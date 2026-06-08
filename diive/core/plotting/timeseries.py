@@ -271,7 +271,8 @@ class TimeSeries:
         show(column(detail, overview))
 
     def plot(self, ax=None, color: str = None, series_units: str = None, xlabel: str = None, ylabel: str = None,
-             title: str = None, linewidth: float = 2.2, alpha: float = 0.95, marker: bool = False):
+             title: str = None, linewidth: float = 2.2, alpha: float = 0.95, marker: bool = False,
+             markersize: float = 3):
         """
         Render time series plot with matplotlib styling (Phase 2 of two-phase design).
 
@@ -288,6 +289,7 @@ class TimeSeries:
             linewidth: Line width in points (default: 2.2)
             alpha: Line/marker opacity, 0-1 (default: 0.95)
             marker: If True, draw a point marker at each observation (default: False)
+            markersize: Point marker size in points, used only when marker=True (default: 3)
 
         Returns:
             The matplotlib axes the series was drawn on (the new axes when ax=None),
@@ -321,7 +323,7 @@ class TimeSeries:
                      linewidth=linewidth,
                      linestyle='-',
                      marker='o' if marker else None,
-                     markersize=3 if marker else 0,
+                     markersize=markersize if marker else 0,
                      markeredgecolor='none',
                      zorder=99, label=label)
 
@@ -338,6 +340,10 @@ class TimeSeries:
                 self.fig.suptitle(self.series.name, fontsize=16, fontweight=500, color=_COLOR_INK, y=0.98)
             self.fig.tight_layout(pad=1.2)
             self.fig.show()
+        elif title:
+            # When drawing onto a caller-supplied ax, honor an explicit title
+            # (there is no figure suptitle in that case).
+            self.ax.set_title(title, fontsize=14, fontweight=500, color=_COLOR_INK)
 
         return self.ax
 

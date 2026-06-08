@@ -27,7 +27,7 @@ diive-gui                # or: uv run diive-gui
 | `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
 | `tabs/fluxchain.py` | Flux processing chain tab — Input + Level 2 (first slice); runs `init_flux_data`/`run_level2`, **Copy Python** emits a reproducible script |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
-| `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar; attaches a `HoverAnnotator` |
+| `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar (with a Save-DPI spinbox); attaches a `HoverAnnotator` |
 | `widgets/hover.py` | `HoverAnnotator` — value-under-cursor tooltip (line snap + heatmap cell) via blitting |
 | `widgets/variable_panel.py` | **`VariablePanel`** — the shared variable list (filter + pills) used by every tab |
 | `widgets/variable_list.py` | `VariableList` — list emitting `selected(name, ctrl_held)` |
@@ -54,14 +54,32 @@ The **ridgeline** is single-variable and whole-figure: `RidgeLinePlot` builds it
 tab passes `canvas.fig` to the class's `fig=` param and sets `canvas.auto_layout=False` (so the constrained-layout
 freeze/resize machinery doesn't reflow its overlapping ridges) — see `_render_ridgeline`.
 
-**Live plot settings:** between the variable list and the canvas sits a `PlotSettingsPanel(plot_type)` — a scrollable
+**Plot settings:** between the variable list and the canvas sits a `PlotSettingsPanel(plot_type)` — a scrollable
 strip of controls, one per `plot()` parameter of the underlying diive plot class (heatmap: colormap, vmin/vmax,
 orientation, colorbar, cell-value overlay, ticks, grid, …; time series: line width, opacity, markers, drop-gaps,
-labels/units). Editing any control emits `changed`; the tab re-renders the current panels (`_on_settings_changed` →
-`_render`), and `_draw_one` reads `settings.values()` into the library plot call. The panel is GUI-only (it just
-collects parameters); the `HEATMAP`/`TIMESERIES` constants live in `plot_settings.py` and `plotting.py` re-exports them
-(so no import cycle). Line *colours* stay theme-driven (`theme.manager.ts_colors`, Appearance tab), not duplicated here.
-Add a parameter = add a control in `plot_settings._build_*` + a key in `values()` + pass it through in `_draw_one`.
+labels/units). **Editing a control does NOT re-render** — the tab's **Update plot** button (`PlottingTab.update_btn`,
+below the settings) reads `settings.values()` and calls `_render()` on click, so the apply trigger is identical for
+every control type (no `editingFinished`-vs-`valueChanged` inconsistency). Controls still emit `changed`, but the tab
+no longer connects it to a render. (Variable selection in the list *does* still render live, via
+`_on_selected` → `run_with_loading`; that's the one interaction the user singled out as wanting immediate.) `_draw_one`
+reads `settings.values()` into the library plot call. The panel is GUI-only (it just collects parameters); the
+`HEATMAP`/`TIMESERIES` constants live in `plot_settings.py` and `plotting.py` re-exports them (so no import cycle). Line
+*colours* stay theme-driven (`theme.manager.ts_colors`, Appearance tab), not duplicated here. Add a parameter = add a
+control in `plot_settings._build_*` + a key in `values()` + pass it through in `_draw_one`.
+
+**GUI-only post-render passes:** a couple of settings have no library `plot()` parameter and are applied *after* the
+diive plot renders, analogous to the Overview's uniform-font pass:
+- **Axes group** (`_build_axes_group`) — X/Y limits (blank = auto), log X/Y, invert Y, add grid. Present on the
+  line/scatter types only (`TIMESERIES`, `CUMULATIVE_YEAR`, `SCATTER`, and Y-only for `DIELCYCLE`); `values()` carries
+  them under the `_axes` key and `plotting._apply_axes(axes)` applies them to the data axes. It is **plot-type-aware**:
+  heatmaps and the ridgeline have no `_axes` (no-op), and the diel cycle's fixed 0–24 h x-axis is left alone (Y-only
+  group). The grid toggle is additive (turns grid on; never strips a plot type's native grid). For shared multi-panel
+  stacks the limits apply to every panel.
+- **Reverse colormap** — a checkbox in the Colors group (heatmap, heatmap year/month, hexbin, scatter) that appends/strips
+  the matplotlib `_r` suffix on the chosen cmap in `values()` (`_reverse_cmap`); no library change.
+
+**Figure export DPI:** `MplCanvas`'s bottom bar has a *Save DPI* spinbox (default 150); its `_SaveDpiToolbar`
+overrides the toolbar's Save to export `savefig` at that DPI, so saved images aren't capped at screen DPI.
 
 **Data flow:** **File ▸ Open data file…** shows `OpenDataDialog` — pick one or more files, choose the filetype, and
 preview the first parsed rows before loading (parquet via `dv.load_parquet`, other formats via `dv.ReadFileType`).

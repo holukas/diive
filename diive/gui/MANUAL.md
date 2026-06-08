@@ -87,7 +87,8 @@ Each plot method opens as its own tab (the menu shows a small icon for each).
 - **Diel cycle** — the mean daily cycle (value by time of day) with a ±SD band;
   optionally one curve per month.
 - **Cumulative year** — one cumulative-sum curve per year (overlaid by day of
-  year); optionally highlight a year and show a mean reference.
+  year); optionally **highlight a year** (chosen from a dropdown of the years
+  present in the data) and show a mean reference.
 - **Scatter XY** — click two variables for X and Y (a third, optional, colours
   the points); optionally bin the x-axis and show a trend. One panel.
 - **Ridgeline** — one stacked density curve per period (group by month, week, or
@@ -99,16 +100,27 @@ Each plot method opens as its own tab (the menu shows a small icon for each).
   - *(The ridgeline shows a single variable, so Ctrl+click just switches it.)*
 - **Ctrl + click** a shown variable again to remove its panel.
 - Use the small toolbar (bottom-right of the plot) to **pan, zoom, and save** the
-  figure. Zooming one panel zooms them all.
+  figure. Zooming one panel zooms them all. Set **Save DPI** (next to the toolbar)
+  before saving for a higher-resolution image than the screen.
 
-**Settings (middle column) — live preview.** Between the variable list and the
-plot is a panel of controls for the plot. Change one and the plot updates
-immediately:
-- *Heatmap*: colormap, min/max colour values, missing-value colour, orientation
-  (vertical/horizontal), date-axis ticks, grid, colorbar (show, label, decimals,
-  extend arrows), and optionally overlaying the numeric values on the cells.
-- *Time series*: line width, opacity, point markers, whether to connect across
-  gaps, and the axis labels/units.
+**Settings (middle column).** Between the variable list and the plot is a panel
+of controls for the plot. Adjust as many as you like, then click **Update plot**
+(below the controls) to apply them all at once — the plot does not change while
+you are still editing. (Clicking a *variable* in the list, by contrast, updates
+the plot immediately.) Available controls:
+- *Heatmap*: colormap (with a **Reverse colormap** toggle), min/max colour values,
+  missing-value colour, orientation (vertical/horizontal), date-axis ticks, grid,
+  colorbar (show, label, decimals, extend arrows), and optionally overlaying the
+  numeric values on the cells.
+- *Time series*: title, line width, opacity, point markers (and marker size),
+  whether to connect across gaps, and the axis labels/units.
+- *Diel cycle*: mean/±SD band, one curve per month (each month gets its own
+  colour), legend position, and labels.
+- *Scatter XY*: marker size and opacity, the Z colormap (with **Reverse** and a
+  Z min/max), an optional title, and bin aggregation.
+- *Axes* (time series, scatter, cumulative year; Y-only for the diel cycle): set
+  **X/Y min/max** (blank = automatic), **log** scaling, **invert Y**, and add a
+  **grid**.
 
   Line *colours* for time series come from **Settings ▸ Appearance** (so a
   variable keeps the same colour everywhere).

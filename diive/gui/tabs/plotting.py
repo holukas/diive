@@ -5,8 +5,10 @@ GUI.TABS.PLOTTING: INTERACTIVE PLOTTING TAB
 Three-column plotting tab: a list of variables on the left, a live plot-settings
 panel in the middle, the plot area on the right. On startup the bundled example
 dataset is loaded, the variable list is populated from its columns, and NEE is
-selected and rendered as a date x time-of-day heatmap. Editing any setting
-re-renders the current panels for a live preview (see `plot_settings.py`).
+selected and rendered as a date x time-of-day heatmap. Editing a setting does
+not re-render on its own; the user clicks the **Update plot** button to apply all
+pending parameter changes at once (see `plot_settings.py`). Selecting a variable
+in the list still re-renders immediately.
 
 Selection model:
 - Plain click  -> reset to a single panel showing the clicked variable.
@@ -24,7 +26,13 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QSplitter, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QPushButton,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
+)
 
 import diive as dv
 from diive.gui import theme
@@ -84,10 +92,19 @@ class PlottingTab(DiiveTab):
         self.varpanel = VariablePanel()
         self.varpanel.selected.connect(self._on_selected)
 
-        # Middle: live plot-parameter controls. Editing any control re-renders
-        # the current panels (live preview).
+        # Middle: plot-parameter controls plus an explicit "Update plot" button.
+        # Editing a control does NOT re-render — the user clicks the button to
+        # apply all pending changes at once (a single, consistent trigger across
+        # every control type). Variable selection in the list still renders live.
         self.settings = PlotSettingsPanel(self._plot_type)
-        self.settings.changed.connect(self._on_settings_changed)
+        self.update_btn = QPushButton("Update plot")
+        self.update_btn.clicked.connect(lambda: self._render())
+        middle = QWidget()
+        mlay = QVBoxLayout(middle)
+        mlay.setContentsMargins(0, 0, 0, 0)
+        mlay.setSpacing(4)
+        mlay.addWidget(self.settings, 1)
+        mlay.addWidget(self.update_btn)
 
         # Right: embedded matplotlib canvas.
         self.canvas = MplCanvas()
@@ -97,7 +114,7 @@ class PlottingTab(DiiveTab):
             self.canvas.auto_layout = False
 
         splitter.addWidget(self.varpanel)
-        splitter.addWidget(self.settings)
+        splitter.addWidget(middle)
         splitter.addWidget(self.canvas)
         splitter.setStretchFactor(0, 0)   # list keeps its width
         splitter.setStretchFactor(1, 0)   # settings keep their width
@@ -116,12 +133,6 @@ class PlottingTab(DiiveTab):
         if self._plot_type in (TIMESERIES, DIELCYCLE) and self._panels:
             self._render()
 
-    def _on_settings_changed(self) -> None:
-        # A plot parameter changed -- re-render the current panels for a live
-        # preview (no-op while nothing is plotted yet).
-        if self._panels:
-            self._render()
-
     def on_data_loaded(self, df, created: set | None = None) -> None:
         """Populate the variable list from the dataset and render.
 
@@ -131,6 +142,9 @@ class PlottingTab(DiiveTab):
         self._panels = []
         self._xyz = []
         self.varpanel.set_variables(df.columns, created)
+        if self._plot_type == CUMULATIVE_YEAR:
+            # Offer the data's years in the highlight-year dropdown.
+            self.settings.set_years(sorted(set(df.index.year)))
         self._select_default()
 
     def _select_default(self) -> None:
@@ -237,8 +251,38 @@ class PlottingTab(DiiveTab):
                 ax.set_xlabel("")
                 ax.tick_params(labelbottom=False)
 
+        self._apply_axes(axes)
         self.canvas.draw()
         self._mark_selected()
+
+    def _apply_axes(self, axes) -> None:
+        """Apply the GUI-only Axes settings (limits, log scale, invert, grid).
+
+        Pure presentation, run after the library plot has rendered. Only the
+        line/scatter plot types expose an Axes group (`values()` carries an
+        `_axes` dict); for everything else this is a no-op. Heatmaps, the
+        ridgeline, and the diel cycle's fixed 0-24 hour x-axis are never touched
+        (heatmaps/ridgeline have no `_axes`; the diel cycle's group is Y-only).
+        For shared multi-panel stacks the settings apply to every panel.
+        """
+        ax_opts = self.settings.values().get("_axes")
+        if not ax_opts:
+            return
+        for ax in axes:
+            if ax_opts["xmin"] is not None or ax_opts["xmax"] is not None:
+                ax.set_xlim(ax_opts["xmin"], ax_opts["xmax"])
+            if ax_opts["ymin"] is not None or ax_opts["ymax"] is not None:
+                ax.set_ylim(ax_opts["ymin"], ax_opts["ymax"])
+            if ax_opts["logx"]:
+                ax.set_xscale("log")
+            if ax_opts["logy"]:
+                ax.set_yscale("log")
+            if ax_opts["invert_y"]:
+                ax.invert_yaxis()
+            if ax_opts["grid"]:
+                # Additive: turn the grid on without stripping a plot type's
+                # native grid (e.g. the time series' default y-grid) when unset.
+                ax.grid(True)
 
     def _render_ridgeline(self) -> None:
         """Render the ridgeline, which builds its own stacked-density figure.
@@ -342,9 +386,12 @@ class PlottingTab(DiiveTab):
                 nbins=opts["nbins"], binagg=opts["binagg"],
             ).plot(
                 ax=ax, cmap=opts["cmap"], show_colorbar=opts["show_colorbar"],
+                markersize=opts["markersize"], alpha=opts["alpha"],
+                vmin=opts["vmin"], vmax=opts["vmax"], title=opts["title"],
                 xlabel=opts["xlabel"], ylabel=opts["ylabel"], zlabel=opts["zlabel"],
                 xunits=opts["xunits"], yunits=opts["yunits"],
             )
+            self._apply_axes([ax])
         except Exception as err:
             ax.clear()
             ax.text(0.5, 0.5, f"Cannot plot scatter:\n{err}", ha="center",
@@ -403,19 +450,25 @@ class PlottingTab(DiiveTab):
             elif self._plot_type == TIMESERIES:
                 ts_colors = theme.manager.ts_colors
                 dv.plotting.TimeSeries(series, drop_gaps=opts["drop_gaps"]).plot(
-                    ax=ax, title=name, color=ts_colors[index % len(ts_colors)],
+                    ax=ax, title=opts["title"] or name,
+                    color=ts_colors[index % len(ts_colors)],
                     linewidth=opts["linewidth"], alpha=opts["alpha"],
-                    marker=opts["marker"], xlabel=opts["xlabel"],
-                    ylabel=opts["ylabel"], series_units=opts["series_units"],
+                    marker=opts["marker"], markersize=opts["markersize"],
+                    xlabel=opts["xlabel"], ylabel=opts["ylabel"],
+                    series_units=opts["series_units"],
                 )
             elif self._plot_type == DIELCYCLE:
                 ts_colors = theme.manager.ts_colors
+                # DielCycle auto-colors per month only when color is None; pass
+                # None for the per-month view so each month gets its own colour,
+                # otherwise the theme line colour for this panel.
+                color = None if opts["each_month"] else ts_colors[index % len(ts_colors)]
                 dv.plotting.DielCycle(series).plot(
-                    ax=ax, title=name, color=ts_colors[index % len(ts_colors)],
+                    ax=ax, title=name, color=color,
                     mean=opts["mean"], std=opts["std"], each_month=opts["each_month"],
                     show_legend=opts["show_legend"], showgrid=opts["showgrid"],
-                    legend_n_col=opts["legend_n_col"], ylabel=opts["ylabel"],
-                    txt_ylabel_units=opts["txt_ylabel_units"],
+                    legend_n_col=opts["legend_n_col"], legend_loc=opts["legend_loc"],
+                    ylabel=opts["ylabel"], txt_ylabel_units=opts["txt_ylabel_units"],
                 )
             elif self._plot_type == CUMULATIVE_YEAR:
                 dv.plotting.CumulativeYear(

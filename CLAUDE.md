@@ -233,7 +233,8 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
 - **Menu tabs are multi-instance.** Tabs opened from menus (`registry.MENU_TABS`, factories) open a NEW numbered
   instance each time (Heatmap 1, 2, 3 ...), all closable; tracked in `MainWindow._menu_tab_list`. Labels in
   `registry.SINGLE_INSTANCE_TABS` (e.g. Appearance) instead focus the existing one. Always-on tabs have their close
-  button removed; `_next_menu_index` reuses the smallest free number.
+  button removed; `_next_menu_index` reuses the smallest free number. On close (`_on_tab_close`) focus falls back to the
+  tab to the *left* of the closed one, but never the Log tab — if that's where it would land, it jumps to Overview.
 - **Two-phase plot classes are GUI-ready.** The plotting tab renders diive plots straight into an embedded canvas via
   `Plot(series).plot(ax=canvas.ax, fig=canvas.fig)`; no GUI-specific plot variants needed.
 - **`Plot` menu = one closable tab per method.** There is no single "Plotting" tab. Each plot method (Heatmap date/time,
@@ -248,6 +249,20 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   model: `RidgeLinePlot` builds its own stacked-density gridspec on the whole figure, so it's single-variable, gets
   `canvas.fig` via the class's `fig=` param, and the tab sets `canvas.auto_layout=False` so the constrained-layout
   freeze/resize machinery leaves its manual gridspec alone (see `_render_ridgeline`).
+- **GUI-only presentation passes (no library param).** A few settings have no `plot()` kwarg and are applied *after* the
+  diive plot renders (like the Overview's uniform-font pass): (1) the **Axes** group (`plot_settings._build_axes_group`)
+  — X/Y limits, log X/Y, invert Y, additive grid — on the line/scatter types (`TIMESERIES`, `CUMULATIVE_YEAR`, `SCATTER`,
+  Y-only for `DIELCYCLE`); `values()` carries them under the `_axes` key and `plotting._apply_axes(axes)` applies them.
+  It is plot-type-aware: heatmaps/ridgeline have no `_axes` (no-op), the diel cycle's fixed 0–24 h x-axis is untouched
+  (Y-only group). (2) The **Reverse colormap** checkbox (heatmap, year/month, hexbin, scatter) flips the `_r` suffix in
+  `values()` (`_reverse_cmap`). Export **DPI** is a `MplCanvas` bottom-bar spinbox (default 150); `_SaveDpiToolbar`
+  overrides the toolbar Save to write `savefig` at that DPI.
+- **Params apply on a button, not live.** Editing a plot-settings control no longer re-renders; the tab's **Update
+  plot** button (`PlottingTab.update_btn`, below the settings) reads `values()` and calls `_render()` on click — one
+  consistent trigger for every control type (avoids the `QLineEdit.editingFinished` vs `QSpinBox.valueChanged`
+  inconsistency, where typed fields only committed on Enter/focus-loss). The panel still emits `changed`, but the tab
+  doesn't connect it to a render. **Variable selection stays live** (`_on_selected` → `run_with_loading`). In tests,
+  set the controls then `tab.update_btn.click()` to apply (not `settings.changed.emit()`).
 - **Data flow.** The `File` menu loads data via `OpenDataDialog` (parquet → `dv.load_parquet`, else `dv.ReadFileType`;
   multiple files → `MultiDataFileReader` / parquet `combine_first`; reading is library work, the dialog only calls it).
   `MainWindow` holds the current DataFrame and pushes it to every tab via the `DiiveTab.on_data_loaded(df, created)`

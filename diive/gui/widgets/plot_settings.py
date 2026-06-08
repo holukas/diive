@@ -4,9 +4,10 @@ GUI.WIDGETS.PLOT_SETTINGS: LIVE PLOT PARAMETER PANEL
 
 A scrollable panel of controls that sits between the variable list and the
 canvas in a plotting tab. Each control maps to one parameter of the underlying
-diive plot class (`HeatmapDateTime.plot(...)` or `TimeSeries.plot(...)`); any
-change emits `changed`, which the tab connects to a re-render for a live
-preview.
+diive plot class (`HeatmapDateTime.plot(...)` or `TimeSeries.plot(...)`). Editing
+a control does not re-render on its own — the tab's "Update plot" button reads
+`values()` and re-renders when clicked. (Controls still emit `changed`; it is
+left available for callers but the plotting tab no longer renders on it.)
 
 This is GUI-only: the controls merely collect parameter values via `values()`;
 all plotting is done by the library classes the tab calls. The plot-type
@@ -66,8 +67,9 @@ class PlotSettingsPanel(QScrollArea):
     """Live-editable plot parameters for one plot type.
 
     Builds the control set matching `plot_type` (heatmap or time series). Every
-    control is wired so editing it emits `changed`; the tab re-renders on that
-    signal. Current values are read back as a dict via `values()`.
+    control emits `changed` when edited (kept for callers that want it), but the
+    plotting tab does not re-render on it — its "Update plot" button reads the
+    current values back as a dict via `values()` instead.
     """
 
     changed = Signal()
@@ -144,7 +146,8 @@ class PlotSettingsPanel(QScrollArea):
                 pairs += [("agg", self.agg), ("ranks", self.ranks)]
         elif self._plot_type == TIMESERIES:
             pairs = [("linewidth", self.linewidth), ("alpha", self.alpha),
-                     ("marker", self.marker), ("drop_gaps", self.drop_gaps),
+                     ("marker", self.marker), ("markersize", self.markersize),
+                     ("drop_gaps", self.drop_gaps), ("title", self.title),
                      ("xlabel", self.xlabel), ("ylabel", self.ylabel),
                      ("series_units", self.series_units)]
         elif self._plot_type == RIDGELINE:
@@ -156,6 +159,7 @@ class PlotSettingsPanel(QScrollArea):
             pairs = [("mean", self.dc_mean), ("std", self.dc_std),
                      ("each_month", self.dc_each_month), ("show_legend", self.dc_show_legend),
                      ("showgrid", self.dc_show_grid), ("legend_n_col", self.dc_legend_ncol),
+                     ("legend_loc", self.dc_legend_loc),
                      ("ylabel", self.dc_ylabel), ("txt_ylabel_units", self.dc_units)]
         elif self._plot_type == CUMULATIVE_YEAR:
             pairs = [("show_reference", self.cy_show_reference),
@@ -184,6 +188,8 @@ class PlotSettingsPanel(QScrollArea):
         elif self._plot_type == SCATTER:
             pairs = [
                 ("cmap", self.sc_cmap), ("show_colorbar", self.sc_show_colorbar),
+                ("markersize", self.sc_markersize), ("alpha", self.sc_alpha),
+                ("vmin", self.sc_vmin), ("vmax", self.sc_vmax), ("title", self.sc_title),
                 ("xlabel", self.sc_xlabel), ("ylabel", self.sc_ylabel),
                 ("zlabel", self.sc_zlabel), ("xunits", self.sc_xunits),
                 ("yunits", self.sc_yunits),
@@ -228,6 +234,7 @@ class PlotSettingsPanel(QScrollArea):
         self.color_bad.addItems(_BAD_COLORS)
         self.color_bad.currentTextChanged.connect(self.changed)
         form.addRow("Missing color", self.color_bad)
+        self.reverse_cmap = self._check("Reverse colormap", form)
         self._col.addWidget(colors)
 
         layout = QGroupBox("Layout")
@@ -289,11 +296,16 @@ class PlotSettingsPanel(QScrollArea):
         self.linewidth = self._dspin(2.2, 0.2, 10.0, 0.2, 1, form, "Line width")
         self.alpha = self._dspin(0.95, 0.05, 1.0, 0.05, 2, form, "Opacity")
         self.marker = self._check("Show markers", form)
+        self.markersize = self._dspin(3.0, 0.5, 20.0, 0.5, 1, form, "Marker size")
         self.drop_gaps = self._check("Drop gaps (connect)", form)
         self._col.addWidget(line)
 
         labels = QGroupBox("Labels")
         form = QFormLayout(labels)
+        self.title = QLineEdit()
+        self.title.setPlaceholderText("(variable name)")
+        self.title.editingFinished.connect(self.changed)
+        form.addRow("Title", self.title)
         self.xlabel = QLineEdit()
         self.xlabel.setPlaceholderText("Date")
         self.xlabel.editingFinished.connect(self.changed)
@@ -307,6 +319,8 @@ class PlotSettingsPanel(QScrollArea):
         self.series_units.editingFinished.connect(self.changed)
         form.addRow("Y units", self.series_units)
         self._col.addWidget(labels)
+
+        self._build_axes_group()
 
     # --- ridgeline controls ---
     def _build_ridgeline(self) -> None:
@@ -379,6 +393,7 @@ class PlotSettingsPanel(QScrollArea):
         self.color_bad.addItems(_BAD_COLORS)
         self.color_bad.currentTextChanged.connect(self.changed)
         form.addRow("Missing color", self.color_bad)
+        self.reverse_cmap = self._check("Reverse colormap", form)
         self._col.addWidget(colors)
 
         cbar = QGroupBox("Colorbar")
@@ -425,6 +440,25 @@ class PlotSettingsPanel(QScrollArea):
         self.cb_labelsize = self._fontspin(form, "Colorbar labels")
         self._col.addWidget(fonts)
 
+    def set_years(self, years) -> None:
+        """Populate the cumulative-year highlight dropdown from the data's years.
+
+        Called by the tab when data loads (or the date range changes). Keeps the
+        leading "none" entry and preserves the current selection if that year is
+        still present.
+        """
+        if self._plot_type != CUMULATIVE_YEAR:
+            return
+        current = self.cy_highlight.currentText()
+        self.cy_highlight.blockSignals(True)
+        self.cy_highlight.clear()
+        self.cy_highlight.addItem("none")
+        for year in years:
+            self.cy_highlight.addItem(str(year))
+        idx = self.cy_highlight.findText(current)
+        self.cy_highlight.setCurrentIndex(idx if idx >= 0 else 0)
+        self.cy_highlight.blockSignals(False)
+
     def set_xyz(self, x: str | None, y: str | None, z: str | None) -> None:
         """Update the X/Y/Z role readout (hexbin / scatter)."""
         if self._plot_type not in (HEXBIN, SCATTER):
@@ -459,6 +493,12 @@ class PlotSettingsPanel(QScrollArea):
         form.addRow("Bin aggregation", self.sc_binagg)
         self._col.addWidget(binning)
 
+        points = QGroupBox("Points")
+        form = QFormLayout(points)
+        self.sc_markersize = self._dspin(40.0, 1.0, 300.0, 5.0, 0, form, "Marker size")
+        self.sc_alpha = self._dspin(1.0, 0.05, 1.0, 0.05, 2, form, "Opacity")
+        self._col.addWidget(points)
+
         colors = QGroupBox("Colour (Z)")
         form = QFormLayout(colors)
         self.sc_cmap = QComboBox()
@@ -467,17 +507,29 @@ class PlotSettingsPanel(QScrollArea):
                                "coolwarm", "RdYlBu_r", "Spectral_r"])
         self.sc_cmap.currentTextChanged.connect(self.changed)
         form.addRow("Colormap", self.sc_cmap)
+        self.sc_reverse_cmap = self._check("Reverse colormap", form)
         self.sc_show_colorbar = self._check("Show colorbar", form, checked=True)
+        self.sc_vmin = QLineEdit()
+        self.sc_vmin.setPlaceholderText("auto")
+        self.sc_vmin.editingFinished.connect(self.changed)
+        form.addRow("Z min", self.sc_vmin)
+        self.sc_vmax = QLineEdit()
+        self.sc_vmax.setPlaceholderText("auto")
+        self.sc_vmax.editingFinished.connect(self.changed)
+        form.addRow("Z max", self.sc_vmax)
         self._col.addWidget(colors)
 
         labels = QGroupBox("Labels")
         form = QFormLayout(labels)
+        self.sc_title = self._lineedit("(Y vs. X)", form, "Title")
         self.sc_xlabel = self._lineedit("(X name)", form, "X label")
         self.sc_ylabel = self._lineedit("(Y name)", form, "Y label")
         self.sc_zlabel = self._lineedit("(Z name)", form, "Z label")
         self.sc_xunits = self._lineedit("e.g. °C", form, "X units")
         self.sc_yunits = self._lineedit("e.g. µmol m⁻²s⁻¹", form, "Y units")
         self._col.addWidget(labels)
+
+        self._build_axes_group()
 
     def _lineedit(self, placeholder, form, label) -> QLineEdit:
         edit = QLineEdit()
@@ -496,6 +548,14 @@ class PlotSettingsPanel(QScrollArea):
         self.dc_show_legend = self._check("Show legend", form, checked=True)
         self.dc_show_grid = self._check("Show grid", form, checked=True)
         self.dc_legend_ncol = self._spin(1, 1, 6, form, "Legend columns")
+        self.dc_legend_loc = QComboBox()
+        self.dc_legend_loc.addItems([
+            "best", "upper right", "upper left", "lower left", "lower right",
+            "right", "center left", "center right", "lower center",
+            "upper center", "center",
+        ])
+        self.dc_legend_loc.currentTextChanged.connect(self.changed)
+        form.addRow("Legend position", self.dc_legend_loc)
         self._col.addWidget(grp)
 
         labels = QGroupBox("Labels")
@@ -510,15 +570,18 @@ class PlotSettingsPanel(QScrollArea):
         form.addRow("Y units", self.dc_units)
         self._col.addWidget(labels)
 
+        self._build_axes_group(yonly=True)
+
     # --- yearly-cumulative controls ---
     def _build_cumulative_year(self) -> None:
         grp = QGroupBox("Yearly cumulative")
         form = QFormLayout(grp)
         self.cy_show_reference = self._check("Show mean reference", form)
-        self.cy_highlight = QSpinBox()
-        self.cy_highlight.setRange(0, 3000)
-        self.cy_highlight.setSpecialValueText("none")  # 0 -> no highlight
-        self.cy_highlight.valueChanged.connect(self.changed)
+        # Populated from the data's years by set_years() when data loads; the
+        # first entry ("none") means no highlight.
+        self.cy_highlight = QComboBox()
+        self.cy_highlight.addItem("none")
+        self.cy_highlight.currentTextChanged.connect(self.changed)
         form.addRow("Highlight year", self.cy_highlight)
         self.cy_digits = self._spin(2, 0, 6, form, "Label decimals")
         self._col.addWidget(grp)
@@ -534,6 +597,67 @@ class PlotSettingsPanel(QScrollArea):
         self.cy_yearly_end.editingFinished.connect(self.changed)
         form.addRow("Yearly end date", self.cy_yearly_end)
         self._col.addWidget(labels)
+
+        self._build_axes_group()
+
+    # --- shared "Axes" group (GUI-only: limits/scale/grid applied post-render) ---
+    def _build_axes_group(self, yonly: bool = False) -> None:
+        """Build the GUI-only Axes group (limits, log scale, invert, grid).
+
+        These are not library plot() params — the tab applies them in a small
+        post-render pass on the data axes. `yonly` omits the x controls (e.g. the
+        diel cycle, whose x-axis is the fixed 0-24 hour range).
+        """
+        self._has_axes_group = True
+        self._axes_has_x = not yonly
+        grp = QGroupBox("Axes")
+        form = QFormLayout(grp)
+        if not yonly:
+            self.ax_xmin = QLineEdit()
+            self.ax_xmin.setPlaceholderText("auto")
+            self.ax_xmin.editingFinished.connect(self.changed)
+            form.addRow("X min", self.ax_xmin)
+            self.ax_xmax = QLineEdit()
+            self.ax_xmax.setPlaceholderText("auto")
+            self.ax_xmax.editingFinished.connect(self.changed)
+            form.addRow("X max", self.ax_xmax)
+        self.ax_ymin = QLineEdit()
+        self.ax_ymin.setPlaceholderText("auto")
+        self.ax_ymin.editingFinished.connect(self.changed)
+        form.addRow("Y min", self.ax_ymin)
+        self.ax_ymax = QLineEdit()
+        self.ax_ymax.setPlaceholderText("auto")
+        self.ax_ymax.editingFinished.connect(self.changed)
+        form.addRow("Y max", self.ax_ymax)
+        if not yonly:
+            self.ax_logx = self._check("Log X", form)
+        self.ax_logy = self._check("Log Y", form)
+        self.ax_invert_y = self._check("Invert Y", form)
+        self.ax_grid = self._check("Show grid", form)
+        self._col.addWidget(grp)
+
+    def _axes_values(self) -> dict | None:
+        """GUI-only axis settings, or None if this plot type has no Axes group."""
+        if not getattr(self, "_has_axes_group", False):
+            return None
+        has_x = self._axes_has_x
+        return {
+            "xmin": self._float_or_none(self.ax_xmin.text()) if has_x else None,
+            "xmax": self._float_or_none(self.ax_xmax.text()) if has_x else None,
+            "ymin": self._float_or_none(self.ax_ymin.text()),
+            "ymax": self._float_or_none(self.ax_ymax.text()),
+            "logx": self.ax_logx.isChecked() if has_x else False,
+            "logy": self.ax_logy.isChecked(),
+            "invert_y": self.ax_invert_y.isChecked(),
+            "grid": self.ax_grid.isChecked(),
+        }
+
+    @staticmethod
+    def _reverse_cmap(cmap, reverse: bool):
+        """Toggle a matplotlib colormap's `_r` suffix when `reverse` is set."""
+        if not reverse or not cmap:
+            return cmap
+        return cmap[:-2] if cmap.endswith("_r") else cmap + "_r"
 
     # --- control factories (wire each to `changed`) ---
     def _spin(self, value, lo, hi, form, label) -> QSpinBox:
@@ -610,13 +734,15 @@ class PlotSettingsPanel(QScrollArea):
                 "ticks_labelsize": _font(self.ticks_labelsize),
                 "cb_labelsize": _font(self.cb_labelsize),
             }
+            reverse = self.reverse_cmap.isChecked()
             if self._plot_type == HEATMAP_YEARMONTH:
                 # "auto"/empty -> None so HeatmapYearMonth picks the rank-aware default.
-                opts["cmap"] = None if cmap_text in ("", "auto") else cmap_text
+                cmap = None if cmap_text in ("", "auto") else cmap_text
+                opts["cmap"] = self._reverse_cmap(cmap, reverse)
                 opts["agg"] = self.agg.currentText()
                 opts["ranks"] = self.ranks.isChecked()
             else:
-                opts["cmap"] = cmap_text or "RdYlBu_r"
+                opts["cmap"] = self._reverse_cmap(cmap_text or "RdYlBu_r", reverse)
                 opts["minticks"] = self.minticks.value()
                 opts["maxticks"] = self.maxticks.value()
             return opts
@@ -639,17 +765,20 @@ class PlotSettingsPanel(QScrollArea):
                 "show_legend": self.dc_show_legend.isChecked(),
                 "showgrid": self.dc_show_grid.isChecked(),
                 "legend_n_col": self.dc_legend_ncol.value(),
+                "legend_loc": self.dc_legend_loc.currentText(),
                 "ylabel": self.dc_ylabel.text().strip() or None,
                 "txt_ylabel_units": self.dc_units.text().strip() or None,
+                "_axes": self._axes_values(),
             }
         if self._plot_type == CUMULATIVE_YEAR:
-            hy = self.cy_highlight.value()
+            hy = self.cy_highlight.currentText()
             return {
                 "show_reference": self.cy_show_reference.isChecked(),
-                "highlight_year": hy if hy > 0 else None,
+                "highlight_year": int(hy) if hy.isdigit() else None,
                 "digits_after_comma": self.cy_digits.value(),
                 "series_units": self.cy_units.text().strip() or None,
                 "yearly_end_date": self.cy_yearly_end.text().strip() or None,
+                "_axes": self._axes_values(),
             }
         if self._plot_type == HEXBIN:
             def _font(sp):
@@ -660,7 +789,8 @@ class PlotSettingsPanel(QScrollArea):
                 "normalize_axes": self.normalize_axes.isChecked(),
                 "mincnt": self.mincnt.value(),
                 # plot() styling params
-                "cmap": self.cmap.currentText().strip() or "RdYlBu_r",
+                "cmap": self._reverse_cmap(self.cmap.currentText().strip() or "RdYlBu_r",
+                                           self.reverse_cmap.isChecked()),
                 "vmin": self._float_or_none(self.vmin.text()),
                 "vmax": self._float_or_none(self.vmax.text()),
                 "color_bad": self.color_bad.currentText().strip() or "grey",
@@ -681,20 +811,30 @@ class PlotSettingsPanel(QScrollArea):
             return {
                 "nbins": self.sc_nbins.value(),
                 "binagg": self.sc_binagg.currentText(),
-                "cmap": self.sc_cmap.currentText().strip() or "viridis",
+                "cmap": self._reverse_cmap(self.sc_cmap.currentText().strip() or "viridis",
+                                           self.sc_reverse_cmap.isChecked()),
                 "show_colorbar": self.sc_show_colorbar.isChecked(),
+                "markersize": self.sc_markersize.value(),
+                "alpha": self.sc_alpha.value(),
+                "vmin": self._float_or_none(self.sc_vmin.text()),
+                "vmax": self._float_or_none(self.sc_vmax.text()),
+                "title": self.sc_title.text().strip() or None,
                 "xlabel": self.sc_xlabel.text().strip() or None,
                 "ylabel": self.sc_ylabel.text().strip() or None,
                 "zlabel": self.sc_zlabel.text().strip() or None,
                 "xunits": self.sc_xunits.text().strip() or None,
                 "yunits": self.sc_yunits.text().strip() or None,
+                "_axes": self._axes_values(),
             }
         return {
             "linewidth": self.linewidth.value(),
             "alpha": self.alpha.value(),
             "marker": self.marker.isChecked(),
+            "markersize": self.markersize.value(),
             "drop_gaps": self.drop_gaps.isChecked(),
+            "title": self.title.text().strip() or None,
             "xlabel": self.xlabel.text().strip() or None,
             "ylabel": self.ylabel.text().strip() or None,
             "series_units": self.series_units.text().strip() or None,
+            "_axes": self._axes_values(),
         }

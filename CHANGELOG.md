@@ -38,6 +38,17 @@
   - **Editable fields stand out** (tinted `INPUT_BG` background, app-wide) and **settings show docstring tooltips** —
     pulled live from the library via `diive.core.utils.docstrings.param_docs` (Google `Args:` + class attribute
     docstrings), so help text never goes stale.
+  - **More plot controls** — an **Axes** group (X/Y limits, log X/Y, invert Y, grid) on the line/scatter types
+    (Y-only for the diel cycle), a **Reverse colormap** toggle (heatmaps / hexbin / scatter), per-plot **title** fields,
+    scatter **marker size / opacity / Z min·max**, time-series **marker size**, a diel-cycle **legend position**, and a
+    **Save DPI** spinbox on the canvas toolbar so exports aren't capped at screen DPI. Bug fix: the diel cycle's
+    "one curve per month" view now colours each month distinctly (the GUI passed a single colour, defeating the
+    per-month palette).
+  - **Plot settings apply on an "Update plot" button**, not live while typing — one consistent trigger for every
+    control type (text fields previously only committed on Enter/focus-loss, which was confusing). Selecting a variable
+    in the list still updates the plot immediately.
+  - **Cumulative-year "highlight year" is a dropdown** of the years present in the loaded data (populated on load and
+    on date-range changes), replacing the free-entry spinbox.
   - **Feature engineering tab** (`FeatureEngineer`); created columns tagged with a NEW pill.
   - **Flux processing chain tab** (Tools menu; first slice = Input + Level 2) — runs the composable `init_flux_data` /
     `run_level2`, shows the L2 QCF-filtered flux, and **Copy Python** emits the exact reproducible script. The
@@ -49,6 +60,9 @@
 - **`save_parquet(..., enforce_diive_format=True, timestamp_name=...)` and `dv.to_diive_format(df, timestamp_name=...)`**
   — coerce a DataFrame to the diive parquet format: single-level columns (one header row) + a validly-named timestamp
   index (`TIMESTAMP_END` / `TIMESTAMP_MIDDLE` / `TIMESTAMP_START`).
+- **Plot styling params added (backward-compatible defaults):** `ScatterXY.plot` gains `markersize`, `alpha`, and
+  `vmin` / `vmax` (Z colour scale); `TimeSeries.plot` gains `markersize` and now honors an explicit `title` when drawn
+  onto a caller-supplied `ax`; `DielCycle.plot` gains `legend_loc`. All preserve previous behavior when unset.
 - **`HeatmapDateTime` gains `cb_digits_after_comma='auto'`** — colorbar precision chosen from the data range
   (whole numbers for wide ranges, more digits for narrow ones). New helper `auto_colorbar_digits` in
   `diive.core.plotting.heatmap_base`. Extracted from the GUI so all library users benefit.

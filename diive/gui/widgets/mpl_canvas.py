@@ -13,6 +13,7 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
+import matplotlib as mpl
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_qtagg import (
     FigureCanvasQTAgg,
@@ -20,7 +21,35 @@ from matplotlib.backends.backend_qtagg import (
 )
 from matplotlib.figure import Figure
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QCheckBox, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QHBoxLayout,
+    QLabel,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
+
+
+class _SaveDpiToolbar(NavigationToolbar2QT):
+    """Navigation toolbar whose Save action exports at a user-chosen DPI.
+
+    The embedded figure is sized for the screen, so a plain save would bake in
+    the (low) screen DPI. `save_figure` temporarily raises `savefig.dpi` to the
+    value the canvas's DPI spinbox reports, so exported images are crisp.
+    """
+
+    def __init__(self, canvas, parent, dpi_getter) -> None:
+        super().__init__(canvas, parent, coordinates=False)
+        self._dpi_getter = dpi_getter
+
+    def save_figure(self, *args):
+        old = mpl.rcParams["savefig.dpi"]
+        mpl.rcParams["savefig.dpi"] = self._dpi_getter()
+        try:
+            return super().save_figure(*args)
+        finally:
+            mpl.rcParams["savefig.dpi"] = old
 
 
 class MplCanvas(QWidget):
@@ -58,7 +87,14 @@ class MplCanvas(QWidget):
         self._canvas = FigureCanvasQTAgg(self.fig)
         # coordinates=False drops the toolbar's x/y readout label (not needed
         # here -- the hover tooltip shows values instead).
-        self._toolbar = NavigationToolbar2QT(self._canvas, self, coordinates=False)
+        # DPI spinbox for figure export; the toolbar's Save reads it (see
+        # _SaveDpiToolbar). 150 is a sensible default above typical screen DPI.
+        self._dpi_spin = QSpinBox()
+        self._dpi_spin.setRange(50, 600)
+        self._dpi_spin.setSingleStep(50)
+        self._dpi_spin.setValue(150)
+        self._dpi_spin.setToolTip("DPI used when saving the figure")
+        self._toolbar = _SaveDpiToolbar(self._canvas, self, self.save_dpi)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -78,6 +114,8 @@ class MplCanvas(QWidget):
         bottom = QHBoxLayout()
         bottom.setContentsMargins(0, 0, 4, 2)
         bottom.addStretch(1)
+        bottom.addWidget(QLabel("Save DPI"))
+        bottom.addWidget(self._dpi_spin)
         bottom.addWidget(self._hover_toggle)
         bottom.addWidget(self._toolbar)
         layout.addLayout(bottom)
@@ -86,6 +124,10 @@ class MplCanvas(QWidget):
         # so panels adapt to the real widget size. Pan/zoom doesn't resize, so
         # it stays frozen -- see draw()/_on_resize.
         self._canvas.mpl_connect("resize_event", self._on_resize)
+
+    def save_dpi(self) -> int:
+        """Current DPI selected for figure export (read by the Save action)."""
+        return self._dpi_spin.value()
 
     def new_axes(self, n: int = 1, orientation: str = "horizontal",
                  sharex: bool = False, sharey: bool = False) -> list[Axes]:

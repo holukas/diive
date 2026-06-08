@@ -238,7 +238,12 @@ class MainWindow(QMainWindow):
         return i
 
     def _on_tab_close(self, index: int) -> None:
-        """Close a menu-opened tab (always-on tabs have no close button)."""
+        """Close a menu-opened tab (always-on tabs have no close button).
+
+        After closing, fall back to the tab to the left of the one closed —
+        except never land on the Log tab: if that's where we'd land, jump
+        straight to the Overview tab instead.
+        """
         widget = self._tabwidget.widget(index)
         for tab in list(self._menu_tab_list):
             if tab.widget() is widget:
@@ -246,6 +251,10 @@ class MainWindow(QMainWindow):
                 if tab in self._tabs:
                     self._tabs.remove(tab)
                 self._menu_tab_list.remove(tab)
+                target = max(0, index - 1)
+                if self._tabwidget.tabText(target) == "Log":
+                    target = 0  # Overview
+                self._tabwidget.setCurrentIndex(target)
                 return
 
     def _add_features(self, new_df) -> None:

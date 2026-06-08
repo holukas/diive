@@ -96,6 +96,23 @@ def test_multi_instance_plot_tabs(window):
     assert "Time series 1" in _tabs(window)
 
 
+def test_close_tab_focuses_previous_not_log(window):
+    tw = window._tabwidget
+    # Layout: Overview(0), Log(1), then menu tabs appended after.
+    window._open_menu_tab("Heatmap date/time")  # index 2
+    window._open_menu_tab("Time series")        # index 3
+    assert _tabs(window) == ["Overview", "Log", "Heatmap date/time 1", "Time series 1"]
+
+    # Closing the last tab falls back to the tab on its left (the heatmap).
+    tw.setCurrentIndex(3)
+    window._on_tab_close(3)
+    assert tw.tabText(tw.currentIndex()) == "Heatmap date/time 1"
+
+    # Closing the only remaining menu tab would land on Log -> redirect to Overview.
+    window._on_tab_close(2)
+    assert tw.tabText(tw.currentIndex()) == "Overview"
+
+
 def test_plot_settings_live_render(window):
     from diive.gui.widgets.plot_settings import HEATMAP, PlotSettingsPanel
     window._open_menu_tab("Heatmap date/time")
@@ -111,8 +128,8 @@ def test_plot_settings_live_render(window):
         return [t for ax in tab.canvas.fig.axes for t in ax.texts
                 if "Cannot plot" in t.get_text()]
 
-    # Toggle a spread of non-default settings; each edit re-renders live and the
-    # heatmap must still draw (no error-fallback text).
+    # Toggle a spread of non-default settings; params apply only on "Update
+    # plot", after which the heatmap must still draw (no error-fallback text).
     tab.settings.cmap.setCurrentText("viridis")
     tab.settings.orientation.setCurrentText("horizontal")
     tab.settings.vmin.setText("-5")
@@ -120,18 +137,43 @@ def test_plot_settings_live_render(window):
     tab.settings.show_values.setChecked(True)
     tab.settings.cb_extend.setCurrentText("both")
     tab.settings.axlabels_fontsize.setValue(8)
+    tab.update_btn.click()
     QApplication.processEvents()
     assert tab.settings.values()["cmap"] == "viridis"
     assert not _fallback(tab)
 
+    # Reverse-colormap toggle (heatmap): appends/strips the _r suffix.
+    tab.settings.cmap.setCurrentText("viridis")
+    tab.settings.reverse_cmap.setChecked(True)
+    assert tab.settings.values()["cmap"] == "viridis_r"
+    tab.settings.reverse_cmap.setChecked(False)
+    assert tab.settings.values()["cmap"] == "viridis"
+
     window._open_menu_tab("Time series")
     ts = window._menu_tab_list[-1]
-    assert {"linewidth", "alpha", "marker", "drop_gaps"} <= set(ts.settings.values())
+    assert {"linewidth", "alpha", "marker", "drop_gaps", "markersize", "title",
+            "_axes"} <= set(ts.settings.values())
     ts.settings.marker.setChecked(True)
     ts.settings.drop_gaps.setChecked(True)
     ts.settings.linewidth.setValue(4.0)
+    ts.settings.markersize.setValue(6.0)
     ts.settings.series_units.setText("umol")
+    ts.settings.title.setText("Custom title")
+    ts.update_btn.click()  # params apply on the button, not on edit
     QApplication.processEvents()
+    assert not _fallback(ts)
+    # Explicit title overrides the variable-name default.
+    assert any(a.get_title() == "Custom title" for a in ts.canvas.fig.axes)
+
+    # GUI-only Axes pass: log Y + a Y limit take effect on the data axis.
+    ts.settings.ax_logy.setChecked(True)
+    ts.settings.ax_ymin.setText("1")
+    ts.settings.ax_ymax.setText("100")
+    ts.update_btn.click()
+    QApplication.processEvents()
+    tax = ts.canvas.fig.axes[0]
+    assert tax.get_yscale() == "log"
+    assert {round(tax.get_ylim()[0]), round(tax.get_ylim()[1])} == {1, 100}
     assert not _fallback(ts)
 
     # Year/month heatmap: distinct settings (aggregation + ranks) and renders.
@@ -147,8 +189,32 @@ def test_plot_settings_live_render(window):
     ym.settings.agg.setCurrentText("sum")
     ym.settings.ranks.setChecked(True)
     ym.settings.orientation.setCurrentText("horizontal")
+    ym.update_btn.click()
     QApplication.processEvents()
     assert not _fallback(ym)
+
+
+def test_params_apply_only_on_update_button(window):
+    # Editing a parameter must NOT re-render; only the "Update plot" button
+    # applies pending changes. (Variable selection still renders live — covered
+    # elsewhere.) Use a spinbox, which DOES emit `changed`, to prove the tab no
+    # longer renders on that signal.
+    import numpy as np
+    window._open_menu_tab("Time series")
+    tab = window._menu_tab_list[-1]
+    QApplication.processEvents()
+
+    def _main_line(tab):
+        return max((l for l in tab.canvas.fig.axes[0].get_lines()),
+                   key=lambda l: np.asarray(l.get_xdata()).size)
+
+    before = _main_line(tab).get_linewidth()
+    tab.settings.linewidth.setValue(before + 4.0)  # emits `changed`
+    QApplication.processEvents()
+    assert _main_line(tab).get_linewidth() == before  # not applied yet
+    tab.update_btn.click()
+    QApplication.processEvents()
+    assert _main_line(tab).get_linewidth() != before  # button applied it
 
 
 def test_keep_daterange_library():
@@ -268,6 +334,34 @@ def test_hover_value_lookup(app, example_year):
     assert f"{float(vals[5, 10]):.4g}" in text2
 
 
+def test_save_dpi_spinbox(app):
+    # The canvas exposes a Save-DPI spinbox (default 150) whose value the
+    # Save action passes through to savefig.
+    import matplotlib as mpl
+    from diive.gui.widgets.mpl_canvas import MplCanvas
+    canvas = MplCanvas()
+    assert canvas.save_dpi() == 150
+    canvas._dpi_spin.setValue(300)
+    assert canvas.save_dpi() == 300
+    # The toolbar's save_figure sets savefig.dpi from the spinbox while saving.
+    captured = {}
+
+    def fake_save(*args, **kwargs):
+        captured["dpi"] = mpl.rcParams["savefig.dpi"]
+
+    canvas._canvas.figure.savefig = fake_save
+    # Drive the toolbar override directly (no file dialog): patch the base save.
+    from matplotlib.backends.backend_qtagg import NavigationToolbar2QT
+    orig = NavigationToolbar2QT.save_figure
+    NavigationToolbar2QT.save_figure = lambda self, *a: mpl.rcParams["savefig.dpi"]
+    try:
+        result = canvas._toolbar.save_figure()
+    finally:
+        NavigationToolbar2QT.save_figure = orig
+    assert result == 300  # the elevated DPI was active during the base save
+    assert mpl.rcParams["savefig.dpi"] != 300  # restored afterwards
+
+
 def test_feature_engineer_index_only(window):
     import time
     # Timestamp + record-number features need no selected variables (they derive
@@ -343,11 +437,29 @@ def test_diel_cycle_tab(window):
     assert tab._panels  # default variable rendered
     fig = tab.canvas.fig
     assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
-    assert {"mean", "std", "each_month"} <= set(tab.settings.values())
+    assert {"mean", "std", "each_month", "legend_loc"} <= set(tab.settings.values())
     # Ctrl+click stacks a second variable (shared time-of-day x-axis).
     tab._on_selected("Tair_f", True)
     QApplication.processEvents()
     assert tab._panels == ["NEE_CUT_REF_f", "Tair_f"]
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+
+    # Per-month colouring: with "one curve per month" on, the GUI must pass
+    # color=None so DielCycle auto-colours each month distinctly (the bug fix).
+    tab._panels = ["Tair_f"]
+    tab.settings.dc_each_month.setChecked(True)
+    tab.update_btn.click()  # params apply on the button, not on edit
+    QApplication.processEvents()
+    ax = tab.canvas.fig.axes[0]
+    line_colors = {tuple(l.get_color()) if not isinstance(l.get_color(), str) else l.get_color()
+                   for l in ax.get_lines()}
+    assert len(line_colors) > 1  # months drawn in different colours, not all one
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    # Legend position is wired through.
+    tab.settings.dc_legend_loc.setCurrentText("upper right")
+    tab.update_btn.click()
+    QApplication.processEvents()
+    assert tab.settings.values()["legend_loc"] == "upper right"
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
 
@@ -359,7 +471,8 @@ def test_scatter_tab(window):
     # Seeded with X, Y (2 vars) -> plain scatter renders.
     assert len(tab._xyz) >= 2
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
-    assert {"nbins", "binagg", "cmap", "show_colorbar"} <= set(tab.settings.values())
+    assert {"nbins", "binagg", "cmap", "show_colorbar", "markersize", "alpha",
+            "vmin", "vmax", "title", "_axes"} <= set(tab.settings.values())
     # Add a third variable (Z) -> colour scatter (extra colorbar axis).
     tab._xyz = ["Tair_f", "NEE_CUT_REF_f", "VPD_f"]
     tab._render()
@@ -367,6 +480,35 @@ def test_scatter_tab(window):
     assert len(tab.canvas.fig.axes) >= 2  # scatter + colorbar
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
     assert tab.settings.z_role.text() == "VPD_f"  # role readout updated
+
+    # Marker size / opacity reach the scatter collection.
+    tab.settings.sc_markersize.setValue(80)
+    tab.settings.sc_alpha.setValue(0.3)
+    tab._render()
+    QApplication.processEvents()
+    sax = tab.canvas.fig.axes[0]
+    coll = sax.collections[0]
+    assert abs(coll.get_sizes()[0] - 80) < 1e-6
+    assert abs(coll.get_alpha() - 0.3) < 1e-6
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+
+    # Reverse-colormap toggle flips the cmap name (GUI-only _r suffix).
+    tab.settings.sc_cmap.setCurrentText("viridis")
+    tab.settings.sc_reverse_cmap.setChecked(True)
+    assert tab.settings.values()["cmap"] == "viridis_r"
+
+    # GUI-only Axes pass: invert Y and a Y limit apply to the data axis.
+    tab.settings.sc_reverse_cmap.setChecked(False)
+    tab.settings.ax_invert_y.setChecked(True)
+    tab.settings.ax_ymin.setText("0")
+    tab.settings.ax_ymax.setText("5")
+    tab._render()
+    QApplication.processEvents()
+    sax = tab.canvas.fig.axes[0]
+    lo, hi = sax.get_ylim()
+    assert lo > hi  # inverted
+    assert {round(lo), round(hi)} == {0, 5}
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
 
 def test_cumulative_year_tab(window):
@@ -378,9 +520,15 @@ def test_cumulative_year_tab(window):
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
     vals = tab.settings.values()
     assert {"show_reference", "highlight_year", "digits_after_comma"} <= set(vals)
-    assert vals["highlight_year"] is None  # 0 -> no highlight
+    assert vals["highlight_year"] is None  # "none" -> no highlight
+    # Highlight year is a dropdown populated from the data's years.
+    items = [tab.settings.cy_highlight.itemText(i)
+             for i in range(tab.settings.cy_highlight.count())]
+    assert items[0] == "none"
+    assert "2021" in items  # the example data's year is offered
     tab.settings.cy_show_reference.setChecked(True)
-    tab.settings.cy_highlight.setValue(2021)
+    tab.settings.cy_highlight.setCurrentText("2021")
+    tab.update_btn.click()  # params apply on the button, not on edit
     QApplication.processEvents()
     assert tab.settings.values()["highlight_year"] == 2021
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
