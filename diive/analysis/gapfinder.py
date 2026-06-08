@@ -26,6 +26,28 @@ from diive.core.plotting.plotfuncs import save_fig
 from diive.core.utils.console import console as _console, rule
 
 
+def _nearest_gap(results: DataFrame, timestamp):
+    """Return the gap row containing ``timestamp``, else the nearest one.
+
+    ``results`` must have ``GAP_START`` / ``GAP_END`` columns. ``timestamp`` is
+    coerced to a tz-naive :class:`pandas.Timestamp` (gap timestamps taken from a
+    series index are tz-naive; an interactive caller may pass a tz-aware value,
+    e.g. from a matplotlib date axis). Returns the single matching row as a
+    :class:`pandas.Series`, or ``None`` when there are no gaps.
+    """
+    if results is None or results.empty:
+        return None
+    ts = pd.Timestamp(timestamp)
+    if ts.tz is not None:
+        ts = ts.tz_localize(None)
+    # Distance from ts to each gap interval: 0 when inside, else the gap to the
+    # nearer end. before/after are mutually exclusive (one is clipped to 0), so
+    # their sum is the signed-free distance; idxmin picks the containing/nearest.
+    before = (ts - results['GAP_END']).dt.total_seconds().clip(lower=0)
+    after = (results['GAP_START'] - ts).dt.total_seconds().clip(lower=0)
+    return results.loc[(before + after).idxmin()]
+
+
 class GapFinder:
     """Find gaps in time series.
 
@@ -49,6 +71,7 @@ class GapFinder:
 
     Methods:
         .showfig(): Two-panel figure — availability heatmap and gap-length histogram.
+        .gap_at(timestamp): The gap containing a timestamp, or the nearest one.
 
     Example:
         See `examples/analysis/analysis_gapfinder.py` for complete usage including
@@ -153,6 +176,19 @@ class GapFinder:
             'mean_gap_records': round(float(gaps['GAP_LENGTH'].mean()), 1) if not gaps.empty else 0.0,
             'longest_gap_duration': gaps['GAP_DURATION'].max() if not gaps.empty else pd.NaT,
         }
+
+    def gap_at(self, timestamp):
+        """Return the detected gap containing ``timestamp``, or the nearest one.
+
+        The returned row (a :class:`pandas.Series`) has GAP_START, GAP_END,
+        GAP_LENGTH and GAP_DURATION. Returns ``None`` if no gaps were found.
+        Handy for interactive tools that map a clicked time to a gap.
+
+        Args:
+            timestamp: A datetime / pandas Timestamp (tz-aware values are
+                accepted and reduced to tz-naive wall time).
+        """
+        return _nearest_gap(self._gapfinder_df, timestamp)
 
     def __str__(self) -> str:
         s = self.summary
@@ -265,7 +301,7 @@ class GapFinder:
         ax.set_yticklabels(years)
         ax.margins(y=0.02)
 
-        cbar = plt.colorbar(im, ax=ax, fraction=0.015, pad=0.01)
+        cbar = ax.figure.colorbar(im, ax=ax, fraction=0.015, pad=0.01)
         cbar.set_label('Availability', fontsize=8)
         cbar.set_ticks([0, 0.5, 1])
         cbar.set_ticklabels(['0% (all missing)', '50%', '100%'])
@@ -346,6 +382,8 @@ class GapStats:
         .summary: Extended headline statistics dict.
 
     Methods:
+        .gap_at(timestamp): The gap containing a timestamp, or the nearest one
+            (row includes YEAR / MONTH).
         .report(): Rich-formatted console report — rules, coloured tables,
             long-gap list, monthly and annual breakdowns.
         .showfig(): Four-panel figure — RdYlGn availability heatmap, gap spike
@@ -507,6 +545,20 @@ class GapStats:
             'worst_month_missing_pct': worst_pct,
             'annual_coverage': ann['coverage_pct'].to_dict() if not ann.empty else {},
         }
+
+    def gap_at(self, timestamp):
+        """Return the gap containing ``timestamp``, or the nearest one.
+
+        The returned row (a :class:`pandas.Series`) includes the YEAR / MONTH
+        columns alongside GAP_START, GAP_END, GAP_LENGTH and GAP_DURATION.
+        Returns ``None`` if no gaps were found. Handy for interactive tools that
+        map a clicked time to a gap.
+
+        Args:
+            timestamp: A datetime / pandas Timestamp (tz-aware values are
+                accepted and reduced to tz-naive wall time).
+        """
+        return _nearest_gap(self._results, timestamp)
 
     # ------------------------------------------------------------------
     # Text representation
@@ -794,7 +846,7 @@ class GapStats:
         ax.set_yticklabels(years, fontsize=9)
         ax.margins(y=0.02)
 
-        cbar = plt.colorbar(im, ax=ax, fraction=0.015, pad=0.01)
+        cbar = ax.figure.colorbar(im, ax=ax, fraction=0.015, pad=0.01)
         cbar.set_label('Daily availability', fontsize=8)
         cbar.set_ticks([0, 0.5, 1])
         cbar.set_ticklabels(['0% (all missing)', '50%', '100% (full)'])
@@ -878,7 +930,7 @@ class GapStats:
 
         sm = plt.cm.ScalarMappable(cmap='YlOrRd', norm=norm)
         sm.set_array([])
-        cbar = plt.colorbar(sm, ax=ax, fraction=0.015, pad=0.01)
+        cbar = ax.figure.colorbar(sm, ax=ax, fraction=0.015, pad=0.01)
         cbar.set_label('Gap length (records)', fontsize=8)
 
         n_long = len(self.long_gaps)

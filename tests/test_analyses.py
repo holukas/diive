@@ -28,6 +28,34 @@ class TestAnalyses(unittest.TestCase):
         self.assertEqual(gapfinder_df.iloc[-1]['GAP_LENGTH'], 1)
         self.assertEqual(gapfinder_df['GAP_LENGTH'].sum(), 117099)
 
+        # gap_at: a timestamp inside a gap returns that gap; outside returns the
+        # nearest; None when there are no gaps.
+        longest = gapfinder_df.iloc[0]
+        mid = longest['GAP_START'] + (longest['GAP_END'] - longest['GAP_START']) / 2
+        hit = gf.gap_at(mid)
+        self.assertEqual(hit['GAP_START'], longest['GAP_START'])
+        self.assertEqual(hit['GAP_END'], longest['GAP_END'])
+        # A tz-aware timestamp is accepted (reduced to tz-naive wall time).
+        import pandas as pd
+        hit_tz = gf.gap_at(pd.Timestamp(mid).tz_localize('UTC'))
+        self.assertEqual(hit_tz['GAP_START'], longest['GAP_START'])
+        # No gaps -> None.
+        from diive.analysis.gapfinder import GapFinder
+        nogaps = GapFinder(series=series.fillna(0.0))
+        self.assertIsNone(nogaps.gap_at(series.index[0]))
+
+    def test_gapstats_gap_at(self):
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.analysis.gapfinder import GapStats
+        series = load_exampledata_parquet()['NEE_CUT_REF_orig']
+        gs = GapStats(series=series, long_gap_records=48)
+        longest = gs.long_gaps.iloc[0]
+        hit = gs.gap_at(longest['GAP_START'])
+        self.assertEqual(hit['GAP_START'], longest['GAP_START'])
+        # GapStats rows carry YEAR / MONTH enrichment.
+        self.assertIn('YEAR', hit.index)
+        self.assertIn('MONTH', hit.index)
+
     def test_sorting_bins_method(self):
         from diive.configs.exampledata import load_exampledata_parquet
         from diive.analysis.decoupling import SortingBinsMethod

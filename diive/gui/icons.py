@@ -268,6 +268,22 @@ def _chain_icon() -> QIcon:  # Flux processing chain
     return QIcon(pm)
 
 
+def _gap_icon() -> QIcon:  # Gaps & coverage
+    pm, p = _canvas()
+    p.setPen(Qt.PenStyle.NoPen)
+    # Coverage bar: green segments split by a red gap in the middle.
+    p.setBrush(_GREEN)
+    p.drawRoundedRect(QRectF(1.5, 6, 5.2, 4), 1, 1)
+    p.drawRoundedRect(QRectF(11, 6, 3.5, 4), 1, 1)
+    p.setBrush(_RED)
+    p.drawRect(QRectF(7.0, 6, 3.6, 4))            # the gap
+    # Timeline baseline.
+    p.setPen(QPen(_INK, 1))
+    p.drawLine(1.5, 13, 14.5, 13)
+    p.end()
+    return QIcon(pm)
+
+
 def _info_icon() -> QIcon:  # About
     pm, p = _canvas()
     p.setPen(Qt.PenStyle.NoPen)
@@ -295,6 +311,8 @@ _RULES = [
     ("exit", _exit_icon),
     ("date range", _calendar_icon),
     ("reset", _reset_icon),
+    ("gap", _gap_icon),
+    ("coverage", _gap_icon),
     ("feature", _gear_icon),
     ("chain", _chain_icon),
     ("flux", _chain_icon),

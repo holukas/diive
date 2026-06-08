@@ -26,6 +26,7 @@ diive-gui                # or: uv run diive-gui
 | `widgets/plot_settings.py` | `PlotSettingsPanel(plot_type)` — live plot-parameter controls (between list and canvas); `changed` re-renders; defines `HEATMAP`/`TIMESERIES` |
 | `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
 | `tabs/fluxchain.py` | Flux processing chain tab — Input + Level 2 (first slice); runs `init_flux_data`/`run_level2`, **Copy Python** emits a reproducible script |
+| `tabs/gaps.py` | Gap & coverage dashboard — stat cards + clickable gap map (`GapStats` availability heatmap + gap timeline) + long-gap table |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
 | `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar (with a Save-DPI spinbox); attaches a `HoverAnnotator` |
 | `widgets/hover.py` | `HoverAnnotator` — value-under-cursor tooltip (line snap + heatmap cell) via blitting |
@@ -105,6 +106,17 @@ script via the library's `level2_to_code`. The script-gen lives in the library (
 the API call shape; the GUI only calls it. Needs real EddyPro-FLUXNET input (FC/USTAR/`*_TEST` columns) —
 `load_exampledata_parquet_lae_level1_30MIN`, not the default CH-DAV. **Later slices** add L3.1/3.2/3.3/4.1 groups and
 switch to `run_chain`/`chain_to_code`; per-level live preview can reuse the cascade-aware `run_level*` callables.
+
+**Gap & coverage dashboard (`tabs/gaps.py`):** opened from **Tools ▸ Gaps & coverage** (single-instance). Pick a
+variable; the right side shows KPI stat cards, a two-panel **gap map** (daily-availability heatmap + gap-spike timeline)
+and a table of the longest gaps. The map is **clickable both ways**: clicking a table row highlights that gap on the
+timeline (a blue span + ring overlay); clicking the timeline calls `GapStats.gap_at(timestamp)` to find the nearest gap,
+highlights it, and selects its table row (a `_syncing` flag prevents the two selections echoing). *All* gap logic is the
+library's `dv.analysis.GapStats` — the tab reads `.summary` / `.long_gaps`, calls the per-`ax` `plot_availability_heatmap` /
+`plot_gap_spike_timeline`, and the new `gap_at()` lookup; it implements no gap maths itself (separation rule). It defaults
+to the gappiest column (`df.isna().sum().idxmax()`) so it's useful on open, and a "long gap ≥ records" spinbox re-runs
+`GapStats`. The library's panel `plot_*` methods were made embed-safe (`ax.figure.colorbar`, not `plt.colorbar`) so they
+render into the shared canvas — a one-line fix that benefits any embedding caller.
 
 **Feature engineering:** opened from **Tools ▸ Feature engineering** (a menu-activated tab — `registry.MENU_TAB_CLASSES`
 — not shown until selected, and closable; always-on tabs have their close button removed). It runs `FeatureEngineer`

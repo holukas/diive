@@ -125,6 +125,22 @@ the plot immediately.) Available controls:
   Line *colours* for time series come from **Settings ▸ Appearance** (so a
   variable keeps the same colour everywhere).
 
+### Tools ▸ Gaps & coverage
+
+A dashboard for finding and inspecting **missing data**. Pick a variable on the
+left (it opens on the one with the most gaps); the right side shows:
+
+- **Stat cards** — overall missing %, number of gap periods, long gaps, the
+  longest gap and its duration, and the worst month.
+- A **gap map**: a daily-availability heatmap (green = data, red = missing) over
+  a timeline where each gap is a spike (taller = longer).
+- A **table of the longest gaps** (start, end, length, duration).
+
+The map is **clickable**: click a row in the table to highlight that gap on the
+timeline, or click anywhere on the timeline to jump to the nearest gap (it gets
+highlighted and its table row is selected). Use **Long gap ≥ (records)** to set
+what counts as a "long" gap (48 records = one day for half-hourly data).
+
 ### Tools ▸ Feature engineering
 
 Build new features (lags, rolling stats, differences, EMA, polynomials, STL,

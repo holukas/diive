@@ -49,6 +49,11 @@
     in the list still updates the plot immediately.
   - **Cumulative-year "highlight year" is a dropdown** of the years present in the loaded data (populated on load and
     on date-range changes), replacing the free-entry spinbox.
+  - **Gap & coverage dashboard** (Tools menu; single-instance) — pick a variable and see KPI stat cards, a two-panel
+    *gap map* (daily-availability heatmap + gap-spike timeline) and a long-gap table, all from `dv.analysis.GapStats`.
+    The map is clickable both ways: click a table row to highlight that gap on the timeline, or click the timeline to
+    jump to the nearest gap (via the new `GapStats.gap_at()`), which highlights it and selects its table row. Opens on
+    the gappiest variable; a "long gap ≥ records" control re-runs the analysis.
   - **Feature engineering tab** (`FeatureEngineer`); created columns tagged with a NEW pill.
   - **Flux processing chain tab** (Tools menu; first slice = Input + Level 2) — runs the composable `init_flux_data` /
     `run_level2`, shows the L2 QCF-filtered flux, and **Copy Python** emits the exact reproducible script. The
@@ -60,6 +65,11 @@
 - **`save_parquet(..., enforce_diive_format=True, timestamp_name=...)` and `dv.to_diive_format(df, timestamp_name=...)`**
   — coerce a DataFrame to the diive parquet format: single-level columns (one header row) + a validly-named timestamp
   index (`TIMESTAMP_END` / `TIMESTAMP_MIDDLE` / `TIMESTAMP_START`).
+- **`GapFinder.gap_at(timestamp)` / `GapStats.gap_at(timestamp)`** — return the detected gap containing a timestamp,
+  or the nearest one (accepts tz-aware values). Handy for interactive tools that map a clicked time to a gap.
+- **`GapFinder` / `GapStats` panel plotters are now embed-safe** — `plot_availability_heatmap`, `plot_gap_spike_timeline`
+  attach their colorbar via `ax.figure.colorbar` instead of `plt.colorbar` (which targeted pyplot's current figure), so
+  they render correctly into a caller-supplied figure (e.g. an embedded GUI canvas). No change for standalone use.
 - **Plot styling params added (backward-compatible defaults):** `ScatterXY.plot` gains `markersize`, `alpha`, and
   `vmin` / `vmax` (Z colour scale); `TimeSeries.plot` gains `markersize` and now honors an explicit `title` when drawn
   onto a caller-supplied `ax`; `DielCycle.plot` gains `legend_loc`. All preserve previous behavior when unset.

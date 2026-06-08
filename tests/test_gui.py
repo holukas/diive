@@ -583,6 +583,56 @@ def test_hexbin_tab(window):
     assert len(tab._xyz) == 3
 
 
+def test_gap_dashboard_tab(window):
+    import types
+    import matplotlib.dates as mdates
+    from diive.gui.icons import menu_icon
+    assert not menu_icon("Gaps & coverage").isNull()
+
+    window._open_menu_tab("Gaps & coverage")
+    tab = window._menu_tab_list[-1]
+    # run_with_loading defers the compute one tick; flush it.
+    for _ in range(50):
+        QApplication.processEvents()
+
+    # Defaults to the gappiest variable so the dashboard is useful on open.
+    assert tab._current == "NEE_CUT_84_orig"
+    fig = tab.canvas.fig
+    assert len(fig.axes) >= 2  # availability heatmap + gap timeline (+ colorbars)
+    assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    # Stat cards (minus trailing stretch) and a populated long-gap table.
+    assert tab.stats_layout.count() - 1 == 6
+    n_rows = tab.table.rowCount()
+    assert n_rows > 0
+
+    # Clickable gap map, table -> highlight overlay on the timeline.
+    tab.table.selectRow(0)
+    QApplication.processEvents()
+    assert len(tab._highlight) == 2  # span + ring
+
+    # Clickable gap map, timeline click -> nearest gap highlighted + row selected.
+    g0 = tab._long_gaps.iloc[0]
+    ev = types.SimpleNamespace(
+        inaxes=tab._timeline_ax,
+        xdata=mdates.date2num(g0["GAP_START"]),
+        ydata=float(g0["GAP_LENGTH"]))
+    tab._on_click(ev)
+    QApplication.processEvents()
+    assert len(tab._highlight) == 2
+    sel = tab.table.selectionModel().selectedRows()
+    assert sel and sel[0].row() == 0
+
+    # Raising the long-gap threshold lists fewer gaps (library recompute).
+    tab.threshold.setValue(tab.threshold.value() * 4)
+    for _ in range(50):
+        QApplication.processEvents()
+    assert tab.table.rowCount() < n_rows
+
+    # Single-instance: re-opening focuses the existing tab.
+    window._open_menu_tab("Gaps & coverage")
+    assert _tabs(window).count("Gaps & coverage") == 1
+
+
 def test_appearance_singleton(window):
     window._open_menu_tab("Appearance")
     window._open_menu_tab("Appearance")

@@ -299,6 +299,15 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   live on a `QObject` helper because `DiiveTab` is a plain `ABC`, not a `QObject` — class-level `Signal`s on a `DiiveTab`
   won't bind. When lazily creating a menu tab, call `tab.widget()` (builds it) **before** connecting `featuresCreated`,
   which `build()` sets.
+- **Gap & coverage dashboard tab** (`tabs/gaps.py`, `Tools ▸ Gaps & coverage`, single-instance). Diagnostics for
+  missing data: stat cards + a two-panel **gap map** (availability heatmap + gap-spike timeline) + a long-gap table.
+  All gap logic is the library's `dv.analysis.GapStats` — `.summary`, `.long_gaps`, the per-`ax` `plot_availability_heatmap`/
+  `plot_gap_spike_timeline`, and `gap_at(timestamp)` (new: maps a click to the containing/nearest gap). The tab only
+  arranges widgets and wires the **clickable** interactions both ways (table row → highlight overlay on the timeline;
+  timeline click → `gap_at` → highlight + select the matching row), with a `_syncing` guard against selection echo.
+  Defaults to the gappiest variable (`df.isna().sum().idxmax()`) so it's useful on open. The long-gap threshold spinbox
+  re-runs `GapStats` (cheap). **Note:** the library's `plot_*` panel methods attach their colorbar via `ax.figure.colorbar`
+  (not `plt.colorbar`, which targets pyplot's current figure) so they embed correctly in the GUI canvas.
 - **Var list sync.** All tabs refresh via `MainWindow._push_data()` → `on_data_loaded(df, created)` on every data
   change; menu tabs get current data on open and are dropped from the push list on close.
 - **Output console.** The `Log` tab (`LogTab` → `ConsolePanel`) mirrors diive's Rich output in colour. The library tees
