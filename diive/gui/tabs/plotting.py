@@ -33,6 +33,7 @@ from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.plot_settings import (
     HEATMAP,
     HEATMAP_YEARMONTH,
+    HEXBIN,
     RIDGELINE,
     TIMESERIES,
     PlotSettingsPanel,
@@ -65,6 +66,7 @@ class PlottingTab(DiiveTab):
     def build(self) -> QWidget:
         self._df = None
         self._panels: list[str] = []
+        self._xyz: list[str] = []  # hexbin role order: [X, Y, Z]
 
         root = QWidget()
         layout = QHBoxLayout(root)
@@ -94,7 +96,7 @@ class PlottingTab(DiiveTab):
         splitter.setStretchFactor(0, 0)   # list keeps its width
         splitter.setStretchFactor(1, 0)   # settings keep their width
         splitter.setStretchFactor(2, 1)   # canvas takes extra space
-        splitter.setSizes([220, 250, 780])
+        splitter.setSizes([220, 320, 780])
         layout.addWidget(splitter)
 
         # Live theme preview: repaint pills, and re-render if colors affect the
@@ -121,12 +123,20 @@ class PlottingTab(DiiveTab):
         """
         self._df = df
         self._panels = []
+        self._xyz = []
         self.varpanel.set_variables(df.columns, created)
         self._select_default()
 
     def _select_default(self) -> None:
-        """Highlight and render the startup variable in a single panel."""
+        """Highlight and render the startup variable(s)."""
         cols = [str(c) for c in self._df.columns]
+        if self._plot_type == HEXBIN:
+            # Hexbin needs three variables; seed a sensible driver/driver/flux
+            # triple so the tab shows something on open.
+            preferred = ["Tair_f", "VPD_f", "NEE_CUT_REF_f"]
+            self._xyz = preferred if all(c in cols for c in preferred) else cols[:3]
+            self._render()
+            return
         if _DEFAULT_VAR in cols:
             self._panels = [_DEFAULT_VAR]
         elif cols:
@@ -137,6 +147,18 @@ class PlottingTab(DiiveTab):
 
     def _on_selected(self, name: str, additive: bool) -> None:
         if not name:
+            return
+        if self._plot_type == HEXBIN:
+            # Click cycles roles: fill X, then Y, then Z; clicking an assigned
+            # variable removes it; once all three are set a new pick replaces the
+            # oldest (X), sliding Y->X, Z->Y, new->Z.
+            if name in self._xyz:
+                self._xyz.remove(name)
+            elif len(self._xyz) < 3:
+                self._xyz.append(name)
+            else:
+                self._xyz = self._xyz[1:] + [name]
+            self.varpanel.run_with_loading(name, self._render)
             return
         if self._plot_type == RIDGELINE:
             # The ridgeline uses the whole figure -> single variable only.
@@ -163,6 +185,10 @@ class PlottingTab(DiiveTab):
         x labels on the bottom panel only, independent y per panel). The
         ridgeline is single-variable and manages its own figure.
         """
+        if self._plot_type == HEXBIN:
+            self._render_hexbin()
+            return
+
         if self._plot_type == RIDGELINE:
             self._render_ridgeline()
             return
@@ -224,6 +250,52 @@ class PlottingTab(DiiveTab):
                 ax = fig.add_subplot(111)
                 ax.text(0.5, 0.5, f"Cannot plot '{name}':\n{err}", ha="center",
                         va="center", wrap=True, transform=ax.transAxes)
+        self.canvas.draw()
+        self._mark_selected()
+
+    def _render_hexbin(self) -> None:
+        """Render the hexbin (single figure): z aggregated into 2D x/y bins.
+
+        Needs all three roles set. `HexbinPlot` requires x and y to be NaN-free,
+        so rows with a missing x or y are dropped jointly (keeping x/y/z aligned);
+        z may keep NaNs (ignored during aggregation). z is aggregated with the
+        class default (median).
+        """
+        self.settings.set_xyz(*(self._xyz + [None, None, None])[:3])
+        ax = self.canvas.new_axes(1)[0]
+        if len(self._xyz) < 3:
+            ax.text(0.5, 0.5,
+                    f"Click 3 variables to set X, Y, Z  ({len(self._xyz)}/3)",
+                    ha="center", va="center", transform=ax.transAxes)
+            self.canvas.draw()
+            self._mark_selected()
+            return
+        xn, yn, zn = self._xyz
+        opts = self.settings.values()
+        try:
+            sub = self._df[[xn, yn, zn]].dropna(subset=[xn, yn])
+            dv.plotting.HexbinPlot(
+                x=sub[xn], y=sub[yn], z=sub[zn],
+                gridsize=opts["gridsize"], normalize_axes=opts["normalize_axes"],
+                mincnt=opts["mincnt"],
+            ).plot(
+                ax=ax, fig=self.canvas.fig,
+                cmap=opts["cmap"], vmin=opts["vmin"], vmax=opts["vmax"],
+                color_bad=opts["color_bad"], zlabel=opts["zlabel"],
+                xlabel=opts["xlabel"], ylabel=opts["ylabel"],
+                cb_digits_after_comma=opts["cb_digits_after_comma"],
+                cb_extend=opts["cb_extend"], show_colormap=opts["show_colormap"],
+                show_values=opts["show_values"],
+                show_values_n_dec_places=opts["show_values_n_dec_places"],
+                show_values_fontsize=opts["show_values_fontsize"],
+                axlabels_fontsize=opts["axlabels_fontsize"],
+                ticks_labelsize=opts["ticks_labelsize"],
+                cb_labelsize=opts["cb_labelsize"],
+            )
+        except Exception as err:
+            ax.clear()
+            ax.text(0.5, 0.5, f"Cannot plot hexbin:\n{err}", ha="center",
+                    va="center", wrap=True, transform=ax.transAxes)
         self.canvas.draw()
         self._mark_selected()
 
@@ -292,5 +364,10 @@ class PlottingTab(DiiveTab):
             )
 
     def _mark_selected(self) -> None:
-        """Highlight the selected panels in the shared variable list."""
-        self.varpanel.set_panels(self._panels)
+        """Highlight the selected variables in the shared list.
+
+        Hexbin numbers its three role picks (1=X, 2=Y, 3=Z); other plot types
+        number their panels left-to-right / top-to-bottom.
+        """
+        marks = self._xyz if self._plot_type == HEXBIN else self._panels
+        self.varpanel.set_panels(marks)

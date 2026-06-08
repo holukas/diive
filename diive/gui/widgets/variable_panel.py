@@ -40,16 +40,53 @@ from diive.gui.widgets.variable_delegate import (
 )
 from diive.gui.widgets.variable_list import VariableList
 
+#: Original (dataset) insertion order of an item, so the list can be re-sorted
+#: back to it when the filter is cleared. Panel-internal (not painted), so it
+#: lives here rather than in the delegate's role set.
+ORDER_ROLE = Qt.ItemDataRole.UserRole + 10
+
 
 def _normalize(text: str) -> str:
     """Lowercase and strip non-alphanumerics for separator-insensitive search."""
     return re.sub(r"[^a-z0-9]", "", text.lower())
 
 
-def _is_subsequence(needle: str, hay: str) -> bool:
-    """True if every char of `needle` appears in `hay` in order (gaps allowed)."""
-    it = iter(hay)
-    return all(c in it for c in needle)
+def _fuzzy_score(needle: str, hay: str):
+    """Fuzzy-match `needle` against `hay` (both already normalized).
+
+    Subsequence matching is the gate (every needle char appears in `hay` in
+    order, gaps allowed); the return value ranks how *tight* the match is so the
+    best candidates can float to the top. Higher is better. Contiguous runs, a
+    match at the very start, an early first hit, and a haystack close in length
+    to the needle all raise the score. Returns ``None`` when `needle` is not a
+    subsequence of `hay`.
+    """
+    if not needle:
+        return 0.0
+    score = 0.0
+    pos = 0       # search cursor into hay
+    prev = -2     # index of the previously matched char
+    first = None  # index of the first matched char
+    run = 0       # current contiguous-run length
+    for c in needle:
+        idx = hay.find(c, pos)
+        if idx == -1:
+            return None
+        if first is None:
+            first = idx
+        if idx == prev + 1:
+            run += 1
+            score += 2.0 + run  # contiguous matches are worth more, growing
+        else:
+            run = 0
+            score += 1.0
+        prev = idx
+        pos = idx + 1
+    if first == 0:
+        score += 3.0  # matches anchored at the start rank highest
+    score -= 0.05 * first              # earlier first hit is better
+    score -= 0.1 * (len(hay) - len(needle))  # less padding around the match
+    return score
 
 
 class VariablePanel(QWidget):
@@ -63,9 +100,11 @@ class VariablePanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
+        self._order_counter = 0  # next dataset-order index for added items
+
         self.search = QLineEdit()
         self.search.setClearButtonEnabled(True)
-        self.search.setPlaceholderText("Filter variables...")
+        self.search.setPlaceholderText("Fuzzy filter variables...")
         self.search.textChanged.connect(self._apply_filter)
 
         self.list = VariableList()
@@ -94,6 +133,7 @@ class VariablePanel(QWidget):
         """Replace the list contents; `created` names get the NEW pill."""
         created = created or set()
         self.list.clear()
+        self._order_counter = 0
         for name in names:
             self._add_item(str(name), str(name) in created)
         self._apply_filter(self.search.text())
@@ -116,6 +156,8 @@ class VariablePanel(QWidget):
         item.setData(NAME_ROLE, name)
         item.setData(PANEL_ROLE, 0)
         item.setData(CREATED_ROLE, created)
+        item.setData(ORDER_ROLE, self._order_counter)
+        self._order_counter += 1
         self.list.addItem(item)
 
     # --- highlight (panel order: 1 = primary, 2+ = additional) ---
@@ -162,8 +204,49 @@ class VariablePanel(QWidget):
 
     # --- filtering ---
     def _apply_filter(self, text: str) -> None:
+        """Fuzzy-filter and rank the list.
+
+        With an empty field, all items show in dataset order. While typing,
+        non-matching items are hidden and matches are sorted best-first by their
+        fuzzy score (ties keep dataset order), so the closest variable rises to
+        the top.
+        """
         needle = _normalize(text)
-        for i in range(self.list.count()):
-            item = self.list.item(i)
-            hay = _normalize(item.data(NAME_ROLE) or "")
-            item.setHidden(not _is_subsequence(needle, hay))
+        items = [self.list.item(i) for i in range(self.list.count())]
+        if not items:
+            return
+        if not needle:
+            ordered = sorted(items, key=lambda it: it.data(ORDER_ROLE))
+            self._reorder(ordered, hidden=set())
+            return
+        matched, unmatched = [], []
+        for it in items:
+            score = _fuzzy_score(needle, _normalize(it.data(NAME_ROLE) or ""))
+            if score is None:
+                unmatched.append(it)
+            else:
+                matched.append((score, it.data(ORDER_ROLE), it))
+        matched.sort(key=lambda t: (-t[0], t[1]))  # best score first, then order
+        ordered = [t[2] for t in matched]
+        ordered += sorted(unmatched, key=lambda it: it.data(ORDER_ROLE))
+        # QListWidgetItem is unhashable in PySide6, so track hidden ones by id().
+        self._reorder(ordered, hidden={id(it) for it in unmatched})
+
+    def _reorder(self, ordered: list, hidden: set) -> None:
+        """Re-sequence the list to `ordered`, hiding items whose id() is in `hidden`.
+
+        Items are detached and re-added in the new order; each keeps its data
+        (name, pills, panel/loading state), so only position and the hidden flag
+        change. `ordered` must contain every current item exactly once (it holds
+        the references that keep the detached items alive).
+        """
+        self.list.setUpdatesEnabled(False)
+        try:
+            while self.list.count():
+                self.list.takeItem(0)
+            for it in ordered:
+                self.list.addItem(it)
+                it.setHidden(id(it) in hidden)
+        finally:
+            self.list.setUpdatesEnabled(True)
+        self.list.viewport().update()

@@ -355,6 +355,35 @@ def test_ridgeline_and_plot_icons(window):
     assert tab._panels == ["Tair_f"]
 
 
+def test_hexbin_tab(window):
+    from diive.gui.icons import plot_menu_icon
+    assert not plot_menu_icon("Hexbin").isNull()
+
+    window._open_menu_tab("Hexbin")
+    tab = window._menu_tab_list[-1]
+    QApplication.processEvents()
+    # Seeds three roles (driver/driver/flux) and renders a hexbin on open.
+    assert len(tab._xyz) == 3
+    fig = tab.canvas.fig
+    assert fig.axes and fig.axes[0].collections  # hexbin polycollection drawn
+    assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    # Role readout reflects the assignment.
+    assert tab.settings.x_role.text() == tab._xyz[0]
+    assert tab.settings.z_role.text() == tab._xyz[2]
+
+    # Click cycling: clicking an assigned variable removes it; an incomplete
+    # selection shows the prompt instead of a plot.
+    x0 = tab._xyz[0]
+    tab._on_selected(x0, False)
+    QApplication.processEvents()
+    assert x0 not in tab._xyz and len(tab._xyz) == 2
+    assert any("X, Y, Z" in t.get_text() for a in tab.canvas.fig.axes for t in a.texts)
+    # Re-adding fills the freed slot again (back to three).
+    tab._on_selected(x0, False)
+    QApplication.processEvents()
+    assert len(tab._xyz) == 3
+
+
 def test_appearance_singleton(window):
     window._open_menu_tab("Appearance")
     window._open_menu_tab("Appearance")

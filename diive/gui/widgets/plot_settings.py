@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
+    QLabel,
     QLineEdit,
     QScrollArea,
     QSpinBox,
@@ -37,6 +38,7 @@ HEATMAP = "Heatmap (date/time)"
 HEATMAP_YEARMONTH = "Heatmap (year/month)"
 TIMESERIES = "Time series"
 RIDGELINE = "Ridgeline"
+HEXBIN = "Hexbin"
 
 #: Period grouping for the ridgeline (one density ridge per group).
 _RIDGELINE_HOW = ["monthly", "weekly", "yearly"]
@@ -71,7 +73,7 @@ class PlotSettingsPanel(QScrollArea):
         super().__init__()
         self._plot_type = plot_type
         self.setWidgetResizable(True)
-        self.setFixedWidth(250)
+        self.setFixedWidth(320)
 
         inner = QWidget()
         self._col = QVBoxLayout(inner)
@@ -83,8 +85,18 @@ class PlotSettingsPanel(QScrollArea):
             self._build_timeseries()
         elif plot_type == RIDGELINE:
             self._build_ridgeline()
+        elif plot_type == HEXBIN:
+            self._build_hexbin()
 
         self._col.addStretch(1)
+        # Keep every form within the panel's fixed width: wrap a row's field
+        # under its label when the two together are too wide, and let fields grow
+        # to fill the available width. Without this, long labels/fields push the
+        # content wider than the panel and the right edge (combo/spin arrows)
+        # gets clipped.
+        for form in inner.findChildren(QFormLayout):
+            form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+            form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.setWidget(inner)
         self._apply_tooltips()
 
@@ -97,6 +109,7 @@ class PlotSettingsPanel(QScrollArea):
             HEATMAP_YEARMONTH: dv.plotting.HeatmapYearMonth.plot,
             TIMESERIES: dv.plotting.TimeSeries.plot,
             RIDGELINE: dv.plotting.RidgeLinePlot.plot,
+            HEXBIN: dv.plotting.HexbinPlot.plot,
         }.get(self._plot_type)
         docs = param_docs(method) if method else {}
 
@@ -127,6 +140,26 @@ class PlotSettingsPanel(QScrollArea):
                      ("shade_percentile", self.shade_percentile), ("kd_kwargs", self.bandwidth),
                      ("show_mean_line", self.show_mean_line), ("ascending", self.ascending),
                      ("xlabel", self.xlabel)]
+        elif self._plot_type == HEXBIN:
+            pairs = [
+                ("cmap", self.cmap), ("vmin", self.vmin), ("vmax", self.vmax),
+                ("color_bad", self.color_bad), ("zlabel", self.zlabel),
+                ("xlabel", self.xlabel), ("ylabel", self.ylabel),
+                ("cb_digits_after_comma", self.cb_digits), ("cb_extend", self.cb_extend),
+                ("show_colormap", self.show_colormap), ("show_values", self.show_values),
+                ("show_values_n_dec_places", self.show_values_dec),
+                ("show_values_fontsize", self.show_values_fontsize),
+                ("axlabels_fontsize", self.axlabels_fontsize),
+                ("ticks_labelsize", self.ticks_labelsize), ("cb_labelsize", self.cb_labelsize),
+            ]
+            # gridsize/normalize_axes/mincnt are __init__ params, not in plot().
+            init_docs = param_docs(dv.plotting.HexbinPlot.__init__)
+            for param, widget in [("gridsize", self.gridsize),
+                                  ("normalize_axes", self.normalize_axes),
+                                  ("mincnt", self.mincnt)]:
+                tip = init_docs.get(param)
+                if tip:
+                    widget.setToolTip(tip)
         else:
             pairs = []
         for param, widget in pairs:
@@ -265,6 +298,107 @@ class PlotSettingsPanel(QScrollArea):
         form.addRow("X label", self.xlabel)
         self._col.addWidget(labels)
 
+    # --- hexbin controls ---
+    def _build_hexbin(self) -> None:
+        # Read-only readout of the current X/Y/Z role assignment (the tab sets
+        # these via set_xyz as the user clicks variables). The list highlight
+        # numbers the same picks 1/2/3 = X/Y/Z.
+        roles = QGroupBox("Variables")
+        form = QFormLayout(roles)
+        hint = QLabel("Click list in order →")
+        hint.setStyleSheet("color: #90A4AE;")
+        form.addRow(hint)
+        self.x_role = QLabel("—")
+        self.y_role = QLabel("—")
+        self.z_role = QLabel("—")
+        for lbl in (self.x_role, self.y_role, self.z_role):
+            lbl.setStyleSheet("color: #455A64;")
+        form.addRow("X (driver)", self.x_role)
+        form.addRow("Y (driver)", self.y_role)
+        form.addRow("Z (flux)", self.z_role)
+        self._col.addWidget(roles)
+
+        binning = QGroupBox("Binning")
+        form = QFormLayout(binning)
+        self.gridsize = self._spin(11, 2, 100, form, "Grid size")
+        self.normalize_axes = self._check("Normalize (pctile)", form)
+        self.mincnt = self._spin(0, 0, 1000, form, "Min count")
+        self._col.addWidget(binning)
+
+        colors = QGroupBox("Colors")
+        form = QFormLayout(colors)
+        self.cmap = QComboBox()
+        self.cmap.setEditable(True)
+        self.cmap.addItems(_COLORMAPS)
+        self.cmap.currentTextChanged.connect(self.changed)
+        form.addRow("Colormap", self.cmap)
+        self.vmin = QLineEdit()
+        self.vmin.setPlaceholderText("auto")
+        self.vmin.editingFinished.connect(self.changed)
+        form.addRow("Min value", self.vmin)
+        self.vmax = QLineEdit()
+        self.vmax.setPlaceholderText("auto")
+        self.vmax.editingFinished.connect(self.changed)
+        form.addRow("Max value", self.vmax)
+        self.color_bad = QComboBox()
+        self.color_bad.setEditable(True)
+        self.color_bad.addItems(_BAD_COLORS)
+        self.color_bad.currentTextChanged.connect(self.changed)
+        form.addRow("Missing color", self.color_bad)
+        self._col.addWidget(colors)
+
+        cbar = QGroupBox("Colorbar")
+        form = QFormLayout(cbar)
+        self.show_colormap = self._check("Show colorbar", form, checked=True)
+        self.zlabel = QLineEdit()
+        self.zlabel.setPlaceholderText("(units)")
+        self.zlabel.editingFinished.connect(self.changed)
+        form.addRow("Label", self.zlabel)
+        self.cb_digits = QComboBox()
+        self.cb_digits.addItems(["0", "1", "2", "3", "4"])
+        self.cb_digits.setCurrentText("2")
+        self.cb_digits.currentTextChanged.connect(self.changed)
+        form.addRow("Decimals", self.cb_digits)
+        self.cb_extend = QComboBox()
+        self.cb_extend.addItems(["neither", "both", "min", "max"])
+        self.cb_extend.currentTextChanged.connect(self.changed)
+        form.addRow("Extend arrows", self.cb_extend)
+        self._col.addWidget(cbar)
+
+        vals = QGroupBox("Bin values")
+        form = QFormLayout(vals)
+        self.show_values = self._check("Overlay values", form)
+        self.show_values_dec = self._spin(0, 0, 6, form, "Decimals")
+        self.show_values_fontsize = self._fontspin(form, "Value font")
+        self._col.addWidget(vals)
+
+        labels = QGroupBox("Labels")
+        form = QFormLayout(labels)
+        self.xlabel = QLineEdit()
+        self.xlabel.setPlaceholderText("(X variable name)")
+        self.xlabel.editingFinished.connect(self.changed)
+        form.addRow("X label", self.xlabel)
+        self.ylabel = QLineEdit()
+        self.ylabel.setPlaceholderText("(Y variable name)")
+        self.ylabel.editingFinished.connect(self.changed)
+        form.addRow("Y label", self.ylabel)
+        self._col.addWidget(labels)
+
+        fonts = QGroupBox("Fonts (0 = auto)")
+        form = QFormLayout(fonts)
+        self.axlabels_fontsize = self._fontspin(form, "Axis labels")
+        self.ticks_labelsize = self._fontspin(form, "Tick labels")
+        self.cb_labelsize = self._fontspin(form, "Colorbar labels")
+        self._col.addWidget(fonts)
+
+    def set_xyz(self, x: str | None, y: str | None, z: str | None) -> None:
+        """Update the X/Y/Z role readout (hexbin only)."""
+        if self._plot_type != HEXBIN:
+            return
+        self.x_role.setText(x or "—")
+        self.y_role.setText(y or "—")
+        self.z_role.setText(z or "—")
+
     # --- control factories (wire each to `changed`) ---
     def _spin(self, value, lo, hi, form, label) -> QSpinBox:
         sp = QSpinBox()
@@ -360,6 +494,32 @@ class PlotSettingsPanel(QScrollArea):
                 "ascending": self.ascending.isChecked(),
                 "xlabel": self.xlabel.text().strip() or None,
                 "kd_kwargs": {"bandwidth": bw} if bw > 0 else None,
+            }
+        if self._plot_type == HEXBIN:
+            def _font(sp):
+                return sp.value() or None
+            return {
+                # __init__ params
+                "gridsize": self.gridsize.value(),
+                "normalize_axes": self.normalize_axes.isChecked(),
+                "mincnt": self.mincnt.value(),
+                # plot() styling params
+                "cmap": self.cmap.currentText().strip() or "RdYlBu_r",
+                "vmin": self._float_or_none(self.vmin.text()),
+                "vmax": self._float_or_none(self.vmax.text()),
+                "color_bad": self.color_bad.currentText().strip() or "grey",
+                "zlabel": self.zlabel.text().strip() or None,
+                "xlabel": self.xlabel.text().strip() or None,
+                "ylabel": self.ylabel.text().strip() or None,
+                "cb_digits_after_comma": int(self.cb_digits.currentText()),
+                "cb_extend": self.cb_extend.currentText(),
+                "show_colormap": self.show_colormap.isChecked(),
+                "show_values": self.show_values.isChecked(),
+                "show_values_n_dec_places": self.show_values_dec.value(),
+                "show_values_fontsize": _font(self.show_values_fontsize),
+                "axlabels_fontsize": _font(self.axlabels_fontsize),
+                "ticks_labelsize": _font(self.ticks_labelsize),
+                "cb_labelsize": _font(self.cb_labelsize),
             }
         return {
             "linewidth": self.linewidth.value(),
