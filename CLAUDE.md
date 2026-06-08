@@ -60,7 +60,7 @@ tests/                        # Unit tests
 | `dv.outliers` | `AbsoluteLimits`, `Hampel`, `LocalSD`, `LocalOutlierFactor`, `zScore`, `zScoreRolling`, `zScoreIncrements`, `TrimLow`, `ManualRemoval`, + daytime/nighttime variants |
 | `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`, `FeatureEngineer`, `GapFillingResult`, `prediction_scores`, `linear_interpolation` |
 | `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `process_one_file`, `FluxDetectionLimit`, ustar classes. Per-level `run_level*`, `make_level32_detector`, and `chain_to_code`/`level2_to_code` (render chain choices as a reproducible script) live in `diive.flux.fluxprocessingchain`. |
-| `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `harmonic_analysis`, `percentiles101`, `rank_drivers` |
+| `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `harmonic_analysis`, `spectrogram`, `percentiles101`, `rank_drivers` |
 | `dv.analysis.experimental` | **(provisional, API may change)** `DriverAnalysis`, `DriverAnalysisResult`, `AleCurve`, `Ale2DResult`, `accumulated_local_effects`, `accumulated_local_effects_2d`, `ExperimentalWarning` — evidence-triangulation driver attribution; emits a one-time `ExperimentalWarning` on use |
 | `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `ShiftedDistributionPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot` |
 | `dv.times` | `TimestampSanitizer`, `DetectFrequency`, `keep_daterange` (non-destructive date-range subselection; inclusive `start`/`end`, either bound optional), `resample_to_daily_agg` (sub-daily → one value per calendar day; `agg=`, `mincounts_perc=`), `resample_to_monthly_agg_matrix`, `timestamp_infer_freq_*` |
@@ -329,6 +329,13 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   py::stl_decompose`) never passed `period` to statsmodels and called `STL.fit(weights=...)` (unsupported) — so STL
   always raised on real data. Now passes `period` + a small odd seasonal smoother and `fit()` without weights; classical/
   harmonic were already fine.
+- **Spectrogram tab** (`tabs/spectrogram.py`, `Tools ▸ Spectrogram`, single-instance). Time-frequency view: how the
+  strength of a variable's cycles (esp. the 1/day diel rhythm) changes over the record. Wraps `dv.analysis.spectrogram`;
+  the tab maps the result onto **calendar-time × cycles-per-day** axes (records-per-day inferred from the index spacing;
+  segment centres mapped to real timestamps via the non-NaN sample index, so the x-axis is correct even across gaps) and
+  shows a plain-language **explanation label** of what a spectrogram is (the user asked for it). Window length / overlap /
+  window-function apply on **Update** (recompute); max-cycles-per-day (y-limit) and colormap are live re-renders. No
+  signal processing in the GUI.
 - **Var list sync.** All tabs refresh via `MainWindow._push_data()` → `on_data_loaded(df, created)` on every data
   change; menu tabs get current data on open and are dropped from the push list on close.
 - **Output console.** The `Log` tab (`LogTab` → `ConsolePanel`) mirrors diive's Rich output in colour. The library tees

@@ -29,6 +29,7 @@ diive-gui                # or: uv run diive-gui
 | `tabs/gaps.py` | Gap & coverage dashboard — stat cards + clickable gap map (`GapStats` availability heatmap + gap timeline) + long-gap table |
 | `tabs/drivers.py` | Driver explorer — rank variables by correlation with a target (`rank_drivers`, optional lag scan); click a driver for its scatter |
 | `tabs/seasonaltrend.py` | Seasonal-trend & anomaly explorer — STL/classical/harmonic decomposition + yearly anomalies vs a reference period |
+| `tabs/spectrogram.py` | Spectrogram explorer — time-frequency map (`dv.analysis.spectrogram`) on calendar/cycles-per-day axes + an explanation |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
 | `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar (with a Save-DPI spinbox); attaches a `HoverAnnotator` |
 | `widgets/hover.py` | `HoverAnnotator` — value-under-cursor tooltip (line snap + heatmap cell) via blitting |
@@ -142,6 +143,15 @@ Variable / view / reference-year changes re-render live; **method/robust apply o
 On <2 years of data it shows a friendly message (annual decomposition needs two cycles) and keeps the anomaly view
 working. *(Building this surfaced and fixed a real library bug: `stl_decompose` never passed `period` to statsmodels and
 called `STL.fit(weights=…)`, which isn't supported — STL had been raising on all real data.)*
+
+**Spectrogram explorer (`tabs/spectrogram.py`):** opened from **Tools ▸ Spectrogram** (single-instance). Pick a
+variable → a spectrogram (short-time FFT) shows how the strength of its cycles changes over time, with a plain-language
+**explanation label** above the plot describing what to look for (the bright 1-cycle/day diel band, overtones, the
+window trade-off). The transform is `dv.analysis.spectrogram`; the tab maps the record-based result onto **calendar
+time × cycles-per-day** axes — records-per-day is inferred from the index spacing, and each segment centre is mapped to
+a real timestamp through the non-NaN sample index so the time axis stays correct even across gaps. Window length /
+overlap / window function recompute on **Update**; the frequency-axis limit and colormap are live re-renders. The GUI
+does no signal processing — it only calls the library and arranges the output.
 
 **Feature engineering:** opened from **Tools ▸ Feature engineering** (a menu-activated tab — `registry.MENU_TAB_CLASSES`
 — not shown until selected, and closable; always-on tabs have their close button removed). It runs `FeatureEngineer`

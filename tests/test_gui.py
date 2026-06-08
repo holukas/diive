@@ -728,6 +728,44 @@ def test_seasonal_trend_short_data_graceful(window):
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
 
+def test_spectrogram_tab(window):
+    from diive.gui.icons import menu_icon
+    assert not menu_icon("Spectrogram").isNull()
+
+    window._open_menu_tab("Spectrogram")
+    tab = window._menu_tab_list[-1]
+    for _ in range(60):
+        QApplication.processEvents()
+
+    assert tab._target == "NEE_CUT_REF_f"
+    assert tab._spec is not None
+    assert round(tab._rec_per_day) == 48  # half-hourly -> 48 records/day
+    fig = tab.canvas.fig
+    qmesh = [c for a in fig.axes for c in a.collections
+             if c.__class__.__name__ == "QuadMesh"]
+    assert qmesh  # spectrogram mesh drawn
+    assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    # The explanation text is present.
+    assert "cycle" in tab.explanation.text()
+
+    # Window length applies on Update (recompute -> different segmentation).
+    before = tab._spec["power"].shape
+    tab.nperseg.setValue(128)
+    tab.update_btn.click()
+    for _ in range(40):
+        QApplication.processEvents()
+    assert tab._spec["power"].shape != before
+
+    # Max cycles/day is a live re-render (y-limit only).
+    tab.max_freq.setValue(2.0)
+    QApplication.processEvents()
+    assert round(tab.canvas.fig.axes[0].get_ylim()[1], 1) == 2.0
+
+    # Single-instance.
+    window._open_menu_tab("Spectrogram")
+    assert _tabs(window).count("Spectrogram") == 1
+
+
 def test_appearance_singleton(window):
     window._open_menu_tab("Appearance")
     window._open_menu_tab("Appearance")

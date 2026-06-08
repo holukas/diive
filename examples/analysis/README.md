@@ -16,7 +16,7 @@ Examples demonstrating statistical analysis, decomposition, and pattern detectio
 ### Decomposition & Trends
 
 - **analysis_seasonaltrend.py** — STL decomposition separating trend and seasonality
-- **analysis_harmonic.py** — Spectral analysis and Fourier decomposition for frequency content
+- **analysis_harmonic.py** — `harmonic_analysis` + `spectrogram`: amplitude/phase of the diel and annual cycles, window effect, and a time-frequency map
 
 ### Distribution & Ranges
 

@@ -64,7 +64,7 @@ See: [visualization/README.md](visualization/README.md)
 | [**analysis_histogram_distribution.py**](analysis/analysis_histogram_distribution.py) | Histogram binning methods: fixed bins, unique values, fringe bin removal |
 | [**analysis_optimumrange.py**](analysis/analysis_optimumrange.py) | Find optimal value ranges, condition-based filtering |
 | [**analysis_quantiles.py**](analysis/analysis_quantiles.py) | Percentile and quantile calculations, non-parametric statistics |
-| [**analysis_harmonic.py**](analysis/analysis_harmonic.py) | Spectral analysis, Fourier decomposition, frequency content |
+| [**analysis_harmonic.py**](analysis/analysis_harmonic.py) | `harmonic_analysis` + `spectrogram`: diel/annual cycles, window effect, time-frequency map |
 
 See: [analysis/README.md](analysis/README.md)
 

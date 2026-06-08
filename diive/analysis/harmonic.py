@@ -49,6 +49,10 @@ def harmonic_analysis(
         - Window function reduces spectral leakage
         - Phase is in radians [-π, π]
         - Harmonics are ordered by harmonic number (1st, 2nd, 3rd, etc.)
+
+    Example:
+        See `examples/analysis/analysis_harmonic.py` for diel and annual harmonic
+        decomposition of flux and meteo data, plus the effect of the window.
     """
     # Remove NaN
     valid_idx = series.notna()
@@ -210,6 +214,78 @@ def periodogram(
         'peaks': peak_list,
         'dominant_frequency': dominant_freq,
         'dominant_period': 1.0 / dominant_freq if dominant_freq > 0 else np.inf
+    }
+
+
+def spectrogram(
+    series: pd.Series,
+    nperseg: int = 256,
+    noverlap: int = None,
+    window: str = 'hann',
+    scaling: str = 'spectrum',
+    detrend: str = 'constant',
+    verbose: bool = False,
+) -> Dict:
+    """
+    Spectrogram (short-time Fourier transform): how the frequency content of a
+    series evolves over time.
+
+    Splits the series into overlapping windows and computes a spectrum for each,
+    revealing *when* each cyclic component is strong. For eddy-covariance data
+    this shows, e.g., the 1-cycle-per-day photosynthesis rhythm strengthening in
+    the growing season and fading in winter — information a single static
+    spectrum (:func:`harmonic_analysis`, :func:`periodogram`) cannot show.
+
+    Args:
+        series (pd.Series): Input time series (NaN values removed).
+        nperseg (int): Samples per segment (window length). Larger = finer
+            frequency resolution but coarser time resolution. Clamped to the
+            series length. Default 256.
+        noverlap (int): Samples of overlap between segments. Default nperseg // 2.
+        window (str): Window function ('hann', 'hamming', 'blackman', ...). Default 'hann'.
+        scaling (str): 'spectrum' (power spectrum) or 'density' (power spectral
+            density). Default 'spectrum'.
+        detrend (str | bool): Per-segment detrending ('constant', 'linear', or
+            False). Default 'constant'.
+        verbose (bool): Print details. Default False.
+
+    Returns:
+        Dict with keys:
+            - 'frequencies': np.ndarray, frequency bins (cycles per record)
+            - 'times': np.ndarray, segment-centre positions (records from start)
+            - 'power': np.ndarray, 2D [n_frequencies, n_times] power
+            - 'power_db': np.ndarray, 10*log10(power) for plotting (decibels)
+
+    Notes:
+        - Frequencies are in cycles per record; multiply by the sampling rate to
+          interpret (e.g. x48 for cycles/day on half-hourly data).
+        - ``nperseg`` trades frequency resolution against time resolution.
+    """
+    valid = series.notna()
+    values = series[valid].to_numpy()
+
+    if len(values) < 4:
+        raise ValueError(f"Series must have >= 4 valid values, got {len(values)}")
+
+    nperseg = min(nperseg, len(values))
+    if noverlap is None:
+        noverlap = nperseg // 2
+
+    frequencies, times, power = signal.spectrogram(
+        values, nperseg=nperseg, noverlap=noverlap, window=window,
+        scaling=scaling, detrend=detrend,
+    )
+    power_db = 10.0 * np.log10(power + 1e-12)
+
+    if verbose:
+        detail(f"Spectrogram: nperseg={nperseg}, noverlap={noverlap}, window={window}, "
+               f"{power.shape[0]} freqs x {power.shape[1]} time segments", verbose=verbose)
+
+    return {
+        'frequencies': frequencies,
+        'times': times,
+        'power': power,
+        'power_db': power_db,
     }
 
 

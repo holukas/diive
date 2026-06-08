@@ -19,7 +19,7 @@ from diive.analysis.decoupling import StratifiedAnalysis
 from diive.analysis import experimental
 from diive.analysis.gapfinder import GapFinder, GapStats
 from diive.analysis.gridaggregator import GridAggregator
-from diive.analysis.harmonic import harmonic_analysis
+from diive.analysis.harmonic import harmonic_analysis, spectrogram
 from diive.analysis.histogram import Histogram
 from diive.analysis.optimumrange import FindOptimumRange
 from diive.analysis.quantiles import percentiles101
@@ -42,4 +42,5 @@ __all__ = [
     'percentiles101',
     'rank_drivers',
     'SeasonalTrendDecomposition',
+    'spectrogram',
 ]

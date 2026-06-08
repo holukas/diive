@@ -313,6 +313,25 @@ def _seasonal_icon() -> QIcon:  # Seasonal-trend & anomalies
     return QIcon(pm)
 
 
+def _spectrogram_icon() -> QIcon:  # Spectrogram
+    pm, p = _canvas()
+    # Time-frequency cells (columns of a ramp) with a bright horizontal band.
+    p.setPen(Qt.PenStyle.NoPen)
+    ncol, nrow = 5, 4
+    cw = (_SIZE - 2) / ncol
+    ch = (_SIZE - 2) / nrow
+    for c in range(ncol):
+        for r in range(nrow):
+            shade = _RAMP[(r + (c % 3)) % len(_RAMP)]
+            p.setBrush(shade)
+            p.drawRect(QRectF(1 + c * cw, 1 + r * ch, cw - 0.5, ch - 0.5))
+    # The "1 cycle/day" band.
+    p.setPen(QPen(_WHITE, 1.2, Qt.PenStyle.DashLine))
+    p.drawLine(1, int(1 + 2 * ch), 15, int(1 + 2 * ch))
+    p.end()
+    return QIcon(pm)
+
+
 def _info_icon() -> QIcon:  # About
     pm, p = _canvas()
     p.setPen(Qt.PenStyle.NoPen)
@@ -345,6 +364,7 @@ _RULES = [
     ("driver", _driver_icon),
     ("season", _seasonal_icon),
     ("anomal", _seasonal_icon),
+    ("spectro", _spectrogram_icon),
     ("feature", _gear_icon),
     ("chain", _chain_icon),
     ("flux", _chain_icon),

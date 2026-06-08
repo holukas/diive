@@ -49,6 +49,9 @@
     in the list still updates the plot immediately.
   - **Cumulative-year "highlight year" is a dropdown** of the years present in the loaded data (populated on load and
     on date-range changes), replacing the free-entry spinbox.
+  - **Spectrogram explorer** (Tools menu; single-instance) — a time-frequency view (`dv.analysis.spectrogram`) showing
+    how a variable's cycles (e.g. the daily rhythm) strengthen and weaken over the record, on calendar-time ×
+    cycles-per-day axes, with a plain-language explanation of what a spectrogram shows.
   - **Seasonal-trend & anomaly explorer** (Tools menu; single-instance) — decompose a variable's daily-mean series into
     trend/seasonal/residual (STL/classical/harmonic) and, in a second view, show each year's anomaly vs a reference
     period. Wraps `SeasonalTrendDecomposition` + `LongtermAnomaliesYear`; degrades gracefully on <2 years of data.
@@ -568,6 +571,11 @@
 - Updated `fluxprocessingchain_composable.py`: Step 5b gap analysis after L3.3 via `data.gap_stats()`;
   Step 12 replaced with `data.plot_gapfilled_heatmaps()` (all methods side-by-side); Step 13 replaced
   with `data.plot_cumulative_comparison()` (all methods on one axes).
+- Rewrote `analysis_harmonic.py` to use `dv.analysis.harmonic_analysis` (it previously called scipy directly): diel
+  harmonics of NEE, annual harmonics of air temperature, the window-function effect, and a time-frequency spectrogram.
+- **New `dv.analysis.spectrogram`** — short-time Fourier transform (time-frequency map) of a series; returns
+  `frequencies` / `times` / `power` / `power_db`. Complements `harmonic_analysis` / `periodogram` (which give a single
+  static spectrum) by showing *when* each cycle is strong. Used by the harmonic example's spectrogram panel.
 - 21 Jupyter notebooks archived; content migrated to Sphinx Gallery examples.
 - Switched from poetry to `uv` for dependency management.
 

@@ -72,6 +72,20 @@ class TestAnalyses(unittest.TestCase):
         with self.assertRaises(ValueError):
             rank_drivers(df, target='NEE_CUT_REF_f', method='kendall')
 
+    def test_spectrogram(self):
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.analysis.harmonic import spectrogram
+        nee = load_exampledata_parquet()['NEE_CUT_REF_f'].loc['2015-01-01':'2015-12-31']
+        spec = spectrogram(nee, nperseg=512, noverlap=256)
+        self.assertEqual(set(spec), {'frequencies', 'times', 'power', 'power_db'})
+        # power is 2D [n_frequencies, n_times]; axes line up with the arrays.
+        self.assertEqual(spec['power'].shape,
+                         (len(spec['frequencies']), len(spec['times'])))
+        self.assertEqual(spec['power_db'].shape, spec['power'].shape)
+        # nperseg is clamped to the series length (no crash on short input).
+        short = spectrogram(nee.iloc[:100], nperseg=512)
+        self.assertGreater(short['power'].shape[1], 0)
+
     def test_seasonal_trend_decomposition(self):
         import diive as dv
         from diive.configs.exampledata import load_exampledata_parquet

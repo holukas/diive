@@ -179,6 +179,19 @@ two boxes.
 - Needs at least ~2 years of data for the decomposition (the anomaly view works
   with fewer).
 
+### Tools ▸ Spectrogram
+
+See **when** a variable's cycles are strong. A spectrogram shows time along the
+bottom, frequency (cycles per day) up the side, and colour for power — a bright
+horizontal band at **1 cycle/day** is the daily rhythm, and it usually
+strengthens in the growing season. An explanation is shown above the plot.
+
+- **Window (records)** / **Overlap %** / **Window** — how the series is split for
+  the analysis; a wider window gives finer frequency detail but blurs timing.
+  These apply on **Update**.
+- **Max cycles/day** sets how far up the frequency axis to look; **Colormap**
+  changes the colours — both update immediately.
+
 ### Tools ▸ Feature engineering
 
 Build new features (lags, rolling stats, differences, EMA, polynomials, STL,
