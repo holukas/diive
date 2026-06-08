@@ -49,6 +49,9 @@
     in the list still updates the plot immediately.
   - **Cumulative-year "highlight year" is a dropdown** of the years present in the loaded data (populated on load and
     on date-range changes), replacing the free-entry spinbox.
+  - **Seasonal-trend & anomaly explorer** (Tools menu; single-instance) — decompose a variable's daily-mean series into
+    trend/seasonal/residual (STL/classical/harmonic) and, in a second view, show each year's anomaly vs a reference
+    period. Wraps `SeasonalTrendDecomposition` + `LongtermAnomaliesYear`; degrades gracefully on <2 years of data.
   - **Driver explorer** (Tools menu; single-instance) — pick a target variable and get every other variable ranked by
     how strongly it correlates with it (Pearson/Spearman), with an optional lead/lag scan; click a ranked driver to see
     the target-vs-driver scatter at its best lag. Ranking is the new `dv.analysis.rank_drivers`; the scatter is
@@ -480,6 +483,12 @@
 
 ### Fixes
 
+- **`SeasonalTrendDecomposition(method='stl')` now works on real data.** The STL wrapper
+  (`core/times/decomposition_utils.py::stl_decompose`) never passed `period` to statsmodels (so it could not infer the
+  cycle from a numerically-indexed series) and called `STL.fit(weights=…)`, which statsmodels does not support — so STL
+  always raised `RuntimeError`. It now passes `period` plus a small odd seasonal smoother and calls `fit()` without
+  weights (the `robust` flag handles outliers; quality weighting stays in `quality_weighted_decompose`). Classical and
+  harmonic methods were unaffected.
 - **`HeatmapYearMonth` no longer raises `AttributeError`.** It called the non-existent
   `dv.resample_to_monthly_agg_matrix` (the function lives in `dv.times`, not the top level); now imports
   `resample_to_monthly_agg_matrix` directly. The class (and the `plot_heatmap_advanced.py` example) was broken before.

@@ -672,6 +672,62 @@ def test_driver_explorer_tab(window):
     assert _tabs(window).count("Driver explorer") == 1
 
 
+def test_seasonal_trend_tab(app):
+    # Needs several years (annual STL needs >= 2 cycles), so build a standalone
+    # tab with multi-year data instead of the one-year `window` fixture.
+    from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
+    from diive.gui.icons import menu_icon
+    assert not menu_icon("Seasonal-trend & anomalies").isNull()
+
+    df = dv.load_exampledata_parquet().loc["2018":"2022"]  # 5 years
+    tab = SeasonalTrendTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    for _ in range(80):
+        QApplication.processEvents()
+
+    # Decomposition view: STL ran (regression — it used to always raise) and the
+    # four component panels drew.
+    assert tab._target == "Tair_f"
+    assert tab._decomp is not None
+    assert tab._decomp["strength"] > 0.4
+    fig = tab.canvas.fig
+    assert len(fig.axes) == 4
+    assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    assert tab.stats_layout.count() - 1 == 6  # stat cards
+    assert (tab.ref_start.value(), tab.ref_end.value()) == (2018, 2022)
+
+    # Anomaly view renders a single bar chart vs the reference period.
+    tab.view.setCurrentText("Yearly anomalies")
+    QApplication.processEvents()
+    assert len(tab.canvas.fig.axes) == 1
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+
+    # Switching method recomputes on the Update button.
+    tab.view.setCurrentText("Decomposition")
+    tab.method.setCurrentText("Classical")
+    tab.update_btn.click()
+    for _ in range(60):
+        QApplication.processEvents()
+    assert tab._decomp is not None
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+
+
+def test_seasonal_trend_short_data_graceful(window):
+    # The window fixture has one year -> annual decomposition can't run. The tab
+    # must show a friendly message (not crash), and the anomaly view still works.
+    window._open_menu_tab("Seasonal-trend & anomalies")
+    tab = window._menu_tab_list[-1]
+    for _ in range(60):
+        QApplication.processEvents()
+    assert tab._decomp is None
+    msgs = [t.get_text() for a in tab.canvas.fig.axes for t in a.texts]
+    assert any("2 years" in m for m in msgs)
+    tab.view.setCurrentText("Yearly anomalies")
+    QApplication.processEvents()
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+
+
 def test_appearance_singleton(window):
     window._open_menu_tab("Appearance")
     window._open_menu_tab("Appearance")

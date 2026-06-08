@@ -317,6 +317,18 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   method/max-lag apply on a **Rank drivers** button (the lag scan can be heavier). Table sorts numerically via a small
   `_NumItem` (sorts on the stored value, not display text). Defaults to `NEE_CUT_REF_f` (a continuous flux makes the
   ranking informative), else the first numeric column.
+- **Seasonal-trend & anomaly explorer tab** (`tabs/seasonaltrend.py`, `Tools ▸ Seasonal-trend & anomalies`,
+  single-instance). "Is this variable changing over the years?" Decomposes a variable's **daily-mean** series into
+  trend/seasonal/residual (4 stacked panels) and, in a second **view**, shows each year's anomaly vs a reference period.
+  Maths is the library's: `dv.times.resample_to_daily_agg` → `dv.analysis.SeasonalTrendDecomposition` (STL/classical/
+  harmonic) → `dv.plotting.LongtermAnomaliesYear`. Decomposes at the annual period (365); STL runs `robust=False` +
+  `seasonal_jump=trend_jump≈12` for sub-second speed (a "Robust" checkbox opts into the slower outlier-resistant fit).
+  Variable selection + view + reference-year changes re-render live; method/robust apply on **Update** (STL is the
+  expensive recompute). Degrades gracefully on <2 years of data (annual STL needs two cycles) — shows a message and
+  keeps the anomaly view working. **Library bug fixed along the way:** the STL wrapper (`core/times/decomposition_utils.
+  py::stl_decompose`) never passed `period` to statsmodels and called `STL.fit(weights=...)` (unsupported) — so STL
+  always raised on real data. Now passes `period` + a small odd seasonal smoother and `fit()` without weights; classical/
+  harmonic were already fine.
 - **Var list sync.** All tabs refresh via `MainWindow._push_data()` → `on_data_loaded(df, created)` on every data
   change; menu tabs get current data on open and are dropped from the push list on close.
 - **Output console.** The `Log` tab (`LogTab` → `ConsolePanel`) mirrors diive's Rich output in colour. The library tees

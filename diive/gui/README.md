@@ -28,6 +28,7 @@ diive-gui                # or: uv run diive-gui
 | `tabs/fluxchain.py` | Flux processing chain tab — Input + Level 2 (first slice); runs `init_flux_data`/`run_level2`, **Copy Python** emits a reproducible script |
 | `tabs/gaps.py` | Gap & coverage dashboard — stat cards + clickable gap map (`GapStats` availability heatmap + gap timeline) + long-gap table |
 | `tabs/drivers.py` | Driver explorer — rank variables by correlation with a target (`rank_drivers`, optional lag scan); click a driver for its scatter |
+| `tabs/seasonaltrend.py` | Seasonal-trend & anomaly explorer — STL/classical/harmonic decomposition + yearly anomalies vs a reference period |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
 | `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar (with a Save-DPI spinbox); attaches a `HoverAnnotator` |
 | `widgets/hover.py` | `HoverAnnotator` — value-under-cursor tooltip (line snap + heatmap cell) via blitting |
@@ -129,6 +130,18 @@ table/cards, and renders the selected scatter. Target selection is **live**; met
 drivers** button (the lag scan can be heavier). The table sorts numerically via a small `_NumItem` (compares the stored
 value, not the display string). Defaults to a continuous flux target (`NEE_CUT_REF_f`) so the ranking is informative on
 open. A natural next step: a "send top-N drivers to Feature engineering / gap-filling" handoff.
+
+**Seasonal-trend & anomaly explorer (`tabs/seasonaltrend.py`):** opened from **Tools ▸ Seasonal-trend & anomalies**
+(single-instance). Pick a variable → its daily-mean series is split into **trend / seasonal / residual** (four stacked
+panels), and a second **view** shows each year's **anomaly** vs a reference period (red above / blue below). Everything is
+library-backed: `dv.times.resample_to_daily_agg` builds the daily series, `dv.analysis.SeasonalTrendDecomposition`
+(STL / classical / harmonic) decomposes it, `dv.plotting.LongtermAnomaliesYear` draws the anomaly bars. The tab only
+collects method/robust/view/reference-years, lays out the panels, and renders. STL runs at the annual period (365) with
+`robust=False` + Loess `*_jump≈12` so it's sub-second (a **Robust** checkbox opts into the slower outlier-resistant fit).
+Variable / view / reference-year changes re-render live; **method/robust apply on Update** (STL is the heavy recompute).
+On <2 years of data it shows a friendly message (annual decomposition needs two cycles) and keeps the anomaly view
+working. *(Building this surfaced and fixed a real library bug: `stl_decompose` never passed `period` to statsmodels and
+called `STL.fit(weights=…)`, which isn't supported — STL had been raising on all real data.)*
 
 **Feature engineering:** opened from **Tools ▸ Feature engineering** (a menu-activated tab — `registry.MENU_TAB_CLASSES`
 — not shown until selected, and closable; always-on tabs have their close button removed). It runs `FeatureEngineer`

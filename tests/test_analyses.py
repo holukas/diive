@@ -72,6 +72,29 @@ class TestAnalyses(unittest.TestCase):
         with self.assertRaises(ValueError):
             rank_drivers(df, target='NEE_CUT_REF_f', method='kendall')
 
+    def test_seasonal_trend_decomposition(self):
+        import diive as dv
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.analysis.seasonaltrend import SeasonalTrendDecomposition
+        daily = dv.times.resample_to_daily_agg(
+            load_exampledata_parquet()['Tair_f'], agg='mean').dropna()
+
+        # STL — regression test: it used to always raise on real data (period was
+        # never passed to statsmodels, and fit() got an unsupported `weights`).
+        std = SeasonalTrendDecomposition(
+            daily, method='stl', seasonal_period=365,
+            robust=False, seasonal_jump=12, trend_jump=12)
+        tr, se, re = std.trend, std.seasonal, std.residual
+        recon = (tr + se + re).dropna()
+        # Additive components reconstruct the input.
+        self.assertLess((recon - daily.loc[recon.index]).abs().max(), 1e-6)
+        self.assertGreater(std.seasonality_strength, 0.5)  # strong annual cycle
+
+        # Classical and harmonic methods also run and return aligned components.
+        for method in ('classical', 'harmonic'):
+            s = SeasonalTrendDecomposition(daily, method=method, seasonal_period=365)
+            self.assertEqual(len(s.seasonal), len(daily))
+
     def test_gapstats_gap_at(self):
         from diive.configs.exampledata import load_exampledata_parquet
         from diive.analysis.gapfinder import GapStats

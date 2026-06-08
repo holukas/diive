@@ -300,6 +300,19 @@ def _driver_icon() -> QIcon:  # Driver explorer
     return QIcon(pm)
 
 
+def _seasonal_icon() -> QIcon:  # Seasonal-trend & anomalies
+    pm, p = _canvas()
+    # A seasonal wave riding a rising trend line.
+    p.setPen(QPen(_AMBER, 1.0))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    wave = [(x, 11 - 0.18 * x - 2.6 * math.sin(2 * math.pi * x / 8)) for x in range(1, 16)]
+    p.drawPolyline(_poly(wave))
+    p.setPen(QPen(_RED, 1.5))
+    p.drawLine(1, 11, 15, 4)                        # trend
+    p.end()
+    return QIcon(pm)
+
+
 def _info_icon() -> QIcon:  # About
     pm, p = _canvas()
     p.setPen(Qt.PenStyle.NoPen)
@@ -330,6 +343,8 @@ _RULES = [
     ("gap", _gap_icon),
     ("coverage", _gap_icon),
     ("driver", _driver_icon),
+    ("season", _seasonal_icon),
+    ("anomal", _seasonal_icon),
     ("feature", _gear_icon),
     ("chain", _chain_icon),
     ("flux", _chain_icon),

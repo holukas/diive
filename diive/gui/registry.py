@@ -16,6 +16,7 @@ from diive.gui.tabs.features import FeatureEngineerTab
 from diive.gui.tabs.fluxchain import FluxChainTab
 from diive.gui.tabs.gaps import GapDashboardTab
 from diive.gui.tabs.log import LogTab
+from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
 from diive.gui.tabs.overview import OverviewTab
 from diive.gui.tabs.plotting import (
     CUMULATIVE_YEAR,
@@ -55,6 +56,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
     "Tools": {
         "Gaps & coverage": GapDashboardTab,
         "Driver explorer": DriverExplorerTab,
+        "Seasonal-trend & anomalies": SeasonalTrendTab,
         "Feature engineering": FeatureEngineerTab,
         "Flux processing chain": FluxChainTab,
     },
@@ -71,4 +73,5 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 #: Menu tabs that may exist only once (re-selecting focuses the existing one).
 #: Everything else opens a new, numbered instance each time.
 SINGLE_INSTANCE_TABS: set[str] = {
-    "Appearance", "Flux processing chain", "Gaps & coverage", "Driver explorer"}
+    "Appearance", "Flux processing chain", "Gaps & coverage", "Driver explorer",
+    "Seasonal-trend & anomalies"}

@@ -158,6 +158,27 @@ target-vs-driver scatter.
 - Changing the method or max lag takes effect on **Rank drivers**; picking a new
   target updates immediately.
 
+### Tools ▸ Seasonal-trend & anomalies
+
+See whether a variable is **changing over the years** and which years stood out.
+Pick a variable; it is split into:
+
+- **Trend** — the slow, long-term direction.
+- **Seasonal** — the repeating yearly cycle.
+- **Residual** — what's left (noise, events).
+
+Switch **View** to **Yearly anomalies** to see each year compared to a
+**reference period** (red bars = above the reference mean, blue = below) — handy
+for spotting warming or unusually wet/dry years. Set the reference years with the
+two boxes.
+
+- **Method** — *STL* (robust, recommended), *Classical*, or *Harmonic*.
+- **Robust** (STL) — down-weights outliers; more faithful but slower.
+- Method/Robust changes apply on **Update**; variable, view and reference years
+  update immediately.
+- Needs at least ~2 years of data for the decomposition (the anomaly view works
+  with fewer).
+
 ### Tools ▸ Feature engineering
 
 Build new features (lags, rolling stats, differences, EMA, polynomials, STL,

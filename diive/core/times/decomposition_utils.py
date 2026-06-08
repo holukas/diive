@@ -77,9 +77,17 @@ def stl_decompose(
     if trend < 3:
         raise ValueError(f"trend must be >= 3, got {trend}")
 
-    # Make even seasonal and trend for STL
-    seasonal = seasonal if seasonal % 2 == 1 else seasonal + 1
+    # diive's `seasonal` argument is the cycle length — the *period* (e.g. 365
+    # for the annual cycle in daily data). statsmodels STL needs it passed as
+    # `period`, with a *separate*, small, odd seasonal-LOESS smoother window
+    # (its default is 7). statsmodels also requires the trend window to be odd
+    # and strictly greater than the period.
+    period = seasonal
     trend = trend if trend % 2 == 1 else trend + 1
+    if trend <= period:
+        trend = period + 1
+        trend = trend if trend % 2 == 1 else trend + 1
+    stl_seasonal_smoother = 7
 
     # Handle weights
     if weights is not None:
@@ -106,7 +114,8 @@ def stl_decompose(
 
         # Build STL kwargs with available parameters
         stl_kwargs = {
-            'seasonal': seasonal,
+            'period': period,
+            'seasonal': stl_seasonal_smoother,
             'trend': trend,
             'robust': robust,
         }
@@ -122,7 +131,10 @@ def stl_decompose(
             stl_kwargs['trend_jump'] = trend_jump
 
         stl_result = STL(series_for_stl, **stl_kwargs)
-        decomp = stl_result.fit(weights=weights_norm)
+        # statsmodels STL.fit() takes no observation weights; its `robust` flag
+        # handles outlier down-weighting internally. (Quality-weighted fitting is
+        # provided separately via quality_weighted_decompose.)
+        decomp = stl_result.fit()
 
         # Restore original index to decomposition results
         decomp.seasonal.index = series.index
@@ -130,8 +142,8 @@ def stl_decompose(
         decomp.resid.index = series.index
 
         if verbose:
-            detail(f"STL decomposition: seasonal={seasonal}, trend={trend}, robust={robust}, "
-                   f"iterations={decomp.nobs}", verbose=verbose)
+            detail(f"STL decomposition: period={period}, seasonal={stl_seasonal_smoother}, "
+                   f"trend={trend}, robust={robust}, iterations={decomp.nobs}", verbose=verbose)
 
         return {
             'seasonal': decomp.seasonal,
