@@ -141,6 +141,23 @@ timeline, or click anywhere on the timeline to jump to the nearest gap (it gets
 highlighted and its table row is selected). Use **Long gap ≥ (records)** to set
 what counts as a "long" gap (48 records = one day for half-hourly data).
 
+### Tools ▸ Driver explorer
+
+Find **what relates to a variable** — useful before gap-filling or interpreting
+a flux. Pick a **target** on the left; the table ranks every other variable by
+how strongly it correlates with it (the **r** value is tinted green for positive,
+red for negative, stronger = more saturated). **Click a driver** to see the
+target-vs-driver scatter.
+
+- **Method** — *Pearson* (straight-line relationships) or *Spearman* (any
+  consistently increasing/decreasing relationship).
+- **Max lag (records)** — scan a lead/lag window and report each driver's
+  *strongest* lag (0 = same time only). A positive **Lag** means the driver
+  leads the target (e.g. radiation now → flux a bit later). The scatter is shown
+  at that lag.
+- Changing the method or max lag takes effect on **Rank drivers**; picking a new
+  target updates immediately.
+
 ### Tools ▸ Feature engineering
 
 Build new features (lags, rolling stats, differences, EMA, polynomials, STL,

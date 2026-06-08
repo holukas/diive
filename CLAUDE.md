@@ -60,7 +60,7 @@ tests/                        # Unit tests
 | `dv.outliers` | `AbsoluteLimits`, `Hampel`, `LocalSD`, `LocalOutlierFactor`, `zScore`, `zScoreRolling`, `zScoreIncrements`, `TrimLow`, `ManualRemoval`, + daytime/nighttime variants |
 | `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`, `FeatureEngineer`, `GapFillingResult`, `prediction_scores`, `linear_interpolation` |
 | `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `process_one_file`, `FluxDetectionLimit`, ustar classes. Per-level `run_level*`, `make_level32_detector`, and `chain_to_code`/`level2_to_code` (render chain choices as a reproducible script) live in `diive.flux.fluxprocessingchain`. |
-| `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `harmonic_analysis`, `percentiles101` |
+| `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `harmonic_analysis`, `percentiles101`, `rank_drivers` |
 | `dv.analysis.experimental` | **(provisional, API may change)** `DriverAnalysis`, `DriverAnalysisResult`, `AleCurve`, `Ale2DResult`, `accumulated_local_effects`, `accumulated_local_effects_2d`, `ExperimentalWarning` — evidence-triangulation driver attribution; emits a one-time `ExperimentalWarning` on use |
 | `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `ShiftedDistributionPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot` |
 | `dv.times` | `TimestampSanitizer`, `DetectFrequency`, `keep_daterange` (non-destructive date-range subselection; inclusive `start`/`end`, either bound optional), `resample_to_daily_agg` (sub-daily → one value per calendar day; `agg=`, `mincounts_perc=`), `resample_to_monthly_agg_matrix`, `timestamp_infer_freq_*` |
@@ -308,6 +308,15 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   Defaults to the gappiest variable (`df.isna().sum().idxmax()`) so it's useful on open. The long-gap threshold spinbox
   re-runs `GapStats` (cheap). **Note:** the library's `plot_*` panel methods attach their colorbar via `ax.figure.colorbar`
   (not `plt.colorbar`, which targets pyplot's current figure) so they embed correctly in the GUI canvas.
+- **Driver explorer tab** (`tabs/drivers.py`, `Tools ▸ Driver explorer`, single-instance). "What relates to this
+  variable, and at what lag?" Pick a target; a ranked table lists every other variable by correlation strength, click a
+  driver to see the target-vs-driver scatter. The ranking + lag scan is the library's new `dv.analysis.rank_drivers(df,
+  target, method=, max_lag=)` → DataFrame `[DRIVER, CORR, ABS_CORR, BEST_LAG, N]` (positive `BEST_LAG` = driver leads
+  the target); the scatter is `dv.plotting.ScatterXY`. The tab only collects target/method/max-lag, fills widgets, and
+  renders the selected driver's scatter (shifted by its `BEST_LAG`) — no stats of its own. Target selection is live;
+  method/max-lag apply on a **Rank drivers** button (the lag scan can be heavier). Table sorts numerically via a small
+  `_NumItem` (sorts on the stored value, not display text). Defaults to `NEE_CUT_REF_f` (a continuous flux makes the
+  ranking informative), else the first numeric column.
 - **Var list sync.** All tabs refresh via `MainWindow._push_data()` → `on_data_loaded(df, created)` on every data
   change; menu tabs get current data on open and are dropped from the push list on close.
 - **Output console.** The `Log` tab (`LogTab` → `ConsolePanel`) mirrors diive's Rich output in colour. The library tees

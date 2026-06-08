@@ -633,6 +633,45 @@ def test_gap_dashboard_tab(window):
     assert _tabs(window).count("Gaps & coverage") == 1
 
 
+def test_driver_explorer_tab(window):
+    from diive.gui.icons import menu_icon
+    assert not menu_icon("Driver explorer").isNull()
+
+    window._open_menu_tab("Driver explorer")
+    tab = window._menu_tab_list[-1]
+    for _ in range(60):
+        QApplication.processEvents()
+
+    # Opens on a flux target, ranks the other variables, shows the top scatter.
+    assert tab._target == "NEE_CUT_REF_f"
+    assert tab._ranked is not None and len(tab._ranked) > 0
+    assert tab.table.rowCount() == len(tab._ranked)
+    assert tab.stats_layout.count() - 1 == 6  # stat cards
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    # Ranked by |corr| descending (no lag scan yet -> all lags 0).
+    abs_corr = tab._ranked["ABS_CORR"].to_numpy()
+    assert (abs_corr[:-1] >= abs_corr[1:]).all()
+    assert (tab._ranked["BEST_LAG"] == 0).all()
+
+    # Lag scan applies on the button and can pick non-zero lags.
+    tab.max_lag.setValue(6)
+    tab.rank_btn.click()
+    for _ in range(60):
+        QApplication.processEvents()
+    assert int(tab._ranked["BEST_LAG"].abs().max()) <= 6
+    assert (tab._ranked["BEST_LAG"] != 0).any()
+
+    # Click a ranked driver -> target-vs-driver scatter renders.
+    tab.table.selectRow(min(3, tab.table.rowCount() - 1))
+    QApplication.processEvents()
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    assert tab.canvas.fig.axes  # a scatter axis exists
+
+    # Single-instance: re-opening focuses the existing tab.
+    window._open_menu_tab("Driver explorer")
+    assert _tabs(window).count("Driver explorer") == 1
+
+
 def test_appearance_singleton(window):
     window._open_menu_tab("Appearance")
     window._open_menu_tab("Appearance")

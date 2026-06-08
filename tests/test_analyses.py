@@ -44,6 +44,34 @@ class TestAnalyses(unittest.TestCase):
         nogaps = GapFinder(series=series.fillna(0.0))
         self.assertIsNone(nogaps.gap_at(series.index[0]))
 
+    def test_rank_drivers(self):
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.analysis.correlation import rank_drivers
+        df = load_exampledata_parquet()
+
+        res = rank_drivers(df, target='NEE_CUT_REF_f', method='pearson', max_lag=0)
+        self.assertListEqual(list(res.columns),
+                             ['DRIVER', 'CORR', 'ABS_CORR', 'BEST_LAG', 'N'])
+        self.assertNotIn('NEE_CUT_REF_f', res['DRIVER'].tolist())  # target excluded
+        # Sorted by |corr| descending.
+        vals = res['ABS_CORR'].to_numpy()
+        self.assertTrue((vals[:-1] >= vals[1:]).all())
+        # Strongest driver is strongly correlated; lags are 0 with no scan.
+        self.assertGreater(res.iloc[0]['ABS_CORR'], 0.5)
+        self.assertTrue((res['BEST_LAG'] == 0).all())
+
+        # Lag scan: best lag stays within the scanned window; explicit features.
+        res2 = rank_drivers(df, target='NEE_CUT_REF_f', method='pearson', max_lag=4,
+                            features=['Tair_f', 'VPD_f', 'Rg_f'])
+        self.assertEqual(len(res2), 3)
+        self.assertLessEqual(int(res2['BEST_LAG'].abs().max()), 4)
+
+        # Validation.
+        with self.assertRaises(ValueError):
+            rank_drivers(df, target='NOT_A_COLUMN')
+        with self.assertRaises(ValueError):
+            rank_drivers(df, target='NEE_CUT_REF_f', method='kendall')
+
     def test_gapstats_gap_at(self):
         from diive.configs.exampledata import load_exampledata_parquet
         from diive.analysis.gapfinder import GapStats

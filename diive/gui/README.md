@@ -27,6 +27,7 @@ diive-gui                # or: uv run diive-gui
 | `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
 | `tabs/fluxchain.py` | Flux processing chain tab — Input + Level 2 (first slice); runs `init_flux_data`/`run_level2`, **Copy Python** emits a reproducible script |
 | `tabs/gaps.py` | Gap & coverage dashboard — stat cards + clickable gap map (`GapStats` availability heatmap + gap timeline) + long-gap table |
+| `tabs/drivers.py` | Driver explorer — rank variables by correlation with a target (`rank_drivers`, optional lag scan); click a driver for its scatter |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
 | `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar (with a Save-DPI spinbox); attaches a `HoverAnnotator` |
 | `widgets/hover.py` | `HoverAnnotator` — value-under-cursor tooltip (line snap + heatmap cell) via blitting |
@@ -117,6 +118,17 @@ library's `dv.analysis.GapStats` — the tab reads `.summary` / `.long_gaps`, ca
 to the gappiest column (`df.isna().sum().idxmax()`) so it's useful on open, and a "long gap ≥ records" spinbox re-runs
 `GapStats`. The library's panel `plot_*` methods were made embed-safe (`ax.figure.colorbar`, not `plt.colorbar`) so they
 render into the shared canvas — a one-line fix that benefits any embedding caller.
+
+**Driver explorer (`tabs/drivers.py`):** opened from **Tools ▸ Driver explorer** (single-instance). Answers "what
+relates to this variable, and at what lag?" Pick a target; a ranked table lists every other variable by correlation
+strength (the `r` cell tinted green/red by sign and magnitude), with its best lag and overlap count; clicking a driver
+renders the target-vs-driver scatter (shifted by that driver's best lag). The ranking + lead/lag scan is the library's
+new `dv.analysis.rank_drivers(df, target, method=, max_lag=)` (returns `[DRIVER, CORR, ABS_CORR, BEST_LAG, N]`); the
+scatter is `dv.plotting.ScatterXY`. The tab implements no statistics — it only collects target/method/max-lag, fills the
+table/cards, and renders the selected scatter. Target selection is **live**; method and max-lag apply on a **Rank
+drivers** button (the lag scan can be heavier). The table sorts numerically via a small `_NumItem` (compares the stored
+value, not the display string). Defaults to a continuous flux target (`NEE_CUT_REF_f`) so the ranking is informative on
+open. A natural next step: a "send top-N drivers to Feature engineering / gap-filling" handoff.
 
 **Feature engineering:** opened from **Tools ▸ Feature engineering** (a menu-activated tab — `registry.MENU_TAB_CLASSES`
 — not shown until selected, and closable; always-on tabs have their close button removed). It runs `FeatureEngineer`

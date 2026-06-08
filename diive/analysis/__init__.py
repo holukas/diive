@@ -7,7 +7,7 @@ Comprehensive toolkit: decomposition, correlation, gap detection, histograms, gr
 Part of the diive library: https://github.com/holukas/diive
 """
 
-from diive.analysis.correlation import DailyCorrelation
+from diive.analysis.correlation import DailyCorrelation, rank_drivers
 from diive.analysis.granger import GrangerCausality
 
 # Alias for backward compatibility
@@ -40,5 +40,6 @@ __all__ = [
     'Histogram',
     'FindOptimumRange',
     'percentiles101',
+    'rank_drivers',
     'SeasonalTrendDecomposition',
 ]

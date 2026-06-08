@@ -49,6 +49,10 @@
     in the list still updates the plot immediately.
   - **Cumulative-year "highlight year" is a dropdown** of the years present in the loaded data (populated on load and
     on date-range changes), replacing the free-entry spinbox.
+  - **Driver explorer** (Tools menu; single-instance) — pick a target variable and get every other variable ranked by
+    how strongly it correlates with it (Pearson/Spearman), with an optional lead/lag scan; click a ranked driver to see
+    the target-vs-driver scatter at its best lag. Ranking is the new `dv.analysis.rank_drivers`; the scatter is
+    `ScatterXY`. Feeds straight into the feature-engineering / gap-filling workflow.
   - **Gap & coverage dashboard** (Tools menu; single-instance) — pick a variable and see KPI stat cards, a two-panel
     *gap map* (daily-availability heatmap + gap-spike timeline) and a long-gap table, all from `dv.analysis.GapStats`.
     The map is clickable both ways: click a table row to highlight that gap on the timeline, or click the timeline to
@@ -65,6 +69,10 @@
 - **`save_parquet(..., enforce_diive_format=True, timestamp_name=...)` and `dv.to_diive_format(df, timestamp_name=...)`**
   — coerce a DataFrame to the diive parquet format: single-level columns (one header row) + a validly-named timestamp
   index (`TIMESTAMP_END` / `TIMESTAMP_MIDDLE` / `TIMESTAMP_START`).
+- **`dv.analysis.rank_drivers(df, target, method=, max_lag=, ...)`** — rank candidate variables by how strongly they
+  correlate with a target (Pearson/Spearman). With `max_lag > 0` it scans a lead/lag window and reports each driver's
+  strongest lag (positive = driver leads the target). Returns a sorted DataFrame `[DRIVER, CORR, ABS_CORR, BEST_LAG, N]`.
+  Pure ranking utility for "what drives this?" exploration and shortlisting gap-filling features.
 - **`GapFinder.gap_at(timestamp)` / `GapStats.gap_at(timestamp)`** — return the detected gap containing a timestamp,
   or the nearest one (accepts tz-aware values). Handy for interactive tools that map a clicked time to a gap.
 - **`GapFinder` / `GapStats` panel plotters are now embed-safe** — `plot_availability_heatmap`, `plot_gap_spike_timeline`

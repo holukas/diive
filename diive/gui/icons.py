@@ -284,6 +284,22 @@ def _gap_icon() -> QIcon:  # Gaps & coverage
     return QIcon(pm)
 
 
+def _driver_icon() -> QIcon:  # Driver explorer
+    pm, p = _canvas()
+    # Axes, a rising trend line, and a few points around it (a relationship).
+    p.setPen(QPen(_INK, 1.2))
+    p.drawLine(2, 14, 2, 2)
+    p.drawLine(2, 14, 14, 14)
+    p.setPen(QPen(_BLUE, 1.6))
+    p.drawLine(3, 12, 14, 4)                       # trend line
+    p.setPen(Qt.PenStyle.NoPen)
+    for x, y, col in ((4, 12, _GREEN), (7, 9, _AMBER), (9, 8, _RED), (12, 5, _GREEN)):
+        p.setBrush(col)
+        p.drawEllipse(QRectF(x - 1.3, y - 1.3, 2.6, 2.6))
+    p.end()
+    return QIcon(pm)
+
+
 def _info_icon() -> QIcon:  # About
     pm, p = _canvas()
     p.setPen(Qt.PenStyle.NoPen)
@@ -313,6 +329,7 @@ _RULES = [
     ("reset", _reset_icon),
     ("gap", _gap_icon),
     ("coverage", _gap_icon),
+    ("driver", _driver_icon),
     ("feature", _gear_icon),
     ("chain", _chain_icon),
     ("flux", _chain_icon),
