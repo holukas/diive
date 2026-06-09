@@ -245,6 +245,31 @@ QMenu#studiomenu::item:selected {{ background: {t['HOVER_BG']}; color: {t['INK']
 QMenu#studiomenu::item:disabled {{ color: #9E9E9E; }}
 QMenu#studiomenu::item:disabled:selected {{ background: transparent; }}
 QMenu#studiomenu::separator {{ height: 1px; background: {t['BORDER']}; margin: 5px 8px; }}
+
+/* Firefox-style pill tabs (Studio only): rounded, spaced, filled active pill,
+   no base line or per-tab borders. The #studiotabs id scopes this to the
+   Studio shell so Classic keeps its boxed underline tabs. */
+#studiotabs::pane {{ border: none; top: -1px; }}
+#studiotabs QTabBar {{ qproperty-drawBase: 0; }}
+/* Generous vertical padding makes a taller pill row (the only lever a
+   QTabWidget honours); no min-width so each pill hugs its content with equal
+   left/right padding, centring the icon+label horizontally. The style centres
+   the content vertically within the pill. */
+#studiotabs QTabBar::tab {{
+    background: transparent; color: {t['INK']};
+    border: none; border-radius: {r}px;
+    /* font-size grows the row height (QTabWidget honours it, keeping every tab
+       the same height so they stay vertically centred); vertical margin lifts
+       the pill off the pane so all four corners round (a floating pill, not an
+       attached tab); no min-width so the icon+label centre with equal padding. */
+    font-size: 15px; padding: 10px 20px; margin: 6px 4px;
+}}
+#studiotabs QTabBar::tab:hover {{ background: {t['HOVER_BG']}; }}
+#studiotabs QTabBar::tab:selected {{
+    background: {t['EXTRA_BG']}; color: {t['EXTRA_FG']}; border: none;
+}}
+#studiotabs QTabBar::close-button {{ border-radius: 4px; }}
+#studiotabs QTabBar::close-button:hover {{ background: {t['HOVER_PRESSED']}; }}
 """
 
 

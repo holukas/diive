@@ -13,7 +13,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QRectF, Qt
+from PySide6.QtCore import QByteArray, QRectF, QSize, Qt
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -131,6 +131,7 @@ class MainWindow(QMainWindow):
 
         self._tabs = []
         self._header = None  # set only in Studio chrome (None => native)
+        self._studio_tabs = False  # Studio pill tabs carry favicon-style glyphs
         self._tabwidget = QTabWidget()
         for tab_cls in TAB_CLASSES:
             tab = tab_cls()
@@ -169,6 +170,16 @@ class MainWindow(QMainWindow):
         theme.manager.built_chrome = "studio"
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._tabwidget.setObjectName("studiotabs")  # scopes the pill-tab QSS
+        # Studio pills carry a small favicon-style glyph; give the always-on
+        # tabs theirs now and flag later menu tabs to get one on open.
+        self._studio_tabs = True
+        # Favicon-style glyph on each pill, kept at its native 16px so it stays
+        # crisp (the row height is grown via the tab font-size in the QSS, which
+        # QTabWidget honours without top-aligning the inactive tabs).
+        self._tabwidget.setIconSize(QSize(16, 16))
+        for i in range(self._tabwidget.count()):
+            self._tabwidget.setTabIcon(i, menu_icon(self._tabwidget.tabText(i)))
 
         root = _StudioRoot()
         rlay = QVBoxLayout(root)
@@ -347,7 +358,10 @@ class MainWindow(QMainWindow):
         self._menu_tab_list.append(tab)
         self._tabs.append(tab)  # now receives data pushes
         # Build first (widget()/build sets featuresCreated) before connecting.
-        self._tabwidget.addTab(tab.widget(), title)
+        idx = self._tabwidget.addTab(tab.widget(), title)
+        if self._studio_tabs:  # favicon-style glyph on the pill (match the label)
+            from diive.gui.icons import menu_icon
+            self._tabwidget.setTabIcon(idx, menu_icon(label))
         if hasattr(tab, "featuresCreated"):
             tab.featuresCreated.connect(self._add_features)
         if self._data is not None:

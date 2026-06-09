@@ -549,6 +549,8 @@ _CLASSIC_RULES = [
     ("flux", _chain_icon),
     ("appearance", _palette_icon),
     ("about", _info_icon),
+    ("overview", _heatmap_icon),
+    ("log", _document_icon),
 ]
 
 _LINE_RULES = [
@@ -577,6 +579,8 @@ _LINE_RULES = [
     ("flux", _ln_wave),
     ("appearance", _ln_palette),
     ("about", _ln_info),
+    ("overview", _ln_grid),
+    ("log", _ln_document),
 ]
 
 
