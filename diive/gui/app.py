@@ -312,11 +312,9 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Saved {p.stem}.parquet", 5000)
 
     def _about(self) -> None:
-        QMessageBox.about(
-            self, "About diive",
-            f"diive {diive.__version__}\n\nTime series processing for "
-            f"ecosystem and flux data.\nhttps://github.com/holukas/diive",
-        )
+        # Reuse the startup splash artwork as the About dialog.
+        from diive.gui.splash import show_about
+        show_about(self)
 
     def closeEvent(self, event) -> None:
         """Persist preferences (theme, window geometry, last filetype) on exit."""
@@ -345,6 +343,22 @@ def run() -> int:
     from diive.gui.widgets import open_data_dialog as odd
     odd._last_choice = cfg.get("last_filetype")
 
-    window = MainWindow(cfg)
+    # Splash while the window builds (it auto-loads the example dataset).
+    from diive.gui.splash import create_splash, show_message
+    splash = create_splash(app)
+    splash.show()
+    show_message(splash, "Loading…")
+    app.processEvents()  # paint the splash before the (blocking) window build
+
+    window = MainWindow(cfg)  # builds tabs + loads the example dataset
     window.show()
+    # Keep the splash on top until the GUI is actually ready: the Overview
+    # defers its first render by an event-loop tick (it renders synchronously
+    # when that fires), so pump events to drain those deferred renders while the
+    # splash is still up, then drop it. Without this, the splash would close the
+    # instant the (still-empty) window is shown.
+    splash.raise_()
+    for _ in range(3):
+        app.processEvents()
+    splash.finish(window)
     return app.exec()

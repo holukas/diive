@@ -799,6 +799,33 @@ def test_histogram_tab(window):
     assert len(tab.canvas.fig.axes) == 1  # twiny gone with z-scores off
 
 
+def test_splash_screen(app):
+    from PySide6.QtWidgets import QSplashScreen
+    from diive.gui.splash import make_splash_pixmap, create_splash, AUTHOR, SUPPORTERS
+    # Artwork renders to a non-empty, high-DPI-aware pixmap.
+    pm = make_splash_pixmap(2.0)
+    assert not pm.isNull()
+    assert pm.devicePixelRatio() == 2.0 and pm.width() > 0
+    # Author is baked in; supporters list exists (empty by default, extensible).
+    assert AUTHOR == "Lukas Hörtnagl"
+    assert isinstance(SUPPORTERS, list)
+    # create_splash returns a ready QSplashScreen.
+    splash = create_splash(app)
+    assert isinstance(splash, QSplashScreen)
+    assert not splash.pixmap().isNull()
+
+    # Help > About reuses the same artwork as a modal dialog.
+    from PySide6.QtWidgets import QLabel
+    from diive.gui.splash import _AboutDialog, _WIDTH, _HEIGHT
+    dlg = _AboutDialog()
+    assert dlg.isModal()
+    assert (dlg.width(), dlg.height()) == (_WIDTH, _HEIGHT)
+    has_art = [l for l in dlg.findChildren(QLabel)
+               if l.pixmap() is not None and not l.pixmap().isNull()]
+    assert has_art  # the splash pixmap is shown
+    dlg.accept()
+
+
 def test_appearance_singleton(window):
     window._open_menu_tab("Appearance")
     window._open_menu_tab("Appearance")

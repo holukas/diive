@@ -18,6 +18,7 @@ diive-gui                # or: uv run diive-gui
 | `config.py` | Persist preferences (theme, window geometry, last filetype) as JSON in the user config dir |
 | `tabs/settings.py` | Appearance settings tab — live colour editing with a pill/highlight preview |
 | `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`); window sized to ~88% of screen |
+| `splash.py` | Startup splash + **Help ▸ About** dialog (`QPainter`-drawn waves + wordmark/version/tagline/credits); `AUTHOR` + `SUPPORTERS` |
 | `registry.py` | `TAB_CLASSES` (always-on), `MENU_TABS` (menu-opened factories), `SINGLE_INSTANCE_TABS` |
 | `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df, created)` — the extension point |
 | `tabs/overview.py` | Overview tab (first/default): 2×4 panel figure (top) + full-width KPI stat-card strip (bottom); panels via `_PANELS` |

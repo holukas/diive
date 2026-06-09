@@ -27,6 +27,9 @@
 - **PySide6 desktop GUI** — new `diive.gui` subpackage, launched via the `diive-gui` console script (optional `gui`
   extra: `uv sync --extra gui` / `pip install 'diive[gui]'`). See `diive/gui/MANUAL.md` (user) and
   `diive/gui/README.md` (developer). Highlights:
+  - **Startup splash screen** — a `QPainter`-drawn splash (blue-teal gradient, the diive wordmark + version + tagline,
+    layered waves, and a credits line) shown (and kept on top) until the window is ready; author plus an extensible
+    `SUPPORTERS` list. The same artwork backs **Help ▸ About**.
   - **Overview tab** (default) — per-variable `dv.sstats` cards + multi-panel figure (time series, cumulative, mean
     diel cycle, heatmap).
   - **Per-method plot tabs** opened from the Plot menu (Heatmap date/time, Heatmap year/month, Time series, Diel cycle,

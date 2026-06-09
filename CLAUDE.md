@@ -223,6 +223,15 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   render) one tick later. matplotlib renders synchronously (blocks the event loop), so the indicator is a *static*
   busy cue painted before the freeze — it cannot smoothly animate. True animation would require off-thread Agg
   rendering (losing the interactive toolbar).
+- **Splash screen.** `gui/splash.py` draws a `QSplashScreen` entirely with `QPainter` (no image assets, like the menu
+  icons): a blue-teal gradient, the diive wordmark + `diive.__version__` + tagline, layered sine **waves**, and a
+  credits line. `run()` shows it (high-DPI aware via the screen's `devicePixelRatio`) before building `MainWindow`
+  (which blocks while auto-loading the example data), keeps it **on top until the GUI is ready** — after `window.show()`
+  it `raise_()`s the splash and pumps `processEvents()` so the Overview's deferred first render drains while the splash
+  is still up — then `splash.finish(window)`. The same artwork backs **Help ▸ About** (`splash.show_about(parent)` → a
+  frameless modal `_AboutDialog`, click or Esc to close). Author is the `AUTHOR` constant; add backers to the
+  `SUPPORTERS` list (empty hides the line). GUI-only; the launch path uses it, so tests that build `MainWindow` directly
+  are unaffected.
 - **Window sizing.** `MainWindow._size_to_screen()` sizes the window to ~88% of the available screen and centres it
   (adapts to resolution); Qt handles high-DPI scaling. Restored from saved geometry if present.
 - **Persisted preferences.** `gui/config.py` saves/loads JSON (`QStandardPaths` config dir) on close/launch: theme
