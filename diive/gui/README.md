@@ -46,8 +46,16 @@ diive-gui                # or: uv run diive-gui
 closable, unless listed in `SINGLE_INSTANCE_TABS` (e.g. Appearance). The main window is agnostic to concrete tabs.
 
 **Menu icons:** every menu entry (File/Data/Plot/Tools/Settings/Help) gets a small `QPainter`-drawn glyph via
-`gui/icons.py::menu_icon(label)`, matched to the label by keyword (`&` mnemonics stripped first). `_build_menu` wraps
-each action with it. Add a menu entry → add a keyword rule in `icons._RULES` (unknown labels fall back to a chart glyph).
+`gui/icons.py::menu_icon(label)`, matched to the label by keyword (`&` mnemonics stripped first). `_build_menus` wraps
+each action with it. Add a menu entry → add a keyword rule in **both** `icons._CLASSIC_RULES` and `icons._LINE_RULES`
+(the active theme preset's `icon_style` picks the table; unknown labels fall back to a chart glyph).
+
+**Theme presets:** the look ships as named presets in `gui/theme.py::PRESETS` — "Classic" (the long-standing look) and
+"Studio" (a clean, minimal VIBECAD-style look: near-white surfaces, soft borderless panels, monochrome line icons,
+uppercase tracked labels, and a frameless rounded window with a custom `StudioHeaderBar` + floating `PillToolbar`).
+A preset bundles `tokens` + `typography` + `icons` + `chrome`. Palette/typography/icons apply live via the `changed`
+signal; the structural `chrome` flag is read once by `MainWindow` (`_build_native_chrome` vs `_build_studio_chrome`),
+so switching it needs a relaunch. Pick a preset in **Settings ▸ Appearance**.
 
 **Plot menu:** each method is its own closable tab, with a small drawn icon. The **Plot** menu lists methods (Heatmap
 date/time, Heatmap year/month, Time series, Diel cycle, Cumulative year, Ridgeline, Scatter XY, Hexbin, Histogram); selecting one

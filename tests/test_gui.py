@@ -855,6 +855,82 @@ def test_theme_persistence_roundtrip():
     theme.manager.reset(silent=True)
 
 
+def test_preset_switch_updates_tokens_typography_icons(app):
+    from diive.gui import theme
+    try:
+        theme.manager.set_preset("Classic", silent=True)
+        assert theme.manager.preset_name == "Classic"
+        assert theme.manager.icon_style == "classic"
+        assert theme.manager.chrome == "native"
+        assert theme.manager.typography["uppercase"] is False
+
+        theme.manager.set_preset("Studio", silent=True)
+        assert theme.manager.icon_style == "line"
+        assert theme.manager.chrome == "studio"
+        assert theme.manager.typography["uppercase"] is True
+        # Studio tokens carry the canvas/ink/radius keys build_qss reads.
+        for key in ("CANVAS", "INK", "RADIUS"):
+            assert key in theme.manager.tokens
+        # label_text uppercases under Studio; tracked_font applies letter spacing.
+        assert theme.manager.label_text("Open") == "OPEN"
+    finally:
+        theme.manager.reset(silent=True)
+
+
+def test_preset_persists_through_roundtrip():
+    from diive.gui import theme
+    theme.manager.reset(silent=True)
+    theme.manager.set_preset("Studio", silent=True)
+    theme.manager.tokens["ACCENT"] = "#abcdef"  # user tweak on top of the preset
+    data = theme.manager.as_dict()
+    theme.manager.reset(silent=True)  # back to Classic
+    theme.manager.load_dict(data)
+    assert theme.manager.preset_name == "Studio"
+    assert theme.manager.icon_style == "line"
+    assert theme.manager.tokens["ACCENT"] == "#abcdef"  # override survives
+    theme.manager.reset(silent=True)
+
+
+def test_old_config_without_preset_stays_classic():
+    from diive.gui import theme
+    theme.manager.reset(silent=True)
+    # A pre-preset config (no "preset" key) must keep the Classic default.
+    theme.manager.load_dict({"pills": {}, "list_width": 240})
+    assert theme.manager.preset_name == "Classic"
+    assert theme.manager.icon_style == "classic"
+    theme.manager.reset(silent=True)
+
+
+def test_studio_chrome_builds_frameless_with_header(app, monkeypatch, example_year):
+    from diive.gui import theme
+    import diive
+    monkeypatch.setattr(diive, "load_exampledata_parquet", lambda: example_year.copy())
+    try:
+        theme.manager.set_preset("Studio", silent=True)
+        from diive.gui.app import MainWindow
+        win = MainWindow()
+        win.show()
+        QApplication.processEvents()
+        # Studio shell: a custom header replaces the native menu bar, and the
+        # window is frameless. The tab structure is unchanged.
+        assert win._header is not None
+        assert win.windowFlags() & Qt.WindowType.FramelessWindowHint
+        assert _tabs(win) == ["Overview", "Log"]
+        # The full menu tree lives as inline dropdown buttons in the header
+        # (File/Data/Plot/Tools/Settings/Help), each with a populated QMenu.
+        from PySide6.QtWidgets import QToolButton
+        menu_btns = win._header.findChildren(QToolButton, "headermenu")
+        assert len(menu_btns) == 6
+        assert all(b.menu() is not None and b.menu().actions() for b in menu_btns)
+        # Open and Save live inside the File menu (no separate buttons).
+        file_items = [a.text() for a in menu_btns[0].menu().actions()]
+        assert any("Open" in t for t in file_items)
+        assert any("Save" in t for t in file_items)
+        win.close()
+    finally:
+        theme.manager.reset(silent=True)
+
+
 def test_overview_stats_cards(window):
     overview = window._tabs[0]
     overview._on_select("NEE_CUT_REF_f")

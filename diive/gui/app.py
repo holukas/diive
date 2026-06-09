@@ -13,17 +13,27 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, Qt
-from PySide6.QtGui import QAction
+from PySide6.QtCore import QByteArray, QRectF, Qt
+from PySide6.QtGui import (
+    QAction,
+    QColor,
+    QLinearGradient,
+    QPainter,
+    QPainterPath,
+    QPen,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QFileDialog,
     QInputDialog,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QTabBar,
     QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 import diive
@@ -37,6 +47,54 @@ from diive.gui.registry import (
 from diive.core.io.files import ALLOWED_TIMESTAMP_NAMES
 from diive.gui.widgets.daterange_dialog import DateRangeDialog
 from diive.gui.widgets.open_data_dialog import OpenDataDialog
+
+
+class _StudioRoot(QWidget):
+    """Root container for the frameless Studio chrome.
+
+    Paints a rounded, soft-gradient backdrop over the window's translucent
+    background (giving the window its rounded corners + ambient frame) and
+    keeps a floating overlay (the pill toolbar) anchored bottom-centre.
+    """
+
+    _RADIUS = 14
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("studioroot")
+        self._overlay: QWidget | None = None
+
+    def set_overlay(self, widget: QWidget) -> None:
+        self._overlay = widget
+        widget.raise_()
+        self._place_overlay()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._place_overlay()
+
+    def _place_overlay(self) -> None:
+        if self._overlay is None:
+            return
+        self._overlay.adjustSize()
+        x = (self.width() - self._overlay.width()) // 2
+        y = self.height() - self._overlay.height() - 22
+        self._overlay.move(max(0, x), max(0, y))
+
+    def paintEvent(self, event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        path = QPainterPath()
+        path.addRoundedRect(rect, self._RADIUS, self._RADIUS)
+        grad = QLinearGradient(rect.topLeft(), rect.bottomRight())
+        grad.setColorAt(0.0, QColor("#FCFBFA"))
+        grad.setColorAt(0.55, QColor("#F6F2F4"))
+        grad.setColorAt(1.0, QColor("#EFE8EF"))
+        p.fillPath(path, grad)
+        p.setPen(QPen(QColor(0, 0, 0, 22), 1))
+        p.drawPath(path)
+        p.end()
 
 
 class MainWindow(QMainWindow):
@@ -72,6 +130,7 @@ class MainWindow(QMainWindow):
         self._menu_tab_list: list = []  # open menu-activated tabs (multi-instance)
 
         self._tabs = []
+        self._header = None  # set only in Studio chrome (None => native)
         self._tabwidget = QTabWidget()
         for tab_cls in TAB_CLASSES:
             tab = tab_cls()
@@ -83,11 +142,72 @@ class MainWindow(QMainWindow):
         for i in range(self._tabwidget.count()):
             bar.setTabButton(i, QTabBar.ButtonPosition.RightSide, None)
         self._tabwidget.tabCloseRequested.connect(self._on_tab_close)
-        self.setCentralWidget(self._tabwidget)
 
-        self._build_menu()
+        # Two window shells, chosen by the active theme preset's `chrome` flag
+        # (read once here; switching presets needs a relaunch to swap chrome).
+        if theme.manager.chrome == "studio":
+            self._build_studio_chrome()
+        else:
+            self._build_native_chrome()
+
         # Auto-load the bundled example data so the app is usable on startup.
         self._load_example()
+
+    def _build_native_chrome(self) -> None:
+        """Standard QMainWindow shell: native title bar + menu bar + tabs."""
+        theme.manager.built_chrome = "native"
+        self.setCentralWidget(self._tabwidget)
+        self._build_menus(self.menuBar().addMenu)
+
+    def _build_studio_chrome(self) -> None:
+        """Frameless rounded shell: custom header + tabs + floating pill bar."""
+        from diive.gui.icons import menu_icon
+        from diive.gui.widgets.frameless import FramelessResizeHelper
+        from diive.gui.widgets.header_bar import StudioHeaderBar
+        from diive.gui.widgets.pill_toolbar import PillToolbar
+
+        theme.manager.built_chrome = "studio"
+        self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+        root = _StudioRoot()
+        rlay = QVBoxLayout(root)
+        rlay.setContentsMargins(8, 8, 8, 8)
+        rlay.setSpacing(6)
+
+        self._header = StudioHeaderBar()
+        # Each top-level menu (File, Data, Plot, …) becomes an inline dropdown
+        # button in the header instead of a native menu bar; the same builder
+        # populates both shells. Studio menus are translucent so the QSS rounds
+        # their corners into a white card (no square popup-shadow artefact).
+        def _add_menu(name):
+            m = QMenu(self)
+            m.setObjectName("studiomenu")
+            # Frameless + translucent so the QSS-rounded white card has no
+            # opaque (black) corners behind its rounded border, and no square
+            # native popup shadow pokes out past the radius.
+            m.setWindowFlags(m.windowFlags()
+                             | Qt.WindowType.FramelessWindowHint
+                             | Qt.WindowType.NoDropShadowWindowHint)
+            m.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+            self._header.add_menu(name, m)
+            return m
+        self._build_menus(_add_menu)
+
+        rlay.addWidget(self._header)
+        rlay.addWidget(self._tabwidget, 1)
+        self.setCentralWidget(root)
+
+        # Floating pill toolbar overlaying the content, anchored bottom-centre.
+        pill = PillToolbar(root)
+        pill.add_action(menu_icon("Open"), "Open data file…", self._open_file)
+        pill.add_action(menu_icon("Save"), "Save data as parquet…", self._save_file)
+        pill.add_action(menu_icon("date range"), "Select date range…", self._select_daterange)
+        pill.add_action(menu_icon("reset"), "Reset to full range", self._reset_range)
+        root.set_overlay(pill)
+
+        # Native edge/corner resize (frameless windows lose the OS grips).
+        self._resize_helper = FramelessResizeHelper(self, root)
 
     def _size_to_screen(self) -> None:
         """Size the window relative to the available screen and center it."""
@@ -101,7 +221,13 @@ class MainWindow(QMainWindow):
         frame.moveCenter(avail.center())
         self.move(frame.topLeft())
 
-    def _build_menu(self) -> None:
+    def _build_menus(self, add_menu) -> None:
+        """Populate the menu tree, creating each top-level menu via `add_menu`.
+
+        `add_menu(name) -> QMenu` decouples the menu contents from the shell:
+        native chrome passes `self.menuBar().addMenu`, Studio chrome passes a
+        callback that adds submenus under the header's "≡" popup.
+        """
         from diive.gui.icons import menu_icon
 
         def _act(text, slot, shortcut=None):
@@ -112,9 +238,7 @@ class MainWindow(QMainWindow):
             action.triggered.connect(slot)
             return action
 
-        menubar = self.menuBar()
-
-        file_menu = menubar.addMenu("&File")
+        file_menu = add_menu("&File")
         file_menu.addAction(_act("&Open data file...", self._open_file, "Ctrl+O"))
         file_menu.addAction(_act("Load &example data", self._load_example))
         file_menu.addSeparator()
@@ -122,21 +246,21 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(_act("E&xit", self.close, "Ctrl+Q"))
 
-        data_menu = menubar.addMenu("&Data")
+        data_menu = add_menu("&Data")
         data_menu.addAction(_act("Select date &range...", self._select_daterange, "Ctrl+R"))
         self._reset_range_act = _act("Reset to &full range", self._reset_range)
         self._reset_range_act.setEnabled(False)
         data_menu.addAction(self._reset_range_act)
 
         for menu_name, group in MENU_TABS.items():
-            menu = menubar.addMenu(f"&{menu_name}")
+            menu = add_menu(f"&{menu_name}")
             for label in group:
                 act = QAction(menu_icon(label), label, self)
                 act.triggered.connect(
                     lambda _checked, lab=label: self._open_menu_tab(lab))
                 menu.addAction(act)
 
-        help_menu = menubar.addMenu("&Help")
+        help_menu = add_menu("&Help")
         help_menu.addAction(_act("&About", self._about))
 
     def _push_data(self) -> None:
@@ -169,6 +293,8 @@ class MainWindow(QMainWindow):
             title = (f"{self._base_title} — {self._source} "
                      f"[{start:%Y-%m-%d %H:%M} to {end:%Y-%m-%d %H:%M}]")
         self.setWindowTitle(title)
+        if self._header is not None:
+            self._header.set_title(title)
         self._reset_range_act.setEnabled(self._range is not None)
         self._push_data()
 

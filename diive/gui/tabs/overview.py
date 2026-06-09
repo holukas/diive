@@ -96,8 +96,8 @@ class _StatCard(QFrame):
         lay.setContentsMargins(11, 7, 11, 7)
         lay.setSpacing(1)
 
-        name_lbl = QLabel(name)
-        nf = name_lbl.font()
+        name_lbl = QLabel(theme.manager.label_text(name))
+        nf = theme.manager.tracked_font(name_lbl.font())
         nf.setPointSizeF(max(7.0, nf.pointSizeF() - 1.5))
         nf.setBold(True)
         name_lbl.setFont(nf)

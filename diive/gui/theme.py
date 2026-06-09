@@ -1,6 +1,6 @@
 """
-GUI.THEME: CENTRAL APPEARANCE CONFIG (live-editable)
-====================================================
+GUI.THEME: CENTRAL APPEARANCE CONFIG (live-editable, preset-based)
+==================================================================
 
 Single source of truth for the diive GUI's look: colour tokens, pill tags, the
 time-series palette, and the Qt stylesheet. The `ThemeManager` singleton
@@ -8,22 +8,40 @@ time-series palette, and the Qt stylesheet. The `ThemeManager` singleton
 are modified, so the Settings tab can offer a live preview — widgets re-read
 colours from `manager` and repaint.
 
+The look ships as named **presets** (`PRESETS`): "Classic" (the long-standing
+look) and "Studio" (a clean, minimal VIBECAD-style look — near-white surfaces,
+soft borderless panels, monochrome line icons, uppercase tracked labels, and a
+frameless window with a custom header). A preset bundles four things:
+
+- ``tokens``     — colour tokens (live-applied via the stylesheet).
+- ``typography`` — ``{uppercase, tracking}`` for nav/section labels (live).
+- ``icons``      — icon style flag read by ``gui.icons.menu_icon`` (build-time).
+- ``chrome``     — window-shell flag read once by ``MainWindow`` (build-time).
+
+Palette/typography/icons apply instantly through the ``changed`` signal; the
+structural ``chrome`` (frameless window, header bar, pill toolbar) is read when
+``MainWindow`` is built, so switching it takes effect on the next launch. This
+is intentional — Qt cannot cleanly flip a frameless window or re-parent a menu
+bar on a live, shown top-level window.
+
 Note: which *variable name* maps to which pill kind (e.g. ``NEE_*`` -> NEE) is
 LIBRARY domain knowledge (`dv.variables.classify_variable`); only the pill
-**colours and labels** are configured here (GUI presentation).
+**colours and labels** are configured here (GUI presentation). Pills and the
+time-series palette are shared across presets (their colours encode meaning).
 
 Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
 from PySide6.QtCore import QObject, Signal
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
 
-# Fixed convenience colours (not user-editable).
+# Fixed convenience colours (not user-editable; kept for back-compat imports).
 WHITE = "#FFFFFF"
 DARK = "#212121"
 
-# --- editable defaults ------------------------------------------------------
+# --- Classic (long-standing) token defaults ---------------------------------
 DEFAULT_TOKENS: dict[str, str] = {
     "ACCENT": "#2196F3",              # focus / active-tab underline
     "BORDER": "#B0BEC5",              # control borders
@@ -38,9 +56,58 @@ DEFAULT_TOKENS: dict[str, str] = {
     "EXTRA_BG": "#BBDEFB",           # additional panels highlight
     "EXTRA_FG": "#0D47A1",
     "TEXT_FG": DARK,
+    # Canvas / ink / corner radius — kept as tokens so build_qss is fully
+    # token-driven (no hardcoded colours) and presets differ by data alone.
+    "CANVAS": WHITE,                 # base widget background
+    "INK": DARK,                     # base text colour
+    "RADIUS": "6",                   # control corner radius (px, as string)
+}
+
+# --- Studio (VIBECAD-like) token defaults -----------------------------------
+# Monochrome neutrals + one restrained slate-ink accent. Same keys as Classic,
+# so every existing consumer (build_qss, the variable delegate) works unchanged.
+STUDIO_TOKENS: dict[str, str] = {
+    "ACCENT": "#3A4D5C",
+    "BORDER": "#E6E6E3",             # ~= canvas -> hairlines read as soft separators
+    "INPUT_BG": "#F4F4F1",
+    "LIST_BG": "#F7F7F4",
+    "HOVER_BG": "#ECECE8",
+    "HOVER_PRESSED": "#E0E0DB",
+    "SCROLL_HANDLE": "#D8D8D3",
+    "SCROLL_HANDLE_HOVER": "#BDBDB7",
+    "PRIMARY_BG": "#3A4D5C",         # primary selection = the accent
+    "PRIMARY_FG": WHITE,
+    "EXTRA_BG": "#DCE3E8",           # muted accent tint for additional panels
+    "EXTRA_FG": "#2A3942",
+    "TEXT_FG": "#1E2226",            # near-black ink
+    "CANVAS": "#FBFBF9",             # near-white warm canvas
+    "INK": "#1E2226",
+    "RADIUS": "12",                  # softer, larger corners
+}
+
+# --- per-preset typography ---------------------------------------------------
+# Tracking is QFont AbsoluteSpacing in px; 0.0 is a no-op (Classic byte-identical).
+DEFAULT_TYPOGRAPHY: dict = {"uppercase": False, "tracking": 0.0}
+STUDIO_TYPOGRAPHY: dict = {"uppercase": True, "tracking": 1.5}
+
+#: Named presets. Each bundles tokens + typography + icon style + chrome flag.
+PRESETS: dict[str, dict] = {
+    "Classic": {
+        "tokens": DEFAULT_TOKENS,
+        "typography": DEFAULT_TYPOGRAPHY,
+        "icons": "classic",
+        "chrome": "native",
+    },
+    "Studio": {
+        "tokens": STUDIO_TOKENS,
+        "typography": STUDIO_TYPOGRAPHY,
+        "icons": "line",
+        "chrome": "studio",
+    },
 }
 
 #: kind -> [label, background, text]. Lists so values are editable in place.
+#: Shared across presets (the colours encode domain meaning: NEE green, Reco red).
 DEFAULT_PILL_STYLE: dict[str, list[str]] = {
     "NEE": ["NEE", "#388E3C", WHITE],
     "FC": ["FC", "#388E3C", WHITE],
@@ -65,60 +132,68 @@ DEFAULT_LIST_WIDTH = 240
 
 
 def build_qss(t: dict[str, str]) -> str:
-    """Build the application stylesheet from a token dict."""
-    return f"""
-QWidget {{ background: {WHITE}; color: {DARK}; }}
-QTabWidget::pane {{ border: 1px solid #E0E0E0; }}
-QTabBar::tab {{ background: #F5F5F5; padding: 6px 14px; border: 1px solid #E0E0E0; }}
-QTabBar::tab:selected {{ background: {WHITE}; border-bottom: 2px solid {t['ACCENT']}; }}
+    """Build the application stylesheet from a token dict.
 
-QMenuBar {{ background: {WHITE}; }}
+    Fully token-driven: the canvas/ink colours and the corner radius come from
+    the tokens, so both presets render from this one function. Studio's hairline
+    ``BORDER`` (~= canvas) makes the ``1px solid`` rules read as soft separators.
+    The trailing object-name selectors are inert in Classic (those widgets only
+    exist in the Studio chrome).
+    """
+    r = t["RADIUS"]
+    return f"""
+QWidget {{ background: {t['CANVAS']}; color: {t['INK']}; }}
+QTabWidget::pane {{ border: 1px solid {t['BORDER']}; }}
+QTabBar::tab {{ background: {t['LIST_BG']}; padding: 6px 14px; border: 1px solid {t['BORDER']}; }}
+QTabBar::tab:selected {{ background: {t['CANVAS']}; border-bottom: 2px solid {t['ACCENT']}; }}
+
+QMenuBar {{ background: {t['CANVAS']}; }}
 QMenuBar::item {{ padding: 4px 10px; background: transparent; border-radius: 4px; }}
 QMenuBar::item:selected {{ background: {t['HOVER_BG']}; }}
 QMenuBar::item:pressed {{ background: {t['HOVER_PRESSED']}; }}
-QMenu {{ background: {WHITE}; border: 1px solid {t['BORDER']}; padding: 4px; }}
+QMenu {{ background: {t['CANVAS']}; border: 1px solid {t['BORDER']}; padding: 4px; }}
 QMenu::item {{ padding: 5px 22px; border-radius: 4px; }}
 QMenu::item:selected {{ background: {t['HOVER_BG']}; }}
 
 /* Editable inputs share a tinted background so it's obvious what can be edited. */
 QLineEdit, QSpinBox, QDoubleSpinBox {{
-    background: {t['INPUT_BG']}; border: 1px solid {t['BORDER']}; border-radius: 6px;
+    background: {t['INPUT_BG']}; border: 1px solid {t['BORDER']}; border-radius: {r}px;
     padding: 5px 8px;
 }}
 QLineEdit {{ margin-bottom: 4px; }}
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{ border: 1px solid {t['ACCENT']}; }}
 QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {{
-    background: #F5F5F5; color: #9E9E9E;
+    background: {t['LIST_BG']}; color: #9E9E9E;
 }}
 
 QPushButton {{
-    background: #F5F5F5; border: 1px solid {t['BORDER']};
-    border-radius: 4px; padding: 5px 14px;
+    background: {t['LIST_BG']}; border: 1px solid {t['BORDER']};
+    border-radius: {r}px; padding: 5px 14px;
 }}
 QPushButton:hover {{ background: {t['HOVER_BG']}; }}
 QPushButton:pressed {{ background: {t['HOVER_PRESSED']}; }}
-QPushButton:disabled {{ color: #9E9E9E; background: #FAFAFA; }}
+QPushButton:disabled {{ color: #9E9E9E; background: {t['CANVAS']}; }}
 
 QComboBox {{
     background: {t['INPUT_BG']}; border: 1px solid {t['BORDER']};
-    border-radius: 4px; padding: 3px 6px;
+    border-radius: {r}px; padding: 3px 6px;
 }}
 QComboBox:hover {{ border: 1px solid {t['HOVER_PRESSED']}; }}
 QComboBox:focus {{ border: 1px solid {t['ACCENT']}; }}
 QComboBox QAbstractItemView {{
-    background: {WHITE}; border: 1px solid {t['BORDER']}; outline: 0;
-    selection-background-color: {t['HOVER_BG']}; selection-color: {DARK};
+    background: {t['CANVAS']}; border: 1px solid {t['BORDER']}; outline: 0;
+    selection-background-color: {t['HOVER_BG']}; selection-color: {t['INK']};
 }}
 QComboBox QAbstractItemView::item {{ padding: 4px 8px; }}
-QComboBox QAbstractItemView::item:selected {{ background: {t['HOVER_BG']}; color: {DARK}; }}
+QComboBox QAbstractItemView::item:selected {{ background: {t['HOVER_BG']}; color: {t['INK']}; }}
 
 QListWidget {{
     background: {t['LIST_BG']}; border: 1px solid {t['BORDER']};
-    border-radius: 6px; padding: 4px; outline: 0;
+    border-radius: {r}px; padding: 4px; outline: 0;
 }}
 
 QGroupBox {{
-    border: 1px solid {t['BORDER']}; border-radius: 6px;
+    border: 1px solid {t['BORDER']}; border-radius: {r}px;
     margin-top: 10px; padding: 8px 6px 6px 6px;
 }}
 QGroupBox::title {{
@@ -129,7 +204,7 @@ QGroupBox::title {{
 QCheckBox {{ spacing: 7px; padding: 2px 0; }}
 QCheckBox::indicator {{
     width: 16px; height: 16px; border-radius: 3px;
-    border: 1px solid {t['SCROLL_HANDLE_HOVER']}; background: {WHITE};
+    border: 1px solid {t['SCROLL_HANDLE_HOVER']}; background: {t['CANVAS']};
 }}
 QCheckBox::indicator:hover {{ border: 1px solid {t['ACCENT']}; }}
 QCheckBox::indicator:checked {{
@@ -143,26 +218,95 @@ QScrollBar::handle:horizontal {{ background: {t['SCROLL_HANDLE']}; border-radius
 QScrollBar::handle:hover {{ background: {t['SCROLL_HANDLE_HOVER']}; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; background: none; border: none; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: none; }}
+
+/* Studio chrome (inert in Classic — these widgets/object-names only exist there). */
+#studioroot {{ background: transparent; }}
+StudioHeaderBar {{ background: transparent; }}
+#pilltoolbar {{ background: {t['CANVAS']}; border: 1px solid {t['BORDER']}; border-radius: 22px; }}
+
+/* Inline header menu buttons: flat text + chevron, soft rounded hover. */
+QToolButton#headermenu {{
+    background: transparent; border: none; padding: 5px 10px; border-radius: 8px;
+    color: {t['INK']};
+}}
+QToolButton#headermenu:hover {{ background: {t['HOVER_BG']}; }}
+QToolButton#headermenu:pressed {{ background: {t['HOVER_PRESSED']}; }}
+QToolButton#headermenu::menu-indicator {{ image: none; width: 0; }}
+
+/* Dropdown popup: an elegant rounded white card (translucent window behind it). */
+QMenu#studiomenu {{
+    background: {WHITE}; border: 1px solid {t['BORDER']}; border-radius: 10px; padding: 6px;
+}}
+QMenu#studiomenu::item {{ padding: 6px 22px 6px 12px; border-radius: 6px; }}
+QMenu#studiomenu::item:selected {{ background: {t['HOVER_BG']}; color: {t['INK']}; }}
+/* A custom ::item rule disables Qt's native disabled greying, so restore it —
+   otherwise a disabled entry (e.g. "Reset to full range") looks active but
+   takes no hover highlight. */
+QMenu#studiomenu::item:disabled {{ color: #9E9E9E; }}
+QMenu#studiomenu::item:disabled:selected {{ background: transparent; }}
+QMenu#studiomenu::separator {{ height: 1px; background: {t['BORDER']}; margin: 5px 8px; }}
 """
 
 
 class ThemeManager(QObject):
-    """Holds the live, editable theme; emits `changed` on every modification."""
+    """Holds the live, editable theme; emits `changed` on every modification.
+
+    Token colours, typography, and icon style update live; the structural
+    `chrome` flag is read by `MainWindow` at build time (relaunch to switch).
+    """
 
     changed = Signal()
 
     def __init__(self) -> None:
         super().__init__()
+        # Which chrome the live MainWindow actually built (set by app.py). Used
+        # by the Settings tab to know when a preset switch needs a relaunch.
+        self.built_chrome: str | None = None
         self.reset(silent=True)
 
     def reset(self, silent: bool = False) -> None:
-        self.tokens = dict(DEFAULT_TOKENS)
+        """Restore defaults: shared pills/palette + the Classic preset."""
         self.pills = {k: list(v) for k, v in DEFAULT_PILL_STYLE.items()}
         self.new_pill = list(DEFAULT_NEW_PILL)
         self.ts_colors = list(DEFAULT_TIMESERIES_COLORS)
         self.list_width = DEFAULT_LIST_WIDTH
+        self.set_preset("Classic", silent=True)
         if not silent:
             self.apply()
+
+    def set_preset(self, name: str, *, silent: bool = False) -> None:
+        """Switch to a named preset (tokens/typography/icons/chrome).
+
+        Copies the preset's tokens *into* ``self.tokens`` so the live colour
+        editor keeps mutating one source and any user tweaks layer on top.
+        """
+        preset = PRESETS.get(name)
+        if preset is None:
+            return
+        self.preset_name = name
+        self.tokens = dict(preset["tokens"])
+        self.typography = dict(preset["typography"])
+        self.icon_style = preset["icons"]
+        self.chrome = preset["chrome"]
+        if not silent:
+            self.apply()
+
+    def tracked_font(self, base: QFont | None = None, *, point_delta: float = 0.0) -> QFont:
+        """A QFont with the active preset's letter spacing applied.
+
+        Tracking 0.0 (Classic) is a no-op, so Classic labels are unchanged.
+        """
+        font = QFont(base) if base is not None else QFont()
+        if point_delta:
+            font.setPointSizeF(max(1.0, font.pointSizeF() + point_delta))
+        tracking = self.typography.get("tracking", 0.0)
+        if tracking:
+            font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, tracking)
+        return font
+
+    def label_text(self, text: str) -> str:
+        """Uppercase a nav/section label when the active preset asks for it."""
+        return text.upper() if self.typography.get("uppercase") else text
 
     def qss(self) -> str:
         return build_qss(self.tokens)
@@ -177,6 +321,7 @@ class ThemeManager(QObject):
     def as_dict(self) -> dict:
         """Serialise the current theme (for persisting preferences)."""
         return {
+            "preset": self.preset_name,
             "tokens": dict(self.tokens),
             "pills": {k: list(v) for k, v in self.pills.items()},
             "new_pill": list(self.new_pill),
@@ -185,9 +330,18 @@ class ThemeManager(QObject):
         }
 
     def load_dict(self, data: dict) -> None:
-        """Load a serialised theme (tolerant of missing/old keys); no emit."""
+        """Load a serialised theme (tolerant of missing/old keys); no emit.
+
+        Applies the saved preset baseline first, then layers any saved token
+        overrides on top. Old configs without a preset keep the Classic default
+        set in ``__init__``; old configs missing CANVAS/INK/RADIUS keep the
+        Classic values seeded by the preset (``update`` only touches present keys).
+        """
         if not data:
             return
+        name = data.get("preset")
+        if name in PRESETS:
+            self.set_preset(name, silent=True)
         self.tokens.update(data.get("tokens", {}))
         for kind, value in data.get("pills", {}).items():
             if kind in self.pills:
