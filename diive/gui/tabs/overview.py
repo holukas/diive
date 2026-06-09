@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 import diive as dv
+from diive.core.dfun.stats import SSTATS_DESCRIPTIONS
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
@@ -81,31 +82,78 @@ def _fmt(value) -> str:
     return f"{f:.4g}"
 
 
-class _StatCard(QFrame):
-    """A small KPI-style card: stat name on top, value below."""
+class _StatItem(QWidget):
+    """A borderless metric: a tiny tracked label above a bold value.
 
-    def __init__(self, name: str, value: str) -> None:
+    No card chrome — items sit on the strip separated by hairlines, reading as
+    one clean metrics ribbon rather than a row of boxes.
+    """
+
+    def __init__(self, name: str, value: str, tip: str = "") -> None:
         super().__init__()
-        self.setObjectName("statcard")
-        self.setFixedHeight(64)
-        self.setMinimumWidth(92)
-        self.setStyleSheet(
-            "QFrame#statcard { background: #FFFFFF; border: 1px solid #E0E4E7;"
-            " border-radius: 8px; }")
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(11, 7, 11, 7)
+        lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(1)
 
         name_lbl = QLabel(theme.manager.label_text(name))
         nf = theme.manager.tracked_font(name_lbl.font())
-        nf.setPointSizeF(max(7.0, nf.pointSizeF() - 1.5))
+        nf.setPointSizeF(max(6.5, nf.pointSizeF() - 2.0))
         nf.setBold(True)
         name_lbl.setFont(nf)
         name_lbl.setStyleSheet("color: #90A4AE; background: transparent;")
 
         value_lbl = QLabel(value)
         vf = value_lbl.font()
-        vf.setPointSizeF(vf.pointSizeF() + 4.0)
+        vf.setPointSizeF(vf.pointSizeF() + 2.0)
+        vf.setBold(True)
+        value_lbl.setFont(vf)
+        value_lbl.setStyleSheet("color: #263238; background: transparent;")
+        value_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+
+        lay.addWidget(name_lbl)
+        lay.addWidget(value_lbl)
+
+        # Explain the metric on hover (set on the children too, so the tooltip
+        # shows wherever the cursor lands within the item).
+        if tip:
+            full = f"{name}: {tip}"
+            for w in (self, name_lbl, value_lbl):
+                w.setToolTip(full)
+
+
+def _stat_separator() -> QFrame:
+    """A short vertical hairline between metrics."""
+    line = QFrame()
+    line.setFixedSize(1, 30)
+    line.setStyleSheet("background: #E6E6E3;")
+    return line
+
+
+class _StatCard(QFrame):
+    """A compact KPI-style card (used by the Gaps/Drivers/Seasonal tabs)."""
+
+    def __init__(self, name: str, value: str) -> None:
+        super().__init__()
+        self.setObjectName("statcard")
+        self.setFixedHeight(44)
+        self.setMinimumWidth(74)
+        self.setStyleSheet(
+            "QFrame#statcard { background: #FFFFFF; border: 1px solid #E0E4E7;"
+            " border-radius: 7px; }")
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(9, 4, 9, 4)
+        lay.setSpacing(0)
+
+        name_lbl = QLabel(theme.manager.label_text(name))
+        nf = theme.manager.tracked_font(name_lbl.font())
+        nf.setPointSizeF(max(6.5, nf.pointSizeF() - 2.0))
+        nf.setBold(True)
+        name_lbl.setFont(nf)
+        name_lbl.setStyleSheet("color: #90A4AE; background: transparent;")
+
+        value_lbl = QLabel(value)
+        vf = value_lbl.font()
+        vf.setPointSizeF(vf.pointSizeF() + 1.0)
         vf.setBold(True)
         value_lbl.setFont(vf)
         value_lbl.setStyleSheet("color: #263238; background: transparent;")
@@ -149,21 +197,20 @@ class OverviewTab(DiiveTab):
         # Bottom: full-width "dashboard strip" of stat cards.
         self.stats_strip = QScrollArea()
         self.stats_strip.setWidgetResizable(True)
-        self.stats_strip.setFixedHeight(92)
+        self.stats_strip.setFixedHeight(54)
         self.stats_strip.setFrameShape(QFrame.Shape.NoFrame)
         self.stats_strip.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.stats_strip.setVerticalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        list_bg = theme.manager.tokens["LIST_BG"]
         border = theme.manager.tokens["BORDER"]
         self.stats_strip.setStyleSheet(
-            f"QScrollArea {{ background: {list_bg}; border-top: 1px solid {border}; }}")
+            f"QScrollArea {{ background: #FFFFFF; border-top: 1px solid {border}; }}")
         host = QWidget()
-        host.setStyleSheet(f"background: {list_bg};")
+        host.setStyleSheet("background: #FFFFFF;")
         self.stats_layout = QHBoxLayout(host)
-        self.stats_layout.setContentsMargins(10, 8, 10, 8)
-        self.stats_layout.setSpacing(8)
+        self.stats_layout.setContentsMargins(14, 0, 14, 0)
+        self.stats_layout.setSpacing(14)
         self.stats_layout.addStretch(1)
         self.stats_strip.setWidget(host)
         outer.addWidget(self.stats_strip)
@@ -196,11 +243,17 @@ class OverviewTab(DiiveTab):
             if item.widget():
                 item.widget().deleteLater()
         try:
-            values = dv.sstats(series).iloc[:, 0]
+            values = dv.sstats(series).iloc[:, 0]  # all stats (ribbon scrolls)
         except Exception:
             return
+        at = 0  # insert before the trailing stretch, hairline-separated
         for i, (stat, value) in enumerate(values.items()):
-            self.stats_layout.insertWidget(i, _StatCard(str(stat), _fmt(value)))
+            if i > 0:
+                self.stats_layout.insertWidget(at, _stat_separator())
+                at += 1
+            tip = SSTATS_DESCRIPTIONS.get(str(stat), "")
+            self.stats_layout.insertWidget(at, _StatItem(str(stat), _fmt(value), tip))
+            at += 1
 
     def _render_figure(self, series, name: str) -> None:
         fig = self.canvas.fig

@@ -21,9 +21,11 @@ from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import (
     QColor,
     QFont,
+    QIcon,
     QLinearGradient,
     QPainter,
     QPainterPath,
+    QPen,
     QPixmap,
 )
 from PySide6.QtGui import QGuiApplication
@@ -163,6 +165,72 @@ def make_splash_pixmap(dpr: float = 1.0) -> QPixmap:
 
     p.end()
     return pm
+
+
+def make_icon_pixmap(size: int = 256) -> QPixmap:
+    """Render the diive app icon at `size` px square: the blue-teal gradient
+    tile with layered cyan waves and a white "d" above them (the splash motif)."""
+    pm = QPixmap(size, size)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    s = float(size)
+
+    card = QPainterPath()
+    card.addRoundedRect(QRectF(0, 0, s, s), s * 0.22, s * 0.22)
+    p.setClipPath(card)
+
+    # Brighter, more saturated than the splash so the icon stands out on a
+    # (light or dark) taskbar; near-black navy would vanish on a dark taskbar.
+    grad = QLinearGradient(0, 0, 0, s)
+    grad.setColorAt(0.0, QColor("#1E88E5"))   # blue 600
+    grad.setColorAt(1.0, QColor("#00ACC1"))   # cyan 600
+    p.fillRect(QRectF(0, 0, s, s), grad)
+
+    def _wave(base_f: float, amp_f: float, wl_f: float, phase: float, color: QColor) -> None:
+        base_y, amp, wl = s * base_f, s * amp_f, s * wl_f
+        path = QPainterPath()
+        path.moveTo(0.0, s)
+        path.lineTo(0.0, base_y)
+        x, step = 0.0, s / 64.0
+        while x <= s:
+            path.lineTo(x, base_y + amp * math.sin(2 * math.pi * (x / wl) + phase))
+            x += step
+        path.lineTo(s, s)
+        path.closeSubpath()
+        p.fillPath(path, color)
+
+    # Layered translucent-white "foam" waves across the lower third.
+    _wave(0.66, 0.055, 0.95, 0.4, QColor(255, 255, 255, 45))
+    _wave(0.76, 0.050, 0.62, 1.9, QColor(255, 255, 255, 75))
+    _wave(0.86, 0.040, 0.46, 3.3, QColor(255, 255, 255, 120))
+
+    # Wordmark "d" drawn as a vector (font-independent, always crisp): a ring
+    # "bowl" with a vertical stem on its right, sitting above the waves.
+    w = s * 0.10                 # stroke / stem width
+    r = s * 0.155                # bowl radius
+    cx, cy = s * 0.47, s * 0.43  # bowl centre (above the waves)
+    y_top = s * 0.17             # stem reaches up to here
+    pen = QPen(_WHITE, w)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawEllipse(QRectF(cx - r, cy - r, 2 * r, 2 * r))   # bowl (ring -> counter)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(_WHITE)
+    p.drawRoundedRect(QRectF(cx + r - w, y_top, w, (cy + r) - y_top),
+                      w / 2.0, w / 2.0)                    # stem
+    p.end()
+    return pm
+
+
+def app_icon() -> QIcon:
+    """The diive application/window icon (multi-size, drawn from the splash motif)."""
+    icon = QIcon()
+    for sz in (16, 24, 32, 48, 64, 128, 256):
+        icon.addPixmap(make_icon_pixmap(sz))
+    return icon
 
 
 def create_splash(app=None) -> QSplashScreen:

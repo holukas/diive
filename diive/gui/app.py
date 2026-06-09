@@ -54,8 +54,7 @@ class _StudioRoot(QWidget):
     """Root container for the frameless Studio chrome.
 
     Paints a rounded, soft-gradient backdrop over the window's translucent
-    background (giving the window its rounded corners + ambient frame) and
-    keeps a floating overlay (the pill toolbar) anchored bottom-centre.
+    background (giving the window its rounded corners + ambient frame).
     """
 
     _RADIUS = 14
@@ -63,24 +62,6 @@ class _StudioRoot(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("studioroot")
-        self._overlay: QWidget | None = None
-
-    def set_overlay(self, widget: QWidget) -> None:
-        self._overlay = widget
-        widget.raise_()
-        self._place_overlay()
-
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        self._place_overlay()
-
-    def _place_overlay(self) -> None:
-        if self._overlay is None:
-            return
-        self._overlay.adjustSize()
-        x = (self.width() - self._overlay.width()) // 2
-        y = self.height() - self._overlay.height() - 22
-        self._overlay.move(max(0, x), max(0, y))
 
     def paintEvent(self, event) -> None:
         p = QPainter(self)
@@ -106,6 +87,8 @@ class MainWindow(QMainWindow):
         self._config = config or {}
         self._base_title = f"diive {diive.__version__}"
         self.setWindowTitle(self._base_title)
+        from diive.gui.splash import app_icon
+        self.setWindowIcon(app_icon())
         # Restore saved window geometry if available, else size to screen.
         geo = self._config.get("geometry")
         if geo:
@@ -166,11 +149,10 @@ class MainWindow(QMainWindow):
         self._build_menus(self.menuBar().addMenu)
 
     def _build_studio_chrome(self) -> None:
-        """Frameless rounded shell: custom header + tabs + floating pill bar."""
+        """Frameless rounded shell: custom header + tabs."""
         from diive.gui.icons import menu_icon
         from diive.gui.widgets.frameless import FramelessResizeHelper
         from diive.gui.widgets.header_bar import StudioHeaderBar
-        from diive.gui.widgets.pill_toolbar import PillToolbar
 
         theme.manager.built_chrome = "studio"
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
@@ -213,14 +195,6 @@ class MainWindow(QMainWindow):
         rlay.addWidget(self._header)
         rlay.addWidget(self._tabwidget, 1)
         self.setCentralWidget(root)
-
-        # Floating pill toolbar overlaying the content, anchored bottom-centre.
-        pill = PillToolbar(root)
-        pill.add_action(menu_icon("Open"), "Open data file…", self._open_file)
-        pill.add_action(menu_icon("Save"), "Save data as parquet…", self._save_file)
-        pill.add_action(menu_icon("date range"), "Select date range…", self._select_daterange)
-        pill.add_action(menu_icon("reset"), "Reset to full range", self._reset_range)
-        root.set_overlay(pill)
 
         # Native edge/corner resize (frameless windows lose the OS grips).
         self._resize_helper = FramelessResizeHelper(self, root)
@@ -509,12 +483,23 @@ class MainWindow(QMainWindow):
 
 def run() -> int:
     """Boot the QApplication, show the main window, run the event loop."""
+    # Windows groups a Python process under python.exe in the taskbar (and uses
+    # its icon) unless the app declares its own AppUserModelID first.
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("diive.gui")
+        except Exception:
+            pass
+
     app = QApplication.instance() or QApplication(sys.argv)
     app.setOrganizationName("diive")
     app.setApplicationName("diive-gui")
     # Fusion style honours stylesheet item-selection colours consistently
     # (the native Windows style ignores them in combo-box popups).
     app.setStyle("Fusion")
+    from diive.gui.splash import app_icon
+    app.setWindowIcon(app_icon())  # taskbar / window icon (splash motif)
 
     # Restore saved preferences before building the window.
     cfg = config.load_config()

@@ -228,10 +228,16 @@ QScrollBar::add-page, QScrollBar::sub-page {{ background: none; }}
 QToolButton#tabclose {{ border: none; border-radius: 5px; padding: 0; }}
 QToolButton#tabclose:hover {{ background: {t['HOVER_PRESSED']}; }}
 
+/* Tooltips: a clean rounded card with a soft accent-tinted border. */
+QToolTip {{
+    background: {WHITE}; color: {t['INK']};
+    border: 1px solid {t['ACCENT']}; border-radius: 8px;
+    padding: 6px 10px; font-size: 12px;
+}}
+
 /* Studio chrome (inert in Classic — these widgets/object-names only exist there). */
 #studioroot {{ background: transparent; }}
 StudioHeaderBar {{ background: transparent; }}
-#pilltoolbar {{ background: {t['CANVAS']}; border: 1px solid {t['BORDER']}; border-radius: 22px; }}
 
 /* Inline header menu buttons: flat text + chevron, soft rounded hover. */
 QToolButton#headermenu {{

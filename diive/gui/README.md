@@ -52,7 +52,7 @@ each action with it. Add a menu entry → add a keyword rule in **both** `icons.
 
 **Theme presets:** the look ships as named presets in `gui/theme.py::PRESETS` — "Classic" (the long-standing look) and
 "Studio" (a clean, minimal VIBECAD-style look: near-white surfaces, soft borderless panels, monochrome line icons,
-uppercase tracked labels, and a frameless rounded window with a custom `StudioHeaderBar` + floating `PillToolbar`).
+uppercase tracked labels, and a frameless rounded window with a custom `StudioHeaderBar`).
 A preset bundles `tokens` + `typography` + `icons` + `chrome`. Palette/typography/icons apply live via the `changed`
 signal; the structural `chrome` flag is read once by `MainWindow` (`_build_native_chrome` vs `_build_studio_chrome`),
 so switching it needs a relaunch. Pick a preset in **Settings ▸ Appearance**.
