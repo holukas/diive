@@ -584,6 +584,18 @@ _LINE_RULES = [
 ]
 
 
+def close_icon() -> QIcon:
+    """A small, clearly visible "×" for tab close buttons (ink-coloured)."""
+    pm, p = _canvas()
+    pen = QPen(_line_ink(), 1.7)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    p.drawLine(QPointF(4.5, 4.5), QPointF(11.5, 11.5))
+    p.drawLine(QPointF(11.5, 4.5), QPointF(4.5, 11.5))
+    p.end()
+    return QIcon(pm)
+
+
 def menu_icon(label: str) -> QIcon:
     """Pick a small drawn icon for a menu label by keyword.
 

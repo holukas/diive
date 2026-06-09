@@ -113,6 +113,33 @@ def test_close_tab_focuses_previous_not_log(window):
     assert tw.tabText(tw.currentIndex()) == "Overview"
 
 
+def test_tabs_movable_renamable_and_close_buttons(window):
+    tw = window._tabwidget
+    bar = tw.tabBar()
+    from PySide6.QtWidgets import QTabBar
+    right = QTabBar.ButtonPosition.RightSide
+    # Drag-to-reorder is enabled.
+    assert tw.isMovable()
+    # Always-on Overview/Log have no close button (they stay open).
+    for i in range(tw.count()):
+        assert bar.tabButton(i, right) is None
+
+    # A menu tab gets a (custom, visible) close button.
+    window._open_menu_tab("Time series")
+    idx = tw.currentIndex()
+    assert bar.tabButton(idx, right) is not None
+
+    # Rename changes the display label only.
+    tw.setTabText(idx, "My series")  # what _rename_tab does after the dialog
+    assert tw.tabText(idx) == "My series"
+
+    # The custom button closes its tab regardless of current order.
+    n_before = tw.count()
+    bar.tabButton(idx, right).click()
+    assert tw.count() == n_before - 1
+    assert "Overview" in _tabs(window) and "Log" in _tabs(window)
+
+
 def test_plot_settings_live_render(window):
     from diive.gui.widgets.plot_settings import HEATMAP, PlotSettingsPanel
     window._open_menu_tab("Heatmap date/time")

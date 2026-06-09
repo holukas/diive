@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QTabBar,
     QTabWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -137,12 +138,16 @@ class MainWindow(QMainWindow):
             tab = tab_cls()
             self._tabs.append(tab)
             self._tabwidget.addTab(tab.widget(), tab.title)
-        # Always-on tabs are not closable; menu-opened tabs (added later) are.
+        # Tabs can be dragged to reorder and renamed by double-clicking. Menu
+        # tabs get a (custom, clearly visible) close button on open; the
+        # always-on Overview/Log are removed here so they stay open.
         self._tabwidget.setTabsClosable(True)
+        self._tabwidget.setMovable(True)
         bar = self._tabwidget.tabBar()
         for i in range(self._tabwidget.count()):
             bar.setTabButton(i, QTabBar.ButtonPosition.RightSide, None)
         self._tabwidget.tabCloseRequested.connect(self._on_tab_close)
+        self._tabwidget.tabBarDoubleClicked.connect(self._rename_tab)
 
         # Two window shells, chosen by the active theme preset's `chrome` flag
         # (read once here; switching presets needs a relaunch to swap chrome).
@@ -359,6 +364,9 @@ class MainWindow(QMainWindow):
         self._tabs.append(tab)  # now receives data pushes
         # Build first (widget()/build sets featuresCreated) before connecting.
         idx = self._tabwidget.addTab(tab.widget(), title)
+        self._tabwidget.tabBar().setTabButton(
+            idx, QTabBar.ButtonPosition.RightSide,
+            self._make_close_button(tab.widget()))
         if self._studio_tabs:  # favicon-style glyph on the pill (match the label)
             from diive.gui.icons import menu_icon
             self._tabwidget.setTabIcon(idx, menu_icon(label))
@@ -378,7 +386,7 @@ class MainWindow(QMainWindow):
         return i
 
     def _on_tab_close(self, index: int) -> None:
-        """Close a menu-opened tab (always-on tabs have no close button).
+        """Close any tab; de-register it so it stops receiving data pushes.
 
         After closing, fall back to the tab to the left of the one closed —
         except never land on the Log tab: if that's where we'd land, jump
@@ -387,15 +395,47 @@ class MainWindow(QMainWindow):
         widget = self._tabwidget.widget(index)
         for tab in list(self._menu_tab_list):
             if tab.widget() is widget:
-                self._tabwidget.removeTab(index)
-                if tab in self._tabs:
-                    self._tabs.remove(tab)
                 self._menu_tab_list.remove(tab)
-                target = max(0, index - 1)
-                if self._tabwidget.tabText(target) == "Log":
-                    target = 0  # Overview
-                self._tabwidget.setCurrentIndex(target)
-                return
+                break
+        for tab in list(self._tabs):
+            if tab.widget() is widget:
+                self._tabs.remove(tab)
+                break
+        self._tabwidget.removeTab(index)
+        if self._tabwidget.count() == 0:
+            return
+        target = max(0, index - 1)
+        if self._tabwidget.tabText(target) == "Log":
+            target = 0  # Overview
+        self._tabwidget.setCurrentIndex(target)
+
+    def _make_close_button(self, widget) -> QToolButton:
+        """A small, clearly visible "×" close button bound to `widget`'s tab."""
+        from diive.gui.icons import close_icon
+        btn = QToolButton()
+        btn.setObjectName("tabclose")
+        btn.setAutoRaise(True)
+        btn.setIcon(close_icon())
+        btn.setIconSize(QSize(12, 12))
+        btn.setFixedSize(18, 18)
+        btn.setToolTip("Close tab")
+        btn.clicked.connect(lambda: self._close_widget(widget))
+        return btn
+
+    def _close_widget(self, widget) -> None:
+        """Close the tab currently hosting `widget` (its index may have moved)."""
+        idx = self._tabwidget.indexOf(widget)
+        if idx >= 0:
+            self._on_tab_close(idx)
+
+    def _rename_tab(self, index: int) -> None:
+        """Rename a tab on double-click (changes the display label only)."""
+        if index < 0:
+            return
+        new, ok = QInputDialog.getText(
+            self, "Rename tab", "Tab name:", text=self._tabwidget.tabText(index))
+        if ok and new.strip():
+            self._tabwidget.setTabText(index, new.strip())
 
     def _add_features(self, new_df) -> None:
         """Merge engineered features into the dataset and re-push to tabs.

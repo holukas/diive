@@ -80,7 +80,8 @@ STUDIO_TOKENS: dict[str, str] = {
     "EXTRA_BG": "#DCE3E8",           # muted accent tint for additional panels
     "EXTRA_FG": "#2A3942",
     "TEXT_FG": "#1E2226",            # near-black ink
-    "CANVAS": "#FBFBF9",             # near-white warm canvas
+    "CANVAS": WHITE,                 # white content background (incl. the area
+                                     # around the variable list / splitter gaps)
     "INK": "#1E2226",
     "RADIUS": "12",                  # softer, larger corners
 }
@@ -192,6 +193,10 @@ QListWidget {{
     border-radius: {r}px; padding: 4px; outline: 0;
 }}
 
+/* The variable pane's own surface (the area around the search field and list)
+   is white; the search field and list keep their own tinted backgrounds. */
+#varpanel {{ background: {WHITE}; }}
+
 QGroupBox {{
     border: 1px solid {t['BORDER']}; border-radius: {r}px;
     margin-top: 10px; padding: 8px 6px 6px 6px;
@@ -218,6 +223,10 @@ QScrollBar::handle:horizontal {{ background: {t['SCROLL_HANDLE']}; border-radius
 QScrollBar::handle:hover {{ background: {t['SCROLL_HANDLE_HOVER']}; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; background: none; border: none; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: none; }}
+
+/* Tab close button: flat with a soft rounded hover so the "×" stays visible. */
+QToolButton#tabclose {{ border: none; border-radius: 5px; padding: 0; }}
+QToolButton#tabclose:hover {{ background: {t['HOVER_PRESSED']}; }}
 
 /* Studio chrome (inert in Classic — these widgets/object-names only exist there). */
 #studioroot {{ background: transparent; }}
@@ -249,8 +258,10 @@ QMenu#studiomenu::separator {{ height: 1px; background: {t['BORDER']}; margin: 5
 /* Firefox-style pill tabs (Studio only): rounded, spaced, filled active pill,
    no base line or per-tab borders. The #studiotabs id scopes this to the
    Studio shell so Classic keeps its boxed underline tabs. */
-#studiotabs::pane {{ border: none; top: -1px; }}
-#studiotabs QTabBar {{ qproperty-drawBase: 0; }}
+/* Tabs sit on a soft grey strip; the content pane below them is white. */
+#studiotabs {{ background: #EFEFEC; }}
+#studiotabs::pane {{ border: none; top: -1px; background: {WHITE}; }}
+#studiotabs QTabBar {{ qproperty-drawBase: 0; background: transparent; }}
 /* Generous vertical padding makes a taller pill row (the only lever a
    QTabWidget honours); no min-width so each pill hugs its content with equal
    left/right padding, centring the icon+label horizontally. The style centres
@@ -354,13 +365,18 @@ class ThemeManager(QObject):
             "list_width": self.list_width,
         }
 
+    #: Tokens that define the look's structure (not user-editable in the UI);
+    #: they always follow the active preset, so default changes to them take
+    #: effect on the next launch without a config reset (a stale persisted value
+    #: must not shadow them).
+    STRUCTURAL_TOKENS = ("CANVAS", "INK", "RADIUS")
+
     def load_dict(self, data: dict) -> None:
         """Load a serialised theme (tolerant of missing/old keys); no emit.
 
         Applies the saved preset baseline first, then layers any saved token
-        overrides on top. Old configs without a preset keep the Classic default
-        set in ``__init__``; old configs missing CANVAS/INK/RADIUS keep the
-        Classic values seeded by the preset (``update`` only touches present keys).
+        overrides on top — except the STRUCTURAL_TOKENS, which are re-pinned from
+        the preset so a stale persisted value can't shadow a default change.
         """
         if not data:
             return
@@ -368,6 +384,11 @@ class ThemeManager(QObject):
         if name in PRESETS:
             self.set_preset(name, silent=True)
         self.tokens.update(data.get("tokens", {}))
+        # Structural tokens always come from the active preset, never the
+        # persisted snapshot (see STRUCTURAL_TOKENS).
+        active = PRESETS.get(self.preset_name, PRESETS["Classic"])["tokens"]
+        for key in self.STRUCTURAL_TOKENS:
+            self.tokens[key] = active[key]
         for kind, value in data.get("pills", {}).items():
             if kind in self.pills:
                 self.pills[kind] = list(value)

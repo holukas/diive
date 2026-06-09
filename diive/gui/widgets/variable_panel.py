@@ -97,6 +97,7 @@ class VariablePanel(QWidget):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        self.setObjectName("varpanel")  # white pane bg via QSS (search/list keep theirs)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
