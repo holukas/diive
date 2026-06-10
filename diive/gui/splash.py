@@ -40,8 +40,9 @@ AUTHOR = "Lukas Hörtnagl"
 TAGLINE = "Eddy covariance & environmental time series"
 
 #: Supporters shown beneath the author. Append names here as they come in;
-#: an empty list simply hides the supporters line.
-SUPPORTERS: list[str] = []
+#: an empty list simply hides the supporters line. (The current entries are
+#: placeholder example names — replace them with real supporters.)
+SUPPORTERS: list[str] = ["Gusty McFluxface", "Anita Breeze", "Ed D. Covariance"]
 
 _WIDTH = 620
 _HEIGHT = 380
@@ -58,7 +59,7 @@ _WAVE_COLORS = [
 ]
 _WHITE = QColor("#FFFFFF")
 _LIGHT = QColor("#B3E5FC")       # light blue 100
-_FAINT = QColor("#7FB3C9")
+_FOOTER = QColor("#D6F1FC")      # near-white cyan — keeps the URL legible on the waves
 
 
 def _draw_wave(p: QPainter, base_y: float, amp: float, wavelength: float,
@@ -155,11 +156,13 @@ def make_splash_pixmap(dpr: float = 1.0) -> QPixmap:
                    Qt.AlignmentFlag.AlignLeft,
                    "Supported by " + " · ".join(SUPPORTERS))
 
-    # Footer.
+    # Footer (the project URL). DemiBold + near-white cyan so it stays readable
+    # over the bright front waves it sits on.
     foot = QFont()
     foot.setPointSize(9)
+    foot.setWeight(QFont.Weight.DemiBold)
     p.setFont(foot)
-    p.setPen(_FAINT)
+    p.setPen(_FOOTER)
     p.drawText(QRectF(48, _HEIGHT - 34, _WIDTH - 96, 18),
                Qt.AlignmentFlag.AlignLeft, "github.com/holukas/diive")
 
@@ -286,7 +289,7 @@ class _AboutDialog(QDialog):
         # Faint "click to close" hint, overlaid (not baked into the shared
         # pixmap, so the startup splash stays clean).
         hint = QLabel("click anywhere to close", self)
-        hint.setStyleSheet("color: rgba(255,255,255,150); background: transparent;")
+        hint.setStyleSheet("color: rgba(255,255,255,225); background: transparent;")
         hint.adjustSize()
         hint.move(_WIDTH - hint.width() - 20, _HEIGHT - hint.height() - 14)
 

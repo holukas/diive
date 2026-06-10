@@ -227,7 +227,10 @@ class HampelOutlierTab(DiiveTab):
         self.canvas.reset_layout()
         fig = self.canvas.fig
         ax_top = fig.add_subplot(2, 1, 1)
-        ax_bot = fig.add_subplot(2, 1, 2, sharex=ax_top, sharey=ax_top)
+        # Share the time axis only: the cleaned panel must autoscale its y-axis to
+        # the outlier-free range (sharing y would keep it stretched by the spikes
+        # the top panel still shows).
+        ax_bot = fig.add_subplot(2, 1, 2, sharex=ax_top)
 
         # Light, thin original line so the outlier markers stand out on top of it
         # (the series is dense, so a dark line would bury them).

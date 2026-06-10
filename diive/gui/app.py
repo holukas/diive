@@ -248,8 +248,17 @@ class MainWindow(QMainWindow):
         self._reset_range_act = _act("Reset to &full range", self._reset_range)
         self._reset_range_act.setEnabled(False)
         data_menu.addAction(self._reset_range_act)
+        # Menu-tab entries that belong under Data (e.g. Select variables) are
+        # merged into this manually-built menu rather than getting their own.
+        data_menu.addSeparator()
+        for label in MENU_TABS.get("Data", {}):
+            act = QAction(menu_icon(label), label, self)
+            act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))
+            data_menu.addAction(act)
 
         for menu_name, group in MENU_TABS.items():
+            if menu_name == "Data":
+                continue  # already merged into the Data menu built above
             menu = add_menu(f"&{menu_name}")
             for label in group:
                 act = QAction(menu_icon(label), label, self)

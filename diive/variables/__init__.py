@@ -42,6 +42,7 @@ from diive.variables.classification import (
     CATEGORY_CARBON,
     CATEGORY_WATER,
     CATEGORY_RADIATION,
+    CATEGORY_NITROGEN,
 )
 
 __all__ = [
@@ -69,4 +70,5 @@ __all__ = [
     'CATEGORY_CARBON',
     'CATEGORY_WATER',
     'CATEGORY_RADIATION',
+    'CATEGORY_NITROGEN',
 ]

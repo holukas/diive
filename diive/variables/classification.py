@@ -19,6 +19,7 @@ CATEGORY_WATER = "water"
 CATEGORY_RADIATION = "radiation"
 CATEGORY_METEO = "meteo"
 CATEGORY_SOIL = "soil"
+CATEGORY_NITROGEN = "nitrogen"
 
 
 class VariableClass(NamedTuple):
@@ -26,9 +27,10 @@ class VariableClass(NamedTuple):
 
     Attributes:
         kind: Canonical short variable label, e.g. ``'NEE'``, ``'GPP'``,
-            ``'Reco'``, ``'LE'``, ``'ET'``, ``'Rg'``, ``'SW_IN'``, ``'PPFD'``,
-            ``'PAR'``, ``'LW'``.
-        category: One of ``'carbon'``, ``'water'``, ``'radiation'``.
+            ``'Reco'``, ``'FCH4'``, ``'FN2O'``, ``'FH2O'``, ``'LE'``, ``'ET'``,
+            ``'Rg'``, ``'SW_IN'``, ``'PPFD'``, ``'PAR'``, ``'LW'``.
+        category: One of ``'carbon'``, ``'water'``, ``'radiation'``,
+            ``'meteo'``, ``'soil'``, ``'nitrogen'``.
     """
     kind: str
     category: str
@@ -40,6 +42,9 @@ _RULES: tuple[tuple[str, str, str], ...] = (
     ("NEE", "NEE", CATEGORY_CARBON),
     ("GPP", "GPP", CATEGORY_CARBON),
     ("Reco", "Reco", CATEGORY_CARBON),
+    ("FCH4", "FCH4", CATEGORY_CARBON),       # methane flux ("FCH4" and "FCH4_*")
+    ("FN2O", "FN2O", CATEGORY_NITROGEN),     # nitrous oxide flux ("FN2O"/"FN2O_*")
+    ("FH2O", "FH2O", CATEGORY_WATER),        # water vapour flux ("FH2O"/"FH2O_*")
     ("LE_", "LE", CATEGORY_WATER),
     ("ET_", "ET", CATEGORY_WATER),
     ("Rg_", "Rg", CATEGORY_RADIATION),

@@ -89,6 +89,12 @@ def test_pill_classification():
     assert _pill_for("Tair_f")[0] == "TA"
     assert _pill_for("VPD_f")[0] == "VPD"
     assert _pill_for("SWC_FF0_0.15_1")[0] == "SWC"
+    # Methane / nitrous oxide / water-vapour fluxes (bare and suffixed).
+    assert _pill_for("FCH4")[0] == "FCH4"
+    assert _pill_for("FCH4_orig")[0] == "FCH4"
+    assert _pill_for("FN2O_f")[0] == "FN2O"
+    assert _pill_for("FH2O")[0] == "FH2O"
+    assert _pill_for("FC")[0] == "FC"               # FC is not caught by FCH4
     assert _pill_for("RH_f") is None                # unrecognised -> no pill
 
 
@@ -927,6 +933,13 @@ def test_hampel_outlier_tab_keeps_original_cleaned_flag(window):
     QApplication.processEvents()
     cleaned, flag = f"{var}_HAMPEL", f"FLAG_{var}_OUTLIER_HAMPEL_TEST"
     assert list(tab._result_df.columns) == [cleaned, flag]
+
+    # The cleaned (bottom) panel autoscales its y-axis to the outlier-free range:
+    # its y-axis is independent of the spike-stretched top panel, while the time
+    # x-axis stays linked for synchronized pan/zoom.
+    top, bot = tab.canvas.fig.axes[0], tab.canvas.fig.axes[1]
+    assert not bot.get_shared_y_axes().joined(top, bot)
+    assert bot.get_shared_x_axes().joined(top, bot)
 
     n_before = window._data.shape[1]
     tab._add()  # what "Add cleaned + flag to dataset" does

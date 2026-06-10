@@ -68,7 +68,7 @@ tests/                        # Unit tests
 | `dv.corrections` | `MeasurementOffsetFromReplicate`, `WindDirOffset`, `remove_radiation_zero_offset`, `remove_relativehumidity_offset`, `set_exact_values_to_missing`, `setto_threshold`, `setto_value` |
 | `dv.qaqc` | `FlagQCF`, `StepwiseMeteoScreeningDb` |
 
-Top-level (no namespace): `load_exampledata_parquet`, `load_exampledata_parquet_lae`, `load_parquet`, `save_parquet` (with `enforce_diive_format=True` → single header row + valid `TIMESTAMP_*` index name), `to_diive_format`, `ReadFileType`, `search_files`, `sstats`, `keep_vars` (non-destructive column subselection — column analogue of `times.keep_daterange`), `transform_yearmonth_matrix_to_longform`, `get_encoded_value_from_int`, `get_encoded_value_series`
+Top-level (no namespace): `load_exampledata_parquet`, `load_exampledata_parquet_lae`, `load_parquet`, `load_parquet_many` (read + `combine_first`-merge several parquet files; optional `progress_callback(phase, done, total, filepath)` — parquet counterpart to `MultiDataFileReader`), `save_parquet` (with `enforce_diive_format=True` → single header row + valid `TIMESTAMP_*` index name), `to_diive_format`, `ReadFileType`, `search_files`, `sstats`, `keep_vars` (non-destructive column subselection — column analogue of `times.keep_daterange`), `transform_yearmonth_matrix_to_longform`, `get_encoded_value_from_int`, `get_encoded_value_series`
 
 ## Core Concepts
 
@@ -211,7 +211,9 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   emits `changed` on edit; `apply()` re-applies the stylesheet app-wide. The **Appearance settings** tab (Tools menu)
   edits these with a live preview — the pill delegate and time-series plot read from `theme.manager` and repaint on
   `changed`; the Settings tab shows a sample variable list as a pill/highlight preview. (Which *variable name* maps to
-  which pill kind stays in the library: `dv.variables.classify_variable`. Only colours/labels are GUI.)
+  which pill kind stays in the library: `dv.variables.classify_variable` — kinds include the carbon fluxes `NEE`/`FC`/
+  `GPP`/`Reco`/`FCH4`, the water fluxes `LE`/`ET`/`FH2O`, the nitrogen flux `FN2O`, plus radiation/meteo/soil kinds. Add
+  a kind by adding a rule there *and* a colour entry in `theme.DEFAULT_PILL_STYLE`. Only colours/labels are GUI.)
   - **Theme presets.** `theme.PRESETS` bundles named looks: `"Classic"` (the original) and `"Studio"` (clean, minimal,
     VIBECAD-style). `set_preset(name)` swaps `tokens` + a typography spec (`tracked_font`/`label_text` apply uppercase +
     letter-spacing) + an `icons` flag (classic colour glyphs vs `icons.py` thin-line monochrome) + a `chrome` flag. The
@@ -221,9 +223,12 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
     follow the active preset in `load_dict` (a stale persisted value can't shadow them). Preset choice persists.
 
 - **Shared variable list: `widgets/variable_panel.py` (`VariablePanel`).** Every tab's left-hand variable list MUST be
-  this one component (filter + `VariableList` + `VariableDelegate` pills + subsequence filtering) so styling, pills, and
+  this one component (filter + `VariableList` + `VariableDelegate` pills + fuzzy filtering) so styling, pills, and
   filtering are identical everywhere. Tabs differ only in how they react to `selected(name, ctrl_held)` and what they
-  pass to `set_panels(...)`/`set_variables(...)`. Don't build ad-hoc variable lists. Its width is a shared appearance
+  pass to `set_panels(...)`/`set_variables(...)`. Don't build ad-hoc variable lists. The filter is an **fzf-style fuzzy
+  search**: separator-insensitive subsequence matching is the gate, but matches are *scored* (`_fuzzy_score`: contiguous
+  runs, start-anchored, early hit, length-closeness) and the list **reorders best-match-first** while typing; clearing
+  the field restores dataset order (tracked via `ORDER_ROLE`). Its width is a shared appearance
   setting (`theme.manager.list_width`, editable in Appearance settings) applied as a fixed width, so it's identical in
   every tab — don't set per-tab widths on it. `run_with_loading(name, fn)` shows a busy indicator (`LOADING_ROLE`:
   translucent wash + bottom bar) on the clicked variable plus a wait cursor, force-repaints it, then runs `fn` (the
@@ -257,7 +262,7 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   pin/freeze**: right-click a *menu* tab → Pin; pinned tabs (`MainWindow._pinned`) are skipped by `_push_data`, so they
   keep their dataset (cheap — references + pandas Copy-on-Write), and show a pin glyph (`icons.pin_icon`); unpin
   re-syncs. Overview/Log are never pinnable.
-- **Select variables tab** (`tabs/variable_selector.py`, `Tools ▸ Select variables`, single-instance) — a dual-list
+- **Select variables tab** (`tabs/variable_selector.py`, `Data ▸ Select variables`, single-instance) — a dual-list
   picker (two `VariablePanel`s: available ↔ selected) emitting a `subsetSelected` signal (same `QObject`-helper pattern
   as `featuresCreated`); `MainWindow` routes it to the Overview's `show_variable_subset(...)`, which uses `dv.keep_vars`
   to restrict the Overview's variable list to the chosen subset (Overview-only; data untouched).
@@ -291,7 +296,9 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   doesn't connect it to a render. **Variable selection stays live** (`_on_selected` → `run_with_loading`). In tests,
   set the controls then `tab.update_btn.click()` to apply (not `settings.changed.emit()`).
 - **Data flow.** The `File` menu loads data via `OpenDataDialog` (parquet → `dv.load_parquet`, else `dv.ReadFileType`;
-  multiple files → `MultiDataFileReader` / parquet `combine_first`; reading is library work, the dialog only calls it).
+  multiple files → `MultiDataFileReader` / `dv.load_parquet_many` for parquet; reading + merge is library work, the
+  dialog only calls it). When several files are selected the dialog shows a **per-file progress list** (one row +
+  progress bar each), driven from the load worker thread via the library reader's `progress_callback`.
   `MainWindow` holds the current DataFrame and pushes it to every tab via the `DiiveTab.on_data_loaded(df, created)`
   hook; data-presenting tabs override it. Example data auto-loads on startup. **File ▸ Save data as parquet…** writes a
   diive-format parquet via `dv.save_parquet`; `app.to_diive_parquet_frame` enforces single-level columns (one header
@@ -308,7 +315,12 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   extensible via `_PANELS`). The variable name is a blue badge inside the time-series panel (not a figure title).
   Bottom: a compact, borderless **metrics ribbon** of `dv.sstats` values (`_StatItem`, hairline-separated) with
   per-stat hover descriptions from `SSTATS_DESCRIPTIONS`. `_StatCard` (boxed) is still used by the Gaps/Drivers/Seasonal
-  tabs.
+  tabs. **Linked zoom**: the three datetime panels (time series, cumulative, daily mean) share an x-axis (`sharex`) so
+  zooming/panning one zooms all to the same window; an `xlim_changed` handler then **recomputes the diel cycle on the
+  zoomed date range** (`dv.times.keep_daterange` → re-plot) and **clips the heatmap to that date range** (its date is on
+  the y-axis, same date-number units, so a `set_ylim`). Repaint uses `MplCanvas.draw_idle()` (not `draw()`) so it never
+  re-freezes the layout mid-resize; `_on_resize` runs **two** constrained-layout solve passes so the multi-panel zoomed
+  layout converges instead of collapsing.
 - **Hover tooltip.** `MplCanvas` attaches a `HoverAnnotator` (`widgets/hover.py`) in its constructor, so every embedded
   figure (Overview, plotting tabs) shows the value under the cursor with no per-tab wiring. Lines snap to the nearest
   sample (`np.searchsorted` on `get_xdata(orig=False)` — the unit-converted floats, **not** raw datetimes); `pcolormesh`
@@ -366,6 +378,13 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   shows a plain-language **explanation label** of what a spectrogram is (the user asked for it). Window length / overlap /
   window-function apply on **Update** (recompute); max-cycles-per-day (y-limit) and colormap are live re-renders. No
   signal processing in the GUI.
+- **Hampel outlier tab** (`tabs/outliers.py`, `Outliers ▸ Hampel filter`). Runs the library's `dv.outliers.Hampel` on a
+  worker thread; keeps the **original** (untouched), the **cleaned** series (`{var}_HAMPEL`, outliers→NaN), and the
+  **flag** (`FLAG_{var}_OUTLIER_HAMPEL_TEST`, 0/2). Two stacked preview panels: top = original + red outlier markers,
+  bottom = cleaned. They share the time x-axis (`sharex`) but **not** y — the cleaned panel autoscales to the
+  outlier-free range (sharing y would keep it stretched by the spikes the top panel still shows). **Add cleaned + flag to
+  dataset** emits the columns via a `featuresCreated` signal (the feature-engineering merge mechanism). All detection is
+  library work.
 - **Var list sync.** All tabs refresh via `MainWindow._push_data()` → `on_data_loaded(df, created)` on every data
   change; menu tabs get current data on open and are dropped from the push list on close.
 - **Output console.** The `Log` tab (`LogTab` → `ConsolePanel`) mirrors diive's Rich output in colour. The library tees

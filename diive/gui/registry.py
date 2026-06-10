@@ -47,6 +47,11 @@ TAB_CLASSES: list[type[DiiveTab]] = [
 #: Each plot method is its own tab; add a new method by adding a PlottingTab
 #: factory here (and a branch in plotting._draw_one).
 MENU_TABS: dict[str, dict[str, callable]] = {
+    "Data": {
+        # Merged into the manually-built Data menu (date-range actions); see
+        # MainWindow._build_menus. Not given its own top-level menu.
+        "Select variables": VariableSelectorTab,
+    },
     "Plot": {
         "Heatmap date/time": lambda: PlottingTab(HEATMAP, "Heatmap date/time"),
         "Heatmap year/month": lambda: PlottingTab(HEATMAP_YEARMONTH, "Heatmap year/month"),
@@ -62,7 +67,6 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Hampel filter": HampelOutlierTab,
     },
     "Tools": {
-        "Select variables": VariableSelectorTab,
         "Gaps & coverage": GapDashboardTab,
         "Driver explorer": DriverExplorerTab,
         "Seasonal-trend & anomalies": SeasonalTrendTab,

@@ -114,6 +114,9 @@ DEFAULT_PILL_STYLE: dict[str, list[str]] = {
     "FC": ["FC", "#388E3C", WHITE],
     "GPP": ["GPP", "#1976D2", WHITE],
     "Reco": ["RECO", "#D32F2F", WHITE],
+    "FCH4": ["FCH4", "#00897B", WHITE],   # teal — methane flux
+    "FN2O": ["FN2O", "#AD1457", WHITE],   # pink — nitrous oxide flux
+    "FH2O": ["FH2O", "#3949AB", WHITE],   # indigo — water vapour flux
     "LE": ["LE", "#8E24AA", WHITE],
     "ET": ["ET", "#8E24AA", WHITE],
     "Rg": ["Rg", "#FB8C00", DARK],
