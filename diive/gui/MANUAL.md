@@ -205,12 +205,40 @@ strengthens in the growing season. An explanation is shown above the plot.
 - **Max cycles/day** sets how far up the frequency axis to look; **Colormap**
   changes the colours — both update immediately.
 
-### Tools ▸ Select variables
+### Outliers ▸ Hampel filter
+
+Detect spikes with the **Hampel filter** (a robust, median-based test). Pick a
+variable; the top panel shows it with detected outliers marked, the bottom panel
+shows the cleaned copy (outliers removed). Your original variable is never changed.
+
+- **Window (records)** — how many neighbouring points define "local" (624 ≈ 13
+  days at half-hourly sampling).
+- **n sigma (global)** — how far from the local median counts as an outlier
+  (lower = stricter, flags more).
+- **Use double-differencing** — removes trends first (Papale 2006); leave on for
+  most flux/meteo data.
+- **Repeat until no more outliers** — re-runs until clean; a **progress bar**
+  fills as each pass removes fewer points.
+- **Separate daytime / nighttime** *(optional)* — use **different** thresholds for
+  day and night (the point of separating: with the same value for both, the result
+  is identical to not separating). Set **Daytime n sigma** / **Nighttime n sigma**
+  (they start from the global value, then edit each); the coordinates default from
+  **Settings ▸ Site details**. Day and night outliers are then drawn in **red** and
+  **blue**, and the status line reports how many of each were found.
+
+**Detect outliers** runs the filter; the status line reports the total and the
+number of iterations. **Add cleaned + flag to dataset** adds two new columns
+(`{var}_HAMPEL` and its flag) to the variable list. **Copy Python** (quiet link at
+the bottom) puts the equivalent diive script on the clipboard.
+
+### Data ▸ Select variables
 
 Pick a subset of variables to focus the **Overview** list on. Click a variable on
 the left (*Available*) to move it to the right (*Selected*); click one on the right
-to remove it. **Confirm → update Overview** restricts the Overview's variable list
-to your selection (your data is not changed — load new data or re-open to reset).
+to remove it. **Add all →** (under the Available list) moves everything across;
+**Clear** (under the Selected list) empties the selection. **Confirm → update
+Overview** restricts the Overview's variable list to your selection (your data is
+not changed — load new data or re-open to reset).
 
 ### Tools ▸ Feature engineering
 
@@ -238,6 +266,13 @@ did on the clipboard, so a point-and-click run stays scriptable.
 > `*_TEST` flags). The bundled CH-DAV example is a processed product and won't
 > run the chain — load a level-1 EC dataset.
 
+### Settings ▸ Site details
+
+Enter your measurement site's **name, latitude, longitude, elevation, and UTC
+offset** once and **Save**. These are stored app-wide and reused wherever diive
+needs site coordinates (e.g. the Hampel tab's daytime/nighttime split, the flux
+chain), so you don't retype them per tool. They're **remembered between sessions**.
+
 ### Settings ▸ Appearance
 
 Customise the **Studio** look (the GUI's single design — near-white surfaces,
@@ -262,8 +297,8 @@ colour. Use **Save…** to write the log to a file.
   line plots it snaps to the nearest data point (with a marker); on heatmaps it
   shows the cell's date, time, and value. Untick **Hover values** (bottom-right,
   next to the plot toolbar) to switch it off.
-- Your appearance settings, window size/position, and last-used filetype are
-  **remembered** between sessions.
+- Your appearance settings, site details, window size/position, and last-used
+  filetype are **remembered** between sessions.
 - The window sizes itself to your screen on first launch.
 - A short loading cue appears on a variable while its plot is being drawn.
 - Stuck or something looks off? Check the **Log** tab for messages.

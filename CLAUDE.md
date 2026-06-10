@@ -447,6 +447,20 @@ Three CLIs (console scripts in `pyproject.toml`), all requiring **wind-rotation-
 - **Full pipeline:** `dv.qaqc.StepwiseMeteoScreeningDb()` — corrections → outlier detection → quality flags
 - **Timestamp shift:** three methods comparing measured vs. theoretical radiation (requires clear days)
 
+**[CONVENTION] Day/night threshold parameters.** Outlier methods that support `separate_day_night` follow one rule so
+the GUI and API behave predictably — **all new day/night-capable methods MUST match it:**
+
+1. **A single global knob (`n_sigma`, `threshold`, …) is the source of truth.** Per-period overrides
+   (`n_sigma_daytime` / `n_sigma_nighttime`, etc.) **default to `None`, never to a literal**, and fall back to the
+   global value when unset: `self.x_daytime = x_daytime if x_daytime is not None else x`. Defaulting a per-period
+   parameter to a literal (the old `Hampel` bug: `n_sigma_daytime=5.5`) silently shadows the global knob, so the global
+   parameter appears to "do nothing" in day/night mode. Verify that changing the global value alone changes the result.
+2. **`separate_day_night` only changes results when the day and night thresholds differ.** With equal thresholds it is
+   mathematically identical to no separation. So a GUI exposing the feature should expose *per-period* thresholds (seeded
+   from the global value, then independently editable), not just the toggle. The Hampel tab (`gui/tabs/outliers.py`) is
+   the reference pattern: separate daytime/nighttime sigma fields + red/blue day/night outlier markers + a day/night
+   count in the status line.
+
 ## Coding Standards
 
 ### Input validation

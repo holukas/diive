@@ -176,6 +176,12 @@ Library additions used by the GUI (all backward-compatible):
 
 ### Fixes
 
+- **`Hampel` honoured `n_sigma` in day/night mode.** `n_sigma_daytime` / `n_sigma_nighttime` defaulted to the literal
+  `5.5` instead of `None`, so the "fall back to `n_sigma`" logic was dead and the threshold was hard-wired to 5.5
+  whenever `separate_day_night=True` — passing `n_sigma` alone had no effect on the result. Defaults are now `None`
+  (as the docstring already stated). **Behaviour change:** code that ran `Hampel(..., n_sigma=X, separate_day_night=True)`
+  without explicit `n_sigma_daytime`/`n_sigma_nighttime` will now flag a different number of outliers (it previously used
+  5.5). Passing nothing still yields 5.5; passing explicit per-period sigmas is unchanged.
 - **`SeasonalTrendDecomposition(method='stl')` now works on real data.** The STL wrapper never passed `period` to
   statsmodels and called the unsupported `STL.fit(weights=…)`, so STL always raised. Classical/harmonic were unaffected.
 - **`HeatmapYearMonth` no longer raises `AttributeError`** (it called the non-existent top-level

@@ -35,10 +35,12 @@ from PySide6.QtWidgets import (
 )
 
 import diive as dv
-from diive.gui import theme
+from diive.gui import site, theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.variable_panel import VariablePanel
+from diive.preprocessing.outlier_detection.codegen import hampel_to_code
 
 
 class _OutlierSignals(QObject):
@@ -82,6 +84,9 @@ class HampelOutlierTab(DiiveTab):
         self._sig.run_done.connect(self._on_done)
         self._sig.run_failed.connect(self._on_failed)
         self._sig.progress.connect(self._on_progress)
+        # Seed the day/night coords from Site details and stay in sync with edits.
+        self._seed_site()
+        site.manager.changed.connect(self._on_site_changed)
         return root
 
     def _build_settings(self) -> QWidget:
@@ -104,7 +109,7 @@ class HampelOutlierTab(DiiveTab):
         self.n_sigma.setRange(0.1, 50.0)
         self.n_sigma.setSingleStep(0.5)
         self.n_sigma.setValue(5.5)
-        form.addRow("n sigma", self.n_sigma)
+        form.addRow("n sigma (global)", self.n_sigma)
         self.diff_cb = QCheckBox("Use double-differencing (Papale 2006)")
         self.diff_cb.setChecked(True)
         form.addRow(self.diff_cb)
@@ -119,15 +124,27 @@ class HampelOutlierTab(DiiveTab):
         dn_box = QGroupBox("Day / night (optional)")
         dn = QFormLayout(dn_box)
         dn.addRow(self.daynight_cb)
+        # Separate thresholds make day/night meaningful (with one shared sigma the
+        # result is identical to no separation). Seeded from the global n sigma.
+        self.n_sigma_dt = QDoubleSpinBox()
+        self.n_sigma_dt.setRange(0.1, 50.0); self.n_sigma_dt.setSingleStep(0.5)
+        self.n_sigma_dt.setValue(5.5)
+        self.n_sigma_nt = QDoubleSpinBox()
+        self.n_sigma_nt.setRange(0.1, 50.0); self.n_sigma_nt.setSingleStep(0.5)
+        self.n_sigma_nt.setValue(5.5)
         self.lat = QDoubleSpinBox(); self.lat.setRange(-90.0, 90.0); self.lat.setDecimals(4)
         self.lon = QDoubleSpinBox(); self.lon.setRange(-180.0, 180.0); self.lon.setDecimals(4)
         self.utc = QSpinBox(); self.utc.setRange(-12, 14)
-        for w in (self.lat, self.lon, self.utc):
+        self._dn_widgets = (self.n_sigma_dt, self.n_sigma_nt, self.lat, self.lon, self.utc)
+        for w in self._dn_widgets:
             w.setEnabled(False)
+        dn.addRow("Daytime n sigma", self.n_sigma_dt)
+        dn.addRow("Nighttime n sigma", self.n_sigma_nt)
         dn.addRow("Latitude", self.lat)
         dn.addRow("Longitude", self.lon)
         dn.addRow("UTC offset (h)", self.utc)
-        dn_note = QLabel("Tip: set these once under Settings ▸ Site details.")
+        dn_note = QLabel("Coordinates default from Settings ▸ Site details; the "
+                         "global n sigma above is ignored while this is on.")
         dn_note.setWordWrap(True)
         dn_note.setStyleSheet("color: #6B7780;")
         dn.addRow(dn_note)
@@ -155,11 +172,38 @@ class HampelOutlierTab(DiiveTab):
         outer.addWidget(self.add_btn)
 
         outer.addStretch(1)
+
+        # Reproducible snippet (library codegen) — a quiet footer action, not a
+        # primary control, so it sits at the bottom of the panel.
+        self.copy_btn = CopyPythonButton(self._python_code)
+        self.copy_btn.setFlat(True)
+        self.copy_btn.setStyleSheet("color: #6B7780; text-align: left;")
+        outer.addWidget(self.copy_btn)
         return panel
 
     def _toggle_daynight(self, on: bool) -> None:
-        for w in (self.lat, self.lon, self.utc):
+        for w in self._dn_widgets:
             w.setEnabled(on)
+        if on:
+            # Seed the per-period thresholds from the global sigma so they start
+            # sensible; the user can then make day and night differ.
+            self.n_sigma_dt.setValue(self.n_sigma.value())
+            self.n_sigma_nt.setValue(self.n_sigma.value())
+            self._seed_site()
+
+    def _seed_site(self) -> None:
+        """Prefill lat/lon/UTC from the app-wide Site details, if configured."""
+        m = site.manager
+        if not m.configured:
+            return
+        self.lat.setValue(m.latitude)
+        self.lon.setValue(m.longitude)
+        self.utc.setValue(m.utc_offset)
+
+    def _on_site_changed(self) -> None:
+        # Keep the fields in sync if the site is edited while day/night is on.
+        if self.daynight_cb.isChecked():
+            self._seed_site()
 
     # --- data ---
     def on_data_loaded(self, df, created: set | None = None) -> None:
@@ -183,10 +227,8 @@ class HampelOutlierTab(DiiveTab):
         self.varpanel.run_with_loading(name, lambda: self._draw(self._df[name]))
 
     # --- run ---
-    def _run(self) -> None:
-        if self._df is None or self._var is None:
-            self.status.setText("Select a variable on the left first.")
-            return
+    def _current_kwargs(self) -> dict:
+        """Hampel kwargs from the current control values (shared by run + codegen)."""
         kwargs = dict(
             window_length=self.window.value(),
             n_sigma=self.n_sigma.value(),
@@ -195,7 +237,24 @@ class HampelOutlierTab(DiiveTab):
         )
         if self.daynight_cb.isChecked():
             kwargs.update(lat=self.lat.value(), lon=self.lon.value(),
-                          utc_offset=self.utc.value())
+                          utc_offset=self.utc.value(),
+                          n_sigma_daytime=self.n_sigma_dt.value(),
+                          n_sigma_nighttime=self.n_sigma_nt.value())
+        return kwargs
+
+    def _python_code(self) -> str | None:
+        """Reproducible snippet for the current selection; None if nothing picked."""
+        if self._var is None:
+            self.status.setText("Select a variable first to copy its code.")
+            return None
+        return hampel_to_code(self._current_kwargs(),
+                              repeat=self.repeat_cb.isChecked(), var_name=self._var)
+
+    def _run(self) -> None:
+        if self._df is None or self._var is None:
+            self.status.setText("Select a variable on the left first.")
+            return
+        kwargs = self._current_kwargs()
         series = self._df[self._var]
         self.run_btn.setEnabled(False)
         self.add_btn.setEnabled(False)
@@ -219,9 +278,13 @@ class HampelOutlierTab(DiiveTab):
             cleaned.name = f"{series.name}_HAMPEL"
             flag = h.overall_flag.copy()  # name: FLAG_{var}_OUTLIER_HAMPEL_TEST
             result = pd.DataFrame({cleaned.name: cleaned, flag.name: flag})
+            # Day/night split of the outliers (only when separation was on).
+            # h.is_daytime is the library-computed daytime mask over the index.
+            is_daytime = h.is_daytime if kwargs.get("separate_day_night") else None
             payload = {
                 "var": series.name, "cleaned": cleaned, "flag": flag,
                 "result": result, "n_outliers": int((flag == 2).sum()),
+                "is_daytime": is_daytime,
             }
         except Exception as err:  # surface the library error to the user
             self._sig.run_failed.emit(str(err))
@@ -251,11 +314,16 @@ class HampelOutlierTab(DiiveTab):
         self.progress.setVisible(False)
         self._result_df = payload["result"]
         self._draw(self._df[payload["var"]], flag=payload["flag"],
-                   cleaned=payload["cleaned"], n_outliers=payload["n_outliers"])
+                   cleaned=payload["cleaned"], n_outliers=payload["n_outliers"],
+                   is_daytime=payload["is_daytime"])
         n = payload["n_outliers"]
         iters = self._n_iter
+        split = ""
+        if payload["is_daytime"] is not None:
+            n_day, n_night = self._daynight_counts(payload["flag"], payload["is_daytime"])
+            split = f" ({n_day} daytime, {n_night} nighttime)"
         self.status.setText(
-            f"{n} outliers flagged over {iters} iteration{'' if iters == 1 else 's'}. "
+            f"{n} outliers flagged{split} over {iters} iteration{'' if iters == 1 else 's'}. "
             f"'Add' keeps {payload['cleaned'].name} and the flag "
             f"(original '{payload['var']}' is unchanged).")
         self.add_btn.setEnabled(True)
@@ -265,10 +333,20 @@ class HampelOutlierTab(DiiveTab):
         self.progress.setVisible(False)
         self.status.setText(f"Failed: {msg}")
 
-    def _draw(self, series, flag=None, cleaned=None, n_outliers: int = 0) -> None:
+    @staticmethod
+    def _daynight_counts(flag, is_daytime) -> tuple[int, int]:
+        """(n_daytime, n_nighttime) outliers, splitting the flag by the day mask."""
+        out_idx = flag[flag == 2].index
+        day_mask = is_daytime.reindex(out_idx).fillna(False).astype(bool)
+        n_day = int(day_mask.sum())
+        return n_day, len(out_idx) - n_day
+
+    def _draw(self, series, flag=None, cleaned=None, n_outliers: int = 0,
+              is_daytime=None) -> None:
         """Two stacked panels: top = original (+ outlier markers once detected),
         bottom = the cleaned series. Called on variable select (series only) and
-        after detection (with flag + cleaned)."""
+        after detection (with flag + cleaned). When day/night separation was used,
+        the outlier markers are coloured red (daytime) / blue (nighttime)."""
         self.canvas.reset_layout()
         fig = self.canvas.fig
         ax_top = fig.add_subplot(2, 1, 1)
@@ -283,9 +361,19 @@ class HampelOutlierTab(DiiveTab):
                     alpha=0.8, label="original", zorder=1)
         if flag is not None:
             outliers = series[flag == 2]
-            ax_top.plot(outliers.index, outliers.to_numpy(), linestyle="none",
-                        marker="o", color="#E53935", ms=4, markeredgecolor="none",
-                        alpha=0.85, zorder=5, label=f"outliers ({n_outliers})")
+            if is_daytime is not None:
+                day_mask = is_daytime.reindex(outliers.index).fillna(False).astype(bool)
+                day, night = outliers[day_mask], outliers[~day_mask]
+                ax_top.plot(day.index, day.to_numpy(), linestyle="none", marker="o",
+                            color="#E53935", ms=4, markeredgecolor="none", alpha=0.85,
+                            zorder=6, label=f"daytime ({len(day)})")
+                ax_top.plot(night.index, night.to_numpy(), linestyle="none", marker="o",
+                            color="#1E88E5", ms=4, markeredgecolor="none", alpha=0.85,
+                            zorder=5, label=f"nighttime ({len(night)})")
+            else:
+                ax_top.plot(outliers.index, outliers.to_numpy(), linestyle="none",
+                            marker="o", color="#E53935", ms=4, markeredgecolor="none",
+                            alpha=0.85, zorder=5, label=f"outliers ({n_outliers})")
             ax_top.legend(loc="best", fontsize=8, framealpha=0.9)
         ax_top.set_title(f"{series.name} — original"
                          + (" + outliers" if flag is not None else ""), fontsize=9)
