@@ -121,6 +121,9 @@ DEFAULT_PILL_STYLE: dict[str, list[str]] = {
     "PPFD": ["PPFD", "#FB8C00", DARK],
     "PAR": ["PAR", "#FB8C00", DARK],
     "LW": ["LW", "#FB8C00", DARK],
+    "TA": ["TA", "#EF6C00", WHITE],     # deep orange — air temperature
+    "VPD": ["VPD", "#0097A7", WHITE],   # cyan — vapour pressure deficit
+    "SWC": ["SWC", "#6D4C41", WHITE],   # brown — soil water content
 }
 
 DEFAULT_NEW_PILL: list[str] = ["✦ NEW", "#D81B60", WHITE]

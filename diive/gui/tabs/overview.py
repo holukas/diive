@@ -65,10 +65,13 @@ _TITLE_COLOR = "#37474F"  # blue-grey 800 — fallback header colour (heatmap)
 # panels, so the overview reads cleanly despite the plot classes' own defaults.
 _FONT_SIZE = 9
 
-# Modern, mutually distinct line colours so each panel reads at a glance: the
-# time series stays Material blue; the diel cycle and daily mean differ from it.
-_DIEL_COLOR = "#7E57C2"   # deep purple 400 — mean diel cycle
+# Refined, mutually distinct line colours so each panel reads at a glance and
+# looks professional (the bright Material blue read as garish).
+_TS_COLOR = "#546E7A"     # blue-grey 600 — time series (refined, professional)
 _DAILY_COLOR = "#26A69A"  # teal 400 — daily mean (line + SD band)
+# The diel cycle now draws one auto-coloured line per month (no single colour).
+_ZERO_COLOR = "#90A4AE"   # blue-grey 300 — zero reference line
+_BADGE_BG = "#1565C0"     # elegant deep blue — variable-name badge background
 
 
 def _fmt(value) -> str:
@@ -274,6 +277,14 @@ class OverviewTab(DiiveTab):
         # Clear + re-enable constrained layout (canvas.draw() freezes it after,
         # so zoom/pan don't reflow the panels).
         self.canvas.reset_layout()
+        # Pack the panels tighter (less whitespace between them, esp. the three
+        # lower panels) while keeping room for tick labels.
+        engine = fig.get_layout_engine()
+        if engine is not None:
+            try:
+                engine.set(w_pad=0.015, h_pad=0.02, wspace=0.0, hspace=0.03)
+            except (AttributeError, TypeError):
+                pass
         gs = fig.add_gridspec(2, 4)
         # Full series for the current range; the diel cycle re-slices it on zoom.
         self._zoom_series = series
@@ -294,7 +305,17 @@ class OverviewTab(DiiveTab):
         # sizes for a clean, consistent look.
         for ax in fig.axes:
             self._panel_fonts(ax)
-        fig.suptitle(name)
+        # Variable name as an elegant badge inside the time-series panel's
+        # top-left corner (bold white on deep blue) — saves the figure-level
+        # title strip. Added after the per-axes font pass so it keeps its size;
+        # fig.clear() drops it on re-render so it never accumulates.
+        ts_ax = panel_axes.get("Time series")
+        if ts_ax is not None:
+            ts_ax.text(0.012, 0.95, name, transform=ts_ax.transAxes,
+                       ha="left", va="top", fontsize=12, fontweight="bold",
+                       color="white", zorder=100,
+                       bbox=dict(boxstyle="round,pad=0.35", facecolor=_BADGE_BG,
+                                 edgecolor="none"))
 
         # Live zoom sync: the three datetime panels follow each other via sharex;
         # the diel cycle (recomputed on the visible window) and the heatmap
@@ -379,13 +400,17 @@ class OverviewTab(DiiveTab):
     def _draw_panel(self, ax, series, plot_type: str) -> None:
         try:
             if plot_type == "Time series":
-                dv.plotting.TimeSeries(series).plot(ax=ax)
+                dv.plotting.TimeSeries(series).plot(
+                    ax=ax, color=_TS_COLOR, linewidth=1.4)
             elif plot_type == "Cumulative":
                 dv.plotting.Cumulative(df=series.to_frame()).plot(
-                    ax=ax, showplot=False, show_title=False)
+                    ax=ax, showplot=False, show_title=False, fill=True)
             elif plot_type == "Diel cycle":
+                # One auto-coloured line per month (seasonal diel pattern).
                 dv.plotting.DielCycle(series).plot(
-                    ax=ax, color=_DIEL_COLOR, show_legend=False)
+                    ax=ax, each_month=True, show_legend=False, linewidth=1.1)
+                ax.axhline(0, color=_ZERO_COLOR, linestyle="--", linewidth=1.0,
+                           alpha=0.6, zorder=1)
             elif plot_type == "Daily mean":
                 # Daily mean ± SD over the (possibly subselected) range.
                 daily = dv.times.resample_to_daily_agg(series, agg="mean")
@@ -393,7 +418,9 @@ class OverviewTab(DiiveTab):
                 ax.fill_between(daily.index, (daily - sd).to_numpy(),
                                 (daily + sd).to_numpy(), color=_DAILY_COLOR,
                                 alpha=0.2, edgecolor="none", zorder=0)
-                dv.plotting.TimeSeries(daily).plot(ax=ax, color=_DAILY_COLOR)
+                dv.plotting.TimeSeries(daily).plot(ax=ax, color=_DAILY_COLOR, linewidth=1.4)
+                ax.axhline(0, color=_ZERO_COLOR, linestyle="--", linewidth=1.0,
+                           alpha=0.6, zorder=0)
             elif plot_type == "Heatmap (date/time)":
                 dv.plotting.HeatmapDateTime(series).plot(
                     ax=ax, fig=self.canvas.fig, cb_digits_after_comma="auto")

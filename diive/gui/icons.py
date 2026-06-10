@@ -584,6 +584,21 @@ _LINE_RULES = [
 ]
 
 
+def pin_icon() -> QIcon:
+    """A small 'pinned' indicator (thumbtack) shown on frozen tabs."""
+    pm, p = _canvas()
+    ink = _line_ink()
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(ink)
+    p.drawEllipse(QRectF(4.5, 3.0, 7.0, 7.0))            # head
+    pen = QPen(ink, 1.6)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    p.drawLine(QPointF(8.0, 10.0), QPointF(8.0, 13.5))   # needle
+    p.end()
+    return QIcon(pm)
+
+
 def close_icon() -> QIcon:
     """A small, clearly visible "×" for tab close buttons (ink-coloured)."""
     pm, p = _canvas()

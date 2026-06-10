@@ -84,7 +84,12 @@ def test_pill_classification():
     from diive.gui.widgets.variable_delegate import _pill_for
     assert _pill_for("GPP_CUT_REF_f")[0] == "GPP"
     assert _pill_for("NEE_CUT_REF_f")[0] == "NEE"
-    assert _pill_for("TA_f") is None
+    assert _pill_for("PPFD")[0] == "PPFD"           # bare PPFD now tags
+    assert _pill_for("TA_f")[0] == "TA"             # air temperature
+    assert _pill_for("Tair_f")[0] == "TA"
+    assert _pill_for("VPD_f")[0] == "VPD"
+    assert _pill_for("SWC_FF0_0.15_1")[0] == "SWC"
+    assert _pill_for("RH_f") is None                # unrecognised -> no pill
 
 
 def test_multi_instance_plot_tabs(window):
@@ -890,6 +895,32 @@ def test_select_variables_tab_updates_overview(window):
     QApplication.processEvents()
     overview = window._tabs[0]
     assert overview.varpanel.names() == [names[5], names[1]]
+
+
+def test_pin_freezes_menu_tab(window):
+    window._open_menu_tab("Time series")
+    tab = window._menu_tab_list[-1]
+
+    window._toggle_pin(tab)  # what the right-click "Pin" does
+    assert tab in window._pinned
+
+    # A pinned tab is skipped by data pushes; unpinning re-syncs it once.
+    calls = []
+    tab.on_data_loaded = lambda df, created=None: calls.append(df)
+    window._apply_range()
+    QApplication.processEvents()
+    assert calls == []                       # frozen: no push received
+    window._toggle_pin(tab)                  # unpin -> re-sync
+    QApplication.processEvents()
+    assert len(calls) == 1
+
+
+def test_overview_and_log_not_pinnable(window):
+    overview, log = window._tabs[0], window._tabs[1]
+    window._toggle_pin(overview)
+    window._toggle_pin(log)
+    assert overview not in window._pinned
+    assert log not in window._pinned
 
 
 def test_live_theme_edit(window):

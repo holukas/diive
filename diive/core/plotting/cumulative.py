@@ -259,7 +259,8 @@ class Cumulative:
              show_grid: bool = True,
              show_legend: bool = True,
              ylabel: str = None,
-             show_title: bool = True
+             show_title: bool = True,
+             fill: bool = False
              ):
         # Phase 2: use the caller's axes, or create a standalone figure.
         if ax is None:
@@ -290,6 +291,12 @@ class Cumulative:
                          ls='-', lw=lw,
                          marker='', markeredgecolor='none', ms=0,
                          zorder=99, label=label)
+
+            # Faintly shade the area between the curve and the zero line.
+            if fill:
+                self.ax.fill_between(series.index, series.to_numpy(), 0,
+                                     color=color, alpha=0.12, edgecolor='none',
+                                     zorder=1)
 
             x = series.index[-1]
             y = series.iloc[-1]

@@ -17,6 +17,7 @@ from PySide6.QtCore import QByteArray, QRectF, QSize, Qt
 from PySide6.QtGui import (
     QAction,
     QColor,
+    QIcon,
     QLinearGradient,
     QPainter,
     QPainterPath,
@@ -131,6 +132,12 @@ class MainWindow(QMainWindow):
             bar.setTabButton(i, QTabBar.ButtonPosition.RightSide, None)
         self._tabwidget.tabCloseRequested.connect(self._on_tab_close)
         self._tabwidget.tabBarDoubleClicked.connect(self._rename_tab)
+        # Per-tab "pin" (freeze data): pinned tabs keep their current dataset and
+        # are skipped by data pushes. Toggle via the tab's right-click menu.
+        self._pinned: set = set()
+        bar = self._tabwidget.tabBar()
+        bar.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        bar.customContextMenuRequested.connect(self._tab_context_menu)
 
         # Two window shells, chosen by the active theme preset's `chrome` flag
         # (read once here; switching presets needs a relaunch to swap chrome).
@@ -255,6 +262,8 @@ class MainWindow(QMainWindow):
 
     def _push_data(self) -> None:
         for tab in self._tabs:
+            if tab in self._pinned:
+                continue  # frozen: keep its own dataset
             tab.on_data_loaded(self._data, self._created)
 
     def _set_data(self, df, source: str) -> None:
@@ -362,21 +371,22 @@ class MainWindow(QMainWindow):
         return i
 
     def _on_tab_close(self, index: int) -> None:
-        """Close any tab; de-register it so it stops receiving data pushes.
+        """Close a menu-opened tab and de-register it from data pushes.
 
-        After closing, fall back to the tab to the left of the one closed —
-        except never land on the Log tab: if that's where we'd land, jump
-        straight to the Overview tab instead.
+        Only menu tabs are closable — the always-on Overview/Log have no close
+        button and must also resist middle-click closing (QTabBar emits
+        `tabCloseRequested` on middle-click regardless), so requests for them are
+        ignored. After closing, focus falls back to the tab to the left, except
+        never the Log tab (jump to Overview instead).
         """
         widget = self._tabwidget.widget(index)
-        for tab in list(self._menu_tab_list):
-            if tab.widget() is widget:
-                self._menu_tab_list.remove(tab)
-                break
-        for tab in list(self._tabs):
-            if tab.widget() is widget:
-                self._tabs.remove(tab)
-                break
+        tab = next((t for t in self._menu_tab_list if t.widget() is widget), None)
+        if tab is None:
+            return  # always-on tab (Overview/Log): not closable
+        self._menu_tab_list.remove(tab)
+        if tab in self._tabs:
+            self._tabs.remove(tab)
+        self._pinned.discard(tab)
         self._tabwidget.removeTab(index)
         if self._tabwidget.count() == 0:
             return
@@ -403,6 +413,53 @@ class MainWindow(QMainWindow):
         idx = self._tabwidget.indexOf(widget)
         if idx >= 0:
             self._on_tab_close(idx)
+
+    def _tab_context_menu(self, pos) -> None:
+        """Right-click a tab to pin/unpin it (freeze/follow the dataset)."""
+        bar = self._tabwidget.tabBar()
+        index = bar.tabAt(pos)
+        if index < 0:
+            return
+        widget = self._tabwidget.widget(index)
+        # Only menu tabs are pinnable; the always-on Overview/Log stay live.
+        tab = next((t for t in self._menu_tab_list if t.widget() is widget), None)
+        if tab is None:
+            return
+        menu = QMenu(self)
+        pinned = tab in self._pinned
+        label = "Unpin tab (follow data)" if pinned else "Pin tab (freeze data)"
+        menu.addAction(label).triggered.connect(lambda: self._toggle_pin(tab))
+        menu.exec(bar.mapToGlobal(pos))
+
+    def _toggle_pin(self, tab) -> None:
+        """Freeze a tab on its current dataset, or unfreeze and re-sync it.
+
+        Only menu tabs are pinnable; Overview/Log are always live.
+        """
+        if tab not in self._menu_tab_list:
+            return
+        if tab in self._pinned:
+            self._pinned.discard(tab)
+            if self._data is not None:  # catch up to the current dataset
+                tab.on_data_loaded(self._data, self._created)
+        else:
+            self._pinned.add(tab)
+        self._refresh_tab_icon(tab)
+
+    def _refresh_tab_icon(self, tab) -> None:
+        """Pinned tabs show a pin glyph; otherwise restore the favicon (Studio)."""
+        index = self._tabwidget.indexOf(tab.widget())
+        if index < 0:
+            return
+        if tab in self._pinned:
+            from diive.gui.icons import pin_icon
+            self._tabwidget.setTabIcon(index, pin_icon())
+        elif self._studio_tabs:
+            from diive.gui.icons import menu_icon
+            label = getattr(tab, "_menu_label", None) or tab.title
+            self._tabwidget.setTabIcon(index, menu_icon(label))
+        else:
+            self._tabwidget.setTabIcon(index, QIcon())
 
     def _rename_tab(self, index: int) -> None:
         """Rename a tab on double-click (changes the display label only)."""

@@ -55,6 +55,7 @@ class DielCycle:
              mean: bool = True,
              std: bool = True,
              each_month: bool = False,
+             linewidth: float = 2,
              legend_n_col: int = 1,
              legend_loc: str = 'best',
              ylim: list = None,
@@ -118,7 +119,8 @@ class DielCycle:
             x_decimal = [t.hour + t.minute / 60 + t.second / 3600 for t in means.index]
             means_numeric = means.copy()
             means_numeric.index = x_decimal
-            means_numeric.plot(ax=self.ax, label=f'{monthstr}', color=color, zorder=99, lw=2, **kwargs)
+            means_numeric.plot(ax=self.ax, label=f'{monthstr}', color=color, zorder=99,
+                                lw=linewidth, **kwargs)
 
             # label = "Mittelwert ± 1 Standardabweichung"
             label = None

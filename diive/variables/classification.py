@@ -17,6 +17,8 @@ from typing import NamedTuple
 CATEGORY_CARBON = "carbon"
 CATEGORY_WATER = "water"
 CATEGORY_RADIATION = "radiation"
+CATEGORY_METEO = "meteo"
+CATEGORY_SOIL = "soil"
 
 
 class VariableClass(NamedTuple):
@@ -42,9 +44,13 @@ _RULES: tuple[tuple[str, str, str], ...] = (
     ("ET_", "ET", CATEGORY_WATER),
     ("Rg_", "Rg", CATEGORY_RADIATION),
     ("SW_IN_", "SW_IN", CATEGORY_RADIATION),
-    ("PPFD_", "PPFD", CATEGORY_RADIATION),
+    ("PPFD", "PPFD", CATEGORY_RADIATION),  # bare "PPFD" and "PPFD_*"
     ("PAR_", "PAR", CATEGORY_RADIATION),
     ("LW_", "LW", CATEGORY_RADIATION),
+    ("Tair", "TA", CATEGORY_METEO),        # "Tair" and "Tair_*"
+    ("TA_", "TA", CATEGORY_METEO),         # "TA_*" (bare "TA" handled below)
+    ("VPD", "VPD", CATEGORY_METEO),        # "VPD" and "VPD_*"
+    ("SWC", "SWC", CATEGORY_SOIL),         # "SWC" and "SWC_*"
 )
 
 
@@ -72,6 +78,10 @@ def classify_variable(name: str) -> VariableClass | None:
     # does not also catch FCH4 (methane flux).
     if name == "FC" or name.startswith("FC_"):
         return VariableClass(kind="FC", category=CATEGORY_CARBON)
+    # Bare "TA" is exact-matched (a "TA" prefix would also catch e.g. TARGET/TAU);
+    # "TA_*" and "Tair*" are handled by the prefix rules below.
+    if name == "TA":
+        return VariableClass(kind="TA", category=CATEGORY_METEO)
     for prefix, kind, category in _RULES:
         if name.startswith(prefix):
             return VariableClass(kind=kind, category=category)
