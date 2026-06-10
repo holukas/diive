@@ -63,28 +63,42 @@ class VariableSelectorTab(DiiveTab):
         self.selected = VariablePanel()
         self.available.selected.connect(lambda name, _ctrl: self._select(name))
         self.selected.selected.connect(lambda name, _ctrl: self._deselect(name))
+
+        # Footer buttons. Available: "Add all". Selected: "Clear" (danger, red)
+        # + "Confirm" (confirm, green) side by side so the primary action is
+        # right next to the list it acts on.
+        self.add_all_btn = QPushButton("Add all →")
+        self.add_all_btn.clicked.connect(self._add_all)
+        self.clear_btn = QPushButton("Clear")
+        self.clear_btn.clicked.connect(self._clear)
+        theme.set_button_role(self.clear_btn, "danger")
+        self.confirm_btn = QPushButton("Confirm → update Overview")
+        self.confirm_btn.clicked.connect(self._confirm)
+        theme.set_button_role(self.confirm_btn, "confirm")
+
+        selected_footer = QHBoxLayout()
+        selected_footer.addWidget(self.clear_btn)
+        selected_footer.addWidget(self.confirm_btn, stretch=1)
+
         lists = QHBoxLayout()
-        lists.addLayout(self._column("Available", self.available))
-        lists.addLayout(self._column("Selected", self.selected))
+        lists.addLayout(self._column("Available", self.available, self.add_all_btn))
+        lists.addLayout(self._column("Selected", self.selected, selected_footer))
         lists.addStretch(1)
         outer.addLayout(lists, stretch=1)
 
-        # Actions.
-        actions = QHBoxLayout()
-        self.clear_btn = QPushButton("Clear")
-        self.clear_btn.clicked.connect(self._clear)
+        # Status line below the lists.
         self.status = QLabel("")
-        self.confirm_btn = QPushButton("Confirm → update Overview")
-        self.confirm_btn.clicked.connect(self._confirm)
-        actions.addWidget(self.clear_btn)
-        actions.addWidget(self.status, stretch=1)
-        actions.addWidget(self.confirm_btn)
-        outer.addLayout(actions)
+        self.status.setStyleSheet("color: #6B7780;")
+        outer.addWidget(self.status)
         return root
 
     @staticmethod
-    def _column(title: str, panel: VariablePanel) -> QVBoxLayout:
-        """A labelled column wrapping a VariablePanel."""
+    def _column(title: str, panel: VariablePanel, footer) -> QVBoxLayout:
+        """A labelled column wrapping a VariablePanel with a footer.
+
+        ``footer`` is either a widget (added directly) or a layout (added as a
+        sub-layout) placed below the list.
+        """
         col = QVBoxLayout()
         header = QLabel(theme.manager.label_text(title))
         hf = theme.manager.tracked_font(header.font())
@@ -92,6 +106,10 @@ class VariableSelectorTab(DiiveTab):
         header.setFont(hf)
         col.addWidget(header)
         col.addWidget(panel, stretch=1)
+        if isinstance(footer, QHBoxLayout):
+            col.addLayout(footer)
+        else:
+            col.addWidget(footer)
         return col
 
     def on_data_loaded(self, df, created: set | None = None) -> None:
@@ -108,6 +126,8 @@ class VariableSelectorTab(DiiveTab):
         n = len(self._selected)
         self.status.setText(f"{n} variable{'' if n == 1 else 's'} selected")
         self.confirm_btn.setEnabled(n > 0)
+        self.add_all_btn.setEnabled(len(available) > 0)
+        self.clear_btn.setEnabled(n > 0)
 
     def _select(self, name: str) -> None:
         if name in self._all and name not in self._selected:
@@ -118,6 +138,10 @@ class VariableSelectorTab(DiiveTab):
         if name in self._selected:
             self._selected.remove(name)
             self._refresh()
+
+    def _add_all(self) -> None:
+        self._selected = [n for n in self._all]
+        self._refresh()
 
     def _clear(self) -> None:
         self._selected = []

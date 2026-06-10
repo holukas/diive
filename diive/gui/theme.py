@@ -57,6 +57,13 @@ STUDIO_TOKENS: dict[str, str] = {
                                      # around the variable list / splitter gaps)
     "INK": "#1E2226",
     "RADIUS": "12",                  # softer, larger corners
+    # Action-button accents (reusable confirm/danger roles). Bold white text.
+    "CONFIRM_BG": "#2E9E5B",         # modern green — affirmative actions
+    "CONFIRM_BG_HOVER": "#27894F",
+    "CONFIRM_BG_PRESSED": "#207141",
+    "DANGER_BG": "#E04646",          # modern red — destructive/clearing actions
+    "DANGER_BG_HOVER": "#C93C3C",
+    "DANGER_BG_PRESSED": "#AE3232",
 }
 
 # Nav/section label typography. Tracking is QFont AbsoluteSpacing in px.
@@ -134,6 +141,22 @@ QPushButton {{
 QPushButton:hover {{ background: {t['HOVER_BG']}; }}
 QPushButton:pressed {{ background: {t['HOVER_PRESSED']}; }}
 QPushButton:disabled {{ color: #9E9E9E; background: {t['CANVAS']}; }}
+
+/* Accent action buttons (set via the `role` dynamic property). Filled, bold,
+   white text so primary/destructive actions stand out from neutral buttons. */
+QPushButton[role="confirm"] {{
+    background: {t['CONFIRM_BG']}; color: {WHITE}; font-weight: bold; border: none;
+}}
+QPushButton[role="confirm"]:hover {{ background: {t['CONFIRM_BG_HOVER']}; }}
+QPushButton[role="confirm"]:pressed {{ background: {t['CONFIRM_BG_PRESSED']}; }}
+QPushButton[role="confirm"]:disabled {{ background: #BFD8C7; color: #EAF2EC; }}
+
+QPushButton[role="danger"] {{
+    background: {t['DANGER_BG']}; color: {WHITE}; font-weight: bold; border: none;
+}}
+QPushButton[role="danger"]:hover {{ background: {t['DANGER_BG_HOVER']}; }}
+QPushButton[role="danger"]:pressed {{ background: {t['DANGER_BG_PRESSED']}; }}
+QPushButton[role="danger"]:disabled {{ background: #E6C2C2; color: #F4E8E8; }}
 
 QComboBox {{
     background: {t['INPUT_BG']}; border: 1px solid {t['BORDER']};
@@ -338,3 +361,14 @@ class ThemeManager(QObject):
 
 #: Singleton used across the GUI.
 manager = ThemeManager()
+
+
+def set_button_role(button, role: str) -> None:
+    """Tag a QPushButton as an accent action: ``"confirm"`` (green) or
+    ``"danger"`` (red). Sets the ``role`` dynamic property the stylesheet keys
+    off and re-polishes so the rule takes effect immediately.
+    """
+    button.setProperty("role", role)
+    style = button.style()
+    style.unpolish(button)
+    style.polish(button)
