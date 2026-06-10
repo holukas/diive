@@ -13,9 +13,9 @@ near-white surfaces, soft borderless panels, monochrome line icons, uppercase
 tracked nav/section labels, and a frameless window with a custom header. The
 look is described by:
 
-- ``tokens``     — colour tokens, fed to the stylesheet (live-applied).
+- ``tokens``     — colour tokens, fed to the stylesheet (live-applied);
+  ``gui.icons`` reads the ``INK`` token for its glyph colour.
 - ``typography`` — ``{uppercase, tracking}`` for nav/section labels (live).
-- ``icon_style`` — icon style flag read by ``gui.icons.menu_icon``.
 
 Colours/typography apply instantly through the ``changed`` signal. The frameless
 window shell is built once by ``MainWindow``.
@@ -61,9 +61,6 @@ STUDIO_TOKENS: dict[str, str] = {
 
 # Nav/section label typography. Tracking is QFont AbsoluteSpacing in px.
 STUDIO_TYPOGRAPHY: dict = {"uppercase": True, "tracking": 1.5}
-
-#: Icon style flag read by ``gui.icons.menu_icon`` (thin-line monochrome glyphs).
-ICON_STYLE = "line"
 
 #: kind -> [label, background, text]. Lists so values are editable in place.
 #: Shared across presets (the colours encode domain meaning: NEE green, Reco red).
@@ -256,7 +253,7 @@ class ThemeManager(QObject):
     """Holds the live, editable Studio theme; emits `changed` on modification.
 
     Token colours, typography, and the time-series palette update live (the
-    Settings tab edits them); `icon_style` is fixed to the Studio line glyphs.
+    Settings tab edits them).
     """
 
     changed = Signal()
@@ -273,7 +270,6 @@ class ThemeManager(QObject):
         self.list_width = DEFAULT_LIST_WIDTH
         self.tokens = dict(STUDIO_TOKENS)
         self.typography = dict(STUDIO_TYPOGRAPHY)
-        self.icon_style = ICON_STYLE
         if not silent:
             self.apply()
 

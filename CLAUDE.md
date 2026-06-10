@@ -217,7 +217,7 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   - **Single Studio look.** The GUI has one design — **Studio** (clean, minimal, VIBECAD-style: near-white surfaces,
     soft borderless panels, `icons.py` thin-line monochrome glyphs, uppercase tracked nav/section labels via
     `tracked_font`/`label_text`, and a frameless rounded window with `widgets/header_bar.py`'s inline-dropdown header).
-    `theme.manager` holds `STUDIO_TOKENS` (editable live), `STUDIO_TYPOGRAPHY`, and `icon_style="line"`; `MainWindow`
+    `theme.manager` holds `STUDIO_TOKENS` (editable live) and `STUDIO_TYPOGRAPHY`; `MainWindow`
     always builds the Studio chrome (`_build_studio_chrome`). Structural tokens (`CANVAS`/`INK`/`RADIUS`) are re-pinned
     from `STUDIO_TOKENS` in `load_dict`, so an old persisted config (incl. one from the removed Classic look — its
     `"preset"` key is ignored) can't shadow them while other colour overrides survive.

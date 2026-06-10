@@ -51,13 +51,12 @@ closable, unless listed in `SINGLE_INSTANCE_TABS` (e.g. Appearance). The main wi
 **Menu icons:** every menu entry (File/Data/Plot/Tools/Settings/Help) gets a small `QPainter`-drawn glyph via
 `gui/icons.py::menu_icon(label)`, matched to the label by keyword (`&` mnemonics stripped first). `_build_menus` wraps
 each action with it. Add a menu entry → add a keyword rule in `icons._LINE_RULES` (the thin-line monochrome glyph table;
-unknown labels fall back to a chart glyph). (`_CLASSIC_RULES` + its colour-glyph factories are leftovers from the removed
-Classic look and are no longer selected.)
+unknown labels fall back to a chart glyph).
 
 **Studio look:** the GUI has one design — Studio (a clean, minimal VIBECAD-style look: near-white surfaces, soft
 borderless panels, monochrome line icons, uppercase tracked labels, and a frameless rounded window with a custom
-`StudioHeaderBar`). `gui/theme.py::manager` holds `STUDIO_TOKENS` (edited live in **Settings ▸ Appearance**),
-`STUDIO_TYPOGRAPHY`, and `icon_style="line"`; `MainWindow` always builds the frameless shell (`_build_studio_chrome`).
+`StudioHeaderBar`). `gui/theme.py::manager` holds `STUDIO_TOKENS` (edited live in **Settings ▸ Appearance**) and
+`STUDIO_TYPOGRAPHY`; `MainWindow` always builds the frameless shell (`_build_studio_chrome`).
 
 **Plot menu:** each method is its own closable tab, with a small drawn icon. The **Plot** menu lists methods (Heatmap
 date/time, Heatmap year/month, Time series, Diel cycle, Cumulative year, Ridgeline, Scatter XY, Hexbin, Histogram); selecting one

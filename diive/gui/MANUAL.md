@@ -240,12 +240,9 @@ did on the clipboard, so a point-and-click run stays scriptable.
 
 ### Settings ▸ Appearance
 
-Customise the look with a **live preview** — colours update across the whole app as
-you change them:
-- a **Theme preset**: *Classic* (the standard look) or *Studio* (a clean, minimal
-  look — near-white surfaces, pill-shaped tabs, a slim header with drop-down menus).
-  Colours, icons and text update immediately; the *Studio* window style takes
-  effect after you restart diive.
+Customise the **Studio** look (the GUI's single design — near-white surfaces,
+pill-shaped tabs, a slim header with drop-down menus) with a **live preview** —
+colours update across the whole app as you change them:
 - pill colours, selection/hover colours, time-series line colours;
 - the variable-list **width** (applies to every tab);
 - **Reset to defaults** to undo.

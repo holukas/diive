@@ -1013,11 +1013,10 @@ def test_theme_persistence_roundtrip():
 
 
 def test_studio_look_defaults(app):
-    # The GUI ships a single Studio look: line icons, uppercase tracked labels,
-    # and the canvas/ink/radius structural tokens build_qss reads.
+    # The GUI ships a single Studio look: uppercase tracked labels and the
+    # canvas/ink/radius structural tokens build_qss reads.
     from diive.gui import theme
     theme.manager.reset(silent=True)
-    assert theme.manager.icon_style == "line"
     assert theme.manager.typography["uppercase"] is True
     for key in ("CANVAS", "INK", "RADIUS"):
         assert key in theme.manager.tokens
@@ -1035,7 +1034,6 @@ def test_theme_override_persists_through_roundtrip():
     theme.manager.reset(silent=True)
     theme.manager.load_dict(data)
     assert theme.manager.tokens["ACCENT"] == "#abcdef"  # override survives
-    assert theme.manager.icon_style == "line"
     theme.manager.reset(silent=True)
 
 
@@ -1048,7 +1046,6 @@ def test_old_classic_config_loads_into_studio():
     theme.manager.load_dict(
         {"preset": "Classic", "tokens": {"RADIUS": "6", "ACCENT": "#2196F3"},
          "list_width": 240})
-    assert theme.manager.icon_style == "line"
     assert theme.manager.tokens["RADIUS"] == "12"      # structural -> Studio
     assert theme.manager.tokens["ACCENT"] == "#2196F3"  # non-structural kept
     theme.manager.reset(silent=True)
