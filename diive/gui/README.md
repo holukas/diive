@@ -21,7 +21,8 @@ diive-gui                # or: uv run diive-gui
 | `splash.py` | Startup splash + **Help ▸ About** dialog (`QPainter`-drawn waves + wordmark/version/tagline/credits); `AUTHOR` + `SUPPORTERS` |
 | `registry.py` | `TAB_CLASSES` (always-on), `MENU_TABS` (menu-opened factories), `SINGLE_INSTANCE_TABS` |
 | `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df, created)` — the extension point |
-| `tabs/overview.py` | Overview tab (first/default): 2×4 panel figure (top) + full-width KPI stat-card strip (bottom); panels via `_PANELS` |
+| `tabs/overview.py` | Overview tab (first/default): 2×4 panel figure (top, varname badge inside the time-series panel) + a compact borderless **metrics ribbon** (`_StatItem`, `dv.sstats` + `SSTATS_DESCRIPTIONS` tooltips); panels via `_PANELS`. Exposes `_StatCard` for the Gaps/Drivers/Seasonal tabs |
+| `tabs/variable_selector.py` | **Select variables** tab — dual-list picker (available ↔ selected); `subsetSelected` → Overview's `show_variable_subset` (via `dv.keep_vars`) |
 | `tabs/plotting.py` | `PlottingTab(plot_type)` — one closable tab per plot method (opened from the Plot menu); var list + live settings panel + canvas |
 | `icons.py` | `menu_icon(label)` — tiny `QPainter`-drawn glyphs for **all** menu entries (folder/disk/calendar/gear/palette/… + plot shapes), keyword-matched |
 | `widgets/plot_settings.py` | `PlotSettingsPanel(plot_type)` — live plot-parameter controls (between list and canvas); `changed` re-renders; defines `HEATMAP`/`TIMESERIES` |
@@ -39,6 +40,8 @@ diive-gui                # or: uv run diive-gui
 | `widgets/variable_delegate.py` | `VariableDelegate` — paints row highlight + NEE/GPP/Reco pills |
 | `widgets/open_data_dialog.py` | `OpenDataDialog` — file + filetype picker with a parsed live preview |
 | `widgets/daterange_dialog.py` | `DateRangeDialog` — from/to picker (clamped to the data span) for date-range subselection |
+| `widgets/header_bar.py` | `StudioHeaderBar` — frameless Studio chrome header: wordmark + inline File/Data/… hover-dropdown menus + centred title |
+| `widgets/frameless.py` | `FramelessResizeHelper` — edge/corner resize for the frameless Studio window |
 | `widgets/console_panel.py` | `ConsolePanel` — mirrors diive's Rich output in colour (used by the Log tab) |
 
 **Adding a tab:** always-on tabs (Overview, Log) go in `TAB_CLASSES`. Menu-opened tabs go in `registry.MENU_TABS`
@@ -184,6 +187,13 @@ event loop (true animation would need off-thread Agg rendering).
 **Variable list stays in sync:** every data change (file load, feature add) goes through `MainWindow._push_data()`,
 which calls `on_data_loaded(df, created)` on all active tabs. A menu tab gets the current data on open and is then
 subscribed; on close it's removed so it can't go stale.
+
+**Tab UX & pinning:** tabs are movable (drag), renamable (double-click → `_rename_tab`), and menu tabs carry a custom
+visible "×" (`icons.close_icon`); the always-on Overview/Log are not closable (a `tabCloseRequested` for them — incl.
+middle-click — is ignored). **Right-click a menu tab → Pin** freezes it on its current dataset: pinned tabs
+(`MainWindow._pinned`) are skipped by `_push_data` (cheap — references + pandas Copy-on-Write) and show a pin glyph
+(`icons.pin_icon`); unpin re-syncs. Overview/Log are never pinnable. The app/taskbar icon is drawn from the splash
+motif (`splash.app_icon`); a Windows AppUserModelID is set in `run()` so the taskbar uses it.
 
 **Hover tooltip (`HoverAnnotator`):** `MplCanvas` attaches one in its constructor; it works on every figure rendered into the
 canvas (Overview, plotting tabs) with no per-tab wiring. On mouse-move it shows a small box with the value under the cursor:

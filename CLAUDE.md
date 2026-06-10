@@ -68,7 +68,7 @@ tests/                        # Unit tests
 | `dv.corrections` | `MeasurementOffsetFromReplicate`, `WindDirOffset`, `remove_radiation_zero_offset`, `remove_relativehumidity_offset`, `set_exact_values_to_missing`, `setto_threshold`, `setto_value` |
 | `dv.qaqc` | `FlagQCF`, `StepwiseMeteoScreeningDb` |
 
-Top-level (no namespace): `load_exampledata_parquet`, `load_exampledata_parquet_lae`, `load_parquet`, `save_parquet` (with `enforce_diive_format=True` → single header row + valid `TIMESTAMP_*` index name), `to_diive_format`, `ReadFileType`, `search_files`, `sstats`, `transform_yearmonth_matrix_to_longform`, `get_encoded_value_from_int`, `get_encoded_value_series`
+Top-level (no namespace): `load_exampledata_parquet`, `load_exampledata_parquet_lae`, `load_parquet`, `save_parquet` (with `enforce_diive_format=True` → single header row + valid `TIMESTAMP_*` index name), `to_diive_format`, `ReadFileType`, `search_files`, `sstats`, `keep_vars` (non-destructive column subselection — column analogue of `times.keep_daterange`), `transform_yearmonth_matrix_to_longform`, `get_encoded_value_from_int`, `get_encoded_value_series`
 
 ## Core Concepts
 
@@ -212,6 +212,13 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   edits these with a live preview — the pill delegate and time-series plot read from `theme.manager` and repaint on
   `changed`; the Settings tab shows a sample variable list as a pill/highlight preview. (Which *variable name* maps to
   which pill kind stays in the library: `dv.variables.classify_variable`. Only colours/labels are GUI.)
+  - **Theme presets.** `theme.PRESETS` bundles named looks: `"Classic"` (the original) and `"Studio"` (clean, minimal,
+    VIBECAD-style). `set_preset(name)` swaps `tokens` + a typography spec (`tracked_font`/`label_text` apply uppercase +
+    letter-spacing) + an `icons` flag (classic colour glyphs vs `icons.py` thin-line monochrome) + a `chrome` flag. The
+    live tier (palette/typography/icons via `build_qss` + `changed`) applies instantly; the structural `chrome`
+    (`"native"` QMainWindow vs `"studio"` frameless rounded shell with `widgets/header_bar.py` inline-dropdown header) is
+    read once at `MainWindow` build, so switching it needs a relaunch. Structural tokens (`CANVAS`/`INK`/`RADIUS`) always
+    follow the active preset in `load_dict` (a stale persisted value can't shadow them). Preset choice persists.
 
 - **Shared variable list: `widgets/variable_panel.py` (`VariablePanel`).** Every tab's left-hand variable list MUST be
   this one component (filter + `VariableList` + `VariableDelegate` pills + subsequence filtering) so styling, pills, and
@@ -244,6 +251,16 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   `registry.SINGLE_INSTANCE_TABS` (e.g. Appearance) instead focus the existing one. Always-on tabs have their close
   button removed; `_next_menu_index` reuses the smallest free number. On close (`_on_tab_close`) focus falls back to the
   tab to the *left* of the closed one, but never the Log tab — if that's where it would land, it jumps to Overview.
+- **Tab UX.** Tabs are movable (drag to reorder), renamable (double-click → `_rename_tab`), and menu tabs carry a
+  custom visible "×" (`icons.close_icon`); the always-on Overview/Log are not closable (a `tabCloseRequested`, incl.
+  middle-click, for them is ignored). In Studio chrome the tabs are Firefox-style pills with a favicon glyph. **Per-tab
+  pin/freeze**: right-click a *menu* tab → Pin; pinned tabs (`MainWindow._pinned`) are skipped by `_push_data`, so they
+  keep their dataset (cheap — references + pandas Copy-on-Write), and show a pin glyph (`icons.pin_icon`); unpin
+  re-syncs. Overview/Log are never pinnable.
+- **Select variables tab** (`tabs/variable_selector.py`, `Tools ▸ Select variables`, single-instance) — a dual-list
+  picker (two `VariablePanel`s: available ↔ selected) emitting a `subsetSelected` signal (same `QObject`-helper pattern
+  as `featuresCreated`); `MainWindow` routes it to the Overview's `show_variable_subset(...)`, which uses `dv.keep_vars`
+  to restrict the Overview's variable list to the chosen subset (Overview-only; data untouched).
 - **Two-phase plot classes are GUI-ready.** The plotting tab renders diive plots straight into an embedded canvas via
   `Plot(series).plot(ax=canvas.ax, fig=canvas.fig)`; no GUI-specific plot variants needed.
 - **`Plot` menu = one closable tab per method.** There is no single "Plotting" tab. Each plot method (Heatmap date/time,
@@ -286,9 +303,12 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   active window, toggles the reset action, and pushes to tabs. Engineered features merge into `_full_data` (so they
   survive a range reset; out-of-range rows align to NaN). The slicing math is the library's `keep_daterange`, not the GUI.
 - **Overview tab.** First tab, focused on every load (`setCurrentIndex(0)`). Top: variable list + a GridSpec figure
-  (2×4: time series, `Cumulative`, `DielCycle` mean diel cycle, daily-mean time series via `dv.times.resample_to_daily_agg`,
-  date/time heatmap; extensible via `_PANELS`). Bottom: a full-width strip of KPI-style stat cards (`_StatCard`) from
-  `dv.sstats`.
+  (2×4: time series, `Cumulative` (`fill=True` shaded to zero), `DielCycle` (`each_month=True`, per-month colours +
+  zero line), daily-mean time series via `dv.times.resample_to_daily_agg` (with a zero line), date/time heatmap;
+  extensible via `_PANELS`). The variable name is a blue badge inside the time-series panel (not a figure title).
+  Bottom: a compact, borderless **metrics ribbon** of `dv.sstats` values (`_StatItem`, hairline-separated) with
+  per-stat hover descriptions from `SSTATS_DESCRIPTIONS`. `_StatCard` (boxed) is still used by the Gaps/Drivers/Seasonal
+  tabs.
 - **Hover tooltip.** `MplCanvas` attaches a `HoverAnnotator` (`widgets/hover.py`) in its constructor, so every embedded
   figure (Overview, plotting tabs) shows the value under the cursor with no per-tab wiring. Lines snap to the nearest
   sample (`np.searchsorted` on `get_xdata(orig=False)` — the unit-converted floats, **not** raw datetimes); `pcolormesh`
@@ -554,4 +574,4 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 
 ---
 
-**Last Updated:** 2026-06-07 | **Version:** v0.91.0 | **Package Manager:** `uv`
+**Last Updated:** 2026-06-10 | **Version:** v0.91.0 | **Package Manager:** `uv`

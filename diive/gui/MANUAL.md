@@ -58,25 +58,34 @@ straight back into diive (GUI or library).
 - **Filter box** — type to narrow the list. Matching is fuzzy and ignores
   underscores/case: `gpp16` finds `GPP_CUT_16_f`.
 - **Tag pills** — variables are colour-tagged by kind: NEE/FC (green), GPP (blue),
-  Reco (red), LE/ET (purple), radiation (orange). Features you create get a pink
-  **✦ NEW** pill.
+  Reco (red), LE/ET (purple), radiation/Rg/SW_IN/PPFD/PAR/LW (orange), air
+  temperature TA (deep orange), VPD (cyan), soil water content SWC (brown).
+  Features you create get a pink **✦ NEW** pill.
 - The list looks and behaves the same in every tab.
 
 ---
 
 ## Tabs
 
-The window opens with **Overview** and **Log**. Other tabs open from the menus and
-can be closed (×). Most can be opened **multiple times** — you'll get *Heatmap 1*,
-*Heatmap 2*, etc.
+The window opens with **Overview** and **Log** (these two stay open — they have no
+close button). Other tabs open from the menus and can be closed (×). Most can be
+opened **multiple times** — you'll get *Heatmap 1*, *Heatmap 2*, etc. You can
+**drag tabs to reorder** them and **double-click a tab to rename** it.
+
+**Pin a tab to freeze its data:** right-click a tab → **Pin tab (freeze data)**.
+A pinned tab keeps the dataset it currently shows and ignores later changes (a new
+file, a date-range change, added features) — handy for comparing while you change
+the data elsewhere. A pin marker appears on the tab; right-click → **Unpin** to let
+it follow the data again. (Overview and Log are always live.)
 
 ### Overview (first tab)
 
 Click a variable to see, for that variable:
-- a **figure** with several panels — full time series, cumulative sum, mean diel
-  cycle, daily-mean time series, and a date/time heatmap;
-- a **strip of statistic cards** along the bottom (count, mean, SD, min/max,
-  percentiles, …).
+- a **figure** with several panels — full time series (the variable name sits in a
+  badge in its top-left), cumulative sum (shaded to zero), a per-month diel cycle,
+  the daily mean, and a date/time heatmap;
+- a **ribbon of statistics** along the bottom (count, mean, SD, min/max,
+  percentiles, …); **hover** any one for a short description of what it is.
 
 ### Plot ▸ Heatmap date/time · Heatmap year/month · Time series · Diel cycle · Cumulative year · Ridgeline · Hexbin
 
@@ -196,6 +205,13 @@ strengthens in the growing season. An explanation is shown above the plot.
 - **Max cycles/day** sets how far up the frequency axis to look; **Colormap**
   changes the colours — both update immediately.
 
+### Tools ▸ Select variables
+
+Pick a subset of variables to focus the **Overview** list on. Click a variable on
+the left (*Available*) to move it to the right (*Selected*); click one on the right
+to remove it. **Confirm → update Overview** restricts the Overview's variable list
+to your selection (your data is not changed — load new data or re-open to reset).
+
 ### Tools ▸ Feature engineering
 
 Build new features (lags, rolling stats, differences, EMA, polynomials, STL,
@@ -226,6 +242,10 @@ did on the clipboard, so a point-and-click run stays scriptable.
 
 Customise the look with a **live preview** — colours update across the whole app as
 you change them:
+- a **Theme preset**: *Classic* (the standard look) or *Studio* (a clean, minimal
+  look — near-white surfaces, pill-shaped tabs, a slim header with drop-down menus).
+  Colours, icons and text update immediately; the *Studio* window style takes
+  effect after you restart diive.
 - pill colours, selection/hover colours, time-series line colours;
 - the variable-list **width** (applies to every tab);
 - **Reset to defaults** to undo.
