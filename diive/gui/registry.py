@@ -17,6 +17,7 @@ from diive.gui.tabs.fluxchain import FluxChainTab
 from diive.gui.tabs.gaps import GapDashboardTab
 from diive.gui.tabs.log import LogTab
 from diive.gui.tabs.outliers import HampelOutlierTab
+from diive.gui.tabs.outliers_localsd import LocalSDOutlierTab
 from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
 from diive.gui.tabs.spectrogram import SpectrogramTab
 from diive.gui.tabs.overview import OverviewTab
@@ -66,6 +67,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
     },
     "Outliers": {
         "Hampel filter": HampelOutlierTab,
+        "Local SD filter": LocalSDOutlierTab,
     },
     "Tools": {
         "Gaps & coverage": GapDashboardTab,

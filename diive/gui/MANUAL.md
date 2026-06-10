@@ -244,6 +244,24 @@ number of iterations. **Add cleaned + flag to dataset** adds two new columns
 (`{var}_HAMPEL` and its flag) to the variable list. **Copy Python** (quiet link at
 the bottom) puts the equivalent diive script on the clipboard.
 
+### Outliers ▸ Local SD filter
+
+Flags points that deviate from a **rolling-window median** by more than a number
+of standard deviations. Same two-panel preview, live preview, limit lines,
+day/night colouring, **Add to dataset**, and **Copy Python** as the Hampel tab —
+only the parameters differ:
+
+- **Window (records)** — the rolling window for the median and SD (seeded to ~5%
+  of the series length when data loads).
+- **n SD (global)** — how many standard deviations from the median count as an
+  outlier (lower = stricter).
+- **Constant SD (whole series)** — use the SD of the entire series instead of a
+  rolling SD within the window.
+- **Separate daytime / nighttime** — set a window and n SD per period (these
+  become `[daytime, nighttime]` lists for the library).
+
+Adds `{var}_LOCALSD` and its flag to the variable list.
+
 ### Data ▸ Select variables
 
 Pick a subset of variables to focus the **Overview** list on. Click a variable on

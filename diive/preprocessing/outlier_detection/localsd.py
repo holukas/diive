@@ -136,6 +136,11 @@ class LocalSD(FlagBase):
 
         self.winsize = int(len(self.series) / 20) if winsize is None else winsize
 
+        # Per-iteration detection band in data units (set by _flagtests); exposed
+        # for visualisation. Series over the current cleaned series' index.
+        self.last_upper_bound = None
+        self.last_lower_bound = None
+
         # Initialize day/night attributes
         if self.separate_daytime_nighttime:
             self._validate_daytime_nighttime_setup()
@@ -163,7 +168,7 @@ class LocalSD(FlagBase):
         if self.utc_offset is None:
             raise ValueError(f"utc_offset must be set if separate_daytime_nighttime is True")
 
-    def calc(self, repeat: bool = True):
+    def calc(self, repeat: bool = True, progress_callback=None):
         """
         Runs the iterative outlier detection process.
 
@@ -177,12 +182,16 @@ class LocalSD(FlagBase):
             repeat (bool, optional): If True, the detection process is
                 repeated until a stable state (no new outliers) is reached.
                 If False, it runs only once. Defaults to True.
+            progress_callback: Optional ``callable(iteration, n_outliers,
+                filteredseries)`` invoked after each iteration (e.g. to drive a
+                progress bar / live-update the cleaned series).
 
         Returns:
             pd.Series: A flag series (managed by the `FlagBase` parent class)
             where outliers are marked with flag ID 2.
         """
-        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
+        self._overall_flag, n_iterations = self.repeat(
+            self.run_flagtests, repeat=repeat, progress_callback=progress_callback)
         if self.showplot:
 
             if self.separate_daytime_nighttime:
@@ -208,7 +217,7 @@ class LocalSD(FlagBase):
             n_sd: float,
             iteration: int,
             time_period: str = None
-    ) -> tuple[DatetimeIndex, DatetimeIndex, int]:
+    ) -> tuple[DatetimeIndex, DatetimeIndex, int, Series, Series]:
         """
         Performs a single pass of outlier detection on a series.
 
@@ -248,7 +257,7 @@ class LocalSD(FlagBase):
             detail(f"ITERATION#{iteration}{time_period}: Total found outliers: {len(rejected)} values", verbose=self.verbose)
         if self.showplot:
             self._plot_add_iteration(rmedian, upper_limit, lower_limit, iteration, time_period=time_period)
-        return ok, rejected, n_outliers
+        return ok, rejected, n_outliers, upper_limit, lower_limit
 
     def _flagtests(self, iteration: int) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """
@@ -277,23 +286,28 @@ class LocalSD(FlagBase):
         s = self.filteredseries.copy().dropna()
 
         if not self.separate_daytime_nighttime:
-            ok, rejected, n_outliers = self._identify_outliers(
+            ok, rejected, n_outliers, upper, lower = self._identify_outliers(
                 s=s, iteration=iteration, n_sd=self.n_sd, winsize=self.winsize, time_period=" (global)")
+            self.last_upper_bound = upper
+            self.last_lower_bound = lower
         else:
             # Run for daytime (dt)
             s_dt = s[self.is_daytime]  # Daytime data
-            ok_dt, rejected_dt, n_outliers_dt = self._identify_outliers(
+            ok_dt, rejected_dt, n_outliers_dt, up_dt, lo_dt = self._identify_outliers(
                 s=s_dt, iteration=iteration, n_sd=self.n_sd[0], winsize=self.winsize[0], time_period=" (daytime)")
 
             # Run for nighttime
             s_nt = s[self.is_nighttime]  # Nighttime data
-            ok_nt, rejected_nt, n_outliers_nt = self._identify_outliers(
+            ok_nt, rejected_nt, n_outliers_nt, up_nt, lo_nt = self._identify_outliers(
                 s=s_nt, iteration=iteration, n_sd=self.n_sd[1], winsize=self.winsize[1], time_period=" (nighttime)")
 
             # Collect daytime and nighttime flags in one overall flag
             ok = ok_dt.union(ok_nt)
             rejected = rejected_dt.union(rejected_nt)
             n_outliers = n_outliers_dt + n_outliers_nt
+            # Combined data-unit band over the union of day + night indices.
+            self.last_upper_bound = pd.concat([up_dt, up_nt]).sort_index()
+            self.last_lower_bound = pd.concat([lo_dt, lo_nt]).sort_index()
 
         return ok, rejected, n_outliers
 
