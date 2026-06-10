@@ -24,6 +24,40 @@ pd.set_option('display.max_columns', 30)
 pd.set_option('display.max_rows', 50)
 
 
+def keep_vars(data: DataFrame | Series,
+              variables: list[str],
+              verbose: bool = False) -> DataFrame | Series:
+    """Keep only the given variables (columns), preserving their order.
+
+    A non-destructive variable subselection (the column analogue of
+    ``times.keep_daterange``): returns a copy containing only ``variables`` in
+    the requested order, leaving the input untouched so the caller can keep the
+    full record and revert. Every requested name must exist.
+
+    Args:
+        data: A DataFrame, or a Series (returned unchanged if its name is listed).
+        variables: Column names to keep, in the desired order.
+        verbose: Print how many variables were kept.
+
+    Returns:
+        A copy of ``data`` restricted to ``variables``.
+
+    Raises:
+        ValueError: If any requested name is not present in the data.
+    """
+    if isinstance(data, Series):
+        if data.name in variables:
+            return data.copy()
+        raise ValueError(f"Series '{data.name}' is not among the requested variables.")
+    missing = [v for v in variables if v not in data.columns]
+    if missing:
+        raise ValueError(f"Variables not found in data: {missing}")
+    out = data.loc[:, list(variables)].copy()
+    if verbose:
+        info(f"Kept {len(variables)} of {data.shape[1]} variables.")
+    return out
+
+
 def compare_len_header_vs_data(n_cols_data: int, n_cols_header: int, varnames_list: list, varunits_list: list):
     """
     Check whether there are more data columns than given in the header

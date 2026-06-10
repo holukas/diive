@@ -218,11 +218,25 @@ class OverviewTab(DiiveTab):
 
     def on_data_loaded(self, df, created: set | None = None) -> None:
         self._df = df
+        self._created = created or set()
         self.varpanel.set_variables(df.columns, created)
         cols = [str(c) for c in df.columns]
         default = _DEFAULT_VAR if _DEFAULT_VAR in cols else (cols[0] if cols else None)
         if default is not None:
             self._on_select(default)
+
+    def show_variable_subset(self, var_names: list) -> None:
+        """Restrict the variable list to `var_names` (from the Select-variables
+        tab). Uses the library's `dv.keep_vars` to validate/order the subset;
+        the full dataset (`self._df`) is untouched, only the list is filtered."""
+        if self._df is None or not var_names:
+            return
+        subset = dv.keep_vars(self._df, [v for v in var_names if v in self._df.columns])
+        names = [str(c) for c in subset.columns]
+        if not names:
+            return
+        self.varpanel.set_variables(names, getattr(self, "_created", set()))
+        self._on_select(names[0])
 
     def _on_select(self, name: str, _additive: bool = False) -> None:
         if not name or self._df is None:

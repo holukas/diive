@@ -346,6 +346,8 @@ class MainWindow(QMainWindow):
             self._tabwidget.setTabIcon(idx, menu_icon(label))
         if hasattr(tab, "featuresCreated"):
             tab.featuresCreated.connect(self._add_features)
+        if hasattr(tab, "subsetSelected"):
+            tab.subsetSelected.connect(self._show_overview_subset)
         if self._data is not None:
             tab.on_data_loaded(self._data, self._created)  # up to date on open
         self._tabwidget.setCurrentWidget(tab.widget())
@@ -424,6 +426,16 @@ class MainWindow(QMainWindow):
             self._full_data[col] = new_df[col]  # aligns on index
         self._created |= {str(c) for c in new_df.columns}
         self._apply_range()
+
+    def _show_overview_subset(self, var_names: list) -> None:
+        """Restrict the Overview tab's variable list to the selected subset
+        (from the 'Select variables' tab). Overview-only; data is untouched."""
+        for tab in self._tabs:
+            if hasattr(tab, "show_variable_subset"):
+                tab.show_variable_subset(var_names)
+                break
+        self.statusBar().showMessage(
+            f"Overview showing {len(var_names)} selected variables", 5000)
 
     def _load_example(self) -> None:
         df = diive.load_exampledata_parquet()

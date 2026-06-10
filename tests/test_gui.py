@@ -859,6 +859,39 @@ def test_appearance_singleton(window):
     assert _tabs(window).count("Appearance") == 1
 
 
+def test_keep_vars_subset():
+    df = dv.load_exampledata_parquet()
+    wanted = [df.columns[3], df.columns[0]]  # out-of-order on purpose
+    out = dv.keep_vars(df, wanted)
+    assert list(out.columns) == wanted          # order preserved
+    assert out.shape[0] == df.shape[0]          # rows untouched
+    assert df.shape[1] > out.shape[1]           # input untouched (still full)
+    import pytest as _pt
+    with _pt.raises(ValueError):
+        dv.keep_vars(df, ["does_not_exist"])
+
+
+def test_select_variables_tab_updates_overview(window):
+    tw = window._tabwidget
+    window._open_menu_tab("Select variables")
+    sel = window._menu_tab_list[-1]
+    n_all = sel.available.list.count()
+    assert n_all == window._data.shape[1]
+    assert hasattr(sel, "subsetSelected")
+
+    names = [str(c) for c in window._data.columns]
+    sel._select(names[5])
+    sel._select(names[1])
+    # Moved out of "available" into "selected".
+    assert sel.available.list.count() == n_all - 2
+    assert sel.selected.names() == [names[5], names[1]]
+
+    sel._confirm()  # what the Confirm button does
+    QApplication.processEvents()
+    overview = window._tabs[0]
+    assert overview.varpanel.names() == [names[5], names[1]]
+
+
 def test_live_theme_edit(window):
     from diive.gui import theme
     from diive.gui.widgets.variable_delegate import _pill_for

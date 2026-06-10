@@ -32,6 +32,7 @@ from diive.gui.tabs.plotting import (
     PlottingTab,
 )
 from diive.gui.tabs.settings import SettingsTab
+from diive.gui.tabs.variable_selector import VariableSelectorTab
 
 #: Tab classes always shown in the main window, in display order.
 #: Future: append FluxChainTab, OutlierTab, GapFillingTab, ...
@@ -57,6 +58,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Histogram": lambda: PlottingTab(HISTOGRAM, "Histogram"),
     },
     "Tools": {
+        "Select variables": VariableSelectorTab,
         "Gaps & coverage": GapDashboardTab,
         "Driver explorer": DriverExplorerTab,
         "Seasonal-trend & anomalies": SeasonalTrendTab,
@@ -78,4 +80,4 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 #: Everything else opens a new, numbered instance each time.
 SINGLE_INSTANCE_TABS: set[str] = {
     "Appearance", "Flux processing chain", "Gaps & coverage", "Driver explorer",
-    "Seasonal-trend & anomalies", "Spectrogram"}
+    "Seasonal-trend & anomalies", "Spectrogram", "Select variables"}
