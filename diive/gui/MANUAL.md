@@ -219,6 +219,19 @@ shows the cleaned copy (outliers removed). Your original variable is never chang
   most flux/meteo data.
 - **Repeat until no more outliers** — re-runs until clean; a **progress bar**
   fills as each pass removes fewer points.
+The **Preview** section holds two display options (they don't change the result):
+
+- **Live preview** *(on by default)* — both panels update after every iteration:
+  the top panel grows its outlier markers pass by pass (red/blue when day/night is
+  on), and the bottom panel shows the cleaned series with the points removed *this
+  pass* flagged by a red **X**. Detection runs faster with this **off** — it then
+  renders once at the end.
+- **Show limit lines** *(off by default)* — overlay the upper/lower limits that
+  decide what's an outlier, as faint lines (upper dashed, lower dotted; red =
+  daytime, blue = nighttime, slate when not separating), with matching legend
+  entries. Every iteration's band accumulates in the top panel (a tightening
+  envelope); the bottom panel shows just the current pass's band. Shown in data
+  units even with double-differencing on. Toggling it re-renders the last result.
 - **Separate daytime / nighttime** *(optional)* — use **different** thresholds for
   day and night (the point of separating: with the same value for both, the result
   is identical to not separating). Set **Daytime n sigma** / **Nighttime n sigma**

@@ -153,9 +153,11 @@ class FlagBase:
         Args:
             func: Per-iteration flag test, returns ``(iteration_df, n_outliers)``.
             repeat: If *True*, repeat until an iteration finds no more outliers.
-            progress_callback: Optional ``callable(iteration, n_outliers)`` invoked
-                after each iteration (e.g. to drive a progress indicator). The final
-                call carries ``n_outliers == 0`` when the loop converges.
+            progress_callback: Optional ``callable(iteration, n_outliers,
+                filteredseries)`` invoked after each iteration (e.g. to drive a
+                progress indicator / live plot). ``filteredseries`` is a copy of the
+                series cleaned so far (outliers removed up to this iteration). The
+                final call carries ``n_outliers == 0`` when the loop converges.
         """
         n_outliers = 9999
         iteration = 0
@@ -165,7 +167,9 @@ class FlagBase:
             cur_iteration_flag_df, n_outliers = func(iteration=iteration)
             iteration_flags_df = pd.concat([iteration_flags_df, cur_iteration_flag_df], axis=1)
             if progress_callback is not None:
-                progress_callback(iteration, n_outliers)
+                # Copy so the consumer (possibly another thread) can't race the
+                # next iteration's in-place mutation of the filtered series.
+                progress_callback(iteration, n_outliers, self.filteredseries.copy())
             if not repeat:
                 break
 
