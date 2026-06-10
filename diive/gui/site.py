@@ -1,0 +1,81 @@
+"""
+GUI.SITE: SITE DETAILS STORE
+============================
+
+A tiny app-wide store for the measurement site's metadata — name, latitude,
+longitude, elevation, and UTC offset — entered once in the **Settings ▸ Site
+details** tab and reused wherever a diive function needs site coordinates (e.g.
+daytime/nighttime separation, the flux processing chain).
+
+This holds *values only* (no domain logic): the GUI collects them here and passes
+them to the library functions, which already accept ``lat`` / ``lon`` /
+``utc_offset`` arguments. Persisted with the other GUI preferences via
+``config.py`` (``as_dict`` / ``load_dict``). A ``changed`` signal lets dependent
+tabs refresh when the site is updated.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+from __future__ import annotations
+
+from PySide6.QtCore import QObject, Signal
+
+
+class SiteManager(QObject):
+    """Live, app-wide holder of the current site's metadata.
+
+    Access the singleton as ``site.manager``. Read the fields directly
+    (``manager.latitude`` etc.); write them through :meth:`update` so the
+    ``changed`` signal fires. ``configured`` is False until the user saves the
+    site details at least once, so callers can tell "unset" from a deliberate
+    ``(0, 0)``.
+    """
+
+    #: Emitted after :meth:`update` so dependent widgets can refresh.
+    changed = Signal()
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.name: str = ""
+        self.latitude: float = 0.0
+        self.longitude: float = 0.0
+        self.elevation: float = 0.0
+        self.utc_offset: int = 0
+        self.configured: bool = False
+
+    def update(self, *, name: str, latitude: float, longitude: float,
+               elevation: float, utc_offset: int) -> None:
+        """Set all fields, mark the site configured, and emit ``changed``."""
+        self.name = name
+        self.latitude = latitude
+        self.longitude = longitude
+        self.elevation = elevation
+        self.utc_offset = utc_offset
+        self.configured = True
+        self.changed.emit()
+
+    def as_dict(self) -> dict:
+        """Serialise for persistence (see ``config.py``)."""
+        return {
+            "name": self.name,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "elevation": self.elevation,
+            "utc_offset": self.utc_offset,
+            "configured": self.configured,
+        }
+
+    def load_dict(self, data: dict) -> None:
+        """Restore from a persisted dict (missing keys keep their defaults)."""
+        if not data:
+            return
+        self.name = str(data.get("name", self.name))
+        self.latitude = float(data.get("latitude", self.latitude))
+        self.longitude = float(data.get("longitude", self.longitude))
+        self.elevation = float(data.get("elevation", self.elevation))
+        self.utc_offset = int(data.get("utc_offset", self.utc_offset))
+        self.configured = bool(data.get("configured", self.configured))
+
+
+#: Process-wide singleton; import as ``from diive.gui import site`` then
+#: ``site.manager``.
+manager = SiteManager()

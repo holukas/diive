@@ -452,11 +452,12 @@ def test_flux_chain_tab_level2(app):
 
 
 def test_all_menu_items_have_icons(window):
-    # Every (non-separator) menu entry carries a drawn icon.
-    menubar = window.menuBar()
+    # Every (non-separator) menu entry carries a drawn icon. Menus live as inline
+    # header dropdown buttons in the Studio shell.
+    from PySide6.QtWidgets import QToolButton
     count = 0
-    for menu_action in menubar.actions():
-        menu = menu_action.menu()
+    for btn in window._header.findChildren(QToolButton, "headermenu"):
+        menu = btn.menu()
         if menu is None:
             continue
         for action in menu.actions():
@@ -464,7 +465,7 @@ def test_all_menu_items_have_icons(window):
                 continue
             count += 1
             assert not action.icon().isNull(), action.text()
-    assert count >= 12  # File/Data/Plot/Tools/Settings/Help entries
+    assert count >= 12  # File/Data/Plot/Outliers/Tools/Settings/Help entries
 
 
 def test_diel_cycle_tab(window):
@@ -870,6 +871,34 @@ def test_appearance_singleton(window):
     assert _tabs(window).count("Appearance") == 1
 
 
+def test_site_details_tab(window):
+    from diive.gui import site
+    # Lives under the Settings menu and opens a single instance.
+    window._open_menu_tab("Site details")
+    window._open_menu_tab("Site details")
+    assert _tabs(window).count("Site details") == 1
+    tab = window._menu_tab_list[-1]
+    # Entering + saving stores the values app-wide for later use by functions.
+    tab.name.setText("CH-DAV")
+    tab.lat.setValue(46.8153)
+    tab.lon.setValue(9.8559)
+    tab.utc.setValue(1)
+    tab._save()
+    assert site.manager.configured
+    assert site.manager.latitude == 46.8153
+    assert site.manager.longitude == 9.8559
+    assert site.manager.utc_offset == 1
+    # Persistence round-trips through the as_dict/load_dict pair.
+    from diive.gui.site import SiteManager
+    restored = SiteManager()
+    restored.load_dict(site.manager.as_dict())
+    assert restored.as_dict() == site.manager.as_dict()
+    # Reset the process-wide singleton so other tests start clean.
+    site.manager.update(name="", latitude=0.0, longitude=0.0, elevation=0.0,
+                        utc_offset=0)
+    site.manager.configured = False
+
+
 def test_keep_vars_subset():
     df = dv.load_exampledata_parquet()
     wanted = [df.columns[3], df.columns[0]]  # out-of-order on purpose
@@ -983,49 +1012,45 @@ def test_theme_persistence_roundtrip():
     theme.manager.reset(silent=True)
 
 
-def test_preset_switch_updates_tokens_typography_icons(app):
-    from diive.gui import theme
-    try:
-        theme.manager.set_preset("Classic", silent=True)
-        assert theme.manager.preset_name == "Classic"
-        assert theme.manager.icon_style == "classic"
-        assert theme.manager.chrome == "native"
-        assert theme.manager.typography["uppercase"] is False
-
-        theme.manager.set_preset("Studio", silent=True)
-        assert theme.manager.icon_style == "line"
-        assert theme.manager.chrome == "studio"
-        assert theme.manager.typography["uppercase"] is True
-        # Studio tokens carry the canvas/ink/radius keys build_qss reads.
-        for key in ("CANVAS", "INK", "RADIUS"):
-            assert key in theme.manager.tokens
-        # label_text uppercases under Studio; tracked_font applies letter spacing.
-        assert theme.manager.label_text("Open") == "OPEN"
-    finally:
-        theme.manager.reset(silent=True)
-
-
-def test_preset_persists_through_roundtrip():
+def test_studio_look_defaults(app):
+    # The GUI ships a single Studio look: line icons, uppercase tracked labels,
+    # and the canvas/ink/radius structural tokens build_qss reads.
     from diive.gui import theme
     theme.manager.reset(silent=True)
-    theme.manager.set_preset("Studio", silent=True)
-    theme.manager.tokens["ACCENT"] = "#abcdef"  # user tweak on top of the preset
-    data = theme.manager.as_dict()
-    theme.manager.reset(silent=True)  # back to Classic
-    theme.manager.load_dict(data)
-    assert theme.manager.preset_name == "Studio"
     assert theme.manager.icon_style == "line"
-    assert theme.manager.tokens["ACCENT"] == "#abcdef"  # override survives
-    theme.manager.reset(silent=True)
+    assert theme.manager.typography["uppercase"] is True
+    for key in ("CANVAS", "INK", "RADIUS"):
+        assert key in theme.manager.tokens
+    assert theme.manager.label_text("Open") == "OPEN"
+    # No preset machinery remains.
+    assert not hasattr(theme.manager, "set_preset")
+    assert not hasattr(theme.manager, "chrome")
 
 
-def test_old_config_without_preset_stays_classic():
+def test_theme_override_persists_through_roundtrip():
     from diive.gui import theme
     theme.manager.reset(silent=True)
-    # A pre-preset config (no "preset" key) must keep the Classic default.
-    theme.manager.load_dict({"pills": {}, "list_width": 240})
-    assert theme.manager.preset_name == "Classic"
-    assert theme.manager.icon_style == "classic"
+    theme.manager.tokens["ACCENT"] = "#abcdef"  # user tweak on top of Studio
+    data = theme.manager.as_dict()
+    theme.manager.reset(silent=True)
+    theme.manager.load_dict(data)
+    assert theme.manager.tokens["ACCENT"] == "#abcdef"  # override survives
+    assert theme.manager.icon_style == "line"
+    theme.manager.reset(silent=True)
+
+
+def test_old_classic_config_loads_into_studio():
+    from diive.gui import theme
+    theme.manager.reset(silent=True)
+    # A config saved by the removed Classic look (a "preset" key + classic
+    # tokens) must load into Studio: the preset key is ignored and the structural
+    # tokens are re-pinned to the Studio defaults, while other overrides survive.
+    theme.manager.load_dict(
+        {"preset": "Classic", "tokens": {"RADIUS": "6", "ACCENT": "#2196F3"},
+         "list_width": 240})
+    assert theme.manager.icon_style == "line"
+    assert theme.manager.tokens["RADIUS"] == "12"      # structural -> Studio
+    assert theme.manager.tokens["ACCENT"] == "#2196F3"  # non-structural kept
     theme.manager.reset(silent=True)
 
 
@@ -1034,7 +1059,6 @@ def test_studio_chrome_builds_frameless_with_header(app, monkeypatch, example_ye
     import diive
     monkeypatch.setattr(diive, "load_exampledata_parquet", lambda: example_year.copy())
     try:
-        theme.manager.set_preset("Studio", silent=True)
         from diive.gui.app import MainWindow
         win = MainWindow()
         win.show()

@@ -33,6 +33,7 @@ from diive.gui.tabs.plotting import (
     PlottingTab,
 )
 from diive.gui.tabs.settings import SettingsTab
+from diive.gui.tabs.site import SiteDetailsTab
 from diive.gui.tabs.variable_selector import VariableSelectorTab
 
 #: Tab classes always shown in the main window, in display order.
@@ -76,6 +77,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
     },
     "Settings": {
         "Appearance": SettingsTab,
+        "Site details": SiteDetailsTab,
     },
 }
 
@@ -87,5 +89,6 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 #: Menu tabs that may exist only once (re-selecting focuses the existing one).
 #: Everything else opens a new, numbered instance each time.
 SINGLE_INSTANCE_TABS: set[str] = {
-    "Appearance", "Flux processing chain", "Gaps & coverage", "Driver explorer",
-    "Seasonal-trend & anomalies", "Spectrogram", "Select variables"}
+    "Appearance", "Site details", "Flux processing chain", "Gaps & coverage",
+    "Driver explorer", "Seasonal-trend & anomalies", "Spectrogram",
+    "Select variables"}

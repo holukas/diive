@@ -15,7 +15,6 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QColorDialog,
-    QComboBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -90,7 +89,6 @@ class SettingsTab(DiiveTab):
         inner = QWidget()
         col = QVBoxLayout(inner)
 
-        col.addWidget(self._preset_group())
         col.addWidget(self._pill_group())
         col.addWidget(self._ui_group())
         col.addWidget(self._timeseries_group())
@@ -123,32 +121,6 @@ class SettingsTab(DiiveTab):
         return root
 
     # --- setting groups ---
-    def _preset_group(self) -> QGroupBox:
-        box = QGroupBox("Preset")
-        v = QVBoxLayout(box)
-        self.preset_combo = QComboBox()
-        self.preset_combo.addItems(list(theme.PRESETS.keys()))
-        self.preset_combo.setCurrentText(theme.manager.preset_name)
-        self.preset_combo.currentTextChanged.connect(self._on_preset_changed)
-        v.addWidget(self.preset_combo)
-        self.restart_hint = QLabel("Window style changes apply after restarting diive.")
-        self.restart_hint.setWordWrap(True)
-        self.restart_hint.setVisible(False)
-        v.addWidget(self.restart_hint)
-        self._refresh_restart_hint()
-        return box
-
-    @staticmethod
-    def _on_preset_changed(name: str) -> None:
-        theme.manager.set_preset(name)  # live-applies palette/typography/icons
-
-    def _refresh_restart_hint(self) -> None:
-        """Show the relaunch note when the picked preset's chrome isn't live yet."""
-        built = theme.manager.built_chrome
-        target = theme.PRESETS.get(theme.manager.preset_name, {}).get("chrome")
-        self.restart_hint.setStyleSheet(f"color: {theme.manager.tokens['ACCENT']};")
-        self.restart_hint.setVisible(built is not None and target != built)
-
     def _pill_group(self) -> QGroupBox:
         box = QGroupBox("Pill colours")
         form = QFormLayout(box)
@@ -240,8 +212,4 @@ class SettingsTab(DiiveTab):
         self.width_spin.blockSignals(True)
         self.width_spin.setValue(theme.manager.list_width)
         self.width_spin.blockSignals(False)
-        self.preset_combo.blockSignals(True)
-        self.preset_combo.setCurrentText(theme.manager.preset_name)
-        self.preset_combo.blockSignals(False)
-        self._refresh_restart_hint()
         self.preview.viewport().update()

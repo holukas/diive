@@ -1,6 +1,6 @@
 """
-GUI.THEME: CENTRAL APPEARANCE CONFIG (live-editable, preset-based)
-==================================================================
+GUI.THEME: CENTRAL APPEARANCE CONFIG (live-editable)
+====================================================
 
 Single source of truth for the diive GUI's look: colour tokens, pill tags, the
 time-series palette, and the Qt stylesheet. The `ThemeManager` singleton
@@ -8,26 +8,21 @@ time-series palette, and the Qt stylesheet. The `ThemeManager` singleton
 are modified, so the Settings tab can offer a live preview — widgets re-read
 colours from `manager` and repaint.
 
-The look ships as named **presets** (`PRESETS`): "Classic" (the long-standing
-look) and "Studio" (a clean, minimal VIBECAD-style look — near-white surfaces,
-soft borderless panels, monochrome line icons, uppercase tracked labels, and a
-frameless window with a custom header). A preset bundles four things:
+The GUI has one look — **Studio**: a clean, minimal VIBECAD-style design with
+near-white surfaces, soft borderless panels, monochrome line icons, uppercase
+tracked nav/section labels, and a frameless window with a custom header. The
+look is described by:
 
-- ``tokens``     — colour tokens (live-applied via the stylesheet).
+- ``tokens``     — colour tokens, fed to the stylesheet (live-applied).
 - ``typography`` — ``{uppercase, tracking}`` for nav/section labels (live).
-- ``icons``      — icon style flag read by ``gui.icons.menu_icon`` (build-time).
-- ``chrome``     — window-shell flag read once by ``MainWindow`` (build-time).
+- ``icon_style`` — icon style flag read by ``gui.icons.menu_icon``.
 
-Palette/typography/icons apply instantly through the ``changed`` signal; the
-structural ``chrome`` (frameless window, header bar, pill toolbar) is read when
-``MainWindow`` is built, so switching it takes effect on the next launch. This
-is intentional — Qt cannot cleanly flip a frameless window or re-parent a menu
-bar on a live, shown top-level window.
+Colours/typography apply instantly through the ``changed`` signal. The frameless
+window shell is built once by ``MainWindow``.
 
 Note: which *variable name* maps to which pill kind (e.g. ``NEE_*`` -> NEE) is
 LIBRARY domain knowledge (`dv.variables.classify_variable`); only the pill
-**colours and labels** are configured here (GUI presentation). Pills and the
-time-series palette are shared across presets (their colours encode meaning).
+**colours and labels** are configured here (GUI presentation).
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -41,31 +36,9 @@ from PySide6.QtWidgets import QApplication
 WHITE = "#FFFFFF"
 DARK = "#212121"
 
-# --- Classic (long-standing) token defaults ---------------------------------
-DEFAULT_TOKENS: dict[str, str] = {
-    "ACCENT": "#2196F3",              # focus / active-tab underline
-    "BORDER": "#B0BEC5",              # control borders
-    "INPUT_BG": "#EAF4FF",           # editable fields (line edits, spin boxes, combos)
-    "LIST_BG": "#ECEFF1",            # variable-list sidebar tint
-    "HOVER_BG": "#FFCC80",           # hover highlight (menus, list, combo)
-    "HOVER_PRESSED": "#FFB74D",      # pressed/active hover
-    "SCROLL_HANDLE": "#B0BEC5",
-    "SCROLL_HANDLE_HOVER": "#78909C",
-    "PRIMARY_BG": "#1565C0",         # var 1 / primary panel highlight
-    "PRIMARY_FG": WHITE,
-    "EXTRA_BG": "#BBDEFB",           # additional panels highlight
-    "EXTRA_FG": "#0D47A1",
-    "TEXT_FG": DARK,
-    # Canvas / ink / corner radius — kept as tokens so build_qss is fully
-    # token-driven (no hardcoded colours) and presets differ by data alone.
-    "CANVAS": WHITE,                 # base widget background
-    "INK": DARK,                     # base text colour
-    "RADIUS": "6",                   # control corner radius (px, as string)
-}
-
 # --- Studio (VIBECAD-like) token defaults -----------------------------------
-# Monochrome neutrals + one restrained slate-ink accent. Same keys as Classic,
-# so every existing consumer (build_qss, the variable delegate) works unchanged.
+# Monochrome neutrals + one restrained slate-ink accent. These are the look's
+# starting colours; the Settings tab edits them live on top.
 STUDIO_TOKENS: dict[str, str] = {
     "ACCENT": "#3A4D5C",
     "BORDER": "#E6E6E3",             # ~= canvas -> hairlines read as soft separators
@@ -86,26 +59,11 @@ STUDIO_TOKENS: dict[str, str] = {
     "RADIUS": "12",                  # softer, larger corners
 }
 
-# --- per-preset typography ---------------------------------------------------
-# Tracking is QFont AbsoluteSpacing in px; 0.0 is a no-op (Classic byte-identical).
-DEFAULT_TYPOGRAPHY: dict = {"uppercase": False, "tracking": 0.0}
+# Nav/section label typography. Tracking is QFont AbsoluteSpacing in px.
 STUDIO_TYPOGRAPHY: dict = {"uppercase": True, "tracking": 1.5}
 
-#: Named presets. Each bundles tokens + typography + icon style + chrome flag.
-PRESETS: dict[str, dict] = {
-    "Classic": {
-        "tokens": DEFAULT_TOKENS,
-        "typography": DEFAULT_TYPOGRAPHY,
-        "icons": "classic",
-        "chrome": "native",
-    },
-    "Studio": {
-        "tokens": STUDIO_TOKENS,
-        "typography": STUDIO_TYPOGRAPHY,
-        "icons": "line",
-        "chrome": "studio",
-    },
-}
+#: Icon style flag read by ``gui.icons.menu_icon`` (thin-line monochrome glyphs).
+ICON_STYLE = "line"
 
 #: kind -> [label, background, text]. Lists so values are editable in place.
 #: Shared across presets (the colours encode domain meaning: NEE green, Reco red).
@@ -142,10 +100,9 @@ def build_qss(t: dict[str, str]) -> str:
     """Build the application stylesheet from a token dict.
 
     Fully token-driven: the canvas/ink colours and the corner radius come from
-    the tokens, so both presets render from this one function. Studio's hairline
-    ``BORDER`` (~= canvas) makes the ``1px solid`` rules read as soft separators.
-    The trailing object-name selectors are inert in Classic (those widgets only
-    exist in the Studio chrome).
+    the tokens. Studio's hairline ``BORDER`` (~= canvas) makes the ``1px solid``
+    rules read as soft separators. The trailing object-name selectors style the
+    frameless Studio shell (header bar, pill tabs).
     """
     r = t["RADIUS"]
     return f"""
@@ -241,7 +198,7 @@ QToolTip {{
     padding: 6px 10px; font-size: 12px;
 }}
 
-/* Studio chrome (inert in Classic — these widgets/object-names only exist there). */
+/* Studio chrome: the frameless shell's header/root object-names. */
 #studioroot {{ background: transparent; }}
 StudioHeaderBar {{ background: transparent; }}
 
@@ -267,9 +224,8 @@ QMenu#studiomenu::item:disabled {{ color: #9E9E9E; }}
 QMenu#studiomenu::item:disabled:selected {{ background: transparent; }}
 QMenu#studiomenu::separator {{ height: 1px; background: {t['BORDER']}; margin: 5px 8px; }}
 
-/* Firefox-style pill tabs (Studio only): rounded, spaced, filled active pill,
-   no base line or per-tab borders. The #studiotabs id scopes this to the
-   Studio shell so Classic keeps its boxed underline tabs. */
+/* Firefox-style pill tabs: rounded, spaced, filled active pill, no base line or
+   per-tab borders. The #studiotabs id scopes this to the tab widget. */
 /* Tabs sit on a soft grey strip; the content pane below them is white. */
 #studiotabs {{ background: #EFEFEC; }}
 #studiotabs::pane {{ border: none; top: -1px; background: {WHITE}; }}
@@ -297,53 +253,32 @@ QMenu#studiomenu::separator {{ height: 1px; background: {t['BORDER']}; margin: 5
 
 
 class ThemeManager(QObject):
-    """Holds the live, editable theme; emits `changed` on every modification.
+    """Holds the live, editable Studio theme; emits `changed` on modification.
 
-    Token colours, typography, and icon style update live; the structural
-    `chrome` flag is read by `MainWindow` at build time (relaunch to switch).
+    Token colours, typography, and the time-series palette update live (the
+    Settings tab edits them); `icon_style` is fixed to the Studio line glyphs.
     """
 
     changed = Signal()
 
     def __init__(self) -> None:
         super().__init__()
-        # Which chrome the live MainWindow actually built (set by app.py). Used
-        # by the Settings tab to know when a preset switch needs a relaunch.
-        self.built_chrome: str | None = None
         self.reset(silent=True)
 
     def reset(self, silent: bool = False) -> None:
-        """Restore defaults: shared pills/palette + the Classic preset."""
+        """Restore the Studio defaults (tokens, typography, pills, palette)."""
         self.pills = {k: list(v) for k, v in DEFAULT_PILL_STYLE.items()}
         self.new_pill = list(DEFAULT_NEW_PILL)
         self.ts_colors = list(DEFAULT_TIMESERIES_COLORS)
         self.list_width = DEFAULT_LIST_WIDTH
-        self.set_preset("Classic", silent=True)
-        if not silent:
-            self.apply()
-
-    def set_preset(self, name: str, *, silent: bool = False) -> None:
-        """Switch to a named preset (tokens/typography/icons/chrome).
-
-        Copies the preset's tokens *into* ``self.tokens`` so the live colour
-        editor keeps mutating one source and any user tweaks layer on top.
-        """
-        preset = PRESETS.get(name)
-        if preset is None:
-            return
-        self.preset_name = name
-        self.tokens = dict(preset["tokens"])
-        self.typography = dict(preset["typography"])
-        self.icon_style = preset["icons"]
-        self.chrome = preset["chrome"]
+        self.tokens = dict(STUDIO_TOKENS)
+        self.typography = dict(STUDIO_TYPOGRAPHY)
+        self.icon_style = ICON_STYLE
         if not silent:
             self.apply()
 
     def tracked_font(self, base: QFont | None = None, *, point_delta: float = 0.0) -> QFont:
-        """A QFont with the active preset's letter spacing applied.
-
-        Tracking 0.0 (Classic) is a no-op, so Classic labels are unchanged.
-        """
+        """A QFont with the Studio letter spacing applied."""
         font = QFont(base) if base is not None else QFont()
         if point_delta:
             font.setPointSizeF(max(1.0, font.pointSizeF() + point_delta))
@@ -353,7 +288,7 @@ class ThemeManager(QObject):
         return font
 
     def label_text(self, text: str) -> str:
-        """Uppercase a nav/section label when the active preset asks for it."""
+        """Uppercase a nav/section label (Studio uppercases them)."""
         return text.upper() if self.typography.get("uppercase") else text
 
     def qss(self) -> str:
@@ -369,7 +304,6 @@ class ThemeManager(QObject):
     def as_dict(self) -> dict:
         """Serialise the current theme (for persisting preferences)."""
         return {
-            "preset": self.preset_name,
             "tokens": dict(self.tokens),
             "pills": {k: list(v) for k, v in self.pills.items()},
             "new_pill": list(self.new_pill),
@@ -378,29 +312,23 @@ class ThemeManager(QObject):
         }
 
     #: Tokens that define the look's structure (not user-editable in the UI);
-    #: they always follow the active preset, so default changes to them take
-    #: effect on the next launch without a config reset (a stale persisted value
-    #: must not shadow them).
+    #: they always follow the Studio defaults, so default changes to them take
+    #: effect on the next launch even if an old config persisted other values.
     STRUCTURAL_TOKENS = ("CANVAS", "INK", "RADIUS")
 
     def load_dict(self, data: dict) -> None:
         """Load a serialised theme (tolerant of missing/old keys); no emit.
 
-        Applies the saved preset baseline first, then layers any saved token
-        overrides on top — except the STRUCTURAL_TOKENS, which are re-pinned from
-        the preset so a stale persisted value can't shadow a default change.
+        Layers saved token overrides on top of the Studio defaults — except the
+        STRUCTURAL_TOKENS, which are re-pinned from the defaults so a stale
+        persisted value (incl. one from the removed Classic look) can't shadow
+        them.
         """
         if not data:
             return
-        name = data.get("preset")
-        if name in PRESETS:
-            self.set_preset(name, silent=True)
         self.tokens.update(data.get("tokens", {}))
-        # Structural tokens always come from the active preset, never the
-        # persisted snapshot (see STRUCTURAL_TOKENS).
-        active = PRESETS.get(self.preset_name, PRESETS["Classic"])["tokens"]
         for key in self.STRUCTURAL_TOKENS:
-            self.tokens[key] = active[key]
+            self.tokens[key] = STUDIO_TOKENS[key]
         for kind, value in data.get("pills", {}).items():
             if kind in self.pills:
                 self.pills[kind] = list(value)

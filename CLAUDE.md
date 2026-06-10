@@ -214,13 +214,13 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   which pill kind stays in the library: `dv.variables.classify_variable` — kinds include the carbon fluxes `NEE`/`FC`/
   `GPP`/`Reco`/`FCH4`, the water fluxes `LE`/`ET`/`FH2O`, the nitrogen flux `FN2O`, plus radiation/meteo/soil kinds. Add
   a kind by adding a rule there *and* a colour entry in `theme.DEFAULT_PILL_STYLE`. Only colours/labels are GUI.)
-  - **Theme presets.** `theme.PRESETS` bundles named looks: `"Classic"` (the original) and `"Studio"` (clean, minimal,
-    VIBECAD-style). `set_preset(name)` swaps `tokens` + a typography spec (`tracked_font`/`label_text` apply uppercase +
-    letter-spacing) + an `icons` flag (classic colour glyphs vs `icons.py` thin-line monochrome) + a `chrome` flag. The
-    live tier (palette/typography/icons via `build_qss` + `changed`) applies instantly; the structural `chrome`
-    (`"native"` QMainWindow vs `"studio"` frameless rounded shell with `widgets/header_bar.py` inline-dropdown header) is
-    read once at `MainWindow` build, so switching it needs a relaunch. Structural tokens (`CANVAS`/`INK`/`RADIUS`) always
-    follow the active preset in `load_dict` (a stale persisted value can't shadow them). Preset choice persists.
+  - **Single Studio look.** The GUI has one design — **Studio** (clean, minimal, VIBECAD-style: near-white surfaces,
+    soft borderless panels, `icons.py` thin-line monochrome glyphs, uppercase tracked nav/section labels via
+    `tracked_font`/`label_text`, and a frameless rounded window with `widgets/header_bar.py`'s inline-dropdown header).
+    `theme.manager` holds `STUDIO_TOKENS` (editable live), `STUDIO_TYPOGRAPHY`, and `icon_style="line"`; `MainWindow`
+    always builds the Studio chrome (`_build_studio_chrome`). Structural tokens (`CANVAS`/`INK`/`RADIUS`) are re-pinned
+    from `STUDIO_TOKENS` in `load_dict`, so an old persisted config (incl. one from the removed Classic look — its
+    `"preset"` key is ignored) can't shadow them while other colour overrides survive.
 
 - **Shared variable list: `widgets/variable_panel.py` (`VariablePanel`).** Every tab's left-hand variable list MUST be
   this one component (filter + `VariableList` + `VariableDelegate` pills + fuzzy filtering) so styling, pills, and
@@ -247,7 +247,13 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
 - **Window sizing.** `MainWindow._size_to_screen()` sizes the window to ~88% of the available screen and centres it
   (adapts to resolution); Qt handles high-DPI scaling. Restored from saved geometry if present.
 - **Persisted preferences.** `gui/config.py` saves/loads JSON (`QStandardPaths` config dir) on close/launch: theme
-  (`ThemeManager.as_dict`/`load_dict`), window geometry, last-used filetype. Best-effort (failures swallowed).
+  (`ThemeManager.as_dict`/`load_dict`), site details (`site.manager.as_dict`/`load_dict`), window geometry, last-used
+  filetype. Best-effort (failures swallowed).
+- **Site details store.** `gui/site.py`'s `SiteManager` singleton (`site.manager`) holds the measurement site's metadata
+  (name, latitude, longitude, elevation, UTC offset) plus a `configured` flag; `update(...)` sets them and emits
+  `changed`. The **Site details** tab (`tabs/site.py`, `Settings ▸ Site details`, single-instance) is a form that reads
+  the values on build and writes them back on **Save**. Values only (no domain logic) — the GUI collects them here and
+  passes them to library functions that take `lat`/`lon`/`utc_offset` (daytime/nighttime split, flux chain, ...).
 - **Registry-driven tabs.** `MainWindow` iterates `registry.TAB_CLASSES` (always-on tabs: Overview, Log) — it knows
   nothing about concrete tabs. Add a feature area = write a `DiiveTab` (`title` + `build()`) and append it. This is how
   the flux processing chain will plug in later.

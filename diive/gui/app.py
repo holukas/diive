@@ -39,7 +39,7 @@ from PySide6.QtWidgets import (
 )
 
 import diive
-from diive.gui import config, theme
+from diive.gui import config, site, theme
 from diive.gui.registry import (
     MENU_TAB_CLASSES,
     MENU_TABS,
@@ -139,21 +139,12 @@ class MainWindow(QMainWindow):
         bar.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         bar.customContextMenuRequested.connect(self._tab_context_menu)
 
-        # Two window shells, chosen by the active theme preset's `chrome` flag
-        # (read once here; switching presets needs a relaunch to swap chrome).
-        if theme.manager.chrome == "studio":
-            self._build_studio_chrome()
-        else:
-            self._build_native_chrome()
+        # The GUI has a single look: the frameless Studio shell (custom header +
+        # pill tabs).
+        self._build_studio_chrome()
 
         # Auto-load the bundled example data so the app is usable on startup.
         self._load_example()
-
-    def _build_native_chrome(self) -> None:
-        """Standard QMainWindow shell: native title bar + menu bar + tabs."""
-        theme.manager.built_chrome = "native"
-        self.setCentralWidget(self._tabwidget)
-        self._build_menus(self.menuBar().addMenu)
 
     def _build_studio_chrome(self) -> None:
         """Frameless rounded shell: custom header + tabs."""
@@ -161,7 +152,6 @@ class MainWindow(QMainWindow):
         from diive.gui.widgets.frameless import FramelessResizeHelper
         from diive.gui.widgets.header_bar import StudioHeaderBar
 
-        theme.manager.built_chrome = "studio"
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._tabwidget.setObjectName("studiotabs")  # scopes the pill-tab QSS
@@ -222,8 +212,8 @@ class MainWindow(QMainWindow):
         """Populate the menu tree, creating each top-level menu via `add_menu`.
 
         `add_menu(name) -> QMenu` decouples the menu contents from the shell:
-        native chrome passes `self.menuBar().addMenu`, Studio chrome passes a
-        callback that adds submenus under the header's "≡" popup.
+        the Studio chrome passes a callback that adds each menu as an inline
+        dropdown button in the header bar.
         """
         from diive.gui.icons import menu_icon
 
@@ -553,6 +543,7 @@ class MainWindow(QMainWindow):
         from diive.gui.widgets import open_data_dialog as odd
         config.save_config({
             "theme": theme.manager.as_dict(),
+            "site": site.manager.as_dict(),
             "geometry": bytes(self.saveGeometry().toBase64()).decode("ascii"),
             "last_filetype": odd._last_choice,
         })
@@ -583,6 +574,7 @@ def run() -> int:
     cfg = config.load_config()
     theme.manager.load_dict(cfg.get("theme", {}))
     theme.manager.apply()
+    site.manager.load_dict(cfg.get("site", {}))
     from diive.gui.widgets import open_data_dialog as odd
     odd._last_choice = cfg.get("last_filetype")
 
