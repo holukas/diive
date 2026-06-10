@@ -164,15 +164,18 @@ class Hampel(FlagBase):
             self.is_nighttime = None
             self.flag_daytime = None
 
-    def calc(self, repeat: bool = True):
+    def calc(self, repeat: bool = True, progress_callback=None):
         """Calculate overall flag, based on individual flags from multiple iterations.
 
         Args:
             repeat: If *True*, the outlier detection is repeated until all
                 outliers are removed.
+            progress_callback: Optional ``callable(iteration, n_outliers)`` invoked
+                after each iteration (e.g. to drive a progress bar).
 
         """
-        self._overall_flag, n_iterations = self.repeat(func=self.run_flagtests, repeat=repeat)
+        self._overall_flag, n_iterations = self.repeat(
+            func=self.run_flagtests, repeat=repeat, progress_callback=progress_callback)
 
         if self.showplot:
             # Default plot for outlier tests, showing rejected values

@@ -158,6 +158,14 @@ QPushButton[role="danger"]:hover {{ background: {t['DANGER_BG_HOVER']}; }}
 QPushButton[role="danger"]:pressed {{ background: {t['DANGER_BG_PRESSED']}; }}
 QPushButton[role="danger"]:disabled {{ background: #E6C2C2; color: #F4E8E8; }}
 
+/* Progress bar: medium-slate groove + green fill, bold white text so the label
+   reads clearly on both the filled and unfilled portions. */
+QProgressBar {{
+    background: #5A6B78; border: none; border-radius: 6px;
+    text-align: center; color: {WHITE}; font-weight: bold; min-height: 18px;
+}}
+QProgressBar::chunk {{ background: {t['CONFIRM_BG']}; border-radius: 6px; }}
+
 QComboBox {{
     background: {t['INPUT_BG']}; border: 1px solid {t['BORDER']};
     border-radius: {r}px; padding: 3px 6px;

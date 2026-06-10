@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QProgressBar,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -34,6 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 import diive as dv
+from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.variable_panel import VariablePanel
@@ -44,6 +46,7 @@ class _OutlierSignals(QObject):
     run_done = Signal(object)
     run_failed = Signal(str)
     features_created = Signal(object)
+    progress = Signal(int, int)  # (iteration, n_outliers) — drives the progress bar
 
 
 class HampelOutlierTab(DiiveTab):
@@ -78,6 +81,7 @@ class HampelOutlierTab(DiiveTab):
 
         self._sig.run_done.connect(self._on_done)
         self._sig.run_failed.connect(self._on_failed)
+        self._sig.progress.connect(self._on_progress)
         return root
 
     def _build_settings(self) -> QWidget:
@@ -123,11 +127,22 @@ class HampelOutlierTab(DiiveTab):
         dn.addRow("Latitude", self.lat)
         dn.addRow("Longitude", self.lon)
         dn.addRow("UTC offset (h)", self.utc)
+        dn_note = QLabel("Tip: set these once under Settings ▸ Site details.")
+        dn_note.setWordWrap(True)
+        dn_note.setStyleSheet("color: #6B7780;")
+        dn.addRow(dn_note)
         outer.addWidget(dn_box)
 
         self.run_btn = QPushButton("Detect outliers")
         self.run_btn.clicked.connect(self._run)
         outer.addWidget(self.run_btn)
+
+        # Iteration progress (visible only while a repeat-until-clean run is going).
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 100)
+        self.progress.setTextVisible(True)
+        self.progress.setVisible(False)
+        outer.addWidget(self.progress)
 
         self.status = QLabel("Select a variable on the left.")
         self.status.setWordWrap(True)
@@ -136,6 +151,7 @@ class HampelOutlierTab(DiiveTab):
         self.add_btn = QPushButton("Add cleaned + flag to dataset")
         self.add_btn.setEnabled(False)
         self.add_btn.clicked.connect(self._add)
+        theme.set_button_role(self.add_btn, "confirm")
         outer.addWidget(self.add_btn)
 
         outer.addStretch(1)
@@ -183,6 +199,11 @@ class HampelOutlierTab(DiiveTab):
         series = self._df[self._var]
         self.run_btn.setEnabled(False)
         self.add_btn.setEnabled(False)
+        self._first_n = None  # outlier count of the first iteration (for the %)
+        self._n_iter = 0      # iterations that ran (last seen via progress)
+        self.progress.setValue(0)
+        self.progress.setFormat("starting…")
+        self.progress.setVisible(True)
         self.status.setText("Detecting outliers...")
         threading.Thread(
             target=self._worker,
@@ -191,7 +212,9 @@ class HampelOutlierTab(DiiveTab):
 
     def _worker(self, series, kwargs: dict, repeat: bool) -> None:
         try:
-            h = dv.outliers.Hampel(series=series, **kwargs).run(repeat=repeat)
+            cb = lambda it, n: self._sig.progress.emit(it, n)
+            h = dv.outliers.Hampel(series=series, **kwargs).run(
+                repeat=repeat, progress_callback=cb)
             cleaned = h.filteredseries.copy()
             cleaned.name = f"{series.name}_HAMPEL"
             flag = h.overall_flag.copy()  # name: FLAG_{var}_OUTLIER_HAMPEL_TEST
@@ -205,19 +228,41 @@ class HampelOutlierTab(DiiveTab):
             return
         self._sig.run_done.emit(payload)
 
+    def _on_progress(self, iteration: int, n_outliers: int) -> None:
+        """Fill the bar as repeated iterations remove outliers. Total iterations
+        aren't known ahead of time, so progress is measured against the first
+        iteration's outlier count (the most that ever get removed at once)."""
+        self._n_iter = iteration
+        if n_outliers > 0 and self._first_n is None:
+            self._first_n = n_outliers
+        if n_outliers == 0:
+            pct = 100
+        elif self._first_n:
+            pct = max(0, min(99, round((1 - n_outliers / self._first_n) * 100)))
+        else:
+            pct = 0
+        self.progress.setValue(pct)
+        self.progress.setFormat(f"iteration {iteration} — {n_outliers} outliers")
+
     def _on_done(self, payload: dict) -> None:
         self.run_btn.setEnabled(True)
+        self.progress.setValue(100)
+        self.progress.setFormat("done")
+        self.progress.setVisible(False)
         self._result_df = payload["result"]
         self._draw(self._df[payload["var"]], flag=payload["flag"],
                    cleaned=payload["cleaned"], n_outliers=payload["n_outliers"])
         n = payload["n_outliers"]
+        iters = self._n_iter
         self.status.setText(
-            f"{n} outliers flagged. 'Add' keeps {payload['cleaned'].name} and the flag "
+            f"{n} outliers flagged over {iters} iteration{'' if iters == 1 else 's'}. "
+            f"'Add' keeps {payload['cleaned'].name} and the flag "
             f"(original '{payload['var']}' is unchanged).")
         self.add_btn.setEnabled(True)
 
     def _on_failed(self, msg: str) -> None:
         self.run_btn.setEnabled(True)
+        self.progress.setVisible(False)
         self.status.setText(f"Failed: {msg}")
 
     def _draw(self, series, flag=None, cleaned=None, n_outliers: int = 0) -> None:

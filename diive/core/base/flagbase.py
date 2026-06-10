@@ -147,8 +147,16 @@ class FlagBase:
         filteredname = f"{self.series.name}_FILTERED-AFTER-ITER{iteration}"
         return filteredname
 
-    def repeat(self, func, repeat):
-        """Repeat function until no more outliers found."""
+    def repeat(self, func, repeat, progress_callback=None):
+        """Repeat function until no more outliers found.
+
+        Args:
+            func: Per-iteration flag test, returns ``(iteration_df, n_outliers)``.
+            repeat: If *True*, repeat until an iteration finds no more outliers.
+            progress_callback: Optional ``callable(iteration, n_outliers)`` invoked
+                after each iteration (e.g. to drive a progress indicator). The final
+                call carries ``n_outliers == 0`` when the loop converges.
+        """
         n_outliers = 9999
         iteration = 0
         iteration_flags_df = pd.DataFrame()
@@ -156,6 +164,8 @@ class FlagBase:
             iteration += 1
             cur_iteration_flag_df, n_outliers = func(iteration=iteration)
             iteration_flags_df = pd.concat([iteration_flags_df, cur_iteration_flag_df], axis=1)
+            if progress_callback is not None:
+                progress_callback(iteration, n_outliers)
             if not repeat:
                 break
 
