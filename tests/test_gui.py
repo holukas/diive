@@ -915,6 +915,30 @@ def test_pin_freezes_menu_tab(window):
     assert len(calls) == 1
 
 
+def test_hampel_outlier_tab_keeps_original_cleaned_flag(window):
+    window._open_menu_tab("Hampel filter")
+    tab = window._menu_tab_list[-1]
+    var = "Tair_f"
+    tab._select(var)
+    # Run the worker directly (synchronous) instead of the background thread.
+    series = window._data[var]
+    tab._worker(series, dict(window_length=48 * 13, n_sigma=5.5,
+                             use_differencing=True, separate_day_night=False), True)
+    QApplication.processEvents()
+    cleaned, flag = f"{var}_HAMPEL", f"FLAG_{var}_OUTLIER_HAMPEL_TEST"
+    assert list(tab._result_df.columns) == [cleaned, flag]
+
+    n_before = window._data.shape[1]
+    tab._add()  # what "Add cleaned + flag to dataset" does
+    QApplication.processEvents()
+    cols = [str(c) for c in window._data.columns]
+    assert var in cols                 # original kept, untouched
+    assert cleaned in cols and flag in cols
+    assert window._data.shape[1] == n_before + 2
+    # The flag is 0 (ok) / 2 (outlier); the cleaned series drops the flagged rows.
+    assert set(window._data[flag].dropna().unique()) <= {0, 2}
+
+
 def test_overview_and_log_not_pinnable(window):
     overview, log = window._tabs[0], window._tabs[1]
     window._toggle_pin(overview)
@@ -1008,10 +1032,10 @@ def test_studio_chrome_builds_frameless_with_header(app, monkeypatch, example_ye
         assert win.windowFlags() & Qt.WindowType.FramelessWindowHint
         assert _tabs(win) == ["Overview", "Log"]
         # The full menu tree lives as inline dropdown buttons in the header
-        # (File/Data/Plot/Tools/Settings/Help), each with a populated QMenu.
+        # (File/Data/Plot/Outliers/Tools/Settings/Help), each with a populated QMenu.
         from PySide6.QtWidgets import QToolButton
         menu_btns = win._header.findChildren(QToolButton, "headermenu")
-        assert len(menu_btns) == 6
+        assert len(menu_btns) == 7
         assert all(b.menu() is not None and b.menu().actions() for b in menu_btns)
         # Open and Save live inside the File menu (no separate buttons).
         file_items = [a.text() for a in menu_btns[0].menu().actions()]

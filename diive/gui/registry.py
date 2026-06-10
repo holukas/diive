@@ -16,6 +16,7 @@ from diive.gui.tabs.features import FeatureEngineerTab
 from diive.gui.tabs.fluxchain import FluxChainTab
 from diive.gui.tabs.gaps import GapDashboardTab
 from diive.gui.tabs.log import LogTab
+from diive.gui.tabs.outliers import HampelOutlierTab
 from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
 from diive.gui.tabs.spectrogram import SpectrogramTab
 from diive.gui.tabs.overview import OverviewTab
@@ -56,6 +57,9 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Scatter XY": lambda: PlottingTab(SCATTER, "Scatter XY"),
         "Hexbin": lambda: PlottingTab(HEXBIN, "Hexbin"),
         "Histogram": lambda: PlottingTab(HISTOGRAM, "Histogram"),
+    },
+    "Outliers": {
+        "Hampel filter": HampelOutlierTab,
     },
     "Tools": {
         "Select variables": VariableSelectorTab,
