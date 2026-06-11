@@ -273,6 +273,27 @@ class BaseOutlierTab(DiiveTab):
         if self.daynight_cb.isChecked():
             self._seed_site()
 
+    # --- state (save/restore inputs with a project) ---
+    def _state_controls(self) -> dict:
+        """Shared persistable controls; subclasses extend with their own params."""
+        return {"repeat": self.repeat_cb, "live": self.live_cb,
+                "limits": self.limits_cb, "daynight": self.daynight_cb,
+                "lat": self.lat, "lon": self.lon, "utc": self.utc}
+
+    def save_state(self) -> dict:
+        from diive.gui.widgets.state_utils import save_controls
+        return {"var": self._var, "controls": save_controls(self._state_controls())}
+
+    def restore_state(self, state: dict) -> None:
+        from diive.gui.widgets.state_utils import restore_controls
+        # Restore in control order: the day/night toggle (re-seeds per-period
+        # fields from the global value) comes before those fields, so the saved
+        # per-period values, applied after, win.
+        restore_controls(self._state_controls(), state.get("controls"))
+        var = state.get("var")
+        if var and self._df is not None and var in self._df.columns:
+            self._select(var)  # re-plots the raw series; detection is not auto-run
+
     # --- data ---
     def on_data_loaded(self, df, created: set | None = None) -> None:
         self._df = df

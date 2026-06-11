@@ -56,6 +56,10 @@ writes a `<name>.diive` folder containing:
 - all your **metadata** — variable tags, notes, and the full origin/processing
   history,
 - the **site details** and the active **date range**,
+- the **open tabs** (your workspace — the same tabs, in order, with pins, reopen
+  when you load the project, each restored to its **selected variable(s) and
+  settings**; the tab you had active regains focus),
+- the **Overview** state (its selected variable and any variable subset),
 - a `__diive__` marker that identifies the folder as a diive project.
 
 **File ▸ Open project…** (Ctrl+Shift+O) loads a `.diive` folder and restores all of

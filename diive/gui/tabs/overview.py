@@ -179,6 +179,8 @@ class OverviewTab(DiiveTab):
 
     def build(self) -> QWidget:
         self._df = None
+        self._current = None   # selected variable (for project save/restore)
+        self._subset = None    # active variable-list subset, or None for the full list
         self._sig = _OverviewSignals()
         #: Emitted when a variable is deleted via its right-click menu; the main
         #: window drops the column from the dataset and re-pushes to all tabs.
@@ -229,9 +231,22 @@ class OverviewTab(DiiveTab):
         outer.addWidget(self.stats_strip)
         return root
 
+    def save_state(self) -> dict:
+        return {"current": self._current,
+                "subset": list(self._subset) if self._subset else None}
+
+    def restore_state(self, state: dict) -> None:
+        subset = state.get("subset")
+        if subset:
+            self.show_variable_subset(subset)  # also selects the first of the subset
+        cur = state.get("current")
+        if cur and self._df is not None and cur in self.varpanel.names():
+            self._on_select(cur)
+
     def on_data_loaded(self, df, created: set | None = None) -> None:
         self._df = df
         self._created = created or set()
+        self._subset = None  # a fresh dataset starts on the full variable list
         self.varpanel.set_variables(df.columns, created)
         cols = [str(c) for c in df.columns]
         default = _DEFAULT_VAR if _DEFAULT_VAR in cols else (cols[0] if cols else None)
@@ -248,12 +263,14 @@ class OverviewTab(DiiveTab):
         names = [str(c) for c in subset.columns]
         if not names:
             return
+        self._subset = names  # remember the active subset for project save
         self.varpanel.set_variables(names, getattr(self, "_created", set()))
         self._on_select(names[0])
 
     def _on_select(self, name: str, _additive: bool = False) -> None:
         if not name or self._df is None:
             return
+        self._current = name
         self.varpanel.set_panels([name])  # highlight the selected variable
         series = self._df[name]
 

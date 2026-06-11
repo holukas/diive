@@ -304,7 +304,10 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   consistent trigger for every control type (avoids the `QLineEdit.editingFinished` vs `QSpinBox.valueChanged`
   inconsistency, where typed fields only committed on Enter/focus-loss). The panel still emits `changed`, but the tab
   doesn't connect it to a render. **Variable selection stays live** (`_on_selected` → `run_with_loading`). In tests,
-  set the controls then `tab.update_btn.click()` to apply (not `settings.changed.emit()`).
+  set the controls then `tab.update_btn.click()` to apply (not `settings.changed.emit()`). For **project save/restore**
+  the panel exposes `state()`/`apply_state()` — a *raw* positional snapshot of every control (field widgets of each
+  `QFormLayout` row, so internal spin/combo editors are excluded; round-trips, unlike the transformed `values()`);
+  `PlottingTab.save_state`/`restore_state` use it so a reopened plot has its exact colormap/limits/labels.
 - **Data flow.** The `File` menu loads data via `OpenDataDialog` (parquet → `dv.load_parquet`, else `dv.ReadFileType`;
   multiple files → `MultiDataFileReader` / `dv.load_parquet_many` for parquet; reading + merge is library work, the
   dialog only calls it). When several files are selected the dialog shows a **per-file progress list** (one row +
@@ -427,7 +430,14 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   (`to_dict`/`from_dict`: origin, parents, provenance, tags+sources, notes — richer than the lightweight per-session
   config) plus an opaque `extras` dict (so the library never imports GUI types). The GUI (`File ▸ Save project` Ctrl+S /
   `Save project as…` / `Open project…`, dialog `widgets/save_project_dialog.py`) puts site (`site.manager.as_dict`),
-  active date range, and `created` columns into `extras`. `MainWindow._open_project` loads data clean
+  active date range, `created` columns, and the **open menu tabs** (`_open_tabs_state` → label/title/pinned **+ each tab's
+  `save_state()`**; restored by `_close_all_menu_tabs` + `_restore_tabs` → `tab.restore_state()` after the data push).
+  Every `DiiveTab` has `save_state()`/`restore_state()` (default no-op) capturing its *inputs only* — selected
+  variable(s) + control values (via `widgets/state_utils.save_controls`/`restore_controls`); heavy results re-compute on
+  restore. Both wrapped in try/except so one tab's quirk can't break save/load. `extras` also carries `overview` (the
+  always-on Overview's selected variable + active subset, via its own `save_state`/`restore_state`) and `active_tab`
+  (the focused tab's title, refocused by `_restore_active_tab` after the workspace is rebuilt).
+  `MainWindow._open_project` loads data clean
   (`_set_data(persist_metadata=False)`) then overlays the project's metadata via `store.load_dict`; a plain load clears
   `_project_dir` so Ctrl+S can't overwrite a project with unrelated data. `_save_project` updates the open project in
   place, else prompts.

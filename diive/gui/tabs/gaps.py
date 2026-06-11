@@ -161,6 +161,16 @@ class GapDashboardTab(DiiveTab):
         return self.table
 
     # --- data flow -----------------------------------------------------
+    def save_state(self) -> dict:
+        return {"var": self._current, "threshold": self.threshold.value()}
+
+    def restore_state(self, state: dict) -> None:
+        from diive.gui.widgets.state_utils import set_widget_value
+        set_widget_value(self.threshold, state.get("threshold"))
+        v = state.get("var")
+        if v and self._df is not None and v in self._df.columns:
+            self._on_select(v)
+
     def on_data_loaded(self, df, created: set | None = None) -> None:
         self._df = df
         self.varpanel.set_variables(df.columns, created)

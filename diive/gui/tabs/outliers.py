@@ -76,6 +76,11 @@ class HampelOutlierTab(BaseOutlierTab):
         self.n_sigma_dt.setValue(self.n_sigma.value())
         self.n_sigma_nt.setValue(self.n_sigma.value())
 
+    def _state_controls(self) -> dict:
+        return {**super()._state_controls(), "window": self.window,
+                "n_sigma": self.n_sigma, "diff": self.diff_cb,
+                "n_sigma_dt": self.n_sigma_dt, "n_sigma_nt": self.n_sigma_nt}
+
     def _current_kwargs(self) -> dict:
         kwargs = dict(
             window_length=self.window.value(),

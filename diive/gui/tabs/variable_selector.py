@@ -112,6 +112,18 @@ class VariableSelectorTab(DiiveTab):
             col.addWidget(footer)
         return col
 
+    def save_state(self) -> dict:
+        return {"selected": list(self._selected)}
+
+    def restore_state(self, state: dict) -> None:
+        sel = [n for n in (state.get("selected") or []) if n in self._all]
+        if not sel:
+            return
+        self._clear()
+        for name in sel:
+            self._select(name)
+        self._confirm()  # re-apply the subset to the Overview
+
     def on_data_loaded(self, df, created: set | None = None) -> None:
         self._created = created or set()
         self._all = [str(c) for c in df.columns]

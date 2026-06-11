@@ -172,6 +172,18 @@ class PlottingTab(DiiveTab):
             self._panels = []
         self._render()
 
+    def save_state(self) -> dict:
+        sel = self._xyz if self._plot_type in _XYZ_TYPES else self._panels
+        return {"sel": list(sel), "settings": self.settings.state()}
+
+    def restore_state(self, state: dict) -> None:
+        if "settings" in state:
+            self.settings.apply_state(state["settings"])  # before the render reads them
+        names = set(self.varpanel.names())
+        sel = [n for n in (state.get("sel") or []) if n in names]
+        for i, name in enumerate(sel):
+            self._on_selected(name, i > 0)  # replay clicks (first resets, rest add)
+
     def _on_selected(self, name: str, additive: bool) -> None:
         if not name:
             return

@@ -453,6 +453,56 @@ class MainWindow(QMainWindow):
             i += 1
         return i
 
+    # --- open-tab state (saved with a project) -------------------------
+    def _open_tabs_state(self) -> list:
+        """The open menu tabs (label/title/pinned) in tab-bar order, so a project
+        can reopen the same workspace. Always-on Overview/Log are not recorded."""
+        state = []
+        for i in range(self._tabwidget.count()):
+            widget = self._tabwidget.widget(i)
+            tab = next((t for t in self._menu_tab_list if t.widget() is widget), None)
+            if tab is None or getattr(tab, "_menu_label", None) not in MENU_TAB_CLASSES:
+                continue
+            entry = {
+                "label": tab._menu_label,
+                "title": self._tabwidget.tabText(i),
+                "pinned": tab in self._pinned,
+            }
+            try:
+                entry["state"] = tab.save_state()  # tab-specific inputs
+            except Exception:
+                entry["state"] = {}  # never let one tab's quirk break the save
+            state.append(entry)
+        return state
+
+    def _close_all_menu_tabs(self) -> None:
+        """Close every menu tab (e.g. before restoring a project's workspace)."""
+        for tab in list(self._menu_tab_list):
+            self._close_widget(tab.widget())
+
+    def _restore_tabs(self, state) -> None:
+        """Reopen the menu tabs recorded by `_open_tabs_state` (label/title/pin)."""
+        for entry in state or []:
+            label = entry.get("label")
+            if label not in MENU_TAB_CLASSES:
+                continue  # unknown/renamed feature — skip rather than crash
+            self._open_menu_tab(label)
+            tab = self._menu_tab_list[-1] if self._menu_tab_list else None
+            if tab is None:
+                continue
+            idx = self._tabwidget.indexOf(tab.widget())
+            if idx >= 0 and entry.get("title"):
+                self._tabwidget.setTabText(idx, entry["title"])
+            # Re-apply the tab's own inputs (the list is already populated, since
+            # _open_menu_tab pushed the current data). Tolerant of stale state.
+            try:
+                tab.restore_state(entry.get("state") or {})
+            except Exception:
+                pass
+            if entry.get("pinned"):
+                self._toggle_pin(tab)
+        self._tabwidget.setCurrentIndex(0)  # land on the Overview after restore
+
     def _on_tab_close(self, index: int) -> None:
         """Close a menu-opened tab and de-register it from data pushes.
 
@@ -696,6 +746,9 @@ class MainWindow(QMainWindow):
             "created_columns": sorted(str(c) for c in self._created),
             "source": self._source,
             "saved": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "tabs": self._open_tabs_state(),  # reopen the same workspace on load
+            "overview": self._tabs[0].save_state(),  # selected var + subset
+            "active_tab": self._tabwidget.tabText(self._tabwidget.currentIndex()),
         }
         project = DiiveProject(
             name=name, data=self._full_data,
@@ -757,6 +810,9 @@ class MainWindow(QMainWindow):
         if site_d:
             site.manager.load_dict(site_d)
             site.manager.changed.emit()
+        # Clear the current workspace before loading, so the project's saved tabs
+        # replace it (and stale tabs don't get the incoming data push).
+        self._close_all_menu_tabs()
         # Load the data clean (no config tags), then overlay the project's full
         # metadata (origin/parent/provenance/tags/notes) authoritatively.
         self._set_data(project.data, source=project.name, persist_metadata=False)
@@ -769,8 +825,24 @@ class MainWindow(QMainWindow):
         self._last_project = str(Path(folder))
         self._apply_range()  # re-push with restored created-columns + range
         metadata_store.manager.notify()
+        # Overview's selected variable + subset, then the saved workspace tabs.
+        try:
+            self._tabs[0].restore_state(project.extras.get("overview") or {})
+        except Exception:
+            pass
+        self._restore_tabs(project.extras.get("tabs"))  # reopens tabs; lands on Overview
+        self._restore_active_tab(project.extras.get("active_tab"))
         self.statusBar().showMessage(f"Opened project '{project.name}'", 5000)
         return True
+
+    def _restore_active_tab(self, title) -> None:
+        """Focus the tab the user had active when the project was saved."""
+        if not title:
+            return
+        for i in range(self._tabwidget.count()):
+            if self._tabwidget.tabText(i) == title:
+                self._tabwidget.setCurrentIndex(i)
+                return
 
     def _about(self) -> None:
         # Reuse the startup splash artwork as the About dialog.

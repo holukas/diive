@@ -753,6 +753,32 @@ class PlotSettingsPanel(QScrollArea):
         except ValueError:
             return None
 
+    # --- raw widget state (for project save/restore) ---
+    def _state_widgets(self) -> list:
+        """Every persistable control, in deterministic build order. Collected as
+        the field widget of each form row (so spinbox/combo *internal* editors are
+        excluded, and the order is stable across two panels of the same type)."""
+        from PySide6.QtWidgets import QFormLayout
+        widgets = []
+        for form in self.widget().findChildren(QFormLayout):
+            for r in range(form.rowCount()):
+                item = form.itemAt(r, QFormLayout.ItemRole.FieldRole)
+                if item is not None and item.widget() is not None:
+                    widgets.append(item.widget())
+        return widgets
+
+    def state(self) -> list:
+        """Raw values of all controls (round-trips, unlike the transformed
+        :meth:`values`). Positional — restored against the same plot type."""
+        from diive.gui.widgets.state_utils import widget_value
+        return [widget_value(w) for w in self._state_widgets()]
+
+    def apply_state(self, values) -> None:
+        """Re-apply a snapshot from :meth:`state` onto the controls."""
+        from diive.gui.widgets.state_utils import set_widget_value
+        for w, v in zip(self._state_widgets(), values or []):
+            set_widget_value(w, v)
+
     def values(self) -> dict:
         """Current settings as a dict keyed by the library plot() parameter."""
         if self._plot_type in (HEATMAP, HEATMAP_YEARMONTH):

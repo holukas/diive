@@ -157,6 +157,20 @@ class SeasonalTrendTab(DiiveTab):
         return bar
 
     # --- data flow -----------------------------------------------------
+    def save_state(self) -> dict:
+        return {"target": self._target, "method": self.method.currentText(),
+                "robust": self.robust.isChecked(), "view": self.view.currentText(),
+                "ref_start": self.ref_start.value(), "ref_end": self.ref_end.value()}
+
+    def restore_state(self, state: dict) -> None:
+        from diive.gui.widgets.state_utils import restore_controls
+        restore_controls({"method": self.method, "robust": self.robust,
+                          "view": self.view, "ref_start": self.ref_start,
+                          "ref_end": self.ref_end}, state)
+        t = state.get("target")
+        if t and self._df is not None and t in self._df.columns:
+            self._on_select(t)
+
     def on_data_loaded(self, df, created: set | None = None) -> None:
         self._df = df
         self.varpanel.set_variables(df.columns, created)

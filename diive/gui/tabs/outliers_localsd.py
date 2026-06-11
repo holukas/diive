@@ -100,6 +100,12 @@ class LocalSDOutlierTab(BaseOutlierTab):
         self.winsize_dt.setValue(self.winsize.value())
         self.winsize_nt.setValue(self.winsize.value())
 
+    def _state_controls(self) -> dict:
+        return {**super()._state_controls(), "winsize": self.winsize,
+                "n_sd": self.n_sd, "constant": self.constant_cb,
+                "n_sd_dt": self.n_sd_dt, "n_sd_nt": self.n_sd_nt,
+                "winsize_dt": self.winsize_dt, "winsize_nt": self.winsize_nt}
+
     def _current_kwargs(self) -> dict:
         constant_sd = self.constant_cb.isChecked()
         if self.daynight_cb.isChecked():

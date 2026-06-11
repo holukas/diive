@@ -169,6 +169,18 @@ class DriverExplorerTab(DiiveTab):
         return self.table
 
     # --- data flow -----------------------------------------------------
+    def save_state(self) -> dict:
+        return {"target": self._target, "method": self.method.currentText(),
+                "max_lag": self.max_lag.value()}
+
+    def restore_state(self, state: dict) -> None:
+        from diive.gui.widgets.state_utils import set_widget_value
+        set_widget_value(self.method, state.get("method"))
+        set_widget_value(self.max_lag, state.get("max_lag"))
+        t = state.get("target")
+        if t and self._df is not None and t in self._df.columns:
+            self._on_select(t)
+
     def on_data_loaded(self, df, created: set | None = None) -> None:
         self._df = df
         self.varpanel.set_variables(df.columns, created)

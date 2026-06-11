@@ -182,6 +182,26 @@ class FluxChainTab(DiiveTab):
         sp.setValue(value)
         return sp
 
+    # --- state ---
+    def _fx_controls(self) -> dict:
+        return {"fluxcol": self.fluxcol, "site_lat": self.site_lat,
+                "site_lon": self.site_lon, "utc_offset": self.utc_offset,
+                "nighttime_threshold": self.nighttime_threshold,
+                "day_qcf": self.day_qcf, "night_qcf": self.night_qcf,
+                "signal_strength_col": self.signal_strength_col}
+
+    def save_state(self) -> dict:
+        from diive.gui.widgets.state_utils import save_controls
+        return {"controls": save_controls(self._fx_controls()),
+                "l2": {k: cb.isChecked() for k, cb in self.l2_checks.items()}}
+
+    def restore_state(self, state: dict) -> None:
+        from diive.gui.widgets.state_utils import restore_controls
+        restore_controls(self._fx_controls(), state.get("controls"))
+        for k, val in (state.get("l2") or {}).items():
+            if k in self.l2_checks:
+                self.l2_checks[k].setChecked(bool(val))
+
     # --- data ---
     def on_data_loaded(self, df, created: set | None = None) -> None:
         self._df = df

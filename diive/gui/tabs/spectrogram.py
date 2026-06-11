@@ -152,6 +152,20 @@ class SpectrogramTab(DiiveTab):
         return bar
 
     # --- data flow -----------------------------------------------------
+    def save_state(self) -> dict:
+        return {"target": self._target, "nperseg": self.nperseg.value(),
+                "overlap": self.overlap.value(), "window": self.window.currentText(),
+                "max_freq": self.max_freq.value(), "cmap": self.cmap.currentText()}
+
+    def restore_state(self, state: dict) -> None:
+        from diive.gui.widgets.state_utils import restore_controls
+        restore_controls({"nperseg": self.nperseg, "overlap": self.overlap,
+                          "window": self.window, "max_freq": self.max_freq,
+                          "cmap": self.cmap}, state)
+        t = state.get("target")
+        if t and self._df is not None and t in self._df.columns:
+            self._on_select(t)
+
     def on_data_loaded(self, df, created: set | None = None) -> None:
         self._df = df
         self.varpanel.set_variables(df.columns, created)

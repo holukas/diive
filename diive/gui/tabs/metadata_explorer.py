@@ -151,6 +151,14 @@ class MetadataExplorerTab(DiiveTab):
         'Edit metadata…' right-click)."""
         self._select(name)
 
+    def save_state(self) -> dict:
+        return {"current": self._current}
+
+    def restore_state(self, state: dict) -> None:
+        name = state.get("current")
+        if name and self._df is not None and name in self._df.columns:
+            self.select_variable(name)
+
     def _select(self, name: str) -> None:
         if not name:
             return

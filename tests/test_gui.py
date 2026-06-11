@@ -1217,6 +1217,78 @@ def test_startup_reopens_last_project(window, tmp_path, monkeypatch):
     assert "favorite" in store.get(var).tags
 
 
+def test_project_saves_and_restores_open_tabs(window, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+
+    # Open a couple of menu tabs (the workspace to capture).
+    window._open_menu_tab("Time series")
+    window._open_menu_tab("Driver explorer")
+    open_labels = {t._menu_label for t in window._menu_tab_list}
+    assert {"Time series", "Driver explorer"} <= open_labels
+
+    folder = tmp_path / "Proj.diive"
+    assert window._write_project(folder, "Proj")
+
+    # Close everything, then reopening the project must restore the tabs.
+    window._close_all_menu_tabs()
+    assert window._menu_tab_list == []
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory",
+                        staticmethod(lambda *a, **k: str(folder)))
+    window._open_project()
+    QApplication.processEvents()
+
+    restored = {t._menu_label for t in window._menu_tab_list}
+    assert {"Time series", "Driver explorer"} <= restored
+    # Always-on tabs are never duplicated by the restore.
+    assert _tabs(window)[:2] == ["Overview", "Log"]
+
+
+def test_project_restores_per_tab_state(window, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+
+    # Driver explorer with non-default settings.
+    window._open_menu_tab("Driver explorer")
+    drv = window._menu_tab_list[-1]
+    target = str(window._data.select_dtypes("number").columns[0])
+    drv.method.setCurrentText("Spearman")
+    drv.max_lag.setValue(5)
+    drv._on_select(target)
+    # A time-series plot showing two specific variables + a non-default setting.
+    window._open_menu_tab("Time series")
+    ts = window._menu_tab_list[-1]
+    cols = [str(c) for c in window._data.columns][:2]
+    ts._on_selected(cols[0], False)
+    ts._on_selected(cols[1], True)
+    ts.settings.linewidth.setValue(4.5)
+    ts.settings.title.setText("My plot")
+    # Overview focused on a specific variable; the Time series tab is active.
+    ovar = str(window._data.columns[3])
+    window._tabs[0]._on_select(ovar)
+    window._tabwidget.setCurrentWidget(ts.widget())
+    QApplication.processEvents()
+
+    folder = tmp_path / "P.diive"
+    window._write_project(folder, "P")
+    window._close_all_menu_tabs()
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory",
+                        staticmethod(lambda *a, **k: str(folder)))
+    window._open_project()
+    QApplication.processEvents()
+
+    drv2 = next(t for t in window._menu_tab_list if t._menu_label == "Driver explorer")
+    assert drv2._target == target
+    assert drv2.method.currentText() == "Spearman"
+    assert drv2.max_lag.value() == 5
+    ts2 = next(t for t in window._menu_tab_list if t._menu_label == "Time series")
+    assert ts2._panels == cols  # the two selected variables came back
+    assert ts2.settings.linewidth.value() == 4.5  # settings restored too
+    assert ts2.settings.title.text() == "My plot"
+    assert window._tabs[0]._current == ovar  # Overview selection restored
+    # The previously-active tab regains focus (not just landing on Overview).
+    cur = window._tabwidget.currentIndex()
+    assert window._tabwidget.tabText(cur) == "Time series 1"
+
+
 def test_metadata_namespace_migrates_legacy_flat_config():
     from diive.gui.app import _namespace_metadata
     # Legacy flat {name: [tags]} migrates under the first dataset key.

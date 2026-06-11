@@ -227,6 +227,29 @@ class FeatureEngineerTab(DiiveTab):
         self.available.add_name(name)
 
     # --- data ---
+    def _fe_controls(self) -> dict:
+        return {"lag": self.lag_cb, "lag_min": self.lag_min, "lag_max": self.lag_max,
+                "lag_step": self.lag_step, "roll": self.roll_cb,
+                "roll_windows": self.roll_windows, "roll_stats": self.roll_stats,
+                "diff": self.diff_cb, "diff_orders": self.diff_orders,
+                "ema": self.ema_cb, "ema_spans": self.ema_spans,
+                "poly": self.poly_cb, "poly_deg": self.poly_deg,
+                "stl": self.stl_cb, "stl_period": self.stl_period,
+                "ts": self.ts_cb, "rec": self.rec_cb}
+
+    def save_state(self) -> dict:
+        from diive.gui.widgets.state_utils import save_controls
+        feats = [self.selected.item(i).text() for i in range(self.selected.count())]
+        return {"selected": feats, "controls": save_controls(self._fe_controls())}
+
+    def restore_state(self, state: dict) -> None:
+        from diive.gui.widgets.state_utils import restore_controls
+        avail = set(self.available.names())
+        for name in state.get("selected") or []:
+            if name in avail:
+                self._add_feature(name)  # move from available -> selected
+        restore_controls(self._fe_controls(), state.get("controls"))
+
     def on_data_loaded(self, df, created: set | None = None) -> None:
         self._df = df
         self._created_df = None

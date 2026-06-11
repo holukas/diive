@@ -51,3 +51,17 @@ class DiiveTab(ABC):
         Default is a no-op so tabs that don't consume data need not implement it.
         """
 
+    def save_state(self) -> dict:
+        """Return a JSON-serializable snapshot of this tab's UI state (selected
+        variables, control values, …) so a project can reopen it as it was.
+
+        Default is empty. Override to capture inputs only — not heavy results
+        (those re-compute on restore). Paired with :meth:`restore_state`.
+        """
+        return {}
+
+    def restore_state(self, state: dict) -> None:
+        """Re-apply a snapshot from :meth:`save_state`. Called after the tab has
+        received the dataset, so its variable list is already populated. Must be
+        tolerant of missing keys / unknown variables (skip rather than fail)."""
+
