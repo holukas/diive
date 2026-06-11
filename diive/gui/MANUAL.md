@@ -49,8 +49,8 @@ engineer while a range is active are kept too, and reappear when you reset.
 ### Saving your work as a project
 
 A **project** keeps everything together so you can pick up exactly where you left
-off. **File ▸ Save project as…** asks for a name and a location and writes a
-`<name>.diive` folder containing:
+off. **File ▸ Save project as…** (Ctrl+Shift+S) asks for a name and a location and
+writes a `<name>.diive` folder containing:
 
 - the dataset (including features you engineered) as parquet,
 - all your **metadata** — variable tags, notes, and the full origin/processing
@@ -58,9 +58,10 @@ off. **File ▸ Save project as…** asks for a name and a location and writes a
 - the **site details** and the active **date range**,
 - a `__diive__` marker that identifies the folder as a diive project.
 
-**File ▸ Open project…** loads a `.diive` folder and restores all of the above.
-Once a project is open, **Ctrl+S (File ▸ Save project)** updates it in place; the
-window title shows the project name.
+**File ▸ Open project…** (Ctrl+Shift+O) loads a `.diive` folder and restores all of
+the above. Once a project is open, **Ctrl+S (File ▸ Save project)** updates it in
+place; the window title shows the project name. diive reopens your most recent
+project automatically the next time you launch it.
 
 ### Saving just the data
 
@@ -85,7 +86,9 @@ straight back into diive (GUI or library).
 - **Right-click a variable** for **Edit metadata…** (jumps to the Metadata
   explorer focused on that variable), **★ Mark favorite**, and **Add tag… /
   Remove tag**. Full editing (tags, a free-text note, history) lives in
-  **Data ▸ Metadata explorer**.
+  **Data ▸ Metadata explorer**. On the **Overview** list, right-click also offers
+  **Delete** to drop a variable from the loaded dataset (non-destructive — reload
+  or reopen to restore it).
 - The list looks and behaves the same in every tab.
 
 ---
@@ -112,13 +115,15 @@ Click a variable to see, for that variable:
 - a **ribbon of statistics** along the bottom (count, mean, SD, min/max,
   percentiles, …); **hover** any one for a short description of what it is.
 
-### Plot ▸ Heatmap date/time · Heatmap year/month · Time series · Diel cycle · Cumulative year · Ridgeline · Hexbin
+### Plot menu (heatmaps · time series · diel cycle · cumulative · ridgeline · scatter · hexbin · histogram)
 
 Each plot method opens as its own tab (the menu shows a small icon for each).
 
 - **Heatmap date/time** — date × time-of-day grid.
 - **Heatmap year/month** — one cell per year × month (pick the aggregation —
   mean, sum, … — and optionally show *ranks*).
+- **Time series** — the variable as a line over time. Ctrl+click more variables
+  to stack them in extra panels (shared time axis), each its own colour.
 - **Diel cycle** — the mean daily cycle (value by time of day) with a ±SD band;
   optionally one curve per month.
 - **Cumulative year** — one cumulative-sum curve per year (overlaid by day of
@@ -126,6 +131,9 @@ Each plot method opens as its own tab (the menu shows a small icon for each).
   present in the data) and show a mean reference.
 - **Scatter XY** — click two variables for X and Y (a third, optional, colours
   the points); optionally bin the x-axis and show a trend. One panel.
+- **Hexbin** — like Scatter XY but for very dense data: the plane is tiled with
+  hexagons coloured by how many points fall in each. Pick variables by **X / Y / Z**
+  role (it needs all three; Z drives the colour).
 - **Ridgeline** — one stacked density curve per period (group by month, week, or
   year); set the overlap, shading, and KDE bandwidth. One variable at a time.
 - **Histogram** — the distribution of one variable: bars of counts, with the
@@ -373,7 +381,7 @@ colours update across the whole app as you change them:
 ### Log
 
 Mirrors diive's console output (file loading, feature engineering progress, …) in
-colour. Use **Save…** to write the log to a file.
+colour. **Save…** writes the log to a text file; **Clear** empties it.
 
 ---
 
@@ -385,8 +393,9 @@ colour. Use **Save…** to write the log to a file.
   line plots it snaps to the nearest data point (with a marker); on heatmaps it
   shows the cell's date, time, and value. Untick **Hover values** (bottom-right,
   next to the plot toolbar) to switch it off.
-- Your appearance settings, site details, window size/position, and last-used
-  filetype are **remembered** between sessions.
+- Your appearance settings, site details, window size/position, last-used
+  filetype, variable tags/notes, and most-recent project are **remembered**
+  between sessions.
 - The window sizes itself to your screen on first launch.
 - A short loading cue appears on a variable while its plot is being drawn.
 - Stuck or something looks off? Check the **Log** tab for messages.
