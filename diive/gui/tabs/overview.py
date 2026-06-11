@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import matplotlib.dates as mdates
 import pandas as pd
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -31,6 +31,12 @@ from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.variable_panel import VariablePanel
 
 _DEFAULT_VAR = "NEE_CUT_REF_f"
+
+
+def _is_flag(name: str) -> bool:
+    """A QC/outlier flag column (``FLAG_..._TEST`` / ``..._QCF``) — not a series
+    worth auto-plotting; the Overview prefers the cleaned data column instead."""
+    return str(name).startswith("FLAG_")
 
 # Overview figure layout (2 rows x 4 cols): the time series spans the top-left
 # three columns; below it sit the cumulative, mean-diel-cycle and daily-mean
@@ -167,11 +173,6 @@ class _StatCard(QFrame):
         lay.addStretch(1)
 
 
-class _OverviewSignals(QObject):
-    """Qt signals for the tab (DiiveTab is a plain ABC, not a QObject)."""
-    variable_deleted = Signal(str)
-
-
 class OverviewTab(DiiveTab):
     """Stats + multi-panel figure for the selected variable."""
 
@@ -181,10 +182,6 @@ class OverviewTab(DiiveTab):
         self._df = None
         self._current = None   # selected variable (for project save/restore)
         self._subset = None    # active variable-list subset, or None for the full list
-        self._sig = _OverviewSignals()
-        #: Emitted when a variable is deleted via its right-click menu; the main
-        #: window drops the column from the dataset and re-pushes to all tabs.
-        self.variableDeleted = self._sig.variable_deleted
         # Live zoom-sync state (set per render; see _render_figure / _on_zoom).
         self._zoom_series = None
         self._diel_ax = None
@@ -199,9 +196,8 @@ class OverviewTab(DiiveTab):
 
         # Top: variable list + figure.
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.varpanel = VariablePanel(deletable=True)
+        self.varpanel = VariablePanel()
         self.varpanel.selected.connect(self._on_select)
-        self.varpanel.deleteRequested.connect(self.variableDeleted)
         self.canvas = MplCanvas()
         splitter.addWidget(self.varpanel)
         splitter.addWidget(self.canvas)
@@ -244,14 +240,49 @@ class OverviewTab(DiiveTab):
             self._on_select(cur)
 
     def on_data_loaded(self, df, created: set | None = None) -> None:
-        self._df = df
-        self._created = created or set()
-        self._subset = None  # a fresh dataset starts on the full variable list
-        self.varpanel.set_variables(df.columns, created)
+        created = created or set()
         cols = [str(c) for c in df.columns]
-        default = _DEFAULT_VAR if _DEFAULT_VAR in cols else (cols[0] if cols else None)
-        if default is not None:
+        # Columns created since the last push (e.g. a freshly added outlier-
+        # cleaned column + its flag) — these should appear even while a subset is
+        # active, so the new feature isn't silently hidden.
+        prev_created = getattr(self, "_created", set())
+        new_cols = [c for c in cols if c in created and c not in prev_created]
+        self._df = df
+        self._created = created
+        # An in-place update (delete/rename/feature-add re-push) keeps the active
+        # subset, dropping names that no longer exist and appending freshly
+        # created ones; a fresh dataset load clears it first via `reset_subset()`,
+        # so this falls back to the full list. Without preserving it, deleting one
+        # variable would resurrect a subset the user had filtered away.
+        subset = [n for n in (self._subset or []) if n in cols]
+        if subset:
+            subset += [c for c in new_cols if c not in subset]
+        names = subset if subset else cols
+        self._subset = subset or None
+        # A leftover fuzzy-filter would hide a freshly added variable that doesn't
+        # match it (the reported "new var not visible"); clear it so the new
+        # feature actually shows. set_variables re-applies whatever text remains.
+        if new_cols:
+            self.varpanel.clear_filter()
+        self.varpanel.set_variables(names, created)
+        # Selection priority: a freshly added feature (so it's plotted and
+        # obviously visible — flags are skipped in favour of the cleaned series),
+        # then the surviving current selection, then a default.
+        feature = next((c for c in new_cols if not _is_flag(c)), None) \
+            or (new_cols[0] if new_cols else None)
+        if feature in names:
+            self.varpanel.scroll_to(feature)  # bring the appended row into view
+            self._on_select(feature)
+        elif self._current in names:
+            self._on_select(self._current)
+        elif names:
+            default = _DEFAULT_VAR if _DEFAULT_VAR in names else names[0]
             self._on_select(default)
+
+    def reset_subset(self) -> None:
+        """Forget any active variable-list subset (called on a fresh dataset
+        load so the new data starts on its full variable list)."""
+        self._subset = None
 
     def show_variable_subset(self, var_names: list) -> None:
         """Restrict the variable list to `var_names` (from the Select-variables

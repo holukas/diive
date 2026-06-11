@@ -98,16 +98,12 @@ class VariablePanel(QWidget):
 
     #: Emitted on item click as (variable_name, ctrl_held).
     selected = Signal(str, bool)
-    #: Emitted when "Delete variable" is chosen from the right-click menu
-    #: (only wired when the panel is built with `deletable=True`).
-    deleteRequested = Signal(str)
     #: Emitted when "Remove all tags & note" is chosen for a variable (only
     #: offered when the panel is built with `clearable=True`). The owning tab
     #: handles it so it can unbind any open editor before the store changes.
     clearRequested = Signal(str)
 
-    def __init__(self, parent=None, deletable: bool = False,
-                 clearable: bool = False) -> None:
+    def __init__(self, parent=None, clearable: bool = False) -> None:
         super().__init__(parent)
         self.setObjectName("varpanel")  # white pane bg via QSS (search/list keep theirs)
         layout = QVBoxLayout(self)
@@ -129,10 +125,8 @@ class VariablePanel(QWidget):
         self.list.setWordWrap(False)
         self.list.selected.connect(self.selected)  # re-emit upward
 
-        # Right-click menu: metadata tags (favorite, add/remove) everywhere, plus
-        # "Delete variable" only on dataset-owning panels (`deletable`), which
-        # wire `deleteRequested`.
-        self._deletable = deletable
+        # Right-click menu: rename/delete + metadata tags everywhere (routed
+        # through the app-wide metadata manager, so no per-tab wiring is needed).
         self._clearable = clearable
         self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list.customContextMenuRequested.connect(self._show_context_menu)
@@ -150,7 +144,7 @@ class VariablePanel(QWidget):
             lambda: self._apply_filter(self.search.text()))
 
     def _show_context_menu(self, pos) -> None:
-        """Right-click menu: favorite + tag editing (always), delete (deletable)."""
+        """Right-click menu: rename, delete, favorite + tag editing (all tabs)."""
         item = self.list.itemAt(pos)
         if item is None:
             return
@@ -167,11 +161,16 @@ class VariablePanel(QWidget):
             menu.addAction(edit_act)
             menu.addSeparator()
 
-        # Rename works in every tab's variable list (incl. the explorer's own).
+        # Rename / delete work in every tab's variable list (incl. the explorer's
+        # own), routed through the app-wide metadata manager.
         rename_act = QAction("Rename…", menu)
         rename_act.triggered.connect(
             lambda: metadata_store.manager.request_rename(name))
         menu.addAction(rename_act)
+        del_act = QAction("Delete…", menu)
+        del_act.triggered.connect(
+            lambda: metadata_store.manager.request_delete(name))
+        menu.addAction(del_act)
         menu.addSeparator()
 
         fav = FAVORITE in md.tags
@@ -198,12 +197,6 @@ class VariablePanel(QWidget):
             clear_act = QAction("Remove all tags & note", menu)
             clear_act.triggered.connect(lambda: self.clearRequested.emit(name))
             menu.addAction(clear_act)
-
-        if self._deletable:
-            menu.addSeparator()
-            act = QAction(f"Delete '{name}'", menu)
-            act.triggered.connect(lambda: self.deleteRequested.emit(name))
-            menu.addAction(act)
 
         menu.exec(self.list.viewport().mapToGlobal(pos))
 
@@ -259,6 +252,20 @@ class VariablePanel(QWidget):
             name = item.data(NAME_ROLE)
             item.setData(PANEL_ROLE, panels.index(name) + 1 if name in panels else 0)
         self.list.viewport().update()
+
+    def clear_filter(self) -> None:
+        """Clear the fuzzy-filter text (e.g. so a just-added variable that
+        wouldn't match the current filter is not hidden)."""
+        self.search.clear()
+
+    def scroll_to(self, name: str) -> None:
+        """Scroll the list so `name`'s row is visible (e.g. a just-added feature
+        appended at the bottom of a long list)."""
+        for i in range(self.list.count()):
+            item = self.list.item(i)
+            if item.data(NAME_ROLE) == name:
+                self.list.scrollToItem(item)
+                return
 
     # --- loading indicator ---
     def set_loading(self, name: str) -> None:

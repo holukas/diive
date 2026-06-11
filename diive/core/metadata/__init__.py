@@ -44,6 +44,22 @@ def truncate_words(text: str, n: int = MAX_DESCRIPTION_WORDS) -> str:
     """Trim ``text`` to at most ``n`` whitespace-separated words."""
     return " ".join((text or "").split()[:n])
 
+
+def _coerce_tag_sources(tags) -> dict:
+    """Normalize a persisted ``tags`` value to ``{tag: source}``.
+
+    Accepts the current ``{tag: source}`` dict or an older bare list of tag
+    strings (from a project saved before tag sources were tracked); list entries
+    become user tags, since user tags were the only ones that round-tripped then.
+    Unknown shapes yield an empty mapping rather than raising.
+    """
+    if isinstance(tags, dict):
+        return {str(t): (s if s in (USER, FUNCTION) else USER)
+                for t, s in tags.items()}
+    if isinstance(tags, (list, tuple, set)):
+        return {str(t): USER for t in tags}
+    return {}
+
 #: Key under which a DataFrame carries its provenance payload in ``df.attrs``.
 #: Operation tabs set ``df.attrs[ATTRS_KEY]`` before emitting new columns; the
 #: main window consumes it via :meth:`MetadataStore.from_attrs`.
@@ -146,11 +162,21 @@ class VariableMetadata:
 
     @classmethod
     def from_dict(cls, d: dict) -> "VariableMetadata":
-        md = cls(name=d["name"], origin=d.get("origin", ORIGINAL),
-                 parents=list(d.get("parents") or []),
+        """Rebuild from :meth:`to_dict`, tolerant of older project layouts.
+
+        Forward/back-compat: ``name`` may be absent (caller skips such records),
+        and ``tags`` may be the current ``{tag: source}`` dict or an older bare
+        list of tag strings (coerced to user tags, the only kind that persisted).
+        """
+        name = d.get("name") or d.get("var")  # older drafts keyed it as "var"
+        if not name:
+            raise ValueError("variable metadata entry has no name")
+        md = cls(name=str(name), origin=d.get("origin", ORIGINAL),
+                 parents=[str(p) for p in (d.get("parents") or [])],
                  description=d.get("description", ""))
-        md._tag_sources = dict(d.get("tags") or {})
-        md.provenance = [ProvenanceEntry.from_dict(p) for p in d.get("provenance") or []]
+        md._tag_sources = _coerce_tag_sources(d.get("tags"))
+        md.provenance = [ProvenanceEntry.from_dict(p)
+                         for p in (d.get("provenance") or []) if isinstance(p, dict)]
         return md
 
 
@@ -204,14 +230,31 @@ class MetadataStore:
                        tags: list[str] | None = None, origin: str = MODIFIED,
                        timestamp: str | None = None) -> VariableMetadata:
         """Mark ``name`` as a modified/derived column: set its origin, link its
-        parent, append a provenance entry, and add the operation's tags."""
+        parent, append a provenance entry, and add the operation's tags.
+
+        On first creation the column inherits its parent's full history, so the
+        lineage is cumulative (e.g. ``FC`` -> ``FC_LOCALSD`` -> ``FC_LOCALSD_HAMPEL``
+        shows the import, the Local SD step, and the Hampel step in order). The
+        parent's history is *copied* (a snapshot taken now), not shared."""
         name = str(name)
-        md = self._items.get(name) or VariableMetadata(name=name)
+        existing = self._items.get(name)
+        md = existing or VariableMetadata(name=name)
         self._items[name] = md
         md.remove_tag(ORIGINAL)  # a transformed/derived column is not original
         md.origin = origin
         if parent and str(parent) not in md.parents:
             md.parents.append(str(parent))
+        # Inherit the parent's lineage (history + ancestor links) once, when this
+        # column is first recorded. Re-running an operation on an existing column
+        # only appends its own new step.
+        if existing is None and parent:
+            pmd = self._items.get(str(parent))
+            if pmd is not None:
+                md.provenance = [
+                    ProvenanceEntry.from_dict(e.to_dict()) for e in pmd.provenance]
+                for ancestor in pmd.parents:
+                    if ancestor not in md.parents:
+                        md.parents.append(ancestor)
         md.provenance.append(ProvenanceEntry(
             operation=operation, params=dict(params or {}),
             parent=str(parent) if parent else None, timestamp=timestamp,
@@ -309,10 +352,19 @@ class MetadataStore:
         return {"variables": [md.to_dict() for md in self._items.values()]}
 
     def load_dict(self, data: dict | None) -> None:
-        """Replace the store contents from a :meth:`to_dict` payload."""
+        """Replace the store contents from a :meth:`to_dict` payload.
+
+        Malformed entries (e.g. from an older project layout missing required
+        fields) are skipped rather than aborting the whole load, so a stale
+        project still opens with whatever metadata is recoverable."""
         self._items = {}
         for vd in (data or {}).get("variables", []):
-            md = VariableMetadata.from_dict(vd)
+            if not isinstance(vd, dict):
+                continue
+            try:
+                md = VariableMetadata.from_dict(vd)
+            except (ValueError, TypeError, KeyError):
+                continue
             self._items[md.name] = md
 
     def user_data(self) -> dict:

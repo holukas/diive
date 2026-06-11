@@ -160,8 +160,6 @@ class MainWindow(QMainWindow):
             tab = tab_cls()
             self._tabs.append(tab)
             self._tabwidget.addTab(tab.widget(), tab.title)
-            if hasattr(tab, "variableDeleted"):
-                tab.variableDeleted.connect(self._delete_variable)
         # Tabs can be dragged to reorder and renamed by double-clicking. Menu
         # tabs get a (custom, clearly visible) close button on open; the
         # always-on Overview/Log are removed here so they stay open.
@@ -188,6 +186,8 @@ class MainWindow(QMainWindow):
         metadata_store.manager.editRequested.connect(self._edit_metadata)
         # Variable-list "Rename…" (any tab) prompts for a new name and applies it.
         metadata_store.manager.renameRequested.connect(self._rename_one_variable)
+        # Variable-list "Delete…" (any tab) confirms and drops the column.
+        metadata_store.manager.deleteRequested.connect(self._delete_variable)
 
         # The GUI has a single look: the frameless Studio shell (custom header +
         # pill tabs).
@@ -332,6 +332,14 @@ class MainWindow(QMainWindow):
         self._source = source
         self._range = None  # a new dataset starts at its full range
         self._created = set()  # fresh dataset has no user-created features
+        # A new dataset starts on the full variable list — clear any subset a tab
+        # is holding so it isn't re-applied to unrelated data on the push below.
+        # Pinned tabs are frozen (skipped by `_push_data`), so leave them alone.
+        for tab in self._tabs:
+            if tab in getattr(self, "_pinned", set()):
+                continue
+            if hasattr(tab, "reset_subset"):
+                tab.reset_subset()
         # A plain load leaves any open project; `_open_project` re-sets these
         # after calling here, so Ctrl+S can't overwrite a project with other data.
         self._project_dir = None

@@ -34,6 +34,9 @@ class MetadataManager(QObject):
     #: Emitted to ask the app to rename a variable (from any tab's variable-list
     #: right-click). MainWindow prompts for the new name and applies it.
     renameRequested = Signal(str)
+    #: Emitted to ask the app to delete a variable (from any tab's variable-list
+    #: right-click). MainWindow confirms and drops the column.
+    deleteRequested = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -44,6 +47,9 @@ class MetadataManager(QObject):
 
     def request_rename(self, name: str) -> None:
         self.renameRequested.emit(name)
+
+    def request_delete(self, name: str) -> None:
+        self.deleteRequested.emit(name)
 
     def notify(self) -> None:
         """Emit ``changed`` after the main window records load/feature provenance
