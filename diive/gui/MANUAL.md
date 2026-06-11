@@ -45,11 +45,27 @@ This is **non-destructive**: the full record is kept in the background, so
 **Data ▸ Reset to full range** brings everything back at any time. Features you
 engineer while a range is active are kept too, and reappear when you reset.
 
-### Saving your data
+### Saving your work as a project
 
-**File ▸ Save data as parquet…** (Ctrl+S) writes the current dataset — including
-any features you engineered — as a **diive-format parquet** file: a single header
-row and a properly named timestamp index (`TIMESTAMP_MIDDLE` / `TIMESTAMP_END` /
+A **project** keeps everything together so you can pick up exactly where you left
+off. **File ▸ Save project as…** asks for a name and a location and writes a
+`<name>.diive` folder containing:
+
+- the dataset (including features you engineered) as parquet,
+- all your **metadata** — variable tags, notes, and the full origin/processing
+  history,
+- the **site details** and the active **date range**,
+- a `__diive__` marker that identifies the folder as a diive project.
+
+**File ▸ Open project…** loads a `.diive` folder and restores all of the above.
+Once a project is open, **Ctrl+S (File ▸ Save project)** updates it in place; the
+window title shows the project name.
+
+### Saving just the data
+
+**File ▸ Save data as parquet…** writes only the current dataset — including any
+features you engineered — as a **diive-format parquet** file: a single header row
+and a properly named timestamp index (`TIMESTAMP_MIDDLE` / `TIMESTAMP_END` /
 `TIMESTAMP_START`; you're asked which if it isn't already set). These files load
 straight back into diive (GUI or library).
 

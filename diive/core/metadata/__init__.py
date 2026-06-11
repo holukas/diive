@@ -85,6 +85,17 @@ class ProvenanceEntry:
             text = f"{text} ({kv})"
         return text
 
+    def to_dict(self) -> dict:
+        return {"operation": self.operation, "params": self.params,
+                "parent": self.parent, "timestamp": self.timestamp,
+                "source": self.source}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "ProvenanceEntry":
+        return cls(operation=d.get("operation", ""), params=dict(d.get("params") or {}),
+                   parent=d.get("parent"), timestamp=d.get("timestamp"),
+                   source=d.get("source", FUNCTION))
+
 
 @dataclass
 class VariableMetadata:
@@ -123,6 +134,24 @@ class VariableMetadata:
     def user_tags(self) -> list[str]:
         """Tags the user set (the only ones worth persisting)."""
         return [t for t, s in self._tag_sources.items() if s == USER]
+
+    def to_dict(self) -> dict:
+        """Full serialization (origin, parents, provenance, tags+sources, note)."""
+        return {
+            "name": self.name, "origin": self.origin, "parents": list(self.parents),
+            "description": self.description,
+            "tags": dict(self._tag_sources),
+            "provenance": [p.to_dict() for p in self.provenance],
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "VariableMetadata":
+        md = cls(name=d["name"], origin=d.get("origin", ORIGINAL),
+                 parents=list(d.get("parents") or []),
+                 description=d.get("description", ""))
+        md._tag_sources = dict(d.get("tags") or {})
+        md.provenance = [ProvenanceEntry.from_dict(p) for p in d.get("provenance") or []]
+        return md
 
 
 class MetadataStore:
@@ -254,6 +283,17 @@ class MetadataStore:
         for tag in md.user_tags():
             md.remove_tag(tag)
         md.description = ""
+
+    def to_dict(self) -> dict:
+        """Full serialization of every variable's metadata (for diive projects)."""
+        return {"variables": [md.to_dict() for md in self._items.values()]}
+
+    def load_dict(self, data: dict | None) -> None:
+        """Replace the store contents from a :meth:`to_dict` payload."""
+        self._items = {}
+        for vd in (data or {}).get("variables", []):
+            md = VariableMetadata.from_dict(vd)
+            self._items[md.name] = md
 
     def user_data(self) -> dict:
         """All persistable user content: ``{"tags": ..., "descriptions": ...}``."""

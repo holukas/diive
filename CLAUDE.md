@@ -418,6 +418,16 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   reset and loads the incoming one; `_namespace_metadata()` migrates older non-namespaced configs onto the first dataset.
   `_set_data(persist_metadata=False)` loads a **clean** dataset — no saved tags/notes applied or kept, and any stale
   entry for that source is purged; the bundled example auto-load uses it so the example always opens pristine.
+- **Projects.** A *diive project* is a self-contained `<name>.diive` folder: `__diive__` marker, `project.json`
+  manifest, `data.parquet`. Format is the **library's** `diive.core.io.project` (`save_project`, `load_project`,
+  `is_project`, `DiiveProject`, `project_name_to_dirname`) — it serializes the **full** `MetadataStore`
+  (`to_dict`/`from_dict`: origin, parents, provenance, tags+sources, notes — richer than the lightweight per-session
+  config) plus an opaque `extras` dict (so the library never imports GUI types). The GUI (`File ▸ Save project` Ctrl+S /
+  `Save project as…` / `Open project…`, dialog `widgets/save_project_dialog.py`) puts site (`site.manager.as_dict`),
+  active date range, and `created` columns into `extras`. `MainWindow._open_project` loads data clean
+  (`_set_data(persist_metadata=False)`) then overlays the project's metadata via `store.load_dict`; a plain load clears
+  `_project_dir` so Ctrl+S can't overwrite a project with unrelated data. `_save_project` updates the open project in
+  place, else prompts.
 - **Var list sync.** All tabs refresh via `MainWindow._push_data()` → `on_data_loaded(df, created)` on every data
   change; menu tabs get current data on open and are dropped from the push list on close.
 - **Output console.** The `Log` tab (`LogTab` → `ConsolePanel`) mirrors diive's Rich output in colour. The library tees

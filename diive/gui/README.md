@@ -15,7 +15,8 @@ diive-gui                # or: uv run diive-gui
 | File | Role |
 |---|---|
 | `theme.py` | **Central appearance config** — `ThemeManager` (`manager`): editable colour tokens, pill colours/labels, time-series palette, stylesheet; emits `changed`; `as_dict`/`load_dict` for persistence |
-| `config.py` | Persist preferences (theme, site, window geometry, last filetype, **variable user-tags**) as JSON in the user config dir |
+| `config.py` | Persist preferences (theme, site, window geometry, last filetype, **variable user-tags**, last project dir) as JSON in the user config dir |
+| `widgets/save_project_dialog.py` | `SaveProjectDialog` — project name + location for **File ▸ Save project as…** (writes a `<name>.diive` folder via the library's `save_project`) |
 | `metadata_store.py` | **App-wide variable metadata** — `MetadataManager` (`manager`): wraps the library `MetadataStore` (tags + provenance), emits `changed`; edited via `add_user_tag`/`toggle_user_tag` |
 | `tabs/settings.py` | Appearance settings tab — live colour editing with a pill/highlight preview |
 | `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`); window sized to ~88% of screen |

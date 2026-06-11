@@ -1136,6 +1136,43 @@ def test_metadata_example_data_loads_clean(window):
     assert window._dataset_key is None                  # example isn't persisted
 
 
+def test_project_save_and_open(window, tmp_path, monkeypatch):
+    from diive.core.io import project as projmod
+    from diive.gui import app as appmod
+    from diive.gui import metadata_store, site
+    from PySide6.QtWidgets import QFileDialog
+    store = metadata_store.manager.store
+
+    var = str(window._data.columns[0])
+    metadata_store.manager.add_user_tag(var, "favorite")
+    store.set_description(var, "important variable")
+    site.manager.update(name="X", latitude=46.8, longitude=9.8,
+                        elevation=1000.0, utc_offset=1)
+
+    folder = tmp_path / "Proj.diive"
+    assert window._write_project(folder, "Proj")
+    assert projmod.is_project(folder)
+
+    # Change state, then open the project back — it must restore everything.
+    window._load_example()  # clears tags + project + (here) the site is changed too
+    site.manager.update(name="Y", latitude=0.0, longitude=0.0,
+                        elevation=0.0, utc_offset=0)
+    assert "favorite" not in store.get(var).tags
+    assert window._project_dir is None
+
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory",
+                        staticmethod(lambda *a, **k: str(folder)))
+    window._open_project()
+    QApplication.processEvents()
+
+    assert window._project_name == "Proj"
+    assert window._project_dir == folder
+    assert "favorite" in store.get(var).tags
+    assert store.get(var).description == "important variable"
+    assert site.manager.latitude == 46.8           # site restored from the project
+    assert var in [str(c) for c in window._data.columns]
+
+
 def test_metadata_namespace_migrates_legacy_flat_config():
     from diive.gui.app import _namespace_metadata
     # Legacy flat {name: [tags]} migrates under the first dataset key.

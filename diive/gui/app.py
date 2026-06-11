@@ -14,6 +14,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import pandas as pd
+
 from PySide6.QtCore import QByteArray, QRectF, QSize, Qt
 from PySide6.QtGui import (
     QAction,
@@ -143,6 +145,10 @@ class MainWindow(QMainWindow):
         # dataset, so the same column name in two datasets keeps separate tags.
         self._dataset_key: str | None = None
         self._saved_metadata: dict = dict(self._config.get("variable_metadata") or {})
+        # Open diive project (folder), if any — set by Open/Save-as project.
+        self._project_dir: Path | None = None
+        self._project_name: str | None = None
+        self._last_project_dir: str = self._config.get("last_project_dir") or ""
         self._menu_tab_list: list = []  # open menu-activated tabs (multi-instance)
 
         self._tabs = []
@@ -263,9 +269,12 @@ class MainWindow(QMainWindow):
 
         file_menu = add_menu("&File")
         file_menu.addAction(_act("&Open data file...", self._open_file, "Ctrl+O"))
+        file_menu.addAction(_act("Open &project...", self._open_project, "Ctrl+Shift+O"))
         file_menu.addAction(_act("Load &example data", self._load_example))
         file_menu.addSeparator()
-        file_menu.addAction(_act("&Save data as parquet...", self._save_file, "Ctrl+S"))
+        file_menu.addAction(_act("&Save project", self._save_project, "Ctrl+S"))
+        file_menu.addAction(_act("Save project &as...", self._save_project_as, "Ctrl+Shift+S"))
+        file_menu.addAction(_act("Save data as par&quet...", self._save_file))
         file_menu.addSeparator()
         file_menu.addAction(_act("E&xit", self.close, "Ctrl+Q"))
 
@@ -312,6 +321,10 @@ class MainWindow(QMainWindow):
         self._source = source
         self._range = None  # a new dataset starts at its full range
         self._created = set()  # fresh dataset has no user-created features
+        # A plain load leaves any open project; `_open_project` re-sets these
+        # after calling here, so Ctrl+S can't overwrite a project with other data.
+        self._project_dir = None
+        self._project_name = None
         store = metadata_store.manager.store
         # Stash the outgoing dataset's user edits (tags/notes) before the store
         # is reset, so switching datasets — or reloading this one — keeps them.
@@ -631,6 +644,107 @@ class MainWindow(QMainWindow):
         QApplication.restoreOverrideCursor()
         self.statusBar().showMessage(f"Saved {p.stem}.parquet", 5000)
 
+    # --- projects ------------------------------------------------------
+    def _save_project(self) -> None:
+        """Ctrl+S: update the open project in place, or prompt if none is open."""
+        if self._project_dir is not None:
+            self._write_project(self._project_dir, self._project_name)
+        else:
+            self._save_project_as()
+
+    def _save_project_as(self) -> None:
+        """Pick a name + location and write a new diive project folder."""
+        from diive.core.io.project import is_project, project_name_to_dirname
+        from diive.gui.widgets.save_project_dialog import SaveProjectDialog
+        if self._full_data is None:
+            QMessageBox.information(self, "Save project", "No data loaded yet.")
+            return
+        default_name = self._project_name or (self._source or "project").split(".")[0]
+        dlg = SaveProjectDialog(default_name, self._last_project_dir, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        name, location = dlg.values()
+        folder = Path(location) / project_name_to_dirname(name)
+        if folder.exists() and not is_project(folder):
+            QMessageBox.warning(
+                self, "Save project",
+                f"'{folder.name}' already exists and is not a diive project.")
+            return
+        if folder.exists() and QMessageBox.question(
+                self, "Save project",
+                f"Overwrite the existing project '{folder.name}'?") \
+                != QMessageBox.StandardButton.Yes:
+            return
+        self._last_project_dir = location
+        if self._write_project(folder, name):
+            self._project_dir, self._project_name = folder, name
+            self._source = name
+            self._apply_range()  # refresh title with the project name
+
+    def _write_project(self, folder, name: str) -> bool:
+        """Write the current data + metadata + site/range into `folder`."""
+        from diive.core.io.project import DiiveProject, save_project
+        extras = {
+            "site": site.manager.as_dict(),
+            "range": ([self._range[0].isoformat(), self._range[1].isoformat()]
+                      if self._range else None),
+            "created_columns": sorted(str(c) for c in self._created),
+            "source": self._source,
+            "saved": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        }
+        project = DiiveProject(
+            name=name, data=self._full_data,
+            metadata=metadata_store.manager.store, extras=extras)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            save_project(folder, project)
+        except Exception as err:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.critical(self, "Save failed", f"Could not save project:\n{err}")
+            return False
+        QApplication.restoreOverrideCursor()
+        self.statusBar().showMessage(f"Saved project '{name}'", 5000)
+        return True
+
+    def _open_project(self) -> None:
+        """Open a diive project folder and restore its data + metadata + site."""
+        from diive.core.io.project import is_project, load_project
+        start = self._last_project_dir or str(Path.home())
+        folder = QFileDialog.getExistingDirectory(self, "Open diive project", start)
+        if not folder:
+            return
+        if not is_project(folder):
+            QMessageBox.warning(
+                self, "Open project",
+                "That folder is not a diive project (no '__diive__' marker).")
+            return
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            project = load_project(folder)
+        except Exception as err:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.critical(self, "Open failed", f"Could not open project:\n{err}")
+            return
+        QApplication.restoreOverrideCursor()
+
+        # Restore site details first (so day/night-aware tabs see them on push).
+        site_d = project.extras.get("site")
+        if site_d:
+            site.manager.load_dict(site_d)
+            site.manager.changed.emit()
+        # Load the data clean (no config tags), then overlay the project's full
+        # metadata (origin/parent/provenance/tags/notes) authoritatively.
+        self._set_data(project.data, source=project.name, persist_metadata=False)
+        metadata_store.manager.store.load_dict(project.metadata.to_dict())
+        self._created = {str(c) for c in project.extras.get("created_columns") or []}
+        rng = project.extras.get("range")
+        self._range = (pd.Timestamp(rng[0]), pd.Timestamp(rng[1])) if rng else None
+        self._project_dir, self._project_name = Path(folder), project.name
+        self._last_project_dir = str(Path(folder).parent)
+        self._apply_range()  # re-push with restored created-columns + range
+        metadata_store.manager.notify()
+        self.statusBar().showMessage(f"Opened project '{project.name}'", 5000)
+
     def _about(self) -> None:
         # Reuse the startup splash artwork as the About dialog.
         from diive.gui.splash import show_about
@@ -651,6 +765,7 @@ class MainWindow(QMainWindow):
             "geometry": bytes(self.saveGeometry().toBase64()).decode("ascii"),
             "last_filetype": odd._last_choice,
             "variable_metadata": self._saved_metadata,
+            "last_project_dir": self._last_project_dir,
         })
         super().closeEvent(event)
 
