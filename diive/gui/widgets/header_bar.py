@@ -45,6 +45,10 @@ class StudioHeaderBar(QWidget):
         wf = theme.manager.tracked_font(point_delta=4.0)
         wf.setBold(True)
         self._wordmark.setFont(wf)
+        # Transparent background so the wordmark sits cleanly on the card's soft
+        # gradient — the global `QWidget { background: CANVAS }` rule would
+        # otherwise paint a white box behind it.
+        self._wordmark.setStyleSheet("background: transparent;")
         lay.addWidget(self._wordmark)
 
         lay.addSpacing(10)
@@ -55,7 +59,7 @@ class StudioHeaderBar(QWidget):
         lay.addStretch(1)
         self._title = QLabel("")
         self._title.setFont(theme.manager.tracked_font())
-        self._title.setStyleSheet("color: #6B7780;")
+        self._title.setStyleSheet("color: #6B7780; background: transparent;")
         lay.addWidget(self._title)
         lay.addStretch(1)
 
