@@ -284,8 +284,13 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   re-syncs. Overview/Log are never pinnable.
 - **Select variables tab** (`tabs/variable_selector.py`, `Data ▸ Select variables`, single-instance) — a dual-list
   picker (two `VariablePanel`s: available ↔ selected) emitting a `subsetSelected` signal (same `QObject`-helper pattern
-  as `featuresCreated`); `MainWindow` routes it to the Overview's `show_variable_subset(...)`, which uses `dv.keep_vars`
-  to restrict the Overview's variable list to the chosen subset (Overview-only; data untouched).
+  as `featuresCreated`); `MainWindow._apply_var_subset` applies it **app-wide** (non-destructive). Like the date range,
+  the chosen subset narrows `_data` via `dv.keep_vars` (full record stays in `_full_data`), so **every non-pinned tab**
+  sees only the chosen variables — pinned (frozen) tabs are skipped by `_push_data` and keep their full dataset. **Data ▸
+  Reset to all variables** (`_reset_var_subset`) clears it. The subset is maintained through edits (new features append,
+  renames remap, deletes drop) and persisted in projects (`extras["var_subset"]`). The picker itself opts into the full
+  record (`wants_full_data` → `MainWindow._data_for`) so it can always re-add dropped variables, and reflects the active
+  subset on open (`set_active_subset`).
 - **Rename variables tab** (`tabs/rename_variables.py`, `Data ▸ Rename variables`, single-instance) — adds a prefix
   and/or suffix to **all** variables with a live old→new preview table; **Apply** emits `variablesRenamed(mapping)` →
   `MainWindow._rename_variables` (renames columns in `_full_data`, remaps the `created` set, calls the library
@@ -355,13 +360,13 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   zoomed date range** (`dv.times.keep_daterange` → re-plot) and **clips the heatmap to that date range** (its date is on
   the y-axis, same date-number units, so a `set_ylim`). Repaint uses `MplCanvas.draw_idle()` (not `draw()`) so it never
   re-freezes the layout mid-resize; `_on_resize` runs **two** constrained-layout solve passes so the multi-panel zoomed
-  layout converges instead of collapsing. **Subset + new-feature handling in `on_data_loaded`**: it diffs the incoming
+  layout converges instead of collapsing. **New-feature handling in `on_data_loaded`**: it diffs the incoming
   `created` set against the previous to find newly added columns and, for them, clears the list's fuzzy filter (a leftover
-  filter would hide a non-matching new name — the cause of "added var doesn't show"), appends them to an active subset,
-  `scroll_to`s the row, and auto-selects/plots the new variable (skipping its `FLAG_…_TEST`). An active subset is
-  **preserved across in-place updates** (delete/rename narrow/rename within it, not reset to the full list); a genuine
-  new-dataset load clears it first via `reset_subset()` (called by `MainWindow._set_data`, which skips pinned tabs). The
-  Overview's splitter handle is disabled (the var panel is fixed-width) so it shows no misleading ↔ resize cursor.
+  filter would hide a non-matching new name — the cause of "added var doesn't show"), `scroll_to`s the row, and
+  auto-selects/plots the new variable (skipping its `FLAG_…_TEST`). The Overview holds **no subset state of its own** —
+  variable subsetting is app-wide in `MainWindow` (`_apply_var_subset`/`_var_subset`, narrowing `_data`), so the Overview
+  just shows whatever columns it's pushed. The Overview's splitter handle is disabled (the var panel is fixed-width) so
+  it shows no misleading ↔ resize cursor.
 - **Hover tooltip.** `MplCanvas` attaches a `HoverAnnotator` (`widgets/hover.py`) in its constructor, so every embedded
   figure (Overview, plotting tabs) shows the value under the cursor with no per-tab wiring. Lines snap to the nearest
   sample (`np.searchsorted` on `get_xdata(orig=False)` — the unit-converted floats, **not** raw datetimes); `pcolormesh`

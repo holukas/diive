@@ -39,6 +39,11 @@ class VariableSelectorTab(DiiveTab):
 
     title = "Select variables"
 
+    #: Always pick from the complete variable list, even while an app-wide subset
+    #: is active (the subset narrows `_data`; this tab is its source, so it needs
+    #: `_full_data` to let the user re-add variables the subset dropped).
+    wants_full_data = True
+
     def build(self) -> QWidget:
         self._all: list[str] = []       # all variable names, original order
         self._selected: list[str] = []  # chosen names, in selection order
@@ -129,6 +134,12 @@ class VariableSelectorTab(DiiveTab):
         self._all = [str(c) for c in df.columns]
         # Drop selections that no longer exist (e.g. after loading new data).
         self._selected = [n for n in self._selected if n in self._all]
+        self._refresh()
+
+    def set_active_subset(self, names) -> None:
+        """Seed the selection from the app-wide subset currently in effect, so a
+        freshly opened picker reflects what's actually shown (set by MainWindow)."""
+        self._selected = [n for n in (names or []) if n in self._all]
         self._refresh()
 
     def _refresh(self) -> None:

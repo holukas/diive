@@ -28,7 +28,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `registry.py` | `TAB_CLASSES` (always-on), `MENU_TABS` (menu-opened factories), `SINGLE_INSTANCE_TABS` |
 | `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df, created)` — the extension point |
 | `tabs/overview.py` | Overview tab (first/default): 2×4 panel figure (top, varname badge inside the time-series panel) + a compact borderless **metrics ribbon** (`_StatItem`, `dv.sstats` + `SSTATS_DESCRIPTIONS` tooltips); panels via `_PANELS`. Exposes `_StatCard` for the Gaps/Drivers/Seasonal tabs |
-| `tabs/variable_selector.py` | **Select variables** tab — dual-list picker (available ↔ selected); `subsetSelected` → Overview's `show_variable_subset` (via `dv.keep_vars`) |
+| `tabs/variable_selector.py` | **Select variables** tab — dual-list picker (available ↔ selected); `subsetSelected` → `MainWindow._apply_var_subset` (app-wide narrowing via `dv.keep_vars`). Opts into `_full_data` (`wants_full_data`) so it can always pick from every column |
 | `tabs/rename_variables.py` | **Rename variables** tab — add a prefix/suffix to all variables with a live old→new preview; double-click a row to rename one; `variablesRenamed` → `MainWindow._rename_variables` |
 | `tabs/site.py` | **Project settings** tab — author/description + site details form (→ `site.manager`) plus the **notes wall** (`widgets/notes_wall.py`) filling the empty space |
 | `tabs/plotting.py` | `PlottingTab(plot_type)` — one closable tab per plot method (opened from the Plot menu); var list + live settings panel + canvas |
@@ -226,11 +226,10 @@ this: bulk prefix/suffix emits `variablesRenamed`, and a row double-click calls 
 
 **Newly created variables surface in the Overview.** When columns are added (outlier/feature tabs → `featuresCreated` →
 `_add_features` → push), `OverviewTab.on_data_loaded` diffs the incoming `created` set against the previous one to find
-the **new** columns and: clears the list's fuzzy filter (so a non-matching new name isn't hidden), appends them to an
-active subset (so a subset doesn't hide them), `scroll_to`s the new row, and auto-selects/plots the new variable
-(skipping its `FLAG_…_TEST`). It also **preserves an active subset across in-place updates** (delete/rename drop/rename
-within the subset rather than resetting to the full list); a genuine new-dataset load clears the subset first via
-`reset_subset()` (called by `_set_data`, skipping pinned tabs).
+the **new** columns and: clears the list's fuzzy filter (so a non-matching new name isn't hidden), `scroll_to`s the new
+row, and auto-selects/plots the new variable (skipping its `FLAG_…_TEST`). The **variable subset is app-wide** — it
+narrows `MainWindow._data` (see `_apply_var_subset`/`_reset_var_subset`), so every non-pinned tab (not just the Overview)
+sees only the chosen variables; the Overview holds no subset state of its own.
 
 **Tab UX & pinning:** tabs are movable (drag), renamable (**left** double-click → `_rename_tab`), and menu tabs carry a
 custom visible "×" (`icons.close_icon`); the always-on Overview/Log are not closable (a `tabCloseRequested` for them —

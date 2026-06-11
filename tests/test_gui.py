@@ -942,6 +942,37 @@ def test_select_variables_tab_updates_overview(window):
     assert overview.varpanel.names() == [names[5], names[1]]
 
 
+def test_select_variables_subset_is_app_wide(window):
+    """The subset narrows `_data` for every (non-pinned) tab, not just the
+    Overview; the picker keeps the full list and reset restores everything."""
+    names = [str(c) for c in window._full_data.columns]
+    n_all = window._full_data.shape[1]
+
+    # A pinned tab must keep its full dataset after a subset is applied.
+    window._open_menu_tab("Time series")
+    pinned = window._menu_tab_list[-1]
+    window._toggle_pin(pinned)
+    pushed = []
+    pinned.on_data_loaded = lambda df, created=None: pushed.append(df)
+
+    window._apply_var_subset([names[5], names[1]])
+    QApplication.processEvents()
+    assert pushed == []  # frozen: never received the narrowed dataset
+    # Every non-pinned tab now sees only the 2-column data.
+    assert list(window._data.columns) == [names[5], names[1]]
+    assert window._reset_subset_act.isEnabled()
+    # The picker opted into the full record, so it can still re-add the others.
+    window._open_menu_tab("Select variables")
+    sel = window._menu_tab_list[-1]
+    assert sel.available.list.count() + sel.selected.list.count() == n_all
+    assert sel.selected.names() == [names[5], names[1]]  # reflects active subset
+
+    window._reset_var_subset()
+    QApplication.processEvents()
+    assert window._data.shape[1] == n_all
+    assert not window._reset_subset_act.isEnabled()
+
+
 def test_pin_freezes_menu_tab(window):
     window._open_menu_tab("Time series")
     tab = window._menu_tab_list[-1]

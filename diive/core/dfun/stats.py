@@ -117,7 +117,10 @@ def series_skewness(s: Series) -> float:
     - < 0: left-skewed (tail on left, most values on right)
     - ≈ 0: approximately symmetric
     """
-    return scipy_stats.skew(s.dropna(), bias=False)
+    s_clean = s.dropna()
+    if len(s_clean) < 3:  # bias-corrected skewness is undefined below n=3
+        return np.nan
+    return scipy_stats.skew(s_clean, bias=False)
 
 
 def series_kurtosis(s: Series) -> float:
@@ -128,7 +131,10 @@ def series_kurtosis(s: Series) -> float:
     - < 0: light tails (platykurtic, fewer outliers than normal)
     - ≈ 0: similar to normal distribution
     """
-    return scipy_stats.kurtosis(s.dropna(), bias=False)
+    s_clean = s.dropna()
+    if len(s_clean) < 4:  # bias-corrected kurtosis is undefined below n=4
+        return np.nan
+    return scipy_stats.kurtosis(s_clean, bias=False)
 
 
 def mean_absolute_change(s: Series) -> float:

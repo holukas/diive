@@ -181,7 +181,6 @@ class OverviewTab(DiiveTab):
     def build(self) -> QWidget:
         self._df = None
         self._current = None   # selected variable (for project save/restore)
-        self._subset = None    # active variable-list subset, or None for the full list
         # Live zoom-sync state (set per render; see _render_figure / _on_zoom).
         self._zoom_series = None
         self._diel_ax = None
@@ -235,13 +234,9 @@ class OverviewTab(DiiveTab):
         return root
 
     def save_state(self) -> dict:
-        return {"current": self._current,
-                "subset": list(self._subset) if self._subset else None}
+        return {"current": self._current}
 
     def restore_state(self, state: dict) -> None:
-        subset = state.get("subset")
-        if subset:
-            self.show_variable_subset(subset)  # also selects the first of the subset
         cur = state.get("current")
         if cur and self._df is not None and cur in self.varpanel.names():
             self._on_select(cur)
@@ -250,60 +245,30 @@ class OverviewTab(DiiveTab):
         created = created or set()
         cols = [str(c) for c in df.columns]
         # Columns created since the last push (e.g. a freshly added outlier-
-        # cleaned column + its flag) — these should appear even while a subset is
-        # active, so the new feature isn't silently hidden.
+        # cleaned column + its flag), so the new feature can be auto-selected.
         prev_created = getattr(self, "_created", set())
         new_cols = [c for c in cols if c in created and c not in prev_created]
         self._df = df
         self._created = created
-        # An in-place update (delete/rename/feature-add re-push) keeps the active
-        # subset, dropping names that no longer exist and appending freshly
-        # created ones; a fresh dataset load clears it first via `reset_subset()`,
-        # so this falls back to the full list. Without preserving it, deleting one
-        # variable would resurrect a subset the user had filtered away.
-        subset = [n for n in (self._subset or []) if n in cols]
-        if subset:
-            subset += [c for c in new_cols if c not in subset]
-        names = subset if subset else cols
-        self._subset = subset or None
         # A leftover fuzzy-filter would hide a freshly added variable that doesn't
         # match it (the reported "new var not visible"); clear it so the new
         # feature actually shows. set_variables re-applies whatever text remains.
         if new_cols:
             self.varpanel.clear_filter()
-        self.varpanel.set_variables(names, created)
+        self.varpanel.set_variables(cols, created)
         # Selection priority: a freshly added feature (so it's plotted and
         # obviously visible — flags are skipped in favour of the cleaned series),
         # then the surviving current selection, then a default.
         feature = next((c for c in new_cols if not _is_flag(c)), None) \
             or (new_cols[0] if new_cols else None)
-        if feature in names:
+        if feature in cols:
             self.varpanel.scroll_to(feature)  # bring the appended row into view
             self._on_select(feature)
-        elif self._current in names:
+        elif self._current in cols:
             self._on_select(self._current)
-        elif names:
-            default = _DEFAULT_VAR if _DEFAULT_VAR in names else names[0]
+        elif cols:
+            default = _DEFAULT_VAR if _DEFAULT_VAR in cols else cols[0]
             self._on_select(default)
-
-    def reset_subset(self) -> None:
-        """Forget any active variable-list subset (called on a fresh dataset
-        load so the new data starts on its full variable list)."""
-        self._subset = None
-
-    def show_variable_subset(self, var_names: list) -> None:
-        """Restrict the variable list to `var_names` (from the Select-variables
-        tab). Uses the library's `dv.keep_vars` to validate/order the subset;
-        the full dataset (`self._df`) is untouched, only the list is filtered."""
-        if self._df is None or not var_names:
-            return
-        subset = dv.keep_vars(self._df, [v for v in var_names if v in self._df.columns])
-        names = [str(c) for c in subset.columns]
-        if not names:
-            return
-        self._subset = names  # remember the active subset for project save
-        self.varpanel.set_variables(names, getattr(self, "_created", set()))
-        self._on_select(names[0])
 
     def _on_select(self, name: str, _additive: bool = False) -> None:
         if not name or self._df is None:

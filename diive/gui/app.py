@@ -139,6 +139,12 @@ class MainWindow(QMainWindow):
         self._full_data = None
         self._data = None
         self._range: tuple | None = None
+        # Active app-wide variable subset (from the Select-variables tab), or None
+        # for the full variable list. Like `_range`, it narrows `_data` (via
+        # `dv.keep_vars`) non-destructively — the full record stays in `_full_data`
+        # and the subset is resettable. Pinned tabs are skipped by `_push_data`,
+        # so a frozen tab keeps its own (unsubset) dataset.
+        self._var_subset: list | None = None
         self._source = ""
         self._created: set = set()  # user-engineered feature column names
         # Per-variable user metadata (tags/notes) is persisted namespaced by
@@ -294,6 +300,9 @@ class MainWindow(QMainWindow):
         self._reset_range_act = _act("Reset to &full range", self._reset_range)
         self._reset_range_act.setEnabled(False)
         data_menu.addAction(self._reset_range_act)
+        self._reset_subset_act = _act("Reset to all &variables", self._reset_var_subset)
+        self._reset_subset_act.setEnabled(False)
+        data_menu.addAction(self._reset_subset_act)
         # Menu-tab entries that belong under Data (e.g. Select variables) are
         # merged into this manually-built menu rather than getting their own.
         data_menu.addSeparator()
@@ -315,11 +324,20 @@ class MainWindow(QMainWindow):
         help_menu = add_menu("&Help")
         help_menu.addAction(_act("&About", self._about))
 
+    def _data_for(self, tab):
+        """Dataset a tab should receive: the active (range/subset-narrowed)
+        `_data`, except for tabs that opt into the full record via
+        `wants_full_data` (the Select-variables tab, which must see every column
+        to let the user pick a subset)."""
+        if getattr(tab, "wants_full_data", False) and self._full_data is not None:
+            return self._full_data
+        return self._data
+
     def _push_data(self) -> None:
         for tab in self._tabs:
             if tab in self._pinned:
                 continue  # frozen: keep its own dataset
-            tab.on_data_loaded(self._data, self._created)
+            tab.on_data_loaded(self._data_for(tab), self._created)
 
     def _set_data(self, df, source: str, persist_metadata: bool = True) -> None:
         """Set a freshly loaded dataset, reset created features + range, push.
@@ -331,15 +349,8 @@ class MainWindow(QMainWindow):
         self._full_data = df
         self._source = source
         self._range = None  # a new dataset starts at its full range
+        self._var_subset = None  # and on its full variable list
         self._created = set()  # fresh dataset has no user-created features
-        # A new dataset starts on the full variable list — clear any subset a tab
-        # is holding so it isn't re-applied to unrelated data on the push below.
-        # Pinned tabs are frozen (skipped by `_push_data`), so leave them alone.
-        for tab in self._tabs:
-            if tab in getattr(self, "_pinned", set()):
-                continue
-            if hasattr(tab, "reset_subset"):
-                tab.reset_subset()
         # A plain load leaves any open project; `_open_project` re-sets these
         # after calling here, so Ctrl+S can't overwrite a project with other data.
         self._project_dir = None
@@ -381,10 +392,19 @@ class MainWindow(QMainWindow):
             self._data = diive.times.keep_daterange(self._full_data, start, end)
             title = (f"{self._base_title} — {self._source} "
                      f"[{start:%Y-%m-%d %H:%M} to {end:%Y-%m-%d %H:%M}]")
+        # Then narrow to the active variable subset. Names that no longer exist
+        # (deleted/renamed away) are dropped here, so a stale subset can't raise.
+        total = len(self._full_data.columns)
+        if self._var_subset:
+            keep = [v for v in self._var_subset if v in self._data.columns]
+            if keep:
+                self._data = diive.keep_vars(self._data, keep)
+                title += f" [{len(keep)} of {total} variables]"
         self.setWindowTitle(title)
         if self._header is not None:
             self._header.set_title(title)
         self._reset_range_act.setEnabled(self._range is not None)
+        self._reset_subset_act.setEnabled(bool(self._var_subset))
         self._push_data()
 
     def _select_daterange(self) -> None:
@@ -454,11 +474,15 @@ class MainWindow(QMainWindow):
         if hasattr(tab, "featuresCreated"):
             tab.featuresCreated.connect(self._add_features)
         if hasattr(tab, "subsetSelected"):
-            tab.subsetSelected.connect(self._show_overview_subset)
+            tab.subsetSelected.connect(self._apply_var_subset)
         if hasattr(tab, "variablesRenamed"):
             tab.variablesRenamed.connect(self._rename_variables)
         if self._data is not None:
-            tab.on_data_loaded(self._data, self._created)  # up to date on open
+            tab.on_data_loaded(self._data_for(tab), self._created)  # up to date on open
+        # Seed the variable picker with the subset currently in effect, so a
+        # freshly opened picker reflects what's actually shown.
+        if hasattr(tab, "set_active_subset") and self._var_subset:
+            tab.set_active_subset(self._var_subset)
         self._tabwidget.setCurrentWidget(tab.widget())
 
     def _next_menu_index(self, label: str) -> int:
@@ -591,7 +615,7 @@ class MainWindow(QMainWindow):
         if tab in self._pinned:
             self._pinned.discard(tab)
             if self._data is not None:  # catch up to the current dataset
-                tab.on_data_loaded(self._data, self._created)
+                tab.on_data_loaded(self._data_for(tab), self._created)
         else:
             self._pinned.add(tab)
         self._refresh_tab_icon(tab)
@@ -641,6 +665,12 @@ class MainWindow(QMainWindow):
         for col in new_df.columns:
             self._full_data[col] = new_df[col]  # aligns on index
         self._created |= {str(c) for c in new_df.columns}
+        # While a variable subset is active, a freshly created column would be
+        # filtered out (it isn't in the subset) and silently invisible — so add
+        # it to the subset, mirroring the Overview's new-feature handling.
+        if self._var_subset is not None:
+            self._var_subset += [str(c) for c in new_df.columns
+                                 if str(c) not in self._var_subset]
         # Record provenance the emitting tab attached to the frame (origin,
         # parent, operation, params, tags); stamp the time here (the library
         # model stays free of wall-clock calls). Frames without it are ignored.
@@ -668,6 +698,8 @@ class MainWindow(QMainWindow):
             return
         self._full_data = self._full_data.drop(columns=[name])
         self._created.discard(name)
+        if self._var_subset is not None and name in self._var_subset:
+            self._var_subset.remove(name)
         metadata_store.manager.store.drop(name)
         metadata_store.manager.notify()
         self._apply_range()
@@ -703,20 +735,34 @@ class MainWindow(QMainWindow):
             return
         self._full_data = self._full_data.rename(columns=mapping)
         self._created = {mapping.get(c, c) for c in self._created}
+        if self._var_subset is not None:  # keep renamed vars in the active subset
+            self._var_subset = [mapping.get(c, c) for c in self._var_subset]
         metadata_store.manager.store.rename(mapping)
         metadata_store.manager.notify()
         self._apply_range()
         self.statusBar().showMessage(f"Renamed {len(mapping)} variables", 5000)
 
-    def _show_overview_subset(self, var_names: list) -> None:
-        """Restrict the Overview tab's variable list to the selected subset
-        (from the 'Select variables' tab). Overview-only; data is untouched."""
-        for tab in self._tabs:
-            if hasattr(tab, "show_variable_subset"):
-                tab.show_variable_subset(var_names)
-                break
+    def _apply_var_subset(self, var_names: list) -> None:
+        """Narrow the dataset to the selected variables, app-wide (from the
+        'Select variables' tab). Non-destructive: the full record stays in
+        `_full_data`, so it's resettable (Data > Reset to all variables). Every
+        non-pinned tab sees only the subset; pinned (frozen) tabs are skipped by
+        `_push_data` and keep their full dataset."""
+        names = [n for n in var_names if self._full_data is not None
+                 and n in self._full_data.columns]
+        self._var_subset = names or None
+        self._apply_range()
+        n = len(self._var_subset or [])
         self.statusBar().showMessage(
-            f"Overview showing {len(var_names)} selected variables", 5000)
+            f"Showing {n} of {len(self._full_data.columns)} variables", 5000)
+
+    def _reset_var_subset(self) -> None:
+        """Revert to the full variable list (discard the subselection)."""
+        if self._var_subset is None:
+            return
+        self._var_subset = None
+        self._apply_range()
+        self.statusBar().showMessage("Reverted to all variables", 5000)
 
     def _load_example(self) -> None:
         df = diive.load_exampledata_parquet()
@@ -804,11 +850,12 @@ class MainWindow(QMainWindow):
             "site": site.manager.as_dict(),
             "range": ([self._range[0].isoformat(), self._range[1].isoformat()]
                       if self._range else None),
+            "var_subset": list(self._var_subset) if self._var_subset else None,
             "created_columns": sorted(str(c) for c in self._created),
             "source": self._source,
             "saved": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "tabs": self._open_tabs_state(),  # reopen the same workspace on load
-            "overview": self._tabs[0].save_state(),  # selected var + subset
+            "overview": self._tabs[0].save_state(),  # selected variable
             "active_tab": self._tabwidget.tabText(self._tabwidget.currentIndex()),
         }
         project = DiiveProject(
@@ -881,12 +928,13 @@ class MainWindow(QMainWindow):
         self._created = {str(c) for c in project.extras.get("created_columns") or []}
         rng = project.extras.get("range")
         self._range = (pd.Timestamp(rng[0]), pd.Timestamp(rng[1])) if rng else None
+        self._var_subset = list(project.extras.get("var_subset") or []) or None
         self._project_dir, self._project_name = Path(folder), project.name
         self._last_project_dir = str(Path(folder).parent)
         self._last_project = str(Path(folder))
         self._apply_range()  # re-push with restored created-columns + range
         metadata_store.manager.notify()
-        # Overview's selected variable + subset, then the saved workspace tabs.
+        # Overview's selected variable, then the saved workspace tabs.
         try:
             self._tabs[0].restore_state(project.extras.get("overview") or {})
         except Exception:

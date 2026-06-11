@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QRectF, Qt, QTimer
+from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import (
     QColor,
     QFont,
@@ -27,6 +27,7 @@ from PySide6.QtGui import (
     QPainterPath,
     QPen,
     QPixmap,
+    QRadialGradient,
 )
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QDialog, QLabel, QSplashScreen, QVBoxLayout
@@ -170,10 +171,31 @@ def make_splash_pixmap(dpr: float = 1.0) -> QPixmap:
     return pm
 
 
+def _wave_path(s: float, base_y: float, amp: float, wl: float, phase: float) -> QPainterPath:
+    """A closed sine-wave fill path from `base_y` down to the bottom edge `s`."""
+    path = QPainterPath()
+    path.moveTo(0.0, s)
+    path.lineTo(0.0, base_y)
+    x, step = 0.0, s / 96.0
+    while x <= s:
+        path.lineTo(x, base_y + amp * math.sin(2 * math.pi * (x / wl) + phase))
+        x += step
+    path.lineTo(s, s)
+    path.closeSubpath()
+    return path
+
+
 def make_icon_pixmap(size: int = 256) -> QPixmap:
-    """Render the diive app icon at `size` px square: the blue-teal gradient
-    tile with layered cyan waves and a white "d" above them (the splash motif)."""
+    """Render the diive app icon at `size` px square: a glossy blue-teal gradient
+    tile with layered cyan waves and a white "[d]" wordmark above them (the splash
+    motif).
+
+    Depth comes from a diagonal gradient + a top-left light glow + a deeper water
+    band under the waves, all drawn as vectors so they stay crisp from 16 px
+    (taskbar) up; the front wave carries a bright crest highlight and the "[d]" a
+    soft drop shadow, so the mark reads even on a busy backdrop."""
     pm = QPixmap(size, size)
+    pm.setDevicePixelRatio(1.0)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -183,47 +205,63 @@ def make_icon_pixmap(size: int = 256) -> QPixmap:
     card.addRoundedRect(QRectF(0, 0, s, s), s * 0.22, s * 0.22)
     p.setClipPath(card)
 
-    # Brighter, more saturated than the splash so the icon stands out on a
-    # (light or dark) taskbar; near-black navy would vanish on a dark taskbar.
-    grad = QLinearGradient(0, 0, 0, s)
-    grad.setColorAt(0.0, QColor("#1E88E5"))   # blue 600
-    grad.setColorAt(1.0, QColor("#00ACC1"))   # cyan 600
+    # Diagonal gradient (bright sky-blue top-left → deep teal bottom-right) gives
+    # the tile a light direction; brighter/more saturated than the splash so it
+    # holds up on a light *or* dark taskbar.
+    grad = QLinearGradient(0, 0, s, s)
+    grad.setColorAt(0.0, QColor("#4FC3F7"))   # light blue 300
+    grad.setColorAt(0.45, QColor("#1E88E5"))  # blue 600
+    grad.setColorAt(1.0, QColor("#00838F"))   # cyan 800
     p.fillRect(QRectF(0, 0, s, s), grad)
 
-    def _wave(base_f: float, amp_f: float, wl_f: float, phase: float, color: QColor) -> None:
-        base_y, amp, wl = s * base_f, s * amp_f, s * wl_f
-        path = QPainterPath()
-        path.moveTo(0.0, s)
-        path.lineTo(0.0, base_y)
-        x, step = 0.0, s / 64.0
-        while x <= s:
-            path.lineTo(x, base_y + amp * math.sin(2 * math.pi * (x / wl) + phase))
-            x += step
-        path.lineTo(s, s)
-        path.closeSubpath()
-        p.fillPath(path, color)
+    # Soft light glow from the top-left corner.
+    glow = QRadialGradient(s * 0.28, s * 0.22, s * 0.75)
+    glow.setColorAt(0.0, QColor(255, 255, 255, 70))
+    glow.setColorAt(1.0, QColor(255, 255, 255, 0))
+    p.fillRect(QRectF(0, 0, s, s), glow)
 
-    # Layered translucent-white "foam" waves across the lower third.
-    _wave(0.66, 0.055, 0.95, 0.4, QColor(255, 255, 255, 45))
-    _wave(0.76, 0.050, 0.62, 1.9, QColor(255, 255, 255, 75))
-    _wave(0.86, 0.040, 0.46, 3.3, QColor(255, 255, 255, 120))
+    # Deeper-water band under the waves so the lower third feels like depth, not
+    # just stripes (echoes the splash's darker bottom).
+    deep = QLinearGradient(0, s * 0.6, 0, s)
+    deep.setColorAt(0.0, QColor(0, 80, 110, 0))
+    deep.setColorAt(1.0, QColor(0, 70, 100, 90))
+    p.fillRect(QRectF(0, s * 0.6, s, s * 0.4), deep)
 
-    # Wordmark "d" drawn as a vector (font-independent, always crisp): a ring
-    # "bowl" with a vertical stem on its right, sitting above the waves.
-    w = s * 0.10                 # stroke / stem width
-    r = s * 0.155                # bowl radius
-    cx, cy = s * 0.47, s * 0.43  # bowl centre (above the waves)
-    y_top = s * 0.17             # stem reaches up to here
-    pen = QPen(_WHITE, w)
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-    p.setPen(pen)
+    # Layered translucent-white "foam" waves across the lower third, back→front.
+    # Kept in the lower ~28% so they never crowd the "d" (matters at 16 px).
+    front_base, front_amp, front_wl, front_phase = s * 0.88, s * 0.038, s * 0.46, 3.3
+    p.fillPath(_wave_path(s, s * 0.72, s * 0.052, s * 0.95, 0.4), QColor(255, 255, 255, 40))
+    p.fillPath(_wave_path(s, s * 0.80, s * 0.048, s * 0.62, 1.9), QColor(255, 255, 255, 70))
+    p.fillPath(_wave_path(s, front_base, front_amp, front_wl, front_phase),
+               QColor(255, 255, 255, 130))
+    # A bright crest line tracing the front wave's surface → glossy water sheen.
+    crest = QPen(QColor(255, 255, 255, 210), max(1.0, s * 0.012))
+    crest.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(crest)
     p.setBrush(Qt.BrushStyle.NoBrush)
-    p.drawEllipse(QRectF(cx - r, cy - r, 2 * r, 2 * r))   # bowl (ring -> counter)
-    p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(_WHITE)
-    p.drawRoundedRect(QRectF(cx + r - w, y_top, w, (cy + r) - y_top),
-                      w / 2.0, w / 2.0)                    # stem
+    prev = None
+    x, step = 0.0, s / 96.0
+    while x <= s:
+        y = front_base + front_amp * math.sin(2 * math.pi * (x / front_wl) + front_phase)
+        if prev is not None:
+            p.drawLine(QPointF(prev[0], prev[1]), QPointF(x, y))
+        prev = (x, y)
+        x += step
+
+    # Wordmark "[d]" set in real bold type, centred above the waves. The bracketed
+    # "d" is the diive mark; a soft drop shadow lifts it off the gradient.
+    font = QFont()
+    font.setBold(True)
+    font.setPixelSize(int(s * 0.50))
+    font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 96.0)
+    p.setFont(font)
+    text_rect = QRectF(0, s * 0.02, s, s * 0.74)  # upper area, clear of the waves
+
+    p.setPen(QColor(0, 40, 70, 80))               # soft drop shadow
+    p.drawText(text_rect.adjusted(s * 0.012, s * 0.018, s * 0.012, s * 0.018),
+               Qt.AlignmentFlag.AlignCenter, "[d]")
+    p.setPen(_WHITE)                              # the mark
+    p.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, "[d]")
     p.end()
     return pm
 
