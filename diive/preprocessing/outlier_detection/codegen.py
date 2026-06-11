@@ -62,6 +62,39 @@ def localsd_to_code(kwargs: dict, repeat: bool = True, *,
                         repeat, series_var, var_name)
 
 
+def zscore_to_code(kwargs: dict, repeat: bool = True, *,
+                   series_var: str = "series", var_name: str | None = None) -> str:
+    """Render a ``dv.outliers.zScore(...).run(...)`` snippet as a string.
+
+    Args mirror :func:`hampel_to_code`.
+    """
+    from diive.preprocessing.outlier_detection.zscore import zScore
+    return _render_call("dv.outliers.zScore", kwargs, _signature_defaults(zScore),
+                        repeat, series_var, var_name)
+
+
+def zscorerolling_to_code(kwargs: dict, repeat: bool = True, *,
+                          series_var: str = "series", var_name: str | None = None) -> str:
+    """Render a ``dv.outliers.zScoreRolling(...).run(...)`` snippet as a string.
+
+    Args mirror :func:`hampel_to_code`.
+    """
+    from diive.preprocessing.outlier_detection.zscore import zScoreRolling
+    return _render_call("dv.outliers.zScoreRolling", kwargs, _signature_defaults(zScoreRolling),
+                        repeat, series_var, var_name)
+
+
+def zscoreincrements_to_code(kwargs: dict, repeat: bool = True, *,
+                             series_var: str = "series", var_name: str | None = None) -> str:
+    """Render a ``dv.outliers.zScoreIncrements(...).run(...)`` snippet as a string.
+
+    Args mirror :func:`hampel_to_code`.
+    """
+    from diive.preprocessing.outlier_detection.incremental import zScoreIncrements
+    return _render_call("dv.outliers.zScoreIncrements", kwargs,
+                        _signature_defaults(zScoreIncrements), repeat, series_var, var_name)
+
+
 def hampel_to_code(kwargs: dict, repeat: bool = True, *,
                    series_var: str = "series", var_name: str | None = None) -> str:
     """Render a ``dv.outliers.Hampel(...).run(...)`` snippet as a string.

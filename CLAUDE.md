@@ -391,13 +391,32 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   shows a plain-language **explanation label** of what a spectrogram is (the user asked for it). Window length / overlap /
   window-function apply on **Update** (recompute); max-cycles-per-day (y-limit) and colormap are live re-renders. No
   signal processing in the GUI.
-- **Hampel outlier tab** (`tabs/outliers.py`, `Outliers ▸ Hampel filter`). Runs the library's `dv.outliers.Hampel` on a
-  worker thread; keeps the **original** (untouched), the **cleaned** series (`{var}_HAMPEL`, outliers→NaN), and the
-  **flag** (`FLAG_{var}_OUTLIER_HAMPEL_TEST`, 0/2). Two stacked preview panels: top = original + red outlier markers,
-  bottom = cleaned. They share the time x-axis (`sharex`) but **not** y — the cleaned panel autoscales to the
-  outlier-free range (sharing y would keep it stretched by the spikes the top panel still shows). **Add cleaned + flag to
-  dataset** emits the columns via a `featuresCreated` signal (the feature-engineering merge mechanism). All detection is
-  library work.
+- **Outlier tabs** (`Outliers` menu) — a family of `BaseOutlierTab` (`tabs/_outlier_base.py`) subclasses, one per
+  library detector: **Hampel** (`tabs/outliers.py`), **Local SD** (`tabs/outliers_localsd.py`), and the three z-score
+  methods **Z-score** / **Z-score (rolling)** / **Z-score (increments)** (`tabs/outliers_zscore.py` /
+  `outliers_zscorerolling.py` / `outliers_zscoreincrements.py`). Each runs its detector on a worker thread and keeps the
+  **original** (untouched), the **cleaned** series (`{var}_{METHOD_SUFFIX}`, outliers→NaN), and the **flag**
+  (`FLAG_{var}_OUTLIER_{flagid}_TEST`, 0/2 — note the flag id comes from the *library* class, so it can differ from the
+  cleaned-column suffix, e.g. `ZSCOREINCREMENTS` cleaned column but `FLAG_..._OUTLIER_INCRZ_TEST`). Two stacked preview
+  panels: top = original + red outlier markers, bottom = cleaned. They share the time x-axis (`sharex`) but **not** y —
+  the cleaned panel autoscales to the outlier-free range. **Add cleaned + flag to dataset** emits the columns via a
+  `featuresCreated` signal (the feature-engineering merge mechanism). All detection is library work; a subclass supplies
+  only param widgets, kwargs, the detector, and codegen.
+  - **Detector interface contract.** `BaseOutlierTab._worker` requires the library detector to expose `.run(repeat,
+    progress_callback)` (→ `.calc(...)`), `.filteredseries`, `.overall_flag`, `.last_lower_bound`/`.last_upper_bound`
+    (per-iteration detection band in **data units**, for the optional limit-line overlay), and `.is_daytime` (day/night
+    mode). When adding a GUI tab for another `dv.outliers` detector, verify/extend the library class to this contract —
+    do **not** reimplement detection in the GUI. (zScore/zScoreRolling/zScoreIncrements were extended to it; AbsoluteLimits,
+    LOF, TrimLow, ManualRemoval are candidates that still need checking.)
+  - **Two class flags gate optional UI.** `supports_daynight = False` omits the whole day/night box (rolling & increment
+    z-score have no day/night mode). `band_center_label = "<text>"` draws the detection band's **centre** (its midpoint —
+    the rolling mean/median the band is symmetric around) as a solid line beside the dashed/dotted limits, labelled with
+    that text (set on the rolling z-score tab; the band is `rolling_mean ± t·rolling_std`, so the midpoint *is* the
+    rolling mean — derived GUI-side from the bounds, no extra library output).
+  - **No limit band for the increments method (by design).** `zScoreIncrements` leaves `last_lower_bound`/`upper_bound`
+    `None`: it flags a point only when the z-scores of all three increments (forward/backward/combined) exceed the
+    threshold, so the accepted region is a *union* of intervals, not a single `[lower, upper]` envelope — there is no
+    faithful data-unit band to draw, and the base skips the overlay when the bounds are `None`.
 - **Per-variable metadata (tags + provenance).** Model is the **library's** `diive.core.metadata` (`VariableMetadata`,
   `ProvenanceEntry`, `MetadataStore`, `provenance_attr`, `ATTRS_KEY`, `truncate_words`, `MAX_DESCRIPTION_WORDS=50`) —
   headless, no Qt, no wall-clock (timestamps are passed in). The GUI holds it app-wide in `gui/metadata_store.py`'s

@@ -299,6 +299,55 @@ only the parameters differ:
 
 Adds `{var}_LOCALSD` and its flag to the variable list.
 
+### Outliers ▸ Z-score filter
+
+Flags points whose absolute **z-score** (deviation from the mean in units of
+standard deviation) exceeds a threshold. Same two-panel preview, live preview,
+limit lines, day/night colouring, **Add to dataset**, and **Copy Python** as the
+Hampel tab — only the parameters differ:
+
+- **Threshold (global)** — flag a point when its absolute z-score exceeds this
+  value (lower = stricter).
+- **Separate daytime / nighttime** — the z-score is then computed separately for
+  daytime and nighttime records (each with its own mean and SD), with a
+  **threshold per period** (seeded from the global value).
+
+Adds `{var}_ZSCORE` and its flag to the variable list.
+
+### Outliers ▸ Z-score (rolling) filter
+
+Like the z-score filter, but the mean and standard deviation are computed in a
+**rolling window** centred on each point, so the band adapts to local
+variability — useful for non-stationary series. No day/night mode (the rolling
+window already adapts). Parameters:
+
+- **Threshold** — flag a point when its absolute rolling z-score exceeds this
+  value (lower = stricter).
+- **Window (records)** — the rolling window for the mean and SD (seeded to ~5% of
+  the series length when data loads).
+
+With **Show limit lines** on, the band's centre — the **rolling mean** the band is
+built around — is drawn as a solid line between the upper/lower limits.
+
+Adds `{var}_ZSCOREROLLING` and its flag to the variable list.
+
+### Outliers ▸ Z-score (increments) filter
+
+Targets **abrupt changes**: a point is flagged only when the z-scores of its
+forward, backward, *and* combined increments all exceed the threshold. This
+isolates spikes while tolerating gradual change. No day/night mode. **No
+detection-limit band** (the **Show limit lines** option has no effect here): the
+test is on increment z-scores rather than the values, and because a point is
+flagged only when *all three* increments are extreme, the accepted region is a
+union of intervals — not a single upper/lower envelope — so there is no
+data-unit band to draw. Parameter:
+
+- **Threshold** — the z-score threshold applied to each increment series; a point
+  is flagged only when all three exceed it (lower = stricter).
+
+Adds `{var}_ZSCOREINCREMENTS` and its flag to the variable list (the flag column
+keeps the library's `FLAG_{var}_OUTLIER_INCRZ_TEST` name).
+
 ### Data ▸ Select variables
 
 Pick a subset of variables to focus the **Overview** list on. Click a variable on

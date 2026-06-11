@@ -19,6 +19,9 @@ from diive.gui.tabs.log import LogTab
 from diive.gui.tabs.metadata_explorer import MetadataExplorerTab
 from diive.gui.tabs.outliers import HampelOutlierTab
 from diive.gui.tabs.outliers_localsd import LocalSDOutlierTab
+from diive.gui.tabs.outliers_zscore import ZScoreOutlierTab
+from diive.gui.tabs.outliers_zscoreincrements import ZScoreIncrementsOutlierTab
+from diive.gui.tabs.outliers_zscorerolling import ZScoreRollingOutlierTab
 from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
 from diive.gui.tabs.spectrogram import SpectrogramTab
 from diive.gui.tabs.overview import OverviewTab
@@ -73,6 +76,9 @@ MENU_TABS: dict[str, dict[str, callable]] = {
     "Outliers": {
         "Hampel filter": HampelOutlierTab,
         "Local SD filter": LocalSDOutlierTab,
+        "Z-score filter": ZScoreOutlierTab,
+        "Z-score (rolling) filter": ZScoreRollingOutlierTab,
+        "Z-score (increments) filter": ZScoreIncrementsOutlierTab,
     },
     # Eddy-covariance flux processing (dv.flux). Its own menu — a first-class
     # diive domain that will grow (gap-filling, USTAR, storage, ...).

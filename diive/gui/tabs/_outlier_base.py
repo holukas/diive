@@ -52,7 +52,8 @@ _C_DAY = "#E53935"      # red 600       — daytime outliers + limits
 _C_NIGHT = "#1E88E5"    # blue 600      — nighttime outliers + limits
 _C_OUTLIER = "#E53935"  # red 600       — outliers when not separating day/night
 _C_REMOVED = "#E53935"  # red 600       — points removed in the current pass (X)
-_C_LIMIT = "#546E7A"    # blue-grey 600 — limits when not separating day/night
+_C_LIMIT = "#8E24AA"    # purple 600    — limits when not separating day/night
+                        # (distinct from the blue-grey raw line + green/red series)
 _C_MUTED = "#6B7780"    # secondary/help text
 
 
@@ -80,6 +81,13 @@ class BaseOutlierTab(DiiveTab):
     settings_title = "Settings"
     #: Suffix for the cleaned column name, e.g. "HAMPEL" -> "{var}_HAMPEL".
     method_suffix = "OUTLIER"
+    #: Whether the method supports daytime/nighttime separation. When False, the
+    #: day/night box is omitted (e.g. rolling/increment z-score have no day/night).
+    supports_daynight = True
+    #: When set (e.g. "rolling mean"), the detection band's centre line is drawn
+    #: alongside the limits and labelled with this text. Only meaningful for methods
+    #: whose band centre is informative on its own (e.g. the rolling z-score).
+    band_center_label: str | None = None
 
     # --- build ---
     def build(self) -> QWidget:
@@ -162,38 +170,44 @@ class BaseOutlierTab(DiiveTab):
         preview.addWidget(self.limits_cb)
         outer.addWidget(preview_box)
 
-        # Optional day/night separation (needs site coordinates).
+        # Optional day/night separation (needs site coordinates). The checkbox is
+        # always created (so `self.daynight_cb.isChecked()` is safe everywhere), but
+        # the box is only shown for methods that support it.
         self.daynight_cb = QCheckBox("Separate daytime / nighttime")
         self.daynight_cb.setToolTip(
             "Apply different thresholds to daytime and nighttime records (split by "
             "solar elevation from the site coordinates). Only changes the result when "
             "the two thresholds differ.")
-        self.daynight_cb.toggled.connect(self._toggle_daynight)
-        dn_box = QGroupBox("Day / night (optional)")
-        dn = QFormLayout(dn_box)
-        dn.addRow(self.daynight_cb)
-        # Subclass per-period threshold rows (returns its widgets to enable/disable).
-        threshold_widgets = tuple(self._add_daynight_threshold_rows(dn))
-        self.lat = QDoubleSpinBox(); self.lat.setRange(-90.0, 90.0); self.lat.setDecimals(4)
-        self.lat.setToolTip("Site latitude in decimal degrees (north positive); used "
-                            "to split day from night.")
-        self.lon = QDoubleSpinBox(); self.lon.setRange(-180.0, 180.0); self.lon.setDecimals(4)
-        self.lon.setToolTip("Site longitude in decimal degrees (east positive); used "
-                            "to split day from night.")
-        self.utc = QSpinBox(); self.utc.setRange(-12, 14)
-        self.utc.setToolTip("UTC offset (hours) of the timestamps; used to align solar "
-                            "position for the day/night split.")
-        self._dn_widgets = threshold_widgets + (self.lat, self.lon, self.utc)
-        for w in self._dn_widgets:
-            w.setEnabled(False)
-        dn.addRow("Latitude", self.lat)
-        dn.addRow("Longitude", self.lon)
-        dn.addRow("UTC offset (h)", self.utc)
-        dn_note = QLabel("Coordinates default from Settings ▸ Site details.")
-        dn_note.setWordWrap(True)
-        dn_note.setStyleSheet(f"color: {_C_MUTED};")
-        dn.addRow(dn_note)
-        outer.addWidget(dn_box)
+        if self.supports_daynight:
+            self.daynight_cb.toggled.connect(self._toggle_daynight)
+            dn_box = QGroupBox("Day / night (optional)")
+            dn = QFormLayout(dn_box)
+            dn.addRow(self.daynight_cb)
+            # Subclass per-period threshold rows (returns its widgets to enable/disable).
+            threshold_widgets = tuple(self._add_daynight_threshold_rows(dn))
+            self.lat = QDoubleSpinBox(); self.lat.setRange(-90.0, 90.0); self.lat.setDecimals(4)
+            self.lat.setToolTip("Site latitude in decimal degrees (north positive); used "
+                                "to split day from night.")
+            self.lon = QDoubleSpinBox(); self.lon.setRange(-180.0, 180.0); self.lon.setDecimals(4)
+            self.lon.setToolTip("Site longitude in decimal degrees (east positive); used "
+                                "to split day from night.")
+            self.utc = QSpinBox(); self.utc.setRange(-12, 14)
+            self.utc.setToolTip("UTC offset (hours) of the timestamps; used to align solar "
+                                "position for the day/night split.")
+            self._dn_widgets = threshold_widgets + (self.lat, self.lon, self.utc)
+            for w in self._dn_widgets:
+                w.setEnabled(False)
+            dn.addRow("Latitude", self.lat)
+            dn.addRow("Longitude", self.lon)
+            dn.addRow("UTC offset (h)", self.utc)
+            dn_note = QLabel("Coordinates default from Settings ▸ Site details.")
+            dn_note.setWordWrap(True)
+            dn_note.setStyleSheet(f"color: {_C_MUTED};")
+            dn.addRow(dn_note)
+            outer.addWidget(dn_box)
+        else:
+            self.lat = self.lon = self.utc = None
+            self._dn_widgets = ()
 
         self.run_btn = QPushButton("Detect outliers")
         self.run_btn.clicked.connect(self._run)
@@ -261,6 +275,8 @@ class BaseOutlierTab(DiiveTab):
 
     def _seed_site(self) -> None:
         """Prefill lat/lon/UTC from the app-wide Site details, if configured."""
+        if not self.supports_daynight:
+            return
         m = site.manager
         if not m.configured:
             return
@@ -276,9 +292,12 @@ class BaseOutlierTab(DiiveTab):
     # --- state (save/restore inputs with a project) ---
     def _state_controls(self) -> dict:
         """Shared persistable controls; subclasses extend with their own params."""
-        return {"repeat": self.repeat_cb, "live": self.live_cb,
-                "limits": self.limits_cb, "daynight": self.daynight_cb,
-                "lat": self.lat, "lon": self.lon, "utc": self.utc}
+        controls = {"repeat": self.repeat_cb, "live": self.live_cb,
+                    "limits": self.limits_cb}
+        if self.supports_daynight:
+            controls.update(daynight=self.daynight_cb, lat=self.lat,
+                            lon=self.lon, utc=self.utc)
+        return controls
 
     def save_state(self) -> dict:
         from diive.gui.widgets.state_utils import save_controls
@@ -443,7 +462,7 @@ class BaseOutlierTab(DiiveTab):
                     alpha=0.8, zorder=1)
         if show_limits:
             for lo, hi in self._bounds_history:
-                self._plot_band(ax_top, lo, hi, alpha=0.18, lw=0.6)
+                self._plot_band(ax_top, lo, hi, alpha=0.45, lw=1.0)
         self._plot_outlier_markers(ax_top, outliers, self._live_is_daytime)
         self._finalize_legend(ax_top, show_limits)
         ax_top.set_title(f"{orig.name} — original + outliers (iter {iteration})",
@@ -453,7 +472,7 @@ class BaseOutlierTab(DiiveTab):
         ax_bot.clear()
         ax_bot.plot(cleaned.index, cleaned.to_numpy(), color=_C_CLEANED, lw=0.8, zorder=1)
         if show_limits and bounds is not None:  # only this pass's band, a touch stronger
-            self._plot_band(ax_bot, bounds[0], bounds[1], alpha=0.5, lw=0.8)
+            self._plot_band(ax_bot, bounds[0], bounds[1], alpha=0.85, lw=1.3)
         if len(this_pass):
             ax_bot.plot(this_pass.index, this_pass.to_numpy(), linestyle="none",
                         marker="x", color=_C_REMOVED, ms=7, markeredgewidth=1.5,
@@ -464,19 +483,26 @@ class BaseOutlierTab(DiiveTab):
         self.canvas.draw_idle()
 
     # Upper limit = dashed, lower limit = dotted, so the two are told apart in the
-    # legend even though they share a day/night colour.
+    # legend even though they share a day/night colour. The band centre (the rolling
+    # mean/median the band is built around) is a solid line.
     _UPPER_STYLE = "--"
     _LOWER_STYLE = ":"
+    _CENTER_STYLE = "-"
 
     def _plot_band(self, ax, lower, upper, *, alpha: float, lw: float) -> None:
         """Draw a detection band (lower/upper limits) as faint lines, day/night
         coloured (red/blue) when a day mask is set, else neutral slate. Reindexed to
         the original index so the lines break at removed/missing points (no long
-        interpolation across gaps)."""
+        interpolation across gaps). When ``band_center_label`` is set, also draws the
+        band centre (its midpoint, e.g. the rolling mean) as a solid line — the band
+        is symmetric (centre ± limit), so the midpoint is exactly that centre."""
         orig = self._orig_series
         idx = orig.index if orig is not None else lower.index
         is_daytime = self._live_is_daytime
-        for bound, style in ((upper, self._UPPER_STYLE), (lower, self._LOWER_STYLE)):
+        bounds = [(upper, self._UPPER_STYLE), (lower, self._LOWER_STYLE)]
+        if self.band_center_label is not None:
+            bounds.append(((lower + upper) / 2.0, self._CENTER_STYLE))
+        for bound, style in bounds:
             b = bound.reindex(idx)
             if is_daytime is not None:
                 dm = is_daytime.reindex(idx).fillna(False).astype(bool)
@@ -492,16 +518,28 @@ class BaseOutlierTab(DiiveTab):
         """Proxy legend entries for the detection-limit lines (the band lines aren't
         labelled directly — that would add one entry per iteration)."""
         if self._live_is_daytime is not None:
-            return [
+            handles = [
                 Line2D([], [], color=_C_DAY, ls=self._UPPER_STYLE, label="upper limit (day)"),
                 Line2D([], [], color=_C_DAY, ls=self._LOWER_STYLE, label="lower limit (day)"),
                 Line2D([], [], color=_C_NIGHT, ls=self._UPPER_STYLE, label="upper limit (night)"),
                 Line2D([], [], color=_C_NIGHT, ls=self._LOWER_STYLE, label="lower limit (night)"),
             ]
-        return [
+            if self.band_center_label is not None:
+                handles += [
+                    Line2D([], [], color=_C_DAY, ls=self._CENTER_STYLE,
+                           label=f"{self.band_center_label} (day)"),
+                    Line2D([], [], color=_C_NIGHT, ls=self._CENTER_STYLE,
+                           label=f"{self.band_center_label} (night)"),
+                ]
+            return handles
+        handles = [
             Line2D([], [], color=_C_LIMIT, ls=self._UPPER_STYLE, label="upper limit"),
             Line2D([], [], color=_C_LIMIT, ls=self._LOWER_STYLE, label="lower limit"),
         ]
+        if self.band_center_label is not None:
+            handles.append(Line2D([], [], color=_C_LIMIT, ls=self._CENTER_STYLE,
+                                  label=self.band_center_label))
+        return handles
 
     def _finalize_legend(self, ax, show_limits: bool) -> None:
         """Build the axis legend from its labelled artists, plus limit proxies."""
@@ -603,7 +641,7 @@ class BaseOutlierTab(DiiveTab):
                     alpha=0.8, label="original", zorder=1)
         if show_limits:
             for lo, hi in (bounds_history or []):
-                self._plot_band(ax_top, lo, hi, alpha=0.18, lw=0.6)
+                self._plot_band(ax_top, lo, hi, alpha=0.45, lw=1.0)
         if flag is not None:
             self._plot_outlier_markers(ax_top, series[flag == 2], is_daytime)
             self._finalize_legend(ax_top, show_limits and bool(bounds_history))

@@ -29,8 +29,10 @@
 - Tabs: **Overview** (per-variable stats ribbon + multi-panel figure); per-method **Plot** tabs (heatmaps, time series,
   diel cycle, cumulative year, ridgeline, scatter XY, hexbin, histogram; multi-instance, each with a live settings
   panel); **Analyze** tabs **Gaps & coverage**, **Driver explorer**, **Seasonal-trend & anomalies**, **Spectrogram**;
-  **Flux processing chain** (Input + L2, with **Copy Python**); Data menu **Select variables**, **Metadata explorer**,
-  **Feature engineering**; plus **Appearance** and **Log**.
+  **Flux processing chain** (Input + L2, with **Copy Python**); **Outliers** tabs **Hampel filter**, **Local SD
+  filter**, **Z-score filter**, **Z-score (rolling) filter**, and **Z-score (increments) filter** (each keeps the
+  original + a cleaned copy + the flag, with a live two-panel preview and **Copy Python**); Data menu **Select
+  variables**, **Metadata explorer**, **Feature engineering**; plus **Appearance** and **Log**.
 - **Projects** (`File ▸ Save project` / `Open project`): save the full working state to a self-contained
   ``<name>.diive`` folder — the dataset (`data.parquet`), the complete per-variable metadata (tags, notes,
   origin/provenance), site coordinates, and the active date range, marked by a `__diive__` file. Opening one restores
@@ -72,6 +74,11 @@ Library additions used by the GUI (all backward-compatible):
   headless per-variable tag + provenance model. Operations attach a `df.attrs[ATTRS_KEY]` payload describing new columns;
   consumers record origin/parent/operation/tags. Used by the GUI's metadata explorer.
 - `SSTATS_DESCRIPTIONS` (`diive.core.dfun.stats`): one-line description per `sstats` metric.
+- Outlier detectors expose the GUI-preview interface: `zScore`, `zScoreRolling`, and `zScoreIncrements` now accept a
+  `progress_callback` in `.run()`/`.calc()` (per-iteration progress + live preview) and expose `last_lower_bound` /
+  `last_upper_bound` (the per-iteration detection band in data units; `None` for the increment method, which has no
+  data-unit band) — matching `Hampel` / `LocalSD`. `zScore` also gains `thres_zscore_daytime` / `thres_zscore_nighttime`
+  per-period overrides (default `None` → fall back to the global `thres_zscore`), per the day/night threshold convention.
 
 ### Flux Processing Chain
 

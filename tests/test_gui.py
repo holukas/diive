@@ -1355,6 +1355,70 @@ def test_localsd_outlier_tab_keeps_original_cleaned_flag(window):
     assert set(window._data[flag].dropna().unique()) <= {0, 2}
 
 
+def test_zscore_outlier_tab_keeps_original_cleaned_flag(window):
+    window._open_menu_tab("Z-score filter")
+    tab = window._menu_tab_list[-1]
+    var = "Tair_f"
+    tab._select(var)
+    # Run the worker directly (synchronous) instead of the background thread.
+    series = window._data[var]
+    tab._worker(series, dict(thres_zscore=4.0), True)
+    QApplication.processEvents()
+    cleaned, flag = f"{var}_ZSCORE", f"FLAG_{var}_OUTLIER_ZSCORE_TEST"
+    assert list(tab._result_df.columns) == [cleaned, flag]
+
+    n_before = window._data.shape[1]
+    tab._add()  # what "Add cleaned + flag to dataset" does
+    QApplication.processEvents()
+    cols = [str(c) for c in window._data.columns]
+    assert var in cols                 # original kept, untouched
+    assert cleaned in cols and flag in cols
+    assert window._data.shape[1] == n_before + 2
+    assert set(window._data[flag].dropna().unique()) <= {0, 2}
+
+
+def test_zscorerolling_outlier_tab_keeps_original_cleaned_flag(window):
+    window._open_menu_tab("Z-score (rolling) filter")
+    tab = window._menu_tab_list[-1]
+    var = "Tair_f"
+    tab._select(var)
+    series = window._data[var]
+    tab._worker(series, dict(thres_zscore=4.0, winsize=480), True)
+    QApplication.processEvents()
+    cleaned, flag = f"{var}_ZSCOREROLLING", f"FLAG_{var}_OUTLIER_ZSCOREROLLING_TEST"
+    assert list(tab._result_df.columns) == [cleaned, flag]
+
+    n_before = window._data.shape[1]
+    tab._add()
+    QApplication.processEvents()
+    cols = [str(c) for c in window._data.columns]
+    assert var in cols                 # original kept, untouched
+    assert cleaned in cols and flag in cols
+    assert window._data.shape[1] == n_before + 2
+    assert set(window._data[flag].dropna().unique()) <= {0, 2}
+
+
+def test_zscoreincrements_outlier_tab_keeps_original_cleaned_flag(window):
+    window._open_menu_tab("Z-score (increments) filter")
+    tab = window._menu_tab_list[-1]
+    var = "Tair_f"
+    tab._select(var)
+    series = window._data[var]
+    tab._worker(series, dict(thres_zscore=4.0), True)
+    QApplication.processEvents()
+    cleaned, flag = f"{var}_ZSCOREINCREMENTS", f"FLAG_{var}_OUTLIER_INCRZ_TEST"
+    assert list(tab._result_df.columns) == [cleaned, flag]
+
+    n_before = window._data.shape[1]
+    tab._add()
+    QApplication.processEvents()
+    cols = [str(c) for c in window._data.columns]
+    assert var in cols                 # original kept, untouched
+    assert cleaned in cols and flag in cols
+    assert window._data.shape[1] == n_before + 2
+    assert set(window._data[flag].dropna().unique()) <= {0, 2}
+
+
 def test_overview_and_log_not_pinnable(window):
     overview, log = window._tabs[0], window._tabs[1]
     window._toggle_pin(overview)
