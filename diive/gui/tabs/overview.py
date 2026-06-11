@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import matplotlib.dates as mdates
 import pandas as pd
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -167,6 +167,11 @@ class _StatCard(QFrame):
         lay.addStretch(1)
 
 
+class _OverviewSignals(QObject):
+    """Qt signals for the tab (DiiveTab is a plain ABC, not a QObject)."""
+    variable_deleted = Signal(str)
+
+
 class OverviewTab(DiiveTab):
     """Stats + multi-panel figure for the selected variable."""
 
@@ -174,6 +179,10 @@ class OverviewTab(DiiveTab):
 
     def build(self) -> QWidget:
         self._df = None
+        self._sig = _OverviewSignals()
+        #: Emitted when a variable is deleted via its right-click menu; the main
+        #: window drops the column from the dataset and re-pushes to all tabs.
+        self.variableDeleted = self._sig.variable_deleted
         # Live zoom-sync state (set per render; see _render_figure / _on_zoom).
         self._zoom_series = None
         self._diel_ax = None
@@ -188,8 +197,9 @@ class OverviewTab(DiiveTab):
 
         # Top: variable list + figure.
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.varpanel = VariablePanel()
+        self.varpanel = VariablePanel(deletable=True)
         self.varpanel.selected.connect(self._on_select)
+        self.varpanel.deleteRequested.connect(self.variableDeleted)
         self.canvas = MplCanvas()
         splitter.addWidget(self.varpanel)
         splitter.addWidget(self.canvas)

@@ -122,6 +122,8 @@ class MainWindow(QMainWindow):
             tab = tab_cls()
             self._tabs.append(tab)
             self._tabwidget.addTab(tab.widget(), tab.title)
+            if hasattr(tab, "variableDeleted"):
+                tab.variableDeleted.connect(self._delete_variable)
         # Tabs can be dragged to reorder and renamed by double-clicking. Menu
         # tabs get a (custom, clearly visible) close button on open; the
         # always-on Overview/Log are removed here so they stay open.
@@ -482,6 +484,25 @@ class MainWindow(QMainWindow):
             self._full_data[col] = new_df[col]  # aligns on index
         self._created |= {str(c) for c in new_df.columns}
         self._apply_range()
+
+    def _delete_variable(self, name: str) -> None:
+        """Drop a column from the dataset (non-destructive to the source file).
+
+        Removes it from the full record and re-derives the active range so every
+        tab drops it. The on-disk file is untouched; re-loading restores it.
+        """
+        if self._full_data is None or name not in self._full_data.columns:
+            return
+        if QMessageBox.question(
+                self, "Delete variable",
+                f"Remove '{name}' from the loaded dataset?\n\n"
+                "This affects the in-memory data only; the source file is "
+                "untouched.") != QMessageBox.StandardButton.Yes:
+            return
+        self._full_data = self._full_data.drop(columns=[name])
+        self._created.discard(name)
+        self._apply_range()
+        self.statusBar().showMessage(f"Deleted variable '{name}'", 5000)
 
     def _show_overview_subset(self, var_names: list) -> None:
         """Restrict the Overview tab's variable list to the selected subset

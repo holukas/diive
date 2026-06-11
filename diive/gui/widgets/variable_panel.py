@@ -21,11 +21,13 @@ from __future__ import annotations
 import re
 
 from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QLineEdit,
     QListWidgetItem,
+    QMenu,
     QVBoxLayout,
     QWidget,
 )
@@ -94,8 +96,11 @@ class VariablePanel(QWidget):
 
     #: Emitted on item click as (variable_name, ctrl_held).
     selected = Signal(str, bool)
+    #: Emitted when "Delete variable" is chosen from the right-click menu
+    #: (only wired when the panel is built with `deletable=True`).
+    deleteRequested = Signal(str)
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, deletable: bool = False) -> None:
         super().__init__(parent)
         self.setObjectName("varpanel")  # white pane bg via QSS (search/list keep theirs)
         layout = QVBoxLayout(self)
@@ -117,6 +122,12 @@ class VariablePanel(QWidget):
         self.list.setWordWrap(False)
         self.list.selected.connect(self.selected)  # re-emit upward
 
+        # Opt-in right-click "Delete variable" menu (tabs that own the dataset
+        # wire `deleteRequested`; other tabs leave it off, so no dead menu).
+        if deletable:
+            self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            self.list.customContextMenuRequested.connect(self._show_context_menu)
+
         layout.addWidget(self.search)
         layout.addWidget(self.list, stretch=1)
 
@@ -124,6 +135,18 @@ class VariablePanel(QWidget):
         # settings). Live theme preview also repaints pills/highlights.
         self.setFixedWidth(theme.manager.list_width)
         theme.manager.changed.connect(self._on_theme_changed)
+
+    def _show_context_menu(self, pos) -> None:
+        """Right-click menu for the item under the cursor: delete the variable."""
+        item = self.list.itemAt(pos)
+        if item is None:
+            return
+        name = item.data(NAME_ROLE)
+        menu = QMenu(self.list)
+        act = QAction(f"Delete '{name}'", menu)
+        act.triggered.connect(lambda: self.deleteRequested.emit(name))
+        menu.addAction(act)
+        menu.exec(self.list.viewport().mapToGlobal(pos))
 
     def _on_theme_changed(self) -> None:
         self.setFixedWidth(theme.manager.list_width)
