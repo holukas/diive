@@ -32,8 +32,9 @@ from PySide6.QtWidgets import (
 #: stretching across a wide window.
 _COL_WIDTH = 480
 
-from diive.gui import site
+from diive.gui import site, theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.notes_wall import NotesWall
 
 
 class ProjectSettingsTab(DiiveTab):
@@ -128,14 +129,33 @@ class ProjectSettingsTab(DiiveTab):
 
         col.addStretch(1)  # keep the rows packed at the top of the column
 
-        # Anchor the column to the left; the trailing stretch fills the rest.
+        # Anchor the form column to the left; the notes wall fills the rest of the
+        # otherwise-empty space.
         outer.addWidget(column)
-        outer.addStretch(1)
+
+        notes_col = QVBoxLayout()
+        notes_col.setContentsMargins(0, 0, 0, 0)
+        notes_col.setSpacing(8)
+        header = QLabel(theme.manager.label_text("Notes"))
+        hf = theme.manager.tracked_font(header.font())
+        hf.setBold(True)
+        header.setFont(hf)
+        notes_col.addWidget(header)
+        self.notes = NotesWall()
+        self.notes.set_state(site.manager.notes)
+        self.notes.changed.connect(self._on_notes_changed)
+        notes_col.addWidget(self.notes, stretch=1)
+        outer.addLayout(notes_col, stretch=1)
 
         self._load_from_manager()
         # Keep the form in sync if another part of the app updates the site.
         site.manager.changed.connect(self._load_from_manager)
         return root
+
+    def _on_notes_changed(self) -> None:
+        """Mirror the wall into the store so it travels with the project / prefs.
+        A plain attribute set (no ``changed`` signal) avoids a rebuild loop."""
+        site.manager.notes = self.notes.state()
 
     def _load_from_manager(self) -> None:
         m = site.manager
@@ -153,6 +173,11 @@ class ProjectSettingsTab(DiiveTab):
         self.description.blockSignals(True)
         self.description.setPlainText(m.description)
         self.description.blockSignals(False)
+        # Rebuild the notes wall only when the store's notes genuinely differ from
+        # what's on the wall (e.g. a project was opened), so unrelated `changed`
+        # signals — like the Save below — don't wipe an in-progress edit.
+        if hasattr(self, "notes") and m.notes != self.notes.state():
+            self.notes.set_state(m.notes)
         self.status.setText(
             "Stored." if m.configured else "Not set yet — fill in and Save.")
 

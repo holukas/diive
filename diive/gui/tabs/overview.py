@@ -203,6 +203,13 @@ class OverviewTab(DiiveTab):
         splitter.addWidget(self.canvas)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
+        # The variable panel is fixed-width, so the splitter handle can't resize
+        # anything — disable it and restore the arrow cursor so it doesn't show a
+        # misleading ↔ resize cursor at the list's right edge.
+        splitter.setChildrenCollapsible(False)
+        handle = splitter.handle(1)
+        handle.setEnabled(False)
+        handle.setCursor(Qt.CursorShape.ArrowCursor)
         outer.addWidget(splitter, stretch=1)
 
         # Bottom: full-width "dashboard strip" of stat cards.

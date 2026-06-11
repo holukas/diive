@@ -44,6 +44,10 @@ class SiteManager(QObject):
         self.elevation: float = 0.0
         self.utc_offset: int = 0
         self.configured: bool = False
+        #: Free-form sticky notes shown on the Project settings "wall"; a list of
+        #: card dicts (title, body, color, x, y, w, h). Presentation-only; managed
+        #: by the GUI's notes wall. Travels with the project (and GUI prefs).
+        self.notes: list = []
 
     def update(self, *, name: str, latitude: float, longitude: float,
                elevation: float, utc_offset: int, author: str = "",
@@ -70,6 +74,7 @@ class SiteManager(QObject):
             "elevation": self.elevation,
             "utc_offset": self.utc_offset,
             "configured": self.configured,
+            "notes": list(self.notes),
         }
 
     def load_dict(self, data: dict) -> None:
@@ -84,6 +89,9 @@ class SiteManager(QObject):
         self.elevation = float(data.get("elevation", self.elevation))
         self.utc_offset = int(data.get("utc_offset", self.utc_offset))
         self.configured = bool(data.get("configured", self.configured))
+        notes = data.get("notes")
+        if isinstance(notes, list):
+            self.notes = [dict(n) for n in notes if isinstance(n, dict)]
 
 
 #: Process-wide singleton; import as ``from diive.gui import site`` then
