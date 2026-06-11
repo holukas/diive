@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from PySide6.QtCore import QByteArray, QRectF, QSize, Qt, QTimer
+from PySide6.QtCore import QByteArray, QEvent, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -171,6 +171,11 @@ class MainWindow(QMainWindow):
         for i in range(self._tabwidget.count()):
             bar.setTabButton(i, QTabBar.ButtonPosition.RightSide, None)
         self._tabwidget.tabCloseRequested.connect(self._on_tab_close)
+        # Rename only on a *left* double-click. tabBarDoubleClicked fires for any
+        # button, so an event filter records the last double-click button and the
+        # rename slot ignores middle/right ones.
+        self._last_tab_dblclick_left = True
+        self._tabwidget.tabBar().installEventFilter(self)
         self._tabwidget.tabBarDoubleClicked.connect(self._rename_tab)
         # Per-tab "pin" (freeze data): pinned tabs keep their current dataset and
         # are skipped by data pushes. Toggle via the tab's right-click menu.
@@ -181,6 +186,8 @@ class MainWindow(QMainWindow):
 
         # Variable-list "Edit metadata…" (any tab) opens the Metadata explorer.
         metadata_store.manager.editRequested.connect(self._edit_metadata)
+        # Variable-list "Rename…" (any tab) prompts for a new name and applies it.
+        metadata_store.manager.renameRequested.connect(self._rename_one_variable)
 
         # The GUI has a single look: the frameless Studio shell (custom header +
         # pill tabs).
@@ -440,6 +447,8 @@ class MainWindow(QMainWindow):
             tab.featuresCreated.connect(self._add_features)
         if hasattr(tab, "subsetSelected"):
             tab.subsetSelected.connect(self._show_overview_subset)
+        if hasattr(tab, "variablesRenamed"):
+            tab.variablesRenamed.connect(self._rename_variables)
         if self._data is not None:
             tab.on_data_loaded(self._data, self._created)  # up to date on open
         self._tabwidget.setCurrentWidget(tab.widget())
@@ -594,9 +603,18 @@ class MainWindow(QMainWindow):
         else:
             self._tabwidget.setTabIcon(index, QIcon())
 
+    def eventFilter(self, obj, event):
+        """Record the mouse button of a tab-bar double-click so `_rename_tab`
+        can act on left double-clicks only (Qt's signal carries no button)."""
+        if (obj is self._tabwidget.tabBar()
+                and event.type() == QEvent.Type.MouseButtonDblClick):
+            self._last_tab_dblclick_left = (
+                event.button() == Qt.MouseButton.LeftButton)
+        return super().eventFilter(obj, event)
+
     def _rename_tab(self, index: int) -> None:
-        """Rename a tab on double-click (changes the display label only)."""
-        if index < 0:
+        """Rename a tab on a left double-click (changes the display label only)."""
+        if index < 0 or not self._last_tab_dblclick_left:
             return
         new, ok = QInputDialog.getText(
             self, "Rename tab", "Tab name:", text=self._tabwidget.tabText(index))
@@ -646,6 +664,41 @@ class MainWindow(QMainWindow):
         metadata_store.manager.notify()
         self._apply_range()
         self.statusBar().showMessage(f"Deleted variable '{name}'", 5000)
+
+    def _rename_one_variable(self, name: str) -> None:
+        """Prompt for a new name for one variable, then rename it (any tab)."""
+        if self._full_data is None or name not in self._full_data.columns:
+            return
+        new, ok = QInputDialog.getText(
+            self, "Rename variable", "New name:", text=name)
+        new = new.strip()
+        if not ok or not new or new == name:
+            return
+        if new in self._full_data.columns:
+            QMessageBox.warning(
+                self, "Rename variable",
+                f"A variable named '{new}' already exists.")
+            return
+        self._rename_variables({name: new})
+
+    def _rename_variables(self, mapping: dict) -> None:
+        """Rename columns in the dataset (non-destructive to the source file).
+
+        Renames in the full record, remaps the `created` set and the per-variable
+        metadata store (origin/provenance/tags travel with the new name), then
+        re-derives the active range so every tab sees the new names.
+        """
+        if self._full_data is None or not mapping:
+            return
+        mapping = {o: n for o, n in mapping.items() if o in self._full_data.columns}
+        if not mapping:
+            return
+        self._full_data = self._full_data.rename(columns=mapping)
+        self._created = {mapping.get(c, c) for c in self._created}
+        metadata_store.manager.store.rename(mapping)
+        metadata_store.manager.notify()
+        self._apply_range()
+        self.statusBar().showMessage(f"Renamed {len(mapping)} variables", 5000)
 
     def _show_overview_subset(self, var_names: list) -> None:
         """Restrict the Overview tab's variable list to the selected subset

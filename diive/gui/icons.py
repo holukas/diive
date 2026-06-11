@@ -223,6 +223,7 @@ _LINE_RULES = [
     ("anomal", _ln_chart),
     ("spectro", _ln_grid),
     ("feature", _ln_gear),
+    ("rename", _ln_document),
     ("chain", _ln_wave),
     ("flux", _ln_wave),
     ("appearance", _ln_palette),

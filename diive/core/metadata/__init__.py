@@ -253,6 +253,26 @@ class MetadataStore:
         """Forget a deleted variable."""
         self._items.pop(str(name), None)
 
+    def rename(self, mapping: dict) -> None:
+        """Rename variables, preserving each one's metadata and lineage links.
+
+        ``mapping`` is ``{old_name: new_name}``. Re-keys the store, updates each
+        record's ``name``, and rewrites parent references (``parents`` lists and
+        per-provenance ``parent``) so the renamed variables still point at each
+        other. Entries not in ``mapping`` keep their names but still get their
+        parent references remapped (a child of a renamed variable stays linked).
+        """
+        mapping = {str(o): str(n) for o, n in mapping.items() if str(o) != str(n)}
+        if not mapping:
+            return
+        for md in self._items.values():
+            md.name = mapping.get(md.name, md.name)
+            md.parents = [mapping.get(p, p) for p in md.parents]
+            for entry in md.provenance:
+                if entry.parent is not None:
+                    entry.parent = mapping.get(entry.parent, entry.parent)
+        self._items = {md.name: md for md in self._items.values()}
+
     def user_tags(self) -> dict[str, list[str]]:
         """``{name: [user tags]}`` for every variable that has any — the
         persistence surface (function-set provenance tags do not round-trip)."""

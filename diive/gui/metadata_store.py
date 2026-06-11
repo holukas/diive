@@ -31,6 +31,9 @@ class MetadataManager(QObject):
     #: Emitted to ask the app to open the Metadata explorer on a variable
     #: (from any tab's variable-list right-click). MainWindow handles it.
     editRequested = Signal(str)
+    #: Emitted to ask the app to rename a variable (from any tab's variable-list
+    #: right-click). MainWindow prompts for the new name and applies it.
+    renameRequested = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -38,6 +41,9 @@ class MetadataManager(QObject):
 
     def request_edit(self, name: str) -> None:
         self.editRequested.emit(name)
+
+    def request_rename(self, name: str) -> None:
+        self.renameRequested.emit(name)
 
     def notify(self) -> None:
         """Emit ``changed`` after the main window records load/feature provenance

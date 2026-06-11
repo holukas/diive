@@ -167,6 +167,13 @@ class VariablePanel(QWidget):
             menu.addAction(edit_act)
             menu.addSeparator()
 
+        # Rename works in every tab's variable list (incl. the explorer's own).
+        rename_act = QAction("Rename…", menu)
+        rename_act.triggered.connect(
+            lambda: metadata_store.manager.request_rename(name))
+        menu.addAction(rename_act)
+        menu.addSeparator()
+
         fav = FAVORITE in md.tags
         fav_act = QAction("★ Unmark favorite" if fav else "★ Mark favorite", menu)
         fav_act.triggered.connect(

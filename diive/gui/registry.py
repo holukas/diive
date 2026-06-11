@@ -25,6 +25,7 @@ from diive.gui.tabs.outliers_zscorerolling import ZScoreRollingOutlierTab
 from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
 from diive.gui.tabs.spectrogram import SpectrogramTab
 from diive.gui.tabs.overview import OverviewTab
+from diive.gui.tabs.rename_variables import RenameVariablesTab
 from diive.gui.tabs.plotting import (
     CUMULATIVE_YEAR,
     DIELCYCLE,
@@ -59,6 +60,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         # data/variable preparation: subset, per-variable metadata, and the
         # feature engineer (which derives new columns).
         "Select variables": VariableSelectorTab,
+        "Rename variables": RenameVariablesTab,
         "Metadata explorer": MetadataExplorerTab,
         "Feature engineering": FeatureEngineerTab,
     },
@@ -108,4 +110,4 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 SINGLE_INSTANCE_TABS: set[str] = {
     "Appearance", "Project settings", "Flux processing chain", "Gaps & coverage",
     "Driver explorer", "Seasonal-trend & anomalies", "Spectrogram",
-    "Metadata explorer", "Select variables"}
+    "Metadata explorer", "Select variables", "Rename variables"}
