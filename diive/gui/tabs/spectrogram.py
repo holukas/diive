@@ -153,15 +153,21 @@ class SpectrogramTab(DiiveTab):
 
     # --- data flow -----------------------------------------------------
     def save_state(self) -> dict:
-        return {"target": self._target, "nperseg": self.nperseg.value(),
-                "overlap": self.overlap.value(), "window": self.window.currentText(),
-                "max_freq": self.max_freq.value(), "cmap": self.cmap.currentText()}
+        from diive.gui.widgets.state_utils import save_controls
+        return {"target": self._target,
+                "controls": save_controls(
+                    {"nperseg": self.nperseg, "overlap": self.overlap,
+                     "window": self.window, "max_freq": self.max_freq,
+                     "cmap": self.cmap})}
 
     def restore_state(self, state: dict) -> None:
         from diive.gui.widgets.state_utils import restore_controls
+        # `state.get("controls") or state` tolerates older projects that saved
+        # the control values flat at the top level.
         restore_controls({"nperseg": self.nperseg, "overlap": self.overlap,
                           "window": self.window, "max_freq": self.max_freq,
-                          "cmap": self.cmap}, state)
+                          "cmap": self.cmap},
+                         state.get("controls") or state)
         t = state.get("target")
         if t and self._df is not None and t in self._df.columns:
             self._on_select(t)

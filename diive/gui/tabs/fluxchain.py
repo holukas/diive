@@ -31,7 +31,6 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
-    QLineEdit,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,

@@ -365,17 +365,21 @@ class BaseOutlierTab(DiiveTab):
         self._bounds_history = []
         if self.live_cb.isChecked():
             self._draw(series)
+        # Snapshot widget state on the GUI thread; the worker must not read live
+        # Qt widgets from a background thread.
         threading.Thread(
             target=self._worker,
-            args=(series, kwargs, self.repeat_cb.isChecked()),
+            args=(series, kwargs, self.repeat_cb.isChecked(),
+                  self.daynight_cb.isChecked()),
             daemon=True).start()
 
-    def _worker(self, series, kwargs: dict, repeat: bool) -> None:
+    def _worker(self, series, kwargs: dict, repeat: bool,
+                separate: bool = False) -> None:
         try:
             h = self._make_detector(series, kwargs)
             # Daytime mask is computed in __init__; expose it for live colouring
             # before run() starts firing progress callbacks.
-            self._live_is_daytime = getattr(h, "is_daytime", None) if self.daynight_cb.isChecked() else None
+            self._live_is_daytime = getattr(h, "is_daytime", None) if separate else None
 
             def cb(it, n, s):
                 # Read the iteration's data-unit detection band off the detector.
@@ -401,7 +405,7 @@ class BaseOutlierTab(DiiveTab):
                     tags=["flag", tag]),
             }
             # Day/night split of the outliers (only when separation was on).
-            is_daytime = getattr(h, "is_daytime", None) if self.daynight_cb.isChecked() else None
+            is_daytime = getattr(h, "is_daytime", None) if separate else None
             payload = {
                 "var": series.name, "cleaned": cleaned, "flag": flag,
                 "result": result, "n_outliers": int((flag == 2).sum()),

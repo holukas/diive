@@ -259,8 +259,12 @@ class OverviewTab(DiiveTab):
         # Selection priority: a freshly added feature (so it's plotted and
         # obviously visible — flags are skipped in favour of the cleaned series),
         # then the surviving current selection, then a default.
-        feature = next((c for c in new_cols if not _is_flag(c)), None) \
-            or (new_cols[0] if new_cols else None)
+        # Auto-select a freshly added *non-flag* column (the cleaned series).
+        # If every new column is a flag, select none here and fall through to
+        # the surviving selection / default — plotting a bare 0/2 flag is not
+        # useful and was never the intent.
+        non_flags = [c for c in new_cols if not _is_flag(c)]
+        feature = non_flags[0] if non_flags else None
         if feature in cols:
             self.varpanel.scroll_to(feature)  # bring the appended row into view
             self._on_select(feature)

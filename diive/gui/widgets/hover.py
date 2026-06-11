@@ -6,8 +6,9 @@ GUI.WIDGETS.HOVER: VALUE-UNDER-CURSOR TOOLTIP FOR EMBEDDED MATPLOTLIB
 the value under the cursor as the mouse moves over a plot:
 
 - **Line panels** (time series, cumulative, diel cycle, daily mean): snaps to
-  the nearest sample along x (`np.searchsorted`, O(log n), so it stays smooth on
-  large series) and shows its x (date or time-of-day) and value, with a marker.
+  the nearest sample along x (`argmin` over |x - cursor|, so it is correct even
+  for non-monotonic lines like the per-month diel cycle) and shows its x (date or
+  time-of-day) and value, with a marker.
 - **Heatmaps** (`pcolormesh`): reads the cell under the cursor from the grid and
   shows its two axis values and the cell value.
 
@@ -21,14 +22,10 @@ from __future__ import annotations
 
 import numpy as np
 from matplotlib.collections import QuadMesh
-from matplotlib.dates import num2date
+from matplotlib.dates import ConciseDateConverter, DateConverter, num2date
 
 #: Tooltip / marker ink (blue-grey 800), matching the GUI's neutral accents.
 _INK = "#37474F"
-
-#: matplotlib date ordinals for recent years are ~1.5e4; time-of-day axes are
-#: 0-24. Above this an axis value is treated as a date, below it as hours.
-_DATE_THRESHOLD = 1000.0
 
 
 class HoverAnnotator:
@@ -151,8 +148,15 @@ class HoverAnnotator:
             y = np.asarray(line.get_ydata(orig=False), dtype=float)
             if x.size == 0:
                 continue
-            idx = int(np.searchsorted(x, event.xdata))
-            for i in (idx - 1, idx):
+            # Nearest sample in x. argmin handles non-monotonic lines (e.g. the
+            # per-month diel cycle) that searchsorted, which assumes ascending x,
+            # would snap to the wrong point.
+            with np.errstate(invalid="ignore"):
+                dx = np.abs(x - event.xdata)
+            if not np.any(np.isfinite(dx)):
+                continue
+            idx = int(np.nanargmin(dx))
+            for i in (idx - 1, idx, idx + 1):
                 if not (0 <= i < x.size) or not np.isfinite(y[i]):
                     continue
                 px, py = ax.transData.transform((x[i], y[i]))
@@ -162,7 +166,7 @@ class HoverAnnotator:
         if best is None:
             return None
         _, bx, by = best
-        return bx, by, f"{self._fmt_axis(bx)}\n{by:.4g}", True
+        return bx, by, f"{self._fmt_axis(ax.xaxis, bx)}\n{by:.4g}", True
 
     def _heatmap_value(self, ax, mesh, event):
         if event.ydata is None:
@@ -176,7 +180,7 @@ class HoverAnnotator:
         xc = 0.5 * (xb[col] + xb[col + 1])
         yc = 0.5 * (yb[row] + yb[row + 1])
         vtxt = "no data" if val is None or not np.isfinite(val) else f"{val:.4g}"
-        text = f"{self._fmt_axis(xc)} · {self._fmt_axis(yc)}\n{vtxt}"
+        text = f"{self._fmt_axis(ax.xaxis, xc)} · {self._fmt_axis(ax.yaxis, yc)}\n{vtxt}"
         return xc, yc, text, False
 
     def _mesh_grid(self, mesh: QuadMesh):
@@ -195,18 +199,43 @@ class HoverAnnotator:
         self._mesh_cache[id(mesh)] = result
         return result
 
-    @staticmethod
-    def _fmt_axis(value: float) -> str:
-        """Format an axis value as a date, a time-of-day, or a plain number."""
-        if value > _DATE_THRESHOLD:
+    def _fmt_axis(self, axis, value: float) -> str:
+        """Format a value on `axis` as a date, a time-of-day, or a plain number.
+
+        The axis kind is read from matplotlib's own unit converter (and, for the
+        diel-cycle/time-of-day axis, its 0-24 span) rather than guessed from the
+        value's magnitude — so a radiation value of 1200 is not mistaken for a
+        date and a temperature of 7.5 is not mistaken for 07:30.
+        """
+        if not np.isfinite(value):
+            return "—"
+        if self._is_date_axis(axis):
             return num2date(value).strftime("%Y-%m-%d %H:%M")
-        if 0 <= value <= 24:
+        if self._is_hours_axis(axis) and 0 <= value <= 24:
             hours = int(value)
             minutes = int(round((value - hours) * 60))
             if minutes == 60:
                 hours, minutes = hours + 1, 0
             return f"{hours:02d}:{minutes:02d}"
         return f"{value:.4g}"
+
+    @staticmethod
+    def _is_date_axis(axis) -> bool:
+        """True when matplotlib treats this axis as dates (its floats are date
+        ordinals), detected from the unit converter set when datetimes were
+        plotted — not from the value's magnitude."""
+        try:
+            conv = axis.get_converter()  # matplotlib >= 3.10
+        except AttributeError:
+            conv = getattr(axis, "converter", None)
+        return isinstance(conv, (DateConverter, ConciseDateConverter))
+
+    @staticmethod
+    def _is_hours_axis(axis) -> bool:
+        """True for the diel-cycle / heatmap time-of-day axis: a non-date axis
+        spanning roughly 0-24, so a value in [0, 24] reads as a clock time."""
+        lo, hi = sorted(axis.get_view_interval())
+        return lo >= -1.0 and hi <= 25.0 and (hi - lo) >= 6.0
 
 
 def _cell_index(bounds: np.ndarray, value: float):

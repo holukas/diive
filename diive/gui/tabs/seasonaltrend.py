@@ -158,15 +158,21 @@ class SeasonalTrendTab(DiiveTab):
 
     # --- data flow -----------------------------------------------------
     def save_state(self) -> dict:
-        return {"target": self._target, "method": self.method.currentText(),
-                "robust": self.robust.isChecked(), "view": self.view.currentText(),
-                "ref_start": self.ref_start.value(), "ref_end": self.ref_end.value()}
+        from diive.gui.widgets.state_utils import save_controls
+        return {"target": self._target,
+                "controls": save_controls(
+                    {"method": self.method, "robust": self.robust,
+                     "view": self.view, "ref_start": self.ref_start,
+                     "ref_end": self.ref_end})}
 
     def restore_state(self, state: dict) -> None:
         from diive.gui.widgets.state_utils import restore_controls
+        # `state.get("controls") or state` tolerates older projects that saved
+        # the control values flat at the top level.
         restore_controls({"method": self.method, "robust": self.robust,
                           "view": self.view, "ref_start": self.ref_start,
-                          "ref_end": self.ref_end}, state)
+                          "ref_end": self.ref_end},
+                         state.get("controls") or state)
         t = state.get("target")
         if t and self._df is not None and t in self._df.columns:
             self._on_select(t)

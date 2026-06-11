@@ -97,6 +97,12 @@ class ConsolePanel(QWidget):
             width=_MIRROR_WIDTH, highlight=False,
         )
         add_console_sink(self._mirror)
+        # `closeEvent` does not fire for an embedded child widget (the Log tab is
+        # never closed), so also drop the sink when this widget is actually
+        # destroyed — otherwise a stale mirror could outlive its view. The lambda
+        # captures `mirror`, not `self`, so it is safe to run during teardown.
+        mirror = self._mirror
+        self.destroyed.connect(lambda *_: remove_console_sink(mirror))
 
     @staticmethod
     def _base_format() -> QTextCharFormat:

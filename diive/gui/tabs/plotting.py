@@ -131,6 +131,13 @@ class PlottingTab(DiiveTab):
     def _on_theme_changed(self) -> None:
         # The panel repaints its own pills; re-render only if colors affect the
         # current plot (per-panel line colors come from the theme palette).
+        # This tab instance is retained after its tab is closed (MainWindow keeps
+        # the Python object) but its canvas C++ widget is gone — guard against
+        # rendering into a deleted widget when the theme changes later.
+        import shiboken6
+        if not shiboken6.isValid(self.canvas):
+            theme.manager.changed.disconnect(self._on_theme_changed)
+            return
         if self._plot_type in (TIMESERIES, DIELCYCLE) and self._panels:
             self._render()
 
