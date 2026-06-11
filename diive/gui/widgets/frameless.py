@@ -47,9 +47,10 @@ class FramelessResizeHelper(QObject):
         return edges
 
     def _cursor_for(self, edges) -> Qt.CursorShape:
-        e = int(edges)
-        left, right = e & int(Qt.Edge.LeftEdge), e & int(Qt.Edge.RightEdge)
-        top, bottom = e & int(Qt.Edge.TopEdge), e & int(Qt.Edge.BottomEdge)
+        # PySide6 flag enums aren't int()-able; use `.value` for the bit tests.
+        e = edges.value
+        left, right = e & Qt.Edge.LeftEdge.value, e & Qt.Edge.RightEdge.value
+        top, bottom = e & Qt.Edge.TopEdge.value, e & Qt.Edge.BottomEdge.value
         if (left and top) or (right and bottom):
             return Qt.CursorShape.SizeFDiagCursor
         if (right and top) or (left and bottom):
@@ -67,7 +68,7 @@ class FramelessResizeHelper(QObject):
         elif (et == QEvent.Type.MouseButtonPress
               and event.button() == Qt.MouseButton.LeftButton):
             edges = self._edges(event.position().toPoint())
-            if int(edges):
+            if edges.value:
                 handle = self._window.windowHandle()
                 if handle is not None:
                     handle.startSystemResize(edges)

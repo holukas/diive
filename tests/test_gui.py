@@ -1173,6 +1173,21 @@ def test_project_save_and_open(window, tmp_path, monkeypatch):
     assert var in [str(c) for c in window._data.columns]
 
 
+def test_frameless_resize_cursor_no_int_error(app):
+    # Regression: PySide6 Qt.Edge flags aren't int()-able; the helper must use
+    # `.value` (the eventFilter previously raised TypeError on every mouse move).
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtWidgets import QWidget
+
+    from diive.gui.widgets.frameless import FramelessResizeHelper
+    w = QWidget(); w.resize(400, 300)
+    h = FramelessResizeHelper(w, w)
+    assert h._cursor_for(h._edges(QPoint(2, 2))) == Qt.CursorShape.SizeFDiagCursor
+    assert h._cursor_for(h._edges(QPoint(2, 150))) == Qt.CursorShape.SizeHorCursor
+    assert h._cursor_for(h._edges(QPoint(200, 150))) == Qt.CursorShape.ArrowCursor
+    assert h._edges(QPoint(200, 150)).value == 0  # interior -> no edge
+
+
 def test_startup_loads_example_when_no_project(window):
     # The fixture builds MainWindow() with no saved project -> example data.
     assert window._data is not None
