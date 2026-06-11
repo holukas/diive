@@ -997,7 +997,8 @@ def run() -> int:
     # (the native Windows style ignores them in combo-box popups).
     app.setStyle("Fusion")
     from diive.gui.splash import app_icon
-    app.setWindowIcon(app_icon())  # taskbar / window icon (splash motif)
+    icon = app_icon()  # taskbar / window icon (splash motif)
+    app.setWindowIcon(icon)
 
     # Restore saved preferences before building the window.
     cfg = config.load_config()
@@ -1027,6 +1028,11 @@ def run() -> int:
         for _ in range(3):
             app.processEvents()
         splash.finish(window)
+        # Re-assert the window icon now that the native window exists. A
+        # frameless + translucent window's HWND is created in a way that can
+        # miss the icon set before show(), so Windows sometimes shows a blank /
+        # default taskbar icon. Re-applying once the handle is live fixes it.
+        window.setWindowIcon(icon)
 
     QTimer.singleShot(0, _finish_startup)
     return app.exec()
