@@ -66,8 +66,18 @@
   `packaging/` (`build_gui.ps1` → `dist/diive-gui/` + a zip). Users unzip and run `diive-gui.exe`. See
   `packaging/README.md`. Opt-in `build` dependency group (`uv sync --extra gui --group build`).
 
+- **Events** (`Data ▸ Add event…` and `Data ▸ Events`): mark when something happened — a single date/time, a from/to
+  range, or a start + duration (fertilization, harvest, grazing, management steps). Each event is stored as a **0/1 data
+  column** (`EVENT_<name>`; 1 = the event took place) that saves with the project and shows in every variable list, and
+  is drawn on the Overview's time-series panels (a line for an instant, a shaded band for a period) and as a band on the
+  date/time heatmap. A single **Show events on plots** toggle (in the Events tab and the Data menu) turns the overlays on
+  or off. Events persist in preferences and projects.
+
 Library additions used by the GUI (all backward-compatible):
 
+- `dv.events` (`Event`, `event_to_flag`, `overlay_events`, `make_event_flag_name`, `CATEGORY_COLORS`): time-stamped
+  event markers. `Event` is an instant (no end) or a period; `event_to_flag(event, index)` builds the 0/1 yes/no column;
+  `overlay_events(ax, events, axis='x'|'y')` draws lines/spans onto an existing datetime axes (x) or the heatmap (y).
 - `save_parquet(..., enforce_diive_format=True, timestamp_name=...)` and `dv.to_diive_format(...)`: coerce to diive
   parquet format (one header row + valid `TIMESTAMP_*` index).
 - `dv.analysis.rank_drivers(df, target, method=, max_lag=)`: rank variables by correlation with a target (optional

@@ -42,7 +42,7 @@ from PySide6.QtWidgets import (
 )
 
 import diive
-from diive.gui import config, metadata_store, site, theme
+from diive.gui import config, events, metadata_store, site, theme
 from diive.gui.registry import (
     MENU_TAB_CLASSES,
     MENU_TABS,
@@ -147,6 +147,9 @@ class MainWindow(QMainWindow):
         self._var_subset: list | None = None
         self._source = ""
         self._created: set = set()  # user-engineered feature column names
+        # EVENT_* columns this session created from the event list, so reconciling
+        # never drops an EVENT_-named column that arrived as plain data.
+        self._event_columns: set = set()
         # Per-variable user metadata (tags/notes) is persisted namespaced by
         # dataset, so the same column name in two datasets keeps separate tags.
         self._dataset_key: str | None = None
@@ -194,6 +197,11 @@ class MainWindow(QMainWindow):
         metadata_store.manager.renameRequested.connect(self._rename_one_variable)
         # Variable-list "Delete…" (any tab) confirms and drops the column.
         metadata_store.manager.deleteRequested.connect(self._delete_variable)
+
+        # Keep each event's 0/1 flag column in sync with the event list, and the
+        # menu toggle in sync with the visibility flag (which the Events tab also
+        # edits). The Overview reacts to the same signal to redraw its overlays.
+        events.manager.changed.connect(self._on_events_changed)
 
         # The GUI has a single look: the frameless Studio shell (custom header +
         # pill tabs).
@@ -303,6 +311,15 @@ class MainWindow(QMainWindow):
         self._reset_subset_act = _act("Reset to all &variables", self._reset_var_subset)
         self._reset_subset_act.setEnabled(False)
         data_menu.addAction(self._reset_subset_act)
+        # Events: add one, and a quick master toggle for showing them on plots
+        # (the Events tab below has the full list/edit UI + the same toggle).
+        data_menu.addSeparator()
+        data_menu.addAction(_act("Add e&vent...", self._add_event))
+        self._show_events_act = QAction(menu_icon("Show events"), "Show e&vents on plots", self)
+        self._show_events_act.setCheckable(True)
+        self._show_events_act.setChecked(events.manager.visible)
+        self._show_events_act.toggled.connect(events.manager.set_visible)
+        data_menu.addAction(self._show_events_act)
         # Menu-tab entries that belong under Data (e.g. Select variables) are
         # merged into this manually-built menu rather than getting their own.
         data_menu.addSeparator()
@@ -354,6 +371,7 @@ class MainWindow(QMainWindow):
         self._range = None  # a new dataset starts at its full range
         self._var_subset = None  # and on its full variable list
         self._created = set()  # fresh dataset has no user-created features
+        self._event_columns = set()  # rebuilt below from the live event list
         # A plain load leaves any open project; `_open_project` re-sets these
         # after calling here, so Ctrl+S can't overwrite a project with other data.
         self._project_dir = None
@@ -376,6 +394,9 @@ class MainWindow(QMainWindow):
             self._saved_metadata.pop(source, None)
             self._dataset_key = None
         metadata_store.manager.notify()
+        # Recreate each event's 0/1 column on the new index (events persist across
+        # loads; this also matches the EVENT_ columns a project's parquet carries).
+        self._sync_event_columns()
         self._apply_range()
         self._tabwidget.setCurrentIndex(0)  # show the Overview tab on load
 
@@ -685,6 +706,83 @@ class MainWindow(QMainWindow):
             metadata_store.manager.notify()
         self._apply_range()
 
+    def _add_event(self) -> None:
+        """Open the Add-event dialog and register the event (creates its 0/1
+        column + draws it on the plots via `events.manager.changed`)."""
+        from diive.gui.widgets.add_event_dialog import AddEventDialog
+        if self._full_data is None or self._full_data.empty:
+            QMessageBox.information(self, "Add event", "No data loaded yet.")
+            return
+        dlg = AddEventDialog(self._full_data.index.min(),
+                             self._full_data.index.max(), parent=self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            events.manager.add(dlg.make_event())
+
+    def _on_events_changed(self) -> None:
+        """React to any event edit: keep the menu toggle in sync and reconcile
+        each event's 0/1 flag column against the dataset."""
+        if self._show_events_act.isChecked() != events.manager.visible:
+            self._show_events_act.blockSignals(True)
+            self._show_events_act.setChecked(events.manager.visible)
+            self._show_events_act.blockSignals(False)
+        # A column add/edit/delete re-renders the Overview through the data push;
+        # a visibility-only toggle changes no column, so refresh it explicitly.
+        if not self._sync_event_columns():
+            overview = self._tabs[0]
+            if hasattr(overview, "refresh_events"):
+                overview.refresh_events()
+
+    def _sync_event_columns(self) -> bool:
+        """Make the dataset's ``EVENT_*`` columns exactly match the event list.
+
+        Each event becomes a 0/1 column (`dv.events.event_to_flag`); deleted
+        events have their column dropped; edits rebuild the affected column. Only
+        re-pushes when something actually changed, so a visibility-only toggle is
+        cheap. The columns are real data (saved with the project, shown in every
+        variable list, taggable), per the requested 'event = yes/no data column'.
+
+        Returns True if any column was added/dropped/rebuilt (so the tabs were
+        re-pushed), False otherwise (e.g. a visibility-only toggle).
+        """
+        if self._full_data is None:
+            return False
+        desired = {}
+        for ev in events.manager.events:
+            desired[ev.flag_name] = diive.events.event_to_flag(
+                ev, self._full_data.index, name=ev.flag_name)
+        changed = False
+        added = []
+        # Only drop EVENT_ columns we created (don't touch an EVENT_-named column
+        # that arrived as plain data without a backing event).
+        for col in list(self._event_columns):
+            if col not in desired and col in self._full_data.columns:
+                self._full_data = self._full_data.drop(columns=[col])
+                self._created.discard(col)
+                metadata_store.manager.store.drop(col)
+                if self._var_subset is not None and col in self._var_subset:
+                    self._var_subset.remove(col)
+                changed = True
+        for col, series in desired.items():
+            if col not in self._full_data.columns \
+                    or not self._full_data[col].equals(series):
+                is_new = col not in self._full_data.columns
+                self._full_data[col] = series
+                self._created.add(col)
+                if is_new:
+                    added.append(col)
+                    if self._var_subset is not None and col not in self._var_subset:
+                        self._var_subset.append(col)
+                changed = True
+        self._event_columns = set(desired)
+        if added:
+            metadata_store.manager.store.record_original(
+                added, operation="Event flag",
+                timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"))
+            metadata_store.manager.notify()
+        if changed:
+            self._apply_range()
+        return changed
+
     def _delete_variable(self, name: str) -> None:
         """Drop a column from the dataset (non-destructive to the source file).
 
@@ -851,6 +949,7 @@ class MainWindow(QMainWindow):
         from diive.core.io.project import DiiveProject, save_project
         extras = {
             "site": site.manager.as_dict(),
+            "events": events.manager.as_dict(),
             "range": ([self._range[0].isoformat(), self._range[1].isoformat()]
                       if self._range else None),
             "var_subset": list(self._var_subset) if self._var_subset else None,
@@ -932,6 +1031,9 @@ class MainWindow(QMainWindow):
         rng = project.extras.get("range")
         self._range = (pd.Timestamp(rng[0]), pd.Timestamp(rng[1])) if rng else None
         self._var_subset = list(project.extras.get("var_subset") or []) or None
+        # Restore the project's events (rebuilds their 0/1 columns via changed →
+        # _sync_event_columns; matches the EVENT_ columns the parquet carries).
+        events.manager.load_dict(project.extras.get("events") or {})
         self._project_dir, self._project_name = Path(folder), project.name
         self._last_project_dir = str(Path(folder).parent)
         self._last_project = str(Path(folder))
@@ -964,6 +1066,12 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         """Persist preferences (theme, window geometry, last filetype) on exit."""
         from diive.gui.widgets import open_data_dialog as odd
+        # Stop reacting to the app-wide event store once closed (the singleton
+        # outlives the window; a stale window must not react to later edits).
+        try:
+            events.manager.changed.disconnect(self._on_events_changed)
+        except (RuntimeError, TypeError):
+            pass
         # Fold the current dataset's user edits into the namespaced blob before
         # writing. Only user content (tags, notes) persists, keyed by dataset;
         # provenance/origin regenerate per session as operations run.
@@ -973,6 +1081,7 @@ class MainWindow(QMainWindow):
         config.save_config({
             "theme": theme.manager.as_dict(),
             "site": site.manager.as_dict(),
+            "events": events.manager.as_dict(),
             "geometry": bytes(self.saveGeometry().toBase64()).decode("ascii"),
             "last_filetype": odd._last_choice,
             "variable_metadata": self._saved_metadata,
@@ -1008,6 +1117,7 @@ def run() -> int:
     theme.manager.load_dict(cfg.get("theme", {}))
     theme.manager.apply()
     site.manager.load_dict(cfg.get("site", {}))
+    events.manager.load_dict(cfg.get("events", {}))
     from diive.gui.widgets import open_data_dialog as odd
     odd._last_choice = cfg.get("last_filetype")
 

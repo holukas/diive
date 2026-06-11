@@ -48,6 +48,18 @@ def window(app, monkeypatch, example_year):
     win.show()
     app.processEvents()
     yield win
+    # Teardown: stop this window reacting to the app-wide event store. The store
+    # is a process-wide singleton, so without this every window the suite creates
+    # stays subscribed and they all re-render on the next events edit -- dozens of
+    # accumulated matplotlib renders that can segfault. Also reset the store so
+    # event state can't leak between tests.
+    from diive.gui import events as _events
+    try:
+        _events.manager.changed.disconnect(win._on_events_changed)
+    except (RuntimeError, TypeError):
+        pass
+    _events.manager.events.clear()
+    _events.manager.visible = True
 
 
 def _tabs(win):
@@ -1589,3 +1601,53 @@ def test_save_parquet_diive_format_roundtrip(tmp_path):
     assert reloaded.index.name in ("TIMESTAMP_MIDDLE", "TIMESTAMP_END")
     assert reloaded.columns.nlevels == 1
     assert reloaded.shape[1] == df.shape[1]
+
+
+def test_event_creates_flag_column(window):
+    from diive.gui import events
+    from diive.events import Event
+    events.manager.clear()
+    start = window._full_data.index.min()
+    events.manager.add(Event("Fert1", start + pd.Timedelta("10D"),
+                             category="fertilization"))
+    events.manager.add(Event("Graze", start + pd.Timedelta("20D"),
+                             start + pd.Timedelta("23D"), category="grazing"))
+    cols = [c for c in window._full_data.columns if str(c).startswith("EVENT_")]
+    assert set(cols) == {"EVENT_Fert1", "EVENT_Graze"}
+    assert window._full_data["EVENT_Fert1"].sum() == 1     # instant -> one record
+    assert window._full_data["EVENT_Graze"].sum() > 1      # period -> many records
+    assert {"EVENT_Fert1", "EVENT_Graze"} <= window._created
+    events.manager.clear()
+
+
+def test_event_removal_drops_only_owned_column(window):
+    from diive.gui import events
+    from diive.events import Event
+    events.manager.clear()
+    # A plain EVENT_-named data column not backed by an event must survive.
+    window._full_data["EVENT_External"] = 0
+    events.manager.add(Event("Mine", window._full_data.index.min()))
+    assert "EVENT_Mine" in window._full_data.columns
+    events.manager.clear()  # removes only the event-backed column
+    assert "EVENT_Mine" not in window._full_data.columns
+    assert "EVENT_External" in window._full_data.columns
+    window._full_data.drop(columns=["EVENT_External"], inplace=True)
+
+
+def test_event_visibility_toggle(window):
+    from diive.gui import events
+    events.manager.set_visible(False)
+    assert window._show_events_act.isChecked() is False
+    events.manager.set_visible(True)
+    assert window._show_events_act.isChecked() is True
+
+
+def test_events_tab_and_dialog_build(window):
+    from diive.gui.tabs.events import EventsTab
+    from diive.gui.widgets.add_event_dialog import AddEventDialog
+    tab = EventsTab()
+    tab.widget()
+    tab.on_data_loaded(window._full_data)
+    dlg = AddEventDialog(window._full_data.index.min(), window._full_data.index.max())
+    ev = dlg.make_event()  # default = instant at data start
+    assert not ev.is_range

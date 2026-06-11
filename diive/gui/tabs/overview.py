@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 import diive as dv
 from diive.core.dfun.stats import SSTATS_DESCRIPTIONS
+from diive.gui import events as events_store
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
@@ -233,6 +234,19 @@ class OverviewTab(DiiveTab):
         outer.addWidget(self.stats_strip)
         return root
 
+    def refresh_events(self) -> None:
+        """Redraw the current variable so event overlays update (called by the
+        main window on a visibility-only toggle — column add/edit/delete already
+        re-render through the normal data push).
+
+        Renders the figure directly (not via ``run_with_loading``) so it stays
+        synchronous — the overlay change is cheap and a deferred busy indicator is
+        unnecessary here."""
+        if self._current is None or self._df is None \
+                or self._current not in self._df.columns:
+            return
+        self._render_figure(self._df[self._current], self._current)
+
     def save_state(self) -> dict:
         return {"current": self._current}
 
@@ -351,6 +365,12 @@ class OverviewTab(DiiveTab):
                        bbox=dict(boxstyle="round,pad=0.35", facecolor=_BADGE_BG,
                                  edgecolor="none"))
 
+        # Event overlays: vertical line / shaded span on the datetime panels and a
+        # horizontal line / band on the heatmap (date is on its y-axis). Drawn
+        # after the font pass so the labels keep their size; they persist through
+        # zoom (they're axes artists, not data-window-dependent).
+        self._overlay_events(panel_axes)
+
         # Live zoom sync: the three datetime panels follow each other via sharex;
         # the diel cycle (recomputed on the visible window) and the heatmap
         # (clipped to the visible date range) don't share that axis, so update
@@ -363,6 +383,24 @@ class OverviewTab(DiiveTab):
         if shared_x_ax is not None:
             shared_x_ax.callbacks.connect("xlim_changed", self._on_zoom)
         self.canvas.draw()
+
+    def _overlay_events(self, panel_axes: dict) -> None:
+        """Draw the configured events onto the datetime panels + heatmap."""
+        if not events_store.manager.visible:
+            return
+        evs = events_store.manager.events
+        if not evs:
+            return
+        for ptype in ("Time series", "Cumulative", "Daily mean"):
+            ax = panel_axes.get(ptype)
+            if ax is not None:
+                # Label only on the time series to avoid repeating the tags in
+                # every small panel.
+                dv.events.overlay_events(
+                    ax, evs, axis="x", show_labels=(ptype == "Time series"))
+        hm = panel_axes.get("Heatmap (date/time)")
+        if hm is not None:
+            dv.events.overlay_events(hm, evs, axis="y", show_labels=False)
 
     def _style_panel(self, ax, plot_type: str) -> None:
         """Per-panel styling shared by the initial render and zoom re-draws."""

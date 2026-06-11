@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSpinBox,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -138,6 +139,16 @@ class Surface3DTab(DiiveTab):
         self.edges.toggled.connect(self._rerender_view)
         lay.addWidget(self.edges)
 
+        lay.addWidget(QLabel("Smooth terrain"))
+        self.smoothing = QSpinBox()
+        self.smoothing.setRange(0, 2)
+        self.smoothing.setValue(0)
+        self.smoothing.setToolTip("Round the surface into rolling hills by "
+                                  "subdividing + relaxing the mesh (0 = off). "
+                                  "Higher = smoother but heavier.")
+        self.smoothing.valueChanged.connect(self._rerender_view)
+        lay.addWidget(self.smoothing)
+
         self.reset_btn = QPushButton("Reset view")
         self.reset_btn.clicked.connect(self._reset_camera)
         lay.addWidget(self.reset_btn)
@@ -150,12 +161,14 @@ class Surface3DTab(DiiveTab):
         return {"target": self._target,
                 "controls": save_controls(
                     {"cmap": self.cmap, "exag": self.exag,
-                     "smooth": self.smooth, "edges": self.edges})}
+                     "smooth": self.smooth, "edges": self.edges,
+                     "smoothing": self.smoothing})}
 
     def restore_state(self, state: dict) -> None:
         from diive.gui.widgets.state_utils import restore_controls
         restore_controls({"cmap": self.cmap, "exag": self.exag,
-                          "smooth": self.smooth, "edges": self.edges},
+                          "smooth": self.smooth, "edges": self.edges,
+                          "smoothing": self.smoothing},
                          state.get("controls") or state)
         t = state.get("target")
         if t and self._df is not None and t in self._df.columns:
@@ -234,10 +247,19 @@ class Surface3DTab(DiiveTab):
         scalars = np.where(finite, z, np.nan)
         surf["values"] = scalars.ravel(order="F")
 
+        mesh = surf
+        n_sub = self.smoothing.value()
+        if n_sub > 0:
+            # Round the faceted grid into rolling hills: triangulate, subdivide
+            # to add vertices, then Taubin-relax (smooths without the shrinkage
+            # plain Laplacian smoothing causes). Scalars are interpolated along.
+            mesh = (surf.extract_surface(algorithm=None).triangulate()
+                    .subdivide(n_sub).smooth_taubin(n_iter=20))
+
         p = self.canvas.plotter
         p.clear()
         p.add_mesh(
-            surf,
+            mesh,
             scalars="values",
             cmap=self.cmap.currentText(),
             nan_opacity=0.0,            # hide gap cells

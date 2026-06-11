@@ -54,11 +54,12 @@ tests/                        # Unit tests
 
 ## Public API Overview
 
-`import diive as dv` exposes 9 domain namespaces:
+`import diive as dv` exposes 10 domain namespaces:
 
 | Namespace | Contents |
 |---|---|
 | `dv.outliers` | `AbsoluteLimits`, `Hampel`, `LocalSD`, `LocalOutlierFactor`, `zScore`, `zScoreRolling`, `zScoreIncrements`, `TrimLow`, `ManualRemoval`, + daytime/nighttime variants |
+| `dv.events` | `Event` (instant or period time-stamped marker), `event_to_flag` (→ 0/1 yes/no column aligned to an index), `overlay_events` (draw lines/spans on a datetime axes — `axis='x'` value-vs-time, `axis='y'` heatmap), `make_event_flag_name`, `CATEGORY_COLORS` |
 | `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`, `FeatureEngineer`, `GapFillingResult`, `prediction_scores`, `linear_interpolation` |
 | `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `process_one_file`, `FluxDetectionLimit`, ustar classes. Per-level `run_level*`, `make_level32_detector`, and `chain_to_code`/`level2_to_code` (render chain choices as a reproducible script) live in `diive.flux.fluxprocessingchain`. |
 | `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `harmonic_analysis`, `spectrogram`, `percentiles101`, `rank_drivers` |
@@ -282,6 +283,20 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   pin/freeze**: right-click a *menu* tab → Pin; pinned tabs (`MainWindow._pinned`) are skipped by `_push_data`, so they
   keep their dataset (cheap — references + pandas Copy-on-Write), and show a pin glyph (`icons.pin_icon`); unpin
   re-syncs. Overview/Log are never pinnable.
+- **Events** (`gui/events.py` `EventManager` singleton `events.manager` — mirrors `site.manager`: live `list[Event]` +
+  a `visible` toggle, `changed` signal, `as_dict`/`load_dict`). Model is the **library's** `dv.events` (`Event`,
+  `event_to_flag`, `overlay_events`) — no domain logic in the GUI. **Data ▸ Add event…** (`MainWindow._add_event`) opens
+  `widgets/add_event_dialog.py` (name/category, three timing modes — single date/time, from/to, start + duration —
+  calendar pickers, colour); its result method is `make_event()` (**not** `event()`, which would override
+  `QDialog.event`). The full list/edit UI is the single-instance **Data ▸ Events** tab (`tabs/events.py`, `EventsTab`):
+  a table + add/edit/delete + a master **Show events on plots** checkbox (synced with the Data-menu checkable action,
+  both driving `events.manager.visible`). `MainWindow._sync_event_columns` (connected to `events.manager.changed`)
+  reconciles the dataset's `EVENT_<name>` **0/1 columns** to the event list — each event = one yes/no column (1 = took
+  place), tracked in `_event_columns` so a reconcile never drops an `EVENT_`-named column that arrived as plain data;
+  added columns join `_created` + get an "Event flag" origin. The Overview redraws on `changed` (`_overlay_events`):
+  `overlay_events(axis='x')` on the time-series/cumulative/daily panels (labels on the time series only) and
+  `axis='y'` on the heatmap (date on its y-axis). Events persist in GUI prefs (`config` `"events"`) and projects
+  (`extras["events"]`); `_set_data` rebuilds them on the new index so they survive loads.
 - **Select variables tab** (`tabs/variable_selector.py`, `Data ▸ Select variables`, single-instance) — a dual-list
   picker (two `VariablePanel`s: available ↔ selected) emitting a `subsetSelected` signal (same `QObject`-helper pattern
   as `featuresCreated`); `MainWindow._apply_var_subset` applies it **app-wide** (non-destructive). Like the date range,

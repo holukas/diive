@@ -22,6 +22,9 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `widgets/save_project_dialog.py` | `SaveProjectDialog` — project name + location for **File ▸ Save project as…** (writes a `<name>.diive` folder via the library's `save_project`) |
 | `metadata_store.py` | **App-wide variable metadata** — `MetadataManager` (`manager`): wraps the library `MetadataStore` (tags + provenance), emits `changed`; edited via `add_user_tag`/`toggle_user_tag`. Also relays variable-list right-click actions app-wide: `editRequested` / `renameRequested` / `deleteRequested` (+ `request_*`) |
 | `site.py` | **Project settings store** — `SiteManager` (`manager`): author, description, site coords/UTC offset, and the **notes wall** cards (`notes`); `as_dict`/`load_dict` so it travels with the project + GUI prefs |
+| `events.py` | **App-wide event store** — `EventManager` (`manager`): live `list[diive.events.Event]` + a `visible` toggle; `add`/`replace`/`remove`/`set_visible` emit `changed`; `as_dict`/`load_dict` so events travel with the project + GUI prefs |
+| `tabs/events.py` | **Events** tab — table of events + add/edit/delete + master **Show events on plots** checkbox; edits `events.manager` (no domain logic) |
+| `widgets/add_event_dialog.py` | `AddEventDialog` — name/category, three timing modes (single date/time, from/to, start + duration) with calendar pickers + colour; `make_event()` returns a `diive.events.Event` |
 | `tabs/settings.py` | Appearance settings tab — live colour editing with a pill/highlight preview |
 | `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`); window sized to ~88% of screen |
 | `splash.py` | Startup splash + **Help ▸ About** dialog (`QPainter`-drawn waves + wordmark/version/tagline/credits); `AUTHOR` + `SUPPORTERS` |
@@ -201,6 +204,20 @@ columns are also listed explicitly in a "Newly created features" panel in the ta
 (available / selected / settings) packed left keep it compact. **Timestamp features and the continuous record number
 need no selected variable** (they derive from the index) — the run only requires a selected variable when a per-variable
 stage (lag/rolling/diff/EMA/poly/STL) is enabled.
+
+**Events (`gui/events.py`, `tabs/events.py`, `widgets/add_event_dialog.py`):** mark *when something happened* —
+fertilization, harvest, grazing, a management step. Open **Data ▸ Add event…** (or the **Data ▸ Events** tab) and pick
+a single date/time, a from/to range, or a start + duration (calendar pickers). The model is the **library's**
+`dv.events`: an `Event` (instant or period), `event_to_flag(event, index)` (the 0/1 yes/no column), and
+`overlay_events(ax, events, axis=)` (the line/span overlay). The GUI holds the live list + a `visible` toggle in the
+`events.manager` singleton (like `site.manager`); the Events tab is just a table + add/edit/delete + a master **Show
+events on plots** checkbox (mirrored by a checkable Data-menu action). Each event becomes a real `EVENT_<name>` 0/1
+column (1 = the event took place) — `MainWindow._sync_event_columns` reconciles those columns to the event list on every
+`events.manager.changed`, tracking the ones it created (`_event_columns`) so it never drops an `EVENT_`-named column that
+came in as plain data. The Overview draws the overlays (`_overlay_events`): a dashed line for an instant and a shaded
+band for a period on the time-series/cumulative/daily panels (labelled on the time series), and a horizontal line/band on
+the date/time heatmap (date is on its y-axis). Events persist in GUI prefs (`config` `"events"`) and inside projects
+(`extras["events"]`), and `_set_data` rebuilds their columns on whatever data is loaded so they survive loads.
 
 **Project settings & notes wall (`tabs/site.py`):** the Project settings tab's form writes author/description/site to
 `site.manager`; the otherwise-empty right side holds a **`NotesWall`** (`widgets/notes_wall.py`) — a free-positioning

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.drivers import DriverExplorerTab
+from diive.gui.tabs.events import EventsTab
 from diive.gui.tabs.features import FeatureEngineerTab
 from diive.gui.tabs.fluxchain import FluxChainTab
 from diive.gui.tabs.gaps import GapDashboardTab
@@ -64,6 +65,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Rename variables": RenameVariablesTab,
         "Metadata explorer": MetadataExplorerTab,
         "Feature engineering": FeatureEngineerTab,
+        "Events": EventsTab,
     },
     "Plot": {
         "Heatmap date/time": lambda: PlottingTab(HEATMAP, "Heatmap date/time"),
@@ -112,4 +114,5 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 SINGLE_INSTANCE_TABS: set[str] = {
     "Appearance", "Project settings", "Flux processing chain", "Gaps & coverage",
     "Driver explorer", "Seasonal-trend & anomalies", "Spectrogram",
-    "Metadata explorer", "Select variables", "Rename variables", "3D surface"}
+    "Metadata explorer", "Select variables", "Rename variables", "3D surface",
+    "Events"}

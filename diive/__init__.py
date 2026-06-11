@@ -2,6 +2,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from diive import analysis
 from diive import corrections
+from diive import events
 from diive import variables
 from diive import flux
 from diive import gapfilling
