@@ -1,0 +1,62 @@
+# Packaging the diive desktop GUI
+
+Build a **standalone Windows app** so others can run the GUI without installing
+Python, uv, or any dependencies. They unzip one folder and double-click
+`diive-gui.exe`.
+
+## Build
+
+From the repo root:
+
+```powershell
+uv sync --extra gui --group build      # one-time: install GUI + PyInstaller
+.\packaging\build_gui.ps1              # build + zip
+```
+
+Output:
+
+- `dist\diive-gui\` — the runnable app folder (`diive-gui.exe` + dependencies)
+- `dist\diive-gui-<version>-win64.zip` — share this; users unzip and run the exe
+
+Useful flags: `.\packaging\build_gui.ps1 -Clean` (wipe `build\`/`dist\` first),
+`-NoZip` (skip the archive).
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `diive_gui.spec` | PyInstaller build recipe (one-folder; bundles `diive/configs` data; collects shap/xgboost/sklearn/... ; excludes unused Qt + the causal extra) |
+| `launch_diive_gui.py` | Frozen-app entry point (calls `diive.gui.launch`) |
+| `build_gui.ps1` | Build + zip helper |
+
+## If a frozen run crashes
+
+PyInstaller's static analysis can miss dynamically-imported modules. If the exe
+crashes with `ModuleNotFoundError` or a missing-data-file error, add the
+offending package to the `_collect` list in `diive_gui.spec` (or a specific name
+to `hiddenimports`) and rebuild. Test by clicking through **every tab and menu**
+once — that exercises the lazy imports.
+
+## Known build quirks (already handled / expected)
+
+- **`collect_all("xgboost")` aborts the build.** It walks `xgboost.testing`,
+  which imports test-only `hypothesis`/`pytest`. xgboost is collected manually
+  instead (`collect_dynamic_libs` + `collect_data_files` + explicit
+  `hiddenimports`). Don't add `xgboost` back to the `_collect` loop.
+- **`Library not found: tbb12.dll`** during the build is harmless — it's numba's
+  optional Intel-TBB threading layer; numba falls back to its workqueue layer.
+- **Bundled test suites are filtered out.** `collect_all` would otherwise pull
+  in the full test trees of numba / sklearn / statsmodels / pyarrow (thousands
+  of `*.tests.*` modules — dead weight at runtime). The spec's
+  `_no_test_submodules()` filter drops every `tests` / `testing` / `conftest`
+  submodule at collection time. If a future run unexpectedly needs one, loosen
+  that filter rather than re-adding the whole tree.
+
+## Notes
+
+- **One-folder, not one-file** — diive's scientific stack is large; a one-file
+  exe would unpack everything to a temp dir on each launch (slow/flaky).
+- **Windows only** — PyInstaller does not cross-compile. A macOS/Linux build
+  must run on that OS.
+- The **causal** extra (tigramite, econml) is intentionally excluded — it is
+  hard to freeze and unused by the core GUI.

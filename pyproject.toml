@@ -92,6 +92,11 @@ dev = [
     "sphinx-basic-ng>=1.0.0b2",
     "sphinx-gallery>=0.21.0",
 ]
+# Standalone-app packaging for the desktop GUI (one-folder Windows build).
+# Opt in with: uv sync --extra gui --group build, then: .\packaging\build_gui.ps1
+build = [
+    "pyinstaller>=6.10",
+]
 
 [tool.ruff]
 cache-dir = ".ruff_cache"

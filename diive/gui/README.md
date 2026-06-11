@@ -10,6 +10,9 @@ uv sync --extra gui      # or: pip install 'diive[gui]'
 diive-gui                # or: uv run diive-gui
 ```
 
+To ship the GUI as a **standalone Windows app** (no Python/uv for end users), see
+[`packaging/README.md`](../../packaging/README.md) — a PyInstaller one-folder build.
+
 ## Architecture
 
 | File | Role |

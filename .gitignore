@@ -65,6 +65,9 @@ MANIFEST
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+!packaging/diive_gui.spec
+# PyInstaller working dir (dist/ already ignored above)
+/build/
 
 # Installer logs
 pip-log.txt

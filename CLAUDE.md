@@ -205,7 +205,8 @@ rather than putting it in `gui/`. (Examples already moved out: `cb_digits_after_
 
 PySide6 desktop app. **Optional dependency** (`gui` extra, lazy-imported like `causal`) — never pulled into a headless
 install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `diive.gui._cli:_gui_main`). See
-`diive/gui/README.md` for the file map.
+`diive/gui/README.md` for the file map. To ship it as a **standalone Windows app** (no Python/uv for end users), use the
+PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/README.md`.
 
 - **Central appearance config: `diive/gui/theme.py`.** The `ThemeManager` singleton (`theme.manager`) holds the live,
   editable colours (`tokens`, `pills`, `new_pill`, `ts_colors`) and builds the stylesheet via `build_qss(tokens)`. It
