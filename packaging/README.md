@@ -13,6 +13,16 @@ uv sync --extra gui --group build      # one-time: install GUI + PyInstaller
 .\packaging\build_gui.ps1              # build + zip
 ```
 
+To include the **3-D surface** tab (Plot ▸ 3D surface), add the `gui3d` extra
+before building — the spec bundles VTK/PyVista only when it's present:
+
+```powershell
+uv sync --extra gui --extra gui3d --group build
+.\packaging\build_gui.ps1
+```
+
+Without `gui3d` the app builds fine and the 3-D tab shows an install notice.
+
 Output:
 
 - `dist\diive-gui\` — the runnable app folder (`diive-gui.exe` + dependencies)
@@ -53,6 +63,12 @@ once — that exercises the lazy imports.
   `_no_test_submodules()` filter drops every `tests` / `testing` / `conftest`
   submodule at collection time. If a future run unexpectedly needs one, loosen
   that filter rather than re-adding the whole tree.
+- **VTK/PyVista (the `gui3d` extra) is collected conditionally.** The spec
+  bundles `vtkmodules` / `vtk` / `pyvista` / `pyvistaqt` (via `collect_all`)
+  **only if** they're installed in the build env, so a 2-D-only build skips
+  them. VTK routes its render window through PySide6's OpenGL modules — do **not**
+  add `PySide6.QtOpenGL` / `PySide6.QtOpenGLWidgets` to `excludes`. VTK adds
+  several hundred MB; expect a noticeably larger build with 3-D enabled.
 
 ## Notes
 

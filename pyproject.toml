@@ -51,6 +51,15 @@ causal = [
 gui = [
     "pyside6>=6.8,<7.0",
 ]
+# GPU-accelerated 3-D plotting for the desktop GUI (VTK-based, embedded via
+# pyvistaqt's QtInteractor). Separate from 'gui' because VTK is heavy and most
+# GUI users don't need 3-D; lazy-imported, so a 'gui'-only install never pulls
+# in VTK. Install with: pip install 'diive[gui,gui3d]'  (or: uv sync --extra
+# gui --extra gui3d).
+gui3d = [
+    "pyvista>=0.44",
+    "pyvistaqt>=0.11",
+]
 
 [project.scripts]
 diive-tlag-pwb-batch = "diive.flux.hires.lag_pwb:_cli_main"

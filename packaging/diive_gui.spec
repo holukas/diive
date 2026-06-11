@@ -76,6 +76,26 @@ binaries += collect_dynamic_libs("xgboost")
 datas += collect_data_files("xgboost")
 hiddenimports += ["xgboost", "xgboost.core", "xgboost.sklearn"]
 
+# --- optional 3-D plotting (gui3d extra: pyvista + pyvistaqt + VTK) -------
+# Only bundled if the gui3d extra is installed in the build env; a 2-D-only
+# build (gui extra alone) skips it, matching the runtime lazy-import design
+# (the 3D tab shows an install notice if VTK is absent). VTK ships hundreds of
+# compiled modules + data files that PyInstaller's static analysis misses, so
+# collect_all is required. `vtkmodules` is the real package; `vtk` is a thin
+# wrapper. qtpy/pyvistaqt route VTK's render window through PySide6, so the
+# QtOpenGL(Widgets) modules must NOT be excluded below.
+import importlib.util as _ilu
+
+if _ilu.find_spec("pyvista") is not None and _ilu.find_spec("pyvistaqt") is not None:
+    for _pkg in ["vtkmodules", "vtk", "pyvista", "pyvistaqt"]:
+        _d, _b, _h = collect_all(_pkg, filter_submodules=_no_test_submodules)
+        datas += _d
+        binaries += _b
+        hiddenimports += _h
+    # pyvistaqt imports the interactor from vtkmodules.qt at runtime; ensure the
+    # static analyzer keeps it (collect_all covers it, but pin it explicitly).
+    hiddenimports += ["vtkmodules.qt.QVTKRenderWindowInteractor"]
+
 # --- Qt modules we never use (keep the build smaller) --------------------
 # matplotlib's qtagg backend only needs QtWidgets/QtGui/QtCore. Dropping
 # WebEngine/Quick/Qml/3D/Multimedia/etc. removes hundreds of MB.

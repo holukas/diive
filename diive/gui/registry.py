@@ -40,6 +40,7 @@ from diive.gui.tabs.plotting import (
 )
 from diive.gui.tabs.settings import SettingsTab
 from diive.gui.tabs.site import ProjectSettingsTab
+from diive.gui.tabs.surface3d import Surface3DTab
 from diive.gui.tabs.variable_selector import VariableSelectorTab
 
 #: Tab classes always shown in the main window, in display order.
@@ -74,6 +75,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Scatter XY": lambda: PlottingTab(SCATTER, "Scatter XY"),
         "Hexbin": lambda: PlottingTab(HEXBIN, "Hexbin"),
         "Histogram": lambda: PlottingTab(HISTOGRAM, "Histogram"),
+        "3D surface": Surface3DTab,
     },
     "Outliers": {
         "Hampel filter": HampelOutlierTab,
@@ -110,4 +112,4 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 SINGLE_INSTANCE_TABS: set[str] = {
     "Appearance", "Project settings", "Flux processing chain", "Gaps & coverage",
     "Driver explorer", "Seasonal-trend & anomalies", "Spectrogram",
-    "Metadata explorer", "Select variables", "Rename variables"}
+    "Metadata explorer", "Select variables", "Rename variables", "3D surface"}

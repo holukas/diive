@@ -316,6 +316,9 @@ class MainWindow(QMainWindow):
                 continue  # already merged into the Data menu built above
             menu = add_menu(f"&{menu_name}")
             for label in group:
+                # Set the 3-D surface (GPU/VTK) apart from the 2-D plot methods.
+                if menu_name == "Plot" and label == "3D surface":
+                    menu.addSeparator()
                 act = QAction(menu_icon(label), label, self)
                 act.triggered.connect(
                     lambda _checked, lab=label: self._open_menu_tab(lab))
