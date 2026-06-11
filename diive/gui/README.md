@@ -51,7 +51,7 @@ diive-gui                # or: uv run diive-gui
 (grouped by menu; values are factories) — they open as **new numbered instances** each time (Heatmap 1, 2, 3 ...), all
 closable, unless listed in `SINGLE_INSTANCE_TABS` (e.g. Appearance). The main window is agnostic to concrete tabs.
 
-**Menu icons:** every menu entry (File/Data/Plot/Tools/Settings/Help) gets a small `QPainter`-drawn glyph via
+**Menu icons:** every menu entry (File/Data/Plot/Outliers/Flux/Analyze/Settings/Help) gets a small `QPainter`-drawn glyph via
 `gui/icons.py::menu_icon(label)`, matched to the label by keyword (`&` mnemonics stripped first). `_build_menus` wraps
 each action with it. Add a menu entry → add a keyword rule in `icons._LINE_RULES` (the thin-line monochrome glyph table;
 unknown labels fall back to a chart glyph).
@@ -116,7 +116,7 @@ Reset to full range** clears the window. `_apply_range()` re-derives `_data`, re
 window, enables/disables the reset action, and re-pushes. Engineered features merge into `_full_data`, so they survive a
 reset (out-of-range rows align to NaN). All plots and processing then run on the narrowed `_data`; saving writes it too.
 
-**Flux processing chain (`tabs/fluxchain.py`):** opened from **Tools ▸ Flux processing chain** (single-instance). A
+**Flux processing chain (`tabs/fluxchain.py`):** opened from **Flux ▸ Flux processing chain** (single-instance). A
 guided tab for the Swiss-FluxNet chain. **First slice = Input + Level 2:** collects site/flux-column + which L2 quality
 tests to run, then on a worker thread calls the composable library callables (`init_flux_data` → `run_level2`), shows the
 L2 QCF-filtered flux as a date/time heatmap, and — the point of the feature — **Copy Python** emits the exact runnable
@@ -126,7 +126,7 @@ the API call shape; the GUI only calls it. Needs real EddyPro-FLUXNET input (FC/
 `load_exampledata_parquet_lae_level1_30MIN`, not the default CH-DAV. **Later slices** add L3.1/3.2/3.3/4.1 groups and
 switch to `run_chain`/`chain_to_code`; per-level live preview can reuse the cascade-aware `run_level*` callables.
 
-**Gap & coverage dashboard (`tabs/gaps.py`):** opened from **Tools ▸ Gaps & coverage** (single-instance). Pick a
+**Gap & coverage dashboard (`tabs/gaps.py`):** opened from **Analyze ▸ Gaps & coverage** (single-instance). Pick a
 variable; the right side shows KPI stat cards, a two-panel **gap map** (daily-availability heatmap + gap-spike timeline)
 and a table of the longest gaps. The map is **clickable both ways**: clicking a table row highlights that gap on the
 timeline (a blue span + ring overlay); clicking the timeline calls `GapStats.gap_at(timestamp)` to find the nearest gap,
@@ -137,7 +137,7 @@ to the gappiest column (`df.isna().sum().idxmax()`) so it's useful on open, and 
 `GapStats`. The library's panel `plot_*` methods were made embed-safe (`ax.figure.colorbar`, not `plt.colorbar`) so they
 render into the shared canvas — a one-line fix that benefits any embedding caller.
 
-**Driver explorer (`tabs/drivers.py`):** opened from **Tools ▸ Driver explorer** (single-instance). Answers "what
+**Driver explorer (`tabs/drivers.py`):** opened from **Analyze ▸ Driver explorer** (single-instance). Answers "what
 relates to this variable, and at what lag?" Pick a target; a ranked table lists every other variable by correlation
 strength (the `r` cell tinted green/red by sign and magnitude), with its best lag and overlap count; clicking a driver
 renders the target-vs-driver scatter (shifted by that driver's best lag). The ranking + lead/lag scan is the library's
@@ -148,7 +148,7 @@ drivers** button (the lag scan can be heavier). The table sorts numerically via 
 value, not the display string). Defaults to a continuous flux target (`NEE_CUT_REF_f`) so the ranking is informative on
 open. A natural next step: a "send top-N drivers to Feature engineering / gap-filling" handoff.
 
-**Seasonal-trend & anomaly explorer (`tabs/seasonaltrend.py`):** opened from **Tools ▸ Seasonal-trend & anomalies**
+**Seasonal-trend & anomaly explorer (`tabs/seasonaltrend.py`):** opened from **Analyze ▸ Seasonal-trend & anomalies**
 (single-instance). Pick a variable → its daily-mean series is split into **trend / seasonal / residual** (four stacked
 panels), and a second **view** shows each year's **anomaly** vs a reference period (red above / blue below). Everything is
 library-backed: `dv.times.resample_to_daily_agg` builds the daily series, `dv.analysis.SeasonalTrendDecomposition`
@@ -160,7 +160,7 @@ On <2 years of data it shows a friendly message (annual decomposition needs two 
 working. *(Building this surfaced and fixed a real library bug: `stl_decompose` never passed `period` to statsmodels and
 called `STL.fit(weights=…)`, which isn't supported — STL had been raising on all real data.)*
 
-**Spectrogram explorer (`tabs/spectrogram.py`):** opened from **Tools ▸ Spectrogram** (single-instance). Pick a
+**Spectrogram explorer (`tabs/spectrogram.py`):** opened from **Analyze ▸ Spectrogram** (single-instance). Pick a
 variable → a spectrogram (short-time FFT) shows how the strength of its cycles changes over time, with a plain-language
 **explanation label** above the plot describing what to look for (the bright 1-cycle/day diel band, overtones, the
 window trade-off). The transform is `dv.analysis.spectrogram`; the tab maps the record-based result onto **calendar
@@ -169,7 +169,7 @@ a real timestamp through the non-NaN sample index so the time axis stays correct
 overlap / window function recompute on **Update**; the frequency-axis limit and colormap are live re-renders. The GUI
 does no signal processing — it only calls the library and arranges the output.
 
-**Feature engineering:** opened from **Tools ▸ Feature engineering** (a menu-activated tab — `registry.MENU_TAB_CLASSES`
+**Feature engineering:** opened from **Data ▸ Feature engineering** (a menu-activated tab — `registry.MENU_TAB_CLASSES`
 — not shown until selected, and closable; always-on tabs have their close button removed). It runs `FeatureEngineer`
 (library) on user-selected variables and emits the new columns via a `featuresCreated` signal; `MainWindow` merges them
 into the dataset, records them in a `created` set, and re-pushes. The plotting list tags created columns with a pink

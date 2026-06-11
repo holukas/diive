@@ -336,7 +336,7 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   sample (`np.searchsorted` on `get_xdata(orig=False)` — the unit-converted floats, **not** raw datetimes); `pcolormesh`
   heatmaps read the cell from `get_coordinates()`/`get_array()`. Renders by blitting (background re-captured on
   `draw_event`); GUI-only presentation, no domain logic.
-- **Flux processing chain tab** (`tabs/fluxchain.py`, `Tools ▸ Flux processing chain`, single-instance). Guided
+- **Flux processing chain tab** (`tabs/fluxchain.py`, `Flux ▸ Flux processing chain`, single-instance). Guided
   Swiss-FluxNet chain. **First slice = Input + Level 2**: collects site/flux-column + L2 test toggles, runs the
   composable `init_flux_data` → `run_level2` on a worker thread, shows the L2 QCF-filtered flux as a heatmap, and
   **Copy Python** emits a reproducible script via the library's `level2_to_code`. Script-gen lives in the library
@@ -344,14 +344,14 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   composable path; both omit default-valued kwargs) — the GUI only calls it. Needs real EddyPro-FLUXNET input
   (`load_exampledata_parquet_lae_level1_30MIN`), not the default CH-DAV. Later slices add L3.1/3.2/3.3/4.1 + switch to
   `run_chain`/`chain_to_code`.
-- **Feature engineering tab.** Menu-activated (`Tools ▸ Feature engineering`, from `registry.MENU_TAB_CLASSES`) — not in
+- **Feature engineering tab.** Menu-activated (`Data ▸ Feature engineering`, from `registry.MENU_TAB_CLASSES`) — not in
   the tab bar until selected, and closable (always-on tabs get their close button removed). Runs `FeatureEngineer`
   (library) on selected variables, emits new columns via a `featuresCreated` signal; `MainWindow` merges them, tracks
   them in a `created` set, re-pushes. Created columns get a pink **✦ NEW** pill (delegate `CREATED_ROLE`). Tab signals
   live on a `QObject` helper because `DiiveTab` is a plain `ABC`, not a `QObject` — class-level `Signal`s on a `DiiveTab`
   won't bind. When lazily creating a menu tab, call `tab.widget()` (builds it) **before** connecting `featuresCreated`,
   which `build()` sets.
-- **Gap & coverage dashboard tab** (`tabs/gaps.py`, `Tools ▸ Gaps & coverage`, single-instance). Diagnostics for
+- **Gap & coverage dashboard tab** (`tabs/gaps.py`, `Analyze ▸ Gaps & coverage`, single-instance). Diagnostics for
   missing data: stat cards + a two-panel **gap map** (availability heatmap + gap-spike timeline) + a long-gap table.
   All gap logic is the library's `dv.analysis.GapStats` — `.summary`, `.long_gaps`, the per-`ax` `plot_availability_heatmap`/
   `plot_gap_spike_timeline`, and `gap_at(timestamp)` (new: maps a click to the containing/nearest gap). The tab only
@@ -360,7 +360,7 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   Defaults to the gappiest variable (`df.isna().sum().idxmax()`) so it's useful on open. The long-gap threshold spinbox
   re-runs `GapStats` (cheap). **Note:** the library's `plot_*` panel methods attach their colorbar via `ax.figure.colorbar`
   (not `plt.colorbar`, which targets pyplot's current figure) so they embed correctly in the GUI canvas.
-- **Driver explorer tab** (`tabs/drivers.py`, `Tools ▸ Driver explorer`, single-instance). "What relates to this
+- **Driver explorer tab** (`tabs/drivers.py`, `Analyze ▸ Driver explorer`, single-instance). "What relates to this
   variable, and at what lag?" Pick a target; a ranked table lists every other variable by correlation strength, click a
   driver to see the target-vs-driver scatter. The ranking + lag scan is the library's new `dv.analysis.rank_drivers(df,
   target, method=, max_lag=)` → DataFrame `[DRIVER, CORR, ABS_CORR, BEST_LAG, N]` (positive `BEST_LAG` = driver leads
@@ -369,7 +369,7 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   method/max-lag apply on a **Rank drivers** button (the lag scan can be heavier). Table sorts numerically via a small
   `_NumItem` (sorts on the stored value, not display text). Defaults to `NEE_CUT_REF_f` (a continuous flux makes the
   ranking informative), else the first numeric column.
-- **Seasonal-trend & anomaly explorer tab** (`tabs/seasonaltrend.py`, `Tools ▸ Seasonal-trend & anomalies`,
+- **Seasonal-trend & anomaly explorer tab** (`tabs/seasonaltrend.py`, `Analyze ▸ Seasonal-trend & anomalies`,
   single-instance). "Is this variable changing over the years?" Decomposes a variable's **daily-mean** series into
   trend/seasonal/residual (4 stacked panels) and, in a second **view**, shows each year's anomaly vs a reference period.
   Maths is the library's: `dv.times.resample_to_daily_agg` → `dv.analysis.SeasonalTrendDecomposition` (STL/classical/
@@ -381,7 +381,7 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   py::stl_decompose`) never passed `period` to statsmodels and called `STL.fit(weights=...)` (unsupported) — so STL
   always raised on real data. Now passes `period` + a small odd seasonal smoother and `fit()` without weights; classical/
   harmonic were already fine.
-- **Spectrogram tab** (`tabs/spectrogram.py`, `Tools ▸ Spectrogram`, single-instance). Time-frequency view: how the
+- **Spectrogram tab** (`tabs/spectrogram.py`, `Analyze ▸ Spectrogram`, single-instance). Time-frequency view: how the
   strength of a variable's cycles (esp. the 1/day diel rhythm) changes over the record. Wraps `dv.analysis.spectrogram`;
   the tab maps the result onto **calendar-time × cycles-per-day** axes (records-per-day inferred from the index spacing;
   segment centres mapped to real timestamps via the non-NaN sample index, so the x-axis is correct even across gaps) and

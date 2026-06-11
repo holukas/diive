@@ -52,9 +52,12 @@ TAB_CLASSES: list[type[DiiveTab]] = [
 MENU_TABS: dict[str, dict[str, callable]] = {
     "Data": {
         # Merged into the manually-built Data menu (date-range actions); see
-        # MainWindow._build_menus. Not given its own top-level menu.
+        # MainWindow._build_menus. Not given its own top-level menu. These are
+        # data/variable preparation: subset, per-variable metadata, and the
+        # feature engineer (which derives new columns).
         "Select variables": VariableSelectorTab,
         "Metadata explorer": MetadataExplorerTab,
+        "Feature engineering": FeatureEngineerTab,
     },
     "Plot": {
         "Heatmap date/time": lambda: PlottingTab(HEATMAP, "Heatmap date/time"),
@@ -71,13 +74,17 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Hampel filter": HampelOutlierTab,
         "Local SD filter": LocalSDOutlierTab,
     },
-    "Tools": {
+    # Eddy-covariance flux processing (dv.flux). Its own menu — a first-class
+    # diive domain that will grow (gap-filling, USTAR, storage, ...).
+    "Flux": {
+        "Flux processing chain": FluxChainTab,
+    },
+    # Exploratory analysis & diagnostics (dv.analysis).
+    "Analyze": {
         "Gaps & coverage": GapDashboardTab,
         "Driver explorer": DriverExplorerTab,
         "Seasonal-trend & anomalies": SeasonalTrendTab,
         "Spectrogram": SpectrogramTab,
-        "Feature engineering": FeatureEngineerTab,
-        "Flux processing chain": FluxChainTab,
     },
     "Settings": {
         "Appearance": SettingsTab,

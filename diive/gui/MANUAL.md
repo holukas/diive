@@ -171,7 +171,7 @@ the plot immediately.) Available controls:
   Line *colours* for time series come from **Settings ▸ Appearance** (so a
   variable keeps the same colour everywhere).
 
-### Tools ▸ Gaps & coverage
+### Analyze ▸ Gaps & coverage
 
 A dashboard for finding and inspecting **missing data**. Pick a variable on the
 left (it opens on the one with the most gaps); the right side shows:
@@ -187,7 +187,7 @@ timeline, or click anywhere on the timeline to jump to the nearest gap (it gets
 highlighted and its table row is selected). Use **Long gap ≥ (records)** to set
 what counts as a "long" gap (48 records = one day for half-hourly data).
 
-### Tools ▸ Driver explorer
+### Analyze ▸ Driver explorer
 
 Find **what relates to a variable** — useful before gap-filling or interpreting
 a flux. Pick a **target** on the left; the table ranks every other variable by
@@ -204,7 +204,7 @@ target-vs-driver scatter.
 - Changing the method or max lag takes effect on **Rank drivers**; picking a new
   target updates immediately.
 
-### Tools ▸ Seasonal-trend & anomalies
+### Analyze ▸ Seasonal-trend & anomalies
 
 See whether a variable is **changing over the years** and which years stood out.
 Pick a variable; it is split into:
@@ -225,7 +225,7 @@ two boxes.
 - Needs at least ~2 years of data for the decomposition (the anomaly view works
   with fewer).
 
-### Tools ▸ Spectrogram
+### Analyze ▸ Spectrogram
 
 See **when** a variable's cycles are strong. A spectrogram shows time along the
 bottom, frequency (cycles per day) up the side, and colour for power — a bright
@@ -336,7 +336,7 @@ notes are kept only for data you load yourself.
 name in two different files keeps separate tags. Origin/history are recomputed
 each session as you work.
 
-### Tools ▸ Feature engineering
+### Data ▸ Feature engineering
 
 Build new features (lags, rolling stats, differences, EMA, polynomials, STL,
 timestamp parts, …) with diive's feature engineer:
@@ -350,7 +350,7 @@ timestamp parts, …) with diive's feature engineer:
 4. **Add features to variable list** — the new columns appear everywhere with a
    **✦ NEW** pill and can be plotted like any other variable.
 
-### Tools ▸ Flux processing chain
+### Flux ▸ Flux processing chain
 
 A guided workspace for the flux processing chain *(early — currently the Input +
 Level 2 steps)*. Pick the flux column and site, choose which Level-2 quality
