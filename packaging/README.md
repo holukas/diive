@@ -31,6 +31,12 @@ Output:
 Useful flags: `.\packaging\build_gui.ps1 -Clean` (wipe `build\`/`dist\` first),
 `-NoZip` (skip the archive).
 
+**Use `-Clean` for release builds.** PyInstaller's `COLLECT` step overwrites but
+never *prunes* `dist\`, so files from a previous build linger and get shipped —
+e.g. VTK from a `gui3d` build you've since dropped (hundreds of MB). `-Clean`
+guarantees the output folder matches exactly this build. (Skipping it is fine
+for dev iteration.)
+
 ## Files
 
 | File | Purpose |
