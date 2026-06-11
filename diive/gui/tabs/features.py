@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
 from diive.core.ml.feature_engineer import FeatureEngineer
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
@@ -298,6 +299,15 @@ class FeatureEngineerTab(DiiveTab):
             inputs = set(work.columns)
             new_cols = [c for c in out.columns if c not in inputs]
             new_df = out[new_cols].copy()
+            # Provenance: each engineered column is derived; best-effort link to
+            # the source variable whose name is embedded in the feature name.
+            src_cols = [str(c) for c in work.columns if c != _TARGET]
+            new_df.attrs[ATTRS_KEY] = {
+                col: provenance_attr(
+                    origin=DERIVED,
+                    parent=next((s for s in src_cols if s in str(col)), None),
+                    operation="Feature engineering", tags=["feature"])
+                for col in new_df.columns}
         except Exception as err:
             self._sig.run_failed.emit(str(err))
             return

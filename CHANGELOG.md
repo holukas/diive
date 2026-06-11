@@ -29,8 +29,15 @@
 - Tabs: **Overview** (per-variable stats ribbon + multi-panel figure); per-method **Plot** tabs (heatmaps, time series,
   diel cycle, cumulative year, ridgeline, scatter XY, hexbin, histogram; multi-instance, each with a live settings
   panel); Tools tabs **Gaps & coverage**, **Driver explorer**, **Seasonal-trend & anomalies**, **Spectrogram**,
-  **Feature engineering**, **Select variables**, **Flux processing chain** (Input + L2, with **Copy Python**); plus
-  **Appearance** and **Log**.
+  **Feature engineering**, **Flux processing chain** (Input + L2, with **Copy Python**); Data menu **Select variables**
+  and **Metadata explorer**; plus **Appearance** and **Log**.
+- **Per-variable metadata** (tags + provenance): every variable carries an origin (original/modified/derived), parent
+  link, and an operation history; operations (outlier filters, feature engineering) auto-record provenance, and the user
+  can add tags / mark favorites. Surfaced via a star + tag-count indicator and a rich hover tooltip on the variable list,
+  and the **Data ▸ Metadata explorer** tab (origin badge, editable tag chips, a free-text note capped at 50 words, and a
+  provenance timeline). Favorites pin to the top of every variable list; user tags get an auto-assigned (stable) colour.
+  User tags + notes persist across sessions **namespaced by dataset** (the same column name in two datasets keeps
+  separate tags); provenance regenerates per session (each file variable's history starts with its import).
 - Shared variable list across tabs (fuzzy filter + colour pills); tinted editable fields; settings tooltips from
   library docstrings; plots apply on an "Update plot" button. Date-range subselection (Data menu) and Save-as-parquet
   (File menu). Startup splash + Help ▸ About. Preferences persist.
@@ -53,6 +60,9 @@ Library additions used by the GUI (all backward-compatible):
   (NEE/FC/GPP/Reco/LE/ET/Rg/SW_IN/PPFD/PAR/LW/TA/VPD/SWC; carbon/water/radiation/meteo/soil). `PPFD` now matches a bare
   column.
 - `dv.keep_vars(data, variables)`: non-destructive column subset (column analogue of `keep_daterange`).
+- `diive.core.metadata` (`VariableMetadata`, `ProvenanceEntry`, `MetadataStore`, `provenance_attr`, `ATTRS_KEY`):
+  headless per-variable tag + provenance model. Operations attach a `df.attrs[ATTRS_KEY]` payload describing new columns;
+  consumers record origin/parent/operation/tags. Used by the GUI's metadata explorer.
 - `SSTATS_DESCRIPTIONS` (`diive.core.dfun.stats`): one-line description per `sstats` metric.
 
 ### Flux Processing Chain

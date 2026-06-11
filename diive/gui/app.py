@@ -11,6 +11,7 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QRectF, QSize, Qt
@@ -39,7 +40,7 @@ from PySide6.QtWidgets import (
 )
 
 import diive
-from diive.gui import config, site, theme
+from diive.gui import config, metadata_store, site, theme
 from diive.gui.registry import (
     MENU_TAB_CLASSES,
     MENU_TABS,
@@ -49,6 +50,32 @@ from diive.gui.registry import (
 from diive.core.io.files import ALLOWED_TIMESTAMP_NAMES
 from diive.gui.widgets.daterange_dialog import DateRangeDialog
 from diive.gui.widgets.open_data_dialog import OpenDataDialog
+
+
+def _namespace_metadata(raw: dict, key: str) -> dict:
+    """Coerce a persisted ``variable_metadata`` blob to the per-dataset shape
+    ``{dataset_key: {"tags": ..., "descriptions": ...}}``.
+
+    Already-namespaced blobs pass through unchanged. Older non-namespaced ones —
+    a single ``{"tags":..,"descriptions":..}`` or the legacy flat ``{name:[tags]}``
+    — are migrated under ``key`` so a user's existing tags survive the upgrade
+    (attached to whichever dataset loads first, since the old format didn't record
+    which dataset they belonged to).
+    """
+    if not raw:
+        return {}
+
+    def _is_userdata(v) -> bool:
+        return isinstance(v, dict) and (not v or "tags" in v or "descriptions" in v)
+
+    if not ("tags" in raw or "descriptions" in raw) and all(
+            _is_userdata(v) for v in raw.values()):
+        return dict(raw)  # already namespaced by dataset
+    if "tags" in raw or "descriptions" in raw:
+        userdata = raw  # a single (non-namespaced) user_data dict
+    else:
+        userdata = {"tags": raw, "descriptions": {}}  # legacy flat name->tags
+    return {key: userdata}
 
 
 class _StudioRoot(QWidget):
@@ -112,6 +139,10 @@ class MainWindow(QMainWindow):
         self._range: tuple | None = None
         self._source = ""
         self._created: set = set()  # user-engineered feature column names
+        # Per-variable user metadata (tags/notes) is persisted namespaced by
+        # dataset, so the same column name in two datasets keeps separate tags.
+        self._dataset_key: str | None = None
+        self._saved_metadata: dict = dict(self._config.get("variable_metadata") or {})
         self._menu_tab_list: list = []  # open menu-activated tabs (multi-instance)
 
         self._tabs = []
@@ -273,6 +304,22 @@ class MainWindow(QMainWindow):
         self._source = source
         self._range = None  # a new dataset starts at its full range
         self._created = set()  # fresh dataset has no user-created features
+        # Reset per-variable metadata to an "original" baseline for the new
+        # columns, then re-apply user tags: persisted favorites first, then any
+        # set earlier this session (so an in-session reload keeps them too).
+        store = metadata_store.manager.store
+        # Stash the outgoing dataset's user edits (tags/notes) before the store
+        # is reset, so switching datasets — or reloading this one — keeps them.
+        if self._dataset_key is not None:
+            self._saved_metadata[self._dataset_key] = store.user_data()
+        else:  # first load: migrate any pre-namespacing config onto this dataset
+            self._saved_metadata = _namespace_metadata(self._saved_metadata, source)
+        store.record_original(
+            df.columns, operation=f"Imported from {source}",
+            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"))
+        store.load_user_data(self._saved_metadata.get(source) or {})
+        self._dataset_key = source
+        metadata_store.manager.notify()
         self._apply_range()
         self._tabwidget.setCurrentIndex(0)  # show the Overview tab on load
 
@@ -483,6 +530,15 @@ class MainWindow(QMainWindow):
         for col in new_df.columns:
             self._full_data[col] = new_df[col]  # aligns on index
         self._created |= {str(c) for c in new_df.columns}
+        # Record provenance the emitting tab attached to the frame (origin,
+        # parent, operation, params, tags); stamp the time here (the library
+        # model stays free of wall-clock calls). Frames without it are ignored.
+        attrs = getattr(new_df, "attrs", {}).get(metadata_store.ATTRS_KEY) \
+            if hasattr(new_df, "attrs") else None
+        if attrs:
+            metadata_store.manager.store.from_attrs(
+                attrs, timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"))
+            metadata_store.manager.notify()
         self._apply_range()
 
     def _delete_variable(self, name: str) -> None:
@@ -501,6 +557,8 @@ class MainWindow(QMainWindow):
             return
         self._full_data = self._full_data.drop(columns=[name])
         self._created.discard(name)
+        metadata_store.manager.store.drop(name)
+        metadata_store.manager.notify()
         self._apply_range()
         self.statusBar().showMessage(f"Deleted variable '{name}'", 5000)
 
@@ -562,11 +620,18 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         """Persist preferences (theme, window geometry, last filetype) on exit."""
         from diive.gui.widgets import open_data_dialog as odd
+        # Fold the current dataset's user edits into the namespaced blob before
+        # writing. Only user content (tags, notes) persists, keyed by dataset;
+        # provenance/origin regenerate per session as operations run.
+        if self._dataset_key is not None:
+            self._saved_metadata[self._dataset_key] = \
+                metadata_store.manager.store.user_data()
         config.save_config({
             "theme": theme.manager.as_dict(),
             "site": site.manager.as_dict(),
             "geometry": bytes(self.saveGeometry().toBase64()).decode("ascii"),
             "last_filetype": odd._last_choice,
+            "variable_metadata": self._saved_metadata,
         })
         super().closeEvent(event)
 

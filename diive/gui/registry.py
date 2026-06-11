@@ -16,6 +16,7 @@ from diive.gui.tabs.features import FeatureEngineerTab
 from diive.gui.tabs.fluxchain import FluxChainTab
 from diive.gui.tabs.gaps import GapDashboardTab
 from diive.gui.tabs.log import LogTab
+from diive.gui.tabs.metadata_explorer import MetadataExplorerTab
 from diive.gui.tabs.outliers import HampelOutlierTab
 from diive.gui.tabs.outliers_localsd import LocalSDOutlierTab
 from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
@@ -53,6 +54,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         # Merged into the manually-built Data menu (date-range actions); see
         # MainWindow._build_menus. Not given its own top-level menu.
         "Select variables": VariableSelectorTab,
+        "Metadata explorer": MetadataExplorerTab,
     },
     "Plot": {
         "Heatmap date/time": lambda: PlottingTab(HEATMAP, "Heatmap date/time"),
@@ -93,4 +95,4 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 SINGLE_INSTANCE_TABS: set[str] = {
     "Appearance", "Site details", "Flux processing chain", "Gaps & coverage",
     "Driver explorer", "Seasonal-trend & anomalies", "Spectrogram",
-    "Select variables"}
+    "Metadata explorer", "Select variables"}

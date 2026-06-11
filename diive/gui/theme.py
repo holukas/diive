@@ -28,6 +28,8 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
+import zlib
+
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
@@ -35,6 +37,25 @@ from PySide6.QtWidgets import QApplication
 # Fixed convenience colours (not user-editable; kept for back-compat imports).
 WHITE = "#FFFFFF"
 DARK = "#212121"
+
+# --- User-tag colours --------------------------------------------------------
+# Material 300-level palette; a user tag is mapped to one deterministically by a
+# stable hash of its name, so the same tag always gets the same colour (across
+# runs, unlike Python's per-process `hash`).
+_TAG_PALETTE: list[str] = [
+    "#EF9A9A", "#F48FB1", "#CE93D8", "#B39DDB", "#9FA8DA", "#90CAF9",
+    "#81D4FA", "#80DEEA", "#80CBC4", "#A5D6A7", "#C5E1A5", "#FFE082",
+    "#FFCC80", "#FFAB91", "#BCAAA4",
+]
+
+
+def tag_color(tag: str) -> tuple[str, str]:
+    """Stable ``(background, text)`` colour for a user tag, picked from a palette
+    by a deterministic hash of the tag name. Text is black/white for contrast."""
+    bg = _TAG_PALETTE[zlib.crc32(tag.encode("utf-8")) % len(_TAG_PALETTE)]
+    r, g, b = int(bg[1:3], 16), int(bg[3:5], 16), int(bg[5:7], 16)
+    fg = WHITE if (0.299 * r + 0.587 * g + 0.114 * b) < 128 else "#1A1A1A"
+    return bg, fg
 
 # --- Studio (VIBECAD-like) token defaults -----------------------------------
 # Monochrome neutrals + one restrained slate-ink accent. These are the look's

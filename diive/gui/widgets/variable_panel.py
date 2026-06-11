@@ -25,6 +25,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QInputDialog,
     QLineEdit,
     QListWidgetItem,
     QMenu,
@@ -32,7 +33,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from diive.gui import theme
+from diive.core.metadata import FAVORITE
+from diive.gui import metadata_store, theme
 from diive.gui.widgets.variable_delegate import (
     CREATED_ROLE,
     LOADING_ROLE,
@@ -122,11 +124,12 @@ class VariablePanel(QWidget):
         self.list.setWordWrap(False)
         self.list.selected.connect(self.selected)  # re-emit upward
 
-        # Opt-in right-click "Delete variable" menu (tabs that own the dataset
-        # wire `deleteRequested`; other tabs leave it off, so no dead menu).
-        if deletable:
-            self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-            self.list.customContextMenuRequested.connect(self._show_context_menu)
+        # Right-click menu: metadata tags (favorite, add/remove) everywhere, plus
+        # "Delete variable" only on dataset-owning panels (`deletable`), which
+        # wire `deleteRequested`.
+        self._deletable = deletable
+        self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.list.customContextMenuRequested.connect(self._show_context_menu)
 
         layout.addWidget(self.search)
         layout.addWidget(self.list, stretch=1)
@@ -135,18 +138,56 @@ class VariablePanel(QWidget):
         # settings). Live theme preview also repaints pills/highlights.
         self.setFixedWidth(theme.manager.list_width)
         theme.manager.changed.connect(self._on_theme_changed)
+        # Re-sort + repaint when metadata changes anywhere: favorites float to
+        # the top, so toggling one must re-order the list, not just repaint it.
+        metadata_store.manager.changed.connect(
+            lambda: self._apply_filter(self.search.text()))
 
     def _show_context_menu(self, pos) -> None:
-        """Right-click menu for the item under the cursor: delete the variable."""
+        """Right-click menu: favorite + tag editing (always), delete (deletable)."""
         item = self.list.itemAt(pos)
         if item is None:
             return
         name = item.data(NAME_ROLE)
+        md = metadata_store.manager.store.get(name)
         menu = QMenu(self.list)
-        act = QAction(f"Delete '{name}'", menu)
-        act.triggered.connect(lambda: self.deleteRequested.emit(name))
-        menu.addAction(act)
+
+        fav = FAVORITE in md.tags
+        fav_act = QAction("★ Unmark favorite" if fav else "★ Mark favorite", menu)
+        fav_act.triggered.connect(
+            lambda: metadata_store.manager.toggle_user_tag(name, FAVORITE))
+        menu.addAction(fav_act)
+
+        add_act = QAction("Add tag…", menu)
+        add_act.triggered.connect(lambda: self._add_tag_dialog(name))
+        menu.addAction(add_act)
+
+        removable = [t for t in md.user_tags() if t != FAVORITE]
+        if removable:
+            sub = menu.addMenu("Remove tag")
+            for tag in removable:
+                a = QAction(tag, sub)
+                a.triggered.connect(
+                    lambda _checked=False, t=tag:
+                    metadata_store.manager.remove_user_tag(name, t))
+                sub.addAction(a)
+
+        if self._deletable:
+            menu.addSeparator()
+            act = QAction(f"Delete '{name}'", menu)
+            act.triggered.connect(lambda: self.deleteRequested.emit(name))
+            menu.addAction(act)
+
         menu.exec(self.list.viewport().mapToGlobal(pos))
+
+    @staticmethod
+    def _is_fav(item) -> bool:
+        return metadata_store.manager.is_favorite(item.data(NAME_ROLE))
+
+    def _add_tag_dialog(self, name: str) -> None:
+        text, ok = QInputDialog.getText(self, "Add tag", f"Tag for '{name}':")
+        if ok and text.strip():
+            metadata_store.manager.add_user_tag(name, text.strip())
 
     def _on_theme_changed(self) -> None:
         self.setFixedWidth(theme.manager.list_width)
@@ -239,8 +280,10 @@ class VariablePanel(QWidget):
         items = [self.list.item(i) for i in range(self.list.count())]
         if not items:
             return
+        # Favorites pin to the top in every view (sorts before the score/order).
         if not needle:
-            ordered = sorted(items, key=lambda it: it.data(ORDER_ROLE))
+            ordered = sorted(
+                items, key=lambda it: (not self._is_fav(it), it.data(ORDER_ROLE)))
             self._reorder(ordered, hidden=set())
             return
         matched, unmatched = [], []
@@ -249,9 +292,9 @@ class VariablePanel(QWidget):
             if score is None:
                 unmatched.append(it)
             else:
-                matched.append((score, it.data(ORDER_ROLE), it))
-        matched.sort(key=lambda t: (-t[0], t[1]))  # best score first, then order
-        ordered = [t[2] for t in matched]
+                matched.append((not self._is_fav(it), -score, it.data(ORDER_ROLE), it))
+        matched.sort(key=lambda t: t[:3])  # favorites first, then score, then order
+        ordered = [t[3] for t in matched]
         ordered += sorted(unmatched, key=lambda it: it.data(ORDER_ROLE))
         # QListWidgetItem is unhashable in PySide6, so track hidden ones by id().
         self._reorder(ordered, hidden={id(it) for it in unmatched})

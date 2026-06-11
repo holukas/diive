@@ -981,6 +981,117 @@ def test_hampel_outlier_tab_keeps_original_cleaned_flag(window):
     assert set(window._data[flag].dropna().unique()) <= {0, 2}
 
 
+def test_metadata_provenance_from_outlier_run(window):
+    from diive.core.metadata import DERIVED, FAVORITE, MODIFIED, ORIGINAL
+    from diive.gui import metadata_store
+
+    store = metadata_store.manager.store
+    var = "Tair_f"
+    # Freshly loaded columns carry an "original" baseline.
+    assert store.get(var).origin == ORIGINAL
+
+    window._open_menu_tab("Hampel filter")
+    tab = window._menu_tab_list[-1]
+    tab._select(var)
+    series = window._data[var]
+    tab._worker(series, dict(window_length=48 * 13, n_sigma=5.5,
+                             use_differencing=True, separate_day_night=False), True)
+    QApplication.processEvents()
+    tab._add()
+    QApplication.processEvents()
+
+    cleaned, flag = f"{var}_HAMPEL", f"FLAG_{var}_OUTLIER_HAMPEL_TEST"
+    md = store.get(cleaned)
+    assert md.origin == MODIFIED
+    assert md.parents == [var]
+    assert "hampel" in md.tags
+    assert len(md.provenance) >= 1  # >=1: a shared window may run this twice
+    assert store.get(flag).origin == DERIVED
+
+    # User tags persist (favorite); provenance tags do not round-trip.
+    metadata_store.manager.add_user_tag(var, FAVORITE)
+    saved = store.user_tags()
+    assert saved.get(var) == [FAVORITE]
+    assert cleaned not in saved  # function-set "hampel" tag is not persisted
+
+    # Favorites float to the top of the variable list (re-sorted on the tag's
+    # `changed` signal), so the first row is now a favorite.
+    QApplication.processEvents()
+    assert metadata_store.manager.is_favorite(
+        tab.varpanel.list.item(0).data(Qt.ItemDataRole.UserRole))
+
+
+def test_metadata_tags_are_per_dataset(window):
+    import numpy as np
+    import pandas as pd
+
+    from diive.gui import metadata_store
+    store = metadata_store.manager.store
+
+    var = str(window._data.columns[0])
+    key_a = window._dataset_key
+    metadata_store.manager.add_user_tag(var, "ds1tag")
+    assert "ds1tag" in store.get(var).tags
+
+    # A different dataset that happens to share the column name must NOT inherit
+    # dataset 1's tag (tags are namespaced by dataset, not by variable name).
+    idx = window._data.index[:50]
+    df2 = pd.DataFrame({var: np.arange(len(idx), dtype=float)}, index=idx)
+    window._set_data(df2, source="other dataset")
+    QApplication.processEvents()
+    assert "ds1tag" not in store.get(var).tags
+
+    # Re-loading the first dataset (same key + column) restores its tag.
+    df3 = pd.DataFrame({var: np.arange(len(idx), dtype=float)}, index=idx)
+    window._set_data(df3, source=key_a)
+    QApplication.processEvents()
+    assert "ds1tag" in store.get(var).tags
+
+
+def test_metadata_namespace_migrates_legacy_flat_config():
+    from diive.gui.app import _namespace_metadata
+    # Legacy flat {name: [tags]} migrates under the first dataset key.
+    out = _namespace_metadata({"NEE": ["favorite"]}, "site_x")
+    assert out == {"site_x": {"tags": {"NEE": ["favorite"]}, "descriptions": {}}}
+    # An already-namespaced blob passes through unchanged.
+    ns = {"site_x": {"tags": {"NEE": ["favorite"]}, "descriptions": {}}}
+    assert _namespace_metadata(ns, "other") == ns
+
+
+def test_metadata_explorer_note_capped_at_50_words(window):
+    from diive.gui import metadata_store
+
+    window._open_menu_tab("Metadata explorer")
+    tab = window._menu_tab_list[-1]
+    var = str(window._data.columns[0])
+    tab._select(var)
+    QApplication.processEvents()
+
+    assert not tab._desc_save.isEnabled()      # nothing to save on a fresh view
+    long_note = " ".join(f"word{i}" for i in range(70))
+    tab._desc_edit.setPlainText(long_note)
+    assert tab._desc_save.isEnabled()          # editing re-enables it
+    tab._save_description()  # what the "Save note" button does
+    QApplication.processEvents()
+
+    stored = metadata_store.manager.store.get(var).description
+    assert len(stored.split()) == 50           # capped
+    assert tab._desc_edit.toPlainText() == stored  # editor reflects truncation
+    # Saved: button greys out and confirms; editing it again reactivates it.
+    assert not tab._desc_save.isEnabled()
+    assert tab._desc_save.text() == "Saved ✓"
+    tab._desc_edit.setPlainText("changed again")
+    assert tab._desc_save.isEnabled()
+    assert tab._desc_save.text() == "Save note"
+
+    # Switching variables flushes the note (no data loss without an explicit save).
+    other = str(window._data.columns[1])
+    tab._desc_edit.setPlainText("a short pending note")
+    tab._select(other)
+    QApplication.processEvents()
+    assert metadata_store.manager.store.get(var).description == "a short pending note"
+
+
 def test_localsd_outlier_tab_keeps_original_cleaned_flag(window):
     window._open_menu_tab("Local SD filter")
     tab = window._menu_tab_list[-1]

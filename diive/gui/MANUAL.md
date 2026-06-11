@@ -61,6 +61,13 @@ straight back into diive (GUI or library).
   Reco (red), LE/ET (purple), radiation/Rg/SW_IN/PPFD/PAR/LW (orange), air
   temperature TA (deep orange), VPD (cyan), soil water content SWC (brown).
   Features you create get a pink **✦ NEW** pill.
+- **Metadata indicators** — a gold **★** marks a favorite, and a small **●N**
+  shows how many extra tags a variable has. **Favorites sort to the top** of the
+  list. **Hover** any variable for a tooltip with its origin, where it came from,
+  its tags, any note, and its full processing history.
+- **Right-click a variable** for **★ Mark favorite** and **Add tag… / Remove tag**.
+  Full editing (tags, a free-text note, history) lives in **Data ▸ Metadata
+  explorer**.
 - The list looks and behaves the same in every tab.
 
 ---
@@ -270,6 +277,29 @@ to remove it. **Add all →** (under the Available list) moves everything across
 **Clear** (under the Selected list) empties the selection. **Confirm → update
 Overview** restricts the Overview's variable list to your selection (your data is
 not changed — load new data or re-open to reset).
+
+### Data ▸ Metadata explorer
+
+See and edit the metadata that travels with each variable — useful once a
+variable has been through several steps (load → outlier filter → gap-fill → …)
+and you want to know *where the current version came from*. Pick a variable on
+the left; the right panel shows:
+
+- **Origin** — *original* (straight from the file), *modified* (a transformed
+  copy, e.g. outliers removed), or *derived* (computed from a parent, e.g. a
+  flag), plus the **parent** variable it came from.
+- **Tags** — toggle **★ Favorite**, and add/remove your own tags (each user tag
+  gets its own colour automatically). Operations also add tags themselves (e.g.
+  `hampel`, `flag`).
+- **Note** — free text describing the variable, up to **50 words** (a live
+  counter shows the count; **Save note** greys out once saved and re-enables when
+  you edit again).
+- **History** — the ordered list of operations that produced the variable, each
+  with its settings and time; for a loaded variable the first entry is its import.
+
+**Your tags and notes are saved between sessions, per dataset** — the same column
+name in two different files keeps separate tags. Origin/history are recomputed
+each session as you work.
 
 ### Tools ▸ Feature engineering
 

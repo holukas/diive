@@ -38,6 +38,7 @@ diive/
 ├── core/plotting/            # Visualization types
 ├── core/times/               # Timestamp handling
 ├── core/io/                  # File I/O
+├── core/metadata/            # Per-variable tag + provenance model (GUI-backing)
 ├── gapfilling/               # Gap-filling (RF, XGBoost, MDS)
 ├── flux/                     # Flux processing (lowres, hires, chain)
 ├── preprocessing/            # Wrapper for domain-based preprocessing modules
@@ -391,6 +392,22 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   outlier-free range (sharing y would keep it stretched by the spikes the top panel still shows). **Add cleaned + flag to
   dataset** emits the columns via a `featuresCreated` signal (the feature-engineering merge mechanism). All detection is
   library work.
+- **Per-variable metadata (tags + provenance).** Model is the **library's** `diive.core.metadata` (`VariableMetadata`,
+  `ProvenanceEntry`, `MetadataStore`, `provenance_attr`, `ATTRS_KEY`, `truncate_words`, `MAX_DESCRIPTION_WORDS=50`) —
+  headless, no Qt, no wall-clock (timestamps are passed in). The GUI holds it app-wide in `gui/metadata_store.py`'s
+  `manager` singleton (mirrors `theme.manager`/`site.manager`; emits `changed`). Each variable carries an **origin**
+  (`original`/`modified`/`derived`), parent links, an ordered **provenance** list, free-text **description** (≤50 words),
+  and **tags** that track their source (only `USER` tags persist). **Operations emit provenance with no signal change**
+  by attaching `df.attrs[ATTRS_KEY]` (built via `provenance_attr`) to the frame they pass to `featuresCreated`;
+  `MainWindow._add_features` consumes it (`store.from_attrs`, stamping the time GUI-side). The outlier base
+  (`tabs/_outlier_base.py`) and feature tab tag their outputs this way; `record_original` seeds each loaded column with
+  an "Imported from <source>" history entry. **Display:** the delegate paints a ★ (favorite) + `●N` (extra-tag count)
+  and `VariablePanel` sorts favorites to the top; `VariableList` shows a rich hover tooltip; right-click edits tags. The
+  **Data ▸ Metadata explorer** tab (`tabs/metadata_explorer.py`, single-instance) does full editing (origin badge,
+  auto-coloured tag chips via `theme.tag_color`, the 50-word note, provenance timeline). **Persistence is namespaced by
+  dataset:** `config.variable_metadata` is `{dataset_key(source): {"tags":…, "descriptions":…}}` — so the same column
+  name in two datasets keeps separate tags. `MainWindow._set_data` stashes the outgoing dataset's `user_data()` before
+  reset and loads the incoming one; `_namespace_metadata()` migrates older non-namespaced configs onto the first dataset.
 - **Var list sync.** All tabs refresh via `MainWindow._push_data()` → `on_data_loaded(df, created)` on every data
   change; menu tabs get current data on open and are dropped from the push list on close.
 - **Output console.** The `Log` tab (`LogTab` → `ConsolePanel`) mirrors diive's Rich output in colour. The library tees

@@ -20,7 +20,8 @@ from PySide6.QtCore import QRect, QSize, Qt
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QStyle, QStyledItemDelegate
 
-from diive.gui import theme
+from diive.core.metadata import FAVORITE, ORIGINAL
+from diive.gui import metadata_store, theme
 from diive.variables import classify_variable
 
 #: Variable name (shared with VariableList click handling).
@@ -68,6 +69,42 @@ class VariableDelegate(QStyledItemDelegate):
         s = super().sizeHint(option, index)
         return QSize(1, max(s.height(), 26))
 
+    @staticmethod
+    def _paint_metadata(painter, option, rect, name, anchor_right) -> int:
+        """Draw a favorite ★ and a faint extra-tag count right of the name (left
+        of the pill). Returns the horizontal space consumed so the name can be
+        elided clear of it."""
+        md = metadata_store.manager.store.peek(name)
+        if md is None:
+            return 0
+        tags = md.tags
+        fav = FAVORITE in tags
+        extra = len(tags - {ORIGINAL, FAVORITE})
+        if not fav and extra == 0:
+            return 0
+
+        font = QFont(option.font)
+        font.setPointSizeF(max(7.0, option.font.pointSizeF() - 1.0))
+        painter.setFont(font)
+        fm = painter.fontMetrics()
+        x = anchor_right
+        used = 0
+        if extra:
+            text = f"●{extra}"
+            w = fm.horizontalAdvance(text)
+            r = QRect(x - w, rect.center().y() - fm.height() // 2, w, fm.height())
+            painter.setPen(QColor("#90A4AE"))  # blue-grey 300 — quiet count
+            painter.drawText(r, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, text)
+            x -= w + 6
+            used += w + 6
+        if fav:
+            w = fm.horizontalAdvance("★")
+            r = QRect(x - w, rect.center().y() - fm.height() // 2, w, fm.height())
+            painter.setPen(QColor("#FFB300"))  # amber 600 — favorite star
+            painter.drawText(r, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, "★")
+            used += w + 4
+        return used
+
     def paint(self, painter, option, index) -> None:
         painter.save()
         painter.setClipRect(option.rect)  # never draw past the row
@@ -111,6 +148,7 @@ class VariableDelegate(QStyledItemDelegate):
         # Pill tag (right-aligned), drawn first so we know how much width to
         # reserve for the text.
         pill_w = 0
+        ind_anchor = rect.right() - 8  # right edge for metadata indicators
         if pill is not None:
             pill_label, pill_color, pill_fg = pill
             pill_font = QFont(option.font)
@@ -130,6 +168,12 @@ class VariableDelegate(QStyledItemDelegate):
             painter.setPen(pill_fg)
             painter.drawText(pill_rect, Qt.AlignmentFlag.AlignCenter, pill_label)
             pill_w = pw + 12
+            ind_anchor = px - 6
+
+        # Metadata indicators (left of the pill): a favorite star and a small
+        # count of extra tags. Read live from the store so they track edits made
+        # in other tabs (the panel repaints on the store's `changed` signal).
+        pill_w += self._paint_metadata(painter, option, rect, name, ind_anchor)
 
         # Variable name (numbered with its panel position when shown).
         text_font = QFont(option.font)

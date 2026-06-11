@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from diive.core.metadata import ATTRS_KEY, DERIVED, MODIFIED, provenance_attr
 from diive.gui import site, theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.copy_button import CopyPythonButton
@@ -347,6 +348,18 @@ class BaseOutlierTab(DiiveTab):
             cleaned.name = f"{series.name}_{self.method_suffix}"
             flag = h.overall_flag.copy()  # name: FLAG_{var}_OUTLIER_{method}_TEST
             result = pd.DataFrame({cleaned.name: cleaned, flag.name: flag})
+            # Provenance for the metadata store: the cleaned series is a modified
+            # copy of the parent; the flag is derived from it.
+            tag = self.method_suffix.lower()
+            result.attrs[ATTRS_KEY] = {
+                cleaned.name: provenance_attr(
+                    origin=MODIFIED, parent=str(series.name), operation=self.title,
+                    params=kwargs, tags=[tag, "outliers-removed"]),
+                flag.name: provenance_attr(
+                    origin=DERIVED, parent=str(series.name),
+                    operation=f"{self.title} flag", params=kwargs,
+                    tags=["flag", tag]),
+            }
             # Day/night split of the outliers (only when separation was on).
             is_daytime = getattr(h, "is_daytime", None) if self.daynight_cb.isChecked() else None
             payload = {
