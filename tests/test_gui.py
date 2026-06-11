@@ -1028,16 +1028,21 @@ def test_metadata_tags_are_per_dataset(window):
     from diive.gui import metadata_store
     store = metadata_store.manager.store
 
+    idx = window._data.index[:50]
     var = str(window._data.columns[0])
+    # Load a real (persisted) dataset — the example auto-load is intentionally
+    # clean and unpersisted, so it can't serve as "dataset one" here.
+    df1 = pd.DataFrame({var: np.arange(len(idx), dtype=float)}, index=idx)
+    window._set_data(df1, source="dataset one")
     key_a = window._dataset_key
+    assert key_a == "dataset one"
     metadata_store.manager.add_user_tag(var, "ds1tag")
     assert "ds1tag" in store.get(var).tags
 
     # A different dataset that happens to share the column name must NOT inherit
     # dataset 1's tag (tags are namespaced by dataset, not by variable name).
-    idx = window._data.index[:50]
     df2 = pd.DataFrame({var: np.arange(len(idx), dtype=float)}, index=idx)
-    window._set_data(df2, source="other dataset")
+    window._set_data(df2, source="dataset two")
     QApplication.processEvents()
     assert "ds1tag" not in store.get(var).tags
 
@@ -1046,6 +1051,89 @@ def test_metadata_tags_are_per_dataset(window):
     window._set_data(df3, source=key_a)
     QApplication.processEvents()
     assert "ds1tag" in store.get(var).tags
+
+
+def test_metadata_explorer_clear_all(window, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    from diive.gui import metadata_store
+    store = metadata_store.manager.store
+
+    window._open_menu_tab("Metadata explorer")
+    tab = window._menu_tab_list[-1]
+    var = str(window._data.columns[0])
+    tab._select(var)
+    metadata_store.manager.add_user_tag(var, "favorite")
+    metadata_store.manager.add_user_tag(var, "lukas")
+    store.set_description(var, "a note")
+    assert store.user_data()["tags"]
+
+    # Confirm the (destructive) dialog, then clear.
+    monkeypatch.setattr(QMessageBox, "question",
+                        lambda *a, **k: QMessageBox.StandardButton.Yes)
+    tab._clear_all()
+    QApplication.processEvents()
+    assert store.user_data() == {"tags": {}, "descriptions": {}}
+
+
+def test_metadata_edit_navigation_from_varlist(window):
+    from diive.gui import metadata_store
+
+    var = str(window._data.columns[2])
+    # What a variable-list "Edit metadata…" right-click triggers.
+    metadata_store.manager.request_edit(var)
+    QApplication.processEvents()
+    explorers = [t for t in window._menu_tab_list
+                 if getattr(t, "_menu_label", None) == "Metadata explorer"]
+    assert len(explorers) == 1                 # opened the (single-instance) tab
+    assert explorers[0]._current == var        # focused on the clicked variable
+
+    # Requesting another variable focuses the same tab and reselects.
+    var2 = str(window._data.columns[3])
+    metadata_store.manager.request_edit(var2)
+    QApplication.processEvents()
+    explorers = [t for t in window._menu_tab_list
+                 if getattr(t, "_menu_label", None) == "Metadata explorer"]
+    assert len(explorers) == 1
+    assert explorers[0]._current == var2
+
+
+def test_metadata_explorer_clear_one_via_right_click(window):
+    from diive.gui import metadata_store
+    store = metadata_store.manager.store
+
+    window._open_menu_tab("Metadata explorer")
+    tab = window._menu_tab_list[-1]
+    keep = str(window._data.columns[0])
+    target = str(window._data.columns[1])
+    for var in (keep, target):
+        metadata_store.manager.add_user_tag(var, "favorite")
+        store.set_description(var, "note")
+    tab._select(target)
+
+    # The panel's right-click "Remove all tags & note" emits clearRequested.
+    tab.varpanel.clearRequested.emit(target)
+    QApplication.processEvents()
+    assert not store.get(target).tags - {"original"}  # only auto baseline remains
+    assert store.get(target).description == ""
+    assert "favorite" in store.get(keep).tags          # other variable untouched
+
+
+def test_metadata_example_data_loads_clean(window):
+    from diive.gui import metadata_store
+    store = metadata_store.manager.store
+
+    var = str(window._data.columns[0])
+    key = "example data (CH-DAV)"
+    # Pretend a stale example entry was persisted from a previous session.
+    window._saved_metadata[key] = {"tags": {var: ["favorite"]}, "descriptions": {}}
+
+    window._load_example()  # reload the bundled example
+    QApplication.processEvents()
+
+    assert "favorite" not in store.get(var).tags        # not applied — clean
+    assert key not in window._saved_metadata            # stale entry purged
+    assert window._dataset_key is None                  # example isn't persisted
 
 
 def test_metadata_namespace_migrates_legacy_flat_config():

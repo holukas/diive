@@ -238,6 +238,23 @@ class MetadataStore:
             for tag in tags:
                 md.add_tag(tag, source=USER)
 
+    def clear_user_data(self) -> None:
+        """Remove every user-set tag and description (the destructive counterpart
+        to :meth:`load_user_data`). Origin, provenance, and function-set tags
+        (e.g. ``hampel``, ``flag``) are kept."""
+        for name in self._items:
+            self.clear_variable_user_data(name)
+
+    def clear_variable_user_data(self, name: str) -> None:
+        """Remove one variable's user tags + description (keeps origin/provenance
+        and function-set tags)."""
+        md = self._items.get(str(name))
+        if md is None:
+            return
+        for tag in md.user_tags():
+            md.remove_tag(tag)
+        md.description = ""
+
     def user_data(self) -> dict:
         """All persistable user content: ``{"tags": ..., "descriptions": ...}``."""
         return {"tags": self.user_tags(), "descriptions": self.descriptions()}

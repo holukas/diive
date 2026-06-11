@@ -28,10 +28,16 @@ class MetadataManager(QObject):
 
     #: Emitted after any edit so the variable lists / explorer repaint.
     changed = Signal()
+    #: Emitted to ask the app to open the Metadata explorer on a variable
+    #: (from any tab's variable-list right-click). MainWindow handles it.
+    editRequested = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
         self.store = MetadataStore()
+
+    def request_edit(self, name: str) -> None:
+        self.editRequested.emit(name)
 
     def notify(self) -> None:
         """Emit ``changed`` after the main window records load/feature provenance
@@ -52,6 +58,14 @@ class MetadataManager(QObject):
             self.store.remove_user_tag(name, tag)
         else:
             self.store.add_user_tag(name, tag)
+        self.changed.emit()
+
+    def clear_user_data(self) -> None:
+        self.store.clear_user_data()
+        self.changed.emit()
+
+    def clear_variable_user_data(self, name: str) -> None:
+        self.store.clear_variable_user_data(name)
         self.changed.emit()
 
     def is_favorite(self, name: str) -> bool:

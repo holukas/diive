@@ -101,8 +101,13 @@ class VariablePanel(QWidget):
     #: Emitted when "Delete variable" is chosen from the right-click menu
     #: (only wired when the panel is built with `deletable=True`).
     deleteRequested = Signal(str)
+    #: Emitted when "Remove all tags & note" is chosen for a variable (only
+    #: offered when the panel is built with `clearable=True`). The owning tab
+    #: handles it so it can unbind any open editor before the store changes.
+    clearRequested = Signal(str)
 
-    def __init__(self, parent=None, deletable: bool = False) -> None:
+    def __init__(self, parent=None, deletable: bool = False,
+                 clearable: bool = False) -> None:
         super().__init__(parent)
         self.setObjectName("varpanel")  # white pane bg via QSS (search/list keep theirs)
         layout = QVBoxLayout(self)
@@ -128,6 +133,7 @@ class VariablePanel(QWidget):
         # "Delete variable" only on dataset-owning panels (`deletable`), which
         # wire `deleteRequested`.
         self._deletable = deletable
+        self._clearable = clearable
         self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list.customContextMenuRequested.connect(self._show_context_menu)
 
@@ -152,6 +158,15 @@ class VariablePanel(QWidget):
         md = metadata_store.manager.store.get(name)
         menu = QMenu(self.list)
 
+        # Jump to the Metadata explorer for this variable (offered everywhere
+        # except inside the explorer's own list, which is already there).
+        if not self._clearable:
+            edit_act = QAction("Edit metadata…", menu)
+            edit_act.triggered.connect(
+                lambda: metadata_store.manager.request_edit(name))
+            menu.addAction(edit_act)
+            menu.addSeparator()
+
         fav = FAVORITE in md.tags
         fav_act = QAction("★ Unmark favorite" if fav else "★ Mark favorite", menu)
         fav_act.triggered.connect(
@@ -171,6 +186,11 @@ class VariablePanel(QWidget):
                     lambda _checked=False, t=tag:
                     metadata_store.manager.remove_user_tag(name, t))
                 sub.addAction(a)
+
+        if self._clearable and (md.user_tags() or md.description):
+            clear_act = QAction("Remove all tags & note", menu)
+            clear_act.triggered.connect(lambda: self.clearRequested.emit(name))
+            menu.addAction(clear_act)
 
         if self._deletable:
             menu.addSeparator()

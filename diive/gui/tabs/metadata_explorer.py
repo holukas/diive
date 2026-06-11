@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -74,12 +75,14 @@ class MetadataExplorerTab(DiiveTab):
         self._desc_var: str | None = None
 
         root = QWidget()
-        layout = QHBoxLayout(root)
-        layout.setContentsMargins(0, 0, 0, 0)
+        outer = QVBoxLayout(root)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.varpanel = VariablePanel()
+        self.varpanel = VariablePanel(clearable=True)
         self.varpanel.selected.connect(lambda name, _ctrl: self._select(name))
+        self.varpanel.clearRequested.connect(self._clear_one)
         splitter.addWidget(self.varpanel)
 
         scroll = QScrollArea()
@@ -93,12 +96,45 @@ class MetadataExplorerTab(DiiveTab):
         splitter.addWidget(scroll)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        layout.addWidget(splitter)
+        outer.addWidget(splitter, 1)
+
+        # Footer: a dataset-wide destructive action (confirmed before it runs).
+        footer = QHBoxLayout()
+        footer.setContentsMargins(8, 4, 8, 4)
+        footer.addStretch(1)
+        self._clear_btn = QPushButton("Clear all tags & notes…")
+        self._clear_btn.setToolTip(
+            "Remove every favorite, custom tag, and note for the current dataset. "
+            "Auto-assigned tags, origin, and history are kept.")
+        self._clear_btn.clicked.connect(self._clear_all)
+        footer.addWidget(self._clear_btn)
+        outer.addLayout(footer)
 
         # Keep the detail view live as operations/tags change in other tabs.
         metadata_store.manager.changed.connect(self._refresh_detail)
         self._refresh_detail()
         return root
+
+    def _clear_all(self) -> None:
+        """Wipe all user tags + notes for the current dataset, after confirming."""
+        if QMessageBox.question(
+                self._detail_host, "Clear all tags & notes",
+                "Remove every favorite, custom tag, and note for the current "
+                "dataset?\n\nAuto-assigned tags, origin, and processing history "
+                "are kept.") != QMessageBox.StandardButton.Yes:
+            return
+        # The `changed` signal rebuilds the detail, which would otherwise flush
+        # the open note editor back into the just-cleared store — unbind it first.
+        self._desc_var = None
+        metadata_store.manager.clear_user_data()
+
+    def _clear_one(self, name: str) -> None:
+        """Right-click "Remove all tags & note" for a single variable."""
+        # If the cleared variable is the one on screen, unbind its note editor so
+        # the rebuild doesn't flush the old text back over the cleared note.
+        if name == self._desc_var:
+            self._desc_var = None
+        metadata_store.manager.clear_variable_user_data(name)
 
     # --- data flow -----------------------------------------------------
     def on_data_loaded(self, df, created: set | None = None) -> None:
@@ -109,6 +145,11 @@ class MetadataExplorerTab(DiiveTab):
         if self._current is not None:
             self.varpanel.set_panels([self._current])
         self._refresh_detail()
+
+    def select_variable(self, name: str) -> None:
+        """Public entry point — focus a variable (e.g. from another tab's
+        'Edit metadata…' right-click)."""
+        self._select(name)
 
     def _select(self, name: str) -> None:
         if not name:
@@ -191,6 +232,14 @@ class MetadataExplorerTab(DiiveTab):
         add_btn.clicked.connect(lambda: self._add_tag(name))
         add_row.addWidget(add_btn)
         v.addLayout(add_row)
+
+        # Clear this one variable's user tags + note (only when it has any).
+        if md.user_tags() or md.description:
+            clear_btn = QPushButton("Clear this variable's tags & note")
+            clear_btn.setFlat(True)
+            clear_btn.setStyleSheet(f"color:{_MUTED}; text-align:left;")
+            clear_btn.clicked.connect(lambda: self._clear_one(name))
+            v.addWidget(clear_btn, alignment=Qt.AlignmentFlag.AlignLeft)
         return box
 
     def _chip(self, name: str, tag: str, *, removable: bool) -> QWidget:

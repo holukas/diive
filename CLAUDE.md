@@ -404,10 +404,20 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   an "Imported from <source>" history entry. **Display:** the delegate paints a ★ (favorite) + `●N` (extra-tag count)
   and `VariablePanel` sorts favorites to the top; `VariableList` shows a rich hover tooltip; right-click edits tags. The
   **Data ▸ Metadata explorer** tab (`tabs/metadata_explorer.py`, single-instance) does full editing (origin badge,
-  auto-coloured tag chips via `theme.tag_color`, the 50-word note, provenance timeline). **Persistence is namespaced by
+  auto-coloured tag chips via `theme.tag_color`, the 50-word note, provenance timeline, a confirmed **Clear all tags
+  & notes** footer button → `MetadataStore.clear_user_data()`, and a per-variable right-click **Remove all tags & note**
+  → `clear_variable_user_data()`; both drop user tags + descriptions but keep origin/provenance/function tags. The
+  per-variable clear is offered both as a detail-panel button and a list right-click — gated by
+  `VariablePanel(clearable=True)` and routed through its `clearRequested` signal so the explorer can unbind the open
+  note editor before the store changes; other tabs' panels don't offer it). Every *other* tab's variable-list
+  right-click has an **Edit metadata…** entry → `manager.request_edit(name)` → `manager.editRequested` →
+  `MainWindow._edit_metadata` opens/focuses the explorer and calls its `select_variable(name)`. **Persistence is
+  namespaced by
   dataset:** `config.variable_metadata` is `{dataset_key(source): {"tags":…, "descriptions":…}}` — so the same column
   name in two datasets keeps separate tags. `MainWindow._set_data` stashes the outgoing dataset's `user_data()` before
   reset and loads the incoming one; `_namespace_metadata()` migrates older non-namespaced configs onto the first dataset.
+  `_set_data(persist_metadata=False)` loads a **clean** dataset — no saved tags/notes applied or kept, and any stale
+  entry for that source is purged; the bundled example auto-load uses it so the example always opens pristine.
 - **Var list sync.** All tabs refresh via `MainWindow._push_data()` → `on_data_loaded(df, created)` on every data
   change; menu tabs get current data on open and are dropped from the push list on close.
 - **Output console.** The `Log` tab (`LogTab` → `ConsolePanel`) mirrors diive's Rich output in colour. The library tees

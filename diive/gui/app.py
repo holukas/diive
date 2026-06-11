@@ -172,6 +172,9 @@ class MainWindow(QMainWindow):
         bar.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         bar.customContextMenuRequested.connect(self._tab_context_menu)
 
+        # Variable-list "Edit metadata…" (any tab) opens the Metadata explorer.
+        metadata_store.manager.editRequested.connect(self._edit_metadata)
+
         # The GUI has a single look: the frameless Studio shell (custom header +
         # pill tabs).
         self._build_studio_chrome()
@@ -298,27 +301,34 @@ class MainWindow(QMainWindow):
                 continue  # frozen: keep its own dataset
             tab.on_data_loaded(self._data, self._created)
 
-    def _set_data(self, df, source: str) -> None:
-        """Set a freshly loaded dataset, reset created features + range, push."""
+    def _set_data(self, df, source: str, persist_metadata: bool = True) -> None:
+        """Set a freshly loaded dataset, reset created features + range, push.
+
+        `persist_metadata=False` loads a *clean* dataset: no saved tags/notes are
+        applied and none are kept for it (used for the bundled example data, which
+        should always open pristine).
+        """
         self._full_data = df
         self._source = source
         self._range = None  # a new dataset starts at its full range
         self._created = set()  # fresh dataset has no user-created features
-        # Reset per-variable metadata to an "original" baseline for the new
-        # columns, then re-apply user tags: persisted favorites first, then any
-        # set earlier this session (so an in-session reload keeps them too).
         store = metadata_store.manager.store
         # Stash the outgoing dataset's user edits (tags/notes) before the store
         # is reset, so switching datasets — or reloading this one — keeps them.
         if self._dataset_key is not None:
             self._saved_metadata[self._dataset_key] = store.user_data()
-        else:  # first load: migrate any pre-namespacing config onto this dataset
+        elif persist_metadata:  # first persisted load: migrate any old global config
             self._saved_metadata = _namespace_metadata(self._saved_metadata, source)
+        # Reset per-variable metadata to an "original" baseline for the new columns.
         store.record_original(
             df.columns, operation=f"Imported from {source}",
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"))
-        store.load_user_data(self._saved_metadata.get(source) or {})
-        self._dataset_key = source
+        if persist_metadata:
+            store.load_user_data(self._saved_metadata.get(source) or {})
+            self._dataset_key = source
+        else:  # clean dataset: don't apply or keep any tags, and purge stale ones
+            self._saved_metadata.pop(source, None)
+            self._dataset_key = None
         metadata_store.manager.notify()
         self._apply_range()
         self._tabwidget.setCurrentIndex(0)  # show the Overview tab on load
@@ -370,6 +380,14 @@ class MainWindow(QMainWindow):
         self._range = None
         self._apply_range()
         self.statusBar().showMessage("Reverted to full date range", 5000)
+
+    def _edit_metadata(self, name: str) -> None:
+        """Open (or focus) the Metadata explorer and select `name` there."""
+        self._open_menu_tab("Metadata explorer")  # single-instance: focuses/opens
+        for tab in self._menu_tab_list:
+            if getattr(tab, "_menu_label", None) == "Metadata explorer":
+                tab.select_variable(name)
+                break
 
     def _open_menu_tab(self, label: str) -> None:
         """Open a menu-activated tab.
@@ -574,7 +592,8 @@ class MainWindow(QMainWindow):
 
     def _load_example(self) -> None:
         df = diive.load_exampledata_parquet()
-        self._set_data(df, source="example data (CH-DAV)")
+        # The bundled example always opens clean — no persisted tags/notes.
+        self._set_data(df, source="example data (CH-DAV)", persist_metadata=False)
 
     def _open_file(self) -> None:
         dlg = OpenDataDialog(self)

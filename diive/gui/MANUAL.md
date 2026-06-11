@@ -65,9 +65,10 @@ straight back into diive (GUI or library).
   shows how many extra tags a variable has. **Favorites sort to the top** of the
   list. **Hover** any variable for a tooltip with its origin, where it came from,
   its tags, any note, and its full processing history.
-- **Right-click a variable** for **★ Mark favorite** and **Add tag… / Remove tag**.
-  Full editing (tags, a free-text note, history) lives in **Data ▸ Metadata
-  explorer**.
+- **Right-click a variable** for **Edit metadata…** (jumps to the Metadata
+  explorer focused on that variable), **★ Mark favorite**, and **Add tag… /
+  Remove tag**. Full editing (tags, a free-text note, history) lives in
+  **Data ▸ Metadata explorer**.
 - The list looks and behaves the same in every tab.
 
 ---
@@ -290,12 +291,21 @@ the left; the right panel shows:
   flag), plus the **parent** variable it came from.
 - **Tags** — toggle **★ Favorite**, and add/remove your own tags (each user tag
   gets its own colour automatically). Operations also add tags themselves (e.g.
-  `hampel`, `flag`).
+  `hampel`, `flag`). **Clear this variable's tags & note** removes just this
+  variable's custom tags and note.
 - **Note** — free text describing the variable, up to **50 words** (a live
   counter shows the count; **Save note** greys out once saved and re-enables when
   you edit again).
 - **History** — the ordered list of operations that produced the variable, each
   with its settings and time; for a loaded variable the first entry is its import.
+
+**Right-click a variable** in this tab's list for **Remove all tags & note** to
+clear just that one variable. **Clear all tags & notes** (bottom of the tab) does
+the same for every variable in the current dataset at once (after a confirmation).
+Either way, auto-assigned tags, origin, and history are kept.
+
+The bundled **example data always opens clean** (no tags or notes) — tags and
+notes are kept only for data you load yourself.
 
 **Your tags and notes are saved between sessions, per dataset** — the same column
 name in two different files keeps separate tags. Origin/history are recomputed

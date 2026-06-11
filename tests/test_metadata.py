@@ -117,6 +117,34 @@ class TestMetadataStore(unittest.TestCase):
         store.load_user_data({"NEE": [FAVORITE]})  # old flat shape
         assert FAVORITE in store.get("NEE").tags
 
+    def test_clear_user_data_keeps_provenance_and_function_tags(self):
+        store = MetadataStore()
+        store.record_original(["NEE"])
+        store.record_derived("NEE", operation="Hampel", tags=["hampel"])
+        store.add_user_tag("NEE", FAVORITE)
+        store.add_user_tag("NEE", "lukas")
+        store.set_description("NEE", "a note")
+
+        store.clear_user_data()
+        md = store.get("NEE")
+        assert FAVORITE not in md.tags and "lukas" not in md.tags  # user tags gone
+        assert md.description == ""                                # note gone
+        assert "hampel" in md.tags                                 # function tag kept
+        assert len(md.provenance) == 1                             # history kept
+        assert store.user_data() == {"tags": {}, "descriptions": {}}
+
+    def test_clear_variable_user_data_is_scoped(self):
+        store = MetadataStore()
+        store.record_original(["NEE", "TA"])
+        store.add_user_tag("NEE", FAVORITE)
+        store.set_description("NEE", "a note")
+        store.add_user_tag("TA", FAVORITE)
+
+        store.clear_variable_user_data("NEE")
+        assert FAVORITE not in store.get("NEE").tags
+        assert store.get("NEE").description == ""
+        assert FAVORITE in store.get("TA").tags  # other variable untouched
+
     def test_drop(self):
         store = MetadataStore()
         store.record_original(["X"])
