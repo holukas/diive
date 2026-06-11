@@ -200,7 +200,7 @@ class BaseOutlierTab(DiiveTab):
             dn.addRow("Latitude", self.lat)
             dn.addRow("Longitude", self.lon)
             dn.addRow("UTC offset (h)", self.utc)
-            dn_note = QLabel("Coordinates default from Settings ▸ Site details.")
+            dn_note = QLabel("Coordinates default from Settings ▸ Project settings.")
             dn_note.setWordWrap(True)
             dn_note.setStyleSheet(f"color: {_C_MUTED};")
             dn.addRow(dn_note)

@@ -871,20 +871,30 @@ def test_appearance_singleton(window):
     assert _tabs(window).count("Appearance") == 1
 
 
-def test_site_details_tab(window):
+def test_project_settings_tab(window):
     from diive.gui import site
     # Lives under the Settings menu and opens a single instance.
-    window._open_menu_tab("Site details")
-    window._open_menu_tab("Site details")
-    assert _tabs(window).count("Site details") == 1
+    window._open_menu_tab("Project settings")
+    window._open_menu_tab("Project settings")
+    assert _tabs(window).count("Project settings") == 1
     tab = window._menu_tab_list[-1]
     # Entering + saving stores the values app-wide for later use by functions.
     tab.name.setText("CH-DAV")
+    tab.author.setText("Jane Doe")
+    tab.description.setPlainText("Test project notes.")
     tab.lat.setValue(46.8153)
     tab.lon.setValue(9.8559)
     tab.utc.setValue(1)
     tab._save()
     assert site.manager.configured
+    assert site.manager.author == "Jane Doe"
+    assert site.manager.description == "Test project notes."
+    # Author + description round-trip through the persistence dict (config + project).
+    assert site.manager.as_dict()["author"] == "Jane Doe"
+    restored = site.SiteManager()
+    restored.load_dict(site.manager.as_dict())
+    assert restored.author == "Jane Doe"
+    assert restored.description == "Test project notes."
     assert site.manager.latitude == 46.8153
     assert site.manager.longitude == 9.8559
     assert site.manager.utc_offset == 1

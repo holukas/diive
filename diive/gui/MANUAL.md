@@ -273,7 +273,7 @@ The **Preview** section holds two display options (they don't change the result)
   day and night (the point of separating: with the same value for both, the result
   is identical to not separating). Set **Daytime n sigma** / **Nighttime n sigma**
   (they start from the global value, then edit each); the coordinates default from
-  **Settings ▸ Site details**. Day and night outliers are then drawn in **red** and
+  **Settings ▸ Project settings**. Day and night outliers are then drawn in **red** and
   **blue**, and the status line reports how many of each were found.
 
 **Detect outliers** runs the filter; the status line reports the total and the
@@ -415,12 +415,21 @@ did on the clipboard, so a point-and-click run stays scriptable.
 > `*_TEST` flags). The bundled CH-DAV example is a processed product and won't
 > run the chain — load a level-1 EC dataset.
 
-### Settings ▸ Site details
+### Settings ▸ Project settings
 
-Enter your measurement site's **name, latitude, longitude, elevation, and UTC
-offset** once and **Save**. These are stored app-wide and reused wherever diive
-needs site coordinates (e.g. the Hampel tab's daytime/nighttime split, the flux
-chain), so you don't retype them per tool. They're **remembered between sessions**.
+Settings for the current project:
+
+- **Your name** — the project author.
+- **Description** — free-text notes about the project (purpose, data source,
+  processing decisions, …).
+- **Site details** — the measurement site's **name, latitude, longitude,
+  elevation, and UTC offset**.
+
+Fill in and **Save**. The site coordinates and UTC offset are reused wherever
+diive needs them (e.g. the Hampel tab's daytime/nighttime split, the flux chain),
+so you don't retype them per tool. Everything here is **remembered between
+sessions** and **saved with the project** (so it travels inside a `.diive`
+folder).
 
 ### Settings ▸ Appearance
 

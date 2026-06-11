@@ -32,10 +32,12 @@
   **Flux processing chain** (Input + L2, with **Copy Python**); **Outliers** tabs **Hampel filter**, **Local SD
   filter**, **Z-score filter**, **Z-score (rolling) filter**, and **Z-score (increments) filter** (each keeps the
   original + a cleaned copy + the flag, with a live two-panel preview and **Copy Python**); Data menu **Select
-  variables**, **Metadata explorer**, **Feature engineering**; plus **Appearance** and **Log**.
+  variables**, **Metadata explorer**, **Feature engineering**; plus **Appearance**, **Project settings** (author,
+  description, and site details — saved with the project), and **Log**.
 - **Projects** (`File ▸ Save project` / `Open project`): save the full working state to a self-contained
   ``<name>.diive`` folder — the dataset (`data.parquet`), the complete per-variable metadata (tags, notes,
-  origin/provenance), site coordinates, and the active date range, marked by a `__diive__` file. Opening one restores
+  origin/provenance), project settings (author, description, site details), and the active date range, marked by a
+  `__diive__` file. Opening one restores
   everything. Library: `diive.core.io.project` (`save_project`, `load_project`, `is_project`, `DiiveProject`); the GUI
   adds a name+location dialog and Ctrl+S = save the open project. A project restores the **complete session**: the open
   tabs (order, titles, pins) each with its selected variable(s) and settings, the Overview's selection/subset, and the

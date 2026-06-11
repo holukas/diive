@@ -253,11 +253,14 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
 - **Persisted preferences.** `gui/config.py` saves/loads JSON (`QStandardPaths` config dir) on close/launch: theme
   (`ThemeManager.as_dict`/`load_dict`), site details (`site.manager.as_dict`/`load_dict`), window geometry, last-used
   filetype. Best-effort (failures swallowed).
-- **Site details store.** `gui/site.py`'s `SiteManager` singleton (`site.manager`) holds the measurement site's metadata
-  (name, latitude, longitude, elevation, UTC offset) plus a `configured` flag; `update(...)` sets them and emits
-  `changed`. The **Site details** tab (`tabs/site.py`, `Settings ▸ Site details`, single-instance) is a form that reads
-  the values on build and writes them back on **Save**. Values only (no domain logic) — the GUI collects them here and
-  passes them to library functions that take `lat`/`lon`/`utc_offset` (daytime/nighttime split, flux chain, ...).
+- **Project settings store.** `gui/site.py`'s `SiteManager` singleton (`site.manager`) holds the project settings: the
+  `author` name, a free-text `description`, and the measurement site's metadata (name, latitude, longitude, elevation,
+  UTC offset) plus a `configured` flag; `update(...)` sets them and emits `changed`. The **Project settings** tab
+  (`tabs/site.py`, class `ProjectSettingsTab` — `SiteDetailsTab` kept as a back-compat alias; `Settings ▸ Project
+  settings`, single-instance) is a form that reads the values on build and writes them back on **Save**. Values only (no
+  domain logic) — the GUI collects them here and passes them to library functions that take `lat`/`lon`/`utc_offset`
+  (daytime/nighttime split, flux chain, ...). Persisted both with the GUI prefs (`config.py`) and inside a project
+  (`app.py` `extras["site"]`), so author/description/site travel with a saved `.diive` folder.
 - **Registry-driven tabs.** `MainWindow` iterates `registry.TAB_CLASSES` (always-on tabs: Overview, Log) — it knows
   nothing about concrete tabs. Add a feature area = write a `DiiveTab` (`title` + `build()`) and append it. This is how
   the flux processing chain will plug in later.
