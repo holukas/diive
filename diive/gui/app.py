@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
 )
 
 import diive
+from diive.core.utils.console import info, success
 from diive.gui import config, events, metadata_store, site, theme
 from diive.gui.registry import (
     MENU_TAB_CLASSES,
@@ -260,6 +261,11 @@ class MainWindow(QMainWindow):
         rlay.addWidget(self._tabwidget, 1)
         self.setCentralWidget(root)
 
+        # No status bar: the frameless Studio shell has no use for the
+        # QMainWindow status bar's empty grey strip below the rounded card.
+        # Transient feedback goes to the Log tab instead (see _notify).
+        self.setStatusBar(None)
+
         # Native edge/corner resize (frameless windows lose the OS grips).
         self._resize_helper = FramelessResizeHelper(self, root)
 
@@ -446,8 +452,7 @@ class MainWindow(QMainWindow):
         self._range = None if (start <= full_start and end >= full_end) else (start, end)
         self._apply_range()
         if self._data is not None:
-            self.statusBar().showMessage(
-                f"Date range: {len(self._data)} records selected", 5000)
+            info(f"Date range: {len(self._data)} records selected")
 
     def _reset_range(self) -> None:
         """Revert to the full loaded date range (discard the subselection)."""
@@ -455,7 +460,7 @@ class MainWindow(QMainWindow):
             return
         self._range = None
         self._apply_range()
-        self.statusBar().showMessage("Reverted to full date range", 5000)
+        success("Reverted to full date range")
 
     def _edit_metadata(self, name: str) -> None:
         """Open (or focus) the Metadata explorer and select `name` there."""
@@ -804,7 +809,7 @@ class MainWindow(QMainWindow):
         metadata_store.manager.store.drop(name)
         metadata_store.manager.notify()
         self._apply_range()
-        self.statusBar().showMessage(f"Deleted variable '{name}'", 5000)
+        success(f"Deleted variable '{name}'")
 
     def _rename_one_variable(self, name: str) -> None:
         """Prompt for a new name for one variable, then rename it (any tab)."""
@@ -841,7 +846,7 @@ class MainWindow(QMainWindow):
         metadata_store.manager.store.rename(mapping)
         metadata_store.manager.notify()
         self._apply_range()
-        self.statusBar().showMessage(f"Renamed {len(mapping)} variables", 5000)
+        success(f"Renamed {len(mapping)} variables")
 
     def _apply_var_subset(self, var_names: list) -> None:
         """Narrow the dataset to the selected variables, app-wide (from the
@@ -854,8 +859,7 @@ class MainWindow(QMainWindow):
         self._var_subset = names or None
         self._apply_range()
         n = len(self._var_subset or [])
-        self.statusBar().showMessage(
-            f"Showing {n} of {len(self._full_data.columns)} variables", 5000)
+        info(f"Showing {n} of {len(self._full_data.columns)} variables")
 
     def _reset_var_subset(self) -> None:
         """Revert to the full variable list (discard the subselection)."""
@@ -863,7 +867,7 @@ class MainWindow(QMainWindow):
             return
         self._var_subset = None
         self._apply_range()
-        self.statusBar().showMessage("Reverted to all variables", 5000)
+        success("Reverted to all variables")
 
     def _load_example(self) -> None:
         df = diive.load_exampledata_parquet()
@@ -904,7 +908,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Save failed", f"Could not save:\n{err}")
             return
         QApplication.restoreOverrideCursor()
-        self.statusBar().showMessage(f"Saved {p.stem}.parquet", 5000)
+        success(f"Saved {p.stem}.parquet")
 
     # --- projects ------------------------------------------------------
     def _save_project(self) -> None:
@@ -971,7 +975,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Save failed", f"Could not save project:\n{err}")
             return False
         QApplication.restoreOverrideCursor()
-        self.statusBar().showMessage(f"Saved project '{name}'", 5000)
+        success(f"Saved project '{name}'")
         return True
 
     def _initial_load(self) -> None:
@@ -1046,7 +1050,7 @@ class MainWindow(QMainWindow):
             pass
         self._restore_tabs(project.extras.get("tabs"))  # reopens tabs; lands on Overview
         self._restore_active_tab(project.extras.get("active_tab"))
-        self.statusBar().showMessage(f"Opened project '{project.name}'", 5000)
+        success(f"Opened project '{project.name}'")
         return True
 
     def _restore_active_tab(self, title) -> None:
