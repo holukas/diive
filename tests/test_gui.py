@@ -1173,6 +1173,35 @@ def test_project_save_and_open(window, tmp_path, monkeypatch):
     assert var in [str(c) for c in window._data.columns]
 
 
+def test_startup_loads_example_when_no_project(window):
+    # The fixture builds MainWindow() with no saved project -> example data.
+    assert window._data is not None
+    assert window._project_dir is None
+
+
+def test_startup_reopens_last_project(window, tmp_path, monkeypatch):
+    from diive.gui import metadata_store
+    from diive.gui.app import MainWindow
+    store = metadata_store.manager.store
+
+    var = str(window._data.columns[0])
+    metadata_store.manager.add_user_tag(var, "favorite")
+    folder = tmp_path / "Proj.diive"
+    window._write_project(folder, "Proj")
+
+    # A fresh window told this is the last project reopens it on startup
+    # (and must NOT fall back to the example data).
+    def _boom():
+        raise AssertionError("example data should not be loaded")
+    monkeypatch.setattr("diive.load_exampledata_parquet", _boom)
+
+    win2 = MainWindow(config={"last_project": str(folder)})
+    QApplication.processEvents()
+    assert win2._project_name == "Proj"
+    assert win2._project_dir == folder
+    assert "favorite" in store.get(var).tags
+
+
 def test_metadata_namespace_migrates_legacy_flat_config():
     from diive.gui.app import _namespace_metadata
     # Legacy flat {name: [tags]} migrates under the first dataset key.

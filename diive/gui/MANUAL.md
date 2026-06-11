@@ -14,9 +14,10 @@ pip install 'diive[gui]'     # or: uv sync --extra gui
 diive-gui
 ```
 
-A splash screen appears while the app starts up; the bundled example dataset
-(CH-DAV, 37 variables) then loads automatically, so you can try everything right
-away. (You can see the splash again any time via **Help ▸ About**.)
+A splash screen with a loading spinner appears while the app starts up. diive
+then **reopens the project you had open last**; if you haven't saved one yet, the
+bundled example dataset (CH-DAV, 37 variables) loads automatically so you can try
+everything right away. (You can see the splash again any time via **Help ▸ About**.)
 
 ---
 

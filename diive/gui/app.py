@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from PySide6.QtCore import QByteArray, QRectF, QSize, Qt
+from PySide6.QtCore import QByteArray, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -112,7 +112,7 @@ class _StudioRoot(QWidget):
 class MainWindow(QMainWindow):
     """Top-level window holding one tab per registered `DiiveTab`."""
 
-    def __init__(self, config: dict | None = None) -> None:
+    def __init__(self, config: dict | None = None, autoload: bool = True) -> None:
         super().__init__()
         self._config = config or {}
         self._base_title = f"diive {diive.__version__}"
@@ -149,6 +149,7 @@ class MainWindow(QMainWindow):
         self._project_dir: Path | None = None
         self._project_name: str | None = None
         self._last_project_dir: str = self._config.get("last_project_dir") or ""
+        self._last_project: str = self._config.get("last_project") or ""
         self._menu_tab_list: list = []  # open menu-activated tabs (multi-instance)
 
         self._tabs = []
@@ -185,8 +186,11 @@ class MainWindow(QMainWindow):
         # pill tabs).
         self._build_studio_chrome()
 
-        # Auto-load the bundled example data so the app is usable on startup.
-        self._load_example()
+        # Auto-load on startup (the last project, else the example). The real
+        # launch passes autoload=False and defers this onto the event loop so the
+        # splash spinner animates (see `run`); tests build with the default.
+        if autoload:
+            self._initial_load()
 
     def _build_studio_chrome(self) -> None:
         """Frameless rounded shell: custom header + tabs."""
@@ -678,6 +682,7 @@ class MainWindow(QMainWindow):
         self._last_project_dir = location
         if self._write_project(folder, name):
             self._project_dir, self._project_name = folder, name
+            self._last_project = str(folder)
             self._source = name
             self._apply_range()  # refresh title with the project name
 
@@ -706,9 +711,18 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Saved project '{name}'", 5000)
         return True
 
+    def _initial_load(self) -> None:
+        """Startup load: reopen the last project if it still exists, else the
+        bundled example data."""
+        from diive.core.io.project import is_project
+        last = self._last_project
+        if last and is_project(last) and self._load_project_folder(last, announce=False):
+            return
+        self._load_example()
+
     def _open_project(self) -> None:
-        """Open a diive project folder and restore its data + metadata + site."""
-        from diive.core.io.project import is_project, load_project
+        """Pick a diive project folder and open it."""
+        from diive.core.io.project import is_project
         start = self._last_project_dir or str(Path.home())
         folder = QFileDialog.getExistingDirectory(self, "Open diive project", start)
         if not folder:
@@ -718,13 +732,24 @@ class MainWindow(QMainWindow):
                 self, "Open project",
                 "That folder is not a diive project (no '__diive__' marker).")
             return
+        self._load_project_folder(folder)
+
+    def _load_project_folder(self, folder, announce: bool = True) -> bool:
+        """Load a project from `folder`, restoring data + metadata + site + range.
+
+        `announce=False` (startup) suppresses the error dialog and just reports
+        failure so the caller can fall back to the example data.
+        """
+        from diive.core.io.project import load_project
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            project = load_project(folder)
+            project = load_project(folder)  # do the risky read before mutating state
         except Exception as err:
             QApplication.restoreOverrideCursor()
-            QMessageBox.critical(self, "Open failed", f"Could not open project:\n{err}")
-            return
+            if announce:
+                QMessageBox.critical(self, "Open failed",
+                                     f"Could not open project:\n{err}")
+            return False
         QApplication.restoreOverrideCursor()
 
         # Restore site details first (so day/night-aware tabs see them on push).
@@ -741,9 +766,11 @@ class MainWindow(QMainWindow):
         self._range = (pd.Timestamp(rng[0]), pd.Timestamp(rng[1])) if rng else None
         self._project_dir, self._project_name = Path(folder), project.name
         self._last_project_dir = str(Path(folder).parent)
+        self._last_project = str(Path(folder))
         self._apply_range()  # re-push with restored created-columns + range
         metadata_store.manager.notify()
         self.statusBar().showMessage(f"Opened project '{project.name}'", 5000)
+        return True
 
     def _about(self) -> None:
         # Reuse the startup splash artwork as the About dialog.
@@ -766,6 +793,7 @@ class MainWindow(QMainWindow):
             "last_filetype": odd._last_choice,
             "variable_metadata": self._saved_metadata,
             "last_project_dir": self._last_project_dir,
+            "last_project": self._last_project,
         })
         super().closeEvent(event)
 
@@ -805,15 +833,19 @@ def run() -> int:
     show_message(splash, "Loading…")
     app.processEvents()  # paint the splash before the (blocking) window build
 
-    window = MainWindow(cfg)  # builds tabs + loads the example dataset
+    window = MainWindow(cfg, autoload=False)  # build the UI now; load data deferred
     window.show()
-    # Keep the splash on top until the GUI is actually ready: the Overview
-    # defers its first render by an event-loop tick (it renders synchronously
-    # when that fires), so pump events to drain those deferred renders while the
-    # splash is still up, then drop it. Without this, the splash would close the
-    # instant the (still-empty) window is shown.
     splash.raise_()
-    for _ in range(3):
-        app.processEvents()
-    splash.finish(window)
+
+    # Defer the data load (last project or example) onto the event loop so the
+    # splash's spinner actually animates during it, instead of freezing behind a
+    # blocking load in the constructor. The Overview also defers its first render
+    # a tick, so pump a few times to drain those before dropping the splash.
+    def _finish_startup() -> None:
+        window._initial_load()
+        for _ in range(3):
+            app.processEvents()
+        splash.finish(window)
+
+    QTimer.singleShot(0, _finish_startup)
     return app.exec()

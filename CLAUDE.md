@@ -236,15 +236,18 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   render) one tick later. matplotlib renders synchronously (blocks the event loop), so the indicator is a *static*
   busy cue painted before the freeze — it cannot smoothly animate. True animation would require off-thread Agg
   rendering (losing the interactive toolbar).
-- **Splash screen.** `gui/splash.py` draws a `QSplashScreen` entirely with `QPainter` (no image assets, like the menu
-  icons): a blue-teal gradient, the diive wordmark + `diive.__version__` + tagline, layered sine **waves**, and a
-  credits line. `run()` shows it (high-DPI aware via the screen's `devicePixelRatio`) before building `MainWindow`
-  (which blocks while auto-loading the example data), keeps it **on top until the GUI is ready** — after `window.show()`
-  it `raise_()`s the splash and pumps `processEvents()` so the Overview's deferred first render drains while the splash
-  is still up — then `splash.finish(window)`. The same artwork backs **Help ▸ About** (`splash.show_about(parent)` → a
-  frameless modal `_AboutDialog`, click or Esc to close). Author is the `AUTHOR` constant; add backers to the
-  `SUPPORTERS` list (empty hides the line). GUI-only; the launch path uses it, so tests that build `MainWindow` directly
-  are unaffected.
+- **Splash screen.** `gui/splash.py` draws a `QSplashScreen` (subclass `_SplashScreen`) entirely with `QPainter` (no
+  image assets, like the menu icons): a blue-teal gradient, the diive wordmark + `diive.__version__` + tagline, layered
+  sine **waves**, a credits line, and a **rotating loading spinner** (a `QTimer` advances `_angle` and `repaint()`s; a
+  12-spoke fading "comet" drawn in `drawContents`). For the spinner to actually animate, `run()` builds `MainWindow(cfg,
+  autoload=False)` (UI only) and **defers the data load onto the event loop** via `QTimer.singleShot(0, …)` → `window.
+  _initial_load()`; otherwise a blocking load in the constructor would freeze the spinner. After the deferred load it
+  pumps `processEvents()` (drains the Overview's deferred first render) then `splash.finish(window)`. The same artwork
+  backs **Help ▸ About** (`splash.show_about` → frameless modal `_AboutDialog`). `AUTHOR`/`SUPPORTERS` constants. Tests
+  build `MainWindow()` with the default `autoload=True`, so they load synchronously in the constructor as before.
+- **Startup load.** `MainWindow._initial_load()` reopens the **last project** (`config.last_project`, if the folder is
+  still a diive project) via `_load_project_folder(announce=False)`, else loads the bundled example
+  (`_load_example`, clean). `_open_project` is just the folder-picker wrapper around `_load_project_folder`.
 - **Window sizing.** `MainWindow._size_to_screen()` sizes the window to ~88% of the available screen and centres it
   (adapts to resolution); Qt handles high-DPI scaling. Restored from saved geometry if present.
 - **Persisted preferences.** `gui/config.py` saves/loads JSON (`QStandardPaths` config dir) on close/launch: theme

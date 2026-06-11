@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import (
     QColor,
     QFont,
@@ -236,6 +236,47 @@ def app_icon() -> QIcon:
     return icon
 
 
+class _SplashScreen(QSplashScreen):
+    """Splash with a rotating loading indicator (a 12-spoke 'comet' spinner).
+
+    A `QTimer` advances the angle and repaints, so it animates whenever the event
+    loop runs — which is why the real startup defers the data load onto the loop
+    (see `app.run`) instead of blocking before the splash can spin.
+    """
+
+    def __init__(self, pixmap) -> None:
+        super().__init__(pixmap)
+        self._angle = 0
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._advance)
+        self._timer.start(80)  # ~12 fps; one full turn ≈ 1 s
+
+    def _advance(self) -> None:
+        self._angle = (self._angle + 30) % 360
+        self.repaint()
+
+    def hideEvent(self, event) -> None:
+        self._timer.stop()
+        super().hideEvent(event)
+
+    def drawContents(self, painter: QPainter) -> None:
+        super().drawContents(painter)  # keeps showMessage() text working
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        cx, cy, r = _WIDTH - 52, _HEIGHT - 50, 12
+        painter.translate(cx, cy)
+        painter.rotate(self._angle)
+        n = 12
+        for i in range(n):
+            alpha = int(40 + 200 * (i / (n - 1)))  # fading tail -> "comet"
+            pen = QPen(QColor(255, 255, 255, alpha), 3.0)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            painter.drawLine(0, -(r - 5), 0, -r)
+            painter.rotate(360.0 / n)
+        painter.restore()
+
+
 def create_splash(app=None) -> QSplashScreen:
     """Build the splash screen (high-DPI aware) ready to ``show()``."""
     dpr = 1.0
@@ -246,7 +287,7 @@ def create_splash(app=None) -> QSplashScreen:
     except Exception:
         dpr = 1.0
     pm = make_splash_pixmap(dpr)
-    splash = QSplashScreen(pm)
+    splash = _SplashScreen(pm)
     splash.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
     # Rounded corners: clip the window to the non-transparent (rounded) region.
     mask = pm.mask()
