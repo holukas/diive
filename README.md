@@ -12,7 +12,7 @@ _**`diive` is currently being prepared for the v1.0 release.**_
 
 `diive` is a Python library for time series processing, focused on ecosystem data. It was originally developed by the [ETH Grassland Sciences group](https://gl.ethz.ch/) for [Swiss FluxNet](https://www.swissfluxnet.ethz.ch/).
 
-[CHANGELOG](CHANGELOG.md) | [Releases](https://github.com/holukas/diive/releases)
+[CHANGELOG](CHANGELOG.md) | [Releases](https://github.com/holukas/diive/releases) | [Project overview](OVERVIEW.md)
 
 ---
 
