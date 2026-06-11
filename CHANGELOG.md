@@ -32,8 +32,9 @@
   **Flux processing chain** (Input + L2, with **Copy Python**); **Outliers** tabs **Hampel filter**, **Local SD
   filter**, **Z-score filter**, **Z-score (rolling) filter**, and **Z-score (increments) filter** (each keeps the
   original + a cleaned copy + the flag, with a live two-panel preview and **Copy Python**); Data menu **Select
-  variables**, **Metadata explorer**, **Feature engineering**; plus **Appearance**, **Project settings** (author,
-  description, and site details — saved with the project), and **Log**.
+  variables**, **Rename variables** (add a prefix/suffix to all variables, or one at a time, with a live preview),
+  **Metadata explorer**, **Feature engineering**; plus **Appearance**, **Project settings** (author, description, site
+  details, and a **sticky-note wall** — all saved with the project), and **Log**.
 - **Projects** (`File ▸ Save project` / `Open project`): save the full working state to a self-contained
   ``<name>.diive`` folder — the dataset (`data.parquet`), the complete per-variable metadata (tags, notes,
   origin/provenance), project settings (author, description, site details), and the active date range, marked by a
@@ -53,9 +54,14 @@
 - Shared variable list across tabs (fuzzy filter + colour pills); tinted editable fields; settings tooltips from
   library docstrings; plots apply on an "Update plot" button. Date-range subselection (Data menu) and Save-as-parquet
   (File menu). Startup splash + Help ▸ About. Preferences persist.
-- **Theme presets** (Appearance): "Classic" and "Studio" (minimal: near-white surfaces, pill tabs, frameless rounded
-  window with an inline-dropdown header). Tabs reorder, rename, close, and **pin** (freeze their dataset). App/taskbar
-  icon added.
+- **Rename / delete any variable** from its right-click menu in every tab (non-destructive; renamed variables keep their
+  tags, notes, and history). Provenance history is now **cumulative** — a derived column inherits its parent's full
+  history (`FC → FC_LOCALSD → FC_LOCALSD_HAMPEL` shows all steps). Adding columns (outlier/feature tabs) **jumps the
+  Overview to the new variable** (clears the filter, scrolls, selects and plots it); an active variable subset is kept
+  across deletes/renames. Older `.diive` projects with a stale metadata layout open gracefully (tolerant
+  deserialization). Tab rename is left-double-click only.
+- **Studio look** (minimal: near-white surfaces, pill tabs, frameless rounded window with an inline-dropdown header),
+  edited live in **Appearance**. Tabs reorder, rename, close, and **pin** (freeze their dataset). App/taskbar icon added.
 
 Library additions used by the GUI (all backward-compatible):
 
@@ -74,7 +80,10 @@ Library additions used by the GUI (all backward-compatible):
 - `dv.keep_vars(data, variables)`: non-destructive column subset (column analogue of `keep_daterange`).
 - `diive.core.metadata` (`VariableMetadata`, `ProvenanceEntry`, `MetadataStore`, `provenance_attr`, `ATTRS_KEY`):
   headless per-variable tag + provenance model. Operations attach a `df.attrs[ATTRS_KEY]` payload describing new columns;
-  consumers record origin/parent/operation/tags. Used by the GUI's metadata explorer.
+  consumers record origin/parent/operation/tags. Used by the GUI's metadata explorer. `record_derived` inherits the
+  parent's provenance chain (cumulative history); `MetadataStore.rename(mapping)` re-keys records and rewrites
+  parent/provenance links; `from_dict`/`load_dict` tolerate older layouts (aliased/missing name, list-form tags, bad
+  entries skipped).
 - `SSTATS_DESCRIPTIONS` (`diive.core.dfun.stats`): one-line description per `sstats` metric.
 - Outlier detectors expose the GUI-preview interface: `zScore`, `zScoreRolling`, and `zScoreIncrements` now accept a
   `progress_callback` in `.run()`/`.calc()` (per-iteration progress + live preview) and expose `last_lower_bound` /

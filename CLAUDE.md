@@ -260,7 +260,12 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   settings`, single-instance) is a form that reads the values on build and writes them back on **Save**. Values only (no
   domain logic) — the GUI collects them here and passes them to library functions that take `lat`/`lon`/`utc_offset`
   (daytime/nighttime split, flux chain, ...). Persisted both with the GUI prefs (`config.py`) and inside a project
-  (`app.py` `extras["site"]`), so author/description/site travel with a saved `.diive` folder.
+  (`app.py` `extras["site"]`), so author/description/site travel with a saved `.diive` folder. The tab's otherwise-empty
+  right side holds a **notes wall** (`widgets/notes_wall.py`, `NotesWall`): a pinboard of draggable/resizable/recolourable
+  sticky-note cards (bold header + body). The wall mirrors its `state()` into `site.manager.notes` on every edit (plain
+  attribute set — no `changed` — to avoid a rebuild loop) and rebuilds only when the store's notes genuinely differ
+  (project open), so notes ride along in `extras["site"]`/prefs with no `app.py` change. GUI-only (cards/colours/
+  positions; card text colour is the WCAG-contrast pick) — no domain logic.
 - **Registry-driven tabs.** `MainWindow` iterates `registry.TAB_CLASSES` (always-on tabs: Overview, Log) — it knows
   nothing about concrete tabs. Add a feature area = write a `DiiveTab` (`title` + `build()`) and append it. This is how
   the flux processing chain will plug in later.
@@ -269,9 +274,10 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   `registry.SINGLE_INSTANCE_TABS` (e.g. Appearance) instead focus the existing one. Always-on tabs have their close
   button removed; `_next_menu_index` reuses the smallest free number. On close (`_on_tab_close`) focus falls back to the
   tab to the *left* of the closed one, but never the Log tab — if that's where it would land, it jumps to Overview.
-- **Tab UX.** Tabs are movable (drag to reorder), renamable (double-click → `_rename_tab`), and menu tabs carry a
+- **Tab UX.** Tabs are movable (drag to reorder), renamable (**left** double-click → `_rename_tab`), and menu tabs carry a
   custom visible "×" (`icons.close_icon`); the always-on Overview/Log are not closable (a `tabCloseRequested`, incl.
-  middle-click, for them is ignored). In Studio chrome the tabs are Firefox-style pills with a favicon glyph. **Per-tab
+  middle-click, for them is ignored). `tabBarDoubleClicked` fires for any button, so an `eventFilter` on the tab bar
+  records the double-click button and `_rename_tab` ignores middle/right ones. In Studio chrome the tabs are Firefox-style pills with a favicon glyph. **Per-tab
   pin/freeze**: right-click a *menu* tab → Pin; pinned tabs (`MainWindow._pinned`) are skipped by `_push_data`, so they
   keep their dataset (cheap — references + pandas Copy-on-Write), and show a pin glyph (`icons.pin_icon`); unpin
   re-syncs. Overview/Log are never pinnable.
@@ -279,6 +285,18 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   picker (two `VariablePanel`s: available ↔ selected) emitting a `subsetSelected` signal (same `QObject`-helper pattern
   as `featuresCreated`); `MainWindow` routes it to the Overview's `show_variable_subset(...)`, which uses `dv.keep_vars`
   to restrict the Overview's variable list to the chosen subset (Overview-only; data untouched).
+- **Rename variables tab** (`tabs/rename_variables.py`, `Data ▸ Rename variables`, single-instance) — adds a prefix
+  and/or suffix to **all** variables with a live old→new preview table; **Apply** emits `variablesRenamed(mapping)` →
+  `MainWindow._rename_variables` (renames columns in `_full_data`, remaps the `created` set, calls the library
+  `MetadataStore.rename(mapping)`, re-derives the range). Double-clicking a table row routes one variable through the
+  same flow via `metadata_store.manager.request_rename`. The prefix/suffix mapping is trivial string work (GUI); the
+  DataFrame `rename` + metadata re-keying are the actual operations.
+- **Rename / delete from any variable list.** The `VariablePanel` right-click menu offers **Rename…** and **Delete…**
+  in every tab, routed through `metadata_store.manager` (`request_rename`/`request_delete` → `renameRequested`/
+  `deleteRequested`, connected once in `MainWindow` — same singleton-relay pattern as `editRequested`, so no per-tab
+  wiring). `_rename_one_variable` prompts + collision-checks; `_delete_variable` confirms + drops. Both non-destructive
+  to the source file. (The old per-panel `deletable=True` gating was removed.) `VariablePanel` also exposes
+  `scroll_to(name)` and `clear_filter()`.
 - **Two-phase plot classes are GUI-ready.** The plotting tab renders diive plots straight into an embedded canvas via
   `Plot(series).plot(ax=canvas.ax, fig=canvas.fig)`; no GUI-specific plot variants needed.
 - **`Plot` menu = one closable tab per method.** There is no single "Plotting" tab. Each plot method (Heatmap date/time,
@@ -336,7 +354,13 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   zoomed date range** (`dv.times.keep_daterange` → re-plot) and **clips the heatmap to that date range** (its date is on
   the y-axis, same date-number units, so a `set_ylim`). Repaint uses `MplCanvas.draw_idle()` (not `draw()`) so it never
   re-freezes the layout mid-resize; `_on_resize` runs **two** constrained-layout solve passes so the multi-panel zoomed
-  layout converges instead of collapsing.
+  layout converges instead of collapsing. **Subset + new-feature handling in `on_data_loaded`**: it diffs the incoming
+  `created` set against the previous to find newly added columns and, for them, clears the list's fuzzy filter (a leftover
+  filter would hide a non-matching new name — the cause of "added var doesn't show"), appends them to an active subset,
+  `scroll_to`s the row, and auto-selects/plots the new variable (skipping its `FLAG_…_TEST`). An active subset is
+  **preserved across in-place updates** (delete/rename narrow/rename within it, not reset to the full list); a genuine
+  new-dataset load clears it first via `reset_subset()` (called by `MainWindow._set_data`, which skips pinned tabs). The
+  Overview's splitter handle is disabled (the var panel is fixed-width) so it shows no misleading ↔ resize cursor.
 - **Hover tooltip.** `MplCanvas` attaches a `HoverAnnotator` (`widgets/hover.py`) in its constructor, so every embedded
   figure (Overview, plotting tabs) shows the value under the cursor with no per-tab wiring. Lines snap to the nearest
   sample (`np.searchsorted` on `get_xdata(orig=False)` — the unit-converted floats, **not** raw datetimes); `pcolormesh`
@@ -429,8 +453,15 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   by attaching `df.attrs[ATTRS_KEY]` (built via `provenance_attr`) to the frame they pass to `featuresCreated`;
   `MainWindow._add_features` consumes it (`store.from_attrs`, stamping the time GUI-side). The outlier base
   (`tabs/_outlier_base.py`) and feature tab tag their outputs this way; `record_original` seeds each loaded column with
-  an "Imported from <source>" history entry. **Display:** the delegate paints a ★ (favorite) + `●N` (extra-tag count)
-  and `VariablePanel` sorts favorites to the top; `VariableList` shows a rich hover tooltip; right-click edits tags. The
+  an "Imported from <source>" history entry. **Cumulative history**: `record_derived` makes a new column **inherit its
+  parent's full provenance** on first creation (a *copied* snapshot — not shared, so a later rename can't alias-mutate
+  it), so `FC → FC_LOCALSD → FC_LOCALSD_HAMPEL` shows all three steps, not just the last. `MetadataStore.rename(mapping)`
+  re-keys records and rewrites parent + provenance links so lineage survives a rename. **Tolerant deserialization** (for
+  older `.diive` projects): `VariableMetadata.from_dict` accepts an aliased/missing name and either the `{tag: source}`
+  dict or an older bare tag list (`_coerce_tag_sources`), and `load_dict` skips malformed entries instead of failing the
+  whole load. **Display:** the delegate paints a ★ (favorite) + `●N` (extra-tag count)
+  and `VariablePanel` sorts favorites to the top; `VariableList` shows a rich hover tooltip; right-click renames/deletes
+  the variable and edits tags. The
   **Data ▸ Metadata explorer** tab (`tabs/metadata_explorer.py`, single-instance) does full editing (origin badge,
   auto-coloured tag chips via `theme.tag_color`, the 50-word note, provenance timeline, a confirmed **Clear all tags
   & notes** footer button → `MetadataStore.clear_user_data()`, and a per-variable right-click **Remove all tags & note**

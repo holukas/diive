@@ -55,7 +55,8 @@ writes a `<name>.diive` folder containing:
 - the dataset (including features you engineered) as parquet,
 - all your **metadata** — variable tags, notes, and the full origin/processing
   history,
-- the **site details** and the active **date range**,
+- the **project settings** (author, description, site details, and your sticky
+  **notes**) and the active **date range**,
 - the **open tabs** (your workspace — the same tabs, in order, with pins, reopen
   when you load the project, each restored to its **selected variable(s) and
   settings**; the tab you had active regains focus),
@@ -88,11 +89,13 @@ straight back into diive (GUI or library).
   list. **Hover** any variable for a tooltip with its origin, where it came from,
   its tags, any note, and its full processing history.
 - **Right-click a variable** for **Edit metadata…** (jumps to the Metadata
-  explorer focused on that variable), **★ Mark favorite**, and **Add tag… /
-  Remove tag**. Full editing (tags, a free-text note, history) lives in
-  **Data ▸ Metadata explorer**. On the **Overview** list, right-click also offers
-  **Delete** to drop a variable from the loaded dataset (non-destructive — reload
-  or reopen to restore it).
+  explorer focused on that variable), **Rename…**, **Delete…**, **★ Mark
+  favorite**, and **Add tag… / Remove tag**. **Rename** and **Delete** work in
+  **every** tab's list: rename asks for a new name (and the variable keeps all
+  its tags, notes, and history under the new name); delete drops it from the
+  loaded dataset. Both are **non-destructive** to the source file — reload or
+  reopen to restore. Full metadata editing (tags, a free-text note, history)
+  lives in **Data ▸ Metadata explorer**.
 - The list looks and behaves the same in every tab.
 
 ---
@@ -102,7 +105,8 @@ straight back into diive (GUI or library).
 The window opens with **Overview** and **Log** (these two stay open — they have no
 close button). Other tabs open from the menus and can be closed (×). Most can be
 opened **multiple times** — you'll get *Heatmap 1*, *Heatmap 2*, etc. You can
-**drag tabs to reorder** them and **double-click a tab to rename** it.
+**drag tabs to reorder** them and **double-click a tab (left button) to rename**
+it.
 
 **Pin a tab to freeze its data:** right-click a tab → **Pin tab (freeze data)**.
 A pinned tab keeps the dataset it currently shows and ignores later changes (a new
@@ -357,6 +361,18 @@ to remove it. **Add all →** (under the Available list) moves everything across
 Overview** restricts the Overview's variable list to your selection (your data is
 not changed — load new data or re-open to reset).
 
+### Data ▸ Rename variables
+
+Add a common **prefix and/or suffix** to **all** variables at once — e.g. tag
+every column with a site code (`CH-DAV_…`) or a year (`…_2024`). Type a prefix
+and/or suffix; the table **previews** the old → new names (changed ones in bold)
+before anything happens. **Apply rename** commits it to the loaded dataset.
+
+To rename just **one** variable, **double-click its name** in the table (same as
+the right-click **Rename…** on any variable list). Renaming is non-destructive to
+the source file, and each variable keeps its tags, notes, and history under the
+new name.
+
 ### Data ▸ Metadata explorer
 
 See and edit the metadata that travels with each variable — useful once a
@@ -403,6 +419,10 @@ timestamp parts, …) with diive's feature engineer:
 4. **Add features to variable list** — the new columns appear everywhere with a
    **✦ NEW** pill and can be plotted like any other variable.
 
+When you add new columns (here or from an Outliers tab), the **Overview jumps
+straight to the new variable** — it clears any active filter, scrolls the new row
+into view, and plots it — so you can see the result right away.
+
 ### Flux ▸ Flux processing chain
 
 A guided workspace for the flux processing chain *(early — currently the Input +
@@ -430,6 +450,13 @@ diive needs them (e.g. the Hampel tab's daytime/nighttime split, the flux chain)
 so you don't retype them per tool. Everything here is **remembered between
 sessions** and **saved with the project** (so it travels inside a `.diive`
 folder).
+
+**Notes wall.** The right side of the tab is a pinboard of **sticky notes** for
+free-form reminders. **+ Add note** drops a card you can type a **bold title** and
+body into; **drag** it by its top bar to arrange it, drag the bottom-right corner
+to **resize** it, click **●** to **recolour** it (sticky-note palette or a custom
+colour), and **✕** to remove it. The notes save automatically with the project (and
+between sessions), so they travel inside the `.diive` folder.
 
 ### Settings ▸ Appearance
 

@@ -179,7 +179,7 @@ Load and save parquet files, read single or batch EddyPro output, detect and spl
 
 ### Desktop GUI (optional)
 
-A PySide6 desktop app (`diive-gui`, install with the `gui` extra) for interactive exploration: an Overview tab (per-variable stats + multi-panel figure), per-method plot tabs (heatmap, time series — opened from the Plot menu, multiple at once), a feature-engineering tab, a live Appearance settings tab, and a colour-mirrored output log. See the [GUI user manual](diive/gui/MANUAL.md).
+A PySide6 desktop app (`diive-gui`, install with the `gui` extra) for interactive exploration: an Overview tab (per-variable stats + multi-panel figure); per-method plot tabs (heatmaps, time series, diel cycle, cumulative, ridgeline, scatter, hexbin, histogram — opened from the Plot menu, multiple at once); Analyze tabs (gaps & coverage, driver explorer, seasonal-trend & anomalies, spectrogram); outlier-detection tabs (Hampel, Local SD, three z-score variants) with live previews; a guided flux processing chain; and Data tools to select, rename, and tag variables and engineer features. Every variable carries editable metadata (tags + full provenance history); the whole working state — data, metadata, project settings, sticky notes, and open tabs — saves to a portable `.diive` **project** folder. See the [GUI user manual](diive/gui/MANUAL.md).
 
 ---
 

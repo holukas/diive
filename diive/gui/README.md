@@ -17,7 +17,8 @@ diive-gui                # or: uv run diive-gui
 | `theme.py` | **Central appearance config** — `ThemeManager` (`manager`): editable colour tokens, pill colours/labels, time-series palette, stylesheet; emits `changed`; `as_dict`/`load_dict` for persistence |
 | `config.py` | Persist preferences (theme, site, window geometry, last filetype, **variable user-tags**, last project dir) as JSON in the user config dir |
 | `widgets/save_project_dialog.py` | `SaveProjectDialog` — project name + location for **File ▸ Save project as…** (writes a `<name>.diive` folder via the library's `save_project`) |
-| `metadata_store.py` | **App-wide variable metadata** — `MetadataManager` (`manager`): wraps the library `MetadataStore` (tags + provenance), emits `changed`; edited via `add_user_tag`/`toggle_user_tag` |
+| `metadata_store.py` | **App-wide variable metadata** — `MetadataManager` (`manager`): wraps the library `MetadataStore` (tags + provenance), emits `changed`; edited via `add_user_tag`/`toggle_user_tag`. Also relays variable-list right-click actions app-wide: `editRequested` / `renameRequested` / `deleteRequested` (+ `request_*`) |
+| `site.py` | **Project settings store** — `SiteManager` (`manager`): author, description, site coords/UTC offset, and the **notes wall** cards (`notes`); `as_dict`/`load_dict` so it travels with the project + GUI prefs |
 | `tabs/settings.py` | Appearance settings tab — live colour editing with a pill/highlight preview |
 | `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`); window sized to ~88% of screen |
 | `splash.py` | Startup splash + **Help ▸ About** dialog (`QPainter`-drawn waves + wordmark/version/tagline/credits); `AUTHOR` + `SUPPORTERS` |
@@ -25,6 +26,8 @@ diive-gui                # or: uv run diive-gui
 | `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df, created)` — the extension point |
 | `tabs/overview.py` | Overview tab (first/default): 2×4 panel figure (top, varname badge inside the time-series panel) + a compact borderless **metrics ribbon** (`_StatItem`, `dv.sstats` + `SSTATS_DESCRIPTIONS` tooltips); panels via `_PANELS`. Exposes `_StatCard` for the Gaps/Drivers/Seasonal tabs |
 | `tabs/variable_selector.py` | **Select variables** tab — dual-list picker (available ↔ selected); `subsetSelected` → Overview's `show_variable_subset` (via `dv.keep_vars`) |
+| `tabs/rename_variables.py` | **Rename variables** tab — add a prefix/suffix to all variables with a live old→new preview; double-click a row to rename one; `variablesRenamed` → `MainWindow._rename_variables` |
+| `tabs/site.py` | **Project settings** tab — author/description + site details form (→ `site.manager`) plus the **notes wall** (`widgets/notes_wall.py`) filling the empty space |
 | `tabs/plotting.py` | `PlottingTab(plot_type)` — one closable tab per plot method (opened from the Plot menu); var list + live settings panel + canvas |
 | `icons.py` | `menu_icon(label)` — tiny `QPainter`-drawn glyphs for **all** menu entries (folder/disk/calendar/gear/palette/… + plot shapes), keyword-matched |
 | `widgets/plot_settings.py` | `PlotSettingsPanel(plot_type)` — live plot-parameter controls (between list and canvas); `changed` re-renders; defines `HEATMAP`/`TIMESERIES` |
@@ -41,7 +44,8 @@ diive-gui                # or: uv run diive-gui
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
 | `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar (with a Save-DPI spinbox); attaches a `HoverAnnotator` |
 | `widgets/hover.py` | `HoverAnnotator` — value-under-cursor tooltip (line snap + heatmap cell) via blitting |
-| `widgets/variable_panel.py` | **`VariablePanel`** — the shared variable list (filter + pills) used by every tab |
+| `widgets/variable_panel.py` | **`VariablePanel`** — the shared variable list (filter + pills) used by every tab; right-click menu (rename/delete/favorite/tags) routed via `metadata_store.manager`; `scroll_to(name)` / `clear_filter()` helpers |
+| `widgets/notes_wall.py` | `NotesWall` — sticky-note pinboard (draggable/resizable/recolourable cards, bold header + body); `state()`/`set_state()` serialise to plain dicts (stored in `site.manager.notes`) |
 | `widgets/variable_list.py` | `VariableList` — list emitting `selected(name, ctrl_held)` |
 | `widgets/variable_delegate.py` | `VariableDelegate` — paints row highlight + NEE/GPP/Reco pills |
 | `widgets/open_data_dialog.py` | `OpenDataDialog` — file + filetype picker with a parsed live preview |
@@ -182,6 +186,22 @@ columns are also listed explicitly in a "Newly created features" panel in the ta
 need no selected variable** (they derive from the index) — the run only requires a selected variable when a per-variable
 stage (lag/rolling/diff/EMA/poly/STL) is enabled.
 
+**Project settings & notes wall (`tabs/site.py`):** the Project settings tab's form writes author/description/site to
+`site.manager`; the otherwise-empty right side holds a **`NotesWall`** (`widgets/notes_wall.py`) — a free-positioning
+pinboard of sticky-note cards (drag by the header bar, resize by the corner grip, recolour from a palette, delete). The
+wall mirrors its `state()` into `site.manager.notes` on every edit (a plain attribute set — no `changed` signal — to
+avoid a rebuild loop), and rebuilds from the store only when the notes genuinely differ (e.g. a project was opened). It
+reuses the existing site persistence, so notes travel with the project (`extras["site"]`) and GUI prefs with no
+`app.py` change. Pure presentation (cards/colours/positions); card text colour is the WCAG-contrast pick.
+
+**Cumulative provenance + tolerant project metadata (library, `diive.core.metadata`):** `MetadataStore.record_derived`
+makes a new column **inherit its parent's full history** on first creation (a *copied* snapshot), so a chain like
+`FC → FC_LOCALSD → FC_LOCALSD_HAMPEL` shows all three steps in the explorer, not just the last. `MetadataStore.rename`
+re-keys records and rewrites parent/provenance links. Deserialization is **tolerant of older project layouts**:
+`VariableMetadata.from_dict` accepts an aliased/missing name and either the current `{tag: source}` dict or an older
+bare tag list (`_coerce_tag_sources`), and `load_dict` skips malformed entries instead of failing the whole project
+load — so a stale `.diive` folder still opens with whatever metadata is recoverable.
+
 **Shared variable list (`VariablePanel`):** every tab's left list MUST be this one widget so styling, pills, filtering
 (separator-insensitive subsequence), and width are identical everywhere. Its width is a shared appearance setting
 (`theme.manager.list_width`, editable in Appearance). `run_with_loading(name, fn)` shows a busy indicator on the clicked
@@ -192,9 +212,27 @@ event loop (true animation would need off-thread Agg rendering).
 which calls `on_data_loaded(df, created)` on all active tabs. A menu tab gets the current data on open and is then
 subscribed; on close it's removed so it can't go stale.
 
-**Tab UX & pinning:** tabs are movable (drag), renamable (double-click → `_rename_tab`), and menu tabs carry a custom
-visible "×" (`icons.close_icon`); the always-on Overview/Log are not closable (a `tabCloseRequested` for them — incl.
-middle-click — is ignored). **Right-click a menu tab → Pin** freezes it on its current dataset: pinned tabs
+**Rename / delete a variable (any tab):** the `VariablePanel` right-click menu offers **Rename…** and **Delete…**
+everywhere — both route through `metadata_store.manager` (`request_rename`/`request_delete` → `renameRequested`/
+`deleteRequested`, connected once in `MainWindow`), so no per-tab wiring is needed (same pattern as `editRequested`).
+`MainWindow._rename_one_variable` prompts + checks for collisions, then `_rename_variables` renames the column in
+`_full_data`, remaps the `created` set, and calls the library `MetadataStore.rename(mapping)` (which re-keys records and
+rewrites parent/provenance links so lineage survives). `_delete_variable` drops the column. Both are non-destructive to
+the source file and re-derive the active range so every tab refreshes. The **Rename variables** tab (Data menu) reuses
+this: bulk prefix/suffix emits `variablesRenamed`, and a row double-click calls `request_rename`.
+
+**Newly created variables surface in the Overview.** When columns are added (outlier/feature tabs → `featuresCreated` →
+`_add_features` → push), `OverviewTab.on_data_loaded` diffs the incoming `created` set against the previous one to find
+the **new** columns and: clears the list's fuzzy filter (so a non-matching new name isn't hidden), appends them to an
+active subset (so a subset doesn't hide them), `scroll_to`s the new row, and auto-selects/plots the new variable
+(skipping its `FLAG_…_TEST`). It also **preserves an active subset across in-place updates** (delete/rename drop/rename
+within the subset rather than resetting to the full list); a genuine new-dataset load clears the subset first via
+`reset_subset()` (called by `_set_data`, skipping pinned tabs).
+
+**Tab UX & pinning:** tabs are movable (drag), renamable (**left** double-click → `_rename_tab`), and menu tabs carry a
+custom visible "×" (`icons.close_icon`); the always-on Overview/Log are not closable (a `tabCloseRequested` for them —
+incl. middle-click — is ignored). `tabBarDoubleClicked` fires for any button, so an `eventFilter` on the tab bar records
+the double-click button and `_rename_tab` ignores middle/right ones. **Right-click a menu tab → Pin** freezes it on its current dataset: pinned tabs
 (`MainWindow._pinned`) are skipped by `_push_data` (cheap — references + pandas Copy-on-Write) and show a pin glyph
 (`icons.pin_icon`); unpin re-syncs. Overview/Log are never pinnable. The app/taskbar icon is drawn from the splash
 motif (`splash.app_icon`); a Windows AppUserModelID is set in `run()` so the taskbar uses it.
