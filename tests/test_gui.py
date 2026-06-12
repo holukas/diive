@@ -475,6 +475,46 @@ def test_flux_chain_tab_level31(app):
                 if "Cannot plot" in t.get_text()]
 
 
+def test_flux_chain_tab_level32(app):
+    # L3.2 chain: add outlier steps via the registry, run through make_level32_detector
+    # + run_level32, and surface the overall QCF separately.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.stepwise_method_params import HampelParams, ZScoreParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    # Build a two-step L3.2 chain (as the picker would).
+    tab._steps = [HampelParams().step(), ZScoreParams().step()]
+    tab._update_run_label()
+    assert "3.2" in tab.run_btn.text()
+
+    # Copy-Python now renders the L3.2 composable chain.
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    assert "make_level32_detector" in code and "run_level32(" in code
+    assert code.count("sod.addflag()") == 2
+
+    data = tab._compute(df, tab._init_kwargs(), tab._level2_settings(),
+                        tab._level31_kwargs(), tab._steps)
+    assert getattr(data.levels, "level32_qcf", None) is not None
+    assert any("L3.2" in str(c) for c in data.fpc_df.columns)
+    tab._on_done(data)
+    QApplication.processEvents()
+    assert "QCF" in tab.summary.toPlainText()
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                if "Cannot plot" in t.get_text()]
+
+    # Steps round-trip through save/restore (project persistence).
+    state = tab.save_state()
+    tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2._steps == tab._steps
+    assert tab2.l32_steps_list.count() == 2
+
+
 def test_stepwise_method_params_run_on_detector(app):
     # Every stepwise method-params widget must produce a {method, kwargs} step that
     # StepwiseOutlierDetection actually accepts and runs — this guards the kwarg
