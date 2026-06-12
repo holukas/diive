@@ -29,6 +29,7 @@ from diive.gui.tabs.outliers_trim import TrimLowOutlierTab
 from diive.gui.tabs.outliers_zscorerolling import ZScoreRollingOutlierTab
 from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
 from diive.gui.tabs.spectrogram import SpectrogramTab
+from diive.gui.tabs.stepwise import StepwiseScreeningTab
 from diive.gui.tabs.timelag import TimeLagAnalysisTab
 from diive.gui.tabs.overview import OverviewTab
 from diive.gui.tabs.rename_variables import RenameVariablesTab
@@ -94,6 +95,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Local Outlier Factor filter": LocalOutlierFactorTab,
         "Trim-low filter": TrimLowOutlierTab,
         "Manual removal": ManualRemovalOutlierTab,
+        "Stepwise screening": StepwiseScreeningTab,
     },
     # Eddy-covariance flux processing (dv.flux). Its own menu — a first-class
     # diive domain that will grow (gap-filling, USTAR, storage, ...).
@@ -126,4 +128,4 @@ SINGLE_INSTANCE_TABS: set[str] = {
     "Gaps & coverage",
     "Driver explorer", "Seasonal-trend & anomalies", "Spectrogram",
     "Metadata explorer", "Select variables", "Rename variables", "3D surface",
-    "Events"}
+    "Stepwise screening", "Events"}

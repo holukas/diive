@@ -35,7 +35,9 @@
   filter**, **Hampel filter**, **Local SD
   filter**, **Z-score filter**, **Z-score (rolling) filter**, **Z-score (increments) filter**, **Local Outlier
   Factor filter**, **Trim-low filter**, and **Manual removal** (each keeps the
-  original + a cleaned copy + the flag, with a live two-panel preview and **Copy Python**); Data menu **Select
+  original + a cleaned copy + the flag, with a live two-panel preview and **Copy Python**), plus **Stepwise screening**
+  (chain several outlier tests on one variable, inspect what each step removes, and compute the overall QCF separately —
+  then add the flags + QCF + filtered series to the dataset); Data menu **Select
   variables**, **Rename variables** (add a prefix/suffix to all variables, or one at a time, with a live preview),
   **Metadata explorer**, **Feature engineering**; plus **Appearance**, **Project settings** (author, description, site
   details, and a **sticky-note wall** — all saved with the project), and **Log**.

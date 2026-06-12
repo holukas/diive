@@ -515,6 +515,49 @@ def test_flux_chain_tab_level32(app):
     assert tab2.l32_steps_list.count() == 2
 
 
+def test_stepwise_screening_tab(app):
+    # Chain outlier tests on one variable: per-step removals, a separate QCF, and
+    # commit of flags + QCF + filtered series.
+    import diive as dv
+    from diive.gui.tabs.stepwise import StepwiseScreeningTab
+    from diive.gui.widgets.stepwise_method_params import HampelParams, ZScoreParams
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-01-01", periods=48 * 20, freq="30min",
+        trend_slope=0.01, seasonal_strength=9, noise_level=2, outlier_fraction=0.1)
+    df.index.name = "TIMESTAMP_END"
+
+    tab = StepwiseScreeningTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._select("observed_value")
+
+    emitted = {}
+    tab.featuresCreated.connect(lambda d: emitted.update(df=d))
+
+    tab._steps = [HampelParams().step(), ZScoreParams().step()]
+    # Drive the worker synchronously (signals deliver in-thread under the test app).
+    tab._worker(df, "observed_value", tab._steps, tab._coords())
+    QApplication.processEvents()
+
+    assert tab.steps_list.count() == 2
+    assert len(tab._payload["removed"]) == 2
+    assert "QCF" in tab.qcf_label.text()
+    assert tab.add_btn.isEnabled()
+    # Selecting a step re-renders without error.
+    tab._on_step_selected(0)
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                if "Cannot plot" in t.get_text()]
+
+    # Commit emits the flags + a clean QCF flag + the QCF-filtered series, index-aligned.
+    tab._add_to_dataset()
+    cols = list(emitted["df"].columns)
+    assert any(str(c).endswith("_STEPWISE_QCF") for c in cols)          # filtered series
+    assert any(str(c) == "FLAG_STEPWISE_observed_value_QCF" for c in cols)  # overall flag
+    assert sum(str(c).endswith("_TEST") for c in cols) == 2             # one flag per step
+    assert emitted["df"].index.equals(df.index)                        # aligns on merge
+
+
 def test_flux_chain_tab_level33(app):
     # L3.3 USTAR filtering: requires an L3.2 step, applies constant thresholds,
     # and exposes per-scenario QCFs.
