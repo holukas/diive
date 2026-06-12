@@ -515,6 +515,50 @@ def test_flux_chain_tab_level32(app):
     assert tab2.l32_steps_list.count() == 2
 
 
+def test_flux_chain_tab_level33(app):
+    # L3.3 USTAR filtering: requires an L3.2 step, applies constant thresholds,
+    # and exposes per-scenario QCFs.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+
+    # Enabling L3.3 without an L3.2 step is rejected up front (no run).
+    tab.l33_enable.setChecked(True)
+    tab._ustar = [(0.1, "CUT_50")]
+    tab._update_run_label()
+    assert "3.3" in tab.run_btn.text()
+    tab._run()
+    assert "requires at least one Level 3.2" in tab.summary.toPlainText()
+
+    # With an L3.2 step, the chain runs through L3.3 and exposes scenarios.
+    tab._steps = [HampelParams().step()]
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    assert "run_level33_constant_ustar(" in code
+
+    data = tab._compute(df, tab._init_kwargs(), tab._level2_settings(),
+                        tab._level31_kwargs(), tab._steps, tab._level33_kwargs())
+    assert getattr(data.levels, "level33_qcf", None)  # non-empty scenario dict
+    assert "CUT_50" in data.levels.filteredseries_level33_qcf
+    tab._on_done(data)
+    QApplication.processEvents()
+    assert "USTAR" in tab.summary.toPlainText()
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                if "Cannot plot" in t.get_text()]
+
+    # USTAR thresholds round-trip through save/restore.
+    state = tab.save_state()
+    tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2.l33_enable.isChecked()
+    assert tab2._ustar == [(0.1, "CUT_50")]
+
+
 def test_stepwise_method_params_run_on_detector(app):
     # Every stepwise method-params widget must produce a {method, kwargs} step that
     # StepwiseOutlierDetection actually accepts and runs — this guards the kwarg

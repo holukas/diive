@@ -29,8 +29,8 @@
 - Tabs: **Overview** (per-variable stats ribbon + multi-panel figure); per-method **Plot** tabs (heatmaps, time series,
   diel cycle, cumulative year, ridgeline, scatter XY, hexbin, histogram; multi-instance, each with a live settings
   panel); **Analyze** tabs **Gaps & coverage**, **Driver explorer**, **Seasonal-trend & anomalies**, **Spectrogram**;
-  **Flux processing chain** (Input + L2 + L3.1 storage correction + L3.2 outlier-detection chain, composable per-level
-  path, with **Copy Python**); **Time lag analysis** (EC concentration↔wind lag
+  **Flux processing chain** (Input + L2 + L3.1 storage correction + L3.2 outlier-detection chain + L3.3 constant-USTAR
+  filtering, composable per-level path, with **Copy Python**); **Time lag analysis** (EC concentration↔wind lag
   distribution per gas, peak/range/EddyPro window, `dv.flux.TimeLagAnalysis`); **Outliers** tabs **Absolute limits
   filter**, **Hampel filter**, **Local SD
   filter**, **Z-score filter**, **Z-score (rolling) filter**, **Z-score (increments) filter**, **Local Outlier

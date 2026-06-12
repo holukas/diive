@@ -182,7 +182,14 @@ def level32_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
         "run_level31,\n    make_level32_detector, run_level32)",
         init_kwargs, level2_settings, df_var, load_hint)
     lines += _level31_block(level31_kwargs)
-    lines += ["", "data, sod = make_level32_detector(data)"]
+    lines += _level32_block(level32_steps)
+    lines += ["final_df = data.fpc_df"]
+    return "\n".join(lines) + "\n"
+
+
+def _level32_block(level32_steps: list[dict]) -> list[str]:
+    """The L3.2 stateful chain block (no trailing ``final_df``)."""
+    lines = ["", "data, sod = make_level32_detector(data)"]
     for step in level32_steps:
         method = step["method"]
         kwarg_lines = _kwargs_lines(step.get("kwargs", {}), _step_defaults(method))
@@ -191,5 +198,41 @@ def level32_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
         else:
             lines.append(f"sod.{method}()")
         lines.append("sod.addflag()")
-    lines += ["data = run_level32(data, outlier_detector=sod)", "final_df = data.fpc_df"]
+    lines.append("data = run_level32(data, outlier_detector=sod)")
+    return lines
+
+
+def _level33_defaults() -> dict:
+    from diive.flux.fluxprocessingchain.levels import run_level33_constant_ustar
+    return {p.name: p.default
+            for p in inspect.signature(run_level33_constant_ustar).parameters.values()
+            if p.default is not inspect.Parameter.empty}
+
+
+def level33_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: dict,
+                    level32_steps: list[dict], level33_kwargs: dict,
+                    df_var: str = "df", load_hint: str | None = None) -> str:
+    """Render the composable chain through Level 3.3 (constant-USTAR filtering).
+
+    L3.3 requires L3.2 to have run, so the L3.2 outlier chain is always rendered
+    before the ``run_level33_constant_ustar`` call.
+
+    Args:
+        init_kwargs: kwargs for ``init_flux_data`` (without ``df``).
+        level2_settings: ``{test_name: settings_dict}`` for ``run_level2``.
+        level31_kwargs: kwargs for ``run_level31`` (storage correction).
+        level32_steps: ordered ``[{"method": str, "kwargs": dict}, ...]``.
+        level33_kwargs: kwargs for ``run_level33_constant_ustar`` (``thresholds``,
+            optional ``threshold_labels``).
+        df_var, load_hint: as in :func:`chain_to_code`.
+    """
+    lines = _init_level2_lines(
+        "from diive.flux.fluxprocessingchain import (init_flux_data, run_level2, "
+        "run_level31,\n    make_level32_detector, run_level32, run_level33_constant_ustar)",
+        init_kwargs, level2_settings, df_var, load_hint)
+    lines += _level31_block(level31_kwargs)
+    lines += _level32_block(level32_steps)
+    lines += ["", "data = run_level33_constant_ustar(", "    data,",
+              *_kwargs_lines(level33_kwargs, _level33_defaults()), ")",
+              "final_df = data.fpc_df"]
     return "\n".join(lines) + "\n"

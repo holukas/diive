@@ -1,14 +1,18 @@
 """
-GUI.TABS.FLUXCHAIN: FLUX PROCESSING CHAIN (Input + L2 + L3.1 + L3.2)
-===================================================================
+GUI.TABS.FLUXCHAIN: FLUX PROCESSING CHAIN (Input + L2 + L3.1 + L3.2 + L3.3)
+==========================================================================
 
 A guided tab for the Swiss-FluxNet flux processing chain. It wires the **Input**
 (site + flux column), **Level 2** (quality-flag tests), **Level 3.1** (single-point
-storage correction), and **Level 3.2** (an optional outlier-detection chain) using
-the composable library callables (`init_flux_data` + `run_level2` + `run_level31`
-+ `make_level32_detector` / `run_level32`), shows the deepest level's QCF-filtered
-flux as a heatmap plus the L3.2 QCF distribution, and — the point of the feature —
-emits the exact reproducible diive script via **Copy Python**.
+storage correction), **Level 3.2** (an optional outlier-detection chain), and
+**Level 3.3** (optional constant-USTAR filtering) using the composable library
+callables (`init_flux_data` + `run_level2` + `run_level31` +
+`make_level32_detector` / `run_level32` + `run_level33_constant_ustar`), shows the
+deepest level's QCF-filtered flux as a heatmap plus the L3.2 QCF distribution /
+L3.3 scenarios, and — the point of the feature — emits the exact reproducible diive
+script via **Copy Python**. L3.3 requires at least one L3.2 outlier test, and applies
+only to CO2/CH4/N2O (for H/LE use threshold 0); the library validates and the tab
+surfaces the error.
 
 L3.2 is built as a chain of outlier tests: pick a method, set its parameters, and
 **Add step**; each step is one `StepwiseOutlierDetection.flag_*` call (committed
@@ -42,6 +46,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QPlainTextEdit,
     QPushButton,
@@ -53,8 +58,9 @@ from PySide6.QtWidgets import (
 
 import diive as dv
 from diive.flux.fluxprocessingchain import (
-    init_flux_data, level31_to_code, level32_to_code,
+    init_flux_data, level31_to_code, level32_to_code, level33_to_code,
     make_level32_detector, run_level2, run_level31, run_level32,
+    run_level33_constant_ustar,
 )
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
@@ -106,6 +112,7 @@ class FluxChainTab(DiiveTab):
         col.addWidget(self._level2_group())
         col.addWidget(self._level31_group())
         col.addWidget(self._level32_group())
+        col.addWidget(self._level33_group())
         self.run_btn = QPushButton("Run through Level 3.1")
         self.run_btn.clicked.connect(self._run)
         col.addWidget(self.run_btn)
@@ -262,8 +269,77 @@ class FluxChainTab(DiiveTab):
         parts = ", ".join(f"{k}={v}" for k, v in step.get("kwargs", {}).items())
         return f"{label} — {parts}" if parts else label
 
-    def _update_run_label(self) -> None:
-        deepest = "3.2" if self._steps else "3.1"
+    def _level33_group(self) -> QGroupBox:
+        box = QGroupBox("Level 3.3 — USTAR filtering (optional)")
+        v = QVBoxLayout(box)
+        self.l33_enable = QCheckBox("Apply constant USTAR thresholds")
+        self.l33_enable.setToolTip(
+            "Flag low-turbulence (low USTAR) periods. Requires at least one Level 3.2 "
+            "outlier test. Only for CO2/CH4/N2O — for H/LE use threshold 0.")
+        self.l33_enable.toggled.connect(self._update_run_label)
+        v.addWidget(self.l33_enable)
+        note = QLabel("One scenario per threshold (m s⁻¹). Label is optional "
+                      "(auto CUT_0, CUT_1, …); use e.g. CUT_50 for a percentile.")
+        note.setWordWrap(True)
+        v.addWidget(note)
+        row = QHBoxLayout()
+        self.l33_value = self._dspin(0.10, 0.0, 5.0, 3)
+        row.addWidget(self.l33_value)
+        self.l33_label = QLineEdit()
+        self.l33_label.setPlaceholderText("label (optional)")
+        row.addWidget(self.l33_label)
+        add_btn = QPushButton("Add")
+        add_btn.clicked.connect(self._add_ustar)
+        row.addWidget(add_btn)
+        v.addLayout(row)
+        # Thresholds as (value, label) — label "" means auto.
+        self._ustar: list[tuple[float, str]] = []
+        self.l33_list = QListWidget()
+        self.l33_list.setMaximumHeight(90)
+        v.addWidget(self.l33_list)
+        rm = QPushButton("Remove threshold")
+        rm.clicked.connect(self._remove_ustar)
+        v.addWidget(rm)
+        return box
+
+    def _add_ustar(self) -> None:
+        value = self.l33_value.value()
+        label = self.l33_label.text().strip()
+        self._ustar.append((value, label))
+        self.l33_list.addItem(f"{value:g}" + (f"  ({label})" if label else ""))
+        self.l33_label.clear()
+        self._update_run_label()
+
+    def _remove_ustar(self) -> None:
+        row = self.l33_list.currentRow()
+        if row < 0:
+            return
+        self.l33_list.takeItem(row)
+        del self._ustar[row]
+        self._update_run_label()
+
+    def _level33_kwargs(self) -> dict | None:
+        """run_level33_constant_ustar kwargs, or None when L3.3 is off/empty."""
+        if not self.l33_enable.isChecked() or not self._ustar:
+            return None
+        thresholds = [v for v, _ in self._ustar]
+        labels = [lab for _, lab in self._ustar]
+        kwargs: dict = {"thresholds": thresholds}
+        # All-or-nothing labels: pass them only if every scenario is labelled,
+        # else let the library auto-generate CUT_0, CUT_1, …
+        if all(labels):
+            kwargs["threshold_labels"] = labels
+        return kwargs
+
+    def _update_run_label(self, *_) -> None:
+        # Reflects intent: L3.3 configured -> "3.3" even before an L3.2 step exists
+        # (the run then surfaces the "needs an L3.2 test" requirement).
+        if self.l33_enable.isChecked() and self._ustar:
+            deepest = "3.3"
+        elif self._steps:
+            deepest = "3.2"
+        else:
+            deepest = "3.1"
         self.run_btn.setText(f"Run through Level {deepest}")
 
     def _apply_tooltips(self) -> None:
@@ -314,7 +390,9 @@ class FluxChainTab(DiiveTab):
         from diive.gui.widgets.state_utils import save_controls
         return {"controls": save_controls(self._fx_controls()),
                 "l2": {k: cb.isChecked() for k, cb in self.l2_checks.items()},
-                "l32_steps": self._steps}
+                "l32_steps": self._steps,
+                "l33_enabled": self.l33_enable.isChecked(),
+                "l33_ustar": [list(u) for u in self._ustar]}
 
     def restore_state(self, state: dict) -> None:
         from diive.gui.widgets.state_utils import restore_controls
@@ -327,6 +405,12 @@ class FluxChainTab(DiiveTab):
         self.l32_steps_list.clear()
         for step in self._steps:
             self.l32_steps_list.addItem(self._step_summary(step))
+        # Rebuild the L3.3 USTAR thresholds.
+        self.l33_enable.setChecked(bool(state.get("l33_enabled")))
+        self._ustar = [tuple(u) for u in (state.get("l33_ustar") or [])]
+        self.l33_list.clear()
+        for value, label in self._ustar:
+            self.l33_list.addItem(f"{value:g}" + (f"  ({label})" if label else ""))
         self._update_run_label()
 
     # --- data ---
@@ -396,8 +480,9 @@ class FluxChainTab(DiiveTab):
 
     # --- run (library work on a worker thread) ---
     def _compute(self, df, init_kwargs: dict, level2_settings: dict, level31_kwargs: dict,
-                 level32_steps: list[dict] | None = None):
-        """Init the container and run Level 2 → 3.1 → (optional) 3.2 (library calls)."""
+                 level32_steps: list[dict] | None = None,
+                 level33_kwargs: dict | None = None):
+        """Init the container and run Level 2 → 3.1 → (optional) 3.2 → (optional) 3.3."""
         work = df.drop(columns=[c for c in _RESERVED if c in df.columns])
         data = init_flux_data(df=work, **init_kwargs)
         data = run_level2(data, **level2_settings)
@@ -410,6 +495,10 @@ class FluxChainTab(DiiveTab):
                 getattr(sod, step["method"])(**step.get("kwargs", {}))
                 sod.addflag()
             data = run_level32(data, outlier_detector=sod)
+        if level33_kwargs:
+            # showplot off — a worker thread must not pop a matplotlib window.
+            data = run_level33_constant_ustar(data, showplot=False, verbose=False,
+                                              **level33_kwargs)
         return data
 
     def _run(self) -> None:
@@ -420,16 +509,25 @@ class FluxChainTab(DiiveTab):
             self.summary.setPlainText("Enable at least one Level 2 test.")
             return
         steps = list(self._steps)
-        deepest = "3.2" if steps else "3.1"
+        l33 = self._level33_kwargs()
+        if l33 and not steps:
+            # USTAR filtering must operate on outlier-screened data (library raises).
+            self.summary.setPlainText(
+                "Level 3.3 (USTAR) requires at least one Level 3.2 outlier test. "
+                "Add a step or disable Level 3.3.")
+            return
+        deepest = "3.3" if l33 else ("3.2" if steps else "3.1")
         self.run_btn.setEnabled(False)
         self.summary.setPlainText(f"Running Level 2 → Level {deepest}…")
         threading.Thread(
-            target=self._worker, args=(self._df, ik, l2, l31, steps), daemon=True).start()
+            target=self._worker, args=(self._df, ik, l2, l31, steps, l33),
+            daemon=True).start()
 
-    def _worker(self, df, init_kwargs, level2_settings, level31_kwargs, level32_steps) -> None:
+    def _worker(self, df, init_kwargs, level2_settings, level31_kwargs, level32_steps,
+                level33_kwargs) -> None:
         try:
             data = self._compute(df, init_kwargs, level2_settings, level31_kwargs,
-                                  level32_steps)
+                                  level32_steps, level33_kwargs)
         except Exception as err:
             self._sig.failed.emit(str(err))
             return
@@ -437,13 +535,25 @@ class FluxChainTab(DiiveTab):
 
     def _on_done(self, data) -> None:
         self.run_btn.setEnabled(True)
-        series = data.filteredseries
-        valid = int(series.dropna().count()) if series is not None else 0
-        # If L3.2 ran, surface its overall QCF distribution separately.
+        # Deepest level reached: L3.3 (USTAR scenarios) > L3.2 (outliers) > L3.1.
         l32_qcf = getattr(data.levels, "level32_qcf", None)
-        level = "3.2" if l32_qcf is not None else "3.1"
+        l33_qcf = getattr(data.levels, "level33_qcf", None)
+        level = "3.3" if l33_qcf else ("3.2" if l32_qcf is not None else "3.1")
+        # After L3.3 there is one filtered series per USTAR scenario (data.filteredseries
+        # is then ambiguous/None); preview the first scenario.
+        series = data.filteredseries
         qcf_note = ""
-        if l32_qcf is not None:
+        if l33_qcf:
+            try:
+                scen_series = data.levels.filteredseries_level33_qcf
+                first = next(iter(scen_series))
+                series = scen_series[first]
+                qcf_note = (f"\nL3.3 USTAR scenarios: {', '.join(scen_series)} "
+                            f"(preview: {first}).")
+            except Exception:
+                qcf_note = ""
+        valid = int(series.dropna().count()) if series is not None else 0
+        if l32_qcf is not None and not l33_qcf:
             try:
                 vc = l32_qcf.flagqcf.value_counts()
                 qcf_note = (f"\nL3.2 QCF — good (0): {int(vc.get(0, 0))}, "
@@ -473,13 +583,13 @@ class FluxChainTab(DiiveTab):
     # --- the killer button: the exact reproducible script ---
     def _code(self) -> str:
         hint = "dv.load_parquet('your_data.parquet')"
+        ik, l2, l31 = self._init_kwargs(), self._level2_settings(), self._level31_kwargs()
+        l33 = self._level33_kwargs()
+        if l33 and self._steps:
+            return level33_to_code(ik, l2, l31, self._steps, l33, load_hint=hint)
         if self._steps:
-            return level32_to_code(
-                self._init_kwargs(), self._level2_settings(), self._level31_kwargs(),
-                self._steps, load_hint=hint)
-        return level31_to_code(
-            self._init_kwargs(), self._level2_settings(), self._level31_kwargs(),
-            load_hint=hint)
+            return level32_to_code(ik, l2, l31, self._steps, load_hint=hint)
+        return level31_to_code(ik, l2, l31, load_hint=hint)
 
     def _copy_code(self) -> None:
         code = self._code()

@@ -93,6 +93,21 @@ class TestFluxCodegen(unittest.TestCase):
         # A method with no non-default kwargs renders as a bare call.
         self.assertIn("sod.flag_missingvals_test()", code)
 
+    def test_level33_to_code(self):
+        from diive.flux.fluxprocessingchain import level33_to_code
+        code = level33_to_code(
+            init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+            level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
+            level31_kwargs={},
+            level32_steps=[{"method": "flag_outliers_hampel_test", "kwargs": {}}],
+            level33_kwargs={"thresholds": [0.18], "threshold_labels": ["CUT_50"]})
+        compile(code, "<gen>", "exec")
+        # L3.3 always renders the L3.2 chain before it (USTAR needs screened data).
+        self.assertIn("make_level32_detector", code)
+        self.assertIn("run_level33_constant_ustar(", code)
+        self.assertIn("thresholds=[0.18]", code)
+        self.assertIn("threshold_labels=['CUT_50']", code)
+
 
 if __name__ == "__main__":
     unittest.main()

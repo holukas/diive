@@ -128,7 +128,7 @@ from diive.flux.fluxprocessingchain.levels import (
 )
 from diive.flux.fluxprocessingchain.run_chain import run_chain
 from diive.flux.fluxprocessingchain.codegen import (
-    chain_to_code, level2_to_code, level31_to_code, level32_to_code,
+    chain_to_code, level2_to_code, level31_to_code, level32_to_code, level33_to_code,
 )
 
 __all__ = [
@@ -145,6 +145,7 @@ __all__ = [
     'level2_to_code',
     'level31_to_code',
     'level32_to_code',
+    'level33_to_code',
     # Composable callables
     'init_flux_data',
     'add_driver',
