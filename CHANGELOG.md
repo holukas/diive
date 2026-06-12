@@ -71,13 +71,19 @@
   column** (`EVENT_<name>`; 1 = the event took place) that saves with the project and shows in every variable list, and
   is drawn on the Overview's time-series panels (a line for an instant, a shaded band for a period) and as a band on the
   date/time heatmap. A single **Show events on plots** toggle (in the Events tab and the Data menu) turns the overlays on
-  or off. Events persist in preferences and projects.
+  or off. Events persist in preferences and projects. The **Events** tab shows them as a reflowing board of
+  **category-coloured cards** (sorted by date), each with a span bar, relative-time hint, and per-card actions:
+  show-on-Overview (zooms the linked panels onto the event), edit, duplicate, shift, and delete; the board can be
+  filtered, grouped (by category or year), and shown compact or comfortable. **Manage categories…** edits a category
+  palette (seeded with `category1/2/3`; rename / recolour / delete, last one kept) whose colours flow to both the cards
+  and the plot overlays.
 
 Library additions used by the GUI (all backward-compatible):
 
 - `dv.events` (`Event`, `event_to_flag`, `overlay_events`, `make_event_flag_name`, `CATEGORY_COLORS`): time-stamped
   event markers. `Event` is an instant (no end) or a period; `event_to_flag(event, index)` builds the 0/1 yes/no column;
   `overlay_events(ax, events, axis='x'|'y')` draws lines/spans onto an existing datetime axes (x) or the heatmap (y).
+  `Event.resolved_color(i, colors=)` and `overlay_events(..., colors=)` take an optional `{category: hex}` override map.
 - `save_parquet(..., enforce_diive_format=True, timestamp_name=...)` and `dv.to_diive_format(...)`: coerce to diive
   parquet format (one header row + valid `TIMESTAMP_*` index).
 - `dv.analysis.rank_drivers(df, target, method=, max_lag=)`: rank variables by correlation with a target (optional
