@@ -72,7 +72,8 @@ class StepwiseOutlierDetection:
             site_lat: float,
             site_lon: float,
             utc_offset: int,
-            idstr: str = None
+            idstr: str = None,
+            output_middle_timestamp: bool = True
     ):
         self.dfin = dfin.copy()
         self.col = col
@@ -81,6 +82,12 @@ class StepwiseOutlierDetection:
         self.site_lon = site_lon
         self.utc_offset = utc_offset
         self.idstr = validate_id_string(idstr=idstr)
+        # When False, the sanitized index keeps the input timestamp convention
+        # (e.g. TIMESTAMP_END) instead of being shifted to the middle of the
+        # averaging period. Callers that must align the resulting flags back to
+        # an existing dataframe (e.g. the GUI) set this False to avoid an index
+        # mismatch on merge.
+        self.output_middle_timestamp = output_middle_timestamp
 
         # Setup
         self._flags, \
@@ -91,10 +98,10 @@ class StepwiseOutlierDetection:
         self._last_flag = pd.DataFrame()  # Flag of most recent QC test
 
     @property
-    def last_flag(self) -> DataFrame:
+    def last_flag(self) -> Series:
         """Return flag of most recent QC test."""
-        if not isinstance(self._last_flag, object):
-            raise Exception(f"No recent results available.")
+        if not isinstance(self._last_flag, Series) or self._last_flag.empty:
+            raise Exception(f"No recent results available. Run an outlier test before accessing the last flag.")
         return self._last_flag
 
     @property
@@ -127,6 +134,16 @@ class StepwiseOutlierDetection:
         """Show *current* cleaned high-resolution data"""
         p = TimeSeries(series=self._series_hires_cleaned)
         p.plot() if not interactive else p.plot_interactive()
+
+    def flag_missingvals_test(self, verbose: bool = False):
+        """Flag missing records in the data (flag 2 where the value is missing)."""
+        # Lazy import: a top-level import would create a circular import via the
+        # qaqc package __init__ (qaqc -> meteoscreening -> outlier_detection -> here).
+        from diive.preprocessing.qaqc.flags import MissingValues
+        series_cleaned = self._series_hires_cleaned.copy()
+        flagtest = MissingValues(series=series_cleaned, idstr=self.idstr, verbose=verbose)
+        flagtest.calc(repeat=False)
+        self._last_flag = flagtest.get_flag()
 
     def flag_manualremoval_test(self, remove_dates: list, showplot: bool = False, verbose: bool = False):
         """Flag specified records for removal"""
@@ -169,7 +186,7 @@ class StepwiseOutlierDetection:
         self._last_flag = flagtest.get_flag()
 
     def flag_outliers_hampel_test(self, window_length: int = 48 * 13, n_sigma: float = 5.5,
-                                  n_sigma_daytime: float = 5.5, n_sigma_nighttime: float = 5.5,
+                                  n_sigma_daytime: float = None, n_sigma_nighttime: float = None,
                                   k: float = 1.4826, use_differencing: bool = True,
                                   separate_daytime_nighttime: bool = True, showplot: bool = False,
                                   verbose: bool = False, repeat: bool = True):
@@ -412,7 +429,7 @@ class StepwiseOutlierDetection:
         _series = self._series.copy()  # Data for this field
 
         # Sanitize timestamp
-        _series = TimestampSanitizer(data=_series).get()
+        _series = TimestampSanitizer(data=_series, output_middle_timestamp=self.output_middle_timestamp).get()
 
         # Initialize hires quality flags
         hires_flags = pd.DataFrame(index=_series.index)

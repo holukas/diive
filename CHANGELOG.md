@@ -361,6 +361,16 @@ Library additions used by the GUI (all backward-compatible):
       meteoscreening from database (38).
 * All outlier detection classes: Harmonized the creation of daytime/nighttime flags across all outlier detection
   methods (12).
+* `StepwiseOutlierDetection`:
+    * Fixed `flag_outliers_hampel_test`: the `n_sigma_daytime`/`n_sigma_nighttime` parameters defaulted to the literal
+      `5.5` instead of `None`, which shadowed the global `n_sigma` so changing it alone had no effect in
+      daytime/nighttime mode. They now default to `None` and fall back to `n_sigma`, matching the `Hampel` class.
+    * Added the missing `flag_missingvals_test()` method (it was documented in the class but not implemented).
+    * Added the `output_middle_timestamp` parameter (default `True`, unchanged behaviour). Set it to `False` to keep the
+      input timestamp convention (e.g. `TIMESTAMP_END`) instead of shifting to the middle of the averaging period, so the
+      resulting flags align to an existing dataframe on merge.
+    * Fixed the `last_flag` property guard, which never raised when no test had been run yet.
+    * Extended the example to show how to calculate the overall quality flag (`QCF`) from the accumulated test flags.
 
 ### Eddy Covariance and Flux Processing
 
