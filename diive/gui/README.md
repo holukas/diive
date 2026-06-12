@@ -43,6 +43,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `widgets/plot_settings.py` | `PlotSettingsPanel(plot_type)` — live plot-parameter controls (between list and canvas); `changed` re-renders; defines `HEATMAP`/`TIMESERIES` |
 | `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
 | `tabs/fluxchain.py` | Flux processing chain tab — Input + Level 2 (first slice); runs `init_flux_data`/`run_level2`, **Copy Python** emits a reproducible script |
+| `tabs/timelag.py` | Time-lag analysis tab — pick a gas, analyse its `*_TLAG_ACTUAL` lag distribution (`dv.flux.TimeLagAnalysis`), embed the 4-panel peak/range/EddyPro figure; **Load example TLAG data** loads the bundled level-0 lag dataset locally |
 | `tabs/gaps.py` | Gap & coverage dashboard — stat cards + clickable gap map (`GapStats` availability heatmap + gap timeline) + long-gap table |
 | `tabs/drivers.py` | Driver explorer — rank variables by correlation with a target (`rank_drivers`, optional lag scan); click a driver for its scatter |
 | `tabs/seasonaltrend.py` | Seasonal-trend & anomaly explorer — STL/classical/harmonic decomposition + yearly anomalies vs a reference period |

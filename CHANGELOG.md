@@ -29,7 +29,8 @@
 - Tabs: **Overview** (per-variable stats ribbon + multi-panel figure); per-method **Plot** tabs (heatmaps, time series,
   diel cycle, cumulative year, ridgeline, scatter XY, hexbin, histogram; multi-instance, each with a live settings
   panel); **Analyze** tabs **Gaps & coverage**, **Driver explorer**, **Seasonal-trend & anomalies**, **Spectrogram**;
-  **Flux processing chain** (Input + L2, with **Copy Python**); **Outliers** tabs **Hampel filter**, **Local SD
+  **Flux processing chain** (Input + L2, with **Copy Python**); **Time lag analysis** (EC concentration↔wind lag
+  distribution per gas, peak/range/EddyPro window, `dv.flux.TimeLagAnalysis`); **Outliers** tabs **Hampel filter**, **Local SD
   filter**, **Z-score filter**, **Z-score (rolling) filter**, and **Z-score (increments) filter** (each keeps the
   original + a cleaned copy + the flag, with a live two-panel preview and **Copy Python**); Data menu **Select
   variables**, **Rename variables** (add a prefix/suffix to all variables, or one at a time, with a live preview),
@@ -167,6 +168,8 @@ Library additions used by the GUI (all backward-compatible):
 
 - **`RidgeLinePlot.plot(fig=...)`** — optional `fig` parameter to render the stacked-density ridges into an existing
   figure (cleared first) instead of creating a new one, e.g. to embed in a GUI canvas. Backward-compatible.
+- **`TimeLagAnalysis.plot_gas(fig=...)`** — optional `fig` parameter to render the 4-panel time-lag figure into an
+  existing figure (cleared first) instead of a new pyplot one, e.g. to embed in the GUI canvas. Backward-compatible.
 - **`DetectTimestampShifts`** — detects clock errors by comparing measured vs. potential shortwave radiation. Three
   detection methods (`fft_phase_shift`, `crosscorr`, `noon_shift`) with five plot methods.
 - **`PreWhiteningBootstrap`** — Vitale et al. (2024) PWB time-lag detection for low-magnitude fluxes (CH4, N2O),
