@@ -64,7 +64,18 @@ class FramelessResizeHelper(QObject):
     def eventFilter(self, obj, event) -> bool:
         et = event.type()
         if et == QEvent.Type.MouseMove:
-            self._grip.setCursor(self._cursor_for(self._edges(event.position().toPoint())))
+            edges = self._edges(event.position().toPoint())
+            if edges.value:
+                self._grip.setCursor(self._cursor_for(edges))
+            else:
+                # Don't leave a sticky resize cursor on the grip: child widgets
+                # without their own cursor inherit the grip's, so a leftover
+                # SizeHorCursor would show as a resize cursor over buttons.
+                self._grip.unsetCursor()
+        elif et == QEvent.Type.Leave:
+            # Moving onto a child widget fires Leave on the grip — reset so the
+            # resize cursor never persists outside the edge margin.
+            self._grip.unsetCursor()
         elif (et == QEvent.Type.MouseButtonPress
               and event.button() == Qt.MouseButton.LeftButton):
             edges = self._edges(event.position().toPoint())
