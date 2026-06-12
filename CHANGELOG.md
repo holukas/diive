@@ -30,8 +30,10 @@
   diel cycle, cumulative year, ridgeline, scatter XY, hexbin, histogram; multi-instance, each with a live settings
   panel); **Analyze** tabs **Gaps & coverage**, **Driver explorer**, **Seasonal-trend & anomalies**, **Spectrogram**;
   **Flux processing chain** (Input + L2, with **Copy Python**); **Time lag analysis** (EC concentration↔wind lag
-  distribution per gas, peak/range/EddyPro window, `dv.flux.TimeLagAnalysis`); **Outliers** tabs **Hampel filter**, **Local SD
-  filter**, **Z-score filter**, **Z-score (rolling) filter**, and **Z-score (increments) filter** (each keeps the
+  distribution per gas, peak/range/EddyPro window, `dv.flux.TimeLagAnalysis`); **Outliers** tabs **Absolute limits
+  filter**, **Hampel filter**, **Local SD
+  filter**, **Z-score filter**, **Z-score (rolling) filter**, **Z-score (increments) filter**, and **Local Outlier
+  Factor filter** (each keeps the
   original + a cleaned copy + the flag, with a live two-panel preview and **Copy Python**); Data menu **Select
   variables**, **Rename variables** (add a prefix/suffix to all variables, or one at a time, with a live preview),
   **Metadata explorer**, **Feature engineering**; plus **Appearance**, **Project settings** (author, description, site

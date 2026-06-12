@@ -52,6 +52,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `widgets/pyvista_canvas.py` | `Pyvista3DCanvas` — embedded `pyvistaqt.QtInteractor` (GPU/VTK render window); lazy-imports VTK, `pyvista_available()` gate + `Missing3DDependency` |
 | `tabs/_outlier_base.py` | `BaseOutlierTab` — shared machinery for the Outliers tabs (var list, two-panel preview, worker thread, iteration progress, live preview, limit lines, day/night colouring, Add/Copy Python). `supports_daynight` toggles the day/night box |
 | `tabs/outliers.py` / `tabs/outliers_localsd.py` | Hampel / Local SD outlier tabs (`dv.outliers.Hampel` / `LocalSD`) — `BaseOutlierTab` subclasses |
+| `tabs/outliers_absolutelimits.py` | Absolute limits outlier tab (`dv.outliers.AbsoluteLimits`) — flag values outside a fixed min/max range (min/max drawn as the limit-line band); `BaseOutlierTab` subclass |
 | `tabs/outliers_zscore.py` / `tabs/outliers_zscorerolling.py` / `tabs/outliers_zscoreincrements.py` | Z-score outlier tabs (`dv.outliers.zScore` / `zScoreRolling` / `zScoreIncrements`) — `BaseOutlierTab` subclasses; rolling & increments set `supports_daynight = False` |
 | `tabs/metadata_explorer.py` | Metadata explorer — per-variable origin badge, editable tag chips (favorite/add/remove, auto-coloured), a 50-word note, provenance timeline; reads `metadata_store.manager` |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |

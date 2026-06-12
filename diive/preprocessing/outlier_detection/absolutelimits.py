@@ -108,6 +108,13 @@ class AbsoluteLimits(FlagBase):
         self.showplot = showplot
         self.verbose = verbose
 
+        # Per-iteration detection band in data units (set by _flagtests); exposed
+        # for visualisation. For absolute limits the band is the fixed min/max, so
+        # it is constant across iterations.
+        self.last_upper_bound = None
+        self.last_lower_bound = None
+        self.is_daytime = None  # global mode; day/night branch overrides below
+
         if separate_daytime_nighttime:
             # Day/night mode
             if daytime_minmax is None or nighttime_minmax is None:
@@ -141,15 +148,19 @@ class AbsoluteLimits(FlagBase):
             self.minval = minval
             self.maxval = maxval
 
-    def calc(self, repeat: bool = False):
+    def calc(self, repeat: bool = False, progress_callback=None):
         """Calculate overall flag based on value limits.
 
         Args:
             repeat: If True, outlier detection is repeated until all outliers
                 are removed (only applies to day/night mode).
+            progress_callback: Optional ``callable(iteration, n_outliers,
+                filteredseries)`` invoked after each iteration (e.g. to drive a
+                progress bar / live-update the cleaned series).
         """
         if self.separate_daytime_nighttime:
-            self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
+            self._overall_flag, n_iterations = self.repeat(
+                self.run_flagtests, repeat=repeat, progress_callback=progress_callback)
             if self.showplot:
                 self.defaultplot(n_iterations=n_iterations)
                 title = (f"Absolute limits filter daytime/nighttime: {self.series.name}, "
@@ -161,7 +172,8 @@ class AbsoluteLimits(FlagBase):
                 )
         else:
             # Global mode: no iteration needed
-            self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=False)
+            self._overall_flag, n_iterations = self.repeat(
+                self.run_flagtests, repeat=False, progress_callback=progress_callback)
             if self.showplot:
                 self.defaultplot(n_iterations=n_iterations)
 
@@ -180,6 +192,11 @@ class AbsoluteLimits(FlagBase):
         rejected = (self.series < self.minval) | (self.series > self.maxval)
         rejected = rejected[rejected].index
         n_outliers = len(rejected)
+
+        # Detection band in DATA units (for visualisation): the fixed limits as
+        # constant lines over the series index.
+        self.last_lower_bound = pd.Series(data=self.minval, index=self.series.index)
+        self.last_upper_bound = pd.Series(data=self.maxval, index=self.series.index)
 
         return ok, rejected, n_outliers
 
@@ -211,6 +228,16 @@ class AbsoluteLimits(FlagBase):
         flag.loc[_rejected_nt] = 2
 
         n_outliers = (flag == 2).sum()
+
+        # Per-record detection band in DATA units: daytime records carry the daytime
+        # limits, nighttime records the nighttime limits (combined over the union
+        # index for day/night-coloured visualisation).
+        self.last_lower_bound = pd.concat([
+            pd.Series(self.daytime_minmax[0], index=_s_dt.index),
+            pd.Series(self.nighttime_minmax[0], index=_s_nt.index)]).sort_index()
+        self.last_upper_bound = pd.concat([
+            pd.Series(self.daytime_minmax[1], index=_s_dt.index),
+            pd.Series(self.nighttime_minmax[1], index=_s_nt.index)]).sort_index()
 
         ok = (flag == 0)
         ok = ok[ok].index

@@ -19,7 +19,9 @@ from diive.gui.tabs.gaps import GapDashboardTab
 from diive.gui.tabs.log import LogTab
 from diive.gui.tabs.metadata_explorer import MetadataExplorerTab
 from diive.gui.tabs.outliers import HampelOutlierTab
+from diive.gui.tabs.outliers_absolutelimits import AbsoluteLimitsTab
 from diive.gui.tabs.outliers_localsd import LocalSDOutlierTab
+from diive.gui.tabs.outliers_lof import LocalOutlierFactorTab
 from diive.gui.tabs.outliers_zscore import ZScoreOutlierTab
 from diive.gui.tabs.outliers_zscoreincrements import ZScoreIncrementsOutlierTab
 from diive.gui.tabs.outliers_zscorerolling import ZScoreRollingOutlierTab
@@ -81,11 +83,13 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "3D surface": Surface3DTab,
     },
     "Outliers": {
+        "Absolute limits filter": AbsoluteLimitsTab,
         "Hampel filter": HampelOutlierTab,
         "Local SD filter": LocalSDOutlierTab,
         "Z-score filter": ZScoreOutlierTab,
         "Z-score (rolling) filter": ZScoreRollingOutlierTab,
         "Z-score (increments) filter": ZScoreIncrementsOutlierTab,
+        "Local Outlier Factor filter": LocalOutlierFactorTab,
     },
     # Eddy-covariance flux processing (dv.flux). Its own menu — a first-class
     # diive domain that will grow (gap-filling, USTAR, storage, ...).

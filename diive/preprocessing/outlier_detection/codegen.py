@@ -62,6 +62,28 @@ def localsd_to_code(kwargs: dict, repeat: bool = True, *,
                         repeat, series_var, var_name)
 
 
+def lof_to_code(kwargs: dict, repeat: bool = True, *,
+                series_var: str = "series", var_name: str | None = None) -> str:
+    """Render a ``dv.outliers.LocalOutlierFactor(...).run(...)`` snippet as a string.
+
+    Args mirror :func:`hampel_to_code`.
+    """
+    from diive.preprocessing.outlier_detection.lof import LocalOutlierFactor
+    return _render_call("dv.outliers.LocalOutlierFactor", kwargs,
+                        _signature_defaults(LocalOutlierFactor), repeat, series_var, var_name)
+
+
+def absolutelimits_to_code(kwargs: dict, repeat: bool = True, *,
+                           series_var: str = "series", var_name: str | None = None) -> str:
+    """Render a ``dv.outliers.AbsoluteLimits(...).run(...)`` snippet as a string.
+
+    Args mirror :func:`hampel_to_code`.
+    """
+    from diive.preprocessing.outlier_detection.absolutelimits import AbsoluteLimits
+    return _render_call("dv.outliers.AbsoluteLimits", kwargs,
+                        _signature_defaults(AbsoluteLimits), repeat, series_var, var_name)
+
+
 def zscore_to_code(kwargs: dict, repeat: bool = True, *,
                    series_var: str = "series", var_name: str | None = None) -> str:
     """Render a ``dv.outliers.zScore(...).run(...)`` snippet as a string.
