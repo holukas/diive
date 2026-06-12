@@ -83,7 +83,11 @@ class AddEventDialog(QDialog):
 
         self.category_edit = QComboBox()
         self.category_edit.setEditable(True)
-        self.category_edit.addItems([""] + sorted(CATEGORY_COLORS))
+        # List every known category (library defaults + the user palette) so the
+        # picker matches the categories managed in the Events tab.
+        from diive.gui import events as events_store
+        self.category_edit.addItems(
+            [""] + sorted(events_store.manager.known_categories(), key=str.lower))
         if event and event.category:
             self.category_edit.setCurrentText(event.category)
         self.category_edit.currentTextChanged.connect(self._sync_color_swatch)
@@ -210,8 +214,13 @@ class AddEventDialog(QDialog):
         if self._color:
             shown, label = self._color, self._color
         else:
-            cat = self.category_edit.currentText().strip().lower()
-            shown = CATEGORY_COLORS.get(cat, "#90A4AE")
+            from diive.gui import events as events_store
+            cat = self.category_edit.currentText().strip()
+            palette = events_store.manager.known_categories()
+            # Case-insensitive match against the known palette, else library default.
+            shown = next(
+                (v for k, v in palette.items() if k.strip().lower() == cat.lower()),
+                CATEGORY_COLORS.get(cat.lower(), "#90A4AE"))
             label = "Auto (by category)"
         text = "white" if QColor(shown).lightnessF() < 0.55 else "black"
         self.color_btn.setText(label)

@@ -23,12 +23,13 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMenu,
     QPlainTextEdit,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
+
+from diive.gui.widgets.menu import studio_menu
 
 #: Sticky-note palette (Material 200-level), plus white. First entry is default.
 _PALETTE = [
@@ -169,7 +170,7 @@ class _NoteCard(QFrame):
         self._resizer.update()
 
     def _pick_color(self) -> None:
-        menu = QMenu(self)
+        menu = studio_menu(self)
         for hexc in _PALETTE:
             act = menu.addAction(hexc)
             sw = QPixmap(16, 16)

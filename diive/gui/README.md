@@ -23,7 +23,11 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `metadata_store.py` | **App-wide variable metadata** — `MetadataManager` (`manager`): wraps the library `MetadataStore` (tags + provenance), emits `changed`; edited via `add_user_tag`/`toggle_user_tag`. Also relays variable-list right-click actions app-wide: `editRequested` / `renameRequested` / `deleteRequested` (+ `request_*`) |
 | `site.py` | **Project settings store** — `SiteManager` (`manager`): author, description, site coords/UTC offset, and the **notes wall** cards (`notes`); `as_dict`/`load_dict` so it travels with the project + GUI prefs |
 | `events.py` | **App-wide event store** — `EventManager` (`manager`): live `list[diive.events.Event]` + a `visible` toggle; `add`/`replace`/`remove`/`set_visible` emit `changed`; `as_dict`/`load_dict` so events travel with the project + GUI prefs |
-| `tabs/events.py` | **Events** tab — table of events + add/edit/delete + master **Show events on plots** checkbox; edits `events.manager` (no domain logic) |
+| `tabs/events.py` | **Events** tab — reflowing board of category-accented event **cards** (`FlowLayout`) on a soft-grey board; per-card header has a **locate** button (`icons.locate_icon` → show on Overview), a **⋯ menu** (`icons.dots_icon` → edit / duplicate / shift), and a **trashcan** delete (`icons.trash_icon`); double-click also edits; **filter** field, **Group** (None/Category/Year) + **Density** (Comfortable/Compact) combos, **Add event…**, **Manage categories…**, master **Show events on plots** checkbox; edits `events.manager` (no domain logic) |
+| `widgets/combo.py` | `install_combo_popup_fix(app)` — one app-wide event filter that strips the native frame/shadow from **every** `QComboBox` popup (the black bars on the frameless translucent window) |
+| `widgets/menu.py` | `studio_menu(parent)` — a `QMenu` factory styled as a rounded white Studio card (frameless + no-shadow + translucent + `#studiomenu`); used for every context menu so none renders black |
+| `widgets/flow_layout.py` | `FlowLayout` — left-to-right wrapping `QLayout` (height-for-width aware) for the event-card grid |
+| `widgets/category_dialog.py` | `CategoryDialog` — add / rename / recolour / remove event categories (edits `events.manager.categories`; seeded with `category1/2/3`, the last one can't be deleted) |
 | `widgets/add_event_dialog.py` | `AddEventDialog` — name/category, three timing modes (single date/time, from/to, start + duration) with calendar pickers + colour; `make_event()` returns a `diive.events.Event` |
 | `tabs/settings.py` | Appearance settings tab — live colour editing with a pill/highlight preview |
 | `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`); window sized to ~88% of screen |
@@ -209,9 +213,23 @@ stage (lag/rolling/diff/EMA/poly/STL) is enabled.
 fertilization, harvest, grazing, a management step. Open **Data ▸ Add event…** (or the **Data ▸ Events** tab) and pick
 a single date/time, a from/to range, or a start + duration (calendar pickers). The model is the **library's**
 `dv.events`: an `Event` (instant or period), `event_to_flag(event, index)` (the 0/1 yes/no column), and
-`overlay_events(ax, events, axis=)` (the line/span overlay). The GUI holds the live list + a `visible` toggle in the
-`events.manager` singleton (like `site.manager`); the Events tab is just a table + add/edit/delete + a master **Show
-events on plots** checkbox (mirrored by a checkable Data-menu action). Each event becomes a real `EVENT_<name>` 0/1
+`overlay_events(ax, events, axis=, colors=)` (the line/span overlay; `colors` is an optional `{category: hex}` override
+map). The GUI holds the live list + a `visible` toggle **+ a user `categories` palette** (`{name: hex}`) in the
+`events.manager` singleton (like `site.manager`; also a `focus_requested` signal and `duplicate`/`shift`/`request_focus`
+helpers); the Events tab presents the events as a **reflowing board of cards** (`widgets/flow_layout.py::FlowLayout`) on a
+soft-grey board (so the white cards stand out), one per event — soft shadow, coloured left accent + category pill (with a
+stable per-category glyph), title + date settings, a relative-time hint, a position-in-record mini bar (`_SpanBar`) and a
+description preview, **accented by its category colour and sorted by start date**. Each card: double-click-to-edit, a
+**trashcan** delete (`icons.trash_icon`, reddening on hover), and a **⋯ menu** (show on the Overview, edit, duplicate,
+shift ±1 day). The board has a **filter** field (name/category), a **Group** combo (None / Category / Year → light section
+headers) and a **Density** combo (Comfortable / Compact), plus a dashed add-event ghost card, **Add event…**, **Manage
+categories…** (`widgets/category_dialog.py::CategoryDialog` — add / rename / recolour / remove categories, palette seeded
+with generic `category1/2/3` and the last one undeletable; `categories_changed` repaints cards + overlays without
+rebuilding columns), and a master **Show events on plots** checkbox (mirrored by a checkable Data-menu action). "Show on
+the Overview" fires `events.manager.request_focus(start, end)` → `MainWindow._focus_event_on_overview` → switches to the
+Overview and `OverviewTab.focus_on(start, end)` zooms the linked datetime panels onto the event. A category's colour
+overrides the library default everywhere via `Event.resolved_color(i, colors=...)` — consistent on the cards and the plot
+overlays. `EventsTab.save_state`/`restore_state` persist the group + density choices with a project. Each event becomes a real `EVENT_<name>` 0/1
 column (1 = the event took place) — `MainWindow._sync_event_columns` reconciles those columns to the event list on every
 `events.manager.changed`, tracking the ones it created (`_event_columns`) so it never drops an `EVENT_`-named column that
 came in as plain data. The Overview draws the overlays (`_overlay_events`): a dashed line for an instant and a shaded
@@ -302,6 +320,18 @@ panel only renders.
 - **The matplotlib Qt toolbar recolours icons from the widget palette.** `MplCanvas` sets a light palette *before*
   building the toolbar so icons stay dark on the white background (otherwise white-on-white on dark system themes).
 - **Use synchronous `canvas.draw()`, not `draw_idle()`,** after a user action so the plot updates immediately.
+- **Combo-box popups show a native frame/shadow as black bars** on the frameless translucent window. `widgets/combo.py::
+  install_combo_popup_fix(app)` (called in `run()`) installs one app-wide event filter that re-flags every popup
+  container frameless + no-shadow + translucent at creation — fixes all dropdowns from one place.
+- **`QMenu` popups render black** the same way (the menu *is* the popup, so the combo trick can't catch them — Polish/Show
+  don't route through the app filter reliably). Build every context menu with `widgets/menu.py::studio_menu(parent)`,
+  which applies the frameless/no-shadow/translucent + `#studiomenu` treatment the QSS rounds into a white card.
+- **Drawn glyphs, not font characters, for tiny buttons.** Unicode marks like `⋯` are missing from many fonts and render
+  blank (the card's "more" button was invisible). Use a `QPainter`-drawn icon (`icons.dots_icon` / `locate_icon` /
+  `trash_icon`) instead.
+- **The global `QWidget { background: CANVAS }` QSS rule paints every widget white.** A tab wanting a different surface
+  (e.g. the Events board's grey) must set its own `#objectName` background *and* give child labels
+  `background: transparent`, or they stay white.
 - **`DiiveTab` is a plain `ABC`, not a `QObject`** — class-level `Signal`s on it won't bind. Put tab signals on a
   small `QObject` helper (see `FeatureEngineerTab`).
 - **matplotlib renders synchronously** on the GUI thread (blocks the event loop), so loading indicators are static

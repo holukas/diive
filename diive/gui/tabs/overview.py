@@ -380,9 +380,26 @@ class OverviewTab(DiiveTab):
         # Heatmap y-axis data range (Date), so zoom can clamp to it.
         self._heatmap_ylim = (
             self._heatmap_ax.get_ylim() if self._heatmap_ax is not None else None)
+        self._shared_x_ax = shared_x_ax  # for focus_on() navigation
         if shared_x_ax is not None:
             shared_x_ax.callbacks.connect("xlim_changed", self._on_zoom)
         self.canvas.draw()
+
+    def focus_on(self, start, end) -> None:
+        """Zoom the linked datetime panels onto ``[start, end]`` (an event window).
+
+        ``end`` may be ``None`` (instant) — a small symmetric window is opened
+        around the instant. The existing ``xlim_changed`` sync then recomputes the
+        diel cycle and clips the heatmap to match. No-op if nothing is plotted."""
+        ax = getattr(self, "_shared_x_ax", None)
+        if ax is None:
+            return
+        lo = mdates.date2num(pd.Timestamp(start))
+        hi = mdates.date2num(pd.Timestamp(end)) if end is not None else lo
+        span = hi - lo
+        pad = span * 0.5 if span > 0 else 5.0  # ±5 days around an instant
+        ax.set_xlim(lo - pad, hi + pad)
+        self.canvas.draw_idle()
 
     def _overlay_events(self, panel_axes: dict) -> None:
         """Draw the configured events onto the datetime panels + heatmap."""
@@ -391,16 +408,19 @@ class OverviewTab(DiiveTab):
         evs = events_store.manager.events
         if not evs:
             return
+        cats = events_store.manager.categories  # user category palette overrides
         for ptype in ("Time series", "Cumulative", "Daily mean"):
             ax = panel_axes.get(ptype)
             if ax is not None:
                 # Label only on the time series to avoid repeating the tags in
                 # every small panel.
                 dv.events.overlay_events(
-                    ax, evs, axis="x", show_labels=(ptype == "Time series"))
+                    ax, evs, axis="x", show_labels=(ptype == "Time series"),
+                    colors=cats)
         hm = panel_axes.get("Heatmap (date/time)")
         if hm is not None:
-            dv.events.overlay_events(hm, evs, axis="y", show_labels=False)
+            dv.events.overlay_events(hm, evs, axis="y", show_labels=False,
+                                     colors=cats)
 
     def _style_panel(self, ax, plot_type: str) -> None:
         """Per-panel styling shared by the initial render and zoom re-draws."""

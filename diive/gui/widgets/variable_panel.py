@@ -28,13 +28,13 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLineEdit,
     QListWidgetItem,
-    QMenu,
     QVBoxLayout,
     QWidget,
 )
 
 from diive.core.metadata import FAVORITE
 from diive.gui import metadata_store, theme
+from diive.gui.widgets.menu import studio_menu
 from diive.gui.widgets.variable_delegate import (
     CREATED_ROLE,
     LOADING_ROLE,
@@ -150,7 +150,7 @@ class VariablePanel(QWidget):
             return
         name = item.data(NAME_ROLE)
         md = metadata_store.manager.store.get(name)
-        menu = QMenu(self.list)
+        menu = studio_menu(self.list)
 
         # Jump to the Metadata explorer for this variable (offered everywhere
         # except inside the explorer's own list, which is already there).
@@ -185,7 +185,9 @@ class VariablePanel(QWidget):
 
         removable = [t for t in md.user_tags() if t != FAVORITE]
         if removable:
-            sub = menu.addMenu("Remove tag")
+            sub = studio_menu(menu)
+            sub.setTitle("Remove tag")
+            menu.addMenu(sub)
             for tag in removable:
                 a = QAction(tag, sub)
                 a.triggered.connect(

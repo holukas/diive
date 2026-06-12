@@ -110,13 +110,22 @@ class Event:
         """The 0/1 flag column name for this event (see :func:`make_event_flag_name`)."""
         return make_event_flag_name(self.name)
 
-    def resolved_color(self, fallback_index: int = 0) -> str:
+    def resolved_color(self, fallback_index: int = 0,
+                       colors: dict[str, str] | None = None) -> str:
         """The colour to draw this event in: explicit, else by category, else a
         cycled fallback (indexed by ``fallback_index`` so a list of events with no
-        category still get distinct colours)."""
+        category still get distinct colours).
+
+        ``colors`` is an optional ``{category: hex}`` override map consulted before
+        the built-in :data:`CATEGORY_COLORS` (category match is case-insensitive),
+        so a caller can supply its own category palette without mutating the event."""
         if self.color:
             return self.color
         cat = (self.category or "").strip().lower()
+        if colors:
+            for key, value in colors.items():
+                if str(key).strip().lower() == cat and value:
+                    return value
         if cat in CATEGORY_COLORS:
             return CATEGORY_COLORS[cat]
         return _FALLBACK_PALETTE[fallback_index % len(_FALLBACK_PALETTE)]
@@ -187,7 +196,8 @@ def event_to_flag(event: Event, index: pd.DatetimeIndex,
 
 def overlay_events(ax, events, *, axis: str = "x", show_labels: bool = True,
                    label_fontsize: int = 8, line_alpha: float = 0.9,
-                   span_alpha: float = 0.16, linewidth: float = 1.3) -> None:
+                   span_alpha: float = 0.16, linewidth: float = 1.3,
+                   colors: dict[str, str] | None = None) -> None:
     """Draw events onto an existing matplotlib axes.
 
     Instant events become a dashed line; period events become a translucent shaded
@@ -209,13 +219,15 @@ def overlay_events(ax, events, *, axis: str = "x", show_labels: bool = True,
         line_alpha: Opacity of instant/border lines.
         span_alpha: Opacity of the period shading.
         linewidth: Width of instant/border lines.
+        colors: Optional ``{category: hex}`` override map (see
+            :meth:`Event.resolved_color`).
     """
     events = list(events)
     if not events:
         return
     vertical = axis == "x"  # draw against the x-axis (time runs horizontally)
     for i, ev in enumerate(events):
-        color = ev.resolved_color(i)
+        color = ev.resolved_color(i, colors=colors)
         s = mdates.date2num(ev.start)
         if ev.is_range:
             e = mdates.date2num(ev.end)

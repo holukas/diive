@@ -260,6 +260,59 @@ def close_icon() -> QIcon:
     return QIcon(pm)
 
 
+def trash_icon(color: str | None = None) -> QIcon:
+    """A small thin-line trash can (per-card delete button).
+
+    ``color`` overrides the ink (e.g. a red for a hover/pressed state); defaults
+    to the theme ink."""
+    pm, p = _canvas()
+    ink = QColor(color) if color else _line_ink()
+    pen = QPen(ink, 1.4)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawLine(QPointF(3.0, 4.5), QPointF(13.0, 4.5))        # lid
+    p.drawLine(QPointF(6.3, 4.5), QPointF(6.8, 2.8))         # handle left
+    p.drawLine(QPointF(6.8, 2.8), QPointF(9.2, 2.8))         # handle top
+    p.drawLine(QPointF(9.2, 2.8), QPointF(9.7, 4.5))         # handle right
+    p.drawPolyline(_poly([(4.2, 4.5), (5.0, 13.4), (11.0, 13.4), (11.8, 4.5)]))
+    for x in (6.6, 8.0, 9.4):                                # tines
+        p.drawLine(QPointF(x, 6.3), QPointF(x, 11.6))
+    p.end()
+    return QIcon(pm)
+
+
+def dots_icon(color: str | None = None) -> QIcon:
+    """Three dots — an overflow/'more actions' (⋯) button glyph that always
+    renders (the unicode ⋯ is missing from many fonts)."""
+    pm, p = _canvas()
+    ink = QColor(color) if color else _line_ink()
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(ink)
+    for cx in (4.0, 8.0, 12.0):
+        p.drawEllipse(QPointF(cx, 8.0), 1.3, 1.3)
+    p.end()
+    return QIcon(pm)
+
+
+def locate_icon(color: str | None = None) -> QIcon:
+    """A small crosshair/target — 'show this on the plot' (locate) button."""
+    pm, p = _canvas()
+    ink = QColor(color) if color else _line_ink()
+    pen = QPen(ink, 1.4)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawEllipse(QRectF(4.5, 4.5, 7.0, 7.0))
+    p.drawLine(QPointF(8.0, 1.5), QPointF(8.0, 3.8))
+    p.drawLine(QPointF(8.0, 12.2), QPointF(8.0, 14.5))
+    p.drawLine(QPointF(1.5, 8.0), QPointF(3.8, 8.0))
+    p.drawLine(QPointF(12.2, 8.0), QPointF(14.5, 8.0))
+    p.end()
+    return QIcon(pm)
+
+
 def menu_icon(label: str) -> QIcon:
     """Pick a small thin-line drawn icon for a menu label by keyword.
 

@@ -32,7 +32,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QInputDialog,
     QMainWindow,
-    QMenu,
     QMessageBox,
     QTabBar,
     QTabWidget,
@@ -52,6 +51,7 @@ from diive.gui.registry import (
 )
 from diive.core.io.files import ALLOWED_TIMESTAMP_NAMES
 from diive.gui.widgets.daterange_dialog import DateRangeDialog
+from diive.gui.widgets.menu import studio_menu
 from diive.gui.widgets.open_data_dialog import OpenDataDialog
 
 
@@ -203,6 +203,11 @@ class MainWindow(QMainWindow):
         # menu toggle in sync with the visibility flag (which the Events tab also
         # edits). The Overview reacts to the same signal to redraw its overlays.
         events.manager.changed.connect(self._on_events_changed)
+        # A category-palette recolour is presentation-only: just redraw the
+        # Overview overlays (no flag-column rebuild).
+        events.manager.categories_changed.connect(self._on_event_categories_changed)
+        # A card's "show on Overview" jumps to the Overview and zooms to the event.
+        events.manager.focus_requested.connect(self._focus_event_on_overview)
 
         # The GUI has a single look: the frameless Studio shell (custom header +
         # pill tabs).
@@ -244,15 +249,9 @@ class MainWindow(QMainWindow):
         # populates both shells. Studio menus are translucent so the QSS rounds
         # their corners into a white card (no square popup-shadow artefact).
         def _add_menu(name):
-            m = QMenu(self)
-            m.setObjectName("studiomenu")
-            # Frameless + translucent so the QSS-rounded white card has no
-            # opaque (black) corners behind its rounded border, and no square
-            # native popup shadow pokes out past the radius.
-            m.setWindowFlags(m.windowFlags()
-                             | Qt.WindowType.FramelessWindowHint
-                             | Qt.WindowType.NoDropShadowWindowHint)
-            m.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+            # Frameless + translucent (via studio_menu) so the QSS-rounded white
+            # card has no opaque (black) corners and no native popup shadow.
+            m = studio_menu(self)
             self._header.add_menu(name, m)
             return m
         self._build_menus(_add_menu)
@@ -628,7 +627,7 @@ class MainWindow(QMainWindow):
         tab = next((t for t in self._menu_tab_list if t.widget() is widget), None)
         if tab is None:
             return
-        menu = QMenu(self)
+        menu = studio_menu(self)
         pinned = tab in self._pinned
         label = "Unpin tab (follow data)" if pinned else "Pin tab (freeze data)"
         menu.addAction(label).triggered.connect(lambda: self._toggle_pin(tab))
@@ -736,6 +735,19 @@ class MainWindow(QMainWindow):
             overview = self._tabs[0]
             if hasattr(overview, "refresh_events"):
                 overview.refresh_events()
+
+    def _on_event_categories_changed(self) -> None:
+        """Recolour the Overview's event overlays after a category-palette edit."""
+        overview = self._tabs[0]
+        if hasattr(overview, "refresh_events"):
+            overview.refresh_events()
+
+    def _focus_event_on_overview(self, start, end) -> None:
+        """Switch to the Overview and zoom its time axis onto an event window."""
+        self._tabwidget.setCurrentIndex(0)
+        overview = self._tabs[0]
+        if hasattr(overview, "focus_on"):
+            overview.focus_on(start, end)
 
     def _sync_event_columns(self) -> bool:
         """Make the dataset's ``EVENT_*`` columns exactly match the event list.
@@ -1076,6 +1088,16 @@ class MainWindow(QMainWindow):
             events.manager.changed.disconnect(self._on_events_changed)
         except (RuntimeError, TypeError):
             pass
+        try:
+            events.manager.categories_changed.disconnect(
+                self._on_event_categories_changed)
+        except (RuntimeError, TypeError):
+            pass
+        try:
+            events.manager.focus_requested.disconnect(
+                self._focus_event_on_overview)
+        except (RuntimeError, TypeError):
+            pass
         # Fold the current dataset's user edits into the namespaced blob before
         # writing. Only user content (tags, notes) persists, keyed by dataset;
         # provenance/origin regenerate per session as operations run.
@@ -1112,6 +1134,10 @@ def run() -> int:
     # Fusion style honours stylesheet item-selection colours consistently
     # (the native Windows style ignores them in combo-box popups).
     app.setStyle("Fusion")
+    # Strip the native frame/shadow from every combo-box popup (black bars on the
+    # frameless translucent window) — one app-wide filter covers all dropdowns.
+    from diive.gui.widgets.combo import install_combo_popup_fix
+    install_combo_popup_fix(app)
     from diive.gui.splash import app_icon
     icon = app_icon()  # taskbar / window icon (splash motif)
     app.setWindowIcon(icon)

@@ -58,8 +58,18 @@ def window(app, monkeypatch, example_year):
         _events.manager.changed.disconnect(win._on_events_changed)
     except (RuntimeError, TypeError):
         pass
+    try:
+        _events.manager.categories_changed.disconnect(
+            win._on_event_categories_changed)
+    except (RuntimeError, TypeError):
+        pass
+    try:
+        _events.manager.focus_requested.disconnect(win._focus_event_on_overview)
+    except (RuntimeError, TypeError):
+        pass
     _events.manager.events.clear()
     _events.manager.visible = True
+    _events.manager.categories = dict(_events.DEFAULT_CATEGORIES)
 
 
 def _tabs(win):
