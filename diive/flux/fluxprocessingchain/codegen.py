@@ -41,6 +41,13 @@ def _config_defaults() -> dict:
             if f.default is not dataclasses.MISSING}
 
 
+def _level31_defaults() -> dict:
+    from diive.flux.fluxprocessingchain.levels import run_level31
+    return {p.name: p.default
+            for p in inspect.signature(run_level31).parameters.values()
+            if p.default is not inspect.Parameter.empty}
+
+
 def _kwargs_lines(kwargs: dict, defaults: dict) -> list[str]:
     """One ``key=repr(value),`` line per kwarg, dropping any that equal their default."""
     lines = []
@@ -84,17 +91,10 @@ def chain_to_code(init_kwargs: dict, config_kwargs: dict,
     return "\n".join(lines) + "\n"
 
 
-def level2_to_code(init_kwargs: dict, level2_settings: dict,
-                   df_var: str = "df", load_hint: str | None = None) -> str:
-    """Render ``init_flux_data`` + ``run_level2`` (composable form) as a script.
-
-    Args:
-        init_kwargs: kwargs for ``init_flux_data`` (without ``df``).
-        level2_settings: ``{test_name: settings_dict}`` for ``run_level2``.
-        df_var, load_hint: as in :func:`chain_to_code`.
-    """
-    lines = ["import diive as dv",
-             "from diive.flux.fluxprocessingchain import init_flux_data, run_level2", ""]
+def _init_level2_lines(imports: str, init_kwargs: dict, level2_settings: dict,
+                       df_var: str, load_hint: str | None) -> list[str]:
+    """Shared header through the ``run_level2`` call (no trailing ``final_df``)."""
+    lines = ["import diive as dv", imports, ""]
     if load_hint:
         lines += [f"{df_var} = {load_hint}", ""]
     lines += [f"# init_flux_data computes {', '.join(_RESERVED)} -- drop any pre-existing",
@@ -105,5 +105,41 @@ def level2_to_code(init_kwargs: dict, level2_settings: dict,
     lines.append("    data,")
     for test, settings in level2_settings.items():
         lines.append(f"    {test}={settings!r},")
-    lines += [")", "final_df = data.fpc_df"]
+    lines.append(")")
+    return lines
+
+
+def level2_to_code(init_kwargs: dict, level2_settings: dict,
+                   df_var: str = "df", load_hint: str | None = None) -> str:
+    """Render ``init_flux_data`` + ``run_level2`` (composable form) as a script.
+
+    Args:
+        init_kwargs: kwargs for ``init_flux_data`` (without ``df``).
+        level2_settings: ``{test_name: settings_dict}`` for ``run_level2``.
+        df_var, load_hint: as in :func:`chain_to_code`.
+    """
+    lines = _init_level2_lines(
+        "from diive.flux.fluxprocessingchain import init_flux_data, run_level2",
+        init_kwargs, level2_settings, df_var, load_hint)
+    lines += ["final_df = data.fpc_df"]
+    return "\n".join(lines) + "\n"
+
+
+def level31_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: dict,
+                    df_var: str = "df", load_hint: str | None = None) -> str:
+    """Render ``init_flux_data`` + ``run_level2`` + ``run_level31`` (composable form).
+
+    Args:
+        init_kwargs: kwargs for ``init_flux_data`` (without ``df``).
+        level2_settings: ``{test_name: settings_dict}`` for ``run_level2``.
+        level31_kwargs: kwargs for ``run_level31`` (storage correction).
+        df_var, load_hint: as in :func:`chain_to_code`.
+    """
+    lines = _init_level2_lines(
+        "from diive.flux.fluxprocessingchain import "
+        "init_flux_data, run_level2, run_level31",
+        init_kwargs, level2_settings, df_var, load_hint)
+    lines += ["", "data = run_level31(", "    data,",
+              *_kwargs_lines(level31_kwargs, _level31_defaults()), ")",
+              "final_df = data.fpc_df"]
     return "\n".join(lines) + "\n"

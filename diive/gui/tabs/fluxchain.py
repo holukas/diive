@@ -1,20 +1,22 @@
 """
-GUI.TABS.FLUXCHAIN: FLUX PROCESSING CHAIN (first slice: Input + Level 2)
-=======================================================================
+GUI.TABS.FLUXCHAIN: FLUX PROCESSING CHAIN (Input + Level 2 + Level 3.1)
+======================================================================
 
-A guided tab for the Swiss-FluxNet flux processing chain. This first slice
-wires the **Input** (site + flux column) and **Level 2** (quality-flag tests)
-steps using the composable library callables (`init_flux_data` + `run_level2`),
-shows the L2 QCF-filtered flux as a heatmap, and — the point of the feature —
-emits the exact reproducible diive script via **Copy Python**.
+A guided tab for the Swiss-FluxNet flux processing chain. It wires the **Input**
+(site + flux column), **Level 2** (quality-flag tests), and **Level 3.1**
+(single-point storage correction) steps using the composable library callables
+(`init_flux_data` + `run_level2` + `run_level31`), shows the deepest level's
+QCF-filtered flux as a heatmap, and — the point of the feature — emits the exact
+reproducible diive script via **Copy Python**.
 
-All computation is library work (`init_flux_data`, `run_level2`); this tab only
-collects parameters and calls them (heavy runs on a worker thread). The
-script-generation is the library's `level2_to_code` (it owns the API shape).
+All computation is library work (`init_flux_data`, `run_level2`, `run_level31`);
+this tab only collects parameters and calls them (heavy runs on a worker thread).
+The script-generation is the library's `level31_to_code` (it owns the API shape).
 
-Later slices add L3.1 / L3.2 / L3.3 / L4.1 groups and switch the run/serialize
-to the full `run_chain` + `chain_to_code` path. See `_render_ridgeline`-style
-incremental growth.
+The chain stays on the **composable per-level** path (not `run_chain`/`FluxConfig`)
+so the upcoming L3.2 slice can embed a real `StepwiseOutlierDetection` chain with
+per-step inspection and a separate QCF surface. Later slices add L3.2 / L3.3 /
+L4.1 groups and the matching `level*_to_code` renderers, growing incrementally.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -40,7 +42,9 @@ from PySide6.QtWidgets import (
 )
 
 import diive as dv
-from diive.flux.fluxprocessingchain import init_flux_data, level2_to_code, run_level2
+from diive.flux.fluxprocessingchain import (
+    init_flux_data, level31_to_code, run_level2, run_level31,
+)
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
 
@@ -88,7 +92,8 @@ class FluxChainTab(DiiveTab):
         col = QVBoxLayout(inner)
         col.addWidget(self._input_group())
         col.addWidget(self._level2_group())
-        self.run_btn = QPushButton("Run Level 2")
+        col.addWidget(self._level31_group())
+        self.run_btn = QPushButton("Run through Level 3.1")
         self.run_btn.clicked.connect(self._run)
         col.addWidget(self.run_btn)
         self.code_btn = QPushButton("Copy Python")
@@ -150,12 +155,30 @@ class FluxChainTab(DiiveTab):
         v.addLayout(form)
         return box
 
+    def _level31_group(self) -> QGroupBox:
+        box = QGroupBox("Level 3.1 — storage correction")
+        v = QVBoxLayout(box)
+        self.l31_gapfill = QCheckBox("Gap-fill storage term (rolling median)")
+        self.l31_gapfill.setChecked(True)
+        v.addWidget(self.l31_gapfill)
+        self.l31_zero = QCheckBox("Set storage to zero (H / LE — no storage profile)")
+        self.l31_zero.setChecked(False)
+        # Setting storage to zero makes the gap-fill choice irrelevant.
+        self.l31_zero.toggled.connect(
+            lambda on: self.l31_gapfill.setEnabled(not on))
+        v.addWidget(self.l31_zero)
+        form = QFormLayout()
+        self.strgcol = QComboBox()  # "" = auto-detect (FLUXNET/EddyPro naming)
+        form.addRow("Storage column (auto if blank)", self.strgcol)
+        v.addLayout(form)
+        return box
+
     def _apply_tooltips(self) -> None:
         """Tooltip each control with its library parameter docstring."""
         from diive.core.utils.docstrings import param_docs
         from diive.flux.fluxprocessingchain import FluxConfig
         docs: dict = {}
-        for src in (init_flux_data, FluxConfig, run_level2):
+        for src in (init_flux_data, FluxConfig, run_level2, run_level31):
             docs.update(param_docs(src))
         for param, widget in (
             ("fluxcol", self.fluxcol), ("site_lat", self.site_lat),
@@ -164,6 +187,9 @@ class FluxChainTab(DiiveTab):
             ("daytime_accept_qcf_below", self.day_qcf),
             ("nighttime_accept_qcf_below", self.night_qcf),
             ("signal_strength_col", self.signal_strength_col),
+            ("gapfill_storage_term", self.l31_gapfill),
+            ("set_storage_to_zero", self.l31_zero),
+            ("strgcol", self.strgcol),
         ):
             tip = docs.get(param)
             if tip:
@@ -187,7 +213,9 @@ class FluxChainTab(DiiveTab):
                 "site_lon": self.site_lon, "utc_offset": self.utc_offset,
                 "nighttime_threshold": self.nighttime_threshold,
                 "day_qcf": self.day_qcf, "night_qcf": self.night_qcf,
-                "signal_strength_col": self.signal_strength_col}
+                "signal_strength_col": self.signal_strength_col,
+                "l31_gapfill": self.l31_gapfill, "l31_zero": self.l31_zero,
+                "strgcol": self.strgcol}
 
     def save_state(self) -> dict:
         from diive.gui.widgets.state_utils import save_controls
@@ -218,6 +246,9 @@ class FluxChainTab(DiiveTab):
             if "SIGNAL_STRENGTH" in c.upper():
                 self.signal_strength_col.setCurrentText(c)
                 break
+        # Storage-term column ("" = auto-detect from FLUXNET/EddyPro naming).
+        self.strgcol.clear()
+        self.strgcol.addItems([""] + cols)
 
     # --- collect kwargs the library wants ---
     def _init_kwargs(self) -> dict:
@@ -253,28 +284,39 @@ class FluxChainTab(DiiveTab):
                 settings[key] = {"apply": True}
         return settings
 
+    def _level31_kwargs(self) -> dict:
+        kwargs = dict(
+            gapfill_storage_term=self.l31_gapfill.isChecked(),
+            set_storage_to_zero=self.l31_zero.isChecked(),
+        )
+        strgcol = self.strgcol.currentText().strip()
+        if strgcol:
+            kwargs["strgcol"] = strgcol
+        return kwargs
+
     # --- run (library work on a worker thread) ---
-    def _compute(self, df, init_kwargs: dict, level2_settings: dict):
-        """Init the container and run Level 2 (synchronous; library calls)."""
+    def _compute(self, df, init_kwargs: dict, level2_settings: dict, level31_kwargs: dict):
+        """Init the container and run Level 2 → Level 3.1 (synchronous; library calls)."""
         work = df.drop(columns=[c for c in _RESERVED if c in df.columns])
         data = init_flux_data(df=work, **init_kwargs)
-        return run_level2(data, **level2_settings)
+        data = run_level2(data, **level2_settings)
+        return run_level31(data, **level31_kwargs)
 
     def _run(self) -> None:
         if self._df is None:
             return
-        ik, l2 = self._init_kwargs(), self._level2_settings()
+        ik, l2, l31 = self._init_kwargs(), self._level2_settings(), self._level31_kwargs()
         if not l2:
             self.summary.setPlainText("Enable at least one Level 2 test.")
             return
         self.run_btn.setEnabled(False)
-        self.summary.setPlainText("Running Level 2…")
+        self.summary.setPlainText("Running Level 2 → Level 3.1…")
         threading.Thread(
-            target=self._worker, args=(self._df, ik, l2), daemon=True).start()
+            target=self._worker, args=(self._df, ik, l2, l31), daemon=True).start()
 
-    def _worker(self, df, init_kwargs, level2_settings) -> None:
+    def _worker(self, df, init_kwargs, level2_settings, level31_kwargs) -> None:
         try:
-            data = self._compute(df, init_kwargs, level2_settings)
+            data = self._compute(df, init_kwargs, level2_settings, level31_kwargs)
         except Exception as err:
             self._sig.failed.emit(str(err))
             return
@@ -285,14 +327,14 @@ class FluxChainTab(DiiveTab):
         series = data.filteredseries
         valid = int(series.dropna().count()) if series is not None else 0
         self.summary.setPlainText(
-            f"Level 2 done — {valid} accepted records "
+            f"Level 3.1 done — {valid} accepted records "
             f"(filtered series: {series.name if series is not None else '—'}).\n"
             f"Click 'Copy Python' for the reproducible script.")
-        # Show the L2 QCF-filtered flux as a date/time heatmap (gaps = flagged).
+        # Show the L3.1 QCF-filtered flux as a date/time heatmap (gaps = flagged).
         ax = self.canvas.new_axes(1)[0]
         try:
             dv.plotting.HeatmapDateTime(series).plot(
-                ax=ax, fig=self.canvas.fig, title=f"L2 filtered: {series.name}",
+                ax=ax, fig=self.canvas.fig, title=f"L3.1 filtered: {series.name}",
                 cb_digits_after_comma="auto")
         except Exception as err:
             ax.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",
@@ -305,8 +347,8 @@ class FluxChainTab(DiiveTab):
 
     # --- the killer button: the exact reproducible script ---
     def _code(self) -> str:
-        return level2_to_code(
-            self._init_kwargs(), self._level2_settings(),
+        return level31_to_code(
+            self._init_kwargs(), self._level2_settings(), self._level31_kwargs(),
             load_hint="dv.load_parquet('your_data.parquet')")
 
     def _copy_code(self) -> None:

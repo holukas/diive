@@ -57,6 +57,19 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertIn("run_level2(", code)
         self.assertIn("ssitc={'apply': True", code)
 
+    def test_level31_to_code(self):
+        from diive.flux.fluxprocessingchain import level31_to_code
+        code = level31_to_code(
+            init_kwargs=dict(fluxcol="LE", site_lat=46.6, site_lon=9.8, utc_offset=1),
+            level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
+            level31_kwargs={"gapfill_storage_term": True, "set_storage_to_zero": True})
+        compile(code, "<gen>", "exec")
+        self.assertIn("init_flux_data, run_level2, run_level31", code)
+        self.assertIn("run_level31(", code)
+        # set_storage_to_zero is non-default -> shown; gapfill_storage_term is default -> omitted.
+        self.assertIn("set_storage_to_zero=True", code)
+        self.assertNotIn("gapfill_storage_term", code)
+
 
 if __name__ == "__main__":
     unittest.main()

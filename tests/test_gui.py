@@ -444,7 +444,7 @@ def test_feature_engineer_index_only(window):
     assert tab.add_btn.isEnabled()
 
 
-def test_flux_chain_tab_level2(app):
+def test_flux_chain_tab_level31(app):
     # The flux chain needs real EddyPro-FLUXNET input (FC, USTAR, *_TEST cols),
     # so load the dedicated EC example dataset (one month for speed).
     from diive.gui.tabs.fluxchain import FluxChainTab
@@ -458,15 +458,17 @@ def test_flux_chain_tab_level2(app):
     # Params carry their library docstring as a tooltip.
     assert "latitude" in tab.site_lat.toolTip().lower()
 
-    # Copy-Python emits runnable composable code matching what Run does.
+    # Copy-Python emits runnable composable code matching what Run does (through L3.1).
     code = tab._code()
     compile(code, "<gen>", "exec")
-    assert "run_level2(" in code and "init_flux_data(" in code
+    assert "init_flux_data(" in code and "run_level2(" in code and "run_level31(" in code
 
-    # Run Level 2 (synchronous core) and render into the canvas.
-    data = tab._compute(df, tab._init_kwargs(), tab._level2_settings())
+    # Run Level 2 -> Level 3.1 (synchronous core) and render into the canvas.
+    data = tab._compute(df, tab._init_kwargs(), tab._level2_settings(), tab._level31_kwargs())
     assert data.filteredseries is not None
     assert data.filteredseries.dropna().count() > 0
+    # The storage-corrected L3.1 column exists in the working dataframe.
+    assert any("L3.1" in str(c) for c in data.fpc_df.columns)
     tab._on_done(data)
     QApplication.processEvents()
     assert not [t for a in tab.canvas.fig.axes for t in a.texts
