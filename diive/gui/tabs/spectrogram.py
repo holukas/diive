@@ -35,7 +35,7 @@ import diive as dv
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
-from diive.gui.widgets.variable_panel import VariablePanel
+from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 #: A variable with a strong daily cycle makes the spectrogram instantly legible.
 _DEFAULT_VAR = "NEE_CUT_REF_f"
@@ -88,6 +88,7 @@ class SpectrogramTab(DiiveTab):
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
+        lock_panel_handle(splitter)  # fixed-width list → no misleading ↔ cursor
         outer.addWidget(splitter)
         return root
 

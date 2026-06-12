@@ -53,7 +53,7 @@ from diive.gui.widgets.plot_settings import (
 
 #: Plot types that pick variables by X/Y/Z role (not comparison panels).
 _XYZ_TYPES = (HEXBIN, SCATTER)
-from diive.gui.widgets.variable_panel import VariablePanel
+from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 #: Plot types laid out like a heatmap (panels side by side, shared axes).
 _HEATMAP_TYPES = (HEATMAP, HEATMAP_YEARMONTH)
@@ -121,6 +121,9 @@ class PlottingTab(DiiveTab):
         splitter.setStretchFactor(1, 0)   # settings keep their width
         splitter.setStretchFactor(2, 1)   # canvas takes extra space
         splitter.setSizes([220, 320, 780])
+        # Lock only the handle next to the fixed-width list (handle 1); the
+        # settings/canvas handle stays draggable.
+        lock_panel_handle(splitter)
         layout.addWidget(splitter)
 
         # Live theme preview: repaint pills, and re-render if colors affect the

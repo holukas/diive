@@ -39,7 +39,7 @@ from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.overview import _StatCard, _fmt
 from diive.gui.widgets.mpl_canvas import MplCanvas
-from diive.gui.widgets.variable_panel import VariablePanel
+from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 #: Strong seasonal cycle + clear warming trend make this a good default demo.
 _DEFAULT_VAR = "Tair_f"
@@ -91,6 +91,7 @@ class SeasonalTrendTab(DiiveTab):
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
+        lock_panel_handle(splitter)  # fixed-width list → no misleading ↔ cursor
         outer.addWidget(splitter)
         return root
 

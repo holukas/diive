@@ -50,6 +50,21 @@ from diive.gui.widgets.variable_list import VariableList
 ORDER_ROLE = Qt.ItemDataRole.UserRole + 10
 
 
+def lock_panel_handle(splitter, handle_index: int = 1) -> None:
+    """Disable the splitter handle next to the fixed-width ``VariablePanel``.
+
+    The variable list has a fixed width (``theme.manager.list_width``), so the
+    handle right after it can't resize anything — but it still shows a misleading
+    horizontal-resize (↔) cursor. Disabling it and forcing the arrow cursor
+    removes that. ``handle_index`` is the handle to the *right* of the panel (1
+    when the panel is the splitter's first widget, as it always is here)."""
+    splitter.setChildrenCollapsible(False)
+    handle = splitter.handle(handle_index)
+    if handle is not None:
+        handle.setEnabled(False)
+        handle.setCursor(Qt.CursorShape.ArrowCursor)
+
+
 def _normalize(text: str) -> str:
     """Lowercase and strip non-alphanumerics for separator-insensitive search."""
     return re.sub(r"[^a-z0-9]", "", text.lower())

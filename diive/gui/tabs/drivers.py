@@ -42,7 +42,7 @@ from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.overview import _StatCard, _fmt
 from diive.gui.widgets.mpl_canvas import MplCanvas
-from diive.gui.widgets.variable_panel import VariablePanel
+from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 #: Preferred default target (a continuous flux makes the ranking informative).
 _DEFAULT_TARGET = "NEE_CUT_REF_f"
@@ -103,6 +103,7 @@ class DriverExplorerTab(DiiveTab):
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
+        lock_panel_handle(splitter)  # fixed-width list → no misleading ↔ cursor
         outer.addWidget(splitter)
         return root
 

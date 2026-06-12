@@ -41,7 +41,7 @@ from diive.gui.widgets.pyvista_canvas import (
     Pyvista3DCanvas,
     pyvista_available,
 )
-from diive.gui.widgets.variable_panel import VariablePanel
+from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 #: A continuous flux with a strong diel cycle makes the relief instantly legible.
 _DEFAULT_VAR = "NEE_CUT_REF_f"
@@ -92,6 +92,7 @@ class Surface3DTab(DiiveTab):
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
+        lock_panel_handle(splitter)  # fixed-width list → no misleading ↔ cursor
         outer.addWidget(splitter)
         return root
 

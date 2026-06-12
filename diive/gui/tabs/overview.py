@@ -29,7 +29,7 @@ from diive.gui import events as events_store
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
-from diive.gui.widgets.variable_panel import VariablePanel
+from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 _DEFAULT_VAR = "NEE_CUT_REF_f"
 
@@ -203,13 +203,9 @@ class OverviewTab(DiiveTab):
         splitter.addWidget(self.canvas)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        # The variable panel is fixed-width, so the splitter handle can't resize
-        # anything — disable it and restore the arrow cursor so it doesn't show a
-        # misleading ↔ resize cursor at the list's right edge.
-        splitter.setChildrenCollapsible(False)
-        handle = splitter.handle(1)
-        handle.setEnabled(False)
-        handle.setCursor(Qt.CursorShape.ArrowCursor)
+        # The variable panel is fixed-width, so its splitter handle can't resize
+        # anything — lock it so it doesn't show a misleading ↔ resize cursor.
+        lock_panel_handle(splitter)
         outer.addWidget(splitter, stretch=1)
 
         # Bottom: full-width "dashboard strip" of stat cards.

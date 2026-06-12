@@ -40,7 +40,7 @@ from diive.core.metadata import (
 )
 from diive.gui import metadata_store, theme
 from diive.gui.tabs.base import DiiveTab
-from diive.gui.widgets.variable_panel import VariablePanel
+from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 #: Background tint per origin (matches the "modified/derived/original" wording).
 _ORIGIN_COLORS = {
@@ -96,6 +96,7 @@ class MetadataExplorerTab(DiiveTab):
         splitter.addWidget(scroll)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
+        lock_panel_handle(splitter)  # fixed-width list → no misleading ↔ cursor
         outer.addWidget(splitter, 1)
 
         # Footer: a dataset-wide destructive action (confirmed before it runs).
