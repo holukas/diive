@@ -454,9 +454,11 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   window-function apply on **Update** (recompute); max-cycles-per-day (y-limit) and colormap are live re-renders. No
   signal processing in the GUI.
 - **Outlier tabs** (`Outliers` menu) — a family of `BaseOutlierTab` (`tabs/_outlier_base.py`) subclasses, one per
-  library detector: **Hampel** (`tabs/outliers.py`), **Local SD** (`tabs/outliers_localsd.py`), and the three z-score
-  methods **Z-score** / **Z-score (rolling)** / **Z-score (increments)** (`tabs/outliers_zscore.py` /
-  `outliers_zscorerolling.py` / `outliers_zscoreincrements.py`). Each runs its detector on a worker thread and keeps the
+  library detector: **Absolute limits** (`tabs/outliers_absolutelimits.py`), **Hampel** (`tabs/outliers.py`),
+  **Local SD** (`tabs/outliers_localsd.py`), the three z-score methods **Z-score** / **Z-score (rolling)** /
+  **Z-score (increments)** (`tabs/outliers_zscore.py` / `outliers_zscorerolling.py` / `outliers_zscoreincrements.py`),
+  **Local Outlier Factor** (`tabs/outliers_lof.py`), **Trim-low** (`tabs/outliers_trim.py`), and **Manual removal**
+  (`tabs/outliers_manualremoval.py`). Each runs its detector on a worker thread and keeps the
   **original** (untouched), the **cleaned** series (`{var}_{METHOD_SUFFIX}`, outliers→NaN), and the **flag**
   (`FLAG_{var}_OUTLIER_{flagid}_TEST`, 0/2 — note the flag id comes from the *library* class, so it can differ from the
   cleaned-column suffix, e.g. `ZSCOREINCREMENTS` cleaned column but `FLAG_..._OUTLIER_INCRZ_TEST`). Two stacked preview
@@ -468,16 +470,26 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
     progress_callback)` (→ `.calc(...)`), `.filteredseries`, `.overall_flag`, `.last_lower_bound`/`.last_upper_bound`
     (per-iteration detection band in **data units**, for the optional limit-line overlay), and `.is_daytime` (day/night
     mode). When adding a GUI tab for another `dv.outliers` detector, verify/extend the library class to this contract —
-    do **not** reimplement detection in the GUI. (zScore/zScoreRolling/zScoreIncrements were extended to it; AbsoluteLimits,
-    LOF are candidates that still need checking. `ManualRemoval` now satisfies the `.run(repeat,
+    do **not** reimplement detection in the GUI. (zScore/zScoreRolling/zScoreIncrements/AbsoluteLimits/LOF were extended
+    to it. `ManualRemoval` (`tabs/outliers_manualremoval.py`) satisfies the `.run(repeat,
     progress_callback)` part — `repeat` is accepted-but-ignored since manual removal is index-based and would never
-    converge — but has **no detection band** (`last_lower_bound`/`last_upper_bound` not exposed; like the increments
-    method, selection is a set of timestamps, not a `[lower, upper]` envelope) and **no day/night mode** (`is_daytime`);
-    a GUI tab for it would set `supports_daynight = False` and skip the band overlay. `TrimLow` satisfies `.run(repeat,
-    progress_callback)` (`calc` forwards both to `repeat`; default single-pass) and exposes `.filteredseries`/
-    `.overall_flag`/`.is_daytime`, but has **no detection band** — the symmetric trim rejects the lowest values plus an
-    equal count of the highest *by position*, so the kept set is not a single `[lower, upper]` envelope (like the
-    increments method); a GUI tab would skip the band overlay and seed per-period thresholds from `lower_limit`.)
+    converge — but has **no detection band** (`last_lower_bound`/`last_upper_bound` exposed as `None`, like the increments
+    method — selection is a set of timestamps, not a `[lower, upper]` envelope) and **no day/night mode** (`is_daytime`);
+    its tab sets `supports_daynight = False` + `supports_repeat = False` and skips the band overlay. `supports_repeat`
+    (new) hides the "Repeat until no more outliers" checkbox; `run_label` overrides the run button text. `TrimLow`
+    (`tabs/outliers_trim.py`) satisfies `.run(repeat, progress_callback)` (`calc` forwards both to `repeat`; default
+    single-pass) and exposes `.filteredseries`/`.overall_flag`/`.is_daytime` plus `last_lower_bound`/`last_upper_bound`
+    `= None` (the symmetric positional trim rejects the lowest values plus an equal count of the highest, so the kept set
+    is not a single `[lower, upper]` envelope — like the increments method, no band is drawn). Its tab sets
+    `supports_daynight = False` because TrimLow's day/night split is method-specific **and opt-in**: by default
+    (`trim_daytime=trim_nighttime=False`) the *whole series* is trimmed against one distribution and **no coordinates are
+    needed** (`lat`/`lon`/`utc_offset` default `None`; they're validated only when a split is requested). The optional
+    **Trim daytime only**/**Trim nighttime only** checkboxes pick which period to screen, each against its own
+    distribution — so the coords + checkboxes live in the method rows (prefixed `trim_…` so they don't collide with the
+    base's `self.lat/lon/utc`, which it nulls when `supports_daynight = False`); the coordinate widgets enable only when a
+    side is ticked, and `lower_limit` is seeded from the variable's minimum on selection. (Constructor arg order is
+    `series, lower_limit, trim_daytime, trim_nighttime, lat, lon, utc_offset, …` — `lower_limit` is the primary param;
+    callers use keywords.))
   - **Two class flags gate optional UI.** `supports_daynight = False` omits the whole day/night box (rolling & increment
     z-score have no day/night mode). `band_center_label = "<text>"` draws the detection band's **centre** (its midpoint —
     the rolling mean/median the band is symmetric around) as a solid line beside the dashed/dotted limits, labelled with

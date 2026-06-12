@@ -81,6 +81,12 @@ class ManualRemoval(FlagBase):
         self.remove_dates = remove_dates
         self.showplot = showplot
 
+        # Selection is a set of timestamps, not a [lower, upper] envelope, so there
+        # is no data-unit detection band to overlay. Exposed as None for the GUI's
+        # shared outlier-tab band contract (same as zScoreIncrements).
+        self.last_upper_bound = None
+        self.last_lower_bound = None
+
     def calc(self, repeat: bool = False, progress_callback=None):
         """Calculate overall flag for manually removed data points.
 

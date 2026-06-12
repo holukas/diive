@@ -8,13 +8,16 @@ Part of the diive library: https://github.com/holukas/diive
 
 How it works:
 
-The trim is applied per subset (daytime, nighttime, or both, controlled by
-``trim_daytime`` / ``trim_nighttime``). Within each subset it counts how many
-values fall below ``lower_limit``, rejects them, and then rejects the same
+By default the whole series is trimmed against one distribution: it counts how
+many values fall below ``lower_limit``, rejects them, and then rejects the same
 number of the highest values. Removing equal counts from both tails keeps the
-distribution symmetric, mirroring the trimmed-mean statistic. When both daytime
-and nighttime are enabled, each is trimmed independently against its own
-distribution and the flags are combined.
+distribution symmetric, mirroring the trimmed-mean statistic.
+
+Day/night screening is optional. ``trim_daytime`` / ``trim_nighttime`` restrict
+the trim to those periods, each screened against its own distribution (location
+parameters are then required to split day from night). When both are enabled,
+each period is trimmed independently and the flags are combined; when neither is
+set, no coordinates are needed.
 
 Use cases:
 
@@ -66,34 +69,40 @@ class TrimLow(FlagBase):
 
     def __init__(self,
                  series: Series,
-                 lat: float,
-                 lon: float,
-                 utc_offset: int,
+                 lower_limit: float = None,
                  trim_daytime: bool = False,
                  trim_nighttime: bool = False,
-                 lower_limit: float = None,
+                 lat: float = None,
+                 lon: float = None,
+                 utc_offset: int = None,
                  idstr: str = None,
                  showplot: bool = False,
                  verbose: bool = False):
         """Trim outliers using symmetric removal (trimmed mean approach).
 
-        Removes values below a threshold, then removes an equal number of values
-        from the high end. Supports separate processing for daytime/nighttime data.
+        Removes values below ``lower_limit``, then removes an equal number of the
+        highest values. By default the whole series is trimmed against one
+        distribution; the optional ``trim_daytime`` / ``trim_nighttime`` flags
+        restrict (and split) the trim to those periods instead, screening each
+        against its own distribution.
 
         Example:
             See `examples/preprocessing/outlier_detection/outlier_trim.py` for complete examples.
 
         Args:
             series: Time series in which outliers are identified.
-            lat: Latitude of location (e.g., 46.583056).
-                Used to detect daytime/nighttime.
-            lon: Longitude of location (e.g., 9.790639).
-                Used to detect daytime/nighttime.
-            utc_offset: UTC offset in hours (e.g., 1 for UTC+01:00).
-                Used to detect daytime/nighttime.
-            trim_daytime: If True, apply filtering to daytime data.
-            trim_nighttime: If True, apply filtering to nighttime data.
             lower_limit: Value below which values are considered outliers.
+            trim_daytime: If True, trim daytime data (against its own distribution).
+            trim_nighttime: If True, trim nighttime data (against its own distribution).
+                When both ``trim_daytime`` and ``trim_nighttime`` are False (the
+                default), the whole series is trimmed as one distribution and no
+                location parameters are needed.
+            lat: Latitude of location (e.g., 46.583056). Only required when
+                ``trim_daytime`` or ``trim_nighttime`` is True (to detect day/night).
+            lon: Longitude of location (e.g., 9.790639). Only required when
+                ``trim_daytime`` or ``trim_nighttime`` is True.
+            utc_offset: UTC offset in hours (e.g., 1 for UTC+01:00). Only required
+                when ``trim_daytime`` or ``trim_nighttime`` is True.
             idstr: Identifier suffix for output variable names.
             showplot: If True, display results plot.
             verbose: If True, print iteration statistics.
@@ -105,12 +114,14 @@ class TrimLow(FlagBase):
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
 
         # Validate inputs
-        if not trim_daytime and not trim_nighttime:
-            raise ValueError('Either trim_daytime or trim_nighttime must be True.')
         if lower_limit is None:
             raise ValueError('lower_limit must be specified (not None).')
-        if lat is None or lon is None or utc_offset is None:
-            raise ValueError('Location parameters (lat, lon, utc_offset) are required for day/night detection.')
+        # Day/night is opt-in. Location parameters are only needed when a split is
+        # requested; without one, the whole series is trimmed (no coordinates).
+        self._separate = trim_daytime or trim_nighttime
+        if self._separate and (lat is None or lon is None or utc_offset is None):
+            raise ValueError('Location parameters (lat, lon, utc_offset) are required '
+                             'when trim_daytime or trim_nighttime is True.')
 
         self.showplot = showplot
         self.verbose = verbose
@@ -118,9 +129,22 @@ class TrimLow(FlagBase):
         self.trim_nighttime = trim_nighttime
         self.lower_limit = lower_limit
 
-        # Detect daytime and nighttime
-        self.flag_daytime, _, self.is_daytime, self.is_nighttime = (
-            create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon, utc_offset=utc_offset))
+        # Detector-interface contract (consumed by the GUI's outlier base): this
+        # method has no single data-unit detection band — the symmetric trim
+        # rejects the lowest values plus an equal count of the highest *by
+        # position*, so the kept set is not a `[lower, upper]` envelope (like the
+        # increments method, the bounds stay None and no band overlay is drawn).
+        self.last_lower_bound = None
+        self.last_upper_bound = None
+
+        # Detect daytime and nighttime only when a split is requested; otherwise
+        # the whole series is trimmed and no day/night classification is needed.
+        if self._separate:
+            self.flag_daytime, _, self.is_daytime, self.is_nighttime = (
+                create_daytime_nighttime_flags(timestamp_index=self.series.index,
+                                               lat=lat, lon=lon, utc_offset=utc_offset))
+        else:
+            self.flag_daytime = self.is_daytime = self.is_nighttime = None
 
     def calc(self, repeat: bool = False, progress_callback=None):
         """Calculate overall flag based on trim filter threshold testing.
@@ -145,8 +169,10 @@ class TrimLow(FlagBase):
                 mode = "daytime/nighttime"
             elif self.trim_daytime:
                 mode = "daytime only"
-            else:
+            elif self.trim_nighttime:
                 mode = "nighttime only"
+            else:
+                mode = "all data"
 
             title = (f"TrimLow filter {mode}: {self.series.name}, "
                      f"n_outliers = {self.series[self.overall_flag == 2].count()}")
@@ -170,16 +196,17 @@ class TrimLow(FlagBase):
 
         # Determine which subsets to trim. When both daytime and nighttime are
         # enabled, each is trimmed independently against its own distribution and
-        # the flags are combined; otherwise only the single enabled subset is
-        # trimmed. (A previous if/elif silently left nighttime unscreened when
-        # both modes were True.)
+        # the flags are combined; with a single flag, only that subset is trimmed.
+        # When neither is set, the whole series is trimmed as one distribution.
+        # (A previous if/elif silently left nighttime unscreened when both modes
+        # were True.)
         subsets = []
         if self.trim_daytime:
             subsets.append(s[self.is_daytime].copy())
         if self.trim_nighttime:
             subsets.append(s[self.is_nighttime].copy())
         if not subsets:
-            raise ValueError('Either trim_daytime or trim_nighttime must be True.')
+            subsets.append(s.copy())
 
         for _s in subsets:
             self._trim_subset(_s, flag)

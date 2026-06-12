@@ -32,8 +32,8 @@
   **Flux processing chain** (Input + L2, with **Copy Python**); **Time lag analysis** (EC concentration↔wind lag
   distribution per gas, peak/range/EddyPro window, `dv.flux.TimeLagAnalysis`); **Outliers** tabs **Absolute limits
   filter**, **Hampel filter**, **Local SD
-  filter**, **Z-score filter**, **Z-score (rolling) filter**, **Z-score (increments) filter**, and **Local Outlier
-  Factor filter** (each keeps the
+  filter**, **Z-score filter**, **Z-score (rolling) filter**, **Z-score (increments) filter**, **Local Outlier
+  Factor filter**, **Trim-low filter**, and **Manual removal** (each keeps the
   original + a cleaned copy + the flag, with a live two-panel preview and **Copy Python**); Data menu **Select
   variables**, **Rename variables** (add a prefix/suffix to all variables, or one at a time, with a live preview),
   **Metadata explorer**, **Feature engineering**; plus **Appearance**, **Project settings** (author, description, site
@@ -253,10 +253,15 @@ Library additions used by the GUI (all backward-compatible):
   detectors (`repeat` is accepted-but-ignored — manual removal is index-based and would never converge), and missing
   records stay unflagged in the per-iteration flag (consistent with the other detectors). **Behaviour change:** code
   passing date-only specs now removes the whole day rather than just midnight.
-- **`TrimLow` no longer opens a duplicate plot, and `calc()`/`run()` accept `repeat`/`progress_callback`.** With
-  `showplot=True` in single-mode (daytime-only or nighttime-only) the default before/after figure was drawn twice; it is
-  now drawn once and carries the mode-aware title (previously discarded). `calc()` now accepts `repeat`/`progress_callback`
-  and forwards them to `repeat` (default single-pass), so `.run(repeat=...)` works for parity with the other detectors.
+- **`TrimLow` day/night split is now optional, and it no longer opens a duplicate plot.** Day/night screening is
+  opt-in: with `trim_daytime=trim_nighttime=False` (the default) the whole series is trimmed against one distribution and
+  **no location parameters are needed** — `lat`/`lon`/`utc_offset` now default to `None` and are validated only when a
+  split is requested (previously they were mandatory and both flags `False` raised). The constructor signature was
+  reordered to `TrimLow(series, lower_limit, trim_daytime, trim_nighttime, lat, lon, utc_offset, …)` with `lower_limit`
+  as the primary parameter (keyword callers unaffected). The GUI gains a **Trim-low filter** tab (trim-all by default;
+  coordinates enable only when a day/night box is ticked). Separately: with `showplot=True` in single-mode the default
+  before/after figure was drawn twice; it is now drawn once and carries the mode-aware title (previously discarded).
+  `calc()`/`run()` accept `repeat`/`progress_callback` (default single-pass) for parity with the other detectors.
   `FlagBase.defaultplot` gained an optional `title=` override (backward-compatible). Docstrings corrected (argument order,
   the `__init__` "Returns" note, and the missing-data flag value — `overall_flag` assigns `0`, not `NaN`, to
   originally-missing records).

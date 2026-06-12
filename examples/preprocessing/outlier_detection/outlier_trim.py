@@ -36,10 +36,35 @@ print(f"  Valid: {s_noise.notna().sum()}")
 print(f"  Range: {s_noise.min():.2f} to {s_noise.max():.2f}°C")
 
 # %%
+# Trim the whole series (default)
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# By default the whole series is trimmed against one distribution. Day/night is
+# opt-in, so no location parameters are needed here.
+
+trim_all = dv.outliers.TrimLow(
+    series=s_noise,
+    lower_limit=-75,
+    showplot=False,
+    verbose=1
+)
+trim_all.calc()
+
+flag_all = trim_all.overall_flag
+filtered_all = s_noise.copy()
+filtered_all.loc[flag_all == 2] = None
+
+print("\nWhole-series trimming results:")
+print(f"  Outliers detected: {(flag_all == 2).sum()}")
+print(f"  Valid records: {filtered_all.notna().sum()}")
+print(f"  Data retained: {100*filtered_all.notna().sum()/s_noise.notna().sum():.1f}%")
+
+# %%
 # Trim nighttime only
 # ^^^^^^^^^^^^^^^^^^^
 #
-# Apply trimming to nighttime data only.
+# Apply trimming to nighttime data only. Requesting a day/night split needs the
+# site coordinates (to detect daytime/nighttime).
 # Useful when daytime varies widely but nighttime is stable.
 
 trim_night = dv.outliers.TrimLow(
@@ -146,6 +171,7 @@ print(f"  At/above lower_limit (high tail): {(rejected_both >= -75).sum()}")
 
 print("\nComparison:")
 print(f"Original valid: {s_noise.notna().sum()}")
+print(f"Whole-series trim: {filtered_all.notna().sum()} retained")
 print(f"Nighttime trim: {filtered_night.notna().sum()} retained")
 print(f"Daytime trim: {filtered_day.notna().sum()} retained")
 print(f"Day+night trim: {filtered_both.notna().sum()} retained")

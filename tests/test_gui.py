@@ -1443,6 +1443,49 @@ def test_absolutelimits_outlier_tab_keeps_original_cleaned_flag(window):
     assert set(window._data[flag].dropna().unique()) <= {0, 2}
 
 
+def test_trimlow_outlier_tab_keeps_original_cleaned_flag(window):
+    window._open_menu_tab("Trim-low filter")
+    tab = window._menu_tab_list[-1]
+    var = "Tair_f"
+    tab._select(var)
+    # Default mode trims the whole series with NO coordinates (day/night is opt-in).
+    series = window._data[var]
+    # Lower limit above the data minimum so some low values are trimmed (plus an
+    # equal number of the highest values, by the symmetric-trim rule).
+    ll = float(series.quantile(0.05))
+    tab._worker(series, dict(lower_limit=ll, trim_daytime=False,
+                             trim_nighttime=False), True)
+    QApplication.processEvents()
+    cleaned, flag = f"{var}_TRIMLOW", f"FLAG_{var}_OUTLIER_TRIMLOW_TEST"
+    assert list(tab._result_df.columns) == [cleaned, flag]
+    assert (tab._result_df[flag] == 2).any()
+
+    n_before = window._data.shape[1]
+    tab._add()  # what "Add cleaned + flag to dataset" does
+    QApplication.processEvents()
+    cols = [str(c) for c in window._data.columns]
+    assert var in cols                 # original kept, untouched
+    assert cleaned in cols and flag in cols
+    assert window._data.shape[1] == n_before + 2
+    assert set(window._data[flag].dropna().unique()) <= {0, 2}
+
+
+def test_trimlow_outlier_tab_daynight_split(window):
+    """Opting into a day/night split passes coordinates and screens that period."""
+    window._open_menu_tab("Trim-low filter")
+    tab = window._menu_tab_list[-1]
+    var = "Tair_f"
+    tab._select(var)
+    series = window._data[var]
+    ll = float(series.quantile(0.05))
+    tab._worker(series, dict(lower_limit=ll, trim_daytime=True, trim_nighttime=True,
+                             lat=46.8, lon=9.8, utc_offset=1), True)
+    QApplication.processEvents()
+    flag = f"FLAG_{var}_OUTLIER_TRIMLOW_TEST"
+    assert (tab._result_df[flag] == 2).any()
+    assert set(tab._result_df[flag].dropna().unique()) <= {0, 2}
+
+
 def test_zscore_outlier_tab_keeps_original_cleaned_flag(window):
     window._open_menu_tab("Z-score filter")
     tab = window._menu_tab_list[-1]
@@ -1496,6 +1539,37 @@ def test_zscoreincrements_outlier_tab_keeps_original_cleaned_flag(window):
     QApplication.processEvents()
     cleaned, flag = f"{var}_ZSCOREINCREMENTS", f"FLAG_{var}_OUTLIER_INCRZ_TEST"
     assert list(tab._result_df.columns) == [cleaned, flag]
+
+    n_before = window._data.shape[1]
+    tab._add()
+    QApplication.processEvents()
+    cols = [str(c) for c in window._data.columns]
+    assert var in cols                 # original kept, untouched
+    assert cleaned in cols and flag in cols
+    assert window._data.shape[1] == n_before + 2
+    assert set(window._data[flag].dropna().unique()) <= {0, 2}
+
+
+def test_manualremoval_outlier_tab_keeps_original_cleaned_flag(window):
+    window._open_menu_tab("Manual removal")
+    tab = window._menu_tab_list[-1]
+    var = "Tair_f"
+    tab._select(var)
+    series = window._data[var]
+    # Exercise the text-box parsing: a single timestamp, a whole-day bare date,
+    # and a 'start to end' range -> the library's remove_dates list.
+    single = series.index[10].strftime("%Y-%m-%d %H:%M:%S")
+    day = series.index[0].strftime("%Y-%m-%d")
+    rng = (f"{series.index[100].strftime('%Y-%m-%d %H:%M:%S')} to "
+           f"{series.index[120].strftime('%Y-%m-%d %H:%M:%S')}")
+    tab.dates_edit.setPlainText(f"{single}\n{day}\n{rng}")
+    kwargs = tab._current_kwargs()
+    assert any(isinstance(e, list) for e in kwargs["remove_dates"])  # range parsed
+    tab._worker(series, kwargs, False)
+    QApplication.processEvents()
+    cleaned, flag = f"{var}_MANUAL", f"FLAG_{var}_OUTLIER_MANUAL_TEST"
+    assert list(tab._result_df.columns) == [cleaned, flag]
+    assert (tab._result_df[flag] == 2).sum() > 0  # records were flagged
 
     n_before = window._data.shape[1]
     tab._add()

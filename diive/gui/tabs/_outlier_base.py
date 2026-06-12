@@ -84,6 +84,12 @@ class BaseOutlierTab(DiiveTab):
     #: Whether the method supports daytime/nighttime separation. When False, the
     #: day/night box is omitted (e.g. rolling/increment z-score have no day/night).
     supports_daynight = True
+    #: Whether the "Repeat until no more outliers" checkbox is shown. When False,
+    #: it is omitted (e.g. manual removal flags fixed timestamps — repeating would
+    #: re-flag the same records and never converge, so the library ignores repeat).
+    supports_repeat = True
+    #: Label of the run button (manual removal isn't really "detection").
+    run_label = "Detect outliers"
     #: When set (e.g. "rolling mean"), the detection band's centre line is drawn
     #: alongside the limits and labelled with this text. Only meaningful for methods
     #: whose band centre is informative on its own (e.g. the rolling z-score).
@@ -101,6 +107,10 @@ class BaseOutlierTab(DiiveTab):
         self._live_is_daytime = None  # daytime mask for live colouring (set per run)
         self._bounds_history = []  # per-iteration (lower, upper) bands, accumulated
         self._last_payload = None   # last completed run (for re-render on toggle)
+        # Progress-bar bookkeeping; (re)set in _run, but seeded here so the progress
+        # slot is safe even when _worker is driven directly (e.g. in tests).
+        self._first_n = None
+        self._n_iter = 0
         self._sig = _OutlierSignals()
         #: Exposed bound signal the main window connects to (merges the columns).
         self.featuresCreated = self._sig.features_created
@@ -143,12 +153,15 @@ class BaseOutlierTab(DiiveTab):
         form_box = QGroupBox(self.settings_title)
         form = QFormLayout(form_box)
         self._add_method_rows(form)
+        # Always created so `self.repeat_cb.isChecked()` is safe everywhere, but
+        # only shown for methods where repeating is meaningful.
         self.repeat_cb = QCheckBox("Repeat until no more outliers")
         self.repeat_cb.setChecked(True)
         self.repeat_cb.setToolTip(
             "Re-run the filter until a pass finds no new outliers (removed points are "
             "excluded from the next pass). Off = a single pass only.")
-        form.addRow(self.repeat_cb)
+        if self.supports_repeat:
+            form.addRow(self.repeat_cb)
         outer.addWidget(form_box)
 
         # Preview options (presentation only; do not affect detection results).
@@ -209,7 +222,7 @@ class BaseOutlierTab(DiiveTab):
             self.lat = self.lon = self.utc = None
             self._dn_widgets = ()
 
-        self.run_btn = QPushButton("Detect outliers")
+        self.run_btn = QPushButton(self.run_label)
         self.run_btn.clicked.connect(self._run)
         outer.addWidget(self.run_btn)
 

@@ -352,6 +352,29 @@ data-unit band to draw. Parameter:
 Adds `{var}_ZSCOREINCREMENTS` and its flag to the variable list (the flag column
 keeps the library's `FLAG_{var}_OUTLIER_INCRZ_TEST` name).
 
+### Outliers ▸ Trim-low filter
+
+Removes low outliers with a **symmetric trim**: it rejects the values below a
+**lower limit**, then rejects an equal number of the **highest** values — keeping
+the distribution balanced (the trimmed-mean rationale). Because some rejected
+points sit *above* the limit, use a one-sided method (Absolute limits) instead if
+you only want to drop the low extremes. **No detection-limit band** (the **Show
+limit lines** option has no effect): the high tail is removed by position, so the
+kept set is not a single upper/lower envelope. Parameters:
+
+- **Lower limit** — values below this are rejected (plus the matching count of
+  highest values). Seeded from the selected variable's minimum, so nothing is
+  trimmed until you raise it.
+- **Trim daytime only** / **Trim nighttime only** — *optional*. Leave both off
+  (the default) to trim the **whole series** against one distribution. Tick one or
+  both to restrict (and split) the trim to those periods, each screened against
+  its own distribution.
+- **Latitude / Longitude / UTC offset** — only used (and enabled) when a day/night
+  box is ticked; seeded from **Settings ▸ Project settings**.
+
+Adds `{var}_TRIMLOW` and its flag (`FLAG_{var}_OUTLIER_TRIMLOW_TEST`) to the
+variable list.
+
 ### Data ▸ Select variables
 
 Pick a subset of variables to focus the **Overview** list on. Click a variable on

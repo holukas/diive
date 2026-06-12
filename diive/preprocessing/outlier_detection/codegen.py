@@ -117,6 +117,31 @@ def zscoreincrements_to_code(kwargs: dict, repeat: bool = True, *,
                         _signature_defaults(zScoreIncrements), repeat, series_var, var_name)
 
 
+def trimlow_to_code(kwargs: dict, repeat: bool = True, *,
+                    series_var: str = "series", var_name: str | None = None) -> str:
+    """Render a ``dv.outliers.TrimLow(...).run(...)`` snippet as a string.
+
+    Args mirror :func:`hampel_to_code`.
+    """
+    from diive.preprocessing.outlier_detection.trim import TrimLow
+    return _render_call("dv.outliers.TrimLow", kwargs, _signature_defaults(TrimLow),
+                        repeat, series_var, var_name)
+
+
+def manualremoval_to_code(kwargs: dict, repeat: bool = True, *,
+                          series_var: str = "series", var_name: str | None = None) -> str:
+    """Render a ``dv.outliers.ManualRemoval(...).run(...)`` snippet as a string.
+
+    Args mirror :func:`hampel_to_code`. ``repeat`` is accepted for a uniform
+    signature but rendered as a plain ``.run()`` — manual removal flags fixed
+    timestamps and ignores ``repeat``.
+    """
+    from diive.preprocessing.outlier_detection.manualremoval import ManualRemoval
+    return _render_call("dv.outliers.ManualRemoval", kwargs,
+                        _signature_defaults(ManualRemoval), repeat=True,
+                        series_var=series_var, var_name=var_name)
+
+
 def hampel_to_code(kwargs: dict, repeat: bool = True, *,
                    series_var: str = "series", var_name: str | None = None) -> str:
     """Render a ``dv.outliers.Hampel(...).run(...)`` snippet as a string.
