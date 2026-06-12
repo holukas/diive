@@ -190,7 +190,7 @@ def analyze_highest_quality_flux(flux: Series,
         detect_fluxbasevar : Detect base variable for a given flux.
 
     Example:
-        See `examples/pkgs/flux/lowres/flux_hqflux.py` for complete examples demonstrating
+        See `examples/flux/lowres/flux_hqflux.py` for complete examples demonstrating
         highest-quality flux filtering with day/night separation and result visualization.
     """
     # Input validation

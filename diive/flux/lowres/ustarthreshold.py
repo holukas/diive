@@ -49,7 +49,7 @@ class FlagMultipleConstantUstarThresholds:
         idstr: Optional identifier string for output columns
 
     Example:
-        See `examples/pkgs/flux/lowres/flux_ustarthreshold.py` for complete examples
+        See `examples/flux/lowres/flux_ustarthreshold.py` for complete examples
         of USTAR threshold detection and data filtering.
     """
 

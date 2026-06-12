@@ -69,7 +69,7 @@ std_by_hour = diel.std_by_hour
 
 ```bash
 # Decomposition & trends
-uv run python examples/pkgs/analysis/analysis_seasonaltrend.py
+uv run python examples/analysis/analysis_seasonaltrend.py
 
 # Correlations & relationships
 uv run python examples/analysis/analysis_daily_correlation.py
@@ -78,18 +78,18 @@ uv run python examples/analysis/analysis_granger.py
 # Data characterization
 uv run python examples/analysis/analysis_gapfinder.py
 uv run python examples/analysis/analysis_gridaggregator.py
-uv run python examples/pkgs/analysis/analysis_quantiles.py
+uv run python examples/analysis/analysis_quantiles.py
 
 # Distribution & range analysis
-uv run python examples/pkgs/analysis/analysis_histogram_distribution.py
-uv run python examples/pkgs/analysis/analysis_optimumrange.py
+uv run python examples/analysis/analysis_histogram_distribution.py
+uv run python examples/analysis/analysis_optimumrange.py
 
 # Spatial & spectral analysis
-uv run python examples/pkgs/analysis/analysis_gridaggregator.py
-uv run python examples/pkgs/analysis/analysis_harmonic.py
+uv run python examples/analysis/analysis_gridaggregator.py
+uv run python examples/analysis/analysis_harmonic.py
 
 # Specialized analysis
-uv run python examples/pkgs/analysis/analysis_decoupling.py
+uv run python examples/analysis/analysis_decoupling.py
 
 # All examples
 uv run python examples/run_all_examples.py

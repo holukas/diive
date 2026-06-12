@@ -61,7 +61,7 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
         ValueError: If series is empty, limit < 1, or index is not DatetimeIndex.
 
     Examples:
-        See examples/pkgs/gapfilling/gapfill_interpolate.py for examples demonstrating
+        See examples/gapfilling/gapfill_interpolate.py for examples demonstrating
         conservative (limit=1) vs. generous (limit=5) gap-filling strategies.
     """
     # Input validation
@@ -205,4 +205,4 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
     return series_filled
 
 
-# See examples/pkgs/gapfilling/gapfill_interpolate.py for usage examples.
+# See examples/gapfilling/gapfill_interpolate.py for usage examples.

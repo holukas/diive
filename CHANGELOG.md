@@ -244,6 +244,22 @@ Library additions used by the GUI (all backward-compatible):
   (as the docstring already stated). **Behaviour change:** code that ran `Hampel(..., n_sigma=X, separate_day_night=True)`
   without explicit `n_sigma_daytime`/`n_sigma_nighttime` will now flag a different number of outliers (it previously used
   5.5). Passing nothing still yields 5.5; passing explicit per-period sigmas is unchanged.
+- **`ManualRemoval` date matching is now day-inclusive and validates input.** A date-only spec (e.g. `'2006-05-01'`)
+  or the end of a `[start, end]` range previously matched only the `00:00:00` record, because the boolean `>=`/`<=`
+  masks parsed a bare date to midnight — the docstring's "whole day, inclusive" promise was wrong. It now uses pandas
+  partial-string `.loc[start:end]` slicing, so a bare date spans the whole day and ranges are closed on both ends.
+  Malformed `remove_dates` entries (non-string/non-list, or a range that isn't exactly two elements) now raise instead
+  of being silently ignored. `calc()`/`run()` also accept `repeat`/`progress_callback` for parity with the other
+  detectors (`repeat` is accepted-but-ignored — manual removal is index-based and would never converge), and missing
+  records stay unflagged in the per-iteration flag (consistent with the other detectors). **Behaviour change:** code
+  passing date-only specs now removes the whole day rather than just midnight.
+- **`TrimLow` no longer opens a duplicate plot, and `calc()`/`run()` accept `repeat`/`progress_callback`.** With
+  `showplot=True` in single-mode (daytime-only or nighttime-only) the default before/after figure was drawn twice; it is
+  now drawn once and carries the mode-aware title (previously discarded). `calc()` now accepts `repeat`/`progress_callback`
+  and forwards them to `repeat` (default single-pass), so `.run(repeat=...)` works for parity with the other detectors.
+  `FlagBase.defaultplot` gained an optional `title=` override (backward-compatible). Docstrings corrected (argument order,
+  the `__init__` "Returns" note, and the missing-data flag value — `overall_flag` assigns `0`, not `NaN`, to
+  originally-missing records).
 - **`SeasonalTrendDecomposition(method='stl')` now works on real data.** The STL wrapper never passed `period` to
   statsmodels and called the unsupported `STL.fit(weights=…)`, so STL always raised. Classical/harmonic were unaffected.
 - **`HeatmapYearMonth` no longer raises `AttributeError`** (it called the non-existent top-level

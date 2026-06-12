@@ -63,7 +63,7 @@ agc = get_encoded_value_series(
 
 ```bash
 # Binary value extraction
-uv run python examples/pkgs/io/io_extract.py
+uv run python examples/io/io_extract.py
 
 # Run all examples
 uv run python examples/run_all_examples.py

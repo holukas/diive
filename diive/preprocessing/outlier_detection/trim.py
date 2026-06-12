@@ -6,18 +6,46 @@ Detect outliers using trimmed mean approach: remove values below threshold, then
 
 Part of the diive library: https://github.com/holukas/diive
 
-Trim filter details:
+How it works:
 
-This module provides outlier detection by removing values below a threshold,
-then removing an equal number of values from the high end. This is based on
-the trimmed mean approach and is useful for symmetric outlier removal.
+The trim is applied per subset (daytime, nighttime, or both, controlled by
+``trim_daytime`` / ``trim_nighttime``). Within each subset it counts how many
+values fall below ``lower_limit``, rejects them, and then rejects the same
+number of the highest values. Removing equal counts from both tails keeps the
+distribution symmetric, mirroring the trimmed-mean statistic. When both daytime
+and nighttime are enabled, each is trimmed independently against its own
+distribution and the flags are combined.
 
-Quality flags:
-  - flag=0: Value within acceptable range (valid)
+Use cases:
+
+  - Symmetrically trimming both tails so a downstream mean/variance is not
+    skewed by extreme values on either end (the trimmed-mean rationale).
+  - Removing physically impossible low spikes (e.g. sensor dropouts below a
+    known floor) while keeping the remaining data balanced by also discarding
+    the matching count of suspicious high values.
+  - Day/night-aware cleaning, where the plausible range differs between daytime
+    and nighttime (e.g. radiation, fluxes, temperature) and each period should
+    be screened against its own distribution.
+  - Quick, deterministic pre-screening: the trim is single-pass and threshold-
+    driven, so it is predictable and fast compared to iterative or model-based
+    detectors, making it a useful first step before finer outlier methods.
+
+When NOT to use:
+
+  - When you only want to drop low (or only high) extremes — this method always
+    removes an equal count from the opposite tail, so it discards otherwise-valid
+    high values. Use a one-sided method (e.g. AbsoluteLimits) instead.
+  - When more than half a subset lies below ``lower_limit``: the two tails
+    overlap and the trim degenerates toward rejecting the whole subset.
+
+Quality flags (overall_flag):
+  - flag=0: Value within acceptable range (valid); also assigned to originally-missing records
   - flag=2: Value detected as outlier (removed)
-  - NaN: Original missing data preserved
 
-See examples/preprocessing/outlier_detection/trim.py for working examples.
+The filtered series (.filteredseries) preserves the original NaNs and, in addition, sets
+rejected values to NaN.
+
+See examples/preprocessing/outlier_detection/outlier_trim.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
@@ -53,25 +81,26 @@ class TrimLow(FlagBase):
         from the high end. Supports separate processing for daytime/nighttime data.
 
         Example:
-            See `examples/preprocessing/outlier_detection/trim.py` for complete examples.
+            See `examples/preprocessing/outlier_detection/outlier_trim.py` for complete examples.
 
         Args:
             series: Time series in which outliers are identified.
-            trim_daytime: If True, apply filtering to daytime data.
-            trim_nighttime: If True, apply filtering to nighttime data.
-            lower_limit: Value below which values are considered outliers.
             lat: Latitude of location (e.g., 46.583056).
                 Used to detect daytime/nighttime.
             lon: Longitude of location (e.g., 9.790639).
                 Used to detect daytime/nighttime.
             utc_offset: UTC offset in hours (e.g., 1 for UTC+01:00).
                 Used to detect daytime/nighttime.
+            trim_daytime: If True, apply filtering to daytime data.
+            trim_nighttime: If True, apply filtering to nighttime data.
+            lower_limit: Value below which values are considered outliers.
             idstr: Identifier suffix for output variable names.
             showplot: If True, display results plot.
             verbose: If True, print iteration statistics.
 
-        Returns:
-            Flag series where 2=outlier and 0=valid.
+        After running ``.calc()`` (or ``.run()``), the flag is available via
+        ``.overall_flag`` (2=outlier, 0=valid) and the cleaned data via
+        ``.filteredseries``.
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
 
@@ -93,18 +122,24 @@ class TrimLow(FlagBase):
         self.flag_daytime, _, self.is_daytime, self.is_nighttime = (
             create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon, utc_offset=utc_offset))
 
-    def calc(self):
+    def calc(self, repeat: bool = False, progress_callback=None):
         """Calculate overall flag based on trim filter threshold testing.
 
-        Single-pass outlier detection (not iterative). Removes values below
-        lower_limit, then removes equal number of values from high end.
+        Single-pass outlier detection by default (not iterative). Removes values
+        below lower_limit, then removes an equal number of values from the high end.
+
+        Args:
+            repeat: If True, repeat the trim until an iteration finds no more
+                outliers. Defaults to False (single pass), which is the intended
+                use for the symmetric trim.
+            progress_callback: Optional ``callable(iteration, n_outliers,
+                filteredseries)`` forwarded to ``repeat`` (e.g. to drive a GUI
+                progress indicator).
         """
-        self._overall_flag, n_iterations = self.repeat(func=self.run_flagtests, repeat=False)
+        self._overall_flag, n_iterations = self.repeat(
+            func=self.run_flagtests, repeat=repeat, progress_callback=progress_callback)
 
         if self.showplot:
-            # Default plot for outlier tests, showing rejected values
-            self.defaultplot(n_iterations=n_iterations)
-
             # Determine filtering mode for plot title
             if self.trim_daytime and self.trim_nighttime:
                 mode = "daytime/nighttime"
@@ -116,13 +151,13 @@ class TrimLow(FlagBase):
             title = (f"TrimLow filter {mode}: {self.series.name}, "
                      f"n_outliers = {self.series[self.overall_flag == 2].count()}")
 
-            # Only plot day/night visualization if both day and night are enabled
+            # Only the both-modes case has a meaningful day/night separation to
+            # visualize; the single-mode case gets one default before/after plot.
             if self.trim_daytime and self.trim_nighttime:
                 self.plot_outlier_daytime_nighttime(series=self.series, flag_daytime=self.flag_daytime,
                                                     flag_quality=self.overall_flag, title=title)
             else:
-                # Single-mode plot (no day/night separation visualization)
-                self.defaultplot(n_iterations=n_iterations)
+                self.defaultplot(n_iterations=n_iterations, title=title)
 
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
@@ -183,6 +218,10 @@ class TrimLow(FlagBase):
             # rather than by an upper-limit value threshold, so ties at the
             # boundary don't reject more (or fewer) than the intended count and
             # the kept/rejected sets stay strictly complementary.
+            # Edge case: if more than half the subset is below lower_limit, the
+            # high-end positions overlap the low set; .union dedupes, so fewer
+            # than 2*n_vals_below unique records are rejected (degenerating to
+            # "reject everything" when the whole subset is below the limit).
             low_idx = _s.index[_s < self.lower_limit]
             high_idx = s_sorted.iloc[0:n_vals_below].index  # s_sorted is descending
             rejected_idx = low_idx.union(high_idx)

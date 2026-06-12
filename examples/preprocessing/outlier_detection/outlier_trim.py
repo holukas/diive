@@ -94,6 +94,50 @@ print(f"  Valid records: {filtered_day.notna().sum()}")
 print(f"  Data retained: {100*filtered_day.notna().sum()/s_noise.notna().sum():.1f}%")
 
 # %%
+# Trim daytime and nighttime together
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# With both enabled, each period is trimmed independently against its own
+# distribution and the flags are combined. Use this when the plausible range
+# differs between day and night and both periods need screening.
+
+trim_both = dv.outliers.TrimLow(
+    series=s_noise,
+    trim_daytime=True,
+    trim_nighttime=True,
+    lower_limit=-75,
+    lat=47.286417,
+    lon=7.733750,
+    utc_offset=1,
+    showplot=False,
+    verbose=1
+)
+trim_both.calc()
+
+flag_both = trim_both.overall_flag
+filtered_both = s_noise.copy()
+filtered_both.loc[flag_both == 2] = None
+
+print("\nDaytime + nighttime trimming results:")
+print(f"  Outliers detected: {(flag_both == 2).sum()}")
+print(f"  Valid records: {filtered_both.notna().sum()}")
+print(f"  Data retained: {100*filtered_both.notna().sum()/s_noise.notna().sum():.1f}%")
+
+# %%
+# Symmetric tails: it also removes high values
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# For every value below ``lower_limit``, an equal number of the highest values
+# is rejected too, keeping the trim symmetric (the trimmed-mean rationale). So
+# some rejected records sit above the limit, not below it. Use a one-sided
+# method (e.g. AbsoluteLimits) if you only want to drop the low extremes.
+
+rejected_both = s_noise[flag_both == 2]
+print("\nWhat the both-modes trim rejected:")
+print(f"  Below lower_limit (-75): {(rejected_both < -75).sum()}")
+print(f"  At/above lower_limit (high tail): {(rejected_both >= -75).sum()}")
+
+# %%
 # Comparison
 # ^^^^^^^^^^
 #
@@ -104,3 +148,4 @@ print("\nComparison:")
 print(f"Original valid: {s_noise.notna().sum()}")
 print(f"Nighttime trim: {filtered_night.notna().sum()} retained")
 print(f"Daytime trim: {filtered_day.notna().sum()} retained")
+print(f"Day+night trim: {filtered_both.notna().sum()} retained")

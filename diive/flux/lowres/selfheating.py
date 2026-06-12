@@ -164,7 +164,7 @@ class ScopPhysics:
         ScopApplicator : Apply final flux correction using optimization results.
 
     Example:
-        See `examples/pkgs/flux/lowres/flux_selfheating.py` for complete self-heating
+        See `examples/flux/lowres/flux_selfheating.py` for complete self-heating
         correction workflow using ScopPhysics, ScopOptimizer, and ScopApplicator classes.
     """
 
@@ -823,7 +823,7 @@ class ScopOptimizer:
         ScopApplicator : Apply final flux correction using optimization results.
 
     Example:
-        See `examples/pkgs/flux/lowres/flux_selfheating.py` for complete self-heating
+        See `examples/flux/lowres/flux_selfheating.py` for complete self-heating
         correction workflow using ScopPhysics, ScopOptimizer, and ScopApplicator classes.
     """
 
@@ -1155,7 +1155,7 @@ class ScopApplicator:
         ScopOptimizer : Determine scaling factors from parallel IRGA measurements.
 
     Example:
-        See `examples/pkgs/flux/lowres/flux_selfheating.py` for complete self-heating
+        See `examples/flux/lowres/flux_selfheating.py` for complete self-heating
         correction workflow using ScopPhysics, ScopOptimizer, and ScopApplicator classes.
     """
 

@@ -99,19 +99,19 @@ cleaned = detector.series_hires_cleaned
 
 ```bash
 # Beginner-friendly (simple, deterministic)
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_absolutelimits.py
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_manualremoval.py
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_trim.py
+uv run python examples/preprocessing/outlier_detection/outlier_absolutelimits.py
+uv run python examples/preprocessing/outlier_detection/outlier_manualremoval.py
+uv run python examples/preprocessing/outlier_detection/outlier_trim.py
 
 # Intermediate (statistical, adaptive)
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_hampel.py
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_zscore.py
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_localsd.py
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_incremental.py
+uv run python examples/preprocessing/outlier_detection/outlier_hampel.py
+uv run python examples/preprocessing/outlier_detection/outlier_zscore.py
+uv run python examples/preprocessing/outlier_detection/outlier_localsd.py
+uv run python examples/preprocessing/outlier_detection/outlier_incremental.py
 
 # Advanced (machine learning, multi-method)
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_lof.py
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_stepwise.py
+uv run python examples/preprocessing/outlier_detection/outlier_lof.py
+uv run python examples/preprocessing/outlier_detection/outlier_stepwise.py
 
 # Run all outlier detection examples
 uv run python examples/run_all_examples.py

@@ -86,10 +86,10 @@ stl_flag = flag_ssitc_eddypro_test(df['SSITC_TEST'])
 
 ```bash
 # Generate overall quality flags from multiple tests
-uv run python examples/pkgs/preprocessing/qaqc/qc_overall_flag.py
+uv run python examples/preprocessing/qaqc/qc_overall_flag.py
 
 # Extract and convert EddyPro-specific quality flags
-uv run python examples/pkgs/preprocessing/qaqc/qc_eddypro_flags.py
+uv run python examples/preprocessing/qaqc/qc_eddypro_flags.py
 
 # Run all QA/QC examples
 uv run python examples/run_all_examples.py

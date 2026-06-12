@@ -107,7 +107,7 @@ class UstarMovingPointDetection:
 
     Example
     -------
-    See `examples/pkgs/flux/lowres/flux_ustar_mp_detection.py` for complete examples
+    See `examples/flux/lowres/flux_ustar_mp_detection.py` for complete examples
     of USTAR threshold detection using the moving point method with bootstrap uncertainty estimation.
     """
 

@@ -34,7 +34,7 @@ def set_exact_values_to_missing(series: Series,
         Corrected series
 
     Example:
-        See `examples/pkgs/preprocessing/corrections/correction_set_exact_values_to_missing.py`
+        See `examples/preprocessing/corrections/correction_set_exact_values_to_missing.py`
     """
     outname = series.name
     series.name = "input_data"
@@ -99,7 +99,7 @@ def setto_value(series: Series, dates: list, value: float = 0, verbose: int = 0)
         *series* with records in time range *dates* set to *value*
 
     Example:
-        See `examples/pkgs/preprocessing/corrections/correction_setto_value.py`
+        See `examples/preprocessing/corrections/correction_setto_value.py`
     """
     series_corr = series.copy()
     for date in dates:
@@ -136,7 +136,7 @@ def setto_threshold(series: Series,
         Corrected series
 
     Example:
-        See `examples/pkgs/preprocessing/corrections/correction_setto_threshold.py`
+        See `examples/preprocessing/corrections/correction_setto_threshold.py`
     """
     outname = series.name
     series.name = "input_data"

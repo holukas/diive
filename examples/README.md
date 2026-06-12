@@ -168,8 +168,8 @@ Browse by topic:
 
 | Domain | Files | Topics |
 |--------|-------|--------|
-| **Visualization** | 21 | Heatmaps, scatter, timeseries (+ interactive & range-tool), shifted distribution, histograms, ridgelines, cumulative, diurnal cycles, tree-ring spiral and radial line |
-| **Times** | 5 | Timestamp validation, frequency detection, diel cycles, temporal matrices |
+| **Visualization** | 22 | Heatmaps, scatter, timeseries (+ interactive & range-tool), shifted distribution, histograms, ridgelines, cumulative, diurnal cycles, tree-ring spiral and radial line |
+| **Times** | 7 | Timestamp validation, frequency detection, diel cycles, temporal matrices |
 | **Analysis** | 12 | Correlation, daily correlation, driver attribution, decomposition, gap detection, gap statistics, spatial aggregation, harmonic analysis |
 | **Events** | 1 | Instant/period event markers, 0/1 flag columns, plot overlays, custom category palette |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
@@ -178,7 +178,7 @@ Browse by topic:
 | **Gapfilling** | 12 | Linear interpolation, Random Forest (4 variants), XGBoost (3 variants), MDS (2), SW_IN physics+XGBoost, comparison |
 | **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
 | **Preprocessing** | 21 | Corrections (7), outlier detection (9), QA/QC (5) |
-| **TOTAL** | **110** | |
+| **TOTAL** | **113** | |
 
 ## Running Options
 

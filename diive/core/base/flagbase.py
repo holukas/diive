@@ -191,8 +191,11 @@ class FlagBase:
         iteration_df = self.collect_results()
         return iteration_df, n_outliers
 
-    def defaultplot(self, n_iterations: int = 1, showplot: bool = True):
-        """Basic plot that shows time series with and without outliers"""
+    def defaultplot(self, n_iterations: int = 1, showplot: bool = True, title: str = None):
+        """Basic plot that shows time series with and without outliers.
+
+        If ``title`` is given it overrides the auto-generated figure title.
+        """
         ok = self.overall_flag == 0
         rejected = self.overall_flag == 2
         n_outliers = rejected.sum()
@@ -226,9 +229,10 @@ class FlagBase:
         default_legend(ax=ax_series)
         default_legend(ax=ax_ok)
         plt.setp(ax_series.get_xticklabels(), visible=False)
-        plottitle = (f"{self.series.name} filtered by {self.overall_flag.name}, "
-                     f"n_iterations = {n_iterations}, "
-                     f"n_outliers = {n_outliers}")
+        plottitle = title if title is not None else (
+            f"{self.series.name} filtered by {self.overall_flag.name}, "
+            f"n_iterations = {n_iterations}, "
+            f"n_outliers = {n_outliers}")
         nice_date_ticks(ax=ax_series)
         nice_date_ticks(ax=ax_ok)
         fig.suptitle(plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
