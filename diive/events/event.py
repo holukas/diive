@@ -3,8 +3,9 @@ EVENTS.EVENT: TIME-STAMPED EVENT MARKERS
 ========================================
 
 A small domain model for *events* — things that happened at a point in time or
-over a period (fertilization, harvest, grazing, a management intervention, an
-instrument swap). Each event carries a name, an optional category, a start and an
+over a period. An event can be anything the user wants to mark on a time series
+(a management intervention, an instrument swap, a field campaign, a weather
+event, …). Each event carries a name, an optional category, a start and an
 optional end, and presentation hints (description, colour).
 
 Two reusable operations live here (no GUI, no Qt):
@@ -18,6 +19,9 @@ Two reusable operations live here (no GUI, no Qt):
   show when events occurred. It works on the value-vs-time axes (``axis='x'``) and
   on the date/time heatmap, where the date is on the y-axis (``axis='y'``).
 
+Example:
+    ``examples/events/events_event.py``
+
 Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
@@ -27,20 +31,22 @@ from dataclasses import dataclass, field
 import matplotlib.dates as mdates
 import pandas as pd
 
-#: Default colours for common management categories (Material Design 400-level),
-#: so events read clearly without the caller having to pick a colour. Categories
-#: not listed here cycle through ``_FALLBACK_PALETTE`` by insertion order.
+#: Default colours for generic categories (Material Design 400-level), so events
+#: read clearly without the caller having to pick a colour. Events can mean
+#: anything the user wants — the categories are deliberately generic placeholders
+#: (``category1``, ``category2``, …) that callers rename to suit their study.
+#: Categories not listed here cycle through ``_FALLBACK_PALETTE`` by insertion order.
 CATEGORY_COLORS: dict[str, str] = {
-    "fertilization": "#66BB6A",   # green 400
-    "harvest": "#FFA726",         # orange 400
-    "grazing": "#8D6E63",         # brown 400
-    "tillage": "#A1887F",         # brown 300
-    "sowing": "#9CCC65",          # light green 400
-    "irrigation": "#29B6F6",      # light blue 400
-    "cut": "#FFCA28",             # amber 400
-    "management": "#AB47BC",      # purple 400
-    "instrument": "#EF5350",      # red 400
-    "disturbance": "#EC407A",     # pink 400
+    "category1": "#66BB6A",   # green 400
+    "category2": "#FFA726",   # orange 400
+    "category3": "#8D6E63",   # brown 400
+    "category4": "#A1887F",   # brown 300
+    "category5": "#9CCC65",   # light green 400
+    "category6": "#29B6F6",   # light blue 400
+    "category7": "#FFCA28",   # amber 400
+    "category8": "#AB47BC",   # purple 400
+    "category9": "#EF5350",   # red 400
+    "category10": "#EC407A",  # pink 400
 }
 
 #: Cycled for events whose category has no entry in ``CATEGORY_COLORS``.
@@ -65,15 +71,15 @@ class Event:
     """A single time-stamped event.
 
     An event is either an **instant** (``end is None`` — a single point in time,
-    e.g. a fertilization on one day) or a **period** (``end`` set — e.g. a grazing
-    interval or a start date plus a duration). ``start``/``end`` are coerced to
+    e.g. something that happened on one day) or a **period** (``end`` set — e.g. an
+    interval, or a start date plus a duration). ``start``/``end`` are coerced to
     ``pandas.Timestamp``; a period with ``end < start`` is rejected.
 
     Args:
         name: Short label shown on plots and used to build the flag column name.
         start: When the event began (or the instant it occurred).
         end: When the event ended; ``None`` for an instant event.
-        category: Optional grouping (e.g. ``"fertilization"``) that drives the
+        category: Optional grouping (e.g. ``"category1"``) that drives the
             default colour via :data:`CATEGORY_COLORS`.
         description: Free-text note.
         color: Explicit colour; when ``None`` it is resolved from the category.

@@ -72,7 +72,7 @@ def test_empty_index_returns_empty_flag():
 
 
 def test_color_resolution():
-    assert Event("A", "2021-01-01", category="fertilization").resolved_color() == "#66BB6A"
+    assert Event("A", "2021-01-01", category="category1").resolved_color() == "#66BB6A"
     assert Event("B", "2021-01-01", color="#123456").resolved_color() == "#123456"
     # Unknown category cycles through the fallback palette by index.
     c0 = Event("C", "2021-01-01").resolved_color(0)
@@ -81,7 +81,7 @@ def test_color_resolution():
 
 
 def test_roundtrip_serialization():
-    ev = Event("Graze", "2021-01-05 06:00", "2021-01-07", category="grazing",
+    ev = Event("Graze", "2021-01-05 06:00", "2021-01-07", category="category3",
                description="cows", color="#abcdef")
     assert Event.from_dict(ev.to_dict()).to_dict() == ev.to_dict()
 

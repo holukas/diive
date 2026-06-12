@@ -2,9 +2,9 @@
 EVENTS: TIME-STAMPED EVENT MARKERS
 ==================================
 
-Represent things that happened at a point in time or over a period (fertilization,
-harvest, grazing, management interventions) as 0/1 data columns and as overlays on
-time-series plots.
+Represent things that happened at a point in time or over a period — anything the
+user wants to mark (management interventions, instrument swaps, field campaigns,
+weather events, …) — as 0/1 data columns and as overlays on time-series plots.
 
 Part of the diive library: https://github.com/holukas/diive
 """

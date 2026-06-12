@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**112 examples across 9 organized folders by functional domain.**
+**113 examples across 10 organized folders by functional domain.**
 
 ## Structure
 
@@ -46,6 +46,8 @@ examples/
 │   ├── analysis_gapfinder.py
 │   ├── analysis_gapstats.py
 │   └── ...
+├── events/                # Time-stamped event markers (1 example)
+│   └── events_event.py
 ├── features/              # Variable creation & engineering (11 examples)
 │   ├── feature_engineer.py
 │   ├── feature_sonic_temp_conversion.py
@@ -169,13 +171,14 @@ Browse by topic:
 | **Visualization** | 21 | Heatmaps, scatter, timeseries (+ interactive & range-tool), shifted distribution, histograms, ridgelines, cumulative, diurnal cycles, tree-ring spiral and radial line |
 | **Times** | 5 | Timestamp validation, frequency detection, diel cycles, temporal matrices |
 | **Analysis** | 12 | Correlation, daily correlation, driver attribution, decomposition, gap detection, gap statistics, spatial aggregation, harmonic analysis |
+| **Events** | 1 | Instant/period event markers, 0/1 flag columns, plot overlays, custom category palette |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
 | **Flux** | 20 | Time lag analysis, processing chain, HQ filtering, USTAR detection (3), self-heating (2), uncertainty, PWB batch detection (CLI + API), PWB detect-remove (apply CLI + TUI demo), high-res analysis |
 | **Gapfilling** | 12 | Linear interpolation, Random Forest (4 variants), XGBoost (3 variants), MDS (2), SW_IN physics+XGBoost, comparison |
 | **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
 | **Preprocessing** | 21 | Corrections (7), outlier detection (9), QA/QC (5) |
-| **TOTAL** | **109** | |
+| **TOTAL** | **110** | |
 
 ## Running Options
 

@@ -7,6 +7,7 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 
 - [Visualization & Plotting](#visualization--plotting)
 - [Data Analysis](#data-analysis)
+- [Events](#events)
 - [Timestamp & Time Series Handling](#timestamp--time-series-handling)
 - [Data Processing & Corrections](#data-processing--corrections)
 - [Quality Control](#quality-control)
@@ -67,6 +68,16 @@ See: [visualization/README.md](visualization/README.md)
 | [**analysis_harmonic.py**](analysis/analysis_harmonic.py) | `harmonic_analysis` + `spectrogram`: diel/annual cycles, window effect, time-frequency map |
 
 See: [analysis/README.md](analysis/README.md)
+
+---
+
+## Events
+
+| Example | Description |
+|---------|-------------|
+| [**events_event.py**](events/events_event.py) | Create instant/period `Event`s, encode them as 0/1 data columns with `event_to_flag`, overlay them on plots with `overlay_events`, and apply a custom category palette |
+
+See: [events/README.md](events/README.md)
 
 ---
 

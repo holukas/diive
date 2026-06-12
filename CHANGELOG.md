@@ -85,6 +85,8 @@ Library additions used by the GUI (all backward-compatible):
   event markers. `Event` is an instant (no end) or a period; `event_to_flag(event, index)` builds the 0/1 yes/no column;
   `overlay_events(ax, events, axis='x'|'y')` draws lines/spans onto an existing datetime axes (x) or the heatmap (y).
   `Event.resolved_color(i, colors=)` and `overlay_events(..., colors=)` take an optional `{category: hex}` override map.
+  Default `CATEGORY_COLORS` keys are now generic placeholders (`category1`, `category2`, …) since an event can mean
+  anything; example `examples/events/events_event.py`.
 - `save_parquet(..., enforce_diive_format=True, timestamp_name=...)` and `dv.to_diive_format(...)`: coerce to diive
   parquet format (one header row + valid `TIMESTAMP_*` index).
 - `dv.analysis.rank_drivers(df, target, method=, max_lag=)`: rank variables by correlation with a target (optional

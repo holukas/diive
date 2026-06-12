@@ -24,15 +24,17 @@ from diive.events import Event
 #: user renames/recolours/deletes to taste. There is always at least one (the
 #: dialog refuses to delete the last), so events can always be categorised.
 DEFAULT_CATEGORIES: dict[str, str] = {
-    "category1": "#42A5F5",   # blue 400
-    "category2": "#66BB6A",   # green 400
-    "category3": "#FFA726",   # orange 400
+    "category1": "#66BB6A",   # green 400
+    "category2": "#FFA726",   # orange 400
+    "category3": "#8D6E63",   # brown 400
 }
 
-#: Colours cycled when the user adds further categories.
+#: Colours cycled when the user adds further categories. Mirrors the library's
+#: ``dv.events.CATEGORY_COLORS`` order so ``categoryN`` here gets the same colour
+#: the library would resolve it to by default (``add_category`` indexes by ``i-1``).
 _ADD_PALETTE: list[str] = [
-    "#AB47BC", "#26C6DA", "#EC407A", "#7E57C2", "#9CCC65",
-    "#FF7043", "#5C6BC0", "#26A69A", "#FFCA28", "#78909C",
+    "#66BB6A", "#FFA726", "#8D6E63", "#A1887F", "#9CCC65",
+    "#29B6F6", "#FFCA28", "#AB47BC", "#EF5350", "#EC407A",
 ]
 
 

@@ -60,6 +60,8 @@ EXAMPLE_FILES = [
     'analysis/analysis_optimumrange.py',
     'analysis/analysis_quantiles.py',
     'analysis/analysis_seasonaltrend.py',
+    # Events
+    'events/events_event.py',
     # I/O
     'io/io_load_save_parquet.py',
     'io/io_read_single_file_with_datafilereader.py',
