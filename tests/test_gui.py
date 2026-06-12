@@ -475,6 +475,52 @@ def test_flux_chain_tab_level31(app):
                 if "Cannot plot" in t.get_text()]
 
 
+def test_stepwise_method_params_run_on_detector(app):
+    # Every stepwise method-params widget must produce a {method, kwargs} step that
+    # StepwiseOutlierDetection actually accepts and runs — this guards the kwarg
+    # mapping (which differs from the raw-detector tabs) against the library API.
+    import diive as dv
+    from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+    from diive.flux.fluxprocessingchain import level32_to_code
+    from diive.gui.widgets.stepwise_method_params import STEP_METHODS
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-01-01", periods=48 * 20, freq="30min",
+        trend_slope=0.01, seasonal_strength=9, noise_level=2, outlier_fraction=0.1)
+    df.index.name = "TIMESTAMP_END"
+    coords = dict(site_lat=46.8, site_lon=8.6, utc_offset=1)
+
+    steps = []
+    for cls in STEP_METHODS:
+        widget = cls()
+        step = widget.step()
+        assert hasattr(StepwiseOutlierDetection, step["method"])
+        steps.append(step)
+        # output_middle_timestamp=False keeps the input index (GUI alignment path).
+        det = StepwiseOutlierDetection(dfin=df, col="observed_value",
+                                       output_middle_timestamp=False, **coords)
+        getattr(det, step["method"])(**step["kwargs"])
+        det.addflag()
+        assert det.flags.shape[1] == 1  # exactly one committed flag
+
+    # A Hampel day/night step (per-period thresholds) also runs.
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    hp = HampelParams()
+    hp.dn_cb.setChecked(True)
+    det = StepwiseOutlierDetection(dfin=df, col="observed_value",
+                                   output_middle_timestamp=False, **coords)
+    getattr(det, hp.step()["method"])(**hp.step()["kwargs"])
+    det.addflag()
+    assert det.flags.shape[1] == 1
+
+    # The collected steps render a compilable L3.2 script.
+    code = level32_to_code(
+        init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+        level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
+        level31_kwargs={}, level32_steps=steps)
+    compile(code, "<gen>", "exec")
+
+
 def test_all_menu_items_have_icons(window):
     # Every (non-separator) menu entry carries a drawn icon. Menus live as inline
     # header dropdown buttons in the Studio shell.
