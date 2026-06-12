@@ -161,7 +161,10 @@ class _EventCard(QFrame):
             "QFrame#eventcard { background: #FFFFFF; border: 1px solid #E3E6E8;"
             f" border-left: 4px solid {color}; border-radius: 12px; }}"
             f" QFrame#eventcard:hover {{ border: 1px solid {color};"
-            f" border-left: 4px solid {color}; background: {_tint(color, 0.96)}; }}")
+            f" border-left: 4px solid {color}; background: {_tint(color, 0.96)}; }}"
+            # A local stylesheet detaches this card's tooltip from the app-wide
+            # QToolTip rule; re-attach the light look explicitly.
+            + theme.manager.tooltip_qss())
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(15)
         shadow.setXOffset(0)
@@ -268,7 +271,9 @@ class _EventCard(QFrame):
         btn.setStyleSheet(
             "QPushButton { background: transparent; border: none;"
             " border-radius: 6px; }"
-            f" QPushButton:hover {{ background: {hover_bg}; }}")
+            f" QPushButton:hover {{ background: {hover_bg}; }}"
+            # Local stylesheet detaches the tooltip from the app-wide rule.
+            + theme.manager.tooltip_qss())
         btn.clicked.connect(on_click)
         return btn
 

@@ -545,6 +545,13 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   building the toolbar (else icons render white-on-white on dark system themes).
 - **Use synchronous `canvas.draw()`, not `draw_idle()`,** after a user action so the canvas repaints immediately.
 - **Share axes for comparison panels** via `subplots(..., sharex=True, sharey=True)` so pan/zoom is synchronised.
+- **A widget with its own stylesheet detaches its tooltips from the app-wide `QToolTip` rule** — they fall back to the
+  dark, low-contrast system default (and bare `color`/`background` leak in, making text barely visible). Append
+  `theme.manager.tooltip_qss()` to that widget's `setStyleSheet(...)` to re-attach the light card look. **The appended
+  string must be all-selector QSS** — `setStyleSheet("color: x; background: y;" + tooltip_qss())` silently drops the
+  `QToolTip` block because Qt can't parse bare declarations mixed with a rule block; wrap the bare props in a selector
+  first: `setStyleSheet("QLabel { color: x; background: y; }" + tooltip_qss())`. Reference fixes: the Overview stat
+  items (`tabs/overview.py`) and the event cards (`tabs/events.py`).
 
 ## High-Resolution EC Analysis (hires)
 

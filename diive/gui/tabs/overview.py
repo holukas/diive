@@ -2,9 +2,10 @@
 GUI.TABS.OVERVIEW: SELECTED-VARIABLE OVERVIEW
 =============================================
 
-The first tab, shown when a dataset is loaded. Pick a variable on the left; the
-right shows a multi-panel figure and a full-width strip of KPI-style stat cards
-(`dv.sstats`) along the bottom. Figure panels are easy to extend (`_PANELS`).
+The first tab, shown when a dataset is loaded. Pick a variable on the left
+(full-height list); the right column shows a multi-panel figure with a strip of
+KPI-style stat cards (`dv.sstats`) directly below it. Figure panels are easy to
+extend (`_PANELS`).
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -32,6 +33,11 @@ from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 _DEFAULT_VAR = "NEE_CUT_REF_f"
+
+# Stats from dv.sstats that the overview ribbon intentionally omits (too noisy /
+# not useful at a glance).
+_HIDDEN_STATS = ["OUTLIER_COUNT", "OUTLIER_PERC", "TREND_SLOPE", "ACF_LAG1",
+                 "P05", "P95"]
 
 
 def _is_flag(name: str) -> bool:
@@ -105,19 +111,26 @@ class _StatItem(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(1)
 
+        # The label stylesheets are local, which detaches the item's tooltip from
+        # the app-wide QToolTip rule (and leaks the bare text colour into it) — so
+        # re-attach the light tooltip look on the widgets that carry the tooltip.
+        tip_qss = theme.manager.tooltip_qss()
+
         name_lbl = QLabel(theme.manager.label_text(name))
         nf = theme.manager.tracked_font(name_lbl.font())
         nf.setPointSizeF(max(6.5, nf.pointSizeF() - 2.0))
         nf.setBold(True)
         name_lbl.setFont(nf)
-        name_lbl.setStyleSheet("color: #90A4AE; background: transparent;")
+        name_lbl.setStyleSheet(
+            "QLabel { color: #90A4AE; background: transparent; }" + tip_qss)
 
         value_lbl = QLabel(value)
         vf = value_lbl.font()
         vf.setPointSizeF(vf.pointSizeF() + 2.0)
         vf.setBold(True)
         value_lbl.setFont(vf)
-        value_lbl.setStyleSheet("color: #263238; background: transparent;")
+        value_lbl.setStyleSheet(
+            "QLabel { color: #263238; background: transparent; }" + tip_qss)
         value_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         lay.addWidget(name_lbl)
@@ -194,21 +207,21 @@ class OverviewTab(DiiveTab):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # Top: variable list + figure.
+        # Variable list (left, full height) | right column (figure over stats).
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.varpanel = VariablePanel()
         self.varpanel.selected.connect(self._on_select)
-        self.canvas = MplCanvas()
-        splitter.addWidget(self.varpanel)
-        splitter.addWidget(self.canvas)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        # The variable panel is fixed-width, so its splitter handle can't resize
-        # anything — lock it so it doesn't show a misleading ↔ resize cursor.
-        lock_panel_handle(splitter)
-        outer.addWidget(splitter, stretch=1)
 
-        # Bottom: full-width "dashboard strip" of stat cards.
+        # Right column: figure on top, the stats ribbon directly below it (so the
+        # stats sit right of the variable list, not spanning the full window).
+        right = QWidget()
+        right_lay = QVBoxLayout(right)
+        right_lay.setContentsMargins(0, 0, 0, 0)
+        right_lay.setSpacing(0)
+        self.canvas = MplCanvas()
+        right_lay.addWidget(self.canvas, stretch=1)
+
+        # "Dashboard strip" of stat cards, below the figure.
         self.stats_strip = QScrollArea()
         self.stats_strip.setWidgetResizable(True)
         self.stats_strip.setFixedHeight(54)
@@ -227,7 +240,16 @@ class OverviewTab(DiiveTab):
         self.stats_layout.setSpacing(14)
         self.stats_layout.addStretch(1)
         self.stats_strip.setWidget(host)
-        outer.addWidget(self.stats_strip)
+        right_lay.addWidget(self.stats_strip)
+
+        splitter.addWidget(self.varpanel)
+        splitter.addWidget(right)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        # The variable panel is fixed-width, so its splitter handle can't resize
+        # anything — lock it so it doesn't show a misleading ↔ resize cursor.
+        lock_panel_handle(splitter)
+        outer.addWidget(splitter, stretch=1)
         return root
 
     def refresh_events(self) -> None:
@@ -307,6 +329,7 @@ class OverviewTab(DiiveTab):
             values = dv.sstats(series).iloc[:, 0]  # all stats (ribbon scrolls)
         except Exception:
             return
+        values = values.drop(labels=_HIDDEN_STATS, errors="ignore")
         at = 0  # insert before the trailing stretch, hairline-separated
         for i, (stat, value) in enumerate(values.items()):
             if i > 0:

@@ -342,6 +342,19 @@ class ThemeManager(QObject):
     def qss(self) -> str:
         return build_qss(self.tokens)
 
+    def tooltip_qss(self) -> str:
+        """A ``QToolTip`` style block to APPEND to a widget's local stylesheet.
+
+        A widget that sets its own stylesheet detaches the tooltips shown for it
+        from the app-wide ``QToolTip`` rule — they fall back to the dark, low-
+        contrast system default (and bare ``color``/``background`` declarations
+        leak in, making the text barely visible). Appending this block keeps such
+        a widget's tooltip on the same light card look as everywhere else."""
+        t = self.tokens
+        return (f" QToolTip {{ background: {WHITE}; color: {t['INK']};"
+                f" border: 1px solid {t['ACCENT']}; border-radius: 8px;"
+                f" padding: 6px 10px; font-size: 12px; }}")
+
     def apply(self) -> None:
         """Re-apply the stylesheet app-wide and notify listeners (live preview)."""
         app = QApplication.instance()
