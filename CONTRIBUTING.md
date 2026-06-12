@@ -183,22 +183,26 @@ result.to_csv('output.csv')
 3. Call from `_create_features()` orchestrator
 4. Use naming: `.{col}_TYPE{detail}` (e.g., `.Tair_f_POL2`)
 5. Update docstring with new parameter
-6. Add example in `examples/createvar/` if applicable
+6. Add example in `examples/features/` if applicable
 
-### Adding a Gap-Filling Method to FluxProcessingChain
+### Adding a Gap-Filling Method to the Flux Processing Chain
 
-1. Create `level41_newmethod()` with all 24 feature parameters
-2. Create `FeatureEngineer`, apply to data
-3. Create and train gap-filling model
-4. Store results in `self._level41['new_method'][ustar_scenario]`
-5. Update tests and add example
+The chain uses composable per-level callables (`diive.flux.fluxprocessingchain`), not
+a monolithic class. To add an L4.1 gap-filling method:
+
+1. Add a `run_level41_newmethod(data, ...)` callable that builds the model and stores
+   results in `data.levels.level41_newmethod` (keyed by ustar_scenario), returning a new
+   `data` via `dataclasses.replace` — never mutate the input
+2. Build a `FeatureEngineer`, train the model, gap-fill
+3. Wire it into `run_chain` behind a `FluxConfig` flag and update `codegen.py`
+4. Update tests (`tests/test_fluxprocessingchain.py`) and add an example
 
 ### Adding an Outlier Detection Method
 
-1. Inherit from appropriate base class (see `diive.pkgs.preprocessing.outlierdetection`)
+1. Inherit from the appropriate base class (see `diive.outliers`)
 2. Implement required methods (`flag_outliers()`, `get_flagged_data()`)
 3. Add comprehensive docstring with parameters
-4. Create example in `examples/outlierdetection/`
+4. Create example in `examples/preprocessing/outlier_detection/`
 5. Add unit test in `tests/test_outlierdetection.py`
 
 ## Writing Tests
@@ -212,17 +216,17 @@ import diive as dv
 class TestGapFilling(unittest.TestCase):
     def setUp(self):
         """Load data once for all tests."""
-        self.df = dv.load_exampledata_parquet(data_id='TLL')
+        self.df = dv.load_exampledata_parquet()
 
     def test_randomforest_basic(self):
         """Random Forest gap-filling produces valid output."""
-        engineer = dv.FeatureEngineer(
+        engineer = dv.gapfilling.FeatureEngineer(
             target_col='NEE',
             features_lag=[-1, 1],
         )
         df_eng = engineer.fit_transform(self.df)
 
-        model = dv.RandomForestTS(
+        model = dv.gapfilling.RandomForestTS(
             input_df=df_eng,
             target_col='NEE',
         )
@@ -246,14 +250,16 @@ Examples are organized in `examples/`:
 
 ```bash
 examples/
-├── gap_filling/        # Gap-filling methods
-├── outlierdetection/    # Outlier detection
-├── visualization/       # Plotting examples
-├── createvar/          # Variable creation
+├── gapfilling/         # Gap-filling methods
+├── preprocessing/      # Outlier detection, corrections, QA/QC
+├── visualization/      # Plotting examples
+├── features/           # Feature engineering / variable creation
 ├── analysis/           # Time series analysis
-├── corrections/        # Data corrections
-├── flux/               # Flux-specific analysis
-├── echires/            # High-resolution EC data
+├── flux/               # Flux-specific analysis (incl. hires/ high-res EC)
+├── events/             # Event markers
+├── fits/               # Curve fitting
+├── io/                 # File I/O
+├── times/              # Timestamp handling
 └── ...
 ```
 
@@ -279,12 +285,12 @@ import diive as dv
 import matplotlib.pyplot as plt
 
 # Load example data
-df = dv.load_exampledata_parquet(data_id='TLL')
+df = dv.load_exampledata_parquet()
 
 # Example 1: Basic usage
 def example_basic_usage():
     """Description of this example."""
-    model = dv.RandomForestTS(
+    model = dv.gapfilling.RandomForestTS(
         input_df=df,
         target_col='NEE',
     )

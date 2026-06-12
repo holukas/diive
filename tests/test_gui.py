@@ -537,17 +537,51 @@ def test_stepwise_screening_tab(app):
 
     tab._steps = [HampelParams().step(), ZScoreParams().step()]
     # Drive the worker synchronously (signals deliver in-thread under the test app).
-    tab._worker(df, "observed_value", tab._steps, tab._coords())
+    # configured=True so SW_IN_POT is computed and the report gets day/night.
+    tab._worker(df, "observed_value", tab._steps, tab._coords(), True)
     QApplication.processEvents()
 
-    assert tab.steps_list.count() == 2
+    # Cards mirror the chain; the run carries per-step removals + detection bounds.
+    assert len(tab._step_cards) == 2
     assert len(tab._payload["removed"]) == 2
+    assert len(tab._payload["bounds"]) == 2
+    # The screening report is built (overall + day/night) and shown in the panel.
+    report = tab._payload["report"]
+    assert "STEPWISE SCREENING REPORT" in report
+    assert "OVERALL" in report and "DAYTIME" in report and "NIGHTTIME" in report
+    assert tab.report_text.toPlainText() == report
+    assert tab.report_copy_btn.isEnabled()
+    # Per-step removal counts must sum to the overall total: addflag mutates the
+    # cleaned series in place, so a missing per-step copy would alias it and make
+    # later steps report 0 removed even though points were dropped.
+    det = tab._payload["detector"]
+    total = int(det.series_hires_orig.notna().sum() - det.series_hires_cleaned.notna().sum())
+    assert sum(len(idx) for idx in tab._payload["removed"]) == total
     assert "QCF" in tab.qcf_label.text()
     assert tab.add_btn.isEnabled()
-    # Selecting a step re-renders without error.
-    tab._on_step_selected(0)
+    assert tab.copy_btn.isEnabled()
+    # Selecting a card re-renders (with the limit band on) without error.
+    tab.limits_cb.setChecked(True)
+    tab._select_step(0)
     assert not [t for a in tab.canvas.fig.axes for t in a.texts
                 if "Cannot plot" in t.get_text()]
+
+    # The Copy-Python provider returns a valid, runnable script.
+    code = tab._code_provider()
+    compile(code, "<gen>", "exec")
+
+    # Editing a step in place round-trips its kwargs back into the param widget.
+    edited = HampelParams()
+    edited.load(tab._steps[0]["kwargs"])
+    assert edited.kwargs()["n_sigma"] == tab._steps[0]["kwargs"]["n_sigma"]
+
+    # The step editor builds exactly one param form (no ghost form left behind,
+    # the cause of the overlapping-labels bug) and seeds it from the step.
+    from diive.gui.widgets.stepwise_cards import StepEditorDialog
+    dlg = StepEditorDialog(step=tab._steps[0])
+    assert dlg._param_box.count() == 1
+    assert dlg.step()["method"] == tab._steps[0]["method"]
+    dlg.deleteLater()
 
     # Commit emits the flags + a clean QCF flag + the QCF-filtered series, index-aligned.
     tab._add_to_dataset()
@@ -556,6 +590,17 @@ def test_stepwise_screening_tab(app):
     assert any(str(c) == "FLAG_STEPWISE_observed_value_QCF" for c in cols)  # overall flag
     assert sum(str(c).endswith("_TEST") for c in cols) == 2             # one flag per step
     assert emitted["df"].index.equals(df.index)                        # aligns on merge
+
+    # Toggling a step off skips it in the chain: it contributes no removals, the
+    # per-step lists stay aligned to the cards, and the total still adds up.
+    tab._steps[0]["enabled"] = False
+    tab._worker(df, "observed_value", tab._steps, tab._coords(), True)
+    QApplication.processEvents()
+    assert len(tab._payload["removed"]) == 2
+    assert len(tab._payload["removed"][0]) == 0           # disabled step removes nothing
+    det = tab._payload["detector"]
+    total = int(det.series_hires_orig.notna().sum() - det.series_hires_cleaned.notna().sum())
+    assert sum(len(idx) for idx in tab._payload["removed"]) == total
 
 
 def test_flux_chain_tab_level33(app):

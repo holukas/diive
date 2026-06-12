@@ -71,6 +71,14 @@ class _StepParams(QWidget):
     def kwargs(self) -> dict:
         raise NotImplementedError
 
+    def load(self, kwargs: dict) -> None:
+        """Seed the form widgets from an existing step's kwargs (for editing).
+
+        Subclasses with parameters override this; the default is a no-op so
+        parameter-less methods (e.g. missing-values) need not implement it.
+        """
+        return
+
     # --- result ---
     def step(self) -> dict:
         """The ``{"method", "kwargs"}`` step for codegen / the detector chain."""
@@ -136,6 +144,19 @@ class HampelParams(_StepParams):
                       n_sigma_nighttime=self.n_sigma_nt.value())
         return kw
 
+    def load(self, kwargs: dict) -> None:
+        self.window.setValue(int(kwargs.get("window_length", self.window.value())))
+        self.n_sigma.setValue(float(kwargs.get("n_sigma", self.n_sigma.value())))
+        self.diff_cb.setChecked(bool(kwargs.get("use_differencing", True)))
+        # Set the toggle first (it seeds the per-period spins from the global
+        # value), then overwrite with the saved per-period thresholds.
+        self.dn_cb.setChecked(bool(kwargs.get("separate_daytime_nighttime", False)))
+        if kwargs.get("n_sigma_daytime") is not None:
+            self.n_sigma_dt.setValue(float(kwargs["n_sigma_daytime"]))
+        if kwargs.get("n_sigma_nighttime") is not None:
+            self.n_sigma_nt.setValue(float(kwargs["n_sigma_nighttime"]))
+        self.repeat_cb.setChecked(bool(kwargs.get("repeat", True)))
+
 
 class LocalSDParams(_StepParams):
     method = "flag_outliers_localsd_test"
@@ -183,6 +204,23 @@ class LocalSDParams(_StepParams):
                     separate_daytime_nighttime=self.dn_cb.isChecked(),
                     **self._repeat_kwargs())
 
+    def load(self, kwargs: dict) -> None:
+        self.constant_cb.setChecked(bool(kwargs.get("constant_sd", False)))
+        dn = bool(kwargs.get("separate_daytime_nighttime", False))
+        self.dn_cb.setChecked(dn)
+        n_sd = kwargs.get("n_sd", self.n_sd.value())
+        win = kwargs.get("winsize", 0)
+        if dn and isinstance(n_sd, (list, tuple)):
+            self.n_sd_dt.setValue(float(n_sd[0]))
+            self.n_sd_nt.setValue(float(n_sd[1]))
+            win0 = win[0] if isinstance(win, (list, tuple)) and win else win
+            self.winsize.setValue(int(win0) if win0 else 0)
+        else:
+            val = n_sd[0] if isinstance(n_sd, (list, tuple)) else n_sd
+            self.n_sd.setValue(float(val))
+            self.winsize.setValue(int(win) if isinstance(win, int) and win else 0)
+        self.repeat_cb.setChecked(bool(kwargs.get("repeat", True)))
+
 
 class ZScoreParams(_StepParams):
     method = "flag_outliers_zscore_test"
@@ -204,6 +242,11 @@ class ZScoreParams(_StepParams):
                     separate_daytime_nighttime=self.dn_cb.isChecked(),
                     **self._repeat_kwargs())
 
+    def load(self, kwargs: dict) -> None:
+        self.thres.setValue(float(kwargs.get("thres_zscore", self.thres.value())))
+        self.dn_cb.setChecked(bool(kwargs.get("separate_daytime_nighttime", False)))
+        self.repeat_cb.setChecked(bool(kwargs.get("repeat", True)))
+
 
 class ZScoreRollingParams(_StepParams):
     method = "flag_outliers_zscore_rolling_test"
@@ -222,6 +265,12 @@ class ZScoreRollingParams(_StepParams):
         return dict(thres_zscore=self.thres.value(),
                     winsize=self.winsize.value() or None, **self._repeat_kwargs())
 
+    def load(self, kwargs: dict) -> None:
+        self.thres.setValue(float(kwargs.get("thres_zscore", self.thres.value())))
+        win = kwargs.get("winsize")
+        self.winsize.setValue(int(win) if win else 0)
+        self.repeat_cb.setChecked(bool(kwargs.get("repeat", True)))
+
 
 class IncrementsParams(_StepParams):
     method = "flag_outliers_increments_zcore_test"
@@ -236,6 +285,10 @@ class IncrementsParams(_StepParams):
 
     def kwargs(self) -> dict:
         return dict(thres_zscore=self.thres.value(), **self._repeat_kwargs())
+
+    def load(self, kwargs: dict) -> None:
+        self.thres.setValue(float(kwargs.get("thres_zscore", self.thres.value())))
+        self.repeat_cb.setChecked(bool(kwargs.get("repeat", True)))
 
 
 class LOFParams(_StepParams):
@@ -261,6 +314,14 @@ class LOFParams(_StepParams):
                            else None),
             separate_daytime_nighttime=self.dn_cb.isChecked(),
             **self._repeat_kwargs())
+
+    def load(self, kwargs: dict) -> None:
+        nn = kwargs.get("n_neighbors")
+        self.n_neighbors.setValue(int(nn) if nn else 0)
+        cont = kwargs.get("contamination")
+        self.contamination.setValue(float(cont) if cont else 0.0)
+        self.dn_cb.setChecked(bool(kwargs.get("separate_daytime_nighttime", False)))
+        self.repeat_cb.setChecked(bool(kwargs.get("repeat", True)))
 
 
 class MissingValsParams(_StepParams):

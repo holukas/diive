@@ -42,7 +42,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `icons.py` | `menu_icon(label)` — tiny `QPainter`-drawn glyphs for **all** menu entries (folder/disk/calendar/gear/palette/… + plot shapes), keyword-matched |
 | `widgets/plot_settings.py` | `PlotSettingsPanel(plot_type)` — live plot-parameter controls (between list and canvas); `changed` re-renders; defines `HEATMAP`/`TIMESERIES` |
 | `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
-| `tabs/fluxchain.py` | Flux processing chain tab — Input + Level 2 (first slice); runs `init_flux_data`/`run_level2`, **Copy Python** emits a reproducible script |
+| `tabs/fluxchain.py` | Flux processing chain tab — Input + L2 + L3.1 + L3.2 + L3.3 via the composable callables (`init_flux_data`/`run_level2`/`run_level31`/`make_level32_detector`+`run_level32`/`run_level33_constant_ustar`); shows the deepest level's QCF-filtered flux as a heatmap, **Copy Python** emits a reproducible script. Only L4.1 remains |
 | `tabs/timelag.py` | Time-lag analysis tab — pick a gas, analyse its `*_TLAG_ACTUAL` lag distribution (`dv.flux.TimeLagAnalysis`), embed the 4-panel peak/range/EddyPro figure; **Load example TLAG data** loads the bundled level-0 lag dataset locally |
 | `tabs/gaps.py` | Gap & coverage dashboard — stat cards + clickable gap map (`GapStats` availability heatmap + gap timeline) + long-gap table |
 | `tabs/drivers.py` | Driver explorer — rank variables by correlation with a target (`rank_drivers`, optional lag scan); click a driver for its scatter |
@@ -54,6 +54,10 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `tabs/outliers.py` / `tabs/outliers_localsd.py` | Hampel / Local SD outlier tabs (`dv.outliers.Hampel` / `LocalSD`) — `BaseOutlierTab` subclasses |
 | `tabs/outliers_absolutelimits.py` | Absolute limits outlier tab (`dv.outliers.AbsoluteLimits`) — flag values outside a fixed min/max range (min/max drawn as the limit-line band); `BaseOutlierTab` subclass |
 | `tabs/outliers_zscore.py` / `tabs/outliers_zscorerolling.py` / `tabs/outliers_zscoreincrements.py` | Z-score outlier tabs (`dv.outliers.zScore` / `zScoreRolling` / `zScoreIncrements`) — `BaseOutlierTab` subclasses; rolling & increments set `supports_daynight = False` |
+| `tabs/outliers_lof.py` | Local Outlier Factor tab (`dv.outliers.LocalOutlierFactor`) — density-based detection; `BaseOutlierTab` subclass |
+| `tabs/outliers_trim.py` | Trim-low tab (`dv.outliers.TrimLow`) — symmetric positional trim; `supports_daynight = False`, opt-in `trim_daytime`/`trim_nighttime` rows, no detection band |
+| `tabs/outliers_manualremoval.py` | Manual removal tab (`dv.outliers.ManualRemoval`) — flag known timestamps/periods; `supports_daynight = False`, `supports_repeat = False`, no detection band |
+| `tabs/stepwise.py` | Stepwise screening tab (`dv.outliers.StepwiseOutlierDetection`) — chain multiple outlier methods with QCF aggregation |
 | `tabs/metadata_explorer.py` | Metadata explorer — per-variable origin badge, editable tag chips (favorite/add/remove, auto-coloured), a 50-word note, provenance timeline; reads `metadata_store.manager` |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
 | `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar (with a Save-DPI spinbox); attaches a `HoverAnnotator` |
@@ -67,6 +71,9 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `widgets/header_bar.py` | `StudioHeaderBar` — frameless Studio chrome header: wordmark + inline File/Data/… hover-dropdown menus + centred title |
 | `widgets/frameless.py` | `FramelessResizeHelper` — edge/corner resize for the frameless Studio window |
 | `widgets/console_panel.py` | `ConsolePanel` — mirrors diive's Rich output in colour (used by the Log tab) |
+| `widgets/stepwise_method_params.py` | One param widget per `StepwiseOutlierDetection.flag_*` method; produces a `{"method", "kwargs"}` step for the L3.2 / stepwise chains (the shape `level32_to_code` consumes) |
+| `widgets/copy_button.py` | Reusable **Copy Python** button — copies library-generated code to the clipboard (GUI never builds the script, only copies it) |
+| `widgets/state_utils.py` | `save_controls`/`restore_controls` — serialize a tab's standard Qt controls by stable key for `save_state`/`restore_state` |
 
 **Adding a tab:** always-on tabs (Overview, Log) go in `TAB_CLASSES`. Menu-opened tabs go in `registry.MENU_TABS`
 (grouped by menu; values are factories) — they open as **new numbered instances** each time (Heatmap 1, 2, 3 ...), all
@@ -138,14 +145,17 @@ window, enables/disables the reset action, and re-pushes. Engineered features me
 reset (out-of-range rows align to NaN). All plots and processing then run on the narrowed `_data`; saving writes it too.
 
 **Flux processing chain (`tabs/fluxchain.py`):** opened from **Flux ▸ Flux processing chain** (single-instance). A
-guided tab for the Swiss-FluxNet chain. **First slice = Input + Level 2:** collects site/flux-column + which L2 quality
-tests to run, then on a worker thread calls the composable library callables (`init_flux_data` → `run_level2`), shows the
-L2 QCF-filtered flux as a date/time heatmap, and — the point of the feature — **Copy Python** emits the exact runnable
-script via the library's `level2_to_code`. The script-gen lives in the library (`flux/fluxprocessingchain/codegen.py`:
-`chain_to_code` for the full `run_chain`/`FluxConfig` path, `level2_to_code` for the composable path) because it encodes
-the API call shape; the GUI only calls it. Needs real EddyPro-FLUXNET input (FC/USTAR/`*_TEST` columns) —
-`load_exampledata_parquet_lae_level1_30MIN`, not the default CH-DAV. **Later slices** add L3.1/3.2/3.3/4.1 groups and
-switch to `run_chain`/`chain_to_code`; per-level live preview can reuse the cascade-aware `run_level*` callables.
+guided tab for the Swiss-FluxNet chain, covering **Input + L2 + L3.1 + L3.2 + L3.3** (only L4.1 gap-filling remains). It
+collects site/flux-column + which L2 quality tests to run, the L3.1 storage-correction options, an optional L3.2
+outlier-detection chain, and optional L3.3 constant-USTAR filtering, then on a worker thread calls the composable library
+callables (`init_flux_data` → `run_level2` → `run_level31` → `make_level32_detector`/`run_level32` →
+`run_level33_constant_ustar`), shows the deepest level's QCF-filtered flux as a date/time heatmap (plus the L3.2 QCF
+distribution / L3.3 scenarios), and — the point of the feature — **Copy Python** emits the exact runnable script via the
+library's per-level codegen (`level2_to_code`/`level31_to_code`/`level32_to_code`/`level33_to_code`). The script-gen
+lives in the library (`flux/fluxprocessingchain/codegen.py`: `chain_to_code` for the full `run_chain`/`FluxConfig` path,
+the `level*_to_code` functions for the composable path) because it encodes the API call shape; the GUI only calls it.
+Needs real EddyPro-FLUXNET input (FC/USTAR/`*_TEST` columns) — `load_exampledata_parquet_lae_level1_30MIN`, not the
+default CH-DAV. **Remaining slice:** L4.1 gap-filling.
 
 **Gap & coverage dashboard (`tabs/gaps.py`):** opened from **Analyze ▸ Gaps & coverage** (single-instance). Pick a
 variable; the right side shows KPI stat cards, a two-panel **gap map** (daily-availability heatmap + gap-spike timeline)

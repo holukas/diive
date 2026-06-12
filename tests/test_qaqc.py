@@ -53,6 +53,30 @@ class TestFlagQCF(unittest.TestCase):
         hq = out[qcf.filteredseriescol_hq]
         self.assertEqual(int(hq.notna().sum()), 1)
 
+    def test_screening_report(self):
+        # The per-step report: potential/measured/retained/rejected, one row per
+        # test (cumulative), with percentages that add up.
+        df = self._build()
+        qcf = FlagQCF(df=df, target_col='FC')
+        qcf.calculate(daytime_accept_qcf_below=2, nighttime_accept_qcf_below=2)
+        table, text = qcf.screening_report()
+
+        # No swinpot -> overall only; one row per test column (5 tests).
+        self.assertEqual(set(table['period']), {'OVERALL'})
+        self.assertEqual(len(table), 5)
+
+        # Final (last-step) cumulative numbers match the known QCF distribution:
+        # 6 measured records, QCF == [0,1,1,2,2,2] -> 3 retained, 3 rejected.
+        final = table.iloc[-1]
+        self.assertEqual(int(final['n_potential']), 6)
+        self.assertEqual(int(final['n_measured']), 6)
+        self.assertEqual(int(final['n_retained']), 3)
+        self.assertEqual(int(final['n_rejected']), 3)
+        self.assertEqual(int(final['n_retained'] + final['n_rejected']),
+                         int(final['n_measured']))
+        self.assertAlmostEqual(float(final['perc_rejected']), 50.0, places=4)
+        self.assertIn('STEPWISE SCREENING REPORT', text)
+
 
 if __name__ == '__main__':
     unittest.main()

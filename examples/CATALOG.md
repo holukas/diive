@@ -53,7 +53,6 @@ See: [visualization/README.md](visualization/README.md)
 
 | Example | Description |
 |---------|-------------|
-| [**analysis_correlation.py**](analysis/analysis_correlation.py) | Cross-correlation, autocorrelation, lag detection, anomaly detection |
 | [**analysis_daily_correlation.py**](analysis/analysis_daily_correlation.py) | Daily correlation coefficients between time series, quality checks, relationship analysis |
 | [**analysis_driveranalysis.py**](analysis/analysis_driveranalysis.py) | _(experimental)_ Evidence-triangulation driver attribution by epistemic level: SHAP + ALE (association), lagged/scale-resolved/stratified importance (temporal), Granger/PCMCI/CATE (causal), with a convergence/divergence summary |
 | [**analysis_granger.py**](analysis/analysis_granger.py) | Granger causality testing for predictive relationships between time series |
@@ -201,6 +200,8 @@ See: [features/README.md](features/README.md)
 | [**flux_lag_pwbopt.py**](flux/hires/flux_lag_pwbopt.py) | PWBOPT batch pipeline: multi-period PWB with S1/S2/S3 selection and strategy comparison; supports real EddyPro-rotated files |
 | [**flux_lag_pwb_batch.py**](flux/hires/flux_lag_pwb_batch.py) | PwbBatchDetection API demo: parallel PWB across many EddyPro files with live Rich progress display, PWBOPT post-processing (standard + pre-filtered), and batch summary figures |
 | [**flux_lag_pwb_batch_cli.py**](flux/hires/flux_lag_pwb_batch_cli.py) | CLI demo: drive PwbBatchDetection from the command line via `python -m diive.flux.hires.lag_pwb`; shows all available flags |
+| [**flux_apply_tlag_cli.py**](flux/hires/flux_apply_tlag_cli.py) | `TlagApplier` CLI demo (`diive-tlag-apply-batch`): apply PWBOPT-detected lags from a `tlag_results.csv` to raw EC files, shifting each scalar by `round(tlag_s · hz)` rows |
+| [**flux_detect_remove_tui_demo.py**](flux/hires/flux_detect_remove_tui_demo.py) | Launches the `diive-tlag-pwb-detect-remove` Textual TUI in demo mode (no input data); interactive, not part of `run_all_examples.py` |
 | [**flux_windrotation.py**](flux/hires/flux_windrotation.py) | Wind rotation and coordinate transformation |
 | [**flux_fluxdetectionlimit.py**](flux/hires/flux_fluxdetectionlimit.py) | Flux detection limit and measurement sensitivity |
 

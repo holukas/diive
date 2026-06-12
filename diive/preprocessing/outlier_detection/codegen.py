@@ -31,6 +31,80 @@ def _hampel_defaults() -> dict:
     return _signature_defaults(Hampel)
 
 
+def _step_defaults(method: str) -> dict:
+    """Default kwargs of a ``StepwiseOutlierDetection.flag_*`` method, so the
+    rendered call omits values left at their default."""
+    from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+    fn = getattr(StepwiseOutlierDetection, method)
+    return {p.name: p.default
+            for p in inspect.signature(fn).parameters.values()
+            if p.default is not inspect.Parameter.empty}
+
+
+def stepwise_to_code(steps: list[dict], *, var_name: str,
+                     site_lat: float, site_lon: float, utc_offset: int,
+                     df_var: str = "df", load_hint: str | None = None) -> str:
+    """Render a ``StepwiseOutlierDetection`` chain + overall QCF as a runnable snippet.
+
+    Each step (``{"method": str, "kwargs": dict}``) becomes one ``flag_*`` call
+    followed by ``addflag()``; the accumulated test flags are aggregated with
+    ``FlagQCF`` into the overall quality flag and the QCF-filtered series — the
+    same path the GUI's Stepwise screening tab runs. Default-valued kwargs are
+    dropped so the snippet shows only the decisions that differ from the defaults.
+
+    Args:
+        steps: ordered chain of ``{"method", "kwargs"}`` outlier tests.
+        var_name: the column screened (used for ``col=`` and the result frame).
+        site_lat, site_lon, utc_offset: site coordinates the detector needs for
+            the day/night split.
+        df_var: variable name used for the input DataFrame.
+        load_hint: if given, prepend ``df = <load_hint>`` so the snippet runs as-is.
+
+    Returns:
+        A runnable Python snippet as a string.
+    """
+    lines = ["import pandas as pd",
+             "import diive as dv",
+             "from diive.preprocessing.outlier_detection import StepwiseOutlierDetection",
+             "from diive.qaqc import FlagQCF",
+             ""]
+    if load_hint is not None:
+        lines += [f"{df_var} = {load_hint}", ""]
+    # output_middle_timestamp=False keeps the input index so the flags align back
+    # to the source frame on merge (what the GUI relies on).
+    lines += [
+        "sod = StepwiseOutlierDetection(",
+        f"    dfin={df_var}[[{var_name!r}]],",
+        f"    col={var_name!r},",
+        f"    site_lat={site_lat!r},",
+        f"    site_lon={site_lon!r},",
+        f"    utc_offset={utc_offset!r},",
+        "    output_middle_timestamp=False,",
+        ")",
+    ]
+    for step in steps:
+        method = step["method"]
+        defaults = _step_defaults(method)
+        kwarg_lines = [f"    {k}={v!r}," for k, v in step.get("kwargs", {}).items()
+                       if not (k in defaults and v == defaults[k])]
+        if kwarg_lines:
+            lines += [f"sod.{method}(", *kwarg_lines, ")"]
+        else:
+            lines.append(f"sod.{method}()")
+        lines.append("sod.addflag()")
+    lines += [
+        "",
+        f"qcf_input = pd.concat([sod.series_hires_orig.to_frame({var_name!r}), "
+        "sod.flags], axis=1)",
+        f"qcf = FlagQCF(df=qcf_input, target_col={var_name!r}, idstr='STEPWISE')",
+        "qcf.calculate()",
+        "",
+        "cleaned = qcf.filteredseries  # QCF-filtered series (outliers -> NaN)",
+        "flag = qcf.flagqcf            # overall flag: 0 ok / 1 marginal / 2 rejected",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def _render_call(class_path: str, kwargs: dict, defaults: dict, repeat: bool,
                  series_var: str, var_name: str | None) -> str:
     """Shared renderer: ``h = <class_path>(series=…, …).run(...)`` + result lines,

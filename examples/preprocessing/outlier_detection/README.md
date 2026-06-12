@@ -1,6 +1,6 @@
 # Outlier Detection Methods Examples
 
-Examples demonstrating 10 outlier detection methods for quality control, anomaly identification, and data cleaning.
+Examples demonstrating 9 outlier detection methods for quality control, anomaly identification, and data cleaning.
 
 ## Methods by Complexity
 
@@ -27,7 +27,10 @@ See `dv.outliers` for available detection classes:
 - `LocalSD` — Adaptive local threshold
 - `zScore` — Statistical threshold
 - `zScoreRolling` — Adaptive rolling threshold
+- `zScoreIncrements` — Spike detection on record-to-record increments
 - `LocalOutlierFactor` — Density-based detection
+- `TrimLow` — Symmetric trimmed-mean removal
+- `ManualRemoval` — Flag known problematic timestamps/periods
 - `StepwiseOutlierDetection` — Multi-stage orchestration
 
 ## Use Cases

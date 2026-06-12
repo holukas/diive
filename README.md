@@ -84,7 +84,7 @@ gapfilled = model.results.gapfilled
 
 ## API
 
-`import diive as dv` exposes nine domain namespaces. Classes live under the namespace for their area:
+`import diive as dv` exposes ten domain namespaces. Classes live under the namespace for their area:
 
 ```python
 import diive as dv
@@ -101,6 +101,7 @@ model = dv.gapfilling.RandomForestTS(input_df=df, target_col='NEE')
 | `dv.flux` | `run_chain`, `FluxConfig`, `FluxDetectionLimit`, `WindDoubleRotation` |
 | `dv.outliers` / `dv.corrections` / `dv.qaqc` | outlier methods, offset corrections, `FlagQCF` |
 | `dv.times` / `dv.variables` | timestamp sanitization, derived variables (VPD, potential radiation, ...) |
+| `dv.events` | `Event`, `event_to_flag`, `overlay_events` |
 
 A few I/O helpers are top-level: `dv.load_parquet`, `dv.save_parquet`, `dv.load_exampledata_parquet`.
 
@@ -110,7 +111,7 @@ For the full list, see `diive.__all__` and each namespace's `__all__`.
 
 ## Examples
 
-109 runnable examples are organized by topic in [examples/](examples/README.md). They follow Sphinx Gallery format (`# %%` sections), so they run as plain scripts and convert to HTML docs automatically. Browse by use case in [CATALOG.md](examples/CATALOG.md), or check [EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md) for documentation of the 37-variable dataset used throughout.
+113 runnable examples are organized by topic in [examples/](examples/README.md). They follow Sphinx Gallery format (`# %%` sections), so they run as plain scripts and convert to HTML docs automatically. Browse by use case in [CATALOG.md](examples/CATALOG.md), or check [EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md) for documentation of the 37-variable dataset used throughout.
 
 ```bash
 uv run python examples/visualization/plot_heatmap_datetime_basic.py

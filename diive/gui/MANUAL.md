@@ -375,6 +375,48 @@ kept set is not a single upper/lower envelope. Parameters:
 Adds `{var}_TRIMLOW` and its flag (`FLAG_{var}_OUTLIER_TRIMLOW_TEST`) to the
 variable list.
 
+### Outliers ▸ Absolute limits filter
+
+The simplest, one-sided test: flag everything **outside a fixed range**. Set a
+**Min** and **Max** and any value below the min or above the max is rejected — the
+limits are drawn on the preview as the detection band. Use it for hard physical
+constraints (e.g. relative humidity must be 0–100 %). Optionally split by day and
+night to enforce different ranges per period. Same preview, day/night colouring,
+**Add to dataset**, and **Copy Python** as the other tabs.
+
+Adds `{var}_ABSLIM` and its flag to the variable list.
+
+### Outliers ▸ Local Outlier Factor filter
+
+A density-based test (`LocalOutlierFactor`): a point is an outlier when its local
+density is substantially lower than that of its nearest neighbours. Parameters:
+
+- **Neighbors** (`n_neighbors`) — how many nearest neighbours define the local
+  density (default 20).
+- **Contamination** — the expected fraction of outliers (default 0.01), or tick
+  **Auto** to use the threshold from the LOF paper.
+
+Adds `{var}_LOF` and its flag to the variable list.
+
+### Outliers ▸ Manual removal
+
+Remove **known** bad records by hand — no statistics. List the timestamps and/or
+periods to drop (a calibration window, a sensor failure you already know about),
+then **Flag listed dates**. There is no detection band and no day/night mode; the
+selection is just the records you named.
+
+Adds `{var}_MANUAL` and its flag to the variable list.
+
+### Outliers ▸ Stepwise screening
+
+Chain several outlier tests on one variable and see what each step removes. Unlike
+the single-method tabs (one detector, one pass), each committed step runs on the
+data the previous steps already cleaned, so spikes are peeled off progressively.
+Build the chain step by step, inspect the per-step removals, and check the overall
+**quality flag (QCF)** — computed separately from the accumulated per-test flags.
+**Add cleaned + flags + QCF to dataset** appends the cleaned series, every step's
+flag, and the QCF-filtered series.
+
 ### Data ▸ Select variables
 
 Pick a subset of variables to focus the **Overview** list on. Click a variable on
@@ -448,11 +490,14 @@ into view, and plots it — so you can see the result right away.
 
 ### Flux ▸ Flux processing chain
 
-A guided workspace for the flux processing chain *(early — currently the Input +
-Level 2 steps)*. Pick the flux column and site, choose which Level-2 quality
-tests to run, and **Run Level 2** — the accepted (QCF-filtered) flux shows as a
-heatmap. **Copy Python** puts the exact, reproducible diive script for what you
-did on the clipboard, so a point-and-click run stays scriptable.
+A guided workspace for the flux processing chain, covering **Input + Level 2 +
+Level 3.1 + Level 3.2 + Level 3.3** (only Level 4.1 gap-filling is still to come).
+Pick the flux column and site, choose which Level-2 quality tests to run, set the
+Level-3.1 storage correction, optionally build a Level-3.2 outlier-detection chain
+and apply Level-3.3 USTAR filtering, then run the chain — the accepted
+(QCF-filtered) flux of the deepest level shows as a heatmap. **Copy Python** puts
+the exact, reproducible diive script for what you did on the clipboard, so a
+point-and-click run stays scriptable.
 
 > Needs eddy-covariance input with the raw EddyPro columns (FC, USTAR, the
 > `*_TEST` flags). The bundled CH-DAV example is a processed product and won't

@@ -45,24 +45,19 @@ seasonal = std.seasonal
 **Find lagged correlations (e.g., radiation vs. photosynthesis):**
 
 ```python
-from diive.analysis import Correlation
+from diive.analysis import rank_drivers
 
-corr = Correlation(
-    series1=df['PAR'],
-    series2=df['GPP'],
-    lags=range(-24, 25)
-)
-max_correlation = corr.results[corr.max_lag]
+# Ranks every other column against the target and scans lags.
+# Columns: DRIVER, CORR, ABS_CORR, BEST_LAG, N (positive BEST_LAG = driver leads target).
+ranked = rank_drivers(df, target='GPP', max_lag=24)
 ```
 
-**Analyze diurnal cycles:**
+**Daily correlation between two series:**
 
 ```python
-from diive.analysis import DielCycle
+from diive.analysis import DailyCorrelation
 
-diel = DielCycle(series=df['NEE'])
-mean_by_hour = diel.mean_by_hour
-std_by_hour = diel.std_by_hour
+dc = DailyCorrelation(series1=df['PAR'], series2=df['GPP'])
 ```
 
 ## Running Examples
@@ -100,11 +95,11 @@ uv run python examples/run_all_examples.py
 See `dv.analysis` for full API documentation:
 
 - `DailyCorrelation` — Daily correlation coefficients, summary statistics, anomaly detection
-- `Correlation` — Cross-correlation and lag detection
+- `rank_drivers` — Rank drivers against a target with lag scanning
 - `GrangerCausality` — Granger causality testing for predictive relationships
 - `SeasonalTrendDecomposition` — STL decomposition
-- `Quantiles` — Percentile-based analysis
+- `percentiles101` — Percentile-based analysis
 - `GapFinder` — Gap detection and reporting
-- `GapStats` — Extended gap analysis: monthly/annual breakdowns, long-gap listing, Rich report, four-panel figure
+- `GapStats` — Extended gap analysis: monthly/annual breakdowns, long-gap listing, Rich report, multi-panel figure
 - `GridAggregator` — 2D grid aggregation (quantile, equal-width, custom binning)
-- `Harmonic` — Spectral and Fourier analysis
+- `harmonic_analysis` / `spectrogram` — Spectral and time-frequency analysis

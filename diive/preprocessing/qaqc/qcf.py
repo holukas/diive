@@ -419,6 +419,122 @@ class FlagQCF:
 
         _console.print(f"\n{'=' * 120}\n")
 
+    def screening_report(self) -> tuple[DataFrame, str]:
+        """Build a per-step data-availability report as a table + formatted text.
+
+        For each individual test (applied cumulatively, in chain order) and for
+        each period (OVERALL, plus DAYTIME / NIGHTTIME when ``swinpot`` was given
+        at init), counts the records that are potential, measured, retained
+        (QCF < 2) and rejected (QCF == 2), with percentages. Built for
+        publication-ready screening statistics.
+
+        Returns:
+            (table, text):
+              - table: tidy DataFrame, one row per (period, step), columns
+                ``period, step, test, n_potential, n_measured, n_new_rejected,
+                n_retained, n_rejected, perc_retained, perc_rejected``.
+              - text: the same numbers formatted as fixed-width tables (one
+                section per period), ready to drop into a report.
+        """
+        test_cols = [c for c in identify_flagcols(df=self.flags, seriescol=self.series_name)
+                     if str(c).startswith('FLAG_') and str(c).endswith('_TEST')]
+        target = self.df[self.series_name]
+        ix_measured = target.notna()
+
+        periods = [("OVERALL", pd.Series(True, index=self.df.index))]
+        if isinstance(self.daytime, Series):
+            periods.append(("DAYTIME", self.daytime == 1))
+        if isinstance(self.nighttime, Series):
+            periods.append(("NIGHTTIME", self.nighttime == 1))
+
+        # Cumulative QCF after each test prefix (measured records only), mirroring
+        # report_qcf_evolution so day/night accept thresholds are honoured.
+        prog_qcf = []
+        if test_cols:
+            allflags = self.flags[test_cols][ix_measured].copy()
+            for k in range(1, len(test_cols) + 1):
+                prog = allflags[test_cols[:k]].copy()
+                prog = self._calculate_flagsums(df=prog)
+                prog = self._calculate_flag_qcf(df=prog)
+                prog_qcf.append(prog[self.flagqcfcol])
+
+        rows = []
+        for period_name, mask in periods:
+            period_ix = mask[mask].index
+            n_potential = len(period_ix)
+            prev_rej = 0
+            for k, test_col in enumerate(test_cols):
+                q = prog_qcf[k]
+                q = q.loc[q.index.intersection(period_ix)]
+                n_measured = len(q)
+                n_rejected = int((q == 2).sum())
+                n_retained = int((q < 2).sum())
+                n_new_rejected = n_rejected - prev_rej
+                prev_rej = n_rejected
+                perc_ret = (n_retained / n_measured * 100) if n_measured else 0.0
+                perc_rej = (n_rejected / n_measured * 100) if n_measured else 0.0
+                test_name = str(test_col).replace('FLAG_', '').replace('_TEST', '')
+                # Drop the redundant variable prefix so the method shows (e.g.
+                # "observed_value_OUTLIER_HAMPEL" -> "OUTLIER_HAMPEL").
+                if test_name.startswith(self.series_name + '_'):
+                    test_name = test_name[len(self.series_name) + 1:]
+                rows.append(dict(
+                    period=period_name, step=k + 1, test=test_name,
+                    n_potential=n_potential, n_measured=n_measured,
+                    n_new_rejected=n_new_rejected, n_retained=n_retained,
+                    n_rejected=n_rejected, perc_retained=perc_ret,
+                    perc_rejected=perc_rej))
+
+        table = DataFrame(rows, columns=[
+            'period', 'step', 'test', 'n_potential', 'n_measured',
+            'n_new_rejected', 'n_retained', 'n_rejected', 'perc_retained',
+            'perc_rejected'])
+        text = self._format_screening_text(table, periods)
+        return table, text
+
+    def _format_screening_text(self, table: DataFrame, periods: list) -> str:
+        """Render :meth:`screening_report`'s table as fixed-width text sections."""
+        lines = ["=" * 92,
+                 f"STEPWISE SCREENING REPORT: {self.series_name}",
+                 "=" * 92,
+                 "Records retained where QCF < 2 (good/marginal), rejected where QCF == 2.",
+                 ""]
+        if table.empty:
+            lines.append("No outlier tests applied yet.")
+            return "\n".join(lines) + "\n"
+        for period_name, _ in periods:
+            sub = table[table['period'] == period_name]
+            if sub.empty:
+                continue
+            n_potential = int(sub['n_potential'].iloc[0])
+            n_measured = int(sub['n_measured'].iloc[0])
+            perc_meas = (n_measured / n_potential * 100) if n_potential else 0.0
+            # Final retained/rejected = last step (cumulative through all tests).
+            final = sub.iloc[-1]
+            lines.append(f"--- {period_name} ---")
+            lines.append(f"   Potential records : {n_potential:>7}")
+            lines.append(f"   Measured records  : {n_measured:>7}  "
+                         f"({perc_meas:5.1f}% of potential)")
+            lines.append(f"   Retained (QCF<2)  : {int(final['n_retained']):>7}  "
+                         f"({final['perc_retained']:5.1f}% of measured)")
+            lines.append(f"   Rejected (QCF=2)  : {int(final['n_rejected']):>7}  "
+                         f"({final['perc_rejected']:5.1f}% of measured)")
+            lines.append("")
+            header = (f"   {'Step':<4} {'Test':<26} {'New rej':>8} "
+                      f"{'Retained':>9} {'Rejected':>9} {'Ret %':>7} {'Rej %':>7}")
+            lines.append(header)
+            lines.append("   " + "-" * (len(header) - 3))
+            for _, r in sub.iterrows():
+                # Keep the tail (method name) if a name is still too long.
+                test = r['test'] if len(r['test']) <= 26 else "..." + r['test'][-23:]
+                lines.append(
+                    f"   {int(r['step']):<4} {test:<26} {int(r['n_new_rejected']):>8} "
+                    f"{int(r['n_retained']):>9} {int(r['n_rejected']):>9} "
+                    f"{r['perc_retained']:>7.1f} {r['perc_rejected']:>7.1f}")
+            lines.append("")
+        lines.append("=" * 92)
+        return "\n".join(lines) + "\n"
+
     def _flagstats(self, flag: Series, prefix: str, indent: str = "  "):
         """Print flag value counts in table format (0=pass, 1=warn, 2=fail)."""
         n_values = len(flag)

@@ -9,9 +9,9 @@ For *how the code is organised internally* (modules, conventions), see
 
 ```mermaid
 flowchart TD
-    core["<b>diive core library</b><br/>diive/<br/>outliers · gapfilling · flux · analysis<br/>plotting · times · variables · corrections · qaqc"]
+    core["<b>diive core library</b><br/>diive/<br/>outliers · gapfilling · flux · analysis · events<br/>plotting · times · variables · corrections · qaqc"]
 
-    core --> lib["<b>Library API</b><br/>import diive as dv<br/><i>9 domain namespaces</i>"]
+    core --> lib["<b>Library API</b><br/>import diive as dv<br/><i>10 domain namespaces</i>"]
     core --> gui["<b>Desktop GUI</b><br/>diive-gui<br/><i>PySide6, 'gui' extra</i>"]
     core --> cli["<b>Command-line tools</b><br/>diive-tlag-pwb-* (EC time-lag)"]
     core --> learn["<b>Learn / verify</b><br/>examples/ · notebooks/ · tests/"]
@@ -40,9 +40,9 @@ flowchart TD
 
 ### 1. Library API — the main way to use diive
 
-`import diive as dv` exposes **9 domain namespaces** (`dv.outliers`, `dv.gapfilling`,
+`import diive as dv` exposes **10 domain namespaces** (`dv.outliers`, `dv.gapfilling`,
 `dv.flux`, `dv.analysis`, `dv.plotting`, `dv.times`, `dv.variables`, `dv.corrections`,
-`dv.qaqc`) plus a handful of top-level I/O helpers. Everything else is built on this —
+`dv.qaqc`, `dv.events`) plus a handful of top-level I/O helpers. Everything else is built on this —
 the GUI and CLIs are callers, not reimplementations. Start at the README
 [Quick start](README.md#quick-start); the full namespace listing is in
 [`CLAUDE.md`](CLAUDE.md).
@@ -90,7 +90,7 @@ Code lives in `diive/flux/hires/`. See the **High-Resolution EC Analysis** secti
 
 ### 5. Examples, notebooks, and tests
 
-- **`examples/`** — ~100 runnable, API-only scripts in Sphinx-Gallery format (`# %%`
+- **`examples/`** — 113 runnable, API-only scripts in Sphinx-Gallery format (`# %%`
   cells, no file I/O). Run one with `uv run python examples/gapfilling/gapfill_randomforest.py`.
   Catalogued in `examples/CATALOG.md`. **Never run the whole suite** during development.
 - **`notebooks/`** — exploratory Jupyter notebooks.
@@ -109,7 +109,7 @@ that feed it.
 ```
 diive/        core library + gui/ + flux/hires/ CLIs   ← the engine and its surfaces
 packaging/    PyInstaller build for the Windows exe
-examples/     ~100 runnable API examples
+examples/     113 runnable API examples
 notebooks/    exploratory Jupyter notebooks
 tests/        unit + integration tests
 docs/         Sphinx documentation source
