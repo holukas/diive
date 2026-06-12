@@ -125,6 +125,12 @@ def level2_to_code(init_kwargs: dict, level2_settings: dict,
     return "\n".join(lines) + "\n"
 
 
+def _level31_block(level31_kwargs: dict) -> list[str]:
+    """The ``run_level31`` call block (blank-line separated, no trailing ``final_df``)."""
+    return ["", "data = run_level31(", "    data,",
+            *_kwargs_lines(level31_kwargs, _level31_defaults()), ")"]
+
+
 def level31_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: dict,
                     df_var: str = "df", load_hint: str | None = None) -> str:
     """Render ``init_flux_data`` + ``run_level2`` + ``run_level31`` (composable form).
@@ -139,7 +145,51 @@ def level31_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
         "from diive.flux.fluxprocessingchain import "
         "init_flux_data, run_level2, run_level31",
         init_kwargs, level2_settings, df_var, load_hint)
-    lines += ["", "data = run_level31(", "    data,",
-              *_kwargs_lines(level31_kwargs, _level31_defaults()), ")",
-              "final_df = data.fpc_df"]
+    lines += _level31_block(level31_kwargs)
+    lines += ["final_df = data.fpc_df"]
+    return "\n".join(lines) + "\n"
+
+
+def _step_defaults(method_name: str) -> dict:
+    """Default values of a ``StepwiseOutlierDetection.flag_*`` method's parameters."""
+    from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+    method = getattr(StepwiseOutlierDetection, method_name)
+    return {p.name: p.default
+            for p in inspect.signature(method).parameters.values()
+            if p.default is not inspect.Parameter.empty}
+
+
+def level32_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: dict,
+                    level32_steps: list[dict],
+                    df_var: str = "df", load_hint: str | None = None) -> str:
+    """Render the composable chain through Level 3.2 (outlier detection).
+
+    Level 3.2 is a stateful chain: ``make_level32_detector`` builds a
+    ``StepwiseOutlierDetection``, then each step calls one ``flag_outliers_*`` /
+    ``flag_*`` method followed by ``addflag()``, and ``run_level32`` aggregates
+    the flags into the level QCF.
+
+    Args:
+        init_kwargs: kwargs for ``init_flux_data`` (without ``df``).
+        level2_settings: ``{test_name: settings_dict}`` for ``run_level2``.
+        level31_kwargs: kwargs for ``run_level31`` (storage correction).
+        level32_steps: ordered ``[{"method": str, "kwargs": dict}, ...]`` — one
+            committed outlier test per entry, in chain order.
+        df_var, load_hint: as in :func:`chain_to_code`.
+    """
+    lines = _init_level2_lines(
+        "from diive.flux.fluxprocessingchain import (init_flux_data, run_level2, "
+        "run_level31,\n    make_level32_detector, run_level32)",
+        init_kwargs, level2_settings, df_var, load_hint)
+    lines += _level31_block(level31_kwargs)
+    lines += ["", "data, sod = make_level32_detector(data)"]
+    for step in level32_steps:
+        method = step["method"]
+        kwarg_lines = _kwargs_lines(step.get("kwargs", {}), _step_defaults(method))
+        if kwarg_lines:
+            lines += [f"sod.{method}(", *kwarg_lines, ")"]
+        else:
+            lines.append(f"sod.{method}()")
+        lines.append("sod.addflag()")
+    lines += ["data = run_level32(data, outlier_detector=sod)", "final_df = data.fpc_df"]
     return "\n".join(lines) + "\n"

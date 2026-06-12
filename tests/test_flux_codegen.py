@@ -70,6 +70,29 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertIn("set_storage_to_zero=True", code)
         self.assertNotIn("gapfill_storage_term", code)
 
+    def test_level32_to_code(self):
+        from diive.flux.fluxprocessingchain import level32_to_code
+        code = level32_to_code(
+            init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+            level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
+            level31_kwargs={"gapfill_storage_term": True},
+            level32_steps=[
+                {"method": "flag_outliers_hampel_test",
+                 "kwargs": {"n_sigma": 5.5, "n_sigma_daytime": 4.0}},
+                {"method": "flag_outliers_zscore_test", "kwargs": {"thres_zscore": 4}},
+                {"method": "flag_missingvals_test", "kwargs": {}},
+            ])
+        compile(code, "<gen>", "exec")
+        self.assertIn("make_level32_detector, run_level32", code)
+        # Each committed test is followed by addflag(); the chain ends with run_level32.
+        self.assertEqual(code.count("sod.addflag()"), 3)
+        self.assertIn("data = run_level32(data, outlier_detector=sod)", code)
+        # Non-default kwarg shown; default-valued ones (n_sigma=5.5, thres_zscore=4) omitted.
+        self.assertIn("n_sigma_daytime=4.0", code)
+        self.assertNotIn("n_sigma=5.5", code)
+        # A method with no non-default kwargs renders as a bare call.
+        self.assertIn("sod.flag_missingvals_test()", code)
+
 
 if __name__ == "__main__":
     unittest.main()
