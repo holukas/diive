@@ -238,6 +238,93 @@ class TestAnalyses(unittest.TestCase):
         self.assertEqual(results.iloc[checkix]['COUNTS'], 7)
         self.assertEqual(hist.peakbins, [1.148, 1.241, 1.929, 1.324, 1.632])
 
+    def test_profile_dataframe(self):
+        import numpy as np
+        import pandas as pd
+        from diive.analysis.profile import (
+            PROFILE_COLUMNS, count_gaps, dataframe_overview, profile_dataframe)
+
+        # Deterministic synthetic frame: 30-min index, a duplicated timestamp,
+        # numeric / constant / non-numeric / all-missing columns with known gaps.
+        idx = pd.date_range('2020-01-01', periods=10, freq='30min')
+        idx = idx.append(pd.DatetimeIndex([idx[-1]]))  # one duplicate timestamp
+        df = pd.DataFrame(index=idx)
+        # NUM: two separate NaN runs (positions 2 and 5-6) -> 2 gaps; one zero.
+        df['NUM'] = [1.0, 0.0, np.nan, 3.0, 4.0, np.nan, np.nan, 7.0, 8.0, 9.0, 9.0]
+        df['CONST'] = 5.0                  # constant numeric column
+        df['CAT'] = list('aabbccddeeff'[:11])  # non-numeric (object)
+        df['EMPTY'] = np.nan               # all missing
+
+        prof = profile_dataframe(df)
+        self.assertListEqual(list(prof.columns), PROFILE_COLUMNS)
+        self.assertEqual(len(prof), 4)
+        # Row order matches df column order; VARIABLE is a string.
+        self.assertListEqual(prof['VARIABLE'].tolist(), ['NUM', 'CONST', 'CAT', 'EMPTY'])
+
+        num = prof.set_index('VARIABLE').loc['NUM']
+        self.assertEqual(num['COUNT'], 8)
+        self.assertEqual(num['MISSING'], 3)
+        self.assertEqual(num['N_GAPS'], 2)           # two consecutive-NaN runs
+        self.assertEqual(num['N_ZEROS'], 1)
+        self.assertFalse(num['CONSTANT'])
+        self.assertEqual(num['MIN'], 0.0)
+        self.assertEqual(num['MAX'], 9.0)
+        self.assertEqual(num['MEDIAN'], np.median([1, 0, 3, 4, 7, 8, 9, 9]))
+
+        const = prof.set_index('VARIABLE').loc['CONST']
+        self.assertTrue(const['CONSTANT'])
+        self.assertEqual(const['N_UNIQUE'], 1)
+
+        # Non-numeric: numeric summaries are NaN, no zeros counted.
+        cat = prof.set_index('VARIABLE').loc['CAT']
+        self.assertEqual(cat['N_ZEROS'], 0)
+        self.assertTrue(np.isnan(cat['MEAN']))
+        self.assertTrue(np.isnan(cat['MIN']))
+
+        # All-missing: count 0, 100% missing, single gap spanning everything.
+        empty = prof.set_index('VARIABLE').loc['EMPTY']
+        self.assertEqual(empty['COUNT'], 0)
+        self.assertEqual(empty['MISSING_PERC'], 100.0)
+        self.assertEqual(empty['N_GAPS'], 1)
+        self.assertTrue(empty['CONSTANT'])           # <=1 unique non-missing value
+        self.assertTrue(np.isnan(empty['MEAN']))
+
+        # count_gaps directly: no gaps, single value, edge runs.
+        self.assertEqual(count_gaps(pd.Series([1.0, 2.0, 3.0])), 0)
+        self.assertEqual(count_gaps(pd.Series([np.nan])), 1)
+        self.assertEqual(count_gaps(pd.Series([np.nan, 1.0, np.nan, np.nan])), 2)
+
+        ov = dataframe_overview(df)
+        self.assertEqual(ov['n_rows'], 11)
+        self.assertEqual(ov['n_cols'], 4)
+        self.assertEqual(ov['n_cells'], 44)
+        self.assertEqual(ov['duplicate_timestamps'], 1)
+        # The duplicate timestamp makes the index irregular -> freq uninferable.
+        self.assertIsNone(ov['freq'])
+        self.assertEqual(ov['start'], idx.min())
+        self.assertEqual(ov['end'], idx.max())
+        # Missing cells: NUM(3) + EMPTY(11) = 14 of 44.
+        self.assertEqual(ov['missing_cells'], 14)
+        self.assertAlmostEqual(ov['missing_perc'], round(100 * 14 / 44, 2))
+        self.assertGreater(ov['memory_bytes'], 0)
+
+    def test_profile_dataframe_exampledata(self):
+        import diive as dv
+        from diive.analysis.profile import PROFILE_COLUMNS
+        from diive.configs.exampledata import load_exampledata_parquet
+        df = load_exampledata_parquet()
+
+        prof = dv.analysis.profile_dataframe(df)
+        self.assertListEqual(list(prof.columns), PROFILE_COLUMNS)
+        self.assertEqual(len(prof), df.shape[1])     # one row per variable
+        # COUNT + MISSING reconcile with the frame for every variable.
+        self.assertTrue((prof['COUNT'] + prof['MISSING'] == len(df)).all())
+
+        ov = dv.analysis.dataframe_overview(df)
+        self.assertEqual(ov['n_rows'], len(df))
+        self.assertEqual(ov['n_cols'], df.shape[1])
+        self.assertEqual(ov['freq'], '30min')
+
 
 if __name__ == '__main__':
     unittest.main()

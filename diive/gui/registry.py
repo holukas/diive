@@ -27,6 +27,7 @@ from diive.gui.tabs.outliers_zscore import ZScoreOutlierTab
 from diive.gui.tabs.outliers_zscoreincrements import ZScoreIncrementsOutlierTab
 from diive.gui.tabs.outliers_trim import TrimLowOutlierTab
 from diive.gui.tabs.outliers_zscorerolling import ZScoreRollingOutlierTab
+from diive.gui.tabs.profile import ProfileTab
 from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
 from diive.gui.tabs.spectrogram import SpectrogramTab
 from diive.gui.tabs.stepwise import StepwiseScreeningTab
@@ -105,6 +106,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
     },
     # Exploratory analysis & diagnostics (dv.analysis).
     "Analyze": {
+        "Data profile": ProfileTab,
         "Gaps & coverage": GapDashboardTab,
         "Driver explorer": DriverExplorerTab,
         "Seasonal-trend & anomalies": SeasonalTrendTab,
@@ -125,7 +127,7 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 #: Everything else opens a new, numbered instance each time.
 SINGLE_INSTANCE_TABS: set[str] = {
     "Appearance", "Project settings", "Flux processing chain", "Time lag analysis",
-    "Gaps & coverage",
+    "Data profile", "Gaps & coverage",
     "Driver explorer", "Seasonal-trend & anomalies", "Spectrogram",
     "Metadata explorer", "Select variables", "Rename variables", "3D surface",
     "Stepwise screening", "Events"}

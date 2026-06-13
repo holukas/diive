@@ -41,6 +41,11 @@
   variables**, **Rename variables** (add a prefix/suffix to all variables, or one at a time, with a live preview),
   **Metadata explorer**, **Feature engineering**; plus **Appearance**, **Project settings** (author, description, site
   details, and a **sticky-note wall** — all saved with the project), and **Log**.
+- **Analyze ▸ Data profile** tab: a whole-dataset profiling overview — dataset-level facts (records, variables, overall
+  missing %, duplicate timestamps/rows, inferred frequency, time span, memory) above a sortable per-variable table
+  (dtype, count, missing count/%, number of gaps, unique values, zeros, constant flag, mean/SD/min/median/max), with a
+  variable filter and missing-% colour tint. Backed by the new library functions
+  `dv.analysis.profile_dataframe` / `dv.analysis.dataframe_overview` / `dv.analysis.count_gaps`.
 - **Projects** (`File ▸ Save project` / `Open project`): save the full working state to a self-contained
   ``<name>.diive`` folder — the dataset (`data.parquet`), the complete per-variable metadata (tags, notes,
   origin/provenance), project settings (author, description, site details), and the active date range, marked by a

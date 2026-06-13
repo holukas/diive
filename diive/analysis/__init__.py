@@ -22,14 +22,17 @@ from diive.analysis.gridaggregator import GridAggregator
 from diive.analysis.harmonic import harmonic_analysis, spectrogram
 from diive.analysis.histogram import Histogram
 from diive.analysis.optimumrange import FindOptimumRange
+from diive.analysis.profile import count_gaps, dataframe_overview, profile_dataframe
 from diive.analysis.quantiles import percentiles101
 from diive.analysis.seasonaltrend import SeasonalTrendDecomposition
 from diive.fits.fitter import BinFitterCP
 
 __all__ = [
     'BinFitterCP',
+    'count_gaps',
     'DailyCorrelation',
     'daily_correlation',
+    'dataframe_overview',
     'GrangerCausality',
     'StratifiedAnalysis',
     'experimental',
@@ -40,6 +43,7 @@ __all__ = [
     'Histogram',
     'FindOptimumRange',
     'percentiles101',
+    'profile_dataframe',
     'rank_drivers',
     'SeasonalTrendDecomposition',
     'spectrogram',
