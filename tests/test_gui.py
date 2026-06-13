@@ -653,6 +653,256 @@ def test_flux_chain_tab_level33(app):
     assert tab2._ustar == [(0.1, "CUT_50")]
 
 
+def test_flux_chain_tab_pipeline_rail(app):
+    # The chain tab is laid out as a pipeline rail (stage cards) + a stacked
+    # inspector: selecting a card swaps the stage's controls, status pills reflect
+    # the live config, and a run lights the reached cards.
+    from diive.gui.tabs.fluxchain import FluxChainTab, _STAGES
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+
+    # One card per pipeline stage; selecting one drives the stacked inspector.
+    assert len(tab.rail._cards) == len(_STAGES)
+    tab._select_stage(3)
+    assert tab._pages.currentIndex() == 3
+
+    # Status pills derive from the live controls.
+    statuses = tab._stage_statuses()
+    assert statuses[0][0] == "FC"                      # input: flux column
+    assert statuses[3] == ("none", "off")              # L3.2: no steps yet
+    assert statuses[4] == ("off", "off")               # L3.3: disabled
+    assert statuses[5] == ("off", "off")               # L4.1: no method
+
+    # Configuring stages updates their pills (kind reflects active/off/warn).
+    tab._steps = [HampelParams().step()]
+    tab.l33_enable.setChecked(True)
+    tab._ustar = [(0.1, "CUT_50")]
+    tab.l41_mds.setChecked(True)
+    tab._update_run_label()
+    s = tab._stage_statuses()
+    assert s[3] == ("1 step", "set")
+    assert s[4] == ("1 scenario", "set")
+    assert s[5][1] == "set" and "mds" in s[5][0]
+
+    # A run lights every reached card with the green ✓ (through L3.2 here).
+    data = tab._compute(df, tab._init_kwargs(), tab._level2_settings(),
+                        tab._level31_kwargs(), tab._steps)
+    tab._on_done(data)
+    QApplication.processEvents()
+    assert tab.rail._cards[3]._reached          # L3.2 reached
+    assert not tab.rail._cards[5]._reached      # L4.1 not run
+
+
+def test_flux_chain_tab_level2_details(app):
+    # The L2 page shows the variables each test reads, exposes the 8 VM97 sub-tests,
+    # gates tests on input availability, and the run produces a QCF report.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.flux.fluxprocessingchain import VM97_SUBTESTS
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+
+    # Vars header reflects the detected flux column + base variable.
+    assert "FC" in tab.l2_header.text() and "CO2" in tab.l2_header.text()
+    # Each test has a column picker seeded to the standard EddyPro column, and
+    # the availability marker confirms it's present.
+    assert tab.l2_cols["ssitc"][0].currentText() == "FC_SSITC_TEST"
+    assert tab.l2_cols["gas_completeness"][1].currentText() == "CO2_NR"
+    assert tab.l2_inputs["ssitc"].text().startswith("✓")
+    # All 8 VM97 sub-tests are exposed; defaults are spikes + dropout.
+    assert set(tab.l2_vm97_checks) == {k for k, _, _ in VM97_SUBTESTS}
+    assert tab.l2_vm97_checks["spikes"].isChecked()
+    assert not tab.l2_vm97_checks["amplitude"].isChecked()
+
+    # Editing the VM97 sub-tests flows into the L2 settings (all 8 keys present);
+    # the column equals the default, so no 'col' override is added.
+    tab.l2_vm97_checks["amplitude"].setChecked(True)
+    tab.l2_vm97_checks["dropout"].setChecked(False)
+    vm97 = tab._level2_settings()["raw_data_screening_vm97"]
+    assert vm97["apply"] is True
+    assert vm97["amplitude"] is True and vm97["dropout"] is False
+    assert set(vm97) == {"apply"} | {k for k, _, _ in VM97_SUBTESTS}
+
+    # Picking a different SSITC column adds a 'col' override to that test's config.
+    tab.l2_cols["ssitc"][0].setCurrentText("EXPECT_NR")
+    assert tab._level2_settings()["ssitc"]["col"] == "EXPECT_NR"
+    tab.l2_cols["ssitc"][0].setCurrentText("FC_SSITC_TEST")  # restore default
+    assert "col" not in tab._level2_settings()["ssitc"]
+
+    # Clearing a test's column disables it (and drops it from settings).
+    tab.l2_cols["spectral_correction_factor"][0].setCurrentText("")
+    assert not tab.l2_checks["spectral_correction_factor"].isEnabled()
+    assert "spectral_correction_factor" not in tab._level2_settings()
+    tab.l2_cols["spectral_correction_factor"][0].setCurrentText("FC_SCF")  # restore
+
+    # Signal strength has no column chosen -> no entry.
+    assert "signal_strength" not in tab._level2_settings()
+
+    # Running L2 fills the QCF report panel (per-test retained/rejected breakdown).
+    # Drive the per-level workers synchronously: init, then L2 on its output.
+    tab._level_worker({"idx": 0, "kind": "init", "init_kwargs": tab._init_kwargs()},
+                      None, df)
+    QApplication.processEvents()
+    tab._level_worker({"idx": 1, "kind": "level2", "settings": tab._level2_settings()},
+                      tab._data, df)
+    QApplication.processEvents()
+    assert tab._reached == 1
+    assert tab.report.toPlainText().strip()
+    assert tab.report_copy.isEnabled()
+    # The report breaks rejection down per test (QCF screening report).
+    assert "OVERALL" in tab.report.toPlainText()
+
+    # VM97 sub-tests + a custom column pick round-trip through save/restore.
+    tab.l2_cols["ssitc"][0].setCurrentText("EXPECT_NR")
+    state = tab.save_state()
+    tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2.l2_vm97_checks["amplitude"].isChecked()
+    assert not tab2.l2_vm97_checks["dropout"].isChecked()
+    assert tab2.l2_cols["ssitc"][0].currentText() == "EXPECT_NR"
+
+
+def test_flux_chain_tab_per_level_run(app):
+    # Each level runs separately, its output feeding the next; the per-level run
+    # buttons are gated by how far the chain has reached.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+
+    # Before any run: only the Input (init) level button is enabled.
+    assert tab._level_run_btns[0].isEnabled()
+    assert not tab._level_run_btns[1].isEnabled()
+    # Running a downstream level before its predecessor is refused.
+    tab._run_level(2)
+    assert "Run L2 first" in tab.summary.toPlainText()
+
+    # Run each level in turn on a synchronous worker; the output feeds forward.
+    def run(idx):
+        plan = tab._level_plan(idx)
+        assert plan is not None
+        tab._level_worker(plan, tab._data, tab._df)
+        QApplication.processEvents()
+
+    run(0)                                  # Input: init_flux_data
+    assert tab._data is not None and tab._reached == 0
+    assert tab._level_run_btns[1].isEnabled()   # L2 unlocked
+    assert not tab._level_run_btns[2].isEnabled()
+
+    run(1)                                  # L2 on the init output
+    assert tab._reached == 1
+    assert "L2 done" in tab.summary.toPlainText()
+
+    run(2)                                  # L3.1 on the L2 output
+    assert tab._reached == 2
+    assert any("L3.1" in str(c) for c in tab._data.fpc_df.columns)
+
+    # L3.2 needs steps; add one, then run.
+    tab._steps = [HampelParams().step()]
+    run(3)
+    assert tab._reached == 3
+    assert getattr(tab._data.levels, "level32_qcf", None) is not None
+
+    # The rail lights every reached card with the green ✓ up to L3.2.
+    assert tab.rail._cards[3]._reached
+    assert not tab.rail._cards[4]._reached
+
+    # Re-running an earlier level cascades the deeper state away (reach resets).
+    run(2)
+    assert tab._reached == 2
+    assert not tab.rail._cards[3]._reached
+
+
+def test_flux_chain_tab_level41(app):
+    # L4.1 gap-filling: fan out one gap-fill per USTAR scenario. MDS is fast and
+    # has no ML training, so drive a real run with it; rf/xgb are checked via codegen.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    # MDS driver combos auto-pick the gap-filled drivers (FLAG_* skipped).
+    assert tab.mds_vpd.currentText() == "VPD_T1_47_1_gfXG"
+    assert tab.mds_swin.currentText() == "SW_IN_T1_47_1_gfXG"
+
+    # A full chain through L3.3 is required for L4.1.
+    tab._steps = [HampelParams().step()]
+    tab.l33_enable.setChecked(True)
+    tab._ustar = [(0.1, "CUT_50")]
+
+    # Enabling MDS deepens the run target to 4.1.
+    tab.l41_mds.setChecked(True)
+    tab._update_run_label()
+    assert "4.1" in tab.run_btn.text()
+
+    # Copy-Python renders the full L2 -> L4.1 composable chain (rf+xgb+mds form).
+    tab.l41_rf.setChecked(True)
+    tab.l41_xgb.setChecked(True)
+    tab.l41_features.item(0).setSelected(True)
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    assert "run_level41_mds(" in code
+    assert "run_level41_rf(" in code and "run_level41_xgb(" in code
+    assert code.count("make_level41_engineer(") == 1
+
+    # Run MDS only (fast). Drive the synchronous core directly.
+    tab.l41_rf.setChecked(False)
+    tab.l41_xgb.setChecked(False)
+    cfg = tab._level41_cfg()
+    assert cfg["methods"] == ["mds"]
+    data = tab._compute(df, tab._init_kwargs(), tab._level2_settings(),
+                        tab._level31_kwargs(), tab._steps, tab._level33_kwargs(), cfg)
+    cols = data.gapfilled_cols()
+    assert "mds" in cols and "CUT_50" in cols["mds"]
+    tab._on_done(data)
+    QApplication.processEvents()
+    assert "Level 4.1 done" in tab.summary.toPlainText()
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                if "Cannot plot" in t.get_text()]
+
+    # The heatmaps view embeds via plot_gapfilled_heatmaps(fig=...).
+    tab.l41_view.setCurrentText("Gap-filled heatmaps")
+    tab._on_done(data)
+    QApplication.processEvents()
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                if "Cannot plot" in t.get_text()]
+
+    # Selecting an L4.1 method without features is rejected up front.
+    tab.l41_view.setCurrentText("Cumulative comparison")
+    tab.l41_rf.setChecked(True)
+    tab.l41_mds.setChecked(False)
+    tab.l41_features.clearSelection()
+    tab._run()
+    assert "feature" in tab.summary.toPlainText().lower()
+
+    # L4.1 config round-trips through save/restore (methods + features + drivers).
+    tab.l41_rf.setChecked(False)
+    tab.l41_mds.setChecked(True)
+    tab.l41_features.item(0).setSelected(True)
+    state = tab.save_state()
+    tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2.l41_mds.isChecked()
+    assert tab2._level41_cfg()["methods"] == ["mds"]
+    assert [i.text() for i in tab2.l41_features.selectedItems()] == \
+           [i.text() for i in tab.l41_features.selectedItems()]
+
+
 def test_stepwise_method_params_run_on_detector(app):
     # Every stepwise method-params widget must produce a {method, kwargs} step that
     # StepwiseOutlierDetection actually accepts and runs — this guards the kwarg

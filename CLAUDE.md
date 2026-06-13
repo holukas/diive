@@ -61,7 +61,7 @@ tests/                        # Unit tests
 | `dv.outliers` | `AbsoluteLimits`, `Hampel`, `LocalSD`, `LocalOutlierFactor`, `zScore`, `zScoreRolling`, `zScoreIncrements`, `TrimLow`, `ManualRemoval`, + daytime/nighttime variants |
 | `dv.events` | `Event` (instant or period time-stamped marker; `resolved_color(i, colors=)` accepts an optional `{category: hex}` override map), `event_to_flag` (→ 0/1 yes/no column aligned to an index), `overlay_events` (draw lines/spans on a datetime axes — `axis='x'` value-vs-time, `axis='y'` heatmap; `colors=` category-override map), `make_event_flag_name`, `CATEGORY_COLORS` |
 | `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`, `FeatureEngineer`, `GapFillingResult`, `prediction_scores`, `linear_interpolation` |
-| `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `process_one_file`, `FluxDetectionLimit`, ustar classes. Per-level `run_level*`, `make_level32_detector`, and `chain_to_code`/`level2_to_code` (render chain choices as a reproducible script) live in `diive.flux.fluxprocessingchain`. |
+| `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `process_one_file`, `FluxDetectionLimit`, ustar classes. Per-level `run_level*`, `make_level32_detector`, and `chain_to_code` / `level2_to_code` … `level41_to_code` (render chain choices as a reproducible script) live in `diive.flux.fluxprocessingchain`. |
 | `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `harmonic_analysis`, `spectrogram`, `percentiles101`, `rank_drivers`, `profile_dataframe` (per-variable profiling table — one row per column: dtype/count/missing/gaps/unique/zeros/constant + numeric summaries), `dataframe_overview` (dataset-level facts: rows/cols/duplicate timestamps/missing %/freq/span/memory), `count_gaps` |
 | `dv.analysis.experimental` | **(provisional, API may change)** `DriverAnalysis`, `DriverAnalysisResult`, `AleCurve`, `Ale2DResult`, `accumulated_local_effects`, `accumulated_local_effects_2d`, `ExperimentalWarning` — evidence-triangulation driver attribution; emits a one-time `ExperimentalWarning` on use |
 | `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `ShiftedDistributionPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot` |
@@ -402,13 +402,46 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   heatmaps read the cell from `get_coordinates()`/`get_array()`. Renders by blitting (background re-captured on
   `draw_event`); GUI-only presentation, no domain logic.
 - **Flux processing chain tab** (`tabs/fluxchain.py`, `Flux ▸ Flux processing chain`, single-instance). Guided
-  Swiss-FluxNet chain. **First slice = Input + Level 2**: collects site/flux-column + L2 test toggles, runs the
-  composable `init_flux_data` → `run_level2` on a worker thread, shows the L2 QCF-filtered flux as a heatmap, and
-  **Copy Python** emits a reproducible script via the library's `level2_to_code`. Script-gen lives in the library
-  (`flux/fluxprocessingchain/codegen.py`: `chain_to_code` for the `run_chain`/`FluxConfig` path, `level2_to_code` for the
-  composable path; both omit default-valued kwargs) — the GUI only calls it. Needs real EddyPro-FLUXNET input
-  (`load_exampledata_parquet_lae_level1_30MIN`), not the default CH-DAV. Later slices add L3.1/3.2/3.3/4.1 + switch to
-  `run_chain`/`chain_to_code`.
+  Swiss-FluxNet chain, **Input → L2 → L3.1 → L3.2 → L3.3 → L4.1**, all on the **composable per-level** path
+  (`init_flux_data` → `run_level2` → `run_level31` → `make_level32_detector`/`run_level32` →
+  `run_level33_constant_ustar` → `run_level41_*`) — deliberately **not** `run_chain`/`FluxConfig`, so L3.2 stays a real
+  inspected stepwise chain with its own QCF surface. **Layout is a horizontal pipeline rail**
+  (`widgets/flux_pipeline_rail.py`: `PipelineRail` + `StageCard`, GUI-only): the six stages (Input › L2 › L3.1 › L3.2 ›
+  L3.3 › L4.1) are selectable cards joined by chevrons, each with a level badge + a live **status pill** (`4 tests`,
+  `2 scenarios`, `rf · mds`, `off`/`none`, or a red `warn` when required-but-empty); clicking a card swaps that stage's
+  controls into a single inspector (`QStackedWidget`), so only the edited stage takes space and the canvas gets the rest.
+  Status pills come from `_stage_statuses()` (refreshed via `_update_run_label`/`_wire_status_refresh`); a run lights
+  every reached card with a green ✓ (`rail.set_reached_through(idx)`). **Levels run incrementally**: each inspector page
+  has its own run button (`Initialize chain`, `Run Level 2`, … `Run Level 4.1`, via `_level_run_button(idx)`) that runs
+  *only that level* on the evolving container `self._data` (`_run_level`/`_level_plan`/`_level_worker`), so each level's
+  output feeds the next; a button unlocks only once its predecessor has run (`_update_level_buttons` gates on
+  `self._reached`), and re-running an earlier level cascades the deeper state away (library re-run rule) and resets the
+  reach. The action-bar **Run through Level N** button still runs the whole chain from scratch through the deepest
+  configured level on a worker thread (ML gap-filling is slow); `_finalize(data, idx)` adopts the result and
+  `_render_stage` shows that level's diagnostic. **Copy Python** is the standardized `CopyPythonButton(self._code)` (no
+  code dump in the summary box — clipboard only, with the "Copied ✓" flash) emitting the exact reproducible composable
+  script. Layout is **inspector (fixed-width, ~545px so the widest stage page fits — no horizontal overflow / left-clip)
+  | heatmap canvas | a right text column** (run status over a monospace **QCF-report panel**): after a level runs,
+  `_update_report` fills it with `qcf.screening_report()` (per-test retained/rejected, day/night split) for that level's `FlagQCF`
+  (`_level_qcf` maps stage → `level2_qcf`/`level31_qcf`/`level32_qcf`/first `level33_qcf` scenario), with a **Copy
+  report** button. **L2 detail:** each test has a **column picker** (`l2_cols`, one combo per input — two for the
+  completeness test) seeded to the standard EddyPro-FLUXNET name (`_populate_l2_cols`) with a present/✗ availability
+  marker (`_refresh_l2_availability`); a test with no valid column is disabled and dropped from the run. The chosen
+  column flows through a **library** per-test override: `run_level2`'s test config dicts take an optional `'col'` key
+  (`'expect_nr_col'`/`'basevar_nr_col'` for completeness), threaded down to the `flag_*_eddypro_test` functions (default
+  `None` → the standard templated name); `_level2_settings` adds `col` only when the pick differs from the default
+  (keeps run/codegen minimal). The eight **VM97 sub-tests** are individual toggles, and signal-strength exposes column +
+  direction + threshold. The default column names + the VM97 sub-test list are library domain knowledge —
+  `dv.flux.level2_test_inputs(fluxcol, fluxbasevar)` (templated names mirroring the `flag_*_eddypro_test` reads) and
+  `VM97_SUBTESTS`; the GUI derives `fluxbasevar` via `detect_fluxbasevar` and only displays/gates. **L4.1** ticks rf / xgb / mds (additive across methods — each
+  replaces only its own previous result), picks rf/xgb predictor features + MDS SW_IN/TA/VPD driver columns (MDS units:
+  VPD kPa, TA °C — the library warns on suspicious medians; driver auto-pick skips `FLAG_*` columns), fans out one
+  gap-fill per USTAR scenario, and renders the method comparison via `data.plot_cumulative_comparison(ax=...)` /
+  `plot_gapfilled_heatmaps(fig=...)` (two-phase `ax=`/`fig=` embedding, like `RidgeLinePlot.plot(fig=...)`; the heatmaps
+  view sets `canvas.auto_layout=False`). Script-gen lives in the library (`flux/fluxprocessingchain/codegen.py`:
+  `chain_to_code` for the `run_chain`/`FluxConfig` path, `level2_to_code` … `level41_to_code` for the composable
+  per-level path; all omit default-valued kwargs) — the GUI only calls it. Needs real EddyPro-FLUXNET input
+  (`load_exampledata_parquet_lae_level1_30MIN`), not the default CH-DAV.
 - **Feature engineering tab.** Menu-activated (`Data ▸ Feature engineering`, from `registry.MENU_TAB_CLASSES`) — not in
   the tab bar until selected, and closable (always-on tabs get their close button removed). Runs `FeatureEngineer`
   (library) on selected variables, emits new columns via a `featuresCreated` signal; `MainWindow` merges them, tracks

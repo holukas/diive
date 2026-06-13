@@ -94,6 +94,56 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         self.assertEqual(data31.level_ids, ['L2', 'L3.1'])
         self.assertIsNone(data31.levels.level32)
 
+    def test_level2_test_inputs_and_vm97_subtests(self):
+        from diive.flux.fluxprocessingchain import VM97_SUBTESTS, level2_test_inputs
+
+        # Eight VM97 sub-tests, each (key, label, kind in {'hard','soft'}).
+        self.assertEqual(len(VM97_SUBTESTS), 8)
+        keys = [k for k, _, _ in VM97_SUBTESTS]
+        self.assertIn("spikes", keys)
+        self.assertIn("discont_sf", keys)
+        self.assertTrue(all(kind in ("hard", "soft") for _, _, kind in VM97_SUBTESTS))
+
+        # Input columns are templated on the flux column + its base variable.
+        info = level2_test_inputs("FC", "CO2")
+        self.assertEqual(info["ssitc"]["inputs"], ["FC_SSITC_TEST"])
+        self.assertEqual(info["raw_data_screening_vm97"]["inputs"], ["CO2_VM97_TEST"])
+        self.assertIn("CO2_NR", info["gas_completeness"]["inputs"])
+        # Signal strength reads a user-chosen column (no fixed input).
+        self.assertTrue(info["signal_strength"]["user_col"])
+        self.assertEqual(info["signal_strength"]["inputs"], [])
+        # A different flux re-templates the columns.
+        self.assertEqual(level2_test_inputs("LE", "H2O")["spectral_correction_factor"]["inputs"],
+                         ["LE_SCF"])
+
+    def test_level2_custom_input_columns(self):
+        # Each L2 test can read a differently-named column via a 'col' override
+        # (two keys for the two-column completeness test).
+        from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+        from diive.flux.fluxprocessingchain import init_flux_data, run_level2
+
+        df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+        df = df.drop(columns=[c for c in ("SW_IN_POT", "DAYTIME", "NIGHTTIME")
+                              if c in df.columns])
+        # Rename the standard inputs to non-standard names.
+        df = df.rename(columns={"FC_SSITC_TEST": "MY_SSITC",
+                                "CO2_VM97_TEST": "MY_VM97",
+                                "CO2_NR": "MY_CO2_NR"})
+        data = init_flux_data(df=df, fluxcol="FC", site_lat=47.4, site_lon=8.5, utc_offset=1)
+        data = run_level2(
+            data,
+            ssitc={"apply": True, "setflag_timeperiod": None, "col": "MY_SSITC"},
+            gas_completeness={"apply": True, "basevar_nr_col": "MY_CO2_NR"},
+            raw_data_screening_vm97={
+                "apply": True, "spikes": True, "dropout": True, "amplitude": False,
+                "abslim": False, "skewkurt_hf": False, "skewkurt_sf": False,
+                "discont_hf": False, "discont_sf": False, "col": "MY_VM97"},
+        )
+        # The chain ran on the renamed columns and produced the standard flags.
+        assert data.filteredseries.dropna().count() > 0
+        assert any("SSITC" in str(c) for c in data.fpc_df.columns)
+        assert any("VM97_DROPOUT" in str(c) for c in data.fpc_df.columns)
+
     def test_ordering_errors(self):
         """Level callables should fail loudly when called out of order."""
         from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN

@@ -108,6 +108,49 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertIn("thresholds=[0.18]", code)
         self.assertIn("threshold_labels=['CUT_50']", code)
 
+    def test_level41_to_code(self):
+        from diive.flux.fluxprocessingchain import level41_to_code
+        code = level41_to_code(
+            init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+            level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
+            level31_kwargs={},
+            level32_steps=[{"method": "flag_outliers_hampel_test", "kwargs": {}}],
+            level33_kwargs={"thresholds": [0.18], "threshold_labels": ["CUT_50"]},
+            level41_cfg={
+                "methods": ["rf", "xgb", "mds"],
+                "features": ["TA_1_1_1", "SW_IN_1_1_1", "VPD_1_1_1"],
+                "mds": {"swin": "SW_IN_1_1_1", "ta": "TA_1_1_1", "vpd": "VPD_1_1_1"},
+            })
+        compile(code, "<gen>", "exec")
+        # L4.1 always renders the full L2 -> L3.3 chain before it.
+        self.assertIn("make_level32_detector", code)
+        self.assertIn("run_level33_constant_ustar(", code)
+        # One engineer shared by rf + xgb; mds takes driver columns.
+        self.assertEqual(code.count("make_level41_engineer("), 1)
+        self.assertIn("run_level41_rf(", code)
+        self.assertIn("run_level41_xgb(", code)
+        self.assertIn("run_level41_mds(", code)
+        self.assertIn("swin='SW_IN_1_1_1'", code)
+        # Only the requested method's functions are imported.
+        self.assertIn("make_level41_engineer", code)
+
+    def test_level41_to_code_mds_only_omits_engineer(self):
+        from diive.flux.fluxprocessingchain import level41_to_code
+        code = level41_to_code(
+            init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+            level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
+            level31_kwargs={},
+            level32_steps=[{"method": "flag_outliers_hampel_test", "kwargs": {}}],
+            level33_kwargs={"thresholds": [0.18], "threshold_labels": ["CUT_50"]},
+            level41_cfg={"methods": ["mds"],
+                         "mds": {"swin": "SW_IN", "ta": "TA", "vpd": "VPD"}})
+        compile(code, "<gen>", "exec")
+        # MDS needs no FeatureEngineer; rf/xgb absent.
+        self.assertNotIn("make_level41_engineer", code)
+        self.assertNotIn("run_level41_rf(", code)
+        self.assertNotIn("run_level41_xgb(", code)
+        self.assertIn("run_level41_mds(", code)
+
 
 if __name__ == "__main__":
     unittest.main()

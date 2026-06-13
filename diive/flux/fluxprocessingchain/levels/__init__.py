@@ -16,7 +16,11 @@ Part of the diive library: https://github.com/holukas/diive
 """
 
 from diive.flux.fluxprocessingchain.levels._init import init_flux_data
-from diive.flux.fluxprocessingchain.levels.level2 import run_level2
+from diive.flux.fluxprocessingchain.levels.level2 import (
+    VM97_SUBTESTS,
+    level2_test_inputs,
+    run_level2,
+)
 from diive.flux.fluxprocessingchain.levels.level31 import run_level31
 from diive.flux.fluxprocessingchain.levels.level32 import make_level32_detector, run_level32
 from diive.flux.fluxprocessingchain.levels.level33 import (
@@ -33,6 +37,8 @@ from diive.flux.fluxprocessingchain.levels.level41 import (
 __all__ = [
     'init_flux_data',
     'run_level2',
+    'VM97_SUBTESTS',
+    'level2_test_inputs',
     'run_level31',
     'make_level32_detector',
     'run_level32',

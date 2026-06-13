@@ -755,6 +755,8 @@ class FluxLevelData:
             saveplot: bool = False,
             path: str | None = None,
             showplot: bool = True,
+            ax=None,
+            fig=None,
     ) -> None:
         """Overlay cumulative sums of all gap-filled methods for direct comparison.
 
@@ -782,6 +784,12 @@ class FluxLevelData:
             showplot: Call ``plt.show()`` after rendering.  Set to ``False``
                 for headless / batch use or when embedding the figure into
                 a larger composite.  Defaults to ``True``.
+            ax: Existing matplotlib ``Axes`` to draw into (two-phase pattern,
+                for embedding in a GUI canvas).  A new figure is created when
+                ``None``.  When supplied, ``tight_layout`` / ``plt.show`` are
+                skipped — the host owns the figure layout.
+            fig: Figure that owns ``ax`` (only used together with ``ax`` for
+                ``saveplot``).  Defaults to ``ax.figure``.
 
         Raises:
             RuntimeError: If no L4.1 method has been run yet.
@@ -826,7 +834,13 @@ class FluxLevelData:
             'mds': 'MDS',
         }
 
-        fig, ax = plt.subplots(figsize=(14, 5))
+        # Two-phase: draw into a caller-supplied ax (GUI embedding) or own a
+        # fresh figure. own_fig gates the layout/show steps the host handles.
+        own_fig = ax is None
+        if own_fig:
+            fig, ax = plt.subplots(figsize=(14, 5))
+        elif fig is None:
+            fig = ax.figure
         unit_str = f' ({units})' if units else ''
 
         # Measured-only reference (L3.3 QCF series; gaps = 0 contribution)
@@ -884,13 +898,14 @@ class FluxLevelData:
                       f"{self.meta.fluxcol}  |  USTAR scenario: {ustar_scenario}")
         ax.set_title(title or auto_title, fontsize=11)
 
-        fig.tight_layout()
+        if own_fig:
+            fig.tight_layout()
 
         if saveplot:
             from diive.core.plotting.plotfuncs import save_fig
             save_fig(fig=fig, title=title or auto_title, path=path)
 
-        if showplot:
+        if own_fig and showplot:
             plt.show()
 
     def plot_gapfilled_heatmaps(
@@ -904,6 +919,7 @@ class FluxLevelData:
             saveplot: bool = False,
             path: str | None = None,
             showplot: bool = True,
+            fig=None,
     ) -> None:
         """Multi-panel heatmap: measured flux + one panel per gap-filling method.
 
@@ -929,10 +945,17 @@ class FluxLevelData:
             showplot: Call ``plt.show()`` after rendering.  Set to ``False``
                 for headless / batch use or when embedding the figure into
                 a larger composite.  Defaults to ``True``.
+            fig: Existing matplotlib ``Figure`` to render into (two-phase
+                pattern, for embedding in a GUI canvas — mirrors
+                ``RidgeLinePlot.plot(fig=...)``).  The whole figure is used
+                for the side-by-side gridspec, so exactly one USTAR scenario
+                may resolve; pass ``ustar_scenario`` when several exist.  The
+                figure is cleared before drawing; ``plt.show`` is skipped.
 
         Raises:
             RuntimeError: If no L4.1 method has been run yet.
-            ValueError: If the requested USTAR scenario is not found.
+            ValueError: If the requested USTAR scenario is not found, or if
+                ``fig`` is supplied while more than one scenario resolves.
 
         Example::
 
@@ -964,16 +987,25 @@ class FluxLevelData:
         else:
             scenarios_to_plot = all_scenarios
 
+        # An external figure backs a single side-by-side gridspec, so it can
+        # only host one scenario; refuse to silently drop the others.
+        if fig is not None and len(scenarios_to_plot) > 1:
+            raise ValueError(
+                f"plot_gapfilled_heatmaps(fig=...) renders into a single figure, "
+                f"but {len(scenarios_to_plot)} USTAR scenarios resolved "
+                f"({scenarios_to_plot}). Pass ustar_scenario= to pick one."
+            )
+
         for scen in scenarios_to_plot:
             self._plot_heatmaps_one_scenario(
                 scen, cols=cols, vmin=vmin, vmax=vmax,
                 cmap=cmap, units=units, title=title,
-                saveplot=saveplot, path=path, showplot=showplot,
+                saveplot=saveplot, path=path, showplot=showplot, fig=fig,
             )
 
     def _plot_heatmaps_one_scenario(
             self, ustar_scenario, *, cols, vmin, vmax,
-            cmap, units, title, saveplot, path, showplot,
+            cmap, units, title, saveplot, path, showplot, fig=None,
     ) -> None:
         import numpy as np
         import matplotlib.pyplot as plt
@@ -1008,7 +1040,13 @@ class FluxLevelData:
 
         n = len(panels)
         zlabel = units or self.meta.fluxcol
-        fig = plt.figure(figsize=(n * 5.5, 5), constrained_layout=True)
+        # Two-phase: render into a caller-supplied figure (GUI embedding,
+        # cleared first like RidgeLinePlot) or own a fresh one.
+        own_fig = fig is None
+        if own_fig:
+            fig = plt.figure(figsize=(n * 5.5, 5), constrained_layout=True)
+        else:
+            fig.clear()
         gs = gridspec.GridSpec(1, n, figure=fig)
 
         for i, (series, subtitle) in enumerate(panels):
@@ -1025,7 +1063,7 @@ class FluxLevelData:
             from diive.core.plotting.plotfuncs import save_fig
             save_fig(fig=fig, title=title or auto_title, path=path)
 
-        if showplot:
+        if own_fig and showplot:
             plt.show()
 
     def gapfilled_cols(self) -> dict[str, dict[str, str]]:

@@ -114,7 +114,9 @@ from diive.flux.fluxprocessingchain.container import (
 from diive.flux.lowres.quality_flags import FluxQualityFlagsEddyPro
 from diive.flux.lowres.storage_correction import FluxStorageCorrectionSinglePointEddyPro
 from diive.flux.fluxprocessingchain.levels import (
+    VM97_SUBTESTS,
     init_flux_data,
+    level2_test_inputs,
     make_level32_detector,
     make_level41_engineer,
     run_level2,
@@ -129,6 +131,7 @@ from diive.flux.fluxprocessingchain.levels import (
 from diive.flux.fluxprocessingchain.run_chain import run_chain
 from diive.flux.fluxprocessingchain.codegen import (
     chain_to_code, level2_to_code, level31_to_code, level32_to_code, level33_to_code,
+    level41_to_code,
 )
 
 __all__ = [
@@ -146,10 +149,13 @@ __all__ = [
     'level31_to_code',
     'level32_to_code',
     'level33_to_code',
+    'level41_to_code',
     # Composable callables
     'init_flux_data',
     'add_driver',
     'run_level2',
+    'VM97_SUBTESTS',
+    'level2_test_inputs',
     'run_level31',
     'make_level32_detector',
     'run_level32',

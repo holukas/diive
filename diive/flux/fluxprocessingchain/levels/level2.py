@@ -21,6 +21,66 @@ from diive.flux.fluxprocessingchain.levels._rerun import (
 )
 from diive.flux.lowres.quality_flags import FluxQualityFlagsEddyPro
 
+#: The eight VM97 (Vickers & Mahrt 1997) raw-data screening sub-tests EddyPro
+#: encodes in the single ``{fluxbasevar}_VM97_TEST`` integer, as
+#: ``(kwarg_key, label, kind)``. ``kind`` is ``'hard'`` (failure -> flag 2) or
+#: ``'soft'`` (failure -> flag 1, a marginal warning). The kwarg keys match the
+#: ``raw_data_screening_vm97`` sub-keys of :func:`run_level2`.
+VM97_SUBTESTS: list[tuple[str, str, str]] = [
+    ("spikes", "Spike detection", "hard"),
+    ("amplitude", "Amplitude resolution", "hard"),
+    ("dropout", "Dropout detection", "hard"),
+    ("abslim", "Absolute limits", "hard"),
+    ("skewkurt_hf", "Skewness / kurtosis (hard)", "hard"),
+    ("skewkurt_sf", "Skewness / kurtosis (soft)", "soft"),
+    ("discont_hf", "Discontinuities (hard)", "hard"),
+    ("discont_sf", "Discontinuities (soft)", "soft"),
+]
+
+
+def level2_test_inputs(fluxcol: str, fluxbasevar: str) -> dict[str, dict]:
+    """Report the EddyPro-FLUXNET input column(s) each Level-2 test reads.
+
+    Lets a caller (e.g. the GUI flux-chain tab) tell the user which variables a
+    quality test depends on, and check upfront whether the loaded dataset
+    actually provides them. Column names are templated on the flux column and
+    its base variable (see :func:`diive.flux.lowres.common.detect_fluxbasevar`),
+    mirroring the column names the underlying ``flag_*_eddypro_test`` functions
+    read.
+
+    The signal-strength test reads a *user-chosen* column rather than a fixed
+    one, so its entry carries ``user_col=True`` and an empty ``inputs`` list —
+    the caller supplies the column.
+
+    Args:
+        fluxcol: Flux column name (e.g. ``'FC'``).
+        fluxbasevar: Base variable the flux was computed from (e.g. ``'CO2'``).
+
+    Returns:
+        ``{test_key: {"label": str, "inputs": [col, ...], "user_col": bool}}``,
+        keyed by the ``run_level2`` test kwarg. The always-on missing-values
+        test (which reads only ``fluxcol``) is omitted — it is not user-toggled.
+    """
+    return {
+        "ssitc": {"label": "SSITC (steady-state / turbulence)",
+                  "inputs": [f"{fluxcol}_SSITC_TEST"], "user_col": False},
+        "gas_completeness": {"label": "Gas completeness",
+                             "inputs": ["EXPECT_NR", f"{fluxbasevar}_NR"],
+                             "user_col": False},
+        "spectral_correction_factor": {"label": "Spectral correction factor",
+                                        "inputs": [f"{fluxcol}_SCF"],
+                                        "user_col": False},
+        "signal_strength": {"label": "Signal strength (IRGA AGC)",
+                            "inputs": [], "user_col": True},
+        "raw_data_screening_vm97": {"label": "Raw-data screening (VM97)",
+                                    "inputs": [f"{fluxbasevar}_VM97_TEST"],
+                                    "user_col": False},
+        "angle_of_attack": {"label": "Angle of attack",
+                            "inputs": ["VM97_AOA_HF"], "user_col": False},
+        "steadiness_of_horizontal_wind": {"label": "Steadiness of horizontal wind",
+                                          "inputs": ["VM97_NSHW_HF"], "user_col": False},
+    }
+
 
 def run_level2(
         data: FluxLevelData,
@@ -38,6 +98,12 @@ def run_level2(
 
     Each test is enabled by passing a config dict containing at least
     ``{'apply': True, ...}``.  Pass ``None`` (or omit) to skip a test.
+
+    Every test reads a fixed EddyPro-FLUXNET input column derived from the flux
+    column / its base variable (see :func:`level2_test_inputs`).  To point a test
+    at a differently-named column, add a ``'col'`` key to its config dict
+    (``'expect_nr_col'`` / ``'basevar_nr_col'`` for the two-column completeness
+    test).  Absent or ``None`` keeps the standard templated name.
 
     Args:
         data: FluxLevelData from ``init_flux_data()``.
@@ -130,12 +196,17 @@ def run_level2(
     )
     level2.missing_vals_test()
 
+    # Each test optionally overrides the EddyPro-FLUXNET input column it reads
+    # via a ``'col'`` key (``'expect_nr_col'`` / ``'basevar_nr_col'`` for the
+    # two-column completeness test). Absent / None -> the standard templated name.
     if ssitc and ssitc.get('apply'):
-        level2.ssitc_test(setflag_timeperiod=ssitc.get('setflag_timeperiod'))
+        level2.ssitc_test(setflag_timeperiod=ssitc.get('setflag_timeperiod'),
+                          flagcol=ssitc.get('col'))
     if gas_completeness and gas_completeness.get('apply'):
-        level2.gas_completeness_test()
+        level2.gas_completeness_test(expect_nr_col=gas_completeness.get('expect_nr_col'),
+                                     basevar_nr_col=gas_completeness.get('basevar_nr_col'))
     if spectral_correction_factor and spectral_correction_factor.get('apply'):
-        level2.spectral_correction_factor_test()
+        level2.spectral_correction_factor_test(scfcol=spectral_correction_factor.get('col'))
     if signal_strength and signal_strength.get('apply'):
         level2.signal_strength_test(
             signal_strength_col=signal_strength['signal_strength_col'],
@@ -152,11 +223,13 @@ def run_level2(
             skewkurt_sf=raw_data_screening_vm97['skewkurt_sf'],
             discont_hf=raw_data_screening_vm97['discont_hf'],
             discont_sf=raw_data_screening_vm97['discont_sf'],
+            vm97col=raw_data_screening_vm97.get('col'),
         )
     if angle_of_attack and angle_of_attack.get('apply'):
-        level2.angle_of_attack_test(application_dates=angle_of_attack['application_dates'])
+        level2.angle_of_attack_test(application_dates=angle_of_attack['application_dates'],
+                                    aoacol=angle_of_attack.get('col'))
     if steadiness_of_horizontal_wind and steadiness_of_horizontal_wind.get('apply'):
-        level2.steadiness_of_horizontal_wind()
+        level2.steadiness_of_horizontal_wind(nshwcol=steadiness_of_horizontal_wind.get('col'))
 
     updated, qcf = finalize_level(
         data,

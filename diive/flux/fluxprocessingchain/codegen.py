@@ -232,7 +232,82 @@ def level33_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
         init_kwargs, level2_settings, df_var, load_hint)
     lines += _level31_block(level31_kwargs)
     lines += _level32_block(level32_steps)
-    lines += ["", "data = run_level33_constant_ustar(", "    data,",
-              *_kwargs_lines(level33_kwargs, _level33_defaults()), ")",
-              "final_df = data.fpc_df"]
+    lines += _level33_block(level33_kwargs)
+    lines += ["final_df = data.fpc_df"]
+    return "\n".join(lines) + "\n"
+
+
+def _level33_block(level33_kwargs: dict) -> list[str]:
+    """The ``run_level33_constant_ustar`` call block (no trailing ``final_df``)."""
+    return ["", "data = run_level33_constant_ustar(", "    data,",
+            *_kwargs_lines(level33_kwargs, _level33_defaults()), ")"]
+
+
+def _level41_block(level41_cfg: dict) -> list[str]:
+    """The L4.1 gap-filling block: one ``run_level41_*`` per selected method.
+
+    ``level41_cfg`` shape (the GUI flux-chain tab's ``_level41_cfg``)::
+
+        {"methods": ["rf", "xgb", "mds"],   # subset, in this canonical order
+         "features": ["TA_...", "SW_IN_...", "VPD_..."],   # rf / xgb predictors
+         "mds": {"swin": "SW_IN_...", "ta": "TA_...", "vpd": "VPD_..."}}
+
+    RF and XGBoost share one ``make_level41_engineer`` instance (feature
+    engineering runs once and is reused across methods and USTAR scenarios).
+    """
+    methods = level41_cfg.get("methods", [])
+    features = level41_cfg.get("features") or []
+    lines: list[str] = []
+    if any(m in methods for m in ("rf", "xgb")):
+        lines += ["", "engineer = make_level41_engineer(", "    data,",
+                  f"    features={features!r},", ")"]
+    if "rf" in methods:
+        lines += ["", "data = run_level41_rf(", "    data,",
+                  f"    features={features!r},", "    engineer=engineer,", ")"]
+    if "xgb" in methods:
+        lines += ["", "data = run_level41_xgb(", "    data,",
+                  f"    features={features!r},", "    engineer=engineer,", ")"]
+    if "mds" in methods:
+        mds = level41_cfg.get("mds") or {}
+        lines += ["", "data = run_level41_mds(", "    data,",
+                  f"    swin={mds.get('swin')!r},", f"    ta={mds.get('ta')!r},",
+                  f"    vpd={mds.get('vpd')!r},", ")"]
+    return lines
+
+
+def level41_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: dict,
+                    level32_steps: list[dict], level33_kwargs: dict, level41_cfg: dict,
+                    df_var: str = "df", load_hint: str | None = None) -> str:
+    """Render the composable chain through Level 4.1 (gap-filling).
+
+    L4.1 requires the full L2 -> L3.3 chain to have run, so that chain is always
+    rendered before the ``run_level41_*`` calls.  Gap-filling is additive across
+    methods: each selected method (``rf`` / ``xgb`` / ``mds``) emits its own
+    ``run_level41_*`` call; RF and XGBoost share one ``FeatureEngineer``.
+
+    Args:
+        init_kwargs: kwargs for ``init_flux_data`` (without ``df``).
+        level2_settings: ``{test_name: settings_dict}`` for ``run_level2``.
+        level31_kwargs: kwargs for ``run_level31`` (storage correction).
+        level32_steps: ordered ``[{"method": str, "kwargs": dict}, ...]``.
+        level33_kwargs: kwargs for ``run_level33_constant_ustar``.
+        level41_cfg: gap-filling selection — see :func:`_level41_block`.
+        df_var, load_hint: as in :func:`chain_to_code`.
+    """
+    methods = level41_cfg.get("methods", [])
+    names = ["init_flux_data", "run_level2", "run_level31",
+             "make_level32_detector", "run_level32", "run_level33_constant_ustar"]
+    if any(m in methods for m in ("rf", "xgb")):
+        names.append("make_level41_engineer")
+    for method in ("mds", "rf", "xgb"):
+        if method in methods:
+            names.append(f"run_level41_{method}")
+    imports = ("from diive.flux.fluxprocessingchain import (\n    "
+               + ", ".join(names) + ")")
+    lines = _init_level2_lines(imports, init_kwargs, level2_settings, df_var, load_hint)
+    lines += _level31_block(level31_kwargs)
+    lines += _level32_block(level32_steps)
+    lines += _level33_block(level33_kwargs)
+    lines += _level41_block(level41_cfg)
+    lines += ["final_df = data.fpc_df"]
     return "\n".join(lines) + "\n"

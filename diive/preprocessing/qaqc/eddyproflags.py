@@ -114,7 +114,8 @@ def flag_signal_strength_eddypro_test(df: DataFrame,
 
 def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
                                                  flux: str,
-                                                 idstr: str = None) -> Series:
+                                                 idstr: str = None,
+                                                 nshwcol: str = None) -> Series:
     """Extract wind steadiness flag from EddyPro output and convert to DIIVE format.
 
     Extracts the wind steadiness test flag from EddyPro FluxNet output and converts
@@ -141,7 +142,7 @@ def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
     flagname_out = f"FLAG{idstr}_{flux}_VM97_NSHW_HF_TEST"
     nshw_flag = _extract_and_convert_flag_from_multidigit(
         df=df,
-        column_name='VM97_NSHW_HF',
+        column_name=nshwcol or 'VM97_NSHW_HF',
         position=1,
         is_hard_flag=True
     )
@@ -158,7 +159,8 @@ def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
 def flag_angle_of_attack_eddypro_test(df: DataFrame,
                                       flux: str,
                                       idstr: str = None,
-                                      application_dates: list or None = None) -> Series:
+                                      application_dates: list or None = None,
+                                      aoacol: str = None) -> Series:
     """Extract angle of attack flag from EddyPro output and convert to DIIVE format.
 
     Extracts the angle of attack test flag from EddyPro FluxNet output and converts
@@ -186,7 +188,7 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
     flagname_out = f"FLAG{idstr}_{flux}_VM97_AOA_HF_TEST"
     aoa_flag = _extract_and_convert_flag_from_multidigit(
         df=df,
-        column_name='VM97_AOA_HF',
+        column_name=aoacol or 'VM97_AOA_HF',
         position=1,
         is_hard_flag=True
     )
@@ -220,7 +222,8 @@ def flags_vm97_eddypro_fluxnetfile_tests(
         skewkurt_hf: bool = False,
         skewkurt_sf: bool = False,
         discont_hf: bool = False,
-        discont_sf: bool = False) -> DataFrame:
+        discont_sf: bool = False,
+        vm97col: str = None) -> DataFrame:
     """Extract VM97 (Vickers & Mahrt 1997) raw data quality test flags from EddyPro output.
 
     EddyPro performs statistical quality tests on the raw high-frequency eddy covariance
@@ -269,7 +272,8 @@ def flags_vm97_eddypro_fluxnetfile_tests(
     """
     idstr = validate_id_string(idstr=idstr)
 
-    vm97 = df[f"{fluxbasevar}_VM97_TEST"].copy()
+    vm97col = vm97col or f"{fluxbasevar}_VM97_TEST"
+    vm97 = df[vm97col].copy()
     vm97 = vm97.apply(pd.to_numeric, errors='coerce').astype(float)
     vm97 = vm97.fillna(899999999)  # 9 = flag is missing
 
@@ -291,7 +295,7 @@ def flags_vm97_eddypro_fluxnetfile_tests(
         is_hard_flag = '_HF_' in c
         _singleflag = _extract_and_convert_flag_from_multidigit(
             df=df,
-            column_name=f"{fluxbasevar}_VM97_TEST",
+            column_name=vm97col,
             position=int(i),
             is_hard_flag=is_hard_flag
         )
@@ -338,7 +342,9 @@ def flag_fluxbasevar_completeness_eddypro_test(df: DataFrame, flux: str,
                                                fluxbasevar: str,
                                                thres_good: float = 0.99,
                                                thres_ok: float = 0.97,
-                                               idstr: str = None) -> Series:
+                                               idstr: str = None,
+                                               expect_nr_col: str = None,
+                                               basevar_nr_col: str = None) -> Series:
     """Extract and evaluate completeness of the base variable used to calculate flux.
 
     Evaluates the completeness of the base variable that was used to calculate the flux
@@ -382,8 +388,8 @@ def flag_fluxbasevar_completeness_eddypro_test(df: DataFrame, flux: str,
 
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f'FLAG{idstr}_{flux}_COMPLETENESS_TEST'
-    expected_n_records = df['EXPECT_NR'].copy()
-    fluxbasevar_n_records = df[f'{fluxbasevar}_NR'].copy()
+    expected_n_records = df[expect_nr_col or 'EXPECT_NR'].copy()
+    fluxbasevar_n_records = df[basevar_nr_col or f'{fluxbasevar}_NR'].copy()
     fluxbasevar_n_records_perc = fluxbasevar_n_records.divide(expected_n_records)
 
     completeness_flag = Series(index=df.index, data=np.nan, name=flagname_out)
@@ -405,7 +411,8 @@ def flag_spectral_correction_factor_eddypro_test(
         flux: str,
         thres_good: int = 2,
         thres_ok: int = 4,
-        idstr: str = None):
+        idstr: str = None,
+        scfcol: str = None):
     """
     Generates a spectral correction factor test flag based on results from EddyPro,
     categorizing data quality into good, ok, and bad. The flag is created as a new Series
@@ -430,7 +437,7 @@ def flag_spectral_correction_factor_eddypro_test(
     """
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f'FLAG{idstr}_{flux}_SCF_TEST'
-    scf = df[f'{flux}_SCF'].copy()
+    scf = df[scfcol or f'{flux}_SCF'].copy()
     scf_flag = Series(index=df.index, data=np.nan, name=flagname_out)
     scf_flag[scf < thres_good] = 0
     scf_flag[(scf >= thres_good) & (scf < thres_ok)] = 1
@@ -446,7 +453,7 @@ def flag_spectral_correction_factor_eddypro_test(
 
 
 def flag_ssitc_eddypro_test(df: DataFrame, flux: str, setflag_timeperiod: dict = None,
-                            idstr: str = None) -> Series:
+                            idstr: str = None, flagcol: str = None) -> Series:
     """Extract Steady State and Integral Turbulence Characteristics (SSITC) test flag from EddyPro output.
 
     SSITC test evaluates flux data quality based on steady state and integral turbulence
@@ -479,7 +486,7 @@ def flag_ssitc_eddypro_test(df: DataFrame, flux: str, setflag_timeperiod: dict =
     """
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f'FLAG{idstr}_{flux}_SSITC_TEST'
-    flagname = f'{flux}_SSITC_TEST'
+    flagname = flagcol or f'{flux}_SSITC_TEST'
     ssitc_flag = Series(index=df.index, data=df[flagname], name=flagname_out)
 
     info(f"SSITC TEST: Generated new flag variable {flagname_out}, "

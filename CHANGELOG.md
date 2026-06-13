@@ -30,7 +30,10 @@
   diel cycle, cumulative year, ridgeline, scatter XY, hexbin, histogram; multi-instance, each with a live settings
   panel); **Analyze** tabs **Gaps & coverage**, **Driver explorer**, **Seasonal-trend & anomalies**, **Spectrogram**;
   **Flux processing chain** (Input + L2 + L3.1 storage correction + L3.2 outlier-detection chain + L3.3 constant-USTAR
-  filtering, composable per-level path, with **Copy Python**); **Time lag analysis** (EC concentration↔wind lag
+  filtering + L4.1 gap-filling — rf / xgb / mds, additive across methods, one gap-fill per USTAR scenario, with a
+  cumulative / heatmap method comparison; composable per-level path with per-level run buttons, a pipeline-rail layout,
+  a per-level QCF screening report, and L2 per-test input-column readouts + the eight VM97 sub-tests; **Copy Python**);
+  **Time lag analysis** (EC concentration↔wind lag
   distribution per gas, peak/range/EddyPro window, `dv.flux.TimeLagAnalysis`); **Outliers** tabs **Absolute limits
   filter**, **Hampel filter**, **Local SD
   filter**, **Z-score filter**, **Z-score (rolling) filter**, **Z-score (increments) filter**, **Local Outlier
@@ -313,6 +316,23 @@ Library additions used by the GUI (all backward-compatible):
   (before gap-filling) in the leftmost panel, one panel per gap-filling method.  All panels share a common
   colour scale (2nd–98th percentile across all series).  When `ustar_scenario=None`, one figure is produced
   per USTAR scenario.
+- **GUI-embeddable flux comparison plots** — `plot_cumulative_comparison(ax=, fig=)` and
+  `plot_gapfilled_heatmaps(fig=)` gained two-phase `ax=`/`fig=` parameters (like `RidgeLinePlot.plot(fig=...)`)
+  so they render into a caller-supplied axes/figure (e.g. the GUI flux-chain canvas) instead of always owning a
+  new one; the heatmaps form requires a single resolved USTAR scenario when `fig=` is given.  Headless
+  `showplot=False` behaviour is unchanged.
+- **`level41_to_code`** — reproducible-script renderer for the composable chain through Level 4.1 gap-filling
+  (always renders L2 → L3.3 first, then one `run_level41_*` per selected method; rf/xgb share one
+  `make_level41_engineer`).  Joins `chain_to_code` / `level2_to_code` … `level33_to_code`.
+- **`dv.flux.level2_test_inputs(fluxcol, fluxbasevar)` + `VM97_SUBTESTS`** — Level-2 quality-test introspection:
+  the EddyPro-FLUXNET input column(s) each test reads (templated on the flux column / base variable, mirroring the
+  `flag_*_eddypro_test` reads), and the eight VM97 raw-data screening sub-tests as `(key, label, kind)`. Lets a caller
+  show which variables a test depends on and check availability upfront (used by the GUI flux-chain L2 page).
+- **Per-test input-column override for Level 2** — each `run_level2` test config dict accepts an optional `'col'`
+  key (`'expect_nr_col'` / `'basevar_nr_col'` for the two-column completeness test) to read a differently-named
+  EddyPro column; threaded down through `FluxQualityFlagsEddyPro` to the `flag_*_eddypro_test` functions (new optional
+  `flagcol` / `scfcol` / `vm97col` / `aoacol` / `nshwcol` / `expect_nr_col` / `basevar_nr_col` params, default
+  `None` → the standard templated name, fully backward-compatible).
 
 ### Examples & Documentation
 

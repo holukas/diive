@@ -99,7 +99,8 @@ class FluxQualityFlagsEddyPro:
 
     def angle_of_attack_test(
             self,
-            application_dates: list or None = None
+            application_dates: list or None = None,
+            aoacol: str = None,
     ):
         """
         Calculates and applies the flag for angle of attack tests.
@@ -117,10 +118,11 @@ class FluxQualityFlagsEddyPro:
             internal `_results` dataframe with the calculated flag.
         """
         flag = flag_angle_of_attack_eddypro_test(df=self.dfin, flux=self.fluxcol,
-                                                 idstr=self.idstr, application_dates=application_dates)
+                                                 idstr=self.idstr, application_dates=application_dates,
+                                                 aoacol=aoacol)
         self._results[flag.name] = flag
 
-    def steadiness_of_horizontal_wind(self):
+    def steadiness_of_horizontal_wind(self, nshwcol: str = None):
         """
         Evaluates the steadiness of horizontal wind using an external test function and stores
         the resulting flag within the class instance.
@@ -133,7 +135,7 @@ class FluxQualityFlagsEddyPro:
             in the `_results` attribute with the flag name as the key.
         """
         flag = flag_steadiness_horizontal_wind_eddypro_test(df=self.dfin, flux=self.fluxcol,
-                                                            idstr=self.idstr)
+                                                            idstr=self.idstr, nshwcol=nshwcol)
         self._results[flag.name] = flag
 
     def raw_data_screening_vm97_tests(
@@ -146,6 +148,7 @@ class FluxQualityFlagsEddyPro:
             skewkurt_sf: bool = False,
             discont_hf: bool = False,
             discont_sf: bool = False,
+            vm97col: str = None,
     ):
         """
         Performs raw data screening using the VM97 tests.
@@ -192,6 +195,7 @@ class FluxQualityFlagsEddyPro:
             skewkurt_sf=skewkurt_sf,
             discont_hf=discont_hf,
             discont_sf=discont_sf,
+            vm97col=vm97col,
         )
         flags = flags_vm97_eddypro_fluxnetfile_tests(**kwargs)
         self._results = pd.concat([self.results, flags], axis=1)
@@ -230,7 +234,8 @@ class FluxQualityFlagsEddyPro:
 
     def spectral_correction_factor_test(self,
                                         thres_good: int = 2,
-                                        thres_ok: int = 4):
+                                        thres_ok: int = 4,
+                                        scfcol: str = None):
         """
         Evaluates the spectral correction factor test for data quality assessment.
 
@@ -262,7 +267,7 @@ class FluxQualityFlagsEddyPro:
         """
         flag = flag_spectral_correction_factor_eddypro_test(
             df=self.dfin, flux=self.fluxcol, idstr=self.idstr,
-            thres_good=thres_good, thres_ok=thres_ok)
+            thres_good=thres_good, thres_ok=thres_ok, scfcol=scfcol)
         self._results[flag.name] = flag
 
     def missing_vals_test(self):
@@ -279,7 +284,7 @@ class FluxQualityFlagsEddyPro:
         flag = flagtest.get_flag()
         self._results[flag.name] = flag
 
-    def ssitc_test(self, setflag_timeperiod: dict = None):
+    def ssitc_test(self, setflag_timeperiod: dict = None, flagcol: str = None):
         """
         Applies the Steady State and Integral Turbulence Characteristics (SSITC) test.
 
@@ -296,14 +301,17 @@ class FluxQualityFlagsEddyPro:
             None: Modifies the `_results` attribute in-place.
         """
         flag = flag_ssitc_eddypro_test(df=self.dfin, flux=self.fluxcol, idstr=self.idstr,
-                                       setflag_timeperiod=setflag_timeperiod)
+                                       setflag_timeperiod=setflag_timeperiod, flagcol=flagcol)
         self._results[flag.name] = flag
 
-    def gas_completeness_test(self, thres_good: float = 0.99, thres_ok: float = 0.97):
+    def gas_completeness_test(self, thres_good: float = 0.99, thres_ok: float = 0.97,
+                              expect_nr_col: str = None, basevar_nr_col: str = None):
         flag = flag_fluxbasevar_completeness_eddypro_test(df=self.dfin, flux=self.fluxcol,
                                                           fluxbasevar=self.fluxbasevar,
                                                           idstr=self.idstr,
-                                                          thres_good=thres_good, thres_ok=thres_ok)
+                                                          thres_good=thres_good, thres_ok=thres_ok,
+                                                          expect_nr_col=expect_nr_col,
+                                                          basevar_nr_col=basevar_nr_col)
         self._results[flag.name] = flag
 
 
