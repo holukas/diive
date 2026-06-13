@@ -316,6 +316,8 @@ class MainWindow(QMainWindow):
         self._reset_subset_act = _act("Reset to all &variables", self._reset_var_subset)
         self._reset_subset_act.setEnabled(False)
         data_menu.addAction(self._reset_subset_act)
+        data_menu.addSeparator()
+        data_menu.addAction(_act("Add timestamp co&lumn...", self._add_timestamp_column))
         # Events: add one, and a quick master toggle for showing them on plots
         # (the Events tab below has the full list/edit UI + the same toggle).
         data_menu.addSeparator()
@@ -709,6 +711,46 @@ class MainWindow(QMainWindow):
                 attrs, timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"))
             metadata_store.manager.notify()
         self._apply_range()
+
+    def _add_timestamp_column(self) -> None:
+        """Open the Add-timestamp-column dialog and append the derived column.
+
+        Adds a START/MIDDLE/END timestamp (optionally strftime-formatted) as a new
+        data column via the library's `format_timestamp`; the index is unchanged.
+        The result is merged through `_add_features` so it gets provenance and
+        survives a range reset like any engineered column.
+        """
+        from diive.core.metadata import DERIVED, ATTRS_KEY, provenance_attr
+        from diive.gui.widgets.add_timestamp_dialog import AddTimestampColumnDialog
+        from diive.times import format_timestamp
+
+        if self._full_data is None or self._full_data.empty:
+            QMessageBox.information(self, "Add timestamp column", "No data loaded yet.")
+            return
+        dlg = AddTimestampColumnDialog(self._full_data, parent=self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        name = dlg.column_name()
+        if not name:
+            QMessageBox.warning(self, "Add timestamp column", "Please enter a column name.")
+            return
+        if name in self._full_data.columns and QMessageBox.question(
+                self, "Add timestamp column",
+                f"Column '{name}' already exists. Overwrite it?") \
+                != QMessageBox.StandardButton.Yes:
+            return
+        convention, fmt = dlg.convention(), dlg.fmt()
+        try:
+            series = format_timestamp(self._full_data, convention=convention, fmt=fmt)
+        except Exception as err:
+            QMessageBox.critical(self, "Add timestamp column",
+                                 f"Could not build the column:\n{err}")
+            return
+        new_df = series.rename(name).to_frame()
+        new_df.attrs[ATTRS_KEY] = {name: provenance_attr(
+            origin=DERIVED, operation="Add timestamp column",
+            params={"convention": convention, "format": fmt}, tags=["timestamp"])}
+        self._add_features(new_df)
 
     def _add_event(self) -> None:
         """Open the Add-event dialog and register the event (creates its 0/1

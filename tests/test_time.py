@@ -5,7 +5,7 @@ import pandas as pd
 import diive.configs.exampledata as ed
 from diive.core.times.resampling import resample_series_to_30MIN
 from diive.core.times.resampling import resample_to_daily_agg
-from diive.core.times.times import DetectFrequency, insert_timestamp
+from diive.core.times.times import DetectFrequency, format_timestamp, insert_timestamp
 from diive.core.times.times import keep_daterange
 from diive.core.times.times import vectorize_timestamps
 
@@ -129,6 +129,20 @@ class TestTime(unittest.TestCase):
         self.assertEqual(checkdata['TIMESTAMP_START'], pd.Timestamp('2024-04-05 19:37:00'))
         self.assertEqual(checkdata['TIMESTAMP_END'], pd.Timestamp('2024-04-05 19:38:00'))
         self.assertEqual(checkdata.name, pd.Timestamp('2024-04-05 19:37:30'))
+
+    def test_format_timestamp(self):
+        df, metadata_df = ed.load_exampledata_GENERIC_CSV_HEADER_1ROW_TS_MIDDLE_FULL_1MIN_long()
+        # Index is untouched; the result is a new aligned Series.
+        end = format_timestamp(df, convention='end')
+        start = format_timestamp(df, convention='start')
+        self.assertEqual(df.index.name, 'TIMESTAMP_MIDDLE')
+        self.assertEqual(end.name, 'TIMESTAMP_END')
+        self.assertTrue(end.index.equals(df.index))
+        self.assertEqual(end.loc['2024-04-05 19:37:30'], pd.Timestamp('2024-04-05 19:38:00'))
+        self.assertEqual(start.loc['2024-04-05 19:37:30'], pd.Timestamp('2024-04-05 19:37:00'))
+        # With a format string the values are strftime-formatted strings.
+        formatted = format_timestamp(df, convention='end', fmt='%Y%m%d%H%M')
+        self.assertEqual(formatted.loc['2024-04-05 19:37:30'], '202404051938')
 
     def test_insert_timestamp_as_index(self):
         df, metadata_df = ed.load_exampledata_GENERIC_CSV_HEADER_1ROW_TS_MIDDLE_FULL_1MIN_long()

@@ -1639,6 +1639,58 @@ def insert_timestamp(
     return data
 
 
+def format_timestamp(
+        data: Union[DataFrame, Series, DatetimeIndex],
+        convention: Literal['start', 'middle', 'end'],
+        fmt: Optional[str] = None,
+        verbose: bool = False) -> Series:
+    """
+    Build a timestamp Series for a chosen averaging-interval convention.
+
+    Derives a START, MIDDLE or END timestamp from *data*'s (timestamp) index
+    without modifying that index. The returned Series is aligned to the input
+    index, so it can be added to *data* as a new data column while the index
+    keeps its own convention (typically TIMESTAMP_MIDDLE).
+
+    The START/END shift reuses :func:`insert_timestamp`, so the input index must
+    be a properly named, regular timestamp index ('TIMESTAMP_START',
+    'TIMESTAMP_MIDDLE' or 'TIMESTAMP_END') with a known frequency.
+
+    Args:
+        data: Source whose index supplies the timestamps. A DataFrame/Series
+            (its index is used) or a DatetimeIndex directly.
+        convention: Convention of the produced timestamps:
+            - 'start': start of the averaging interval
+            - 'middle': middle of the averaging interval
+            - 'end': end of the averaging interval
+        fmt: Optional ``strftime`` format string (e.g. ``'%Y%m%d%H%M'`` for the
+            FLUXNET convention). If given, the Series holds formatted strings; if
+            ``None``, it holds ``datetime64`` values.
+        verbose: If *True*, gives additional text output.
+
+    Returns:
+        A Series named 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE' or 'TIMESTAMP_END',
+        aligned to *data*'s index.
+
+    Examples:
+        >>> df.index.name = 'TIMESTAMP_MIDDLE'
+        >>> df['TIMESTAMP_END'] = format_timestamp(df, convention='end')
+        >>> df['TS'] = format_timestamp(df, convention='start', fmt='%Y%m%d%H%M')
+
+    Added in: v0.92.0
+    """
+    index = data.index if isinstance(data, (DataFrame, Series)) else data
+    # Build a fresh index-only frame so insert_timestamp does not mutate *data*.
+    frame = insert_timestamp(pd.DataFrame(index=index), convention=convention,
+                             insert_as_first_col=False, verbose=verbose)
+    col = f"TIMESTAMP_{convention.upper()}"
+    series = frame[col]
+    if fmt:
+        series = series.dt.strftime(fmt)
+        series.name = col
+    return series
+
+
 def convert_series_timestamp_to_middle(data: Union[Series, DataFrame], verbose: bool = False) -> Union[
     Series, DataFrame]:
     """
