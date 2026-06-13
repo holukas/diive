@@ -27,6 +27,7 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
+import copy
 import threading
 
 import diive as dv
@@ -69,8 +70,14 @@ _QCF_COLORS = {0: "#43A047", 1: "#FFB300", 2: "#E53935"}  # good / marginal / re
 
 class _StepwiseSignals(QObject):
     run_done = Signal(object)
-    run_failed = Signal(str)
+    run_failed = Signal(object)  # (run_id, message)
     features_created = Signal(object)
+
+
+#: Private column name for the potential-radiation series fed to FlagQCF — kept
+#: out of the way so screening a variable literally named "SW_IN_POT" can't
+#: collide with (and overwrite) the target column.
+_SWINPOT_COL = "_SWINPOT_QCF_"
 
 
 class StepwiseScreeningTab(DiiveTab):
@@ -87,6 +94,7 @@ class StepwiseScreeningTab(DiiveTab):
         self._selected_step = -1              # highlighted card (-1 = all removals)
         self._payload = None                  # last completed run
         self._result_df = None                # columns pending "Add"
+        self._run_id = 0                       # guards against stale worker results
         self._step_cards: list[StepCard] = []
         self._sig = _StepwiseSignals()
         self._sig.run_done.connect(self._on_done)
@@ -267,7 +275,9 @@ class StepwiseScreeningTab(DiiveTab):
     def _toggle_step(self, i: int, on: bool) -> None:
         if not (0 <= i < len(self._steps)):
             return
-        self._steps[i]["enabled"] = on
+        # Replace (don't mutate in place): the committed-steps snapshot may share
+        # this dict, and an in-place edit would leak into the rollback copy.
+        self._steps[i] = {**self._steps[i], "enabled": on}
         self._apply_chain_change()
 
     def _select_step(self, i: int) -> None:
@@ -289,6 +299,10 @@ class StepwiseScreeningTab(DiiveTab):
         else:
             self._var = None
         self.var_combo.blockSignals(False)
+        # No variable carried over: select the first so the combo and the
+        # preview agree (otherwise the combo shows row 0 but nothing is plotted).
+        if self._var is None and len(df.columns):
+            self._select(str(df.columns[0]))
 
     def _on_var_changed(self, *_) -> None:
         name = self.var_combo.currentText()
@@ -301,6 +315,10 @@ class StepwiseScreeningTab(DiiveTab):
         self._var = name
         # The chain carries over across variables; re-run it on the new series.
         if self._steps:
+            # Mark dirty + rebuild so cards don't show the previous variable's
+            # removal counts during the re-run.
+            self._chain_dirty = True
+            self._rebuild_cards()
             self._run()
         else:
             self._reset_preview()
@@ -331,12 +349,19 @@ class StepwiseScreeningTab(DiiveTab):
     def _run(self) -> None:
         if self._df is None or self._var is None:
             return
+        # Bump the run id so any in-flight worker's result is ignored on arrival
+        # (results can land out of order under rapid edits).
+        self._run_id += 1
+        run_id = self._run_id
         # Nothing to run (no steps, or all toggled off): show the raw series.
         if not any(s.get("enabled", True) for s in self._steps):
             self._payload = None
             self._chain_dirty = False
             self.add_btn.setEnabled(False)
             self.copy_btn.setEnabled(False)
+            self.report_text.clear()
+            self.report_copy_btn.setEnabled(False)
+            self.qcf_label.setText("QCF: add a step to compute.")
             self._draw_raw(self._df[self._var])
             return
         self.status.setText("Running chain…")
@@ -345,10 +370,10 @@ class StepwiseScreeningTab(DiiveTab):
         threading.Thread(
             target=self._worker,
             args=(self._df, self._var, list(self._steps), self._coords(),
-                  site.manager.configured),
+                  site.manager.configured, run_id),
             daemon=True).start()
 
-    def _worker(self, df, var, steps, coords, configured) -> None:
+    def _worker(self, df, var, steps, coords, configured, run_id) -> None:
         try:
             # output_middle_timestamp=False keeps the input index so the emitted
             # columns align to the app dataframe on merge.
@@ -380,24 +405,28 @@ class StepwiseScreeningTab(DiiveTab):
             # day/night breakdown in the screening report; skip if site unset.
             swinpot_col = None
             if configured:
-                qcf_input["SW_IN_POT"] = dv.variables.potrad(
+                qcf_input[_SWINPOT_COL] = dv.variables.potrad(
                     qcf_input.index, coords["site_lat"], coords["site_lon"],
                     coords["utc_offset"])
-                swinpot_col = "SW_IN_POT"
+                swinpot_col = _SWINPOT_COL
             qcf = FlagQCF(df=qcf_input, target_col=var, idstr="STEPWISE",
                           swinpot_col=swinpot_col)
             qcf.calculate()
             _, report = qcf.screening_report()
             payload = {"var": var, "detector": det, "removed": removed,
-                       "bounds": bounds, "qcf": qcf, "report": report}
+                       "bounds": bounds, "qcf": qcf, "report": report,
+                       "run_id": run_id}
         except Exception as err:
-            self._sig.run_failed.emit(str(err))
+            self._sig.run_failed.emit((run_id, str(err)))
             return
         self._sig.run_done.emit(payload)
 
     def _on_done(self, payload: dict) -> None:
+        # Ignore a stale result from a superseded run (out-of-order completion).
+        if payload.get("run_id") != self._run_id:
+            return
         self._payload = payload
-        self._committed_steps = list(self._steps)
+        self._committed_steps = copy.deepcopy(self._steps)
         self._chain_dirty = False
         det = payload["detector"]
         if self._selected_step >= len(self._steps):
@@ -422,10 +451,13 @@ class StepwiseScreeningTab(DiiveTab):
         self.copy_btn.setEnabled(True)
         self._draw_payload()
 
-    def _on_failed(self, msg: str) -> None:
+    def _on_failed(self, data) -> None:
+        run_id, msg = data
+        if run_id != self._run_id:
+            return  # a superseded run failed; the latest run governs the UI
         self.status.setText(f"Failed: {msg}")
         # Restore the last chain that ran cleanly so the UI stays consistent.
-        self._steps = list(self._committed_steps)
+        self._steps = copy.deepcopy(self._committed_steps)
         self._selected_step = -1
         self._chain_dirty = False
         self._rebuild_cards()
@@ -439,7 +471,9 @@ class StepwiseScreeningTab(DiiveTab):
         cols = pd.concat([det.flags,
                           qcf.flagqcf.rename(qcf.flagqcfcol),
                           qcf.filteredseries.rename(qcf.filteredseriescol)], axis=1)
-        params = {"steps": self._steps}
+        # Snapshot the chain: provenance must capture what was emitted, not a
+        # live reference that later edits would mutate.
+        params = {"steps": copy.deepcopy(self._steps)}
         attrs = {qcf.filteredseriescol: provenance_attr(
             origin=MODIFIED, parent=var, operation="Stepwise screening",
             params=params, tags=["outliers-removed", "qcf"])}

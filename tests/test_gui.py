@@ -538,7 +538,7 @@ def test_stepwise_screening_tab(app):
     tab._steps = [HampelParams().step(), ZScoreParams().step()]
     # Drive the worker synchronously (signals deliver in-thread under the test app).
     # configured=True so SW_IN_POT is computed and the report gets day/night.
-    tab._worker(df, "observed_value", tab._steps, tab._coords(), True)
+    tab._worker(df, "observed_value", tab._steps, tab._coords(), True, tab._run_id)
     QApplication.processEvents()
 
     # Cards mirror the chain; the run carries per-step removals + detection bounds.
@@ -551,6 +551,12 @@ def test_stepwise_screening_tab(app):
     assert "OVERALL" in report and "DAYTIME" in report and "NIGHTTIME" in report
     assert tab.report_text.toPlainText() == report
     assert tab.report_copy_btn.isEnabled()
+
+    # A stale worker result (run id != current) is ignored, so out-of-order
+    # thread completions can't overwrite the payload with the wrong run.
+    good = tab._payload
+    tab._on_done({"run_id": tab._run_id + 1})
+    assert tab._payload is good
     # Per-step removal counts must sum to the overall total: addflag mutates the
     # cleaned series in place, so a missing per-step copy would alias it and make
     # later steps report 0 removed even though points were dropped.
@@ -594,7 +600,7 @@ def test_stepwise_screening_tab(app):
     # Toggling a step off skips it in the chain: it contributes no removals, the
     # per-step lists stay aligned to the cards, and the total still adds up.
     tab._steps[0]["enabled"] = False
-    tab._worker(df, "observed_value", tab._steps, tab._coords(), True)
+    tab._worker(df, "observed_value", tab._steps, tab._coords(), True, tab._run_id)
     QApplication.processEvents()
     assert len(tab._payload["removed"]) == 2
     assert len(tab._payload["removed"][0]) == 0           # disabled step removes nothing
