@@ -1639,6 +1639,42 @@ def insert_timestamp(
     return data
 
 
+# Reserved timestamp names and the averaging-interval convention each one implies.
+TIMESTAMP_CONVENTION_NAMES = {
+    'TIMESTAMP_START': 'start',
+    'TIMESTAMP_MIDDLE': 'middle',
+    'TIMESTAMP_END': 'end',
+}
+
+
+def validate_timestamp_column_name(name: str, convention: Literal['start', 'middle', 'end']) -> None:
+    """
+    Reject a reserved timestamp name that contradicts the column's convention.
+
+    The names 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE' and 'TIMESTAMP_END' are
+    reserved: each one states which point of the averaging interval its timestamps
+    mark. Naming a column with one of them while its values follow a *different*
+    convention would mislabel the data (and could be misread downstream), so it is
+    not allowed. Any other name is accepted.
+
+    Args:
+        name: The intended column name.
+        convention: The convention the column's timestamps actually follow
+            ('start', 'middle' or 'end').
+
+    Raises:
+        ValueError: If *name* is a reserved timestamp name for a different
+            convention than *convention*.
+    """
+    implied = TIMESTAMP_CONVENTION_NAMES.get(name)
+    if implied is not None and implied != convention:
+        raise ValueError(
+            f"Column name '{name}' is reserved for the '{implied}' convention, but "
+            f"the column follows the '{convention}' convention. Either set "
+            f"convention='{implied}' or choose a different column name."
+        )
+
+
 def format_timestamp(
         data: Union[DataFrame, Series, DatetimeIndex],
         convention: Literal['start', 'middle', 'end'],

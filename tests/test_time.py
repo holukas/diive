@@ -5,7 +5,12 @@ import pandas as pd
 import diive.configs.exampledata as ed
 from diive.core.times.resampling import resample_series_to_30MIN
 from diive.core.times.resampling import resample_to_daily_agg
-from diive.core.times.times import DetectFrequency, format_timestamp, insert_timestamp
+from diive.core.times.times import (
+    DetectFrequency,
+    format_timestamp,
+    insert_timestamp,
+    validate_timestamp_column_name,
+)
 from diive.core.times.times import keep_daterange
 from diive.core.times.times import vectorize_timestamps
 
@@ -143,6 +148,17 @@ class TestTime(unittest.TestCase):
         # With a format string the values are strftime-formatted strings.
         formatted = format_timestamp(df, convention='end', fmt='%Y%m%d%H%M')
         self.assertEqual(formatted.loc['2024-04-05 19:37:30'], '202404051938')
+
+    def test_validate_timestamp_column_name(self):
+        # A reserved name must match the column's convention.
+        with self.assertRaises(ValueError):
+            validate_timestamp_column_name('TIMESTAMP_END', 'start')
+        with self.assertRaises(ValueError):
+            validate_timestamp_column_name('TIMESTAMP_START', 'middle')
+        # Matching reserved name and any non-reserved name are fine.
+        validate_timestamp_column_name('TIMESTAMP_END', 'end')
+        validate_timestamp_column_name('TIMESTAMP_START', 'start')
+        validate_timestamp_column_name('my_timestamp', 'start')
 
     def test_insert_timestamp_as_index(self):
         df, metadata_df = ed.load_exampledata_GENERIC_CSV_HEADER_1ROW_TS_MIDDLE_FULL_1MIN_long()

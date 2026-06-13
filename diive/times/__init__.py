@@ -5,6 +5,7 @@ from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import format_timestamp
 from diive.core.times.times import insert_timestamp
 from diive.core.times.times import keep_daterange
+from diive.core.times.times import validate_timestamp_column_name
 from diive.core.times.times import timestamp_infer_freq_from_fullset
 from diive.core.times.times import timestamp_infer_freq_from_timedelta
 from diive.core.times.times import timestamp_infer_freq_progressively
@@ -17,6 +18,7 @@ __all__ = [
     'format_timestamp',
     'insert_timestamp',
     'keep_daterange',
+    'validate_timestamp_column_name',
     'timestamp_infer_freq_from_fullset',
     'timestamp_infer_freq_from_timedelta',
     'timestamp_infer_freq_progressively',

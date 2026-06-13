@@ -722,7 +722,7 @@ class MainWindow(QMainWindow):
         """
         from diive.core.metadata import DERIVED, ATTRS_KEY, provenance_attr
         from diive.gui.widgets.add_timestamp_dialog import AddTimestampColumnDialog
-        from diive.times import format_timestamp
+        from diive.times import format_timestamp, validate_timestamp_column_name
 
         if self._full_data is None or self._full_data.empty:
             QMessageBox.information(self, "Add timestamp column", "No data loaded yet.")
@@ -730,16 +730,20 @@ class MainWindow(QMainWindow):
         dlg = AddTimestampColumnDialog(self._full_data, parent=self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
-        name = dlg.column_name()
+        name, convention, fmt = dlg.column_name(), dlg.convention(), dlg.fmt()
         if not name:
             QMessageBox.warning(self, "Add timestamp column", "Please enter a column name.")
+            return
+        try:
+            validate_timestamp_column_name(name, convention)
+        except ValueError as err:
+            QMessageBox.warning(self, "Add timestamp column", str(err))
             return
         if name in self._full_data.columns and QMessageBox.question(
                 self, "Add timestamp column",
                 f"Column '{name}' already exists. Overwrite it?") \
                 != QMessageBox.StandardButton.Yes:
             return
-        convention, fmt = dlg.convention(), dlg.fmt()
         try:
             series = format_timestamp(self._full_data, convention=convention, fmt=fmt)
         except Exception as err:

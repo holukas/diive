@@ -37,7 +37,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from diive.times import format_timestamp
+from diive.times import format_timestamp, validate_timestamp_column_name
 
 # Convention label -> argument for the library function.
 _CONVENTIONS = {"Start of interval": "start",
@@ -101,6 +101,7 @@ class AddTimestampColumnDialog(QDialog):
 
         self.name_edit = QLineEdit()
         self.name_edit.textEdited.connect(self._on_name_edited)
+        self.name_edit.textChanged.connect(self._update_preview)
         form.addRow("Column name", self.name_edit)
         layout.addLayout(form)
 
@@ -146,21 +147,35 @@ class AddTimestampColumnDialog(QDialog):
 
     def _update_preview(self, *_args) -> None:
         head = self._data.head(_PREVIEW_ROWS)
+        name, convention = self.column_name(), self.convention()
         self.preview.setHorizontalHeaderLabels(
-            [self._data.index.name or "index", self.column_name() or "new column"])
+            [self._data.index.name or "index", name or "new column"])
+        ok_btn = self.buttons.button(QDialogButtonBox.StandardButton.Ok)
         try:
-            series = format_timestamp(head, convention=self.convention(), fmt=self.fmt())
-            self.error_label.clear()
-            self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(True)
+            series = format_timestamp(head, convention=convention, fmt=self.fmt())
         except Exception as err:
             self.error_label.setText(f"Cannot build preview: {err}")
             self.preview.setRowCount(0)
-            self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)
+            ok_btn.setEnabled(False)
             return
         self.preview.setRowCount(len(series))
         for row, (idx, value) in enumerate(series.items()):
             self.preview.setItem(row, 0, QTableWidgetItem(str(idx)))
             self.preview.setItem(row, 1, QTableWidgetItem(str(value)))
+        # A reserved timestamp name must match the chosen convention, and the name
+        # can't be empty — block OK with a clear message otherwise.
+        if not name:
+            self.error_label.setText("Please enter a column name.")
+            ok_btn.setEnabled(False)
+            return
+        try:
+            validate_timestamp_column_name(name, convention)
+        except ValueError as err:
+            self.error_label.setText(str(err))
+            ok_btn.setEnabled(False)
+            return
+        self.error_label.clear()
+        ok_btn.setEnabled(True)
 
     # --- result --------------------------------------------------------
     def convention(self) -> str:
