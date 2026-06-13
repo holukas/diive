@@ -445,7 +445,12 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   output drifts; it's also emitted in `level41_to_code`. The page also exposes **Reduce features (SHAP)** and per-method
   hyperparameters (RF `n_estimators`/`max_depth`, XGB `n_estimators`/`max_depth`/`learning_rate`, MDS `ta_tol`/`vpd_tol`);
   `_level41_cfg` omits any whose value still equals the library default (so the run is unchanged and the script stays
-  minimal — only `random_state` is unconditional). It renders the method comparison via `data.plot_cumulative_comparison(ax=...)` /
+  minimal — only `random_state` is unconditional). **L4.1 layout:** each method's settings live in its own `QGroupBox`
+  shown only when that method is ticked (`_sync_l41_visibility`) — a shared RF/XGB box (features + seed + reduce),
+  separate RF / XGB hyperparameter boxes, and an MDS drivers+tolerances box — so the page is uncluttered (only enabled
+  methods' params show). Features use `widgets/feature_picker.py::FeaturePicker` (a GUI-only **searchable checkable
+  list** with a selected-count and All/None acting on the filtered subset — replaces the old ctrl-click multi-select).
+  It renders the method comparison via `data.plot_cumulative_comparison(ax=...)` /
   `plot_gapfilled_heatmaps(fig=...)` (two-phase `ax=`/`fig=` embedding, like `RidgeLinePlot.plot(fig=...)`; the heatmaps
   view sets `canvas.auto_layout=False`). Script-gen lives in the library (`flux/fluxprocessingchain/codegen.py`:
   `chain_to_code` for the `run_chain`/`FluxConfig` path, `level2_to_code` … `level41_to_code` for the composable

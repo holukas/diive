@@ -813,6 +813,46 @@ def test_flux_chain_tab_level_info(app):
     assert tab2.ustarcol.currentText() == "FRICTION_VEL"
 
 
+def test_flux_chain_tab_level41_layout(app):
+    # L4.1 settings are split into per-method sections shown only when the method
+    # is enabled, and features use the searchable checkable picker.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+
+    # With no method enabled, every settings section is hidden (no clutter).
+    assert not tab._l41_shared.isVisibleTo(tab._l41_shared.parent())
+    assert not tab._l41_rf.isVisibleTo(tab._l41_rf.parent())
+    assert not tab._l41_mds.isVisibleTo(tab._l41_mds.parent())
+
+    # Enabling MDS shows only the MDS section; the RF/XGB shared box stays hidden.
+    tab.l41_mds.setChecked(True)
+    assert tab._l41_mds.isVisibleTo(tab._l41_mds.parent())
+    assert not tab._l41_shared.isVisibleTo(tab._l41_shared.parent())
+    assert not tab._l41_rf.isVisibleTo(tab._l41_rf.parent())
+
+    # Enabling RF reveals the shared (features/seed) box + the RF section.
+    tab.l41_rf.setChecked(True)
+    assert tab._l41_shared.isVisibleTo(tab._l41_shared.parent())
+    assert tab._l41_rf.isVisibleTo(tab._l41_rf.parent())
+
+    # Feature picker: filter + select-all acts on the filtered subset only.
+    fp = tab.l41_features
+    assert fp.count() == len(df.columns)
+    fp._filter.setText("VPD")
+    fp._select_all()
+    picked = fp.selected()
+    assert picked and all("VPD" in p for p in picked)
+    # Clearing the filter and ticking one more is additive (selection is sticky).
+    fp._filter.clear()
+    fp.set_selected(picked + [str(df.columns[0])])
+    assert set(fp.selected()) == set(picked) | {str(df.columns[0])}
+
+
 def test_flux_chain_tab_per_level_run(app):
     # Each level runs separately, its output feeding the next; the per-level run
     # buttons are gated by how far the chain has reached.
@@ -896,7 +936,9 @@ def test_flux_chain_tab_level41(app):
     # Copy-Python renders the full L2 -> L4.1 composable chain (rf+xgb+mds form).
     tab.l41_rf.setChecked(True)
     tab.l41_xgb.setChecked(True)
-    tab.l41_features.item(0).setSelected(True)
+    feat0 = str(df.columns[0])
+    tab.l41_features.set_selected([feat0])
+    assert tab.l41_features.selected() == [feat0]
     code = tab._code()
     compile(code, "<gen>", "exec")
     assert "run_level41_mds(" in code
@@ -944,21 +986,20 @@ def test_flux_chain_tab_level41(app):
     tab.l41_view.setCurrentText("Cumulative comparison")
     tab.l41_rf.setChecked(True)
     tab.l41_mds.setChecked(False)
-    tab.l41_features.clearSelection()
+    tab.l41_features.set_selected([])
     tab._run()
     assert "feature" in tab.summary.toPlainText().lower()
 
     # L4.1 config round-trips through save/restore (methods + features + drivers).
     tab.l41_rf.setChecked(False)
     tab.l41_mds.setChecked(True)
-    tab.l41_features.item(0).setSelected(True)
+    tab.l41_features.set_selected([feat0])
     state = tab.save_state()
     tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
     tab2.restore_state(state)
     assert tab2.l41_mds.isChecked()
     assert tab2._level41_cfg()["methods"] == ["mds"]
-    assert [i.text() for i in tab2.l41_features.selectedItems()] == \
-           [i.text() for i in tab.l41_features.selectedItems()]
+    assert tab2.l41_features.selected() == tab.l41_features.selected()
 
 
 def test_stepwise_method_params_run_on_detector(app):

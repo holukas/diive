@@ -79,6 +79,7 @@ from diive.flux.lowres.common import detect_fluxbasevar
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.copy_button import CopyPythonButton
+from diive.gui.widgets.feature_picker import FeaturePicker
 from diive.gui.widgets.flux_pipeline_rail import PipelineRail
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.stepwise_method_params import STEP_METHOD_BY_KEY, method_labels
@@ -739,87 +740,122 @@ class FluxChainTab(DiiveTab):
     def _level41_group(self) -> QGroupBox:
         box = QGroupBox("Level 4.1 — gap-filling (optional)")
         v = QVBoxLayout(box)
-        note = QLabel("Fill remaining gaps in the L3.3 flux. One gap-fill per USTAR "
-                      "scenario; methods are additive (each replaces only its own "
-                      "previous result). Requires Level 3.3.")
+        note = QLabel("Tick the methods to run (additive — each replaces only its own "
+                      "previous result). Only the enabled methods' settings are shown "
+                      "below, each in its own section. Requires Level 3.3.")
         note.setWordWrap(True)
+        note.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
         v.addWidget(note)
-        # Method toggles. ML methods (rf/xgb) are slow; off by default.
+        # Method toggles drive which setting sections are visible (declutter).
         self.l41_rf = QCheckBox("Random Forest (rf)")
         self.l41_xgb = QCheckBox("XGBoost (xgb)")
         self.l41_mds = QCheckBox("Marginal Data Substitution (mds)")
         for cb in (self.l41_rf, self.l41_xgb, self.l41_mds):
             cb.toggled.connect(self._update_run_label)
+            cb.toggled.connect(self._sync_l41_visibility)
             v.addWidget(cb)
-        # Shared ML settings. A fixed random seed makes rf/xgb runs reproducible
-        # (without it sklearn/xgboost reseed every run -> the output drifts).
-        shared = QFormLayout()
-        self.l41_seed = QSpinBox()
-        self.l41_seed.setRange(0, 2_000_000_000)
-        self.l41_seed.setValue(42)
-        self.l41_seed.setToolTip("Random seed for rf / xgb. Same seed -> identical "
-                                 "gap-fill every run; change it to vary deliberately.")
-        shared.addRow("Random seed (rf / xgb)", self.l41_seed)
-        v.addLayout(shared)
-        self.l41_reduce = QCheckBox("Reduce features (SHAP selection)")
-        self.l41_reduce.setToolTip("Drop low-importance engineered features via "
-                                   "SHAP before the final fit (slower, often cleaner).")
-        v.addWidget(self.l41_reduce)
-        # rf/xgb predictor features — multi-select from the dataset columns.
-        v.addWidget(QLabel("Features (rf / xgb predictors):"))
-        self.l41_features = QListWidget()
-        self.l41_features.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-        self.l41_features.setMaximumHeight(110)
-        v.addWidget(self.l41_features)
-        # Random-Forest hyperparameters (defaults match sklearn -> no behaviour
-        # change vs not passing them; only what you edit is sent + rendered).
-        rf_form = QFormLayout()
-        self.rf_n_est = self._ispin(100, 1, 5000)
-        rf_form.addRow("RF — trees (n_estimators)", self.rf_n_est)
-        self.rf_max_depth = self._ispin(0, 0, 200)
-        self.rf_max_depth.setSpecialValueText("None")  # 0 -> unlimited depth
-        rf_form.addRow("RF — max depth", self.rf_max_depth)
-        v.addLayout(rf_form)
-        # XGBoost hyperparameters (defaults match xgboost).
-        xgb_form = QFormLayout()
-        self.xgb_n_est = self._ispin(100, 1, 5000)
-        xgb_form.addRow("XGB — trees (n_estimators)", self.xgb_n_est)
-        self.xgb_max_depth = self._ispin(6, 1, 200)
-        xgb_form.addRow("XGB — max depth", self.xgb_max_depth)
-        self.xgb_lr = self._dspin(0.30, 0.001, 1.0, 3)
-        xgb_form.addRow("XGB — learning rate", self.xgb_lr)
-        v.addLayout(xgb_form)
-        # MDS driver columns — must exist in the input (full_df).
-        form = QFormLayout()
-        self.mds_swin = QComboBox()
-        self.mds_swin.currentTextChanged.connect(self._refresh_levels_info)
-        form.addRow("MDS SW_IN (W m⁻²)", self.mds_swin)
-        self.mds_ta = QComboBox()
-        self.mds_ta.currentTextChanged.connect(self._refresh_levels_info)
-        form.addRow("MDS TA (°C)", self.mds_ta)
-        self.mds_vpd = QComboBox()
-        self.mds_vpd.currentTextChanged.connect(self._refresh_levels_info)
-        form.addRow("MDS VPD (kPa)", self.mds_vpd)
-        # MDS similarity tolerances (Reichstein et al. 2005 defaults).
-        self.mds_ta_tol = self._dspin(2.5, 0.1, 20.0, 2)
-        form.addRow("MDS — TA tolerance (°C)", self.mds_ta_tol)
-        self.mds_vpd_tol = self._dspin(0.5, 0.05, 10.0, 2)
-        form.addRow("MDS — VPD tolerance (kPa)", self.mds_vpd_tol)
-        v.addLayout(form)
-        self.mds_mark = self._info_marker()
-        v.addWidget(self.mds_mark)
-        vpd_note = QLabel("MDS units: VPD must be kPa (EddyPro outputs hPa — divide "
-                          "by 10), TA in °C. The library warns on suspicious medians.")
-        vpd_note.setWordWrap(True)
-        v.addWidget(vpd_note)
-        # Which comparison to render after L4.1.
+
+        v.addWidget(self._l41_shared_box())
+        v.addWidget(self._l41_rf_box_w())
+        v.addWidget(self._l41_xgb_box_w())
+        v.addWidget(self._l41_mds_box_w())
+
+        # Which comparison to render after L4.1 (always visible).
         form2 = QFormLayout()
         self.l41_view = QComboBox()
         self.l41_view.addItems(["Cumulative comparison", "Gap-filled heatmaps"])
         form2.addRow("Comparison view", self.l41_view)
         v.addLayout(form2)
         v.addWidget(self._level_run_button(5, "Run Level 4.1"))
+        self._sync_l41_visibility()
         return box
+
+    def _l41_shared_box(self) -> QGroupBox:
+        """RF/XGB predictors + shared settings (one feature set drives both)."""
+        gb = QGroupBox("RF / XGB — predictors & settings")
+        gv = QVBoxLayout(gb)
+        feat_lbl = QLabel("Predictor features (filter, then tick to include):")
+        feat_lbl.setWordWrap(True)
+        gv.addWidget(feat_lbl)
+        self.l41_features = FeaturePicker()
+        gv.addWidget(self.l41_features)
+        form = QFormLayout()
+        # A fixed seed makes rf/xgb reproducible (without it sklearn/xgboost
+        # reseed every run -> the output drifts run to run).
+        self.l41_seed = QSpinBox()
+        self.l41_seed.setRange(0, 2_000_000_000)
+        self.l41_seed.setValue(42)
+        self.l41_seed.setToolTip("Same seed -> identical gap-fill every run; "
+                                 "change it to vary deliberately.")
+        form.addRow("Random seed", self.l41_seed)
+        gv.addLayout(form)
+        self.l41_reduce = QCheckBox("Reduce features (SHAP selection)")
+        self.l41_reduce.setToolTip("Drop low-importance engineered features via "
+                                   "SHAP before the final fit (slower, often cleaner).")
+        gv.addWidget(self.l41_reduce)
+        self._l41_shared = gb
+        return gb
+
+    def _l41_rf_box_w(self) -> QGroupBox:
+        gb = QGroupBox("Random Forest — hyperparameters")
+        # Defaults match sklearn -> no behaviour change vs not passing them; only
+        # what you edit is sent + rendered in the script.
+        f = QFormLayout(gb)
+        self.rf_n_est = self._ispin(100, 1, 5000)
+        f.addRow("Trees (n_estimators)", self.rf_n_est)
+        self.rf_max_depth = self._ispin(0, 0, 200)
+        self.rf_max_depth.setSpecialValueText("None")  # 0 -> unlimited depth
+        f.addRow("Max depth", self.rf_max_depth)
+        self._l41_rf = gb
+        return gb
+
+    def _l41_xgb_box_w(self) -> QGroupBox:
+        gb = QGroupBox("XGBoost — hyperparameters")
+        f = QFormLayout(gb)
+        self.xgb_n_est = self._ispin(100, 1, 5000)
+        f.addRow("Trees (n_estimators)", self.xgb_n_est)
+        self.xgb_max_depth = self._ispin(6, 1, 200)
+        f.addRow("Max depth", self.xgb_max_depth)
+        self.xgb_lr = self._dspin(0.30, 0.001, 1.0, 3)
+        f.addRow("Learning rate", self.xgb_lr)
+        self._l41_xgb = gb
+        return gb
+
+    def _l41_mds_box_w(self) -> QGroupBox:
+        gb = QGroupBox("MDS — drivers & tolerances")
+        gv = QVBoxLayout(gb)
+        form = QFormLayout()
+        self.mds_swin = QComboBox()
+        self.mds_swin.currentTextChanged.connect(self._refresh_levels_info)
+        form.addRow("SW_IN (W m⁻²)", self.mds_swin)
+        self.mds_ta = QComboBox()
+        self.mds_ta.currentTextChanged.connect(self._refresh_levels_info)
+        form.addRow("TA (°C)", self.mds_ta)
+        self.mds_vpd = QComboBox()
+        self.mds_vpd.currentTextChanged.connect(self._refresh_levels_info)
+        form.addRow("VPD (kPa)", self.mds_vpd)
+        # MDS similarity tolerances (Reichstein et al. 2005 defaults).
+        self.mds_ta_tol = self._dspin(2.5, 0.1, 20.0, 2)
+        form.addRow("TA tolerance (°C)", self.mds_ta_tol)
+        self.mds_vpd_tol = self._dspin(0.5, 0.05, 10.0, 2)
+        form.addRow("VPD tolerance (kPa)", self.mds_vpd_tol)
+        gv.addLayout(form)
+        self.mds_mark = self._info_marker()
+        gv.addWidget(self.mds_mark)
+        vpd_note = QLabel("Units: VPD in kPa (EddyPro outputs hPa — divide by 10), "
+                          "TA in °C. The library warns on suspicious medians.")
+        vpd_note.setWordWrap(True)
+        vpd_note.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
+        gv.addWidget(vpd_note)
+        self._l41_mds = gb
+        return gb
+
+    def _sync_l41_visibility(self, *_) -> None:
+        """Show each method's settings section only when that method is enabled."""
+        self._l41_shared.setVisible(self.l41_rf.isChecked() or self.l41_xgb.isChecked())
+        self._l41_rf.setVisible(self.l41_rf.isChecked())
+        self._l41_xgb.setVisible(self.l41_xgb.isChecked())
+        self._l41_mds.setVisible(self.l41_mds.isChecked())
 
     @staticmethod
     def _ispin(value, lo, hi) -> QSpinBox:
@@ -849,7 +885,7 @@ class FluxChainTab(DiiveTab):
             return None
         cfg: dict = {"methods": methods}
         if "rf" in methods or "xgb" in methods:
-            cfg["features"] = [i.text() for i in self.l41_features.selectedItems()]
+            cfg["features"] = self.l41_features.selected()
             if self.l41_reduce.isChecked():
                 cfg["reduce_features"] = True
             seed = self.l41_seed.value()
@@ -961,7 +997,7 @@ class FluxChainTab(DiiveTab):
                 "l32_steps": self._steps,
                 "l33_enabled": self.l33_enable.isChecked(),
                 "l33_ustar": [list(u) for u in self._ustar],
-                "l41_features": [i.text() for i in self.l41_features.selectedItems()]}
+                "l41_features": self.l41_features.selected()}
 
     def restore_state(self, state: dict) -> None:
         from diive.gui.widgets.state_utils import restore_controls
@@ -988,11 +1024,8 @@ class FluxChainTab(DiiveTab):
         self.l33_list.clear()
         for value, label in self._ustar:
             self.l33_list.addItem(f"{value:g}" + (f"  ({label})" if label else ""))
-        # Re-select the saved L4.1 feature rows (set after on_data_loaded filled them).
-        wanted = set(state.get("l41_features") or [])
-        for i in range(self.l41_features.count()):
-            item = self.l41_features.item(i)
-            item.setSelected(item.text() in wanted)
+        # Re-check the saved L4.1 features (the picker was filled by on_data_loaded).
+        self.l41_features.set_selected(state.get("l41_features") or [])
         self._refresh_l2_availability()
         self._refresh_levels_info()
         self._update_run_label()
@@ -1027,9 +1060,8 @@ class FluxChainTab(DiiveTab):
         # Storage-term column ("" = auto-detect from FLUXNET/EddyPro naming).
         self.strgcol.clear()
         self.strgcol.addItems([""] + cols)
-        # L4.1: feature list + MDS driver combos. Auto-pick obvious drivers.
-        self.l41_features.clear()
-        self.l41_features.addItems(cols)
+        # L4.1: feature picker + MDS driver combos. Auto-pick obvious drivers.
+        self.l41_features.set_columns(cols, keep_selection=False)
         for combo, needle, avoid in (
             (self.mds_swin, "SW_IN", "POT"),
             (self.mds_ta, "TA", None),
