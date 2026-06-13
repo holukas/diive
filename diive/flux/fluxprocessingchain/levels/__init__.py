@@ -21,7 +21,10 @@ from diive.flux.fluxprocessingchain.levels.level2 import (
     level2_test_inputs,
     run_level2,
 )
-from diive.flux.fluxprocessingchain.levels.level31 import run_level31
+from diive.flux.fluxprocessingchain.levels.level31 import (
+    level31_storage_col,
+    run_level31,
+)
 from diive.flux.fluxprocessingchain.levels.level32 import make_level32_detector, run_level32
 from diive.flux.fluxprocessingchain.levels.level33 import (
     run_level33_constant_ustar,
@@ -40,6 +43,7 @@ __all__ = [
     'VM97_SUBTESTS',
     'level2_test_inputs',
     'run_level31',
+    'level31_storage_col',
     'make_level32_detector',
     'run_level32',
     'run_level33_constant_ustar',

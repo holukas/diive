@@ -116,6 +116,13 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         self.assertEqual(level2_test_inputs("LE", "H2O")["spectral_correction_factor"]["inputs"],
                          ["LE_SCF"])
 
+    def test_level31_storage_col(self):
+        from diive.flux.fluxprocessingchain import level31_storage_col
+        self.assertEqual(level31_storage_col("FC"), "SC_SINGLE")
+        self.assertEqual(level31_storage_col("LE"), "SLE_SINGLE")
+        self.assertEqual(level31_storage_col("H"), "SH_SINGLE")
+        self.assertIsNone(level31_storage_col("NOT_A_FLUX"))
+
     def test_level2_custom_input_columns(self):
         # Each L2 test can read a differently-named column via a 'col' override
         # (two keys for the two-column completeness test).

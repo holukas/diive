@@ -69,10 +69,11 @@ from PySide6.QtWidgets import (
 
 import diive as dv
 from diive.flux.fluxprocessingchain import (
-    VM97_SUBTESTS, init_flux_data, level2_test_inputs, level31_to_code,
-    level32_to_code, level33_to_code, level41_to_code, make_level32_detector,
-    make_level41_engineer, run_level2, run_level31, run_level32,
-    run_level33_constant_ustar, run_level41_mds, run_level41_rf, run_level41_xgb,
+    VM97_SUBTESTS, init_flux_data, level2_test_inputs, level31_storage_col,
+    level31_to_code, level32_to_code, level33_to_code, level41_to_code,
+    make_level32_detector, make_level41_engineer, run_level2, run_level31,
+    run_level32, run_level33_constant_ustar, run_level41_mds, run_level41_rf,
+    run_level41_xgb,
 )
 from diive.flux.lowres.common import detect_fluxbasevar
 from diive.gui import theme
@@ -261,6 +262,8 @@ class FluxChainTab(DiiveTab):
         # The flux column determines the standard L2 input columns -> re-seed the
         # per-test column pickers (which then refreshes availability).
         self.fluxcol.currentTextChanged.connect(self._populate_l2_cols)
+        # It also drives the L3.1 storage-column auto-detection marker.
+        self.fluxcol.currentTextChanged.connect(self._refresh_levels_info)
 
     @staticmethod
     def _level_to_stage(level: str) -> int:
@@ -307,6 +310,13 @@ class FluxChainTab(DiiveTab):
         form = QFormLayout(box)
         self.fluxcol = QComboBox()
         form.addRow("Flux column", self.fluxcol)
+        # USTAR (friction velocity) column — required by init_flux_data and read
+        # by L3.3; pickable so non-'USTAR'-named data can still initialize.
+        self.ustarcol = QComboBox()
+        self.ustarcol.currentTextChanged.connect(self._refresh_levels_info)
+        form.addRow("USTAR column", self.ustarcol)
+        self.ustar_mark = self._info_marker()
+        form.addRow("", self.ustar_mark)
         self.site_lat = self._dspin(47.42, -90, 90, 4)
         form.addRow("Latitude", self.site_lat)
         self.site_lon = self._dspin(8.49, -180, 180, 4)
@@ -393,6 +403,64 @@ class FluxChainTab(DiiveTab):
         mark.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
         self.l2_inputs[key] = mark
         return mark
+
+    @staticmethod
+    def _info_marker() -> QLabel:
+        """A small wrapping availability/info label (shared by the level pages)."""
+        lbl = QLabel("")
+        lbl.setWordWrap(True)
+        lbl.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
+        return lbl
+
+    @staticmethod
+    def _set_marker(label: QLabel, ok: bool, text: str) -> None:
+        label.setText(text)
+        label.setStyleSheet(
+            f"color: {'#2E9E5B' if ok else '#C0392B'}; font-size: 11px;")
+
+    def _refresh_levels_info(self, *_) -> None:
+        """Update the column-availability markers on the non-L2 level pages
+        (mirrors L2's per-test availability so every level shows its inputs)."""
+        if self._df is None:
+            return
+        cols = {str(c) for c in self._df.columns}
+        fluxcol = self.fluxcol.currentText()
+        # Input — USTAR column.
+        if hasattr(self, "ustar_mark"):
+            u = self.ustarcol.currentText().strip()
+            ok = bool(u) and u in cols
+            self._set_marker(self.ustar_mark, ok,
+                             "✓ USTAR column present" if ok
+                             else "✗ pick a USTAR column present in the data")
+        # L3.1 — storage-term column (explicit pick, else the auto-detected name).
+        if hasattr(self, "strg_mark"):
+            default = level31_storage_col(fluxcol)
+            chosen = self.strgcol.currentText().strip()
+            eff = chosen or (default or "")
+            ok = bool(eff) and eff in cols
+            if chosen:
+                txt = f"uses {chosen}" + ("" if ok else " — not in data")
+            elif default:
+                txt = f"auto-detect → {default}" + ("" if ok else " — not in data")
+            else:
+                txt = "no standard storage column for this flux — pick one"
+            self._set_marker(self.strg_mark, ok, ("✓ " if ok else "✗ ") + txt)
+        # L3.3 — the USTAR column it filters on (+ applicability reminder).
+        if hasattr(self, "l33_info"):
+            u = self.ustarcol.currentText().strip() or "USTAR"
+            self.l33_info.setText(
+                f"Filters on USTAR column '{u}'. Applies to CO2 / CH4 / N2O only — "
+                f"for H / LE use threshold 0.")
+        # L4.1 — the three MDS driver columns.
+        if hasattr(self, "mds_mark"):
+            parts, allok = [], True
+            for role, combo in (("SW_IN", self.mds_swin), ("TA", self.mds_ta),
+                                ("VPD", self.mds_vpd)):
+                c = combo.currentText().strip()
+                ok = bool(c) and c in cols
+                allok = allok and ok
+                parts.append(f"{role} {'✓' if ok else '✗'}")
+            self._set_marker(self.mds_mark, allok, "MDS drivers — " + "   ".join(parts))
 
     def _signal_strength_options(self) -> QFormLayout:
         """Column + direction + threshold for the signal-strength (AGC) test."""
@@ -501,6 +569,11 @@ class FluxChainTab(DiiveTab):
     def _level31_group(self) -> QGroupBox:
         box = QGroupBox("Level 3.1 — storage correction")
         v = QVBoxLayout(box)
+        note = QLabel("Adds the single-point storage term to the L2 flux "
+                      "(e.g. NEE = FC + SC_SINGLE).")
+        note.setWordWrap(True)
+        note.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
+        v.addWidget(note)
         self.l31_gapfill = QCheckBox("Gap-fill storage term (rolling median)")
         self.l31_gapfill.setChecked(True)
         v.addWidget(self.l31_gapfill)
@@ -512,8 +585,11 @@ class FluxChainTab(DiiveTab):
         v.addWidget(self.l31_zero)
         form = QFormLayout()
         self.strgcol = QComboBox()  # "" = auto-detect (FLUXNET/EddyPro naming)
+        self.strgcol.currentTextChanged.connect(self._refresh_levels_info)
         form.addRow("Storage column (auto if blank)", self.strgcol)
         v.addLayout(form)
+        self.strg_mark = self._info_marker()
+        v.addWidget(self.strg_mark)
         v.addWidget(self._level_run_button(2, "Run Level 3.1"))
         return box
 
@@ -603,6 +679,9 @@ class FluxChainTab(DiiveTab):
             "outlier test. Only for CO2/CH4/N2O — for H/LE use threshold 0.")
         self.l33_enable.toggled.connect(self._update_run_label)
         v.addWidget(self.l33_enable)
+        # Which USTAR column it filters on (set on the Input page) + applicability.
+        self.l33_info = self._info_marker()
+        v.addWidget(self.l33_info)
         note = QLabel("One scenario per threshold (m s⁻¹). Label is optional "
                       "(auto CUT_0, CUT_1, …); use e.g. CUT_50 for a percentile.")
         note.setWordWrap(True)
@@ -672,21 +751,63 @@ class FluxChainTab(DiiveTab):
         for cb in (self.l41_rf, self.l41_xgb, self.l41_mds):
             cb.toggled.connect(self._update_run_label)
             v.addWidget(cb)
+        # Shared ML settings. A fixed random seed makes rf/xgb runs reproducible
+        # (without it sklearn/xgboost reseed every run -> the output drifts).
+        shared = QFormLayout()
+        self.l41_seed = QSpinBox()
+        self.l41_seed.setRange(0, 2_000_000_000)
+        self.l41_seed.setValue(42)
+        self.l41_seed.setToolTip("Random seed for rf / xgb. Same seed -> identical "
+                                 "gap-fill every run; change it to vary deliberately.")
+        shared.addRow("Random seed (rf / xgb)", self.l41_seed)
+        v.addLayout(shared)
+        self.l41_reduce = QCheckBox("Reduce features (SHAP selection)")
+        self.l41_reduce.setToolTip("Drop low-importance engineered features via "
+                                   "SHAP before the final fit (slower, often cleaner).")
+        v.addWidget(self.l41_reduce)
         # rf/xgb predictor features — multi-select from the dataset columns.
         v.addWidget(QLabel("Features (rf / xgb predictors):"))
         self.l41_features = QListWidget()
         self.l41_features.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self.l41_features.setMaximumHeight(110)
         v.addWidget(self.l41_features)
+        # Random-Forest hyperparameters (defaults match sklearn -> no behaviour
+        # change vs not passing them; only what you edit is sent + rendered).
+        rf_form = QFormLayout()
+        self.rf_n_est = self._ispin(100, 1, 5000)
+        rf_form.addRow("RF — trees (n_estimators)", self.rf_n_est)
+        self.rf_max_depth = self._ispin(0, 0, 200)
+        self.rf_max_depth.setSpecialValueText("None")  # 0 -> unlimited depth
+        rf_form.addRow("RF — max depth", self.rf_max_depth)
+        v.addLayout(rf_form)
+        # XGBoost hyperparameters (defaults match xgboost).
+        xgb_form = QFormLayout()
+        self.xgb_n_est = self._ispin(100, 1, 5000)
+        xgb_form.addRow("XGB — trees (n_estimators)", self.xgb_n_est)
+        self.xgb_max_depth = self._ispin(6, 1, 200)
+        xgb_form.addRow("XGB — max depth", self.xgb_max_depth)
+        self.xgb_lr = self._dspin(0.30, 0.001, 1.0, 3)
+        xgb_form.addRow("XGB — learning rate", self.xgb_lr)
+        v.addLayout(xgb_form)
         # MDS driver columns — must exist in the input (full_df).
         form = QFormLayout()
         self.mds_swin = QComboBox()
+        self.mds_swin.currentTextChanged.connect(self._refresh_levels_info)
         form.addRow("MDS SW_IN (W m⁻²)", self.mds_swin)
         self.mds_ta = QComboBox()
+        self.mds_ta.currentTextChanged.connect(self._refresh_levels_info)
         form.addRow("MDS TA (°C)", self.mds_ta)
         self.mds_vpd = QComboBox()
+        self.mds_vpd.currentTextChanged.connect(self._refresh_levels_info)
         form.addRow("MDS VPD (kPa)", self.mds_vpd)
+        # MDS similarity tolerances (Reichstein et al. 2005 defaults).
+        self.mds_ta_tol = self._dspin(2.5, 0.1, 20.0, 2)
+        form.addRow("MDS — TA tolerance (°C)", self.mds_ta_tol)
+        self.mds_vpd_tol = self._dspin(0.5, 0.05, 10.0, 2)
+        form.addRow("MDS — VPD tolerance (kPa)", self.mds_vpd_tol)
         v.addLayout(form)
+        self.mds_mark = self._info_marker()
+        v.addWidget(self.mds_mark)
         vpd_note = QLabel("MDS units: VPD must be kPa (EddyPro outputs hPa — divide "
                           "by 10), TA in °C. The library warns on suspicious medians.")
         vpd_note.setWordWrap(True)
@@ -700,6 +821,13 @@ class FluxChainTab(DiiveTab):
         v.addWidget(self._level_run_button(5, "Run Level 4.1"))
         return box
 
+    @staticmethod
+    def _ispin(value, lo, hi) -> QSpinBox:
+        sp = QSpinBox()
+        sp.setRange(lo, hi)
+        sp.setValue(value)
+        return sp
+
     def _level41_methods(self) -> list[str]:
         """Selected L4.1 methods in canonical order (matches gapfilled_cols())."""
         out = []
@@ -709,17 +837,47 @@ class FluxChainTab(DiiveTab):
         return out
 
     def _level41_cfg(self) -> dict | None:
-        """run/codegen config for L4.1, or None when no method is selected."""
+        """run/codegen config for L4.1, or None when no method is selected.
+
+        Hyperparameters whose value still equals the library default are omitted
+        (keeps the run identical and the generated script minimal); the random
+        seed is always sent because pinning it is the whole point — it makes the
+        rf/xgb output reproducible across runs.
+        """
         methods = self._level41_methods()
         if not methods:
             return None
         cfg: dict = {"methods": methods}
         if "rf" in methods or "xgb" in methods:
             cfg["features"] = [i.text() for i in self.l41_features.selectedItems()]
+            if self.l41_reduce.isChecked():
+                cfg["reduce_features"] = True
+            seed = self.l41_seed.value()
+            if "rf" in methods:
+                rf = {"random_state": seed}
+                if self.rf_n_est.value() != 100:        # sklearn default
+                    rf["n_estimators"] = self.rf_n_est.value()
+                if self.rf_max_depth.value() != 0:       # 0 == None (unlimited)
+                    rf["max_depth"] = self.rf_max_depth.value()
+                cfg["rf_kwargs"] = rf
+            if "xgb" in methods:
+                xgb = {"random_state": seed}
+                if self.xgb_n_est.value() != 100:        # xgboost default
+                    xgb["n_estimators"] = self.xgb_n_est.value()
+                if self.xgb_max_depth.value() != 6:      # xgboost default
+                    xgb["max_depth"] = self.xgb_max_depth.value()
+                if abs(self.xgb_lr.value() - 0.30) > 1e-9:  # xgboost default
+                    xgb["learning_rate"] = self.xgb_lr.value()
+                cfg["xgb_kwargs"] = xgb
         if "mds" in methods:
-            cfg["mds"] = {"swin": self.mds_swin.currentText(),
-                          "ta": self.mds_ta.currentText(),
-                          "vpd": self.mds_vpd.currentText()}
+            mds = {"swin": self.mds_swin.currentText(),
+                   "ta": self.mds_ta.currentText(),
+                   "vpd": self.mds_vpd.currentText()}
+            if abs(self.mds_ta_tol.value() - 2.5) > 1e-9:   # run_level41_mds default
+                mds["ta_tol"] = self.mds_ta_tol.value()
+            if abs(self.mds_vpd_tol.value() - 0.5) > 1e-9:  # run_level41_mds default
+                mds["vpd_tol"] = self.mds_vpd_tol.value()
+            cfg["mds"] = mds
         return cfg
 
     def _update_run_label(self, *_) -> None:
@@ -775,7 +933,8 @@ class FluxChainTab(DiiveTab):
 
     # --- state ---
     def _fx_controls(self) -> dict:
-        return {"fluxcol": self.fluxcol, "site_lat": self.site_lat,
+        return {"fluxcol": self.fluxcol, "ustarcol": self.ustarcol,
+                "site_lat": self.site_lat,
                 "site_lon": self.site_lon, "utc_offset": self.utc_offset,
                 "nighttime_threshold": self.nighttime_threshold,
                 "day_qcf": self.day_qcf, "night_qcf": self.night_qcf,
@@ -785,7 +944,12 @@ class FluxChainTab(DiiveTab):
                 "strgcol": self.strgcol,
                 "l41_rf": self.l41_rf, "l41_xgb": self.l41_xgb, "l41_mds": self.l41_mds,
                 "mds_swin": self.mds_swin, "mds_ta": self.mds_ta, "mds_vpd": self.mds_vpd,
-                "l41_view": self.l41_view}
+                "l41_view": self.l41_view,
+                "l41_seed": self.l41_seed, "l41_reduce": self.l41_reduce,
+                "rf_n_est": self.rf_n_est, "rf_max_depth": self.rf_max_depth,
+                "xgb_n_est": self.xgb_n_est, "xgb_max_depth": self.xgb_max_depth,
+                "xgb_lr": self.xgb_lr,
+                "mds_ta_tol": self.mds_ta_tol, "mds_vpd_tol": self.mds_vpd_tol}
 
     def save_state(self) -> dict:
         from diive.gui.widgets.state_utils import save_controls
@@ -830,6 +994,7 @@ class FluxChainTab(DiiveTab):
             item = self.l41_features.item(i)
             item.setSelected(item.text() in wanted)
         self._refresh_l2_availability()
+        self._refresh_levels_info()
         self._update_run_label()
 
     # --- data ---
@@ -845,6 +1010,13 @@ class FluxChainTab(DiiveTab):
         for cand in ("FC", "LE", "H", "NEE", "FC_orig"):
             if cand in cols:
                 self.fluxcol.setCurrentText(cand)
+                break
+        # USTAR column (init_flux_data requires it) — default to 'USTAR' if present.
+        self.ustarcol.clear()
+        self.ustarcol.addItems(cols)
+        for cand in ("USTAR", "ustar", "u*"):
+            if cand in cols:
+                self.ustarcol.setCurrentText(cand)
                 break
         self.signal_strength_col.clear()
         self.signal_strength_col.addItems([""] + cols)
@@ -875,6 +1047,7 @@ class FluxChainTab(DiiveTab):
         # New dataset: the previous run's reach no longer applies.
         self.rail.set_reached_through(-1)
         self._populate_l2_cols()  # seed the per-test column pickers + availability
+        self._refresh_levels_info()  # storage / USTAR / MDS availability markers
         self._refresh_rail()
         self._update_level_buttons()
 
@@ -882,6 +1055,7 @@ class FluxChainTab(DiiveTab):
     def _init_kwargs(self) -> dict:
         return dict(
             fluxcol=self.fluxcol.currentText(),
+            ustarcol=self.ustarcol.currentText() or "USTAR",
             site_lat=self.site_lat.value(),
             site_lon=self.site_lon.value(),
             utc_offset=self.utc_offset.value(),
@@ -979,13 +1153,18 @@ class FluxChainTab(DiiveTab):
             # One engineer, reused across rf/xgb (feature engineering runs once).
             features = cfg["features"]
             engineer = make_level41_engineer(data, features=features)
+            reduce = cfg.get("reduce_features", False)
             if "rf" in methods:
-                data = run_level41_rf(data, features=features, engineer=engineer)
+                data = run_level41_rf(data, features=features, engineer=engineer,
+                                      reduce_features=reduce, **cfg.get("rf_kwargs", {}))
             if "xgb" in methods:
-                data = run_level41_xgb(data, features=features, engineer=engineer)
+                data = run_level41_xgb(data, features=features, engineer=engineer,
+                                       reduce_features=reduce, **cfg.get("xgb_kwargs", {}))
         if "mds" in methods:
             mds = cfg["mds"]
-            data = run_level41_mds(data, swin=mds["swin"], ta=mds["ta"], vpd=mds["vpd"])
+            extra = {k: mds[k] for k in ("ta_tol", "vpd_tol") if k in mds}
+            data = run_level41_mds(data, swin=mds["swin"], ta=mds["ta"], vpd=mds["vpd"],
+                                   **extra)
         return data
 
     def _run(self) -> None:

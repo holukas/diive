@@ -31,9 +31,11 @@
   panel); **Analyze** tabs **Gaps & coverage**, **Driver explorer**, **Seasonal-trend & anomalies**, **Spectrogram**;
   **Flux processing chain** (Input + L2 + L3.1 storage correction + L3.2 outlier-detection chain + L3.3 constant-USTAR
   filtering + L4.1 gap-filling — rf / xgb / mds, additive across methods, one gap-fill per USTAR scenario, with a
-  cumulative / heatmap method comparison; composable per-level path with per-level run buttons, a pipeline-rail layout,
-  a per-level QCF screening report, and L2 per-test input-column readouts + the eight VM97 sub-tests; **Copy Python**);
-  **Time lag analysis** (EC concentration↔wind lag
+  cumulative / heatmap method comparison; a shared Random seed makes rf/xgb reproducible, plus per-method
+  hyperparameters (RF/XGB trees/depth/learning-rate, MDS tolerances) and SHAP feature reduction; composable per-level
+  path with per-level run buttons, a pipeline-rail layout, a per-level QCF screening report, per-test input-column
+  pickers + the eight VM97 sub-tests at L2, and a USTAR/storage/driver column picker on the other levels;
+  **Copy Python**); **Time lag analysis** (EC concentration↔wind lag
   distribution per gas, peak/range/EddyPro window, `dv.flux.TimeLagAnalysis`); **Outliers** tabs **Absolute limits
   filter**, **Hampel filter**, **Local SD
   filter**, **Z-score filter**, **Z-score (rolling) filter**, **Z-score (increments) filter**, **Local Outlier

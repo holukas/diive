@@ -433,10 +433,19 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   (keeps run/codegen minimal). The eight **VM97 sub-tests** are individual toggles, and signal-strength exposes column +
   direction + threshold. The default column names + the VM97 sub-test list are library domain knowledge —
   `dv.flux.level2_test_inputs(fluxcol, fluxbasevar)` (templated names mirroring the `flag_*_eddypro_test` reads) and
-  `VM97_SUBTESTS`; the GUI derives `fluxbasevar` via `detect_fluxbasevar` and only displays/gates. **L4.1** ticks rf / xgb / mds (additive across methods — each
+  `VM97_SUBTESTS`; the GUI derives `fluxbasevar` via `detect_fluxbasevar` and only displays/gates. **The other levels
+  mirror this column-info pattern** (`_refresh_levels_info`): Input has a **USTAR column** picker (`init_flux_data`'s
+  `ustarcol`, so non-`USTAR`-named data can initialize) + availability marker; L3.1 shows the auto-detected **storage
+  column** (`dv.flux.level31_storage_col(fluxcol)` — the `FC→SC_SINGLE` map, a library helper) + present/missing marker;
+  L3.3 names the USTAR column it filters on; L4.1 shows a SW_IN/TA/VPD driver-availability marker. **L4.1** ticks rf / xgb / mds (additive across methods — each
   replaces only its own previous result), picks rf/xgb predictor features + MDS SW_IN/TA/VPD driver columns (MDS units:
   VPD kPa, TA °C — the library warns on suspicious medians; driver auto-pick skips `FLAG_*` columns), fans out one
-  gap-fill per USTAR scenario, and renders the method comparison via `data.plot_cumulative_comparison(ax=...)` /
+  gap-fill per USTAR scenario. **Reproducibility:** a shared **Random seed** field (default 42) is always passed to
+  rf/xgb (`cfg["rf_kwargs"]/["xgb_kwargs"]["random_state"]`) — without it sklearn/xgboost reseed every run and the
+  output drifts; it's also emitted in `level41_to_code`. The page also exposes **Reduce features (SHAP)** and per-method
+  hyperparameters (RF `n_estimators`/`max_depth`, XGB `n_estimators`/`max_depth`/`learning_rate`, MDS `ta_tol`/`vpd_tol`);
+  `_level41_cfg` omits any whose value still equals the library default (so the run is unchanged and the script stays
+  minimal — only `random_state` is unconditional). It renders the method comparison via `data.plot_cumulative_comparison(ax=...)` /
   `plot_gapfilled_heatmaps(fig=...)` (two-phase `ax=`/`fig=` embedding, like `RidgeLinePlot.plot(fig=...)`; the heatmaps
   view sets `canvas.auto_layout=False`). Script-gen lives in the library (`flux/fluxprocessingchain/codegen.py`:
   `chain_to_code` for the `run_chain`/`FluxConfig` path, `level2_to_code` … `level41_to_code` for the composable

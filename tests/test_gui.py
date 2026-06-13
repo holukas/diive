@@ -770,6 +770,49 @@ def test_flux_chain_tab_level2_details(app):
     assert tab2.l2_cols["ssitc"][0].currentText() == "EXPECT_NR"
 
 
+def test_flux_chain_tab_level_info(app):
+    # Every level page mirrors L2: it shows the column(s) it reads with an
+    # availability marker, and lets you pick them (USTAR on Input, storage on
+    # L3.1, MDS drivers on L4.1).
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+
+    # Input: USTAR column picker, seeded to 'USTAR', flows into init kwargs.
+    assert tab.ustarcol.currentText() == "USTAR"
+    assert tab._init_kwargs()["ustarcol"] == "USTAR"
+    assert tab.ustar_mark.text().startswith("✓")
+
+    # L3.1: the storage marker shows the auto-detected column for the flux.
+    assert "SC_SINGLE" in tab.strg_mark.text()       # FC -> SC_SINGLE
+    assert tab.strg_mark.text().startswith("✓")
+
+    # L3.3: an info line names the USTAR column it filters on.
+    assert "USTAR" in tab.l33_info.text()
+
+    # L4.1: the MDS driver marker reflects the three drivers' availability.
+    assert "SW_IN" in tab.mds_mark.text() and "VPD" in tab.mds_mark.text()
+
+    # A non-'USTAR'-named friction-velocity column can be picked and initializes.
+    df2 = df.rename(columns={"USTAR": "FRICTION_VEL"})
+    tab.on_data_loaded(df2)
+    tab.ustarcol.setCurrentText("FRICTION_VEL")
+    assert tab._init_kwargs()["ustarcol"] == "FRICTION_VEL"
+    data = tab._compute(df2, tab._init_kwargs(), tab._level2_settings(),
+                        tab._level31_kwargs())
+    assert data.filteredseries.dropna().count() > 0
+
+    # USTAR-column pick round-trips through save/restore.
+    state = tab.save_state()
+    tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df2)
+    tab2.restore_state(state)
+    assert tab2.ustarcol.currentText() == "FRICTION_VEL"
+
+
 def test_flux_chain_tab_per_level_run(app):
     # Each level runs separately, its output feeding the next; the per-level run
     # buttons are gated by how far the chain has reached.
@@ -859,6 +902,21 @@ def test_flux_chain_tab_level41(app):
     assert "run_level41_mds(" in code
     assert "run_level41_rf(" in code and "run_level41_xgb(" in code
     assert code.count("make_level41_engineer(") == 1
+    # The random seed is always pinned (this is what makes rf/xgb reproducible),
+    # so it appears in both ML calls; untouched hyperparameters are omitted.
+    assert code.count("random_state=42") == 2
+    assert "n_estimators" not in code  # default -> omitted
+    # Editing a hyperparameter + seed flows into the config and the script.
+    tab.l41_seed.setValue(7)
+    tab.rf_n_est.setValue(350)
+    tab.l41_reduce.setChecked(True)
+    cfg = tab._level41_cfg()
+    assert cfg["rf_kwargs"] == {"random_state": 7, "n_estimators": 350}
+    assert cfg["reduce_features"] is True
+    code2 = tab._code()
+    assert "random_state=7" in code2 and "n_estimators=350" in code2
+    assert "reduce_features=True" in code2
+    tab.l41_seed.setValue(42); tab.rf_n_est.setValue(100); tab.l41_reduce.setChecked(False)
 
     # Run MDS only (fast). Drive the synchronous core directly.
     tab.l41_rf.setChecked(False)

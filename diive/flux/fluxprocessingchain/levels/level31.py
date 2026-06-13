@@ -24,6 +24,30 @@ from diive.flux.lowres.storage_correction import (
     FluxStorageCorrectionSinglePointEddyPro,
 )
 
+#: Flux column -> the storage-term column L3.1 auto-detects for it (single-point
+#: EddyPro-FLUXNET naming). Mirrors FluxStorageCorrectionSinglePointEddyPro's
+#: internal map; lets a caller (e.g. the GUI) show / seed the storage column and
+#: check availability, the L3.1 analogue of level2_test_inputs.
+_STORAGE_COLS = {
+    'FC': 'SC_SINGLE',
+    'FH2O': 'SH2O_SINGLE',
+    'LE': 'SLE_SINGLE',
+    'ET': 'SET_SINGLE',
+    'FN2O': 'SN2O_SINGLE',
+    'FCH4': 'SCH4_SINGLE',
+    'H': 'SH_SINGLE',
+}
+
+
+def level31_storage_col(fluxcol: str) -> str | None:
+    """The storage-term column ``run_level31`` auto-detects for ``fluxcol``.
+
+    Returns the EddyPro-FLUXNET single-point storage column name (e.g.
+    ``'FC' -> 'SC_SINGLE'``), or ``None`` when the flux is not in the standard
+    map (the caller should then ask the user for an explicit ``strgcol``).
+    """
+    return _STORAGE_COLS.get(fluxcol)
+
 
 def run_level31(
         data: FluxLevelData,

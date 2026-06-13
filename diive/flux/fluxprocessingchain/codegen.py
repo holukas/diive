@@ -257,21 +257,36 @@ def _level41_block(level41_cfg: dict) -> list[str]:
     """
     methods = level41_cfg.get("methods", [])
     features = level41_cfg.get("features") or []
+    reduce = level41_cfg.get("reduce_features")
     lines: list[str] = []
     if any(m in methods for m in ("rf", "xgb")):
         lines += ["", "engineer = make_level41_engineer(", "    data,",
                   f"    features={features!r},", ")"]
+
+    def _ml_call(fn: str, model_kwargs: dict) -> list[str]:
+        body = ["", f"data = {fn}(", "    data,",
+                f"    features={features!r},", "    engineer=engineer,"]
+        if reduce:
+            body.append("    reduce_features=True,")
+        for k, val in (model_kwargs or {}).items():
+            body.append(f"    {k}={val!r},")
+        body.append(")")
+        return body
+
     if "rf" in methods:
-        lines += ["", "data = run_level41_rf(", "    data,",
-                  f"    features={features!r},", "    engineer=engineer,", ")"]
+        lines += _ml_call("run_level41_rf", level41_cfg.get("rf_kwargs", {}))
     if "xgb" in methods:
-        lines += ["", "data = run_level41_xgb(", "    data,",
-                  f"    features={features!r},", "    engineer=engineer,", ")"]
+        lines += _ml_call("run_level41_xgb", level41_cfg.get("xgb_kwargs", {}))
     if "mds" in methods:
         mds = level41_cfg.get("mds") or {}
-        lines += ["", "data = run_level41_mds(", "    data,",
-                  f"    swin={mds.get('swin')!r},", f"    ta={mds.get('ta')!r},",
-                  f"    vpd={mds.get('vpd')!r},", ")"]
+        body = ["", "data = run_level41_mds(", "    data,",
+                f"    swin={mds.get('swin')!r},", f"    ta={mds.get('ta')!r},",
+                f"    vpd={mds.get('vpd')!r},"]
+        for k in ("ta_tol", "vpd_tol"):
+            if k in mds:
+                body.append(f"    {k}={mds[k]!r},")
+        body.append(")")
+        lines += body
     return lines
 
 
