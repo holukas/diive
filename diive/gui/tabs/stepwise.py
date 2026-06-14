@@ -10,12 +10,14 @@ steps already cleaned, so spikes are peeled off progressively. The overall
 **QCF** (`dv.qaqc.FlagQCF`) is computed separately from the accumulated per-test
 flags.
 
-Layout: a compact top bar (variable picker + limit-line toggle + actions), a
-horizontal strip of method cards (add / edit / reorder / delete — any change
-rebuilds and replays the chain on a worker thread), and a four-panel plot grid
-below: original + outliers (optionally with the selected step's detection band),
-the cleaned series, a date/time heatmap of the cleaned series, and the QCF flag
-over time plus its 0/1/2 distribution.
+Layout: the shared variable list on the left, a segmented inspector in the centre
+(Outliers / Corrections / Report — only the active page takes space; each of the
+first two carries its own Run button below its list), and on the right an action
+bar (limit-line toggle + Copy/Add) over a large, always-visible plot grid:
+original + outliers (optionally with the selected step's detection band), the
+cleaned (+ corrected) series, a date/time heatmap of the cleaned series, and the
+QCF flag over time plus its 0/1/2 distribution. Edits apply only when the
+relevant Run button is clicked.
 
 The per-method parameter widgets and the cards are the shared
 `widgets/stepwise_method_params.py` / `widgets/stepwise_cards.py` registries (a
@@ -37,12 +39,12 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -68,9 +70,11 @@ _C_RAW = "#B0BEC5"      # blue-grey 200 — original line
 _C_CLEANED = "#43A047"  # green 600     — cleaned series
 _C_REMOVED = "#E53935"  # red 600       — removed points
 _C_LIMIT = "#8E24AA"    # purple 600    — detection band
-_C_CORRECTED = "#1E88E5"  # blue 600    — corrected series
+_C_CORRECTED = "#FB8C00"  # orange 600   — corrected series (contrasts cleaned green)
 _C_MUTED = "#6B7780"
-_QCF_COLORS = {0: "#43A047", 1: "#FFB300", 2: "#E53935"}  # good / marginal / rejected
+# QCF levels: colorblind-safe blue→orange→red (RdYlBu), avoiding red/green.
+_QCF_COLORS = {0: "#4575B4", 1: "#FDAE61", 2: "#D73027"}  # good / marginal / rejected
+_QCF_CMAP = "RdYlBu_r"  # colorblind-safe cousin of RdYlGn (0=blue good, 2=red bad)
 
 
 class _StepwiseSignals(QObject):
@@ -117,15 +121,16 @@ class StepwiseScreeningTab(DiiveTab):
         self.varpanel.selected.connect(lambda name, _ctrl: self._select(name))
         layout.addWidget(self.varpanel)
 
-        # Right: controls + preview stacked vertically.
+        # Centre: the segmented inspector (Outliers / Corrections / Report) —
+        # only the active page takes space, so the plots get the rest.
+        layout.addWidget(self._build_inspector())
+
+        # Right: action bar + status + the large, always-visible plot stage.
         right = QWidget()
         rlayout = QVBoxLayout(right)
         rlayout.setContentsMargins(0, 0, 0, 0)
         rlayout.addLayout(self._build_top_bar())
-        rlayout.addWidget(self._build_card_strip())
-        rlayout.addWidget(self._build_corrections_section())
 
-        # Status + QCF readout line.
         info_row = QHBoxLayout()
         self.status = QLabel("Select a variable to screen.")
         self.status.setWordWrap(True)
@@ -135,21 +140,158 @@ class StepwiseScreeningTab(DiiveTab):
         info_row.addWidget(self.qcf_label)
         rlayout.addLayout(info_row)
 
-        # Lower area: plot grid (left) + publication report (right).
-        lower = QHBoxLayout()
         self.canvas = MplCanvas()
-        lower.addWidget(self.canvas, stretch=1)
-        lower.addWidget(self._build_report_panel())
-        rlayout.addLayout(lower, stretch=1)
+        rlayout.addWidget(self.canvas, stretch=1)
 
         layout.addWidget(right, stretch=1)
         return root
 
-    def _build_report_panel(self) -> QWidget:
+    # --- inspector (segmented: Outliers / Corrections / Report) ---
+    #: Inspector width per page — the Report's monospace table needs more room
+    #: than the Outliers/Corrections forms, so the pane widens only for it.
+    _INSPECTOR_W = 300
+    _INSPECTOR_W_REPORT = 560
+
+    def _build_inspector(self) -> QWidget:
         panel = QWidget()
-        panel.setFixedWidth(390)
+        self._inspector = panel
+        panel.setFixedWidth(self._INSPECTOR_W)
         v = QVBoxLayout(panel)
         v.setContentsMargins(0, 0, 0, 0)
+
+        seg = QHBoxLayout()
+        seg.setSpacing(4)
+        accent = theme.manager.tokens.get("ACCENT", "#3A4D5C")
+        border = theme.manager.tokens.get("BORDER", "#E6E6E3")
+        seg_qss = (
+            f"QPushButton {{ padding: 6px 6px; border: 0.5px solid {border}; "
+            f"border-radius: 6px; background: transparent; }} "
+            f"QPushButton:checked {{ background: {accent}; color: white; "
+            f"border-color: {accent}; }}")
+        self._seg_btns: list[QPushButton] = []
+        for i, label in enumerate(("Outliers", "Corrections", "Report")):
+            b = QPushButton(label)
+            b.setCheckable(True)
+            b.setCursor(Qt.PointingHandCursor)
+            b.setStyleSheet(seg_qss)
+            b.clicked.connect(lambda _c=False, idx=i: self._set_inspector_page(idx))
+            seg.addWidget(b)
+            self._seg_btns.append(b)
+        v.addLayout(seg)
+
+        self._stack = QStackedWidget()
+        self._stack.addWidget(self._build_outliers_page())
+        self._stack.addWidget(self._build_corrections_page())
+        self._stack.addWidget(self._build_report_page())
+        v.addWidget(self._stack, stretch=1)
+        self._set_inspector_page(0)
+        self._refresh_inspector_badges()
+        return panel
+
+    def _set_inspector_page(self, idx: int) -> None:
+        self._stack.setCurrentIndex(idx)
+        for i, b in enumerate(self._seg_btns):
+            b.setChecked(i == idx)
+        # Widen for the Report page (wide monospace table), narrow otherwise so
+        # the plots keep the space.
+        self._inspector.setFixedWidth(
+            self._INSPECTOR_W_REPORT if idx == 2 else self._INSPECTOR_W)
+
+    def _refresh_inspector_badges(self) -> None:
+        """Show the step / correction counts on the segment buttons. Defensive:
+        runs during the staggered build before all pages exist."""
+        if not getattr(self, "_seg_btns", None):
+            return
+        n_steps = len(self._steps)
+        self._seg_btns[0].setText(f"Outliers  {n_steps}" if n_steps else "Outliers")
+        panel = getattr(self, "corrections_panel", None)
+        n_corr = len(panel.corrections()) if panel is not None else 0
+        self._seg_btns[1].setText(f"Corrections  {n_corr}" if n_corr else "Corrections")
+
+    def _build_outliers_page(self) -> QWidget:
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        host = QWidget()
+        # Cards now stack vertically (full settings visible, no horizontal scroll).
+        self._strip = QVBoxLayout(host)
+        self._strip.setContentsMargins(4, 4, 4, 4)
+        self._strip.setSpacing(8)
+        self._strip.setAlignment(Qt.AlignTop)
+        scroll.setWidget(host)
+        self._strip_host = host
+        self._rebuild_cards()
+        outer.addWidget(scroll, stretch=1)
+
+        # Run the outlier chain — sits right below the method cards.
+        self.run_outliers_btn = QPushButton("Run outliers")
+        self.run_outliers_btn.setToolTip(
+            "Run the outlier chain on the selected variable and compute the QCF. "
+            "Edits to the steps apply only when you run.")
+        self.run_outliers_btn.clicked.connect(lambda: self._run())
+        theme.set_button_role(self.run_outliers_btn, "confirm")
+        outer.addWidget(self.run_outliers_btn)
+        return page
+
+    def _build_corrections_page(self) -> QWidget:
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        host = QWidget()
+        v = QVBoxLayout(host)
+        v.setContentsMargins(4, 4, 4, 4)
+
+        mrow = QHBoxLayout()
+        mrow.addWidget(QLabel("Measurement:"))
+        self.meas_combo = QComboBox()
+        self.meas_combo.setToolTip(
+            "The measurement group of this variable. It decides which "
+            "corrections are physically meaningful (e.g. radiation zero offset "
+            "for SW / PPFD).")
+        self.meas_combo.addItem("(none)", None)
+        for m in MEASUREMENTS:
+            self.meas_combo.addItem(measurement_label(m.code), m.code)
+        self.meas_combo.currentIndexChanged.connect(self._on_measurement_changed)
+        mrow.addWidget(self.meas_combo, stretch=1)
+        v.addLayout(mrow)
+
+        hint = QLabel("Applied to the QCF-filtered series, in order.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet(f"color: {_C_MUTED};")
+        v.addWidget(hint)
+
+        self.corrections_panel = CorrectionsPanel()
+        self.corrections_panel.set_coords_available(site.manager.configured)
+        self.corrections_panel.changed.connect(self._on_corrections_changed)
+        v.addWidget(self.corrections_panel)
+        v.addStretch(1)
+        scroll.setWidget(host)
+        outer.addWidget(scroll, stretch=1)
+
+        # Apply the corrections — sits right below the correction list.
+        self.run_corrections_btn = QPushButton("Run corrections")
+        self.run_corrections_btn.setToolTip(
+            "Apply the corrections to the QCF-filtered series (or the raw series "
+            "when no outlier chain has been run).")
+        self.run_corrections_btn.clicked.connect(lambda: self._recompute_corrections())
+        theme.set_button_role(self.run_corrections_btn, "confirm")
+        outer.addWidget(self.run_corrections_btn)
+        return page
+
+    def _build_report_page(self) -> QWidget:
+        panel = QWidget()
+        v = QVBoxLayout(panel)
+        v.setContentsMargins(4, 4, 4, 4)
         head = QHBoxLayout()
         title = QLabel("Screening report")
         title.setStyleSheet("font-weight: bold;")
@@ -173,19 +315,6 @@ class StepwiseScreeningTab(DiiveTab):
 
     def _build_top_bar(self) -> QHBoxLayout:
         bar = QHBoxLayout()
-        bar.addWidget(QLabel("Measurement:"))
-        self.meas_combo = QComboBox()
-        self.meas_combo.setMinimumWidth(220)
-        self.meas_combo.setToolTip(
-            "The measurement group of this variable. It decides which "
-            "corrections are physically meaningful (e.g. radiation zero offset "
-            "for SW / PPFD).")
-        self.meas_combo.addItem("(none)", None)
-        for m in MEASUREMENTS:
-            self.meas_combo.addItem(measurement_label(m.code), m.code)
-        self.meas_combo.currentIndexChanged.connect(self._on_measurement_changed)
-        bar.addWidget(self.meas_combo)
-
         self.limits_cb = QCheckBox("Show limit lines")
         self.limits_cb.setToolTip(
             "Overlay the selected step's upper/lower detection band on the "
@@ -194,15 +323,6 @@ class StepwiseScreeningTab(DiiveTab):
         bar.addWidget(self.limits_cb)
 
         bar.addStretch(1)
-
-        # Edits don't auto-apply; the chain + corrections run only on this button.
-        self.run_btn = QPushButton("Run chain")
-        self.run_btn.setToolTip(
-            "Apply the outlier chain and corrections. Editing steps or "
-            "corrections does not update the preview until you run.")
-        self.run_btn.clicked.connect(self._on_run_clicked)
-        theme.set_button_role(self.run_btn, "confirm")
-        bar.addWidget(self.run_btn)
 
         self.copy_btn = CopyPythonButton(self._code_provider)
         self.copy_btn.setToolTip("Copy a reproducible script for this chain to the clipboard.")
@@ -216,31 +336,6 @@ class StepwiseScreeningTab(DiiveTab):
         bar.addWidget(self.add_btn)
         return bar
 
-    def _build_card_strip(self) -> QScrollArea:
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFixedHeight(252)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        host = QWidget()
-        self._strip = QHBoxLayout(host)
-        self._strip.setContentsMargins(6, 6, 6, 6)
-        self._strip.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        scroll.setWidget(host)
-        self._strip_host = host
-        self._rebuild_cards()
-        return scroll
-
-    def _build_corrections_section(self) -> QWidget:
-        box = QGroupBox("Corrections (applied to the QCF-filtered series)")
-        v = QVBoxLayout(box)
-        v.setContentsMargins(8, 6, 8, 6)
-        self.corrections_panel = CorrectionsPanel()
-        self.corrections_panel.set_coords_available(site.manager.configured)
-        self.corrections_panel.changed.connect(self._on_corrections_changed)
-        v.addWidget(self.corrections_panel)
-        return box
-
     def _on_measurement_changed(self, *_) -> None:
         code = self.meas_combo.currentData()
         self.corrections_panel.set_measurement(code)
@@ -249,22 +344,19 @@ class StepwiseScreeningTab(DiiveTab):
         # Like step edits, corrections are applied only on Run — just flag the
         # pending change here.
         self._corr_dirty = True
-        self._refresh_run_button()
+        self._refresh_run_buttons()
+        self._refresh_inspector_badges()
 
-    def _refresh_run_button(self) -> None:
-        """Highlight the Run button when there are unapplied edits."""
-        pending = self._chain_dirty or self._corr_dirty
-        self.run_btn.setText("Run chain •" if pending else "Run chain")
-
-    def _on_run_clicked(self) -> None:
-        """Apply pending edits. Re-run the full chain when the chain changed;
-        otherwise just re-apply corrections on the current base series (cheap)."""
-        if self._df is None or self._var is None:
-            return
-        if self._chain_dirty or self._payload is None:
-            self._run()  # _on_done re-applies corrections + clears both flags
-        else:
-            self._recompute_corrections()
+    def _refresh_run_buttons(self) -> None:
+        """Mark each section's Run button pending when it has unapplied edits.
+        Defensive: may run during the staggered build before both exist."""
+        out_btn = getattr(self, "run_outliers_btn", None)
+        if out_btn is not None:
+            out_btn.setText("Run outliers •" if self._chain_dirty else "Run outliers")
+        corr_btn = getattr(self, "run_corrections_btn", None)
+        if corr_btn is not None:
+            corr_btn.setText(
+                "Run corrections •" if self._corr_dirty else "Run corrections")
 
     # --- card strip ---
     def _rebuild_cards(self) -> None:
@@ -295,6 +387,7 @@ class StepwiseScreeningTab(DiiveTab):
         add = AddStepCard()
         add.clicked.connect(self._add_step_dialog)
         self._strip.addWidget(add)
+        self._refresh_inspector_badges()
 
     def _apply_chain_change(self) -> None:
         """Reflect a chain edit immediately (so cards appear/disappear at once),
@@ -302,7 +395,7 @@ class StepwiseScreeningTab(DiiveTab):
         The cards rebuild with no stale counts (dirty); Run fills them back in."""
         self._chain_dirty = True
         self._rebuild_cards()
-        self._refresh_run_button()
+        self._refresh_run_buttons()
 
     def _add_step_dialog(self) -> None:
         if self._var is None:
@@ -397,7 +490,7 @@ class StepwiseScreeningTab(DiiveTab):
         self._corr_dirty = bool(self.corrections_panel.corrections())
         self.copy_btn.setEnabled(self._code_provider() is not None)
         self._draw_raw(self._df[name])
-        self._refresh_run_button()
+        self._refresh_run_buttons()
         if self._chain_dirty or self._corr_dirty:
             self.status.setText(f"Selected '{name}'. Click Run chain to apply.")
         else:
@@ -450,7 +543,7 @@ class StepwiseScreeningTab(DiiveTab):
         self.add_btn.setEnabled(self._result_df is not None
                                 and not self._result_df.empty)
         self.copy_btn.setEnabled(self._code_provider() is not None)
-        self._refresh_run_button()
+        self._refresh_run_buttons()
         self._draw_payload()
 
     def _run(self) -> None:
@@ -567,7 +660,7 @@ class StepwiseScreeningTab(DiiveTab):
         self._selected_step = -1
         self._chain_dirty = False
         self._rebuild_cards()
-        self._refresh_run_button()
+        self._refresh_run_buttons()
 
     # --- result columns for "Add" ---
     def _build_result(self) -> None:
@@ -734,7 +827,7 @@ class StepwiseScreeningTab(DiiveTab):
         try:
             dv.plotting.HeatmapDateTime(flag.rename("QCF")).plot(
                 ax=ax_qcf_heat, fig=fig, title="QCF (0/1/2)", vmin=0, vmax=2,
-                cmap="RdYlGn_r", cb_digits_after_comma=0)
+                cmap=_QCF_CMAP, cb_digits_after_comma=0)
         except Exception as err:
             ax_qcf_heat.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center",
                              va="center", wrap=True, transform=ax_qcf_heat.transAxes)
@@ -753,11 +846,15 @@ class StepwiseScreeningTab(DiiveTab):
     def save_state(self) -> dict:
         return {"var": self._var, "steps": self._steps,
                 "limits": self.limits_cb.isChecked(),
-                "corrections": self.corrections_panel.get_state()}
+                "corrections": self.corrections_panel.get_state(),
+                "inspector": self._stack.currentIndex()}
 
     def restore_state(self, state: dict) -> None:
         self._steps = list(state.get("steps") or [])
         self.limits_cb.setChecked(bool(state.get("limits")))
+        page = state.get("inspector")
+        if isinstance(page, int) and 0 <= page < self._stack.count():
+            self._set_inspector_page(page)
         # Restore the corrections + measurement, syncing the dropdown to match
         # (signals blocked so it doesn't trigger a premature recompute).
         corr_state = state.get("corrections")

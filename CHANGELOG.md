@@ -46,7 +46,9 @@
   phase** (applied to the QCF-filtered series, mirroring the meteo-screening notebook): a **measurement** dropdown
   (e.g. *TA - air temperature*, auto-detected from the variable name) gates which corrections are physically meaningful
   — radiation zero-offset for SW/PPFD, RH offset for RH, plus the generic set-to-min/max, set-to-value and
-  set-exact-to-missing — emitting a corrected column and extending the **Copy Python** script. Data menu **Select
+  set-exact-to-missing — emitting a corrected column and extending the **Copy Python** script. Its layout is a
+  segmented inspector (Outliers / Corrections / Report) beside an always-large plot stage, with edits applied only on a
+  **Run** button. Data menu **Select
   variables**, **Rename variables** (add a prefix/suffix to all variables, or one at a time, with a live preview),
   **Metadata explorer**, **Feature engineering**; plus **Appearance**, **Project settings** (author, description, site
   details, and a **sticky-note wall** — all saved with the project), and **Log**.
