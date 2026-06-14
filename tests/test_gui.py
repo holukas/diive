@@ -642,16 +642,20 @@ def test_stepwise_screening_corrections(app):
     emitted = {}
     tab.featuresCreated.connect(lambda d: emitted.update(df=d))
 
-    # Corrections run standalone (no outlier steps) on the raw series: enabling
-    # them yields a corrected series + a single _CORRECTED column to commit.
+    # Corrections run standalone (no outlier steps) on the raw series. They apply
+    # only on Run — editing the rows just marks the run pending.
     tab.corrections_panel._rows["radiation_zero_offset"].enable.setChecked(True)
     rmax = tab.corrections_panel._rows["setto_max"]
     rmax.enable.setChecked(True)
     rmax.threshold.setValue(800)
+    assert tab._corrected is None                     # not applied until Run
+    assert tab.run_btn.text().endswith("•")           # pending indicator
+    tab.run_btn.click()
     QApplication.processEvents()
     assert tab._corrected is not None
     assert list(tab._result_df.columns) == ["SW_IN_T1_2_1_CORRECTED"]
     assert tab.add_btn.isEnabled()
+    assert tab.run_btn.text().endswith("•") is False  # cleared after running
     # No outlier steps -> no reproducible chain script yet.
     assert tab.copy_btn.isEnabled() is False
 

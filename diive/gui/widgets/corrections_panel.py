@@ -87,27 +87,36 @@ class _CorrectionRow(QWidget):
         super().__init__(parent)
         self.key = key
         spec = correction_spec(key)
-        h = QHBoxLayout(self)
-        h.setContentsMargins(2, 2, 2, 2)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(2, 5, 2, 5)
+        outer.setSpacing(1)
 
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
         self.enable = QCheckBox(spec.label if spec else key)
-        self.enable.setToolTip(spec.description if spec else "")
+        self.enable.setStyleSheet("font-weight: bold;")
         self.enable.toggled.connect(lambda *_: self.changed.emit())
-        h.addWidget(self.enable)
+        top.addWidget(self.enable)
 
+        self._param_widgets: list[QWidget] = []
+        self._build_params(key, top)
+        top.addStretch(1)
+        outer.addLayout(top)
+
+        # The full description, shown inline (not just on hover) so the user can
+        # see what each correction does and when it applies.
+        desc_text = spec.description if spec else ""
         # Coordinate-dependent corrections are disabled (with a hint) when the
         # site is not configured — running them with default 0/0 coords would
         # produce a meaningless day/night split.
         if spec is not None and spec.needs_coords and not coords_available:
             self.enable.setEnabled(False)
-            self.enable.setToolTip(
-                spec.description + "\n\nConfigure the site (Project settings) "
-                "to enable this correction.")
-
-        self._param_widgets: list[QWidget] = []
-        self._build_params(key, h)
-
-        h.addStretch(1)
+            desc_text += "  Configure the site (Project settings) to enable this."
+        self.desc = QLabel(desc_text)
+        self.desc.setWordWrap(True)
+        self.desc.setIndent(22)  # align under the checkbox label
+        self.desc.setStyleSheet("color: #6B7780; font-size: 11px;")
+        outer.addWidget(self.desc)
 
     def _build_params(self, key: str, h: QHBoxLayout) -> None:
         if key in (CORR_SETTO_MAX, CORR_SETTO_MIN):

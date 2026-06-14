@@ -79,27 +79,35 @@ class CorrectionSpec(NamedTuple):
 CORRECTIONS: tuple[CorrectionSpec, ...] = (
     CorrectionSpec(
         CORR_RADIATION_ZERO_OFFSET, 'Remove radiation zero offset',
-        'Remove the nighttime offset from radiation data and set nighttime to zero.',
+        'Radiation should read zero at night. The daily nighttime mean is '
+        'subtracted from all records as the offset, then nighttime values are '
+        'forced to zero. Use for SW_IN, SW_OUT, PPFD_IN, PPFD_OUT.',
         needs_coords=True),
     CorrectionSpec(
         CORR_RELATIVEHUMIDITY_OFFSET, 'Remove relative humidity offset',
-        'Remove the offset so relative humidity does not exceed 100%.',
+        'Fixes relative humidity that drifts above 100%. The daily mean of the '
+        'values exceeding 100% is removed as an offset and any remainder is '
+        'capped at 100%. Use for RH.',
         needs_coords=False),
     CorrectionSpec(
         CORR_SETTO_MAX, 'Set to max threshold',
-        'Clamp values above a threshold down to the threshold.',
+        'Caps the series at a known physical maximum: every value above the '
+        'threshold is set to the threshold.',
         needs_coords=False),
     CorrectionSpec(
         CORR_SETTO_MIN, 'Set to min threshold',
-        'Clamp values below a threshold up to the threshold.',
+        'Floors the series at a known physical minimum: every value below the '
+        'threshold is set to the threshold.',
         needs_coords=False),
     CorrectionSpec(
         CORR_SETTO_VALUE, 'Set to value',
-        'Set records within one or more date ranges to a fixed value.',
+        'Overwrites every record inside one or more date ranges with a fixed '
+        'value — e.g. to blank out a period of known instrument trouble.',
         needs_coords=False),
     CorrectionSpec(
         CORR_SET_EXACT_TO_MISSING, 'Set exact values to missing',
-        'Set records exactly matching given value(s) to missing.',
+        'Sets records that exactly equal any of the listed values to missing '
+        '(NaN) — e.g. to drop a stuck sentinel like 0 or -9999.',
         needs_coords=False),
 )
 

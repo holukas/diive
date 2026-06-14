@@ -38,34 +38,27 @@ from diive.gui.widgets.stepwise_method_params import (
 )
 from PySide6.QtWidgets import QComboBox
 
-_CARD_W = 210
+_CARD_W = 250
+_CARD_H = 210
 _C_MUTED = "#6B7780"
 
 
-def kwargs_summary(kwargs: dict, max_items: int | None = None) -> str:
-    """Compact ``k=v, …`` one-liner for a step's kwargs (empty -> 'defaults').
-
-    ``max_items`` caps how many entries are shown, appending an ellipsis when
-    the rest are dropped — keeps the card summary short; the full string is used
-    for the card's tooltip.
-    """
+def kwargs_detail(kwargs: dict) -> str:
+    """Full ``key: value`` list (one per line) of *all* a step's kwargs, so the
+    card shows every setting rather than a truncated summary. Booleans render as
+    ``yes``/``no``; floats are formatted compactly."""
     if not kwargs:
         return "defaults"
-    parts = []
+    lines = []
     for k, v in kwargs.items():
         if isinstance(v, bool):
-            if not v:
-                continue  # drop the noisy False flags
-            parts.append(k)
+            val = "yes" if v else "no"
         elif isinstance(v, float):
-            parts.append(f"{k}={v:g}")
+            val = f"{v:g}"
         else:
-            parts.append(f"{k}={v}")
-    if not parts:
-        return "defaults"
-    if max_items is not None and len(parts) > max_items:
-        return ", ".join(parts[:max_items]) + ", …"
-    return ", ".join(parts)
+            val = str(v)
+        lines.append(f"{k}: {val}")
+    return "\n".join(lines)
 
 
 class StepEditorDialog(QDialog):
@@ -162,7 +155,7 @@ class StepCard(QFrame):
         self._selected = selected
         self._enabled = enabled
 
-        self.setFixedSize(_CARD_W, 128)
+        self.setFixedSize(_CARD_W, _CARD_H)
         self.setObjectName("stepcard")
         self.setCursor(Qt.PointingHandCursor)
 
@@ -188,9 +181,10 @@ class StepCard(QFrame):
         v.addLayout(head)
 
         kw = step.get("kwargs", {})
-        self._summary = QLabel(kwargs_summary(kw, max_items=3))
+        self._summary = QLabel(kwargs_detail(kw))  # all settings, one per line
         self._summary.setWordWrap(True)
-        self._summary.setToolTip(kwargs_summary(kw))  # full kwargs on hover
+        self._summary.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self._summary.setToolTip(kwargs_detail(kw))
         v.addWidget(self._summary)
         v.addStretch(1)  # pin the controls to the bottom of the fixed-height card
 
@@ -260,7 +254,7 @@ class AddStepCard(QFrame):
         super().__init__(parent)
         self._sig = _CardSignals()
         self.clicked = self._sig.clicked
-        self.setFixedSize(_CARD_W, 128)
+        self.setFixedSize(_CARD_W, _CARD_H)
         self.setObjectName("addcard")
         self.setCursor(Qt.PointingHandCursor)
         v = QVBoxLayout(self)

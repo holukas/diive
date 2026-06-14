@@ -58,6 +58,7 @@ from diive.gui.widgets.stepwise_cards import (
     StepCard,
     StepEditorDialog,
 )
+from diive.gui.widgets.variable_panel import VariablePanel
 from diive.preprocessing.corrections import apply_corrections
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 from diive.preprocessing.outlier_detection.codegen import stepwise_to_code
@@ -95,6 +96,7 @@ class StepwiseScreeningTab(DiiveTab):
         self._steps: list[dict] = []          # the chain ({method, kwargs, enabled})
         self._committed_steps: list[dict] = []  # last chain that ran successfully
         self._chain_dirty = False             # chain edited since the last run
+        self._corr_dirty = False              # corrections edited since last apply
         self._selected_step = -1              # highlighted card (-1 = all removals)
         self._payload = None                  # last completed run
         self._corrected = None                # corrected series (or None)
@@ -108,11 +110,20 @@ class StepwiseScreeningTab(DiiveTab):
         self.featuresCreated = self._sig.features_created
 
         root = QWidget()
-        layout = QVBoxLayout(root)
+        layout = QHBoxLayout(root)
 
-        layout.addLayout(self._build_top_bar())
-        layout.addWidget(self._build_card_strip())
-        layout.addWidget(self._build_corrections_section())
+        # Left: the shared variable list (identical to every other tab).
+        self.varpanel = VariablePanel()
+        self.varpanel.selected.connect(lambda name, _ctrl: self._select(name))
+        layout.addWidget(self.varpanel)
+
+        # Right: controls + preview stacked vertically.
+        right = QWidget()
+        rlayout = QVBoxLayout(right)
+        rlayout.setContentsMargins(0, 0, 0, 0)
+        rlayout.addLayout(self._build_top_bar())
+        rlayout.addWidget(self._build_card_strip())
+        rlayout.addWidget(self._build_corrections_section())
 
         # Status + QCF readout line.
         info_row = QHBoxLayout()
@@ -122,14 +133,16 @@ class StepwiseScreeningTab(DiiveTab):
         self.qcf_label = QLabel("QCF: add a step to compute.")
         self.qcf_label.setStyleSheet(f"color: {_C_MUTED};")
         info_row.addWidget(self.qcf_label)
-        layout.addLayout(info_row)
+        rlayout.addLayout(info_row)
 
         # Lower area: plot grid (left) + publication report (right).
         lower = QHBoxLayout()
         self.canvas = MplCanvas()
         lower.addWidget(self.canvas, stretch=1)
         lower.addWidget(self._build_report_panel())
-        layout.addLayout(lower, stretch=1)
+        rlayout.addLayout(lower, stretch=1)
+
+        layout.addWidget(right, stretch=1)
         return root
 
     def _build_report_panel(self) -> QWidget:
@@ -160,12 +173,6 @@ class StepwiseScreeningTab(DiiveTab):
 
     def _build_top_bar(self) -> QHBoxLayout:
         bar = QHBoxLayout()
-        bar.addWidget(QLabel("Variable:"))
-        self.var_combo = QComboBox()
-        self.var_combo.setMinimumWidth(220)
-        self.var_combo.currentIndexChanged.connect(self._on_var_changed)
-        bar.addWidget(self.var_combo)
-
         bar.addWidget(QLabel("Measurement:"))
         self.meas_combo = QComboBox()
         self.meas_combo.setMinimumWidth(220)
@@ -188,6 +195,15 @@ class StepwiseScreeningTab(DiiveTab):
 
         bar.addStretch(1)
 
+        # Edits don't auto-apply; the chain + corrections run only on this button.
+        self.run_btn = QPushButton("Run chain")
+        self.run_btn.setToolTip(
+            "Apply the outlier chain and corrections. Editing steps or "
+            "corrections does not update the preview until you run.")
+        self.run_btn.clicked.connect(self._on_run_clicked)
+        theme.set_button_role(self.run_btn, "confirm")
+        bar.addWidget(self.run_btn)
+
         self.copy_btn = CopyPythonButton(self._code_provider)
         self.copy_btn.setToolTip("Copy a reproducible script for this chain to the clipboard.")
         self.copy_btn.setEnabled(False)
@@ -203,7 +219,7 @@ class StepwiseScreeningTab(DiiveTab):
     def _build_card_strip(self) -> QScrollArea:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setFixedHeight(160)
+        scroll.setFixedHeight(252)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         host = QWidget()
@@ -230,9 +246,25 @@ class StepwiseScreeningTab(DiiveTab):
         self.corrections_panel.set_measurement(code)
 
     def _on_corrections_changed(self) -> None:
-        # Corrections are cheap and run on the already-computed base series, so
-        # there is no need to re-run the (potentially slow) outlier chain.
-        self._recompute_corrections()
+        # Like step edits, corrections are applied only on Run — just flag the
+        # pending change here.
+        self._corr_dirty = True
+        self._refresh_run_button()
+
+    def _refresh_run_button(self) -> None:
+        """Highlight the Run button when there are unapplied edits."""
+        pending = self._chain_dirty or self._corr_dirty
+        self.run_btn.setText("Run chain •" if pending else "Run chain")
+
+    def _on_run_clicked(self) -> None:
+        """Apply pending edits. Re-run the full chain when the chain changed;
+        otherwise just re-apply corrections on the current base series (cheap)."""
+        if self._df is None or self._var is None:
+            return
+        if self._chain_dirty or self._payload is None:
+            self._run()  # _on_done re-applies corrections + clears both flags
+        else:
+            self._recompute_corrections()
 
     # --- card strip ---
     def _rebuild_cards(self) -> None:
@@ -266,11 +298,11 @@ class StepwiseScreeningTab(DiiveTab):
 
     def _apply_chain_change(self) -> None:
         """Reflect a chain edit immediately (so cards appear/disappear at once),
-        then re-run. The cards rebuild with no stale counts (dirty), and the run
-        fills them back in on completion."""
+        but do NOT re-run — the chain is applied only when the user clicks Run.
+        The cards rebuild with no stale counts (dirty); Run fills them back in."""
         self._chain_dirty = True
         self._rebuild_cards()
-        self._run()
+        self._refresh_run_button()
 
     def _add_step_dialog(self) -> None:
         if self._var is None:
@@ -330,42 +362,46 @@ class StepwiseScreeningTab(DiiveTab):
         self._result_df = None
         self.add_btn.setEnabled(False)
         self.corrections_panel.set_coords_available(site.manager.configured)
-        self.var_combo.blockSignals(True)
-        self.var_combo.clear()
-        self.var_combo.addItems([str(c) for c in df.columns])
+        self.varpanel.set_variables(df.columns, created)
         if self._var is not None and self._var in df.columns:
-            self.var_combo.setCurrentText(str(self._var))
+            self.varpanel.set_panels([self._var])
         else:
             self._var = None
-        self.var_combo.blockSignals(False)
-        # No variable carried over: select the first so the combo and the
-        # preview agree (otherwise the combo shows row 0 but nothing is plotted).
+        # No variable carried over: select the first so the list and the
+        # preview agree.
         if self._var is None and len(df.columns):
             self._select(str(df.columns[0]))
 
-    def _on_var_changed(self, *_) -> None:
-        name = self.var_combo.currentText()
-        if name:
-            self._select(name)
+    def _enabled_steps(self) -> list[dict]:
+        return [s for s in self._steps if s.get("enabled", True)]
 
     def _select(self, name: str) -> None:
         if not name or self._df is None or name not in self._df.columns:
             return
         self._var = name
-        # New variable: drop the stale run so corrections fall back to the raw
-        # series until the chain (if any) re-runs.
+        self.varpanel.set_panels([name])
+        # New variable: clear the previous run/results. Nothing is computed until
+        # the user clicks Run — only the raw series is shown.
         self._payload = None
+        self._corrected = None
+        self._result_df = None
+        self._selected_step = -1
         self._apply_detected_measurement(name)
-        # The chain carries over across variables; re-run it on the new series.
-        if self._steps:
-            # Mark dirty + rebuild so cards don't show the previous variable's
-            # removal counts during the re-run.
-            self._chain_dirty = True
-            self._rebuild_cards()
-            self._run()
+        self._rebuild_cards()
+        self.qcf_label.setText("QCF: run to compute.")
+        self.report_text.clear()
+        self.report_copy_btn.setEnabled(False)
+        self.add_btn.setEnabled(False)
+        # Pending if there is anything to apply on this variable.
+        self._chain_dirty = bool(self._enabled_steps())
+        self._corr_dirty = bool(self.corrections_panel.corrections())
+        self.copy_btn.setEnabled(self._code_provider() is not None)
+        self._draw_raw(self._df[name])
+        self._refresh_run_button()
+        if self._chain_dirty or self._corr_dirty:
+            self.status.setText(f"Selected '{name}'. Click Run chain to apply.")
         else:
-            self._reset_preview()
-        self.status.setText(f"Selected '{name}'. Add outlier tests to build a chain.")
+            self.status.setText(f"Selected '{name}'. Add outlier tests to build a chain.")
 
     def _apply_detected_measurement(self, name: str) -> None:
         """Auto-pick the measurement for this variable from its name (the user
@@ -373,17 +409,6 @@ class StepwiseScreeningTab(DiiveTab):
         code = detect_measurement(name)
         idx = self.meas_combo.findData(code)
         self.meas_combo.setCurrentIndex(idx if idx >= 0 else 0)
-
-    def _reset_preview(self) -> None:
-        self._payload = None
-        self._result_df = None
-        self._selected_step = -1
-        self.qcf_label.setText("QCF: add a step to compute.")
-        self.report_text.clear()
-        self.report_copy_btn.setEnabled(False)
-        self._rebuild_cards()
-        # Corrections (if any) apply on the raw series; this also draws.
-        self._recompute_corrections()
 
     # --- run (rebuild + replay on a worker thread) ---
     @staticmethod
@@ -420,10 +445,12 @@ class StepwiseScreeningTab(DiiveTab):
             except Exception as err:
                 self._corrected = None
                 self.status.setText(f"Correction failed: {err}")
+        self._corr_dirty = False
         self._build_result()
         self.add_btn.setEnabled(self._result_df is not None
                                 and not self._result_df.empty)
         self.copy_btn.setEnabled(self._code_provider() is not None)
+        self._refresh_run_button()
         self._draw_payload()
 
     def _run(self) -> None:
@@ -540,6 +567,7 @@ class StepwiseScreeningTab(DiiveTab):
         self._selected_step = -1
         self._chain_dirty = False
         self._rebuild_cards()
+        self._refresh_run_button()
 
     # --- result columns for "Add" ---
     def _build_result(self) -> None:
@@ -744,9 +772,7 @@ class StepwiseScreeningTab(DiiveTab):
         var = state.get("var")
         if var and self._df is not None and var in self._df.columns:
             self._var = var
-            self.var_combo.blockSignals(True)
-            self.var_combo.setCurrentText(str(var))
-            self.var_combo.blockSignals(False)
+            self.varpanel.set_panels([str(var)])
             self._rebuild_cards()
             if self._steps:
                 self._run()  # replays the saved chain (then applies corrections)
