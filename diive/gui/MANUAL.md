@@ -410,12 +410,31 @@ Adds `{var}_MANUAL` and its flag to the variable list.
 ### Outliers ▸ Stepwise screening
 
 Chain several outlier tests on one variable and see what each step removes. Unlike
-the single-method tabs (one detector, one pass), each committed step runs on the
-data the previous steps already cleaned, so spikes are peeled off progressively.
-Build the chain step by step, inspect the per-step removals, and check the overall
-**quality flag (QCF)** — computed separately from the accumulated per-test flags.
-**Add cleaned + flags + QCF to dataset** appends the cleaned series, every step's
-flag, and the QCF-filtered series.
+the single-method tabs (one detector, one pass), each step runs on the data the
+previous steps already cleaned, so spikes are peeled off progressively. Check the
+overall **quality flag (QCF)** — computed separately from the accumulated per-test
+flags.
+
+The middle panel is a **segmented inspector** with three pages; only the active
+one is shown so the plots stay large:
+
+- **Outliers** — the chain as a vertical list of **method cards** (each shows all
+  its settings and how many points it removed; reorder with ▲▼, edit, or delete).
+  **＋ Add step** opens the method picker. The **Run outliers** button below the
+  list applies the chain — editing a step does *not* update the preview until you
+  run (a `•` on the button marks unapplied edits).
+- **Corrections** — high-resolution corrections applied to the QCF-filtered
+  series (radiation zero-offset, relative-humidity offset, set-to-min/max,
+  set-to-value, set-exact-to-missing). The **Measurement** dropdown (auto-detected
+  from the variable name, e.g. *SW - shortwave radiation*) decides which
+  corrections are physically meaningful and shows only those. The **Run
+  corrections** button applies them.
+- **Report** — the per-step screening statistics (retained / rejected, day/night),
+  with **Copy report**.
+
+**Add cleaned + flags + QCF to dataset** appends every step's flag, the overall
+QCF flag, the QCF-filtered series, and (if any corrections ran) the corrected
+series. **Copy Python** copies a reproducible script for the whole chain.
 
 ### Data ▸ Select variables
 

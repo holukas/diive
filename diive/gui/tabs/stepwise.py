@@ -2,7 +2,7 @@
 GUI.TABS.STEPWISE: STEPWISE OUTLIER SCREENING TAB
 =================================================
 
-Chain several outlier tests on one variable as a row of editable **method
+Chain several outlier tests on one variable as a list of editable **method
 cards** and inspect what each step removes. Unlike the single-method Outliers
 tabs (one detector, one pass), this drives the library's
 `StepwiseOutlierDetection`: each committed step runs on the data the previous
@@ -94,6 +94,11 @@ class StepwiseScreeningTab(DiiveTab):
 
     title = "Stepwise screening"
 
+    #: Inspector width per page — the Report's monospace table needs more room
+    #: than the Outliers/Corrections forms, so the pane widens only for it.
+    _INSPECTOR_W = 300
+    _INSPECTOR_W_REPORT = 560
+
     def build(self) -> QWidget:
         self._df = None
         self._var: str | None = None
@@ -147,11 +152,6 @@ class StepwiseScreeningTab(DiiveTab):
         return root
 
     # --- inspector (segmented: Outliers / Corrections / Report) ---
-    #: Inspector width per page — the Report's monospace table needs more room
-    #: than the Outliers/Corrections forms, so the pane widens only for it.
-    _INSPECTOR_W = 300
-    _INSPECTOR_W_REPORT = 560
-
     def _build_inspector(self) -> QWidget:
         panel = QWidget()
         self._inspector = panel
@@ -161,22 +161,17 @@ class StepwiseScreeningTab(DiiveTab):
 
         seg = QHBoxLayout()
         seg.setSpacing(4)
-        accent = theme.manager.tokens.get("ACCENT", "#3A4D5C")
-        border = theme.manager.tokens.get("BORDER", "#E6E6E3")
-        seg_qss = (
-            f"QPushButton {{ padding: 6px 6px; border: 0.5px solid {border}; "
-            f"border-radius: 6px; background: transparent; }} "
-            f"QPushButton:checked {{ background: {accent}; color: white; "
-            f"border-color: {accent}; }}")
         self._seg_btns: list[QPushButton] = []
         for i, label in enumerate(("Outliers", "Corrections", "Report")):
             b = QPushButton(label)
             b.setCheckable(True)
             b.setCursor(Qt.PointingHandCursor)
-            b.setStyleSheet(seg_qss)
             b.clicked.connect(lambda _c=False, idx=i: self._set_inspector_page(idx))
             seg.addWidget(b)
             self._seg_btns.append(b)
+        self._apply_segment_style()
+        # Repaint the segment chips when the appearance theme changes live.
+        theme.manager.changed.connect(self._apply_segment_style)
         v.addLayout(seg)
 
         self._stack = QStackedWidget()
@@ -187,6 +182,17 @@ class StepwiseScreeningTab(DiiveTab):
         self._set_inspector_page(0)
         self._refresh_inspector_badges()
         return panel
+
+    def _apply_segment_style(self) -> None:
+        accent = theme.manager.tokens.get("ACCENT", "#3A4D5C")
+        border = theme.manager.tokens.get("BORDER", "#E6E6E3")
+        qss = (
+            f"QPushButton {{ padding: 6px 6px; border: 0.5px solid {border}; "
+            f"border-radius: 6px; background: transparent; }} "
+            f"QPushButton:checked {{ background: {accent}; color: white; "
+            f"border-color: {accent}; }}")
+        for b in self._seg_btns:
+            b.setStyleSheet(qss)
 
     def _set_inspector_page(self, idx: int) -> None:
         self._stack.setCurrentIndex(idx)
@@ -247,6 +253,10 @@ class StepwiseScreeningTab(DiiveTab):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.NoFrame)
+        # No horizontal scroll: force the content to the pane width so the input
+        # fields shrink to fit instead of overflowing (and clipping) the pane.
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         host = QWidget()
         v = QVBoxLayout(host)
         v.setContentsMargins(4, 4, 4, 4)
@@ -254,6 +264,12 @@ class StepwiseScreeningTab(DiiveTab):
         mrow = QHBoxLayout()
         mrow.addWidget(QLabel("Measurement:"))
         self.meas_combo = QComboBox()
+        # Don't let the longest item (e.g. the PPFD description) dictate a wide
+        # minimum — that would push the whole pane past its width and clip the
+        # input fields. Keep a small minimum; it still stretches to fill.
+        self.meas_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.meas_combo.setMinimumContentsLength(6)
         self.meas_combo.setToolTip(
             "The measurement group of this variable. It decides which "
             "corrections are physically meaningful (e.g. radiation zero offset "
@@ -451,19 +467,33 @@ class StepwiseScreeningTab(DiiveTab):
 
     # --- data ---
     def on_data_loaded(self, df, created: set | None = None) -> None:
+        prev_df = self._df
         self._df = df
-        self._result_df = None
-        self.add_btn.setEnabled(False)
         self.corrections_panel.set_coords_available(site.manager.configured)
         self.varpanel.set_variables(df.columns, created)
         if self._var is not None and self._var in df.columns:
-            self.varpanel.set_panels([self._var])
+            # A push leaves the variable's series untouched when only columns were
+            # added (e.g. our own "Add"); the index changes when the data really
+            # changed (range subselection, a new dataset). Keep the run in the
+            # former case; treat it as stale in the latter. (Index equality is a
+            # cheap proxy — in-place value edits to a column don't happen here.)
+            unchanged = (prev_df is not None and self._var in prev_df.columns
+                         and prev_df[self._var].index.equals(df[self._var].index))
+            if unchanged:
+                self.varpanel.set_panels([self._var])
+            else:
+                # Stale run: reset + redraw raw (the user re-runs to recompute).
+                # Keep the measurement — don't re-detect on every push and discard
+                # a manual choice.
+                self._show_variable(self._var, redetect_measurement=False)
+        elif len(df.columns):
+            # No variable carried over: select the first so the list and the
+            # preview agree.
+            self._select(str(df.columns[0]))
         else:
             self._var = None
-        # No variable carried over: select the first so the list and the
-        # preview agree.
-        if self._var is None and len(df.columns):
-            self._select(str(df.columns[0]))
+            self._result_df = None
+            self.add_btn.setEnabled(False)
 
     def _enabled_steps(self) -> list[dict]:
         return [s for s in self._steps if s.get("enabled", True)]
@@ -471,15 +501,22 @@ class StepwiseScreeningTab(DiiveTab):
     def _select(self, name: str) -> None:
         if not name or self._df is None or name not in self._df.columns:
             return
+        self._show_variable(name, redetect_measurement=True)
+
+    def _show_variable(self, name: str, *, redetect_measurement: bool) -> None:
+        """Make `name` the active variable: clear any prior run (it's now stale),
+        show the raw series, and leave the chain + corrections to be (re)applied
+        on Run. `redetect_measurement` re-guesses the measurement from the name
+        (on a user pick) or keeps the current one (on a data reload)."""
         self._var = name
         self.varpanel.set_panels([name])
-        # New variable: clear the previous run/results. Nothing is computed until
-        # the user clicks Run — only the raw series is shown.
+        # Nothing is computed until the user clicks Run — only the raw series.
         self._payload = None
         self._corrected = None
         self._result_df = None
         self._selected_step = -1
-        self._apply_detected_measurement(name)
+        if redetect_measurement:
+            self._apply_detected_measurement(name)
         self._rebuild_cards()
         self.qcf_label.setText("QCF: run to compute.")
         self.report_text.clear()
@@ -527,6 +564,7 @@ class StepwiseScreeningTab(DiiveTab):
         Synchronous — corrections are cheap and don't touch the outlier chain."""
         corrs = self.corrections_panel.corrections()
         base = self._base_series()
+        applied = True
         if not corrs or base is None:
             self._corrected = None
         else:
@@ -538,7 +576,9 @@ class StepwiseScreeningTab(DiiveTab):
             except Exception as err:
                 self._corrected = None
                 self.status.setText(f"Correction failed: {err}")
-        self._corr_dirty = False
+                applied = False  # keep the pending dot so the user can retry
+        if applied:
+            self._corr_dirty = False
         self._build_result()
         self.add_btn.setEnabled(self._result_df is not None
                                 and not self._result_df.empty)
@@ -556,7 +596,7 @@ class StepwiseScreeningTab(DiiveTab):
         # Nothing to screen (no steps, or all toggled off): show the raw series.
         # Corrections may still apply (on the raw series), so route through
         # _recompute_corrections rather than drawing raw directly.
-        if not any(s.get("enabled", True) for s in self._steps):
+        if not self._enabled_steps():
             self._payload = None
             self._chain_dirty = False
             self.report_text.clear()
@@ -712,17 +752,22 @@ class StepwiseScreeningTab(DiiveTab):
     def _add_to_dataset(self) -> None:
         if self._result_df is None or self._result_df.empty:
             return
+        cols = list(self._result_df.columns)
+        parts = []
+        if self._payload is not None:
+            parts.append("flags + QCF + filtered series")
+        if any(str(c).endswith("_CORRECTED") for c in cols):
+            parts.append("corrected series")
         self.featuresCreated.emit(self._result_df)
         self.status.setText(
-            f"Added {self._result_df.shape[1]} columns "
-            f"(flags + QCF + filtered series) to the variable list.")
+            f"Added {len(cols)} column(s) ({', '.join(parts)}) to the variable list.")
         self.add_btn.setEnabled(False)
 
     def _code_provider(self) -> str | None:
         """Render the chain (enabled steps only) as a runnable script, or None if
         there is nothing to copy. The CopyPythonButton handles clipboard + the
         'Copied ✓' flash."""
-        enabled = [s for s in self._steps if s.get("enabled", True)]
+        enabled = self._enabled_steps()
         if not enabled or self._var is None:
             return None
         return stepwise_to_code(enabled, var_name=self._var, **self._coords(),
@@ -817,7 +862,9 @@ class StepwiseScreeningTab(DiiveTab):
         # 3) Heatmap of the cleaned series.
         try:
             dv.plotting.HeatmapDateTime(cleaned).plot(
-                ax=ax_heat, fig=fig, title="cleaned", cb_digits_after_comma="auto")
+                ax=ax_heat, fig=fig, title="cleaned", cb_digits_after_comma="auto",
+                axlabels_fontsize=8, ticks_labelsize=7, cb_labelsize=7)
+            ax_heat.title.set_fontsize(9)
         except Exception as err:
             ax_heat.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",
                          wrap=True, transform=ax_heat.transAxes)
@@ -827,7 +874,9 @@ class StepwiseScreeningTab(DiiveTab):
         try:
             dv.plotting.HeatmapDateTime(flag.rename("QCF")).plot(
                 ax=ax_qcf_heat, fig=fig, title="QCF (0/1/2)", vmin=0, vmax=2,
-                cmap=_QCF_CMAP, cb_digits_after_comma=0)
+                cmap=_QCF_CMAP, cb_digits_after_comma=0,
+                axlabels_fontsize=8, ticks_labelsize=7, cb_labelsize=7)
+            ax_qcf_heat.title.set_fontsize(9)
         except Exception as err:
             ax_qcf_heat.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center",
                              va="center", wrap=True, transform=ax_qcf_heat.transAxes)

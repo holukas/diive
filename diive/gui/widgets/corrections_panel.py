@@ -44,6 +44,17 @@ from diive.preprocessing.qaqc.measurements import (
 )
 
 
+def _value_spin() -> QDoubleSpinBox:
+    """A value/threshold spinbox with a sane range and a capped width — a huge
+    range (e.g. ±1e9) makes the spinbox reserve room for its widest value and
+    overflow the narrow inspector pane."""
+    sp = QDoubleSpinBox()
+    sp.setRange(-1e6, 1e6)
+    sp.setDecimals(3)
+    sp.setMaximumWidth(130)
+    return sp
+
+
 def _parse_dates(text: str) -> list:
     """Parse a date-range text field into the ``dates`` list ``setto_value``
     expects. Entries are separated by ``;``; a range uses ``..`` (e.g.
@@ -89,19 +100,18 @@ class _CorrectionRow(QWidget):
         spec = correction_spec(key)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(2, 5, 2, 5)
-        outer.setSpacing(1)
+        outer.setSpacing(2)
 
-        top = QHBoxLayout()
-        top.setContentsMargins(0, 0, 0, 0)
         self.enable = QCheckBox(spec.label if spec else key)
         self.enable.setStyleSheet("font-weight: bold;")
         self.enable.toggled.connect(lambda *_: self.changed.emit())
-        top.addWidget(self.enable)
+        outer.addWidget(self.enable)
 
+        # Parameters go on their own indented line(s) below the label so the
+        # narrow inspector pane never clips them (fields stretch to fit, no fixed
+        # minimum widths).
         self._param_widgets: list[QWidget] = []
-        self._build_params(key, top)
-        top.addStretch(1)
-        outer.addLayout(top)
+        self._build_params(key, outer)
 
         # The full description, shown inline (not just on hover) so the user can
         # see what each correction does and when it applies.
@@ -118,42 +128,39 @@ class _CorrectionRow(QWidget):
         self.desc.setStyleSheet("color: #6B7780; font-size: 11px;")
         outer.addWidget(self.desc)
 
-    def _build_params(self, key: str, h: QHBoxLayout) -> None:
+    def _param_row(self, outer: QVBoxLayout, label_text: str, field: QWidget) -> None:
+        """Add one indented ``label: field`` parameter line that stretches to the
+        pane width (no fixed minimum, so it can't overflow the inspector)."""
+        h = QHBoxLayout()
+        h.setContentsMargins(22, 0, 0, 0)
+        h.addWidget(QLabel(label_text))
+        h.addWidget(field, stretch=1)
+        outer.addLayout(h)
+        self._param_widgets.append(field)
+
+    def _build_params(self, key: str, outer: QVBoxLayout) -> None:
         if key in (CORR_SETTO_MAX, CORR_SETTO_MIN):
-            h.addWidget(QLabel("threshold:"))
-            self.threshold = QDoubleSpinBox()
-            self.threshold.setRange(-1e9, 1e9)
-            self.threshold.setDecimals(3)
+            self.threshold = _value_spin()
             self.threshold.setValue(30.0 if key == CORR_SETTO_MAX else -5.0)
             self.threshold.valueChanged.connect(lambda *_: self.changed.emit())
-            h.addWidget(self.threshold)
-            self._param_widgets.append(self.threshold)
+            self._param_row(outer, "threshold:", self.threshold)
         elif key == CORR_SETTO_VALUE:
-            h.addWidget(QLabel("dates:"))
             self.dates = QLineEdit()
-            self.dates.setPlaceholderText("2022-04-01..2022-04-05; 2022-09-05..2022-09-07")
-            self.dates.setMinimumWidth(260)
+            self.dates.setPlaceholderText("2022-04-01..2022-04-05; ...")
             self.dates.setToolTip(
                 "Date ranges separated by ';'. A range uses '..' "
                 "(start..end, both inclusive); a single timestamp stands alone.")
             self.dates.textChanged.connect(lambda *_: self.changed.emit())
-            h.addWidget(self.dates)
-            h.addWidget(QLabel("value:"))
-            self.value = QDoubleSpinBox()
-            self.value.setRange(-1e9, 1e9)
-            self.value.setDecimals(3)
+            self._param_row(outer, "dates:", self.dates)
+            self.value = _value_spin()
             self.value.valueChanged.connect(lambda *_: self.changed.emit())
-            h.addWidget(self.value)
-            self._param_widgets += [self.dates, self.value]
+            self._param_row(outer, "value:", self.value)
         elif key == CORR_SET_EXACT_TO_MISSING:
-            h.addWidget(QLabel("values:"))
             self.values = QLineEdit()
             self.values.setPlaceholderText("0, -9999")
-            self.values.setMinimumWidth(160)
             self.values.setToolTip("Comma-separated values set to missing (NaN).")
             self.values.textChanged.connect(lambda *_: self.changed.emit())
-            h.addWidget(self.values)
-            self._param_widgets.append(self.values)
+            self._param_row(outer, "values:", self.values)
 
     def is_enabled(self) -> bool:
         return self.enable.isChecked() and self.enable.isEnabled()

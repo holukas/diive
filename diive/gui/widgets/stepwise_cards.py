@@ -196,8 +196,10 @@ class StepCard(QFrame):
             badge.setStyleSheet("color: #E53935; font-weight: bold; font-size: 11px;")
             bottom.addWidget(badge)
         bottom.addStretch(1)
-        for glyph, tip, sig in (("‹", "Move left", self.move_left),
-                                ("›", "Move right", self.move_right),
+        # Cards stack vertically, so reorder reads as up/down (move_left = earlier
+        # in the chain, move_right = later).
+        for glyph, tip, sig in (("▲", "Move up", self.move_left),
+                                ("▼", "Move down", self.move_right),
                                 ("✎", "Edit step", self.edit)):
             b = QToolButton()
             b.setText(glyph)
@@ -227,7 +229,8 @@ class StepCard(QFrame):
             else theme.manager.tokens.get("BORDER", "#E6E6E3")
         width = 2 if self._selected else 1
         style = "dashed" if not self._enabled else "solid"
-        bg = "#F5F5F4" if not self._enabled else "white"
+        # Flat, modern surface — a soft cool off-white; muted grey when inactive.
+        bg = "#EEEEEB" if not self._enabled else "#F7F9FC"
         self.setStyleSheet(
             f"QFrame#stepcard {{ border: {width}px {style} {border}; border-radius: 10px; "
             f"background: {bg}; }}")

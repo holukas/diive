@@ -57,7 +57,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `tabs/outliers_lof.py` | Local Outlier Factor tab (`dv.outliers.LocalOutlierFactor`) — density-based detection; `BaseOutlierTab` subclass |
 | `tabs/outliers_trim.py` | Trim-low tab (`dv.outliers.TrimLow`) — symmetric positional trim; `supports_daynight = False`, opt-in `trim_daytime`/`trim_nighttime` rows, no detection band |
 | `tabs/outliers_manualremoval.py` | Manual removal tab (`dv.outliers.ManualRemoval`) — flag known timestamps/periods; `supports_daynight = False`, `supports_repeat = False`, no detection band |
-| `tabs/stepwise.py` | Stepwise screening tab (`dv.outliers.StepwiseOutlierDetection`) — chain multiple outlier methods with QCF aggregation |
+| `tabs/stepwise.py` | Stepwise screening tab (`dv.outliers.StepwiseOutlierDetection`) — chain multiple outlier methods with QCF aggregation, plus a **corrections** phase (`dv.corrections.apply_corrections` on the QCF-filtered series). Layout: shared variable list + a segmented inspector (Outliers / Corrections / Report, one `QStackedWidget` page shown at a time) + a large always-visible plot grid; a **measurement** dropdown gates applicable corrections; per-section **Run outliers** / **Run corrections** buttons apply edits (nothing auto-runs); runs invalidated only when the variable's data actually changes |
 | `tabs/metadata_explorer.py` | Metadata explorer — per-variable origin badge, editable tag chips (favorite/add/remove, auto-coloured), a 50-word note, provenance timeline; reads `metadata_store.manager` |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
 | `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar (with a Save-DPI spinbox); attaches a `HoverAnnotator` |
@@ -72,6 +72,8 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `widgets/frameless.py` | `FramelessResizeHelper` — edge/corner resize for the frameless Studio window |
 | `widgets/console_panel.py` | `ConsolePanel` — mirrors diive's Rich output in colour (used by the Log tab) |
 | `widgets/stepwise_method_params.py` | One param widget per `StepwiseOutlierDetection.flag_*` method; produces a `{"method", "kwargs"}` step for the L3.2 / stepwise chains (the shape `level32_to_code` consumes) |
+| `widgets/stepwise_cards.py` | The stepwise chain's editable **method cards** (`StepCard` shows every setting + removed count + reorder ▲▼ / edit / delete; `AddStepCard`; `StepEditorDialog`) — display widgets around the `stepwise_method_params` registry |
+| `widgets/corrections_panel.py` | `CorrectionsPanel` — checkable correction rows filtered to the selected measurement (`dv.qaqc.corrections_for_measurement`), with inline descriptions; parses date-range / value text into the `{"key","kwargs"}` corrections `apply_corrections` consumes |
 | `widgets/copy_button.py` | Reusable **Copy Python** button — copies library-generated code to the clipboard (GUI never builds the script, only copies it) |
 | `widgets/state_utils.py` | `save_controls`/`restore_controls` — serialize a tab's standard Qt controls by stable key for `save_state`/`restore_state` |
 
