@@ -37,6 +37,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
@@ -50,20 +51,23 @@ from diive.core.metadata import ATTRS_KEY, DERIVED, MODIFIED, provenance_attr
 from diive.gui import site, theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.copy_button import CopyPythonButton
+from diive.gui.widgets.corrections_panel import CorrectionsPanel
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.stepwise_cards import (
     AddStepCard,
     StepCard,
     StepEditorDialog,
 )
+from diive.preprocessing.corrections import apply_corrections
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 from diive.preprocessing.outlier_detection.codegen import stepwise_to_code
-from diive.qaqc import FlagQCF
+from diive.qaqc import FlagQCF, MEASUREMENTS, detect_measurement, measurement_label
 
 _C_RAW = "#B0BEC5"      # blue-grey 200 — original line
 _C_CLEANED = "#43A047"  # green 600     — cleaned series
 _C_REMOVED = "#E53935"  # red 600       — removed points
 _C_LIMIT = "#8E24AA"    # purple 600    — detection band
+_C_CORRECTED = "#1E88E5"  # blue 600    — corrected series
 _C_MUTED = "#6B7780"
 _QCF_COLORS = {0: "#43A047", 1: "#FFB300", 2: "#E53935"}  # good / marginal / rejected
 
@@ -93,6 +97,7 @@ class StepwiseScreeningTab(DiiveTab):
         self._chain_dirty = False             # chain edited since the last run
         self._selected_step = -1              # highlighted card (-1 = all removals)
         self._payload = None                  # last completed run
+        self._corrected = None                # corrected series (or None)
         self._result_df = None                # columns pending "Add"
         self._run_id = 0                       # guards against stale worker results
         self._step_cards: list[StepCard] = []
@@ -107,6 +112,7 @@ class StepwiseScreeningTab(DiiveTab):
 
         layout.addLayout(self._build_top_bar())
         layout.addWidget(self._build_card_strip())
+        layout.addWidget(self._build_corrections_section())
 
         # Status + QCF readout line.
         info_row = QHBoxLayout()
@@ -160,6 +166,19 @@ class StepwiseScreeningTab(DiiveTab):
         self.var_combo.currentIndexChanged.connect(self._on_var_changed)
         bar.addWidget(self.var_combo)
 
+        bar.addWidget(QLabel("Measurement:"))
+        self.meas_combo = QComboBox()
+        self.meas_combo.setMinimumWidth(220)
+        self.meas_combo.setToolTip(
+            "The measurement group of this variable. It decides which "
+            "corrections are physically meaningful (e.g. radiation zero offset "
+            "for SW / PPFD).")
+        self.meas_combo.addItem("(none)", None)
+        for m in MEASUREMENTS:
+            self.meas_combo.addItem(measurement_label(m.code), m.code)
+        self.meas_combo.currentIndexChanged.connect(self._on_measurement_changed)
+        bar.addWidget(self.meas_combo)
+
         self.limits_cb = QCheckBox("Show limit lines")
         self.limits_cb.setToolTip(
             "Overlay the selected step's upper/lower detection band on the "
@@ -195,6 +214,25 @@ class StepwiseScreeningTab(DiiveTab):
         self._strip_host = host
         self._rebuild_cards()
         return scroll
+
+    def _build_corrections_section(self) -> QWidget:
+        box = QGroupBox("Corrections (applied to the QCF-filtered series)")
+        v = QVBoxLayout(box)
+        v.setContentsMargins(8, 6, 8, 6)
+        self.corrections_panel = CorrectionsPanel()
+        self.corrections_panel.set_coords_available(site.manager.configured)
+        self.corrections_panel.changed.connect(self._on_corrections_changed)
+        v.addWidget(self.corrections_panel)
+        return box
+
+    def _on_measurement_changed(self, *_) -> None:
+        code = self.meas_combo.currentData()
+        self.corrections_panel.set_measurement(code)
+
+    def _on_corrections_changed(self) -> None:
+        # Corrections are cheap and run on the already-computed base series, so
+        # there is no need to re-run the (potentially slow) outlier chain.
+        self._recompute_corrections()
 
     # --- card strip ---
     def _rebuild_cards(self) -> None:
@@ -291,6 +329,7 @@ class StepwiseScreeningTab(DiiveTab):
         self._df = df
         self._result_df = None
         self.add_btn.setEnabled(False)
+        self.corrections_panel.set_coords_available(site.manager.configured)
         self.var_combo.blockSignals(True)
         self.var_combo.clear()
         self.var_combo.addItems([str(c) for c in df.columns])
@@ -313,6 +352,10 @@ class StepwiseScreeningTab(DiiveTab):
         if not name or self._df is None or name not in self._df.columns:
             return
         self._var = name
+        # New variable: drop the stale run so corrections fall back to the raw
+        # series until the chain (if any) re-runs.
+        self._payload = None
+        self._apply_detected_measurement(name)
         # The chain carries over across variables; re-run it on the new series.
         if self._steps:
             # Mark dirty + rebuild so cards don't show the previous variable's
@@ -324,18 +367,23 @@ class StepwiseScreeningTab(DiiveTab):
             self._reset_preview()
         self.status.setText(f"Selected '{name}'. Add outlier tests to build a chain.")
 
+    def _apply_detected_measurement(self, name: str) -> None:
+        """Auto-pick the measurement for this variable from its name (the user
+        can still override via the dropdown)."""
+        code = detect_measurement(name)
+        idx = self.meas_combo.findData(code)
+        self.meas_combo.setCurrentIndex(idx if idx >= 0 else 0)
+
     def _reset_preview(self) -> None:
         self._payload = None
         self._result_df = None
         self._selected_step = -1
         self.qcf_label.setText("QCF: add a step to compute.")
-        self.add_btn.setEnabled(False)
-        self.copy_btn.setEnabled(False)
         self.report_text.clear()
         self.report_copy_btn.setEnabled(False)
         self._rebuild_cards()
-        if self._var is not None and self._df is not None:
-            self._draw_raw(self._df[self._var])
+        # Corrections (if any) apply on the raw series; this also draws.
+        self._recompute_corrections()
 
     # --- run (rebuild + replay on a worker thread) ---
     @staticmethod
@@ -346,6 +394,38 @@ class StepwiseScreeningTab(DiiveTab):
                         utc_offset=m.utc_offset)
         return dict(site_lat=0.0, site_lon=0.0, utc_offset=0)
 
+    def _base_series(self):
+        """The series the corrections start from: the QCF-filtered series after
+        a chain run, else the raw variable (so corrections work standalone)."""
+        if self._payload is not None:
+            return self._payload["qcf"].filteredseries
+        if self._var is not None and self._df is not None:
+            return self._df[self._var]
+        return None
+
+    def _recompute_corrections(self) -> None:
+        """Apply the enabled corrections to the current base series, then refresh
+        the result columns, the 'Add' button, the preview, and the copy button.
+        Synchronous — corrections are cheap and don't touch the outlier chain."""
+        corrs = self.corrections_panel.corrections()
+        base = self._base_series()
+        if not corrs or base is None:
+            self._corrected = None
+        else:
+            coords = self._coords()
+            try:
+                self._corrected = apply_corrections(
+                    base, corrs, lat=coords["site_lat"], lon=coords["site_lon"],
+                    utc_offset=coords["utc_offset"])
+            except Exception as err:
+                self._corrected = None
+                self.status.setText(f"Correction failed: {err}")
+        self._build_result()
+        self.add_btn.setEnabled(self._result_df is not None
+                                and not self._result_df.empty)
+        self.copy_btn.setEnabled(self._code_provider() is not None)
+        self._draw_payload()
+
     def _run(self) -> None:
         if self._df is None or self._var is None:
             return
@@ -353,16 +433,16 @@ class StepwiseScreeningTab(DiiveTab):
         # (results can land out of order under rapid edits).
         self._run_id += 1
         run_id = self._run_id
-        # Nothing to run (no steps, or all toggled off): show the raw series.
+        # Nothing to screen (no steps, or all toggled off): show the raw series.
+        # Corrections may still apply (on the raw series), so route through
+        # _recompute_corrections rather than drawing raw directly.
         if not any(s.get("enabled", True) for s in self._steps):
             self._payload = None
             self._chain_dirty = False
-            self.add_btn.setEnabled(False)
-            self.copy_btn.setEnabled(False)
             self.report_text.clear()
             self.report_copy_btn.setEnabled(False)
             self.qcf_label.setText("QCF: add a step to compute.")
-            self._draw_raw(self._df[self._var])
+            self._recompute_corrections()
             return
         self.status.setText("Running chain…")
         self.add_btn.setEnabled(False)
@@ -446,10 +526,9 @@ class StepwiseScreeningTab(DiiveTab):
             f"Click a card to highlight just its removals.")
         self.report_text.setPlainText(payload.get("report", ""))
         self.report_copy_btn.setEnabled(bool(payload.get("report")))
-        self._build_result(payload)
-        self.add_btn.setEnabled(True)
-        self.copy_btn.setEnabled(True)
-        self._draw_payload()
+        # Applies corrections on the fresh QCF series, builds result columns,
+        # toggles the Add/Copy buttons, and draws the preview.
+        self._recompute_corrections()
 
     def _on_failed(self, data) -> None:
         run_id, msg = data
@@ -463,27 +542,49 @@ class StepwiseScreeningTab(DiiveTab):
         self._rebuild_cards()
 
     # --- result columns for "Add" ---
-    def _build_result(self, payload: dict) -> None:
-        det = payload["detector"]
-        qcf = payload["qcf"]
-        var = payload["var"]
-        # Emit: all FLAG_*_TEST columns + the overall QCF flag + the QCF-filtered series.
-        cols = pd.concat([det.flags,
-                          qcf.flagqcf.rename(qcf.flagqcfcol),
-                          qcf.filteredseries.rename(qcf.filteredseriescol)], axis=1)
-        # Snapshot the chain: provenance must capture what was emitted, not a
-        # live reference that later edits would mutate.
-        params = {"steps": copy.deepcopy(self._steps)}
-        attrs = {qcf.filteredseriescol: provenance_attr(
-            origin=MODIFIED, parent=var, operation="Stepwise screening",
-            params=params, tags=["outliers-removed", "qcf"])}
-        for c in det.flags.columns:
-            attrs[str(c)] = provenance_attr(
-                origin=DERIVED, parent=var, operation="Stepwise screening flag",
-                params=params, tags=["flag"])
-        attrs[qcf.flagqcfcol] = provenance_attr(
-            origin=DERIVED, parent=var, operation="Stepwise screening QCF",
-            params=params, tags=["flag", "qcf"])
+    def _build_result(self) -> None:
+        """Build the columns the 'Add' button emits from the current run +
+        corrections: all FLAG_*_TEST columns, the overall QCF flag, the
+        QCF-filtered series, and (if any corrections are active) the corrected
+        series. Works with only corrections (no outlier chain), and with only an
+        outlier chain (no corrections)."""
+        payload = self._payload
+        pieces = []
+        attrs = {}
+        params = {"steps": copy.deepcopy(self._steps),
+                  "corrections": copy.deepcopy(self.corrections_panel.corrections())}
+        corrected_parent = self._var
+
+        if payload is not None:
+            det = payload["detector"]
+            qcf = payload["qcf"]
+            var = payload["var"]
+            pieces += [det.flags,
+                       qcf.flagqcf.rename(qcf.flagqcfcol),
+                       qcf.filteredseries.rename(qcf.filteredseriescol)]
+            attrs[qcf.filteredseriescol] = provenance_attr(
+                origin=MODIFIED, parent=var, operation="Stepwise screening",
+                params=params, tags=["outliers-removed", "qcf"])
+            for c in det.flags.columns:
+                attrs[str(c)] = provenance_attr(
+                    origin=DERIVED, parent=var, operation="Stepwise screening flag",
+                    params=params, tags=["flag"])
+            attrs[qcf.flagqcfcol] = provenance_attr(
+                origin=DERIVED, parent=var, operation="Stepwise screening QCF",
+                params=params, tags=["flag", "qcf"])
+            corrected_parent = qcf.filteredseriescol
+
+        if self._corrected is not None and self._var is not None:
+            corrected_col = f"{self._var}_CORRECTED"
+            pieces.append(self._corrected.rename(corrected_col))
+            attrs[corrected_col] = provenance_attr(
+                origin=MODIFIED, parent=corrected_parent, operation="Meteo corrections",
+                params=params, tags=["corrected"])
+
+        if not pieces:
+            self._result_df = None
+            return
+        cols = pd.concat(pieces, axis=1)
         cols.attrs[ATTRS_KEY] = attrs
         self._result_df = cols
 
@@ -504,7 +605,8 @@ class StepwiseScreeningTab(DiiveTab):
         if not enabled or self._var is None:
             return None
         return stepwise_to_code(enabled, var_name=self._var, **self._coords(),
-                                load_hint="dv.load_parquet('your_data.parquet')")
+                                load_hint="dv.load_parquet('your_data.parquet')",
+                                corrections=self.corrections_panel.corrections())
 
     def _report_provider(self) -> str | None:
         """The current screening report text (or None), for the Copy button."""
@@ -514,10 +616,18 @@ class StepwiseScreeningTab(DiiveTab):
 
     # --- preview ---
     def _draw_raw(self, series) -> None:
-        """Single panel with the original series (before any step runs)."""
+        """Single panel with the original series (before any step runs), plus the
+        corrected series overlaid when corrections are active."""
         ax = self.canvas.new_axes(1)[0]
-        ax.plot(series.index, series.to_numpy(), color=_C_RAW, lw=0.5, alpha=0.85)
-        ax.set_title(f"{series.name} — original (add a step)", fontsize=9)
+        ax.plot(series.index, series.to_numpy(), color=_C_RAW, lw=0.5, alpha=0.85,
+                label="original")
+        if self._corrected is not None:
+            ax.plot(self._corrected.index, self._corrected.to_numpy(),
+                    color=_C_CORRECTED, lw=0.7, alpha=0.9, label="corrected")
+            ax.legend(loc="best", fontsize=7, framealpha=0.9)
+            ax.set_title(f"{series.name} — original + corrected", fontsize=9)
+        else:
+            ax.set_title(f"{series.name} — original (add a step)", fontsize=9)
         self.canvas.draw()
 
     def _draw_payload(self) -> None:
@@ -572,9 +682,16 @@ class StepwiseScreeningTab(DiiveTab):
         ax_ts.set_title(f"{orig.name} — original + {extra}", fontsize=9)
         ax_ts.legend(loc="best", fontsize=7, framealpha=0.9)
 
-        # 2) Cleaned series.
-        ax_clean.plot(cleaned.index, cleaned.to_numpy(), color=_C_CLEANED, lw=0.7)
-        ax_clean.set_title("cleaned (outliers removed)", fontsize=9)
+        # 2) Cleaned series (+ corrected overlay when corrections are active).
+        ax_clean.plot(cleaned.index, cleaned.to_numpy(), color=_C_CLEANED, lw=0.7,
+                      label="cleaned")
+        if self._corrected is not None:
+            ax_clean.plot(self._corrected.index, self._corrected.to_numpy(),
+                          color=_C_CORRECTED, lw=0.7, alpha=0.9, label="corrected")
+            ax_clean.legend(loc="best", fontsize=7, framealpha=0.9)
+            ax_clean.set_title("cleaned + corrected", fontsize=9)
+        else:
+            ax_clean.set_title("cleaned (outliers removed)", fontsize=9)
 
         # 3) Heatmap of the cleaned series.
         try:
@@ -607,11 +724,23 @@ class StepwiseScreeningTab(DiiveTab):
     # --- state ---
     def save_state(self) -> dict:
         return {"var": self._var, "steps": self._steps,
-                "limits": self.limits_cb.isChecked()}
+                "limits": self.limits_cb.isChecked(),
+                "corrections": self.corrections_panel.get_state()}
 
     def restore_state(self, state: dict) -> None:
         self._steps = list(state.get("steps") or [])
         self.limits_cb.setChecked(bool(state.get("limits")))
+        # Restore the corrections + measurement, syncing the dropdown to match
+        # (signals blocked so it doesn't trigger a premature recompute).
+        corr_state = state.get("corrections")
+        if corr_state:
+            self.corrections_panel.blockSignals(True)
+            self.corrections_panel.set_state(corr_state)
+            self.corrections_panel.blockSignals(False)
+            self.meas_combo.blockSignals(True)
+            idx = self.meas_combo.findData(self.corrections_panel.measurement())
+            self.meas_combo.setCurrentIndex(idx if idx >= 0 else 0)
+            self.meas_combo.blockSignals(False)
         var = state.get("var")
         if var and self._df is not None and var in self._df.columns:
             self._var = var
@@ -620,6 +749,6 @@ class StepwiseScreeningTab(DiiveTab):
             self.var_combo.blockSignals(False)
             self._rebuild_cards()
             if self._steps:
-                self._run()  # replays the saved chain
+                self._run()  # replays the saved chain (then applies corrections)
             else:
-                self._draw_raw(self._df[var])
+                self._recompute_corrections()

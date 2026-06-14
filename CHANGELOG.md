@@ -42,7 +42,11 @@
   Factor filter**, **Trim-low filter**, and **Manual removal** (each keeps the
   original + a cleaned copy + the flag, with a live two-panel preview and **Copy Python**), plus **Stepwise screening**
   (chain several outlier tests on one variable, inspect what each step removes, and compute the overall QCF separately —
-  then add the flags + QCF + filtered series to the dataset); Data menu **Select
+  then add the flags + QCF + filtered series to the dataset). The Stepwise screening tab now also has a **corrections
+  phase** (applied to the QCF-filtered series, mirroring the meteo-screening notebook): a **measurement** dropdown
+  (e.g. *TA - air temperature*, auto-detected from the variable name) gates which corrections are physically meaningful
+  — radiation zero-offset for SW/PPFD, RH offset for RH, plus the generic set-to-min/max, set-to-value and
+  set-exact-to-missing — emitting a corrected column and extending the **Copy Python** script. Data menu **Select
   variables**, **Rename variables** (add a prefix/suffix to all variables, or one at a time, with a live preview),
   **Metadata explorer**, **Feature engineering**; plus **Appearance**, **Project settings** (author, description, site
   details, and a **sticky-note wall** — all saved with the project), and **Log**.

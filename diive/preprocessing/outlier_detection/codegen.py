@@ -43,7 +43,8 @@ def _step_defaults(method: str) -> dict:
 
 def stepwise_to_code(steps: list[dict], *, var_name: str,
                      site_lat: float, site_lon: float, utc_offset: int,
-                     df_var: str = "df", load_hint: str | None = None) -> str:
+                     df_var: str = "df", load_hint: str | None = None,
+                     corrections: list[dict] | None = None) -> str:
     """Render a ``StepwiseOutlierDetection`` chain + overall QCF as a runnable snippet.
 
     Each step (``{"method": str, "kwargs": dict}``) becomes one ``flag_*`` call
@@ -59,6 +60,9 @@ def stepwise_to_code(steps: list[dict], *, var_name: str,
             the day/night split.
         df_var: variable name used for the input DataFrame.
         load_hint: if given, prepend ``df = <load_hint>`` so the snippet runs as-is.
+        corrections: optional ordered list of ``{"key", "kwargs"}`` corrections
+            applied to the QCF-filtered series (rendered after the screening
+            block as ``corrected = ...``).
 
     Returns:
         A runnable Python snippet as a string.
@@ -102,6 +106,14 @@ def stepwise_to_code(steps: list[dict], *, var_name: str,
         "cleaned = qcf.filteredseries  # QCF-filtered series (outliers -> NaN)",
         "flag = qcf.flagqcf            # overall flag: 0 ok / 1 marginal / 2 rejected",
     ]
+    if corrections:
+        from diive.preprocessing.corrections.codegen import corrections_to_code
+        block = corrections_to_code(corrections, site_lat=site_lat, site_lon=site_lon,
+                                    utc_offset=utc_offset, in_var="cleaned",
+                                    out_var="corrected")
+        if block:
+            lines += ["", "# Corrections applied to the QCF-filtered series",
+                      block.rstrip("\n")]
     return "\n".join(lines) + "\n"
 
 

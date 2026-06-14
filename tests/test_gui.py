@@ -609,6 +609,73 @@ def test_stepwise_screening_tab(app):
     assert sum(len(idx) for idx in tab._payload["removed"]) == total
 
 
+def test_stepwise_screening_corrections(app):
+    # The corrections phase: the measurement is auto-detected from the variable
+    # name and gates which corrections appear (radiation zero offset only for SW/
+    # PPFD); enabled corrections produce a corrected column and feed the script.
+    import diive as dv
+    from diive.gui.tabs.stepwise import StepwiseScreeningTab
+    from diive.gui.widgets.stepwise_method_params import ZScoreParams
+    from diive.gui import site
+
+    site.manager.update(author="t", description="", name="X", latitude=47.4,
+                        longitude=8.5, elevation=500, utc_offset=1)
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-06-01", periods=48 * 10, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.05)
+    df = df.rename(columns={"observed_value": "SW_IN_T1_2_1"})
+    df.index.name = "TIMESTAMP_END"
+
+    tab = StepwiseScreeningTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._select("SW_IN_T1_2_1")
+
+    # SW is detected from the name; the radiation zero-offset correction (only
+    # meaningful for radiation) is offered, and the generic ones too.
+    assert tab.meas_combo.currentData() == "SW"
+    assert tab.corrections_panel.measurement() == "SW"
+    assert "radiation_zero_offset" in tab.corrections_panel._rows
+    assert "setto_max" in tab.corrections_panel._rows
+
+    emitted = {}
+    tab.featuresCreated.connect(lambda d: emitted.update(df=d))
+
+    # Corrections run standalone (no outlier steps) on the raw series: enabling
+    # them yields a corrected series + a single _CORRECTED column to commit.
+    tab.corrections_panel._rows["radiation_zero_offset"].enable.setChecked(True)
+    rmax = tab.corrections_panel._rows["setto_max"]
+    rmax.enable.setChecked(True)
+    rmax.threshold.setValue(800)
+    QApplication.processEvents()
+    assert tab._corrected is not None
+    assert list(tab._result_df.columns) == ["SW_IN_T1_2_1_CORRECTED"]
+    assert tab.add_btn.isEnabled()
+    # No outlier steps -> no reproducible chain script yet.
+    assert tab.copy_btn.isEnabled() is False
+
+    # With an outlier step, the QCF columns + the corrected column are all
+    # emitted, and the generated script includes the corrections block.
+    tab._steps = [ZScoreParams().step()]
+    tab._worker(df, "SW_IN_T1_2_1", tab._steps, tab._coords(), True, tab._run_id)
+    QApplication.processEvents()
+    cols = list(tab._result_df.columns)
+    assert any(c.endswith("_CORRECTED") for c in cols)
+    assert any(c.endswith("_STEPWISE_QCF") for c in cols)
+    code = tab._code_provider()
+    compile(code, "<gen>", "exec")
+    assert "corrected = cleaned.copy()" in code
+    assert "remove_radiation_zero_offset" in code
+
+    # Switching to a non-radiation measurement drops the radiation correction.
+    idx = tab.meas_combo.findData("TA")
+    tab.meas_combo.setCurrentIndex(idx)
+    QApplication.processEvents()
+    assert "radiation_zero_offset" not in tab.corrections_panel._rows
+    assert "setto_max" in tab.corrections_panel._rows
+
+
 def test_flux_chain_tab_level33(app):
     # L3.3 USTAR filtering: requires an L3.2 step, applies constant thresholds,
     # and exposes per-scenario QCFs.

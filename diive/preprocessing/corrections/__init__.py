@@ -18,6 +18,7 @@ from diive.preprocessing.corrections.setto import (
     setto_threshold,
     setto_value,
 )
+from diive.preprocessing.corrections.apply import apply_corrections
 
 __all__ = [
     'MeasurementOffsetFromReplicate',
@@ -27,4 +28,5 @@ __all__ = [
     'set_exact_values_to_missing',
     'setto_threshold',
     'setto_value',
+    'apply_corrections',
 ]
