@@ -66,7 +66,7 @@ boot = dv.flux.UstarBootstrapThresholds(
     df=df,
     detector_class=dv.flux.UstarMovingPointDetection,
     detector_kwargs=dict(ta_classes_count=7, ustar_classes_count=20),
-    n_iter=20,
+    n_iter=100,
     percentiles=(16, 50, 84),
     n_jobs=-1,
     verbose=1,

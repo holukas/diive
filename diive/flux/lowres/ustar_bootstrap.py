@@ -24,7 +24,22 @@ def _bootstrap_window_worker(
     detector_kwargs: dict,
     n_iter: int,
 ) -> tuple:
-    """Bootstrap all iterations for one window (module-level for picklability)."""
+    """
+    Bootstrap all iterations for one window (module-level for picklability).
+
+    Fast path: if the detector exposes ``bootstrap_annual_samples`` it is built once on the
+    window and resamples internally on pre-extracted arrays (no per-iteration DataFrame copy
+    or detector reconstruction). Otherwise falls back to the generic resample-and-detect loop.
+    """
+    if hasattr(detector_class, 'bootstrap_annual_samples'):
+        try:
+            detector = detector_class(df_window, verbose=0, **detector_kwargs)
+            samples = [float(s) for s in detector.bootstrap_annual_samples(n_iter)
+                       if s is not None and not np.isnan(s)]
+        except Exception:
+            samples = []
+        return year, samples
+
     samples = []
     for _ in range(n_iter):
         df_boot = df_window.sample(n=len(df_window), replace=True)
@@ -181,6 +196,15 @@ class UstarBootstrapThresholds:
         """
         n_workers = os.cpu_count() if self.n_jobs == -1 else self.n_jobs
 
+        # With the per-detector fast path, each window is cheap; spawning a process pool for
+        # only a handful of windows costs more (process startup + DataFrame pickling) than it
+        # saves. Run sequentially below this point regardless of the requested n_jobs.
+        if n_workers > 1 and len(self.years_) <= 3:
+            if self.verbose >= 1:
+                detail(f"  {len(self.years_)} window(s): running sequentially "
+                       f"(too few to amortize process-pool overhead)")
+            n_workers = 1
+
         if self.verbose >= 1:
             pct_labels = '/'.join(f'p{p}' for p in self.percentiles)
             mode = f"parallel ({n_workers} workers)" if n_workers > 1 else "sequential"
@@ -201,27 +225,17 @@ class UstarBootstrapThresholds:
             df_windows[year] = self.df[self.df.index.year.isin(w)]
 
         if n_workers <= 1:
-            # Sequential execution
+            # Sequential execution (same worker as the parallel path, so the fast path applies)
             for year in self.years_:
                 df_window = df_windows[year]
-                samples: List[float] = []
 
                 if self.verbose >= 1:
                     win_str = '/'.join(str(y) for y in windows[year])
                     info(f"  {year} [window: {win_str}] ({len(df_window)} records)...")
 
-                for _ in range(self.n_iter):
-                    df_boot = df_window.sample(n=len(df_window), replace=True)
-                    try:
-                        detector = self.detector_class(df_boot, verbose=0, **self.detector_kwargs)
-                        detector.detect()
-                        annual = detector.get_annual_thresholds()
-                        threshold = annual.get('threshold')
-                        if threshold is not None and not np.isnan(threshold):
-                            samples.append(float(threshold))
-                    except Exception:
-                        continue
-
+                _, samples = _bootstrap_window_worker(
+                    year, df_window, self.detector_class, self.detector_kwargs, self.n_iter
+                )
                 self._raw_samples_[year] = samples
 
                 if self.verbose >= 1:

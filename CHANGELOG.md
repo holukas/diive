@@ -257,6 +257,17 @@ Library additions used by the GUI (all backward-compatible):
 
 ### Fixes
 
+- **`UstarMovingPointDetection` rewritten for ONEFlux parity and speed.** Validated line-by-line against the reference
+  C source (`oneflux_steps/ustar_mp/src/ustar.c`) and re-implemented on numpy arrays (~8x faster per `detect()`, and
+  the per-iteration object construction + `DataFrame.copy()` in bootstrap loops is gone). **Behaviour changes toward
+  ONEFlux:** (1) default season grouping is now calendar quarters `[[1,2,3],[4,5,6],[7,8,9],[10,11,12]]` (the actual
+  `default_seasons_group` in `main.c`), not DJF; (2) TA/USTAR class boundaries are tie-aware — equal values are never
+  split across adjacent classes (matches the C boundary-extension loop), so quantized USTAR data is binned exactly as
+  ONEFlux does; (3) season month assignment applies the end-of-period timestamp shift (a record at day-1 00:00 belongs
+  to the previous month); (4) the "one big season" fallback is implemented (when every season has < `100*7` samples,
+  all night data is pooled); (5) `bootstrap()` now also returns an `Annual` row (the distribution of the
+  max-across-seasons threshold actually used for filtering) and resamples the full record before night-filtering, as
+  the C does. Defaults still reproduce the ONEFlux default run: forward-mode-2 only, percentile check off.
 - **`Hampel` honoured `n_sigma` in day/night mode.** `n_sigma_daytime` / `n_sigma_nighttime` defaulted to the literal
   `5.5` instead of `None`, so the "fall back to `n_sigma`" logic was dead and the threshold was hard-wired to 5.5
   whenever `separate_day_night=True` — passing `n_sigma` alone had no effect on the result. Defaults are now `None`
