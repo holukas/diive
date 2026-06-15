@@ -35,7 +35,12 @@
   hyperparameters (RF/XGB trees/depth/learning-rate, MDS tolerances) and SHAP feature reduction; composable per-level
   path with per-level run buttons, a pipeline-rail layout, a per-level QCF screening report, per-test input-column
   pickers + the eight VM97 sub-tests at L2, and a USTAR/storage/driver column picker on the other levels;
-  **Copy Python**); **Time lag analysis** (EC concentration↔wind lag
+  **Copy Python**). **Level 3.3** now offers two modes: pre-known **constant thresholds** or **moving-point
+  detection** (Papale 2006) — a multi-year bootstrap (`run_level33_ustar_detection`) that estimates the threshold from
+  nighttime respiration and applies the CUT percentiles (CUT_16/50/84) as USTAR scenarios; **Copy Python** renders the
+  detection call. **Flux ▸ USTAR detection** (new standalone tab) runs the same `UstarMovingPointDetection` directly:
+  pick NEE/TA/USTAR/SW_IN, get per-season + annual thresholds, or tick **Multi-year bootstrap** for per-year
+  p16/p50/p84 + a pooled CUT, shown as a table and a diagnostic plot; **Time lag analysis** (EC concentration↔wind lag
   distribution per gas, peak/range/EddyPro window, `dv.flux.TimeLagAnalysis`); **Outliers** tabs **Absolute limits
   filter**, **Hampel filter**, **Local SD
   filter**, **Z-score filter**, **Z-score (rolling) filter**, **Z-score (increments) filter**, **Local Outlier

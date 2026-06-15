@@ -5,9 +5,10 @@ GUI.TABS.FLUXCHAIN: FLUX PROCESSING CHAIN (Input + L2 + L3.1 + L3.2 + L3.3 + L4.
 A guided tab for the Swiss-FluxNet flux processing chain. It wires the **Input**
 (site + flux column), **Level 2** (quality-flag tests), **Level 3.1** (single-point
 storage correction), **Level 3.2** (an optional outlier-detection chain), and
-**Level 3.3** (optional constant-USTAR filtering) using the composable library
-callables (`init_flux_data` + `run_level2` + `run_level31` +
-`make_level32_detector` / `run_level32` + `run_level33_constant_ustar`), shows the
+**Level 3.3** (optional USTAR filtering — constant thresholds or moving-point
+detection) using the composable library callables (`init_flux_data` + `run_level2`
++ `run_level31` + `make_level32_detector` / `run_level32` +
+`run_level33_constant_ustar` / `run_level33_ustar_detection`), shows the
 deepest level's QCF-filtered flux as a heatmap plus the L3.2 QCF distribution /
 L3.3 scenarios, and — the point of the feature — emits the exact reproducible diive
 script via **Copy Python**. L3.3 requires at least one L3.2 outlier test, and applies
@@ -72,8 +73,8 @@ from diive.flux.fluxprocessingchain import (
     VM97_SUBTESTS, init_flux_data, level2_test_inputs, level31_storage_col,
     level31_to_code, level32_to_code, level33_to_code, level41_to_code,
     make_level32_detector, make_level41_engineer, run_level2, run_level31,
-    run_level32, run_level33_constant_ustar, run_level41_mds, run_level41_rf,
-    run_level41_xgb,
+    run_level32, run_level33_constant_ustar, run_level33_ustar_detection,
+    run_level41_mds, run_level41_rf, run_level41_xgb,
 )
 from diive.flux.lowres.common import detect_fluxbasevar
 from diive.gui import theme
@@ -282,11 +283,16 @@ class FluxChainTab(DiiveTab):
         else:
             l31 = ("storage", "set")
         n32 = len(self._steps)
-        if self.l33_enable.isChecked() and self._ustar:
-            n = len(self._ustar)
-            l33 = (f"{n} scenario" + ("s" if n != 1 else ""), "set")
-        elif self.l33_enable.isChecked():
-            l33 = ("add threshold", "warn")
+        if self.l33_enable.isChecked():
+            l33kw = self._level33_kwargs()
+            if l33kw is None:
+                l33 = ("configure", "warn")
+            elif l33kw.get("_detection"):
+                n = len(l33kw["percentiles"])
+                l33 = (f"detect · {n}", "set")
+            else:
+                n = len(self._ustar)
+                l33 = (f"{n} scenario" + ("s" if n != 1 else ""), "set")
         else:
             l33 = ("off", "off")
         methods = self._level41_methods()
@@ -452,6 +458,16 @@ class FluxChainTab(DiiveTab):
             self.l33_info.setText(
                 f"Filters on USTAR column '{u}'. Applies to CO2 / CH4 / N2O only — "
                 f"for H / LE use threshold 0.")
+        # L3.3 detect — TA / SW_IN driver availability.
+        if hasattr(self, "l33_detect_mark"):
+            parts, allok = [], True
+            for role, combo in (("TA", self.l33_ta), ("SW_IN", self.l33_swin)):
+                c = combo.currentText().strip()
+                ok = bool(c) and c in cols
+                allok = allok and ok
+                parts.append(f"{role} {'✓' if ok else '✗'}")
+            self._set_marker(self.l33_detect_mark, allok,
+                             "Detection drivers — " + "   ".join(parts))
         # L4.1 — the three MDS driver columns.
         if hasattr(self, "mds_mark"):
             parts, allok = [], True
@@ -674,15 +690,41 @@ class FluxChainTab(DiiveTab):
     def _level33_group(self) -> QGroupBox:
         box = QGroupBox("Level 3.3 — USTAR filtering (optional)")
         v = QVBoxLayout(box)
-        self.l33_enable = QCheckBox("Apply constant USTAR thresholds")
+        self.l33_enable = QCheckBox("Apply USTAR filtering")
         self.l33_enable.setToolTip(
             "Flag low-turbulence (low USTAR) periods. Requires at least one Level 3.2 "
-            "outlier test. Only for CO2/CH4/N2O — for H/LE use threshold 0.")
+            "outlier test. Only for CO2/CH4/N2O — for H/LE use a constant threshold 0.")
         self.l33_enable.toggled.connect(self._update_run_label)
+        self.l33_enable.toggled.connect(self._sync_l33_mode)
         v.addWidget(self.l33_enable)
         # Which USTAR column it filters on (set on the Input page) + applicability.
         self.l33_info = self._info_marker()
         v.addWidget(self.l33_info)
+
+        # Mode: constant pre-known thresholds, or auto-detect via moving point.
+        modeform = QFormLayout()
+        self.l33_mode = QComboBox()
+        self.l33_mode.addItems(["Constant thresholds",
+                                "Detect (moving point, Papale 2006)"])
+        self.l33_mode.setToolTip(
+            "Constant: apply pre-known threshold(s).\n"
+            "Detect: estimate the threshold from the data via a multi-year bootstrap "
+            "of the ONEFlux moving-point method, then apply the CUT percentiles as "
+            "scenarios.")
+        self.l33_mode.currentIndexChanged.connect(self._sync_l33_mode)
+        self.l33_mode.currentIndexChanged.connect(self._update_run_label)
+        modeform.addRow("Mode", self.l33_mode)
+        v.addLayout(modeform)
+
+        v.addWidget(self._level33_constant_box())
+        v.addWidget(self._level33_detect_box())
+        v.addWidget(self._level_run_button(4, "Run Level 3.3"))
+        self._sync_l33_mode()
+        return box
+
+    def _level33_constant_box(self) -> QGroupBox:
+        gb = QGroupBox("Constant thresholds")
+        v = QVBoxLayout(gb)
         note = QLabel("One scenario per threshold (m s⁻¹). Label is optional "
                       "(auto CUT_0, CUT_1, …); use e.g. CUT_50 for a percentile.")
         note.setWordWrap(True)
@@ -705,8 +747,63 @@ class FluxChainTab(DiiveTab):
         rm = QPushButton("Remove threshold")
         rm.clicked.connect(self._remove_ustar)
         v.addWidget(rm)
-        v.addWidget(self._level_run_button(4, "Run Level 3.3"))
-        return box
+        self._l33_constant_box = gb
+        return gb
+
+    def _level33_detect_box(self) -> QGroupBox:
+        gb = QGroupBox("Detect — moving-point bootstrap")
+        form = QFormLayout(gb)
+        note = QLabel("Estimate the threshold from nighttime respiration "
+                      "(Papale et al. 2006). One scenario per percentile (CUT_16/50/84).")
+        note.setWordWrap(True)
+        note.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
+        form.addRow(note)
+        # Met drivers the detector stratifies / night-filters on.
+        self.l33_ta = QComboBox()
+        form.addRow("Air temperature (TA)", self.l33_ta)
+        self.l33_swin = QComboBox()
+        form.addRow("Shortwave in (SW_IN)", self.l33_swin)
+        self.l33_detect_mark = self._info_marker()
+        form.addRow("", self.l33_detect_mark)
+        self.l33_niter = QSpinBox()
+        self.l33_niter.setRange(1, 10000)
+        self.l33_niter.setValue(100)
+        self.l33_niter.setToolTip("Bootstrap iterations per year window.")
+        form.addRow("Bootstrap iterations", self.l33_niter)
+        self.l33_njobs = QSpinBox()
+        self.l33_njobs.setRange(-1, 256)
+        self.l33_njobs.setValue(1)
+        self.l33_njobs.setToolTip("Parallel workers (1 = sequential, -1 = all CPUs).")
+        form.addRow("Parallel workers", self.l33_njobs)
+        self.l33_percentiles = QLineEdit("16, 50, 84")
+        self.l33_percentiles.setToolTip("Comma-separated percentiles → one CUT scenario each.")
+        form.addRow("Percentiles", self.l33_percentiles)
+        self.l33_ta_classes = QSpinBox()
+        self.l33_ta_classes.setRange(2, 30)
+        self.l33_ta_classes.setValue(7)
+        form.addRow("TA classes", self.l33_ta_classes)
+        self.l33_ustar_classes = QSpinBox()
+        self.l33_ustar_classes.setRange(4, 60)
+        self.l33_ustar_classes.setValue(20)
+        form.addRow("USTAR classes", self.l33_ustar_classes)
+        self.l33_fw = QSpinBox()
+        self.l33_fw.setRange(1, 5)
+        self.l33_fw.setValue(2)
+        self.l33_fw.setToolTip("Forward-mode order: consecutive plateau bins required "
+                               "(2 = Fw2, the ONEFlux/REddyProc default).")
+        form.addRow("Forward-mode n", self.l33_fw)
+        for w in (self.l33_ta, self.l33_swin):
+            w.currentTextChanged.connect(self._refresh_levels_info)
+        self._l33_detect_box = gb
+        return gb
+
+    def _sync_l33_mode(self, *_) -> None:
+        """Show only the active L3.3 mode's controls (declutter)."""
+        on = self.l33_enable.isChecked()
+        detect = self.l33_mode.currentIndex() == 1
+        self.l33_mode.setEnabled(on)
+        self._l33_constant_box.setVisible(on and not detect)
+        self._l33_detect_box.setVisible(on and detect)
 
     def _add_ustar(self) -> None:
         value = self.l33_value.value()
@@ -725,17 +822,66 @@ class FluxChainTab(DiiveTab):
         self._update_run_label()
 
     def _level33_kwargs(self) -> dict | None:
-        """run_level33_constant_ustar kwargs, or None when L3.3 is off/empty."""
-        if not self.l33_enable.isChecked() or not self._ustar:
+        """L3.3 kwargs, or None when L3.3 is off / incompletely configured.
+
+        Constant mode -> ``run_level33_constant_ustar`` kwargs.
+        Detect mode   -> ``run_level33_ustar_detection`` kwargs, tagged with a
+        ``_detection`` marker the worker + codegen branch on.
+        """
+        if not self.l33_enable.isChecked():
+            return None
+        if self.l33_mode.currentIndex() == 1:  # detect
+            ta = self.l33_ta.currentText().strip()
+            swin = self.l33_swin.currentText().strip()
+            pcts = self._l33_percentiles()
+            if not ta or not swin or not pcts:
+                return None
+            kwargs: dict = {
+                "_detection": True,
+                "ta_col": ta,
+                "swin_col": swin,
+                "n_iter": self.l33_niter.value(),
+                "n_jobs": self.l33_njobs.value(),
+                "percentiles": pcts,
+            }
+            # Detector knobs only when they differ from the library defaults
+            # (keeps the run + generated script minimal).
+            det: dict = {}
+            if self.l33_ta_classes.value() != 7:
+                det["ta_classes_count"] = self.l33_ta_classes.value()
+            if self.l33_ustar_classes.value() != 20:
+                det["ustar_classes_count"] = self.l33_ustar_classes.value()
+            if self.l33_fw.value() != 2:
+                det["forward_mode_n"] = self.l33_fw.value()
+            if det:
+                kwargs["detector_kwargs"] = det
+            return kwargs
+        # constant
+        if not self._ustar:
             return None
         thresholds = [v for v, _ in self._ustar]
         labels = [lab for _, lab in self._ustar]
-        kwargs: dict = {"thresholds": thresholds}
+        kwargs = {"thresholds": thresholds}
         # All-or-nothing labels: pass them only if every scenario is labelled,
         # else let the library auto-generate CUT_0, CUT_1, …
         if all(labels):
             kwargs["threshold_labels"] = labels
         return kwargs
+
+    def _l33_percentiles(self) -> tuple[int, ...]:
+        """Parse the percentiles field into a tuple of ints (empty on bad input)."""
+        out = []
+        for tok in self.l33_percentiles.text().replace(";", ",").split(","):
+            tok = tok.strip()
+            if not tok:
+                continue
+            try:
+                p = int(round(float(tok)))
+            except ValueError:
+                return ()
+            if 1 <= p <= 99:
+                out.append(p)
+        return tuple(out)
 
     def _level41_group(self) -> QGroupBox:
         box = QGroupBox("Level 4.1 — gap-filling (optional)")
@@ -921,7 +1067,7 @@ class FluxChainTab(DiiveTab):
         # (the run then surfaces the "needs an L3.2 test" requirement).
         if self._level41_methods():
             deepest = "4.1"
-        elif self.l33_enable.isChecked() and self._ustar:
+        elif self.l33_enable.isChecked() and self._level33_kwargs():
             deepest = "3.3"
         elif self._steps:
             deepest = "3.2"
@@ -978,6 +1124,11 @@ class FluxChainTab(DiiveTab):
                 "ss_method": self.ss_method, "ss_threshold": self.ss_threshold,
                 "l31_gapfill": self.l31_gapfill, "l31_zero": self.l31_zero,
                 "strgcol": self.strgcol,
+                "l33_mode": self.l33_mode, "l33_ta": self.l33_ta,
+                "l33_swin": self.l33_swin, "l33_niter": self.l33_niter,
+                "l33_njobs": self.l33_njobs, "l33_percentiles": self.l33_percentiles,
+                "l33_ta_classes": self.l33_ta_classes,
+                "l33_ustar_classes": self.l33_ustar_classes, "l33_fw": self.l33_fw,
                 "l41_rf": self.l41_rf, "l41_xgb": self.l41_xgb, "l41_mds": self.l41_mds,
                 "mds_swin": self.mds_swin, "mds_ta": self.mds_ta, "mds_vpd": self.mds_vpd,
                 "l41_view": self.l41_view,
@@ -1028,6 +1179,7 @@ class FluxChainTab(DiiveTab):
         self.l41_features.set_selected(state.get("l41_features") or [])
         self._refresh_l2_availability()
         self._refresh_levels_info()
+        self._sync_l33_mode()
         self._update_run_label()
 
     # --- data ---
@@ -1061,11 +1213,14 @@ class FluxChainTab(DiiveTab):
         self.strgcol.clear()
         self.strgcol.addItems([""] + cols)
         # L4.1: feature picker + MDS driver combos. Auto-pick obvious drivers.
+        # L3.3 detection shares the TA / SW_IN auto-pick rules.
         self.l41_features.set_columns(cols, keep_selection=False)
         for combo, needle, avoid in (
             (self.mds_swin, "SW_IN", "POT"),
-            (self.mds_ta, "TA", None),
+            (self.mds_ta, "TA", "USTAR"),   # "TA" is a substring of "USTAR" — exclude it
             (self.mds_vpd, "VPD", None),
+            (self.l33_swin, "SW_IN", "POT"),
+            (self.l33_ta, "TA", "USTAR"),
         ):
             combo.clear()
             combo.addItems(cols)
@@ -1171,11 +1326,18 @@ class FluxChainTab(DiiveTab):
             data = run_level32(data, outlier_detector=sod)
         if level33_kwargs:
             # showplot off — a worker thread must not pop a matplotlib window.
-            data = run_level33_constant_ustar(data, showplot=False, verbose=False,
-                                              **level33_kwargs)
+            data = self._run_level33(data, level33_kwargs)
         if level41_cfg:
             data = self._run_level41(data, level41_cfg)
         return data
+
+    @staticmethod
+    def _run_level33(data, kwargs: dict):
+        """Run L3.3 — constant thresholds or moving-point detection (showplot off)."""
+        if kwargs.get("_detection"):
+            kw = {k: v for k, v in kwargs.items() if k != "_detection"}
+            return run_level33_ustar_detection(data, showplot=False, verbose=False, **kw)
+        return run_level33_constant_ustar(data, showplot=False, verbose=False, **kwargs)
 
     @staticmethod
     def _run_level41(data, cfg: dict):
@@ -1282,8 +1444,12 @@ class FluxChainTab(DiiveTab):
         if idx == 4:
             l33 = self._level33_kwargs()
             if not l33:
-                self.summary.setPlainText(
-                    "Enable Level 3.3 and add at least one USTAR threshold.")
+                if self.l33_enable.isChecked() and self.l33_mode.currentIndex() == 1:
+                    msg = ("Pick TA and SW_IN columns and at least one percentile "
+                           "for moving-point detection.")
+                else:
+                    msg = "Enable Level 3.3 and add at least one USTAR threshold."
+                self.summary.setPlainText(msg)
                 return None
             return {"idx": 4, "kind": "level33", "kwargs": l33}
         # idx == 5
@@ -1315,8 +1481,7 @@ class FluxChainTab(DiiveTab):
                     sod.addflag()
                 data = run_level32(data, outlier_detector=sod)
             elif kind == "level33":
-                data = run_level33_constant_ustar(base, showplot=False, verbose=False,
-                                                  **plan["kwargs"])
+                data = self._run_level33(base, plan["kwargs"])
             else:  # level41
                 data = self._run_level41(base, plan["cfg"])
         except Exception as err:
@@ -1400,6 +1565,15 @@ class FluxChainTab(DiiveTab):
             series = scen[first]
             label = "L3.3"
             note = f"\nUSTAR scenarios: {', '.join(scen)} (preview: {first})."
+            # In detection mode, report the bootstrap-detected CUT thresholds.
+            boot = getattr(data.levels, "ustar_detection", None)
+            if boot is not None:
+                try:
+                    cut = boot.get_cut_threshold()
+                    note += "\nDetected (moving point): " + "  ".join(
+                        f"{k}={v:.3f}" for k, v in cut.items())
+                except Exception:
+                    pass
         else:
             series = data.filteredseries
             label = {1: "L2", 2: "L3.1", 3: "L3.2"}.get(idx, f"L{idx}")

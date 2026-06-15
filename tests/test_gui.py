@@ -680,6 +680,86 @@ def test_stepwise_screening_corrections(app):
     assert "setto_max" in tab.corrections_panel._rows
 
 
+def test_flux_chain_tab_level33_detection(app):
+    # L3.3 supports auto-detecting the USTAR threshold (moving point bootstrap)
+    # as an alternative to constant thresholds. The detected CUT percentiles
+    # become USTAR scenarios; Copy Python renders run_level33_ustar_detection.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN()
+    ta = [c for c in df.columns if c.upper().startswith("TA_")][0]
+    sw = [c for c in df.columns if c.upper().startswith("SW_IN") and "POT" not in c.upper()][0]
+
+    tab = FluxChainTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    # TA must not auto-pick a USTAR column ("TA" is a substring of "USTAR").
+    assert "USTAR" not in tab.l33_ta.currentText().upper()
+
+    tab.l33_enable.setChecked(True)
+    tab.l33_mode.setCurrentIndex(1)  # detect
+    tab.l33_ta.setCurrentText(ta)
+    tab.l33_swin.setCurrentText(sw)
+    tab.l33_niter.setValue(15)
+    tab._steps = [HampelParams().step()]
+
+    kw = tab._level33_kwargs()
+    assert kw and kw.get("_detection") is True
+    assert kw["ta_col"] == ta and kw["swin_col"] == sw
+
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    assert "run_level33_ustar_detection(" in code
+    assert "run_level33_constant_ustar(" not in code
+
+    data = tab._compute(df, tab._init_kwargs(), tab._level2_settings(),
+                        tab._level31_kwargs(), tab._steps, kw)
+    assert "CUT_50" in data.levels.filteredseries_level33_qcf
+    assert getattr(data.levels, "ustar_detection", None) is not None
+
+    # Mode round-trips through save/restore.
+    state = tab.save_state()
+    tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2.l33_mode.currentIndex() == 1
+    assert tab2.l33_ta.currentText() == ta
+
+
+def test_ustar_detection_tab(app):
+    # Standalone USTAR detection tab: single seasonal detection + multi-year
+    # bootstrap, both via the library detectors, results into table + plot.
+    from diive.gui.tabs.ustar_detection import UstarDetectionTab
+    from diive.configs.exampledata import load_exampledata_parquet_lae
+    df = load_exampledata_parquet_lae()
+
+    tab = UstarDetectionTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    # Auto-pick should land on real TA / USTAR / SW_IN columns (not cross-match).
+    assert tab.ta_col.currentText().upper().startswith("TA")
+    assert "USTAR" in tab.ustar_col.currentText().upper()
+    assert tab.swin_col.currentText().upper().startswith("SW_IN")
+
+    # Single detection (run the worker synchronously, then drain the signal).
+    kwargs = dict(nee_col=tab.nee_col.currentText(), ta_col=tab.ta_col.currentText(),
+                  ustar_col=tab.ustar_col.currentText(), swin_col=tab.swin_col.currentText(),
+                  ta_classes_count=7, ustar_classes_count=20, forward_mode_n=2)
+    tab._worker(df, kwargs, None)
+    QApplication.processEvents()
+    assert tab.table.rowCount() == 5  # 4 seasons + annual
+    labels = [tab.table.item(r, 0).text() for r in range(tab.table.rowCount())]
+    assert "Annual (max)" in labels
+
+    # Bootstrap path (few iterations) produces a per-year + CUT table.
+    tab._worker(df, kwargs, dict(n_iter=10, n_jobs=1, percentiles=(16, 50, 84)))
+    QApplication.processEvents()
+    labels = [tab.table.item(r, 0).text() for r in range(tab.table.rowCount())]
+    assert "CUT (pooled)" in labels
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                if "failed" in t.get_text().lower()]
+
+
 def test_flux_chain_tab_level33(app):
     # L3.3 USTAR filtering: requires an L3.2 step, applies constant thresholds,
     # and exposes per-scenario QCFs.

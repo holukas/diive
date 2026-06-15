@@ -32,6 +32,7 @@ from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
 from diive.gui.tabs.spectrogram import SpectrogramTab
 from diive.gui.tabs.stepwise import StepwiseScreeningTab
 from diive.gui.tabs.timelag import TimeLagAnalysisTab
+from diive.gui.tabs.ustar_detection import UstarDetectionTab
 from diive.gui.tabs.overview import OverviewTab
 from diive.gui.tabs.rename_variables import RenameVariablesTab
 from diive.gui.tabs.plotting import (
@@ -102,6 +103,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
     # diive domain that will grow (gap-filling, USTAR, storage, ...).
     "Flux": {
         "Flux processing chain": FluxChainTab,
+        "USTAR detection": UstarDetectionTab,
         "Time lag analysis": TimeLagAnalysisTab,
     },
     # Exploratory analysis & diagnostics (dv.analysis).
@@ -126,7 +128,8 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 #: Menu tabs that may exist only once (re-selecting focuses the existing one).
 #: Everything else opens a new, numbered instance each time.
 SINGLE_INSTANCE_TABS: set[str] = {
-    "Appearance", "Project settings", "Flux processing chain", "Time lag analysis",
+    "Appearance", "Project settings", "Flux processing chain", "USTAR detection",
+    "Time lag analysis",
     "Data profile", "Gaps & coverage",
     "Driver explorer", "Seasonal-trend & anomalies", "Spectrogram",
     "Metadata explorer", "Select variables", "Rename variables", "3D surface",

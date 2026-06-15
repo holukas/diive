@@ -228,7 +228,8 @@ def level33_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
     """
     lines = _init_level2_lines(
         "from diive.flux.fluxprocessingchain import (init_flux_data, run_level2, "
-        "run_level31,\n    make_level32_detector, run_level32, run_level33_constant_ustar)",
+        "run_level31,\n    make_level32_detector, run_level32, "
+        f"{_level33_import_name(level33_kwargs)})",
         init_kwargs, level2_settings, df_var, load_hint)
     lines += _level31_block(level31_kwargs)
     lines += _level32_block(level32_steps)
@@ -237,8 +238,31 @@ def level33_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
     return "\n".join(lines) + "\n"
 
 
+def _level33_is_detection(level33_kwargs: dict) -> bool:
+    """True when the L3.3 spec is auto-detection (vs constant thresholds)."""
+    return bool(level33_kwargs) and bool(level33_kwargs.get("_detection"))
+
+
+def _level33_import_name(level33_kwargs: dict) -> str:
+    """The L3.3 function symbol to import for this spec."""
+    return ("run_level33_ustar_detection" if _level33_is_detection(level33_kwargs)
+            else "run_level33_constant_ustar")
+
+
+def _level33_detection_defaults() -> dict:
+    from diive.flux.fluxprocessingchain.levels import run_level33_ustar_detection
+    return {p.name: p.default
+            for p in inspect.signature(run_level33_ustar_detection).parameters.values()
+            if p.default is not inspect.Parameter.empty}
+
+
 def _level33_block(level33_kwargs: dict) -> list[str]:
-    """The ``run_level33_constant_ustar`` call block (no trailing ``final_df``)."""
+    """The L3.3 call block (constant thresholds or auto-detection; no ``final_df``)."""
+    if _level33_is_detection(level33_kwargs):
+        # Strip the internal marker; render the detection call.
+        kw = {k: v for k, v in level33_kwargs.items() if k != "_detection"}
+        return ["", "data = run_level33_ustar_detection(", "    data,",
+                *_kwargs_lines(kw, _level33_detection_defaults()), ")"]
     return ["", "data = run_level33_constant_ustar(", "    data,",
             *_kwargs_lines(level33_kwargs, _level33_defaults()), ")"]
 
@@ -311,7 +335,8 @@ def level41_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
     """
     methods = level41_cfg.get("methods", [])
     names = ["init_flux_data", "run_level2", "run_level31",
-             "make_level32_detector", "run_level32", "run_level33_constant_ustar"]
+             "make_level32_detector", "run_level32",
+             _level33_import_name(level33_kwargs)]
     if any(m in methods for m in ("rf", "xgb")):
         names.append("make_level41_engineer")
     for method in ("mds", "rf", "xgb"):
