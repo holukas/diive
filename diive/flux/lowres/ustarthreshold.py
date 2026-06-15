@@ -138,10 +138,69 @@ class FlagSingleConstantUstarThreshold(FlagBase):
         n_outliers = len(rejected)
 
         if self.verbose:
-            detail(f"Total found outliers for USTAR threshold {self._idstr} {self.threshold}: {len(rejected)} values",
+            thr_repr = "variable (per-record)" if isinstance(self.threshold, Series) else self.threshold
+            detail(f"Total found outliers for USTAR threshold {self._idstr} {thr_repr}: {len(rejected)} values",
                    verbose=self.verbose)
 
         return ok, rejected, n_outliers
+
+
+class FlagMultipleVariableUstarThresholds:
+    """
+    Apply multiple *time-varying* USTAR thresholds (e.g. per-year, VUT) to filter flux data.
+
+    Variable-threshold counterpart of :class:`FlagMultipleConstantUstarThresholds`: instead
+    of one scalar per scenario, each scenario carries a full per-record threshold Series
+    (aligned to ``series``/``ustar``). This is what the FLUXNET/ONEFlux **VUT** (Variable
+    U\\* Threshold) approach needs — each year (or any sub-period) filtered by its own
+    threshold. A constant threshold is just a constant Series, so this class can also
+    express CUT scenarios when CUT and VUT are applied together.
+
+    The element-wise comparison ``ustar >= threshold`` is identical to the constant case;
+    only the threshold is broadcast per record rather than as a single value.
+
+    Args:
+        series: flux data (pandas Series).
+        ustar: USTAR / friction velocity (pandas Series).
+        threshold_series: mapping ``{scenario_label: per_record_threshold_Series}``. Each
+            threshold Series must align to ``series.index`` and contain no NaN (the caller
+            resolves any missing periods first).
+        showplot, verbose, idstr: as in :class:`FlagMultipleConstantUstarThresholds`.
+    """
+
+    def __init__(self, series, ustar, threshold_series: dict,
+                 showplot: bool = True, verbose: bool = True, idstr: str = None):
+        self.series = series
+        self.ustar = ustar
+        self.threshold_series = threshold_series
+        self.showplot = showplot
+        self.verbose = verbose
+        self.idstr = idstr
+        self._results = pd.concat([self.series, self.ustar], axis=1).copy()
+
+    @property
+    def results(self) -> DataFrame:
+        if not isinstance(self._results, DataFrame):
+            raise Exception("No USTAR flags available.")
+        return self._results
+
+    def get_results(self) -> DataFrame:
+        return self.results
+
+    def calc(self):
+        for label, thr in self.threshold_series.items():
+            idstr = f"{self.idstr}_{label}" if self.idstr else f"{label}"
+            ust = FlagSingleConstantUstarThreshold(
+                series=self.results[self.series.name],
+                ustar=self.results[self.ustar.name],
+                threshold=thr.reindex(self.results.index),  # per-record threshold
+                idstr=idstr,
+                showplot=self.showplot,
+                verbose=self.verbose,
+            )
+            ust.calc()
+            flag = ust.get_flag()
+            self._results[flag.name] = flag.copy()
 
 
 @ConsoleOutputDecorator()

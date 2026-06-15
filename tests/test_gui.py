@@ -726,6 +726,37 @@ def test_flux_chain_tab_level33_detection(app):
     assert tab2.l33_ta.currentText() == ta
 
 
+def test_flux_chain_tab_level33_vut(app):
+    # L3.3 detection can apply per-year VUT thresholds instead of a constant CUT.
+    # CUT and VUT are mutually exclusive strategies.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN()
+    ta = [c for c in df.columns if c.upper().startswith("TA_")][0]
+    sw = [c for c in df.columns if c.upper().startswith("SW_IN") and "POT" not in c.upper()][0]
+
+    tab = FluxChainTab(); tab.widget(); tab.on_data_loaded(df)
+    tab.l33_enable.setChecked(True)
+    tab.l33_mode.setCurrentIndex(1)   # detect
+    tab.l33_apply.setCurrentIndex(1)  # VUT (per-year)
+    tab.l33_ta.setCurrentText(ta)
+    tab.l33_swin.setCurrentText(sw)
+    tab.l33_niter.setValue(10)
+    tab._steps = [HampelParams().step()]
+
+    kw = tab._level33_kwargs()
+    assert kw.get("mode") == "vut"
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    assert "mode='vut'" in code
+
+    data = tab._compute(df, tab._init_kwargs(), tab._level2_settings(),
+                        tab._level31_kwargs(), tab._steps, kw)
+    scen = list(data.levels.filteredseries_level33_qcf)
+    assert scen and all(s.startswith("VUT_") for s in scen)
+
+
 def test_ustar_detection_tab(app):
     # Standalone USTAR detection tab: single seasonal detection + multi-year
     # bootstrap, both via the library detectors, results into table + plot.
@@ -755,7 +786,7 @@ def test_ustar_detection_tab(app):
     tab._worker(df, kwargs, dict(n_iter=10, n_jobs=1, percentiles=(16, 50, 84)))
     QApplication.processEvents()
     labels = [tab.table.item(r, 0).text() for r in range(tab.table.rowCount())]
-    assert "CUT (pooled)" in labels
+    assert "CUT (constant)" in labels
     assert not [t for a in tab.canvas.fig.axes for t in a.texts
                 if "failed" in t.get_text().lower()]
 

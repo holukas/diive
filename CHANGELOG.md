@@ -273,6 +273,20 @@ Library additions used by the GUI (all backward-compatible):
   all night data is pooled); (5) `bootstrap()` now also returns an `Annual` row (the distribution of the
   max-across-seasons threshold actually used for filtering) and resamples the full record before night-filtering, as
   the C does. Defaults still reproduce the ONEFlux default run: forward-mode-2 only, percentile check off.
+- **`UstarBootstrapThresholds`: explicit VUT / CUT terminology.** Added `get_vut_thresholds()` (the per-year table,
+  alongside the existing `get_cut_threshold()` constant threshold) and documented the ONEFlux VUT (variable, per-year)
+  vs CUT (constant, pooled-across-years) distinction. The docstrings + GUI now state clearly that diive's VUT is
+  **smoothed over a 3-year window** (each year pooled with its two neighbours) rather than the strict ONEFlux
+  single-year VUT — a deliberate trade for a more stable per-year threshold; CUT matches ONEFlux directly. The
+  standalone USTAR detection tab labels its rows VUT (per-year) and CUT (constant).
+- **Flux chain L3.3: VUT filtering.** `run_level33_ustar_detection` gained a `mode=` argument
+  (`'cut'` or `'vut'`): CUT applies the constant pooled threshold per percentile (`CUT_16/50/84`), VUT a per-year
+  threshold per percentile (`VUT_16/50/84`, each year filtered by its own value). CUT and VUT are mutually exclusive
+  filtering strategies — one is applied before gap-filling, with the percentiles as the uncertainty scenarios within it.
+  New library callable `run_level33_variable_ustar` (and flag class `FlagMultipleVariableUstarThresholds`) apply
+  time-varying per-record USTAR thresholds — a constant threshold is just a constant Series, so CUT and VUT share one
+  code path. The flux-chain GUI L3.3 detect mode exposes an **Apply** selector (CUT / VUT); **Copy Python** renders the
+  chosen `mode`. Per-year thresholds with no detected value fall back to the CUT value for that percentile.
 - **`Hampel` honoured `n_sigma` in day/night mode.** `n_sigma_daytime` / `n_sigma_nighttime` defaulted to the literal
   `5.5` instead of `None`, so the "fall back to `n_sigma`" logic was dead and the threshold was hard-wired to 5.5
   whenever `separate_day_night=True` — passing `n_sigma` alone had no effect on the result. Defaults are now `None`

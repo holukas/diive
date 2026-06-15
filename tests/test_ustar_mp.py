@@ -195,5 +195,41 @@ class TestUstarMovingPointDetection(unittest.TestCase):
             UstarMovingPointDetection(self.df, forward_mode_n=0)
 
 
+class TestUstarBootstrapVutCut(unittest.TestCase):
+    """VUT (per-year) and CUT (constant) accessors on the bootstrap wrapper."""
+
+    @classmethod
+    def setUpClass(cls):
+        from diive.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
+        df = load_exampledata_parquet_lae()
+        cls.boot = UstarBootstrapThresholds(
+            df, detector_class=UstarMovingPointDetection,
+            n_iter=10, percentiles=(16, 50, 84), n_jobs=1, verbose=0)
+        cls.boot.run()
+
+    def test_vut_is_per_year_table(self):
+        vut = self.boot.get_vut_thresholds()
+        # One row per calendar year; percentile columns.
+        self.assertEqual(list(vut.index), self.boot.years_)
+        self.assertEqual(list(vut.columns), ["p16", "p50", "p84"])
+        # get_vut_thresholds() returns the same object as run() / annual_stats_.
+        self.assertTrue(vut.equals(self.boot.annual_stats_))
+
+    def test_cut_is_constant_dict(self):
+        cut = self.boot.get_cut_threshold()
+        self.assertEqual(set(cut), {"p16", "p50", "p84"})
+        # Percentiles are ordered: p16 <= p50 <= p84.
+        self.assertLessEqual(cut["p16"], cut["p50"])
+        self.assertLessEqual(cut["p50"], cut["p84"])
+
+    def test_vut_before_run_raises(self):
+        from diive.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
+        b = UstarBootstrapThresholds(
+            load_exampledata_parquet_lae(),
+            detector_class=UstarMovingPointDetection, n_iter=5)
+        with self.assertRaises(RuntimeError):
+            b.get_vut_thresholds()
+
+
 if __name__ == "__main__":
     unittest.main()

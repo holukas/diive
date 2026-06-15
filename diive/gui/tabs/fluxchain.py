@@ -289,7 +289,8 @@ class FluxChainTab(DiiveTab):
                 l33 = ("configure", "warn")
             elif l33kw.get("_detection"):
                 n = len(l33kw["percentiles"])
-                l33 = (f"detect · {n}", "set")
+                tag = {"cut": "CUT", "vut": "VUT"}[l33kw.get("mode", "cut")]
+                l33 = (f"detect {tag} · {n}", "set")
             else:
                 n = len(self._ustar)
                 l33 = (f"{n} scenario" + ("s" if n != 1 else ""), "set")
@@ -754,10 +755,21 @@ class FluxChainTab(DiiveTab):
         gb = QGroupBox("Detect — moving-point bootstrap")
         form = QFormLayout(gb)
         note = QLabel("Estimate the threshold from nighttime respiration "
-                      "(Papale et al. 2006). One scenario per percentile (CUT_16/50/84).")
+                      "(Papale et al. 2006). One scenario per percentile.")
         note.setWordWrap(True)
         note.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
         form.addRow(note)
+        # Which detected threshold(s) to apply.
+        self.l33_apply = QComboBox()
+        self.l33_apply.addItems(["CUT (constant)", "VUT (per-year)"])
+        self.l33_apply.setToolTip(
+            "CUT — one constant threshold per percentile, applied to the whole record "
+            "(CUT_16/50/84).\n"
+            "VUT — a per-year threshold per percentile (each year filtered by its own "
+            "value; VUT_16/50/84). diive's VUT is smoothed over a 3-year window.\n"
+            "CUT and VUT are mutually exclusive — pick one filtering strategy.")
+        self.l33_apply.currentIndexChanged.connect(self._update_run_label)
+        form.addRow("Apply", self.l33_apply)
         # Met drivers the detector stratifies / night-filters on.
         self.l33_ta = QComboBox()
         form.addRow("Air temperature (TA)", self.l33_ta)
@@ -836,6 +848,7 @@ class FluxChainTab(DiiveTab):
             pcts = self._l33_percentiles()
             if not ta or not swin or not pcts:
                 return None
+            mode = ("cut", "vut")[self.l33_apply.currentIndex()]
             kwargs: dict = {
                 "_detection": True,
                 "ta_col": ta,
@@ -843,6 +856,7 @@ class FluxChainTab(DiiveTab):
                 "n_iter": self.l33_niter.value(),
                 "n_jobs": self.l33_njobs.value(),
                 "percentiles": pcts,
+                "mode": mode,
             }
             # Detector knobs only when they differ from the library defaults
             # (keeps the run + generated script minimal).
@@ -1124,7 +1138,8 @@ class FluxChainTab(DiiveTab):
                 "ss_method": self.ss_method, "ss_threshold": self.ss_threshold,
                 "l31_gapfill": self.l31_gapfill, "l31_zero": self.l31_zero,
                 "strgcol": self.strgcol,
-                "l33_mode": self.l33_mode, "l33_ta": self.l33_ta,
+                "l33_mode": self.l33_mode, "l33_apply": self.l33_apply,
+                "l33_ta": self.l33_ta,
                 "l33_swin": self.l33_swin, "l33_niter": self.l33_niter,
                 "l33_njobs": self.l33_njobs, "l33_percentiles": self.l33_percentiles,
                 "l33_ta_classes": self.l33_ta_classes,

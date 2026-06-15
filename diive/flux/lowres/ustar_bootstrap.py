@@ -57,13 +57,31 @@ def _bootstrap_window_worker(
 
 class UstarBootstrapThresholds:
     """
-    Multi-year bootstrap USTAR threshold estimation with CUT support.
+    Multi-year bootstrap USTAR threshold estimation — VUT and CUT.
 
     Wrapper around any USTAR detection class that implements detect() and
-    get_annual_thresholds(). For each central year, bootstrap resampling is
-    run on a 3-year window (central year plus its two neighbors), following
-    the VUT (variable USTAR threshold) approach. Returns per-year percentile
-    thresholds and a CUT (constant) threshold pooled across all years.
+    get_annual_thresholds(). For each central year, bootstrap resampling is run
+    on a 3-year window (central year plus its two neighbors); the distribution
+    of annual thresholds is then summarized two ways, following the FLUXNET /
+    ONEFlux convention:
+
+    - **VUT (Variable U\\* Threshold)** — one threshold *per year*. Returned by
+      :meth:`run` / :meth:`get_vut_thresholds` (the ``annual_stats_`` table):
+      each year's row holds the requested percentiles of that year's bootstrap
+      distribution, so the threshold varies year to year.
+    - **CUT (Constant U\\* Threshold)** — one threshold for the *whole record*.
+      Returned by :meth:`get_cut_threshold`: all bootstrap samples from every
+      year are pooled into a single distribution and the percentiles taken once,
+      giving one constant threshold applied uniformly to every year.
+
+    .. note::
+       **VUT here is smoothed across a 3-year window**, which differs from the
+       strict ONEFlux VUT (each year estimated from that single year alone). The
+       central year is pooled with its two neighbors (see *Window rules*) before
+       bootstrapping, deliberately trading a little year-to-year resolution for a
+       more stable, cleaner per-year threshold — sites often have too few good
+       nighttime records in a single year for a robust single-year estimate.
+       CUT (pooled across all years) matches the ONEFlux CUT meaning directly.
 
     Window rules
     ------------
@@ -102,7 +120,8 @@ class UstarBootstrapThresholds:
     Attributes
     ----------
     annual_stats_ : pd.DataFrame
-        Per-year bootstrap percentile thresholds.
+        Per-year (VUT) bootstrap percentile thresholds. Also returned by
+        :meth:`get_vut_thresholds`.
         Index: year (int), columns: p16, p50, p84 (or custom percentiles).
     years_ : list of int
         Calendar years present in the input data.
@@ -180,17 +199,19 @@ class UstarBootstrapThresholds:
 
     def run(self) -> pd.DataFrame:
         """
-        Run per-year bootstrap using a 3-year sliding window.
+        Run the VUT bootstrap using a 3-year sliding window.
 
         For each central year, pools data from the window (central year plus its
         two neighbors, with edge-case handling), resamples N times with replacement,
         runs the detection method, collects the annual threshold, then computes
-        percentiles from the resulting distribution.
+        percentiles from the resulting distribution. The result is the **VUT**
+        (variable, per-year) threshold table; pool it across years with
+        :meth:`get_cut_threshold` for the **CUT** (constant) threshold.
 
         Returns
         -------
         pd.DataFrame
-            Per-year bootstrap percentile thresholds.
+            Per-year (VUT) bootstrap percentile thresholds.
             Index: year (int), columns: p{percentile} for each requested percentile.
             p50 is the recommended annual USTAR threshold for filtering.
         """
@@ -286,13 +307,43 @@ class UstarBootstrapThresholds:
 
         return self.annual_stats_
 
+    def get_vut_thresholds(self) -> pd.DataFrame:
+        """
+        Get VUT (variable, per-year) USTAR thresholds.
+
+        Convenience accessor returning ``annual_stats_`` (the table produced by
+        :meth:`run`): one row per year, columns ``p{percentile}``. Each year's
+        values are the percentiles of that year's 3-year-window bootstrap
+        distribution, so the threshold varies year to year.
+
+        .. note::
+           Each year is estimated from a **3-year window** (the year plus its two
+           neighbors), not the single year alone, so this VUT is smoothed relative
+           to the strict ONEFlux single-year VUT — a deliberate trade for a more
+           stable per-year threshold. See the class docstring.
+
+        Returns
+        -------
+        pd.DataFrame
+            Per-year percentile thresholds (index: year; columns: p{percentile}).
+
+        Raises
+        ------
+        RuntimeError
+            If run() has not been called yet.
+        """
+        if self.annual_stats_ is None:
+            raise RuntimeError("Call run() before get_vut_thresholds().")
+        return self.annual_stats_
+
     def get_cut_threshold(self) -> Dict[str, float]:
         """
         Get CUT (constant) USTAR threshold pooled across all years.
 
         Pools all bootstrap samples from all years into a single distribution
         and extracts the requested percentiles. This gives a single conservative
-        threshold that is stable across the full measurement record.
+        threshold that is stable across the full measurement record. This matches
+        the ONEFlux CUT (constant U\\* threshold) meaning directly.
 
         Returns
         -------
@@ -314,7 +365,7 @@ class UstarBootstrapThresholds:
         return {f'p{p}': float(np.percentile(self._all_samples_, p)) for p in self.percentiles}
 
     def summary(self) -> str:
-        """Return formatted summary of annual and CUT thresholds."""
+        """Return formatted summary of VUT (per-year) and CUT (constant) thresholds."""
         if self.annual_stats_ is None:
             return "No results. Call run() first."
 
@@ -328,7 +379,8 @@ class UstarBootstrapThresholds:
             f"Iterations : {self.n_iter} per window (3-yr sliding window)",
             f"Percentiles: {', '.join(p_cols)}",
             "",
-            "Annual thresholds (m/s)  [p50 = recommended threshold]",
+            "VUT thresholds (variable, per-year; m/s)  [p50 = recommended; "
+            "3-yr-window smoothed]",
             "-" * 70,
             f"{'Year':<8}{'Window':<16}" + "".join(f"{c:>{col_w}}" for c in p_cols),
         ]

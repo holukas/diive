@@ -5,7 +5,8 @@ GUI.TABS.USTAR_DETECTION: USTAR THRESHOLD DETECTION
 Standalone friction-velocity (u*) threshold detection using the ONEFlux moving
 point method (Papale et al. 2006). Pick the NEE / TA / USTAR / SW_IN columns and
 run either a single seasonal detection (per-season + annual threshold) or a
-multi-year bootstrap (per-year p16/p50/p84 + a pooled CUT threshold).
+multi-year bootstrap giving VUT (variable, per-year) and CUT (constant, pooled
+across years) thresholds.
 
 All detection is the library's `UstarMovingPointDetection` /
 `UstarBootstrapThresholds`; this tab only collects columns + parameters, runs
@@ -164,10 +165,12 @@ class UstarDetectionTab(DiiveTab):
         pf.addRow(note)
         v.addWidget(par_box)
 
-        self.boot_chk = QCheckBox("Multi-year bootstrap (per-year + CUT)")
+        self.boot_chk = QCheckBox("Multi-year bootstrap (VUT + CUT)")
         self.boot_chk.setToolTip(
-            "Run a 3-year sliding-window bootstrap: per-year p16/p50/p84 thresholds "
-            "plus a CUT (constant) threshold pooled across all years.")
+            "Run a 3-year sliding-window bootstrap:\n"
+            "• VUT (variable) — per-year p16/p50/p84 thresholds (smoothed over a "
+            "3-year window for stability).\n"
+            "• CUT (constant) — one threshold pooled across all years.")
         self.boot_chk.toggled.connect(self._sync_boot)
         v.addWidget(self.boot_chk)
 
@@ -371,10 +374,13 @@ class UstarDetectionTab(DiiveTab):
                     if np.isfinite(annual.loc[year, c]) else "—" for c in pcols]
             rows.append((str(year), *vals))
         cut_vals = [f"{cut[c]:.4f}" if np.isfinite(cut[c]) else "—" for c in pcols]
-        rows.append(("CUT (pooled)", *cut_vals))
+        rows.append(("CUT (constant)", *cut_vals))
         self._fill_table(headers, rows)
         cut_str = "  ".join(f"{k}={v}" for k, v in zip(pcols, cut_vals))
-        self.status.setText(f"Bootstrap complete. CUT (pooled across years): {cut_str}.")
+        self.status.setText(
+            f"Bootstrap complete. Rows per year = VUT (variable, per-year, smoothed "
+            f"over a 3-year window); last row = CUT (constant, pooled across years): "
+            f"{cut_str}.")
         self._plot_bootstrap(annual, cut)
 
     # --- plots (presentation only; the numbers are the library's) ------
@@ -415,6 +421,6 @@ class UstarDetectionTab(DiiveTab):
         ax.set_xticks(x)
         ax.set_xticklabels([str(y) for y in years], fontsize=8)
         ax.set_ylabel("u* threshold (m/s)")
-        ax.set_title("Per-year bootstrap u* thresholds")
+        ax.set_title("VUT (per-year) vs CUT (constant) u* thresholds")
         ax.legend(frameon=False, fontsize=8)
         self.canvas.draw()

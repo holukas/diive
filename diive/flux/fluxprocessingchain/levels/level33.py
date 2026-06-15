@@ -2,14 +2,16 @@
 LEVEL 3.3: USTAR FILTERING
 ============================
 
-Composable callables that flag low-turbulence periods using one or more
-constant USTAR thresholds and compute per-scenario QCFs.
+Composable callables that flag low-turbulence periods using USTAR thresholds
+and compute per-scenario QCFs.
 
-Two entry points:
+Entry points:
 
 * ``run_level33_constant_ustar`` — apply pre-determined constant threshold(s).
-* ``run_level33_ustar_detection`` — auto-detect threshold via bootstrap, then
-  apply the detected CUT percentile thresholds as constant scenarios.
+* ``run_level33_variable_ustar`` — apply time-varying (e.g. per-year, VUT)
+  threshold Series, one per scenario.
+* ``run_level33_ustar_detection`` — auto-detect the threshold via bootstrap, then
+  apply it as CUT (constant), VUT (per-year), or both (``mode=`` argument).
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -20,6 +22,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pandas as pd
 
 from diive.core.utils.console import console as _console, info, rule
 from diive.flux.fluxprocessingchain.container import FluxLevelData
@@ -28,7 +31,10 @@ from diive.flux.fluxprocessingchain.levels._rerun import (
     cascade_reset,
     record_added_columns,
 )
-from diive.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
+from diive.flux.lowres.ustarthreshold import (
+    FlagMultipleConstantUstarThresholds,
+    FlagMultipleVariableUstarThresholds,
+)
 
 if TYPE_CHECKING:
     from diive.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
@@ -152,23 +158,7 @@ def run_level33_constant_ustar(
             f"thresholds and threshold_labels must have the same length; "
             f"got {len(thresholds)} thresholds and {len(threshold_labels)} labels."
         )
-    if len(set(threshold_labels)) != len(threshold_labels):
-        raise ValueError(
-            f"threshold_labels must be unique; got {threshold_labels}."
-        )
-    # Substring-overlap check: a label that contains another label as a substring
-    # would silently match the wrong flag column at lookup time (e.g. 'CUT_5' is
-    # contained in 'FLAG_..._CUT_50_..._TEST'). Reject up front so the user can
-    # pick distinct labels (e.g. 'CUT_05' / 'CUT_50') before any work happens.
-    for a in threshold_labels:
-        for b in threshold_labels:
-            if a != b and a in b:
-                raise ValueError(
-                    f"threshold_labels overlap by substring: {a!r} is contained "
-                    f"in {b!r}. This would cause flag-column lookup to match the "
-                    f"wrong scenario. Use distinct labels (e.g. {a!r} -> "
-                    f"{a + '_X'!r} or zero-pad like 'CUT_05' / 'CUT_50')."
-                )
+    _validate_ustar_labels(threshold_labels)
 
     idstr = 'L3.3'
     meta = data.meta
@@ -192,12 +182,39 @@ def run_level33_constant_ustar(
     )
     level33.calc()
 
+    return _finalize_ustar_level(data, level33, threshold_labels,
+                                 flux_corrected_col=flux_corrected_col, meta=meta,
+                                 idstr=idstr, pre_columns=pre_columns, verbose=verbose)
+
+
+def _validate_ustar_labels(labels: list[str]) -> None:
+    """Reject duplicate or substring-overlapping scenario labels (flag-lookup safety)."""
+    if len(set(labels)) != len(labels):
+        raise ValueError(f"USTAR scenario labels must be unique; got {labels}.")
+    # Substring-overlap check: a label that contains another label as a substring
+    # would silently match the wrong flag column at lookup time (e.g. 'CUT_5' is
+    # contained in 'FLAG_..._CUT_50_..._TEST'). Reject up front so the user can
+    # pick distinct labels (e.g. 'CUT_05' / 'CUT_50') before any work happens.
+    for a in labels:
+        for b in labels:
+            if a != b and a in b:
+                raise ValueError(
+                    f"USTAR scenario labels overlap by substring: {a!r} is contained "
+                    f"in {b!r}. This would cause flag-column lookup to match the "
+                    f"wrong scenario. Use distinct labels (e.g. {a!r} -> "
+                    f"{a + '_X'!r} or zero-pad like 'CUT_05' / 'CUT_50')."
+                )
+
+
+def _finalize_ustar_level(data, level33, scenario_labels, *, flux_corrected_col, meta,
+                          idstr, pre_columns, verbose):
+    """Per-scenario QCF + container update, shared by the constant and variable paths."""
     level33_qcf: dict = {}
     filteredseries_level33_qcf: dict = {}
     filteredseries_level33_hq: dict = {}
     current = data
 
-    for ustar_scen in threshold_labels:
+    for ustar_scen in scenario_labels:
         # Match the label only at underscore-delimited boundaries so labels that
         # share a prefix (or appear as substrings of other columns) cannot be
         # confused. We also require the column to be a flag column
@@ -214,7 +231,7 @@ def run_level33_constant_ustar(
             raise RuntimeError(
                 f"Could not uniquely identify the USTAR flag column for scenario "
                 f"{ustar_scen!r}: found {len(flagcols)} matching columns "
-                f"({flagcols}). Threshold labels must be unique and must not "
+                f"({flagcols}). Scenario labels must be unique and must not "
                 f"appear as substrings of each other or of unrelated column names."
             )
         flagcol = flagcols[0]
@@ -225,14 +242,12 @@ def run_level33_constant_ustar(
         # is meaningful provenance that must be preserved. Appending idstr
         # 'L3.3_<scen>' yields 'NEE_L3.1_L3.3_CUT_50_QCF' — storage-corrected
         # (L3.1) then USTAR-filtered (L3.3) — matching L3.2's 'NEE_L3.1_L3.2_QCF'.
-        # L3.1 passes outname only to collapse its redundant self-repeat
-        # ('L3.1_L3.1'), which is a different case.
         current, qcf = finalize_level(
             current,
             run_qcf_on_col=flux_corrected_col,
             idstr=f'L3.3_{ustar_scen}',
             level_df=udf,
-            ustar_scenarios=threshold_labels,
+            ustar_scenarios=scenario_labels,
         )
         level33_qcf[ustar_scen] = qcf
         filteredseries_level33_qcf[ustar_scen] = current.filteredseries.copy()
@@ -257,6 +272,85 @@ def run_level33_constant_ustar(
     return replace(final, added_columns=record_added_columns(final, idstr, pre_columns))
 
 
+def run_level33_variable_ustar(
+        data: FluxLevelData,
+        *,
+        threshold_series: dict,
+        showplot: bool = True,
+        verbose: bool = True,
+) -> FluxLevelData:
+    """
+    Level-3.3: Flag low-turbulence periods using time-varying USTAR thresholds (e.g. VUT).
+
+    Variable-threshold counterpart of :func:`run_level33_constant_ustar`: each scenario
+    carries a full per-record threshold Series instead of one scalar, so a different
+    threshold can apply to different periods. This is what the FLUXNET/ONEFlux **VUT**
+    (Variable U\\* Threshold) approach needs — each year filtered by its own threshold.
+
+    Requires Level-3.1 and Level-3.2 (same as :func:`run_level33_constant_ustar`).
+
+    Args:
+        data: FluxLevelData after ``run_level32()``.
+        threshold_series: mapping ``{scenario_label: per_record_threshold_Series}``. Each
+            Series must align to the flux index and contain no NaN. Labels must be unique
+            and not substrings of one another (e.g. ``VUT_16`` / ``VUT_50`` / ``VUT_84``).
+        showplot: show diagnostic plots. Defaults to True.
+        verbose: print progress. Defaults to True.
+
+    Returns:
+        Updated FluxLevelData with ``levels.level33`` / ``level33_qcf`` /
+        ``filteredseries_level33_qcf`` / ``filteredseries_level33_hq`` populated, one
+        entry per scenario label.
+    """
+    if data.levels.flux_corrected_col is None:
+        raise RuntimeError("run_level31() must be called before run_level33_variable_ustar().")
+    if data.levels.level32_qcf is None:
+        raise RuntimeError(
+            "run_level32() must be called before run_level33_variable_ustar(). "
+            "USTAR filtering must operate on outlier-screened data."
+        )
+    if not threshold_series:
+        raise ValueError("threshold_series is empty — provide at least one scenario.")
+
+    scenario_labels = list(threshold_series)
+    _validate_ustar_labels(scenario_labels)
+
+    # Energy fluxes (H/LE/...) have no physical USTAR threshold; reject positive ones.
+    _energy_basevars_lower = {'h2o', 't_sonic', 'sonic_temperature'}
+    if str(data.meta.fluxbasevar).lower() in _energy_basevars_lower:
+        if any((s.fillna(0) > 0).any() for s in threshold_series.values()):
+            raise ValueError(
+                f"Variable USTAR filtering with positive thresholds is not valid for "
+                f"energy fluxes (fluxcol={data.meta.fluxcol!r}, basevar="
+                f"{data.meta.fluxbasevar!r}). Use run_level33_constant_ustar with "
+                f"thresholds=[0] for the chain's L3.3 ordering requirement."
+            )
+
+    idstr = 'L3.3'
+    meta = data.meta
+    flux_corrected_col = data.levels.flux_corrected_col
+
+    if idstr in data.level_ids:
+        data = cascade_reset(data, idstr)
+    pre_columns = list(data.fpc_df.columns)
+
+    rule("Level 3.3: USTAR Filtering (variable thresholds)")
+
+    level33 = FlagMultipleVariableUstarThresholds(
+        series=data.fpc_df[flux_corrected_col],
+        ustar=data.fpc_df[meta.ustarcol],
+        threshold_series=threshold_series,
+        idstr=idstr,
+        showplot=showplot,
+        verbose=verbose,
+    )
+    level33.calc()
+
+    return _finalize_ustar_level(data, level33, scenario_labels,
+                                 flux_corrected_col=flux_corrected_col, meta=meta,
+                                 idstr=idstr, pre_columns=pre_columns, verbose=verbose)
+
+
 def run_level33_ustar_detection(
         data: FluxLevelData,
         *,
@@ -267,18 +361,28 @@ def run_level33_ustar_detection(
         n_iter: int = 100,
         n_jobs: int = 1,
         percentiles: tuple[int, ...] = (16, 50, 84),
+        mode: str = 'cut',
         showplot: bool = True,
         verbose: bool = True,
 ) -> FluxLevelData:
     """
-    Level-3.3: Auto-detect the USTAR threshold, then apply it as constant scenario(s).
+    Level-3.3: Auto-detect the USTAR threshold, then apply it (CUT and/or VUT).
 
     Runs a multi-year bootstrap USTAR threshold detection (using the ONEFlux moving
-    point method by default) and converts the CUT (constant upper threshold) percentile
-    results into one USTAR filtering scenario per requested percentile.  Each scenario
-    is then passed to ``run_level33_constant_ustar()`` so that per-scenario QCFs and
-    filtered series are produced in exactly the same way as when a pre-known threshold
-    is supplied.
+    point method by default) and applies the result as USTAR filtering scenarios,
+    one per requested percentile. Which thresholds are applied is set by ``mode``:
+
+    * ``'cut'`` (default) — **CUT** (Constant U\\* Threshold): one constant threshold
+      per percentile, pooled across all years, applied via ``run_level33_constant_ustar``.
+      Scenarios labelled ``CUT_<p>``.
+    * ``'vut'`` — **VUT** (Variable U\\* Threshold): a per-year threshold per percentile
+      (each year filtered by its own value), applied via ``run_level33_variable_ustar``.
+      Scenarios labelled ``VUT_<p>``. diive's VUT is smoothed over a 3-year window
+      (see :class:`UstarBootstrapThresholds`); a year with no detected threshold falls
+      back to the CUT value for that percentile.
+
+    CUT and VUT are mutually exclusive filtering strategies — one is applied before
+    gap-filling (the percentiles are the uncertainty scenarios within the chosen strategy).
 
     Requires Level-3.1 (``data.levels.flux_corrected_col``) to have been run.
     Level-3.2 is strongly recommended before calling this function to avoid bias from
@@ -385,14 +489,18 @@ def run_level33_ustar_detection(
         percentiles=percentiles,
         verbose=int(verbose),
     )
+    mode = str(mode).lower()
+    if mode not in ('cut', 'vut'):
+        raise ValueError(f"mode must be 'cut' or 'vut', got {mode!r}.")
+
     boot.run()
     cut = boot.get_cut_threshold()
 
     if verbose:
         _console.print(boot.summary())
 
-    # Extract threshold per percentile; raise if any are NaN
-    thresholds = []
+    # Extract the constant (CUT) threshold per percentile; raise if any are NaN.
+    cut_thresholds = []
     for p in percentiles:
         thr = cut.get(f'p{p}', np.nan)
         if np.isnan(thr):
@@ -401,25 +509,38 @@ def run_level33_ustar_detection(
                 "Check that the dataset has sufficient nighttime records "
                 "(>= 3000 total, >= 160 per season)."
             )
-        thresholds.append(float(thr))
+        cut_thresholds.append(float(thr))
     # Zero-pad to a uniform width so labels can never be substrings of one
     # another (two distinct equal-length strings can't contain each other).
     # Without this, e.g. percentiles=(5, 50, 95) would generate 'CUT_5' /
-    # 'CUT_50' / 'CUT_95' and trip run_level33_constant_ustar's
-    # substring-overlap guard ('CUT_5' in 'CUT_50') — crashing *after* the
-    # expensive bootstrap had already run. The default (16, 50, 84) is
-    # unaffected (all already two digits).
+    # 'CUT_50' / 'CUT_95' and trip the substring-overlap guard ('CUT_5' in
+    # 'CUT_50') — crashing *after* the expensive bootstrap had already run.
     _label_width = max(2, max(len(str(int(p))) for p in percentiles))
-    threshold_labels = [f'CUT_{int(p):0{_label_width}d}' for p in percentiles]
 
-    # Apply detected thresholds as constant USTAR scenarios
-    updated = run_level33_constant_ustar(
-        data,
-        thresholds=thresholds,
-        threshold_labels=threshold_labels,
-        showplot=showplot,
-        verbose=verbose,
-    )
+    if mode == 'cut':
+        labels = [f'CUT_{int(p):0{_label_width}d}' for p in percentiles]
+        updated = run_level33_constant_ustar(
+            data, thresholds=cut_thresholds, threshold_labels=labels,
+            showplot=showplot, verbose=verbose)
+    else:  # vut
+        # Build per-record (VUT) threshold Series per percentile from the per-year
+        # table, mapping each timestamp's year to that year's threshold. Years with
+        # no detected threshold (NaN) fall back to the pooled CUT value.
+        flux_corrected_col = data.levels.flux_corrected_col
+        index = data.fpc_df[flux_corrected_col].index
+        year_of = index.year
+        vut = boot.get_vut_thresholds()
+        threshold_series: dict = {}
+        for p, cut_val in zip(percentiles, cut_thresholds):
+            col = f'p{p}'
+            per_year = {int(y): (vut.loc[y, col] if (y in vut.index
+                        and np.isfinite(vut.loc[y, col])) else cut_val)
+                        for y in vut.index}
+            values = np.array([per_year.get(int(y), cut_val) for y in year_of], dtype=float)
+            threshold_series[f'VUT_{int(p):0{_label_width}d}'] = pd.Series(values, index=index)
+        updated = run_level33_variable_ustar(
+            data, threshold_series=threshold_series,
+            showplot=showplot, verbose=verbose)
 
     # Attach the bootstrap instance to levels for post-hoc inspection
     new_levels = replace(updated.levels, ustar_detection=boot)

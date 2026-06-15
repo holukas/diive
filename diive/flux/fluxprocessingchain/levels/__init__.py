@@ -29,6 +29,7 @@ from diive.flux.fluxprocessingchain.levels.level32 import make_level32_detector,
 from diive.flux.fluxprocessingchain.levels.level33 import (
     run_level33_constant_ustar,
     run_level33_ustar_detection,
+    run_level33_variable_ustar,
 )
 from diive.flux.fluxprocessingchain.levels.level41 import (
     make_level41_engineer,
@@ -48,6 +49,7 @@ __all__ = [
     'run_level32',
     'run_level33_constant_ustar',
     'run_level33_ustar_detection',
+    'run_level33_variable_ustar',
     'make_level41_engineer',
     'run_level41_mds',
     'run_level41_rf',
