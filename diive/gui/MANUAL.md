@@ -510,17 +510,50 @@ into view, and plots it — so you can see the result right away.
 ### Flux ▸ Flux processing chain
 
 A guided workspace for the flux processing chain, covering **Input + Level 2 +
-Level 3.1 + Level 3.2 + Level 3.3** (only Level 4.1 gap-filling is still to come).
+Level 3.1 + Level 3.2 + Level 3.3 + Level 4.1** (gap-filling).
 Pick the flux column and site, choose which Level-2 quality tests to run, set the
 Level-3.1 storage correction, optionally build a Level-3.2 outlier-detection chain
-and apply Level-3.3 USTAR filtering, then run the chain — the accepted
-(QCF-filtered) flux of the deepest level shows as a heatmap. **Copy Python** puts
-the exact, reproducible diive script for what you did on the clipboard, so a
-point-and-click run stays scriptable.
+and apply Level-3.3 USTAR filtering, run gap-filling, then run the chain — the
+accepted (QCF-filtered) flux of the deepest level shows as a heatmap. **Copy
+Python** puts the exact, reproducible diive script for what you did on the
+clipboard, so a point-and-click run stays scriptable.
+
+**Level 3.3 — USTAR filtering** has two modes (a *Mode* dropdown):
+
+- **Constant thresholds** — type one or more known u\* thresholds (m s⁻¹) with
+  optional labels; each becomes a filtering scenario.
+- **Detect (moving point, Papale 2006)** — estimate the threshold from the data
+  with a multi-year bootstrap. Pick the TA and SW_IN columns, set the bootstrap
+  iterations/percentiles, and choose what to **Apply**:
+  - **CUT** (constant) — one threshold per percentile applied to the whole record
+    (`CUT_16/50/84`).
+  - **VUT** (per-year) — each year filtered by its own threshold (`VUT_16/50/84`).
+    diive's VUT is smoothed over a 3-year window for stability.
+
+  CUT and VUT are alternative strategies — pick one; the percentiles (16/50/84)
+  are the uncertainty scenarios within it. Each scenario is gap-filled separately
+  at Level 4.1.
 
 > Needs eddy-covariance input with the raw EddyPro columns (FC, USTAR, the
 > `*_TEST` flags). The bundled CH-DAV example is a processed product and won't
 > run the chain — load a level-1 EC dataset.
+
+### Flux ▸ USTAR detection
+
+Detect the friction-velocity (u\*) threshold on its own, without running the whole
+chain — useful for exploring thresholds or getting a number for elsewhere. Pick
+the **NEE, air-temperature, USTAR and SW_IN** columns (auto-filled from the data),
+optionally adjust the stratification (temperature/USTAR classes, forward-mode
+order), and:
+
+- leave **Multi-year bootstrap** unticked for a quick **single detection** — a
+  threshold per season plus the annual value (the maximum across seasons); or
+- tick it to run the **multi-year bootstrap**, which reports **VUT** (a threshold
+  per year) and **CUT** (one constant threshold pooled across all years), each at
+  the chosen percentiles, as a table and a chart.
+
+The threshold detection follows the ONEFlux moving-point method (Papale et al.
+2006). Results appear as a table on the left and a plot on the right.
 
 ### Settings ▸ Project settings
 

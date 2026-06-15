@@ -22,7 +22,7 @@ Covers time lag detection, quality filtering, self-heating correction, uncertain
 - **flux_ustar_vekuri_detection.py** — Simplified quantile-based friction velocity detection (Vekuri method)
 - **flux_ustar_method_comparison.py** — Compare ONEFlux and Vekuri USTAR detection approaches
 
-All three USTAR examples use `UstarBootstrapThresholds` as the multi-year bootstrap wrapper. It runs N iterations per calendar year using a 3-year sliding window, then returns per-year p16/p50/p84 thresholds and a CUT (constant) threshold pooled across all years. The detection algorithm (moving point vs. quantile-based) is swapped via `detector_class`.
+All three USTAR examples use `UstarBootstrapThresholds` as the multi-year bootstrap wrapper. It runs N iterations per calendar year using a 3-year sliding window, then returns **VUT** (variable, per-year p16/p50/p84 — `get_vut_thresholds()` / `run()`) and **CUT** (constant, pooled across all years — `get_cut_threshold()`) thresholds, following the FLUXNET/ONEFlux convention. diive's VUT is smoothed over the 3-year window (the year plus its two neighbours) for stability, which differs from the strict single-year ONEFlux VUT. The detection algorithm (moving point vs. quantile-based) is swapped via `detector_class`.
 
 ## Running Examples
 

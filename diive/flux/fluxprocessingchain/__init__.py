@@ -64,6 +64,8 @@ Level                          Shape                         Why this shape
                                                              Not expressible as kwargs without a DSL.
 ``run_level33_constant_ustar`` parallel lists                Multiple USTAR scenarios are positional pairs
                                                              (threshold, label).
+``run_level33_variable_ustar`` ``{label: threshold Series}`` Time-varying (e.g. per-year VUT) thresholds —
+                                                             one full per-record Series per scenario.
 ``run_level41_*``              built object + ad-hoc kwargs  Feature engineering is itself an 8-stage
                                                              configuration; passing it as a built object
                                                              is correct.

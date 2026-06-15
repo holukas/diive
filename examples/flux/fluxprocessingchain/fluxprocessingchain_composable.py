@@ -196,8 +196,17 @@ print(f"After L3.3 (CUT_50): {flux_l33.dropna().count()} accepted  |  "
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # ``run_level33_ustar_detection`` runs the bootstrap detector and applies the
-# requested percentiles as USTAR scenarios in one call. Not run here to keep
-# the example fast::
+# requested percentiles as USTAR scenarios in one call. ``mode`` picks the
+# filtering strategy — mutually exclusive, one applied before gap-filling:
+#
+# * ``mode='cut'`` (default) — one *constant* threshold per percentile, pooled
+#   across all years -> scenarios ``CUT_16 / CUT_50 / CUT_84``.
+# * ``mode='vut'`` — a *per-year* threshold per percentile (each year filtered
+#   by its own value) -> scenarios ``VUT_16 / VUT_50 / VUT_84``. diive's VUT is
+#   smoothed over a 3-year window; a year with no detected threshold falls back
+#   to the CUT value for that percentile.
+#
+# Not run here to keep the example fast::
 #
 #     from diive.flux.fluxprocessingchain import run_level33_ustar_detection
 #     data = run_level33_ustar_detection(
@@ -205,12 +214,16 @@ print(f"After L3.3 (CUT_50): {flux_l33.dropna().count()} accepted  |  "
 #         ta_col='TA_1_1_1',
 #         swin_col='SW_IN_1_1_1',
 #         n_iter=100,
-#         percentiles=(16, 50, 84),   # produces CUT_16 / CUT_50 / CUT_84
+#         percentiles=(16, 50, 84),
+#         mode='cut',   # 'cut' -> CUT_16/50/84, or 'vut' -> VUT_16/50/84
 #         showplot=False, verbose=True,
 #     )
 #     print(data.levels.ustar_detection.summary())
 #
-# Same dispatch in ``run_chain`` via
+# Pre-known per-year thresholds (no detection) can be applied directly with
+# ``run_level33_variable_ustar(data, threshold_series={'VUT_50': <per-record Series>})``.
+#
+# Same CUT dispatch in ``run_chain`` via
 # ``FluxConfig(ustar_detection_mode='bootstrap', ustar_bootstrap_ta_col=...,
 # ustar_bootstrap_swin_col=...)``.
 

@@ -42,7 +42,8 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `icons.py` | `menu_icon(label)` — tiny `QPainter`-drawn glyphs for **all** menu entries (folder/disk/calendar/gear/palette/… + plot shapes), keyword-matched |
 | `widgets/plot_settings.py` | `PlotSettingsPanel(plot_type)` — live plot-parameter controls (between list and canvas); `changed` re-renders; defines `HEATMAP`/`TIMESERIES` |
 | `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
-| `tabs/fluxchain.py` | Flux processing chain tab — Input + L2 + L3.1 + L3.2 + L3.3 via the composable callables (`init_flux_data`/`run_level2`/`run_level31`/`make_level32_detector`+`run_level32`/`run_level33_constant_ustar`); shows the deepest level's QCF-filtered flux as a heatmap, **Copy Python** emits a reproducible script. Only L4.1 remains |
+| `tabs/fluxchain.py` | Flux processing chain tab — Input + L2 + L3.1 + L3.2 + L3.3 + L4.1 via the composable callables (`init_flux_data`/`run_level2`/`run_level31`/`make_level32_detector`+`run_level32`/`run_level33_constant_ustar`/`run_level33_ustar_detection`/`run_level41_*`); L3.3 supports constant thresholds **or** moving-point detection (Apply: CUT / VUT); shows the deepest level's QCF-filtered flux as a heatmap, **Copy Python** emits a reproducible script |
+| `tabs/ustar_detection.py` | **USTAR detection** tab — standalone moving-point u\* threshold detection (`UstarMovingPointDetection`): single seasonal detection (per-season + annual) or multi-year bootstrap (`UstarBootstrapThresholds`) for VUT (per-year) + CUT (constant); table + diagnostic plot, worker thread |
 | `tabs/timelag.py` | Time-lag analysis tab — pick a gas, analyse its `*_TLAG_ACTUAL` lag distribution (`dv.flux.TimeLagAnalysis`), embed the 4-panel peak/range/EddyPro figure; **Load example TLAG data** loads the bundled level-0 lag dataset locally |
 | `tabs/gaps.py` | Gap & coverage dashboard — stat cards + clickable gap map (`GapStats` availability heatmap + gap timeline) + long-gap table |
 | `tabs/drivers.py` | Driver explorer — rank variables by correlation with a target (`rank_drivers`, optional lag scan); click a driver for its scatter |
@@ -147,17 +148,29 @@ window, enables/disables the reset action, and re-pushes. Engineered features me
 reset (out-of-range rows align to NaN). All plots and processing then run on the narrowed `_data`; saving writes it too.
 
 **Flux processing chain (`tabs/fluxchain.py`):** opened from **Flux ▸ Flux processing chain** (single-instance). A
-guided tab for the Swiss-FluxNet chain, covering **Input + L2 + L3.1 + L3.2 + L3.3** (only L4.1 gap-filling remains). It
+guided tab for the Swiss-FluxNet chain, covering **Input + L2 + L3.1 + L3.2 + L3.3 + L4.1**. It
 collects site/flux-column + which L2 quality tests to run, the L3.1 storage-correction options, an optional L3.2
-outlier-detection chain, and optional L3.3 constant-USTAR filtering, then on a worker thread calls the composable library
+outlier-detection chain, optional L3.3 USTAR filtering, and L4.1 gap-filling, then on a worker thread calls the composable library
 callables (`init_flux_data` → `run_level2` → `run_level31` → `make_level32_detector`/`run_level32` →
-`run_level33_constant_ustar`), shows the deepest level's QCF-filtered flux as a date/time heatmap (plus the L3.2 QCF
-distribution / L3.3 scenarios), and — the point of the feature — **Copy Python** emits the exact runnable script via the
-library's per-level codegen (`level2_to_code`/`level31_to_code`/`level32_to_code`/`level33_to_code`). The script-gen
-lives in the library (`flux/fluxprocessingchain/codegen.py`: `chain_to_code` for the full `run_chain`/`FluxConfig` path,
-the `level*_to_code` functions for the composable path) because it encodes the API call shape; the GUI only calls it.
-Needs real EddyPro-FLUXNET input (FC/USTAR/`*_TEST` columns) — `load_exampledata_parquet_lae_level1_30MIN`, not the
-default CH-DAV. **Remaining slice:** L4.1 gap-filling.
+`run_level33_constant_ustar` / `run_level33_ustar_detection` → `run_level41_*`), shows the deepest level's QCF-filtered
+flux as a date/time heatmap (plus the L3.2 QCF distribution / L3.3 scenarios), and — the point of the feature — **Copy
+Python** emits the exact runnable script via the library's per-level codegen
+(`level2_to_code`/`level31_to_code`/`level32_to_code`/`level33_to_code`/`level41_to_code`). **L3.3 has two modes**
+(a Mode selector swaps the inspector page): *constant thresholds* (enter value/label scenarios) or *moving-point
+detection* (`run_level33_ustar_detection`, with TA/SW_IN pickers, bootstrap params, and an **Apply** selector choosing
+**CUT** (constant → `CUT_16/50/84`) vs **VUT** (per-year → `VUT_16/50/84`) — mutually exclusive strategies). The
+script-gen lives in the library (`flux/fluxprocessingchain/codegen.py`: `chain_to_code` for the full
+`run_chain`/`FluxConfig` path, the `level*_to_code` functions for the composable path) because it encodes the API call
+shape; the GUI only calls it. Needs real EddyPro-FLUXNET input (FC/USTAR/`*_TEST` columns) —
+`load_exampledata_parquet_lae_level1_30MIN`, not the default CH-DAV.
+
+**USTAR detection (`tabs/ustar_detection.py`):** opened from **Flux ▸ USTAR detection** (single-instance). Standalone
+friction-velocity threshold detection independent of the chain. Pick NEE/TA/USTAR/SW_IN + stratification params (TA/USTAR
+classes, forward-mode-n) and run either a **single seasonal detection** (`UstarMovingPointDetection` → per-season +
+annual threshold table) or, with **Multi-year bootstrap** ticked, `UstarBootstrapThresholds` → **VUT** (variable,
+per-year p16/p50/p84) + **CUT** (constant, pooled) thresholds, as a table + a diagnostic plot. Runs on a worker thread;
+all detection is library work — the small result plot is the only presentation in the tab (a candidate to move to a
+library plot helper if reused elsewhere).
 
 **Gap & coverage dashboard (`tabs/gaps.py`):** opened from **Analyze ▸ Gaps & coverage** (single-instance). Pick a
 variable; the right side shows KPI stat cards, a two-panel **gap map** (daily-availability heatmap + gap-spike timeline)

@@ -186,7 +186,7 @@ Key `data.levels` fields: `level2`, `level2_qcf`, `level31`, `level31_qcf`, `lev
 - `init_flux_data` raises if `df` already contains `SW_IN_POT` / `DAYTIME` / `NIGHTTIME` (reserved names — would silently overwrite user data).
 - `nighttime_accept_qcf_below` (was `nighttimetime_accept_qcf_below` before v0.91.0 — typo fixed).
 - Default `daytime_accept_qcf_below=1` is stricter than FLUXNET convention of `2`; QCF=0 all pass, QCF=1 soft warning, QCF=2 hard failure.
-- `run_level33_constant_ustar` only supports constant thresholds; for in-pipeline bootstrap detection use `run_level33_ustar_detection` (composable) or `FluxConfig(ustar_detection_mode='bootstrap', ustar_bootstrap_ta_col=..., ustar_bootstrap_swin_col=...)` (via `run_chain`). `threshold_labels` is optional — auto-generates `CUT_0`, `CUT_1`, ... (positional index, **not** percentile); pass explicit labels like `['CUT_16', 'CUT_50', 'CUT_84']` for percentile-based thresholds. Length and uniqueness are validated; substring overlap (e.g. `CUT_5` inside `CUT_50`) is also rejected.
+- L3.3 USTAR filtering has three composable entry points: `run_level33_constant_ustar` (pre-known scalar threshold(s)), `run_level33_variable_ustar` (time-varying per-record threshold Series, e.g. per-year VUT — a constant threshold is just a constant Series, so the two share one flag path via `FlagMultipleVariableUstarThresholds`), and `run_level33_ustar_detection` (in-pipeline bootstrap detection). The detector's `mode=` selects the strategy: `'cut'` (constant pooled threshold → `CUT_16/50/84`) or `'vut'` (per-year threshold → `VUT_16/50/84`); CUT and VUT are **mutually exclusive** (the percentiles are the uncertainty scenarios within the chosen strategy). diive's VUT is smoothed over a 3-year window (`UstarBootstrapThresholds`); a year with no detected threshold falls back to its CUT value. `run_chain` only does CUT detection (`FluxConfig(ustar_detection_mode='bootstrap', ustar_bootstrap_ta_col=..., ustar_bootstrap_swin_col=...)`); VUT is composable-only. `threshold_labels` (constant path) is optional — auto-generates `CUT_0`, `CUT_1`, ... (positional index, **not** percentile); pass explicit labels like `['CUT_16', 'CUT_50', 'CUT_84']` for percentile-based thresholds. Length and uniqueness are validated; substring overlap (e.g. `CUT_5` inside `CUT_50`) is also rejected.
 - `run_level33_ustar_detection` raises if `detector_kwargs` contains `nee_col` / `ta_col` / `ustar_col` / `swin_col` (these are set internally).
 - `run_level41_*` emits a `UserWarning` when a re-run would overwrite previously stored scenarios in `levels.level41_*`.
 - `FeatureEngineer(target_col='_target_', ...)` — `target_col` is a required placeholder; any string not in the feature list works.
@@ -404,7 +404,8 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
 - **Flux processing chain tab** (`tabs/fluxchain.py`, `Flux ▸ Flux processing chain`, single-instance). Guided
   Swiss-FluxNet chain, **Input → L2 → L3.1 → L3.2 → L3.3 → L4.1**, all on the **composable per-level** path
   (`init_flux_data` → `run_level2` → `run_level31` → `make_level32_detector`/`run_level32` →
-  `run_level33_constant_ustar` → `run_level41_*`) — deliberately **not** `run_chain`/`FluxConfig`, so L3.2 stays a real
+  `run_level33_constant_ustar` / `run_level33_ustar_detection` → `run_level41_*`) — deliberately **not**
+  `run_chain`/`FluxConfig`, so L3.2 stays a real
   inspected stepwise chain with its own QCF surface. **Layout is a horizontal pipeline rail**
   (`widgets/flux_pipeline_rail.py`: `PipelineRail` + `StageCard`, GUI-only): the six stages (Input › L2 › L3.1 › L3.2 ›
   L3.3 › L4.1) are selectable cards joined by chevrons, each with a level badge + a live **status pill** (`4 tests`,
@@ -437,7 +438,11 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   mirror this column-info pattern** (`_refresh_levels_info`): Input has a **USTAR column** picker (`init_flux_data`'s
   `ustarcol`, so non-`USTAR`-named data can initialize) + availability marker; L3.1 shows the auto-detected **storage
   column** (`dv.flux.level31_storage_col(fluxcol)` — the `FC→SC_SINGLE` map, a library helper) + present/missing marker;
-  L3.3 names the USTAR column it filters on; L4.1 shows a SW_IN/TA/VPD driver-availability marker. **L4.1** ticks rf / xgb / mds (additive across methods — each
+  L3.3 names the USTAR column it filters on. **L3.3 has two modes** (a Mode selector swaps the inspector page):
+  **constant thresholds** (add value/label scenarios) or **moving-point detection** (`run_level33_ustar_detection`) with
+  TA/SW_IN pickers, bootstrap iterations/workers/percentiles + detector params and an **Apply** selector **CUT**
+  (constant pooled → `CUT_16/50/84`) vs **VUT** (per-year → `VUT_16/50/84`); the detected thresholds appear in the stage
+  summary and Copy Python renders the chosen `mode`. L4.1 shows a SW_IN/TA/VPD driver-availability marker. **L4.1** ticks rf / xgb / mds (additive across methods — each
   replaces only its own previous result), picks rf/xgb predictor features + MDS SW_IN/TA/VPD driver columns (MDS units:
   VPD kPa, TA °C — the library warns on suspicious medians; driver auto-pick skips `FLAG_*` columns), fans out one
   gap-fill per USTAR scenario. **Reproducibility:** a shared **Random seed** field (default 42) is always passed to
@@ -456,6 +461,13 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   `chain_to_code` for the `run_chain`/`FluxConfig` path, `level2_to_code` … `level41_to_code` for the composable
   per-level path; all omit default-valued kwargs) — the GUI only calls it. Needs real EddyPro-FLUXNET input
   (`load_exampledata_parquet_lae_level1_30MIN`), not the default CH-DAV.
+- **USTAR detection tab** (`tabs/ustar_detection.py`, `Flux ▸ USTAR detection`, single-instance). Standalone
+  moving-point u\* threshold detection (Papale 2006), independent of the chain. Pick NEE/TA/USTAR/SW_IN + stratification
+  params (TA/USTAR classes, forward-mode-n) and run a **single seasonal detection** (`UstarMovingPointDetection` →
+  per-season + annual table) or tick **Multi-year bootstrap** (`UstarBootstrapThresholds`) for **VUT** (variable,
+  per-year p16/p50/p84) + **CUT** (constant, pooled) thresholds, shown as a table + a diagnostic plot. Runs on a worker
+  thread; all detection is library work (the small result plot is the only presentation in the tab — a candidate to
+  move to a library plot helper if reused).
 - **Feature engineering tab.** Menu-activated (`Data ▸ Feature engineering`, from `registry.MENU_TAB_CLASSES`) — not in
   the tab bar until selected, and closable (always-on tabs get their close button removed). Runs `FeatureEngineer`
   (library) on selected variables, emits new columns via a `featuresCreated` signal; `MainWindow` merges them, tracks

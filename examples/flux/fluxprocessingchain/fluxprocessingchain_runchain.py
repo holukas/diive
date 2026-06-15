@@ -193,7 +193,9 @@ data.plot_cumulative_comparison(
 # the FLUXNET-standard multi-year bootstrap (ONEFlux moving-point
 # method). Three scenarios (``CUT_16`` / ``CUT_50`` / ``CUT_84``) are
 # produced by default; the fitted detector lands on
-# ``data.levels.ustar_detection`` for post-hoc inspection.
+# ``data.levels.ustar_detection`` for post-hoc inspection. ``run_chain``
+# applies the constant (CUT) threshold; for per-year VUT filtering use the
+# composable ``run_level33_ustar_detection(..., mode='vut')``.
 #
 # Not run here to keep the example fast::
 #
