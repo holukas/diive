@@ -112,6 +112,7 @@ EXAMPLE_FILES = [
     'flux/partitioning/partitioning_nighttime_oneflux.py',
     'flux/partitioning/partitioning_nighttime_reddyproc.py',
     'flux/partitioning/partitioning_daytime_reddyproc.py',
+    'flux/partitioning/partitioning_daytime_oneflux.py',
     'flux/partitioning/partitioning_comparison.py',
     # Flux - Low-resolution processing
     'flux/lowres/flux_timelag_analysis.py',

@@ -39,6 +39,7 @@ import diive as dv
 df = dv.load_exampledata_parquet()
 df = df.loc[df.index.year == 2017].copy()  # single year keeps the example quick
 
+print("Partitioning method: NIGHTTIME (Reichstein et al. 2005, ONEFlux port) -> *_NT_OF")
 print(f"Period: {df.index.min().date()} to {df.index.max().date()} ({len(df)} records)")
 
 # %%

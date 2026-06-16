@@ -36,6 +36,7 @@ import diive as dv
 df = dv.load_exampledata_parquet()
 df = df.loc[df.index.year == 2017].copy()  # single year for the plots below
 
+print("Partitioning method: DAYTIME (Lasslop et al. 2010, REddyProc port) -> *_DT_RP")
 print(f"Period: {df.index.min().date()} to {df.index.max().date()} ({len(df)} records)")
 
 # %%

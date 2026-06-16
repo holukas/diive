@@ -5,11 +5,13 @@ FLUX PARTITIONING: NEE -> GPP + RECO
 Partition net ecosystem exchange (NEE) into its gross components, gross primary
 production (GPP) and ecosystem respiration (RECO).
 
-Two faithful, vectorized ports of the same Reichstein et al. (2005) nighttime
-method are available; they differ in window geometry, day/night split, the E0
-fit, and units, so they do not produce identical numbers. Output columns carry
-a variant token after the ``_NT`` suffix - ``_OF`` (ONEFlux) and ``_RP``
-(REddyProc) - so both can coexist in one dataframe:
+Four faithful, vectorized ports are available: two nighttime methods (Reichstein
+et al. 2005, fitting the temperature response of nighttime NEE) and two daytime
+methods (Lasslop et al. 2010, fitting a light-response curve to daytime NEE).
+Each method is a port of a different reference implementation, so they do not
+produce identical numbers. Output columns carry a token after the ``_NT``
+(nighttime) / ``_DT`` (daytime) suffix - ``_OF`` (ONEFlux) and ``_RP``
+(REddyProc) - so all four can coexist in one dataframe:
 
 - Nighttime method ONEFlux (Reichstein et al. 2005),
   ``NighttimePartitioningOneFlux`` / ``partition_nee_nighttime_oneflux`` - a
@@ -22,6 +24,19 @@ a variant token after the ``_NT`` suffix - ``_OF`` (ONEFlux) and ``_RP``
   faithful port of REddyProc's ``sMRFluxPartition``. Whole-record processing
   with a single E0; emits ``*_NT_RP`` columns (no robust variant, as in
   REddyProc).
+
+- Daytime method REddyProc (Lasslop et al. 2010),
+  ``DaytimePartitioningReddyProc`` / ``partition_nee_daytime_reddyproc`` - a
+  faithful port of REddyProc's ``partitionNEEGL``; per-window light-response-curve
+  fit with E0 fixed from a GP-smoothed nighttime estimate, then distance-weighted
+  interpolation. Emits ``*_DT_RP`` columns.
+
+- Daytime method ONEFlux (Lasslop et al. 2010),
+  ``DaytimePartitioningOneFlux`` / ``partition_nee_daytime_oneflux`` - a faithful
+  port of ONEFlux's ``flux_part_gl2010`` (FLUXNET2015); per-window LRC fit with a
+  measured-radiation day/night split (no latitude) and an internal NEE-uncertainty
+  look-up. Emits ``*_DT_OF`` columns (including the GPP standard error
+  ``SE_GPP_DT_OF``).
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -36,6 +51,8 @@ from diive.flux.partitioning.nighttime_reddyproc import lloyd_taylor_kelvin
 from diive.flux.partitioning.nighttime_reddyproc import potential_radiation
 from diive.flux.partitioning.daytime_reddyproc import DaytimePartitioningReddyProc
 from diive.flux.partitioning.daytime_reddyproc import partition_nee_daytime_reddyproc
+from diive.flux.partitioning.daytime_oneflux import DaytimePartitioningOneFlux
+from diive.flux.partitioning.daytime_oneflux import partition_nee_daytime_oneflux
 
 __all__ = [
     "NighttimePartitioningOneFlux",
@@ -48,4 +65,6 @@ __all__ = [
     "potential_radiation",
     "DaytimePartitioningReddyProc",
     "partition_nee_daytime_reddyproc",
+    "DaytimePartitioningOneFlux",
+    "partition_nee_daytime_oneflux",
 ]

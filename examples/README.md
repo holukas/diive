@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**117 examples across 10 organized folders by functional domain.**
+**118 examples across 10 organized folders by functional domain.**
 
 ## Structure
 
@@ -59,14 +59,15 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (24 examples)
+├── flux/                  # Eddy covariance flux processing (25 examples)
 │   ├── fluxprocessingchain/
 │   │   ├── fluxprocessingchain_runchain.py
 │   │   └── fluxprocessingchain_composable.py
-│   ├── partitioning/      # NEE partitioning into GPP/RECO (4 examples)
+│   ├── partitioning/      # NEE partitioning into GPP/RECO (5 examples)
 │   │   ├── partitioning_nighttime_oneflux.py
 │   │   ├── partitioning_nighttime_reddyproc.py
 │   │   ├── partitioning_daytime_reddyproc.py
+│   │   ├── partitioning_daytime_oneflux.py
 │   │   └── partitioning_comparison.py
 │   ├── lowres/            # Low-resolution processing (9 examples)
 │   │   ├── flux_timelag_analysis.py
