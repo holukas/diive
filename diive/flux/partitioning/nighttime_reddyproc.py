@@ -65,6 +65,7 @@ from pandas import DataFrame, Series
 from scipy.optimize import leastsq
 
 from diive.core.utils.console import info, warn, success
+from diive.flux.partitioning._report import partitioning_report
 
 # Lloyd & Taylor reference/regression temperatures in KELVIN, as used by
 # REddyProc (fLloydTaylor): TRef = 273.15 + 15 degC, T0 = 227.13 degK.
@@ -415,7 +416,7 @@ class NighttimePartitioningReddyProc:
                  lat: float,
                  lon: float,
                  utc_offset: float,
-                 verbose: int = 1):
+                 verbose: int = 2):
         """
         Args:
             nee: Measured net ecosystem exchange (umol m-2 s-1). Gaps (NaN) are
@@ -430,7 +431,8 @@ class NighttimePartitioningReddyProc:
             lon: Site longitude in decimal degrees (REddyProc needs longitude
                 and the UTC offset for the solar-time day/night split).
             utc_offset: Time zone offset from UTC in hours (e.g. +1 for CET).
-            verbose: Console verbosity level (0 silent, 1 progress).
+            verbose: Console verbosity level (0 silent, 1 warnings, 2 progress
+                + report, 3 debug). Default 2.
         """
         self._inputs = self._validate(nee, ta, sw_in, nee_f, ta_f)
         self.lat = float(lat)
@@ -475,13 +477,8 @@ class NighttimePartitioningReddyProc:
         cols = ['NEE_NIGHT_RP', 'RECO_NT_RP', 'GPP_NT_RP', 'RREF_NT_RP', 'E0_NT_RP']
         self._results = pd.DataFrame({c: out[c] for c in cols}, index=index)
 
+        self.report()
         if self.verbose:
-            e0 = out['E0_NT_RP']
-            e0_val = e0[np.isfinite(e0)][0] if np.isfinite(e0).any() else np.nan
-            reco = self._results['RECO_NT_RP']
-            info(f"  E0={e0_val:.2f} K, RECO filled "
-                 f"{int(reco.notna().sum())}/{len(index)} records.",
-                 verbose=self.verbose)
             success("Nighttime partitioning (ReddyProc) finished.",
                     verbose=self.verbose)
         return self
@@ -509,11 +506,19 @@ class NighttimePartitioningReddyProc:
         """Gross primary production, umol m-2 s-1."""
         return self.results['GPP_NT_RP']
 
+    def report(self) -> None:
+        """Print a Rich per-year summary of the partitioning result."""
+        partitioning_report(
+            title="Nighttime NEE Partitioning REddyProc (Reichstein et al. 2005)",
+            reference="Wutzler et al. (2018), https://doi.org/10.5194/bg-15-5015-2018",
+            results=self.results, reco_col='RECO_NT_RP', gpp_col='GPP_NT_RP',
+            e0_col='E0_NT_RP', e0_unit='K', verbose=self.verbose)
+
 
 def partition_nee_nighttime_reddyproc(nee: Series, ta: Series, sw_in: Series,
                                       nee_f: Series, ta_f: Series, lat: float,
                                       lon: float, utc_offset: float,
-                                      verbose: int = 1) -> DataFrame:
+                                      verbose: int = 2) -> DataFrame:
     """Functional wrapper around :class:`NighttimePartitioningReddyProc`.
 
     See :class:`NighttimePartitioningReddyProc` for argument semantics.

@@ -71,6 +71,7 @@ from scipy import stats
 from scipy.optimize import leastsq
 
 from diive.core.utils.console import info, warn, success
+from diive.flux.partitioning._report import partitioning_report
 
 # Lloyd & Taylor reference/regression temperatures (degC), as in ONEFlux.
 TREF = 15.0
@@ -977,7 +978,7 @@ class DaytimePartitioningOneFlux:
                  sw_in_f: Series,
                  vpd: Series,
                  vpd_in_kpa: bool = True,
-                 verbose: int = 1):
+                 verbose: int = 2):
         """
         Args:
             nee: Measured net ecosystem exchange (umol m-2 s-1). Gaps (NaN) are
@@ -999,7 +1000,8 @@ class DaytimePartitioningOneFlux:
                 ``vpd`` is already in hPa.
             vpd_in_kpa: If True (default), ``vpd`` is in kPa and multiplied by 10
                 to hPa internally.
-            verbose: Console verbosity level (0 silent, 1 progress).
+            verbose: Console verbosity level (0 silent, 1 warnings, 2 progress
+                + report, 3 debug). Default 2.
         """
         self._inputs = self._validate(nee, ta, sw_in, ta_f, sw_in_f, vpd)
         self.vpd_in_kpa = bool(vpd_in_kpa)
@@ -1059,12 +1061,9 @@ class DaytimePartitioningOneFlux:
                 verbose=self.verbose)
             for col in cols:
                 result.loc[ym, col] = out[col]
-            if self.verbose:
-                reco = result.loc[ym, 'RECO_DT_OF']
-                info(f"  {int(year)}: RECO filled {int(reco.notna().sum())}/"
-                     f"{int(ym.sum())} records.", verbose=self.verbose)
 
         self._results = result
+        self.report()
         if self.verbose:
             success("Daytime partitioning (ONEFlux) finished.", verbose=self.verbose)
         return self
@@ -1093,11 +1092,20 @@ class DaytimePartitioningOneFlux:
         """Gross primary production, umol m-2 s-1."""
         return self.results['GPP_DT_OF']
 
+    def report(self) -> None:
+        """Print a Rich per-year summary of the partitioning result."""
+        partitioning_report(
+            title="Daytime NEE Partitioning ONEFlux (Lasslop et al. 2010)",
+            reference="Pastorello et al. (2020), https://doi.org/10.1038/s41597-020-0534-3",
+            results=self.results, reco_col='RECO_DT_OF', gpp_col='GPP_DT_OF',
+            e0_col='E0_DT_OF', e0_unit='degC', se_col='SE_GPP_DT_OF',
+            verbose=self.verbose)
+
 
 def partition_nee_daytime_oneflux(nee: Series, ta: Series, sw_in: Series,
                                   ta_f: Series, sw_in_f: Series, vpd: Series,
                                   vpd_in_kpa: bool = True,
-                                  verbose: int = 1) -> DataFrame:
+                                  verbose: int = 2) -> DataFrame:
     """Functional wrapper around :class:`DaytimePartitioningOneFlux`.
 
     See :class:`DaytimePartitioningOneFlux` for argument semantics.

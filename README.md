@@ -98,7 +98,7 @@ model = dv.gapfilling.RandomForestTS(input_df=df, target_col='NEE')
 | `dv.plotting` | `TimeSeries`, `Cumulative`, `DielCycle`, `HeatmapDateTime` |
 | `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `FluxMDS` |
 | `dv.analysis` | `GridAggregator`, `SeasonalTrendDecomposition`, `BinFitterCP` |
-| `dv.flux` | `run_chain`, `FluxConfig`, `FluxDetectionLimit`, `WindDoubleRotation` |
+| `dv.flux` | `run_chain`, `FluxConfig`, `FluxDetectionLimit`, `WindDoubleRotation`, NEE partitioning (`partition_nee_*`) |
 | `dv.outliers` / `dv.corrections` / `dv.qaqc` | outlier methods, offset corrections, `FlagQCF` |
 | `dv.times` / `dv.variables` | timestamp sanitization, derived variables (VPD, potential radiation, ...) |
 | `dv.events` | `Event`, `event_to_flag`, `overlay_events` |
@@ -147,6 +147,19 @@ Post-processing from quality flags through gap-filling, covering Levels 2 to 4.1
 Need a computed driver (e.g. VPD in kPa) for L4.1? Use `add_driver(data, series)` to put it where L4.1 actually reads from. Call `data.gap_stats()` at any level for a monthly/annual breakdown with long-gap listing. `data.plot_gapfilled_heatmaps()` puts all gap-filling methods side by side; `data.plot_cumulative_comparison()` overlays their cumulative sums on one axes.
 
 Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/) | Examples: [examples/flux/fluxprocessingchain/](examples/flux/fluxprocessingchain/)
+
+### NEE partitioning
+
+Split net ecosystem exchange (NEE) into gross primary production (GPP) and ecosystem respiration (RECO). diive ships four faithful Python ports of the standard reference routines — two **nighttime** methods (Reichstein et al. 2005, fitting the temperature response of nighttime respiration) and two **daytime** methods (Lasslop et al. 2010, fitting a light-response curve to daytime NEE). Each is validated against its reference implementation; output columns carry a `_NT` / `_DT` (nighttime / daytime) plus `_OF` / `_RP` (ONEFlux / REddyProc) token, so all four can coexist in one dataframe.
+
+| Method (class / function) | Columns | Approach |
+|---|---|---|
+| `NighttimePartitioningOneFlux` / `partition_nee_nighttime_oneflux` | `*_NT_OF` | Reichstein 2005, ONEFlux port; per calendar year, incl. an outlier-robust variant |
+| `NighttimePartitioningReddyProc` / `partition_nee_nighttime_reddyproc` | `*_NT_RP` | Reichstein 2005, REddyProc `sMRFluxPartition` port; whole record with a single E0 |
+| `DaytimePartitioningReddyProc` / `partition_nee_daytime_reddyproc` | `*_DT_RP` | Lasslop 2010, REddyProc `partitionNEEGL` port (light-response curve) |
+| `DaytimePartitioningOneFlux` / `partition_nee_daytime_oneflux` | `*_DT_OF` | Lasslop 2010, ONEFlux `flux_part_gl2010` port; incl. GPP standard error |
+
+Inputs are in physical units — air temperature in °C, VPD in kPa (`vpd_in_kpa=True`). For the day/night split the REddyProc ports take `lat` / `lon` / `utc_offset` (solar geometry) and the ONEFlux nighttime port takes `lat`; the ONEFlux daytime port needs no coordinates (it uses a measured-radiation threshold). Each class prints a Rich per-year summary report on `.run()` (or call `.report()`). See [examples/flux/partitioning/](examples/flux/partitioning/) — including `partitioning_comparison.py`, which runs all four side by side.
 
 ### Quality control and outlier detection
 

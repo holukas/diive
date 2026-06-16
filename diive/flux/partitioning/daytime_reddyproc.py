@@ -74,6 +74,7 @@ from pandas import DataFrame, Series
 from scipy.optimize import minimize
 
 from diive.core.utils.console import info, warn, success
+from diive.flux.partitioning._report import partitioning_report
 from diive.flux.partitioning.nighttime_reddyproc import (
     potential_radiation, _infer_dts, T0_K)
 
@@ -818,7 +819,7 @@ class DaytimePartitioningReddyProc:
                  utc_offset: float,
                  nee_sd: Series | None = None,
                  vpd_in_kpa: bool = True,
-                 verbose: int = 1):
+                 verbose: int = 2):
         """
         Args:
             nee: Measured net ecosystem exchange (umol m-2 s-1). Gaps (NaN) are
@@ -842,7 +843,8 @@ class DaytimePartitioningReddyProc:
                 uncertainties are set to ``max(0.7, 0.2*|NEE|)``.
             vpd_in_kpa: If True (default), ``vpd`` is in kPa and multiplied by 10
                 to hPa internally.
-            verbose: Console verbosity level (0 silent, 1 progress).
+            verbose: Console verbosity level (0 silent, 1 warnings, 2 progress
+                + report, 3 debug). Default 2.
         """
         self._inputs = self._validate(nee, ta, vpd, sw_in, nee_sd)
         self.lat = float(lat)
@@ -896,12 +898,8 @@ class DaytimePartitioningReddyProc:
                 'ALPHA_DT_RP', 'RREF_DT_RP', 'E0_DT_RP']
         self._results = pd.DataFrame({c: out[c] for c in cols}, index=index)
 
+        self.report()
         if self.verbose:
-            reco = self._results['RECO_DT_RP']
-            gpp = self._results['GPP_DT_RP']
-            info(f"  RECO filled {int(reco.notna().sum())}/{len(index)}, "
-                 f"GPP filled {int(gpp.notna().sum())}/{len(index)} records.",
-                 verbose=self.verbose)
             success("Daytime partitioning (ReddyProc) finished.",
                     verbose=self.verbose)
         return self
@@ -929,13 +927,21 @@ class DaytimePartitioningReddyProc:
         """Gross primary production, umol m-2 s-1."""
         return self.results['GPP_DT_RP']
 
+    def report(self) -> None:
+        """Print a Rich per-year summary of the partitioning result."""
+        partitioning_report(
+            title="Daytime NEE Partitioning REddyProc (Lasslop et al. 2010)",
+            reference="Wutzler et al. (2018), https://doi.org/10.5194/bg-15-5015-2018",
+            results=self.results, reco_col='RECO_DT_RP', gpp_col='GPP_DT_RP',
+            e0_col='E0_DT_RP', e0_unit='K', verbose=self.verbose)
+
 
 def partition_nee_daytime_reddyproc(nee: Series, ta: Series, vpd: Series,
                                     sw_in: Series, lat: float, lon: float,
                                     utc_offset: float,
                                     nee_sd: Series | None = None,
                                     vpd_in_kpa: bool = True,
-                                    verbose: int = 1) -> DataFrame:
+                                    verbose: int = 2) -> DataFrame:
     """Functional wrapper around :class:`DaytimePartitioningReddyProc`.
 
     See :class:`DaytimePartitioningReddyProc` for argument semantics.

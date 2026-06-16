@@ -52,6 +52,7 @@ from pandas import DataFrame, Series
 from scipy.optimize import leastsq
 
 from diive.core.utils.console import info, warn, success
+from diive.flux.partitioning._report import partitioning_report
 
 # Lloyd & Taylor reference/regression temperatures (degC), as used by ONEFlux.
 TREF = 15.0
@@ -414,7 +415,7 @@ class NighttimePartitioningOneFlux:
                  nee_f: Series,
                  ta_f: Series,
                  lat: float,
-                 verbose: int = 1):
+                 verbose: int = 2):
         """
         Args:
             nee: Measured net ecosystem exchange (umol m-2 s-1). Gaps (NaN) are
@@ -426,7 +427,8 @@ class NighttimePartitioningOneFlux:
             ta_f: Gap-filled air temperature (degC) - used to compute RECO at
                 every record.
             lat: Site latitude in decimal degrees.
-            verbose: Console verbosity level (0 silent, 1 progress).
+            verbose: Console verbosity level (0 silent, 1 warnings, 2 progress
+                + report, 3 debug). Default 2.
         """
         self._inputs = self._validate(nee, ta, sw_in, nee_f, ta_f)
         self.lat = float(lat)
@@ -477,15 +479,9 @@ class NighttimePartitioningOneFlux:
             )
             for col in cols:
                 result.loc[ymask, col] = year_out[col]
-            if self.verbose:
-                e0 = year_out['E0_NT_OF']
-                e0_val = e0[np.isfinite(e0)][0] if np.isfinite(e0).any() else np.nan
-                reco = result.loc[ymask, 'RECO_NT_OF']
-                info(f"  {int(year)}: E0={e0_val:.1f}, "
-                     f"RECO filled {int(reco.notna().sum())}/{int(ymask.sum())} records.",
-                     verbose=self.verbose)
 
         self._results = result
+        self.report()
         if self.verbose:
             success("Nighttime partitioning finished.", verbose=self.verbose)
         return self
@@ -514,10 +510,19 @@ class NighttimePartitioningOneFlux:
         """Gross primary production, umol m-2 s-1."""
         return self.results['GPP_NT_OF']
 
+    def report(self) -> None:
+        """Print a Rich per-year summary of the partitioning result."""
+        partitioning_report(
+            title="Nighttime NEE Partitioning ONEFlux (Reichstein et al. 2005)",
+            reference="Reichstein et al. (2005), https://doi.org/10.1111/j.1365-2486.2005.001002.x",
+            results=self.results, reco_col='RECO_NT_OF', gpp_col='GPP_NT_OF',
+            e0_col='E0_NT_OF', e0_unit='degC', reco_rob_col='RECO_NT_OF_ROB',
+            gpp_rob_col='GPP_NT_OF_ROB', verbose=self.verbose)
+
 
 def partition_nee_nighttime_oneflux(nee: Series, ta: Series, sw_in: Series,
                             nee_f: Series, ta_f: Series, lat: float,
-                            verbose: int = 1) -> DataFrame:
+                            verbose: int = 2) -> DataFrame:
     """Functional wrapper around :class:`NighttimePartitioningOneFlux`.
 
     See :class:`NighttimePartitioningOneFlux` for argument semantics.

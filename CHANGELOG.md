@@ -175,7 +175,11 @@ Faithful, vectorized ports of four reference partitioning routines: two of the R
 method (ONEFlux and REddyProc) and two of the Lasslop et al. (2010) **daytime** method (REddyProc and ONEFlux). They
 differ in window geometry, day/night split, fitting and units, so they do not produce identical numbers; output columns carry a
 variant token after the `_NT` (nighttime) / `_DT` (daytime) suffix — `_OF` (ONEFlux) and `_RP` (REddyProc) — so all can
-coexist in one dataframe.
+coexist in one dataframe. All four expose a `.report()` method (also printed automatically by `.run()`) rendering a Rich
+per-year summary table — RECO/GPP fill counts and means, temperature sensitivity E0, with outlier-robust (ONEFlux
+nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared `diive.flux.partitioning._report`. The
+`verbose` argument now follows the diive level scheme (0 silent, 1 warnings, 2 progress + report, 3 debug) with default
+**2**, so progress lines and the report are shown by default.
 
 - **Nighttime partitioning ONEFlux** (`dv.flux.NighttimePartitioningOneFlux` /
   `dv.flux.partition_nee_nighttime_oneflux`, module `diive.flux.partitioning`). Splits NEE into GPP and RECO with the

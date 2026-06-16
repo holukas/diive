@@ -8,7 +8,7 @@ ecosystem respiration (RECO) with the nighttime method of Reichstein et al.
 (2005), here as a faithful Python port of REddyProc's ``sMRFluxPartition``.
 
 This is a *second*, independent port of the same paper alongside the ONEFlux
-variant (see ``partitioning_nighttime.py``). REddyProc differs in the day/night
+variant (see ``partitioning_nighttime_oneflux.py``). REddyProc differs in the day/night
 split (potential radiation, needs longitude + UTC offset), the E0 fitting
 routine, the window geometry, and - crucially - it partitions the **whole
 record at once** with a single temperature sensitivity E0. Output columns carry
