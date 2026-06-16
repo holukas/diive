@@ -1,6 +1,6 @@
 """
-NIGHTTIME PARTITIONING: NEE -> GPP + RECO (Reichstein et al. 2005)
-==================================================================
+NIGHTTIME PARTITIONING ONEFLUX: NEE -> GPP + RECO (Reichstein et al. 2005)
+=========================================================================
 
 Faithful, vectorized Python port of the ONEFlux nighttime partitioning
 reference implementation (``oneflux.partition.nighttime``), which itself is a
@@ -27,6 +27,10 @@ Algorithm (per calendar year):
    windows (4-day steps, 8-day windows), both ordinary and outlier-robust,
    then interpolate Rref to every record.
 6. RECO = LloydTaylor(Tair_f, Rref, E0); GPP = RECO - NEE.
+
+A year with no well-constrained short-term E0 (at least one window with small
+absolute *and* relative E0 standard error) is left entirely unpartitioned, as
+in ONEFlux.
 
 Reference:
     Reichstein, M. et al. (2005). On the separation of net ecosystem exchange
@@ -358,6 +362,18 @@ def _partition_one_year(nee: np.ndarray, tair: np.ndarray, sw_in: np.ndarray,
 
     out['E0_NT'][:] = best_e0
 
+    # --- ONEFlux gate: partition only if at least one short-term window
+    # produced a well-constrained E0 (low absolute AND relative standard error).
+    # ONEFlux leaves RECO/GPP empty for the whole year otherwise (the count>0
+    # check in nighttime.flux_partition). Thresholds inlined as in the original.
+    with np.errstate(invalid='ignore', divide='ignore'):
+        well_constrained = ((win_e0_se < 100.0) & ((win_e0_se / win_e0) < 0.5)
+                            & (win_e0 > 50.0) & (win_e0 < 450.0))
+    if not well_constrained.any():
+        warn("Nighttime partitioning: no well-constrained short-term E0; "
+             "year left unpartitioned (ONEFlux parity).", verbose=verbose)
+        return out
+
     # --- 4) Re-estimate Rref with E0 fixed, then RECO and GPP ---
     julday_dec = doy + (hr / 24.0)
     reco, reco_rob, rref_ord = _reanalyse_rref(
@@ -374,8 +390,8 @@ def _partition_one_year(nee: np.ndarray, tair: np.ndarray, sw_in: np.ndarray,
     return out
 
 
-class NighttimePartitioning:
-    """Partition NEE into GPP and RECO with the nighttime method.
+class NighttimePartitioningOneFlux:
+    """Partition NEE into GPP and RECO with the nighttime method (ONEFlux).
 
     Faithful, vectorized port of the ONEFlux nighttime partitioning
     (Reichstein et al. 2005). Each calendar year in the input is partitioned
@@ -384,7 +400,7 @@ class NighttimePartitioning:
     Example: ``examples/flux/partitioning/partitioning_nighttime.py``
 
     Example:
-        >>> part = NighttimePartitioning(
+        >>> part = NighttimePartitioningOneFlux(
         ...     nee=df['NEE_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
         ...     nee_f=df['NEE_f'], ta_f=df['Tair_f'], lat=46.815)
         >>> part.run()
@@ -430,7 +446,7 @@ class NighttimePartitioning:
             df = df.sort_index()
         return df
 
-    def run(self) -> "NighttimePartitioning":
+    def run(self) -> "NighttimePartitioningOneFlux":
         """Run the partitioning and populate :attr:`results`."""
         df = self._inputs
         index = df.index
@@ -499,16 +515,16 @@ class NighttimePartitioning:
         return self.results['GPP_NT']
 
 
-def partition_nee_nighttime(nee: Series, ta: Series, sw_in: Series,
+def partition_nee_nighttime_oneflux(nee: Series, ta: Series, sw_in: Series,
                             nee_f: Series, ta_f: Series, lat: float,
                             verbose: int = 1) -> DataFrame:
-    """Functional wrapper around :class:`NighttimePartitioning`.
+    """Functional wrapper around :class:`NighttimePartitioningOneFlux`.
 
-    See :class:`NighttimePartitioning` for argument semantics.
+    See :class:`NighttimePartitioningOneFlux` for argument semantics.
 
     Returns:
         Results DataFrame (RECO_NT, GPP_NT, ...).
     """
-    return NighttimePartitioning(
+    return NighttimePartitioningOneFlux(
         nee=nee, ta=ta, sw_in=sw_in, nee_f=nee_f, ta_f=ta_f,
         lat=lat, verbose=verbose).run().results

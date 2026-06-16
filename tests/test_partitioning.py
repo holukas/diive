@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 
-class TestNighttimePartitioning(unittest.TestCase):
+class TestNighttimePartitioningOneFlux(unittest.TestCase):
     """Tests for the nighttime NEE partitioning (Reichstein et al. 2005)."""
 
     @classmethod
@@ -16,9 +16,9 @@ class TestNighttimePartitioning(unittest.TestCase):
         cls.lat = 46.815
 
     def _run(self):
-        from diive.flux.partitioning import NighttimePartitioning
+        from diive.flux.partitioning import NighttimePartitioningOneFlux
         df = self.df
-        part = NighttimePartitioning(
+        part = NighttimePartitioningOneFlux(
             nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
             nee_f=df['NEE_CUT_REF_f'], ta_f=df['Tair_f'], lat=self.lat, verbose=0)
         return part.run()
@@ -52,10 +52,35 @@ class TestNighttimePartitioning(unittest.TestCase):
     def test_reco_is_positive_and_filled(self):
         part = self._run()
         reco = part.results['RECO_NT']
-        # RECO should be filled for most records (tair_f is gap-filled).
-        self.assertGreater(reco.notna().sum(), 0.9 * len(reco))
-        # Respiration is a positive flux.
+        # Respiration is a positive flux wherever it is computed.
         self.assertTrue((reco.dropna() > 0).all())
+        # ONEFlux parity: each year is either fully partitioned (~all records,
+        # since tair_f is gap-filled) or, when no short-term E0 is
+        # well-constrained, left entirely unpartitioned by the E0 quality gate.
+        partitioned_years = 0
+        for _, g in reco.groupby(reco.index.year):
+            filled = g.notna().sum()
+            if filled == 0:
+                continue  # year gated out (e.g. 2018 at CH-DAV)
+            self.assertGreater(filled, 0.9 * len(g))
+            partitioned_years += 1
+        self.assertGreater(partitioned_years, 0)
+
+    def test_gate_unconstrained_year_returns_all_nan(self):
+        from diive.flux.partitioning import NighttimePartitioningOneFlux
+        # A year with no temperature range yields no well-constrained short-term
+        # E0, so the ONEFlux E0 quality gate leaves it entirely unpartitioned.
+        idx = pd.date_range('2020-01-01 00:15', '2020-12-31 23:45', freq='30min')
+        n = len(idx)
+        rng = np.random.default_rng(0)
+        nee = pd.Series(rng.normal(2.0, 0.5, n), index=idx)  # noise, no T signal
+        ta = pd.Series(np.full(n, 10.0), index=idx)          # constant temperature
+        sw_in = pd.Series(np.zeros(n), index=idx)            # day/night from sun angle
+        part = NighttimePartitioningOneFlux(nee=nee, ta=ta, sw_in=sw_in, nee_f=nee,
+                                     ta_f=ta, lat=self.lat, verbose=0).run()
+        res = part.results
+        self.assertEqual(res['RECO_NT'].notna().sum(), 0)
+        self.assertEqual(res['GPP_NT'].notna().sum(), 0)
 
     def test_e0_within_physical_range(self):
         part = self._run()
@@ -86,25 +111,25 @@ class TestNighttimePartitioning(unittest.TestCase):
                                    expected.to_numpy(), rtol=1e-6, atol=1e-6)
 
     def test_functional_wrapper(self):
-        from diive.flux.partitioning import partition_nee_nighttime
+        from diive.flux.partitioning import partition_nee_nighttime_oneflux
         df = self.df
-        res = partition_nee_nighttime(
+        res = partition_nee_nighttime_oneflux(
             nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
             nee_f=df['NEE_CUT_REF_f'], ta_f=df['Tair_f'], lat=self.lat, verbose=0)
         self.assertEqual(len(res), len(df))
         self.assertIn('RECO_NT', res.columns)
 
     def test_requires_datetime_index(self):
-        from diive.flux.partitioning import NighttimePartitioning
+        from diive.flux.partitioning import NighttimePartitioningOneFlux
         bad = pd.Series([1.0, 2.0, 3.0])  # RangeIndex, not DatetimeIndex
         with self.assertRaises(TypeError):
-            NighttimePartitioning(nee=bad, ta=bad, sw_in=bad, nee_f=bad,
+            NighttimePartitioningOneFlux(nee=bad, ta=bad, sw_in=bad, nee_f=bad,
                                   ta_f=bad, lat=self.lat, verbose=0)
 
     def test_results_before_run_raises(self):
-        from diive.flux.partitioning import NighttimePartitioning
+        from diive.flux.partitioning import NighttimePartitioningOneFlux
         df = self.df
-        part = NighttimePartitioning(
+        part = NighttimePartitioningOneFlux(
             nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
             nee_f=df['NEE_CUT_REF_f'], ta_f=df['Tair_f'], lat=self.lat, verbose=0)
         with self.assertRaises(RuntimeError):

@@ -12,8 +12,8 @@ from diive.flux import hires
 from diive.flux import lowres
 from diive.flux import fluxprocessingchain
 from diive.flux import partitioning
-from diive.flux.partitioning import NighttimePartitioning
-from diive.flux.partitioning import partition_nee_nighttime
+from diive.flux.partitioning import NighttimePartitioningOneFlux
+from diive.flux.partitioning import partition_nee_nighttime_oneflux
 from diive.flux.fluxprocessingchain import (
     FluxConfig,
     FluxLevelData,
@@ -46,8 +46,8 @@ __all__ = [
     'lowres',
     'fluxprocessingchain',
     'partitioning',
-    'NighttimePartitioning',
-    'partition_nee_nighttime',
+    'NighttimePartitioningOneFlux',
+    'partition_nee_nighttime_oneflux',
     'FluxConfig',
     'FluxLevelData',
     'add_driver',

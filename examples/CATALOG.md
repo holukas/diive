@@ -181,7 +181,7 @@ See: [features/README.md](features/README.md)
 
 | Example | Description |
 |---------|-------------|
-| [**partitioning_nighttime.py**](flux/partitioning/partitioning_nighttime.py) | Partition NEE into GPP and RECO with the nighttime method (Reichstein et al. 2005), a faithful Python port of ONEFlux; validated against the FLUXNET-produced `Reco_CUT_REF`/`GPP_CUT_REF` columns |
+| [**partitioning_nighttime.py**](flux/partitioning/partitioning_nighttime.py) | Partition NEE into GPP and RECO with the nighttime method ONEFlux (Reichstein et al. 2005), a faithful Python port of ONEFlux (`NighttimePartitioningOneFlux`); sanity-checked against the independent, ReddyProc-derived `Reco_CUT_REF`/`GPP_CUT_REF` columns |
 
 ### Low-Resolution (30-min) Processing
 

@@ -7,21 +7,22 @@ production (GPP) and ecosystem respiration (RECO).
 
 Currently implemented:
 
-- Nighttime method (Reichstein et al. 2005), ``NighttimePartitioning`` /
-  ``partition_nee_nighttime`` - a faithful, vectorized Python port of the
-  ONEFlux ``oneflux.partition.nighttime`` reference implementation.
+- Nighttime method ONEFlux (Reichstein et al. 2005),
+  ``NighttimePartitioningOneFlux`` / ``partition_nee_nighttime_oneflux`` - a
+  faithful, vectorized Python port of the ONEFlux ``oneflux.partition.nighttime``
+  reference implementation.
 
 Part of the diive library: https://github.com/holukas/diive
 """
 
-from diive.flux.partitioning.nighttime import NighttimePartitioning
-from diive.flux.partitioning.nighttime import partition_nee_nighttime
-from diive.flux.partitioning.nighttime import lloyd_taylor
-from diive.flux.partitioning.nighttime import sunrise_sunset
+from diive.flux.partitioning.nighttime_oneflux import NighttimePartitioningOneFlux
+from diive.flux.partitioning.nighttime_oneflux import partition_nee_nighttime_oneflux
+from diive.flux.partitioning.nighttime_oneflux import lloyd_taylor
+from diive.flux.partitioning.nighttime_oneflux import sunrise_sunset
 
 __all__ = [
-    "NighttimePartitioning",
-    "partition_nee_nighttime",
+    "NighttimePartitioningOneFlux",
+    "partition_nee_nighttime_oneflux",
     "lloyd_taylor",
     "sunrise_sunset",
 ]
