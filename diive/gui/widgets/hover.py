@@ -70,9 +70,14 @@ class HoverAnnotator:
     def _marker_for(self, ax):
         marker = self._markers.get(ax)
         if marker is None:
+            # scalex/scaley=False: creating the marker must NOT request an
+            # autoscale of this axes. On a sharex-linked panel that still has
+            # autoscale on (the toolbar only disables it on the directly-zoomed
+            # axis), that autoscale would refit x to the full data range and
+            # revert the user's zoom across all linked panels on the next draw.
             (marker,) = ax.plot(
                 [], [], marker="o", ms=6, mfc="none", mec=_INK, mew=1.5,
-                ls="none", zorder=9999)
+                ls="none", zorder=9999, scalex=False, scaley=False)
             marker.set_animated(True)
             self._markers[ax] = marker
         return marker

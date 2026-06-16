@@ -98,6 +98,14 @@ def _ln_wave() -> QIcon:  # ridgeline / diel cycle / flux chain
     return QIcon(pm)
 
 
+def _ln_steps() -> QIcon:  # stepwise screening (descending staircase)
+    pm, p = _line_canvas()
+    p.drawPolyline(_poly([(2, 3), (2, 13), (6, 13), (6, 9.5),
+                          (10, 9.5), (10, 6), (14, 6)]))
+    p.end()
+    return QIcon(pm)
+
+
 def _ln_scatter() -> QIcon:  # scatter XY
     pm, p = _line_canvas()
     for cx, cy in ((4, 11), (7, 7), (9, 10), (12, 4), (5, 5)):
@@ -205,6 +213,8 @@ _LINE_RULES = [
     ("diel", _ln_wave),
     ("cumulative", _ln_chart),
     ("scatter", _ln_scatter),
+    ("stepwise", _ln_steps),
+    ("screening", _ln_steps),
     ("hampel", _ln_scatter),
     ("outlier", _ln_scatter),
     ("histogram", _ln_bars),

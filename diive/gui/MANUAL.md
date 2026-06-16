@@ -212,7 +212,7 @@ target-vs-driver scatter.
 - Changing the method or max lag takes effect on **Rank drivers**; picking a new
   target updates immediately.
 
-### Analyze ▸ Seasonal-trend & anomalies
+### Analyze ▸ Seasonal trend & anomalies
 
 See whether a variable is **changing over the years** and which years stood out.
 Pick a variable; it is split into:

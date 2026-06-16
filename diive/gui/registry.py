@@ -92,6 +92,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "3D surface": Surface3DTab,
     },
     "Outliers": {
+        "Stepwise screening": StepwiseScreeningTab,
         "Absolute limits filter": AbsoluteLimitsTab,
         "Hampel filter": HampelOutlierTab,
         "Local SD filter": LocalSDOutlierTab,
@@ -101,7 +102,6 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Local Outlier Factor filter": LocalOutlierFactorTab,
         "Trim-low filter": TrimLowOutlierTab,
         "Manual removal": ManualRemovalOutlierTab,
-        "Stepwise screening": StepwiseScreeningTab,
     },
     # Eddy-covariance flux processing (dv.flux). Its own menu — a first-class
     # diive domain that will grow (gap-filling, USTAR, storage, ...).
@@ -119,7 +119,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Data profile": ProfileTab,
         "Gaps & coverage": GapDashboardTab,
         "Driver explorer": DriverExplorerTab,
-        "Seasonal-trend & anomalies": SeasonalTrendTab,
+        "Seasonal trend & anomalies": SeasonalTrendTab,
         "Spectrogram": SpectrogramTab,
     },
     "Settings": {
@@ -141,6 +141,6 @@ SINGLE_INSTANCE_TABS: set[str] = {
     "Nighttime partitioning (ONEFlux)", "Nighttime partitioning (REddyProc)",
     "Daytime partitioning (REddyProc)", "Daytime partitioning (ONEFlux)",
     "Data profile", "Gaps & coverage",
-    "Driver explorer", "Seasonal-trend & anomalies", "Spectrogram",
+    "Driver explorer", "Seasonal trend & anomalies", "Spectrogram",
     "Metadata explorer", "Select variables", "Rename variables", "3D surface",
     "Stepwise screening", "Events"}

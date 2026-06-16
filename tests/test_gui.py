@@ -319,26 +319,35 @@ def test_daterange_dialog_clamps_and_orders(app):
     assert got_start >= start and got_end <= end
 
 
-def test_overview_layout_frozen_on_zoom(window):
-    # Constrained layout reflows on every draw, making panels jump while
-    # zooming; the canvas freezes it after the initial render so zoom/pan stay
-    # stable. Verify a simulated zoom does not move any panel.
+def test_overview_layout_stable_on_zoom(window):
+    # The canvas freezes constrained layout after rendering so zoom/pan don't
+    # continuously reflow the panels. The heatmap colorbar can trigger a one-time
+    # settle over the first couple of zooms (full-range vs zoomed tick-label
+    # density), after which the layout must be STABLE — verify repeated zooms no
+    # longer move any panel.
     overview = window._tabs[0]
     overview._on_select("NEE_CUT_REF_f")
     QApplication.processEvents()
     fig = overview.canvas.fig
-    before = [tuple(a.get_position().bounds) for a in fig.axes]
     ts_ax = fig.axes[0]
-    x0, x1 = ts_ax.get_xlim()
-    ts_ax.set_xlim(x0 + (x1 - x0) * 0.3, x0 + (x1 - x0) * 0.6)  # zoom in
-    overview.canvas.draw()
-    QApplication.processEvents()
-    after = [tuple(a.get_position().bounds) for a in fig.axes]
-    assert before == after  # panels stayed put
 
-    # ...but a resize must re-solve the frozen layout to the new size (otherwise
-    # a layout computed at the tiny pre-show size stays collapsed). After a
-    # resize the bottom panels should have a sensible (non-collapsed) width.
+    def zoom_step(lo, hi):
+        x0, x1 = ts_ax.get_xlim()
+        ts_ax.set_xlim(x0 + (x1 - x0) * lo, x0 + (x1 - x0) * hi)
+        overview.canvas.draw()
+        QApplication.processEvents()
+
+    # A couple of settling zooms, then assert the layout no longer shifts.
+    zoom_step(0.3, 0.7)
+    zoom_step(0.3, 0.7)
+    before = [tuple(a.get_position().bounds) for a in fig.axes]
+    zoom_step(0.25, 0.75)
+    after = [tuple(a.get_position().bounds) for a in fig.axes]
+    assert before == after  # stable after the initial settle (no perpetual jitter)
+
+    # A resize must re-solve the frozen layout to the new size (otherwise a layout
+    # computed at the tiny pre-show size stays collapsed). After a resize the
+    # bottom panels should have a sensible (non-collapsed) width.
     fig.set_size_inches(20, 11)
     overview.canvas._on_resize(None)
     QApplication.processEvents()
@@ -1495,7 +1504,7 @@ def test_seasonal_trend_tab(app):
     # tab with multi-year data instead of the one-year `window` fixture.
     from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
     from diive.gui.icons import menu_icon
-    assert not menu_icon("Seasonal-trend & anomalies").isNull()
+    assert not menu_icon("Seasonal trend & anomalies").isNull()
 
     df = dv.load_exampledata_parquet().loc["2018":"2022"]  # 5 years
     tab = SeasonalTrendTab()
@@ -1534,7 +1543,7 @@ def test_seasonal_trend_tab(app):
 def test_seasonal_trend_short_data_graceful(window):
     # The window fixture has one year -> annual decomposition can't run. The tab
     # must show a friendly message (not crash), and the anomaly view still works.
-    window._open_menu_tab("Seasonal-trend & anomalies")
+    window._open_menu_tab("Seasonal trend & anomalies")
     tab = window._menu_tab_list[-1]
     for _ in range(60):
         QApplication.processEvents()
@@ -2437,12 +2446,19 @@ def test_studio_chrome_builds_frameless_with_header(app, monkeypatch, example_ye
         theme.manager.reset(silent=True)
 
 
-def test_overview_stats_cards(window):
+def test_overview_hero_stats(window):
     overview = window._tabs[0]
     overview._on_select("NEE_CUT_REF_f")
     QApplication.processEvents()
-    # Cards = layout items minus the trailing stretch.
-    assert overview.stats_layout.count() - 1 > 5
+    # All stats live in the hero band (no bottom ribbon). The persistent slots
+    # are keyed by label and populated with non-empty values.
+    hero = overview.hero
+    assert hero._name.text() == "NEE_CUT_REF_f"
+    for label in ("STARTDATE", "PERIOD", "NOV", "COVERAGE", "GAPS",
+                  "MEAN ± SD", "SUM", "MEDIAN", "P01", "P99", "MAX"):
+        assert label in hero._slots
+        assert hero._slots[label]._value.text()  # non-empty
+    assert not hasattr(overview, "stats_layout")  # bottom ribbon removed
 
 
 def test_to_diive_format_flattens_and_names():

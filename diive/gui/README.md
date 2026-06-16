@@ -197,7 +197,7 @@ drivers** button (the lag scan can be heavier). The table sorts numerically via 
 value, not the display string). Defaults to a continuous flux target (`NEE_CUT_REF_f`) so the ranking is informative on
 open. A natural next step: a "send top-N drivers to Feature engineering / gap-filling" handoff.
 
-**Seasonal-trend & anomaly explorer (`tabs/seasonaltrend.py`):** opened from **Analyze ▸ Seasonal-trend & anomalies**
+**Seasonal-trend & anomaly explorer (`tabs/seasonaltrend.py`):** opened from **Analyze ▸ Seasonal trend & anomalies**
 (single-instance). Pick a variable → its daily-mean series is split into **trend / seasonal / residual** (four stacked
 panels), and a second **view** shows each year's **anomaly** vs a reference period (red above / blue below). Everything is
 library-backed: `dv.times.resample_to_daily_agg` builds the daily series, `dv.analysis.SeasonalTrendDecomposition`

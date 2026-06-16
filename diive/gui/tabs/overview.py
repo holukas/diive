@@ -11,6 +11,8 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
+from html import escape
+
 import matplotlib.dates as mdates
 import pandas as pd
 from PySide6.QtCore import Qt
@@ -18,26 +20,21 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QScrollArea,
+    QSizePolicy,
     QSplitter,
     QVBoxLayout,
     QWidget,
 )
 
 import diive as dv
-from diive.core.dfun.stats import SSTATS_DESCRIPTIONS
 from diive.gui import events as events_store
+from diive.gui import metadata_store
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 _DEFAULT_VAR = "NEE_CUT_REF_f"
-
-# Stats from dv.sstats that the overview ribbon intentionally omits (too noisy /
-# not useful at a glance).
-_HIDDEN_STATS = ["OUTLIER_COUNT", "OUTLIER_PERC", "TREND_SLOPE", "ACF_LAG1",
-                 "P05", "P95"]
 
 
 def _is_flag(name: str) -> bool:
@@ -46,15 +43,16 @@ def _is_flag(name: str) -> bool:
     return str(name).startswith("FLAG_")
 
 # Overview figure layout (2 rows x 4 cols): the time series spans the top-left
-# three columns; below it sit the cumulative, mean-diel-cycle and daily-mean
-# panels; the heatmap fills the right column over the full height. Add panels by
+# three columns with the date/time heatmap top-right; below them sit the
+# cumulative, diel-cycle, daily-mean and histogram panels. Add panels by
 # extending _PANELS. Each entry: (gridspec row-slice, gridspec col-slice, type).
 _PANELS = [
     ((0, slice(0, 3)), "Time series"),
+    ((0, 3), "Heatmap (date/time)"),
     ((1, 0), "Cumulative"),
     ((1, 1), "Diel cycle"),
     ((1, 2), "Daily mean"),
-    ((slice(0, 2), 3), "Heatmap (date/time)"),
+    ((1, 3), "Histogram"),
 ]
 
 # Panels whose x-axis is the datetime index: linked via a shared x-axis so
@@ -69,6 +67,7 @@ _PANEL_TITLES = {
     "Cumulative": "Cumulative",
     "Diel cycle": "Diel cycle",
     "Daily mean": "Daily mean ± SD",
+    "Histogram": "Distribution",
     "Heatmap (date/time)": "Heatmap",
 }
 _TITLE_FONTSIZE = 10
@@ -84,7 +83,6 @@ _TS_COLOR = "#546E7A"     # blue-grey 600 — time series (refined, professional
 _DAILY_COLOR = "#26A69A"  # teal 400 — daily mean (line + SD band)
 # The diel cycle now draws one auto-coloured line per month (no single colour).
 _ZERO_COLOR = "#90A4AE"   # blue-grey 300 — zero reference line
-_BADGE_BG = "#1565C0"     # elegant deep blue — variable-name badge background
 
 
 def _fmt(value) -> str:
@@ -96,52 +94,6 @@ def _fmt(value) -> str:
     if f == int(f) and abs(f) < 1e15:
         return f"{int(f):,}"
     return f"{f:.4g}"
-
-
-class _StatItem(QWidget):
-    """A borderless metric: a tiny tracked label above a bold value.
-
-    No card chrome — items sit on the strip separated by hairlines, reading as
-    one clean metrics ribbon rather than a row of boxes.
-    """
-
-    def __init__(self, name: str, value: str, tip: str = "") -> None:
-        super().__init__()
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(1)
-
-        # The label stylesheets are local, which detaches the item's tooltip from
-        # the app-wide QToolTip rule (and leaks the bare text colour into it) — so
-        # re-attach the light tooltip look on the widgets that carry the tooltip.
-        tip_qss = theme.manager.tooltip_qss()
-
-        name_lbl = QLabel(theme.manager.label_text(name))
-        nf = theme.manager.tracked_font(name_lbl.font())
-        nf.setPointSizeF(max(6.5, nf.pointSizeF() - 2.0))
-        nf.setBold(True)
-        name_lbl.setFont(nf)
-        name_lbl.setStyleSheet(
-            "QLabel { color: #90A4AE; background: transparent; }" + tip_qss)
-
-        value_lbl = QLabel(value)
-        vf = value_lbl.font()
-        vf.setPointSizeF(vf.pointSizeF() + 2.0)
-        vf.setBold(True)
-        value_lbl.setFont(vf)
-        value_lbl.setStyleSheet(
-            "QLabel { color: #263238; background: transparent; }" + tip_qss)
-        value_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-
-        lay.addWidget(name_lbl)
-        lay.addWidget(value_lbl)
-
-        # Explain the metric on hover (set on the children too, so the tooltip
-        # shows wherever the cursor lands within the item).
-        if tip:
-            full = f"{name}: {tip}"
-            for w in (self, name_lbl, value_lbl):
-                w.setToolTip(full)
 
 
 def _stat_separator() -> QFrame:
@@ -187,6 +139,332 @@ class _StatCard(QFrame):
         lay.addStretch(1)
 
 
+def _human_timedelta(td) -> str:
+    """A compact, unit-light duration label (e.g. '3.2 years', '18 days', '6 h')."""
+    try:
+        secs = float(pd.Timedelta(td).total_seconds())
+    except (TypeError, ValueError):
+        return "—"
+    if secs <= 0:
+        return "—"
+    days = secs / 86400.0
+    if days >= 365:
+        return f"{days / 365.25:.1f} years"
+    if days >= 1:
+        return f"{days:.0f} days"
+    hours = secs / 3600.0
+    if hours >= 1:
+        return f"{hours:.0f} h"
+    return f"{secs / 60:.0f} min"
+
+
+def _human_step(index) -> str:
+    """Median sampling step of a datetime index, compactly (e.g. '30 min')."""
+    try:
+        secs = float(pd.Timedelta(index.to_series().diff().median()).total_seconds())
+    except (TypeError, ValueError, AttributeError):
+        return ""
+    if secs <= 0:
+        return ""
+    if secs >= 86400:
+        return f"{secs / 86400:.0f} d"
+    if secs >= 3600:
+        return f"{secs / 3600:.0f} h"
+    return f"{secs / 60:.0f} min"
+
+
+# Origin -> (chip background, chip text). Authoritative provenance from the
+# metadata store (not name-guessed), so it gets a confident badge.
+_ORIGIN_COLORS = {
+    "original": ("#E3F2FD", "#1565C0"),
+    "modified": ("#FFF3E0", "#E65100"),
+    "derived": ("#F3E5F5", "#6A1B9A"),
+}
+
+
+def _chip_qss(bg: str, fg: str) -> str:
+    """Stylesheet for a small rounded pill (origin badge / tag chip)."""
+    return (f"QLabel {{ background: {bg}; color: {fg}; border-radius: 7px;"
+            f" padding: 2px 9px; font-size: 11px; font-weight: 600; }}")
+
+
+def _chip(text: str, bg: str, fg: str) -> QLabel:
+    """A small rounded pill (origin badge / tag chip)."""
+    lbl = QLabel(text)
+    lbl.setStyleSheet(_chip_qss(bg, fg))
+    return lbl
+
+
+def _history_notes_html(meta) -> str:
+    """Rich-text tooltip: the user note + provenance history (or '' if neither).
+
+    Mirrors the variable-list tooltip's history formatting (``ProvenanceEntry.
+    describe()`` + timestamp) so the two read identically.
+    """
+    if meta is None:
+        return ""
+    rows = []
+    note = (getattr(meta, "description", "") or "").strip()
+    if note:
+        rows.append(f"<span style='color:#90A4AE'>note:</span> <i>{escape(note)}</i>")
+    prov = getattr(meta, "provenance", None) or []
+    if prov:
+        steps = "".join(
+            f"<li>{escape(p.describe())}"
+            + (f" <span style='color:#90A4AE'>· {escape(p.timestamp)}</span>"
+               if p.timestamp else "")
+            + "</li>"
+            for p in prov)
+        rows.append("<span style='color:#90A4AE'>history:</span>"
+                    f"<ol style='margin:2px 0 0 -22px'>{steps}</ol>")
+    return "<br>".join(rows)
+
+
+def _clear_layout(layout) -> None:
+    """Recursively remove and delete every item in a layout.
+
+    Widgets are unparented immediately (``setParent(None)``) before
+    ``deleteLater``: ``deleteLater`` alone keeps them as children until a later
+    event-loop pass, so the old content lingers/flickers under the new content.
+    """
+    while layout.count():
+        item = layout.takeAt(0)
+        w = item.widget()
+        if w is not None:
+            w.setParent(None)
+            w.deleteLater()
+        elif item.layout() is not None:
+            _clear_layout(item.layout())
+            item.layout().deleteLater()
+
+
+class _MetricSlot(QWidget):
+    """A persistent metric (tiny tracked label over a bold value), updated in
+    place — built once, never torn down, so it can't flicker."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(1)
+        tip_qss = theme.manager.tooltip_qss()
+        self._name = QLabel()
+        nf = theme.manager.tracked_font(self._name.font())
+        nf.setPointSizeF(max(6.5, nf.pointSizeF() - 2.0))
+        nf.setBold(True)
+        self._name.setFont(nf)
+        self._name.setStyleSheet(
+            "QLabel { color: #90A4AE; background: transparent; }" + tip_qss)
+        self._value = QLabel()
+        vf = self._value.font()
+        vf.setPointSizeF(vf.pointSizeF() + 2.0)
+        vf.setBold(True)
+        self._value.setFont(vf)
+        self._value.setStyleSheet(
+            "QLabel { color: #263238; background: transparent; }" + tip_qss)
+        self._value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        lay.addWidget(self._name)
+        lay.addWidget(self._value)
+
+    def update_metric(self, name: str, value: str, tip: str) -> None:
+        self._name.setText(theme.manager.label_text(name))
+        self._value.setText(value)
+        full = f"{name}: {tip}" if tip else ""
+        for w in (self, self._name, self._value):
+            w.setToolTip(full)
+
+
+class _HeroBand(QFrame):
+    """Identity + full-stats header for the selected variable.
+
+    Identity line: name + origin badge + user tags + a history/notes hover field
+    (authoritative metadata, not name-guessed). Below it, all summary stats laid
+    out in logical rows (record extent & availability; centre & spread;
+    distribution from min to max) — this is the only stats surface (there is no
+    bottom ribbon). Values come from `dv.sstats` (plus `count_gaps`); deliberately
+    unit-free and length-agnostic, each computed defensively (a failure shows '—'
+    rather than blanking the row).
+
+    Built **once** with persistent widgets — `set_variable` only updates their
+    text/visibility, never tears them down — so switching variables can't flicker.
+    The only per-call rebuild is the tag chips (variable count), confined to a
+    small sub-container. Vertical size policy is Fixed: the structure is constant,
+    so the band keeps a constant height and never resizes the canvas below.
+    """
+
+    #: Metric slots grouped into rows (logical order). Each entry is
+    #: (label, tooltip); `_metric_values` returns a {label: value} map. A single
+    #: row: record extent & availability, then centre/spread/total, then the
+    #: distribution low -> high.
+    _STAT_ROWS = [
+        [
+            ("STARTDATE", "First timestamp in the record"),
+            ("ENDDATE", "Last timestamp in the record"),
+            ("PERIOD", "Time span of the record"),
+            ("NOV", "Number of values (records)"),
+            ("MISSING", "Number of missing records"),
+            ("COVERAGE", "Share of records present (non-missing)"),
+            ("GAPS", "Number of gaps (consecutive missing runs)"),
+            ("MEAN ± SD", "Mean ± standard deviation"),
+            ("VAR", "Variance"),
+            ("CV", "Coefficient of variation (SD / mean)"),
+            ("SUM", "Sum of the available values"),
+            ("MIN", "Minimum value"),
+            ("P01", "1st percentile"),
+            ("MEDIAN", "Median (50th percentile)"),
+            ("P99", "99th percentile"),
+            ("MAX", "Maximum value"),
+        ],
+    ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("heroband")
+        border = theme.manager.tokens["BORDER"]
+        self.setStyleSheet(
+            f"QFrame#heroband {{ background: #FFFFFF; border: 1px solid {border};"
+            f" border-radius: 10px; }}")
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(16, 11, 16, 11)
+        lay.setSpacing(8)
+
+        # --- identity row (persistent widgets) -------------------------------
+        idrow = QHBoxLayout()
+        idrow.setSpacing(8)
+        self._name = QLabel()
+        nf = self._name.font()
+        nf.setPointSizeF(nf.pointSizeF() + 5.0)
+        nf.setBold(True)
+        self._name.setFont(nf)
+        self._name.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        idrow.addWidget(self._name)
+
+        self._origin = QLabel()
+        idrow.addWidget(self._origin)
+
+        # Tag chips vary in number, so they live in their own small container
+        # that's the only thing rebuilt per selection.
+        self._tags_box = QWidget()
+        self._tags_lay = QHBoxLayout(self._tags_box)
+        self._tags_lay.setContentsMargins(0, 0, 0, 0)
+        self._tags_lay.setSpacing(6)
+        idrow.addWidget(self._tags_box)
+
+        self._hist = QLabel("history & notes")
+        self._hist.setStyleSheet(
+            _chip_qss("#ECEFF1", "#546E7A") + theme.manager.tooltip_qss())
+        self._hist.setCursor(Qt.CursorShape.WhatsThisCursor)
+        idrow.addWidget(self._hist)
+        idrow.addStretch(1)
+        lay.addLayout(idrow)
+
+        # --- stat rows (persistent slots, keyed by label) --------------------
+        self._slots: dict[str, _MetricSlot] = {}
+        for row in self._STAT_ROWS:
+            rowlay = QHBoxLayout()
+            rowlay.setSpacing(14)
+            for i, (label, _tip) in enumerate(row):
+                if i > 0:
+                    rowlay.addWidget(_stat_separator())
+                slot = _MetricSlot()
+                self._slots[label] = slot
+                rowlay.addWidget(slot)
+            rowlay.addStretch(1)
+            lay.addLayout(rowlay)
+
+    def set_variable(self, name: str, series) -> None:
+        meta = metadata_store.manager.store.peek(name)  # None if untracked
+        self._name.setText(name)
+
+        origin = getattr(meta, "origin", None)
+        if origin:
+            bg, fg = _ORIGIN_COLORS.get(origin, ("#ECEFF1", "#37474F"))
+            self._origin.setText(origin.upper())
+            self._origin.setStyleSheet(_chip_qss(bg, fg))
+            self._origin.show()
+        else:
+            self._origin.hide()
+
+        # Tags: rebuild only the small tag container (updates suppressed on it
+        # alone so the rest of the band is untouched).
+        self._tags_box.setUpdatesEnabled(False)
+        _clear_layout(self._tags_lay)
+        if meta is not None:
+            for tag in sorted(meta.user_tags()):
+                cbg, cfg = theme.tag_color(tag)
+                self._tags_lay.addWidget(_chip(tag, cbg, cfg))
+        self._tags_lay.activate()
+        self._tags_box.setUpdatesEnabled(True)
+
+        hist_html = _history_notes_html(meta)
+        if hist_html:
+            self._hist.setToolTip(hist_html)
+            self._hist.show()
+        else:
+            self._hist.hide()
+
+        values = self._metric_values(series)
+        for row in self._STAT_ROWS:
+            for label, tip in row:
+                self._slots[label].update_metric(label, values.get(label, "—"), tip)
+
+    @staticmethod
+    def _metric_values(series) -> dict[str, str]:
+        """{label: value string} for every stat slot.
+
+        Numeric stats come from `dv.sstats` (the single canonical computation);
+        coverage/gaps are derived directly. Everything is defensive — a value
+        that can't be computed is '—', so an odd series never blanks the band."""
+        try:
+            s = dv.sstats(series).iloc[:, 0]  # Series: stat label -> value
+        except Exception:
+            s = None
+
+        def g(key: str) -> str:
+            if s is None:
+                return "—"
+            try:
+                return _fmt(s[key])
+            except Exception:
+                return "—"
+
+        out: dict[str, str] = {}
+        # Timestamps + span straight from the index (clean, dtype-independent).
+        idx = series.index
+        try:
+            out["STARTDATE"] = pd.Timestamp(idx.min()).strftime("%Y-%m-%d %H:%M")
+            out["ENDDATE"] = pd.Timestamp(idx.max()).strftime("%Y-%m-%d %H:%M")
+            out["PERIOD"] = _human_timedelta(idx.max() - idx.min())
+        except Exception:
+            out["STARTDATE"] = out["ENDDATE"] = out["PERIOD"] = "—"
+        # Coverage / missing / gaps derived directly (robust on odd series).
+        try:
+            n = len(series)
+            miss = int(series.isna().sum())
+            out["NOV"] = f"{n:,}"
+            out["MISSING"] = f"{miss:,}"
+            out["COVERAGE"] = f"{100.0 * (n - miss) / n if n else 0.0:.0f}%"
+        except Exception:
+            out["NOV"] = out["MISSING"] = out["COVERAGE"] = "—"
+        try:
+            out["GAPS"] = f"{int(dv.analysis.count_gaps(series)):,}"
+        except Exception:
+            out["GAPS"] = "—"
+        # Combined mean ± SD.
+        if s is not None:
+            try:
+                out["MEAN ± SD"] = f"{_fmt(s['MEAN'])} ± {_fmt(s['SD'])}"
+            except Exception:
+                out["MEAN ± SD"] = "—"
+        else:
+            out["MEAN ± SD"] = "—"
+        # The rest pulled straight from sstats.
+        for label in ("VAR", "CV", "SUM", "MIN", "MAX", "MEDIAN", "P01", "P99"):
+            out[label] = g(label)
+        return out
+
+
 class OverviewTab(DiiveTab):
     """Stats + multi-panel figure for the selected variable."""
 
@@ -198,6 +476,7 @@ class OverviewTab(DiiveTab):
         # Live zoom-sync state (set per render; see _render_figure / _on_zoom).
         self._zoom_series = None
         self._diel_ax = None
+        self._hist_ax = None
         self._heatmap_ax = None
         self._heatmap_ylim = None
         self._syncing_zoom = False
@@ -212,35 +491,17 @@ class OverviewTab(DiiveTab):
         self.varpanel = VariablePanel()
         self.varpanel.selected.connect(self._on_select)
 
-        # Right column: figure on top, the stats ribbon directly below it (so the
-        # stats sit right of the variable list, not spanning the full window).
+        # Right column: the hero band (identity + all stats) on top, the figure
+        # below. There is no separate bottom stats ribbon — every stat lives in
+        # the hero band.
         right = QWidget()
         right_lay = QVBoxLayout(right)
         right_lay.setContentsMargins(0, 0, 0, 0)
         right_lay.setSpacing(0)
+        self.hero = _HeroBand()
+        right_lay.addWidget(self.hero)
         self.canvas = MplCanvas()
         right_lay.addWidget(self.canvas, stretch=1)
-
-        # "Dashboard strip" of stat cards, below the figure.
-        self.stats_strip = QScrollArea()
-        self.stats_strip.setWidgetResizable(True)
-        self.stats_strip.setFixedHeight(54)
-        self.stats_strip.setFrameShape(QFrame.Shape.NoFrame)
-        self.stats_strip.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.stats_strip.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        border = theme.manager.tokens["BORDER"]
-        self.stats_strip.setStyleSheet(
-            f"QScrollArea {{ background: #FFFFFF; border-top: 1px solid {border}; }}")
-        host = QWidget()
-        host.setStyleSheet("background: #FFFFFF;")
-        self.stats_layout = QHBoxLayout(host)
-        self.stats_layout.setContentsMargins(14, 0, 14, 0)
-        self.stats_layout.setSpacing(14)
-        self.stats_layout.addStretch(1)
-        self.stats_strip.setWidget(host)
-        right_lay.addWidget(self.stats_strip)
 
         splitter.addWidget(self.varpanel)
         splitter.addWidget(right)
@@ -314,30 +575,12 @@ class OverviewTab(DiiveTab):
         series = self._df[name]
 
         def _render() -> None:
-            self._fill_stats(series)
+            # The hero (identity + all stats) updates its persistent widgets in
+            # place, then the figure renders.
+            self.hero.set_variable(name, series)
             self._render_figure(series, name)
 
         self.varpanel.run_with_loading(name, _render)
-
-    def _fill_stats(self, series) -> None:
-        # Clear existing cards (keep the trailing stretch).
-        while self.stats_layout.count() > 1:
-            item = self.stats_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        try:
-            values = dv.sstats(series).iloc[:, 0]  # all stats (ribbon scrolls)
-        except Exception:
-            return
-        values = values.drop(labels=_HIDDEN_STATS, errors="ignore")
-        at = 0  # insert before the trailing stretch, hairline-separated
-        for i, (stat, value) in enumerate(values.items()):
-            if i > 0:
-                self.stats_layout.insertWidget(at, _stat_separator())
-                at += 1
-            tip = SSTATS_DESCRIPTIONS.get(str(stat), "")
-            self.stats_layout.insertWidget(at, _StatItem(str(stat), _fmt(value), tip))
-            at += 1
 
     def _render_figure(self, series, name: str) -> None:
         fig = self.canvas.fig
@@ -369,20 +612,10 @@ class OverviewTab(DiiveTab):
             self._style_panel(ax, plot_type)
         # One uniform font size for every number, axis label, and in-plot text
         # (including the heatmap colourbar), overriding the plot classes' own
-        # sizes for a clean, consistent look.
+        # sizes for a clean, consistent look. The variable name lives in the hero
+        # band above the figure, so no in-figure name badge is drawn.
         for ax in fig.axes:
             self._panel_fonts(ax)
-        # Variable name as an elegant badge inside the time-series panel's
-        # top-left corner (bold white on deep blue) — saves the figure-level
-        # title strip. Added after the per-axes font pass so it keeps its size;
-        # fig.clear() drops it on re-render so it never accumulates.
-        ts_ax = panel_axes.get("Time series")
-        if ts_ax is not None:
-            ts_ax.text(0.012, 0.95, name, transform=ts_ax.transAxes,
-                       ha="left", va="top", fontsize=12, fontweight="bold",
-                       color="white", zorder=100,
-                       bbox=dict(boxstyle="round,pad=0.35", facecolor=_BADGE_BG,
-                                 edgecolor="none"))
 
         # Event overlays: vertical line / shaded span on the datetime panels and a
         # horizontal line / band on the heatmap (date is on its y-axis). Drawn
@@ -395,6 +628,7 @@ class OverviewTab(DiiveTab):
         # (clipped to the visible date range) don't share that axis, so update
         # them on every xlim change.
         self._diel_ax = panel_axes.get("Diel cycle")
+        self._hist_ax = panel_axes.get("Histogram")
         self._heatmap_ax = panel_axes.get("Heatmap (date/time)")
         # Heatmap y-axis data range (Date), so zoom can clamp to it.
         self._heatmap_ylim = (
@@ -466,7 +700,9 @@ class OverviewTab(DiiveTab):
     def _on_zoom(self, shared_ax) -> None:
         """React to a zoom/pan of the shared datetime x-axis.
 
-        (1) Recompute the diel cycle from only the data in the visible window.
+        (1) Recompute the diel cycle and the histogram from only the data in the
+            visible window (their x-axes aren't datetime, so they don't follow the
+            shared zoom automatically).
         (2) Clip the heatmap to the same date range — its date axis is the y-axis
             (same matplotlib date-number units as the line panels' x-axis), so
             the hour-of-day x-axis is deliberately left untouched.
@@ -484,14 +720,20 @@ class OverviewTab(DiiveTab):
                 yhi = min(hi, self._heatmap_ylim[1])
                 if yhi > ylo:
                     self._heatmap_ax.set_ylim(ylo, yhi)
-            if self._diel_ax is not None:
+            # The diel cycle and histogram both summarise the visible window, so
+            # recompute them on the zoomed sub-range.
+            if self._diel_ax is not None or self._hist_ax is not None:
                 start = pd.Timestamp(mdates.num2date(lo)).tz_localize(None)
                 end = pd.Timestamp(mdates.num2date(hi)).tz_localize(None)
                 sub = dv.times.keep_daterange(self._zoom_series, start=start, end=end)
-                self._diel_ax.clear()
-                self._draw_panel(self._diel_ax, sub, "Diel cycle")
-                self._style_panel(self._diel_ax, "Diel cycle")
-                self._panel_fonts(self._diel_ax)
+                for ax, ptype in ((self._diel_ax, "Diel cycle"),
+                                  (self._hist_ax, "Histogram")):
+                    if ax is None:
+                        continue
+                    ax.clear()
+                    self._draw_panel(ax, sub, ptype)
+                    self._style_panel(ax, ptype)
+                    self._panel_fonts(ax)
         finally:
             self._syncing_zoom = False
         # Repaint without re-freezing the layout (draw() would flip the layout
@@ -532,6 +774,13 @@ class OverviewTab(DiiveTab):
                 dv.plotting.TimeSeries(daily).plot(ax=ax, color=_DAILY_COLOR, linewidth=1.4)
                 ax.axhline(0, color=_ZERO_COLOR, linestyle="--", linewidth=1.0,
                            alpha=0.6, zorder=0)
+            elif plot_type == "Histogram":
+                # Compact distribution: drop the z-score twiny axis, counts and
+                # info box so it reads cleanly at panel size.
+                dv.plotting.HistogramPlot(series).plot(
+                    ax=ax, show_title=False, show_zscores=False,
+                    show_zscore_values=False, show_info=False,
+                    show_counts=False, show_grid=False, highlight_peak=True)
             elif plot_type == "Heatmap (date/time)":
                 dv.plotting.HeatmapDateTime(series).plot(
                     ax=ax, fig=self.canvas.fig, cb_digits_after_comma="auto")

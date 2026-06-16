@@ -59,7 +59,7 @@ _C_RESIDUAL = "#90A4AE"  # blue-grey 300
 class SeasonalTrendTab(DiiveTab):
     """Decompose a variable and inspect its long-term anomalies."""
 
-    title = "Seasonal-trend & anomalies"
+    title = "Seasonal trend & anomalies"
 
     def build(self) -> QWidget:
         self._df = None

@@ -81,6 +81,42 @@ def _namespace_metadata(raw: dict, key: str) -> dict:
     return {key: userdata}
 
 
+class _StudioTabBar(QTabBar):
+    """Studio pill tab bar that tints the always-on (system) tabs.
+
+    Per-tab colours can't be expressed in the pill QSS (a stylesheet can't
+    target an individual `::tab`), so the always-on Overview/Log tabs are
+    distinguished by painting a faint slate wash over their pill after the base
+    style has drawn it. `system_widgets` (the always-on tabs' page widgets) is
+    assigned by `MainWindow`; identity-based so it survives tab reordering.
+    """
+
+    _WASH = QColor(58, 77, 92, 30)  # ACCENT (#3A4D5C) at low alpha
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.system_widgets: set = set()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if not self.system_widgets:
+            return
+        tw = self.parentWidget()  # the hosting QTabWidget
+        radius = float(theme.manager.tokens.get("RADIUS", "12"))
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(self._WASH)
+        for i in range(self.count()):
+            page = tw.widget(i) if tw is not None else None
+            if page is None or page not in self.system_widgets:
+                continue
+            # Inset to the visible pill (QSS margin: 6px vertical, 4px horizontal).
+            pill = QRectF(self.tabRect(i)).adjusted(4, 6, -4, -6)
+            p.drawRoundedRect(pill, radius, radius)
+        p.end()
+
+
 class _StudioRoot(QWidget):
     """Root container for the frameless Studio chrome.
 
@@ -166,10 +202,17 @@ class MainWindow(QMainWindow):
         self._header = None  # set only in Studio chrome (None => native)
         self._studio_tabs = False  # Studio pill tabs carry favicon-style glyphs
         self._tabwidget = QTabWidget()
+        # Custom tab bar so the always-on Overview/Log tabs read slightly
+        # differently (a faint slate wash); set before adding tabs.
+        self._tabwidget.setTabBar(_StudioTabBar())
         for tab_cls in TAB_CLASSES:
             tab = tab_cls()
             self._tabs.append(tab)
             self._tabwidget.addTab(tab.widget(), tab.title)
+        # The always-on tabs' page widgets — tinted by the tab bar and protected
+        # from rename. Identity-based, so it survives reordering.
+        self._system_widgets = {t.widget() for t in self._tabs}
+        self._tabwidget.tabBar().system_widgets = self._system_widgets
         # Tabs can be dragged to reorder and renamed by double-clicking. Menu
         # tabs get a (custom, clearly visible) close button on open; the
         # always-on Overview/Log are removed here so they stay open.
@@ -331,7 +374,9 @@ class MainWindow(QMainWindow):
         # merged into this manually-built menu rather than getting their own.
         data_menu.addSeparator()
         for label in MENU_TABS.get("Data", {}):
-            act = QAction(menu_icon(label), label, self)
+            # Escape '&' so Qt doesn't read it as a mnemonic marker (would render
+            # "Gaps & coverage" as an underlined "Gaps _coverage").
+            act = QAction(menu_icon(label), label.replace("&", "&&"), self)
             act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))
             data_menu.addAction(act)
 
@@ -343,10 +388,19 @@ class MainWindow(QMainWindow):
                 # Set the 3-D surface (GPU/VTK) apart from the 2-D plot methods.
                 if menu_name == "Plot" and label == "3D surface":
                     menu.addSeparator()
-                act = QAction(menu_icon(label), label, self)
+                # Escape '&' so Qt doesn't read it as a mnemonic marker (would
+                # render "Gaps & coverage" as an underlined "Gaps _coverage").
+                act = QAction(menu_icon(label), label.replace("&", "&&"), self)
                 act.triggered.connect(
                     lambda _checked, lab=label: self._open_menu_tab(lab))
                 menu.addAction(act)
+                # Set the stepwise screening (multi-method) apart from the
+                # single-method outlier filters below it.
+                if menu_name == "Outliers" and label == "Stepwise screening":
+                    menu.addSeparator()
+                # Set the full processing chain apart from the standalone tools.
+                if menu_name == "Flux" and label == "Flux processing chain":
+                    menu.addSeparator()
 
         help_menu = add_menu("&Help")
         help_menu.addAction(_act("&About", self._about))
@@ -675,9 +729,14 @@ class MainWindow(QMainWindow):
         return super().eventFilter(obj, event)
 
     def _rename_tab(self, index: int) -> None:
-        """Rename a tab on a left double-click (changes the display label only)."""
+        """Rename a tab on a left double-click (changes the display label only).
+
+        The always-on Overview/Log tabs are not renamable.
+        """
         if index < 0 or not self._last_tab_dblclick_left:
             return
+        if self._tabwidget.widget(index) in self._system_widgets:
+            return  # always-on Overview/Log: not renamable
         new, ok = QInputDialog.getText(
             self, "Rename tab", "Tab name:", text=self._tabwidget.tabText(index))
         if ok and new.strip():

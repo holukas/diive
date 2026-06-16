@@ -37,9 +37,6 @@ import diive
 #: The person who created and maintains diive (shown on the splash).
 AUTHOR = "Lukas Hörtnagl"
 
-#: The author's affiliation, shown beneath the author line.
-AFFILIATION = "Grassland Sciences group, ETH Zurich"
-
 #: One-line description under the wordmark.
 TAGLINE = "Eddy covariance & environmental time series"
 
@@ -142,31 +139,14 @@ def make_splash_pixmap(dpr: float = 1.0) -> QPixmap:
     p.drawText(QRectF(_WIDTH - 220, 56, 180, 24),
                Qt.AlignmentFlag.AlignRight, f"version {diive.__version__}")
 
-    # Credits, lower-left over the waves (white reads well on the dark teal).
-    author_font = QFont()
-    author_font.setPointSize(12)
-    author_font.setWeight(QFont.Weight.DemiBold)
-    p.setFont(author_font)
-    p.setPen(_WHITE)
+    # Credits, lower-left over the waves. A single plain names line: the author
+    # first, then supporters.
+    names_font = QFont()
+    names_font.setPointSize(10)
+    p.setFont(names_font)
+    p.setPen(_LIGHT)
     p.drawText(QRectF(48, _HEIGHT - 98, _WIDTH - 96, 22),
-               Qt.AlignmentFlag.AlignLeft, f"Created by {AUTHOR}")
-
-    if AFFILIATION:
-        aff_font = QFont()
-        aff_font.setPointSize(10)
-        p.setFont(aff_font)
-        p.setPen(_LIGHT)
-        p.drawText(QRectF(48, _HEIGHT - 78, _WIDTH - 96, 18),
-                   Qt.AlignmentFlag.AlignLeft, AFFILIATION)
-
-    if SUPPORTERS:
-        sup_font = QFont()
-        sup_font.setPointSize(10)
-        p.setFont(sup_font)
-        p.setPen(_LIGHT)
-        p.drawText(QRectF(48, _HEIGHT - 58, _WIDTH - 96, 20),
-                   Qt.AlignmentFlag.AlignLeft,
-                   "Supported by " + " · ".join(SUPPORTERS))
+               Qt.AlignmentFlag.AlignLeft, " · ".join([AUTHOR, *SUPPORTERS]))
 
     # Footer (the project URL). DemiBold + near-white cyan so it stays readable
     # over the bright front waves it sits on.

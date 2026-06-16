@@ -41,7 +41,12 @@
   detection call. **Flux ▸ USTAR detection** (new standalone tab) runs the same `UstarMovingPointDetection` directly:
   pick NEE/TA/USTAR/SW_IN, get per-season + annual thresholds, or tick **Multi-year bootstrap** for per-year
   p16/p50/p84 + a pooled CUT, shown as a table and a diagnostic plot; **Time lag analysis** (EC concentration↔wind lag
-  distribution per gas, peak/range/EddyPro window, `dv.flux.TimeLagAnalysis`); **Outliers** tabs **Absolute limits
+  distribution per gas, peak/range/EddyPro window, `dv.flux.TimeLagAnalysis`); **NEE partitioning** — four tabs, one
+  per faithful port (**Nighttime (ONEFlux)** `*_NT_OF`, **Nighttime (REddyProc)** `*_NT_RP`, **Daytime (REddyProc)**
+  `*_DT_RP`, **Daytime (ONEFlux)** `*_DT_OF`), each with auto-seeded input-column pickers (✓/✗ availability marker),
+  site coordinates (seeded from Project settings), an optional VPD-in-kPa toggle for the daytime methods, a worker-thread
+  run, a daily-mean GPP/RECO + cumulative preview, and **Add results to dataset** (emits the GPP/RECO/parameter columns
+  with DERIVED provenance); **Outliers** tabs **Absolute limits
   filter**, **Hampel filter**, **Local SD
   filter**, **Z-score filter**, **Z-score (rolling) filter**, **Z-score (increments) filter**, **Local Outlier
   Factor filter**, **Trim-low filter**, and **Manual removal** (each keeps the
