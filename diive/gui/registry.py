@@ -27,6 +27,10 @@ from diive.gui.tabs.outliers_zscore import ZScoreOutlierTab
 from diive.gui.tabs.outliers_zscoreincrements import ZScoreIncrementsOutlierTab
 from diive.gui.tabs.outliers_trim import TrimLowOutlierTab
 from diive.gui.tabs.outliers_zscorerolling import ZScoreRollingOutlierTab
+from diive.gui.tabs.partitioning_daytime_oneflux import DaytimePartitioningOneFluxTab
+from diive.gui.tabs.partitioning_daytime_reddyproc import DaytimePartitioningReddyProcTab
+from diive.gui.tabs.partitioning_nighttime_oneflux import NighttimePartitioningOneFluxTab
+from diive.gui.tabs.partitioning_nighttime_reddyproc import NighttimePartitioningReddyProcTab
 from diive.gui.tabs.profile import ProfileTab
 from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
 from diive.gui.tabs.spectrogram import SpectrogramTab
@@ -105,6 +109,10 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Flux processing chain": FluxChainTab,
         "USTAR detection": UstarDetectionTab,
         "Time lag analysis": TimeLagAnalysisTab,
+        "Nighttime partitioning (ONEFlux)": NighttimePartitioningOneFluxTab,
+        "Nighttime partitioning (REddyProc)": NighttimePartitioningReddyProcTab,
+        "Daytime partitioning (REddyProc)": DaytimePartitioningReddyProcTab,
+        "Daytime partitioning (ONEFlux)": DaytimePartitioningOneFluxTab,
     },
     # Exploratory analysis & diagnostics (dv.analysis).
     "Analyze": {
@@ -130,6 +138,8 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 SINGLE_INSTANCE_TABS: set[str] = {
     "Appearance", "Project settings", "Flux processing chain", "USTAR detection",
     "Time lag analysis",
+    "Nighttime partitioning (ONEFlux)", "Nighttime partitioning (REddyProc)",
+    "Daytime partitioning (REddyProc)", "Daytime partitioning (ONEFlux)",
     "Data profile", "Gaps & coverage",
     "Driver explorer", "Seasonal-trend & anomalies", "Spectrogram",
     "Metadata explorer", "Select variables", "Rename variables", "3D surface",

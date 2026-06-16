@@ -555,6 +555,48 @@ order), and:
 The threshold detection follows the ONEFlux moving-point method (Papale et al.
 2006). Results appear as a table on the left and a plot on the right.
 
+### Flux ▸ NEE partitioning
+
+Split measured net ecosystem exchange (NEE) into its two component fluxes —
+**gross primary production (GPP)** and **ecosystem respiration (RECO)** — using
+one of four faithful method ports, each on its own tab:
+
+- **Nighttime partitioning (ONEFlux)** — Reichstein et al. (2005); per calendar
+  year. Output columns end in `_NT_OF`.
+- **Nighttime partitioning (REddyProc)** — the REddyProc `sMRFluxPartition`
+  variant (single temperature sensitivity for the whole record). Columns end in
+  `_NT_RP`.
+- **Daytime partitioning (REddyProc)** — the light-response-curve method
+  (Lasslop et al. 2010, REddyProc `partitionNEEGL`). Columns end in `_DT_RP`.
+- **Daytime partitioning (ONEFlux)** — the FLUXNET2015 light-response method
+  (Lasslop et al. 2010, ONEFlux). Columns end in `_DT_OF`.
+
+On each tab, pick the **input columns** (auto-filled from the data, with a green
+✓ / red ✗ marker showing whether the chosen column exists):
+
+- The **nighttime** methods need *measured* and *gap-filled* NEE and air
+  temperature, plus shortwave-in radiation for the day/night split.
+- The **daytime** methods fit on *measured* NEE with *gap-filled* meteo drivers
+  (air temperature, VPD, shortwave-in). The ONEFlux daytime variant also takes
+  the measured air temperature and radiation; the REddyProc daytime variant has
+  an optional **NEE SD** column (leave it as *(none)* to use the method's
+  default uncertainty).
+
+Set the **site coordinates** (latitude — and, for the methods that need them,
+longitude and UTC offset; all default from **Settings ▸ Project settings**). For
+the daytime methods, the **VPD is in kPa** toggle says whether your VPD column is
+in kPa (the diive convention, default) or hPa.
+
+Click **Run partitioning** (it runs in the background — the daytime methods can
+take a while, roughly tens of seconds per year). The preview shows daily-mean
+NEE, GPP and RECO over time plus their cumulative sums. **Add results to
+dataset** appends all of the method's output columns (GPP, RECO and the fitted
+parameters) to your variables.
+
+> The bundled CH-DAV example already has measured and gap-filled NEE / air
+> temperature / VPD / radiation columns, so you can try these tabs on it right
+> away.
+
 ### Settings ▸ Project settings
 
 Settings for the current project:

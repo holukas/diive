@@ -469,6 +469,21 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   per-year p16/p50/p84) + **CUT** (constant, pooled) thresholds, shown as a table + a diagnostic plot. Runs on a worker
   thread; all detection is library work (the small result plot is the only presentation in the tab — a candidate to
   move to a library plot helper if reused).
+- **NEE partitioning tabs** (`Flux` menu, single-instance each) — one tab per faithful partitioning port, all sharing
+  `tabs/_partitioning_base.py::BasePartitioningTab`: **Nighttime partitioning (ONEFlux)**
+  (`tabs/partitioning_nighttime_oneflux.py` → `*_NT_OF`), **Nighttime partitioning (REddyProc)**
+  (`partitioning_nighttime_reddyproc.py` → `*_NT_RP`), **Daytime partitioning (REddyProc)**
+  (`partitioning_daytime_reddyproc.py` → `*_DT_RP`), **Daytime partitioning (ONEFlux)**
+  (`partitioning_daytime_oneflux.py` → `*_DT_OF`). The base is declarative: each subclass lists its `inputs` (one
+  auto-seeded column combo + ✓/✗ availability marker per required series — `needle` may be a list of naming
+  alternatives, e.g. `["SW_IN", "RG"]`, and an `optional` input like daytime-REddyProc's NEE-SD stays `(none)` unless
+  its distinctive token matches), which site coordinates it needs (`needs_lat`/`needs_lon`/`needs_utc`, seeded from
+  `site.manager`), whether to show the **VPD-in-kPa** toggle (`has_vpd_unit`, daytime methods), and the `reco_col`/
+  `gpp_col`/`method_suffix`; it implements only `_build_partitioner(series_map, coords, vpd_in_kpa)` returning the
+  library class (`dv.flux.NighttimePartitioningOneFlux` etc.). The base runs `.run()` on a worker thread, previews
+  daily-mean GPP/RECO/NEE + a cumulative panel, and **Add results to dataset** emits all `*_NT_OF`/`*_NT_RP`/`*_DT_RP`/
+  `*_DT_OF` columns via `featuresCreated` with DERIVED provenance (parent = the measured NEE column). All algorithms are
+  library work — the tabs only collect inputs, run, plot, and emit (strict GUI<->library separation).
 - **Feature engineering tab.** Menu-activated (`Data ▸ Feature engineering`, from `registry.MENU_TAB_CLASSES`) — not in
   the tab bar until selected, and closable (always-on tabs get their close button removed). Runs `FeatureEngineer`
   (library) on selected variables, emits new columns via a `featuresCreated` signal; `MainWindow` merges them, tracks
