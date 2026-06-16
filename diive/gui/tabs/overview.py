@@ -77,6 +77,13 @@ _TITLE_COLOR = "#37474F"  # blue-grey 800 — fallback header colour (heatmap)
 # panels, so the overview reads cleanly despite the plot classes' own defaults.
 _FONT_SIZE = 9
 
+# diive overview tick/spine standard, applied uniformly to every panel (the plot
+# classes' own tick/spine styles vary): ticks point inward, thin and short
+# (matching the cumulative panel); all four spines shown at the same thin width;
+# no grid (the zero reference line is enough).
+_TICK_LENGTH = 4
+_LINE_WIDTH = 0.8
+
 # Refined, mutually distinct line colours so each panel reads at a glance and
 # looks professional (the bright Material blue read as garish).
 _TS_COLOR = "#546E7A"     # blue-grey 600 — time series (refined, professional)
@@ -501,6 +508,9 @@ class OverviewTab(DiiveTab):
         self.hero = _HeroBand()
         right_lay.addWidget(self.hero)
         self.canvas = MplCanvas()
+        # matplotlib hides the time-series x tick labels because it shares its
+        # x-axis with the panels below it; re-reveal them after every draw.
+        self.canvas.fig.canvas.mpl_connect("draw_event", self._reveal_ts_xlabels)
         right_lay.addWidget(self.canvas, stretch=1)
 
         splitter.addWidget(self.varpanel)
@@ -654,6 +664,25 @@ class OverviewTab(DiiveTab):
         ax.set_xlim(lo - pad, hi + pad)
         self.canvas.draw_idle()
 
+    def _reveal_ts_xlabels(self, _event) -> None:
+        """Re-show the time-series x tick labels after a draw.
+
+        The time series shares its x-axis with the panels below it, so matplotlib
+        (treating it as a non-bottom shared subplot) hides its tick labels and
+        re-hides them whenever the ticks regenerate (zoom/pan). Re-reveal them so
+        the main plot stays dated. A same-view redraw keeps the ticks, so the
+        follow-up draw settles; the visibility guard prevents a redraw loop."""
+        ax = getattr(self, "_shared_x_ax", None)
+        if ax is None:
+            return
+        changed = False
+        for tick in ax.xaxis.get_major_ticks():
+            if not tick.label1.get_visible():
+                tick.label1.set_visible(True)
+                changed = True
+        if changed:
+            self.canvas.draw_idle()
+
     def _overlay_events(self, panel_axes: dict) -> None:
         """Draw the configured events onto the datetime panels + heatmap."""
         if not events_store.manager.visible:
@@ -691,7 +720,14 @@ class OverviewTab(DiiveTab):
 
     @staticmethod
     def _panel_fonts(ax) -> None:
-        ax.tick_params(axis="both", labelsize=_FONT_SIZE)
+        # Uniform fonts + the diive overview tick/spine standard (the plot
+        # classes' own tick/spine/grid styles otherwise vary panel to panel).
+        ax.tick_params(axis="both", labelsize=_FONT_SIZE, direction="in",
+                       width=_LINE_WIDTH, length=_TICK_LENGTH)
+        ax.grid(False)
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_linewidth(_LINE_WIDTH)
         ax.xaxis.label.set_size(_FONT_SIZE)
         ax.yaxis.label.set_size(_FONT_SIZE)
         for txt in ax.texts:
@@ -755,6 +791,12 @@ class OverviewTab(DiiveTab):
             if plot_type == "Time series":
                 dv.plotting.TimeSeries(series).plot(
                     ax=ax, color=_TS_COLOR, linewidth=1.4)
+                # Zero reference line only when the data straddles zero (e.g.
+                # fluxes) — pointless for all-positive variables far from zero.
+                smin, smax = series.min(), series.max()
+                if pd.notna(smin) and pd.notna(smax) and smin < 0 < smax:
+                    ax.axhline(0, color=_ZERO_COLOR, linestyle="--",
+                               linewidth=1.0, alpha=0.6, zorder=1)
             elif plot_type == "Cumulative":
                 dv.plotting.Cumulative(df=series.to_frame()).plot(
                     ax=ax, showplot=False, show_title=False, fill=True)
