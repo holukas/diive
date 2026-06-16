@@ -34,6 +34,8 @@ from diive.flux.partitioning.nighttime_reddyproc import NighttimePartitioningRed
 from diive.flux.partitioning.nighttime_reddyproc import partition_nee_nighttime_reddyproc
 from diive.flux.partitioning.nighttime_reddyproc import lloyd_taylor_kelvin
 from diive.flux.partitioning.nighttime_reddyproc import potential_radiation
+from diive.flux.partitioning.daytime_reddyproc import DaytimePartitioningReddyProc
+from diive.flux.partitioning.daytime_reddyproc import partition_nee_daytime_reddyproc
 
 __all__ = [
     "NighttimePartitioningOneFlux",
@@ -44,4 +46,6 @@ __all__ = [
     "partition_nee_nighttime_reddyproc",
     "lloyd_taylor_kelvin",
     "potential_radiation",
+    "DaytimePartitioningReddyProc",
+    "partition_nee_daytime_reddyproc",
 ]

@@ -171,9 +171,11 @@ Library additions used by the GUI (all backward-compatible):
 
 ### NEE Partitioning (new)
 
-Two faithful, vectorized ports of the same Reichstein et al. (2005) nighttime method are available. They differ in
-window geometry, day/night split, E0 fitting and units, so they do not produce identical numbers; output columns carry
-a variant token after the `_NT` suffix — `_OF` (ONEFlux) and `_RP` (REddyProc) — so both can coexist in one dataframe.
+Faithful, vectorized ports of three reference partitioning routines: two of the Reichstein et al. (2005) **nighttime**
+method (ONEFlux and REddyProc) and one of the Lasslop et al. (2010) **daytime** method (REddyProc). They differ in
+window geometry, day/night split, fitting and units, so they do not produce identical numbers; output columns carry a
+variant token after the `_NT` (nighttime) / `_DT` (daytime) suffix — `_OF` (ONEFlux) and `_RP` (REddyProc) — so all can
+coexist in one dataframe.
 
 - **Nighttime partitioning ONEFlux** (`dv.flux.NighttimePartitioningOneFlux` /
   `dv.flux.partition_nee_nighttime_oneflux`, module `diive.flux.partitioning`). Splits NEE into GPP and RECO with the
@@ -203,12 +205,38 @@ a variant token after the `_NT` suffix — `_OF` (ONEFlux) and `_RP` (REddyProc)
   Lloyd-Taylor exponent base out of the optimizer, ~5x faster on 10 years of 30-min data with bit-identical output.
   Example `examples/flux/partitioning/partitioning_nighttime_reddyproc.py`; tests `tests/test_partitioning_reddyproc.py`.
 
-- **Nighttime partitioning comparison example** — `examples/flux/partitioning/partitioning_nighttime_comparison.py` runs
-  both diive ports (ONEFlux `_NT_OF` and REddyProc `_NT_RP`) on identical inputs and compares them against each other and
-  the common ReddyProc-derived reference, showing how window geometry, the day/night split, and per-year vs whole-record
-  E0 make the two implementations of the same paper diverge.
+- **Partitioning comparison example** — `examples/flux/partitioning/partitioning_comparison.py` runs all three diive
+  ports (ONEFlux nighttime `_NT_OF`, REddyProc nighttime `_NT_RP`, REddyProc daytime `_DT_RP`) on identical inputs and
+  compares them against each other and the bundled references for each method (daily-mean + cumulative panels for RECO and
+  GPP), showing how the reference implementation and the nighttime-temperature vs daytime-light approach affect the
+  partitioning.
 
-  Both variants will plug into the flux processing chain and GUI later.
+- **Daytime partitioning REddyProc** (`dv.flux.DaytimePartitioningReddyProc` /
+  `dv.flux.partition_nee_daytime_reddyproc`, module `diive.flux.partitioning`). A faithful Python port of REddyProc's
+  `partitionNEEGL` (Lasslop et al. 2010 light-response-curve method): potential-radiation day/night split (`Rg`>4 W m-2 +
+  sun above horizon), a per-window nighttime `E0` (centered 12-day windows / 4-day reference grid / 2-day step, R's
+  Gauss-Newton `nls` bounded to [50, 400] K with successive 24/48-day window extension) smoothed across time with a
+  Gaussian process (`mlegp`) and an E0-fixed Rref regression, then a per-window rectangular-hyperbola LRC fit (`k`,
+  `beta`, `alpha`, `RRef`; centered 4-day windows / 2-day step) by penalized least squares with Lasslop priors and
+  NEE-uncertainty weighting (R's BFGS `optim`, three starts, the bounds refit cascade and Hessian-based parameter
+  checks), and distance-weighted interpolation of RECO and GPP to every record. To reach REddyProc fidelity the port
+  re-implements R's `nls` Gauss-Newton, `optim` BFGS (`vmmin`) + central-difference gradient/Hessian, and the `mlegp`
+  Gaussian-process smoother. Because the method is a stack of three nested optimizers with data-dependent branches,
+  bit-for-bit parity is not attainable across languages, but each stage matches REddyProc closely: the day/night split
+  and flux interpolation are exact (~1e-13), window acceptance/rejection matches exactly, the LRC per-window parameters
+  match to ~1e-6 for the large majority of windows, and the GP-smoothed E0 to ~0.03 K. **End-to-end the port reproduces
+  a fresh REddyProc run on identical inputs to RECO r = 0.9992, GPP r = 0.9999** (mean abs. diff ~0.01–0.016 µmol m-2 s-1
+  on CH-DAV 2017). Signature: `nee` (measured), `ta`/`vpd`/`sw_in` (gap-filled drivers), `lat`/`lon`/`utc_offset`,
+  optional `nee_sd` (else REddyProc's `max(0.7, 0.2·|NEE|)` fallback), `vpd_in_kpa=True` (diive kPa → REddyProc hPa).
+  Outputs `RECO_DT_RP`, `GPP_DT_RP` and the fitted LRC parameters `K_DT_RP`, `BETA_DT_RP`, `ALPHA_DT_RP`, `RREF_DT_RP`,
+  `E0_DT_RP` (reported at each window's central record). Against the bundled `Reco_DT_CUT_REF` / `GPP_DT_CUT_REF` columns
+  (GPP r ≈ 0.96; RECO r ≈ 0.70 with a small stable bias) the gap is reference provenance — those columns used the
+  measured NEE uncertainty (not shipped), bootstrap uncertainty, the full multi-year record and a different USTAR
+  scenario — not an algorithmic difference. Bootstrap-based uncertainty (`*_SD`, CUT_16/84) is not yet emitted.
+  Example `examples/flux/partitioning/partitioning_daytime_reddyproc.py`; tests
+  `tests/test_partitioning_daytime_reddyproc.py`.
+
+  The variants will plug into the flux processing chain and GUI later.
 
 ### Gap-Filling
 

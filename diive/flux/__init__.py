@@ -16,6 +16,8 @@ from diive.flux.partitioning import NighttimePartitioningOneFlux
 from diive.flux.partitioning import partition_nee_nighttime_oneflux
 from diive.flux.partitioning import NighttimePartitioningReddyProc
 from diive.flux.partitioning import partition_nee_nighttime_reddyproc
+from diive.flux.partitioning import DaytimePartitioningReddyProc
+from diive.flux.partitioning import partition_nee_daytime_reddyproc
 from diive.flux.fluxprocessingchain import (
     FluxConfig,
     FluxLevelData,
@@ -52,6 +54,8 @@ __all__ = [
     'partition_nee_nighttime_oneflux',
     'NighttimePartitioningReddyProc',
     'partition_nee_nighttime_reddyproc',
+    'DaytimePartitioningReddyProc',
+    'partition_nee_daytime_reddyproc',
     'FluxConfig',
     'FluxLevelData',
     'add_driver',
