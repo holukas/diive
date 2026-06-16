@@ -169,6 +169,19 @@ Library additions used by the GUI (all backward-compatible):
   (canonical order `mds`/`rf`/`xgb`); `nighttimetime_accept_qcf_below` → `nighttime_accept_qcf_below`;
   `gapfill_storage_term` default → True; energy-flux set widened (`_ENERGY_FLUX_VARS`: `G`, `SH`, `SLE`, `FH2O`).
 
+### NEE Partitioning (new)
+
+- **Nighttime partitioning** (`dv.flux.NighttimePartitioning` / `dv.flux.partition_nee_nighttime`,
+  module `diive.flux.partitioning`). Splits NEE into GPP and RECO with the nighttime method of Reichstein et al. (2005)
+  — a faithful, fully vectorized Python port of the ONEFlux `oneflux.partition.nighttime` reference: Lloyd & Taylor
+  (1994) respiration model, full-year + windowed (5-day step / 14-day window) parameter optimization with 10% residual
+  trimming, best-E0 selection, E0-fixed Rref re-analysis (4-day step / 8-day window, ordinary + outlier-robust) and
+  linear interpolation. Processes each calendar year independently; outputs `RECO_NT`/`RECO_NT_ROB`, `GPP_NT`/
+  `GPP_NT_ROB`, `RREF_NT`, `E0_NT`, `NEE_NIGHT`. Fast (~0.35 s for 10 years of 30-min data) and validated against the
+  FLUXNET-produced `Reco_CUT_REF`/`GPP_CUT_REF` (correlations 0.97 / 0.99 on CH-DAV). Will plug into the flux processing
+  chain and GUI later. Helpers `lloyd_taylor` and `sunrise_sunset` exported. Example
+  `examples/flux/partitioning/partitioning_nighttime.py`; tests `tests/test_partitioning.py`.
+
 ### Gap-Filling
 
 - **`SWINGapFillerXGBoost`** — physics-aware gap-filler for shortwave incoming radiation. Nighttime gaps are set to

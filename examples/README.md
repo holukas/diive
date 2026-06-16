@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**113 examples across 10 organized folders by functional domain.**
+**114 examples across 10 organized folders by functional domain.**
 
 ## Structure
 
@@ -59,10 +59,12 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (20 examples)
+├── flux/                  # Eddy covariance flux processing (21 examples)
 │   ├── fluxprocessingchain/
 │   │   ├── fluxprocessingchain_runchain.py
 │   │   └── fluxprocessingchain_composable.py
+│   ├── partitioning/      # NEE partitioning into GPP/RECO (1 example)
+│   │   └── partitioning_nighttime.py
 │   ├── lowres/            # Low-resolution processing (9 examples)
 │   │   ├── flux_timelag_analysis.py
 │   │   ├── flux_common.py
@@ -140,7 +142,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs the headless-safe suite (106 scripts) in parallel with 8 workers, reporting execution time and any errors. Three examples are excluded from the runner: the two database-backed meteoscreening workflows and the interactive TUI demo.
+This runs the headless-safe suite (107 scripts) in parallel with 8 workers, reporting execution time and any errors. Three examples are excluded from the runner: the two database-backed meteoscreening workflows and the interactive TUI demo.
 
 ## Finding Examples
 

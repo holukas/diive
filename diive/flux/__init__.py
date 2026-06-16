@@ -11,6 +11,9 @@ Part of the diive library: https://github.com/holukas/diive
 from diive.flux import hires
 from diive.flux import lowres
 from diive.flux import fluxprocessingchain
+from diive.flux import partitioning
+from diive.flux.partitioning import NighttimePartitioning
+from diive.flux.partitioning import partition_nee_nighttime
 from diive.flux.fluxprocessingchain import (
     FluxConfig,
     FluxLevelData,
@@ -42,6 +45,9 @@ __all__ = [
     'hires',
     'lowres',
     'fluxprocessingchain',
+    'partitioning',
+    'NighttimePartitioning',
+    'partition_nee_nighttime',
     'FluxConfig',
     'FluxLevelData',
     'add_driver',

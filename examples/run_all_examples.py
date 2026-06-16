@@ -108,6 +108,8 @@ EXAMPLE_FILES = [
     # Flux - Processing chain
     'flux/fluxprocessingchain/fluxprocessingchain_runchain.py',
     'flux/fluxprocessingchain/fluxprocessingchain_composable.py',
+    # Flux - Partitioning
+    'flux/partitioning/partitioning_nighttime.py',
     # Flux - Low-resolution processing
     'flux/lowres/flux_timelag_analysis.py',
     'flux/lowres/flux_common.py',
