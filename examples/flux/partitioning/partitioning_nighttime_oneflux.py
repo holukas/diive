@@ -62,7 +62,7 @@ part.run()
 results = part.results
 
 print("\nResult columns:", list(results.columns))
-print(results[['RECO_NT', 'GPP_NT', 'E0_NT']].describe())
+print(results[['RECO_NT_OF', 'GPP_NT_OF', 'E0_NT_OF']].describe())
 
 # %%
 # Compare to an independent reference
@@ -74,27 +74,27 @@ print(results[['RECO_NT', 'GPP_NT', 'E0_NT']].describe())
 reco_ref = df['Reco_CUT_REF']
 gpp_ref = df['GPP_CUT_REF_f']
 
-m_reco = results['RECO_NT'].notna() & reco_ref.notna()
-m_gpp = results['GPP_NT'].notna() & gpp_ref.notna()
+m_reco = results['RECO_NT_OF'].notna() & reco_ref.notna()
+m_gpp = results['GPP_NT_OF'].notna() & gpp_ref.notna()
 
 print(f"RECO correlation vs ReddyProc: "
-      f"{np.corrcoef(results['RECO_NT'][m_reco], reco_ref[m_reco])[0, 1]:.4f}")
+      f"{np.corrcoef(results['RECO_NT_OF'][m_reco], reco_ref[m_reco])[0, 1]:.4f}")
 print(f"GPP  correlation vs ReddyProc: "
-      f"{np.corrcoef(results['GPP_NT'][m_gpp], gpp_ref[m_gpp])[0, 1]:.4f}")
+      f"{np.corrcoef(results['GPP_NT_OF'][m_gpp], gpp_ref[m_gpp])[0, 1]:.4f}")
 
 print(f"\nAnnual sums (umol m-2 s-1, mean):")
-print(f"  RECO_NT mean: {results['RECO_NT'].mean():.3f}   "
+print(f"  RECO_NT_OF mean: {results['RECO_NT_OF'].mean():.3f}   "
       f"ReddyProc Reco mean: {reco_ref.mean():.3f}")
-print(f"  GPP_NT  mean: {results['GPP_NT'].mean():.3f}   "
+print(f"  GPP_NT_OF  mean: {results['GPP_NT_OF'].mean():.3f}   "
       f"ReddyProc GPP  mean: {gpp_ref.mean():.3f}")
 
 # %%
 # Outlier-robust variants
 # ^^^^^^^^^^^^^^^^^^^^^^^^
-# ``RECO_NT_ROB`` / ``GPP_NT_ROB`` use a trimmed Rref estimate that downweights
+# ``RECO_NT_OF_ROB`` / ``GPP_NT_OF_ROB`` use a trimmed Rref estimate that downweights
 # the largest nighttime deviations, useful when nighttime NEE is noisy.
 
-print(results[['RECO_NT', 'RECO_NT_ROB', 'GPP_NT', 'GPP_NT_ROB']].mean())
+print(results[['RECO_NT_OF', 'RECO_NT_OF_ROB', 'GPP_NT_OF', 'GPP_NT_OF_ROB']].mean())
 
 # %%
 # Visual comparison
@@ -107,8 +107,8 @@ fig, axes = plt.subplots(1, 2, figsize=(11, 5.2))
 fig.subplots_adjust(left=0.08, right=0.97, top=0.88, bottom=0.12, wspace=0.27)
 
 for ax, dcol, ref, name, color in [
-    (axes[0], 'RECO_NT', reco_ref, 'RECO', '#F44336'),  # red
-    (axes[1], 'GPP_NT', gpp_ref, 'GPP', '#2196F3'),  # blue
+    (axes[0], 'RECO_NT_OF', reco_ref, 'RECO', '#F44336'),  # red
+    (axes[1], 'GPP_NT_OF', gpp_ref, 'GPP', '#2196F3'),  # blue
 ]:
     m = results[dcol].notna() & ref.notna()
     x, y = ref[m], results[dcol][m]
@@ -125,6 +125,7 @@ for ax, dcol, ref, name, color in [
 fig.suptitle('Nighttime partitioning ONEFlux vs ReddyProc (CH-DAV 2017)')
 plt.show()
 
+
 # %%
 # Time-series comparison (shared axis)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -134,13 +135,14 @@ plt.show()
 def _daily(s):
     return s.resample('D').mean()
 
+
 fig, ax = plt.subplots(figsize=(13, 5))
 fig.subplots_adjust(left=0.07, right=0.98, top=0.9, bottom=0.12)
 
-ax.plot(_daily(results['RECO_NT']), color='#F44336', lw=1.4,
+ax.plot(_daily(results['RECO_NT_OF']), color='#F44336', lw=1.4,
         label='RECO diive (ONEFlux)')
 ax.plot(_daily(reco_ref), color='#F44336', lw=1.1, ls='--', label='RECO ReddyProc')
-ax.plot(_daily(results['GPP_NT']), color='#2196F3', lw=1.4,
+ax.plot(_daily(results['GPP_NT_OF']), color='#2196F3', lw=1.4,
         label='GPP diive (ONEFlux)')
 ax.plot(_daily(gpp_ref), color='#2196F3', lw=1.1, ls='--', label='GPP ReddyProc')
 

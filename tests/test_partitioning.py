@@ -44,14 +44,14 @@ class TestNighttimePartitioningOneFlux(unittest.TestCase):
         part = self._run()
         res = part.results
         self.assertEqual(len(res), len(self.df))
-        for col in ['NEE_NIGHT', 'RECO_NT', 'RECO_NT_ROB',
-                    'GPP_NT', 'GPP_NT_ROB', 'RREF_NT', 'E0_NT']:
+        for col in ['NEE_NIGHT_OF', 'RECO_NT_OF', 'RECO_NT_OF_ROB',
+                    'GPP_NT_OF', 'GPP_NT_OF_ROB', 'RREF_NT_OF', 'E0_NT_OF']:
             self.assertIn(col, res.columns)
         self.assertTrue(res.index.equals(self.df.index))
 
     def test_reco_is_positive_and_filled(self):
         part = self._run()
-        reco = part.results['RECO_NT']
+        reco = part.results['RECO_NT_OF']
         # Respiration is a positive flux wherever it is computed.
         self.assertTrue((reco.dropna() > 0).all())
         # ONEFlux parity: each year is either fully partitioned (~all records,
@@ -79,12 +79,12 @@ class TestNighttimePartitioningOneFlux(unittest.TestCase):
         part = NighttimePartitioningOneFlux(nee=nee, ta=ta, sw_in=sw_in, nee_f=nee,
                                      ta_f=ta, lat=self.lat, verbose=0).run()
         res = part.results
-        self.assertEqual(res['RECO_NT'].notna().sum(), 0)
-        self.assertEqual(res['GPP_NT'].notna().sum(), 0)
+        self.assertEqual(res['RECO_NT_OF'].notna().sum(), 0)
+        self.assertEqual(res['GPP_NT_OF'].notna().sum(), 0)
 
     def test_e0_within_physical_range(self):
         part = self._run()
-        e0 = part.results['E0_NT'].dropna().unique()
+        e0 = part.results['E0_NT_OF'].dropna().unique()
         self.assertTrue(len(e0) >= 1)
         for val in e0:
             self.assertGreater(val, 0.0)
@@ -94,20 +94,20 @@ class TestNighttimePartitioningOneFlux(unittest.TestCase):
         part = self._run()
         res = part.results
         reco_ref = self.df['Reco_CUT_REF']
-        m = res['RECO_NT'].notna() & reco_ref.notna()
-        corr = np.corrcoef(res['RECO_NT'][m], reco_ref[m])[0, 1]
+        m = res['RECO_NT_OF'].notna() & reco_ref.notna()
+        corr = np.corrcoef(res['RECO_NT_OF'][m], reco_ref[m])[0, 1]
         # Faithful port: strong correlation with FLUXNET-produced RECO.
         self.assertGreater(corr, 0.9)
         # Means should be close.
-        self.assertLess(abs(res['RECO_NT'][m].mean() - reco_ref[m].mean()), 0.5)
+        self.assertLess(abs(res['RECO_NT_OF'][m].mean() - reco_ref[m].mean()), 0.5)
 
     def test_gpp_definition(self):
         part = self._run()
         res = part.results
         # GPP = RECO - NEE_f wherever both are present.
-        m = res['GPP_NT'].notna() & res['RECO_NT'].notna()
-        expected = res['RECO_NT'][m] - self.df['NEE_CUT_REF_f'][m]
-        np.testing.assert_allclose(res['GPP_NT'][m].to_numpy(),
+        m = res['GPP_NT_OF'].notna() & res['RECO_NT_OF'].notna()
+        expected = res['RECO_NT_OF'][m] - self.df['NEE_CUT_REF_f'][m]
+        np.testing.assert_allclose(res['GPP_NT_OF'][m].to_numpy(),
                                    expected.to_numpy(), rtol=1e-6, atol=1e-6)
 
     def test_functional_wrapper(self):
@@ -117,7 +117,7 @@ class TestNighttimePartitioningOneFlux(unittest.TestCase):
             nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
             nee_f=df['NEE_CUT_REF_f'], ta_f=df['Tair_f'], lat=self.lat, verbose=0)
         self.assertEqual(len(res), len(df))
-        self.assertIn('RECO_NT', res.columns)
+        self.assertIn('RECO_NT_OF', res.columns)
 
     def test_requires_datetime_index(self):
         from diive.flux.partitioning import NighttimePartitioningOneFlux

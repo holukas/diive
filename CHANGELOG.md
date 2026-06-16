@@ -171,6 +171,10 @@ Library additions used by the GUI (all backward-compatible):
 
 ### NEE Partitioning (new)
 
+Two faithful, vectorized ports of the same Reichstein et al. (2005) nighttime method are available. They differ in
+window geometry, day/night split, E0 fitting and units, so they do not produce identical numbers; output columns carry
+a variant token after the `_NT` suffix — `_OF` (ONEFlux) and `_RP` (REddyProc) — so both can coexist in one dataframe.
+
 - **Nighttime partitioning ONEFlux** (`dv.flux.NighttimePartitioningOneFlux` /
   `dv.flux.partition_nee_nighttime_oneflux`, module `diive.flux.partitioning`). Splits NEE into GPP and RECO with the
   nighttime method of Reichstein et al. (2005) — a faithful, fully vectorized Python port of the ONEFlux
@@ -178,11 +182,33 @@ Library additions used by the GUI (all backward-compatible):
   14-day window) parameter optimization with 10% residual trimming, best-E0 selection, the ONEFlux E0 quality gate (a
   year with no well-constrained short-term E0 is left unpartitioned), E0-fixed Rref re-analysis (4-day step / 8-day
   window, ordinary + outlier-robust) and linear interpolation. Processes each calendar year independently; outputs
-  `RECO_NT`/`RECO_NT_ROB`, `GPP_NT`/`GPP_NT_ROB`, `RREF_NT`, `E0_NT`, `NEE_NIGHT`. Fast (~0.35 s for 10 years of 30-min
-  data); step-by-step validated against the ONEFlux reference, and sanity-checked against the (independent,
-  ReddyProc-derived) `Reco_CUT_REF`/`GPP_CUT_REF` columns (correlations 0.97 / 0.99 on CH-DAV). Will plug into the flux
-  processing chain and GUI later. Helpers `lloyd_taylor` and `sunrise_sunset` exported. Example
-  `examples/flux/partitioning/partitioning_nighttime.py`; tests `tests/test_partitioning.py`.
+  `RECO_NT_OF`/`RECO_NT_OF_ROB`, `GPP_NT_OF`/`GPP_NT_OF_ROB`, `RREF_NT_OF`, `E0_NT_OF`, `NEE_NIGHT_OF` (renamed from the
+  earlier suffix-less columns to the `_OF` token). Fast (~0.35 s for 10 years of 30-min data); step-by-step validated
+  against the ONEFlux reference, and sanity-checked against the (independent, ReddyProc-derived)
+  `Reco_CUT_REF`/`GPP_CUT_REF` columns (correlations 0.97 / 0.99 on CH-DAV). Helpers `lloyd_taylor` and `sunrise_sunset`
+  exported. Example `examples/flux/partitioning/partitioning_nighttime_oneflux.py`; tests `tests/test_partitioning.py`.
+
+- **Nighttime partitioning REddyProc** (`dv.flux.NighttimePartitioningReddyProc` /
+  `dv.flux.partition_nee_nighttime_reddyproc`, module `diive.flux.partitioning`). A second, independent port of the same
+  Reichstein et al. (2005) method, faithful to REddyProc's `sMRFluxPartition`: potential-radiation day/night split (exact
+  solar geometry from latitude, longitude and UTC offset), Lloyd-Taylor fit in Kelvin (`TRef`=288.15 K, `T0`=227.13 K),
+  short-term E0 regression (centered 15-day windows / 5-day steps, fit → 5/95 % signed-residual trim → refit, +/-1 SD
+  validity in [30, 350] K, mean of the 3 lowest-SD estimates), E0-fixed Rref as a through-origin slope (centered 7-day
+  windows / 4-day steps) with linear interpolation. Partitions the **whole record at once** with a single E0 (as in
+  REddyProc); no outlier-robust variant. Signature adds `lon` and `utc_offset`. Outputs `RECO_NT_RP`, `GPP_NT_RP`,
+  `RREF_NT_RP`, `E0_NT_RP`, `NEE_NIGHT_RP`. Validated 1:1 against the ReddyProc-derived `Reco_CUT_REF` / `GPP_CUT_REF_f`
+  columns on CH-DAV (2013–2022): RECO r = 0.997, GPP r = 0.9996, annual RECO sums within ~1–2 %. Helpers
+  `lloyd_taylor_kelvin` and `potential_radiation` exported. The short-term E0 and Rref window loops use binary-search
+  slicing of the monotonic day index (instead of a full-length boolean mask per window) and hoist the constant
+  Lloyd-Taylor exponent base out of the optimizer, ~5x faster on 10 years of 30-min data with bit-identical output.
+  Example `examples/flux/partitioning/partitioning_nighttime_reddyproc.py`; tests `tests/test_partitioning_reddyproc.py`.
+
+- **Nighttime partitioning comparison example** — `examples/flux/partitioning/partitioning_nighttime_comparison.py` runs
+  both diive ports (ONEFlux `_NT_OF` and REddyProc `_NT_RP`) on identical inputs and compares them against each other and
+  the common ReddyProc-derived reference, showing how window geometry, the day/night split, and per-year vs whole-record
+  E0 make the two implementations of the same paper diverge.
+
+  Both variants will plug into the flux processing chain and GUI later.
 
 ### Gap-Filling
 

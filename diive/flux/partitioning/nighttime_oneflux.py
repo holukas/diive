@@ -279,13 +279,13 @@ def _partition_one_year(nee: np.ndarray, tair: np.ndarray, sw_in: np.ndarray,
     """
     n = nee.size
     out = {
-        'NEE_NIGHT': np.full(n, np.nan),
-        'RECO_NT': np.full(n, np.nan),
-        'RECO_NT_ROB': np.full(n, np.nan),
-        'GPP_NT': np.full(n, np.nan),
-        'GPP_NT_ROB': np.full(n, np.nan),
-        'RREF_NT': np.full(n, np.nan),
-        'E0_NT': np.full(n, np.nan),
+        'NEE_NIGHT_OF': np.full(n, np.nan),
+        'RECO_NT_OF': np.full(n, np.nan),
+        'RECO_NT_OF_ROB': np.full(n, np.nan),
+        'GPP_NT_OF': np.full(n, np.nan),
+        'GPP_NT_OF_ROB': np.full(n, np.nan),
+        'RREF_NT_OF': np.full(n, np.nan),
+        'E0_NT_OF': np.full(n, np.nan),
     }
 
     # --- Day/night flag and nighttime NEE ---
@@ -298,7 +298,7 @@ def _partition_one_year(nee: np.ndarray, tair: np.ndarray, sw_in: np.ndarray,
     with np.errstate(invalid='ignore'):
         night_mask = (sw_in < DAY_MIN_SW_IN) & (~daylight)
     nee_night = np.where(night_mask, nee, np.nan)
-    out['NEE_NIGHT'] = nee_night
+    out['NEE_NIGHT_OF'] = nee_night
 
     # --- 1) Full-year (fallback) fit ---
     full = _fit_lloyd_taylor(nee_night, tair)
@@ -360,7 +360,7 @@ def _partition_one_year(nee: np.ndarray, tair: np.ndarray, sw_in: np.ndarray,
     if not np.isfinite(best_e0):
         return out  # nothing more can be done for this year
 
-    out['E0_NT'][:] = best_e0
+    out['E0_NT_OF'][:] = best_e0
 
     # --- ONEFlux gate: partition only if at least one short-term window
     # produced a well-constrained E0 (low absolute AND relative standard error).
@@ -380,13 +380,13 @@ def _partition_one_year(nee: np.ndarray, tair: np.ndarray, sw_in: np.ndarray,
         nee_night=nee_night, tair=tair, tair_f=tair_f,
         julday_dec=julday_dec, e0=best_e0)
 
-    out['RECO_NT'] = reco
-    out['RECO_NT_ROB'] = reco_rob
-    out['RREF_NT'] = rref_ord
+    out['RECO_NT_OF'] = reco
+    out['RECO_NT_OF_ROB'] = reco_rob
+    out['RREF_NT_OF'] = rref_ord
 
     # GPP = RECO - NEE, using the gap-filled NEE for continuity.
-    out['GPP_NT'] = reco - nee_f
-    out['GPP_NT_ROB'] = reco_rob - nee_f
+    out['GPP_NT_OF'] = reco - nee_f
+    out['GPP_NT_OF_ROB'] = reco_rob - nee_f
     return out
 
 
@@ -397,14 +397,14 @@ class NighttimePartitioningOneFlux:
     (Reichstein et al. 2005). Each calendar year in the input is partitioned
     independently.
 
-    Example: ``examples/flux/partitioning/partitioning_nighttime.py``
+    Example: ``examples/flux/partitioning/partitioning_nighttime_oneflux.py``
 
     Example:
         >>> part = NighttimePartitioningOneFlux(
         ...     nee=df['NEE_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
         ...     nee_f=df['NEE_f'], ta_f=df['Tair_f'], lat=46.815)
         >>> part.run()
-        >>> results = part.results   # DataFrame with RECO_NT, GPP_NT, ...
+        >>> results = part.results   # DataFrame with RECO_NT_OF, GPP_NT_OF, ...
     """
 
     def __init__(self,
@@ -454,8 +454,8 @@ class NighttimePartitioningOneFlux:
         hr_all = (index.hour + index.minute / 60.0).to_numpy()
         years = index.year.to_numpy()
 
-        cols = ['NEE_NIGHT', 'RECO_NT', 'RECO_NT_ROB', 'GPP_NT', 'GPP_NT_ROB',
-                'RREF_NT', 'E0_NT']
+        cols = ['NEE_NIGHT_OF', 'RECO_NT_OF', 'RECO_NT_OF_ROB', 'GPP_NT_OF', 'GPP_NT_OF_ROB',
+                'RREF_NT_OF', 'E0_NT_OF']
         result = pd.DataFrame(index=index, columns=cols, dtype=float)
 
         if self.verbose:
@@ -478,9 +478,9 @@ class NighttimePartitioningOneFlux:
             for col in cols:
                 result.loc[ymask, col] = year_out[col]
             if self.verbose:
-                e0 = year_out['E0_NT']
+                e0 = year_out['E0_NT_OF']
                 e0_val = e0[np.isfinite(e0)][0] if np.isfinite(e0).any() else np.nan
-                reco = result.loc[ymask, 'RECO_NT']
+                reco = result.loc[ymask, 'RECO_NT_OF']
                 info(f"  {int(year)}: E0={e0_val:.1f}, "
                      f"RECO filled {int(reco.notna().sum())}/{int(ymask.sum())} records.",
                      verbose=self.verbose)
@@ -494,10 +494,10 @@ class NighttimePartitioningOneFlux:
     def results(self) -> DataFrame:
         """DataFrame of partitioning results (aligned to the input index).
 
-        Columns: ``NEE_NIGHT`` (nighttime NEE used), ``RECO_NT`` /
-        ``RECO_NT_ROB`` (ecosystem respiration, ordinary / outlier-robust),
-        ``GPP_NT`` / ``GPP_NT_ROB`` (gross primary production), ``RREF_NT``
-        (interpolated reference respiration), ``E0_NT`` (per-year temperature
+        Columns: ``NEE_NIGHT_OF`` (nighttime NEE used), ``RECO_NT_OF`` /
+        ``RECO_NT_OF_ROB`` (ecosystem respiration, ordinary / outlier-robust),
+        ``GPP_NT_OF`` / ``GPP_NT_OF_ROB`` (gross primary production), ``RREF_NT_OF``
+        (interpolated reference respiration), ``E0_NT_OF`` (per-year temperature
         sensitivity).
         """
         if self._results is None:
@@ -507,12 +507,12 @@ class NighttimePartitioningOneFlux:
     @property
     def reco(self) -> Series:
         """Ecosystem respiration (ordinary), umol m-2 s-1."""
-        return self.results['RECO_NT']
+        return self.results['RECO_NT_OF']
 
     @property
     def gpp(self) -> Series:
         """Gross primary production, umol m-2 s-1."""
-        return self.results['GPP_NT']
+        return self.results['GPP_NT_OF']
 
 
 def partition_nee_nighttime_oneflux(nee: Series, ta: Series, sw_in: Series,
@@ -523,7 +523,7 @@ def partition_nee_nighttime_oneflux(nee: Series, ta: Series, sw_in: Series,
     See :class:`NighttimePartitioningOneFlux` for argument semantics.
 
     Returns:
-        Results DataFrame (RECO_NT, GPP_NT, ...).
+        Results DataFrame (RECO_NT_OF, GPP_NT_OF, ...).
     """
     return NighttimePartitioningOneFlux(
         nee=nee, ta=ta, sw_in=sw_in, nee_f=nee_f, ta_f=ta_f,
