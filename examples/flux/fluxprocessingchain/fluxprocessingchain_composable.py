@@ -7,10 +7,11 @@ The flux processing chain is also exposed as standalone pure functions, one per
 level.  Each function takes a ``FluxLevelData`` container and returns a new
 one — no shared state, no orchestrator class required.
 
-This example runs the **full L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1** pipeline and
-demonstrates the key advantage of the composable functional API: **branching** —
-running three gap-filling methods (Random Forest, XGBoost, MDS) from the same
-L3.3 state without repeating any upstream work.
+This example runs the **full L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1 -> L4.2**
+pipeline and demonstrates the key advantage of the composable functional API:
+**branching** — running three gap-filling methods (Random Forest, XGBoost, MDS)
+and four NEE partitioning variants from the same upstream state without
+repeating any work.
 
 Pipeline at a glance:
   L2   -> ``run_level2``                — EddyPro quality-flag expansion + QCF
@@ -22,6 +23,9 @@ Pipeline at a glance:
   L4.1 -> ``run_level41_mds`` /
           ``run_level41_rf`` /
           ``run_level41_xgb``           — gap-filling
+  L4.2 -> ``run_level42_nighttime_oneflux`` / ``_nighttime_reddyproc`` /
+          ``run_level42_daytime_reddyproc`` / ``_daytime_oneflux``
+                                        — NEE -> GPP + RECO partitioning
 """
 
 # %%
@@ -43,6 +47,10 @@ from diive.flux.fluxprocessingchain import (
     run_level41_mds,
     run_level41_rf,
     run_level41_xgb,
+    run_level42_daytime_oneflux,
+    run_level42_daytime_reddyproc,
+    run_level42_nighttime_oneflux,
+    run_level42_nighttime_reddyproc,
 )
 
 # %%
@@ -465,13 +473,60 @@ data.plot_cumulative_comparison(
 )
 
 # %%
-# Step 14: export the final dataframe
+# Step 14: Level-4.2 — NEE partitioning (GPP + RECO)
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# L4.2 splits the flux into gross primary production (GPP) and ecosystem
+# respiration (RECO). Four faithful ports are available, each its own
+# composable callable — the same branching idea as L4.1: all four run from the
+# same L3.3 / L4.1 state, once per USTAR scenario, and append the scenario
+# label to their output columns (``RECO_NT_OF_CUT_50``).
+#
+# Driver columns resolve from ``data.full_df``; ``lat`` / ``lon`` /
+# ``utc_offset`` come from the container's metadata. The **nighttime** variants
+# need a gap-filled NEE for the GPP residual and read it from the L4.1 method
+# named by ``gapfill_method`` (default ``'mds'``, run in Step 7c). The
+# **daytime** variants use measured NEE only.
+#
+# This LAE subset ships only gap-filled (``_gfXG``) meteo, so we reuse those
+# columns for the "measured" TA / SW_IN inputs too; a real workflow points
+# ``ta`` / ``sw_in`` at the raw measured series. ``VPD_T1_47_1_gfXG`` is in hPa,
+# so we pass ``vpd_in_kpa=False`` to the daytime variants.
+
+TA_M = TA_F = "TA_T1_47_1_gfXG"      # measured / gap-filled TA (stand-in)
+SW_M = SW_F = "SW_IN_T1_47_1_gfXG"   # measured / gap-filled SW_IN (stand-in)
+VPD_F = "VPD_T1_47_1_gfXG"           # gap-filled VPD (hPa here)
+
+# Nighttime variants (need an L4.1 gap-filled NEE; MDS selected).
+data = run_level42_nighttime_oneflux(
+    data, ta=TA_M, sw_in=SW_M, ta_f=TA_F, gapfill_method='mds')
+data = run_level42_nighttime_reddyproc(
+    data, ta=TA_M, sw_in=SW_M, ta_f=TA_F, gapfill_method='mds')
+
+# Daytime variants (measured NEE only — no gap-filled NEE needed).
+data = run_level42_daytime_reddyproc(
+    data, ta_f=TA_F, vpd_f=VPD_F, sw_in_f=SW_F, vpd_in_kpa=False)
+data = run_level42_daytime_oneflux(
+    data, ta=TA_M, sw_in=SW_M, ta_f=TA_F, sw_in_f=SW_F, vpd_f=VPD_F, vpd_in_kpa=False)
+
+# ``partitioned_cols()`` mirrors ``gapfilled_cols()``: it returns
+# ``{variant: {ustar_scenario: [column, ...]}}`` so you can find the RECO / GPP
+# columns without digging into the instances (in
+# ``data.levels.level42_<variant>[scenario]``).
+part_cols = data.partitioned_cols()
+for variant, scen_cols in part_cols.items():
+    for scen, names in scen_cols.items():
+        print(f"L4.2 {variant} {scen}: {names}")
+
+# %%
+# Step 15: export the final dataframe
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# ``data.fpc_df`` holds every flag, QCF, storage-correction, and gap-filled
-# column accumulated by the chain. Use ``data.gapfilled_cols()`` to find the
-# gap-filled column for a given (method, scenario); their ISFILLED flag
-# columns are ``FLAG_<gf_col>_ISFILLED``.
+# ``data.fpc_df`` holds every flag, QCF, storage-correction, gap-filled, and
+# partitioning column accumulated by the chain. Use ``data.gapfilled_cols()``
+# to find the gap-filled column for a given (method, scenario) — their ISFILLED
+# flag columns are ``FLAG_<gf_col>_ISFILLED`` — and ``data.partitioned_cols()``
+# for the GPP / RECO columns per partitioning variant.
 
 final_df = data.fpc_df
 print(f"Final dataframe: {final_df.shape[0]} rows x {final_df.shape[1]} cols")
@@ -483,7 +538,8 @@ print(f"Final dataframe: {final_df.shape[0]} rows x {final_df.shape[1]} cols")
 # - **Partial pipelines**: stop after any level — no chain overhead.
 # - **Custom steps**: replace ``run_level32`` with your own outlier logic on
 #   ``data.fpc_df``, then continue with ``run_level33_constant_ustar``.
-# - **Branching**: run RF, XGBoost, and MDS from the same L3.3 state by
-#   reusing the same ``FluxLevelData`` — no upstream re-runs.
+# - **Branching**: run RF, XGBoost, and MDS gap-filling — and all four L4.2
+#   partitioning variants — from the same upstream state by reusing the same
+#   ``FluxLevelData``, no re-runs.
 # - **Pure functions**: each call returns a new container, never mutates the
 #   input — easy to unit-test, easy to reason about.

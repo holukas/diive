@@ -346,6 +346,70 @@ class FluxConfig:
     """VPD column for MDS (**kPa**; must be in ``data.full_df``).
     EddyPro outputs VPD in hPa — divide by 10 before assigning here."""
 
+    # ----- NEE partitioning (Level-4.2) -----
+    # Each ``partition_*`` flag enables one of the four faithful partitioning
+    # ports. They are off by default — partitioning needs gap-filled meteo
+    # driver columns the chain does not itself produce, so it is opt-in.
+    partition_nighttime_oneflux: bool = False
+    """Run nighttime partitioning, ONEFlux port (Reichstein 2005) — emits
+    ``*_NT_OF`` columns. Needs ``partition_ta`` / ``partition_sw_in`` (measured)
+    and ``partition_ta_f`` (gap-filled), plus a gap-filled NEE from L4.1
+    (``partition_gapfill_method``)."""
+
+    partition_nighttime_reddyproc: bool = False
+    """Run nighttime partitioning, REddyProc port (Reichstein 2005) — emits
+    ``*_NT_RP`` columns. Same inputs as the ONEFlux nighttime variant; uses the
+    site ``lat`` / ``lon`` / ``utc_offset`` from ``init_flux_data``."""
+
+    partition_daytime_reddyproc: bool = False
+    """Run daytime partitioning, REddyProc port (Lasslop 2010) — emits
+    ``*_DT_RP`` columns. Needs gap-filled meteo only: ``partition_ta_f`` /
+    ``partition_vpd_f`` / ``partition_sw_in_f`` (and the optional
+    ``partition_nee_sd``). Measured NEE per USTAR scenario comes from L3.3 — no
+    L4.1 gap-filled NEE needed."""
+
+    partition_daytime_oneflux: bool = False
+    """Run daytime partitioning, ONEFlux port (Lasslop 2010) — emits ``*_DT_OF``
+    columns. Needs ``partition_ta`` / ``partition_sw_in`` (measured) and
+    ``partition_ta_f`` / ``partition_sw_in_f`` / ``partition_vpd_f``
+    (gap-filled). Measured NEE per USTAR scenario comes from L3.3."""
+
+    partition_gapfill_method: str = 'mds'
+    """Which L4.1 gap-filled NEE feeds the *nighttime* partitioning variants
+    (they need a gap-filled NEE for the GPP residual): ``'mds'`` (default,
+    FLUXNET standard), ``'rf'``, or ``'xgb'``. The chosen method must have run
+    at L4.1. Ignored by the daytime variants (they use measured NEE only)."""
+
+    partition_ta: str | None = None
+    """Measured air temperature column (deg C) for partitioning, in
+    ``data.full_df``. Required by the nighttime variants and daytime ONEFlux."""
+
+    partition_sw_in: str | None = None
+    """Measured shortwave incoming radiation column (W m-2) for partitioning, in
+    ``data.full_df``. Required by the nighttime variants and daytime ONEFlux."""
+
+    partition_ta_f: str | None = None
+    """Gap-filled air temperature column (deg C) for partitioning, in
+    ``data.full_df``. Required by every partitioning variant."""
+
+    partition_sw_in_f: str | None = None
+    """Gap-filled shortwave incoming radiation column (W m-2) for partitioning,
+    in ``data.full_df``. Required by the daytime variants."""
+
+    partition_vpd_f: str | None = None
+    """Gap-filled VPD column for partitioning, in ``data.full_df``. **kPa** by
+    default (``partition_vpd_in_kpa=True``). Required by the daytime variants."""
+
+    partition_nee_sd: str | None = None
+    """Optional per-record NEE uncertainty column (umol m-2 s-1) in
+    ``data.full_df``, used to weight the daytime REddyProc LRC fit. ``None``
+    reproduces REddyProc's default ``max(0.7, 0.2*|NEE|)``."""
+
+    partition_vpd_in_kpa: bool = True
+    """Whether ``partition_vpd_f`` is in kPa (default). The daytime LRC ports
+    expect hPa and convert internally; set ``False`` if the column is already
+    hPa."""
+
 
 @dataclass(frozen=True)
 class FluxMeta:
@@ -493,6 +557,39 @@ class LevelResults:
             out['rf'] = self.level41_rf
         if self.level41_xgb:
             out['xgb'] = self.level41_xgb
+        return out
+
+    # Level-4.2 — NEE -> GPP + RECO partitioning. One dict per partitioning
+    # variant, keyed by USTAR scenario (additive across variants, exactly like
+    # the L4.1 gap-filling methods). The short variant key matches the column
+    # token: 'nt_of' (nighttime ONEFlux), 'nt_rp' (nighttime REddyProc),
+    # 'dt_rp' (daytime REddyProc), 'dt_of' (daytime ONEFlux).
+    level42_nt_of: dict[str, Any] = field(default_factory=dict)
+    level42_nt_rp: dict[str, Any] = field(default_factory=dict)
+    level42_dt_rp: dict[str, Any] = field(default_factory=dict)
+    level42_dt_of: dict[str, Any] = field(default_factory=dict)
+
+    def has_level42(self) -> bool:
+        """True if any L4.2 partitioning variant has produced results."""
+        return bool(self.level42_nt_of or self.level42_nt_rp
+                    or self.level42_dt_rp or self.level42_dt_of)
+
+    def level42_variants(self) -> dict[str, dict[str, Any]]:
+        """Return all L4.2 variant dicts that have results, keyed by variant token.
+
+        Keys are ``'nt_of'``, ``'nt_rp'``, ``'dt_rp'``, ``'dt_of'`` — matching
+        the suffixes of the underlying ``level42_*`` attributes and the keys
+        used by ``partitioned_cols()``.
+        """
+        out: dict[str, dict[str, Any]] = {}
+        if self.level42_nt_of:
+            out['nt_of'] = self.level42_nt_of
+        if self.level42_nt_rp:
+            out['nt_rp'] = self.level42_nt_rp
+        if self.level42_dt_rp:
+            out['dt_rp'] = self.level42_dt_rp
+        if self.level42_dt_of:
+            out['dt_of'] = self.level42_dt_of
         return out
 
 
@@ -647,6 +744,26 @@ class FluxLevelData:
                             f"measured: {n_measured:5d}  |  gap-filled: {n_filled:5d} ({pct:.1f}%)"
                             + (f"  |  fallback: {n_fallback}" if n_fallback else "")
                         )
+
+        # L4.2 partitioning stats (RECO / GPP availability per variant + scenario)
+        if self.levels.has_level42():
+            lines.append("")
+            lines.append("Partitioning (L4.2)  [RECO / GPP valid records]:")
+            _reco_token = {'nt_of': 'RECO_NT_OF', 'nt_rp': 'RECO_NT_RP',
+                           'dt_rp': 'RECO_DT_RP', 'dt_of': 'RECO_DT_OF'}
+            _gpp_token = {'nt_of': 'GPP_NT_OF', 'nt_rp': 'GPP_NT_RP',
+                          'dt_rp': 'GPP_DT_RP', 'dt_of': 'GPP_DT_OF'}
+            for variant, scen_dict in self.levels.level42_variants().items():
+                for scen in scen_dict:
+                    reco_col = f"{_reco_token[variant]}_{scen}"
+                    gpp_col = f"{_gpp_token[variant]}_{scen}"
+                    n_reco = (int(self.fpc_df[reco_col].dropna().count())
+                              if reco_col in self.fpc_df.columns else 0)
+                    n_gpp = (int(self.fpc_df[gpp_col].dropna().count())
+                             if gpp_col in self.fpc_df.columns else 0)
+                    lines.append(
+                        f"  {variant} {scen:<10s}  RECO: {n_reco:5d}  |  GPP: {n_gpp:5d}"
+                    )
 
         lines.append("")
         lines.append(f"fpc_df columns ({len(self.fpc_df.columns)}): "
@@ -1130,6 +1247,47 @@ class FluxLevelData:
                   "returned a renamed copy). Re-run the affected L4.1 method."
             )
 
+        return out
+
+    def partitioned_cols(self) -> dict[str, dict[str, list[str]]]:
+        """
+        Return the L4.2 partitioning output columns per variant and USTAR scenario.
+
+        Each partitioning variant emits a fixed set of result columns
+        (``RECO_NT_OF``, ``GPP_NT_OF``, ...); to coexist across USTAR scenarios
+        every column is merged into ``fpc_df`` with the scenario label appended
+        (``RECO_NT_OF_CUT_50``). This helper saves the user from reconstructing
+        those names by hand.
+
+        Returns:
+            Nested dict ``{variant: {ustar_scenario: [column_name, ...]}}``.
+            Variant keys are ``'nt_of'`` / ``'nt_rp'`` / ``'dt_rp'`` /
+            ``'dt_of'`` and present only when that variant has been run.
+
+        Example::
+
+            cols = data.partitioned_cols()
+            # {'nt_of': {'CUT_50': ['NEE_NIGHT_OF_CUT_50', 'RECO_NT_OF_CUT_50',
+            #                       'GPP_NT_OF_CUT_50', ...]}}
+            reco = data.fpc_df[cols['nt_of']['CUT_50'][1]]
+        """
+        out: dict[str, dict[str, list[str]]] = {}
+        _missing: list[str] = []
+        for variant, scen_dict in self.levels.level42_variants().items():
+            out[variant] = {}
+            for scen, inst in scen_dict.items():
+                cols = [f"{c}_{scen}" for c in inst.results.columns]
+                for c in cols:
+                    if c not in self.fpc_df.columns:
+                        _missing.append(f"{variant}/{scen}: {c!r}")
+                out[variant][scen] = cols
+        if _missing:
+            raise RuntimeError(
+                "partitioned_cols(): partitioning instance reported a column "
+                "name that is not present in data.fpc_df:\n"
+                + "\n".join(f"  - {m}" for m in _missing)
+                + "\nRe-run the affected L4.2 partitioning variant."
+            )
         return out
 
 

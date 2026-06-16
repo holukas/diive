@@ -155,8 +155,18 @@ Library additions used by the GUI (all backward-compatible):
 - **Bootstrap USTAR detection** via `FluxConfig.ustar_detection_mode='bootstrap'` (ONEFlux moving-point, Papale 2006);
   fitted thresholds on `data.levels.ustar_detection`. `ustar_thresholds` optional (constant mode only).
 - **L3.2 mandatory before L3.3** (`run_level33_*` raise otherwise). **Re-runs cascade**: re-running a level drops its
-  own columns and clears downstream state (tracked in `FluxLevelData.added_columns`; `levels/_rerun.py`); L4.1 is
-  per-method and additive.
+  own columns and clears downstream state (tracked in `FluxLevelData.added_columns`; `levels/_rerun.py`); L4.1 and L4.2
+  are per-method/per-variant and additive (a cascade from any earlier level clears both).
+- **Level 4.2 — NEE partitioning in the chain.** The four faithful partitioning ports (see the NEE Partitioning section
+  below) are wired in as composable callables `run_level42_nighttime_oneflux` / `run_level42_nighttime_reddyproc` /
+  `run_level42_daytime_reddyproc` / `run_level42_daytime_oneflux` (mirroring the four L4.1 gap-fillers): each runs one
+  partitioning per USTAR scenario and merges its `*_NT_OF` / `*_NT_RP` / `*_DT_RP` / `*_DT_OF` outputs into `fpc_df`
+  with the scenario label appended. Meteo driver columns resolve from `data.full_df`; `lat`/`lon`/`utc_offset` from
+  `data.meta`. The **nighttime** variants read their gap-filled NEE from a selectable L4.1 method
+  (`gapfill_method='mds'` default); the **daytime** variants use measured NEE only. Available on `run_chain` via the
+  `FluxConfig.partition_*` fields, with codegen (`level42_to_code`), a `partitioned_cols()` lookup, a `summary()`
+  section, and `levels.level42_*` instance access. Common per-scenario plumbing shared with L4.1 via
+  `levels/_shared.py`. Example `examples/flux/fluxprocessingchain/fluxprocessingchain_partitioning.py`.
 - **L3.1 now produces a proper QCF** (`level31_qcf` via `finalize_level`), symmetric with the other levels. The storage
   `FLAG_..._ISFILLED` column stays informational (no `_TEST` suffix, excluded from QCF).
 - Composable parity: `strgcol` override (`run_level31`), day/night `swin_col` override (`init_flux_data`),

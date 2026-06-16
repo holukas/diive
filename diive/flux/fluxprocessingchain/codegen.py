@@ -314,6 +314,104 @@ def _level41_block(level41_cfg: dict) -> list[str]:
     return lines
 
 
+#: L4.2 partitioning variant token -> (function suffix, kwarg keys it accepts).
+#: Kwarg keys are rendered from level42_cfg in this order when present.
+_LEVEL42_VARIANTS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "nt_of": ("nighttime_oneflux", ("ta", "sw_in", "ta_f", "gapfill_method")),
+    "nt_rp": ("nighttime_reddyproc", ("ta", "sw_in", "ta_f", "gapfill_method")),
+    "dt_rp": ("daytime_reddyproc", ("ta_f", "vpd_f", "sw_in_f", "nee_sd", "vpd_in_kpa")),
+    "dt_of": ("daytime_oneflux", ("ta", "sw_in", "ta_f", "sw_in_f", "vpd_f", "vpd_in_kpa")),
+}
+
+#: Kwargs whose default is omitted from the rendered L4.2 call.
+_LEVEL42_DEFAULTS: dict = {"gapfill_method": "mds", "vpd_in_kpa": True, "nee_sd": None}
+
+
+def _level42_fn_names(variants: list[str]) -> list[str]:
+    """The ``run_level42_*`` symbols to import for the selected variants."""
+    return [f"run_level42_{_LEVEL42_VARIANTS[v][0]}"
+            for v in ("nt_of", "nt_rp", "dt_rp", "dt_of") if v in variants]
+
+
+def _level42_block(level42_cfg: dict) -> list[str]:
+    """The L4.2 partitioning block: one ``run_level42_*`` per selected variant.
+
+    ``level42_cfg`` shape::
+
+        {"variants": ["nt_of", "nt_rp", "dt_rp", "dt_of"],  # subset, canonical order
+         "gapfill_method": "mds",          # nighttime variants (default 'mds')
+         "ta": "...", "sw_in": "...",      # measured meteo
+         "ta_f": "...", "sw_in_f": "...", "vpd_f": "...",   # gap-filled meteo
+         "nee_sd": "...",                  # optional, daytime REddyProc
+         "vpd_in_kpa": True}               # optional, daytime variants
+
+    Partitioning is additive across variants — each selected variant emits its
+    own ``run_level42_*`` call, just like the L4.1 gap-filling methods.
+    """
+    variants = level42_cfg.get("variants", [])
+    lines: list[str] = []
+    for variant in ("nt_of", "nt_rp", "dt_rp", "dt_of"):
+        if variant not in variants:
+            continue
+        suffix, keys = _LEVEL42_VARIANTS[variant]
+        body = ["", f"data = run_level42_{suffix}(", "    data,"]
+        for key in keys:
+            if key not in level42_cfg or level42_cfg[key] is None:
+                continue
+            # Drop kwargs that equal their library default to keep the script minimal.
+            if key in _LEVEL42_DEFAULTS and level42_cfg[key] == _LEVEL42_DEFAULTS[key]:
+                continue
+            body.append(f"    {key}={level42_cfg[key]!r},")
+        body.append(")")
+        lines += body
+    return lines
+
+
+def level42_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: dict,
+                    level32_steps: list[dict], level33_kwargs: dict, level41_cfg: dict,
+                    level42_cfg: dict,
+                    df_var: str = "df", load_hint: str | None = None) -> str:
+    """Render the composable chain through Level 4.2 (NEE partitioning).
+
+    L4.2 sits after L4.1, so the full L2 -> L4.1 chain is rendered first.
+    Partitioning is additive across variants: each selected variant
+    (``nt_of`` / ``nt_rp`` / ``dt_rp`` / ``dt_of``) emits its own
+    ``run_level42_*`` call. The nighttime variants additionally consume an L4.1
+    gap-filled NEE (``level42_cfg['gapfill_method']``).
+
+    Args:
+        init_kwargs: kwargs for ``init_flux_data`` (without ``df``).
+        level2_settings: ``{test_name: settings_dict}`` for ``run_level2``.
+        level31_kwargs: kwargs for ``run_level31`` (storage correction).
+        level32_steps: ordered ``[{"method": str, "kwargs": dict}, ...]``.
+        level33_kwargs: kwargs for ``run_level33_constant_ustar``.
+        level41_cfg: gap-filling selection — see :func:`_level41_block`.
+        level42_cfg: partitioning selection — see :func:`_level42_block`.
+        df_var, load_hint: as in :func:`chain_to_code`.
+    """
+    methods = level41_cfg.get("methods", [])
+    variants = level42_cfg.get("variants", [])
+    names = ["init_flux_data", "run_level2", "run_level31",
+             "make_level32_detector", "run_level32",
+             _level33_import_name(level33_kwargs)]
+    if any(m in methods for m in ("rf", "xgb")):
+        names.append("make_level41_engineer")
+    for method in ("mds", "rf", "xgb"):
+        if method in methods:
+            names.append(f"run_level41_{method}")
+    names += _level42_fn_names(variants)
+    imports = ("from diive.flux.fluxprocessingchain import (\n    "
+               + ", ".join(names) + ")")
+    lines = _init_level2_lines(imports, init_kwargs, level2_settings, df_var, load_hint)
+    lines += _level31_block(level31_kwargs)
+    lines += _level32_block(level32_steps)
+    lines += _level33_block(level33_kwargs)
+    lines += _level41_block(level41_cfg)
+    lines += _level42_block(level42_cfg)
+    lines += ["final_df = data.fpc_df"]
+    return "\n".join(lines) + "\n"
+
+
 def level41_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: dict,
                     level32_steps: list[dict], level33_kwargs: dict, level41_cfg: dict,
                     df_var: str = "df", load_hint: str | None = None) -> str:

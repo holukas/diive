@@ -21,39 +21,18 @@ from diive.flux.fluxprocessingchain.levels._rerun import (
     drop_columns_for_key,
     record_added_columns,
 )
+from diive.flux.fluxprocessingchain.levels._shared import (
+    append_level_id,
+    assert_aligned_index,
+    require_level33,
+    warn_scenario_overwrite,
+)
 
 if TYPE_CHECKING:
     from diive.core.ml.feature_engineer import FeatureEngineer
 
 
 _LEVEL41_IDSTR = 'L4.1'
-
-
-def _assert_aligned_index(left: pd.DataFrame, *others, context: str) -> None:
-    """Raise if any of ``others`` has an index that does not match ``left``.
-
-    ``pd.concat([..., axis=1])`` aligns by label and silently NaN-pads
-    divergent indexes, so an underlying class that reindexes internally
-    (e.g. dropping rows with all-NaN drivers) would silently poison
-    ``fpc_df`` with phantom rows. Mirror the index-equality guard from
-    :func:`finalize_level` at every concat site that brings external
-    results back into the chain's working dataframe.
-    """
-    for i, other in enumerate(others, start=1):
-        if other is None:
-            continue
-        idx = other.index if hasattr(other, 'index') else None
-        if idx is None:
-            continue
-        if not idx.equals(left.index):
-            only_in_other = idx.difference(left.index)
-            only_in_left = left.index.difference(idx)
-            raise RuntimeError(
-                f"{context}: operand #{i} index does not match the working "
-                f"dataframe index. {len(only_in_other)} timestamp(s) only in "
-                f"the operand, {len(only_in_left)} only in fpc_df. "
-                f"The two must align exactly before concat."
-            )
 
 
 def make_level41_engineer(
@@ -136,84 +115,11 @@ def make_level41_engineer(
     return FeatureEngineer(**defaults)
 
 
-def _append_level_id(level_ids: list[str]) -> list[str]:
-    new = list(level_ids)
-    if _LEVEL41_IDSTR not in new:
-        new.append(_LEVEL41_IDSTR)
-    return new
-
-
-def _warn_scenario_overwrite(existing: dict, new: dict, method_label: str) -> None:
-    """Warn on suspicious L4.1 re-runs (overlap or unexpected-additive).
-
-    Each ``run_level41_*`` call stores its per-scenario instance in
-    ``data.levels.level41_<method>[scen]``. Two patterns are worth warning
-    about:
-
-    - **Overlap** (``existing & new`` non-empty): re-running with overlapping
-      scenario labels silently drops the prior instance via the standard
-      ``{**existing, **new}`` dict-merge pattern; earlier runs become
-      unrecoverable. The most common cause is a hyperparameter sweep with
-      the same scenario labels.
-    - **Unexpected-additive** (``existing`` non-empty, no overlap): the user
-      is *growing* ``level41_<method>`` with completely new scenario labels
-      on top of existing ones. This is almost always a sign of confusion —
-      a re-run of L3.3 with different USTAR labels should *cascade-clear*
-      L4.1 first, leaving ``existing`` empty. If you see this warning,
-      L4.1 holds scenarios from two different L3.3 states simultaneously
-      and the chain bookkeeping is inconsistent.
-
-    Both cases skip the warning when ``existing`` is empty (a first run is
-    not a re-run).
-    """
-    import warnings
-    if not existing:
-        return  # first run; nothing to warn about
-    overlap = sorted(set(existing).intersection(new))
-    only_existing = sorted(set(existing) - set(new))
-    if overlap:
-        warnings.warn(
-            f"run_level41_{method_label}() is replacing previously-stored "
-            f"scenario result(s) for: {overlap}. The earlier instance(s) for "
-            f"these scenarios will be lost. To keep both runs, give the "
-            f"USTAR scenarios distinct labels (e.g. add a suffix at L3.3) or "
-            f"copy data.levels.level41_{method_label} before re-running.",
-            UserWarning,
-            stacklevel=3,
-        )
-    elif only_existing:
-        # No overlap, but existing is non-empty — user is adding new
-        # scenarios on top of old ones. Normally L3.3 re-run cascades L4.1
-        # clean before this can happen; reaching here means the chain
-        # bookkeeping is inconsistent.
-        warnings.warn(
-            f"run_level41_{method_label}() is adding new scenario(s) "
-            f"({sorted(set(new) - set(existing))}) on top of existing "
-            f"scenarios ({only_existing}) — the L4.1 results now mix "
-            f"outputs from two different L3.3 states. Normally a re-run of "
-            f"L3.3 with different labels cascade-clears L4.1; if you see "
-            f"this warning the cascade did not fire. Inspect "
-            f"data.levels.level41_{method_label} and consider rebuilding "
-            f"the chain from the relevant earlier level.",
-            UserWarning,
-            stacklevel=3,
-        )
-
-
 def _extract_gapfilling_flag_col(gapfilling_df: pd.DataFrame) -> str | None:
     """Find the single ``FLAG_*_ISFILLED`` column in a gap-filling DataFrame."""
     candidates = [c for c in gapfilling_df.columns
                   if str(c).startswith("FLAG_") and str(c).endswith("_ISFILLED")]
     return candidates[0] if len(candidates) == 1 else None
-
-
-def _require_level33(data: FluxLevelData) -> dict[str, pd.Series]:
-    if not data.levels.filteredseries_level33_qcf:
-        raise RuntimeError(
-            "run_level33_constant_ustar() must be called before any "
-            "run_level41_* function."
-        )
-    return data.levels.filteredseries_level33_qcf
 
 
 def run_level41_mds(
@@ -337,7 +243,7 @@ def run_level41_mds(
     # Require L3.3 *before* mutating state. If we dropped columns first and
     # then raised, the caller's data would be left in a half-cleaned state
     # if they tried to recover from the exception. Check ordering matters.
-    filteredseries_l33 = _require_level33(data)
+    filteredseries_l33 = require_level33(data)
 
     # Re-run cleanup: drop the previous run's MDS columns from fpc_df so
     # re-running this method doesn't accumulate duplicates. L4.1 is additive
@@ -350,8 +256,8 @@ def run_level41_mds(
 
     for ustar_scen, ustar_flux in filteredseries_l33.items():
         scen_df = data.full_df[[swin, ta, vpd]].copy()
-        _assert_aligned_index(scen_df, fpc_df[ustar_flux.name],
-                              context=f"run_level41_mds[{ustar_scen!r}] scen_df build")
+        assert_aligned_index(scen_df, fpc_df[ustar_flux.name],
+                             context=f"run_level41_mds[{ustar_scen!r}] scen_df build")
         scen_df = pd.concat([scen_df, fpc_df[ustar_flux.name]], axis=1)
 
         instance = FluxMDS(
@@ -365,18 +271,19 @@ def run_level41_mds(
 
         gapfilled = instance.get_gapfilled_target()
         flag = instance.get_flag()
-        _assert_aligned_index(fpc_df, gapfilled, flag,
-                              context=f"run_level41_mds[{ustar_scen!r}] merge into fpc_df")
+        assert_aligned_index(fpc_df, gapfilled, flag,
+                             context=f"run_level41_mds[{ustar_scen!r}] merge into fpc_df")
         fpc_df = pd.concat([fpc_df, gapfilled, flag], axis=1)
         mds_results[ustar_scen] = instance
 
-    _warn_scenario_overwrite(data.levels.level41_mds, mds_results, 'mds')
+    warn_scenario_overwrite(data.levels.level41_mds, mds_results,
+                            fn_label='run_level41_mds', results_attr='level41_mds')
     new_levels = replace(data.levels, level41_mds={**data.levels.level41_mds, **mds_results})
     final = replace(
         data,
         fpc_df=fpc_df,
         levels=new_levels,
-        level_ids=_append_level_id(data.level_ids),
+        level_ids=append_level_id(data.level_ids, _LEVEL41_IDSTR),
     )
     return replace(final, added_columns=record_added_columns(final, 'L4.1_mds', pre_columns))
 
@@ -406,7 +313,7 @@ def _run_level41_ml(
     # Require L3.3 *before* mutating state — see the same guard in
     # run_level41_mds. Dropping columns first and then raising would leave
     # the caller's data in a half-cleaned state on a recovery path.
-    filteredseries_l33 = _require_level33(data)
+    filteredseries_l33 = require_level33(data)
 
     # Re-run cleanup: drop this method's previous columns from fpc_df. The
     # tracking key is e.g. 'L4.1_rf' for results_attr='level41_rf'.
@@ -422,8 +329,8 @@ def _run_level41_ml(
     engineered = engineer.fit_transform(data.full_df[features].copy())
 
     for ustar_scen, ustar_flux in filteredseries_l33.items():
-        _assert_aligned_index(engineered, fpc_df[ustar_flux.name],
-                              context=f"_run_level41_ml[{ustar_scen!r}] scen_df build")
+        assert_aligned_index(engineered, fpc_df[ustar_flux.name],
+                             context=f"_run_level41_ml[{ustar_scen!r}] scen_df build")
         scen_df = pd.concat([engineered, fpc_df[ustar_flux.name]], axis=1).copy()
 
         instance = model_factory(
@@ -452,19 +359,21 @@ def _run_level41_ml(
             )
         gapfilled = instance.gapfilled_.copy()
         flag = instance.gapfilling_df_[flag_col]
-        _assert_aligned_index(fpc_df, gapfilled, flag,
-                              context=f"_run_level41_ml[{ustar_scen!r}] merge into fpc_df")
+        assert_aligned_index(fpc_df, gapfilled, flag,
+                             context=f"_run_level41_ml[{ustar_scen!r}] merge into fpc_df")
         fpc_df = pd.concat([fpc_df, gapfilled, flag], axis=1)
         ml_results[ustar_scen] = instance
 
     existing = getattr(data.levels, results_attr)
-    _warn_scenario_overwrite(existing, ml_results, method_label)
+    warn_scenario_overwrite(existing, ml_results,
+                            fn_label=f'run_level41_{method_label}',
+                            results_attr=results_attr)
     new_levels = replace(data.levels, **{results_attr: {**existing, **ml_results}})
     final = replace(
         data,
         fpc_df=fpc_df,
         levels=new_levels,
-        level_ids=_append_level_id(data.level_ids),
+        level_ids=append_level_id(data.level_ids, _LEVEL41_IDSTR),
     )
     return replace(final, added_columns=record_added_columns(final, tracking_key, pre_columns))
 

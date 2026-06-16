@@ -108,6 +108,7 @@ EXAMPLE_FILES = [
     # Flux - Processing chain
     'flux/fluxprocessingchain/fluxprocessingchain_runchain.py',
     'flux/fluxprocessingchain/fluxprocessingchain_composable.py',
+    'flux/fluxprocessingchain/fluxprocessingchain_partitioning.py',
     # Flux - Partitioning
     'flux/partitioning/partitioning_nighttime_oneflux.py',
     'flux/partitioning/partitioning_nighttime_reddyproc.py',

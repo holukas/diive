@@ -176,6 +176,7 @@ See: [features/README.md](features/README.md)
 |---------|-------------|
 | [**fluxprocessingchain_runchain.py**](flux/fluxprocessingchain/fluxprocessingchain_runchain.py) | Single-call `run_chain(data, FluxConfig)` — minimal config drives the full L2→L4.1 pipeline with sensible defaults. Shows the easy path; for full control over per-detector / per-model knobs use the composable example below |
 | [**fluxprocessingchain_composable.py**](flux/fluxprocessingchain/fluxprocessingchain_composable.py) | Full L2→L4.1 pipeline using composable level callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; `gap_stats()` after L3.3; `plot_gapfilled_heatmaps()` and `plot_cumulative_comparison()` after L4.1 |
+| [**fluxprocessingchain_partitioning.py**](flux/fluxprocessingchain/fluxprocessingchain_partitioning.py) | Level 4.2 NEE→GPP+RECO partitioning wired into the chain; all four variants (`run_level42_nighttime_oneflux` / `_nighttime_reddyproc` / `_daytime_reddyproc` / `_daytime_oneflux`) via `run_chain`, one fit per USTAR scenario; `partitioned_cols()` to discover the `*_NT_OF` / `*_NT_RP` / `*_DT_RP` / `*_DT_OF` output columns |
 
 ### NEE Partitioning (GPP / RECO)
 

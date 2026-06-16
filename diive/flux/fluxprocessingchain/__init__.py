@@ -131,11 +131,15 @@ from diive.flux.fluxprocessingchain.levels import (
     run_level41_mds,
     run_level41_rf,
     run_level41_xgb,
+    run_level42_daytime_oneflux,
+    run_level42_daytime_reddyproc,
+    run_level42_nighttime_oneflux,
+    run_level42_nighttime_reddyproc,
 )
 from diive.flux.fluxprocessingchain.run_chain import run_chain
 from diive.flux.fluxprocessingchain.codegen import (
     chain_to_code, level2_to_code, level31_to_code, level32_to_code, level33_to_code,
-    level41_to_code,
+    level41_to_code, level42_to_code,
 )
 
 __all__ = [
@@ -154,6 +158,7 @@ __all__ = [
     'level32_to_code',
     'level33_to_code',
     'level41_to_code',
+    'level42_to_code',
     # Composable callables
     'init_flux_data',
     'add_driver',
@@ -171,6 +176,10 @@ __all__ = [
     'run_level41_mds',
     'run_level41_rf',
     'run_level41_xgb',
+    'run_level42_nighttime_oneflux',
+    'run_level42_nighttime_reddyproc',
+    'run_level42_daytime_reddyproc',
+    'run_level42_daytime_oneflux',
     # Level classes (for type-checking downstream)
     'FluxQualityFlagsEddyPro',
     'FluxStorageCorrectionSinglePointEddyPro',

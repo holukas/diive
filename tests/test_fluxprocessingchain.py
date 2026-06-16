@@ -223,5 +223,89 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         self.assertIn(gf['mds']['CUT_50'], out.fpc_df.columns)
 
 
+    def test_level42_partitioning_run_chain(self):
+        """Wire the four NEE partitioning variants through run_chain (L4.2)."""
+        import warnings
+        from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+        from diive.flux.fluxprocessingchain import (
+            FluxConfig, FluxLevelData, init_flux_data, run_chain,
+        )
+        df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME') if c in df.columns])
+        # Gap-filled meteo drivers the partitioning needs (the chain doesn't
+        # produce them itself). bfill is a test stand-in for real gap-filling.
+        df['TA_F'] = df['TA_1_1_1'].bfill()
+        df['SW_IN_F'] = df['SW_IN_1_1_1'].bfill()
+        df['VPD_F'] = df['VPD_EP'].bfill().multiply(0.1)  # hPa -> kPa
+
+        data = init_flux_data(df=df, fluxcol='FC',
+                              site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+        cfg = FluxConfig(
+            fluxcol='FC', ustar_thresholds=[0.1], ustar_labels=['CUT_50'],
+            level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+            gapfill_rf=False, gapfill_xgb=False, gapfill_mds=True,   # MDS feeds nighttime
+            mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_F',
+            partition_nighttime_oneflux=True, partition_nighttime_reddyproc=True,
+            partition_daytime_reddyproc=True, partition_daytime_oneflux=True,
+            partition_ta='TA_1_1_1', partition_sw_in='SW_IN_1_1_1',
+            partition_ta_f='TA_F', partition_sw_in_f='SW_IN_F', partition_vpd_f='VPD_F',
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')  # short test record -> unconstrained fits
+            out = run_chain(data, cfg)
+
+        self.assertIsInstance(out, FluxLevelData)
+        self.assertIn('L4.2', out.level_ids)
+        # All four variants produced their scenario-suffixed columns.
+        pc = out.partitioned_cols()
+        for variant in ('nt_of', 'nt_rp', 'dt_rp', 'dt_of'):
+            self.assertIn(variant, pc)
+            self.assertIn('CUT_50', pc[variant])
+            for col in pc[variant]['CUT_50']:
+                self.assertIn(col, out.fpc_df.columns)
+        # The RECO/GPP columns carry the variant token and the USTAR suffix.
+        self.assertIn('RECO_NT_OF_CUT_50', out.fpc_df.columns)
+        self.assertIn('GPP_DT_RP_CUT_50', out.fpc_df.columns)
+        # Instances are stored per variant, keyed by USTAR scenario.
+        self.assertIn('CUT_50', out.levels.level42_nt_of)
+        self.assertEqual(set(out.levels.level42_variants()),
+                         {'nt_of', 'nt_rp', 'dt_rp', 'dt_of'})
+
+        # Re-running an upstream cascade-aware level (L3.3) must clear L4.2.
+        from diive.flux.fluxprocessingchain import run_level33_constant_ustar
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            out2 = run_level33_constant_ustar(
+                out, thresholds=[0.2], threshold_labels=['CUT_50'], showplot=False, verbose=False)
+        self.assertNotIn('L4.2', out2.level_ids)
+        self.assertFalse(out2.levels.has_level42())
+        self.assertNotIn('RECO_NT_OF_CUT_50', out2.fpc_df.columns)
+
+    def test_level42_nighttime_requires_gapfilled_nee(self):
+        """A nighttime partitioning variant must have its gap-fill method run first."""
+        from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+        from diive.flux.fluxprocessingchain import (
+            init_flux_data, run_level2, run_level31, make_level32_detector,
+            run_level32, run_level33_constant_ustar, run_level42_nighttime_oneflux,
+        )
+        df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME') if c in df.columns])
+        df['TA_F'] = df['TA_1_1_1'].bfill()
+        data = init_flux_data(df=df, fluxcol='FC',
+                              site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+        data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None})
+        data = run_level31(data, gapfill_storage_term=True)
+        data, sod = make_level32_detector(data)
+        sod.flag_outliers_hampel_test(showplot=False, verbose=False)
+        sod.addflag()
+        data = run_level32(data, outlier_detector=sod)
+        data = run_level33_constant_ustar(
+            data, thresholds=[0.1], threshold_labels=['CUT_50'], showplot=False, verbose=False)
+        # No L4.1 gap-filling has run -> nighttime partitioning cannot find nee_f.
+        with self.assertRaises(RuntimeError):
+            run_level42_nighttime_oneflux(
+                data, ta='TA_1_1_1', sw_in='SW_IN_1_1_1', ta_f='TA_F')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -29,7 +29,23 @@ from diive.flux.fluxprocessingchain.levels import (
     run_level41_mds,
     run_level41_rf,
     run_level41_xgb,
+    run_level42_daytime_oneflux,
+    run_level42_daytime_reddyproc,
+    run_level42_nighttime_oneflux,
+    run_level42_nighttime_reddyproc,
 )
+
+
+#: L4.2 partitioning: which FluxConfig driver-column fields each variant flag
+#: requires. The nighttime variants also need an L4.1 gap-filled NEE — that is
+#: validated separately against partition_gapfill_method.
+_PARTITION_REQUIRED: dict[str, tuple[str, ...]] = {
+    'partition_nighttime_oneflux': ('partition_ta', 'partition_sw_in', 'partition_ta_f'),
+    'partition_nighttime_reddyproc': ('partition_ta', 'partition_sw_in', 'partition_ta_f'),
+    'partition_daytime_reddyproc': ('partition_ta_f', 'partition_vpd_f', 'partition_sw_in_f'),
+    'partition_daytime_oneflux': ('partition_ta', 'partition_sw_in', 'partition_ta_f',
+                                  'partition_sw_in_f', 'partition_vpd_f'),
+}
 
 
 def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
@@ -232,6 +248,30 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             _missing.append(
                 "gapfilling_features (gapfill_rf=True or gapfill_xgb=True)"
             )
+    # ----- NEE partitioning (L4.2) -----
+    # Each enabled variant requires its driver-column fields. The nighttime
+    # variants additionally need the chosen L4.1 gap-filling method to be on
+    # (they consume its gap-filled NEE for the GPP residual).
+    partition_enabled = [flag for flag in _PARTITION_REQUIRED
+                         if getattr(config, flag)]
+    for flag in partition_enabled:
+        for fld in _PARTITION_REQUIRED[flag]:
+            if not getattr(config, fld):
+                _missing.append(f"{fld} ({flag}=True)")
+    if config.partition_nighttime_oneflux or config.partition_nighttime_reddyproc:
+        _gf_on = {'mds': config.gapfill_mds, 'rf': config.gapfill_rf,
+                  'xgb': config.gapfill_xgb}
+        if config.partition_gapfill_method not in _gf_on:
+            _missing.append(
+                f"partition_gapfill_method must be one of 'mds'/'rf'/'xgb' "
+                f"(got {config.partition_gapfill_method!r})"
+            )
+        elif not _gf_on[config.partition_gapfill_method]:
+            _missing.append(
+                f"gapfill_{config.partition_gapfill_method}=True (required: a "
+                f"nighttime partitioning variant reads its gap-filled NEE from "
+                f"partition_gapfill_method={config.partition_gapfill_method!r})"
+            )
     if _missing:
         raise ValueError(
             "FluxConfig is missing field(s) required by the enabled features:\n"
@@ -262,6 +302,18 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
         for _val in (config.gapfilling_features or ()):
             if _val not in data.full_df.columns:
                 _column_misses.append(f"gapfilling_features entry {_val!r}")
+    # Partitioning driver columns must exist in data.full_df. Dedupe across
+    # variants (they share TA / SW_IN columns) so the error lists each once.
+    _part_misses: dict[str, None] = {}
+    for flag in partition_enabled:
+        for fld in _PARTITION_REQUIRED[flag]:
+            val = getattr(config, fld)
+            if val and val not in data.full_df.columns:
+                _part_misses[f"{fld}={val!r}"] = None
+    if config.partition_daytime_reddyproc and config.partition_nee_sd:
+        if config.partition_nee_sd not in data.full_df.columns:
+            _part_misses[f"partition_nee_sd={config.partition_nee_sd!r}"] = None
+    _column_misses.extend(_part_misses)
     if _column_misses:
         raise KeyError(
             "FluxConfig references column(s) not present in data.full_df:\n"
@@ -433,6 +485,46 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
                 engineer=engineer,
                 reduce_features=config.gapfill_reduce_features,
             )
+
+    # -------------------------------------------------------------- Level-4.2
+    # NEE partitioning. Each enabled variant runs once per USTAR scenario. The
+    # nighttime variants read their gap-filled NEE from the L4.1 method named by
+    # config.partition_gapfill_method (validated above to be enabled).
+    if config.partition_nighttime_oneflux:
+        data = run_level42_nighttime_oneflux(
+            data,
+            ta=config.partition_ta,
+            sw_in=config.partition_sw_in,
+            ta_f=config.partition_ta_f,
+            gapfill_method=config.partition_gapfill_method,
+        )
+    if config.partition_nighttime_reddyproc:
+        data = run_level42_nighttime_reddyproc(
+            data,
+            ta=config.partition_ta,
+            sw_in=config.partition_sw_in,
+            ta_f=config.partition_ta_f,
+            gapfill_method=config.partition_gapfill_method,
+        )
+    if config.partition_daytime_reddyproc:
+        data = run_level42_daytime_reddyproc(
+            data,
+            ta_f=config.partition_ta_f,
+            vpd_f=config.partition_vpd_f,
+            sw_in_f=config.partition_sw_in_f,
+            nee_sd=config.partition_nee_sd,
+            vpd_in_kpa=config.partition_vpd_in_kpa,
+        )
+    if config.partition_daytime_oneflux:
+        data = run_level42_daytime_oneflux(
+            data,
+            ta=config.partition_ta,
+            sw_in=config.partition_sw_in,
+            ta_f=config.partition_ta_f,
+            sw_in_f=config.partition_sw_in_f,
+            vpd_f=config.partition_vpd_f,
+            vpd_in_kpa=config.partition_vpd_in_kpa,
+        )
 
     return data
 
