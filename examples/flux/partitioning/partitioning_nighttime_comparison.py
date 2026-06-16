@@ -1,15 +1,17 @@
 """
-==================================================
-Nighttime NEE Partitioning: ONEFlux vs REddyProc
-==================================================
+==========================================================
+Nighttime NEE Partitioning: ONEFLUX vs REddyProc methods
+==========================================================
 
 diive ships two independent Python ports of the Reichstein et al. (2005)
-nighttime partitioning method: a ONEFlux port
-(:class:`~diive.flux.NighttimePartitioningOneFlux`, ``_NT_OF`` columns) and a
-REddyProc port (:class:`~diive.flux.NighttimePartitioningReddyProc`, ``_NT_RP``
-columns). They implement the *same* paper but differ in the details, so they do
-not produce identical numbers. This example runs both on the same input and
-compares them side by side.
+nighttime partitioning method, referred to throughout as the **diive (ONEFLUX
+method)** and **diive (REddyProc method)** implementations:
+:class:`~diive.flux.NighttimePartitioningOneFlux` (``_NT_OF`` columns) ports the
+ONEFlux reference, :class:`~diive.flux.NighttimePartitioningReddyProc`
+(``_NT_RP`` columns) ports REddyProc's ``sMRFluxPartition``. They implement the
+*same* paper but differ in the details, so they do not produce identical
+numbers. This example runs both on the same input and compares them against each
+other and against the (REddyProc-derived) reference columns.
 
 The two differ in:
 
@@ -82,20 +84,20 @@ def _r(a, b):
 
 
 print("\nRECO correlations:")
-print(f"  ONEFlux vs REddyProc : {_r(of['RECO_NT_OF'], rp['RECO_NT_RP']):.4f}")
-print(f"  ONEFlux vs reference : {_r(of['RECO_NT_OF'], reco_ref):.4f}")
-print(f"  REddyProc vs reference: {_r(rp['RECO_NT_RP'], reco_ref):.4f}")
+print(f"  diive (ONEFLUX method) vs diive (REddyProc method): {_r(of['RECO_NT_OF'], rp['RECO_NT_RP']):.4f}")
+print(f"  diive (ONEFLUX method) vs REddyProc reference     : {_r(of['RECO_NT_OF'], reco_ref):.4f}")
+print(f"  diive (REddyProc method) vs REddyProc reference   : {_r(rp['RECO_NT_RP'], reco_ref):.4f}")
 
 print("\nGPP correlations:")
-print(f"  ONEFlux vs REddyProc : {_r(of['GPP_NT_OF'], rp['GPP_NT_RP']):.4f}")
-print(f"  ONEFlux vs reference : {_r(of['GPP_NT_OF'], gpp_ref):.4f}")
-print(f"  REddyProc vs reference: {_r(rp['GPP_NT_RP'], gpp_ref):.4f}")
+print(f"  diive (ONEFLUX method) vs diive (REddyProc method): {_r(of['GPP_NT_OF'], rp['GPP_NT_RP']):.4f}")
+print(f"  diive (ONEFLUX method) vs REddyProc reference     : {_r(of['GPP_NT_OF'], gpp_ref):.4f}")
+print(f"  diive (REddyProc method) vs REddyProc reference   : {_r(rp['GPP_NT_RP'], gpp_ref):.4f}")
 
 print("\nMeans (umol m-2 s-1):")
-print(f"  RECO  ONEFlux {of['RECO_NT_OF'].mean():.3f}   "
-      f"REddyProc {rp['RECO_NT_RP'].mean():.3f}   reference {reco_ref.mean():.3f}")
-print(f"  GPP   ONEFlux {of['GPP_NT_OF'].mean():.3f}   "
-      f"REddyProc {rp['GPP_NT_RP'].mean():.3f}   reference {gpp_ref.mean():.3f}")
+print(f"  RECO  diive (ONEFLUX method) {of['RECO_NT_OF'].mean():.3f}   "
+      f"diive (REddyProc method) {rp['RECO_NT_RP'].mean():.3f}   REddyProc reference {reco_ref.mean():.3f}")
+print(f"  GPP   diive (ONEFLUX method) {of['GPP_NT_OF'].mean():.3f}   "
+      f"diive (REddyProc method) {rp['GPP_NT_RP'].mean():.3f}   REddyProc reference {gpp_ref.mean():.3f}")
 
 # %%
 # Scatter: the two ports against each other
@@ -122,7 +124,7 @@ for ax, ofcol, rpcol, name, color in [
     ax.set_title(f'{name}   r = {np.corrcoef(x, y)[0, 1]:.3f}')
     ax.legend(loc='upper left', frameon=False)
 
-fig.suptitle('Nighttime partitioning: ONEFlux vs REddyProc (CH-DAV 2017)')
+fig.suptitle('diive (ONEFLUX method) vs diive (REddyProc method) (CH-DAV 2017)')
 plt.show()
 
 

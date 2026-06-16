@@ -76,16 +76,16 @@ gpp_ref = df['GPP_CUT_REF_f']
 m_reco = results['RECO_NT_RP'].notna() & reco_ref.notna()
 m_gpp = results['GPP_NT_RP'].notna() & gpp_ref.notna()
 
-print(f"RECO correlation vs REddyProc: "
+print(f"RECO correlation, diive (REddyProc method) vs REddyProc reference: "
       f"{np.corrcoef(results['RECO_NT_RP'][m_reco], reco_ref[m_reco])[0, 1]:.4f}")
-print(f"GPP  correlation vs REddyProc: "
+print(f"GPP  correlation, diive (REddyProc method) vs REddyProc reference: "
       f"{np.corrcoef(results['GPP_NT_RP'][m_gpp], gpp_ref[m_gpp])[0, 1]:.4f}")
 
 print(f"\nMeans (umol m-2 s-1):")
-print(f"  RECO_NT_RP mean: {results['RECO_NT_RP'].mean():.3f}   "
-      f"REddyProc Reco mean: {reco_ref.mean():.3f}")
-print(f"  GPP_NT_RP  mean: {results['GPP_NT_RP'].mean():.3f}   "
-      f"REddyProc GPP  mean: {gpp_ref.mean():.3f}")
+print(f"  RECO  diive (REddyProc method): {results['RECO_NT_RP'].mean():.3f}   "
+      f"REddyProc reference: {reco_ref.mean():.3f}")
+print(f"  GPP   diive (REddyProc method): {results['GPP_NT_RP'].mean():.3f}   "
+      f"REddyProc reference: {gpp_ref.mean():.3f}")
 
 # %%
 # Visual comparison
@@ -108,20 +108,21 @@ for ax, dcol, ref, name, color in [
     ax.plot(lim, lim, color='#455A64', lw=1.0, ls='--', label='1:1')
     ax.set_xlim(lim)
     ax.set_ylim(lim)
-    ax.set_xlabel(f'REddyProc {name} (umol m-2 s-1)')
-    ax.set_ylabel(f'diive {dcol} (umol m-2 s-1)')
+    ax.set_xlabel(f'REddyProc reference {name} (umol m-2 s-1)')
+    ax.set_ylabel(f'diive (REddyProc method) {name} (umol m-2 s-1)')
     ax.set_title(f'{name}   r = {np.corrcoef(x, y)[0, 1]:.3f}')
     ax.legend(loc='upper left', frameon=False)
 
-fig.suptitle('Nighttime partitioning REddyProc vs reference (CH-DAV 2017)')
+fig.suptitle('diive (REddyProc method) vs REddyProc reference (CH-DAV 2017)')
 plt.show()
 
 
 # %%
 # Time-series comparison (shared axis)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Daily means of RECO and GPP over the year, diive (solid) vs REddyProc
-# reference (dashed), all on one shared axis so the seasonal cycles line up.
+# Daily means of RECO and GPP over the year, diive (REddyProc method, solid) vs
+# REddyProc reference (dashed), all on one shared axis so the seasonal cycles
+# line up.
 
 def _daily(s):
     return s.resample('D').mean()
@@ -131,15 +132,15 @@ fig, ax = plt.subplots(figsize=(13, 5))
 fig.subplots_adjust(left=0.07, right=0.98, top=0.9, bottom=0.12)
 
 ax.plot(_daily(results['RECO_NT_RP']), color='#F44336', lw=1.4,
-        label='RECO diive (REddyProc)')
-ax.plot(_daily(reco_ref), color='#F44336', lw=1.1, ls='--', label='RECO reference')
+        label='RECO diive (REddyProc method)')
+ax.plot(_daily(reco_ref), color='#F44336', lw=1.1, ls='--', label='RECO REddyProc reference')
 ax.plot(_daily(results['GPP_NT_RP']), color='#2196F3', lw=1.4,
-        label='GPP diive (REddyProc)')
-ax.plot(_daily(gpp_ref), color='#2196F3', lw=1.1, ls='--', label='GPP reference')
+        label='GPP diive (REddyProc method)')
+ax.plot(_daily(gpp_ref), color='#2196F3', lw=1.1, ls='--', label='GPP REddyProc reference')
 
 ax.axhline(0, color='#455A64', lw=0.8)
 ax.set_ylabel('flux (umol m-2 s-1)')
 ax.set_xlabel('2017')
-ax.set_title('Nighttime partitioning REddyProc vs reference - daily means (CH-DAV 2017)')
+ax.set_title('diive (REddyProc method) vs REddyProc reference - daily means (CH-DAV 2017)')
 ax.legend(ncol=2, frameon=False)
 plt.show()
