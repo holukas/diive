@@ -15,6 +15,7 @@ from diive.gui.tabs.drivers import DriverExplorerTab
 from diive.gui.tabs.events import EventsTab
 from diive.gui.tabs.features import FeatureEngineerTab
 from diive.gui.tabs.fluxchain import FluxChainTab
+from diive.gui.tabs.gapfilling import XGBoostGapFillingTab
 from diive.gui.tabs.gaps import GapDashboardTab
 from diive.gui.tabs.log import LogTab
 from diive.gui.tabs.metadata_explorer import MetadataExplorerTab
@@ -114,6 +115,10 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Daytime partitioning (REddyProc)": DaytimePartitioningReddyProcTab,
         "Daytime partitioning (ONEFlux)": DaytimePartitioningOneFluxTab,
     },
+    # Gap-filling (dv.gapfilling). Its own menu — will grow (RF, MDS, ...).
+    "Gap-filling": {
+        "XGBoost gap-filling": XGBoostGapFillingTab,
+    },
     # Exploratory analysis & diagnostics (dv.analysis).
     "Analyze": {
         "Data profile": ProfileTab,
@@ -140,6 +145,7 @@ SINGLE_INSTANCE_TABS: set[str] = {
     "Time lag analysis",
     "Nighttime partitioning (ONEFlux)", "Nighttime partitioning (REddyProc)",
     "Daytime partitioning (REddyProc)", "Daytime partitioning (ONEFlux)",
+    "XGBoost gap-filling",
     "Data profile", "Gaps & coverage",
     "Driver explorer", "Seasonal trend & anomalies", "Spectrogram",
     "Metadata explorer", "Select variables", "Rename variables", "3D surface",

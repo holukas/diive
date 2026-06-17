@@ -312,8 +312,14 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   `overlay_events(axis='x')` on the time-series/cumulative/daily panels (labels on the time series only) and
   `axis='y'` on the heatmap (date on its y-axis). Events persist in GUI prefs (`config` `"events"`) and projects
   (`extras["events"]`); `_set_data` rebuilds them on the new index so they survive loads.
+- **Shared two-list picker: `widgets/dual_variable_picker.py` (`DualVariablePicker`).** The click-to-add / click-to-remove
+  available↔selected logic (built on two `VariablePanel`s, selection kept in pick order) is one reusable widget — use it
+  for any two-list selection rather than re-deriving it. It owns only the moves: `set_variables(names, created)`,
+  `set_selected(names)`, `selected_names()`, `select`/`deselect`/`select_all`/`clear`, and a `changed` signal; optional
+  `available_footer`/`selected_footer` slots take per-column buttons. Used by **Select variables** and the **XGBoost
+  gap-filling** feature picker.
 - **Select variables tab** (`tabs/variable_selector.py`, `Data ▸ Select variables`, single-instance) — a dual-list
-  picker (two `VariablePanel`s: available ↔ selected) emitting a `subsetSelected` signal (same `QObject`-helper pattern
+  picker (a `DualVariablePicker`: available ↔ selected) emitting a `subsetSelected` signal (same `QObject`-helper pattern
   as `featuresCreated`); `MainWindow._apply_var_subset` applies it **app-wide** (non-destructive). Like the date range,
   the chosen subset narrows `_data` via `dv.keep_vars` (full record stays in `_full_data`), so **every non-pinned tab**
   sees only the chosen variables — pinned (frozen) tabs are skipped by `_push_data` and keep their full dataset. **Data ▸
@@ -491,6 +497,14 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   live on a `QObject` helper because `DiiveTab` is a plain `ABC`, not a `QObject` — class-level `Signal`s on a `DiiveTab`
   won't bind. When lazily creating a menu tab, call `tab.widget()` (builds it) **before** connecting `featuresCreated`,
   which `build()` sets.
+- **XGBoost gap-filling tab** (`tabs/gapfilling.py`, `Gap-filling ▸ XGBoost gap-filling`, single-instance, own top-level
+  **Gap-filling** menu). Three panes: **inputs** (a target `QComboBox` + a `DualVariablePicker` for the model features —
+  click left to use, click right to drop; the target is auto-excluded from features) | **settings** scroll area
+  (`FeatureEngineer` stage toggles + `XGBoostTS` hyperparameters + optional SHAP feature reduction) | **results** (status +
+  observed-vs-gap-filled `HeatmapDateTime` canvas). Runs on a worker thread: `FeatureEngineer(target_col, …).fit_transform`
+  on `df[[target]+features]`, then `XGBoostTS(...).run()`; emits the gap-filled (`*_gfXG`) + `FLAG_*_ISFILLED` columns via
+  `featuresCreated` with DERIVED provenance (parent = target). A fixed `random_state` (default 42) is always passed so runs
+  are reproducible. All computation is library work; the tab only collects inputs, runs, previews, and emits.
 - **Gap & coverage dashboard tab** (`tabs/gaps.py`, `Analyze ▸ Gaps & coverage`, single-instance). Diagnostics for
   missing data: stat cards + a two-panel **gap map** (availability heatmap + gap-spike timeline) + a long-gap table.
   All gap logic is the library's `dv.analysis.GapStats` — `.summary`, `.long_gaps`, the per-`ax` `plot_availability_heatmap`/

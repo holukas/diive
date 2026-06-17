@@ -62,6 +62,17 @@
   variables**, **Rename variables** (add a prefix/suffix to all variables, or one at a time, with a live preview),
   **Metadata explorer**, **Feature engineering**; plus **Appearance**, **Project settings** (author, description, site
   details, and a **sticky-note wall** — all saved with the project), and **Log**.
+- **Gap-filling ▸ XGBoost gap-filling** tab (`tabs/gapfilling.py`, single-instance, new top-level **Gap-filling** menu):
+  pick a **target** variable, build the model **feature** set with a two-list picker (click a variable on the left to use
+  it, click on the right to drop it), configure the `FeatureEngineer` stages (lag / rolling / differencing / EMA /
+  polynomial / STL / timestamps / record number) and the `XGBoostTS` hyperparameters (n_estimators, max_depth,
+  learning_rate, early stopping, test size, random seed, negative-value handling) plus optional SHAP feature reduction,
+  then run on a worker thread. Previews observed-vs-gap-filled date/time heatmaps + the held-out test R², and **Add
+  results to dataset** emits the gap-filled (`*_gfXG`) + ISFILLED flag columns with DERIVED provenance. All computation is
+  library work (`FeatureEngineer` + `XGBoostTS`).
+- **Shared two-list selector** (`widgets/dual_variable_picker.py`, `DualVariablePicker`): the click-to-add / click-to-remove
+  available↔selected logic, built on two `VariablePanel`s, is now one reusable widget used by both **Data ▸ Select
+  variables** and the gap-filling feature picker (and available to future two-list selections).
 - **Analyze ▸ Data profile** tab: a whole-dataset profiling overview — dataset-level facts (records, variables, overall
   missing %, duplicate timestamps/rows, inferred frequency, time span, memory) above a sortable per-variable table
   (dtype, count, missing count/%, number of gaps, unique values, zeros, constant flag, mean/SD/min/median/max), with a
