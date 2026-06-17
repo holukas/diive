@@ -181,7 +181,7 @@ VPD from temperature and humidity, day/night flags from solar geometry, air dens
 
 ### Eddy covariance
 
-Flux detection limit from 20 Hz data, maximum covariance lag, pre-whitening bootstrap (PWB) for trace gases (CH4, N2O) with single-period and multi-file parallel variants, an end-to-end per-chunk PWB time-lag detect+remove pipeline (`diive-tlag-pwb-detect-remove`, plus a Textual TUI `diive-tlag-pwb-detect-remove-tui`) that splits long raw files into 30-min chunks and writes lag-corrected raw files (line endings preserved), wind double rotation, self-heating correction for open-path IRGAs, USTAR filtering, and random error propagation. See [examples/flux/](examples/flux/).
+Flux detection limit from 20 Hz data, maximum covariance lag, pre-whitening bootstrap (PWB) for trace gases (CH4, N2O) with single-period and multi-file parallel variants, an end-to-end per-chunk PWB time-lag detect+remove pipeline (`diive-tlag-pwb-detect-remove`, plus a Textual TUI `diive-tlag-pwb-detect-remove-tui`) that splits long raw files into 30-min chunks and writes lag-corrected raw files (line endings preserved) — with optional per-gas search windows so a long-inlet gas (e.g. H2O) can use a wider, asymmetric lag range than the dry gases in the same run, wind double rotation, self-heating correction for open-path IRGAs, USTAR filtering, and random error propagation. See [examples/flux/](examples/flux/).
 
 ### Visualization
 

@@ -330,6 +330,18 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
   `--demo`) — Textual front-end for the pipeline: settings form + live per-worker progress, full CLI-option coverage
   with tooltips, a **Check** preflight, **Stop**, column pickers, and persisted settings. Requires `textual` (runtime
   dep; `tui` extra also provided).
+- **Per-gas time-lag search windows.** `PreWhiteningBootstrap` gains optional `lws`/`uws` (asymmetric search window in
+  seconds); the peak search is restricted to `[lws, uws]` while the CCF is still computed symmetrically over
+  `±lag_max` (unset = unchanged, full-window behaviour). A positive-only window (e.g. `[0, 5]`) keeps only physical
+  tube-delay lags (closed-path delay > 0, as Vitale et al. 2024 advise for the constrained methods); a long-inlet gas
+  (H2O) can use a wider window than the dry gases in the same run — which matters because EddyPro applies one lag
+  setting to all gases downstream. `PerFilePipeline` / `process_one_file` take `lws`/`uws` (global) and `per_gas_lag`
+  (`{label: {lag_max_s, block_length_s, lws, uws}}`); the CLI accepts `--scalar "H2O:h2o@lag=30;uws=25"` plus
+  `--lws`/`--uws`; the TUI has a dedicated **Win s** field that auto-fills `LABEL:[lower,upper]` per selected gas
+  (seeded from **Lag max s**, ⟳ to re-seed) — the Scalars field now selects gases only. New helper
+  `window_to_lag_params(lws, uws)`: per gas `lag_max = max(|lws|, |uws|)` and block `= max(20 s, 2·half)` (the paper's
+  20 s floor, growing for wide windows so the block still contains a long lag). The block-length consistency warning
+  now fires only when a block is *shorter* than `2·lag_max` (the risky case), not on a longer-than-coupling block.
 - PWB tooling refinements: near-instant file scan (size-based row estimate, no full read); run settings + folder
   README + summary data-dictionary written up front; responsive TUI layout; reloadable settings YAML dropped in the
   output folder; 30-min output chunks snapped to the wall-clock grid; clearer "applied lag" summary panel; structural
