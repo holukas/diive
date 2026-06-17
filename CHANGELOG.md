@@ -81,6 +81,15 @@
   code.
 - **Gap-filling codegen** — new `diive.gapfilling.codegen.xgboost_gapfill_to_code(...)` renders a runnable
   `XGBoostTS(...).run()` snippet from a target + feature list + kwargs (the GUI's **Copy Python** uses it).
+- **Gap-filling: rich console report** — `MlRegressorGapFillingBase` (all ML gap-fillers) now prints a coloured,
+  blank-line-separated report at `verbose>=2` with phase banners (start → feature reduction → training → gap-filling →
+  complete): a Configuration `Table` (regressor + all hyperparameters), data/split summary, **held-out test** and
+  **in-sample** scores `Table`s (R²/RMSE/MAE/MedAE/MAPE/MAXE/MSE), feature-importance `Table`s (test + final model), a
+  feature-reduction `Table` (per-feature SHAP vs the random benchmark + accepted/rejected verdict), and a gap-fill flag
+  summary (observed / full-model / fallback + coverage). Step-chatter moved to DEBUG(3) so `verbose=2` is the clean
+  report. The GUI runs gap-filling at `verbose=2`, streaming it into the colour-rendering **Log tab**.
+- **Fix: `_TeeConsole` forwarded `rule()` twice** to mirror consoles (e.g. the GUI Log tab) — Rich's `rule` renders via
+  `self.print` (already forwarded), so the extra `rule` override double-printed every horizontal rule. Removed.
 - **Shared two-list selector** (`widgets/dual_variable_picker.py`, `DualVariablePicker`): the click-to-add / click-to-remove
   available↔selected logic, built on two `VariablePanel`s, is now one reusable widget used by both **Data ▸ Select
   variables** and the gap-filling feature picker (and available to future two-list selections).

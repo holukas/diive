@@ -166,8 +166,14 @@ class _PerformanceHero(QFrame):
         test_chip = QLabel("HELD-OUT TEST")
         test_chip.setStyleSheet(_chip_qss("#E8F5E9", "#2E7D32"))
         test_chip.setToolTip(
-            "R² / RMSE / MAE / MAPE / MAXE are computed on the held-out test split "
-            "(an honest generalization estimate), not on the training data.")
+            "R² / RMSE / MAE / MAPE / MAXE are computed on a held-out test split "
+            "(default 25% of complete records), not on the training data.\n\n"
+            "The split is RANDOM (scattered in time), not a temporal block — this is "
+            "the right test for gap-filling: real gaps are short and scattered among "
+            "observed data, so a random hold-out reproduces the actual task of "
+            "interpolating an isolated timestamp from present neighbours. A temporal/"
+            "block split would instead measure extrapolation skill (relevant for "
+            "forecasting or driver analysis), which understates gap-filling performance.")
         idrow.addWidget(test_chip)
         idrow.addStretch(1)
         lay.addLayout(idrow)
@@ -208,10 +214,14 @@ class _PerformanceHero(QFrame):
             v = scores.get(key)
             return f"{v:.3g}" if isinstance(v, (int, float)) else "—"
 
+        # Fallback as a share of the filled records, so its weight is clear.
+        fb = f"{n_fallback:,}"
+        if n_filled > 0:
+            fb += f" ({100.0 * n_fallback / n_filled:.0f}%)"
         values = {
             "R²": g("r2"), "RMSE": g("rmse"), "MAE": g("mae"),
             "MAPE": g("mape"), "MAXE": g("maxe"),
-            "FILLED": f"{n_filled:,}", "FALLBACK": f"{n_fallback:,}",
+            "FILLED": f"{n_filled:,}", "FALLBACK": fb,
             "FEATURES": f"{n_features}",
         }
         for label, tip in self._METRICS:
@@ -364,7 +374,10 @@ class XGBoostGapFillingTab(DiiveTab):
         self.test_size.setSingleStep(0.05); self.test_size.setValue(0.25)
         self.test_size.setToolTip(
             "Fraction of complete records held out to compute the (honest) test "
-            "score; the rest is used for training.")
+            "score; the rest is used for training. The hold-out is sampled RANDOMLY "
+            "across the record (not a temporal block) — the appropriate test for "
+            "gap-filling, which interpolates short scattered gaps from nearby "
+            "observed data rather than extrapolating long unseen periods.")
         mf.addRow("test_size", self.test_size)
         self.random_state = QSpinBox()
         # -1 is the special "empty" value (shows "none") → no seed passed, so
@@ -643,8 +656,10 @@ class XGBoostGapFillingTab(DiiveTab):
 
     def _worker(self, work, target, xgb_kwargs, reduce, shap_factor) -> None:
         try:
+            # verbose=2 (PROGRESS): surfaces the base class's rich, coloured
+            # training/gap-filling report in the Log tab (which mirrors the console).
             model = XGBoostTS(input_df=work, target_col=target,
-                              verbose=1, **xgb_kwargs)
+                              verbose=2, **xgb_kwargs)
             if reduce:
                 model.reduce_features(shap_threshold_factor=shap_factor)
             model.run(showplot_scores=False, showplot_importance=False)

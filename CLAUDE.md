@@ -103,6 +103,32 @@ Used by `FeatureEngineer` class, fed into gap-filling models.
 
 Legacy `.result` property (raw DataFrame) still available.
 
+**[VALIDATION — expect this question often]** The ML gap-fillers' held-out scores (`scores_traintest_`) come from a
+**random** train/test split (`test_size`, default 25%) of the *complete* rows (target + all features present), **not** a
+temporal/block split. This is **correct and intentional for gap-filling**, not a shortcut: real gaps are short and
+scattered among observed data, so a random hold-out reproduces the actual task — interpolating an isolated timestamp from
+mostly-present neighbours — and the score faithfully reflects gap-filling quality. A temporal/block split would measure
+*extrapolation* (the right question for forecasting / driver attribution), which understates gap-filling skill (long gaps
+are MDS / leave-unfilled territory anyway). The rationale is documented at the split in `common.py.__init__`, on
+`scores_traintest_`, in the GUI's `test_size` + HELD-OUT TEST tooltips, and in `MANUAL.md`. `scores_` is the in-sample
+(optimistically biased) counterpart.
+
+**Console output:** `MlRegressorGapFillingBase` emits a **Rich-formatted, coloured report** at
+`verbose>=VERBOSE_PROGRESS(2)` (so all ML gap-fillers inherit it), with clear blank-line-separated phase banners
+(`GAP-FILLING START` → optional `FEATURE REDUCTION` → `MODEL TRAINING & TESTING` → `GAP-FILLING` → `GAP-FILLING
+COMPLETE`). It includes: a **Configuration `Table`** (regressor + every hyperparameter, for reproducibility), a data/
+split summary with the record span, **held-out test** and **in-sample** **scores `Table`s** (R²/RMSE/MAE/MedAE/MAPE/
+MAXE/MSE — both are surfaced, labelled), **feature-importance `Table`s** (held-out test + final model), a
+**feature-reduction `Table`** (every feature's SHAP importance vs the random benchmark with accepted/rejected verdict +
+threshold), and a gap-fill summary (observed / full-model / fallback flag breakdown + coverage). Default `verbose=0`
+keeps scripts silent; pure step-chatter sits at `detail`/DEBUG(3), so the `verbose=2` view is the structured report. The
+GUI runs gap-filling at `verbose=2`, so it streams into the **Log tab** (which renders the console's ANSI colours).
+Helpers: `_section` / `_log_config` / `_log_scores_table` / `_log_importances_table` / `_log_reduction_table` /
+`_log_gapfill_summary`. **Keep console strings cp1252-safe** (Windows stdout): use ASCII `->`, not `→` (Rich auto-
+substitutes box-drawing chars via safe-box, but not arbitrary Unicode in text). **Tee fix:** `_TeeConsole` overrides only
+`print`/`log`, not `rule` — Rich's `rule()` renders via `self.print`, so a `rule` override would forward each rule to
+mirrors (the Log tab) twice.
+
 ML classes (RF / XGB) also expose `plot_feature_importances(ax=None, traintest=False, max_features=None, …)` — a two-phase
 SHAP-importance bar plot (`ax=None` makes a standalone figure; pass an `ax` to embed it). Lives on
 `MlRegressorGapFillingBase`, so every ML gap-filler inherits it. (The structured `feature_importances_` DataFrame —

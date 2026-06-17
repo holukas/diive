@@ -653,6 +653,27 @@ saved like any other column.
 > this on it right away — e.g. target `NEE_CUT_REF_orig` with `Tair_f`, `VPD_f`,
 > `Rg_f` as features.
 
+**How the held-out test score is computed (and why the split is random).** The
+model is scored on a **held-out test set** — by default a random **25%** of the
+*complete* records (rows where the target is observed and every feature is
+present) are set aside and never used for training; the score is how well the
+model predicts those unseen values. The split is **random** — the test points are
+scattered across the whole record, not a single contiguous block of time.
+
+This is deliberate and is the **correct test for gap-filling**: real gaps are
+mostly short and scattered among observed data, and you fill them using the
+nearby, mostly-present context. A random hold-out reproduces exactly that task —
+predicting an isolated timestamp from its neighbours — so the held-out score
+faithfully reflects gap-filling quality.
+
+A **block / temporal split** (e.g. holding out a whole month or year) would
+instead measure **extrapolation** — predicting a long stretch with no nearby
+observations. That is the right question for *forecasting* or *driver analysis*,
+but it understates gap-filling performance, because you would not normally fill a
+gap that long with this method anyway (long gaps are where other methods, like
+MDS, or simply leaving them unfilled, come in). So gap-filling is validated with a
+random split on purpose; it is not a shortcut.
+
 ### Settings ▸ Project settings
 
 Settings for the current project:

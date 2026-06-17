@@ -59,12 +59,15 @@ class _TeeConsole(Console):
         self._forward("print", args, kwargs)
 
     def log(self, *args, **kwargs) -> None:
+        # `log` writes directly (it does not route through `self.print`), so it
+        # must forward to mirrors itself.
         super().log(*args, **kwargs)
         self._forward("log", args, kwargs)
 
-    def rule(self, *args, **kwargs) -> None:
-        super().rule(*args, **kwargs)
-        self._forward("rule", args, kwargs)
+    # NOTE: no `rule` override. Rich's `Console.rule()` renders via `self.print`,
+    # which is already overridden to forward — overriding `rule` too would
+    # forward each rule to mirrors twice (once as the Rule renderable via print,
+    # once again here).
 
 
 console = _TeeConsole(highlight=False)

@@ -143,6 +143,20 @@ class ConsolePanel(QWidget):
         self.text.setTextCursor(cursor)
         self.text.ensureCursorVisible()
 
+    def contents(self) -> str:
+        """Return the accumulated log as plain text (for project save)."""
+        return self.text.toPlainText()
+
+    def restore(self, text: str) -> None:
+        """Replace the log with previously saved text (colour is not retained;
+        SGR formatting only exists on the live stream, so restored history is
+        plain). Live output keeps appending after it."""
+        self.text.setPlainText(text)
+        cursor = self.text.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        self.text.setTextCursor(cursor)
+        self.text.ensureCursorVisible()
+
     def _save(self) -> None:
         """Save the current log text to a file (plain text)."""
         path, _ = QFileDialog.getSaveFileName(

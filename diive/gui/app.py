@@ -1073,6 +1073,11 @@ class MainWindow(QMainWindow):
             self._source = name
             self._apply_range()  # refresh title with the project name
 
+    def _log_tab(self):
+        """The always-on Log tab, located by type (order-independent)."""
+        from diive.gui.tabs.log import LogTab
+        return next((t for t in self._tabs if isinstance(t, LogTab)), None)
+
     def _write_project(self, folder, name: str) -> bool:
         """Write the current data + metadata + site/range into `folder`."""
         from diive.core.io.project import DiiveProject, save_project
@@ -1088,6 +1093,7 @@ class MainWindow(QMainWindow):
             "tabs": self._open_tabs_state(),  # reopen the same workspace on load
             "overview": self._tabs[0].save_state(),  # selected variable
             "active_tab": self._tabwidget.tabText(self._tabwidget.currentIndex()),
+            "log": self._log_tab().save_state() if self._log_tab() else None,
         }
         project = DiiveProject(
             name=name, data=self._full_data,
@@ -1174,6 +1180,12 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self._restore_tabs(project.extras.get("tabs"))  # reopens tabs; lands on Overview
+        log_tab = self._log_tab()
+        if log_tab is not None:
+            try:
+                log_tab.restore_state(project.extras.get("log") or {})
+            except Exception:
+                pass
         self._restore_active_tab(project.extras.get("active_tab"))
         success(f"Opened project '{project.name}'")
         return True
