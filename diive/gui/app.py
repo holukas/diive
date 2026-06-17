@@ -361,15 +361,6 @@ class MainWindow(QMainWindow):
         data_menu.addAction(self._reset_subset_act)
         data_menu.addSeparator()
         data_menu.addAction(_act("Add timestamp co&lumn...", self._add_timestamp_column))
-        # Events: add one, and a quick master toggle for showing them on plots
-        # (the Events tab below has the full list/edit UI + the same toggle).
-        data_menu.addSeparator()
-        data_menu.addAction(_act("Add e&vent...", self._add_event))
-        self._show_events_act = QAction(menu_icon("Show events"), "Show e&vents on plots", self)
-        self._show_events_act.setCheckable(True)
-        self._show_events_act.setChecked(events.manager.visible)
-        self._show_events_act.toggled.connect(events.manager.set_visible)
-        data_menu.addAction(self._show_events_act)
         # Menu-tab entries that belong under Data (e.g. Select variables) are
         # merged into this manually-built menu rather than getting their own.
         data_menu.addSeparator()
@@ -380,9 +371,25 @@ class MainWindow(QMainWindow):
             act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))
             data_menu.addAction(act)
 
+        # Events: the Events tab (full list/edit UI) first, then a quick "add
+        # one" + a master toggle for showing them on plots. Built manually so
+        # the tab entry sits above the actions.
+        events_menu = add_menu("&Events")
+        for label in MENU_TABS.get("Events", {}):
+            act = QAction(menu_icon(label), label.replace("&", "&&"), self)
+            act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))
+            events_menu.addAction(act)
+        events_menu.addSeparator()
+        events_menu.addAction(_act("Add e&vent...", self._add_event))
+        self._show_events_act = QAction(menu_icon("Show events"), "Show e&vents on plots", self)
+        self._show_events_act.setCheckable(True)
+        self._show_events_act.setChecked(events.manager.visible)
+        self._show_events_act.toggled.connect(events.manager.set_visible)
+        events_menu.addAction(self._show_events_act)
+
         for menu_name, group in MENU_TABS.items():
-            if menu_name == "Data":
-                continue  # already merged into the Data menu built above
+            if menu_name in ("Data", "Events"):
+                continue  # built manually above
             menu = add_menu(f"&{menu_name}")
             for label in group:
                 # Set the 3-D surface (GPU/VTK) apart from the 2-D plot methods.

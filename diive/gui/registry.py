@@ -78,6 +78,11 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Rename variables": RenameVariablesTab,
         "Metadata explorer": MetadataExplorerTab,
         "Feature engineering": FeatureEngineerTab,
+    },
+    # Time-stamped event markers (annotations layered over the data, not column
+    # operations) — its own top-level menu. Built manually in MainWindow so the
+    # "Add event..." / "Show events on plots" actions sit above the tab entry.
+    "Events": {
         "Events": EventsTab,
     },
     "Plot": {
