@@ -498,13 +498,18 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   won't bind. When lazily creating a menu tab, call `tab.widget()` (builds it) **before** connecting `featuresCreated`,
   which `build()` sets.
 - **XGBoost gap-filling tab** (`tabs/gapfilling.py`, `Gap-filling ▸ XGBoost gap-filling`, single-instance, own top-level
-  **Gap-filling** menu). Three panes: **inputs** (a target `QComboBox` + a `DualVariablePicker` for the model features —
-  click left to use, click right to drop; the target is auto-excluded from features) | **settings** scroll area
-  (`FeatureEngineer` stage toggles + `XGBoostTS` hyperparameters + optional SHAP feature reduction) | **results** (status +
-  observed-vs-gap-filled `HeatmapDateTime` canvas). Runs on a worker thread: `FeatureEngineer(target_col, …).fit_transform`
-  on `df[[target]+features]`, then `XGBoostTS(...).run()`; emits the gap-filled (`*_gfXG`) + `FLAG_*_ISFILLED` columns via
-  `featuresCreated` with DERIVED provenance (parent = target). A fixed `random_state` (default 42) is always passed so runs
-  are reproducible. All computation is library work; the tab only collects inputs, runs, previews, and emits.
+  **Gap-filling** menu). A focused gap-filling tab — **no feature-engineering settings** (do that in the Feature
+  engineering tab first, then select the engineered columns here). Three variable lists side by side: **Variables** (a
+  `VariablePanel`, far left — click to set the gap-fill target, highlighted via `set_panels`) | a `DualVariablePicker`
+  whose two columns are **Available features** (middle) and **Selected features** (right; click-to-use / click-to-remove).
+  The target is auto-excluded from the feature pool (`_refresh_features` rebuilds it on target change). Beside the lists: a
+  **settings** scroll area (`XGBoostTS` hyperparameters — n_estimators / max_depth / learning_rate / early_stopping /
+  test_size / random_state / negatives — + optional SHAP feature reduction; every field has a code tooltip) and a
+  **results** pane (status + observed-vs-gap-filled `HeatmapDateTime` canvas). Runs on a worker thread: `XGBoostTS(...)`
+  trained on the selected feature columns directly (`df[[target]+features]`), then `.run()`; emits the gap-filled
+  (`*_gfXG`) + `FLAG_*_ISFILLED` columns via `featuresCreated` with DERIVED provenance (parent = target). A fixed
+  `random_state` (default 42) is always passed so runs are reproducible. All computation is library work; the tab only
+  collects inputs, runs, previews, and emits.
 - **Gap & coverage dashboard tab** (`tabs/gaps.py`, `Analyze ▸ Gaps & coverage`, single-instance). Diagnostics for
   missing data: stat cards + a two-panel **gap map** (availability heatmap + gap-spike timeline) + a long-gap table.
   All gap logic is the library's `dv.analysis.GapStats` — `.summary`, `.long_gaps`, the per-`ax` `plot_availability_heatmap`/
