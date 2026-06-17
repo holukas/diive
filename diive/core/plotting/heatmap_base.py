@@ -12,6 +12,7 @@ data into ``self.x``, ``self.y``, and ``self.z`` arrays before calling
 ``plot_pcolormesh``.
 """
 import copy
+import math
 from pathlib import Path
 
 import numpy as np
@@ -23,6 +24,31 @@ from diive.core.plotting.plotfuncs import default_format, format_spines, hide_xa
     make_patch_spines_invisible
 from diive.core.plotting.styles import LightTheme as theme
 from diive.core.times.times import TimestampSanitizer, insert_timestamp
+
+
+def auto_colorbar_digits(z) -> int:
+    """Choose colorbar decimal places from a value array's range.
+
+    Scales the precision to the spacing between colorbar ticks (~range/6), so
+    wide-range data shows whole numbers instead of trailing ``.00`` while
+    narrow-range data keeps enough digits to stay distinguishable. Returns a
+    value clamped to ``[0, 4]``; falls back to 2 for empty or constant data.
+
+    Args:
+        z: Array-like of values (NaNs ignored).
+
+    Returns:
+        int: Decimal places suitable for ``cb_digits_after_comma``.
+    """
+    finite = np.asarray(z, dtype="float64")
+    finite = finite[np.isfinite(finite)]
+    if finite.size == 0:
+        return 2
+    rng = float(finite.max() - finite.min())
+    if rng <= 0:
+        return 2
+    step = rng / 6.0
+    return int(min(max(-math.floor(math.log10(step)), 0), 4))
 
 
 class HeatmapBase:
@@ -174,7 +200,7 @@ class HeatmapBase:
              title: str = None,
              vmin: float = None,
              vmax: float = None,
-             cb_digits_after_comma: int = 2,
+             cb_digits_after_comma: int | str = 2,
              cb_labelsize: float = theme.AX_LABELS_FONTSIZE,
              cb_extend: str = 'neither',
              axlabels_fontsize: float = theme.AX_LABELS_FONTSIZE,
@@ -215,7 +241,9 @@ class HeatmapBase:
             vmin: Lower bound of the colour scale.  *None* = auto from data.
             vmax: Upper bound of the colour scale.  *None* = auto from data.
             cb_digits_after_comma: Decimal places shown on colorbar tick labels.
-                Defaults to 2.
+                Defaults to 2. Pass ``'auto'`` to choose the precision from the
+                data range (whole numbers for wide ranges, more digits for
+                narrow ones).
             cb_labelsize: Font size for colorbar tick labels.
             cb_extend: Colorbar extension arrows.  One of ``'neither'`` (default),
                        ``'both'``, ``'min'``, or ``'max'``.  Use ``'both'`` when
@@ -264,7 +292,10 @@ class HeatmapBase:
         self.cmap = cmap
         self.vmin = vmin
         self.vmax = vmax
-        self.cb_digits_after_comma = cb_digits_after_comma
+        self.cb_digits_after_comma = (
+            auto_colorbar_digits(self.z) if cb_digits_after_comma == 'auto'
+            else cb_digits_after_comma
+        )
         self.cb_labelsize = cb_labelsize
         self.cb_extend = cb_extend
         self.color_bad = color_bad

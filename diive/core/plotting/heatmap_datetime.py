@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 from pandas import Series
 
-import diive as dv
+from diive.core.times.resampling import resample_to_monthly_agg_matrix
 from diive.core.plotting.heatmap_base import HeatmapBase
 from diive.core.plotting.plotfuncs import nice_date_ticks
 from diive.core.plotting.styles import LightTheme as theme
@@ -203,7 +203,7 @@ class HeatmapDateTime(HeatmapBase):
              vmax: float = None,
              cmap: str = 'RdYlBu_r',
              zlabel: str = None,
-             cb_digits_after_comma: int = 2,
+             cb_digits_after_comma: int | str = 2,
              cb_labelsize: float = None,
              cb_extend: str = 'neither',
              axlabels_fontsize: float = None,
@@ -390,7 +390,7 @@ class HeatmapYearMonth(HeatmapBase):
         self.series = self._setup_timestamp(series=self.series)
 
         # Bring data into shape
-        self.plotdf = dv.resample_to_monthly_agg_matrix(series=self.series, agg=self.agg, ranks=self.ranks)
+        self.plotdf = resample_to_monthly_agg_matrix(series=self.series, agg=self.agg, ranks=self.ranks)
 
         # Transpose in case of horizontal, to have months as index, years as columns
         if self.ax_orientation == "horizontal":
@@ -444,7 +444,7 @@ class HeatmapYearMonth(HeatmapBase):
              vmax: float = None,
              cmap: str = None,
              zlabel: str = None,
-             cb_digits_after_comma: int = 2,
+             cb_digits_after_comma: int | str = 2,
              cb_labelsize: float = None,
              cb_extend: str = 'neither',
              axlabels_fontsize: float = None,

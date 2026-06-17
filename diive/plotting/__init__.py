@@ -10,8 +10,10 @@ from diive.core.plotting.histogram import HistogramPlot
 from diive.core.plotting.ridgeline import RidgeLinePlot
 from diive.core.plotting.shifted_distribution import ShiftedDistributionPlot
 from diive.core.plotting.scatter import ScatterXY
+from diive.core.plotting.surface_grid import DateTimeSurface, datetime_surface_grid
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.plotting.treering import TreeRingPlot
+from diive.core.plotting.waterfall import WaterfallPlot
 
 __all__ = [
     'LongtermAnomaliesYear',
@@ -26,6 +28,9 @@ __all__ = [
     'RidgeLinePlot',
     'ShiftedDistributionPlot',
     'ScatterXY',
+    'DateTimeSurface',
+    'datetime_surface_grid',
     'TimeSeries',
     'TreeRingPlot',
+    'WaterfallPlot',
 ]

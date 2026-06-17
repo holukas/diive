@@ -43,6 +43,52 @@ def resample_to_monthly_agg_matrix(series: pd.Series, agg: str, ranks: bool = Fa
     return monthly_agg
 
 
+def resample_to_daily_agg(series: Series,
+                          agg: str = 'mean',
+                          mincounts_perc: float = 0.0) -> Series:
+    """Resample a time series to one aggregated value per calendar day.
+
+    Aggregates a (typically sub-daily) time series down to daily resolution,
+    e.g. a daily-mean time series over the record. Days that hold too few
+    records can be dropped via ``mincounts_perc``.
+
+    Args:
+        series: Time series with a ``DatetimeIndex``.
+        agg: Aggregation method, anything pandas' ``Series.agg`` accepts
+            (e.g. ``'mean'``, ``'sum'``, ``'median'``, ``'min'``, ``'max'``,
+            ``'std'``). Defaults to ``'mean'``.
+        mincounts_perc: Minimum fraction (0-1) of the fullest day's record count
+            that a day must reach to be kept. ``0`` (default) keeps every day
+            that has at least one value; ``0.9`` keeps only days at least 90 %
+            complete relative to the most-populated day.
+
+    Returns:
+        Daily-aggregated Series, indexed by day (timestamp at day start), with
+        the input series' name preserved.
+
+    Raises:
+        TypeError: If ``series`` does not have a ``DatetimeIndex``.
+
+    See Also:
+        examples/times/times_resample_daily.py — daily aggregation with several methods
+    """
+    if not isinstance(series.index, pd.DatetimeIndex):
+        raise TypeError("resample_to_daily_agg requires a series with a DatetimeIndex.")
+
+    daily = series.resample('D')
+    counts = daily.count()
+    agg_ser = daily.agg(agg)
+
+    # Keep days with enough records: relative to the fullest day, but always at
+    # least one value (a day of all-NaN aggregates to NaN and is dropped anyway).
+    maxcounts = counts.max()
+    mincounts = max(1, int(maxcounts * mincounts_perc)) if maxcounts else 1
+    agg_ser = agg_ser[counts >= mincounts]
+
+    agg_ser.name = series.name
+    return agg_ser
+
+
 @ConsoleOutputDecorator()
 def resample_series_to_30MIN(series: Series,
                              to_freqstr: Literal['30T', '30min'] = '30min',

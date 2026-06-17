@@ -82,15 +82,15 @@ See `dv.corrections` for available correction classes:
 
 ```bash
 # Sensor bias corrections
-uv run python examples/pkgs/preprocessing/corrections/correction_relativehumidity_offset.py
-uv run python examples/pkgs/preprocessing/corrections/correction_radiation_offset.py
-uv run python examples/pkgs/preprocessing/corrections/correction_measurement_offset_replicate.py
-uv run python examples/pkgs/preprocessing/corrections/correction_winddir_offset.py
+uv run python examples/preprocessing/corrections/correction_relativehumidity_offset.py
+uv run python examples/preprocessing/corrections/correction_radiation_offset.py
+uv run python examples/preprocessing/corrections/correction_measurement_offset_replicate.py
+uv run python examples/preprocessing/corrections/correction_winddir_offset.py
 
 # Value replacement & clipping
-uv run python examples/pkgs/preprocessing/corrections/correction_set_exact_values_to_missing.py
-uv run python examples/pkgs/preprocessing/corrections/correction_setto_value.py
-uv run python examples/pkgs/preprocessing/corrections/correction_setto_threshold.py
+uv run python examples/preprocessing/corrections/correction_set_exact_values_to_missing.py
+uv run python examples/preprocessing/corrections/correction_setto_value.py
+uv run python examples/preprocessing/corrections/correction_setto_threshold.py
 
 # Run all correction examples
 uv run python examples/run_all_examples.py

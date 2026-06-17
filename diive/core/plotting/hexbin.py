@@ -396,9 +396,14 @@ class HexbinPlot(HeatmapBase):
             zorder=0
         )
 
-        # Set equal aspect ratio (hexagons appear as regular hexagons, not skewed)
-        self.ax.set_aspect('equal', adjustable='datalim')
-        self.ax.apply_aspect()
+        # Equal aspect only yields regular hexagons when both axes share a scale,
+        # i.e. percentile-normalized (0-100). For raw drivers with different
+        # units/ranges (e.g. air temperature vs VPD) it stretches the hexagons,
+        # so leave the aspect automatic — matplotlib then tiles near-regular
+        # hexagons that fill the axes box.
+        if self.normalize_axes:
+            self.ax.set_aspect('equal', adjustable='datalim')
+            self.ax.apply_aspect()
 
         # Format axes with styling
         self.ax.set_xlabel(xlabel, fontsize=axlabels_fontsize)

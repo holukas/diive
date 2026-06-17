@@ -165,6 +165,36 @@ print(f"\nFlag columns applied: {detector.flags.shape[1]}")
 print(f"Sample flags (first 5 records):\n{detector.flags.head()}")
 
 # %%
+# Calculate the overall quality flag (QCF)
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# The stepwise detector only accumulates the individual per-test flags. The
+# single overall flag is calculated separately with ``FlagQCF``, which combines
+# all FLAG_*_TEST columns into one quality flag (0=good, 1=marginal, 2=rejected).
+#
+# Both the series and the flags must share the same index. The detector
+# sanitizes the timestamp on setup, so use the detector's own series
+# (``series_hires_orig``) as the target column rather than the raw input.
+
+import pandas as pd
+
+from diive.qaqc import FlagQCF
+
+qcf_input = pd.concat([detector.series_hires_orig.to_frame('observed_value'), detector.flags], axis=1)
+
+qcf = FlagQCF(df=qcf_input, target_col='observed_value')
+qcf.calculate()
+
+print("\n" + "=" * 60)
+print("Overall Quality Flag (QCF)")
+print("=" * 60)
+qcf_counts = qcf.flagqcf.value_counts(dropna=False).sort_index()
+print(f"QCF=0 (good):     {qcf_counts.get(0, 0)}")
+print(f"QCF=1 (marginal): {qcf_counts.get(1, 0)}")
+print(f"QCF=2 (rejected): {qcf_counts.get(2, 0)}")
+print(f"Records retained (QCF<2): {qcf.filteredseries.notna().sum()}")
+
+# %%
 # Visualize original and cleaned data
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #

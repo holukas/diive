@@ -2,7 +2,7 @@
 
 Examples demonstrating visualization and plotting functions for time series and flux data.
 
-20 examples across 10+ plot types.
+22 examples across 10+ plot types.
 
 ## Examples by Plot Type
 
@@ -28,11 +28,13 @@ Examples demonstrating visualization and plotting functions for time series and 
 - **plot_dielcycle.py** — Diurnal cycles grouped by month or season
 - **plot_cumulative_basic.py** — Cumulative flux over time with scenario comparison
 - **plot_cumulative_year.py** — Yearly cumulative sums with reference bands
+- **plot_waterfall.py** — Daily CO2 uptake/release waterfall building a running flux budget
 
 ### Distributions
 
 - **plot_histogram_basic.py** — Histograms with z-score overlay, peak detection, and custom bin edges
 - **plot_histogram_yearly.py** — Year-over-year histograms showing temporal patterns
+- **plot_shifted_distribution.py** — Compare how a variable's distribution has shifted between a reference and a comparison period (Hansen et al. ±1σ/±3σ zones)
 
 ### Density & Binning
 
@@ -83,6 +85,7 @@ See `diive.core.plotting` for the complete API:
 - `HistogramPlot` — Distribution histograms
 - `HexbinPlot` — 2D hexagonal binning
 - `RidgeLinePlot` — Ridge line plots
+- `ShiftedDistributionPlot` — Compare a variable's distribution between two periods
 - `TreeRingPlot` — Circular spiral: annual rings with color-coded values
 
 ## Running Examples
@@ -96,4 +99,4 @@ uv run python examples/visualization/plot_scatter_xy_colored.py
 uv run python examples/run_all_examples.py
 ```
 
-All 20 examples follow the two-phase design pattern.
+All 22 examples follow the two-phase design pattern.

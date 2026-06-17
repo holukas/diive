@@ -94,6 +94,63 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         self.assertEqual(data31.level_ids, ['L2', 'L3.1'])
         self.assertIsNone(data31.levels.level32)
 
+    def test_level2_test_inputs_and_vm97_subtests(self):
+        from diive.flux.fluxprocessingchain import VM97_SUBTESTS, level2_test_inputs
+
+        # Eight VM97 sub-tests, each (key, label, kind in {'hard','soft'}).
+        self.assertEqual(len(VM97_SUBTESTS), 8)
+        keys = [k for k, _, _ in VM97_SUBTESTS]
+        self.assertIn("spikes", keys)
+        self.assertIn("discont_sf", keys)
+        self.assertTrue(all(kind in ("hard", "soft") for _, _, kind in VM97_SUBTESTS))
+
+        # Input columns are templated on the flux column + its base variable.
+        info = level2_test_inputs("FC", "CO2")
+        self.assertEqual(info["ssitc"]["inputs"], ["FC_SSITC_TEST"])
+        self.assertEqual(info["raw_data_screening_vm97"]["inputs"], ["CO2_VM97_TEST"])
+        self.assertIn("CO2_NR", info["gas_completeness"]["inputs"])
+        # Signal strength reads a user-chosen column (no fixed input).
+        self.assertTrue(info["signal_strength"]["user_col"])
+        self.assertEqual(info["signal_strength"]["inputs"], [])
+        # A different flux re-templates the columns.
+        self.assertEqual(level2_test_inputs("LE", "H2O")["spectral_correction_factor"]["inputs"],
+                         ["LE_SCF"])
+
+    def test_level31_storage_col(self):
+        from diive.flux.fluxprocessingchain import level31_storage_col
+        self.assertEqual(level31_storage_col("FC"), "SC_SINGLE")
+        self.assertEqual(level31_storage_col("LE"), "SLE_SINGLE")
+        self.assertEqual(level31_storage_col("H"), "SH_SINGLE")
+        self.assertIsNone(level31_storage_col("NOT_A_FLUX"))
+
+    def test_level2_custom_input_columns(self):
+        # Each L2 test can read a differently-named column via a 'col' override
+        # (two keys for the two-column completeness test).
+        from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+        from diive.flux.fluxprocessingchain import init_flux_data, run_level2
+
+        df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+        df = df.drop(columns=[c for c in ("SW_IN_POT", "DAYTIME", "NIGHTTIME")
+                              if c in df.columns])
+        # Rename the standard inputs to non-standard names.
+        df = df.rename(columns={"FC_SSITC_TEST": "MY_SSITC",
+                                "CO2_VM97_TEST": "MY_VM97",
+                                "CO2_NR": "MY_CO2_NR"})
+        data = init_flux_data(df=df, fluxcol="FC", site_lat=47.4, site_lon=8.5, utc_offset=1)
+        data = run_level2(
+            data,
+            ssitc={"apply": True, "setflag_timeperiod": None, "col": "MY_SSITC"},
+            gas_completeness={"apply": True, "basevar_nr_col": "MY_CO2_NR"},
+            raw_data_screening_vm97={
+                "apply": True, "spikes": True, "dropout": True, "amplitude": False,
+                "abslim": False, "skewkurt_hf": False, "skewkurt_sf": False,
+                "discont_hf": False, "discont_sf": False, "col": "MY_VM97"},
+        )
+        # The chain ran on the renamed columns and produced the standard flags.
+        assert data.filteredseries.dropna().count() > 0
+        assert any("SSITC" in str(c) for c in data.fpc_df.columns)
+        assert any("VM97_DROPOUT" in str(c) for c in data.fpc_df.columns)
+
     def test_ordering_errors(self):
         """Level callables should fail loudly when called out of order."""
         from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
@@ -164,6 +221,90 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         self.assertIn('mds', gf)
         self.assertIn('CUT_50', gf['mds'])
         self.assertIn(gf['mds']['CUT_50'], out.fpc_df.columns)
+
+
+    def test_level42_partitioning_run_chain(self):
+        """Wire the four NEE partitioning variants through run_chain (L4.2)."""
+        import warnings
+        from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+        from diive.flux.fluxprocessingchain import (
+            FluxConfig, FluxLevelData, init_flux_data, run_chain,
+        )
+        df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME') if c in df.columns])
+        # Gap-filled meteo drivers the partitioning needs (the chain doesn't
+        # produce them itself). bfill is a test stand-in for real gap-filling.
+        df['TA_F'] = df['TA_1_1_1'].bfill()
+        df['SW_IN_F'] = df['SW_IN_1_1_1'].bfill()
+        df['VPD_F'] = df['VPD_EP'].bfill().multiply(0.1)  # hPa -> kPa
+
+        data = init_flux_data(df=df, fluxcol='FC',
+                              site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+        cfg = FluxConfig(
+            fluxcol='FC', ustar_thresholds=[0.1], ustar_labels=['CUT_50'],
+            level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+            gapfill_rf=False, gapfill_xgb=False, gapfill_mds=True,   # MDS feeds nighttime
+            mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_F',
+            partition_nighttime_oneflux=True, partition_nighttime_reddyproc=True,
+            partition_daytime_reddyproc=True, partition_daytime_oneflux=True,
+            partition_ta='TA_1_1_1', partition_sw_in='SW_IN_1_1_1',
+            partition_ta_f='TA_F', partition_sw_in_f='SW_IN_F', partition_vpd_f='VPD_F',
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')  # short test record -> unconstrained fits
+            out = run_chain(data, cfg)
+
+        self.assertIsInstance(out, FluxLevelData)
+        self.assertIn('L4.2', out.level_ids)
+        # All four variants produced their scenario-suffixed columns.
+        pc = out.partitioned_cols()
+        for variant in ('nt_of', 'nt_rp', 'dt_rp', 'dt_of'):
+            self.assertIn(variant, pc)
+            self.assertIn('CUT_50', pc[variant])
+            for col in pc[variant]['CUT_50']:
+                self.assertIn(col, out.fpc_df.columns)
+        # The RECO/GPP columns carry the variant token and the USTAR suffix.
+        self.assertIn('RECO_NT_OF_CUT_50', out.fpc_df.columns)
+        self.assertIn('GPP_DT_RP_CUT_50', out.fpc_df.columns)
+        # Instances are stored per variant, keyed by USTAR scenario.
+        self.assertIn('CUT_50', out.levels.level42_nt_of)
+        self.assertEqual(set(out.levels.level42_variants()),
+                         {'nt_of', 'nt_rp', 'dt_rp', 'dt_of'})
+
+        # Re-running an upstream cascade-aware level (L3.3) must clear L4.2.
+        from diive.flux.fluxprocessingchain import run_level33_constant_ustar
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            out2 = run_level33_constant_ustar(
+                out, thresholds=[0.2], threshold_labels=['CUT_50'], showplot=False, verbose=False)
+        self.assertNotIn('L4.2', out2.level_ids)
+        self.assertFalse(out2.levels.has_level42())
+        self.assertNotIn('RECO_NT_OF_CUT_50', out2.fpc_df.columns)
+
+    def test_level42_nighttime_requires_gapfilled_nee(self):
+        """A nighttime partitioning variant must have its gap-fill method run first."""
+        from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+        from diive.flux.fluxprocessingchain import (
+            init_flux_data, run_level2, run_level31, make_level32_detector,
+            run_level32, run_level33_constant_ustar, run_level42_nighttime_oneflux,
+        )
+        df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME') if c in df.columns])
+        df['TA_F'] = df['TA_1_1_1'].bfill()
+        data = init_flux_data(df=df, fluxcol='FC',
+                              site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+        data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None})
+        data = run_level31(data, gapfill_storage_term=True)
+        data, sod = make_level32_detector(data)
+        sod.flag_outliers_hampel_test(showplot=False, verbose=False)
+        sod.addflag()
+        data = run_level32(data, outlier_detector=sod)
+        data = run_level33_constant_ustar(
+            data, thresholds=[0.1], threshold_labels=['CUT_50'], showplot=False, verbose=False)
+        # No L4.1 gap-filling has run -> nighttime partitioning cannot find nee_f.
+        with self.assertRaises(RuntimeError):
+            run_level42_nighttime_oneflux(
+                data, ta='TA_1_1_1', sw_in='SW_IN_1_1_1', ta_f='TA_F')
 
 
 if __name__ == '__main__':

@@ -5,6 +5,7 @@ from diive.preprocessing.corrections import remove_relativehumidity_offset
 from diive.preprocessing.corrections import set_exact_values_to_missing
 from diive.preprocessing.corrections import setto_threshold
 from diive.preprocessing.corrections import setto_value
+from diive.preprocessing.corrections import apply_corrections
 
 __all__ = [
     'MeasurementOffsetFromReplicate',
@@ -14,4 +15,5 @@ __all__ = [
     'set_exact_values_to_missing',
     'setto_threshold',
     'setto_value',
+    'apply_corrections',
 ]

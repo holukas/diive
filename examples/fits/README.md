@@ -64,10 +64,10 @@ See `dv.analysis` (e.g. `BinFitterCP`) for available fitting classes:
 
 ```bash
 # Binned curve fitting with temperature-VPD relationship
-uv run python examples/pkgs/fits/fit_binfittercp.py
+uv run python examples/fits/fit_binfittercp.py
 
 # Ecosystem driver-response (NEE-VPD) fitting
-uv run python examples/pkgs/fits/fit_fitter.py
+uv run python examples/fits/fit_fitter.py
 
 # Run all fitting examples
 uv run python examples/run_all_examples.py

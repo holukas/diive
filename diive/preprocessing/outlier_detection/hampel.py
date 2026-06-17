@@ -62,8 +62,8 @@ class Hampel(FlagBase):
                  utc_offset: int = None,
                  window_length: int = 48 * 13,
                  n_sigma: float = 5.5,
-                 n_sigma_daytime: float = 5.5,
-                 n_sigma_nighttime: float = 5.5,
+                 n_sigma_daytime: float = None,
+                 n_sigma_nighttime: float = None,
                  n_sigma_dt: float = None,
                  n_sigma_nt: float = None,
                  k: float = 1.4826,
@@ -149,6 +149,10 @@ class Hampel(FlagBase):
         self.k = k
         self.use_differencing = use_differencing
         self.separate_day_night = separate_day_night
+        # Per-iteration detection band in data units (set by _flagtests); exposed
+        # for visualisation. Series over the current cleaned series' index.
+        self.last_upper_bound = None
+        self.last_lower_bound = None
 
         # Detect daytime and nighttime
         if self.separate_day_night:
@@ -164,15 +168,19 @@ class Hampel(FlagBase):
             self.is_nighttime = None
             self.flag_daytime = None
 
-    def calc(self, repeat: bool = True):
+    def calc(self, repeat: bool = True, progress_callback=None):
         """Calculate overall flag, based on individual flags from multiple iterations.
 
         Args:
             repeat: If *True*, the outlier detection is repeated until all
                 outliers are removed.
+            progress_callback: Optional ``callable(iteration, n_outliers,
+                filteredseries)`` invoked after each iteration (e.g. to drive a
+                progress bar / live-update the cleaned series).
 
         """
-        self._overall_flag, n_iterations = self.repeat(func=self.run_flagtests, repeat=repeat)
+        self._overall_flag, n_iterations = self.repeat(
+            func=self.run_flagtests, repeat=repeat, progress_callback=progress_callback)
 
         if self.showplot:
             # Default plot for outlier tests, showing rejected values
@@ -233,6 +241,20 @@ class Hampel(FlagBase):
         lower_bound = rolling_median - limit
 
         is_outlier = (s_to_test > upper_bound) | (s_to_test < lower_bound)
+
+        # Expose the per-iteration detection band in DATA units (for visualisation).
+        # Raw mode: the bounds already are in data units. Double-differencing mode:
+        # the test runs on d = 2*x_t - (x_{t-1} + x_{t+1}), so x_t is flagged iff it
+        # leaves [lower, upper] mapped to data units as neighbour_avg + bound/2
+        # (neighbour_avg = (x_{t-1} + x_{t+1}) / 2). This is the exact data-space
+        # band the flag decision uses for the current iteration.
+        if self.use_differencing:
+            neighbour_avg = (s.shift(1) + s.shift(-1)) / 2.0
+            self.last_upper_bound = neighbour_avg + upper_bound / 2.0
+            self.last_lower_bound = neighbour_avg + lower_bound / 2.0
+        else:
+            self.last_upper_bound = upper_bound.copy()
+            self.last_lower_bound = lower_bound.copy()
 
         # Formatting for return
         # Get indices of True/False

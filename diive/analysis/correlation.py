@@ -8,10 +8,99 @@ Detect patterns, anomalies, and decoupling between variables.
 Part of the diive library: https://github.com/holukas/diive
 """
 
+import numpy as np
 import pandas as pd
 from matplotlib import gridspec, pyplot as plt
-from pandas import Series
+from pandas import DataFrame, Series
 from scipy import stats
+
+
+def rank_drivers(
+        df: DataFrame,
+        target: str,
+        features: list = None,
+        method: str = 'pearson',
+        max_lag: int = 0,
+        min_records: int = 30,
+) -> DataFrame:
+    """Rank candidate variables by how strongly they correlate with a target.
+
+    For each candidate column, computes its correlation with ``target``. When
+    ``max_lag > 0``, the candidate is shifted by every lag in
+    ``[-max_lag, +max_lag]`` (in records) and the lag with the strongest
+    *absolute* correlation is reported — so lead/lag relationships (storage,
+    advection, phenology) surface rather than only the contemporaneous one.
+
+    Pure ranking utility: no plotting, no side effects. Intended for "what
+    drives this variable?" exploration and for shortlisting gap-filling
+    features.
+
+    Args:
+        df: DataFrame holding the target and candidate columns (DatetimeIndex
+            when ``max_lag > 0``, so a shift equals a fixed time step).
+        target: Target column name.
+        features: Candidate columns to rank. Default: every numeric column
+            except the target. Non-existent names and the target are dropped.
+        method: ``'pearson'`` (linear) or ``'spearman'`` (rank/monotonic).
+        max_lag: Maximum absolute lag in records to scan (0 = contemporaneous
+            only). A positive ``BEST_LAG`` means the driver *leads* the target —
+            its value that many records earlier aligns best with the target.
+        min_records: Minimum overlapping non-NaN pairs required at a lag;
+            candidates that never reach it are dropped.
+
+    Returns:
+        DataFrame (index 0..n-1) with columns ``DRIVER``, ``CORR`` (signed
+        correlation at the best lag), ``ABS_CORR``, ``BEST_LAG`` (records),
+        ``N`` (overlapping pairs), sorted by ``ABS_CORR`` descending. Empty when
+        the target is constant/all-NaN or no candidate qualifies.
+
+    Example:
+        >>> ranked = rank_drivers(df, target='NEE', method='pearson', max_lag=4)
+        >>> ranked.head()  # strongest drivers first
+    """
+    if target not in df.columns:
+        raise ValueError(f"target '{target}' not in df columns.")
+    if method not in ('pearson', 'spearman'):
+        raise ValueError("method must be 'pearson' or 'spearman'.")
+    if max_lag < 0:
+        raise ValueError("max_lag must be >= 0.")
+
+    y = pd.to_numeric(df[target], errors='coerce')
+
+    if features is None:
+        numeric = df.select_dtypes(include='number').columns.tolist()
+        features = [c for c in numeric if c != target]
+    else:
+        features = [c for c in features if c != target and c in df.columns]
+
+    lags = range(-max_lag, max_lag + 1)
+    rows = []
+    for col in features:
+        x = pd.to_numeric(df[col], errors='coerce')
+        best = None  # (abs_corr, corr, lag, n)
+        for lag in lags:
+            xs = x.shift(lag) if lag else x
+            mask = y.notna() & xs.notna()
+            n = int(mask.sum())
+            if n < min_records:
+                continue
+            # A constant column over the overlap divides by a zero std inside
+            # the correlation -> NaN (which we skip); silence that numpy warning.
+            with np.errstate(invalid='ignore', divide='ignore'):
+                corr = y[mask].corr(xs[mask], method=method)
+            if pd.isna(corr):
+                continue
+            abs_corr = abs(float(corr))
+            if best is None or abs_corr > best[0]:
+                best = (abs_corr, float(corr), lag, n)
+        if best is not None:
+            rows.append({'DRIVER': col, 'CORR': best[1], 'ABS_CORR': best[0],
+                         'BEST_LAG': best[2], 'N': best[3]})
+
+    result = pd.DataFrame(rows, columns=['DRIVER', 'CORR', 'ABS_CORR', 'BEST_LAG', 'N'])
+    if not result.empty:
+        result = result.sort_values('ABS_CORR', ascending=False).reset_index(drop=True)
+    return result
 
 
 class DailyCorrelation:

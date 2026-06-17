@@ -439,7 +439,7 @@ class TimeLagAnalysis:
         self._analysis_cache[gas] = analysis
         return analysis
 
-    def plot_gas(self, gas, outdir=None, figsize=(18, 9), show=True):
+    def plot_gas(self, gas, outdir=None, figsize=(18, 9), show=True, fig=None):
         """
         Create comprehensive visualization of time lag analysis for a gas species.
 
@@ -476,11 +476,16 @@ class TimeLagAnalysis:
             If True, calls fig.show() to display the figure. If False, figure
             is created but not displayed (useful for batch processing).
             Default: True
+        fig : matplotlib.figure.Figure, optional
+            Existing figure to draw into (cleared first). When provided, the
+            4-panel layout is built on it instead of a new pyplot figure — this
+            is how the desktop GUI embeds the plot in its own canvas. The
+            `figsize` argument is then ignored. Default: None (new figure).
 
         Returns
         -------
         fig : matplotlib.figure.Figure
-            The created figure object. Can be further modified or saved.
+            The created (or supplied) figure object. Can be further modified or saved.
 
         Raises
         ------
@@ -554,8 +559,13 @@ class TimeLagAnalysis:
         nbins_x_ts = max(5, min(12, int(time_range_days / max(1, time_range_days // 6))))
         nbins_x_ts = self._check_tick_overlap(nbins_x_ts, time_range_days, 'date')
 
-        # Create figure and layout
-        fig = plt.figure(facecolor='#f8f9fa', figsize=figsize)
+        # Create figure and layout. A caller (e.g. the GUI) can pass its own
+        # figure to embed the plot; otherwise build a standalone pyplot figure.
+        if fig is None:
+            fig = plt.figure(facecolor='#f8f9fa', figsize=figsize)
+        else:
+            fig.clear()
+            fig.set_facecolor('#f8f9fa')
 
         # Header band
         fig.text(0.5, 0.97, f"Time Lag Analysis  ·  {gascol}",

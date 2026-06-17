@@ -72,7 +72,8 @@ class StepwiseOutlierDetection:
             site_lat: float,
             site_lon: float,
             utc_offset: int,
-            idstr: str = None
+            idstr: str = None,
+            output_middle_timestamp: bool = True
     ):
         self.dfin = dfin.copy()
         self.col = col
@@ -81,6 +82,12 @@ class StepwiseOutlierDetection:
         self.site_lon = site_lon
         self.utc_offset = utc_offset
         self.idstr = validate_id_string(idstr=idstr)
+        # When False, the sanitized index keeps the input timestamp convention
+        # (e.g. TIMESTAMP_END) instead of being shifted to the middle of the
+        # averaging period. Callers that must align the resulting flags back to
+        # an existing dataframe (e.g. the GUI) set this False to avoid an index
+        # mismatch on merge.
+        self.output_middle_timestamp = output_middle_timestamp
 
         # Setup
         self._flags, \
@@ -89,13 +96,31 @@ class StepwiseOutlierDetection:
 
         # Returned variables
         self._last_flag = pd.DataFrame()  # Flag of most recent QC test
+        # Data-unit detection band of the most recent test, as (lower, upper)
+        # Series (or (None, None) for tests with no single envelope). Lets a
+        # caller (e.g. the GUI) overlay the band that produced a step's removals.
+        self._last_bounds: tuple = (None, None)
 
     @property
-    def last_flag(self) -> DataFrame:
+    def last_flag(self) -> Series:
         """Return flag of most recent QC test."""
-        if not isinstance(self._last_flag, object):
-            raise Exception(f"No recent results available.")
+        if not isinstance(self._last_flag, Series) or self._last_flag.empty:
+            raise Exception(f"No recent results available. Run an outlier test before accessing the last flag.")
         return self._last_flag
+
+    @property
+    def last_bounds(self) -> tuple:
+        """``(lower, upper)`` data-unit Series for the most recent test's final
+        detection band, or ``(None, None)`` for tests without a single envelope
+        (z-score increments, LOF, manual removal, missing values)."""
+        return self._last_bounds
+
+    def _record_last(self, flagtest) -> None:
+        """Capture the most recent test's flag and (when it exposes one) its
+        final data-unit detection band, for caller-side limit-line overlays."""
+        self._last_flag = flagtest.get_flag()
+        self._last_bounds = (getattr(flagtest, "last_lower_bound", None),
+                             getattr(flagtest, "last_upper_bound", None))
 
     @property
     def series_hires_cleaned(self) -> Series:
@@ -128,13 +153,23 @@ class StepwiseOutlierDetection:
         p = TimeSeries(series=self._series_hires_cleaned)
         p.plot() if not interactive else p.plot_interactive()
 
+    def flag_missingvals_test(self, verbose: bool = False):
+        """Flag missing records in the data (flag 2 where the value is missing)."""
+        # Lazy import: a top-level import would create a circular import via the
+        # qaqc package __init__ (qaqc -> meteoscreening -> outlier_detection -> here).
+        from diive.preprocessing.qaqc.flags import MissingValues
+        series_cleaned = self._series_hires_cleaned.copy()
+        flagtest = MissingValues(series=series_cleaned, idstr=self.idstr, verbose=verbose)
+        flagtest.calc(repeat=False)
+        self._record_last(flagtest)
+
     def flag_manualremoval_test(self, remove_dates: list, showplot: bool = False, verbose: bool = False):
         """Flag specified records for removal"""
         series_cleaned = self._series_hires_cleaned.copy()
         flagtest = ManualRemoval(series=series_cleaned, idstr=self.idstr, remove_dates=remove_dates,
                                  showplot=showplot, verbose=verbose)
         flagtest.calc()
-        self._last_flag = flagtest.get_flag()
+        self._record_last(flagtest)
 
     def flag_outliers_localsd_test(self, n_sd: float | list = 7, winsize: int | list = None, showplot: bool = False,
                                    constant_sd: bool = False, separate_daytime_nighttime: bool = False,
@@ -145,7 +180,7 @@ class StepwiseOutlierDetection:
                            separate_daytime_nighttime=separate_daytime_nighttime, lat=self.site_lat, lon=self.site_lon,
                            utc_offset=self.utc_offset, constant_sd=constant_sd, showplot=showplot, verbose=verbose)
         flagtest.calc(repeat=repeat)
-        self._last_flag = flagtest.get_flag()
+        self._record_last(flagtest)
 
     def flag_outliers_increments_zcore_test(self, thres_zscore: int = 30, showplot: bool = False,
                                             verbose: bool = False, repeat: bool = True):
@@ -154,7 +189,7 @@ class StepwiseOutlierDetection:
         flagtest = zScoreIncrements(series=series_cleaned, idstr=self.idstr, thres_zscore=thres_zscore,
                                     showplot=showplot, verbose=verbose)
         flagtest.calc(repeat=repeat)
-        self._last_flag = flagtest.get_flag()
+        self._record_last(flagtest)
 
     def flag_outliers_trim_low_test(self, trim_daytime: bool = False, trim_nighttime: bool = False,
                                     lower_limit: float = None, showplot: bool = False, verbose: bool = False):
@@ -166,10 +201,10 @@ class StepwiseOutlierDetection:
                            lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset,
                            lower_limit=lower_limit, showplot=showplot, verbose=verbose)
         flagtest.calc()
-        self._last_flag = flagtest.get_flag()
+        self._record_last(flagtest)
 
     def flag_outliers_hampel_test(self, window_length: int = 48 * 13, n_sigma: float = 5.5,
-                                  n_sigma_daytime: float = 5.5, n_sigma_nighttime: float = 5.5,
+                                  n_sigma_daytime: float = None, n_sigma_nighttime: float = None,
                                   k: float = 1.4826, use_differencing: bool = True,
                                   separate_daytime_nighttime: bool = True, showplot: bool = False,
                                   verbose: bool = False, repeat: bool = True):
@@ -213,7 +248,7 @@ class StepwiseOutlierDetection:
             n_sigma_nighttime=n_sigma_nighttime,
             k=k, showplot=showplot, verbose=verbose)
         flagtest.calc(repeat=repeat)
-        self._last_flag = flagtest.get_flag()
+        self._record_last(flagtest)
 
     def flag_outliers_zscore_test(self,
                                   thres_zscore: float = 4,
@@ -278,7 +313,7 @@ class StepwiseOutlierDetection:
             verbose=verbose
         )
         flagtest.calc(repeat=repeat)
-        self._last_flag = flagtest.get_flag()
+        self._record_last(flagtest)
 
     def flag_outliers_zscore_rolling_test(self, thres_zscore: float = 4, showplot: bool = False, verbose: bool = False,
                                           plottitle: str = None, repeat: bool = True, winsize: int = None):
@@ -288,7 +323,7 @@ class StepwiseOutlierDetection:
                                  showplot=showplot, verbose=verbose, plottitle=plottitle,
                                  winsize=winsize)
         flagtest.calc(repeat=repeat)
-        self._last_flag = flagtest.get_flag()
+        self._record_last(flagtest)
 
     def flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = None,
                                separate_daytime_nighttime: bool = False,
@@ -332,7 +367,7 @@ class StepwiseOutlierDetection:
                                       separate_daytime_nighttime=separate_daytime_nighttime,
                                       showplot=showplot, verbose=verbose, n_jobs=n_jobs)
         flagtest.calc(repeat=repeat)
-        self._last_flag = flagtest.get_flag()
+        self._record_last(flagtest)
 
     def flag_outliers_abslim_test(self, minval: float = None, maxval: float = None,
                                   separate_daytime_nighttime: bool = False,
@@ -375,7 +410,7 @@ class StepwiseOutlierDetection:
             verbose=verbose
         )
         flagtest.calc(repeat=False)
-        self._last_flag = flagtest.get_flag()
+        self._record_last(flagtest)
 
     def addflag(self):
         """Add flag of most recent test to data and update filtered series
@@ -412,7 +447,7 @@ class StepwiseOutlierDetection:
         _series = self._series.copy()  # Data for this field
 
         # Sanitize timestamp
-        _series = TimestampSanitizer(data=_series).get()
+        _series = TimestampSanitizer(data=_series, output_middle_timestamp=self.output_middle_timestamp).get()
 
         # Initialize hires quality flags
         hires_flags = pd.DataFrame(index=_series.index)

@@ -3,15 +3,26 @@
 Manual Removal
 ====================
 
-Explicitly remove data points or date ranges flagged as problematic.
-Useful for known equipment failures, maintenance periods, or measurement errors.
+Explicitly flag known-bad records or date ranges as outliers, instead of
+detecting them statistically. Selection is purely time-based, so it works even
+when the bad values look plausible and a rule-based detector would miss them.
+
+Typical use cases:
+
+* Instrument malfunction, calibration, or maintenance windows recorded in a
+  site logbook.
+* Power outages, sensor swaps, or physical disturbances (mowing, grazing, snow
+  on a sensor) whose timing is known.
+* Records flagged as bad during visual inspection of plots.
+* A final manual override step in a screening chain, removing records that
+  survived the automatic detectors.
 """
 
 # %%
 # Load test data
 # ^^^^^^^^^^^^^^
 #
-# Use temperature data from summer 2018.
+# Use air temperature data from summer 2018 (30-minute resolution).
 
 import diive as dv
 
@@ -27,74 +38,92 @@ print(f"  Period: {s.index.min()} to {s.index.max()}")
 
 # %%
 # Remove individual timestamps
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Specify exact timestamps to remove for single record precision.
-# Useful for individual measurement errors.
+# A full date(time) string removes exactly that one record. Useful for isolated
+# measurement errors spotted during visual inspection.
 
+# Timestamps must fall on the data's 30-min grid (:15 / :45) to match a record.
 remove_dates_single = [
-    '2018-07-05 10:30:00',
+    '2018-07-05 10:45:00',
     '2018-07-12 14:15:00',
-    '2018-07-20 09:00:00'
+    '2018-07-20 09:15:00',
 ]
 
-mr_single = dv.outliers.ManualRemoval(
-    series=s,
-    remove_dates=remove_dates_single,
-    showplot=False,
-    verbose=1
-)
+mr = dv.outliers.ManualRemoval(series=s, remove_dates=remove_dates_single, verbose=True).run()
 
-mr_single.calc()
-
-flag_single = mr_single.get_flag()
-filtered_single = s.copy()
-filtered_single.loc[flag_single == 2] = None
-
+# Results: the unified API exposes the cleaned series and the flag directly.
 print("\nSingle timestamp removal:")
-print(f"  Timestamps removed: {len(remove_dates_single)}")
-print(f"  Records removed: {(flag_single == 2).sum()}")
-print(f"  Valid records remaining: {filtered_single.notna().sum()}")
+print(f"  Timestamps listed: {len(remove_dates_single)}")
+print(f"  Records flagged (flag == 2): {(mr.flag == 2).sum()}")
+print(f"  Valid records remaining: {mr.filteredseries.notna().sum()}")
+
+# %%
+# Remove a whole day with a bare date
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# A date-only string covers the **entire day**, inclusive — handy for a
+# maintenance day where the exact start/end times are not noted. Here the
+# logbook says the sensor was serviced on 2018-07-10.
+
+mr_day = dv.outliers.ManualRemoval(series=s, remove_dates=['2018-07-10'], verbose=True).run()
+
+print("\nWhole-day removal ('2018-07-10'):")
+print(f"  Records flagged: {(mr_day.flag == 2).sum()} (expected 48 for a full 30-min day)")
 
 # %%
 # Remove date ranges
 # ^^^^^^^^^^^^^^^^^^
 #
-# Specify start and end dates to remove entire periods.
-# Effective for maintenance windows, power outages, or known drift periods.
+# A range is a **nested** ``[start, end]`` list (a flat list of two strings would
+# be read as two single removals, not a range). The interval is closed on both
+# ends, and bare dates again span whole days — so the period below covers all of
+# 2018-07-02 through the end of 2018-07-04 (a full 3-day window).
 
 remove_dates_ranges = [
-    ['2018-07-02', '2018-07-04'],  # 3-day period
-    ['2018-07-15 08:00:00', '2018-07-15 16:00:00'],  # Daytime window
-    ['2018-07-25', '2018-07-27']  # Multi-day period
+    ['2018-07-02', '2018-07-04'],                    # 3 full days (power outage)
+    ['2018-07-15 08:00:00', '2018-07-15 16:00:00'],  # a daytime window (calibration)
+    ['2018-07-25', '2018-07-27'],                    # 3 full days (sensor swap)
 ]
 
-mr_ranges = dv.outliers.ManualRemoval(
-    series=s,
-    remove_dates=remove_dates_ranges,
-    showplot=False,
-    verbose=1
-)
-
-mr_ranges.calc()
-
-flag_ranges = mr_ranges.get_flag()
-filtered_ranges = s.copy()
-filtered_ranges.loc[flag_ranges == 2] = None
+mr_ranges = dv.outliers.ManualRemoval(series=s, remove_dates=remove_dates_ranges, verbose=True).run()
 
 print("\nDate range removal:")
 print(f"  Removal periods: {len(remove_dates_ranges)}")
-print(f"  Records removed: {(flag_ranges == 2).sum()}")
-print(f"  Valid records remaining: {filtered_ranges.notna().sum()}")
+print(f"  Records flagged: {(mr_ranges.flag == 2).sum()}")
+print(f"  Valid records remaining: {mr_ranges.filteredseries.notna().sum()}")
+
+# %%
+# Mix single timestamps and ranges in one call
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# A single ``remove_dates`` list may freely mix single-record strings and
+# nested ``[start, end]`` ranges — the usual real-world case where a logbook
+# lists both one-off spikes and extended outage periods.
+
+remove_dates_mixed = [
+    '2018-07-05 10:45:00',                           # one bad spike
+    ['2018-07-02', '2018-07-04'],                    # an outage period
+    '2018-07-20 09:15:00',                           # another bad spike
+]
+
+mr_mixed = dv.outliers.ManualRemoval(series=s, remove_dates=remove_dates_mixed, verbose=True).run()
+
+print("\nMixed single + range removal:")
+print(f"  Records flagged: {(mr_mixed.flag == 2).sum()}")
+print(f"  Valid records remaining: {mr_mixed.filteredseries.notna().sum()}")
 
 # %%
 # Comparison
 # ^^^^^^^^^^
 #
-# Single-point removal is precise for isolated errors.
-# Range removal is effective for extended problem periods.
+# Single-record removal is precise for isolated errors; range removal handles
+# extended problem periods. Both are reproducible — the exact dates live in the
+# script, so the same input always yields the same cleaned series.
 
-print("\nComparison:")
-print(f"Original valid records: {s.notna().sum()}")
-print(f"After single removal: {filtered_single.notna().sum()} ({100*filtered_single.notna().sum()/s.notna().sum():.1f}%)")
-print(f"After range removal: {filtered_ranges.notna().sum()} ({100*filtered_ranges.notna().sum()/s.notna().sum():.1f}%)")
+print("\nComparison (valid records):")
+print(f"  Original:        {s.notna().sum()}")
+print(f"  Single removal:  {mr.filteredseries.notna().sum()}")
+print(f"  Whole-day:       {mr_day.filteredseries.notna().sum()}")
+print(f"  Range removal:   {mr_ranges.filteredseries.notna().sum()}")
+print(f"  Mixed removal:   {mr_mixed.filteredseries.notna().sum()}")

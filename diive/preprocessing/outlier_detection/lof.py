@@ -83,6 +83,31 @@ def lof(series: Series,
     return df
 
 
+def suggest_lof_params(series: Series) -> dict:
+    """Recommend a starting set of LocalOutlierFactor parameters for ``series``.
+
+    LOF runs on the values themselves (a 1-D density estimate), so the only
+    parameter with a defensible data link is ``n_neighbors``, which must stay below
+    the sample count for a valid k-neighbors query. We keep scikit-learn's
+    well-tested rule-of-thumb of 20 neighbors and only clamp it to the available
+    data (relevant for short series). ``contamination`` is deliberately left at
+    ``'auto'``: estimating the outlier fraction from the same data used to detect
+    them is circular, which is exactly the case ``'auto'`` is built for.
+
+    Args:
+        series: Time series the parameters will be applied to.
+
+    Returns:
+        ``{'n_neighbors': int, 'contamination': 'auto'}`` — pass straight to the
+        constructor (``LocalOutlierFactor(series=series, **suggest_lof_params(series))``).
+    """
+    n_valid = int(series.dropna().shape[0])
+    n_neighbors = 20
+    if n_valid > 1:
+        n_neighbors = min(n_neighbors, n_valid - 1)
+    return dict(n_neighbors=max(1, n_neighbors), contamination="auto")
+
+
 @ConsoleOutputDecorator()
 class LocalOutlierFactor(FlagBase):
     flagid = "OUTLIER_LOF"
@@ -143,6 +168,12 @@ class LocalOutlierFactor(FlagBase):
         self.n_jobs = n_jobs
         self.separate_daytime_nighttime = separate_daytime_nighttime
 
+        # Density-based detection has no single data-unit threshold band, so there
+        # is nothing to overlay as upper/lower limit lines.
+        self.last_upper_bound = None
+        self.last_lower_bound = None
+        self.is_daytime = None
+
         if self.separate_daytime_nighttime:
             if lat is None or lon is None or utc_offset is None:
                 raise ValueError("lat, lon, and utc_offset are required when separate_daytime_nighttime=True")
@@ -150,16 +181,20 @@ class LocalOutlierFactor(FlagBase):
                 create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon,
                                                utc_offset=utc_offset))
 
-    def calc(self, repeat: bool = True):
+    def calc(self, repeat: bool = True, progress_callback=None):
         """Calculate overall flag, based on individual flags from multiple iterations.
 
         Args:
             repeat: If *True*, the outlier detection is repeated until all
                 outliers are removed.
+            progress_callback: Optional ``callable(iteration, n_outliers,
+                filteredseries)`` invoked after each iteration (e.g. to drive a
+                progress bar / live-update the cleaned series).
 
         """
 
-        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
+        self._overall_flag, n_iterations = self.repeat(
+            self.run_flagtests, repeat=repeat, progress_callback=progress_callback)
         if self.showplot:
             self.defaultplot(n_iterations=n_iterations)
             if self.separate_daytime_nighttime:

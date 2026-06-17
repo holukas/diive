@@ -80,6 +80,10 @@ class ScatterXY:
             cmap: str = 'viridis',
             show_colorbar: bool = True,
             title: str = None,
+            markersize: float = 40,
+            alpha: float = 1.0,
+            vmin: float = None,
+            vmax: float = None,
     ):
         """Generate plot with optional styling and formatting.
 
@@ -99,6 +103,10 @@ class ScatterXY:
                   Examples: 'plasma', 'viridis', 'coolwarm', 'RdYlBu'
             show_colorbar: Display colorbar if z provided (default: True)
             title: Plot title (default: "{yname} vs. {xname}")
+            markersize: Scatter point area in points^2 (default: 40)
+            alpha: Scatter point opacity, 0-1 (default: 1.0)
+            vmin: Lower bound of the z colour scale (default: data minimum)
+            vmax: Upper bound of the z colour scale (default: data maximum)
 
         Notes:
             - xlim always uses full data range (no quantile trimming)
@@ -118,19 +126,22 @@ class ScatterXY:
 
         if not ax:
             self.fig, self.ax = pf.create_ax(figsize=(8, 8))
-            self._plot(self.ax, xlabel, ylabel, zlabel, xunits, yunits, xlim, ylim, cmap, show_colorbar, title)
+            self._plot(self.ax, xlabel, ylabel, zlabel, xunits, yunits, xlim, ylim, cmap, show_colorbar, title,
+                       markersize=markersize, alpha=alpha, vmin=vmin, vmax=vmax)
             # Skip tight_layout if colorbar is present (incompatible with new layout engine)
             if self.zname is None or not show_colorbar:
                 plt.tight_layout()
             self.fig.show()
         else:
             self.ax = ax
-            self._plot(self.ax, xlabel, ylabel, zlabel, xunits, yunits, xlim, ylim, cmap, show_colorbar, title)
+            self._plot(self.ax, xlabel, ylabel, zlabel, xunits, yunits, xlim, ylim, cmap, show_colorbar, title,
+                       markersize=markersize, alpha=alpha, vmin=vmin, vmax=vmax)
 
     def _plot(self, ax: plt.Axes, xlabel: str = None, ylabel: str = None, zlabel: str = None,
               xunits: str = None, yunits: str = None, xlim: list = None,
               ylim: list or str = None, cmap: str = 'viridis',
-              show_colorbar: bool = True, title: str = None, nbins: int = 10):
+              show_colorbar: bool = True, title: str = None, nbins: int = 10,
+              markersize: float = 40, alpha: float = 1.0, vmin: float = None, vmax: float = None):
         """Generate plot on axis"""
         nbins += 1  # To include zero
 
@@ -139,9 +150,12 @@ class ScatterXY:
             scatter = ax.scatter(x=self.xy_df[self.xname],
                                  y=self.xy_df[self.yname],
                                  c=self.xy_df[self.zname],
-                                 s=40,
+                                 s=markersize,
+                                 alpha=alpha,
                                  marker='o',
                                  cmap=cmap,
+                                 vmin=vmin,
+                                 vmax=vmax,
                                  label=self.yname)
             if show_colorbar:
                 cbar = plt.colorbar(scatter, ax=ax)
@@ -150,7 +164,8 @@ class ScatterXY:
             ax.scatter(x=self.xy_df[self.xname],
                        y=self.xy_df[self.yname],
                        c='none',
-                       s=40,
+                       s=markersize,
+                       alpha=alpha,
                        marker='o',
                        edgecolors='#607D8B',
                        label=self.yname)

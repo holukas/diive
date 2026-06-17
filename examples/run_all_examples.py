@@ -24,6 +24,7 @@ EXAMPLE_FILES = [
     'visualization/plot_hexbin_advanced.py',
     'visualization/plot_cumulative_basic.py',
     'visualization/plot_cumulative_year.py',
+    'visualization/plot_waterfall.py',
     'visualization/plot_other_plots.py',
     'visualization/plot_timeseries.py',
     'visualization/plot_timeseries_interactive.py',
@@ -40,6 +41,8 @@ EXAMPLE_FILES = [
     'visualization/plot_treering_line_temperature.py',
     # Times
     'times/times_timestamp_sanitizer.py',
+    'times/times_keep_daterange.py',
+    'times/times_resample_daily.py',
     'times/times_frequency_detection.py',
     'times/times_diel_cycles.py',
     'times/times_temporal_matrices.py',
@@ -57,6 +60,8 @@ EXAMPLE_FILES = [
     'analysis/analysis_optimumrange.py',
     'analysis/analysis_quantiles.py',
     'analysis/analysis_seasonaltrend.py',
+    # Events
+    'events/events_event.py',
     # I/O
     'io/io_load_save_parquet.py',
     'io/io_read_single_file_with_datafilereader.py',
@@ -103,6 +108,13 @@ EXAMPLE_FILES = [
     # Flux - Processing chain
     'flux/fluxprocessingchain/fluxprocessingchain_runchain.py',
     'flux/fluxprocessingchain/fluxprocessingchain_composable.py',
+    'flux/fluxprocessingchain/fluxprocessingchain_partitioning.py',
+    # Flux - Partitioning
+    'flux/partitioning/partitioning_nighttime_oneflux.py',
+    'flux/partitioning/partitioning_nighttime_reddyproc.py',
+    'flux/partitioning/partitioning_daytime_reddyproc.py',
+    'flux/partitioning/partitioning_daytime_oneflux.py',
+    'flux/partitioning/partitioning_comparison.py',
     # Flux - Low-resolution processing
     'flux/lowres/flux_timelag_analysis.py',
     'flux/lowres/flux_common.py',
@@ -120,6 +132,7 @@ EXAMPLE_FILES = [
     'flux/hires/flux_lag_pwbopt.py',
     'flux/hires/flux_lag_pwb_batch.py',
     'flux/hires/flux_lag_pwb_batch_cli.py',
+    'flux/hires/flux_apply_tlag_cli.py',
     'flux/hires/flux_windrotation.py',
     # Gap-filling
     'gapfilling/gapfill_interpolate_generous.py',

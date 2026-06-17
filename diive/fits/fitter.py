@@ -22,9 +22,9 @@ class BinFitterCP:
 
     Examples
     --------
-    See `examples/pkgs/fits/fit_binfittercp.py` for comprehensive example demonstrating
+    See `examples/fits/fit_binfittercp.py` for comprehensive example demonstrating
     binned fitting with temperature-VPD relationship, result exploration, and interval
-    interpretation. See `examples/pkgs/fits/fit_fitter.py` for ecosystem driver-response
+    interpretation. See `examples/fits/fit_fitter.py` for ecosystem driver-response
     (NEE-VPD) fitting example.
     """
 

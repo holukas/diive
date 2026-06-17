@@ -9,7 +9,7 @@
 Most functionality is now available as runnable Python scripts in the `examples/` folder — these are maintained, tested,
 and the primary reference for learning diive.
 
-**98 example scripts** organized by topic (visualization, gap-filling, flux processing, quality control, feature
+**113 example scripts** organized by topic (visualization, gap-filling, flux processing, quality control, feature
 engineering, and more)
 
 **See the complete catalog:** [examples/CATALOG.md](../examples/CATALOG.md)
@@ -57,7 +57,7 @@ development and scratch notebooks, not part of the standard workflow.
 
 ## Quick Links
 
-- [examples/CATALOG.md](../examples/CATALOG.md) — Complete index of 98 Python examples
+- [examples/CATALOG.md](../examples/CATALOG.md) — Complete index of 113 Python examples
 - [examples/README.md](../examples/README.md) — Examples folder overview
 - [CLAUDE.md](../CLAUDE.md) — Development guide and project overview
 - [CHANGELOG.md](../CHANGELOG.md) — Version history and recent updates

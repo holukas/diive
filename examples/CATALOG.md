@@ -7,6 +7,7 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 
 - [Visualization & Plotting](#visualization--plotting)
 - [Data Analysis](#data-analysis)
+- [Events](#events)
 - [Timestamp & Time Series Handling](#timestamp--time-series-handling)
 - [Data Processing & Corrections](#data-processing--corrections)
 - [Quality Control](#quality-control)
@@ -31,6 +32,7 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 | [**plot_timeseries_rangetool.py**](visualization/plot_timeseries_rangetool.py) | Interactive Bokeh plot with a RangeTool overview for navigating long series |
 | [**plot_cumulative_basic.py**](visualization/plot_cumulative_basic.py) | Cumulative flux across all time, scenario comparison |
 | [**plot_cumulative_year.py**](visualization/plot_cumulative_year.py) | Yearly cumulative sums with reference bands, annual budgets |
+| [**plot_waterfall.py**](visualization/plot_waterfall.py) | Daily CO2 uptake/release waterfall building a running flux budget |
 | [**plot_dielcycle.py**](visualization/plot_dielcycle.py) | Diurnal cycle analysis by month/season |
 | [**plot_hexbin_basic.py**](visualization/plot_hexbin_basic.py) | 2D hexagonal binning with percentile normalization, sparse-bin filtering (mincnt) |
 | [**plot_hexbin_advanced.py**](visualization/plot_hexbin_advanced.py) | Advanced hexbin with absolute values and overlays |
@@ -51,7 +53,6 @@ See: [visualization/README.md](visualization/README.md)
 
 | Example | Description |
 |---------|-------------|
-| [**analysis_correlation.py**](analysis/analysis_correlation.py) | Cross-correlation, autocorrelation, lag detection, anomaly detection |
 | [**analysis_daily_correlation.py**](analysis/analysis_daily_correlation.py) | Daily correlation coefficients between time series, quality checks, relationship analysis |
 | [**analysis_driveranalysis.py**](analysis/analysis_driveranalysis.py) | _(experimental)_ Evidence-triangulation driver attribution by epistemic level: SHAP + ALE (association), lagged/scale-resolved/stratified importance (temporal), Granger/PCMCI/CATE (causal), with a convergence/divergence summary |
 | [**analysis_granger.py**](analysis/analysis_granger.py) | Granger causality testing for predictive relationships between time series |
@@ -63,9 +64,19 @@ See: [visualization/README.md](visualization/README.md)
 | [**analysis_histogram_distribution.py**](analysis/analysis_histogram_distribution.py) | Histogram binning methods: fixed bins, unique values, fringe bin removal |
 | [**analysis_optimumrange.py**](analysis/analysis_optimumrange.py) | Find optimal value ranges, condition-based filtering |
 | [**analysis_quantiles.py**](analysis/analysis_quantiles.py) | Percentile and quantile calculations, non-parametric statistics |
-| [**analysis_harmonic.py**](analysis/analysis_harmonic.py) | Spectral analysis, Fourier decomposition, frequency content |
+| [**analysis_harmonic.py**](analysis/analysis_harmonic.py) | `harmonic_analysis` + `spectrogram`: diel/annual cycles, window effect, time-frequency map |
 
 See: [analysis/README.md](analysis/README.md)
+
+---
+
+## Events
+
+| Example | Description |
+|---------|-------------|
+| [**events_event.py**](events/events_event.py) | Create instant/period `Event`s, encode them as 0/1 data columns with `event_to_flag`, overlay them on plots with `overlay_events`, and apply a custom category palette |
+
+See: [events/README.md](events/README.md)
 
 ---
 
@@ -74,6 +85,8 @@ See: [analysis/README.md](analysis/README.md)
 | Example | Description |
 |---------|-------------|
 | [**times_timestamp_sanitizer.py**](times/times_timestamp_sanitizer.py) | Clean, validate, regularize datetime indices, gap filling, frequency detection |
+| [**times_keep_daterange.py**](times/times_keep_daterange.py) | Non-destructive date-range subselection (keep a time window, open or closed bounds) |
+| [**times_resample_daily.py**](times/times_resample_daily.py) | Resample a sub-daily series to one value per calendar day (mean/sum/min/max, completeness filter) |
 | [**times_frequency_detection.py**](times/times_frequency_detection.py) | Auto-detect time resolution with confidence scoring and alternative frequencies |
 | [**times_diel_cycles.py**](times/times_diel_cycles.py) | Calculate hourly aggregation patterns (annual and monthly diel cycles) |
 | [**times_temporal_matrices.py**](times/times_temporal_matrices.py) | Convert time series to year × month matrix for heatmap visualization |
@@ -163,6 +176,17 @@ See: [features/README.md](features/README.md)
 |---------|-------------|
 | [**fluxprocessingchain_runchain.py**](flux/fluxprocessingchain/fluxprocessingchain_runchain.py) | Single-call `run_chain(data, FluxConfig)` — minimal config drives the full L2→L4.1 pipeline with sensible defaults. Shows the easy path; for full control over per-detector / per-model knobs use the composable example below |
 | [**fluxprocessingchain_composable.py**](flux/fluxprocessingchain/fluxprocessingchain_composable.py) | Full L2→L4.1 pipeline using composable level callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; `gap_stats()` after L3.3; `plot_gapfilled_heatmaps()` and `plot_cumulative_comparison()` after L4.1 |
+| [**fluxprocessingchain_partitioning.py**](flux/fluxprocessingchain/fluxprocessingchain_partitioning.py) | Level 4.2 NEE→GPP+RECO partitioning wired into the chain; all four variants (`run_level42_nighttime_oneflux` / `_nighttime_reddyproc` / `_daytime_reddyproc` / `_daytime_oneflux`) via `run_chain`, one fit per USTAR scenario; `partitioned_cols()` to discover the `*_NT_OF` / `*_NT_RP` / `*_DT_RP` / `*_DT_OF` output columns |
+
+### NEE Partitioning (GPP / RECO)
+
+| Example | Description |
+|---------|-------------|
+| [**partitioning_nighttime_oneflux.py**](flux/partitioning/partitioning_nighttime_oneflux.py) | Partition NEE into GPP and RECO with the nighttime method ONEFlux (Reichstein et al. 2005), a faithful Python port of ONEFlux (`NighttimePartitioningOneFlux`, `_NT_OF` columns); sanity-checked against the independent, ReddyProc-derived `Reco_CUT_REF`/`GPP_CUT_REF` columns |
+| [**partitioning_nighttime_reddyproc.py**](flux/partitioning/partitioning_nighttime_reddyproc.py) | Partition NEE into GPP and RECO with the nighttime method REddyProc (Reichstein et al. 2005), a faithful Python port of REddyProc's `sMRFluxPartition` (`NighttimePartitioningReddyProc`, `_NT_RP` columns); whole-record single-E0 processing reproduces the ReddyProc-derived `Reco_CUT_REF`/`GPP_CUT_REF_f` columns (RECO r≈0.997 on CH-DAV) |
+| [**partitioning_daytime_reddyproc.py**](flux/partitioning/partitioning_daytime_reddyproc.py) | Partition NEE into GPP and RECO with the daytime method REddyProc (Lasslop et al. 2010), a faithful Python port of REddyProc's `partitionNEEGL` (`DaytimePartitioningReddyProc`, `_DT_RP` columns); fits a rectangular-hyperbola light-response curve to daytime NEE with E0 fixed from nighttime, matching a fresh REddyProc run on identical inputs to r>0.999 (GPP r≈0.96 vs the provenance-different bundled `GPP_DT_CUT_REF`) |
+| [**partitioning_daytime_oneflux.py**](flux/partitioning/partitioning_daytime_oneflux.py) | Partition NEE into GPP and RECO with the daytime method ONEFlux (Lasslop et al. 2010), a faithful Python port of ONEFlux's `flux_part_gl2010` / FLUXNET2015 (`DaytimePartitioningOneFlux`, `_DT_OF` columns); per-window light-response-curve fit with a measured-radiation day/night split (no latitude) and an internal NEE-uncertainty look-up, matching a native ONEFlux run on identical inputs to RECO r≈0.999 / GPP r≈0.9999 (provenance-different vs the bundled `GPP_DT_CUT_REF`) |
+| [**partitioning_comparison.py**](flux/partitioning/partitioning_comparison.py) | Run all four diive partitioning ports — ONEFLUX nighttime `_NT_OF`, REddyProc nighttime `_NT_RP`, REddyProc daytime `_DT_RP`, ONEFLUX daytime `_DT_OF` — on identical inputs and compare them against each other and the bundled references for each method (daily-mean + cumulative panels for RECO and GPP); shows how the reference implementation and the nighttime-temperature vs daytime-light approach affect the partitioning |
 
 ### Low-Resolution (30-min) Processing
 
@@ -187,6 +211,8 @@ See: [features/README.md](features/README.md)
 | [**flux_lag_pwbopt.py**](flux/hires/flux_lag_pwbopt.py) | PWBOPT batch pipeline: multi-period PWB with S1/S2/S3 selection and strategy comparison; supports real EddyPro-rotated files |
 | [**flux_lag_pwb_batch.py**](flux/hires/flux_lag_pwb_batch.py) | PwbBatchDetection API demo: parallel PWB across many EddyPro files with live Rich progress display, PWBOPT post-processing (standard + pre-filtered), and batch summary figures |
 | [**flux_lag_pwb_batch_cli.py**](flux/hires/flux_lag_pwb_batch_cli.py) | CLI demo: drive PwbBatchDetection from the command line via `python -m diive.flux.hires.lag_pwb`; shows all available flags |
+| [**flux_apply_tlag_cli.py**](flux/hires/flux_apply_tlag_cli.py) | `TlagApplier` CLI demo (`diive-tlag-apply-batch`): apply PWBOPT-detected lags from a `tlag_results.csv` to raw EC files, shifting each scalar by `round(tlag_s · hz)` rows |
+| [**flux_detect_remove_tui_demo.py**](flux/hires/flux_detect_remove_tui_demo.py) | Launches the `diive-tlag-pwb-detect-remove` Textual TUI in demo mode (no input data); interactive, not part of `run_all_examples.py` |
 | [**flux_windrotation.py**](flux/hires/flux_windrotation.py) | Wind rotation and coordinate transformation |
 | [**flux_fluxdetectionlimit.py**](flux/hires/flux_fluxdetectionlimit.py) | Flux detection limit and measurement sensitivity |
 

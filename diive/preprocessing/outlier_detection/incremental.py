@@ -78,16 +78,25 @@ class zScoreIncrements(FlagBase):
         self.showplot = showplot
         self.verbose = verbose
 
-    def calc(self, repeat: bool = True):
+        # Detection works on the z-scores of three increment series, not on the
+        # values directly, so there is no single data-unit band to overlay.
+        self.last_upper_bound = None
+        self.last_lower_bound = None
+
+    def calc(self, repeat: bool = True, progress_callback=None):
         """Calculate overall flag, based on individual flags from multiple iterations.
 
         Args:
             repeat: If *True*, the outlier detection is repeated until all
                 outliers are removed.
+            progress_callback: Optional ``callable(iteration, n_outliers,
+                filteredseries)`` invoked after each iteration (e.g. to drive a
+                progress bar / live-update the cleaned series).
 
         """
 
-        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
+        self._overall_flag, n_iterations = self.repeat(
+            self.run_flagtests, repeat=repeat, progress_callback=progress_callback)
         if self.showplot:
             self.defaultplot(n_iterations=n_iterations)
 

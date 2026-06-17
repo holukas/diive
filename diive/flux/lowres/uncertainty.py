@@ -61,7 +61,7 @@ class RandomUncertaintyPAS20:
             pipeline for eddy covariance data. 27. https://doi.org/10.1038/s41597-020-0534-3
 
     Example:
-        See `examples/pkgs/flux/lowres/flux_uncertainty.py` for complete examples of
+        See `examples/flux/lowres/flux_uncertainty.py` for complete examples of
         random uncertainty calculation and cumulative uncertainty propagation.
     """
 

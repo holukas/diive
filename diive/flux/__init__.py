@@ -11,6 +11,15 @@ Part of the diive library: https://github.com/holukas/diive
 from diive.flux import hires
 from diive.flux import lowres
 from diive.flux import fluxprocessingchain
+from diive.flux import partitioning
+from diive.flux.partitioning import NighttimePartitioningOneFlux
+from diive.flux.partitioning import partition_nee_nighttime_oneflux
+from diive.flux.partitioning import NighttimePartitioningReddyProc
+from diive.flux.partitioning import partition_nee_nighttime_reddyproc
+from diive.flux.partitioning import DaytimePartitioningReddyProc
+from diive.flux.partitioning import partition_nee_daytime_reddyproc
+from diive.flux.partitioning import DaytimePartitioningOneFlux
+from diive.flux.partitioning import partition_nee_daytime_oneflux
 from diive.flux.fluxprocessingchain import (
     FluxConfig,
     FluxLevelData,
@@ -42,6 +51,15 @@ __all__ = [
     'hires',
     'lowres',
     'fluxprocessingchain',
+    'partitioning',
+    'NighttimePartitioningOneFlux',
+    'partition_nee_nighttime_oneflux',
+    'NighttimePartitioningReddyProc',
+    'partition_nee_nighttime_reddyproc',
+    'DaytimePartitioningReddyProc',
+    'partition_nee_daytime_reddyproc',
+    'DaytimePartitioningOneFlux',
+    'partition_nee_daytime_oneflux',
     'FluxConfig',
     'FluxLevelData',
     'add_driver',

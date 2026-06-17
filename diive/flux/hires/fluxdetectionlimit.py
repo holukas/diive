@@ -176,7 +176,7 @@ class FluxDetectionLimit:
 
     Example
     -------
-    See `examples/pkgs/flux/hires/flux_fluxdetectionlimit.py` for complete examples
+    See `examples/flux/hires/flux_fluxdetectionlimit.py` for complete examples
     demonstrating flux detection limit calculation from high-resolution eddy covariance data.
 
     References

@@ -2,7 +2,30 @@
 MANUAL REMOVAL: EXPLICIT DATA FLAGGING
 =======================================
 
-Manually flag specific records or date ranges as outliers.
+Flag specific records or date ranges as outliers by listing them explicitly,
+rather than detecting them statistically. The user names exactly which
+timestamps to remove; matched records are flagged 2 (rejected) and set to
+missing in the filtered series, everything else is flagged 0 (ok), and gaps
+stay unflagged.
+
+This is the manual counterpart to the automatic detectors (Hampel, LocalSD,
+z-score, absolute limits, ...): instead of a rule, it removes a known list of
+bad records. Selection is purely time-based — a bare date covers the whole day,
+a [start, end] pair covers the closed interval — so it does not depend on the
+values themselves.
+
+Use cases:
+    * Removing periods of known instrument malfunction, calibration, or
+      maintenance recorded in a field/site logbook.
+    * Excising power outages, sensor swaps, or physical disturbances (e.g.
+      grazing, mowing, snow on a sensor) whose timing is known but whose values
+      look plausible, so a statistical detector would miss them.
+    * Discarding data flagged as bad during visual inspection of plots.
+    * Forcing the removal of records that survived the automatic detectors but
+      are known to be wrong, typically as a final manual step in a screening
+      chain (see StepwiseOutlierDetection / StepwiseMeteoScreeningDb).
+    * Reproducible, auditable cleaning: the exact removed dates live in the
+      script/config, so the same input always yields the same result.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -31,33 +54,53 @@ class ManualRemoval(FlagBase):
 
         Args:
             series: Time series in which outliers are identified.
-            remove_dates: list, can be given as a mix of strings and lists that
-                contain the date(times) of records that should be removed.
-                Example:
-                    * remove_dates=['2022-06-30 23:58:30', ['2022-06-05 00:00:30', '2022-06-07 14:30:00']]*
-                    will remove the record for '2022-06-30 23:58:30' and all records between
-                    '2022-06-05 00:00:30' (inclusive) and '2022-06-07 14:30:00' (inclusive).
-                    * This also works when providing only the date, e.g.
-                    removed_dates=['2006-05-01', '2006-07-18'] will remove all data points between
-                    2006-05-01 and 2006-07-18.
+            remove_dates: List of records to flag for removal. Each entry is either:
+                * a single date(time) string, which flags that one record, e.g.
+                  '2022-06-30 23:58:30'. A bare date such as '2006-05-01' flags the
+                  whole day (partial-string match, both bounds inclusive).
+                * a ``[start, end]`` list of two date(time) strings, which flags all
+                  records in the closed interval [start, end], e.g.
+                  ['2022-06-05 00:00:30', '2022-06-07 14:30:00']. Bare dates again
+                  span whole days, so ['2006-05-01', '2006-07-18'] removes everything
+                  from the start of 2006-05-01 to the end of 2006-07-18.
+                A range MUST be given as a nested two-element list. A flat list of two
+                strings is interpreted as two separate single-record removals, not a range.
+                Example mixing both forms:
+                    remove_dates=['2022-06-30 23:58:30',
+                                  ['2022-06-05 00:00:30', '2022-06-07 14:30:00']]
             showplot: Show plot with removed data points.
             verbose: More text output to console if *True*.
             idstr: Identifier, added as suffix to output variable names.
 
         Returns:
-            Results dataframe via the @repeater wrapper function, dataframe contains
-            the filtered time series and flags from all iterations.
+            None. After calling .calc() (or .run()), results are available via
+            .filteredseries, .flag and .overall_flag.
 
         """
-        super().__init__(series=series, flagid=self.flagid, idstr=idstr)
+        super().__init__(series=series, flagid=self.flagid, idstr=idstr, verbose=verbose)
         self.remove_dates = remove_dates
         self.showplot = showplot
-        self.verbose = verbose
 
-    def calc(self):
-        """Calculate overall flag for manually removed data points."""
+        # Selection is a set of timestamps, not a [lower, upper] envelope, so there
+        # is no data-unit detection band to overlay. Exposed as None for the GUI's
+        # shared outlier-tab band contract (same as zScoreIncrements).
+        self.last_upper_bound = None
+        self.last_lower_bound = None
 
-        self._overall_flag, n_iterations = self.repeat(func=self.run_flagtests, repeat=False)
+    def calc(self, repeat: bool = False, progress_callback=None):
+        """Calculate overall flag for manually removed data points.
+
+        Args:
+            repeat: Accepted for interface compatibility with the other outlier
+                detectors but ignored — manual removal flags fixed timestamps, so a
+                second pass would re-flag the same records (selection is index-based,
+                not value-based) and never converge. Detection always runs once.
+            progress_callback: Optional ``callable(iteration, n_outliers,
+                filteredseries)`` invoked after the (single) iteration.
+        """
+
+        self._overall_flag, n_iterations = self.repeat(
+            func=self.run_flagtests, repeat=False, progress_callback=progress_callback)
         if self.showplot:
             self.defaultplot(n_iterations=n_iterations)
 
@@ -78,17 +121,31 @@ class ManualRemoval(FlagBase):
 
         for date_spec in self.remove_dates:
             if isinstance(date_spec, str):
-                date_mask = (flag.index >= date_spec) & (flag.index <= date_spec)
-                flag.loc[date_mask] = 2
-            elif isinstance(date_spec, list):
-                date_mask = (flag.index >= date_spec[0]) & (flag.index <= date_spec[1])
-                flag.loc[date_mask] = 2
+                start = end = date_spec
+            elif isinstance(date_spec, (list, tuple)):
+                if len(date_spec) != 2:
+                    raise ValueError(
+                        f"A date range in remove_dates must have exactly two elements "
+                        f"[start, end], got {len(date_spec)}: {date_spec!r}")
+                start, end = date_spec
+            else:
+                raise TypeError(
+                    f"Each entry in remove_dates must be a date(time) string or a "
+                    f"[start, end] list, got {type(date_spec).__name__}: {date_spec!r}")
+            # Partial-string slicing makes a bare date span the whole day, inclusive
+            # of both bounds; a boolean >=/<= comparison would only match midnight.
+            # Index is monotonic (FlagBase enforces a frequency), so label slicing
+            # works even for bounds not present in the index.
+            rejected_idx = self.filteredseries.loc[start:end].index
+            flag.loc[rejected_idx] = 2
 
         rejected = flag[flag == 2].index
         n_outliers = len(rejected)
-        ok = flag.index.difference(rejected)
+        # Records that still hold data and were not removed are flagged ok; missing
+        # records stay unflagged (consistent with the other outlier detectors).
+        ok = self.filteredseries.dropna().index.difference(rejected)
 
         if self.verbose:
-            detail(f"ITERATION#{iteration}: Manually removed {n_outliers} values", verbose=self.verbose)
+            detail(f"ITERATION#{iteration}: Manually removed {n_outliers} values")
 
         return ok, rejected, n_outliers

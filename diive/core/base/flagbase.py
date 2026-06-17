@@ -147,8 +147,18 @@ class FlagBase:
         filteredname = f"{self.series.name}_FILTERED-AFTER-ITER{iteration}"
         return filteredname
 
-    def repeat(self, func, repeat):
-        """Repeat function until no more outliers found."""
+    def repeat(self, func, repeat, progress_callback=None):
+        """Repeat function until no more outliers found.
+
+        Args:
+            func: Per-iteration flag test, returns ``(iteration_df, n_outliers)``.
+            repeat: If *True*, repeat until an iteration finds no more outliers.
+            progress_callback: Optional ``callable(iteration, n_outliers,
+                filteredseries)`` invoked after each iteration (e.g. to drive a
+                progress indicator / live plot). ``filteredseries`` is a copy of the
+                series cleaned so far (outliers removed up to this iteration). The
+                final call carries ``n_outliers == 0`` when the loop converges.
+        """
         n_outliers = 9999
         iteration = 0
         iteration_flags_df = pd.DataFrame()
@@ -156,6 +166,10 @@ class FlagBase:
             iteration += 1
             cur_iteration_flag_df, n_outliers = func(iteration=iteration)
             iteration_flags_df = pd.concat([iteration_flags_df, cur_iteration_flag_df], axis=1)
+            if progress_callback is not None:
+                # Copy so the consumer (possibly another thread) can't race the
+                # next iteration's in-place mutation of the filtered series.
+                progress_callback(iteration, n_outliers, self.filteredseries.copy())
             if not repeat:
                 break
 
@@ -177,8 +191,11 @@ class FlagBase:
         iteration_df = self.collect_results()
         return iteration_df, n_outliers
 
-    def defaultplot(self, n_iterations: int = 1, showplot: bool = True):
-        """Basic plot that shows time series with and without outliers"""
+    def defaultplot(self, n_iterations: int = 1, showplot: bool = True, title: str = None):
+        """Basic plot that shows time series with and without outliers.
+
+        If ``title`` is given it overrides the auto-generated figure title.
+        """
         ok = self.overall_flag == 0
         rejected = self.overall_flag == 2
         n_outliers = rejected.sum()
@@ -212,9 +229,10 @@ class FlagBase:
         default_legend(ax=ax_series)
         default_legend(ax=ax_ok)
         plt.setp(ax_series.get_xticklabels(), visible=False)
-        plottitle = (f"{self.series.name} filtered by {self.overall_flag.name}, "
-                     f"n_iterations = {n_iterations}, "
-                     f"n_outliers = {n_outliers}")
+        plottitle = title if title is not None else (
+            f"{self.series.name} filtered by {self.overall_flag.name}, "
+            f"n_iterations = {n_iterations}, "
+            f"n_outliers = {n_outliers}")
         nice_date_ticks(ax=ax_series)
         nice_date_ticks(ax=ax_ok)
         fig.suptitle(plottitle, fontsize=theme.FIGHEADER_FONTSIZE)

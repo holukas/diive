@@ -66,6 +66,8 @@ class zScore(FlagBase):
                  utc_offset: int = None,
                  idstr: str = None,
                  thres_zscore: float = 4,
+                 thres_zscore_daytime: float = None,
+                 thres_zscore_nighttime: float = None,
                  showplot: bool = False,
                  plottitle: str = None,
                  verbose: bool = False):
@@ -83,7 +85,13 @@ class zScore(FlagBase):
                 Example: 1 for UTC+01:00. Used to detect daytime/nighttime.
             idstr: Identifier, added as suffix to output variable names.
             thres_zscore: Z-score threshold for outlier detection (default 4).
-                Values with |z-score| > threshold are flagged as outliers.
+                Values with |z-score| > threshold are flagged as outliers. Used for:
+                * **Global mode (separate_daytime_nighttime=False):** Applied to all records.
+                * **Day/Night mode:** Default for both daytime and nighttime (can be overridden).
+            thres_zscore_daytime: Override ``thres_zscore`` for daytime records only.
+                Only used if ``separate_daytime_nighttime=True``. If None, uses ``thres_zscore``.
+            thres_zscore_nighttime: Override ``thres_zscore`` for nighttime records only.
+                Only used if ``separate_daytime_nighttime=True``. If None, uses ``thres_zscore``.
             showplot: Show plot with removed data points.
             plottitle: Optional title for the plot.
             verbose: More text output to console if True.
@@ -99,6 +107,21 @@ class zScore(FlagBase):
         self.plottitle = plottitle
         self.verbose = verbose
         self.thres_zscore = thres_zscore
+        # Per-period overrides default to None and fall back to the global threshold,
+        # so changing thres_zscore alone still affects both periods (CLAUDE.md
+        # day/night convention). Separation only changes results vs. global when the
+        # two thresholds differ OR the per-subset mean/std differ.
+        self.thres_zscore_daytime = (thres_zscore_daytime
+                                     if thres_zscore_daytime is not None else thres_zscore)
+        self.thres_zscore_nighttime = (thres_zscore_nighttime
+                                       if thres_zscore_nighttime is not None else thres_zscore)
+        if self.thres_zscore_daytime <= 0 or self.thres_zscore_nighttime <= 0:
+            raise ValueError('thres_zscore (daytime/nighttime) must be positive.')
+
+        # Per-iteration detection band in data units (set by _flagtests); exposed
+        # for visualisation. Series over the current cleaned series' index.
+        self.last_upper_bound = None
+        self.last_lower_bound = None
 
         if separate_daytime_nighttime:
             # Day/night mode
@@ -111,13 +134,17 @@ class zScore(FlagBase):
             self.flag_daytime, _, self.is_daytime, self.is_nighttime = (
                 create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon, utc_offset=utc_offset))
 
-    def calc(self, repeat: bool = True):
+    def calc(self, repeat: bool = True, progress_callback=None):
         """Calculate overall flag based on z-score thresholds.
 
         Args:
             repeat: If True, outlier detection is repeated until convergence.
+            progress_callback: Optional ``callable(iteration, n_outliers,
+                filteredseries)`` invoked after each iteration (e.g. to drive a
+                progress bar / live-update the cleaned series).
         """
-        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
+        self._overall_flag, n_iterations = self.repeat(
+            self.run_flagtests, repeat=repeat, progress_callback=progress_callback)
         if self.showplot:
             self.defaultplot(n_iterations=n_iterations)
             if self.separate_daytime_nighttime:
@@ -146,6 +173,14 @@ class zScore(FlagBase):
         rejected = zscores > self.thres_zscore
         rejected = rejected[rejected].index
 
+        # Expose the detection band in DATA units (for visualisation): the z-score
+        # is (x - mean) / std, so |z| <= t maps to mean ± t * std. Mirror the exact
+        # mean/std used by funcs.zscore (numpy defaults: ddof=0).
+        mean, std = np.mean(s), np.std(s)
+        limit = self.thres_zscore * std
+        self.last_upper_bound = pd.Series(data=mean + limit, index=s.index)
+        self.last_lower_bound = pd.Series(data=mean - limit, index=s.index)
+
         n_outliers = len(rejected)
 
         if self.verbose:
@@ -162,17 +197,17 @@ class zScore(FlagBase):
         # Run for daytime (dt)
         _s_dt = s[self.is_daytime].copy()
         _zscore_dt = np.abs(funcs.zscore(series=_s_dt))
-        _ok_dt = _zscore_dt <= self.thres_zscore
+        _ok_dt = _zscore_dt <= self.thres_zscore_daytime
         _ok_dt = _ok_dt[_ok_dt].index
-        _rejected_dt = _zscore_dt > self.thres_zscore
+        _rejected_dt = _zscore_dt > self.thres_zscore_daytime
         _rejected_dt = _rejected_dt[_rejected_dt].index
 
         # Run for nighttime (nt)
         _s_nt = s[self.is_nighttime].copy()
         _zscore_nt = np.abs(funcs.zscore(series=_s_nt))
-        _ok_nt = _zscore_nt <= self.thres_zscore
+        _ok_nt = _zscore_nt <= self.thres_zscore_nighttime
         _ok_nt = _ok_nt[_ok_nt].index
-        _rejected_nt = _zscore_nt > self.thres_zscore
+        _rejected_nt = _zscore_nt > self.thres_zscore_nighttime
         _rejected_nt = _rejected_nt[_rejected_nt].index
 
         # Collect daytime and nighttime flags in one overall flag
@@ -180,6 +215,17 @@ class zScore(FlagBase):
         flag.loc[_rejected_dt] = 2
         flag.loc[_ok_nt] = 0
         flag.loc[_rejected_nt] = 2
+
+        # Per-subset detection band in DATA units (mean ± t * std), combined over
+        # the union of day + night indices for visualisation.
+        _mean_dt, _std_dt = np.mean(_s_dt), np.std(_s_dt)
+        _mean_nt, _std_nt = np.mean(_s_nt), np.std(_s_nt)
+        _upper_dt = pd.Series(data=_mean_dt + self.thres_zscore_daytime * _std_dt, index=_s_dt.index)
+        _lower_dt = pd.Series(data=_mean_dt - self.thres_zscore_daytime * _std_dt, index=_s_dt.index)
+        _upper_nt = pd.Series(data=_mean_nt + self.thres_zscore_nighttime * _std_nt, index=_s_nt.index)
+        _lower_nt = pd.Series(data=_mean_nt - self.thres_zscore_nighttime * _std_nt, index=_s_nt.index)
+        self.last_upper_bound = pd.concat([_upper_dt, _upper_nt]).sort_index()
+        self.last_lower_bound = pd.concat([_lower_dt, _lower_nt]).sort_index()
 
         n_outliers = (flag == 2).sum()
 
@@ -243,15 +289,24 @@ class zScoreRolling(FlagBase):
         self.thres_zscore = thres_zscore
         self.winsize = winsize
 
-    def calc(self, repeat: bool = True):
+        # Per-iteration detection band in data units (set by _flagtests); exposed
+        # for visualisation. Series over the current cleaned series' index.
+        self.last_upper_bound = None
+        self.last_lower_bound = None
+
+    def calc(self, repeat: bool = True, progress_callback=None):
         """Calculate overall flag, based on individual flags from multiple iterations.
 
         Args:
             repeat: If *True*, the outlier detection is repeated until all
                 outliers are removed.
+            progress_callback: Optional ``callable(iteration, n_outliers,
+                filteredseries)`` invoked after each iteration (e.g. to drive a
+                progress bar / live-update the cleaned series).
 
         """
-        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
+        self._overall_flag, n_iterations = self.repeat(
+            self.run_flagtests, repeat=repeat, progress_callback=progress_callback)
         if self.showplot:
             self.defaultplot(n_iterations=n_iterations)
 
@@ -276,6 +331,12 @@ class zScoreRolling(FlagBase):
         ok = ok[ok].index
         rejected = rzscore > self.thres_zscore
         rejected = rejected[rejected].index
+
+        # Detection band in DATA units: |(x - rmean) / rsd| <= t maps to
+        # rmean ± t * rsd (the rolling mean/SD adapt the band per point).
+        limit = self.thres_zscore * rsd
+        self.last_upper_bound = rmean + limit
+        self.last_lower_bound = rmean - limit
 
         n_outliers = len(rejected)
 

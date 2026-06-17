@@ -1,6 +1,6 @@
 # Outlier Detection Methods Examples
 
-Examples demonstrating 10 outlier detection methods for quality control, anomaly identification, and data cleaning.
+Examples demonstrating 9 outlier detection methods for quality control, anomaly identification, and data cleaning.
 
 ## Methods by Complexity
 
@@ -27,7 +27,10 @@ See `dv.outliers` for available detection classes:
 - `LocalSD` — Adaptive local threshold
 - `zScore` — Statistical threshold
 - `zScoreRolling` — Adaptive rolling threshold
+- `zScoreIncrements` — Spike detection on record-to-record increments
 - `LocalOutlierFactor` — Density-based detection
+- `TrimLow` — Symmetric trimmed-mean removal
+- `ManualRemoval` — Flag known problematic timestamps/periods
 - `StepwiseOutlierDetection` — Multi-stage orchestration
 
 ## Use Cases
@@ -99,19 +102,19 @@ cleaned = detector.series_hires_cleaned
 
 ```bash
 # Beginner-friendly (simple, deterministic)
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_absolutelimits.py
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_manualremoval.py
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_trim.py
+uv run python examples/preprocessing/outlier_detection/outlier_absolutelimits.py
+uv run python examples/preprocessing/outlier_detection/outlier_manualremoval.py
+uv run python examples/preprocessing/outlier_detection/outlier_trim.py
 
 # Intermediate (statistical, adaptive)
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_hampel.py
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_zscore.py
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_localsd.py
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_incremental.py
+uv run python examples/preprocessing/outlier_detection/outlier_hampel.py
+uv run python examples/preprocessing/outlier_detection/outlier_zscore.py
+uv run python examples/preprocessing/outlier_detection/outlier_localsd.py
+uv run python examples/preprocessing/outlier_detection/outlier_incremental.py
 
 # Advanced (machine learning, multi-method)
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_lof.py
-uv run python examples/pkgs/preprocessing/outlier_detection/outlier_stepwise.py
+uv run python examples/preprocessing/outlier_detection/outlier_lof.py
+uv run python examples/preprocessing/outlier_detection/outlier_stepwise.py
 
 # Run all outlier detection examples
 uv run python examples/run_all_examples.py

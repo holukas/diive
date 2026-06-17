@@ -31,6 +31,10 @@ The chain that ``run_chain`` runs:
              symmetric ``[-2, 2]`` lag window, first/second-order
              differencing, ``4 / 12 / 48``-record rolling median + std,
              and vectorised timestamps. SHAP feature reduction is **on**.
+- **L4.2** — NEE -> GPP + RECO partitioning with whichever of the four
+             variants you enabled via the ``partition_*`` fields. One fit per
+             USTAR scenario; nighttime variants read their gap-filled NEE from
+             the L4.1 method named by ``partition_gapfill_method``.
 """
 
 # %%
@@ -139,6 +143,24 @@ cfg = FluxConfig(
     gapfill_xgb=True,
     gapfill_reduce_features=True,  # SHAP reduction — the default
     gapfilling_features=['TA_T1_47_1_gfXG', 'SW_IN_T1_47_1_gfXG', 'VPD_kPa'],
+    # L4.2 NEE partitioning — enable all four variants (off by default). Each
+    # runs once per USTAR scenario. The partition_* driver columns must be in
+    # data.full_df; lat / lon / utc_offset come from init_flux_data. The
+    # nighttime variants read their gap-filled NEE from the L4.1 method named by
+    # partition_gapfill_method (MDS here); the daytime variants use measured NEE.
+    # This LAE subset ships only gap-filled meteo, so the "measured" partition_ta
+    # / partition_sw_in reuse the gap-filled columns (a real workflow points them
+    # at the raw measured series).
+    partition_nighttime_oneflux=True,
+    partition_nighttime_reddyproc=True,
+    partition_daytime_reddyproc=True,
+    partition_daytime_oneflux=True,
+    partition_gapfill_method='mds',
+    partition_ta='TA_T1_47_1_gfXG',          # measured TA (stand-in: gap-filled)
+    partition_sw_in='SW_IN_T1_47_1_gfXG',    # measured SW_IN (stand-in: gap-filled)
+    partition_ta_f='TA_T1_47_1_gfXG',        # gap-filled TA
+    partition_sw_in_f='SW_IN_T1_47_1_gfXG',  # gap-filled SW_IN
+    partition_vpd_f='VPD_kPa',               # gap-filled VPD (kPa, registered above)
 )
 
 # %%
@@ -165,7 +187,21 @@ cols = data.gapfilled_cols()
 print(f"\nGap-filled columns: {cols}")
 
 # %%
-# Step 6 — side-by-side comparison plots
+# Step 6 — partitioning columns (L4.2)
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# ``partitioned_cols()`` is the L4.2 analogue of ``gapfilled_cols()``: it
+# returns ``{variant: {ustar_scenario: [column, ...]}}`` for the GPP / RECO and
+# fitted-parameter columns each partitioning variant added to ``fpc_df``. The
+# fitted instances live under ``data.levels.level42_<variant>[scenario]``.
+
+part_cols = data.partitioned_cols()
+for variant, scen_cols in part_cols.items():
+    for scen, names in scen_cols.items():
+        print(f"L4.2 {variant} {scen}: {names}")
+
+# %%
+# Step 7 — side-by-side comparison plots
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # ``plot_gapfilled_heatmaps`` shows the measured series plus one heatmap
@@ -193,7 +229,9 @@ data.plot_cumulative_comparison(
 # the FLUXNET-standard multi-year bootstrap (ONEFlux moving-point
 # method). Three scenarios (``CUT_16`` / ``CUT_50`` / ``CUT_84``) are
 # produced by default; the fitted detector lands on
-# ``data.levels.ustar_detection`` for post-hoc inspection.
+# ``data.levels.ustar_detection`` for post-hoc inspection. ``run_chain``
+# applies the constant (CUT) threshold; for per-year VUT filtering use the
+# composable ``run_level33_ustar_detection(..., mode='vut')``.
 #
 # Not run here to keep the example fast::
 #

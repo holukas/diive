@@ -18,7 +18,7 @@ print(df.dtypes)          # column types
 print(dv.sstats(df))      # summary stats (mean, std, gaps, ...)
 ```
 
-The built-in example dataset is a multi-year 30-min eddy covariance record (CH-LAE).
+The built-in example dataset is a multi-year 30-min eddy covariance record (CH-DAV).
 Swap in your own DataFrame from any source — diive only requires a `DatetimeIndex`.
 
 Full examples: [io/io_load_save_parquet.py](io/io_load_save_parquet.py),
@@ -141,37 +141,50 @@ Full examples: [gapfilling/gapfill_randomforest.py](gapfilling/gapfill_randomfor
 ## 5. Run the full flux processing chain (L2–L4.1)
 
 ```python
-import diive as dv
 from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+from diive.flux.fluxprocessingchain import FluxConfig, init_flux_data, run_chain
 
 df = load_exampledata_parquet_lae_level1_30MIN()
-df = df.loc['2024-06']                      # one month for speed
+df = df.loc['2024-06':'2024-06']           # one month for speed
+df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
+                      if c in df.columns])  # reserved names; recomputed fresh
 
-fpc = dv.flux.FluxProcessingChain(
+# Initialise the container: potential radiation, day/night flags, frozen meta.
+data = init_flux_data(
     df=df,
     fluxcol='FC',
-    site_lat=47.42,
-    site_lon=8.49,
+    site_lat=47.41887,
+    site_lon=8.491318,
     utc_offset=1,
     nighttime_threshold=20,                 # W m-2
     daytime_accept_qcf_below=2,
-    nighttime_accept_qcf_below=2
+    nighttime_accept_qcf_below=2,
 )
 
-fpc.level2_quality_flag_expansion()        # L2: 7 quality tests
-fpc.level31_storage_correction()           # L3.1: storage flux correction
-fpc.level32_outlier_removal()              # L3.2: sequential outlier chain
-fpc.level33_USTAR_filtering()              # L3.3: turbulence filtering (nighttime)
-fpc.level41_gap_filling_randomforest()     # L4.1: Random Forest gap-filling
+# One FluxConfig drives the whole L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1 chain.
+cfg = FluxConfig(
+    fluxcol='FC',
+    ustar_thresholds=[0.18],                # L3.3 constant USTAR threshold
+    ustar_labels=['CUT_50'],
+    mds_swin='SW_IN_T1_47_1_gfXG',          # L4.1 MDS drivers (must be in data.full_df)
+    mds_ta='TA_T1_47_1_gfXG',
+    mds_vpd='VPD_kPa',                       # MDS needs VPD in kPa, not hPa
+    gapfill_mds=True,
+    gapfill_rf=True,
+    gapfilling_features=['TA_T1_47_1_gfXG', 'SW_IN_T1_47_1_gfXG', 'VPD_kPa'],
+)
 
-results = fpc.get_results()                # dict with gapfilled flux + all flags
+data = run_chain(data, cfg)
+print(data.summary())
+cols = data.gapfilled_cols()               # {method: {ustar_scenario: column_name}}
 ```
 
 Returns a complete audit trail: one flag column per test, QCF composite flag, and
-gap-filled flux at every USTAR scenario.
+gap-filled flux at every USTAR scenario. For full control over every detector and
+model knob, use the composable per-level API (`run_level2`, `run_level31`, ...).
 
-Full example: [flux/fluxprocessingchain/fluxprocessingchain.py](flux/fluxprocessingchain/fluxprocessingchain.py) |
-quick version: [flux/fluxprocessingchain/fluxprocessingchain_quick.py](flux/fluxprocessingchain/fluxprocessingchain_quick.py)
+Full example: [flux/fluxprocessingchain/fluxprocessingchain_runchain.py](flux/fluxprocessingchain/fluxprocessingchain_runchain.py) |
+composable version: [flux/fluxprocessingchain/fluxprocessingchain_composable.py](flux/fluxprocessingchain/fluxprocessingchain_composable.py)
 
 ---
 

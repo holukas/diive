@@ -8,7 +8,7 @@ import datetime
 import fnmatch
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal, Optional
 
 import pandas as pd
 import pandas.errors
@@ -152,35 +152,29 @@ def _convert_timestamp_idx_col(var: int or list):
     return new
 
 
-# def rename_duplicate_cols(df: DataFrame) -> DataFrame:
-#     """
-#     Rename columns with the same name to unique names
-#
-#     For example:
-#         - two columns with the same name in *df*:
-#             'co2_mean' and 'co2_mean'
-#             will be renamed to
-#             'co2_mean.1' and 'co2_mean.2'
-#
-#     Args:
-#         df: DataFrame with multiple columns
-#
-#     Returns:
-#         Complete df with renamed columns. If no duplicates
-#         were found, the returned df is the same as the input df.
-#
-#     Kudos:
-#     - https://stackoverflow.com/questions/24685012/pandas-dataframe-renaming-multiple-identically-named-columns
-#
-#     """
-#     df.columns = ParserBase({'usecols': None})._maybe_dedup_names(df.columns)
-#     return df
-
-
 class ColumnNamesSanitizer:
+    """Make DataFrame column names unique by renaming duplicates.
+
+    Some data files contain repeated column names (e.g. the same variable
+    exported twice). pandas keeps such duplicates, which makes column selection
+    by name ambiguous. This sanitizer detects duplicate names and appends an
+    integer suffix (``COL``, ``COL.1``, ``COL.2``, ...) so every column name is
+    unique, choosing the next free suffix if a suffixed name already exists.
+    The first occurrence keeps its original name; a warning is emitted for each
+    rename. Operates on a copy — the input DataFrame is not modified.
+
+    Example:
+        >>> sanitizer = ColumnNamesSanitizer(df)
+        >>> clean_df = sanitizer.get()
+    """
 
     def __init__(self,
                  df: DataFrame):
+        """
+        Args:
+            df: DataFrame whose column names should be made unique. Copied
+                internally; the original is left unchanged.
+        """
         self.df = df.copy()
 
         # # For testing: create a duplicate column name
@@ -193,6 +187,7 @@ class ColumnNamesSanitizer:
         self._run()
 
     def get(self) -> DataFrame:
+        """Return the DataFrame with de-duplicated column names."""
         return self.df
 
     def _run(self):
@@ -235,15 +230,51 @@ class ColumnNamesSanitizer:
 
 
 class MultiDataFileReader:
-    """Read and merge multiple datafiles of the same filetype"""
+    """Read several data files of one filetype and merge them into one dataset.
 
-    def __init__(self, filepaths: list, filetype: str, output_middle_timestamp: bool = True):
+    Each file is read with :class:`ReadFileType` using the configuration for the
+    given ``filetype``, then merged into a single data and a single metadata
+    DataFrame. Overlapping timestamps/columns are combined with
+    ``DataFrame.combine_first`` (existing values take precedence; the incoming
+    file fills gaps), columns are sorted, and the merged data is reindexed to a
+    continuous timestamp at the filetype's frequency. Files that are empty
+    (``pandas.errors.EmptyDataError``) are skipped.
+
+    Use the :attr:`data_df` and :attr:`metadata_df` properties to retrieve the
+    merged results after construction.
+
+    Example:
+        >>> reader = MultiDataFileReader(filepaths=files, filetype='DIIVE-CSV-30MIN')
+        >>> data = reader.data_df
+        >>> meta = reader.metadata_df
+    """
+
+    def __init__(self, filepaths: list, filetype: str, output_middle_timestamp: bool = True,
+                 progress_callback: Optional[Callable[[str, int, int, object], None]] = None):
+        """
+        Args:
+            filepaths: List of file paths to read. All must be the same
+                ``filetype``.
+            filetype: Name of the filetype configuration to use (a key from
+                :func:`diive.configs.filetypes.get_filetypes`), e.g.
+                ``'DIIVE-CSV-30MIN'``.
+            output_middle_timestamp: If *True*, the output timestamp index marks
+                the middle of each averaging interval. Defaults to *True*.
+            progress_callback: Optional callable invoked while merging so callers
+                (e.g. a GUI) can report per-file progress. Called as
+                ``callback(phase, done, total, filepath)`` with ``phase`` either
+                ``'reading'`` (before a file is read) or ``'done'`` (after it has
+                been merged); ``done`` is the count of finished files and
+                ``total`` the number of files. Empty (skipped) files still emit a
+                ``'done'`` event so the count stays consistent.
+        """
 
         # Getting configs for filetype
         configfilepath = get_filetypes()[filetype]
         self.filetypeconfig = ConfigFileReader(configfilepath=configfilepath, validation='filetype').read()
         self.filepaths = filepaths
         self.output_middle_timestamp = output_middle_timestamp
+        self.progress_callback = progress_callback
 
         # Collect data from all files listed in filepaths
         self._data_df, self._metadata_df = self._get_incoming_data()
@@ -268,8 +299,11 @@ class MultiDataFileReader:
         """Merge data across all files"""
         data_df = None
         metadata_df = None
-        for filepath in self.filepaths:
+        total = len(self.filepaths)
+        for idx, filepath in enumerate(self.filepaths):
             # print(f"\n{'-' * 40}\nReading file {filepath.stem}\n{'-' * 40}")
+            if self.progress_callback:
+                self.progress_callback('reading', idx, total, filepath)
             try:
                 incoming_data_df, incoming_metadata_df = \
                     ReadFileType(filepath=filepath, filetypeconfig=self.filetypeconfig,
@@ -279,6 +313,9 @@ class MultiDataFileReader:
                                               incoming_metadata_df=incoming_metadata_df, metadata_df=metadata_df)
             except pandas.errors.EmptyDataError:
                 continue
+            finally:
+                if self.progress_callback:
+                    self.progress_callback('done', idx + 1, total, filepath)
         data_df = sort_multiindex_columns_names(df=data_df, priority_vars=None)
         return data_df, metadata_df
 

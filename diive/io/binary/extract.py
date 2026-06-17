@@ -53,7 +53,7 @@ def get_encoded_value_from_int(integer: int,
          get_encoded_value_series : Apply bit extraction to a series of integers.
 
      Example:
-         See `examples/pkgs/io/io_extract.py` for complete examples.
+         See `examples/io/io_extract.py` for complete examples.
      """
     bits = bin(integer).replace("0b", "")  # Convert to binary value
     bits = bits.zfill(n_bits)  # Add leading zeros, if needed
@@ -107,7 +107,7 @@ def get_encoded_value_series(
         get_encoded_value_from_int : Extract bits from a single integer value.
 
     Example:
-        See `examples/pkgs/io/io_extract.py` for complete examples.
+        See `examples/io/io_extract.py` for complete examples.
     """
     missing = int_series.isnull()
     available = ~missing

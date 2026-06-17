@@ -32,7 +32,7 @@ class SeasonalTrendDecomposition:
     Lazy evaluation: Components are computed once on first access and cached.
 
     Example:
-        See `examples/pkgs/analysis/analysis_seasonaltrend.py` for complete examples.
+        See `examples/analysis/analysis_seasonaltrend.py` for complete examples.
 
     See Also:
         SeasonalTrendDecomposition : This class.

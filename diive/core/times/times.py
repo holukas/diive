@@ -1639,6 +1639,94 @@ def insert_timestamp(
     return data
 
 
+# Reserved timestamp names and the averaging-interval convention each one implies.
+TIMESTAMP_CONVENTION_NAMES = {
+    'TIMESTAMP_START': 'start',
+    'TIMESTAMP_MIDDLE': 'middle',
+    'TIMESTAMP_END': 'end',
+}
+
+
+def validate_timestamp_column_name(name: str, convention: Literal['start', 'middle', 'end']) -> None:
+    """
+    Reject a reserved timestamp name that contradicts the column's convention.
+
+    The names 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE' and 'TIMESTAMP_END' are
+    reserved: each one states which point of the averaging interval its timestamps
+    mark. Naming a column with one of them while its values follow a *different*
+    convention would mislabel the data (and could be misread downstream), so it is
+    not allowed. Any other name is accepted.
+
+    Args:
+        name: The intended column name.
+        convention: The convention the column's timestamps actually follow
+            ('start', 'middle' or 'end').
+
+    Raises:
+        ValueError: If *name* is a reserved timestamp name for a different
+            convention than *convention*.
+    """
+    implied = TIMESTAMP_CONVENTION_NAMES.get(name)
+    if implied is not None and implied != convention:
+        raise ValueError(
+            f"Column name '{name}' is reserved for the '{implied}' convention, but "
+            f"the column follows the '{convention}' convention. Either set "
+            f"convention='{implied}' or choose a different column name."
+        )
+
+
+def format_timestamp(
+        data: Union[DataFrame, Series, DatetimeIndex],
+        convention: Literal['start', 'middle', 'end'],
+        fmt: Optional[str] = None,
+        verbose: bool = False) -> Series:
+    """
+    Build a timestamp Series for a chosen averaging-interval convention.
+
+    Derives a START, MIDDLE or END timestamp from *data*'s (timestamp) index
+    without modifying that index. The returned Series is aligned to the input
+    index, so it can be added to *data* as a new data column while the index
+    keeps its own convention (typically TIMESTAMP_MIDDLE).
+
+    The START/END shift reuses :func:`insert_timestamp`, so the input index must
+    be a properly named, regular timestamp index ('TIMESTAMP_START',
+    'TIMESTAMP_MIDDLE' or 'TIMESTAMP_END') with a known frequency.
+
+    Args:
+        data: Source whose index supplies the timestamps. A DataFrame/Series
+            (its index is used) or a DatetimeIndex directly.
+        convention: Convention of the produced timestamps:
+            - 'start': start of the averaging interval
+            - 'middle': middle of the averaging interval
+            - 'end': end of the averaging interval
+        fmt: Optional ``strftime`` format string (e.g. ``'%Y%m%d%H%M'`` for the
+            FLUXNET convention). If given, the Series holds formatted strings; if
+            ``None``, it holds ``datetime64`` values.
+        verbose: If *True*, gives additional text output.
+
+    Returns:
+        A Series named 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE' or 'TIMESTAMP_END',
+        aligned to *data*'s index.
+
+    Examples:
+        >>> df.index.name = 'TIMESTAMP_MIDDLE'
+        >>> df['TIMESTAMP_END'] = format_timestamp(df, convention='end')
+        >>> df['TS'] = format_timestamp(df, convention='start', fmt='%Y%m%d%H%M')
+
+    Added in: v0.92.0
+    """
+    index = data.index if isinstance(data, (DataFrame, Series)) else data
+    # Build a fresh index-only frame so insert_timestamp does not mutate *data*.
+    frame = insert_timestamp(pd.DataFrame(index=index), convention=convention,
+                             insert_as_first_col=False, verbose=verbose)
+    col = f"TIMESTAMP_{convention.upper()}"
+    series = frame[col]
+    if fmt:
+        series = series.dt.strftime(fmt)
+        series.name = col
+    return series
+
+
 def convert_series_timestamp_to_middle(data: Union[Series, DataFrame], verbose: bool = False) -> Union[
     Series, DataFrame]:
     """
@@ -1787,6 +1875,57 @@ def keep_years(data: Union[Series, DataFrame],
     if end_year:
         data = data.loc[data.index.year <= end_year]
     return data
+
+
+def keep_daterange(data: Union[Series, DataFrame],
+                   start=None,
+                   end=None,
+                   verbose: bool = False) -> Union[Series, DataFrame]:
+    """Keep only records whose timestamp falls within ``[start, end]`` (inclusive).
+
+    A non-destructive date-range subselection: returns a copy restricted to the
+    given window, leaving the input untouched so the caller can keep the full
+    record and revert. Either bound may be omitted to leave that side open.
+
+    Args:
+        data: Series or DataFrame with a ``DatetimeIndex``.
+        start: Lower bound (inclusive). A ``pandas.Timestamp``, ``datetime``, or
+            any string pandas can parse (e.g. ``'2021-06-01'``,
+            ``'2021-06-01 12:30'``). ``None`` leaves the start open.
+        end: Upper bound (inclusive), same accepted types as ``start``. ``None``
+            leaves the end open.
+        verbose: Print how many records were kept.
+
+    Returns:
+        A copy of ``data`` containing only the in-range records. With both bounds
+        ``None`` the full data is returned (as a copy).
+
+    Raises:
+        TypeError: If ``data`` does not have a ``DatetimeIndex``.
+        ValueError: If ``start`` is after ``end``.
+
+    See Also:
+        examples/times/times_keep_daterange.py — date-range subselection examples
+    """
+    if not isinstance(data.index, DatetimeIndex):
+        raise TypeError("keep_daterange requires data with a DatetimeIndex.")
+
+    start_ts = pd.Timestamp(start) if start is not None else None
+    end_ts = pd.Timestamp(end) if end is not None else None
+    if start_ts is not None and end_ts is not None and start_ts > end_ts:
+        raise ValueError(f"start ({start_ts}) is after end ({end_ts}).")
+
+    keep = np.ones(len(data), dtype=bool)
+    if start_ts is not None:
+        keep &= data.index >= start_ts
+    if end_ts is not None:
+        keep &= data.index <= end_ts
+
+    out = data.loc[keep].copy()
+    if verbose:
+        info(f"Kept {len(out)} of {len(data)} records "
+             f"in date range [{start_ts}, {end_ts}].")
+    return out
 
 
 def calc_doy_timefraction(input_series: Series) -> DataFrame:

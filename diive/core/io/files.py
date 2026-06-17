@@ -3,11 +3,54 @@ import pickle
 import time
 import zipfile as zf
 from pathlib import Path
+from typing import Callable, Optional
 
 from pandas import Series, DataFrame, read_parquet
 
-from diive.core.times.times import TimestampSanitizer
+from diive.core.times.times import TimestampSanitizer, validate_timestamp_naming
 from diive.core.utils.console import info, detail
+
+#: Allowed names for a timestamp index in a diive parquet file.
+ALLOWED_TIMESTAMP_NAMES = ['TIMESTAMP_END', 'TIMESTAMP_MIDDLE', 'TIMESTAMP_START']
+
+
+def to_diive_format(data: DataFrame, timestamp_name: str = None) -> DataFrame:
+    """Coerce a DataFrame to the diive parquet format.
+
+    Ensures the data follows the diive convention:
+
+    - **One header row**: MultiIndex columns are flattened to their top level so
+      there is a single level of column names.
+    - **Named timestamp index**: the index name must be one of
+      ``'TIMESTAMP_END'``, ``'TIMESTAMP_MIDDLE'`` or ``'TIMESTAMP_START'``
+      (indicating what the timestamp marks). Pass ``timestamp_name`` to set it;
+      otherwise the existing index name is validated.
+
+    Args:
+        data: DataFrame to coerce.
+        timestamp_name: Optional timestamp index name to set before validation.
+            Must be one of :data:`ALLOWED_TIMESTAMP_NAMES`.
+
+    Returns:
+        A (possibly copied) DataFrame in diive format.
+
+    Raises:
+        ValueError: If no valid timestamp index name is available.
+    """
+    out = data
+    if out.columns.nlevels > 1:
+        out = out.copy()
+        out.columns = out.columns.get_level_values(0)
+    if timestamp_name is not None:
+        if timestamp_name not in ALLOWED_TIMESTAMP_NAMES:
+            raise ValueError(
+                f"timestamp_name must be one of {ALLOWED_TIMESTAMP_NAMES}, "
+                f"got '{timestamp_name}'.")
+        if out.index.name != timestamp_name:
+            out = out.copy()
+            out.index.name = timestamp_name
+    validate_timestamp_naming(out)  # raises if the index name is not allowed
+    return out
 
 
 def set_outpath(outpath: str or None, filename: str, fileextension: str):
@@ -19,7 +62,8 @@ def set_outpath(outpath: str or None, filename: str, fileextension: str):
     return filepath
 
 
-def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None = None) -> str:
+def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None = None,
+                 enforce_diive_format: bool = False, timestamp_name: str = None) -> str:
     """
     Save pandas Series or DataFrame as Parquet file.
 
@@ -34,6 +78,14 @@ def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None 
             Index name is preserved (e.g., 'TIMESTAMP_END', 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE').
         outpath : str or Path, optional
             Directory path for output file. Default None: saves to current working directory.
+        enforce_diive_format : bool, optional (default False)
+            If True, coerce the data to the diive parquet format before saving
+            (see :func:`to_diive_format`): one header row (flattened columns) and
+            a validly-named timestamp index. Raises ValueError if the index name
+            is not valid and ``timestamp_name`` is not given.
+        timestamp_name : str, optional
+            Timestamp index name to set when ``enforce_diive_format`` is True.
+            One of 'TIMESTAMP_END', 'TIMESTAMP_MIDDLE', 'TIMESTAMP_START'.
 
     Returns:
         str
@@ -51,6 +103,8 @@ def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None 
     tic = time.time()
     if isinstance(data, Series):
         data = data.to_frame()
+    if enforce_diive_format:
+        data = to_diive_format(data, timestamp_name=timestamp_name)
     data.to_parquet(filepath)
     toc = time.time() - tic
     info(f"Saved file {filepath} ({toc:.3f} seconds).")
@@ -112,6 +166,44 @@ def load_parquet(filepath: str or Path, output_middle_timestamp: bool = True,
         df = TimestampSanitizer(data=df, output_middle_timestamp=output_middle_timestamp).get()
         detail(f"Detected time resolution of {df.index.freq} / {df.index.freqstr}")
     return df
+
+
+def load_parquet_many(filepaths: list, output_middle_timestamp: bool = True,
+                      sanitize_timestamp: bool = True,
+                      progress_callback: Optional[Callable[[str, int, int, object], None]] = None) -> DataFrame:
+    """Load several parquet files and merge them into one DataFrame.
+
+    Each file is read with :func:`load_parquet` and merged with the running
+    result via ``DataFrame.combine_first`` (existing values take precedence; the
+    incoming file fills gaps). This is the parquet counterpart to
+    :class:`diive.core.io.filereader.MultiDataFileReader` and shares its
+    ``progress_callback`` contract.
+
+    Args:
+        filepaths: Parquet file paths to read and merge, in order.
+        output_middle_timestamp: Forwarded to :func:`load_parquet`.
+        sanitize_timestamp: Forwarded to :func:`load_parquet`.
+        progress_callback: Optional callable invoked while merging so callers
+            (e.g. a GUI) can report per-file progress. Called as
+            ``callback(phase, done, total, filepath)`` with ``phase`` either
+            ``'reading'`` (before a file is read) or ``'done'`` (after it has
+            been merged); ``done`` is the count of finished files and ``total``
+            the number of files.
+
+    Returns:
+        The merged DataFrame.
+    """
+    merged = None
+    total = len(filepaths)
+    for idx, filepath in enumerate(filepaths):
+        if progress_callback:
+            progress_callback('reading', idx, total, filepath)
+        df = load_parquet(filepath=filepath, output_middle_timestamp=output_middle_timestamp,
+                          sanitize_timestamp=sanitize_timestamp)
+        merged = df if merged is None else merged.combine_first(df)
+        if progress_callback:
+            progress_callback('done', idx + 1, total, filepath)
+    return merged
 
 
 def save_as_pickle(outpath: str or None, filename: str, data) -> str:

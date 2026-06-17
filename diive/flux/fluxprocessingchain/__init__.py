@@ -64,6 +64,8 @@ Level                          Shape                         Why this shape
                                                              Not expressible as kwargs without a DSL.
 ``run_level33_constant_ustar`` parallel lists                Multiple USTAR scenarios are positional pairs
                                                              (threshold, label).
+``run_level33_variable_ustar`` ``{label: threshold Series}`` Time-varying (e.g. per-year VUT) thresholds —
+                                                             one full per-record Series per scenario.
 ``run_level41_*``              built object + ad-hoc kwargs  Feature engineering is itself an 8-stage
                                                              configuration; passing it as a built object
                                                              is correct.
@@ -114,7 +116,10 @@ from diive.flux.fluxprocessingchain.container import (
 from diive.flux.lowres.quality_flags import FluxQualityFlagsEddyPro
 from diive.flux.lowres.storage_correction import FluxStorageCorrectionSinglePointEddyPro
 from diive.flux.fluxprocessingchain.levels import (
+    VM97_SUBTESTS,
     init_flux_data,
+    level2_test_inputs,
+    level31_storage_col,
     make_level32_detector,
     make_level41_engineer,
     run_level2,
@@ -122,11 +127,20 @@ from diive.flux.fluxprocessingchain.levels import (
     run_level32,
     run_level33_constant_ustar,
     run_level33_ustar_detection,
+    run_level33_variable_ustar,
     run_level41_mds,
     run_level41_rf,
     run_level41_xgb,
+    run_level42_daytime_oneflux,
+    run_level42_daytime_reddyproc,
+    run_level42_nighttime_oneflux,
+    run_level42_nighttime_reddyproc,
 )
 from diive.flux.fluxprocessingchain.run_chain import run_chain
+from diive.flux.fluxprocessingchain.codegen import (
+    chain_to_code, level2_to_code, level31_to_code, level32_to_code, level33_to_code,
+    level41_to_code, level42_to_code,
+)
 
 __all__ = [
     # Containers / config
@@ -137,19 +151,35 @@ __all__ = [
     'LevelResults',
     # Single-call convenience driver
     'run_chain',
+    # Reproducible-script codegen
+    'chain_to_code',
+    'level2_to_code',
+    'level31_to_code',
+    'level32_to_code',
+    'level33_to_code',
+    'level41_to_code',
+    'level42_to_code',
     # Composable callables
     'init_flux_data',
     'add_driver',
     'run_level2',
+    'VM97_SUBTESTS',
+    'level2_test_inputs',
     'run_level31',
+    'level31_storage_col',
     'make_level32_detector',
     'run_level32',
     'run_level33_constant_ustar',
     'run_level33_ustar_detection',
+    'run_level33_variable_ustar',
     'make_level41_engineer',
     'run_level41_mds',
     'run_level41_rf',
     'run_level41_xgb',
+    'run_level42_nighttime_oneflux',
+    'run_level42_nighttime_reddyproc',
+    'run_level42_daytime_reddyproc',
+    'run_level42_daytime_oneflux',
     # Level classes (for type-checking downstream)
     'FluxQualityFlagsEddyPro',
     'FluxStorageCorrectionSinglePointEddyPro',

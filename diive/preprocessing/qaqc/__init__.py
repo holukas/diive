@@ -20,6 +20,16 @@ from diive.preprocessing.qaqc.eddyproflags import (
 )
 from diive.preprocessing.qaqc.qcf import FlagQCF
 from diive.preprocessing.qaqc.meteoscreening import StepwiseMeteoScreeningDb
+from diive.preprocessing.qaqc.measurements import (
+    Measurement,
+    MEASUREMENTS,
+    CorrectionSpec,
+    CORRECTIONS,
+    corrections_for_measurement,
+    correction_spec,
+    detect_measurement,
+    measurement_label,
+)
 
 __all__ = [
     'restrict_application',
@@ -33,4 +43,12 @@ __all__ = [
     'flag_ssitc_eddypro_test',
     'FlagQCF',
     'StepwiseMeteoScreeningDb',
+    'Measurement',
+    'MEASUREMENTS',
+    'CorrectionSpec',
+    'CORRECTIONS',
+    'corrections_for_measurement',
+    'correction_spec',
+    'detect_measurement',
+    'measurement_label',
 ]

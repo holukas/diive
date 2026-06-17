@@ -28,6 +28,99 @@ class TestAnalyses(unittest.TestCase):
         self.assertEqual(gapfinder_df.iloc[-1]['GAP_LENGTH'], 1)
         self.assertEqual(gapfinder_df['GAP_LENGTH'].sum(), 117099)
 
+        # gap_at: a timestamp inside a gap returns that gap; outside returns the
+        # nearest; None when there are no gaps.
+        longest = gapfinder_df.iloc[0]
+        mid = longest['GAP_START'] + (longest['GAP_END'] - longest['GAP_START']) / 2
+        hit = gf.gap_at(mid)
+        self.assertEqual(hit['GAP_START'], longest['GAP_START'])
+        self.assertEqual(hit['GAP_END'], longest['GAP_END'])
+        # A tz-aware timestamp is accepted (reduced to tz-naive wall time).
+        import pandas as pd
+        hit_tz = gf.gap_at(pd.Timestamp(mid).tz_localize('UTC'))
+        self.assertEqual(hit_tz['GAP_START'], longest['GAP_START'])
+        # No gaps -> None.
+        from diive.analysis.gapfinder import GapFinder
+        nogaps = GapFinder(series=series.fillna(0.0))
+        self.assertIsNone(nogaps.gap_at(series.index[0]))
+
+    def test_rank_drivers(self):
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.analysis.correlation import rank_drivers
+        df = load_exampledata_parquet()
+
+        res = rank_drivers(df, target='NEE_CUT_REF_f', method='pearson', max_lag=0)
+        self.assertListEqual(list(res.columns),
+                             ['DRIVER', 'CORR', 'ABS_CORR', 'BEST_LAG', 'N'])
+        self.assertNotIn('NEE_CUT_REF_f', res['DRIVER'].tolist())  # target excluded
+        # Sorted by |corr| descending.
+        vals = res['ABS_CORR'].to_numpy()
+        self.assertTrue((vals[:-1] >= vals[1:]).all())
+        # Strongest driver is strongly correlated; lags are 0 with no scan.
+        self.assertGreater(res.iloc[0]['ABS_CORR'], 0.5)
+        self.assertTrue((res['BEST_LAG'] == 0).all())
+
+        # Lag scan: best lag stays within the scanned window; explicit features.
+        res2 = rank_drivers(df, target='NEE_CUT_REF_f', method='pearson', max_lag=4,
+                            features=['Tair_f', 'VPD_f', 'Rg_f'])
+        self.assertEqual(len(res2), 3)
+        self.assertLessEqual(int(res2['BEST_LAG'].abs().max()), 4)
+
+        # Validation.
+        with self.assertRaises(ValueError):
+            rank_drivers(df, target='NOT_A_COLUMN')
+        with self.assertRaises(ValueError):
+            rank_drivers(df, target='NEE_CUT_REF_f', method='kendall')
+
+    def test_spectrogram(self):
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.analysis.harmonic import spectrogram
+        nee = load_exampledata_parquet()['NEE_CUT_REF_f'].loc['2015-01-01':'2015-12-31']
+        spec = spectrogram(nee, nperseg=512, noverlap=256)
+        self.assertEqual(set(spec), {'frequencies', 'times', 'power', 'power_db'})
+        # power is 2D [n_frequencies, n_times]; axes line up with the arrays.
+        self.assertEqual(spec['power'].shape,
+                         (len(spec['frequencies']), len(spec['times'])))
+        self.assertEqual(spec['power_db'].shape, spec['power'].shape)
+        # nperseg is clamped to the series length (no crash on short input).
+        short = spectrogram(nee.iloc[:100], nperseg=512)
+        self.assertGreater(short['power'].shape[1], 0)
+
+    def test_seasonal_trend_decomposition(self):
+        import diive as dv
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.analysis.seasonaltrend import SeasonalTrendDecomposition
+        daily = dv.times.resample_to_daily_agg(
+            load_exampledata_parquet()['Tair_f'], agg='mean').dropna()
+
+        # STL — regression test: it used to always raise on real data (period was
+        # never passed to statsmodels, and fit() got an unsupported `weights`).
+        std = SeasonalTrendDecomposition(
+            daily, method='stl', seasonal_period=365,
+            robust=False, seasonal_jump=12, trend_jump=12)
+        tr, se, re = std.trend, std.seasonal, std.residual
+        recon = (tr + se + re).dropna()
+        # Additive components reconstruct the input.
+        self.assertLess((recon - daily.loc[recon.index]).abs().max(), 1e-6)
+        self.assertGreater(std.seasonality_strength, 0.5)  # strong annual cycle
+
+        # Classical and harmonic methods also run and return aligned components.
+        for method in ('classical', 'harmonic'):
+            s = SeasonalTrendDecomposition(daily, method=method, seasonal_period=365)
+            self.assertEqual(len(s.seasonal), len(daily))
+
+    def test_gapstats_gap_at(self):
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.analysis.gapfinder import GapStats
+        series = load_exampledata_parquet()['NEE_CUT_REF_orig']
+        gs = GapStats(series=series, long_gap_records=48)
+        longest = gs.long_gaps.iloc[0]
+        hit = gs.gap_at(longest['GAP_START'])
+        self.assertEqual(hit['GAP_START'], longest['GAP_START'])
+        # GapStats rows carry YEAR / MONTH enrichment.
+        self.assertIn('YEAR', hit.index)
+        self.assertIn('MONTH', hit.index)
+
     def test_sorting_bins_method(self):
         from diive.configs.exampledata import load_exampledata_parquet
         from diive.analysis.decoupling import SortingBinsMethod
@@ -144,6 +237,93 @@ class TestAnalyses(unittest.TestCase):
         checkix = int(checkix[0])
         self.assertEqual(results.iloc[checkix]['COUNTS'], 7)
         self.assertEqual(hist.peakbins, [1.148, 1.241, 1.929, 1.324, 1.632])
+
+    def test_profile_dataframe(self):
+        import numpy as np
+        import pandas as pd
+        from diive.analysis.profile import (
+            PROFILE_COLUMNS, count_gaps, dataframe_overview, profile_dataframe)
+
+        # Deterministic synthetic frame: 30-min index, a duplicated timestamp,
+        # numeric / constant / non-numeric / all-missing columns with known gaps.
+        idx = pd.date_range('2020-01-01', periods=10, freq='30min')
+        idx = idx.append(pd.DatetimeIndex([idx[-1]]))  # one duplicate timestamp
+        df = pd.DataFrame(index=idx)
+        # NUM: two separate NaN runs (positions 2 and 5-6) -> 2 gaps; one zero.
+        df['NUM'] = [1.0, 0.0, np.nan, 3.0, 4.0, np.nan, np.nan, 7.0, 8.0, 9.0, 9.0]
+        df['CONST'] = 5.0                  # constant numeric column
+        df['CAT'] = list('aabbccddeeff'[:11])  # non-numeric (object)
+        df['EMPTY'] = np.nan               # all missing
+
+        prof = profile_dataframe(df)
+        self.assertListEqual(list(prof.columns), PROFILE_COLUMNS)
+        self.assertEqual(len(prof), 4)
+        # Row order matches df column order; VARIABLE is a string.
+        self.assertListEqual(prof['VARIABLE'].tolist(), ['NUM', 'CONST', 'CAT', 'EMPTY'])
+
+        num = prof.set_index('VARIABLE').loc['NUM']
+        self.assertEqual(num['COUNT'], 8)
+        self.assertEqual(num['MISSING'], 3)
+        self.assertEqual(num['N_GAPS'], 2)           # two consecutive-NaN runs
+        self.assertEqual(num['N_ZEROS'], 1)
+        self.assertFalse(num['CONSTANT'])
+        self.assertEqual(num['MIN'], 0.0)
+        self.assertEqual(num['MAX'], 9.0)
+        self.assertEqual(num['MEDIAN'], np.median([1, 0, 3, 4, 7, 8, 9, 9]))
+
+        const = prof.set_index('VARIABLE').loc['CONST']
+        self.assertTrue(const['CONSTANT'])
+        self.assertEqual(const['N_UNIQUE'], 1)
+
+        # Non-numeric: numeric summaries are NaN, no zeros counted.
+        cat = prof.set_index('VARIABLE').loc['CAT']
+        self.assertEqual(cat['N_ZEROS'], 0)
+        self.assertTrue(np.isnan(cat['MEAN']))
+        self.assertTrue(np.isnan(cat['MIN']))
+
+        # All-missing: count 0, 100% missing, single gap spanning everything.
+        empty = prof.set_index('VARIABLE').loc['EMPTY']
+        self.assertEqual(empty['COUNT'], 0)
+        self.assertEqual(empty['MISSING_PERC'], 100.0)
+        self.assertEqual(empty['N_GAPS'], 1)
+        self.assertTrue(empty['CONSTANT'])           # <=1 unique non-missing value
+        self.assertTrue(np.isnan(empty['MEAN']))
+
+        # count_gaps directly: no gaps, single value, edge runs.
+        self.assertEqual(count_gaps(pd.Series([1.0, 2.0, 3.0])), 0)
+        self.assertEqual(count_gaps(pd.Series([np.nan])), 1)
+        self.assertEqual(count_gaps(pd.Series([np.nan, 1.0, np.nan, np.nan])), 2)
+
+        ov = dataframe_overview(df)
+        self.assertEqual(ov['n_rows'], 11)
+        self.assertEqual(ov['n_cols'], 4)
+        self.assertEqual(ov['n_cells'], 44)
+        self.assertEqual(ov['duplicate_timestamps'], 1)
+        # The duplicate timestamp makes the index irregular -> freq uninferable.
+        self.assertIsNone(ov['freq'])
+        self.assertEqual(ov['start'], idx.min())
+        self.assertEqual(ov['end'], idx.max())
+        # Missing cells: NUM(3) + EMPTY(11) = 14 of 44.
+        self.assertEqual(ov['missing_cells'], 14)
+        self.assertAlmostEqual(ov['missing_perc'], round(100 * 14 / 44, 2))
+        self.assertGreater(ov['memory_bytes'], 0)
+
+    def test_profile_dataframe_exampledata(self):
+        import diive as dv
+        from diive.analysis.profile import PROFILE_COLUMNS
+        from diive.configs.exampledata import load_exampledata_parquet
+        df = load_exampledata_parquet()
+
+        prof = dv.analysis.profile_dataframe(df)
+        self.assertListEqual(list(prof.columns), PROFILE_COLUMNS)
+        self.assertEqual(len(prof), df.shape[1])     # one row per variable
+        # COUNT + MISSING reconcile with the frame for every variable.
+        self.assertTrue((prof['COUNT'] + prof['MISSING'] == len(df)).all())
+
+        ov = dv.analysis.dataframe_overview(df)
+        self.assertEqual(ov['n_rows'], len(df))
+        self.assertEqual(ov['n_cols'], df.shape[1])
+        self.assertEqual(ov['freq'], '30min')
 
 
 if __name__ == '__main__':

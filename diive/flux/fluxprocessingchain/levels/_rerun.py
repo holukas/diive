@@ -13,10 +13,12 @@ that level, two things have to happen:
 
 L2 / L3.1 / L3.2 / L3.3 use a **cascade**: re-running level N invalidates N
 and every level after N in the chain order, because those later levels' state
-was computed against the now-stale upstream inputs. L4.1 is **additive** by
-design (each gap-filling method holds an independent dict keyed by USTAR
-scenario), so each ``run_level41_*`` cleans up only its own method's columns
-and does not cascade.
+was computed against the now-stale upstream inputs. L4.1 (gap-filling) and
+L4.2 (NEE partitioning) are **additive** by design (each method holds an
+independent dict keyed by USTAR scenario), so each ``run_level41_*`` /
+``run_level42_*`` cleans up only its own method's columns and does not cascade.
+A cascade from any earlier (cascade-aware) level still clears both additive
+levels, because their state was computed against the now-stale upstream.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -27,9 +29,14 @@ import dataclasses
 
 from diive.flux.fluxprocessingchain.container import FluxLevelData
 
-# Ordering of cascade-aware levels. L4.1 is NOT in this list because its
-# re-run semantics are per-method (mds / rf / xgb) and additive across methods.
+# Ordering of cascade-aware levels. The additive levels (L4.1 gap-filling,
+# L4.2 partitioning) are NOT in this list because their re-run semantics are
+# per-method and additive across methods.
 _LEVEL_ORDER = ['L2', 'L3.1', 'L3.2', 'L3.3']
+
+# Additive late-level idstrs (not cascade-ordered). A cascade from any
+# cascade-aware level clears every one of these.
+_ADDITIVE_LEVEL_IDS: tuple[str, ...] = ('L4.1', 'L4.2')
 
 # Fields on LevelResults that each cascade-aware level owns. Re-running the
 # level clears these along with any downstream level's fields.
@@ -58,11 +65,18 @@ _LEVEL_FIELDS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-# L4.1's fields are always reset by a cascade from any earlier level.
-_L41_FIELDS: tuple[str, ...] = ('level41_mds', 'level41_rf', 'level41_xgb')
+# Additive-level (L4.1 + L4.2) LevelResults fields — always reset by a cascade
+# from any earlier level.
+_ADDITIVE_FIELDS: tuple[str, ...] = (
+    'level41_mds', 'level41_rf', 'level41_xgb',
+    'level42_nt_of', 'level42_nt_rp', 'level42_dt_rp', 'level42_dt_of',
+)
 
-# L4.1 tracking sub-keys in added_columns.
-_L41_TRACKED_KEYS: tuple[str, ...] = ('L4.1_mds', 'L4.1_rf', 'L4.1_xgb')
+# Additive-level tracking sub-keys in added_columns.
+_ADDITIVE_TRACKED_KEYS: tuple[str, ...] = (
+    'L4.1_mds', 'L4.1_rf', 'L4.1_xgb',
+    'L4.2_nt_of', 'L4.2_nt_rp', 'L4.2_dt_rp', 'L4.2_dt_of',
+)
 
 
 def _field_default(value):
@@ -101,8 +115,9 @@ def cascade_reset(data: FluxLevelData, from_idstr: str) -> FluxLevelData:
 
     from_idx = _LEVEL_ORDER.index(from_idstr)
     cleared_levels = list(_LEVEL_ORDER[from_idx:])  # this level + downstream
-    # A cascade from any cascade-aware level also invalidates L4.1.
-    affected_tracking_keys = set(cleared_levels) | set(_L41_TRACKED_KEYS)
+    # A cascade from any cascade-aware level also invalidates the additive
+    # levels (L4.1 gap-filling, L4.2 partitioning).
+    affected_tracking_keys = set(cleared_levels) | set(_ADDITIVE_TRACKED_KEYS)
 
     # 1. Drop tracked columns from fpc_df. Keep the order stable by filtering
     # the current columns list.
@@ -119,19 +134,21 @@ def cascade_reset(data: FluxLevelData, from_idstr: str) -> FluxLevelData:
     keep = [c for c in data.fpc_df.columns if c not in cols_to_drop]
     fpc_df = data.fpc_df[keep].copy() if cols_to_drop else data.fpc_df.copy()
 
-    # 2. Reset LevelResults fields owned by the cleared levels (plus L4.1).
+    # 2. Reset LevelResults fields owned by the cleared levels (plus the
+    # additive levels L4.1 / L4.2).
     resets: dict = {}
     for lvl in cleared_levels:
         for fname in _LEVEL_FIELDS.get(lvl, ()):
             resets[fname] = _field_default(getattr(data.levels, fname))
-    for fname in _L41_FIELDS:
+    for fname in _ADDITIVE_FIELDS:
         resets[fname] = _field_default(getattr(data.levels, fname))
     new_levels = dataclasses.replace(data.levels, **resets)
 
-    # 3. Trim level_ids: drop the cleared cascade-aware levels and L4.1.
+    # 3. Trim level_ids: drop the cleared cascade-aware levels and the
+    # additive levels (L4.1 / L4.2).
     new_level_ids = [
         lid for lid in data.level_ids
-        if lid not in cleared_levels and lid != 'L4.1'
+        if lid not in cleared_levels and lid not in _ADDITIVE_LEVEL_IDS
     ]
 
     # 4. Restore filteredseries to whatever the most-recently-surviving level

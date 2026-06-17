@@ -55,7 +55,9 @@ class DielCycle:
              mean: bool = True,
              std: bool = True,
              each_month: bool = False,
+             linewidth: float = 2,
              legend_n_col: int = 1,
+             legend_loc: str = 'best',
              ylim: list = None,
              ylabel: str = None,
              showgrid: bool = True,
@@ -63,8 +65,15 @@ class DielCycle:
              show_xlabel: bool = True,
              show_legend: bool = True,
              **kwargs):
+        """Plot the diel (24-hour) cycle, optionally one curve per month.
+
+        Args:
+            legend_loc: Matplotlib legend location, e.g. 'best', 'upper right',
+                'lower left', 'center' (default: 'best').
+        """
 
         self.title = title
+        self.legend_loc = legend_loc
         self.txt_ylabel_units = txt_ylabel_units
         self.ylabel = ylabel
         self.showgrid = showgrid
@@ -110,7 +119,8 @@ class DielCycle:
             x_decimal = [t.hour + t.minute / 60 + t.second / 3600 for t in means.index]
             means_numeric = means.copy()
             means_numeric.index = x_decimal
-            means_numeric.plot(ax=self.ax, label=f'{monthstr}', color=color, zorder=99, lw=2, **kwargs)
+            means_numeric.plot(ax=self.ax, label=f'{monthstr}', color=color, zorder=99,
+                                lw=linewidth, **kwargs)
 
             # label = "Mittelwert ± 1 Standardabweichung"
             label = None
@@ -142,7 +152,7 @@ class DielCycle:
             self.ax.set_xlabel("")
         format_spines(ax=self.ax, color='black', lw=1)
         if self.show_legend:
-            default_legend(ax=self.ax, ncol=legend_n_col)
+            default_legend(ax=self.ax, ncol=legend_n_col, loc=self.legend_loc)
         add_zeroline_y(ax=self.ax, data=self.diel_cycles_df['mean'])
         self.ax.set_xticks([3, 6, 9, 12, 15, 18, 21])
         self.ax.set_xticklabels([3, 6, 9, 12, 15, 18, 21])

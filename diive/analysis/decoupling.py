@@ -58,7 +58,7 @@ class StratifiedAnalysis:
             .showplot_decoupling_sbm(): Visualize results with line plot and error bars
 
         Example:
-            See `examples/pkgs/analysis/analysis_decoupling.py` for complete examples demonstrating
+            See `examples/analysis/analysis_decoupling.py` for complete examples demonstrating
             stratified binning across temperature ranges, result access, and visualization.
 
         See Also:

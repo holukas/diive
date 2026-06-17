@@ -52,7 +52,7 @@ def detect_fluxbasevar(fluxcol: str) -> str:
         analyze_highest_quality_flux : Filter highest-quality flux data using Hampel filter.
 
     Example:
-        See `examples/pkgs/flux/lowres/flux_common.py` for examples of flux variable
+        See `examples/flux/lowres/flux_common.py` for examples of flux variable
         detection and nomenclature mapping.
     """
     fluxbasevar = fluxbasevars_fluxnetfile[fluxcol]

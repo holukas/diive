@@ -4,11 +4,67 @@ import pandas as pd
 
 import diive.configs.exampledata as ed
 from diive.core.times.resampling import resample_series_to_30MIN
-from diive.core.times.times import DetectFrequency, insert_timestamp
+from diive.core.times.resampling import resample_to_daily_agg
+from diive.core.times.times import (
+    DetectFrequency,
+    format_timestamp,
+    insert_timestamp,
+    validate_timestamp_column_name,
+)
+from diive.core.times.times import keep_daterange
 from diive.core.times.times import vectorize_timestamps
 
 
 class TestTime(unittest.TestCase):
+
+    def test_resample_to_daily_agg(self):
+        df, _ = ed.load_exampledata_DIIVE_CSV_30MIN()
+        series = df.iloc[:, 0]
+        n_days = len(series.resample('D').mean())
+
+        daily = resample_to_daily_agg(series, agg='mean')
+        self.assertEqual(len(daily), n_days)
+        self.assertEqual(daily.name, series.name)
+        # One value per calendar day, sorted, daily frequency.
+        self.assertTrue((daily.index.normalize() == daily.index).all())
+
+        # Aggregation methods are honoured: daily max >= daily mean elementwise.
+        daily_max = resample_to_daily_agg(series, agg='max')
+        self.assertTrue((daily_max.dropna() >= daily.dropna()).all())
+
+        # Completeness filter keeps at most all days.
+        strict = resample_to_daily_agg(series, agg='mean', mincounts_perc=1.0)
+        self.assertLessEqual(len(strict), len(daily))
+
+        # Non-datetime index raises.
+        with self.assertRaises(TypeError):
+            resample_to_daily_agg(series.reset_index(drop=True))
+
+    def test_keep_daterange(self):
+        df, _ = ed.load_exampledata_DIIVE_CSV_30MIN()
+        n_full = len(df)
+
+        # Closed window (inclusive on both ends).
+        start, end = df.index[10], df.index[20]
+        sub = keep_daterange(df, start, end)
+        self.assertEqual(len(sub), 11)
+        self.assertEqual(sub.index.min(), start)
+        self.assertEqual(sub.index.max(), end)
+        self.assertEqual(len(df), n_full)  # non-destructive
+
+        # Open bounds.
+        self.assertEqual(len(keep_daterange(df, start=df.index[5])), n_full - 5)
+        self.assertEqual(len(keep_daterange(df, end=df.index[5])), 6)
+        self.assertEqual(len(keep_daterange(df)), n_full)  # both None -> full copy
+
+        # Works on a Series too.
+        self.assertEqual(len(keep_daterange(df.iloc[:, 0], start, end)), 11)
+
+        # Inverted bounds raise; non-datetime index raises.
+        with self.assertRaises(ValueError):
+            keep_daterange(df, end, start)
+        with self.assertRaises(TypeError):
+            keep_daterange(df.reset_index(drop=True), start, end)
 
     def test_vectorize_timestamps(self):
         df, _ = ed.load_exampledata_DIIVE_CSV_30MIN()
@@ -78,6 +134,31 @@ class TestTime(unittest.TestCase):
         self.assertEqual(checkdata['TIMESTAMP_START'], pd.Timestamp('2024-04-05 19:37:00'))
         self.assertEqual(checkdata['TIMESTAMP_END'], pd.Timestamp('2024-04-05 19:38:00'))
         self.assertEqual(checkdata.name, pd.Timestamp('2024-04-05 19:37:30'))
+
+    def test_format_timestamp(self):
+        df, metadata_df = ed.load_exampledata_GENERIC_CSV_HEADER_1ROW_TS_MIDDLE_FULL_1MIN_long()
+        # Index is untouched; the result is a new aligned Series.
+        end = format_timestamp(df, convention='end')
+        start = format_timestamp(df, convention='start')
+        self.assertEqual(df.index.name, 'TIMESTAMP_MIDDLE')
+        self.assertEqual(end.name, 'TIMESTAMP_END')
+        self.assertTrue(end.index.equals(df.index))
+        self.assertEqual(end.loc['2024-04-05 19:37:30'], pd.Timestamp('2024-04-05 19:38:00'))
+        self.assertEqual(start.loc['2024-04-05 19:37:30'], pd.Timestamp('2024-04-05 19:37:00'))
+        # With a format string the values are strftime-formatted strings.
+        formatted = format_timestamp(df, convention='end', fmt='%Y%m%d%H%M')
+        self.assertEqual(formatted.loc['2024-04-05 19:37:30'], '202404051938')
+
+    def test_validate_timestamp_column_name(self):
+        # A reserved name must match the column's convention.
+        with self.assertRaises(ValueError):
+            validate_timestamp_column_name('TIMESTAMP_END', 'start')
+        with self.assertRaises(ValueError):
+            validate_timestamp_column_name('TIMESTAMP_START', 'middle')
+        # Matching reserved name and any non-reserved name are fine.
+        validate_timestamp_column_name('TIMESTAMP_END', 'end')
+        validate_timestamp_column_name('TIMESTAMP_START', 'start')
+        validate_timestamp_column_name('my_timestamp', 'start')
 
     def test_insert_timestamp_as_index(self):
         df, metadata_df = ed.load_exampledata_GENERIC_CSV_HEADER_1ROW_TS_MIDDLE_FULL_1MIN_long()

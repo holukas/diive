@@ -117,7 +117,10 @@ def series_skewness(s: Series) -> float:
     - < 0: left-skewed (tail on left, most values on right)
     - ≈ 0: approximately symmetric
     """
-    return scipy_stats.skew(s.dropna(), bias=False)
+    s_clean = s.dropna()
+    if len(s_clean) < 3:  # bias-corrected skewness is undefined below n=3
+        return np.nan
+    return scipy_stats.skew(s_clean, bias=False)
 
 
 def series_kurtosis(s: Series) -> float:
@@ -128,7 +131,10 @@ def series_kurtosis(s: Series) -> float:
     - < 0: light tails (platykurtic, fewer outliers than normal)
     - ≈ 0: similar to normal distribution
     """
-    return scipy_stats.kurtosis(s.dropna(), bias=False)
+    s_clean = s.dropna()
+    if len(s_clean) < 4:  # bias-corrected kurtosis is undefined below n=4
+        return np.nan
+    return scipy_stats.kurtosis(s_clean, bias=False)
 
 
 def mean_absolute_change(s: Series) -> float:
@@ -277,6 +283,42 @@ def approximate_entropy(s: Series, m: int = 2, r: float = None) -> float:
         return (N - m + 1.0) ** (-1) * sum(np.log(C))
 
     return abs(_phi(m) - _phi(m + 1))
+
+
+#: One-line, human-readable description of each metric produced by `sstats`
+#: (keyed by the row label). Used for help text / tooltips.
+SSTATS_DESCRIPTIONS: dict[str, str] = {
+    'STARTDATE': "First timestamp in the series.",
+    'ENDDATE': "Last timestamp in the series.",
+    'PERIOD': "Total time span covered by the series.",
+    'NOV': "Number of valid (non-missing) observations.",
+    'MISSING': "Number of missing (NaN) values.",
+    'MISSING_PERC': "Percentage of values that are missing.",
+    'MEAN': "Arithmetic average of all values.",
+    'MEDIAN': "Middle value when sorted (50th percentile).",
+    'SD': "Standard deviation — spread around the mean.",
+    'VAR': "Variance — squared standard deviation.",
+    'SD/MEAN': "Ratio of standard deviation to mean (can be negative).",
+    'SUM': "Total sum of all values.",
+    'MIN': "Minimum value in the series.",
+    'MAX': "Maximum value in the series.",
+    'CV': "Coefficient of variation (SD / |mean|) — scale-independent variability.",
+    'IQR': "Interquartile range (Q3 − Q1) — spread of the middle 50%, robust to outliers.",
+    'SKEWNESS': "Distribution asymmetry: >0 right-skewed, <0 left-skewed, ≈0 symmetric.",
+    'KURTOSIS': "Excess kurtosis vs normal: >0 heavy tails, <0 light tails.",
+    'MEAN_ABS_CHANGE': "Average absolute change between consecutive time steps (volatility).",
+    'TREND_SLOPE': "Linear-regression slope per time step: >0 rising, <0 falling.",
+    'ACF_LAG1': "Lag-1 autocorrelation — correlation with the previous time step ([-1, 1]).",
+    'OUTLIER_COUNT': "Number of statistical outliers (beyond 3σ).",
+    'OUTLIER_PERC': "Percentage of values that are statistical outliers.",
+    'CUMSUM': "Total integrated value (sum of all values).",
+    'P01': "1st percentile — 1% of values fall below this.",
+    'P05': "5th percentile — 5% of values fall below this.",
+    'P25': "25th percentile (Q1) — lower quartile.",
+    'P75': "75th percentile (Q3) — upper quartile.",
+    'P95': "95th percentile — 95% of values fall below this.",
+    'P99': "99th percentile — 99% of values fall below this.",
+}
 
 
 def sstats(s: Series) -> DataFrame:

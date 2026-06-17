@@ -346,6 +346,70 @@ class FluxConfig:
     """VPD column for MDS (**kPa**; must be in ``data.full_df``).
     EddyPro outputs VPD in hPa — divide by 10 before assigning here."""
 
+    # ----- NEE partitioning (Level-4.2) -----
+    # Each ``partition_*`` flag enables one of the four faithful partitioning
+    # ports. They are off by default — partitioning needs gap-filled meteo
+    # driver columns the chain does not itself produce, so it is opt-in.
+    partition_nighttime_oneflux: bool = False
+    """Run nighttime partitioning, ONEFlux port (Reichstein 2005) — emits
+    ``*_NT_OF`` columns. Needs ``partition_ta`` / ``partition_sw_in`` (measured)
+    and ``partition_ta_f`` (gap-filled), plus a gap-filled NEE from L4.1
+    (``partition_gapfill_method``)."""
+
+    partition_nighttime_reddyproc: bool = False
+    """Run nighttime partitioning, REddyProc port (Reichstein 2005) — emits
+    ``*_NT_RP`` columns. Same inputs as the ONEFlux nighttime variant; uses the
+    site ``lat`` / ``lon`` / ``utc_offset`` from ``init_flux_data``."""
+
+    partition_daytime_reddyproc: bool = False
+    """Run daytime partitioning, REddyProc port (Lasslop 2010) — emits
+    ``*_DT_RP`` columns. Needs gap-filled meteo only: ``partition_ta_f`` /
+    ``partition_vpd_f`` / ``partition_sw_in_f`` (and the optional
+    ``partition_nee_sd``). Measured NEE per USTAR scenario comes from L3.3 — no
+    L4.1 gap-filled NEE needed."""
+
+    partition_daytime_oneflux: bool = False
+    """Run daytime partitioning, ONEFlux port (Lasslop 2010) — emits ``*_DT_OF``
+    columns. Needs ``partition_ta`` / ``partition_sw_in`` (measured) and
+    ``partition_ta_f`` / ``partition_sw_in_f`` / ``partition_vpd_f``
+    (gap-filled). Measured NEE per USTAR scenario comes from L3.3."""
+
+    partition_gapfill_method: str = 'mds'
+    """Which L4.1 gap-filled NEE feeds the *nighttime* partitioning variants
+    (they need a gap-filled NEE for the GPP residual): ``'mds'`` (default,
+    FLUXNET standard), ``'rf'``, or ``'xgb'``. The chosen method must have run
+    at L4.1. Ignored by the daytime variants (they use measured NEE only)."""
+
+    partition_ta: str | None = None
+    """Measured air temperature column (deg C) for partitioning, in
+    ``data.full_df``. Required by the nighttime variants and daytime ONEFlux."""
+
+    partition_sw_in: str | None = None
+    """Measured shortwave incoming radiation column (W m-2) for partitioning, in
+    ``data.full_df``. Required by the nighttime variants and daytime ONEFlux."""
+
+    partition_ta_f: str | None = None
+    """Gap-filled air temperature column (deg C) for partitioning, in
+    ``data.full_df``. Required by every partitioning variant."""
+
+    partition_sw_in_f: str | None = None
+    """Gap-filled shortwave incoming radiation column (W m-2) for partitioning,
+    in ``data.full_df``. Required by the daytime variants."""
+
+    partition_vpd_f: str | None = None
+    """Gap-filled VPD column for partitioning, in ``data.full_df``. **kPa** by
+    default (``partition_vpd_in_kpa=True``). Required by the daytime variants."""
+
+    partition_nee_sd: str | None = None
+    """Optional per-record NEE uncertainty column (umol m-2 s-1) in
+    ``data.full_df``, used to weight the daytime REddyProc LRC fit. ``None``
+    reproduces REddyProc's default ``max(0.7, 0.2*|NEE|)``."""
+
+    partition_vpd_in_kpa: bool = True
+    """Whether ``partition_vpd_f`` is in kPa (default). The daytime LRC ports
+    expect hPa and convert internally; set ``False`` if the column is already
+    hPa."""
+
 
 @dataclass(frozen=True)
 class FluxMeta:
@@ -493,6 +557,39 @@ class LevelResults:
             out['rf'] = self.level41_rf
         if self.level41_xgb:
             out['xgb'] = self.level41_xgb
+        return out
+
+    # Level-4.2 — NEE -> GPP + RECO partitioning. One dict per partitioning
+    # variant, keyed by USTAR scenario (additive across variants, exactly like
+    # the L4.1 gap-filling methods). The short variant key matches the column
+    # token: 'nt_of' (nighttime ONEFlux), 'nt_rp' (nighttime REddyProc),
+    # 'dt_rp' (daytime REddyProc), 'dt_of' (daytime ONEFlux).
+    level42_nt_of: dict[str, Any] = field(default_factory=dict)
+    level42_nt_rp: dict[str, Any] = field(default_factory=dict)
+    level42_dt_rp: dict[str, Any] = field(default_factory=dict)
+    level42_dt_of: dict[str, Any] = field(default_factory=dict)
+
+    def has_level42(self) -> bool:
+        """True if any L4.2 partitioning variant has produced results."""
+        return bool(self.level42_nt_of or self.level42_nt_rp
+                    or self.level42_dt_rp or self.level42_dt_of)
+
+    def level42_variants(self) -> dict[str, dict[str, Any]]:
+        """Return all L4.2 variant dicts that have results, keyed by variant token.
+
+        Keys are ``'nt_of'``, ``'nt_rp'``, ``'dt_rp'``, ``'dt_of'`` — matching
+        the suffixes of the underlying ``level42_*`` attributes and the keys
+        used by ``partitioned_cols()``.
+        """
+        out: dict[str, dict[str, Any]] = {}
+        if self.level42_nt_of:
+            out['nt_of'] = self.level42_nt_of
+        if self.level42_nt_rp:
+            out['nt_rp'] = self.level42_nt_rp
+        if self.level42_dt_rp:
+            out['dt_rp'] = self.level42_dt_rp
+        if self.level42_dt_of:
+            out['dt_of'] = self.level42_dt_of
         return out
 
 
@@ -648,6 +745,26 @@ class FluxLevelData:
                             + (f"  |  fallback: {n_fallback}" if n_fallback else "")
                         )
 
+        # L4.2 partitioning stats (RECO / GPP availability per variant + scenario)
+        if self.levels.has_level42():
+            lines.append("")
+            lines.append("Partitioning (L4.2)  [RECO / GPP valid records]:")
+            _reco_token = {'nt_of': 'RECO_NT_OF', 'nt_rp': 'RECO_NT_RP',
+                           'dt_rp': 'RECO_DT_RP', 'dt_of': 'RECO_DT_OF'}
+            _gpp_token = {'nt_of': 'GPP_NT_OF', 'nt_rp': 'GPP_NT_RP',
+                          'dt_rp': 'GPP_DT_RP', 'dt_of': 'GPP_DT_OF'}
+            for variant, scen_dict in self.levels.level42_variants().items():
+                for scen in scen_dict:
+                    reco_col = f"{_reco_token[variant]}_{scen}"
+                    gpp_col = f"{_gpp_token[variant]}_{scen}"
+                    n_reco = (int(self.fpc_df[reco_col].dropna().count())
+                              if reco_col in self.fpc_df.columns else 0)
+                    n_gpp = (int(self.fpc_df[gpp_col].dropna().count())
+                             if gpp_col in self.fpc_df.columns else 0)
+                    lines.append(
+                        f"  {variant} {scen:<10s}  RECO: {n_reco:5d}  |  GPP: {n_gpp:5d}"
+                    )
+
         lines.append("")
         lines.append(f"fpc_df columns ({len(self.fpc_df.columns)}): "
                      + ", ".join(self.fpc_df.columns.tolist()))
@@ -755,6 +872,8 @@ class FluxLevelData:
             saveplot: bool = False,
             path: str | None = None,
             showplot: bool = True,
+            ax=None,
+            fig=None,
     ) -> None:
         """Overlay cumulative sums of all gap-filled methods for direct comparison.
 
@@ -782,6 +901,12 @@ class FluxLevelData:
             showplot: Call ``plt.show()`` after rendering.  Set to ``False``
                 for headless / batch use or when embedding the figure into
                 a larger composite.  Defaults to ``True``.
+            ax: Existing matplotlib ``Axes`` to draw into (two-phase pattern,
+                for embedding in a GUI canvas).  A new figure is created when
+                ``None``.  When supplied, ``tight_layout`` / ``plt.show`` are
+                skipped — the host owns the figure layout.
+            fig: Figure that owns ``ax`` (only used together with ``ax`` for
+                ``saveplot``).  Defaults to ``ax.figure``.
 
         Raises:
             RuntimeError: If no L4.1 method has been run yet.
@@ -826,7 +951,13 @@ class FluxLevelData:
             'mds': 'MDS',
         }
 
-        fig, ax = plt.subplots(figsize=(14, 5))
+        # Two-phase: draw into a caller-supplied ax (GUI embedding) or own a
+        # fresh figure. own_fig gates the layout/show steps the host handles.
+        own_fig = ax is None
+        if own_fig:
+            fig, ax = plt.subplots(figsize=(14, 5))
+        elif fig is None:
+            fig = ax.figure
         unit_str = f' ({units})' if units else ''
 
         # Measured-only reference (L3.3 QCF series; gaps = 0 contribution)
@@ -884,13 +1015,14 @@ class FluxLevelData:
                       f"{self.meta.fluxcol}  |  USTAR scenario: {ustar_scenario}")
         ax.set_title(title or auto_title, fontsize=11)
 
-        fig.tight_layout()
+        if own_fig:
+            fig.tight_layout()
 
         if saveplot:
             from diive.core.plotting.plotfuncs import save_fig
             save_fig(fig=fig, title=title or auto_title, path=path)
 
-        if showplot:
+        if own_fig and showplot:
             plt.show()
 
     def plot_gapfilled_heatmaps(
@@ -904,6 +1036,7 @@ class FluxLevelData:
             saveplot: bool = False,
             path: str | None = None,
             showplot: bool = True,
+            fig=None,
     ) -> None:
         """Multi-panel heatmap: measured flux + one panel per gap-filling method.
 
@@ -929,10 +1062,17 @@ class FluxLevelData:
             showplot: Call ``plt.show()`` after rendering.  Set to ``False``
                 for headless / batch use or when embedding the figure into
                 a larger composite.  Defaults to ``True``.
+            fig: Existing matplotlib ``Figure`` to render into (two-phase
+                pattern, for embedding in a GUI canvas — mirrors
+                ``RidgeLinePlot.plot(fig=...)``).  The whole figure is used
+                for the side-by-side gridspec, so exactly one USTAR scenario
+                may resolve; pass ``ustar_scenario`` when several exist.  The
+                figure is cleared before drawing; ``plt.show`` is skipped.
 
         Raises:
             RuntimeError: If no L4.1 method has been run yet.
-            ValueError: If the requested USTAR scenario is not found.
+            ValueError: If the requested USTAR scenario is not found, or if
+                ``fig`` is supplied while more than one scenario resolves.
 
         Example::
 
@@ -964,16 +1104,25 @@ class FluxLevelData:
         else:
             scenarios_to_plot = all_scenarios
 
+        # An external figure backs a single side-by-side gridspec, so it can
+        # only host one scenario; refuse to silently drop the others.
+        if fig is not None and len(scenarios_to_plot) > 1:
+            raise ValueError(
+                f"plot_gapfilled_heatmaps(fig=...) renders into a single figure, "
+                f"but {len(scenarios_to_plot)} USTAR scenarios resolved "
+                f"({scenarios_to_plot}). Pass ustar_scenario= to pick one."
+            )
+
         for scen in scenarios_to_plot:
             self._plot_heatmaps_one_scenario(
                 scen, cols=cols, vmin=vmin, vmax=vmax,
                 cmap=cmap, units=units, title=title,
-                saveplot=saveplot, path=path, showplot=showplot,
+                saveplot=saveplot, path=path, showplot=showplot, fig=fig,
             )
 
     def _plot_heatmaps_one_scenario(
             self, ustar_scenario, *, cols, vmin, vmax,
-            cmap, units, title, saveplot, path, showplot,
+            cmap, units, title, saveplot, path, showplot, fig=None,
     ) -> None:
         import numpy as np
         import matplotlib.pyplot as plt
@@ -1008,7 +1157,13 @@ class FluxLevelData:
 
         n = len(panels)
         zlabel = units or self.meta.fluxcol
-        fig = plt.figure(figsize=(n * 5.5, 5), constrained_layout=True)
+        # Two-phase: render into a caller-supplied figure (GUI embedding,
+        # cleared first like RidgeLinePlot) or own a fresh one.
+        own_fig = fig is None
+        if own_fig:
+            fig = plt.figure(figsize=(n * 5.5, 5), constrained_layout=True)
+        else:
+            fig.clear()
         gs = gridspec.GridSpec(1, n, figure=fig)
 
         for i, (series, subtitle) in enumerate(panels):
@@ -1025,7 +1180,7 @@ class FluxLevelData:
             from diive.core.plotting.plotfuncs import save_fig
             save_fig(fig=fig, title=title or auto_title, path=path)
 
-        if showplot:
+        if own_fig and showplot:
             plt.show()
 
     def gapfilled_cols(self) -> dict[str, dict[str, str]]:
@@ -1092,6 +1247,47 @@ class FluxLevelData:
                   "returned a renamed copy). Re-run the affected L4.1 method."
             )
 
+        return out
+
+    def partitioned_cols(self) -> dict[str, dict[str, list[str]]]:
+        """
+        Return the L4.2 partitioning output columns per variant and USTAR scenario.
+
+        Each partitioning variant emits a fixed set of result columns
+        (``RECO_NT_OF``, ``GPP_NT_OF``, ...); to coexist across USTAR scenarios
+        every column is merged into ``fpc_df`` with the scenario label appended
+        (``RECO_NT_OF_CUT_50``). This helper saves the user from reconstructing
+        those names by hand.
+
+        Returns:
+            Nested dict ``{variant: {ustar_scenario: [column_name, ...]}}``.
+            Variant keys are ``'nt_of'`` / ``'nt_rp'`` / ``'dt_rp'`` /
+            ``'dt_of'`` and present only when that variant has been run.
+
+        Example::
+
+            cols = data.partitioned_cols()
+            # {'nt_of': {'CUT_50': ['NEE_NIGHT_OF_CUT_50', 'RECO_NT_OF_CUT_50',
+            #                       'GPP_NT_OF_CUT_50', ...]}}
+            reco = data.fpc_df[cols['nt_of']['CUT_50'][1]]
+        """
+        out: dict[str, dict[str, list[str]]] = {}
+        _missing: list[str] = []
+        for variant, scen_dict in self.levels.level42_variants().items():
+            out[variant] = {}
+            for scen, inst in scen_dict.items():
+                cols = [f"{c}_{scen}" for c in inst.results.columns]
+                for c in cols:
+                    if c not in self.fpc_df.columns:
+                        _missing.append(f"{variant}/{scen}: {c!r}")
+                out[variant][scen] = cols
+        if _missing:
+            raise RuntimeError(
+                "partitioned_cols(): partitioning instance reported a column "
+                "name that is not present in data.fpc_df:\n"
+                + "\n".join(f"  - {m}" for m in _missing)
+                + "\nRe-run the affected L4.2 partitioning variant."
+            )
         return out
 
 

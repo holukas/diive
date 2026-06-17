@@ -2,12 +2,14 @@
 
 Examples demonstrating timestamp sanitization, frequency detection, temporal aggregation, and statistical analysis.
 
-**5 examples covering the complete time series handling pipeline.**
+**7 examples covering the complete time series handling pipeline.**
 
 ## Contents
 
 **Core utilities:**
 - **times_timestamp_sanitizer.py** — 10-step timestamp validation, cleaning, and regularization
+- **times_keep_daterange.py** — non-destructive date-range subselection (keep a time window)
+- **times_resample_daily.py** — resample a sub-daily series to one value per calendar day
 
 **Temporal analysis & aggregation:**
 - **times_frequency_detection.py** — Auto-detect time resolution with confidence scoring
