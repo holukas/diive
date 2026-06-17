@@ -403,6 +403,7 @@ class MainWindow(QMainWindow):
                     menu.addSeparator()
 
         help_menu = add_menu("&Help")
+        help_menu.addAction(_act("&User manual", self._user_manual))
         help_menu.addAction(_act("&About", self._about))
 
     def _data_for(self, tab):
@@ -1178,6 +1179,29 @@ class MainWindow(QMainWindow):
             if self._tabwidget.tabText(i) == title:
                 self._tabwidget.setCurrentIndex(i)
                 return
+
+    def _user_manual(self) -> None:
+        """Open the styled HTML manual in the default browser.
+
+        Falls back to the GitHub-hosted Markdown source if the bundled HTML is
+        missing (e.g. a partial install)."""
+        import sys
+
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+
+        candidates = [Path(__file__).with_name("MANUAL.html")]
+        # Frozen (PyInstaller) builds: bundled data lives under _MEIPASS, where
+        # the module's notional __file__ may not resolve.
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(Path(meipass) / "diive" / "gui" / "MANUAL.html")
+        for html in candidates:
+            if html.is_file():
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(html)))
+                return
+        QDesktopServices.openUrl(
+            QUrl("https://github.com/holukas/diive/blob/main/diive/gui/MANUAL.md"))
 
     def _about(self) -> None:
         # Reuse the startup splash artwork as the About dialog.

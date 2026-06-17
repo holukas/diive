@@ -27,6 +27,12 @@ if ($Clean) {
     Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
 }
 
+# Render the GUI user manual (MANUAL.md -> MANUAL.html) so the exe bundles a
+# fresh copy. The spec includes gui/MANUAL.html in the build's data files.
+Write-Host "Rendering user manual (MANUAL.md -> MANUAL.html) ..." -ForegroundColor Cyan
+uv run python -m diive.gui.build_manual
+if ($LASTEXITCODE -ne 0) { throw "Manual render failed." }
+
 Write-Host "Running PyInstaller (this takes a few minutes) ..." -ForegroundColor Cyan
 uv run pyinstaller "packaging\diive_gui.spec" --noconfirm --clean
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed." }

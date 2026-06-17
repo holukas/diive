@@ -42,9 +42,12 @@ def _no_test_submodules(name):
     return not ({"tests", "testing", "conftest"} & set(parts))
 
 # --- diive package data --------------------------------------------------
-# Runtime-required non-.py files: filetype YAMLs (ReadFileType / File > Open)
-# and the bundled example dataset that auto-loads on startup.
-datas += collect_data_files("diive", includes=["configs/**/*"])
+# Runtime-required non-.py files: filetype YAMLs (ReadFileType / File > Open),
+# the bundled example dataset that auto-loads on startup, and the rendered GUI
+# user manual (Help > User manual opens diive/gui/MANUAL.html). Regenerate the
+# HTML before building with: uv run python -m diive.gui.build_manual
+# (build_gui.ps1 does this automatically).
+datas += collect_data_files("diive", includes=["configs/**/*", "gui/MANUAL.html"])
 
 # --- heavy / dynamically-imported third-party packages -------------------
 # These use lazy/plugin-style imports or ship compiled binaries & data that

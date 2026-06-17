@@ -2,6 +2,11 @@
 
 > Using the app? See the **[user manual](MANUAL.md)**. This file is the developer
 > map (architecture, gotchas).
+>
+> **User manual:** `MANUAL.md` is the source of truth. `build_manual.py` renders it
+> to the styled `MANUAL.html` that **Help ▸ User manual** opens (and the packaged
+> exe bundles). After editing `MANUAL.md`, regenerate the HTML — don't hand-edit it:
+> `uv run python -m diive.gui.build_manual`. (`build_gui.ps1` runs this automatically.)
 
 PySide6 desktop application for diive. Optional dependency — install and launch with:
 
@@ -32,6 +37,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `tabs/settings.py` | Appearance settings tab — live colour editing with a pill/highlight preview |
 | `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`); window sized to ~88% of screen |
 | `splash.py` | Startup splash + **Help ▸ About** dialog (`QPainter`-drawn waves + wordmark/version/tagline/credits); `AUTHOR` + `SUPPORTERS` |
+| `build_manual.py` | Renders `MANUAL.md` → `MANUAL.html` (the styled manual **Help ▸ User manual** opens). Dependency-free; run `python -m diive.gui.build_manual` after editing the Markdown. `MANUAL.html` is generated — don't hand-edit |
 | `registry.py` | `TAB_CLASSES` (always-on), `MENU_TABS` (menu-opened factories), `SINGLE_INSTANCE_TABS` |
 | `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df, created)` — the extension point |
 | `tabs/overview.py` | Overview tab (first/default): 2×4 panel figure (top, varname badge inside the time-series panel) + a compact borderless **metrics ribbon** (`_StatItem`, `dv.sstats` + `SSTATS_DESCRIPTIONS` tooltips); panels via `_PANELS`. Exposes `_StatCard` for the Gaps/Drivers/Seasonal tabs |
