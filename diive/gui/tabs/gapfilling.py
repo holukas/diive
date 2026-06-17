@@ -390,6 +390,11 @@ class XGBoostGapFillingTab(DiiveTab):
             "then XGBoost reseeds every run and the output drifts. Any fixed value "
             "makes runs reproducible.")
         mf.addRow("random_state", self.random_state)
+        self.n_jobs = QSpinBox(); self.n_jobs.setRange(-1, 256); self.n_jobs.setValue(1)
+        self.n_jobs.setToolTip(
+            "Number of CPU cores used for training. 1 = single core (default); "
+            "-1 = all available cores (faster, but uses the whole machine).")
+        mf.addRow("n_jobs", self.n_jobs)
         self.below_zero = QComboBox(); self.below_zero.addItems(list(_BELOW_ZERO))
         self.below_zero.setToolTip(
             "How to treat predicted negative values. Keep for fluxes that can be "
@@ -583,8 +588,8 @@ class XGBoostGapFillingTab(DiiveTab):
         return {"n_estimators": self.n_estimators, "max_depth": self.max_depth,
                 "learning_rate": self.learning_rate, "early_stop": self.early_stop,
                 "test_size": self.test_size, "random_state": self.random_state,
-                "below_zero": self.below_zero, "reduce": self.reduce_cb,
-                "shap_factor": self.shap_factor}
+                "n_jobs": self.n_jobs, "below_zero": self.below_zero,
+                "reduce": self.reduce_cb, "shap_factor": self.shap_factor}
 
     def save_state(self) -> dict:
         from diive.gui.widgets.state_utils import save_controls
@@ -610,7 +615,7 @@ class XGBoostGapFillingTab(DiiveTab):
             "n_estimators": self.n_estimators.value(),
             "max_depth": self.max_depth.value(),
             "learning_rate": self.learning_rate.value(),
-            "n_jobs": -1,
+            "n_jobs": self.n_jobs.value(),
         }
         # -1 = the "none" special value: leave random_state unset (XGBoost reseeds).
         if self.random_state.value() >= 0:

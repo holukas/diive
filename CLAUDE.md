@@ -105,13 +105,14 @@ Legacy `.result` property (raw DataFrame) still available.
 
 **[VALIDATION — expect this question often]** The ML gap-fillers' held-out scores (`scores_traintest_`) come from a
 **random** train/test split (`test_size`, default 25%) of the *complete* rows (target + all features present), **not** a
-temporal/block split. This is **correct and intentional for gap-filling**, not a shortcut: real gaps are short and
-scattered among observed data, so a random hold-out reproduces the actual task — interpolating an isolated timestamp from
-mostly-present neighbours — and the score faithfully reflects gap-filling quality. A temporal/block split would measure
-*extrapolation* (the right question for forecasting / driver attribution), which understates gap-filling skill (long gaps
-are MDS / leave-unfilled territory anyway). The rationale is documented at the split in `common.py.__init__`, on
-`scores_traintest_`, in the GUI's `test_size` + HELD-OUT TEST tooltips, and in `MANUAL.md`. `scores_` is the in-sample
-(optimistically biased) counterpart.
+temporal/block split. This is **correct and intentional for gap-filling**, not a shortcut: the model predicts each gap
+from the driver values at that timestamp, and gaps are interspersed with observed data, so training always spans the same
+conditions — a random hold-out reproduces exactly that, and the score faithfully reflects gap-filling quality. A
+temporal/block split answers a *different* question — transferability to an unseen period (forecasting / inter-annual
+drift) — and conflates fill skill with regime change; it is not the gap-filling task. (Do **not** frame this as "long
+gaps belong to MDS" — that's wrong: MDS degrades on long gaps and driver-based ML often handles them better.) The
+rationale is documented at the split in `common.py.__init__`, on `scores_traintest_`, in the GUI's `test_size` +
+HELD-OUT TEST tooltips, and in `MANUAL.md`. `scores_` is the in-sample (optimistically biased) counterpart.
 
 **Console output:** `MlRegressorGapFillingBase` emits a **Rich-formatted, coloured report** at
 `verbose>=VERBOSE_PROGRESS(2)` (so all ML gap-fillers inherit it), with clear blank-line-separated phase banners
