@@ -70,14 +70,17 @@
   trained on the selected feature columns directly (no feature-engineering settings — build engineered features in the
   *Feature engineering* tab first if needed). Above the observed-vs-gap-filled date/time heatmaps a **performance hero
   band** (reusing the Overview's metric-slot building blocks) shows the model's held-out test scores — R² / RMSE / MAE /
-  MAPE / MAXE + gaps filled + feature count, and a narrow far-right **SHAP feature-importance** pane shows the
-  gap-filling model's top features. **Add results to dataset** emits the gap-filled
+  MAPE / MAXE + gaps filled + **fallback-fill** count + feature count, and a narrow far-right **SHAP feature-importance
+  table** (Feature | mean |SHAP|, sorted, with an inline magnitude bar). A **Copy Python** button copies a runnable
+  script reproducing the run. **Add results to dataset** emits the gap-filled
   (`*_gfXG`) + ISFILLED flag columns with DERIVED provenance. All computation is library work (`XGBoostTS`).
 - **Gap-filling: `plot_feature_importances` on the ML base class** — `MlRegressorGapFillingBase` (so `RandomForestTS` /
   `XGBoostTS` and variants) gained a two-phase SHAP feature-importance bar plot: `plot_feature_importances(ax=None,
   traintest=False, max_features=None, …)`. `ax=None` builds a standalone figure; passing an `ax` draws into it (embeddable
-  in a GUI canvas or multi-panel figure). Replaces the need for the standalone, non-embeddable `plot_feature_importance`
-  helper for new code.
+  in a GUI canvas or multi-panel figure). Replaces the standalone, non-embeddable `plot_feature_importance` helper for new
+  code.
+- **Gap-filling codegen** — new `diive.gapfilling.codegen.xgboost_gapfill_to_code(...)` renders a runnable
+  `XGBoostTS(...).run()` snippet from a target + feature list + kwargs (the GUI's **Copy Python** uses it).
 - **Shared two-list selector** (`widgets/dual_variable_picker.py`, `DualVariablePicker`): the click-to-add / click-to-remove
   available↔selected logic, built on two `VariablePanel`s, is now one reusable widget used by both **Data ▸ Select
   variables** and the gap-filling feature picker (and available to future two-list selections).

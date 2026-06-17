@@ -104,8 +104,9 @@ Used by `FeatureEngineer` class, fed into gap-filling models.
 Legacy `.result` property (raw DataFrame) still available.
 
 ML classes (RF / XGB) also expose `plot_feature_importances(ax=None, traintest=False, max_features=None, …)` — a two-phase
-SHAP-importance bar plot (`ax=None` makes a standalone figure; pass an `ax` to embed it, e.g. in the GUI). Lives on
-`MlRegressorGapFillingBase`, so every ML gap-filler inherits it.
+SHAP-importance bar plot (`ax=None` makes a standalone figure; pass an `ax` to embed it). Lives on
+`MlRegressorGapFillingBase`, so every ML gap-filler inherits it. (The structured `feature_importances_` DataFrame —
+`SHAP_IMPORTANCE`/`SHAP_SD`, indexed by feature — is the data behind it, e.g. for a table.)
 
 ### Timestamp Sanitization
 
@@ -521,11 +522,13 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   `none`) → the seed is omitted so XGBoost reseeds (non-reproducible); any value ≥ 0 (default 42) is a fixed reproducible
   seed. The hero (`_PerformanceHero`) reuses the Overview's `_MetricSlot` / `_stat_separator` / `_chip_qss` building
   blocks and a green **HELD-OUT TEST** chip; it shows the model's held-out (test-set) scores — R² / RMSE / MAE / MAPE /
-  MAXE — plus the (whole-record) gaps-filled and feature counts, updated in place on each run. The SHAP panel is drawn by
-  the library's two-phase `MlRegressorGapFillingBase.plot_feature_importances(ax=, traintest=, max_features=, …)` (the
-  GUI only supplies the axes — no plotting math in the tab) and shows the **final** model's importances over **all**
-  complete observations (not the held-out test set — captioned as such, distinct from the test scores). Runs on a worker
-  thread: `XGBoostTS(...)` trained on the selected feature columns directly (`df[[target]+features]`), then `.run()`;
+  MAXE — plus the gaps-filled count, the **fallback-fill** count (flag==2: filled by the timestamp-only fallback model
+  because a predictor was missing — a high count means weak fills), and the feature count, updated in place on each run.
+  The narrow far-right column is a **SHAP feature-importance table** (`QTableWidget`: Feature | mean |SHAP|, sorted
+  strongest-first, with a `_ShapBarDelegate` that paints a faint proportional bar behind each value) built from the
+  final model's `feature_importances_` DataFrame (`SHAP_IMPORTANCE` column). A **Copy Python** button (`CopyPythonButton`
+  → `gapfilling/codegen.py::xgboost_gapfill_to_code`) copies a runnable `XGBoostTS(...).run()` script for the current
+  target/features/settings. Runs on a worker thread: `XGBoostTS(...)` trained on the selected feature columns directly (`df[[target]+features]`), then `.run()`;
   emits the gap-filled (`*_gfXG`) + `FLAG_*_ISFILLED` columns via `featuresCreated` with DERIVED provenance (parent =
   target). All computation is library work; the tab only collects inputs, runs, previews, and emits.
 - **Gap & coverage dashboard tab** (`tabs/gaps.py`, `Analyze ▸ Gaps & coverage`, single-instance). Diagnostics for

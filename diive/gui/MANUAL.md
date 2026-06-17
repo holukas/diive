@@ -631,17 +631,23 @@ The **settings** column holds the model controls (hover any field for a tooltip)
 Click **Run gap-filling** (it runs in the background). When it finishes:
 
 - A **performance band** across the top shows the model's **held-out test** scores
-  — R², RMSE, MAE, MAPE, MAXE — plus how many gaps were filled and how many
-  features were used. (The green **HELD-OUT TEST** chip is a reminder these scores
-  are measured on data the model didn't train on.)
+  — R², RMSE, MAE, MAPE, MAXE — plus how many gaps were filled, how many of those
+  used the **fallback** model, and how many features were used. (The green
+  **HELD-OUT TEST** chip is a reminder these scores are measured on data the model
+  didn't train on. **Fallback** fills happen when a predictor is missing at a gap,
+  so the model falls back to time-of-year/-day only — a high fallback count means
+  those fills are weak.)
 - Two **heatmaps** compare the **observed** series (with its gaps) against the
   **gap-filled** result, on a shared colour scale.
-- A narrow **SHAP feature importance** panel on the right ranks how much each
-  predictor drove the model (computed over all complete observations).
+- On the right, a **SHAP feature importance** table ranks how much each predictor
+  drove the model (over all complete observations) — each row shows the variable,
+  its mean |SHAP| value, and a small bar for its relative magnitude.
 
-**Add results to dataset** appends the gap-filled series (`{target}_gfXG`) and its
-fill flag to your variables, where they can be plotted or saved like any other
-column.
+**Copy Python** (top bar) puts a runnable diive script for the current
+target/features/settings on the clipboard, so a point-and-click run stays
+scriptable. **Add results to dataset** appends the gap-filled series
+(`{target}_gfXG`) and its fill flag to your variables, where they can be plotted or
+saved like any other column.
 
 > The bundled CH-DAV example has continuous flux and meteo columns, so you can try
 > this on it right away — e.g. target `NEE_CUT_REF_orig` with `Tair_f`, `VPD_f`,

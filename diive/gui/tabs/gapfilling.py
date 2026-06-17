@@ -27,8 +27,10 @@ import threading
 
 import numpy as np
 import pandas as pd
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, QRect, Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -36,22 +38,28 @@ from PySide6.QtWidgets import (
     QFrame,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QPushButton,
     QScrollArea,
     QSizePolicy,
     QSpinBox,
+    QStyledItemDelegate,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
 import diive as dv
 from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
+from diive.gapfilling.codegen import xgboost_gapfill_to_code
 from diive.gapfilling.xgboost_ts import XGBoostTS
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 # Reuse the Overview's hero building blocks (presentation-only helpers).
 from diive.gui.tabs.overview import _MetricSlot, _chip_qss, _stat_separator
+from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.dual_variable_picker import DualVariablePicker
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.variable_panel import VariablePanel
@@ -63,6 +71,40 @@ _HM_FONT = 9
 
 #: below_zero options: label -> XGBoostTS value.
 _BELOW_ZERO = {"Keep (default)": None, "Clip to zero": "zero", "Set to NaN": "nan"}
+
+#: Role on the value cell holding the raw SHAP importance (for the bar delegate).
+_SHAP_ROLE = Qt.ItemDataRole.UserRole + 1
+
+
+class _ShapBarDelegate(QStyledItemDelegate):
+    """Paints the SHAP-value cell as a faint horizontal bar (proportional to the
+    importance) behind a right-aligned value — a mini bar chart inside the table."""
+
+    _BAR = QColor("#BBD7F0")   # light blue fill
+    _TEXT = QColor("#263238")
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.maxval = 1.0  # set by the tab when the table is (re)filled
+
+    def paint(self, painter, option, index) -> None:
+        val = index.data(_SHAP_ROLE)
+        rect = option.rect
+        painter.save()
+        painter.fillRect(rect, QColor("#FFFFFF"))
+        if isinstance(val, (int, float)) and self.maxval > 0:
+            frac = max(0.0, min(1.0, float(val) / self.maxval))
+            bw = int((rect.width() - 10) * frac)
+            if bw > 0:
+                bar = QRect(rect.left() + 4, rect.top() + 4, bw, rect.height() - 8)
+                painter.setBrush(self._BAR)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRoundedRect(bar, 3, 3)
+        painter.setPen(self._TEXT)
+        painter.drawText(rect.adjusted(6, 0, -8, 0),
+                         int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight),
+                         index.data(Qt.ItemDataRole.DisplayRole) or "")
+        painter.restore()
 
 
 class _Signals(QObject):
@@ -88,6 +130,9 @@ class _PerformanceHero(QFrame):
         ("MAPE", "Mean absolute percentage error on the test set."),
         ("MAXE", "Maximum absolute error on the test set, in target units."),
         ("FILLED", "Number of gap records filled by the model."),
+        ("FALLBACK", "Of the filled records, how many used the low-quality "
+                     "fallback model (timestamp features only, because some "
+                     "predictor was missing). A high count means weak fills."),
         ("FEATURES", "Number of feature variables used to train the model."),
     ]
 
@@ -154,7 +199,7 @@ class _PerformanceHero(QFrame):
             self._slots[label].update_metric(label, "—", tip)
 
     def set_metrics(self, target: str, n_features: int, n_filled: int,
-                    scores: dict) -> None:
+                    n_fallback: int, scores: dict) -> None:
         self._target.setText(target)
         self._target.setStyleSheet(_chip_qss("#E3F2FD", "#1565C0"))
         self._target.show()
@@ -166,7 +211,8 @@ class _PerformanceHero(QFrame):
         values = {
             "R²": g("r2"), "RMSE": g("rmse"), "MAE": g("mae"),
             "MAPE": g("mape"), "MAXE": g("maxe"),
-            "FILLED": f"{n_filled:,}", "FEATURES": f"{n_features}",
+            "FILLED": f"{n_filled:,}", "FALLBACK": f"{n_fallback:,}",
+            "FEATURES": f"{n_features}",
         }
         for label, tip in self._METRICS:
             self._slots[label].update_metric(label, values.get(label, "—"), tip)
@@ -205,6 +251,10 @@ class XGBoostGapFillingTab(DiiveTab):
         title.setStyleSheet("font-weight: bold;")
         bar.addWidget(title)
         bar.addStretch(1)
+        self.copy_btn = CopyPythonButton(self._python_code)
+        self.copy_btn.setToolTip(
+            "Copy a runnable diive script reproducing this gap-filling run.")
+        bar.addWidget(self.copy_btn)
         self.run_btn = QPushButton("Run gap-filling")
         self.run_btn.setToolTip("Train XGBoost on the selected features and fill the target's gaps.")
         theme.set_button_role(self.run_btn, "confirm")
@@ -384,7 +434,7 @@ class XGBoostGapFillingTab(DiiveTab):
         bottom.setContentsMargins(0, 0, 0, 0)
         bottom.setSpacing(0)
         bottom.addWidget(self._build_heatmaps(), stretch=1)
-        bottom.addWidget(self._build_shap())
+        bottom.addWidget(self._build_right_panels())
         v.addLayout(bottom, stretch=1)
         return host
 
@@ -415,16 +465,16 @@ class XGBoostGapFillingTab(DiiveTab):
         lbl.setFont(f)
         return lbl
 
-    def _build_shap(self) -> QWidget:
+    def _build_right_panels(self) -> QWidget:
+        """Narrow far-right column: a SHAP feature-importance table. Fixed width so
+        the heatmaps absorb the rest and this column sits flush against the right
+        edge (a maximumWidth would fight the layout and leave a gap)."""
         host = QWidget()
-        # Fixed (not max) width: a maximumWidth fights the splitter — it allocates
-        # a wider pane and the capped widget leaves a gap. Fixed makes the splitter
-        # give exactly this, so the heatmaps absorb the rest and SHAP sits flush
-        # against the right edge.
-        host.setFixedWidth(240)
+        host.setFixedWidth(250)
         v = QVBoxLayout(host)
         v.setContentsMargins(6, 6, 6, 6)
         v.setSpacing(4)
+
         header = self._panel_header("Feature importance (SHAP)")
         header.setToolTip(
             "Mean |SHAP value| per feature of the final gap-filling model — how "
@@ -436,9 +486,28 @@ class XGBoostGapFillingTab(DiiveTab):
         caption.setWordWrap(True)
         caption.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
         v.addWidget(caption)
-        # No toolbar: lets the panel shrink to a narrow strip at the right edge.
-        self.shap_canvas = MplCanvas(show_toolbar=False)
-        v.addWidget(self.shap_canvas, stretch=1)
+
+        self.shap_table = QTableWidget(0, 2)
+        self.shap_table.setHorizontalHeaderLabels(["Feature", "mean |SHAP|"])
+        self.shap_table.verticalHeader().setVisible(False)
+        self.shap_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.shap_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.shap_table.setShowGrid(False)
+        self.shap_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.shap_table.setWordWrap(False)
+        hh = self.shap_table.horizontalHeader()
+        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        self.shap_table.setColumnWidth(1, 96)
+        self._shap_delegate = _ShapBarDelegate(self.shap_table)
+        self.shap_table.setItemDelegateForColumn(1, self._shap_delegate)
+        self.shap_table.setStyleSheet(
+            "QTableWidget { background: #FFFFFF; border: 1px solid "
+            f"{theme.manager.tokens['BORDER']}; border-radius: 8px; }}"
+            "QTableWidget::item { padding: 3px 6px; color: #263238; }"
+            "QHeaderView::section { background: #F5F6F7; color: #6B7780; "
+            "border: none; padding: 5px 6px; font-weight: 600; }")
+        v.addWidget(self.shap_table, stretch=1)
         return host
 
     @staticmethod
@@ -537,6 +606,18 @@ class XGBoostGapFillingTab(DiiveTab):
             kwargs["early_stopping_rounds"] = self.early_stop.value()
         return kwargs
 
+    def _python_code(self) -> str | None:
+        """Reproducible diive script for the current target/features/settings
+        (library codegen; returns None until a target + features are chosen)."""
+        target = self._target
+        feats = self._feature_cols()
+        if not target or not feats:
+            return None
+        return xgboost_gapfill_to_code(
+            target, feats, self._xgb_kwargs(),
+            reduce=self.reduce_cb.isChecked(),
+            shap_threshold_factor=self.shap_factor.value())
+
     def _run(self) -> None:
         if self._df is None or self._running:
             return
@@ -571,6 +652,8 @@ class XGBoostGapFillingTab(DiiveTab):
             gapfilled = model.get_gapfilled_target()
             flag = model.get_flag()
             scores = model.scores_traintest_ or model.scores_
+            # Flag: 0 = observed, 1 = full-model fill, 2 = fallback fill.
+            n_fallback = int((flag == 2).sum())
 
             out = pd.DataFrame({str(gapfilled.name): gapfilled,
                                 str(flag.name): flag})
@@ -585,7 +668,8 @@ class XGBoostGapFillingTab(DiiveTab):
             out.attrs[ATTRS_KEY] = attrs
             n_features = work.shape[1] - 1  # everything except the target
             self._sig.done.emit(
-                (out, work[target], gapfilled, scores, target, n_features, model))
+                (out, work[target], gapfilled, scores, target, n_features,
+                 n_fallback, model))
         except Exception as err:
             self._sig.failed.emit(str(err))
 
@@ -597,16 +681,16 @@ class XGBoostGapFillingTab(DiiveTab):
 
     # --- results -------------------------------------------------------
     def _on_done(self, payload) -> None:
-        out, observed, gapfilled, scores, target, n_features, model = payload
+        out, observed, gapfilled, scores, target, n_features, n_fallback, model = payload
         self._set_running(False)
         self._result_df = out
         n_filled = int((out[str(gapfilled.name)].notna() & observed.isna()).sum())
         self.hero.set_metrics(target=target, n_features=n_features,
-                              n_filled=n_filled, scores=scores)
+                              n_filled=n_filled, n_fallback=n_fallback, scores=scores)
         self.status.setText(f"Done. 'Add' appends {', '.join(out.columns)}.")
         self.add_btn.setEnabled(True)
         self._plot(observed, gapfilled)
-        self._plot_shap(model)
+        self._fill_shap_table(model)
 
     def _on_failed(self, msg: str) -> None:
         self._set_running(False)
@@ -617,21 +701,29 @@ class XGBoostGapFillingTab(DiiveTab):
                 transform=ax.transAxes)
         self.canvas.draw()
 
-    def _plot_shap(self, model) -> None:
-        """SHAP feature-importance panel for the gap-filling model.
-
-        The plotting itself is the library's `plot_feature_importances` (two-phase
-        `ax=` rendering) — the tab only provides the axes and embeds the result.
-        """
-        ax = self.shap_canvas.new_axes(1)[0]
+    def _fill_shap_table(self, model) -> None:
+        """Fill the SHAP table from the model's feature importances (a DataFrame
+        with a SHAP_IMPORTANCE column, index = feature). Sorted strongest-first;
+        the bar delegate scales each value against the maximum."""
+        table = self.shap_table
+        table.setRowCount(0)
         try:
-            model.plot_feature_importances(
-                ax=ax, max_features=15, show_values=False, title="")
-        except Exception as err:  # importances may be unavailable; never crash
-            ax.clear()
-            ax.text(0.5, 0.5, f"SHAP unavailable:\n{err}", ha="center",
-                    va="center", transform=ax.transAxes, fontsize=8)
-        self.shap_canvas.draw()
+            fi = model.feature_importances_  # DataFrame: index=feature, SHAP_IMPORTANCE
+            ser = fi["SHAP_IMPORTANCE"].sort_values(ascending=False)
+            # Drop the random-baseline row if it slipped in (reduction artifact).
+            ser = ser[[i for i in ser.index if i != getattr(model, "random_col", None)]]
+        except Exception:
+            return
+        self._shap_delegate.maxval = float(ser.max()) if len(ser) else 1.0
+        table.setRowCount(len(ser))
+        for row, (name, val) in enumerate(ser.items()):
+            name_item = QTableWidgetItem(str(name))
+            name_item.setToolTip(str(name))  # full name (cells elide when narrow)
+            val_item = QTableWidgetItem()
+            val_item.setData(Qt.ItemDataRole.DisplayRole, f"{val:.4f}")
+            val_item.setData(_SHAP_ROLE, float(val))
+            table.setItem(row, 0, name_item)
+            table.setItem(row, 1, val_item)
 
     def _plot(self, observed, gapfilled) -> None:
         """Side-by-side date/time heatmaps: observed (with gaps) vs gap-filled.
