@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import threading
 
+import numpy as np
 import pandas as pd
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (
@@ -40,7 +41,6 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSpinBox,
-    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -57,6 +57,9 @@ from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.variable_panel import VariablePanel
 
 _C_MUTED = "#6B7780"
+
+#: Heatmap tick / axis-label / colorbar font size — matches the Overview tab.
+_HM_FONT = 9
 
 #: below_zero options: label -> XGBoostTS value.
 _BELOW_ZERO = {"Keep (default)": None, "Clip to zero": "zero", "Set to NaN": "nan"}
@@ -114,6 +117,13 @@ class _PerformanceHero(QFrame):
         self._method = QLabel("XGBOOST")
         self._method.setStyleSheet(_chip_qss("#F3E5F5", "#6A1B9A"))
         idrow.addWidget(self._method)
+        # Make explicit that the fit/error metrics are held-out (not in-sample).
+        test_chip = QLabel("HELD-OUT TEST")
+        test_chip.setStyleSheet(_chip_qss("#E8F5E9", "#2E7D32"))
+        test_chip.setToolTip(
+            "R² / RMSE / MAE / MAPE / MAXE are computed on the held-out test split "
+            "(an honest generalization estimate), not on the training data.")
+        idrow.addWidget(test_chip)
         idrow.addStretch(1)
         lay.addLayout(idrow)
 
@@ -208,15 +218,20 @@ class XGBoostGapFillingTab(DiiveTab):
         bar.addWidget(self.add_btn)
         outer.addLayout(bar)
 
-        # Three panes: inputs (target + feature picker) | settings | results.
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self._build_inputs())
-        splitter.addWidget(self._build_settings())
-        splitter.addWidget(self._build_results())
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 0)
-        splitter.setStretchFactor(2, 1)
-        outer.addWidget(splitter)
+        # Three columns: inputs (target + feature picker) | settings | the right
+        # region (stretch). A plain HBox (not a splitter) honours the fixed widths
+        # exactly and hands all remaining width to the right region — a splitter
+        # leaves gaps by allocating panes wider than their fixed widgets. The
+        # right region stacks the full-width hero band over a row of
+        # [heatmaps (stretch) | SHAP panel pinned at the far-right edge], so the
+        # hero spans all the way right and the heatmaps push SHAP to the edge.
+        main = QHBoxLayout()
+        main.setContentsMargins(0, 0, 0, 0)
+        main.setSpacing(0)
+        main.addWidget(self._build_inputs())
+        main.addWidget(self._build_settings())
+        main.addWidget(self._build_results(), stretch=1)
+        outer.addLayout(main)
         return root
 
     def _build_inputs(self) -> QWidget:
@@ -265,6 +280,7 @@ class XGBoostGapFillingTab(DiiveTab):
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)  # drop the faint outer border
         inner = QWidget()
         v = QVBoxLayout(inner)
 
@@ -300,10 +316,16 @@ class XGBoostGapFillingTab(DiiveTab):
             "Fraction of complete records held out to compute the (honest) test "
             "score; the rest is used for training.")
         mf.addRow("test_size", self.test_size)
-        self.random_state = QSpinBox(); self.random_state.setRange(0, 2_000_000); self.random_state.setValue(42)
+        self.random_state = QSpinBox()
+        # -1 is the special "empty" value (shows "none") → no seed passed, so
+        # XGBoost reseeds every run; any value >= 0 is a fixed reproducible seed.
+        self.random_state.setRange(-1, 2_000_000)
+        self.random_state.setSpecialValueText("none")
+        self.random_state.setValue(42)
         self.random_state.setToolTip(
-            "Reproducibility seed. Without a fixed seed XGBoost reseeds every run and "
-            "the output drifts between runs.")
+            "Reproducibility seed. Set to 'none' (spin below 0) to leave it unset — "
+            "then XGBoost reseeds every run and the output drifts. Any fixed value "
+            "makes runs reproducible.")
         mf.addRow("random_state", self.random_state)
         self.below_zero = QComboBox(); self.below_zero.addItems(list(_BELOW_ZERO))
         self.below_zero.setToolTip(
@@ -346,15 +368,77 @@ class XGBoostGapFillingTab(DiiveTab):
         self.status.setWordWrap(True)
         self.status.setStyleSheet("padding: 6px 10px; color: #444;")
         v.addWidget(self.status)
-        # Hero band with the model's performance metrics, above the plots.
+        # Hero band with the model's performance metrics — spans the full width
+        # of the right region (over both the heatmaps and the SHAP panel).
         self.hero = _PerformanceHero()
         hwrap = QWidget()
         hl = QVBoxLayout(hwrap)
         hl.setContentsMargins(10, 0, 10, 6)
         hl.addWidget(self.hero)
         v.addWidget(hwrap)
+        # Below the hero: heatmaps (stretch) | SHAP panel at the far-right edge.
+        # A plain HBox (not a splitter) honours the SHAP panel's fixed width
+        # exactly and hands all remaining width to the heatmaps, so SHAP sits
+        # flush against the right edge with no gap.
+        bottom = QHBoxLayout()
+        bottom.setContentsMargins(0, 0, 0, 0)
+        bottom.setSpacing(0)
+        bottom.addWidget(self._build_heatmaps(), stretch=1)
+        bottom.addWidget(self._build_shap())
+        v.addLayout(bottom, stretch=1)
+        return host
+
+    def _build_heatmaps(self) -> QWidget:
+        """Heatmap canvas with Qt panel headers (one per panel) above it, styled
+        like the SHAP header so the matplotlib titles can be dropped."""
+        col = QWidget()
+        cv = QVBoxLayout(col)
+        cv.setContentsMargins(0, 0, 0, 0)
+        cv.setSpacing(4)
+        headers = QHBoxLayout()
+        headers.setContentsMargins(0, 0, 0, 0)
+        for text in ("Observed (with gaps)", "XGBoost gap-filled"):
+            lbl = self._panel_header(text)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+            headers.addWidget(lbl, stretch=1)
+        cv.addLayout(headers)
         self.canvas = MplCanvas()
-        v.addWidget(self.canvas, stretch=1)
+        cv.addWidget(self.canvas, stretch=1)
+        return col
+
+    @staticmethod
+    def _panel_header(text: str) -> QLabel:
+        """A panel header styled like the SHAP header (tracked uppercase, bold)."""
+        lbl = QLabel(theme.manager.label_text(text))
+        f = theme.manager.tracked_font(lbl.font())
+        f.setBold(True)
+        lbl.setFont(f)
+        return lbl
+
+    def _build_shap(self) -> QWidget:
+        host = QWidget()
+        # Fixed (not max) width: a maximumWidth fights the splitter — it allocates
+        # a wider pane and the capped widget leaves a gap. Fixed makes the splitter
+        # give exactly this, so the heatmaps absorb the rest and SHAP sits flush
+        # against the right edge.
+        host.setFixedWidth(240)
+        v = QVBoxLayout(host)
+        v.setContentsMargins(6, 6, 6, 6)
+        v.setSpacing(4)
+        header = self._panel_header("Feature importance (SHAP)")
+        header.setToolTip(
+            "Mean |SHAP value| per feature of the final gap-filling model — how "
+            "much each driver moves the model's prediction. Computed over all "
+            "complete observations (not just the held-out test set, unlike the "
+            "performance scores above).")
+        v.addWidget(header)
+        caption = QLabel("Final model, all complete observations")
+        caption.setWordWrap(True)
+        caption.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
+        v.addWidget(caption)
+        # No toolbar: lets the panel shrink to a narrow strip at the right edge.
+        self.shap_canvas = MplCanvas(show_toolbar=False)
+        v.addWidget(self.shap_canvas, stretch=1)
         return host
 
     @staticmethod
@@ -444,9 +528,11 @@ class XGBoostGapFillingTab(DiiveTab):
             "n_estimators": self.n_estimators.value(),
             "max_depth": self.max_depth.value(),
             "learning_rate": self.learning_rate.value(),
-            "random_state": self.random_state.value(),
             "n_jobs": -1,
         }
+        # -1 = the "none" special value: leave random_state unset (XGBoost reseeds).
+        if self.random_state.value() >= 0:
+            kwargs["random_state"] = self.random_state.value()
         if self.early_stop.value() > 0:
             kwargs["early_stopping_rounds"] = self.early_stop.value()
         return kwargs
@@ -499,7 +585,7 @@ class XGBoostGapFillingTab(DiiveTab):
             out.attrs[ATTRS_KEY] = attrs
             n_features = work.shape[1] - 1  # everything except the target
             self._sig.done.emit(
-                (out, work[target], gapfilled, scores, target, n_features))
+                (out, work[target], gapfilled, scores, target, n_features, model))
         except Exception as err:
             self._sig.failed.emit(str(err))
 
@@ -511,7 +597,7 @@ class XGBoostGapFillingTab(DiiveTab):
 
     # --- results -------------------------------------------------------
     def _on_done(self, payload) -> None:
-        out, observed, gapfilled, scores, target, n_features = payload
+        out, observed, gapfilled, scores, target, n_features, model = payload
         self._set_running(False)
         self._result_df = out
         n_filled = int((out[str(gapfilled.name)].notna() & observed.isna()).sum())
@@ -520,6 +606,7 @@ class XGBoostGapFillingTab(DiiveTab):
         self.status.setText(f"Done. 'Add' appends {', '.join(out.columns)}.")
         self.add_btn.setEnabled(True)
         self._plot(observed, gapfilled)
+        self._plot_shap(model)
 
     def _on_failed(self, msg: str) -> None:
         self._set_running(False)
@@ -530,14 +617,49 @@ class XGBoostGapFillingTab(DiiveTab):
                 transform=ax.transAxes)
         self.canvas.draw()
 
-    def _plot(self, observed, gapfilled) -> None:
-        """Side-by-side date/time heatmaps: observed (with gaps) vs gap-filled."""
-        ax_obs, ax_gf = self.canvas.new_axes(2)
+    def _plot_shap(self, model) -> None:
+        """SHAP feature-importance panel for the gap-filling model.
+
+        The plotting itself is the library's `plot_feature_importances` (two-phase
+        `ax=` rendering) — the tab only provides the axes and embeds the result.
+        """
+        ax = self.shap_canvas.new_axes(1)[0]
         try:
-            dv.plotting.HeatmapDateTime(series=observed).plot(ax=ax_obs)
-            ax_obs.set_title("Observed\n(with gaps)", fontsize=10, fontweight="bold")
-            dv.plotting.HeatmapDateTime(series=gapfilled).plot(ax=ax_gf)
-            ax_gf.set_title("XGBoost\ngap-filled", fontsize=10, fontweight="bold")
+            model.plot_feature_importances(
+                ax=ax, max_features=15, show_values=False, title="")
+        except Exception as err:  # importances may be unavailable; never crash
+            ax.clear()
+            ax.text(0.5, 0.5, f"SHAP unavailable:\n{err}", ha="center",
+                    va="center", transform=ax.transAxes, fontsize=8)
+        self.shap_canvas.draw()
+
+    def _plot(self, observed, gapfilled) -> None:
+        """Side-by-side date/time heatmaps: observed (with gaps) vs gap-filled.
+
+        Both panels share one value scale, so only the right panel draws a
+        colorbar and the left's y-axis is the only "Date" axis (the right shares
+        it). Dropping the duplicate colorbar + y-axis lets the two heatmaps fill
+        far more of the canvas width."""
+        ax_obs, ax_gf = self.canvas.new_axes(2, sharey=True)
+        try:
+            # Shared colour scale (robust 1–99th pct over both series), so the
+            # single colorbar on the right is valid for both panels. Fonts match
+            # the Overview tab; titles come from the Qt headers above the canvas.
+            both = pd.concat([observed.dropna(), gapfilled.dropna()])
+            vmin = float(np.nanpercentile(both, 1)) if len(both) else None
+            vmax = float(np.nanpercentile(both, 99)) if len(both) else None
+            opts = {"vmin": vmin, "vmax": vmax, "ticks_labelsize": _HM_FONT,
+                    "axlabels_fontsize": _HM_FONT, "cb_labelsize": _HM_FONT}
+            dv.plotting.HeatmapDateTime(series=observed).plot(
+                ax=ax_obs, show_colormap=False, **opts)
+            dv.plotting.HeatmapDateTime(series=gapfilled).plot(ax=ax_gf, **opts)
+            # Drop the library's auto title (series name) — the Qt headers above
+            # the canvas label the panels instead.
+            ax_obs.set_title("")
+            ax_gf.set_title("")
+            # Right panel shares the left's dates — drop its redundant y-axis.
+            ax_gf.set_ylabel("")
+            ax_gf.tick_params(labelleft=False)
         except Exception as err:  # plotting must never crash the tab
             ax_obs.text(0.5, 0.5, f"Plot failed: {err}", ha="center", va="center",
                         transform=ax_obs.transAxes, fontsize=8)

@@ -377,6 +377,71 @@ class MlRegressorGapFillingBase:
             rejected_features=self._rejected_features or None,
         )
 
+    def plot_feature_importances(self,
+                                 ax=None,
+                                 traintest: bool = False,
+                                 max_features: int = None,
+                                 color: str = '#003A70',
+                                 error_color: str = '#C41E3A',
+                                 show_values: bool = True,
+                                 title: str = "SHAP feature importance"):
+        """Plot SHAP feature importances as a horizontal bar chart (two-phase).
+
+        Importances are mean |SHAP value| per feature with SD error bars, sorted
+        ascending so the strongest feature sits at the top.
+
+        Two-phase rendering: with ``ax=None`` a new standalone figure is created
+        and shown; passing an existing ``ax`` draws into it and returns it without
+        showing — for embedding in a GUI canvas or a multi-panel figure.
+
+        Args:
+            ax: Target matplotlib Axes. None creates (and shows) a new figure.
+            traintest: Plot the train/test (held-out) importances instead of the
+                final gap-filling model's importances.
+            max_features: Keep only the top-N features by importance (None = all).
+            color: Bar fill color.
+            error_color: SD error-bar color.
+            show_values: Annotate each bar with its importance value.
+            title: Axes title.
+
+        Returns:
+            The matplotlib Axes drawn into.
+        """
+        fi = self.feature_importances_traintest_ if traintest else self.feature_importances_
+        fidf = fi.copy().sort_values(by='SHAP_IMPORTANCE', ascending=True)
+        if max_features is not None and max_features > 0:
+            fidf = fidf.tail(max_features)  # tail() keeps the largest (sorted ascending)
+        importances = fidf['SHAP_IMPORTANCE']
+        errors = fidf['SHAP_SD'] if 'SHAP_SD' in fidf.columns else None
+        labels = fidf.index
+
+        standalone = ax is None
+        if standalone:
+            _, ax = plt.subplots(figsize=(10, max(4, len(fidf) * 0.35)), dpi=100)
+
+        y = range(len(importances))
+        ax.barh(y, importances, color=color, alpha=0.85,
+                edgecolor='#2C3E50', linewidth=0.6)
+        if errors is not None:
+            ax.errorbar(importances, y, xerr=errors, fmt='none', ecolor=error_color,
+                        elinewidth=1.5, capsize=3, capthick=1.5, alpha=0.8, zorder=3)
+        ax.set_yticks(list(y))
+        ax.set_yticklabels(labels, fontsize=8)
+        ax.set_xlabel('mean |SHAP value|', fontsize=9)
+        ax.set_title(title, fontsize=10, fontweight='bold')
+        ax.grid(True, axis='x', alpha=0.4, color='#BDC3C7', linewidth=0.5)
+        ax.set_axisbelow(True)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        if show_values:
+            for i, imp in enumerate(importances):
+                ax.text(imp, i, f' {imp:.3f}', va='center', fontsize=7, color='#2C3E50')
+
+        if standalone:
+            ax.figure.tight_layout()
+            ax.figure.show()
+        return ax
+
     def trainmodel(self,
                    showplot_scores: bool = True,
                    showplot_importance: bool = True):

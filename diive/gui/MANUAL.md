@@ -597,6 +597,56 @@ parameters) to your variables.
 > temperature / VPD / radiation columns, so you can try these tabs on it right
 > away.
 
+### Gap-filling ▸ XGBoost gap-filling
+
+Fill the gaps in one variable with an **XGBoost** model (gradient-boosted trees),
+trained on other variables you pick as predictors. This tab does gap-filling only:
+it has **no feature-engineering options**. If you want engineered predictors (lags,
+rolling means, …), build them first in **Data ▸ Feature engineering**, then select
+them here.
+
+Set up the run with **three variable lists** on the left:
+
+1. **Variables** (far left) — **click** a variable to make it the **target** (the
+   one whose gaps get filled). The chosen target is highlighted and shown as
+   *Target:* at the bottom.
+2. **Available features** (middle) — **click** a variable to use it as a model
+   predictor (it moves to the right). The target is automatically excluded here.
+3. **Selected features** (right) — your chosen predictors; **click** one to drop
+   it back.
+
+The **settings** column holds the model controls (hover any field for a tooltip):
+
+- **n_estimators / max_depth / learning_rate** — model size and learning speed.
+- **early_stopping** — stop adding trees once the validation score stalls (0 = off).
+- **test_size** — fraction of complete records held out to score the model honestly.
+- **random_state** — the reproducibility seed; spin it down to **none** to let
+  XGBoost reseed every run (results then drift), or leave a fixed number (default
+  42) for repeatable results.
+- **Negatives** — keep predicted negative values (fluxes like NEE can be negative)
+  or clip / NaN them for variables that can't be negative (VPD, SW_IN).
+- **Reduce features (SHAP importance)** — optionally drop weak predictors before
+  the final model; the **threshold factor** sets how strict that is.
+
+Click **Run gap-filling** (it runs in the background). When it finishes:
+
+- A **performance band** across the top shows the model's **held-out test** scores
+  — R², RMSE, MAE, MAPE, MAXE — plus how many gaps were filled and how many
+  features were used. (The green **HELD-OUT TEST** chip is a reminder these scores
+  are measured on data the model didn't train on.)
+- Two **heatmaps** compare the **observed** series (with its gaps) against the
+  **gap-filled** result, on a shared colour scale.
+- A narrow **SHAP feature importance** panel on the right ranks how much each
+  predictor drove the model (computed over all complete observations).
+
+**Add results to dataset** appends the gap-filled series (`{target}_gfXG`) and its
+fill flag to your variables, where they can be plotted or saved like any other
+column.
+
+> The bundled CH-DAV example has continuous flux and meteo columns, so you can try
+> this on it right away — e.g. target `NEE_CUT_REF_orig` with `Tair_f`, `VPD_f`,
+> `Rg_f` as features.
+
 ### Settings ▸ Project settings
 
 Settings for the current project:

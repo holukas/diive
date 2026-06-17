@@ -33,6 +33,14 @@ Write-Host "Rendering user manual (MANUAL.md -> MANUAL.html) ..." -ForegroundCol
 uv run python -m diive.gui.build_manual
 if ($LASTEXITCODE -ne 0) { throw "Manual render failed." }
 
+# Stamp a build identifier (timestamp) so each deploy of the same version is
+# distinguishable. Written next to splash.py; the spec bundles it and the GUI
+# reads it (splash.build_number) to show "build <stamp>". Absent in source runs.
+$build = Get-Date -Format "yyyyMMdd.HHmmss"
+$buildInfo = Join-Path $repo "diive\gui\_build_info.txt"
+Set-Content -Path $buildInfo -Value $build -NoNewline -Encoding utf8
+Write-Host "Build stamp: $build" -ForegroundColor Cyan
+
 Write-Host "Running PyInstaller (this takes a few minutes) ..." -ForegroundColor Cyan
 uv run pyinstaller "packaging\diive_gui.spec" --noconfirm --clean
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed." }
@@ -49,7 +57,7 @@ if ($NoZip) {
 
 # Read the package version to name the zip.
 $ver = (uv run python -c "import diive; print(diive.__version__)").Trim()
-$zip = Join-Path $repo "dist\diive-gui-$ver-win64.zip"
+$zip = Join-Path $repo "dist\diive-gui-$ver+build.$build-win64.zip"
 Remove-Item -Force $zip -ErrorAction SilentlyContinue
 
 Write-Host "Zipping -> $zip ..." -ForegroundColor Cyan

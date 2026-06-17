@@ -71,7 +71,6 @@ _PANEL_TITLES = {
     "Heatmap (date/time)": "Heatmap",
 }
 _TITLE_FONTSIZE = 10
-_TITLE_COLOR = "#37474F"  # blue-grey 800 — fallback header colour (heatmap)
 
 # One size for every tick number, axis label, and in-plot annotation across all
 # panels, so the overview reads cleanly despite the plot classes' own defaults.
@@ -504,7 +503,9 @@ class OverviewTab(DiiveTab):
         right = QWidget()
         right_lay = QVBoxLayout(right)
         right_lay.setContentsMargins(0, 0, 0, 0)
-        right_lay.setSpacing(0)
+        # Small gap so the figure (and its panel titles) isn't flush against the
+        # hero band above it.
+        right_lay.setSpacing(10)
         self.hero = _HeroBand()
         right_lay.addWidget(self.hero)
         self.canvas = MplCanvas()
@@ -713,10 +714,12 @@ class OverviewTab(DiiveTab):
             legend = ax.get_legend()
             if legend is not None:
                 legend.remove()
-        # Header tinted to match the panel's line, for quick visual pairing.
-        ax.set_title(_PANEL_TITLES.get(plot_type, plot_type),
-                     fontsize=_TITLE_FONTSIZE, fontweight=500,
-                     color=self._line_color(ax))
+        # Panel header in the Qt-header style used elsewhere (e.g. the gap-filling
+        # tab): tracked uppercase, bold, monochrome ink. matplotlib has no
+        # letter-spacing, so the tracking is approximated by the uppercasing alone.
+        ax.set_title(theme.manager.label_text(_PANEL_TITLES.get(plot_type, plot_type)),
+                     fontsize=_TITLE_FONTSIZE, fontweight="bold",
+                     color=theme.manager.tokens["INK"])
 
     @staticmethod
     def _panel_fonts(ax) -> None:
@@ -775,16 +778,6 @@ class OverviewTab(DiiveTab):
         # Repaint without re-freezing the layout (draw() would flip the layout
         # engine and could abort an in-progress resize re-solve).
         self.canvas.draw_idle()
-
-    @staticmethod
-    def _line_color(ax) -> str:
-        """Colour of the panel's main data line (the zorder-99 line the diive
-        plot classes draw), used to tint the header. Falls back to the neutral
-        title colour for panels without a line (the heatmap)."""
-        for line in ax.get_lines():
-            if line.get_zorder() == 99:
-                return line.get_color()
-        return _TITLE_COLOR
 
     def _draw_panel(self, ax, series, plot_type: str) -> None:
         try:

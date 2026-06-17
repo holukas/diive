@@ -16,6 +16,7 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import (
@@ -48,6 +49,21 @@ SUPPORTERS: list[str] = ["Gusty McFluxface", "Anita Breeze", "Ed D. Covariance"]
 _WIDTH = 620
 _HEIGHT = 380
 _RADIUS = 18
+
+
+def build_number() -> str | None:
+    """Build identifier baked into the packaged app by ``packaging/build_gui.ps1``.
+
+    The build script writes a timestamp to ``_build_info.txt`` next to this module
+    just before PyInstaller bundles it, so a packaged install can report exactly
+    which build it is even when the version string is unchanged. Returns ``None``
+    when running from source (no file present), where "build number" has no meaning.
+    """
+    try:
+        text = Path(__file__).with_name("_build_info.txt").read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return text or None
 
 # Palette — deep water at the top fading to lighter teal; waves layered below.
 _BG_TOP = QColor("#06293F")
@@ -138,6 +154,17 @@ def make_splash_pixmap(dpr: float = 1.0) -> QPixmap:
     p.setPen(_LIGHT)
     p.drawText(QRectF(_WIDTH - 220, 56, 180, 24),
                Qt.AlignmentFlag.AlignRight, f"version {diive.__version__}")
+
+    # Build identifier (packaged builds only) — distinguishes repeated deploys of
+    # the same version. Drawn on a second, smaller line below the version.
+    _build = build_number()
+    if _build:
+        bld = QFont()
+        bld.setPointSize(8)
+        p.setFont(bld)
+        p.setPen(_LIGHT)
+        p.drawText(QRectF(_WIDTH - 300, 80, 260, 18),
+                   Qt.AlignmentFlag.AlignRight, f"build {_build}")
 
     # Credits, lower-left over the waves. A single plain names line: the author
     # first, then supporters.

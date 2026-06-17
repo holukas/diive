@@ -59,7 +59,14 @@ class MplCanvas(QWidget):
     is cleared first), drawing into them, then `draw()`.
     """
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, *,
+                 show_toolbar: bool = True) -> None:
+        """Embeddable matplotlib canvas.
+
+        ``show_toolbar=False`` omits the bottom navigation/DPI/hover row. The
+        toolbar's many buttons impose a wide minimum width, so dropping it lets
+        the canvas shrink into a narrow side panel (e.g. the gap-filling SHAP
+        panel)."""
         super().__init__(parent)
 
         # Give this widget a light palette BEFORE building the toolbar. The
@@ -94,7 +101,7 @@ class MplCanvas(QWidget):
         self._dpi_spin.setSingleStep(50)
         self._dpi_spin.setValue(150)
         self._dpi_spin.setToolTip("DPI used when saving the figure")
-        self._toolbar = _SaveDpiToolbar(self._canvas, self, self.save_dpi)
+        self._toolbar = _SaveDpiToolbar(self._canvas, self, self.save_dpi) if show_toolbar else None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -107,18 +114,22 @@ class MplCanvas(QWidget):
         self.hover = HoverAnnotator(self)
 
         # Bottom row: a "Hover values" toggle next to the navigation toolbar,
-        # both pushed to the right corner by a stretch.
-        self._hover_toggle = QCheckBox("Hover values")
-        self._hover_toggle.setChecked(True)
-        self._hover_toggle.toggled.connect(self.hover.set_enabled)
-        bottom = QHBoxLayout()
-        bottom.setContentsMargins(0, 0, 4, 2)
-        bottom.addStretch(1)
-        bottom.addWidget(QLabel("Save DPI"))
-        bottom.addWidget(self._dpi_spin)
-        bottom.addWidget(self._hover_toggle)
-        bottom.addWidget(self._toolbar)
-        layout.addLayout(bottom)
+        # both pushed to the right corner by a stretch. Omitted when the toolbar
+        # is hidden (its width minimum would otherwise stop the canvas going narrow).
+        if show_toolbar:
+            self._hover_toggle = QCheckBox("Hover values")
+            self._hover_toggle.setChecked(True)
+            self._hover_toggle.toggled.connect(self.hover.set_enabled)
+            bottom = QHBoxLayout()
+            bottom.setContentsMargins(0, 0, 4, 2)
+            bottom.addStretch(1)
+            bottom.addWidget(QLabel("Save DPI"))
+            bottom.addWidget(self._dpi_spin)
+            bottom.addWidget(self._hover_toggle)
+            bottom.addWidget(self._toolbar)
+            layout.addLayout(bottom)
+        else:
+            self._hover_toggle = None
 
         # Re-solve the (frozen) constrained layout whenever the canvas resizes,
         # so panels adapt to the real widget size. Pan/zoom doesn't resize, so

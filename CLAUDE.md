@@ -103,6 +103,10 @@ Used by `FeatureEngineer` class, fed into gap-filling models.
 
 Legacy `.result` property (raw DataFrame) still available.
 
+ML classes (RF / XGB) also expose `plot_feature_importances(ax=None, traintest=False, max_features=None, …)` — a two-phase
+SHAP-importance bar plot (`ax=None` makes a standalone figure; pass an `ax` to embed it, e.g. in the GUI). Lives on
+`MlRegressorGapFillingBase`, so every ML gap-filler inherits it.
+
 ### Timestamp Sanitization
 
 ```python
@@ -502,17 +506,28 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   engineering tab first, then select the engineered columns here). Three variable lists side by side: **Variables** (a
   `VariablePanel`, far left — click to set the gap-fill target, highlighted via `set_panels`) | a `DualVariablePicker`
   whose two columns are **Available features** (middle) and **Selected features** (right; click-to-use / click-to-remove).
-  The target is auto-excluded from the feature pool (`_refresh_features` rebuilds it on target change). Beside the lists: a
-  **settings** scroll area (`XGBoostTS` hyperparameters — n_estimators / max_depth / learning_rate / early_stopping /
-  test_size / random_state / negatives — + optional SHAP feature reduction; every field has a code tooltip) and a
-  **results** pane (status + a **performance hero band** + observed-vs-gap-filled `HeatmapDateTime` canvas). The hero
-  (`_PerformanceHero`) reuses the Overview's `_MetricSlot` / `_stat_separator` / `_chip_qss` building blocks but shows the
-  model's held-out (test-set) scores — R² / RMSE / MAE / MAPE / MAXE + gaps filled + feature count — updated in place on
-  each run. Runs on a worker thread: `XGBoostTS(...)`
-  trained on the selected feature columns directly (`df[[target]+features]`), then `.run()`; emits the gap-filled
-  (`*_gfXG`) + `FLAG_*_ISFILLED` columns via `featuresCreated` with DERIVED provenance (parent = target). A fixed
-  `random_state` (default 42) is always passed so runs are reproducible. All computation is library work; the tab only
-  collects inputs, runs, previews, and emits.
+  The target is auto-excluded from the feature pool (`_refresh_features` rebuilds it on target change). **Layout** is a
+  horizontal **QHBoxLayout** (not a splitter — a splitter allocates panes wider than their fixed widgets and leaves
+  gaps): the input lists (left) | a fixed-width **settings** scroll area (no outer frame) | the **right region** (the
+  stretch column). The right region stacks a full-width **performance hero band** over a row of [observed-vs-gap-filled
+  `HeatmapDateTime` canvas (stretch) | a narrow fixed-width **SHAP feature-importance** panel flush against the right
+  edge], so the hero spans the whole width and the heatmaps push SHAP to the edge. The two heatmaps **share one value
+  scale + one colorbar** (only the right panel draws it) and a single "Date" y-axis (the right panel's redundant y-axis is
+  hidden, panels are `sharey`), so they fill far more of the canvas width than two independently-decorated panels would.
+  The SHAP canvas is built with `MplCanvas(show_toolbar=False)` so the toolbar's wide minimum doesn't stop it shrinking
+  into a narrow strip. Settings = `XGBoostTS` hyperparameters
+  (n_estimators / max_depth / learning_rate / early_stopping / test_size / random_state / negatives) + optional SHAP
+  feature reduction; every field has a code tooltip. `random_state` uses `-1` as a special "none" value (shown as
+  `none`) → the seed is omitted so XGBoost reseeds (non-reproducible); any value ≥ 0 (default 42) is a fixed reproducible
+  seed. The hero (`_PerformanceHero`) reuses the Overview's `_MetricSlot` / `_stat_separator` / `_chip_qss` building
+  blocks and a green **HELD-OUT TEST** chip; it shows the model's held-out (test-set) scores — R² / RMSE / MAE / MAPE /
+  MAXE — plus the (whole-record) gaps-filled and feature counts, updated in place on each run. The SHAP panel is drawn by
+  the library's two-phase `MlRegressorGapFillingBase.plot_feature_importances(ax=, traintest=, max_features=, …)` (the
+  GUI only supplies the axes — no plotting math in the tab) and shows the **final** model's importances over **all**
+  complete observations (not the held-out test set — captioned as such, distinct from the test scores). Runs on a worker
+  thread: `XGBoostTS(...)` trained on the selected feature columns directly (`df[[target]+features]`), then `.run()`;
+  emits the gap-filled (`*_gfXG`) + `FLAG_*_ISFILLED` columns via `featuresCreated` with DERIVED provenance (parent =
+  target). All computation is library work; the tab only collects inputs, runs, previews, and emits.
 - **Gap & coverage dashboard tab** (`tabs/gaps.py`, `Analyze ▸ Gaps & coverage`, single-instance). Diagnostics for
   missing data: stat cards + a two-panel **gap map** (availability heatmap + gap-spike timeline) + a long-gap table.
   All gap logic is the library's `dv.analysis.GapStats` — `.summary`, `.long_gaps`, the per-`ax` `plot_availability_heatmap`/
