@@ -330,7 +330,7 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
   `--demo`) — Textual front-end for the pipeline: settings form + live per-worker progress, full CLI-option coverage
   with tooltips, a **Check** preflight, **Stop**, column pickers, and persisted settings. Requires `textual` (runtime
   dep; `tui` extra also provided).
-- **Per-gas time-lag search windows.** `PreWhiteningBootstrap` gains optional `lws`/`uws` (asymmetric search window in
+- **Per-gas time-lag search windows.** `PreWhiteningBootstrap` adds optional `lws`/`uws` (asymmetric search window in
   seconds); the peak search is restricted to `[lws, uws]` while the CCF is still computed symmetrically over
   `±lag_max` (unset = unchanged, full-window behaviour). A positive-only window (e.g. `[0, 5]`) keeps only physical
   tube-delay lags (closed-path delay > 0, as Vitale et al. 2024 advise for the constrained methods); a long-inlet gas
