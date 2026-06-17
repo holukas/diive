@@ -32,11 +32,13 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QSplitter,
     QVBoxLayout,
@@ -48,6 +50,8 @@ from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
 from diive.gapfilling.xgboost_ts import XGBoostTS
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
+# Reuse the Overview's hero building blocks (presentation-only helpers).
+from diive.gui.tabs.overview import _MetricSlot, _chip_qss, _stat_separator
 from diive.gui.widgets.dual_variable_picker import DualVariablePicker
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.variable_panel import VariablePanel
@@ -63,6 +67,99 @@ class _Signals(QObject):
     done = Signal(object)
     failed = Signal(str)
     features_created = Signal(object)
+
+
+class _PerformanceHero(QFrame):
+    """Hero band above the plots showing the gap-filling model's performance.
+
+    Same visual pattern as the Overview's `_HeroBand` (identity row + a row of
+    persistent `_MetricSlot`s with hairline separators), but the metrics are the
+    held-out (test-set) model scores from gap-filling, not variable statistics.
+    Built once; `set_metrics` updates the slot text in place (no flicker)."""
+
+    #: (label, tooltip) per metric slot, in display order.
+    _METRICS = [
+        ("R²", "Coefficient of determination on the held-out test set (1 = perfect)."),
+        ("RMSE", "Root mean squared error on the test set, in target units."),
+        ("MAE", "Mean absolute error on the test set, in target units."),
+        ("MAPE", "Mean absolute percentage error on the test set."),
+        ("MAXE", "Maximum absolute error on the test set, in target units."),
+        ("FILLED", "Number of gap records filled by the model."),
+        ("FEATURES", "Number of feature variables used to train the model."),
+    ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("perfhero")
+        border = theme.manager.tokens["BORDER"]
+        self.setStyleSheet(
+            f"QFrame#perfhero {{ background: #FFFFFF; border: 1px solid {border};"
+            f" border-radius: 10px; }}")
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(16, 11, 16, 11)
+        lay.setSpacing(8)
+
+        # --- identity row ---
+        idrow = QHBoxLayout()
+        idrow.setSpacing(8)
+        title = QLabel("Gap-filling performance")
+        tf = title.font()
+        tf.setPointSizeF(tf.pointSizeF() + 3.0)
+        tf.setBold(True)
+        title.setFont(tf)
+        idrow.addWidget(title)
+        self._target = QLabel()
+        idrow.addWidget(self._target)
+        self._method = QLabel("XGBOOST")
+        self._method.setStyleSheet(_chip_qss("#F3E5F5", "#6A1B9A"))
+        idrow.addWidget(self._method)
+        idrow.addStretch(1)
+        lay.addLayout(idrow)
+
+        # --- metric row (persistent slots) ---
+        self._slots: dict[str, _MetricSlot] = {}
+        rowlay = QHBoxLayout()
+        rowlay.setSpacing(14)
+        for i, (label, _tip) in enumerate(self._METRICS):
+            if i > 0:
+                rowlay.addWidget(_stat_separator())
+            slot = _MetricSlot()
+            self._slots[label] = slot
+            rowlay.addWidget(slot)
+        rowlay.addStretch(1)
+        lay.addLayout(rowlay)
+
+        self.reset()
+
+    def reset(self, target: str = "") -> None:
+        """Blank the metrics (placeholder dashes); show the target if known."""
+        if target:
+            self._target.setText(target)
+            self._target.setStyleSheet(_chip_qss("#E3F2FD", "#1565C0"))
+            self._target.show()
+        else:
+            self._target.hide()
+        for label, tip in self._METRICS:
+            self._slots[label].update_metric(label, "—", tip)
+
+    def set_metrics(self, target: str, n_features: int, n_filled: int,
+                    scores: dict) -> None:
+        self._target.setText(target)
+        self._target.setStyleSheet(_chip_qss("#E3F2FD", "#1565C0"))
+        self._target.show()
+
+        def g(key: str) -> str:
+            v = scores.get(key)
+            return f"{v:.3g}" if isinstance(v, (int, float)) else "—"
+
+        values = {
+            "R²": g("r2"), "RMSE": g("rmse"), "MAE": g("mae"),
+            "MAPE": g("mape"), "MAXE": g("maxe"),
+            "FILLED": f"{n_filled:,}", "FEATURES": f"{n_features}",
+        }
+        for label, tip in self._METRICS:
+            self._slots[label].update_metric(label, values.get(label, "—"), tip)
 
 
 class XGBoostGapFillingTab(DiiveTab):
@@ -249,6 +346,13 @@ class XGBoostGapFillingTab(DiiveTab):
         self.status.setWordWrap(True)
         self.status.setStyleSheet("padding: 6px 10px; color: #444;")
         v.addWidget(self.status)
+        # Hero band with the model's performance metrics, above the plots.
+        self.hero = _PerformanceHero()
+        hwrap = QWidget()
+        hl = QVBoxLayout(hwrap)
+        hl.setContentsMargins(10, 0, 10, 6)
+        hl.addWidget(self.hero)
+        v.addWidget(hwrap)
         self.canvas = MplCanvas()
         v.addWidget(self.canvas, stretch=1)
         return host
@@ -393,7 +497,9 @@ class XGBoostGapFillingTab(DiiveTab):
                     tags=["gapfilling", "flag"]),
             }
             out.attrs[ATTRS_KEY] = attrs
-            self._sig.done.emit((out, work[target], gapfilled, scores))
+            n_features = work.shape[1] - 1  # everything except the target
+            self._sig.done.emit(
+                (out, work[target], gapfilled, scores, target, n_features))
         except Exception as err:
             self._sig.failed.emit(str(err))
 
@@ -405,20 +511,19 @@ class XGBoostGapFillingTab(DiiveTab):
 
     # --- results -------------------------------------------------------
     def _on_done(self, payload) -> None:
-        out, observed, gapfilled, scores = payload
+        out, observed, gapfilled, scores, target, n_features = payload
         self._set_running(False)
         self._result_df = out
         n_filled = int((out[str(gapfilled.name)].notna() & observed.isna()).sum())
-        r2 = scores.get("r2")
-        r2_txt = f"test R²={r2:.3f}, " if isinstance(r2, (int, float)) else ""
-        self.status.setText(
-            f"Done. {r2_txt}filled {n_filled} gaps. 'Add' appends "
-            f"{', '.join(out.columns)}.")
+        self.hero.set_metrics(target=target, n_features=n_features,
+                              n_filled=n_filled, scores=scores)
+        self.status.setText(f"Done. 'Add' appends {', '.join(out.columns)}.")
         self.add_btn.setEnabled(True)
         self._plot(observed, gapfilled)
 
     def _on_failed(self, msg: str) -> None:
         self._set_running(False)
+        self.hero.reset(self._target)
         self.status.setText(f"Failed: {msg}")
         ax = self.canvas.new_axes(1)[0]
         ax.text(0.5, 0.5, "Gap-filling failed", ha="center", va="center",

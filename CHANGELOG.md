@@ -68,9 +68,10 @@
   hyperparameters (n_estimators, max_depth, learning_rate, early stopping, test size, random seed, negative-value
   handling) plus optional SHAP feature reduction (every field has a tooltip), then run on a worker thread. The model is
   trained on the selected feature columns directly (no feature-engineering settings — build engineered features in the
-  *Feature engineering* tab first if needed). Previews observed-vs-gap-filled date/time heatmaps + the held-out test R²,
-  and **Add results to dataset** emits the gap-filled (`*_gfXG`) + ISFILLED flag columns with DERIVED provenance. All
-  computation is library work (`XGBoostTS`).
+  *Feature engineering* tab first if needed). Above the observed-vs-gap-filled date/time heatmaps a **performance hero
+  band** (reusing the Overview's metric-slot building blocks) shows the model's held-out test scores — R² / RMSE / MAE /
+  MAPE / MAXE + gaps filled + feature count. **Add results to dataset** emits the gap-filled (`*_gfXG`) + ISFILLED flag
+  columns with DERIVED provenance. All computation is library work (`XGBoostTS`).
 - **Shared two-list selector** (`widgets/dual_variable_picker.py`, `DualVariablePicker`): the click-to-add / click-to-remove
   available↔selected logic, built on two `VariablePanel`s, is now one reusable widget used by both **Data ▸ Select
   variables** and the gap-filling feature picker (and available to future two-list selections).

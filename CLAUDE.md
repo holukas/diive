@@ -505,7 +505,10 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   The target is auto-excluded from the feature pool (`_refresh_features` rebuilds it on target change). Beside the lists: a
   **settings** scroll area (`XGBoostTS` hyperparameters — n_estimators / max_depth / learning_rate / early_stopping /
   test_size / random_state / negatives — + optional SHAP feature reduction; every field has a code tooltip) and a
-  **results** pane (status + observed-vs-gap-filled `HeatmapDateTime` canvas). Runs on a worker thread: `XGBoostTS(...)`
+  **results** pane (status + a **performance hero band** + observed-vs-gap-filled `HeatmapDateTime` canvas). The hero
+  (`_PerformanceHero`) reuses the Overview's `_MetricSlot` / `_stat_separator` / `_chip_qss` building blocks but shows the
+  model's held-out (test-set) scores — R² / RMSE / MAE / MAPE / MAXE + gaps filled + feature count — updated in place on
+  each run. Runs on a worker thread: `XGBoostTS(...)`
   trained on the selected feature columns directly (`df[[target]+features]`), then `.run()`; emits the gap-filled
   (`*_gfXG`) + `FLAG_*_ISFILLED` columns via `featuresCreated` with DERIVED provenance (parent = target). A fixed
   `random_state` (default 42) is always passed so runs are reproducible. All computation is library work; the tab only
