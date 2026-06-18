@@ -10,6 +10,12 @@ orchestrates the choice and shows the result.
 
 Selecting multiple files merges them into one dataset (same filetype assumed).
 
+An optional **label** prefixes every loaded variable (``v1`` -> ``v1_NEE``) so a
+second dataset can be loaded alongside the first without column-name collisions
+-- e.g. comparing two processing runs of the same site. The **load mode**
+(Replace / Add to current) decides whether the load replaces the current dataset
+or merges onto it (only offered when data is already loaded).
+
 No default filetype is assumed (there are many) -- the user picks explicitly,
 except for ``.parquet`` which is unambiguous and preselected. The preview reads
 only a few rows (`data_nrows`) so switching filetypes stays fast.
@@ -134,12 +140,15 @@ class OpenDataDialog(QDialog):
     #: Per-file merge progress from the worker: (phase, done, total, filepath).
     _progress = Signal(str, int, int, str)
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, can_add: bool = False) -> None:
         super().__init__(parent)
         self.setWindowTitle("Open data file")
         self.resize(760, 500)
         self.dataframe = None      # set on successful Load
         self.source_name = ""
+        self.label = ""            # optional per-variable prefix
+        self.load_mode = "replace"  # 'replace' (default) or 'add' (merge on index)
+        self._can_add = can_add
         self._paths: list[str] = []
         #: filepath -> its progress row, while a multi-file load is running.
         self._file_rows: dict[str, _FileProgressRow] = {}
@@ -180,6 +189,30 @@ class OpenDataDialog(QDialog):
         self.ft_combo.currentIndexChanged.connect(self._preview)
         ft_row.addWidget(self.ft_combo, stretch=1)
         layout.addLayout(ft_row)
+
+        # Label + load-mode row. The label prefixes every variable so a second
+        # dataset can coexist with the first; the mode decides replace vs merge.
+        opt_row = QHBoxLayout()
+        opt_row.addWidget(QLabel("Label:"))
+        self.label_edit = QLineEdit()
+        self.label_edit.setPlaceholderText(
+            "optional prefix for every variable, e.g. v1 -> v1_NEE")
+        self.label_edit.setToolTip(
+            "Prefixes every loaded variable with '<label>_'. Use it to keep a\n"
+            "second dataset (e.g. a different processing run of the same site)\n"
+            "separate from the first instead of overwriting same-named columns.")
+        opt_row.addWidget(self.label_edit, stretch=1)
+        opt_row.addWidget(QLabel("Load mode:"))
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem("Replace current data", "replace")
+        if can_add:
+            self.mode_combo.addItem("Add to current data", "add")
+        self.mode_combo.setToolTip(
+            "Replace: discard the current dataset and load this one.\n"
+            "Add to current: merge these variables onto the current dataset on\n"
+            "the shared timestamp index (for comparing datasets side by side).")
+        opt_row.addWidget(self.mode_combo)
+        layout.addLayout(opt_row)
 
         # Multi-file progress list: one row (filename + progress bar) per
         # selected file, shown only when several files are merged. Hidden for a
@@ -335,13 +368,21 @@ class OpenDataDialog(QDialog):
         self.status.setText(f"Merging files... {done}/{total}")
 
     def _on_load_done(self, df) -> None:
+        label = self.label_edit.text().strip()
+        if label:
+            # Prefix every variable (not the timestamp index) so a labeled
+            # dataset never collides with same-named columns already loaded.
+            df = df.rename(columns={c: f"{label}_{c}" for c in df.columns})
+        self.label = label
+        self.load_mode = self.mode_combo.currentData() or "replace"
         self.dataframe = df
         global _last_choice
         _last_choice = self._choice()
-        self.source_name = (
+        name = (
             Path(self._paths[0]).name if len(self._paths) == 1
             else f"{len(self._paths)} files (merged)"
         )
+        self.source_name = f"{name} [{label}]" if label else name
         self.accept()
 
     def _on_load_failed(self, msg: str) -> None:

@@ -1000,9 +1000,42 @@ class MainWindow(QMainWindow):
         self._set_data(df, source="example data (CH-DAV)", persist_metadata=False)
 
     def _open_file(self) -> None:
-        dlg = OpenDataDialog(self)
-        if dlg.exec() == QDialog.DialogCode.Accepted and dlg.dataframe is not None:
+        dlg = OpenDataDialog(self, can_add=self._full_data is not None)
+        if dlg.exec() != QDialog.DialogCode.Accepted or dlg.dataframe is None:
+            return
+        if dlg.load_mode == "add" and self._full_data is not None:
+            self._add_dataset(dlg.dataframe, dlg.source_name)
+        else:
             self._set_data(dlg.dataframe, source=dlg.source_name)
+
+    def _add_dataset(self, new_df, source: str) -> None:
+        """Merge a second loaded dataset onto the current one (shared index).
+
+        Used for comparing datasets side by side (e.g. two processing runs of the
+        same site). Columns align on the timestamp index via `_add_features`. A
+        same-named column would overwrite the existing one, so collisions are
+        flagged first — the user is expected to load with a label to avoid them.
+        """
+        collisions = [c for c in new_df.columns if c in self._full_data.columns]
+        if collisions:
+            preview = ", ".join(collisions[:5]) + ("..." if len(collisions) > 5 else "")
+            resp = QMessageBox.question(
+                self, "Variable name collision",
+                f"{len(collisions)} variable(s) already exist and would be "
+                f"overwritten:\n{preview}\n\nLoad again with a label (e.g. 'v2') "
+                f"to keep them separate.\n\nOverwrite anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if resp != QMessageBox.StandardButton.Yes:
+                return
+        # Seed an "original" provenance baseline for the merged-in columns, as a
+        # plain load does — `_add_features` only records provenance from attrs.
+        metadata_store.manager.store.record_original(
+            new_df.columns, operation=f"Imported from {source}",
+            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"))
+        self._add_features(new_df)
+        metadata_store.manager.notify()
+        success(f"Added {len(new_df.columns)} variable(s) from {source}")
 
     def _save_file(self) -> None:
         """Save the current dataset as a diive-format parquet file."""
