@@ -29,6 +29,13 @@
   style). Data-rendering args (`color`, `cmap`, `marker`, `vmin`/`vmax`, `fill`, ...) and colorbar args (`cb_*`, and
   the colorbar-label `zlabel` on the heatmaps/`HexbinPlot`) remain direct `plot()` keywords. See the
   `dv.plotting.FormatStyle` entry under *Refactoring*.
+- **`remove_radiation_zero_offset` renamed to `remove_nighttime_zero_offset`** — the correction is general-purpose (any
+  variable that should read zero at night, e.g. SW/PPFD; not radiation-specific, and not for LW), so the name no longer
+  says "radiation". The `StepwiseMeteoScreeningDb.correction_remove_radiation_zero_offset` method is likewise
+  `correction_remove_nighttime_zero_offset`. A new `clamp_negatives=True` argument makes the post-offset
+  negative-to-zero clamp explicit and optional. New `nighttime_zero_offset_diagnostics` / `NighttimeZeroOffsetResult`
+  expose every intermediate series + below-zero stats. The persisted correction-key value (`'radiation_zero_offset'`) is
+  unchanged, so saved projects still load.
 
 ### Desktop GUI (new)
 
@@ -63,13 +70,22 @@
   then add the flags + QCF + filtered series to the dataset). The Stepwise screening tab now also has a **corrections
   phase** (applied to the QCF-filtered series, mirroring the meteo-screening notebook): a **measurement** dropdown
   (e.g. *TA - air temperature*, auto-detected from the variable name) gates which corrections are physically meaningful
-  — radiation zero-offset for SW/PPFD, RH offset for RH, plus the generic set-to-min/max, set-to-value and
+  — nighttime zero-offset for SW/PPFD, RH offset for RH, plus the generic set-to-min/max, set-to-value and
   set-exact-to-missing — emitting a corrected column and extending the **Copy Python** script. Its layout is a
   segmented inspector (Outliers / Corrections / Report) beside an always-large plot stage, with edits applied only on a
   **Run** button. Data menu **Select
   variables**, **Rename variables** (add a prefix/suffix to all variables, or one at a time, with a live preview),
   **Metadata explorer**, **Feature engineering**; plus **Appearance**, **Project settings** (author, description, site
   details, and a **sticky-note wall** — all saved with the project), and **Log**.
+- **Corrections menu** — the high-resolution data corrections, now also as **standalone tabs, one per correction**, on a
+  reusable **`BaseCorrectionTab` template** (`tabs/_correction_base.py`; the RF/XGB shared-template approach): **Remove
+  nighttime zero offset**, **Remove relative humidity offset**, **Set to max / min threshold**, **Set to value**, **Set
+  exact values to missing**. Each picks a target variable, previews original vs corrected, and emits a `{var}_…` column
+  with **Copy Python**; all route through the library `apply_corrections` / `corrections_to_code`. Because each correction
+  is its own tab, any correction is available for any variable (the measurement is a hint, not a lock). The **Remove
+  nighttime zero offset** tab is the rich one: a **Clamp negative values to zero** option, a **4-panel diagnostic
+  preview** (original → daily offset → series−offset → final corrected), and a **below-zero stats hero** (records < 0
+  before/after, overall + nighttime), driven by the new `dv.corrections.nighttime_zero_offset_diagnostics`.
 - **Gap-filling ▸ XGBoost gap-filling** + **Random Forest gap-filling** tabs (`tabs/gapfilling.py` /
   `tabs/gapfilling_randomforest.py`, single-instance, new top-level **Gap-filling** menu) on a reusable
   **`MlGapFillingTab` template** (`tabs/_ml_gapfilling_base.py`): the whole layout/flow is a template every ML gap-filler

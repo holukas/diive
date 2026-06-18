@@ -25,7 +25,7 @@ complete, physically consistent time series.
 # SWINGapFillerXGBoost addresses both issues at once:
 #
 # 1. Calculate potential radiation (SW_IN_POT) from lat/lon
-# 2. Apply ``remove_radiation_zero_offset()`` to subtract the
+# 2. Apply ``remove_nighttime_zero_offset()`` to subtract the
 #    nighttime bias from the whole series (``correct_nighttime_offset=True``)
 # 3. Use SW_IN_POT as the daytime/nighttime divider (threshold 20 W/m2)
 # 4. Set nighttime gaps to zero (physics)
@@ -82,7 +82,7 @@ gf = dv.gapfilling.SWINGapFillerXGBoost(
     lat=SITE_LAT,
     lon=SITE_LON,
     utc_offset=SITE_UTC_OFFSET,
-    nighttime_threshold=0.001,  # W/m2: SW_IN_POT < threshold -> night (matches remove_radiation_zero_offset)
+    nighttime_threshold=0.001,  # W/m2: SW_IN_POT < threshold -> night (matches remove_nighttime_zero_offset)
     correct_nighttime_offset=True,
     reduce_features=False,
     verbose=1,

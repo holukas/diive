@@ -78,10 +78,13 @@ class CorrectionSpec(NamedTuple):
 #: All corrections, in the order they are offered.
 CORRECTIONS: tuple[CorrectionSpec, ...] = (
     CorrectionSpec(
-        CORR_RADIATION_ZERO_OFFSET, 'Remove radiation zero offset',
-        'Radiation should read zero at night. The daily nighttime mean is '
-        'subtracted from all records as the offset, then nighttime values are '
-        'forced to zero. Use for SW_IN, SW_OUT, PPFD_IN, PPFD_OUT.',
+        CORR_RADIATION_ZERO_OFFSET, 'Remove nighttime zero offset',
+        'For variables that should read zero at night (e.g. shortwave radiation, '
+        "PPFD). For each day, the mean of that day's nighttime values is the "
+        "offset, subtracted from all of the day's records (days with no nighttime "
+        'data use the median of all daily offsets). Nighttime values are then '
+        'forced to zero and, optionally, any remaining negatives clamped to zero. '
+        'Use for SW_IN, SW_OUT, PPFD_IN, PPFD_OUT.',
         needs_coords=True),
     CorrectionSpec(
         CORR_RELATIVEHUMIDITY_OFFSET, 'Remove relative humidity offset',

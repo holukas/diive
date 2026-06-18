@@ -681,7 +681,7 @@ def test_stepwise_screening_corrections(app):
     code = tab._code_provider()
     compile(code, "<gen>", "exec")
     assert "corrected = cleaned.copy()" in code
-    assert "remove_radiation_zero_offset" in code
+    assert "remove_nighttime_zero_offset" in code
 
     # Switching to a non-radiation measurement drops the radiation correction.
     idx = tab.meas_combo.findData("TA")
@@ -689,6 +689,84 @@ def test_stepwise_screening_corrections(app):
     QApplication.processEvents()
     assert "radiation_zero_offset" not in tab.corrections_panel._rows
     assert "setto_max" in tab.corrections_panel._rows
+
+
+def test_correction_tabs(app):
+    # The standalone correction tabs (RF/XGB-style shared template): each is one
+    # correction on a selected variable, producing a corrected column + provenance,
+    # with a reproducible script. Available for any variable (no measurement lock).
+    import diive as dv
+    from diive.core.metadata import ATTRS_KEY
+    from diive.gui.tabs.corrections_nighttime_offset import NighttimeZeroOffsetTab
+    from diive.gui.tabs.corrections_setto_threshold import SetToMaxThresholdTab
+    from diive.gui.tabs.corrections_set_missing import SetExactToMissingTab
+    from diive.gui import site
+
+    site.manager.update(author="t", description="", name="X", latitude=47.4,
+                        longitude=8.5, elevation=500, utc_offset=1)
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-06-01", periods=48 * 10, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.0)
+    df = df.rename(columns={"observed_value": "SW_IN_T1_2_1"})
+    df.index.name = "TIMESTAMP_END"
+
+    # --- Nighttime zero offset: needs coords (seeded from the site) ---
+    tab = NighttimeZeroOffsetTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._select("SW_IN_T1_2_1")
+    assert tab.needs_coords and tab.lat.value() == pytest.approx(47.4)
+
+    emitted = {}
+    tab.featuresCreated.connect(lambda d: emitted.update(df=d))
+    tab._worker(df["SW_IN_T1_2_1"], tab._current_kwargs(),
+                tab.lat.value(), tab.lon.value(), tab.utc.value())
+    QApplication.processEvents()
+    assert list(tab._result_df.columns) == ["SW_IN_T1_2_1_NIGHTOFFSET"]
+    assert "SW_IN_T1_2_1_NIGHTOFFSET" in tab._result_df.attrs[ATTRS_KEY]
+    assert tab.add_btn.isEnabled()
+    # Diagnostics power the multi-panel preview + below-zero hero stats; after
+    # the correction no records remain below zero (night forced to zero + clamp).
+    e = tab._last_payload["extra"]
+    assert {"offset", "corrected_by_offset", "n_below_zero_after",
+            "n_below_zero_after_night"} <= e.keys()
+    assert e["n_below_zero_after"] == 0
+    assert e["n_below_zero_after_night"] == 0
+    # clamp_negatives is on by default and omitted from the script; turning it off
+    # surfaces in both the kwargs and the generated code.
+    assert tab.clamp_cb.isChecked() and tab._current_kwargs() == {"clamp_negatives": True}
+    assert "clamp_negatives" not in tab._python_code()
+    tab.clamp_cb.setChecked(False)
+    assert "clamp_negatives=False" in tab._python_code()
+    tab.clamp_cb.setChecked(True)
+    tab._add()
+    QApplication.processEvents()
+    assert "SW_IN_T1_2_1_NIGHTOFFSET" in emitted["df"].columns
+    code = tab._python_code()
+    compile(code, "<gen>", "exec")
+    assert "remove_nighttime_zero_offset" in code  # general-purpose library fn
+
+    # --- Set to max threshold: a generic, parameterized correction ---
+    tmax = SetToMaxThresholdTab()
+    tmax.widget()
+    tmax.on_data_loaded(df)
+    tmax._select("SW_IN_T1_2_1")
+    tmax.threshold.setValue(5.0)
+    tmax._worker(df["SW_IN_T1_2_1"], tmax._current_kwargs(), None, None, None)
+    QApplication.processEvents()
+    corrected = tmax._result_df["SW_IN_T1_2_1_SETMAX"]
+    assert corrected.max() <= 5.0 + 1e-9            # capped
+    assert "setto_threshold" in tmax._python_code()
+
+    # --- Validation: set-exact-to-missing needs values before it runs ---
+    miss = SetExactToMissingTab()
+    miss.widget()
+    miss.on_data_loaded(df)
+    miss._select("SW_IN_T1_2_1")
+    miss._run()                                      # no values entered
+    assert miss._result_df is None
+    assert "value" in miss.status.text().lower()
 
 
 def test_flux_chain_tab_level33_detection(app):

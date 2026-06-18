@@ -618,7 +618,7 @@ mscr.showplot_cleaned()
 # Remove nighttime offset from radiation data and set nighttime to zero.
 # Can be used for: SW_IN, SW_OUT, PPFD_IN, PPFD_OUT
 
-mscr.correction_remove_radiation_zero_offset()
+mscr.correction_remove_nighttime_zero_offset()
 
 # %%
 # Correction: Remove Relative Humidity Offset

@@ -56,10 +56,12 @@ def corrections_to_code(corrections: list[dict],
         key = corr["key"]
         kw = corr.get("kwargs", {})
         if key == CORR_RADIATION_ZERO_OFFSET:
+            # Only emit clamp_negatives when it differs from the default (True).
+            clamp = "" if kw.get("clamp_negatives", True) else ", clamp_negatives=False"
             lines.append(
-                f"{out_var} = dv.corrections.remove_radiation_zero_offset("
+                f"{out_var} = dv.corrections.remove_nighttime_zero_offset("
                 f"series={out_var}, lat={site_lat!r}, lon={site_lon!r}, "
-                f"utc_offset={utc_offset!r})")
+                f"utc_offset={utc_offset!r}{clamp})")
         elif key == CORR_RELATIVEHUMIDITY_OFFSET:
             lines.append(
                 f"{out_var} = dv.corrections.remove_relativehumidity_offset("

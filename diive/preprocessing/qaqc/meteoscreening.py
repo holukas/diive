@@ -27,7 +27,7 @@ from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import detect_freq_groups
 from diive.analysis import daily_correlation
 from diive.variables.radiation import potrad
-from diive.preprocessing.corrections import remove_radiation_zero_offset, remove_relativehumidity_offset
+from diive.preprocessing.corrections import remove_nighttime_zero_offset, remove_relativehumidity_offset
 from diive.preprocessing.corrections import set_exact_values_to_missing, setto_threshold, setto_value
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 from diive.preprocessing.qaqc.flags import MissingValues
@@ -59,7 +59,7 @@ class StepwiseMeteoScreeningDb:
     - `.flag_outliers_trim_low_test()`: Remove values below threshold and remove an equal amount of records from high end of data
 
     Implemented corrections:
-    - `.correction_remove_radiation_zero_offset()`: Remove nighttime offset from all radiation data and set nighttime to zero
+    - `.correction_remove_nighttime_zero_offset()`: Remove nighttime offset from a variable that should be zero at night (e.g. radiation) and set nighttime to zero
     - `.correction_remove_relativehumidity_offset()`: Remove relative humidity offset
     - `.correction_setto_max_threshold()`: Set values above a threshold value to threshold value
     - `.correction_setto_min_threshold()`: Set values below a threshold value to threshold value
@@ -551,11 +551,11 @@ class StepwiseMeteoScreeningDb:
                 n_jobs=n_jobs
             )
 
-    def correction_remove_radiation_zero_offset(self):
-        """Remove nighttime offset from all radiation data and set nighttime to zero"""
+    def correction_remove_nighttime_zero_offset(self):
+        """Remove nighttime offset from variables that should be zero at night (e.g. radiation)"""
         for field in self.fields:
             self._series_hires_cleaned[field] = \
-                remove_radiation_zero_offset(series=self._series_hires_cleaned[field],
+                remove_nighttime_zero_offset(series=self._series_hires_cleaned[field],
                                              lat=self.site_lat, lon=self.site_lon,
                                              utc_offset=self.utc_offset, showplot=True)
 

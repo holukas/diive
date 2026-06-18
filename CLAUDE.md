@@ -67,8 +67,8 @@ tests/                        # Unit tests
 | `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `ShiftedDistributionPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot`, `FormatStyle` (shared plot **chrome** — title/labels/units/fontsizes/weights/text-spine-tick-grid colors/grid/legend/zeroline — and the **only** way to set chrome: pass `plot(format_style=FormatStyle(...))`. `None` fields resolve to the `LightTheme` standard block (`FONTSIZE_TITLE`/`FONTSIZE_AXLABEL`/`FONTSIZE_TICKS`/`COLOR_TEXT`/`COLOR_CHROME`/`COLOR_FACE`), so a bare `FormatStyle()` **is** the house style and editing those constants restyles every plot at once. The old flat chrome kwargs (`title`/`xlabel`/`ylabel`/`series_units`/`axlabels_fontsize`/...) were **removed** from every `plot()` (v0.91.0 breaking change) — use `format_style=`, and `.merged(**overrides)` to vary one field off a shared style. Data-render args (`color`/`cmap`/`marker`/`vmin`/`vmax`/...) and colorbar args (`cb_*`, and the colorbar-label `zlabel` on heatmaps/`HexbinPlot`) stay direct `plot()` kwargs. The matplotlib work lives in `FormatStyle.apply(ax, default_title=, default_xlabel=, default_ylabel=, zeroline_data=)`, reusing the `plotfuncs` helpers, so there's one implementation of "the look". Lives in `diive/core/plotting/styles/format.py`. Conversion is chrome-only for the multi-axes `RidgeLinePlot` and polar `TreeRingPlot` (gridspec/polar machinery untouched). **GUI:** the plot-settings panel has one shared **Format** section (title/labels/units/font sizes/grid/legend) on every plot type, read via `_format_values()` -> `values()["_format"]` -> `FormatStyle(**...)` in `tabs/plotting.py`) |
 | `dv.times` | `TimestampSanitizer`, `DetectFrequency`, `keep_daterange` (non-destructive date-range subselection; inclusive `start`/`end`, either bound optional), `insert_timestamp` (add a START/MIDDLE/END timestamp **column** without changing the index), `format_timestamp` (return an aligned START/MIDDLE/END timestamp Series for a chosen convention; optional `fmt=` strftime → formatted strings, e.g. FLUXNET `%Y%m%d%H%M`; else `datetime64`), `validate_timestamp_column_name` (reject a reserved name `TIMESTAMP_START/MIDDLE/END` used for a column that follows a different convention), `resample_to_daily_agg` (sub-daily → one value per calendar day; `agg=`, `mincounts_perc=`), `resample_to_monthly_agg_matrix`, `timestamp_infer_freq_*` |
 | `dv.variables` | `DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot`, `TimeSince`, `potrad`, `potrad_eot`, `calc_vpd_from_ta_rh`, `aerodynamic_resistance`, `dry_air_density`, `et_from_le`, `latent_heat_of_vaporization`, `air_temp_from_sonic_temp`, `lagged_variants`, `classify_variable`, noise helpers |
-| `dv.corrections` | `MeasurementOffsetFromReplicate`, `WindDirOffset`, `remove_radiation_zero_offset`, `remove_relativehumidity_offset`, `set_exact_values_to_missing`, `setto_threshold`, `setto_value`, `apply_corrections` (run an ordered list of `{"key","kwargs"}` corrections in one call — the single key→function mapping the GUI + `corrections_to_code` share) |
-| `dv.qaqc` | `FlagQCF`, `StepwiseMeteoScreeningDb`, plus meteo-measurement helpers: `MEASUREMENTS`/`Measurement` (measurement codes + descriptions, e.g. `TA - air temperature`), `CORRECTIONS`/`CorrectionSpec`, `corrections_for_measurement(code)` (which corrections are physically meaningful for a measurement — radiation zero-offset for SW/PPFD, RH offset for RH, plus generics), `detect_measurement(varname)` (guess the measurement from a column name), `measurement_label`, `correction_spec` |
+| `dv.corrections` | `MeasurementOffsetFromReplicate`, `WindDirOffset`, `remove_nighttime_zero_offset` (general-purpose nighttime zero-offset removal for any variable that should read zero at night — SW/PPFD, **not** LW; renamed from `remove_radiation_zero_offset`. Removes the daily nighttime-mean offset, forces night to zero, then `clamp_negatives=True` (default) clamps remaining daytime negatives to the physical floor of 0 — pass `clamp_negatives=False` to keep them. The correction key value stays `'radiation_zero_offset'` for saved-project compat), `nighttime_zero_offset_diagnostics` (same computation but returns a `NighttimeZeroOffsetResult` with every intermediate series — input, daily `offset`, `corrected_by_offset`, final `corrected`, `nighttime_flag` — plus below-zero counts before/after, overall + nighttime; for inspection/plotting, e.g. the GUI nighttime-offset tab's 4-panel preview + stats hero; also takes `clamp_negatives`), `NighttimeZeroOffsetResult`, `remove_relativehumidity_offset`, `set_exact_values_to_missing`, `setto_threshold`, `setto_value`, `apply_corrections` (run an ordered list of `{"key","kwargs"}` corrections in one call — the single key→function mapping the GUI + `corrections_to_code` share) |
+| `dv.qaqc` | `FlagQCF`, `StepwiseMeteoScreeningDb`, plus meteo-measurement helpers: `MEASUREMENTS`/`Measurement` (measurement codes + descriptions, e.g. `TA - air temperature`), `CORRECTIONS`/`CorrectionSpec`, `corrections_for_measurement(code)` (which corrections are physically meaningful for a measurement — nighttime zero-offset for SW/PPFD, RH offset for RH, plus generics), `detect_measurement(varname)` (guess the measurement from a column name), `measurement_label`, `correction_spec` |
 
 Top-level (no namespace): `load_exampledata_parquet`, `load_exampledata_parquet_lae`, `load_parquet`, `load_parquet_many` (read + `combine_first`-merge several parquet files; optional `progress_callback(phase, done, total, filepath)` — parquet counterpart to `MultiDataFileReader`), `save_parquet` (with `enforce_diive_format=True` → single header row + valid `TIMESTAMP_*` index name), `to_diive_format`, `ReadFileType`, `search_files`, `sstats`, `keep_vars` (non-destructive column subselection — column analogue of `times.keep_daterange`), `transform_yearmonth_matrix_to_longform`, `get_encoded_value_from_int`, `get_encoded_value_series`
 
@@ -93,7 +93,7 @@ Used by `FeatureEngineer` class, fed into gap-filling models.
 |-----------------------|----------|-----------------------------------|-----------------------------------|
 | Random Forest         | Yes      | 8-stage engineered                | Interpretable, robust             |
 | XGBoost               | Yes      | 8-stage engineered                | Non-linear, efficient             |
-| SWINGapFillerXGBoost  | Yes      | SW_IN_POT + timestamps (+ opt. TA/VPD) | SW_IN with physical nighttime constraint; `nighttime_threshold=0.001` matches `remove_radiation_zero_offset` |
+| SWINGapFillerXGBoost  | Yes      | SW_IN_POT + timestamps (+ opt. TA/VPD) | SW_IN with physical nighttime constraint; `nighttime_threshold=0.001` matches `remove_nighttime_zero_offset` |
 | MDS                   | No       | Meteorological similarity         | No overfitting risk               |
 | Linear Interp.        | No       | None                              | Small gaps only                   |
 
@@ -681,6 +681,26 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
     `None`: it flags a point only when the z-scores of all three increments (forward/backward/combined) exceed the
     threshold, so the accepted region is a *union* of intervals, not a single `[lower, upper]` envelope — there is no
     faithful data-unit band to draw, and the base skips the overlay when the bounds are `None`.
+- **Correction tabs** (`Corrections` menu) — a family of `BaseCorrectionTab` (`tabs/_correction_base.py`) subclasses,
+  **one tab per correction** (the RF/XGB shared-template approach): **Remove nighttime zero offset**
+  (`tabs/corrections_nighttime_offset.py`, `NighttimeZeroOffsetTab`), **Remove relative humidity offset**, **Set to max /
+  min threshold** (two classes in `corrections_setto_threshold.py`), **Set to value**, **Set exact values to missing**.
+  The base owns the layout (XGBoost-style title bar + `CopyPythonButton`, "Target (click to set target)" `VariablePanel`,
+  "Settings" panel, method **hero chip** with a stats strip, original/corrected two-panel preview, worker thread,
+  **Add corrected to dataset** via `featuresCreated`); it routes through the **library's** `apply_corrections` /
+  `corrections_to_code` (the single key→function mapping), so a subclass only sets `corr_key` / `method_suffix` /
+  `method_chip_*` / `needs_coords` / `suited_for` and implements `_add_method_rows` / `_current_kwargs` / `_validate` /
+  `_method_controls`. Because each correction is its own tab, **all are independently available for any variable** — the
+  measurement is a hint (`suited_for`), not a lock. Output column: `{var}_{method_suffix}` with MODIFIED provenance
+  (parent = source var). Hooks for richer output: `_apply(series, kwargs, coords) -> (corrected, extra)` (default
+  `apply_corrections`; the nighttime-offset tab overrides it to call `nighttime_zero_offset_diagnostics` once and return
+  the intermediate series), `_hero_metrics(payload)` (the hero stats strip — `_MetricSlot`s; default one
+  "records changed" slot), `_render_result(payload)` / `_status_text(payload)`. The **nighttime-offset** tab is the rich
+  one: needs site coords, a **Clamp negative values to zero** checkbox (`clamp_negatives`, default on), a **4-panel
+  diagnostic preview** (original → daily offset → series−offset → final corrected, zero lines), and a **below-zero stats
+  hero** (records < 0 before/after, overall + nighttime, green `0 ✓` when none remain). The same `clamp_negatives` option
+  is mirrored on the stepwise screening corrections panel (`widgets/corrections_panel.py`). All algorithms are library
+  work; the tabs only collect inputs, run, preview, and emit.
 - **Per-variable metadata (tags + provenance).** Model is the **library's** `diive.core.metadata` (`VariableMetadata`,
   `ProvenanceEntry`, `MetadataStore`, `provenance_attr`, `ATTRS_KEY`, `truncate_words`, `MAX_DESCRIPTION_WORDS=50`) —
   headless, no Qt, no wall-clock (timestamps are passed in). The GUI holds it app-wide in `gui/metadata_store.py`'s
@@ -790,7 +810,7 @@ Three CLIs (console scripts in `pyproject.toml`), all requiring **wind-rotation-
 
 - **Single method:** `dv.outliers.Hampel(series).run()`
 - **Chained:** `dv.outliers.StepwiseOutlierDetection()` (orchestrates multiple methods)
-- **Corrections:** `dv.corrections.MeasurementOffsetFromReplicate()`, `remove_radiation_zero_offset()`, `setto_*()`
+- **Corrections:** `dv.corrections.MeasurementOffsetFromReplicate()`, `remove_nighttime_zero_offset()`, `setto_*()`
 - **QCF aggregation:** `dv.qaqc.FlagQCF()` → 0 (good) / 1 (marginal) / 2 (poor)
 - **Full pipeline:** `dv.qaqc.StepwiseMeteoScreeningDb()` — corrections → outlier detection → quality flags
 - **Timestamp shift:** three methods comparing measured vs. theoretical radiation (requires clear days)

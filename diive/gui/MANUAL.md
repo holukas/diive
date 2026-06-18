@@ -486,17 +486,73 @@ is shown so the plots stay large:
   list applies the chain. Editing a step does *not* update the preview until you
   run (a `•` on the button marks unapplied edits).
 - **Corrections.** High-resolution corrections applied to the QCF-filtered series
-  (radiation zero-offset, relative-humidity offset, set-to-min/max, set-to-value,
+  (nighttime zero-offset, relative-humidity offset, set-to-min/max, set-to-value,
   set-exact-to-missing). The **Measurement** dropdown (auto-detected from the
   variable name, e.g. *SW - shortwave radiation*) decides which corrections are
   physically meaningful and shows only those. The **Run corrections** button applies
-  them.
+  them. (The same corrections are also available one-per-tab under the **Corrections**
+  menu — see below.)
 - **Report.** The per-step screening statistics (retained / rejected, day/night),
   with **Copy report**.
 
 **Add cleaned + flags + QCF to dataset** appends every step's flag, the overall QCF
 flag, the QCF-filtered series, and (if any corrections ran) the corrected series.
 **Copy Python** copies a reproducible script for the whole chain.
+
+### Corrections ▸ Remove nighttime zero offset
+
+Apply a single data correction to one variable, with a before/after preview. The
+**Corrections** menu has one tab per correction; they all share the same layout —
+**click a variable** in the **Target** list on the left, set the options in the
+middle, and the right side previews the **original** against the **corrected**
+series. **Run correction** applies it, **Add corrected to dataset** keeps the result
+(a new `{var}_…` column; your original is never changed), and **Copy Python** (top
+bar) copies a reproducible script. Each correction is its own tab, so any correction
+is available for any variable — the suggested use is just a hint.
+
+This first one is for variables that should read **zero at night** (shortwave
+radiation, PPFD). For each day it works out the average of that day's nighttime
+values (the **offset**), subtracts it from all of the day's records, then forces the
+nighttime to zero. It needs the **site coordinates** (from **Settings ▸ Project
+settings**) to tell day from night; the latitude / longitude / UTC offset are shown
+and pre-filled.
+
+- **Clamp negative values to zero** *(on by default).* After the offset is removed
+  and the night zeroed, set any remaining negative values (daytime included) to zero
+  as well, enforcing the variable's physical floor of zero. **Uncheck** it to keep
+  those negatives, for example to inspect them.
+
+The preview shows the **four stages** stacked: the original series, the daily
+offset, the series after subtracting the offset, and the final corrected series
+(each with a zero line so dips below zero stand out). The stats band at the top
+reports how many records were **below zero before** the correction (overall and at
+night) and **after** it — the after counts show a green **0 ✓** once nothing remains
+below zero. Adds `{var}_NIGHTOFFSET`.
+
+### Corrections ▸ Remove relative humidity offset
+
+For **relative humidity** that drifts above 100%. The daily mean of the values
+exceeding 100% is removed as an offset and anything still over 100% is capped at 100.
+Same layout as above (no site coordinates needed). Adds `{var}_RHOFFSET`.
+
+### Corrections ▸ Set to max threshold / Set to min threshold
+
+Cap or floor a variable at a known physical limit: every value **above** (max) or
+**below** (min) the **Threshold** you set is replaced with the threshold. Generic —
+works on any variable. Adds `{var}_SETMAX` or `{var}_SETMIN`.
+
+### Corrections ▸ Set to value
+
+Overwrite every record inside one or more **date ranges** with a fixed **value** —
+for example to blank out a period of known instrument trouble. Enter ranges separated
+by `;`, using `..` for a range (`2022-04-01..2022-04-05`) or a single timestamp on
+its own. Adds `{var}_SETVAL`.
+
+### Corrections ▸ Set exact values to missing
+
+Set records that **exactly equal** any of the values you list (comma-separated, e.g.
+`0, -9999`) to missing (NaN) — handy for dropping a stuck sentinel value. Adds
+`{var}_SETMISSING`.
 
 ### Data ▸ Select variables
 

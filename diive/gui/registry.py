@@ -11,6 +11,11 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.tabs.corrections_nighttime_offset import NighttimeZeroOffsetTab
+from diive.gui.tabs.corrections_relativehumidity_offset import RelativeHumidityOffsetTab
+from diive.gui.tabs.corrections_set_missing import SetExactToMissingTab
+from diive.gui.tabs.corrections_setto_threshold import SetToMaxThresholdTab, SetToMinThresholdTab
+from diive.gui.tabs.corrections_setto_value import SetToValueTab
 from diive.gui.tabs.drivers import DriverExplorerTab
 from diive.gui.tabs.events import EventsTab
 from diive.gui.tabs.features import FeatureEngineerTab
@@ -121,6 +126,16 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Daytime partitioning (REddyProc)": DaytimePartitioningReddyProcTab,
         "Daytime partitioning (ONEFlux)": DaytimePartitioningOneFluxTab,
     },
+    # Data corrections (dv.corrections). One tab per correction, all sharing
+    # BaseCorrectionTab (the RF/XGB shared-template approach).
+    "Corrections": {
+        "Remove nighttime zero offset": NighttimeZeroOffsetTab,
+        "Remove relative humidity offset": RelativeHumidityOffsetTab,
+        "Set to max threshold": SetToMaxThresholdTab,
+        "Set to min threshold": SetToMinThresholdTab,
+        "Set to value": SetToValueTab,
+        "Set exact values to missing": SetExactToMissingTab,
+    },
     # Gap-filling (dv.gapfilling). Its own menu — will grow (MDS, ...).
     "Gap-filling": {
         "XGBoost gap-filling": XGBoostGapFillingTab,
@@ -156,4 +171,7 @@ SINGLE_INSTANCE_TABS: set[str] = {
     "Data profile", "Gaps & coverage",
     "Driver explorer", "Seasonal trend & anomalies", "Spectrogram",
     "Metadata explorer", "Select variables", "Rename variables", "3D surface",
-    "Stepwise screening", "Events"}
+    "Stepwise screening", "Events",
+    "Remove nighttime zero offset", "Remove relative humidity offset",
+    "Set to max threshold", "Set to min threshold", "Set to value",
+    "Set exact values to missing"}
