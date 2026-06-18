@@ -796,7 +796,8 @@ class OverviewTab(DiiveTab):
             elif plot_type == "Diel cycle":
                 # One auto-coloured line per month (seasonal diel pattern).
                 dv.plotting.DielCycle(series).plot(
-                    ax=ax, each_month=True, show_legend=False, linewidth=1.1)
+                    ax=ax, format_style=dv.plotting.FormatStyle(show_legend=False),
+                    each_month=True, linewidth=1.1)
                 ax.axhline(0, color=_ZERO_COLOR, linestyle="--", linewidth=1.0,
                            alpha=0.6, zorder=1)
             elif plot_type == "Daily mean":
@@ -813,9 +814,10 @@ class OverviewTab(DiiveTab):
                 # Compact distribution: drop the z-score twiny axis, counts and
                 # info box so it reads cleanly at panel size.
                 dv.plotting.HistogramPlot(series).plot(
-                    ax=ax, show_title=False, show_zscores=False,
+                    ax=ax, format_style=dv.plotting.FormatStyle(show_grid=False),
+                    show_title=False, show_zscores=False,
                     show_zscore_values=False, show_info=False,
-                    show_counts=False, show_grid=False, highlight_peak=True)
+                    show_counts=False, highlight_peak=True)
             elif plot_type == "Heatmap (date/time)":
                 dv.plotting.HeatmapDateTime(series).plot(
                     ax=ax, fig=self.canvas.fig, cb_digits_after_comma="auto")

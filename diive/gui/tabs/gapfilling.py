@@ -760,11 +760,11 @@ class XGBoostGapFillingTab(DiiveTab):
             both = pd.concat([observed.dropna(), gapfilled.dropna()])
             vmin = float(np.nanpercentile(both, 1)) if len(both) else None
             vmax = float(np.nanpercentile(both, 99)) if len(both) else None
-            opts = {"vmin": vmin, "vmax": vmax, "ticks_labelsize": _HM_FONT,
-                    "axlabels_fontsize": _HM_FONT, "cb_labelsize": _HM_FONT}
+            opts = {"vmin": vmin, "vmax": vmax, "cb_labelsize": _HM_FONT}
+            hm_style = dv.plotting.FormatStyle(ticks_fontsize=_HM_FONT, axlabel_fontsize=_HM_FONT)
             dv.plotting.HeatmapDateTime(series=observed).plot(
-                ax=ax_obs, show_colormap=False, **opts)
-            dv.plotting.HeatmapDateTime(series=gapfilled).plot(ax=ax_gf, **opts)
+                ax=ax_obs, format_style=hm_style, show_colormap=False, **opts)
+            dv.plotting.HeatmapDateTime(series=gapfilled).plot(ax=ax_gf, format_style=hm_style, **opts)
             # Drop the library's auto title (series name) — the Qt headers above
             # the canvas label the panels instead.
             ax_obs.set_title("")

@@ -13,6 +13,7 @@ from pandas import Series
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.histogram import HistogramPlot
+from diive.core.plotting.styles.format import FormatStyle
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
 from diive.core.times.times import DetectFrequency
 
@@ -216,7 +217,8 @@ class FlagBase:
                        markersize=12, markeredgecolor='none', marker='X')
         hist_computation_kwargs = dict(method='n_bins', n_bins=None)
         hist_styling_kwargs = dict(highlight_peak=True, show_zscores=True, show_info=False,
-                                    show_title=False, show_zscore_values=False, show_grid=False)
+                                    show_title=False, show_zscore_values=False,
+                                    format_style=FormatStyle(show_grid=False))
         HistogramPlot(self.series, **hist_computation_kwargs).plot(ax=ax_series_hist, **hist_styling_kwargs)
 
         ax_ok.plot(self.series[ok].index, self.series[ok],
@@ -293,7 +295,8 @@ class FlagBase:
                      ax_cleaned_dt_hist, ax_series_nt_hist, ax_cleaned_nt_hist]
         hist_computation_kwargs = dict(method='n_bins', n_bins=None)
         hist_styling_kwargs = dict(highlight_peak=True, show_zscores=True, show_info=False,
-                                    show_title=False, show_zscore_values=False, show_grid=False)
+                                    show_title=False, show_zscore_values=False,
+                                    format_style=FormatStyle(show_grid=False))
         series_kwargs = dict(marker='o', mec='black', markeredgewidth=1, alpha=.2, fillstyle='none', linestyle='none')
 
         # Column 0
