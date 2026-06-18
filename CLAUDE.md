@@ -350,6 +350,14 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   `set_selected(names)`, `selected_names()`, `select`/`deselect`/`select_all`/`clear`, and a `changed` signal; optional
   `available_footer`/`selected_footer` slots take per-column buttons. Used by **Select variables** and the **XGBoost
   gap-filling** feature picker.
+- **Shared in-tab sub-navigation: `widgets/sub_tabs.py` (`SubTabs`).** The standardized look for output-heavy tabs that
+  split their content into sections (e.g. a **Model** configuration page and a **Results** dashboard) — a horizontal row
+  of segmented pill buttons over a `QStackedWidget`, only the active page taking space (so a Results page can use the
+  full tab width). Same visual language as the stepwise-screening inspector segments, extracted once. `add_page(label,
+  widget)`, `set_page(idx)`, `current_index()`, `set_label(idx, text)` (count badges), `changed(idx)`; plus
+  `add_corner_widget(widget)` (mounts e.g. action buttons to the right of the pills) and `add_corner_separator()` (a slim
+  vertical hairline `_CornerSeparator` that fades at both ends, dividing the pills from the corner buttons). The chips
+  repaint on theme change. Used by the **ML gap-filling** template; stepwise screening is a candidate to adopt it.
 - **Select variables tab** (`tabs/variable_selector.py`, `Data ▸ Select variables`, single-instance) — a dual-list
   picker (a `DualVariablePicker`: available ↔ selected) emitting a `subsetSelected` signal (same `QObject`-helper pattern
   as `featuresCreated`); `MainWindow._apply_var_subset` applies it **app-wide** (non-destructive). Like the date range,
@@ -529,35 +537,60 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   live on a `QObject` helper because `DiiveTab` is a plain `ABC`, not a `QObject` — class-level `Signal`s on a `DiiveTab`
   won't bind. When lazily creating a menu tab, call `tab.widget()` (builds it) **before** connecting `featuresCreated`,
   which `build()` sets.
-- **XGBoost gap-filling tab** (`tabs/gapfilling.py`, `Gap-filling ▸ XGBoost gap-filling`, single-instance, own top-level
-  **Gap-filling** menu). A focused gap-filling tab — **no feature-engineering settings** (do that in the Feature
-  engineering tab first, then select the engineered columns here). Three variable lists side by side: **Variables** (a
-  `VariablePanel`, far left — click to set the gap-fill target, highlighted via `set_panels`) | a `DualVariablePicker`
-  whose two columns are **Available features** (middle) and **Selected features** (right; click-to-use / click-to-remove).
-  The target is auto-excluded from the feature pool (`_refresh_features` rebuilds it on target change). **Layout** is a
-  horizontal **QHBoxLayout** (not a splitter — a splitter allocates panes wider than their fixed widgets and leaves
-  gaps): the input lists (left) | a fixed-width **settings** scroll area (no outer frame) | the **right region** (the
-  stretch column). The right region stacks a full-width **performance hero band** over a row of [observed-vs-gap-filled
-  `HeatmapDateTime` canvas (stretch) | a narrow fixed-width **SHAP feature-importance** panel flush against the right
-  edge], so the hero spans the whole width and the heatmaps push SHAP to the edge. The two heatmaps **share one value
-  scale + one colorbar** (only the right panel draws it) and a single "Date" y-axis (the right panel's redundant y-axis is
-  hidden, panels are `sharey`), so they fill far more of the canvas width than two independently-decorated panels would.
-  The SHAP canvas is built with `MplCanvas(show_toolbar=False)` so the toolbar's wide minimum doesn't stop it shrinking
-  into a narrow strip. Settings = `XGBoostTS` hyperparameters
-  (n_estimators / max_depth / learning_rate / early_stopping / test_size / random_state / negatives) + optional SHAP
-  feature reduction; every field has a code tooltip. `random_state` uses `-1` as a special "none" value (shown as
-  `none`) → the seed is omitted so XGBoost reseeds (non-reproducible); any value ≥ 0 (default 42) is a fixed reproducible
-  seed. The hero (`_PerformanceHero`) reuses the Overview's `_MetricSlot` / `_stat_separator` / `_chip_qss` building
-  blocks and a green **HELD-OUT TEST** chip; it shows the model's held-out (test-set) scores — R² / RMSE / MAE / MAPE /
-  MAXE — plus the gaps-filled count, the **fallback-fill** count (flag==2: filled by the timestamp-only fallback model
-  because a predictor was missing — a high count means weak fills), and the feature count, updated in place on each run.
-  The narrow far-right column is a **SHAP feature-importance table** (`QTableWidget`: Feature | mean |SHAP|, sorted
-  strongest-first, with a `_ShapBarDelegate` that paints a faint proportional bar behind each value) built from the
-  final model's `feature_importances_` DataFrame (`SHAP_IMPORTANCE` column). A **Copy Python** button (`CopyPythonButton`
-  → `gapfilling/codegen.py::xgboost_gapfill_to_code`) copies a runnable `XGBoostTS(...).run()` script for the current
-  target/features/settings. Runs on a worker thread: `XGBoostTS(...)` trained on the selected feature columns directly (`df[[target]+features]`), then `.run()`;
-  emits the gap-filled (`*_gfXG`) + `FLAG_*_ISFILLED` columns via `featuresCreated` with DERIVED provenance (parent =
-  target). All computation is library work; the tab only collects inputs, runs, previews, and emits.
+- **ML gap-filling tabs — `MlGapFillingTab` template** (`tabs/_ml_gapfilling_base.py`). The XGBoost tab's whole
+  layout/flow is a **reusable template** so every ML gap-filler (XGBoost now, **Random Forest** next, ...) shares one
+  identical UI. The base owns everything generic; a concrete tab is a thin subclass overriding a small **method-hook
+  surface**: class attrs `title` / `method_name` / `method_chip_label`+`_bg`+`_fg` (the hero chip), and methods
+  `_model_class()` (the library `*TS` class), `_build_model_box()` (the hyperparameter `QGroupBox`), `_method_kwargs()`
+  (constructor kwargs from those widgets), `_method_controls()` ({name: widget} for save/restore), and
+  `_codegen(target, features, kwargs, reduce, shap_factor)` (the reproducible script). The base supplies the
+  **Model/Results sub-tabs** (`SubTabs`), the title bar (Copy Python at the far-right edge) with **Run / Add** mounted as
+  sub-tab **corner widgets** (a `_CornerSeparator` divider between the pills and the buttons), the three-list
+  target/feature picker, the shared **SHAP feature-reduction** box, the performance hero, the heatmaps + SHAP table, the
+  Results dashboard, and the worker/emit flow. **Adding a method = a ~140-line subclass** (see `tabs/gapfilling.py`) plus
+  a one-line codegen wrapper + a registry entry.
+  - **XGBoost gap-filling tab** (`tabs/gapfilling.py`, `Gap-filling ▸ XGBoost gap-filling`, single-instance, own
+    top-level **Gap-filling** menu) — the first `MlGapFillingTab` subclass: model class `XGBoostTS`, lilac `XGBOOST`
+    chip, `XGBoostTS` hyperparameters (n_estimators / max_depth / learning_rate / early_stopping / test_size /
+    random_state / n_jobs / negatives) + the shared SHAP reduction, codegen `xgboost_gapfill_to_code`. **No
+    feature-engineering settings** (do that in the Feature engineering tab first, then select the engineered columns
+    here). `random_state` uses `-1` as a special "none" value (shown as `none`) → the seed is omitted so XGBoost reseeds
+    (non-reproducible); any value ≥ 0 (default 42) is a fixed reproducible seed.
+  - **Model sub-tab** = the full gap-filling workspace, three regions in a horizontal **QHBoxLayout** (not a splitter —
+    a splitter allocates panes wider than their fixed widgets and leaves gaps): the input lists (**Target**
+    `VariablePanel` far left, click to set the gap-fill target highlighted via `set_panels`, auto-excluded from the
+    feature pool by `_refresh_features` | a `DualVariablePicker` of **Available** / **Selected features**) | a
+    fixed-width **settings** scroll area | the **right region** (stretch). The right region stacks the full-width
+    **performance hero band** over a row of [observed-vs-gap-filled `HeatmapDateTime` canvas (stretch) | a narrow
+    fixed-width **SHAP feature-importance** panel flush against the right edge]. The two heatmaps **share one value scale
+    + one colorbar** (only the right panel draws it) and a single "Date" y-axis (right panel `sharey`, redundant y-axis
+    hidden). The SHAP canvas is `MplCanvas(show_toolbar=False)` so the toolbar's wide minimum doesn't stop it shrinking.
+    The hero (`_PerformanceHero`, parameterised by the subclass's chip) reuses the Overview's `_MetricSlot` /
+    `_stat_separator` / `_chip_qss` blocks + a green **HELD-OUT TEST** chip; it shows held-out (test-set) scores — R² /
+    RMSE / MAE / MAPE / MAXE — plus gaps-filled, the **fallback-fill** count (flag==2: filled by the timestamp-only
+    fallback model — a high count means weak fills), and feature count, updated in place. The SHAP table (`QTableWidget`:
+    Feature | mean |SHAP|, sorted strongest-first, a `_ShapBarDelegate` paints a faint proportional bar) is built from
+    the final model's `feature_importances_` (`SHAP_IMPORTANCE`).
+  - **Results sub-tab** = `GapFillResultsPanel` (`widgets/gapfill_results.py`), a scrollable **card dashboard** that
+    surfaces, natively in Qt, everything the library's console gap-filling report emits + extra plots. **One top row of
+    tables** — **Model performance** (held-out-test vs in-sample R²/RMSE/MAE/MedAE/MAPE/MAXE/MSE), **Configuration**
+    (regressor + hyperparameters, reproducibility), **Feature reduction (SHAP)** (only when reduction ran; an **info
+    button** with the exact threshold equation `threshold = random + k × SD` and the substituted numbers, a **dashed red
+    threshold line** at the keep/drop boundary since rows are sorted by importance, and **colour-coded rows** — green
+    kept / grey dropped / amber `.RANDOM` benchmark), and **Gap-fill quality** (observed / full-model / fallback
+    breakdown + coverage). **One row of plots below** — predicted-vs-observed scatter (1:1 line), SHAP importance bar
+    (`model.plot_feature_importances`), per-month diel cycle, cumulative sum. Every table text has a tooltip; the table
+    stylesheet appends `theme.manager.tooltip_qss()` and (CRITICAL Qt gotcha) puts no `color:` on `::item` so per-item
+    `setForeground` colours actually paint. Reads only library attributes (`scores_`/`scores_traintest_`,
+    `feature_importances_`, `feature_importances_reduction_`/`accepted_features_`, `gapfilling_df_`); the reduction
+    factor `k` (not stored on the model) is passed from the tab into `update(model, target, shap_threshold_factor=)`.
+  - **Flow:** a **Copy Python** button (`CopyPythonButton` → the subclass's `_codegen` → `gapfilling/codegen.py`'s
+    `ml_gapfill_to_code(class_name, suffix, ...)`, with `xgboost_gapfill_to_code` a thin wrapper) copies a runnable
+    `XGBoostTS(...).run()` script. Runs on a worker thread (`self._model_class()(...)` trained on `df[[target]+features]`
+    directly, optional `reduce_features`, then `.run()`); emits the gap-filled (`*_gfXG`) + `FLAG_*_ISFILLED` columns via
+    `featuresCreated` with DERIVED provenance (parent = target). Clicking **Add** keeps the Results dashboard intact
+    (`on_data_loaded` no longer resets it — the merge re-pushes data) and disables **Add** until the next run. All
+    computation is library work; the tab only collects inputs, runs, previews, and emits.
 - **Gap & coverage dashboard tab** (`tabs/gaps.py`, `Analyze ▸ Gaps & coverage`, single-instance). Diagnostics for
   missing data: stat cards + a two-panel **gap map** (availability heatmap + gap-spike timeline) + a long-gap table.
   All gap logic is the library's `dv.analysis.GapStats` — `.summary`, `.long_gaps`, the per-`ax` `plot_availability_heatmap`/
@@ -921,4 +954,4 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 
 ---
 
-**Last Updated:** 2026-06-16 | **Version:** v0.91.0 | **Package Manager:** `uv`
+**Last Updated:** 2026-06-18 | **Version:** v0.91.0 | **Package Manager:** `uv`

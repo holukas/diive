@@ -14,21 +14,26 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 
-def xgboost_gapfill_to_code(target: str, features: list[str], kwargs: dict, *,
-                            reduce: bool = False,
-                            shap_threshold_factor: float = 0.5,
-                            df_var: str = "df",
-                            load_hint: str | None = None) -> str:
-    """Render an ``XGBoostTS(...).run()`` gap-filling snippet as a string.
+def ml_gapfill_to_code(class_name: str, gapfilled_suffix: str,
+                       target: str, features: list[str], kwargs: dict, *,
+                       reduce: bool = False,
+                       shap_threshold_factor: float = 0.5,
+                       df_var: str = "df",
+                       load_hint: str | None = None) -> str:
+    """Render an ``<class_name>(...).run()`` gap-filling snippet as a string.
 
-    Mirrors what the GUI tab runs: an ``XGBoostTS`` trained on the selected
-    feature columns directly (no feature engineering), optionally reducing
-    features by SHAP importance first.
+    Mirrors what the GUI tabs run for the ML gap-fillers (``XGBoostTS`` /
+    ``RandomForestTS`` / ...): the model trained on the selected feature columns
+    directly (no feature engineering), optionally reducing features by SHAP
+    importance first. The only per-method differences are the class name and the
+    gap-filled column suffix, so all ML methods share this one renderer.
 
     Args:
+        class_name: the gap-filling class (e.g. ``"XGBoostTS"``), under ``dv.gapfilling``.
+        gapfilled_suffix: the gap-filled column suffix, for the comment (e.g. ``"_gfXG"``).
         target: the column to gap-fill.
         features: predictor columns fed to the model.
-        kwargs: keyword args for ``XGBoostTS`` (without ``input_df``/``target_col``).
+        kwargs: keyword args for the model (without ``input_df``/``target_col``).
         reduce: emit a ``reduce_features(...)`` call before the run.
         shap_threshold_factor: the reduction threshold (only when ``reduce``).
         df_var: variable name used for the input DataFrame.
@@ -43,7 +48,7 @@ def xgboost_gapfill_to_code(target: str, features: list[str], kwargs: dict, *,
     lines += [f"target = {target!r}",
               f"features = {list(features)!r}",
               "",
-              "model = dv.gapfilling.XGBoostTS(",
+              f"model = dv.gapfilling.{class_name}(",
               f"    input_df={df_var}[[target] + features],",
               "    target_col=target,"]
     for key, value in kwargs.items():
@@ -53,6 +58,19 @@ def xgboost_gapfill_to_code(target: str, features: list[str], kwargs: dict, *,
         lines.append(f"model.reduce_features(shap_threshold_factor={shap_threshold_factor!r})")
     lines += ["model.run()",
               "",
-              "gapfilled = model.get_gapfilled_target()  # observed + filled (*_gfXG)",
+              f"gapfilled = model.get_gapfilled_target()  # observed + filled (*{gapfilled_suffix})",
               "flag = model.get_flag()  # 0 = observed, 1 = gap-filled, 2 = fallback"]
     return "\n".join(lines) + "\n"
+
+
+def xgboost_gapfill_to_code(target: str, features: list[str], kwargs: dict, *,
+                            reduce: bool = False,
+                            shap_threshold_factor: float = 0.5,
+                            df_var: str = "df",
+                            load_hint: str | None = None) -> str:
+    """Render an ``XGBoostTS(...).run()`` snippet (thin wrapper over
+    :func:`ml_gapfill_to_code`)."""
+    return ml_gapfill_to_code(
+        "XGBoostTS", "_gfXG", target, features, kwargs,
+        reduce=reduce, shap_threshold_factor=shap_threshold_factor,
+        df_var=df_var, load_hint=load_hint)

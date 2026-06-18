@@ -690,9 +690,15 @@ it has **no feature-engineering options**. If you want engineered predictors (la
 rolling means, and so on), build them first in **Data ▸ Feature engineering**, then
 select them here.
 
-Set up the run with **three variable lists** on the left:
+The tab has two sub-tabs: **Model** (set up and run the gap-filling, see the
+performance band, heatmaps and SHAP table) and **Results** (a fuller dashboard of
+tables and plots, filled in after a run). The **Copy Python** button sits in the
+title bar; **Run gap-filling** and **Add results to dataset** sit next to the
+sub-tab pills.
 
-1. **Variables** (far left). **Click** a variable to make it the **target** (the one
+Set up the run on the **Model** sub-tab, with **three variable lists** on the left:
+
+1. **Target** (far left). **Click** a variable to make it the **target** (the one
    whose gaps get filled). The chosen target is highlighted and shown as *Target:* at
    the bottom.
 2. **Available features** (middle). **Click** a variable to use it as a model
@@ -727,6 +733,18 @@ Click **Run gap-filling** (it runs in the background). When it finishes:
 - On the right, a **SHAP feature importance** table ranks how much each predictor
   drove the model (over all complete observations). Each row shows the variable, its
   mean |SHAP| value, and a small bar for its relative magnitude.
+
+Open the **Results** sub-tab for a fuller report of the same run:
+
+- A top row of tables — **Model performance** (held-out-test vs in-sample scores
+  across R²/RMSE/MAE/MedAE/MAPE/MAXE/MSE), **Configuration** (the exact settings, for
+  reproducibility), **Feature reduction** (only if you enabled it — each feature's
+  importance vs. the random-baseline threshold, with kept features in green, dropped
+  in grey, and an ⓘ button explaining the threshold equation), and **Gap-fill
+  quality** (the observed / model-filled / fallback-filled breakdown + coverage).
+- A row of plots — **predicted vs. observed** (with a 1:1 line), the **SHAP
+  importance** bar chart, the gap-filled **diel cycle** by month, and the **cumulative
+  sum**. Hover any table value for an explanation.
 
 **Copy Python** (top bar) puts a runnable diive script for the current
 target/features/settings on the clipboard, so a point-and-click run stays
