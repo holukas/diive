@@ -61,7 +61,9 @@ from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.overview import _MetricSlot, _chip_qss, _stat_separator
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.dual_variable_picker import DualVariablePicker
+from diive.gui.widgets.gapfill_results import GapFillResultsPanel
 from diive.gui.widgets.mpl_canvas import MplCanvas
+from diive.gui.widgets.sub_tabs import SubTabs
 from diive.gui.widgets.variable_panel import VariablePanel
 
 _C_MUTED = "#6B7780"
@@ -253,46 +255,64 @@ class XGBoostGapFillingTab(DiiveTab):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # Action bar.
-        bar = QHBoxLayout()
-        bar.setContentsMargins(10, 8, 10, 8)
+        # Title bar (the buttons sit in the sub-tab row, not here).
+        titlebar = QHBoxLayout()
+        titlebar.setContentsMargins(10, 8, 10, 8)
         title = QLabel(theme.manager.label_text(self.title))
         title.setFont(theme.manager.tracked_font(point_delta=1.0))
         title.setStyleSheet("font-weight: bold;")
-        bar.addWidget(title)
-        bar.addStretch(1)
+        titlebar.addWidget(title)
+        titlebar.addStretch(1)
+        # Copy Python sits at the far-right edge of the header row, away from the
+        # Run/Add action buttons in the sub-tab row below.
         self.copy_btn = CopyPythonButton(self._python_code)
         self.copy_btn.setToolTip(
             "Copy a runnable diive script reproducing this gap-filling run.")
-        bar.addWidget(self.copy_btn)
+        titlebar.addWidget(self.copy_btn)
+        outer.addLayout(titlebar)
+
+        # Action buttons (built here, mounted into the sub-tab row so they sit
+        # next to the page pills and stay prominent).
         self.run_btn = QPushButton("Run gap-filling")
         self.run_btn.setToolTip("Train XGBoost on the selected features and fill the target's gaps.")
         theme.set_button_role(self.run_btn, "confirm")
         self.run_btn.clicked.connect(self._run)
-        bar.addWidget(self.run_btn)
         self.add_btn = QPushButton("Add results to dataset")
         self.add_btn.setToolTip("Append the gap-filled series and its flag to the variable list.")
         self.add_btn.setEnabled(False)
         self.add_btn.clicked.connect(self._add)
         theme.set_button_role(self.add_btn, "confirm")
-        bar.addWidget(self.add_btn)
-        outer.addLayout(bar)
 
-        # Three columns: inputs (target + feature picker) | settings | the right
-        # region (stretch). A plain HBox (not a splitter) honours the fixed widths
-        # exactly and hands all remaining width to the right region — a splitter
-        # leaves gaps by allocating panes wider than their fixed widgets. The
-        # right region stacks the full-width hero band over a row of
-        # [heatmaps (stretch) | SHAP panel pinned at the far-right edge], so the
-        # hero spans all the way right and the heatmaps push SHAP to the edge.
-        main = QHBoxLayout()
-        main.setContentsMargins(0, 0, 0, 0)
-        main.setSpacing(0)
-        main.addWidget(self._build_inputs())
-        main.addWidget(self._build_settings())
-        main.addWidget(self._build_results(), stretch=1)
-        outer.addLayout(main)
+        # Sub-tabs split the configuration+output (Model) from a Results page
+        # we'll populate later — the standardized layout for output-heavy tabs.
+        # The action buttons live in the tab row (corner), always visible.
+        self.subtabs = SubTabs()
+        self.subtabs.add_page("Model", self._build_model_page())
+        self.subtabs.add_page("Results", self._build_results_page())
+        self.subtabs.add_corner_separator()
+        self.subtabs.add_corner_widget(self.run_btn)
+        self.subtabs.add_corner_widget(self.add_btn)
+        outer.addWidget(self.subtabs, stretch=1)
         return root
+
+    def _build_model_page(self) -> QWidget:
+        """Model page = the full gap-filling workspace: inputs | settings | the
+        results region (hero + heatmaps + SHAP). A plain HBox (not a splitter)
+        honours the fixed widths and hands the rest to the results region."""
+        page = QWidget()
+        body = QHBoxLayout(page)
+        body.setContentsMargins(10, 4, 10, 4)
+        body.setSpacing(0)
+        body.addWidget(self._build_inputs())
+        body.addWidget(self._build_settings())
+        body.addWidget(self._build_results(), stretch=1)
+        return page
+
+    def _build_results_page(self) -> QWidget:
+        """Results page — a card dashboard with the full score/config/quality
+        tables and extra diagnostic + temporal plots (populated after a run)."""
+        self.results_panel = GapFillResultsPanel()
+        return self.results_panel
 
     def _build_inputs(self) -> QWidget:
         host = QWidget()
@@ -300,7 +320,7 @@ class XGBoostGapFillingTab(DiiveTab):
         v.setContentsMargins(10, 6, 10, 6)
 
         intro = QLabel(
-            "Click a variable in 'Variables' to set the gap-fill target. Click a "
+            "Click a variable in 'Target' to set the gap-fill target. Click a "
             "variable in 'Available features' to use it as a model feature; click "
             "one in 'Selected features' to remove it.")
         intro.setWordWrap(True)
@@ -311,7 +331,7 @@ class XGBoostGapFillingTab(DiiveTab):
 
         # --- target list (far left) ---
         tcol = QVBoxLayout()
-        tcol.addWidget(self._list_header("Variables", "click to set target"))
+        tcol.addWidget(self._list_header("Target", "click to set target"))
         self.target_list = VariablePanel()
         self.target_list.list.setToolTip("Click a variable to set it as the gap-fill target.")
         self.target_list.selected.connect(lambda name, _c: self._set_target(name))
@@ -540,6 +560,8 @@ class XGBoostGapFillingTab(DiiveTab):
         self._created = set(created or set())
         self._all_cols = [str(c) for c in df.columns]
         self._result_df = None
+        # Keep any rendered results visible across data pushes (e.g. our own
+        # 'Add results' merge); only the Add button gates on a fresh run.
         self.add_btn.setEnabled(False)
 
         self.target_list.set_variables(self._all_cols, self._created)
@@ -575,7 +597,7 @@ class XGBoostGapFillingTab(DiiveTab):
             return
         feats = self._feature_cols()
         if not self._target:
-            self.status.setText("Click a variable in 'Variables' to set the gap-fill target.")
+            self.status.setText("Click a variable in 'Target' to set the gap-fill target.")
         elif not feats:
             self.status.setText(
                 f"Target: {self._target}. Now click variables in 'Available features'.")
@@ -687,9 +709,12 @@ class XGBoostGapFillingTab(DiiveTab):
             }
             out.attrs[ATTRS_KEY] = attrs
             n_features = work.shape[1] - 1  # everything except the target
+            # Pass the reduction factor so the Results card can show the exact
+            # threshold equation/line (None when reduction was off).
+            factor = shap_factor if reduce else None
             self._sig.done.emit(
                 (out, work[target], gapfilled, scores, target, n_features,
-                 n_fallback, model))
+                 n_fallback, model, factor))
         except Exception as err:
             self._sig.failed.emit(str(err))
 
@@ -701,7 +726,7 @@ class XGBoostGapFillingTab(DiiveTab):
 
     # --- results -------------------------------------------------------
     def _on_done(self, payload) -> None:
-        out, observed, gapfilled, scores, target, n_features, n_fallback, model = payload
+        out, observed, gapfilled, scores, target, n_features, n_fallback, model, factor = payload
         self._set_running(False)
         self._result_df = out
         n_filled = int((out[str(gapfilled.name)].notna() & observed.isna()).sum())
@@ -711,6 +736,7 @@ class XGBoostGapFillingTab(DiiveTab):
         self.add_btn.setEnabled(True)
         self._plot(observed, gapfilled)
         self._fill_shap_table(model)
+        self.results_panel.update(model, target, shap_threshold_factor=factor)
 
     def _on_failed(self, msg: str) -> None:
         self._set_running(False)
@@ -720,6 +746,7 @@ class XGBoostGapFillingTab(DiiveTab):
         ax.text(0.5, 0.5, "Gap-filling failed", ha="center", va="center",
                 transform=ax.transAxes)
         self.canvas.draw()
+        self.results_panel.reset(f"Gap-filling failed: {msg}")
 
     def _fill_shap_table(self, model) -> None:
         """Fill the SHAP table from the model's feature importances (a DataFrame
