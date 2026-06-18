@@ -157,6 +157,62 @@ class LongTermGapFillingBase:
             raise Exception(f'Not available: _feature_importance_per_year.')
         return self._feature_importance_per_year
 
+    @property
+    def scores_overall_(self) -> dict:
+        """In-sample scores averaged across all years (one value per metric)."""
+        return self._mean_scores(self.scores_)
+
+    @property
+    def scores_traintest_overall_(self) -> dict:
+        """Held-out test scores averaged across all years (one value per metric)."""
+        return self._mean_scores(self.scores_traintest_)
+
+    @staticmethod
+    def _mean_scores(scores_by_year: dict) -> dict:
+        """Mean of each numeric metric across the per-year score dicts."""
+        keys = set().union(*[s.keys() for s in scores_by_year.values()]) if scores_by_year else set()
+        out = {}
+        for k in keys:
+            vals = [s[k] for s in scores_by_year.values() if isinstance(s.get(k), (int, float))]
+            if vals:
+                out[k] = sum(vals) / len(vals)
+        return out
+
+    def get_gapfilled_target(self) -> Series:
+        """Gap-filled target series across all years (alias of ``gapfilled_``)."""
+        return self.gapfilled_
+
+    def get_flag(self) -> Series:
+        """Gap-filling flag across all years (0=observed, 1=gap-filled, 2=fallback).
+
+        The flag column name is consistent across the per-year models (it derives
+        from the target name), so it is read from the first yearly model."""
+        model = next(iter(self.results_yearly_.values()))
+        return self.gapfilling_df_[model.target_gapfilled_flag_col]
+
+    def run(self, reduce_features: bool = False, shap_threshold_factor: float = 0.5):
+        """Run the full long-term gap-filling flow in one call.
+
+        Convenience wrapper around the staged API (``create_yearpools`` ->
+        ``initialize_yearly_models`` -> optional ``reduce_features_across_years``
+        -> ``fillgaps``), mirroring the single-model classes' ``run()``.
+
+        Args:
+            reduce_features: reduce features per year by SHAP importance before
+                the final per-year models (keeps features selected in >=1 year).
+            shap_threshold_factor: reduction threshold factor (only used when
+                ``reduce_features``).
+
+        Returns:
+            self (so callers can chain ``.gapfilled_`` etc.).
+        """
+        self.create_yearpools()
+        self.initialize_yearly_models()
+        if reduce_features:
+            self.reduce_features_across_years(shap_threshold_factor=shap_threshold_factor)
+        self.fillgaps()
+        return self
+
     def _init_input_df(self):
         # Features should be pre-engineered before passing to LongTermGapFillingBase
         # This method is now a no-op since feature engineering happens upstream
@@ -190,13 +246,13 @@ class LongTermGapFillingBase:
             )
             self._results_yearly[year] = model
 
-    def reduce_features_across_years(self):
+    def reduce_features_across_years(self, shap_threshold_factor: float = 0.5):
         """Reduce features and detect features that were selected in at least one year."""
         features_reduced_across_years = []
         for year, year_dict in self._yearpools.items():
             info(f"Reducing features for {year} ...", verbose=self.verbose)
             rfts = self.results_yearly_[year]
-            rfts.reduce_features(shap_threshold_factor=0.5)
+            rfts.reduce_features(shap_threshold_factor=shap_threshold_factor)
             features_reduced_across_years.append(rfts.accepted_features_)
 
         # Flatten common_features (list of lists)

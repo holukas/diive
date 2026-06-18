@@ -91,6 +91,17 @@
   is trained on the selected feature columns directly (no feature-engineering settings). A **Copy Python** button copies a
   runnable script; **Add results to dataset** emits the gap-filled + ISFILLED flag columns with DERIVED provenance and
   keeps the Results dashboard intact. All computation is library work (`XGBoostTS` / `RandomForestTS`).
+  - **Long-term (per-year) mode** — both ML gap-filling tabs now offer a **Long-term mode** checkbox that, instead of one
+    model for the whole record, builds one model per calendar year from that year plus its two closest neighbours
+    (`LongTermGapFillingXGBoostTS` / `LongTermGapFillingRandomForestTS`). The checkbox is **selectable only when the record
+    spans more than three years** (≥ 4 distinct years), with a hint showing the detected span. In long-term mode the hero
+    band shows the per-year held-out scores **averaged across years**, the Model-page SHAP table shows mean importance
+    across years, and the **Results** dashboard switches to a long-term view: a **Performance per year** table (one row per
+    year + an across-year **Average** row), a **Year pools** table (which years trained each year's model), a
+    **Feature importance per year** table (feature × year + a mean column), plus per-year-R² / cumulative / diel /
+    mean-importance plots. **Copy Python** renders the long-term `.run(reduce_features=…)` flow. New library support:
+    `LongTermGapFillingBase.run()`, `get_gapfilled_target()`, `get_flag()`, `scores_overall_` /
+    `scores_traintest_overall_`, and a `shap_threshold_factor` arg on `reduce_features_across_years()`.
 - **Gap-filling: `plot_feature_importances` on the ML base class** — `MlRegressorGapFillingBase` (so `RandomForestTS` /
   `XGBoostTS` and variants) gained a two-phase SHAP feature-importance bar plot: `plot_feature_importances(ax=None,
   traintest=False, max_features=None, …)`. `ax=None` builds a standalone figure; passing an `ax` draws into it (embeddable

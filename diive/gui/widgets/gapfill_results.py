@@ -257,6 +257,180 @@ class GapFillResultsPanel(QScrollArea):
         ]))
         self._root.addStretch(1)
 
+    # --- long-term update ---------------------------------------------
+    def update_longterm(self, model, target: str,
+                        shap_threshold_factor: float | None = None) -> None:
+        """Render the dashboard for a long-term (per-year) gap-filling model.
+
+        Long-term models build one model per calendar year (from that year + its
+        two closest neighbours), so the natural views differ from the single
+        model: the year pools, per-year scores with an across-year average, and
+        feature importance per year. All numbers come from the fitted library
+        model (``scores_traintest_``/``scores_``, ``yearpools``,
+        ``feature_importance_per_year``, ``get_flag``)."""
+        self._reset_layout()
+        try:
+            flag = model.get_flag()
+            gapfilled = model.get_gapfilled_target()
+            observed = model.gapfilling_df_[target]
+        except Exception as err:
+            self.reset(f"Could not read long-term results: {err}")
+            return
+
+        # Top row of tables: config, per-year scores (+ average), year pools, quality.
+        tables = QHBoxLayout()
+        tables.setSpacing(14)
+        tables.addWidget(self._config_card(model, target), stretch=1)
+        tables.addWidget(self._yearly_scores_card(model), stretch=1)
+        tables.addWidget(self._yearpools_card(model), stretch=1)
+        tables.addWidget(self._quality_card(observed, flag), stretch=1)
+        self._root.addLayout(tables)
+
+        # Feature importance per year (its own full-width card — it can be wide).
+        fi_card = self._fi_per_year_card(model)
+        if fi_card is not None:
+            self._root.addWidget(fi_card)
+
+        # Plots: per-year skill, cumulative, diel cycle, feature importance (mean).
+        self._root.addLayout(self._plot_row([
+            ("R² per year (held-out test)", lambda ax: self._plot_yearly_r2(ax, model)),
+            ("Cumulative sum (gap-filled)", lambda ax: self._plot_cumulative(ax, gapfilled)),
+            ("Diel cycle (gap-filled, by month)", lambda ax: self._plot_diel(ax, gapfilled)),
+            ("Feature importance (mean across years)",
+             lambda ax: self._plot_fi_mean(ax, model)),
+        ]))
+        self._root.addStretch(1)
+
+    def _yearly_scores_card(self, model) -> _Card:
+        card = _Card(
+            "Performance per year",
+            "Held-out test scores of each year's model; the last row is the "
+            "across-year average (also shown in the hero band).")
+        try:
+            tt = dict(getattr(model, "scores_traintest_", {}) or {})
+        except Exception:
+            tt = {}
+        years = sorted(tt.keys())
+        # Compact metric subset (same as the hero band).
+        cols = [("R²", "r2", "f3"), ("RMSE", "rmse", "g"), ("MAE", "mae", "g"),
+                ("MAPE", "mape", "g"), ("MAXE", "maxe", "g")]
+        headers = ["Year"] + [c[0] for c in cols]
+        n_rows = len(years) + 1  # + average row
+        table = self._make_table(headers, n_rows)
+        for r, year in enumerate(years):
+            self._set_cell(table, r, 0, str(year), bold=True, align_left=True)
+            for c, (_lbl, key, kind) in enumerate(cols, start=1):
+                self._set_cell(table, r, c, _fmt(tt[year].get(key), kind))
+        # Average row.
+        avg = self._mean_metrics(tt)
+        ar = len(years)
+        self._set_cell(table, ar, 0, "Average", bold=True, align_left=True,
+                       color=_C_ACCEPT)
+        for c, (_lbl, key, kind) in enumerate(cols, start=1):
+            self._set_cell(table, ar, c, _fmt(avg.get(key), kind), bold=True,
+                           color=_C_ACCEPT)
+        self._fit_table_height(table, n_rows, cap=16)
+        card.body().addWidget(table)
+        return card
+
+    @staticmethod
+    def _mean_metrics(scores_by_year: dict) -> dict:
+        keys = set().union(*[s.keys() for s in scores_by_year.values()]) if scores_by_year else set()
+        out = {}
+        for k in keys:
+            vals = [s[k] for s in scores_by_year.values() if isinstance(s.get(k), (int, float))]
+            if vals:
+                out[k] = sum(vals) / len(vals)
+        return out
+
+    def _yearpools_card(self, model) -> _Card:
+        card = _Card(
+            "Year pools",
+            "Each year is gap-filled by a model trained on the years listed "
+            "(the year itself plus its two closest neighbours).")
+        try:
+            pools = {y: d.get("poolyears", []) for y, d in model.yearpools.items()}
+        except Exception:
+            pools = {}
+        years = sorted(pools.keys())
+        table = self._make_table(["Year", "Trained on"], len(years) or 1)
+        if years:
+            for r, year in enumerate(years):
+                self._set_cell(table, r, 0, str(year), bold=True, align_left=True)
+                self._set_cell(table, r, 1,
+                               ", ".join(str(p) for p in pools[year]),
+                               align_left=True)
+        else:
+            self._set_cell(table, 0, 0, "—", align_left=True)
+            self._set_cell(table, 0, 1, "no pools", align_left=True)
+        self._fit_table_height(table, len(years) or 1, cap=16)
+        card.body().addWidget(table)
+        return card
+
+    def _fi_per_year_card(self, model) -> _Card | None:
+        try:
+            fi = model.feature_importance_per_year  # DataFrame: index=feature, cols=years
+        except Exception:
+            return None
+        if fi is None or fi.empty:
+            return None
+        fi = fi.copy()
+        fi["Mean"] = fi.mean(axis=1)
+        fi = fi.sort_values("Mean", ascending=False)
+        card = _Card(
+            "Feature importance per year (SHAP)",
+            "Mean |SHAP| importance of each feature in each year's model. Blank = "
+            "the feature was not selected that year. Sorted by the across-year mean.")
+        year_cols = [c for c in fi.columns if c != "Mean"]
+        headers = ["Feature"] + [str(c) for c in year_cols] + ["Mean"]
+        table = self._make_table(headers, len(fi))
+        for r, (feat, row) in enumerate(fi.iterrows()):
+            self._set_cell(table, r, 0, str(feat), align_left=True, bold=True)
+            for c, col in enumerate(year_cols, start=1):
+                val = row[col]
+                # NB: per-year values are numpy.float32 (not a Python float
+                # subclass), so test with pd.notna, not isinstance(float).
+                txt = f"{float(val):.4f}" if pd.notna(val) else "—"
+                self._set_cell(table, r, c, txt)
+            self._set_cell(table, r, len(year_cols) + 1, f"{row['Mean']:.4f}",
+                           bold=True, color=_C_ACCEPT)
+        self._fit_table_height(table, len(fi), cap=16)
+        card.body().addWidget(table)
+        return card
+
+    def _plot_yearly_r2(self, canvas, model) -> None:
+        ax = canvas.new_axes(1)[0]
+        try:
+            tt = dict(getattr(model, "scores_traintest_", {}) or {})
+        except Exception:
+            tt = {}
+        years = sorted(tt.keys())
+        r2 = [tt[y].get("r2", float("nan")) for y in years]
+        ax.bar(range(len(years)), r2, color="#2196F3", width=0.7)
+        ax.set_xticks(range(len(years)))
+        ax.set_xticklabels([str(y) for y in years], rotation=45, ha="right",
+                           fontsize=_PLOT_FONT)
+        ax.set_ylabel("R² (held-out test)", fontsize=_PLOT_FONT)
+        ax.tick_params(labelsize=_PLOT_FONT)
+        ax.axhline(0, color="#90A4AE", linewidth=0.8)
+        ax.grid(axis="y", alpha=0.3)
+
+    def _plot_fi_mean(self, canvas, model) -> None:
+        ax = canvas.new_axes(1)[0]
+        try:
+            fi = model.feature_importance_per_year
+            ser = fi.mean(axis=1).sort_values(ascending=True).dropna().tail(12)
+        except Exception:
+            ax.text(0.5, 0.5, "No feature importance", ha="center", va="center",
+                    transform=ax.transAxes, fontsize=_PLOT_FONT)
+            return
+        ax.barh(range(len(ser)), ser.to_numpy(), color="#003A70", height=0.7)
+        ax.set_yticks(range(len(ser)))
+        ax.set_yticklabels([str(i) for i in ser.index], fontsize=_PLOT_FONT)
+        ax.set_xlabel("mean |SHAP|", fontsize=_PLOT_FONT)
+        ax.tick_params(labelsize=_PLOT_FONT)
+        ax.grid(axis="x", alpha=0.3)
+
     # --- scores --------------------------------------------------------
     def _scores_card(self, model) -> _Card:
         card = _Card(

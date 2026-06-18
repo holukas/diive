@@ -27,7 +27,11 @@ from PySide6.QtWidgets import (
     QSpinBox,
 )
 
-from diive.gapfilling.codegen import randomforest_gapfill_to_code
+from diive.gapfilling.codegen import (
+    longterm_randomforest_gapfill_to_code,
+    randomforest_gapfill_to_code,
+)
+from diive.gapfilling.longterm import LongTermGapFillingRandomForestTS
 from diive.gapfilling.randomforest_ts import RandomForestTS
 from diive.gui.tabs._ml_gapfilling_base import MlGapFillingTab
 
@@ -50,6 +54,9 @@ class RandomForestGapFillingTab(MlGapFillingTab):
     # --- method hooks --------------------------------------------------
     def _model_class(self):
         return RandomForestTS
+
+    def _longterm_model_class(self):
+        return LongTermGapFillingRandomForestTS
 
     def _build_model_box(self) -> QGroupBox:
         model_box = QGroupBox("Random Forest model")
@@ -144,5 +151,10 @@ class RandomForestGapFillingTab(MlGapFillingTab):
 
     def _codegen(self, target, features, kwargs, reduce, shap_factor) -> str:
         return randomforest_gapfill_to_code(
+            target, features, kwargs, reduce=reduce,
+            shap_threshold_factor=shap_factor)
+
+    def _longterm_codegen(self, target, features, kwargs, reduce, shap_factor) -> str:
+        return longterm_randomforest_gapfill_to_code(
             target, features, kwargs, reduce=reduce,
             shap_threshold_factor=shap_factor)

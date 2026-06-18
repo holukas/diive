@@ -28,7 +28,11 @@ from PySide6.QtWidgets import (
     QSpinBox,
 )
 
-from diive.gapfilling.codegen import xgboost_gapfill_to_code
+from diive.gapfilling.codegen import (
+    longterm_xgboost_gapfill_to_code,
+    xgboost_gapfill_to_code,
+)
+from diive.gapfilling.longterm import LongTermGapFillingXGBoostTS
 from diive.gapfilling.xgboost_ts import XGBoostTS
 from diive.gui.tabs._ml_gapfilling_base import MlGapFillingTab
 
@@ -48,6 +52,9 @@ class XGBoostGapFillingTab(MlGapFillingTab):
     # --- method hooks --------------------------------------------------
     def _model_class(self):
         return XGBoostTS
+
+    def _longterm_model_class(self):
+        return LongTermGapFillingXGBoostTS
 
     def _build_model_box(self) -> QGroupBox:
         model_box = QGroupBox("XGBoost model")
@@ -131,5 +138,10 @@ class XGBoostGapFillingTab(MlGapFillingTab):
 
     def _codegen(self, target, features, kwargs, reduce, shap_factor) -> str:
         return xgboost_gapfill_to_code(
+            target, features, kwargs, reduce=reduce,
+            shap_threshold_factor=shap_factor)
+
+    def _longterm_codegen(self, target, features, kwargs, reduce, shap_factor) -> str:
+        return longterm_xgboost_gapfill_to_code(
             target, features, kwargs, reduce=reduce,
             shap_threshold_factor=shap_factor)

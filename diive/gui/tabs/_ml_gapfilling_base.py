@@ -242,8 +242,25 @@ class MlGapFillingTab(DiiveTab):
     method_chip_bg = "#ECEFF1"
     method_chip_fg = "#37474F"
 
+    #: Minimum number of distinct years in the record for the long-term option to
+    #: be selectable ("spans more than 3 years" -> at least 4 distinct years).
+    longterm_min_years = 4
+
     def _model_class(self):
         """Return the library gap-filling class (e.g. ``XGBoostTS``)."""
+        raise NotImplementedError
+
+    def _longterm_model_class(self):
+        """Return the per-year long-term gap-filling class (e.g.
+        ``LongTermGapFillingXGBoostTS``), or None if the method has no long-term
+        variant (then the long-term option is never shown)."""
+        return None
+
+    def _longterm_codegen(self, target: str, features: list[str], kwargs: dict,
+                          reduce: bool, shap_factor: float) -> str:
+        """Return a runnable diive snippet reproducing a long-term run.
+
+        Subclasses that support a long-term variant must override this."""
         raise NotImplementedError
 
     def _build_model_box(self) -> QGroupBox:
@@ -272,6 +289,7 @@ class MlGapFillingTab(DiiveTab):
         self._target: str = ""
         self._running = False
         self._result_df: pd.DataFrame | None = None  # columns to emit on "Add"
+        self._n_years = 0  # distinct years in the current record (gates long-term)
 
         self._sig = _Signals()
         self._sig.done.connect(self._on_done)
@@ -394,12 +412,48 @@ class MlGapFillingTab(DiiveTab):
         inner = QWidget()
         v = QVBoxLayout(inner)
 
+        lt_box = self._build_longterm_box()         # long-term per-year mode (optional)
+        if lt_box is not None:
+            v.addWidget(lt_box)
         v.addWidget(self._build_model_box())       # method-specific hyperparameters
         v.addWidget(self._build_reduction_box())   # shared SHAP feature reduction
         v.addStretch(1)
         scroll.setWidget(inner)
         outer.addWidget(scroll, stretch=1)
         return host
+
+    def _build_longterm_box(self) -> QGroupBox | None:
+        """Optional 'Long-term' mode box. Only built when the method has a
+        long-term variant; the checkbox is enabled only when the record spans
+        enough years (set in ``on_data_loaded``)."""
+        self.longterm_cb = None
+        if self._longterm_model_class() is None:
+            return None
+        box = QGroupBox("Long-term mode")
+        lv = QVBoxLayout(box)
+        self.longterm_cb = QCheckBox("Build one model per year (neighbouring years)")
+        self.longterm_cb.setToolTip(
+            "Gap-fill each calendar year with its own model, trained on that year "
+            "plus its two closest neighbouring years (e.g. 2016 is filled from "
+            "2015-2017). This tracks slow inter-annual change better than one model "
+            "for the whole record.\n\n"
+            f"Available only when the record spans more than "
+            f"{self.longterm_min_years - 1} years.")
+        self.longterm_cb.toggled.connect(self._on_longterm_toggled)
+        lv.addWidget(self.longterm_cb)
+        self.longterm_hint = QLabel()
+        self.longterm_hint.setWordWrap(True)
+        self.longterm_hint.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
+        lv.addWidget(self.longterm_hint)
+        return box
+
+    def _longterm_enabled(self) -> bool:
+        """True if the long-term checkbox exists, is enabled, and is checked."""
+        cb = getattr(self, "longterm_cb", None)
+        return bool(cb is not None and cb.isEnabled() and cb.isChecked())
+
+    def _on_longterm_toggled(self, *_) -> None:
+        self._update_status()
 
     def _build_reduction_box(self) -> QGroupBox:
         """The shared SHAP feature-reduction controls (every ML method has them)."""
@@ -496,10 +550,10 @@ class MlGapFillingTab(DiiveTab):
             "complete observations (not just the held-out test set, unlike the "
             "performance scores above).")
         v.addWidget(header)
-        caption = QLabel("Final model, all complete observations")
-        caption.setWordWrap(True)
-        caption.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
-        v.addWidget(caption)
+        self.shap_caption = QLabel("Final model, all complete observations")
+        self.shap_caption.setWordWrap(True)
+        self.shap_caption.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
+        v.addWidget(self.shap_caption)
 
         self.shap_table = QTableWidget(0, 2)
         self.shap_table.setHorizontalHeaderLabels(["Feature", "mean |SHAP|"])
@@ -540,6 +594,7 @@ class MlGapFillingTab(DiiveTab):
         # 'Add results' merge); only the Add button gates on a fresh run.
         self.add_btn.setEnabled(False)
 
+        self._update_longterm_availability(df)
         self.target_list.set_variables(self._all_cols, self._created)
         if self._target not in self._all_cols:
             self._target = ""
@@ -547,6 +602,27 @@ class MlGapFillingTab(DiiveTab):
         self.target_list.set_panels([self._target] if self._target else [])
         self._update_target_label()
         self._update_status()
+
+    def _update_longterm_availability(self, df) -> None:
+        """Enable the long-term checkbox only when the record spans enough years."""
+        cb = getattr(self, "longterm_cb", None)
+        try:
+            self._n_years = int(pd.DatetimeIndex(df.index).year.nunique())
+        except Exception:
+            self._n_years = 0
+        if cb is None:
+            return
+        enough = self._n_years >= self.longterm_min_years
+        cb.setEnabled(enough)
+        if not enough:
+            cb.setChecked(False)
+            self.longterm_hint.setText(
+                f"Record spans {self._n_years} year(s) — long-term needs more than "
+                f"{self.longterm_min_years - 1}. One model is used for the whole record.")
+        else:
+            self.longterm_hint.setText(
+                f"Record spans {self._n_years} years — one model per year, each "
+                f"trained on the year plus its two closest neighbours.")
 
     def _set_target(self, name: str) -> None:
         if not name or name not in self._all_cols:
@@ -578,13 +654,19 @@ class MlGapFillingTab(DiiveTab):
             self.status.setText(
                 f"Target: {self._target}. Now click variables in 'Available features'.")
         else:
+            mode = (f" — long-term ({self._n_years} per-year models)"
+                    if self._longterm_enabled() else "")
             self.status.setText(
-                f"Target: {self._target} — {len(feats)} feature(s) selected. Run gap-filling.")
+                f"Target: {self._target} — {len(feats)} feature(s) selected{mode}. "
+                f"Run gap-filling.")
 
     # --- state ---------------------------------------------------------
     def _controls(self) -> dict:
-        return {**self._method_controls(),
-                "reduce": self.reduce_cb, "shap_factor": self.shap_factor}
+        ctrls = {**self._method_controls(),
+                 "reduce": self.reduce_cb, "shap_factor": self.shap_factor}
+        if getattr(self, "longterm_cb", None) is not None:
+            ctrls["longterm"] = self.longterm_cb
+        return ctrls
 
     def save_state(self) -> dict:
         from diive.gui.widgets.state_utils import save_controls
@@ -610,7 +692,8 @@ class MlGapFillingTab(DiiveTab):
         feats = self._feature_cols()
         if not target or not feats:
             return None
-        return self._codegen(
+        gen = self._longterm_codegen if self._longterm_enabled() else self._codegen
+        return gen(
             target, feats, self._method_kwargs(),
             self.reduce_cb.isChecked(), self.shap_factor.value())
 
@@ -628,29 +711,28 @@ class MlGapFillingTab(DiiveTab):
         kwargs = self._method_kwargs()
         reduce = self.reduce_cb.isChecked()
         shap_factor = self.shap_factor.value()
+        longterm = self._longterm_enabled()
 
         work = self._df[[target] + feats].copy()
         self._set_running(True)
+        extra = (f" — long-term, {self._n_years} per-year models"
+                 if longterm else "")
         self.status.setText(
-            f"Gap-filling… (training {self.method_name} — this can take a while)")
+            f"Gap-filling… (training {self.method_name}{extra} — this can take a while)")
         threading.Thread(
             target=self._worker,
-            args=(work, target, kwargs, reduce, shap_factor),
+            args=(work, target, kwargs, reduce, shap_factor, longterm),
             daemon=True).start()
 
-    def _worker(self, work, target, kwargs, reduce, shap_factor) -> None:
+    def _worker(self, work, target, kwargs, reduce, shap_factor, longterm) -> None:
         try:
-            # verbose=2 (PROGRESS): surfaces the base class's rich, coloured
-            # training/gap-filling report in the Log tab (which mirrors the console).
-            model = self._model_class()(input_df=work, target_col=target,
-                                        verbose=2, **kwargs)
-            if reduce:
-                model.reduce_features(shap_threshold_factor=shap_factor)
-            model.run(showplot_scores=False, showplot_importance=False)
+            if longterm:
+                model, gapfilled, flag, scores = self._run_longterm(
+                    work, target, kwargs, reduce, shap_factor)
+            else:
+                model, gapfilled, flag, scores = self._run_single(
+                    work, target, kwargs, reduce, shap_factor)
 
-            gapfilled = model.get_gapfilled_target()
-            flag = model.get_flag()
-            scores = model.scores_traintest_ or model.scores_
             # Flag: 0 = observed, 1 = full-model fill, 2 = fallback fill.
             n_fallback = int((flag == 2).sum())
 
@@ -671,9 +753,30 @@ class MlGapFillingTab(DiiveTab):
             factor = shap_factor if reduce else None
             self._sig.done.emit(
                 (out, work[target], gapfilled, scores, target, n_features,
-                 n_fallback, model, factor))
+                 n_fallback, model, factor, longterm))
         except Exception as err:
             self._sig.failed.emit(str(err))
+
+    def _run_single(self, work, target, kwargs, reduce, shap_factor):
+        # verbose=2 (PROGRESS): surfaces the base class's rich, coloured
+        # training/gap-filling report in the Log tab (which mirrors the console).
+        model = self._model_class()(input_df=work, target_col=target,
+                                    verbose=2, **kwargs)
+        if reduce:
+            model.reduce_features(shap_threshold_factor=shap_factor)
+        model.run(showplot_scores=False, showplot_importance=False)
+        scores = model.scores_traintest_ or model.scores_
+        return model, model.get_gapfilled_target(), model.get_flag(), scores
+
+    def _run_longterm(self, work, target, kwargs, reduce, shap_factor):
+        """Long-term flow: one model per year (built from the year + its two
+        neighbours), stitched back together. Hero scores are the per-year
+        held-out scores averaged across years."""
+        model = self._longterm_model_class()(input_df=work, target_col=target,
+                                             verbose=2, **kwargs)
+        model.run(reduce_features=reduce, shap_threshold_factor=shap_factor)
+        scores = model.scores_traintest_overall_ or model.scores_overall_
+        return model, model.get_gapfilled_target(), model.get_flag(), scores
 
     def _set_running(self, on: bool) -> None:
         self._running = on
@@ -683,17 +786,26 @@ class MlGapFillingTab(DiiveTab):
 
     # --- results -------------------------------------------------------
     def _on_done(self, payload) -> None:
-        out, observed, gapfilled, scores, target, n_features, n_fallback, model, factor = payload
+        (out, observed, gapfilled, scores, target, n_features,
+         n_fallback, model, factor, longterm) = payload
         self._set_running(False)
         self._result_df = out
         n_filled = int((out[str(gapfilled.name)].notna() & observed.isna()).sum())
         self.hero.set_metrics(target=target, n_features=n_features,
                               n_filled=n_filled, n_fallback=n_fallback, scores=scores)
-        self.status.setText(f"Done. 'Add' appends {', '.join(out.columns)}.")
+        mode = " (long-term, per-year models)" if longterm else ""
+        self.status.setText(f"Done{mode}. 'Add' appends {', '.join(out.columns)}.")
         self.add_btn.setEnabled(True)
+        self.shap_caption.setText("Mean across per-year models" if longterm
+                                  else "Final model, all complete observations")
         self._plot(observed, gapfilled)
-        self._fill_shap_table(model)
-        self.results_panel.update(model, target, shap_threshold_factor=factor)
+        if longterm:
+            self._fill_shap_table_longterm(model)
+            self.results_panel.update_longterm(model, target,
+                                                shap_threshold_factor=factor)
+        else:
+            self._fill_shap_table(model)
+            self.results_panel.update(model, target, shap_threshold_factor=factor)
 
     def _on_failed(self, msg: str) -> None:
         self._set_running(False)
@@ -723,6 +835,27 @@ class MlGapFillingTab(DiiveTab):
         for row, (name, val) in enumerate(ser.items()):
             name_item = QTableWidgetItem(str(name))
             name_item.setToolTip(str(name))  # full name (cells elide when narrow)
+            val_item = QTableWidgetItem()
+            val_item.setData(Qt.ItemDataRole.DisplayRole, f"{val:.4f}")
+            val_item.setData(_SHAP_ROLE, float(val))
+            table.setItem(row, 0, name_item)
+            table.setItem(row, 1, val_item)
+
+    def _fill_shap_table_longterm(self, model) -> None:
+        """Fill the SHAP table with each feature's mean importance across the
+        per-year models (long-term has no single ``feature_importances_``)."""
+        table = self.shap_table
+        table.setRowCount(0)
+        try:
+            fi = model.feature_importance_per_year  # DataFrame: index=feature, cols=years
+            ser = fi.mean(axis=1).sort_values(ascending=False).dropna()
+        except Exception:
+            return
+        self._shap_delegate.maxval = float(ser.max()) if len(ser) else 1.0
+        table.setRowCount(len(ser))
+        for row, (name, val) in enumerate(ser.items()):
+            name_item = QTableWidgetItem(str(name))
+            name_item.setToolTip(f"{name} (mean |SHAP| across years)")
             val_item = QTableWidgetItem()
             val_item.setData(Qt.ItemDataRole.DisplayRole, f"{val:.4f}")
             val_item.setData(_SHAP_ROLE, float(val))
