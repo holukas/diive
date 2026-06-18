@@ -90,6 +90,13 @@ class CategoryDialog(QDialog):
         row.addWidget(close)
         outer.addLayout(row)
 
+        # Pull any category already used by an event but not yet in the palette
+        # into it, so custom categories typed when adding an event are managed here.
+        mgr = events_store.manager
+        for name, color in mgr.known_categories().items():
+            if name not in mgr.categories:
+                mgr.set_category(name, color)
+
         self._reload()
 
     # --- helpers -------------------------------------------------------
