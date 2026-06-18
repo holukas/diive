@@ -1,4 +1,5 @@
 from diive.core.plotting.bar import LongtermAnomaliesYear
+from diive.core.plotting.styles.format import FormatStyle
 from diive.core.plotting.cumulative import Cumulative
 from diive.core.plotting.cumulative import CumulativeYear
 from diive.core.plotting.dielcycle import DielCycle
@@ -16,6 +17,7 @@ from diive.core.plotting.treering import TreeRingPlot
 from diive.core.plotting.waterfall import WaterfallPlot
 
 __all__ = [
+    'FormatStyle',
     'LongtermAnomaliesYear',
     'Cumulative',
     'CumulativeYear',

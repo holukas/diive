@@ -1128,6 +1128,7 @@ class FluxLevelData:
         import matplotlib.pyplot as plt
         import matplotlib.gridspec as gridspec
         from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        from diive.core.plotting.styles.format import FormatStyle
 
         _LABELS = {'rf': 'Random Forest', 'xgb': 'XGBoost', 'mds': 'MDS'}
 
@@ -1169,7 +1170,7 @@ class FluxLevelData:
         for i, (series, subtitle) in enumerate(panels):
             ax = fig.add_subplot(gs[0, i])
             hm = HeatmapDateTime(series=series, verbose=False)
-            hm.plot(ax=ax, fig=fig, title=subtitle,
+            hm.plot(ax=ax, fig=fig, format_style=FormatStyle(title=subtitle),
                     vmin=_vmin, vmax=_vmax, cmap=cmap, zlabel=zlabel)
 
         auto_title = (f"Gap-filled flux heatmaps  --  "

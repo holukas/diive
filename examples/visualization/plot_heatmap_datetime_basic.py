@@ -23,6 +23,17 @@ series = series.dropna()
 print(f"Loaded {len(series)} records from {series.index[0].date()} to {series.index[-1].date()}")
 
 # %%
+# A shared FormatStyle for both orientations
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# FormatStyle carries the plot *chrome* (here just the title) so it can be built
+# once and reused across both heatmaps. The colorbar settings (vmin/vmax/cmap/
+# zlabel) are NOT chrome - they stay direct plot() arguments because FormatStyle
+# does not own the colorbar. We override only the title per call via .merged().
+
+style = dv.plotting.FormatStyle(title="NEE flux")
+
+# %%
 # HeatmapDateTime - vertical orientation
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
@@ -35,7 +46,7 @@ hm = dv.plotting.HeatmapDateTime(
 )
 hm.plot(
     ax=None,  # Create new figure
-    title="NEE flux - Vertical (dates on y-axis)",
+    format_style=style.merged(title="NEE flux - Vertical (dates on y-axis)"),
     vmin=-10,  # Minimum color value
     vmax=10,  # Maximum color value
     cmap='RdBu_r',  # Colormap
@@ -51,6 +62,7 @@ print("Plotted HeatmapDateTime in vertical orientation")
 #
 # Time-of-day on y-axis, dates on x-axis.
 # Horizontal layout places dates along x-axis for easier date reading.
+# The same FormatStyle is reused, again with just the title overridden.
 
 hm = dv.plotting.HeatmapDateTime(
     series=series,
@@ -58,7 +70,7 @@ hm = dv.plotting.HeatmapDateTime(
 )
 hm.plot(
     ax=None,  # Create new figure
-    title="NEE flux - Horizontal (dates on x-axis)",
+    format_style=style.merged(title="NEE flux - Horizontal (dates on x-axis)"),
     vmin=-10,  # Minimum color value
     vmax=10,  # Maximum color value
     cmap='RdBu_r',  # Colormap

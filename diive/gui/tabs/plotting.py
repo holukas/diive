@@ -325,10 +325,12 @@ class PlottingTab(DiiveTab):
             series = self._df[name].dropna()  # KDE can't fit NaNs
             try:
                 dv.plotting.RidgeLinePlot(series).plot(
-                    fig=fig, showplot=False, how=opts["how"],
+                    fig=fig, showplot=False,
+                    format_style=dv.plotting.FormatStyle(**opts["_format"]),
+                    how=opts["how"],
                     hspace=opts["hspace"], shade_percentile=opts["shade_percentile"],
                     show_mean_line=opts["show_mean_line"], ascending=opts["ascending"],
-                    xlabel=opts["xlabel"], kd_kwargs=opts["kd_kwargs"],
+                    kd_kwargs=opts["kd_kwargs"],
                 )
             except Exception as err:
                 ax = fig.add_subplot(111)
@@ -364,16 +366,14 @@ class PlottingTab(DiiveTab):
                 mincnt=opts["mincnt"],
             ).plot(
                 ax=ax, fig=self.canvas.fig,
+                format_style=dv.plotting.FormatStyle(**opts["_format"]),
                 cmap=opts["cmap"], vmin=opts["vmin"], vmax=opts["vmax"],
                 color_bad=opts["color_bad"], zlabel=opts["zlabel"],
-                xlabel=opts["xlabel"], ylabel=opts["ylabel"],
                 cb_digits_after_comma=opts["cb_digits_after_comma"],
                 cb_extend=opts["cb_extend"], show_colormap=opts["show_colormap"],
                 show_values=opts["show_values"],
                 show_values_n_dec_places=opts["show_values_n_dec_places"],
                 show_values_fontsize=opts["show_values_fontsize"],
-                axlabels_fontsize=opts["axlabels_fontsize"],
-                ticks_labelsize=opts["ticks_labelsize"],
                 cb_labelsize=opts["cb_labelsize"],
             )
         except Exception as err:
@@ -409,11 +409,10 @@ class PlottingTab(DiiveTab):
                 x=sub[xn], y=sub[yn], z=(sub[zn] if zn else None),
                 nbins=opts["nbins"], binagg=opts["binagg"],
             ).plot(
-                ax=ax, cmap=opts["cmap"], show_colorbar=opts["show_colorbar"],
+                ax=ax, format_style=dv.plotting.FormatStyle(**opts["_format"]),
+                cmap=opts["cmap"], show_colorbar=opts["show_colorbar"],
                 markersize=opts["markersize"], alpha=opts["alpha"],
-                vmin=opts["vmin"], vmax=opts["vmax"], title=opts["title"],
-                xlabel=opts["xlabel"], ylabel=opts["ylabel"], zlabel=opts["zlabel"],
-                xunits=opts["xunits"], yunits=opts["yunits"],
+                vmin=opts["vmin"], vmax=opts["vmax"],
             )
             self._apply_axes([ax])
         except Exception as err:
@@ -436,19 +435,17 @@ class PlottingTab(DiiveTab):
             if self._plot_type == HEATMAP:
                 dv.plotting.HeatmapDateTime(
                     series, ax_orientation=opts["ax_orientation"]).plot(
-                    ax=ax, fig=self.canvas.fig, title=name,
+                    ax=ax, fig=self.canvas.fig,
+                    format_style=dv.plotting.FormatStyle(**opts["_format"]),
                     cmap=opts["cmap"], vmin=opts["vmin"], vmax=opts["vmax"],
                     color_bad=opts["color_bad"], zlabel=opts["zlabel"],
                     cb_digits_after_comma=opts["cb_digits_after_comma"],
                     cb_extend=opts["cb_extend"],
                     show_colormap=opts["show_colormap"],
-                    show_grid=opts["show_grid"],
                     show_less_xticklabels=opts["show_less_xticklabels"],
                     show_values=opts["show_values"],
                     show_values_n_dec_places=opts["show_values_n_dec_places"],
                     show_values_fontsize=opts["show_values_fontsize"],
-                    axlabels_fontsize=opts["axlabels_fontsize"],
-                    ticks_labelsize=opts["ticks_labelsize"],
                     cb_labelsize=opts["cb_labelsize"],
                     minticks=opts["minticks"], maxticks=opts["maxticks"],
                 )
@@ -456,30 +453,31 @@ class PlottingTab(DiiveTab):
                 dv.plotting.HeatmapYearMonth(
                     series, agg=opts["agg"], ranks=opts["ranks"],
                     ax_orientation=opts["ax_orientation"]).plot(
-                    ax=ax, fig=self.canvas.fig, title=name,
+                    ax=ax, fig=self.canvas.fig,
+                    format_style=dv.plotting.FormatStyle(**opts["_format"]),
                     cmap=opts["cmap"], vmin=opts["vmin"], vmax=opts["vmax"],
                     color_bad=opts["color_bad"], zlabel=opts["zlabel"],
                     cb_digits_after_comma=opts["cb_digits_after_comma"],
                     cb_extend=opts["cb_extend"],
                     show_colormap=opts["show_colormap"],
-                    show_grid=opts["show_grid"],
                     show_less_xticklabels=opts["show_less_xticklabels"],
                     show_values=opts["show_values"],
                     show_values_n_dec_places=opts["show_values_n_dec_places"],
                     show_values_fontsize=opts["show_values_fontsize"],
-                    axlabels_fontsize=opts["axlabels_fontsize"],
-                    ticks_labelsize=opts["ticks_labelsize"],
                     cb_labelsize=opts["cb_labelsize"],
                 )
             elif self._plot_type == TIMESERIES:
                 ts_colors = theme.manager.ts_colors
+                # Chrome (title/labels/units/fonts) goes through the shared
+                # FormatStyle; the line-rendering args stay direct.
+                fmt = dict(opts["_format"])
+                if fmt.get("title") is None:
+                    fmt["title"] = name  # default the title to the variable name
                 dv.plotting.TimeSeries(series, drop_gaps=opts["drop_gaps"]).plot(
-                    ax=ax, title=opts["title"] or name,
+                    ax=ax, format_style=dv.plotting.FormatStyle(**fmt),
                     color=ts_colors[index % len(ts_colors)],
                     linewidth=opts["linewidth"], alpha=opts["alpha"],
                     marker=opts["marker"], markersize=opts["markersize"],
-                    xlabel=opts["xlabel"], ylabel=opts["ylabel"],
-                    series_units=opts["series_units"],
                 )
             elif self._plot_type == DIELCYCLE:
                 ts_colors = theme.manager.ts_colors
@@ -487,12 +485,12 @@ class PlottingTab(DiiveTab):
                 # None for the per-month view so each month gets its own colour,
                 # otherwise the theme line colour for this panel.
                 color = None if opts["each_month"] else ts_colors[index % len(ts_colors)]
+                fmt = dict(opts["_format"])
+                if fmt.get("title") is None:
+                    fmt["title"] = name  # default the title to the variable name
                 dv.plotting.DielCycle(series).plot(
-                    ax=ax, title=name, color=color,
+                    ax=ax, format_style=dv.plotting.FormatStyle(**fmt), color=color,
                     mean=opts["mean"], std=opts["std"], each_month=opts["each_month"],
-                    show_legend=opts["show_legend"], showgrid=opts["showgrid"],
-                    legend_n_col=opts["legend_n_col"], legend_loc=opts["legend_loc"],
-                    ylabel=opts["ylabel"], txt_ylabel_units=opts["txt_ylabel_units"],
                 )
             elif self._plot_type == CUMULATIVE_YEAR:
                 dv.plotting.CumulativeYear(
@@ -500,17 +498,22 @@ class PlottingTab(DiiveTab):
                     yearly_end_date=opts["yearly_end_date"],
                     show_reference=opts["show_reference"],
                     highlight_year=opts["highlight_year"],
-                ).plot(ax=ax, showplot=False, digits_after_comma=opts["digits_after_comma"])
+                ).plot(ax=ax, showplot=False,
+                       format_style=dv.plotting.FormatStyle(**opts["_format"]),
+                       digits_after_comma=opts["digits_after_comma"])
             elif self._plot_type == HISTOGRAM:
+                fmt = dict(opts["_format"])
+                if fmt.get("title") is None:
+                    fmt["title"] = name  # default the title to the variable name
                 dv.plotting.HistogramPlot(
                     series.dropna(), method="n_bins", n_bins=opts["n_bins"],
                 ).plot(
-                    ax=ax, title=name, xlabel=opts["xlabel"],
+                    ax=ax, format_style=dv.plotting.FormatStyle(**fmt),
                     highlight_peak=opts["highlight_peak"],
                     show_zscores=opts["show_zscores"],
                     show_zscore_values=opts["show_zscore_values"],
                     show_info=opts["show_info"], show_counts=opts["show_counts"],
-                    show_title=opts["show_title"], show_grid=opts["show_grid"],
+                    show_title=opts["show_title"],
                 )
             else:
                 raise ValueError(f"Unknown plot type: {self._plot_type}")

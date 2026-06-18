@@ -72,6 +72,23 @@ AX_LABELS_FONTSIZE_12 = 12
 AX_LABELS_FONTCOLOR = black()
 AX_LABELS_FONTWEIGHT = 'normal'
 
+# ============================================================================
+# STANDARD PLOT STYLE
+# Single source of truth for the shared formatting layer
+# (`diive.plotting.FormatStyle`). Every plot class that consumes a FormatStyle
+# falls back to these values, so changing them here restyles all of them at
+# once. The names are deliberately canonical (TITLE / AXLABEL / TICKS / LEGEND)
+# to give one vocabulary across the whole plotting package.
+# ============================================================================
+FONTSIZE_TITLE = 16  # plot title
+FONTWEIGHT_TITLE = 'bold'
+FONTSIZE_AXLABEL = AX_LABELS_FONTSIZE  # x/y axis labels
+FONTWEIGHT_AXLABEL = AX_LABELS_FONTWEIGHT
+FONTSIZE_TICKS = 16  # tick labels (mirrors TICKS_LABELS_FONTSIZE below)
+COLOR_TEXT = black()  # title + axis labels
+COLOR_CHROME = black()  # ticks + spines
+COLOR_FACE = white()  # axes background
+
 INFOTXT_FONTSIZE = 12
 
 FONTSIZE_ANNOTATIONS_SMALL = 12

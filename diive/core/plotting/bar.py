@@ -3,6 +3,7 @@ from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
 import diive.core.plotting.styles.LightTheme as theme
+from diive.core.plotting.styles.format import FormatStyle
 
 
 class LongtermAnomaliesYear:
@@ -59,15 +60,8 @@ class LongtermAnomaliesYear:
 
         self.anomalies_df = self._calc_reference()
 
-    def _apply_format(self, title: str = None):
-        """Format matplotlib plot with modern scientific design principles."""
-        # Publication-ready title styling
-        if title is None:
-            title = f"{self.series_label} anomaly per year ({self.data_first_year}-{self.data_last_year})"
-        if self.fig is not None:
-            self.fig.suptitle(title, fontsize=16, fontweight=500, color='#2C3E50', y=0.98)
-
-        # Calculate reference statistics
+    def _annotate_reference(self):
+        """Draw the domain-specific reference-statistics info box (not shared chrome)."""
         ref_mean = self.anomalies_df['reference_mean'].iloc[-1]
         ref_sd = self.anomalies_df['reference_sd'].iloc[-1]
         ref_n_years = (self.reference_end_year - self.reference_start_year) + 1
@@ -75,7 +69,6 @@ class LongtermAnomaliesYear:
         last10_mean = last10.mean()
         last10_std = last10.std()
 
-        # Publication-ready info text
         self.ax.text(0.98, 0.02, f"reference period mean: {ref_mean:.2f}±{ref_sd:.2f}sd "
                                  f"({self.reference_start_year}-{self.reference_end_year}, "
                                  f"{ref_n_years} years)\n"
@@ -85,35 +78,10 @@ class LongtermAnomaliesYear:
                      alpha=0.9, horizontalalignment='right', verticalalignment='bottom',
                      bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8, edgecolor='#CCCCCC', linewidth=0.5))
 
-        # X-axis tick configuration
+        # X-axis tick configuration (avoid overcrowding for long records)
         nbins = 50 if len(self.series) > 50 else len(self.series)
         self.ax.locator_params(axis='x', nbins=nbins)
-
-        # Publication-ready axis labels and formatting
-        self.ax.set_xlabel('Year', fontsize=13, fontweight=600, color='#2C3E50', labelpad=10)
-        ylabel_text = f"{self.series_label} anomaly" + (f" {self.series_units}" if self.series_units else "")
-        self.ax.set_ylabel(ylabel_text, fontsize=13, fontweight=600, color='#2C3E50', labelpad=10)
-
-        # Publication-ready gridline styling (subtle, y-axis only)
-        self.ax.grid(True, axis='y', alpha=0.2, linestyle='-', linewidth=0.7, color='#CCCCCC')
-        self.ax.set_axisbelow(True)
-
-        # Publication-ready spine styling (all spines visible)
-        for spine in ['top', 'right', 'left', 'bottom']:
-            self.ax.spines[spine].set_color('#2C3E50')
-            self.ax.spines[spine].set_linewidth(1.2)
-
-        # Zero line reference
-        self.ax.axhline(0, lw=1.0, color='#2C3E50', linestyle='-', alpha=0.6, zorder=0)
-
-        # Publication-ready tick styling
-        self.ax.tick_params(axis='both', which='major', labelsize=12, colors='#2C3E50',
-                           length=6, width=1.0, pad=6)
-        self.ax.tick_params(axis='both', which='minor', length=4, width=0.7)
-
         self.ax.set_xlim(-1, len(self.series))
-        if self.fig is not None:
-            self.fig.tight_layout(pad=1.2)
 
     def _calc_reference(self):
         anomalies_df = pd.DataFrame(self.series)
@@ -128,25 +96,31 @@ class LongtermAnomaliesYear:
         anomalies_df['anomaly_below'] = anomalies_df['anomaly'].loc[anomalies_df['anomaly'] < 0]
         return anomalies_df
 
-    def plot(self, ax=None, title: str = None):
+    def plot(self, ax=None, format_style: FormatStyle = None):
         """
         Render long-term anomaly bar chart with matplotlib styling (Phase 2 of two-phase design).
 
-        All styling and presentation parameters go here. Can be called multiple times
-        on the same LongtermAnomaliesYear object to plot on different axes with different styling.
+        Chrome (title, labels, units, font sizes, colours, grid, ticks, spines, zero
+        line) comes from a shared :class:`~diive.plotting.FormatStyle` so it looks and
+        is configured the same way as every other diive plot. The red/blue above/below
+        bar colouring is data encoding and stays here. Can be called multiple times on
+        the same object to draw on different axes with different styling.
 
         Args:
             ax: Matplotlib axes to plot on. If None, creates new figure and displays it
-            title: Figure title (default: auto-generated from series_label and year range)
+            format_style: A :class:`~diive.plotting.FormatStyle` describing the chrome.
+                When None the diive house style is used.
 
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
 
         Example:
             >>> anomaly = dv.plot_longterm_anomalies_year(series=data, reference_start_year=2015)
-            >>> anomaly.plot(title='Custom Title')  # New figure with custom title
-            >>> anomaly.plot(ax=ax1, title='Subplot Title')  # Plot on existing axis
+            >>> anomaly.plot(format_style=dv.plotting.FormatStyle(title='Custom Title'))
+            >>> anomaly.plot(ax=ax1)  # Plot on existing axis
         """
+        style = format_style or FormatStyle()
+
         # Create axis if not provided (Phase 2 only)
         if ax:
             # If ax is given, plot directly to ax, no fig needed
@@ -158,7 +132,7 @@ class LongtermAnomaliesYear:
             self.fig, self.ax = pf.create_ax()
             self.showplot = True
 
-        # Publication-ready colors for above/below anomalies
+        # Publication-ready colors for above/below anomalies (data encoding)
         color_above = '#EF5350'  # Red for above-reference
         color_below = '#42A5F5'  # Blue for below-reference
 
@@ -178,13 +152,18 @@ class LongtermAnomaliesYear:
             alpha=0.9
         )
 
-        # Apply formatting
-        self._apply_format(title=title)
+        # Shared formatting layer: title/labels/units/fonts/grid/ticks/spines/zeroline.
+        default_title = f"{self.series_label} anomaly per year ({self.data_first_year}-{self.data_last_year})"
+        default_ylabel = f"{self.series_label} anomaly" + (f" {self.series_units}" if self.series_units else "")
+        style.apply(ax=self.ax, default_title=default_title, default_xlabel='Year',
+                    default_ylabel=default_ylabel, zeroline_data=self.anomalies_df['anomaly'])
 
-        # Set white background
-        self.ax.set_facecolor('white')
+        # Domain-specific annotation + categorical x-axis tweaks (not shared chrome).
+        self._annotate_reference()
+
         if self.showplot:
             self.fig.patch.set_facecolor('white')
+            self.fig.tight_layout(pad=1.2)
             self.fig.show()
 
     def get(self):

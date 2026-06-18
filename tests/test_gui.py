@@ -196,7 +196,7 @@ def test_plot_settings_live_render(window):
     tab.settings.vmax.setText("5")
     tab.settings.show_values.setChecked(True)
     tab.settings.cb_extend.setCurrentText("both")
-    tab.settings.axlabels_fontsize.setValue(8)
+    tab.settings.fmt_axlabel_fs.setValue(8)
     tab.update_btn.click()
     QApplication.processEvents()
     assert tab.settings.values()["cmap"] == "viridis"
@@ -211,14 +211,16 @@ def test_plot_settings_live_render(window):
 
     window._open_menu_tab("Time series")
     ts = window._menu_tab_list[-1]
-    assert {"linewidth", "alpha", "marker", "drop_gaps", "markersize", "title",
-            "_axes"} <= set(ts.settings.values())
+    ts_vals = ts.settings.values()
+    assert {"linewidth", "alpha", "marker", "drop_gaps", "markersize", "_format",
+            "_axes"} <= set(ts_vals)
+    assert "title" in ts_vals["_format"]  # chrome now in the shared Format group
     ts.settings.marker.setChecked(True)
     ts.settings.drop_gaps.setChecked(True)
     ts.settings.linewidth.setValue(4.0)
     ts.settings.markersize.setValue(6.0)
-    ts.settings.series_units.setText("umol")
-    ts.settings.title.setText("Custom title")
+    ts.settings.fmt_yunits.setText("umol")
+    ts.settings.fmt_title.setText("Custom title")
     ts.update_btn.click()  # params apply on the button, not on edit
     QApplication.processEvents()
     assert not _fallback(ts)
@@ -1264,7 +1266,9 @@ def test_diel_cycle_tab(window):
     assert tab._panels  # default variable rendered
     fig = tab.canvas.fig
     assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
-    assert {"mean", "std", "each_month", "legend_loc"} <= set(tab.settings.values())
+    vals = tab.settings.values()
+    assert {"mean", "std", "each_month"} <= set(vals)
+    assert "legend_loc" in vals["_format"]  # chrome now lives in the shared Format group
     # Ctrl+click stacks a second variable (shared time-of-day x-axis).
     tab._on_selected("Tair_f", True)
     QApplication.processEvents()
@@ -1283,10 +1287,10 @@ def test_diel_cycle_tab(window):
     assert len(line_colors) > 1  # months drawn in different colours, not all one
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
     # Legend position is wired through.
-    tab.settings.dc_legend_loc.setCurrentText("upper right")
+    tab.settings.fmt_legend_loc.setCurrentText("upper right")
     tab.update_btn.click()
     QApplication.processEvents()
-    assert tab.settings.values()["legend_loc"] == "upper right"
+    assert tab.settings.values()["_format"]["legend_loc"] == "upper right"
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
 
@@ -1298,8 +1302,10 @@ def test_scatter_tab(window):
     # Seeded with X, Y (2 vars) -> plain scatter renders.
     assert len(tab._xyz) >= 2
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    sc_vals = tab.settings.values()
     assert {"nbins", "binagg", "cmap", "show_colorbar", "markersize", "alpha",
-            "vmin", "vmax", "title", "_axes"} <= set(tab.settings.values())
+            "vmin", "vmax", "_format", "_axes"} <= set(sc_vals)
+    assert "title" in sc_vals["_format"]  # chrome moved into the shared Format group
     # Add a third variable (Z) -> colour scatter (extra colorbar axis).
     tab._xyz = ["Tair_f", "NEE_CUT_REF_f", "VPD_f"]
     tab._render()
@@ -2089,7 +2095,7 @@ def test_project_restores_per_tab_state(window, tmp_path, monkeypatch):
     ts._on_selected(cols[0], False)
     ts._on_selected(cols[1], True)
     ts.settings.linewidth.setValue(4.5)
-    ts.settings.title.setText("My plot")
+    ts.settings.fmt_title.setText("My plot")
     # Overview focused on a specific variable; the Time series tab is active.
     ovar = str(window._data.columns[3])
     window._tabs[0]._on_select(ovar)
@@ -2111,7 +2117,7 @@ def test_project_restores_per_tab_state(window, tmp_path, monkeypatch):
     ts2 = next(t for t in window._menu_tab_list if t._menu_label == "Time series")
     assert ts2._panels == cols  # the two selected variables came back
     assert ts2.settings.linewidth.value() == 4.5  # settings restored too
-    assert ts2.settings.title.text() == "My plot"
+    assert ts2.settings.fmt_title.text() == "My plot"
     assert window._tabs[0]._current == ovar  # Overview selection restored
     # The previously-active tab regains focus (not just landing on Overview).
     cur = window._tabwidget.currentIndex()

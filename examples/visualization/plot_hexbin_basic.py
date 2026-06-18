@@ -39,14 +39,19 @@ hm = dv.plotting.HexbinPlot(
     gridsize=11,  # Data: number of hexagons per side
     mincnt=5,  # Data: hide bins with fewer than 5 values
 )
+# The axis labels are chrome and move into FormatStyle. The colorbar params
+# (zlabel, cmap, cb_*) are not chrome -- FormatStyle does not own the colorbar --
+# so they stay as direct plot() arguments.
 hm.plot(
     ax=None,  # Create new figure
-    cmap='RdYlBu_r',  # Styling: colormap name
-    xlabel='Air temperature (percentile)',  # Styling: axis labels
-    ylabel='Vapor pressure deficit (percentile)',
-    zlabel='NEE aggregated',
-    show_values=True,  # Styling: don't show values on hexagons
-    cb_digits_after_comma=1  # Styling: colorbar decimal places
+    format_style=dv.plotting.FormatStyle(
+        xlabel='Air temperature (percentile)',
+        ylabel='Vapor pressure deficit (percentile)',
+    ),
+    cmap='RdYlBu_r',  # Colorbar: colormap name
+    zlabel='NEE aggregated',  # Colorbar: label
+    show_values=True,  # Show aggregated values on hexagons
+    cb_digits_after_comma=1  # Colorbar: decimal places
 )
 
 plt.show(block=False)

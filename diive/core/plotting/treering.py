@@ -19,6 +19,7 @@ import pandas as pd
 from matplotlib.collections import LineCollection
 
 import diive.core.plotting.styles.LightTheme as theme
+from diive.core.plotting.styles.format import FormatStyle
 from diive.core.utils.console import detail
 
 
@@ -136,9 +137,9 @@ class TreeRingPlot:
 
     def plot(self,
              ax=None,
+             format_style: FormatStyle = None,
              figsize: tuple = (10, 10),
              figdpi: int = 100,
-             title: str = None,
              cmap: str = 'RdBu_r',
              vmin: float = None,
              vmax: float = None,
@@ -151,8 +152,7 @@ class TreeRingPlot:
              cb_labelsize: float = None,
              cb_digits_after_comma: int = 1,
              month_label_fontsize: float = None,
-             year_label_fontsize: float = None,
-             title_fontsize: float = None):
+             year_label_fontsize: float = None):
         """Render TreeRingPlot on a polar axis (Phase 2 of two-phase design).
 
         All styling and presentation parameters live here. Can be called multiple times
@@ -160,9 +160,11 @@ class TreeRingPlot:
 
         Args:
             ax: Polar matplotlib axes. If None, a new figure is created
+            format_style: A :class:`~diive.plotting.FormatStyle` for the shared chrome.
+                Only its ``title`` / title font fields apply here (this is a polar plot,
+                so the cartesian spines/ticks/grid of ``FormatStyle.apply`` do not).
             figsize: Figure size in inches (default (10, 10))
             figdpi: Figure DPI (default 100)
-            title: Plot title text
             cmap: Colormap name (default 'RdBu_r', blue=low, red=high)
             vmin: Minimum color scale value. If the data contains values below vmin,
                 the colorbar is extended with a downward arrow automatically.
@@ -180,16 +182,17 @@ class TreeRingPlot:
             cb_digits_after_comma: Decimal places on colorbar tick labels (default 1)
             month_label_fontsize: Font size for month labels (default theme value)
             year_label_fontsize: Font size for year labels (default theme value)
-            title_fontsize: Font size for the plot title (default theme value)
         """
+        style = format_style or FormatStyle()
+
         if cb_labelsize is None:
             cb_labelsize = theme.AX_LABELS_FONTSIZE
         if month_label_fontsize is None:
             month_label_fontsize = theme.AX_LABELS_FONTSIZE
         if year_label_fontsize is None:
             year_label_fontsize = theme.TICKS_LABELS_FONTSIZE - 4
-        if title_fontsize is None:
-            title_fontsize = theme.AX_LABELS_FONTSIZE
+        title_fs = style.title_fontsize if style.title_fontsize is not None else theme.AX_LABELS_FONTSIZE
+        title_color = style.text_color if style.text_color is not None else theme.COLOR_TEXT
 
         flat = self.grid[~np.isnan(self.grid)]
         data_min = float(np.nanmin(flat))
@@ -322,10 +325,11 @@ class TreeRingPlot:
                     )
 
         # --- Title ---
-        if title:
+        if style.title:
             # Reserve top margin so suptitle stays within the saved figure boundary.
             self._fig.subplots_adjust(top=0.92)
-            self._fig.suptitle(title, fontsize=title_fontsize, fontweight='bold', y=0.97)
+            self._fig.suptitle(style.title, fontsize=title_fs, color=title_color,
+                               fontweight=style.title_fontweight, y=0.97)
 
         # --- Colorbar ---
         # Shrink and shift the colorbar so it does not overlap month labels on the
@@ -346,9 +350,9 @@ class TreeRingPlot:
 
     def plot_line(self,
                   ax=None,
+                  format_style: FormatStyle = None,
                   figsize: tuple = (10, 10),
                   figdpi: int = 100,
-                  title: str = None,
                   vmin: float = None,
                   vmax: float = None,
                   cmap: str = 'RdYlBu_r',
@@ -365,8 +369,7 @@ class TreeRingPlot:
                   cb_labelsize: float = None,
                   cb_digits_after_comma: int = 1,
                   month_label_fontsize: float = None,
-                  year_label_fontsize: float = None,
-                  title_fontsize: float = None):
+                  year_label_fontsize: float = None):
         """Render TreeRingPlot as concentric radial line traces colored by data value.
 
         Each year traces its own ring at a fixed base radius (oldest at center, newest
@@ -380,9 +383,11 @@ class TreeRingPlot:
 
         Args:
             ax: Polar matplotlib axes. If None, a new figure is created.
+            format_style: A :class:`~diive.plotting.FormatStyle` for the shared chrome.
+                Only its ``title`` / title font fields apply here (this is a polar plot,
+                so the cartesian spines/ticks/grid of ``FormatStyle.apply`` do not).
             figsize: Figure size in inches (default (10, 10))
             figdpi: Figure DPI (default 100)
-            title: Plot title text
             vmin: Low colour anchor (defaults to data minimum).
             vmax: High colour anchor (defaults to data maximum).
             cmap: Colormap applied to data values (default 'RdYlBu_r', blue=low, red=high).
@@ -402,16 +407,17 @@ class TreeRingPlot:
             cb_digits_after_comma: Decimal places on colorbar tick labels (default 1)
             month_label_fontsize: Font size for month labels (default theme value)
             year_label_fontsize: Font size for year labels (default theme value)
-            title_fontsize: Font size for the plot title (default theme value)
         """
+        style = format_style or FormatStyle()
+
         if cb_labelsize is None:
             cb_labelsize = theme.AX_LABELS_FONTSIZE
         if month_label_fontsize is None:
             month_label_fontsize = theme.AX_LABELS_FONTSIZE
         if year_label_fontsize is None:
             year_label_fontsize = theme.TICKS_LABELS_FONTSIZE - 4
-        if title_fontsize is None:
-            title_fontsize = theme.AX_LABELS_FONTSIZE
+        title_fs = style.title_fontsize if style.title_fontsize is not None else theme.AX_LABELS_FONTSIZE
+        title_color = style.text_color if style.text_color is not None else theme.COLOR_TEXT
 
         flat = self.grid[~np.isnan(self.grid)]
         data_min = float(np.nanmin(flat))
@@ -521,9 +527,10 @@ class TreeRingPlot:
                             fontsize=year_label_fontsize, color='black',
                             fontweight='bold', zorder=5)
 
-        if title:
+        if style.title:
             self._fig.subplots_adjust(top=0.92)
-            self._fig.suptitle(title, fontsize=title_fontsize, fontweight='bold', y=0.97)
+            self._fig.suptitle(style.title, fontsize=title_fs, color=title_color,
+                               fontweight=style.title_fontweight, y=0.97)
 
         # Colorbar — ScalarMappable since LineCollection has no standalone colorbar method.
         fmt = mticker.FormatStrFormatter(f'%.{cb_digits_after_comma}f')

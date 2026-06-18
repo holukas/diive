@@ -227,13 +227,13 @@ fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 hm_original = dv.plotting.HeatmapDateTime(series=gf_df[original_col])
 hm_original.plot(
     ax=axes[0],
-    title='Original NEE (with gaps)'
+    format_style=dv.plotting.FormatStyle(title='Original NEE (with gaps)')
 )
 
 hm_gapfilled = dv.plotting.HeatmapDateTime(series=gf_df[gapfilled_col])
 hm_gapfilled.plot(
     ax=axes[1],
-    title='Gap-filled NEE (complete)'
+    format_style=dv.plotting.FormatStyle(title='Gap-filled NEE (complete)')
 )
 
 plt.tight_layout()

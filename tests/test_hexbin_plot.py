@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from diive.core.plotting.hexbin import HexbinPlot
+from diive.core.plotting.styles.format import FormatStyle
 
 
 class TestHexbinPlot(unittest.TestCase):
@@ -28,7 +29,8 @@ class TestHexbinPlot(unittest.TestCase):
         """Custom axis labels are passed to plot(); the constructor path is deprecated."""
         # Canonical: labels via plot()
         hb = HexbinPlot(self.x, self.y, self.z)
-        hb.plot(xlabel="Temperature (°C)", ylabel="Water Content (%)", zlabel="NEP (µmol m⁻² s⁻¹)")
+        hb.plot(format_style=FormatStyle(xlabel="Temperature (°C)", ylabel="Water Content (%)"),
+                zlabel="NEP (µmol m⁻² s⁻¹)")
         # Deprecated: labels via the constructor still work but warn
         with self.assertWarns(DeprecationWarning):
             hb2 = HexbinPlot(self.x, self.y, self.z, xlabel="Temperature (°C)",
@@ -141,7 +143,8 @@ class TestHexbinPlot(unittest.TestCase):
             mincnt=2,
         )
         try:
-            hb.plot(figsize=(10, 8), xlabel="Custom X", ylabel="Custom Y", zlabel="Custom Z")
+            hb.plot(figsize=(10, 8), format_style=FormatStyle(xlabel="Custom X", ylabel="Custom Y"),
+                    zlabel="Custom Z")
         except Exception as e:
             self.fail(f"plot() with custom params raised: {e}")
 

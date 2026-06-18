@@ -21,6 +21,14 @@
   `PwbBatchDetection` always run the full 4-combination RFlux v3.2.0 logic; the 2-combination (cw/wc) fallback was
   removed. Pass a sonic-temperature column. Result keys `tlag_opt_s`, `corr_est`, `cv5pct`, `cv1pct` were removed;
   `corr_pw` (un-smoothed PW peak correlation) and `cov_pwb` (raw cross-covariance at the selected lag) added.
+- **Plotting: chrome is `FormatStyle`-only.** The flat chrome keyword arguments on the plotting classes' `plot()`
+  methods were removed — `title`, `xlabel`, `ylabel`, `zlabel` (axes), `xunits`, `yunits`, `series_units`,
+  `txt_ylabel_units`, `axlabels_fontsize`, `ticks_labelsize`, `legend_n_col`, `legend_loc`, `fig_title`,
+  `title_fontsize`, and the `show_grid`/`showgrid`/`show_legend` toggles that duplicated the style. Pass them via
+  `format_style=dv.plotting.FormatStyle(...)` instead (use `.merged(**overrides)` to vary one field off a shared
+  style). Data-rendering args (`color`, `cmap`, `marker`, `vmin`/`vmax`, `fill`, ...) and colorbar args (`cb_*`, and
+  the colorbar-label `zlabel` on the heatmaps/`HexbinPlot`) remain direct `plot()` keywords. See the
+  `dv.plotting.FormatStyle` entry under *Refactoring*.
 
 ### Desktop GUI (new)
 
@@ -414,6 +422,17 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
 - **`Hampel`** — `HampelDaytimeNighttime` renamed to `Hampel`; `n_sigma_dt`/`n_sigma_nt` short-form aliases added.
 - **Plotting two-phase design** — `HeatmapBase`, `HeatmapDateTime`, `HeatmapYearMonth`, `HeatmapXYZ`, `HexbinPlot`
   refactored to separate data (`__init__`) from styling (`plot()`).
+- **Shared plot formatting — `dv.plotting.FormatStyle`.** A single reusable description of a plot's chrome (title,
+  axis labels + units, font sizes/weights, text/spine/tick/grid colours, grid, legend, zero line) that every plotting
+  class's `plot()` now accepts via `format_style=`. All `None` fields resolve to one set of defaults in
+  `LightTheme` (new `FONTSIZE_TITLE`/`FONTSIZE_AXLABEL`/`FONTSIZE_TICKS`/`COLOR_TEXT`/`COLOR_CHROME`/`COLOR_FACE`
+  block), so a bare `FormatStyle()` is the diive house style and changing those constants restyles every plot at once.
+  Applied across all 15 classes (`TimeSeries`, `DielCycle`, `Cumulative`, `CumulativeYear`, `ScatterXY`,
+  `WaterfallPlot`, `HistogramPlot`, `ShiftedDistributionPlot`, the four heatmaps, `HexbinPlot`, plus partial coverage
+  for the multi-axes `RidgeLinePlot` and polar `TreeRingPlot`). See **Breaking Changes** — the old flat chrome
+  keywords were removed; chrome is set only via `format_style=`. The desktop GUI exposes a single shared **Format**
+  control section (title / labels / units / font sizes / grid / legend) on *every* plot type, replacing the
+  per-plot-type label/font controls.
 
 ### Fixes
 

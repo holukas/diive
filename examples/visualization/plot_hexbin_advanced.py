@@ -40,12 +40,15 @@ hm = dv.plotting.HexbinPlot(
 )
 hm.plot(
     ax=None,                           # Create new figure
-    cmap='RdYlBu_r',                   # Styling: colormap name
-    xlabel='Air temperature (°C)',     # Styling: axis labels
-    ylabel='Vapor pressure deficit (hPa)',
-    zlabel='Mean NEE',
-    show_values=False,                 # Styling: don't show values on hexagons
-    cb_digits_after_comma=0            # Styling: colorbar decimal places
+    # Chrome (title + axis labels) is described once by a shared FormatStyle.
+    format_style=dv.plotting.FormatStyle(
+        xlabel='Air temperature (°C)',
+        ylabel='Vapor pressure deficit (hPa)',
+    ),
+    cmap='RdYlBu_r',                   # Colorbar: colormap name
+    zlabel='Mean NEE',                 # Colorbar: label (not FormatStyle chrome)
+    show_values=False,                 # Don't show values on hexagons
+    cb_digits_after_comma=0            # Colorbar decimal places
 )
 
 plt.show(block=False)
@@ -68,14 +71,17 @@ hm = dv.plotting.HexbinPlot(
 )
 hm.plot(
     ax=None,                           # Create new figure
-    cmap='RdYlBu_r',                   # Styling: colormap name
-    xlabel='Temperature (percentile)',  # Styling: axis labels
-    ylabel='VPD (percentile)',
-    zlabel='Mean NEE',
-    show_values=True,                  # Styling: display values on hexagon centers
-    show_values_fontsize=8,            # Styling: font size for overlay values
-    show_values_n_dec_places=0,        # Styling: decimal places in overlay
-    cb_digits_after_comma=1            # Styling: colorbar decimal places
+    # Chrome (title + axis labels) is described once by a shared FormatStyle.
+    format_style=dv.plotting.FormatStyle(
+        xlabel='Temperature (percentile)',
+        ylabel='VPD (percentile)',
+    ),
+    cmap='RdYlBu_r',                   # Colorbar: colormap name
+    zlabel='Mean NEE',                 # Colorbar: label (not FormatStyle chrome)
+    show_values=True,                  # Display values on hexagon centers
+    show_values_fontsize=8,            # Font size for overlay values
+    show_values_n_dec_places=0,        # Decimal places in overlay
+    cb_digits_after_comma=1            # Colorbar decimal places
 )
 
 plt.show(block=False)

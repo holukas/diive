@@ -42,6 +42,7 @@ import pandas as pd
 
 from diive.core.plotting.heatmap_base import HeatmapBase
 from diive.core.plotting.styles import LightTheme as theme
+from diive.core.plotting.styles.format import FormatStyle
 
 
 class HeatmapXYZ(HeatmapBase):
@@ -277,21 +278,18 @@ class HeatmapXYZ(HeatmapBase):
              fig=None,
              figsize: tuple = None,
              figdpi: int = 72,
-             title: str = None,
+             format_style: FormatStyle = None,
              vmin: float = None,
              vmax: float = None,
              cmap: str = 'RdYlBu_r',
              cb_digits_after_comma: int = 2,
              cb_labelsize: float = None,
              cb_extend: str = 'neither',
-             axlabels_fontsize: float = None,
-             ticks_labelsize: float = None,
              color_bad: str = 'grey',
              show_colormap: bool = True,
              show_values: bool = False,
              show_values_fontsize: float = None,
              show_values_n_dec_places: int = 0,
-             show_grid: bool = False,
              xlabel: str = None,
              ylabel: str = None,
              zlabel: str = None):
@@ -305,21 +303,22 @@ class HeatmapXYZ(HeatmapBase):
             fig: Existing matplotlib Figure. If None and ax is None, creates new figure
             figsize: Figure size as (width, height) in inches. Only used when ax is None
             figdpi: Figure DPI. Only used when ax is None. Defaults to 72
-            title: Plot title (auto-generated if None)
+            format_style: Shared chrome (title/labels/fonts/ticks/spines/grid) via
+                :class:`~diive.core.plotting.styles.format.FormatStyle`. None = house
+                style (grid off). The ``xlabel``/``ylabel`` below still feed the
+                axis labels as caller defaults; a passed format_style overrides
+                them. The colorbar stays ``cb_*``/``zlabel``-controlled.
             vmin: Minimum color value (auto from data if None)
             vmax: Maximum color value (auto from data if None)
             cmap: Colormap name (default: 'RdYlBu_r')
             cb_digits_after_comma: Decimal places on colorbar labels (default: 2)
             cb_labelsize: Font size for colorbar tick labels
             cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
-            axlabels_fontsize: Font size for axis labels
-            ticks_labelsize: Font size for tick labels
             color_bad: Color for NaN cells (default: 'grey')
             show_colormap: Whether to show colorbar (default: True)
             show_values: Overlay numeric values on cells (default: False)
             show_values_fontsize: Font size for value overlay text
             show_values_n_dec_places: Decimal places for value overlay (default: 0)
-            show_grid: Show gridlines (default: False)
 
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
@@ -329,8 +328,6 @@ class HeatmapXYZ(HeatmapBase):
         # Use theme defaults if not provided
         if cb_labelsize is None:
             cb_labelsize = theme.AX_LABELS_FONTSIZE
-        if axlabels_fontsize is None:
-            axlabels_fontsize = theme.AX_LABELS_FONTSIZE
 
         # Labels: plot() arg wins, else the value stored at construction
         # (which auto-defaults from the data's .name).
@@ -340,8 +337,6 @@ class HeatmapXYZ(HeatmapBase):
             ylabel = self.ylabel
         if zlabel is None:
             zlabel = self.zlabel
-        if ticks_labelsize is None:
-            ticks_labelsize = theme.TICKS_LABELS_FONTSIZE
         if show_values_fontsize is None:
             show_values_fontsize = theme.AX_LABELS_FONTSIZE
 
@@ -352,7 +347,7 @@ class HeatmapXYZ(HeatmapBase):
             figsize=figsize,
             figdpi=figdpi,
             ax_orientation='vertical',  # Not used for XYZ heatmaps, but required by parent
-            title=title,
+            format_style=format_style,
             vmin=vmin,
             vmax=vmax,
             cmap=cmap,
@@ -360,14 +355,11 @@ class HeatmapXYZ(HeatmapBase):
             cb_digits_after_comma=cb_digits_after_comma,
             cb_labelsize=cb_labelsize,
             cb_extend=cb_extend,
-            axlabels_fontsize=axlabels_fontsize,
-            ticks_labelsize=ticks_labelsize,
             color_bad=color_bad,
             show_colormap=show_colormap,
             show_values=show_values,
             show_values_fontsize=show_values_fontsize,
-            show_values_n_dec_places=show_values_n_dec_places,
-            show_grid=show_grid
+            show_values_n_dec_places=show_values_n_dec_places
         )
 
         # Domain-specific rendering (pcolormesh + formatting)

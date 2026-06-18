@@ -6,6 +6,7 @@ from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
 from diive.core.dfun.stats import q25, q75
+from diive.core.plotting.styles.format import FormatStyle
 
 
 class ScatterXY:
@@ -70,16 +71,11 @@ class ScatterXY:
     def plot(
             self,
             ax: plt.Axes = None,
-            xlabel: str = None,
-            ylabel: str = None,
-            zlabel: str = None,
-            xunits: str = None,
-            yunits: str = None,
+            format_style: FormatStyle = None,
             xlim: list = None,
             ylim: list or Literal['auto'] = None,
             cmap: str = 'viridis',
             show_colorbar: bool = True,
-            title: str = None,
             markersize: float = 40,
             alpha: float = 1.0,
             vmin: float = None,
@@ -90,19 +86,21 @@ class ScatterXY:
         Renders scatter plot with all styling parameters. Can be called multiple
         times with different parameters/axes to explore different views of the same data.
 
+        Chrome (title, labels, units, font sizes, colours, grid, legend, zero line)
+        comes from a shared :class:`~diive.plotting.FormatStyle` so it looks and is
+        configured the same way as every other diive plot. The data-rendering
+        arguments (cmap/markersize/alpha/vmin/vmax/colorbar, axis limits) stay here.
+
         Args:
             ax: Matplotlib axes to plot on (default: creates new figure if None)
-            xlabel: X-axis label (default: series name)
-            ylabel: Y-axis label (default: series name)
-            zlabel: Colorbar label (default: z series name, ignored if no z)
-            xunits: X-axis units (appended to xlabel)
-            yunits: Y-axis units (appended to ylabel)
+            format_style: A :class:`~diive.plotting.FormatStyle` describing the chrome
+                (title/xlabel/ylabel/zlabel/xunits/yunits). When None the diive house
+                style is used. The colorbar label reads from ``format_style.zlabel``.
             xlim: X-axis limits as [min, max] (default: data min/max)
             ylim: Y-axis limits as [min, max] or 'auto' (default: data range)
             cmap: Colormap name for z variable (default: 'viridis')
                   Examples: 'plasma', 'viridis', 'coolwarm', 'RdYlBu'
             show_colorbar: Display colorbar if z provided (default: True)
-            title: Plot title (default: "{yname} vs. {xname}")
             markersize: Scatter point area in points^2 (default: 40)
             alpha: Scatter point opacity, 0-1 (default: 1.0)
             vmin: Lower bound of the z colour scale (default: data minimum)
@@ -113,20 +111,14 @@ class ScatterXY:
             - ylim='auto' with nbins: uses binned data limits
             - Colorbar shown only if z is provided and show_colorbar=True
         """
-        xlabel = xlabel if xlabel else self.xname
-        ylabel = ylabel if ylabel else self.yname
-        zlabel = zlabel if zlabel else self.zname
-        xunits = xunits
-        yunits = yunits
-        xlim = xlim
-        ylim = ylim
-        cmap = cmap
-        show_colorbar = show_colorbar
-        title = title if title else f"{self.yname} vs. {self.xname}"
+        style = format_style or FormatStyle()
+
+        # Colorbar label comes only from the style; fall back to the z series name.
+        zlabel = style.zlabel if style.zlabel is not None else self.zname
 
         if not ax:
             self.fig, self.ax = pf.create_ax(figsize=(8, 8))
-            self._plot(self.ax, xlabel, ylabel, zlabel, xunits, yunits, xlim, ylim, cmap, show_colorbar, title,
+            self._plot(self.ax, style, zlabel, xlim, ylim, cmap, show_colorbar,
                        markersize=markersize, alpha=alpha, vmin=vmin, vmax=vmax)
             # Skip tight_layout if colorbar is present (incompatible with new layout engine)
             if self.zname is None or not show_colorbar:
@@ -134,13 +126,12 @@ class ScatterXY:
             self.fig.show()
         else:
             self.ax = ax
-            self._plot(self.ax, xlabel, ylabel, zlabel, xunits, yunits, xlim, ylim, cmap, show_colorbar, title,
+            self._plot(self.ax, style, zlabel, xlim, ylim, cmap, show_colorbar,
                        markersize=markersize, alpha=alpha, vmin=vmin, vmax=vmax)
 
-    def _plot(self, ax: plt.Axes, xlabel: str = None, ylabel: str = None, zlabel: str = None,
-              xunits: str = None, yunits: str = None, xlim: list = None,
-              ylim: list or str = None, cmap: str = 'viridis',
-              show_colorbar: bool = True, title: str = None, nbins: int = 10,
+    def _plot(self, ax: plt.Axes, style: FormatStyle, zlabel: str = None,
+              xlim: list = None, ylim: list or str = None, cmap: str = 'viridis',
+              show_colorbar: bool = True, nbins: int = 10,
               markersize: float = 40, alpha: float = 1.0, vmin: float = None, vmax: float = None):
         """Generate plot on axis"""
         nbins += 1  # To include zero
@@ -195,13 +186,12 @@ class ScatterXY:
                             elinewidth=3, ecolor='red', alpha=.6, lw=0,
                             label="standard deviation")
 
-        self._apply_format(ax, xlabel, ylabel, xunits, yunits, xlim, ylim, title)
+        self._apply_format(ax, style, xlim, ylim)
         ax.locator_params(axis='x', nbins=nbins)
         ax.locator_params(axis='y', nbins=nbins)
 
-    def _apply_format(self, ax: plt.Axes, xlabel: str = None, ylabel: str = None,
-                      xunits: str = None, yunits: str = None,
-                      xlim: list = None, ylim: list or str = None, title: str = None):
+    def _apply_format(self, ax: plt.Axes, style: FormatStyle,
+                      xlim: list = None, ylim: list or str = None):
 
         if xlim:
             xmin = xlim[0]
@@ -232,21 +222,7 @@ class ScatterXY:
 
         ax.set_ylim(ymin, ymax)
 
-        pf.add_zeroline_y(ax=ax, data=self.xy_df[self.yname])
-
-        pf.default_format(ax=ax,
-                          ax_xlabel_txt=xlabel,
-                          ax_ylabel_txt=ylabel,
-                          txt_ylabel_units=yunits)
-
-        pf.default_legend(ax=ax,
-                          labelspacing=0.2,
-                          ncol=1)
-
-        ax.set_title(title, size=20)
-
-        # pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='auto')
-
-        # if self.showplot:
-        #     self.fig.suptitle(f"{self.title}", fontsize=theme.FIGHEADER_FONTSIZE)
-        #     self.fig.tight_layout()
+        # Shared formatting layer: title/labels/units/fonts/grid/legend/zeroline.
+        style.apply(ax=ax, default_title=f"{self.yname} vs. {self.xname}",
+                    default_xlabel=self.xname, default_ylabel=self.yname,
+                    zeroline_data=self.xy_df[self.yname])

@@ -12,6 +12,7 @@ from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
 import diive.core.plotting.styles.LightTheme as theme
+from diive.core.plotting.styles.format import FormatStyle
 
 
 class WaterfallPlot:
@@ -72,32 +73,47 @@ class WaterfallPlot:
         self.ax = None
         self._own_fig = False
 
-    def _apply_format(self):
-        title = (f"Cumulative waterfall ({self.contributions.index.min().date()} to "
-                 f"{self.contributions.index.max().date()})")
-        if self._own_fig:
-            self.fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
-        else:
-            self.ax.set_title(title, fontsize=theme.FIGHEADER_FONTSIZE)
+    def _apply_format(self, style: FormatStyle):
+        auto_title = (f"Cumulative waterfall ({self.contributions.index.min().date()} to "
+                      f"{self.contributions.index.max().date()})")
 
-        pf.add_zeroline_y(ax=self.ax, data=self.cumulative)
-        pf.default_format(ax=self.ax,
-                          ax_xlabel_txt="Date",
-                          ax_ylabel_txt=f"Cumulative {self.varname}",
-                          txt_ylabel_units=self.series_units)
+        # When this object owns the figure the title is a FIGHEADER suptitle, not
+        # an axes title — let the shared chrome draw everything else but the title,
+        # which we place as a suptitle here to preserve the figure-header look.
+        if self._own_fig:
+            shown_title = style.title if style.title is not None else auto_title
+            if shown_title:
+                self.fig.suptitle(shown_title, fontsize=theme.FIGHEADER_FONTSIZE)
+            style.merged(title="").apply(
+                ax=self.ax, default_xlabel="Date",
+                default_ylabel=f"Cumulative {self.varname}", zeroline_data=self.cumulative)
+        else:
+            style.apply(ax=self.ax, default_title=auto_title, default_xlabel="Date",
+                        default_ylabel=f"Cumulative {self.varname}", zeroline_data=self.cumulative)
+
         pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='auto')
 
     def get(self):
         """Return axis"""
         return self.ax
 
-    def plot(self, ax=None, showplot: bool = True, digits_after_comma: int = 0,
+    def plot(self, ax=None, format_style: FormatStyle = None, showplot: bool = True,
+             digits_after_comma: int = 0,
              color_uptake: str = '#2196F3', color_release: str = '#F44336',
              bar_width: float = None, show_connectors: bool = True):
         """Render the waterfall chart (Phase 2 of the two-phase design).
 
+        Chrome (title, labels, units, font sizes, colours, grid, legend, zero line)
+        comes from a shared :class:`~diive.plotting.FormatStyle`, so it looks and is
+        configured like every other diive plot. The bar/connector/annotation
+        rendering arguments stay here.
+
         Args:
             ax: Matplotlib axes to plot on. If None, a new figure is created and shown.
+            format_style: A :class:`~diive.plotting.FormatStyle` describing the chrome.
+                When None the diive house style is used. The ``series_units`` passed at
+                construction is folded onto it as the y-axis units for backward
+                compatibility.
             showplot: Show the figure (only when this object created the figure).
             digits_after_comma: Decimals for the final-total annotation.
             color_uptake: Bar color for uptake (sink) periods.
@@ -109,6 +125,9 @@ class WaterfallPlot:
         Returns:
             The matplotlib axis.
         """
+        # Fold the legacy series_units onto the (copied) style so old call sites keep
+        # working without mutating a caller-supplied FormatStyle.
+        style = (format_style or FormatStyle()).merged(yunits=self.series_units)
         if ax is None:
             self.fig, self.ax = pf.create_ax()
             self._own_fig = True
@@ -147,7 +166,7 @@ class WaterfallPlot:
                      size=12, color=theme.COLOR_LINE_ZERO,
                      horizontalalignment='left', verticalalignment='center', zorder=11)
 
-        self._apply_format()
+        self._apply_format(style)
 
         if self._own_fig and showplot:
             self.fig.show()

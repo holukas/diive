@@ -68,10 +68,11 @@ for ax, agg, cmap, label in [
     ).plot(
         ax=ax,
         show_values=True,
-        zlabel=label,
-        cmap=cmap
+        zlabel=label,  # colorbar label stays a direct kwarg (not FormatStyle chrome)
+        cmap=cmap,
+        # The title is shared plot chrome, so it goes through FormatStyle.
+        format_style=dv.plotting.FormatStyle(title=f"agg='{agg}'")
     )
-    ax.set_title(f"agg='{agg}'")
 
 fig.show()
 print("Plotted HeatmapYearMonth with mean / max / std aggregation")
@@ -116,16 +117,22 @@ series_le = series_le.loc[locs]
 
 fig, axes = plt.subplots(1, 3, figsize=(20, 6), constrained_layout=True)
 
+# One FormatStyle, reused across all three panels: building it once keeps the
+# tick/label font sizing identical, so the only per-panel difference is the
+# title (folded on via .merged()) and the colorbar (a direct kwarg).
+panel_style = dv.plotting.FormatStyle(axlabel_fontsize=12, ticks_fontsize=10)
+
 dv.plotting.HeatmapDateTime(
     series=series_nee,
     ax_orientation="vertical"  # Data: time on y-axis
 ).plot(
     ax=axes[0],  # Render on first subplot
-    zlabel=r"$\mathrm{\mu mol\ CO_2\ m^{-2}\ s^{-1}}$",
+    zlabel=r"$\mathrm{\mu mol\ CO_2\ m^{-2}\ s^{-1}}$",  # colorbar label stays direct
     vmin=-10,  # Minimum color value
     vmax=10,  # Maximum color value
     show_values=False,  # Don't show cell values
-    cmap='RdBu_r'  # Colormap
+    cmap='RdBu_r',  # Colormap
+    format_style=panel_style.merged(title="NEE (CO₂ flux)")
 )
 
 dv.plotting.HeatmapDateTime(
@@ -137,7 +144,8 @@ dv.plotting.HeatmapDateTime(
     vmin=-10,
     vmax=30,
     show_values=False,
-    cmap='RdYlBu_r'
+    cmap='RdYlBu_r',
+    format_style=panel_style.merged(title="Air temperature")
 )
 
 dv.plotting.HeatmapDateTime(
@@ -149,12 +157,9 @@ dv.plotting.HeatmapDateTime(
     vmin=0,
     vmax=400,
     show_values=False,
-    cmap='YlOrRd'
+    cmap='YlOrRd',
+    format_style=panel_style.merged(title="Latent heat flux")
 )
-
-axes[0].set_title("NEE (CO₂ flux)")
-axes[1].set_title("Air temperature")
-axes[2].set_title("Latent heat flux")
 
 fig.show()
 

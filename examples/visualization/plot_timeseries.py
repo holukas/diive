@@ -24,21 +24,16 @@ print(f"Loaded {len(df)} records from {df.index[0]} to {df.index[-1]}")
 # Basic time series plot
 # ^^^^^^^^^^^^^^^^^^^^^^
 #
-# Create a simple time series plot with default styling.
+# Create a simple time series plot with default styling. Passing no chrome
+# arguments at all keeps the diive house style: 'Date' on the x-axis, the
+# series name as title and y-label.
 
 series = df['NEE_CUT_REF_f'].copy()
 
 ts = dv.plotting.TimeSeries(
     series=series
 )
-ts.plot(
-    ax=None,  # Create new figure
-    color=None,  # Use default theme color
-    series_units=None,  # No units label
-    xlabel=None,  # Use default 'Date'
-    ylabel=None,  # Use series name
-    title=None  # Use series name
-)
+ts.plot(ax=None)  # New figure, default chrome
 
 print("\nPlotted NEE flux time series")
 
@@ -46,18 +41,22 @@ print("\nPlotted NEE flux time series")
 # Time series with custom units and labels
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Add units information and custom labels for better documentation.
+# Chrome (title, axis labels, units, font sizes, ...) is described once in a
+# ``FormatStyle`` and handed to ``plot()`` via ``format_style=``. Data-rendering
+# arguments like ``color`` stay direct on ``plot()``.
 
 ts_with_units = dv.plotting.TimeSeries(
     series=series
 )
 ts_with_units.plot(
     ax=None,
-    color=None,
-    series_units=r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)',  # Add units to y-axis
-    xlabel='Date',  # Custom x-axis label
-    ylabel='CO₂ Flux',  # Custom y-axis label
-    title='Net Ecosystem Exchange (2013-2022)'  # Custom title
+    color=None,  # Use default theme color
+    format_style=dv.plotting.FormatStyle(
+        title='Net Ecosystem Exchange (2013-2022)',
+        xlabel='Date',
+        ylabel='CO₂ Flux',
+        yunits=r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)',
+    ),
 )
 
 print("\nPlotted with custom units, labels, and title")
@@ -66,7 +65,8 @@ print("\nPlotted with custom units, labels, and title")
 # Time series with custom color
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Customize line color for publication-quality plots.
+# ``color`` is a data-rendering choice, so it stays a direct ``plot()`` argument
+# while the chrome lives in the ``FormatStyle``.
 
 series_temp = df['Tair_f'].copy()
 
@@ -76,13 +76,40 @@ ts_color = dv.plotting.TimeSeries(
 ts_color.plot(
     ax=None,
     color='#FF6B6B',  # Custom line color (red)
-    series_units='(°C)',  # Temperature units
-    xlabel='Date',
-    ylabel='Air Temperature',
-    title='Air Temperature Time Series'
+    format_style=dv.plotting.FormatStyle(
+        title='Air Temperature Time Series',
+        xlabel='Date',
+        ylabel='Air Temperature',
+        yunits='(°C)',
+    ),
 )
 
 print("\nPlotted temperature with custom color")
+
+# %%
+# Reuse one FormatStyle across plots
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# The key benefit of the shared style: build it once and hand the same instance
+# to several plots so they look identical. Here one style formats both the
+# gap-filled and the measured NEE series.
+
+shared_style = dv.plotting.FormatStyle(
+    xlabel='Date',
+    ylabel='NEE',
+    yunits=r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)',
+)
+
+dv.plotting.TimeSeries(series=series).plot(
+    ax=None,
+    format_style=shared_style,
+)
+dv.plotting.TimeSeries(series=df['NEE_CUT_REF_orig'].copy()).plot(
+    ax=None,
+    format_style=shared_style,
+)
+
+print("\nPlotted two series sharing one FormatStyle")
 
 # %%
 # Gaps stay visible, with point markers
@@ -100,12 +127,14 @@ ts_gaps = dv.plotting.TimeSeries(
 )
 ts_gaps.plot(
     ax=None,
-    series_units=r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)',
-    ylabel='Measured NEE',
-    title='Measured NEE — gaps shown as line breaks',
     marker=True,       # draw a marker at each observation
     linewidth=1.2,     # thinner line
-    alpha=0.85
+    alpha=0.85,
+    format_style=dv.plotting.FormatStyle(
+        title='Measured NEE — gaps shown as line breaks',
+        ylabel='Measured NEE',
+        yunits=r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)',
+    ),
 )
 
 print("\nPlotted measured NEE with visible gaps and point markers")

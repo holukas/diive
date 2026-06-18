@@ -114,10 +114,52 @@ class PlotSettingsPanel(QScrollArea):
         self.setWidget(inner)
         self._apply_tooltips()
 
+    #: Fallback one-line descriptions for the shared Format controls, used when
+    #: the FormatStyle dataclass auto-__init__ exposes no parsable docstring.
+    _FORMAT_TOOLTIPS = {
+        "title": "Plot title (blank -> the variable name).",
+        "xlabel": "X-axis label (blank -> auto).",
+        "ylabel": "Y-axis label (blank -> auto).",
+        "xunits": "Units appended to the x-axis label, e.g. (degC).",
+        "yunits": "Units appended to the y-axis label, e.g. (degC).",
+        "zlabel": "Colorbar / z-axis label.",
+        "title_fontsize": "Title font size (0 = auto / theme default).",
+        "axlabel_fontsize": "Axis-label font size (0 = auto / theme default).",
+        "ticks_fontsize": "Tick-label font size (0 = auto / theme default).",
+        "show_grid": "Draw the background grid.",
+        "show_legend": "Draw a legend when the axes has labelled artists.",
+        "legend_loc": "Legend location (matplotlib loc).",
+        "legend_ncol": "Number of legend columns.",
+    }
+
+    def _apply_format_tooltips(self) -> None:
+        """Tooltip the shared Format controls from the FormatStyle field docs."""
+        import diive as dv
+        from diive.core.utils.docstrings import param_docs
+        docs = param_docs(dv.plotting.FormatStyle.__init__) or {}
+        pairs = [
+            ("fmt_title", "title"), ("fmt_xlabel", "xlabel"),
+            ("fmt_ylabel", "ylabel"), ("fmt_xunits", "xunits"),
+            ("fmt_yunits", "yunits"), ("fmt_zlabel", "zlabel"),
+            ("fmt_title_fs", "title_fontsize"),
+            ("fmt_axlabel_fs", "axlabel_fontsize"),
+            ("fmt_ticks_fs", "ticks_fontsize"), ("fmt_grid", "show_grid"),
+            ("fmt_legend", "show_legend"), ("fmt_legend_loc", "legend_loc"),
+            ("fmt_legend_ncol", "legend_ncol"),
+        ]
+        for attr, field in pairs:
+            widget = getattr(self, attr, None)
+            if widget is None:
+                continue
+            tip = docs.get(field) or self._FORMAT_TOOLTIPS.get(field)
+            if tip:
+                widget.setToolTip(tip)
+
     def _apply_tooltips(self) -> None:
         """Tooltip each control with its library plot() parameter docstring."""
         import diive as dv
         from diive.core.utils.docstrings import param_docs
+        self._apply_format_tooltips()
         method = {
             HEATMAP: dv.plotting.HeatmapDateTime.plot,
             HEATMAP_YEARMONTH: dv.plotting.HeatmapYearMonth.plot,
@@ -136,13 +178,12 @@ class PlotSettingsPanel(QScrollArea):
                 ("cmap", self.cmap), ("vmin", self.vmin), ("vmax", self.vmax),
                 ("color_bad", self.color_bad), ("ax_orientation", self.orientation),
                 ("show_less_xticklabels", self.show_less_xticklabels),
-                ("show_grid", self.show_grid), ("show_colormap", self.show_colormap),
+                ("show_colormap", self.show_colormap),
                 ("zlabel", self.zlabel), ("cb_digits_after_comma", self.cb_digits),
                 ("cb_extend", self.cb_extend), ("show_values", self.show_values),
                 ("show_values_n_dec_places", self.show_values_dec),
                 ("show_values_fontsize", self.show_values_fontsize),
-                ("axlabels_fontsize", self.axlabels_fontsize),
-                ("ticks_labelsize", self.ticks_labelsize), ("cb_labelsize", self.cb_labelsize),
+                ("cb_labelsize", self.cb_labelsize),
             ]
             if self._plot_type == HEATMAP:
                 pairs += [("minticks", self.minticks), ("maxticks", self.maxticks)]
@@ -151,20 +192,14 @@ class PlotSettingsPanel(QScrollArea):
         elif self._plot_type == TIMESERIES:
             pairs = [("linewidth", self.linewidth), ("alpha", self.alpha),
                      ("marker", self.marker), ("markersize", self.markersize),
-                     ("drop_gaps", self.drop_gaps), ("title", self.title),
-                     ("xlabel", self.xlabel), ("ylabel", self.ylabel),
-                     ("series_units", self.series_units)]
+                     ("drop_gaps", self.drop_gaps)]
         elif self._plot_type == RIDGELINE:
             pairs = [("how", self.how), ("hspace", self.hspace),
                      ("shade_percentile", self.shade_percentile), ("kd_kwargs", self.bandwidth),
-                     ("show_mean_line", self.show_mean_line), ("ascending", self.ascending),
-                     ("xlabel", self.xlabel)]
+                     ("show_mean_line", self.show_mean_line), ("ascending", self.ascending)]
         elif self._plot_type == DIELCYCLE:
             pairs = [("mean", self.dc_mean), ("std", self.dc_std),
-                     ("each_month", self.dc_each_month), ("show_legend", self.dc_show_legend),
-                     ("showgrid", self.dc_show_grid), ("legend_n_col", self.dc_legend_ncol),
-                     ("legend_loc", self.dc_legend_loc),
-                     ("ylabel", self.dc_ylabel), ("txt_ylabel_units", self.dc_units)]
+                     ("each_month", self.dc_each_month)]
         elif self._plot_type == CUMULATIVE_YEAR:
             pairs = [("show_reference", self.cy_show_reference),
                      ("highlight_year", self.cy_highlight), ("digits_after_comma", self.cy_digits),
@@ -173,13 +208,11 @@ class PlotSettingsPanel(QScrollArea):
             pairs = [
                 ("cmap", self.cmap), ("vmin", self.vmin), ("vmax", self.vmax),
                 ("color_bad", self.color_bad), ("zlabel", self.zlabel),
-                ("xlabel", self.xlabel), ("ylabel", self.ylabel),
                 ("cb_digits_after_comma", self.cb_digits), ("cb_extend", self.cb_extend),
                 ("show_colormap", self.show_colormap), ("show_values", self.show_values),
                 ("show_values_n_dec_places", self.show_values_dec),
                 ("show_values_fontsize", self.show_values_fontsize),
-                ("axlabels_fontsize", self.axlabels_fontsize),
-                ("ticks_labelsize", self.ticks_labelsize), ("cb_labelsize", self.cb_labelsize),
+                ("cb_labelsize", self.cb_labelsize),
             ]
             # gridsize/normalize_axes/mincnt are __init__ params, not in plot().
             init_docs = param_docs(dv.plotting.HexbinPlot.__init__)
@@ -193,10 +226,7 @@ class PlotSettingsPanel(QScrollArea):
             pairs = [
                 ("cmap", self.sc_cmap), ("show_colorbar", self.sc_show_colorbar),
                 ("markersize", self.sc_markersize), ("alpha", self.sc_alpha),
-                ("vmin", self.sc_vmin), ("vmax", self.sc_vmax), ("title", self.sc_title),
-                ("xlabel", self.sc_xlabel), ("ylabel", self.sc_ylabel),
-                ("zlabel", self.sc_zlabel), ("xunits", self.sc_xunits),
-                ("yunits", self.sc_yunits),
+                ("vmin", self.sc_vmin), ("vmax", self.sc_vmax),
             ]
             # nbins/binagg are __init__ params, not in plot().
             init_docs = param_docs(dv.plotting.ScatterXY.__init__)
@@ -208,8 +238,8 @@ class PlotSettingsPanel(QScrollArea):
             pairs = [
                 ("highlight_peak", self.hist_peak), ("show_counts", self.hist_counts),
                 ("show_info", self.hist_info), ("show_title", self.hist_title),
-                ("show_grid", self.hist_grid), ("show_zscores", self.hist_zscores),
-                ("show_zscore_values", self.hist_zvalues), ("xlabel", self.hist_xlabel),
+                ("show_zscores", self.hist_zscores),
+                ("show_zscore_values", self.hist_zvalues),
             ]
             # n_bins is an __init__ param, not in plot().
             tip = param_docs(dv.plotting.HistogramPlot.__init__).get("n_bins")
@@ -270,7 +300,6 @@ class PlotSettingsPanel(QScrollArea):
             self.minticks = self._spin(3, 1, 50, form, "Date min ticks")
             self.maxticks = self._spin(10, 1, 100, form, "Date max ticks")
         self.show_less_xticklabels = self._check("Skip every 2nd x-label", form)
-        self.show_grid = self._check("Show grid", form)
         self._col.addWidget(layout)
 
         cbar = QGroupBox("Colorbar")
@@ -288,6 +317,7 @@ class PlotSettingsPanel(QScrollArea):
         self.cb_extend.addItems(["neither", "both", "min", "max"])
         self.cb_extend.currentTextChanged.connect(self.changed)
         form.addRow("Extend arrows", self.cb_extend)
+        self.cb_labelsize = self._fontspin(form, "Colorbar font")
         self._col.addWidget(cbar)
 
         vals = QGroupBox("Cell values")
@@ -297,12 +327,7 @@ class PlotSettingsPanel(QScrollArea):
         self.show_values_fontsize = self._fontspin(form, "Value font")
         self._col.addWidget(vals)
 
-        fonts = QGroupBox("Fonts (0 = auto)")
-        form = QFormLayout(fonts)
-        self.axlabels_fontsize = self._fontspin(form, "Axis labels")
-        self.ticks_labelsize = self._fontspin(form, "Tick labels")
-        self.cb_labelsize = self._fontspin(form, "Colorbar labels")
-        self._col.addWidget(fonts)
+        self._build_format_group(fields=["title", "fonts", "show_grid"])
 
     # --- time-series controls ---
     def _build_timeseries(self) -> None:
@@ -315,25 +340,9 @@ class PlotSettingsPanel(QScrollArea):
         self.drop_gaps = self._check("Drop gaps (connect)", form)
         self._col.addWidget(line)
 
-        labels = QGroupBox("Labels")
-        form = QFormLayout(labels)
-        self.title = QLineEdit()
-        self.title.setPlaceholderText("(variable name)")
-        self.title.editingFinished.connect(self.changed)
-        form.addRow("Title", self.title)
-        self.xlabel = QLineEdit()
-        self.xlabel.setPlaceholderText("Date")
-        self.xlabel.editingFinished.connect(self.changed)
-        form.addRow("X label", self.xlabel)
-        self.ylabel = QLineEdit()
-        self.ylabel.setPlaceholderText("(variable name)")
-        self.ylabel.editingFinished.connect(self.changed)
-        form.addRow("Y label", self.ylabel)
-        self.series_units = QLineEdit()
-        self.series_units.setPlaceholderText("e.g. °C")
-        self.series_units.editingFinished.connect(self.changed)
-        form.addRow("Y units", self.series_units)
-        self._col.addWidget(labels)
+        self._build_format_group(fields=[
+            "title", "xlabel", "ylabel", "yunits", "fonts",
+            "show_grid", "show_legend"])
 
         self._build_axes_group()
 
@@ -353,13 +362,7 @@ class PlotSettingsPanel(QScrollArea):
         self.ascending = self._check("Ascending order", form)
         self._col.addWidget(grp)
 
-        labels = QGroupBox("Labels")
-        form = QFormLayout(labels)
-        self.xlabel = QLineEdit()
-        self.xlabel.setPlaceholderText("(variable name)")
-        self.xlabel.editingFinished.connect(self.changed)
-        form.addRow("X label", self.xlabel)
-        self._col.addWidget(labels)
+        self._build_format_group(fields=["title", "xlabel", "fonts"])
 
     # --- hexbin controls ---
     def _build_hexbin(self) -> None:
@@ -427,6 +430,7 @@ class PlotSettingsPanel(QScrollArea):
         self.cb_extend.addItems(["neither", "both", "min", "max"])
         self.cb_extend.currentTextChanged.connect(self.changed)
         form.addRow("Extend arrows", self.cb_extend)
+        self.cb_labelsize = self._fontspin(form, "Colorbar font")
         self._col.addWidget(cbar)
 
         vals = QGroupBox("Bin values")
@@ -436,24 +440,8 @@ class PlotSettingsPanel(QScrollArea):
         self.show_values_fontsize = self._fontspin(form, "Value font")
         self._col.addWidget(vals)
 
-        labels = QGroupBox("Labels")
-        form = QFormLayout(labels)
-        self.xlabel = QLineEdit()
-        self.xlabel.setPlaceholderText("(X variable name)")
-        self.xlabel.editingFinished.connect(self.changed)
-        form.addRow("X label", self.xlabel)
-        self.ylabel = QLineEdit()
-        self.ylabel.setPlaceholderText("(Y variable name)")
-        self.ylabel.editingFinished.connect(self.changed)
-        form.addRow("Y label", self.ylabel)
-        self._col.addWidget(labels)
-
-        fonts = QGroupBox("Fonts (0 = auto)")
-        form = QFormLayout(fonts)
-        self.axlabels_fontsize = self._fontspin(form, "Axis labels")
-        self.ticks_labelsize = self._fontspin(form, "Tick labels")
-        self.cb_labelsize = self._fontspin(form, "Colorbar labels")
-        self._col.addWidget(fonts)
+        self._build_format_group(fields=[
+            "title", "xlabel", "ylabel", "fonts", "show_grid"])
 
     def set_years(self, years) -> None:
         """Populate the cumulative-year highlight dropdown from the data's years.
@@ -534,15 +522,9 @@ class PlotSettingsPanel(QScrollArea):
         form.addRow("Z max", self.sc_vmax)
         self._col.addWidget(colors)
 
-        labels = QGroupBox("Labels")
-        form = QFormLayout(labels)
-        self.sc_title = self._lineedit("(Y vs. X)", form, "Title")
-        self.sc_xlabel = self._lineedit("(X name)", form, "X label")
-        self.sc_ylabel = self._lineedit("(Y name)", form, "Y label")
-        self.sc_zlabel = self._lineedit("(Z name)", form, "Z label")
-        self.sc_xunits = self._lineedit("e.g. °C", form, "X units")
-        self.sc_yunits = self._lineedit("e.g. µmol m⁻²s⁻¹", form, "Y units")
-        self._col.addWidget(labels)
+        self._build_format_group(fields=[
+            "title", "xlabel", "ylabel", "xunits", "yunits", "zlabel",
+            "fonts", "show_grid", "show_legend"])
 
         self._build_axes_group()
 
@@ -559,7 +541,6 @@ class PlotSettingsPanel(QScrollArea):
         self.hist_counts = self._check("Show bar counts", form, checked=True)
         self.hist_info = self._check("Show info box", form, checked=True)
         self.hist_title = self._check("Show title", form, checked=True)
-        self.hist_grid = self._check("Show grid", form, checked=True)
         self._col.addWidget(disp)
 
         zgrp = QGroupBox("z-scores")
@@ -568,20 +549,7 @@ class PlotSettingsPanel(QScrollArea):
         self.hist_zvalues = self._check("Show z-score values", form, checked=True)
         self._col.addWidget(zgrp)
 
-        labels = QGroupBox("Labels")
-        form = QFormLayout(labels)
-        self.hist_xlabel = QLineEdit()
-        self.hist_xlabel.setPlaceholderText("(value)")
-        self.hist_xlabel.editingFinished.connect(self.changed)
-        form.addRow("X label", self.hist_xlabel)
-        self._col.addWidget(labels)
-
-    def _lineedit(self, placeholder, form, label) -> QLineEdit:
-        edit = QLineEdit()
-        edit.setPlaceholderText(placeholder)
-        edit.editingFinished.connect(self.changed)
-        form.addRow(label, edit)
-        return edit
+        self._build_format_group(fields=["title", "xlabel", "fonts", "show_grid"])
 
     # --- diel-cycle controls ---
     def _build_dielcycle(self) -> None:
@@ -590,30 +558,11 @@ class PlotSettingsPanel(QScrollArea):
         self.dc_mean = self._check("Show mean", form, checked=True)
         self.dc_std = self._check("Show ± SD band", form, checked=True)
         self.dc_each_month = self._check("One curve per month", form)
-        self.dc_show_legend = self._check("Show legend", form, checked=True)
-        self.dc_show_grid = self._check("Show grid", form, checked=True)
-        self.dc_legend_ncol = self._spin(1, 1, 6, form, "Legend columns")
-        self.dc_legend_loc = QComboBox()
-        self.dc_legend_loc.addItems([
-            "best", "upper right", "upper left", "lower left", "lower right",
-            "right", "center left", "center right", "lower center",
-            "upper center", "center",
-        ])
-        self.dc_legend_loc.currentTextChanged.connect(self.changed)
-        form.addRow("Legend position", self.dc_legend_loc)
         self._col.addWidget(grp)
 
-        labels = QGroupBox("Labels")
-        form = QFormLayout(labels)
-        self.dc_ylabel = QLineEdit()
-        self.dc_ylabel.setPlaceholderText("(variable name)")
-        self.dc_ylabel.editingFinished.connect(self.changed)
-        form.addRow("Y label", self.dc_ylabel)
-        self.dc_units = QLineEdit()
-        self.dc_units.setPlaceholderText("e.g. °C")
-        self.dc_units.editingFinished.connect(self.changed)
-        form.addRow("Y units", self.dc_units)
-        self._col.addWidget(labels)
+        self._build_format_group(fields=[
+            "title", "ylabel", "yunits", "fonts",
+            "show_grid", "show_legend", "legend"])
 
         self._build_axes_group(yonly=True)
 
@@ -642,6 +591,8 @@ class PlotSettingsPanel(QScrollArea):
         self.cy_yearly_end.editingFinished.connect(self.changed)
         form.addRow("Yearly end date", self.cy_yearly_end)
         self._col.addWidget(labels)
+
+        self._build_format_group(fields=["fonts", "show_grid", "show_legend"])
 
         self._build_axes_group()
 
@@ -696,6 +647,92 @@ class PlotSettingsPanel(QScrollArea):
             "invert_y": self.ax_invert_y.isChecked(),
             "grid": self.ax_grid.isChecked(),
         }
+
+    #: Matplotlib legend locations offered in the Format group's legend combo.
+    _LEGEND_LOCS = [
+        "best", "upper right", "upper left", "lower left", "lower right",
+        "right", "center left", "center right", "lower center",
+        "upper center", "center",
+    ]
+
+    def _build_format_group(self, fields) -> None:
+        """Append the shared "Format" group, building only the named controls.
+
+        One consistent chrome group (title/labels/units/fonts/grid/legend) for
+        every plot type; `fields` selects the subset. Each widget gets a stable
+        `fmt_` attribute so `values()`/state can read it, and all rows live in one
+        QFormLayout so `_state_widgets()` picks them up automatically. The
+        per-type values flow into a `dv.plotting.FormatStyle` via
+        :meth:`_format_values`.
+        """
+        grp = QGroupBox("Format")
+        form = QFormLayout(grp)
+
+        def _line(attr, label, placeholder):
+            edit = QLineEdit()
+            edit.setPlaceholderText(placeholder)
+            edit.editingFinished.connect(self.changed)
+            form.addRow(label, edit)
+            setattr(self, attr, edit)
+
+        if "title" in fields:
+            _line("fmt_title", "Title", "(auto: variable name)")
+        if "xlabel" in fields:
+            _line("fmt_xlabel", "X label", "(auto)")
+        if "ylabel" in fields:
+            _line("fmt_ylabel", "Y label", "(auto)")
+        if "xunits" in fields:
+            _line("fmt_xunits", "X units", "e.g. °C")
+        if "yunits" in fields:
+            _line("fmt_yunits", "Y units", "e.g. °C")
+        if "zlabel" in fields:
+            _line("fmt_zlabel", "Z label", "(colour label)")
+        if "fonts" in fields:
+            self.fmt_title_fs = self._fontspin(form, "Title font")
+            self.fmt_axlabel_fs = self._fontspin(form, "Axis-label font")
+            self.fmt_ticks_fs = self._fontspin(form, "Tick font")
+        if "show_grid" in fields:
+            grid_default = self._plot_type not in (
+                HEATMAP, HEATMAP_YEARMONTH, HEXBIN)
+            self.fmt_grid = self._check("Show grid", form, checked=grid_default)
+        if "show_legend" in fields:
+            self.fmt_legend = self._check("Show legend", form, checked=True)
+        if "legend" in fields:
+            self.fmt_legend_loc = QComboBox()
+            self.fmt_legend_loc.addItems(self._LEGEND_LOCS)
+            self.fmt_legend_loc.currentTextChanged.connect(self.changed)
+            form.addRow("Legend position", self.fmt_legend_loc)
+            self.fmt_legend_ncol = self._spin(1, 1, 6, form, "Legend columns")
+
+        self._col.addWidget(grp)
+
+    def _format_values(self) -> dict:
+        """FormatStyle-kwargs dict for whichever fmt_ widgets exist."""
+        out: dict = {}
+        if hasattr(self, "fmt_title"):
+            out["title"] = self.fmt_title.text().strip() or None
+        if hasattr(self, "fmt_xlabel"):
+            out["xlabel"] = self.fmt_xlabel.text().strip() or None
+        if hasattr(self, "fmt_ylabel"):
+            out["ylabel"] = self.fmt_ylabel.text().strip() or None
+        if hasattr(self, "fmt_xunits"):
+            out["xunits"] = self.fmt_xunits.text().strip() or None
+        if hasattr(self, "fmt_yunits"):
+            out["yunits"] = self.fmt_yunits.text().strip() or None
+        if hasattr(self, "fmt_zlabel"):
+            out["zlabel"] = self.fmt_zlabel.text().strip() or None
+        if hasattr(self, "fmt_title_fs"):
+            out["title_fontsize"] = self.fmt_title_fs.value() or None
+            out["axlabel_fontsize"] = self.fmt_axlabel_fs.value() or None
+            out["ticks_fontsize"] = self.fmt_ticks_fs.value() or None
+        if hasattr(self, "fmt_grid"):
+            out["show_grid"] = self.fmt_grid.isChecked()
+        if hasattr(self, "fmt_legend"):
+            out["show_legend"] = self.fmt_legend.isChecked()
+        if hasattr(self, "fmt_legend_loc"):
+            out["legend_loc"] = self.fmt_legend_loc.currentText()
+            out["legend_ncol"] = self.fmt_legend_ncol.value()
+        return out
 
     @staticmethod
     def _reverse_cmap(cmap, reverse: bool):
@@ -793,7 +830,6 @@ class PlotSettingsPanel(QScrollArea):
                 "color_bad": self.color_bad.currentText().strip() or "grey",
                 "ax_orientation": self.orientation.currentText(),
                 "show_less_xticklabels": self.show_less_xticklabels.isChecked(),
-                "show_grid": self.show_grid.isChecked(),
                 "show_colormap": self.show_colormap.isChecked(),
                 "zlabel": self.zlabel.text().strip() or None,
                 "cb_digits_after_comma": "auto" if digits == "auto" else int(digits),
@@ -801,9 +837,8 @@ class PlotSettingsPanel(QScrollArea):
                 "show_values": self.show_values.isChecked(),
                 "show_values_n_dec_places": self.show_values_dec.value(),
                 "show_values_fontsize": _font(self.show_values_fontsize),
-                "axlabels_fontsize": _font(self.axlabels_fontsize),
-                "ticks_labelsize": _font(self.ticks_labelsize),
                 "cb_labelsize": _font(self.cb_labelsize),
+                "_format": self._format_values(),
             }
             reverse = self.reverse_cmap.isChecked()
             if self._plot_type == HEATMAP_YEARMONTH:
@@ -825,20 +860,15 @@ class PlotSettingsPanel(QScrollArea):
                 "shade_percentile": self.shade_percentile.value(),
                 "show_mean_line": self.show_mean_line.isChecked(),
                 "ascending": self.ascending.isChecked(),
-                "xlabel": self.xlabel.text().strip() or None,
                 "kd_kwargs": {"bandwidth": bw} if bw > 0 else None,
+                "_format": self._format_values(),
             }
         if self._plot_type == DIELCYCLE:
             return {
                 "mean": self.dc_mean.isChecked(),
                 "std": self.dc_std.isChecked(),
                 "each_month": self.dc_each_month.isChecked(),
-                "show_legend": self.dc_show_legend.isChecked(),
-                "showgrid": self.dc_show_grid.isChecked(),
-                "legend_n_col": self.dc_legend_ncol.value(),
-                "legend_loc": self.dc_legend_loc.currentText(),
-                "ylabel": self.dc_ylabel.text().strip() or None,
-                "txt_ylabel_units": self.dc_units.text().strip() or None,
+                "_format": self._format_values(),
                 "_axes": self._axes_values(),
             }
         if self._plot_type == CUMULATIVE_YEAR:
@@ -849,6 +879,7 @@ class PlotSettingsPanel(QScrollArea):
                 "digits_after_comma": self.cy_digits.value(),
                 "series_units": self.cy_units.text().strip() or None,
                 "yearly_end_date": self.cy_yearly_end.text().strip() or None,
+                "_format": self._format_values(),
                 "_axes": self._axes_values(),
             }
         if self._plot_type == HEXBIN:
@@ -866,17 +897,14 @@ class PlotSettingsPanel(QScrollArea):
                 "vmax": self._float_or_none(self.vmax.text()),
                 "color_bad": self.color_bad.currentText().strip() or "grey",
                 "zlabel": self.zlabel.text().strip() or None,
-                "xlabel": self.xlabel.text().strip() or None,
-                "ylabel": self.ylabel.text().strip() or None,
                 "cb_digits_after_comma": int(self.cb_digits.currentText()),
                 "cb_extend": self.cb_extend.currentText(),
                 "show_colormap": self.show_colormap.isChecked(),
                 "show_values": self.show_values.isChecked(),
                 "show_values_n_dec_places": self.show_values_dec.value(),
                 "show_values_fontsize": _font(self.show_values_fontsize),
-                "axlabels_fontsize": _font(self.axlabels_fontsize),
-                "ticks_labelsize": _font(self.ticks_labelsize),
                 "cb_labelsize": _font(self.cb_labelsize),
+                "_format": self._format_values(),
             }
         if self._plot_type == SCATTER:
             return {
@@ -889,12 +917,7 @@ class PlotSettingsPanel(QScrollArea):
                 "alpha": self.sc_alpha.value(),
                 "vmin": self._float_or_none(self.sc_vmin.text()),
                 "vmax": self._float_or_none(self.sc_vmax.text()),
-                "title": self.sc_title.text().strip() or None,
-                "xlabel": self.sc_xlabel.text().strip() or None,
-                "ylabel": self.sc_ylabel.text().strip() or None,
-                "zlabel": self.sc_zlabel.text().strip() or None,
-                "xunits": self.sc_xunits.text().strip() or None,
-                "yunits": self.sc_yunits.text().strip() or None,
+                "_format": self._format_values(),
                 "_axes": self._axes_values(),
             }
         if self._plot_type == HISTOGRAM:
@@ -904,10 +927,9 @@ class PlotSettingsPanel(QScrollArea):
                 "show_counts": self.hist_counts.isChecked(),
                 "show_info": self.hist_info.isChecked(),
                 "show_title": self.hist_title.isChecked(),
-                "show_grid": self.hist_grid.isChecked(),
                 "show_zscores": self.hist_zscores.isChecked(),
                 "show_zscore_values": self.hist_zvalues.isChecked(),
-                "xlabel": self.hist_xlabel.text().strip() or None,
+                "_format": self._format_values(),
             }
         return {
             "linewidth": self.linewidth.value(),
@@ -915,9 +937,6 @@ class PlotSettingsPanel(QScrollArea):
             "marker": self.marker.isChecked(),
             "markersize": self.markersize.value(),
             "drop_gaps": self.drop_gaps.isChecked(),
-            "title": self.title.text().strip() or None,
-            "xlabel": self.xlabel.text().strip() or None,
-            "ylabel": self.ylabel.text().strip() or None,
-            "series_units": self.series_units.text().strip() or None,
+            "_format": self._format_values(),
             "_axes": self._axes_values(),
         }

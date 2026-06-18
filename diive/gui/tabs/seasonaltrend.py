@@ -335,8 +335,9 @@ class SeasonalTrendTab(DiiveTab):
                 reference_start_year=self.ref_start.value(),
                 reference_end_year=self.ref_end.value(),
                 series_label=self._target,
-            ).plot(ax=ax, title=f"{self._target} — yearly anomaly vs. "
-                                f"{self.ref_start.value()}–{self.ref_end.value()} mean")
+            ).plot(ax=ax, format_style=dv.plotting.FormatStyle(
+                title=f"{self._target} — yearly anomaly vs. "
+                      f"{self.ref_start.value()}–{self.ref_end.value()} mean"))
         except Exception as err:
             ax.clear()
             ax.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",

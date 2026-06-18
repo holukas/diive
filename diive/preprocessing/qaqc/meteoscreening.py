@@ -20,6 +20,7 @@ import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 from diive.core.utils.console import info, detail
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
+from diive.core.plotting.styles.format import FormatStyle
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.times.resampling import resample_series_to_30MIN
 from diive.core.times.times import TimestampSanitizer
@@ -267,10 +268,12 @@ class StepwiseMeteoScreeningDb:
                          color="#FFA726", alpha=1, markersize=3, markeredgecolor='none')
 
             # Heatmaps
-            kwargs_heatmap = dict(cb_labelsize=10, axlabels_fontsize=10, ticks_labelsize=10,
-                                  minticks=3, maxticks=99)
-            HeatmapDateTime(series=series_orig).plot(ax=ax_heatmap_hires_before, **kwargs_heatmap)
-            HeatmapDateTime(series=series_resampled).plot(ax=ax_heatmap_resampled_after, **kwargs_heatmap)
+            kwargs_heatmap = dict(cb_labelsize=10, minticks=3, maxticks=99)
+            format_style_heatmap = FormatStyle(axlabel_fontsize=10, ticks_fontsize=10)
+            HeatmapDateTime(series=series_orig).plot(ax=ax_heatmap_hires_before,
+                                                     format_style=format_style_heatmap, **kwargs_heatmap)
+            HeatmapDateTime(series=series_resampled).plot(ax=ax_heatmap_resampled_after,
+                                                          format_style=format_style_heatmap, **kwargs_heatmap)
 
             # Format time series
             default_format(ax=ax_orig, ticks_labels_fontsize=10)

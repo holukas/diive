@@ -38,9 +38,15 @@ tr = dv.plotting.TreeRingPlot(
 # Radial line plot — default blue-to-red colormap
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+# The shared FormatStyle carries the title (chrome). This is a polar plot, so
+# only the title and its font fields apply; the colorbar (cb_*) stays direct.
+style = dv.plotting.FormatStyle(
+    title='Air temperature at ICOS Ecosystem Station Davos (2013-2022)',
+)
+
 tr.plot_line(
     figsize=(10, 10),
-    title='Air temperature at ICOS Ecosystem Station Davos (2013-2022)',
+    format_style=style,
     # vmin=-15,
     # vmax=25,
     linewidth=1.2,

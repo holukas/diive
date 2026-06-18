@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 
 from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
 from diive.core.plotting.histogram import HistogramPlot
+from diive.core.plotting.styles.format import FormatStyle
 
 
 class TestPlots(unittest.TestCase):
@@ -15,7 +16,7 @@ class TestPlots(unittest.TestCase):
         series = data_df['FC'].copy()
 
         hist = HistogramPlot(series=series, method='n_bins', n_bins=20)
-        hist.plot(xlabel='flux', highlight_peak=True, show_zscores=True, show_info=True)
+        hist.plot(format_style=FormatStyle(xlabel='flux'), highlight_peak=True, show_zscores=True, show_info=True)
 
         edges = hist.edges
         counts = hist.counts
@@ -52,7 +53,7 @@ class TestPlots(unittest.TestCase):
         idx = pd.date_range("2021-01-01", periods=50, freq="30min")
         s = pd.Series(range(50), index=idx, name="ser", dtype=float)
         fig, ax = plt.subplots()
-        TimeSeries(s).plot(ax=ax, title="My Title", marker=True, markersize=7)
+        TimeSeries(s).plot(ax=ax, format_style=FormatStyle(title="My Title"), marker=True, markersize=7)
         self.assertEqual(ax.get_title(), "My Title")
         line = next(l for l in ax.get_lines() if l.get_markersize() > 0)
         self.assertAlmostEqual(line.get_markersize(), 7)
@@ -64,7 +65,7 @@ class TestPlots(unittest.TestCase):
         idx = pd.date_range("2021-01-01", periods=48 * 60, freq="30min")
         s = pd.Series([i % 48 for i in range(len(idx))], index=idx, name="ser", dtype=float)
         fig, ax = plt.subplots()
-        DielCycle(s).plot(ax=ax, legend_loc="upper right")
+        DielCycle(s).plot(ax=ax, format_style=FormatStyle(legend_loc="upper right"))
         self.assertIsNotNone(ax.get_legend())
         plt.close(fig)
 

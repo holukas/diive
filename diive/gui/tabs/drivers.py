@@ -299,7 +299,8 @@ class DriverExplorerTab(DiiveTab):
             sub = pd.concat([x.rename(driver), y.rename(self._target)], axis=1).dropna()
             title = f"{self._target} vs. {driver}" + (f"  (lag {lag:+d} rec.)" if lag else "")
             dv.plotting.ScatterXY(x=sub[driver], y=sub[self._target]).plot(
-                ax=ax, title=title, xlabel=driver, ylabel=self._target)
+                ax=ax, format_style=dv.plotting.FormatStyle(
+                    title=title, xlabel=driver, ylabel=self._target))
         except Exception as err:
             ax.clear()
             ax.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",

@@ -28,6 +28,23 @@ print(f"Loaded {len(df_orig)} records")
 print(f"Unit conversion factor: {conversion_factor}")
 
 # %%
+# A shared FormatStyle for the chrome
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# Build the plot chrome (font sizes, grid) once as a ``FormatStyle`` and reuse
+# it across both cumulative plots below, so they share one look. The y-axis
+# units are folded in from the ``series_units`` constructor argument, so they
+# are not repeated here. (CumulativeYear owns its own dynamic per-year title,
+# so a ``title`` set on the style does not apply here.) Data-rendering choices
+# like ``highlight_year_color`` stay direct on ``plot()``.
+
+style = dv.plotting.FormatStyle(
+    axlabel_fontsize=12,
+    ticks_fontsize=10,
+    show_grid=False,
+)
+
+# %%
 # Yearly cumulative with reference band
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
@@ -42,7 +59,7 @@ dv.plotting.CumulativeYear(
     end_year=2019,
     show_reference=True,
     excl_years_from_reference=None,
-).plot(highlight_year_color='#F44336')
+).plot(format_style=style, highlight_year_color='#F44336')
 
 print("\nPlotted yearly cumulative sums with reference band (2015-2017 baseline)")
 
@@ -51,6 +68,7 @@ print("\nPlotted yearly cumulative sums with reference band (2015-2017 baseline)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # Emphasize a single year for detailed comparison against reference period.
+# The same ``style`` is reused, so both figures share identical chrome.
 
 dv.plotting.CumulativeYear(
     series=series,
@@ -61,7 +79,7 @@ dv.plotting.CumulativeYear(
     show_reference=True,
     excl_years_from_reference=None,
     highlight_year=2017,
-).plot(highlight_year_color='#F44336')
+).plot(format_style=style, highlight_year_color='#F44336')
 
 print("Plotted yearly cumulative sums with year 2017 highlighted")
 print("Highlighting enables easy identification of outlier years and trends")

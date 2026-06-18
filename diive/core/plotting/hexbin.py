@@ -46,6 +46,7 @@ import numpy as np
 
 from diive.core.plotting.heatmap_base import HeatmapBase
 from diive.core.plotting.styles import LightTheme as theme
+from diive.core.plotting.styles.format import FormatStyle
 from diive.core.utils.console import info
 
 
@@ -253,7 +254,7 @@ class HexbinPlot(HeatmapBase):
              fig=None,
              figsize: tuple = None,
              figdpi: int = 72,
-             title: str = None,
+             format_style: FormatStyle = None,
              vmin: float = None,
              vmax: float = None,
              cmap: str = 'RdYlBu_r',
@@ -264,8 +265,6 @@ class HexbinPlot(HeatmapBase):
              cb_digits_after_comma: int = 2,
              cb_labelsize: float = None,
              cb_extend: str = None,
-             axlabels_fontsize: float = None,
-             ticks_labelsize: float = None,
              minticks: int = 3,
              maxticks: int = 10,
              color_bad: str = 'grey',
@@ -274,8 +273,7 @@ class HexbinPlot(HeatmapBase):
              show_values: bool = False,
              show_values_fontsize: float = None,
              show_values_n_dec_places: int = 0,
-             show_values_color: str = 'black',
-             show_grid: bool = False):
+             show_values_color: str = 'black'):
         """Render HexbinPlot with matplotlib styling (Phase 2 of two-phase design).
 
         All styling and presentation parameters go here. Can be called multiple times
@@ -286,7 +284,11 @@ class HexbinPlot(HeatmapBase):
             fig: Existing matplotlib Figure. If None and ax is None, creates new figure
             figsize: Figure size as (width, height) in inches. Only used when ax is None
             figdpi: Figure DPI. Only used when ax is None (default 72)
-            title: Plot title (auto-generated if None)
+            format_style: Shared chrome (title/labels/fonts/ticks/spines/grid) via
+                :class:`~diive.core.plotting.styles.format.FormatStyle`. None = house
+                style (grid off). The ``xlabel``/``ylabel`` below still feed the
+                axis labels as caller defaults; a passed format_style overrides
+                them. The colorbar stays ``cb_*``/``zlabel``-controlled.
             vmin: Minimum color value (auto from data if None)
             vmax: Maximum color value (auto from data if None)
             cmap: Colormap name (default: 'RdYlBu_r')
@@ -294,8 +296,6 @@ class HexbinPlot(HeatmapBase):
             cb_digits_after_comma: Decimal places on colorbar labels (default 2)
             cb_labelsize: Font size for colorbar tick labels
             cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
-            axlabels_fontsize: Font size for axis labels
-            ticks_labelsize: Font size for tick labels
             minticks: Minimum major ticks on axes (default 3)
             maxticks: Maximum major ticks on axes (default 10)
             color_bad: Color for NaN cells (default 'grey')
@@ -305,7 +305,6 @@ class HexbinPlot(HeatmapBase):
             show_values_fontsize: Font size for value overlay text
             show_values_n_dec_places: Decimal places for value overlay (default 0)
             show_values_color: Text color for value overlay (default 'black')
-            show_grid: Show gridlines (default False)
 
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
@@ -324,10 +323,6 @@ class HexbinPlot(HeatmapBase):
         # Use theme defaults if not provided
         if cb_labelsize is None:
             cb_labelsize = theme.AX_LABELS_FONTSIZE
-        if axlabels_fontsize is None:
-            axlabels_fontsize = theme.AX_LABELS_FONTSIZE
-        if ticks_labelsize is None:
-            ticks_labelsize = theme.TICKS_LABELS_FONTSIZE
         if show_values_fontsize is None:
             show_values_fontsize = theme.AX_LABELS_FONTSIZE
 
@@ -354,7 +349,7 @@ class HexbinPlot(HeatmapBase):
             fig=fig,
             figsize=figsize,
             figdpi=figdpi,
-            title=title,
+            format_style=format_style,
             vmin=vmin,
             vmax=vmax,
             cmap=cmap,
@@ -362,8 +357,6 @@ class HexbinPlot(HeatmapBase):
             cb_digits_after_comma=cb_digits_after_comma,
             cb_labelsize=cb_labelsize,
             cb_extend=cb_extend,
-            axlabels_fontsize=axlabels_fontsize,
-            ticks_labelsize=ticks_labelsize,
             minticks=minticks,
             maxticks=maxticks,
             color_bad=color_bad,
@@ -371,8 +364,7 @@ class HexbinPlot(HeatmapBase):
             show_less_xticklabels=show_less_xticklabels,
             show_values=show_values,
             show_values_fontsize=show_values_fontsize,
-            show_values_n_dec_places=show_values_n_dec_places,
-            show_grid=show_grid
+            show_values_n_dec_places=show_values_n_dec_places
         )
 
         # Store styling parameters for show_vals_in_plot()
@@ -405,15 +397,11 @@ class HexbinPlot(HeatmapBase):
             self.ax.set_aspect('equal', adjustable='datalim')
             self.ax.apply_aspect()
 
-        # Format axes with styling
-        self.ax.set_xlabel(xlabel, fontsize=axlabels_fontsize)
-        self.ax.set_ylabel(ylabel, fontsize=axlabels_fontsize)
-        self.ax.xaxis.set_tick_params(labelsize=ticks_labelsize)
-        self.ax.yaxis.set_tick_params(labelsize=ticks_labelsize)
-
         # Overlay values on hexagons if requested
         if show_values:
             self.show_vals_in_plot()
 
-        # Apply base formatting (title, colorbar, spines, grid, etc.)
+        # Apply base formatting (title, axis labels + fonts, ticks, spines, grid,
+        # colorbar) via the shared FormatStyle path. The hexbin's axis labels flow
+        # through as the caller defaults, so a passed format_style can override them.
         self.format(plot=self.p, ax_xlabel_txt=xlabel, ax_ylabel_txt=ylabel)

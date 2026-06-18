@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 from pandas import Series, DataFrame
 
 import diive.core.plotting.styles.LightTheme as theme
-from diive.core.plotting.plotfuncs import default_format, format_spines, default_legend, add_zeroline_y
 from diive.core.plotting.plotfuncs import set_fig
+from diive.core.plotting.styles.format import FormatStyle
 from diive.core.times.resampling import diel_cycle
 
 
@@ -28,14 +28,9 @@ class DielCycle:
         self.fig = None
         self.ax = None
         self.showplot = False
-        self.title = None
-        self.ylabel = None
-        self.txt_ylabel_units = None
         self._diel_cycles_df = None
-        self.showgrid = True
         self.show_xticklabels = True
         self.show_xlabel = True
-        self.show_legend = True
 
     def get_data(self) -> DataFrame:
         return self.diel_cycles_df
@@ -49,37 +44,30 @@ class DielCycle:
 
     def plot(self,
              ax: plt.Axes = None,
-             title: str = None,
+             format_style: FormatStyle = None,
              color: str = None,
-             txt_ylabel_units: str = None,
              mean: bool = True,
              std: bool = True,
              each_month: bool = False,
              linewidth: float = 2,
-             legend_n_col: int = 1,
-             legend_loc: str = 'best',
              ylim: list = None,
-             ylabel: str = None,
-             showgrid: bool = True,
              show_xticklabels: bool = True,
              show_xlabel: bool = True,
-             show_legend: bool = True,
              **kwargs):
         """Plot the diel (24-hour) cycle, optionally one curve per month.
 
+        Chrome (title, labels, units, font sizes, colours, grid, legend, zero
+        line) comes from a shared :class:`~diive.plotting.FormatStyle`.
+
         Args:
-            legend_loc: Matplotlib legend location, e.g. 'best', 'upper right',
-                'lower left', 'center' (default: 'best').
+            format_style: A :class:`~diive.plotting.FormatStyle` describing the
+                chrome. When None the diive house style is used.
         """
 
-        self.title = title
-        self.legend_loc = legend_loc
-        self.txt_ylabel_units = txt_ylabel_units
-        self.ylabel = ylabel
-        self.showgrid = showgrid
         self.show_xticklabels = show_xticklabels
         self.show_xlabel = show_xlabel
-        self.show_legend = show_legend
+
+        style = format_style or FormatStyle()
 
         # Resample
         self._diel_cycles_df = diel_cycle(series=self.series,
@@ -131,34 +119,23 @@ class DielCycle:
                                  alpha=alpha, zorder=0, color=color, edgecolor='none',
                                  label=label)
 
-        self._format(title=title, legend_n_col=legend_n_col, ylim=ylim)
+        # Shared formatting layer: title/labels/units/fonts/grid/legend/zeroline.
+        style.apply(ax=self.ax, default_xlabel="Time (hours of day)",
+                    default_ylabel=self.series.name,
+                    zeroline_data=self.diel_cycles_df['mean'])
 
-        if self.showplot:
-            self.fig.show()
-
-    def _format(self, title, legend_n_col, ylim):
-
-        if title:
-            self.ax.set_title(title, color='black', fontsize=24)
-        ax_xlabel_txt = "Time (hours of day)"
-        ylabel = self.ylabel if self.ylabel else self.series.name
-        default_format(ax=self.ax, ax_xlabel_txt=ax_xlabel_txt, ax_ylabel_txt=ylabel,
-                       txt_ylabel_units=self.txt_ylabel_units,
-                       ticks_direction='in', ticks_length=8, ticks_width=2,
-                       ax_labels_fontsize=20,
-                       ticks_labels_fontsize=20,
-                       showgrid=self.showgrid)
+        # show_xlabel=False blanks the (already-set) x-label.
         if not self.show_xlabel:
             self.ax.set_xlabel("")
-        format_spines(ax=self.ax, color='black', lw=1)
-        if self.show_legend:
-            default_legend(ax=self.ax, ncol=legend_n_col, loc=self.legend_loc)
-        add_zeroline_y(ax=self.ax, data=self.diel_cycles_df['mean'])
+
+        # Fixed 0-24h diel x-axis with hourly ticks (domain-specific, not chrome).
         self.ax.set_xticks([3, 6, 9, 12, 15, 18, 21])
         self.ax.set_xticklabels([3, 6, 9, 12, 15, 18, 21])
         if not self.show_xticklabels:
             self.ax.set_xticklabels([])
         self.ax.set_xlim([0, 24])
         self.ax.set_ylim(ylim)
+
         if self.showplot:
             self.fig.tight_layout()
+            self.fig.show()

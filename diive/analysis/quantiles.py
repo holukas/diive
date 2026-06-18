@@ -13,6 +13,7 @@ import pandas as pd
 from pandas import Series, DataFrame
 
 from diive.core.plotting.scatter import ScatterXY
+from diive.core.plotting.styles.format import FormatStyle
 from diive.core.utils.console import console as _console
 
 
@@ -45,6 +46,6 @@ def percentiles101(series: Series, showplot: bool = True, verbose: bool = True) 
     if showplot:
         scatter = ScatterXY(x=percentiles_df['PERCENTILE'],
                             y=percentiles_df['VALUE'])
-        scatter.plot(title=f"Percentile values: {series.name}")
+        scatter.plot(format_style=FormatStyle(title=f"Percentile values: {series.name}"))
 
     return percentiles_df

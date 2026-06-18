@@ -5,7 +5,7 @@ import pandas as pd
 
 import diive.core.plotting.plotfuncs as pf
 from diive.core.funcs.funcs import zscore, val_from_zscore
-from diive.core.plotting.plotfuncs import default_format
+from diive.core.plotting.styles.format import FormatStyle
 
 # pd.options.display.width = None
 # pd.options.display.max_columns = None
@@ -63,23 +63,33 @@ class HistogramPlot:
     def get_ax(self):
         return self.ax
 
-    def plot(self, ax=None, xlabel: str = None, title: str = None, highlight_peak: bool = True,
-             show_zscores: bool = True, show_zscore_values: bool = True, show_info: bool = True,
-             show_counts: bool = True, show_title: bool = True, show_grid: bool = True):
+    def plot(self, ax=None, format_style: FormatStyle = None,
+             highlight_peak: bool = True, show_zscores: bool = True, show_zscore_values: bool = True,
+             show_info: bool = True, show_counts: bool = True, show_title: bool = True):
         """Generate histogram plot with optional styling.
+
+        Chrome (title, x-label, grid, fonts, colours) comes from a shared
+        :class:`~diive.plotting.FormatStyle` so it matches every other diive plot.
+        The histogram-specific rendering (bar colour, peak highlight, z-score
+        twiny axis, info/counts boxes and their toggles) stays here.
 
         Args:
             ax: Matplotlib axes (creates new if None)
-            xlabel: X-axis label (default: empty)
-            title: Plot title (default: "{series.name} (between {start_date} and {end_date})")
+            format_style: A :class:`~diive.plotting.FormatStyle` describing the chrome.
+                When None the diive house style is used. Default title:
+                "{series.name} (between {start_date} and {end_date})".
             highlight_peak: Highlight the bin with most counts (default: True)
             show_zscores: Show z-score overlay on top axis (default: True)
             show_zscore_values: Display z-score values and corresponding data values (default: True)
             show_info: Show method and peak information text (default: True)
             show_counts: Show count labels on each bar (default: True)
             show_title: Display title (default: True)
-            show_grid: Display gridlines (default: True)
         """
+        # show_title=False suppresses the title via an empty string on a copied style.
+        style = format_style or FormatStyle()
+        if not show_title:
+            style = style.merged(title="")
+
         # Setup
         self.ax = ax
         self.fig, self.ax, showplot = pf.setup_figax(ax=self.ax, figsize=(16, 9))
@@ -92,12 +102,6 @@ class HistogramPlot:
             color="#78909c"
         )
         self.ax.set_xticks(self.edges)
-
-        if show_title:
-            plot_title = title if title else f"{self.s.name} (between {self.first_date} and {self.last_date})"
-            self.ax.set_title(plot_title, fontsize=24, weight='bold')
-
-        xlabel_text = xlabel if xlabel else ""
 
         ix_max = self.counts.argmax()
 
@@ -153,9 +157,9 @@ class HistogramPlot:
             self.axx.tick_params(axis='x', colors='#AB47BC', labelsize=16)
             self.axx.set_xlabel("z-score", color='#AB47BC', fontsize=16)
 
-        default_format(ax=self.ax, ax_xlabel_txt=xlabel_text, ax_ylabel_txt="counts",
-                       ticks_width=2, ticks_length=6, ticks_direction='in',
-                       spines_lw=1, showgrid=show_grid)
+        # Shared formatting layer: title/x-label/y-label/fonts/grid.
+        style.apply(ax=self.ax, default_title=f"{self.s.name} (between {self.first_date} and {self.last_date})",
+                    default_xlabel="", default_ylabel="Counts")
 
         self.ax.locator_params(axis='both', nbins=10)
 
