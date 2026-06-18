@@ -538,8 +538,8 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   won't bind. When lazily creating a menu tab, call `tab.widget()` (builds it) **before** connecting `featuresCreated`,
   which `build()` sets.
 - **ML gap-filling tabs — `MlGapFillingTab` template** (`tabs/_ml_gapfilling_base.py`). The XGBoost tab's whole
-  layout/flow is a **reusable template** so every ML gap-filler (XGBoost now, **Random Forest** next, ...) shares one
-  identical UI. The base owns everything generic; a concrete tab is a thin subclass overriding a small **method-hook
+  layout/flow is a **reusable template** so every ML gap-filler (**XGBoost** + **Random Forest** now, MDS-style next, ...)
+  shares one identical UI. The base owns everything generic; a concrete tab is a thin subclass overriding a small **method-hook
   surface**: class attrs `title` / `method_name` / `method_chip_label`+`_bg`+`_fg` (the hero chip), and methods
   `_model_class()` (the library `*TS` class), `_build_model_box()` (the hyperparameter `QGroupBox`), `_method_kwargs()`
   (constructor kwargs from those widgets), `_method_controls()` ({name: widget} for save/restore), and
@@ -556,6 +556,13 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
     feature-engineering settings** (do that in the Feature engineering tab first, then select the engineered columns
     here). `random_state` uses `-1` as a special "none" value (shown as `none`) → the seed is omitted so XGBoost reseeds
     (non-reproducible); any value ≥ 0 (default 42) is a fixed reproducible seed.
+  - **Random Forest gap-filling tab** (`tabs/gapfilling_randomforest.py`, `Gap-filling ▸ Random Forest gap-filling`,
+    single-instance) — the second `MlGapFillingTab` subclass and the proof the template generalises: model class
+    `RandomForestTS`, green `RANDOM FOREST` chip, codegen `randomforest_gapfill_to_code`, gap-filled suffix `*_gfRF`. Its
+    `_build_model_box` is the only real difference — the sklearn-RF hyperparameters (n_estimators / max_depth (`0` special
+    value → `none`/unlimited) / min_samples_split / min_samples_leaf / max_features (`all`/`sqrt`/`log2`) / test_size /
+    random_state / n_jobs / negatives), `n_jobs` defaulting to `-1`. Everything else (layout, Results dashboard, flow) is
+    inherited unchanged.
   - **Model sub-tab** = the full gap-filling workspace, three regions in a horizontal **QHBoxLayout** (not a splitter —
     a splitter allocates panes wider than their fixed widgets and leaves gaps): the input lists (**Target**
     `VariablePanel` far left, click to set the gap-fill target highlighted via `set_panels`, auto-excluded from the

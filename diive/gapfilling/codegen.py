@@ -74,3 +74,16 @@ def xgboost_gapfill_to_code(target: str, features: list[str], kwargs: dict, *,
         "XGBoostTS", "_gfXG", target, features, kwargs,
         reduce=reduce, shap_threshold_factor=shap_threshold_factor,
         df_var=df_var, load_hint=load_hint)
+
+
+def randomforest_gapfill_to_code(target: str, features: list[str], kwargs: dict, *,
+                                 reduce: bool = False,
+                                 shap_threshold_factor: float = 0.5,
+                                 df_var: str = "df",
+                                 load_hint: str | None = None) -> str:
+    """Render a ``RandomForestTS(...).run()`` snippet (thin wrapper over
+    :func:`ml_gapfill_to_code`)."""
+    return ml_gapfill_to_code(
+        "RandomForestTS", "_gfRF", target, features, kwargs,
+        reduce=reduce, shap_threshold_factor=shap_threshold_factor,
+        df_var=df_var, load_hint=load_hint)

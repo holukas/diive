@@ -70,15 +70,17 @@
   variables**, **Rename variables** (add a prefix/suffix to all variables, or one at a time, with a live preview),
   **Metadata explorer**, **Feature engineering**; plus **Appearance**, **Project settings** (author, description, site
   details, and a **sticky-note wall** — all saved with the project), and **Log**.
-- **Gap-filling ▸ XGBoost gap-filling** tab (`tabs/gapfilling.py`, single-instance, new top-level **Gap-filling** menu)
-  + reusable **`MlGapFillingTab` template** (`tabs/_ml_gapfilling_base.py`): the whole layout/flow is a template every ML
-  gap-filler shares, so **Random Forest** (next) is a ~140-line subclass overriding only the method hooks (`_model_class`,
-  `_build_model_box`, `_method_kwargs`, `_method_controls`, `_codegen`, and a few labels). The tab splits into **Model**
+- **Gap-filling ▸ XGBoost gap-filling** + **Random Forest gap-filling** tabs (`tabs/gapfilling.py` /
+  `tabs/gapfilling_randomforest.py`, single-instance, new top-level **Gap-filling** menu) on a reusable
+  **`MlGapFillingTab` template** (`tabs/_ml_gapfilling_base.py`): the whole layout/flow is a template every ML gap-filler
+  shares, so each method is a ~140-line subclass overriding only the method hooks (`_model_class`, `_build_model_box`,
+  `_method_kwargs`, `_method_controls`, `_codegen`, and a few labels). Random Forest exposes the sklearn-RF
+  hyperparameters (n_estimators, max_depth, min_samples_split, min_samples_leaf, max_features, ...) and emits `*_gfRF`;
+  XGBoost emits `*_gfXG`. The tabs split into **Model**
   and **Results** sub-tabs (new `SubTabs` widget — segmented pills over a `QStackedWidget`, with the **Copy Python**
   button in the title bar and **Run / Add** mounted as sub-tab corner widgets past a slim faded divider).
   *Model* uses three variable lists — set the **target** in the *Target* list (far left), then move features between
-  *Available features* and *Selected features* by clicking — configure the `XGBoostTS` hyperparameters (n_estimators,
-  max_depth, learning_rate, early stopping, test size, random seed, n_jobs, negative-value handling) + optional SHAP
+  *Available features* and *Selected features* by clicking — configure the model hyperparameters + optional SHAP
   feature reduction (every field has a tooltip), and shows the observed-vs-gap-filled date/time heatmaps under a
   **performance hero band** (held-out R² / RMSE / MAE / MAPE / MAXE + gaps filled + **fallback-fill** count + feature
   count) beside a narrow **SHAP feature-importance table**. *Results* is a new scrollable **card dashboard**
@@ -87,8 +89,8 @@
   threshold equation + a dashed-red keep/drop line + green-kept/grey-dropped/amber-benchmark rows, **Gap-fill quality**)
   over a row of plots (predicted-vs-observed, SHAP importance, diel cycle, cumulative). Runs on a worker thread; the model
   is trained on the selected feature columns directly (no feature-engineering settings). A **Copy Python** button copies a
-  runnable script; **Add results to dataset** emits the gap-filled (`*_gfXG`) + ISFILLED flag columns with DERIVED
-  provenance and keeps the Results dashboard intact. All computation is library work (`XGBoostTS`).
+  runnable script; **Add results to dataset** emits the gap-filled + ISFILLED flag columns with DERIVED provenance and
+  keeps the Results dashboard intact. All computation is library work (`XGBoostTS` / `RandomForestTS`).
 - **Gap-filling: `plot_feature_importances` on the ML base class** — `MlRegressorGapFillingBase` (so `RandomForestTS` /
   `XGBoostTS` and variants) gained a two-phase SHAP feature-importance bar plot: `plot_feature_importances(ax=None,
   traintest=False, max_features=None, …)`. `ax=None` builds a standalone figure; passing an `ax` draws into it (embeddable
@@ -96,7 +98,7 @@
   code.
 - **Gap-filling codegen** — new `diive.gapfilling.codegen.ml_gapfill_to_code(class_name, gapfilled_suffix, ...)` renders a
   runnable `<class>(...).run()` snippet from a target + feature list + kwargs (shared by every ML gap-filler);
-  `xgboost_gapfill_to_code(...)` is a thin wrapper. The GUI's **Copy Python** uses it.
+  `xgboost_gapfill_to_code(...)` / `randomforest_gapfill_to_code(...)` are thin wrappers. The GUI's **Copy Python** uses it.
 - **Gap-filling: rich console report** — `MlRegressorGapFillingBase` (all ML gap-fillers) now prints a coloured,
   blank-line-separated report at `verbose>=2` with phase banners (start → feature reduction → training → gap-filling →
   complete): a Configuration `Table` (regressor + all hyperparameters), data/split summary, **held-out test** and

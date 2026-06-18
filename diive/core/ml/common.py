@@ -142,10 +142,13 @@ class MlRegressorGapFillingBase:
         else:
             self.gfsuffix = '_gf'
 
+        # Short method tag (RF / XGB) shown on every phase banner in the report.
+        self._method_tag = {'_gfRF': 'RF', '_gfXG': 'XGB'}.get(self.gfsuffix, 'ML')
+
         if self.verbose >= VERBOSE_PROGRESS:
             _console.print("")
-            rule(f"[bold]GAP-FILLING START — {self.target_col} · {self.regressor.__name__}[/bold]",
-                 verbose=self.verbose)
+            rule(f"[bold]GAP-FILLING START — {self.target_col} · {self._method_tag} "
+                 f"({self.regressor.__name__})[/bold]", verbose=self.verbose)
 
         # Model dataframe is the pre-engineered input (features are already computed)
         self.model_df = input_df.copy()
@@ -512,11 +515,12 @@ class MlRegressorGapFillingBase:
     # keeps scripts silent unless they opt in.
 
     def _section(self, title: str) -> None:
-        """A blank line + a titled rule, so phases are clearly separated."""
+        """A blank line + a titled rule, so phases are clearly separated. The
+        method tag (RF / XGB) is appended so each banner names the gap-filler."""
         if self.verbose < VERBOSE_PROGRESS:
             return
         _console.print("")
-        rule(title, verbose=self.verbose)
+        rule(f"{title} · {self._method_tag}", verbose=self.verbose)
 
     def _log_config(self) -> None:
         """Print the run configuration (regressor + hyperparameters) for

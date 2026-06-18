@@ -97,13 +97,20 @@ _CONFIG_TIPS = {
                  "rest is used for training.",
     "below_zero": "How predicted negative values were treated (keep / clip to "
                   "zero / set to NaN).",
-    "n_estimators": "Number of boosting rounds (trees) in the model.",
+    "n_estimators": "Number of trees in the model (boosting rounds for XGBoost, "
+                    "forest size for Random Forest).",
     "max_depth": "Maximum depth of each tree — higher captures more feature "
                  "interactions but risks overfitting.",
-    "learning_rate": "Step-size shrinkage per boosting round.",
+    "learning_rate": "Step-size shrinkage per boosting round (XGBoost).",
+    "min_samples_split": "Minimum number of samples required to split an internal "
+                         "node (Random Forest). Higher = more conservative trees.",
+    "min_samples_leaf": "Minimum number of samples required at a leaf node (Random "
+                        "Forest). Higher = smoother model, less overfitting.",
+    "max_features": "Number of features considered for the best split (Random "
+                    "Forest): 'sqrt'/'log2' add randomness, 1.0 uses all features.",
     "random_state": "Reproducibility seed. A fixed value makes runs repeatable.",
     "early_stopping_rounds": "Stop adding trees when the validation score has "
-                             "not improved for this many rounds.",
+                             "not improved for this many rounds (XGBoost).",
     "n_jobs": "Number of CPU cores used for training.",
 }
 

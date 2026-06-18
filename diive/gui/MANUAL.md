@@ -777,6 +777,18 @@ gap-filling task, in which training always covers the same conditions as the
 interspersed gaps. It would also conflate fill accuracy with changes in the
 driver-target relationship between periods.
 
+### Gap-filling ▸ Random Forest gap-filling
+
+Fill the gaps in one variable with a **Random Forest** model, trained on the
+predictors you pick. The tab works **exactly like the XGBoost gap-filling tab**
+above — the same Model/Results sub-tabs, target/feature lists, performance band,
+heatmaps, SHAP table and Results dashboard — only the model controls differ:
+n_estimators, max_depth (**none** = grow trees fully), min_samples_split,
+min_samples_leaf, max_features (`all` / `sqrt` / `log2`), test size, random seed,
+n_jobs and negative-value handling. **Add results to dataset** appends the
+gap-filled series (`{target}_gfRF`) and its fill flag. Use this when you want a
+robust, less tuning-sensitive alternative to XGBoost.
+
 ### Settings ▸ Project settings
 
 Settings for the current project:
