@@ -4,13 +4,13 @@
 
 ## v0.91.0 | XX May 2026
 
-**Major release: composable flux chain, 9 domain namespaces, new EC analysis tools.**
+**Major release: composable flux chain, 10 domain namespaces, new EC analysis tools.**
 
 ### Breaking Changes
 
-- **Public API: 9 domain namespaces** — flat 145-export namespace replaced with `dv.outliers`, `dv.gapfilling`,
-  `dv.flux`, `dv.analysis`, `dv.plotting`, `dv.times`, `dv.variables`, `dv.corrections`, `dv.qaqc`. All old flat names
-  removed. Update all imports.
+- **Public API: 10 domain namespaces** — flat 145-export namespace replaced with `dv.outliers`, `dv.gapfilling`,
+  `dv.flux`, `dv.analysis`, `dv.plotting`, `dv.times`, `dv.variables`, `dv.corrections`, `dv.qaqc`, `dv.events`. All old
+  flat names removed. Update all imports.
 - **Gap-filling: feature parameters moved to `FeatureEngineer`** — `RandomForestTS` / `XGBoostTS` no longer accept
   `features_*` parameters; pass a pre-built `FeatureEngineer` instance instead.
 - **`zScore` unified** — `zScoreDaytimeNighttime` removed; use `zScore(separate_daytime_nighttime=True)`.
