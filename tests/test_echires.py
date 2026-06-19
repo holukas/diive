@@ -229,6 +229,50 @@ class TestPwbPerGasWindow(unittest.TestCase):
             window_to_lag_params(10.0, 5.0)  # upper <= lower
 
     # ---- TUI: the Win field auto-syncs to the selected scalars ----
+    def test_cli_writes_tui_loadable_settings_yaml(self):
+        import tempfile, yaml
+        from pathlib import Path
+        from diive.flux.hires.detect_and_remove_tlag import (
+            _build_parser, parse_scalar_spec)
+        try:
+            from diive.flux.hires.detect_and_remove_tlag_tui import (
+                write_run_settings_yaml, parse_win_ranges,
+                _FIELD_IDS, _SWITCHES)
+        except Exception:
+            self.skipTest('textual TUI not importable')
+
+        args = _build_parser().parse_args([
+            '--input-dir', '.', '--output-dir', '.',
+            '--col-u', 'u', '--col-v', 'v', '--col-w', 'w', '--col-tsonic', 'ts',
+            '--scalar', 'CH4:ch4', '--scalar', 'H2O:h2o@lws=0;uws=20',
+            '--lag-max', '10', '--hdi-prefilter', '1.0',
+            '--lws', '0', '--uws', '5', '--random-state', '42', '--save-plots',
+        ])
+        scalars, pgl = {}, {}
+        for tok in args.scalars:
+            lbl, col, ov = parse_scalar_spec(tok)
+            scalars[lbl] = col
+            if ov:
+                pgl[lbl] = ov
+
+        out = Path(tempfile.mkdtemp())
+        path = write_run_settings_yaml(out, args, scalars, pgl)
+        self.assertIsNotNone(path)
+        self.assertEqual(Path(path).name, 'detect_remove_tui_settings.yaml')
+        data = yaml.safe_load(Path(path).read_text(encoding='utf-8'))
+
+        # Every key must be one the TUI's loader recognises (no silent drops).
+        known = set(_FIELD_IDS) | set(_SWITCHES)
+        self.assertTrue(set(data).issubset(known), set(data) - known)
+        # Scalars carry columns only; windows live in the 'Win s' field.
+        self.assertEqual(data['scalars'], 'CH4:ch4,H2O:h2o')
+        # Per-gas override (H2O) and the global window inherited by CH4 both
+        # reconstruct, and parse straight back through the TUI loader.
+        self.assertEqual(parse_win_ranges(data['winranges']),
+                         {'CH4': (0.0, 5.0), 'H2O': (0.0, 20.0)})
+        self.assertEqual(data['randomstate'], '42')
+        self.assertTrue(data['saveplots'])
+
     def test_tui_win_field_autosync(self):
         try:
             import asyncio

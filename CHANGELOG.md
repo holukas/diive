@@ -392,6 +392,11 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
   aligned with RFlux v3.2.0 numerics; threaded `random_state` for reproducibility.
 - **`PwbBatchDetection`** — parallel batch PWB across many files (crash-safe checkpoints, deterministic per-file
   seeding, `strict` mode); CLI `diive-tlag-pwb-batch`. Optional `--file-date-format` parses a timestamp from filenames.
+- **`diive-tlag-pwb-detect-remove` now writes a TUI-loadable settings YAML** (`detect_remove_tui_settings.yaml`) into the
+  run's output folder, so a CLI run can be reopened/edited in the detect+remove TUI (Load button or drag-drop) to inspect
+  or reproduce it — the same file the TUI itself drops. New `write_run_settings_yaml` in `detect_and_remove_tlag_tui.py`
+  mirrors the TUI's field schema (per-gas search windows reconstructed into the `Win s` field); the CLI lazy-imports it,
+  so a headless install without the `gui`/textual extra simply skips the file (best-effort, never blocks a run).
 - **`TlagApplier`** — apply PWB-detected lags from a `tlag_results.csv` to raw files (shift each scalar by
   `round(tlag_s·hz)` rows), preserving header and column order; handles arbitrary text formats; parallel; CLI
   `diive-tlag-apply-batch`. Example: `examples/flux/hires/flux_apply_tlag_cli.py`.

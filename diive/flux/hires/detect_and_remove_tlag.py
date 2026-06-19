@@ -2872,6 +2872,18 @@ def _cli_main():
     output_dir.mkdir(parents=True, exist_ok=True)
     log_path = output_dir / 'log.txt'
 
+    # Drop a TUI-loadable settings YAML so this CLI run can be reopened/edited
+    # in the detect+remove TUI. Optional: needs the textual ('gui') extra, and
+    # a missing TUI module or any write error must never stop the run.
+    settings_yaml = None
+    try:
+        from diive.flux.hires.detect_and_remove_tlag_tui import (
+            write_run_settings_yaml)
+        settings_yaml = write_run_settings_yaml(
+            output_dir, args, scalars, per_gas_lag)
+    except Exception:
+        settings_yaml = None
+
     pipeline = PerFilePipeline(
         input_dir=input_dir,
         output_dir=output_dir,
@@ -2961,6 +2973,9 @@ def _cli_main():
     out(f'[dim]align :[/dim]  lag column '
         f'[bold]{args.lag_column_template}[/bold] '
         f'[dim](phase 2 shifts scalars by this PWBOPT lag to remove it)[/dim]')
+    if settings_yaml:
+        out(f'[dim]config:[/dim]  {settings_yaml}  '
+            f'[dim](reload in the TUI to inspect/reproduce)[/dim]')
     out(f'[dim]data  :[/dim]  lag-corrected chunks -> '
         f'[bold]{output_dir / args.data_subdir}[/bold]  '
         f'[dim](step 2; next-step input)[/dim]')

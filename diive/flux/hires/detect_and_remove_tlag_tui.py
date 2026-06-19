@@ -721,6 +721,87 @@ def _load_settings() -> dict:
         return {}
 
 
+def _winranges_from_cli(scalars: dict, per_gas_lag: dict,
+                        global_lws, global_uws) -> str:
+    """Rebuild the TUI 'Win s' field from a CLI run's per-gas windows.
+
+    The CLI carries windows as ``per_gas_lag`` overrides (``lws``/``uws`` or a
+    symmetric ``lag_max_s``) plus optional global ``--lws``/``--uws``; the TUI
+    field is ``LABEL:[lower,upper]``.  A gas with both bounds round-trips
+    exactly; a gas with only a symmetric ``lag_max_s`` becomes ``[-L, L]``; a
+    gas with no window at all is omitted (it falls back to the global Lag max,
+    matching the CLI).
+    """
+    items = []
+    for label in scalars:
+        ov = per_gas_lag.get(label, {}) or {}
+        lws = ov.get('lws', global_lws)
+        uws = ov.get('uws', global_uws)
+        if lws is not None and uws is not None:
+            items.append((label, lws, uws))
+        elif 'lag_max_s' in ov:
+            L = ov['lag_max_s']
+            items.append((label, -L, L))
+    return format_win_ranges(items) if items else ''
+
+
+def write_run_settings_yaml(output_dir, args, scalars: dict,
+                            per_gas_lag: dict) -> str | None:
+    """Drop a TUI-loadable settings YAML into a CLI run's output folder.
+
+    Mirrors the App's ``_settings_dict`` schema (``_FIELD_IDS`` + ``_SWITCHES``)
+    so a ``diive-tlag-pwb-detect-remove`` run's settings load straight back into
+    the TUI (Load button or drag-drop) to inspect or reproduce the run.  ``args``
+    is the CLI's parsed argparse namespace.  Best-effort: returns the path
+    written, or ``None`` on failure (a settings copy must never block a run).
+    """
+    try:
+        data = {
+            'input_dir': str(args.input_dir),
+            'output_dir': str(args.output_dir),
+            'col_u': args.col_u, 'col_v': args.col_v, 'col_w': args.col_w,
+            'col_tsonic': args.col_tsonic,
+            'scalars': ','.join(f'{lbl}:{col}' for lbl, col in scalars.items()),
+            'hz': str(args.hz),
+            'chunk': _fmt_win_num(args.chunk_seconds),
+            'minchunk': _fmt_win_num(args.min_chunk_seconds),
+            'nboot': str(args.n_bootstrap),
+            'lagmax': _fmt_win_num(args.lag_max),
+            'winranges': _winranges_from_cli(scalars, per_gas_lag,
+                                             args.lws, args.uws),
+            'hdithresh': _fmt_win_num(args.hdi_thresh),
+            'devthresh': _fmt_win_num(args.dev_thresh),
+            'hdiprefilter': _fmt_win_num(args.hdi_prefilter),
+            'lagcol': args.lag_column_template,
+            'skiprows': str(args.skiprows),
+            'extrarows': str(args.extra_rows),
+            'sep': args.sep,
+            'filepattern': args.file_pattern,
+            'navalues': ' '.join(args.na_values) if args.na_values else '',
+            'narep': args.na_rep,
+            'lineterm': args.lineterm,
+            'streg': args.start_time_regex or '',
+            'stfmt': args.start_time_format,
+            'ctmpl': args.chunk_name_template,
+            'detectsub': args.detect_subdir,
+            'datasub': args.data_subdir,
+            'workers': '' if args.n_workers is None else str(args.n_workers),
+            'randomstate': ('' if args.random_state is None
+                            else str(args.random_state)),
+            'saveplots': bool(args.save_plots),
+            'strict': bool(args.strict),
+        }
+        # Keep only known fields so a CLI-side typo can't write a key the TUI
+        # would silently ignore; the load tolerates missing keys (uses defaults).
+        known = set(_FIELD_IDS) | set(_SWITCHES)
+        data = {k: v for k, v in data.items() if k in known}
+        path = Path(output_dir) / _OUTPUT_SETTINGS_NAME
+        path.write_text(yaml.safe_dump(data, sort_keys=False), encoding='utf-8')
+        return str(path)
+    except Exception:
+        return None
+
+
 def _summary_lines(summary, scalars, hz, cancelled: bool = False) -> list:
     """Build the post-run summary block: counts + reliability + median lag."""
     import numpy as np
