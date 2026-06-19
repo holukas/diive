@@ -1507,7 +1507,7 @@ def test_gap_dashboard_tab(window):
         QApplication.processEvents()
 
     # Defaults to the gappiest variable so the dashboard is useful on open.
-    assert tab._current == "NEE_CUT_84_orig"
+    assert tab._target == "NEE_CUT_84_orig"
     fig = tab.canvas.fig
     assert len(fig.axes) >= 2  # availability heatmap + gap timeline (+ colorbars)
     assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]

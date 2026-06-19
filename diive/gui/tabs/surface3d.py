@@ -28,20 +28,17 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QSpinBox,
-    QSplitter,
     QVBoxLayout,
     QWidget,
 )
 
 import diive as dv
-from diive.gui import theme
-from diive.gui.tabs.base import DiiveTab
+from diive.gui.tabs._explorer_base import SingleVariableExplorerTab
 from diive.gui.widgets.pyvista_canvas import (
     INSTALL_HINT,
     Pyvista3DCanvas,
     pyvista_available,
 )
-from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 #: A continuous flux with a strong diel cycle makes the relief instantly legible.
 _DEFAULT_VAR = "NEE_CUT_REF_f"
@@ -57,24 +54,14 @@ def _unit(a: np.ndarray) -> np.ndarray:
     return (a - lo) / (hi - lo) if hi > lo else np.zeros_like(a)
 
 
-class Surface3DTab(DiiveTab):
+class Surface3DTab(SingleVariableExplorerTab):
     """Rotatable 3-D relief surface of a variable's date x time-of-day grid."""
 
     title = "3D surface"
+    #: A continuous flux with a strong diel cycle makes the relief instantly legible.
+    default_var = _DEFAULT_VAR
 
-    def build(self) -> QWidget:
-        self._df = None
-        self._target = None
-
-        root = QWidget()
-        outer = QVBoxLayout(root)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.varpanel = VariablePanel()
-        self.varpanel.selected.connect(self._on_select)
-
+    def _build_right(self) -> QWidget:
         right = QWidget()
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 0, 0, 0)
@@ -87,14 +74,7 @@ class Surface3DTab(DiiveTab):
         else:
             self.canvas = None
             rl.addWidget(self._build_missing_notice(), stretch=1)
-
-        splitter.addWidget(self.varpanel)
-        splitter.addWidget(right)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        lock_panel_handle(splitter)  # fixed-width list → no misleading ↔ cursor
-        outer.addWidget(splitter)
-        return root
+        return right
 
     # --- sub-widgets ---------------------------------------------------
     def _build_missing_notice(self) -> QWidget:
@@ -176,31 +156,11 @@ class Surface3DTab(DiiveTab):
             self._on_select(t)
 
     # --- data flow -----------------------------------------------------
-    def on_data_loaded(self, df, created: set | None = None) -> None:
-        self._df = df
-        self.varpanel.set_variables(df.columns, created)
-        numeric = df.select_dtypes(include="number").columns.tolist()
-        cols = [str(c) for c in numeric]
-        if _DEFAULT_VAR in cols:
-            default = _DEFAULT_VAR
-        elif numeric:
-            default = str(numeric[0])
-        else:
-            return
-        self._on_select(default)
-
-    def _on_select(self, name: str, _additive: bool = False) -> None:
-        if not name or self._df is None or self.canvas is None:
-            return
-        self._target = name
-        self.varpanel.set_panels([name])
-        self.varpanel.run_with_loading(name, self._render)
-
     def _rerender_view(self, *_a) -> None:
         # Colormap / exaggeration / shading all need the mesh rebuilt (height is
         # baked into geometry), but it's cheap, so just re-render the current var.
         if self._target is not None and self.canvas is not None:
-            self._render()
+            self._compute()
 
     def _reset_camera(self) -> None:
         if self.canvas is not None:
@@ -208,7 +168,7 @@ class Surface3DTab(DiiveTab):
             self.canvas.render()
 
     # --- rendering -----------------------------------------------------
-    def _render(self) -> None:
+    def _compute(self) -> None:
         if self.canvas is None or self._target is None:
             return
         import pyvista as pv

@@ -24,8 +24,6 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-import threading
-
 import numpy as np
 import pandas as pd
 from PySide6.QtCore import QObject, QRect, Qt, Signal
@@ -61,7 +59,9 @@ from diive.gui.widgets.dual_variable_picker import DualVariablePicker
 from diive.gui.widgets.gapfill_results import GapFillResultsPanel
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.sub_tabs import SubTabs
+from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel
+from diive.gui.widgets.worker import WorkerRunner
 
 _C_MUTED = "#6B7780"
 
@@ -104,9 +104,8 @@ class _ShapBarDelegate(QStyledItemDelegate):
 
 
 class _Signals(QObject):
-    """Qt signals (DiiveTab is a plain ABC, not a QObject)."""
-    done = Signal(object)
-    failed = Signal(str)
+    """Qt signal (DiiveTab is a plain ABC, not a QObject). Run done/failed
+    plumbing lives in :class:`WorkerRunner`."""
     features_created = Signal(object)
 
 
@@ -287,36 +286,27 @@ class MlGapFillingTab(DiiveTab):
         self._all_cols: list[str] = []
         self._created: set = set()
         self._target: str = ""
-        self._running = False
         self._result_df: pd.DataFrame | None = None  # columns to emit on "Add"
         self._n_years = 0  # distinct years in the current record (gates long-term)
 
         self._sig = _Signals()
-        self._sig.done.connect(self._on_done)
-        self._sig.failed.connect(self._on_failed)
         #: Exposed bound signal the main window connects to (merges the columns).
         self.featuresCreated = self._sig.features_created
+        self._runner = WorkerRunner()
+        self._runner.done.connect(self._on_done)
+        self._runner.failed.connect(self._on_failed)
 
         root = QWidget()
         outer = QVBoxLayout(root)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # Title bar (the buttons sit in the sub-tab row, not here).
-        titlebar = QHBoxLayout()
-        titlebar.setContentsMargins(10, 8, 10, 8)
-        title = QLabel(theme.manager.label_text(self.title))
-        title.setFont(theme.manager.tracked_font(point_delta=1.0))
-        title.setStyleSheet("font-weight: bold;")
-        titlebar.addWidget(title)
-        titlebar.addStretch(1)
-        # Copy Python sits at the far-right edge of the header row, away from the
-        # Run/Add action buttons in the sub-tab row below.
+        # Title bar (the Run/Add buttons sit in the sub-tab row, not here; Copy
+        # Python sits at the far-right edge of the header row).
         self.copy_btn = CopyPythonButton(self._python_code)
         self.copy_btn.setToolTip(
             "Copy a runnable diive script reproducing this gap-filling run.")
-        titlebar.addWidget(self.copy_btn)
-        outer.addLayout(titlebar)
+        outer.addLayout(build_titlebar(self.title, self.copy_btn))
 
         # Action buttons (built here, mounted into the sub-tab row so they sit
         # next to the page pills and stay prominent).
@@ -578,11 +568,7 @@ class MlGapFillingTab(DiiveTab):
         v.addWidget(self.shap_table, stretch=1)
         return host
 
-    @staticmethod
-    def _list_header(title: str, hint: str) -> QLabel:
-        label = QLabel(f"<b>{title}</b> <span style='color:#90A4AE'>({hint})</span>")
-        label.setWordWrap(True)
-        return label
+    _list_header = staticmethod(list_header)
 
     # --- data ----------------------------------------------------------
     def on_data_loaded(self, df, created: set | None = None) -> None:
@@ -645,7 +631,7 @@ class MlGapFillingTab(DiiveTab):
         return [f for f in self.picker.selected_names() if f != self._target]
 
     def _update_status(self, *_) -> None:
-        if self._running:
+        if self._runner.is_running:
             return
         feats = self._feature_cols()
         if not self._target:
@@ -698,7 +684,7 @@ class MlGapFillingTab(DiiveTab):
             self.reduce_cb.isChecked(), self.shap_factor.value())
 
     def _run(self) -> None:
-        if self._df is None or self._running:
+        if self._df is None or self._runner.is_running:
             return
         target = self._target
         feats = self._feature_cols()
@@ -719,43 +705,40 @@ class MlGapFillingTab(DiiveTab):
                  if longterm else "")
         self.status.setText(
             f"Gap-filling… (training {self.method_name}{extra} — this can take a while)")
-        threading.Thread(
-            target=self._worker,
-            args=(work, target, kwargs, reduce, shap_factor, longterm),
-            daemon=True).start()
+        self._runner.run(self._compute_payload, work, target, kwargs, reduce,
+                         shap_factor, longterm)
 
-    def _worker(self, work, target, kwargs, reduce, shap_factor, longterm) -> None:
-        try:
-            if longterm:
-                model, gapfilled, flag, scores = self._run_longterm(
-                    work, target, kwargs, reduce, shap_factor)
-            else:
-                model, gapfilled, flag, scores = self._run_single(
-                    work, target, kwargs, reduce, shap_factor)
+    def _compute_payload(self, work, target, kwargs, reduce, shap_factor, longterm):
+        """Train + gap-fill off-thread; return the result tuple consumed by
+        :meth:`_on_done`. Raises on error (the runner forwards to
+        :meth:`_on_failed`)."""
+        if longterm:
+            model, gapfilled, flag, scores = self._run_longterm(
+                work, target, kwargs, reduce, shap_factor)
+        else:
+            model, gapfilled, flag, scores = self._run_single(
+                work, target, kwargs, reduce, shap_factor)
 
-            # Flag: 0 = observed, 1 = full-model fill, 2 = fallback fill.
-            n_fallback = int((flag == 2).sum())
+        # Flag: 0 = observed, 1 = full-model fill, 2 = fallback fill.
+        n_fallback = int((flag == 2).sum())
 
-            out = pd.DataFrame({str(gapfilled.name): gapfilled,
-                                str(flag.name): flag})
-            attrs = {
-                str(gapfilled.name): provenance_attr(
-                    origin=DERIVED, parent=str(target), operation=self.title,
-                    tags=["gapfilling", self.method_name.lower()]),
-                str(flag.name): provenance_attr(
-                    origin=DERIVED, parent=str(target), operation=self.title,
-                    tags=["gapfilling", "flag"]),
-            }
-            out.attrs[ATTRS_KEY] = attrs
-            n_features = work.shape[1] - 1  # everything except the target
-            # Pass the reduction factor so the Results card can show the exact
-            # threshold equation/line (None when reduction was off).
-            factor = shap_factor if reduce else None
-            self._sig.done.emit(
-                (out, work[target], gapfilled, scores, target, n_features,
-                 n_fallback, model, factor, longterm))
-        except Exception as err:
-            self._sig.failed.emit(str(err))
+        out = pd.DataFrame({str(gapfilled.name): gapfilled,
+                            str(flag.name): flag})
+        attrs = {
+            str(gapfilled.name): provenance_attr(
+                origin=DERIVED, parent=str(target), operation=self.title,
+                tags=["gapfilling", self.method_name.lower()]),
+            str(flag.name): provenance_attr(
+                origin=DERIVED, parent=str(target), operation=self.title,
+                tags=["gapfilling", "flag"]),
+        }
+        out.attrs[ATTRS_KEY] = attrs
+        n_features = work.shape[1] - 1  # everything except the target
+        # Pass the reduction factor so the Results card can show the exact
+        # threshold equation/line (None when reduction was off).
+        factor = shap_factor if reduce else None
+        return (out, work[target], gapfilled, scores, target, n_features,
+                n_fallback, model, factor, longterm)
 
     def _run_single(self, work, target, kwargs, reduce, shap_factor):
         # verbose=2 (PROGRESS): surfaces the base class's rich, coloured
@@ -779,7 +762,6 @@ class MlGapFillingTab(DiiveTab):
         return model, model.get_gapfilled_target(), model.get_flag(), scores
 
     def _set_running(self, on: bool) -> None:
-        self._running = on
         self.run_btn.setEnabled(not on)
         if on:
             self.add_btn.setEnabled(False)

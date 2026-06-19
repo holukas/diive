@@ -358,6 +358,28 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   `add_corner_widget(widget)` (mounts e.g. action buttons to the right of the pills) and `add_corner_separator()` (a slim
   vertical hairline `_CornerSeparator` that fades at both ends, dividing the pills from the corner buttons). The chips
   repaint on theme change. Used by the **ML gap-filling** template; stepwise screening is a candidate to adopt it.
+- **Shared background-thread runner: `widgets/worker.py` (`WorkerRunner`).** A `QObject` with `done(object)` /
+  `failed(str)` signals + an `is_running` guard that owns the daemon-thread spawn + exception→`failed` safety net the
+  result-producing tabs used to hand-roll. A tab keeps `self._runner = WorkerRunner()`, connects `done`/`failed`, and
+  calls `self._runner.run(self._compute_payload, *args)` — `_compute_payload` is a **pure** function (returns the result,
+  raises on error), no Qt/threading in it. Used by `_outlier_base`, `_correction_base`, `_ml_gapfilling_base`,
+  `_partitioning_base`, and `tabs/ustar_detection.py`. The outlier/correction/ustar tabs keep a thin synchronous
+  `_worker(*args)` dispatch shim (calls `_compute_payload` then `_on_done`/`_on_failed`) because their tests drive
+  `_worker` directly; the per-tab `_Signals` objects now carry only the non-worker signals (`features_created`, and the
+  outlier `progress`).
+- **Shared analysis-explorer template: `tabs/_explorer_base.py` (`SingleVariableExplorerTab`).** The base for the
+  "pick one variable on the left, compute/render a view on the right" analysis tabs — **Driver explorer**, **Gaps &
+  coverage**, **Seasonal trend & anomalies**, **Spectrogram**, **3D surface**. It owns the left/right split skeleton
+  (`VariablePanel` + `lock_panel_handle`), the `select → run_with_loading → _compute` flow, default-variable picking
+  (`default_var` / `default_numeric_only`, override `_default_variable` for a custom heuristic — gaps picks the gappiest),
+  `_recompute()` (re-run on the current target, for Update/Rank-style buttons), and an opt-in stats strip
+  (`_build_stats_strip()` + `_set_stat_cards(cards)`). A concrete tab overrides only `_build_right()` (its controls +
+  canvas/table) and `_compute()` (read `self._df[self._target]`, call the library, render); the selected variable is
+  always `self._target`.
+- **Shared tab chrome: `widgets/tab_chrome.py`.** `build_titlebar(title, *trailing)` (the tracked/bold tab-title row with
+  right-aligned action widgets — Copy Python, Run, Add …) and `list_header(title, hint)` (the bold `Target (click to set
+  target)`-style header), extracted from the verbatim copies in `_correction_base` / `_ml_gapfilling_base` /
+  `_partitioning_base`. Presentation only.
 - **Select variables tab** (`tabs/variable_selector.py`, `Data ▸ Select variables`, single-instance) — a dual-list
   picker (a `DualVariablePicker`: available ↔ selected) emitting a `subsetSelected` signal (same `QObject`-helper pattern
   as `featuresCreated`); `MainWindow._apply_var_subset` applies it **app-wide** (non-destructive). Like the date range,

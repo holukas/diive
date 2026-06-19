@@ -22,8 +22,6 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-import threading
-
 import pandas as pd
 from matplotlib.lines import Line2D
 from PySide6.QtCore import QObject, Signal
@@ -46,7 +44,9 @@ from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.overview import _chip, _MetricSlot, _stat_separator
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
+from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel
+from diive.gui.widgets.worker import WorkerRunner
 from diive.preprocessing.corrections.apply import apply_corrections
 from diive.preprocessing.corrections.codegen import corrections_to_code
 
@@ -58,9 +58,8 @@ _C_MUTED = "#6B7780"     # secondary/help text
 
 
 class _CorrectionSignals(QObject):
-    """Qt signals for the tab (DiiveTab is a plain ABC, not a QObject)."""
-    run_done = Signal(object)
-    run_failed = Signal(str)
+    """Qt signal for the tab (DiiveTab is a plain ABC, not a QObject). Run
+    done/failed plumbing lives in :class:`WorkerRunner`."""
     features_created = Signal(object)
 
 
@@ -102,6 +101,9 @@ class BaseCorrectionTab(DiiveTab):
         self._sig = _CorrectionSignals()
         #: Exposed bound signal the main window connects to (merges the columns).
         self.featuresCreated = self._sig.features_created
+        self._runner = WorkerRunner()
+        self._runner.done.connect(self._on_done)
+        self._runner.failed.connect(self._on_failed)
 
         root = QWidget()
         outer = QVBoxLayout(root)
@@ -110,18 +112,10 @@ class BaseCorrectionTab(DiiveTab):
 
         # Title bar (XGBoost-gap-filling-style header): a tracked, bold title with
         # Copy Python at the far-right edge.
-        titlebar = QHBoxLayout()
-        titlebar.setContentsMargins(10, 8, 10, 8)
-        title = QLabel(theme.manager.label_text(self.title))
-        title.setFont(theme.manager.tracked_font(point_delta=1.0))
-        title.setStyleSheet("font-weight: bold;")
-        titlebar.addWidget(title)
-        titlebar.addStretch(1)
         self.copy_btn = CopyPythonButton(self._python_code)
         self.copy_btn.setToolTip(
             "Copy a runnable diive script reproducing this correction.")
-        titlebar.addWidget(self.copy_btn)
-        outer.addLayout(titlebar)
+        outer.addLayout(build_titlebar(self.title, self.copy_btn))
 
         # Body: target list | settings | hero + preview.
         body = QWidget()
@@ -153,20 +147,12 @@ class BaseCorrectionTab(DiiveTab):
 
         outer.addWidget(body, stretch=1)
 
-        self._sig.run_done.connect(self._on_done)
-        self._sig.run_failed.connect(self._on_failed)
         if self.needs_coords:
             self._seed_site()
             site.manager.changed.connect(self._on_site_changed)
         return root
 
-    @staticmethod
-    def _list_header(title: str, hint: str) -> QLabel:
-        """A bold list title with a muted parenthetical hint, matching the ML
-        gap-filling tabs' 'Target (click to set target)' header."""
-        label = QLabel(f"<b>{title}</b> <span style='color:#90A4AE'>({hint})</span>")
-        label.setWordWrap(True)
-        return label
+    _list_header = staticmethod(list_header)
 
     def _build_hero(self) -> QWidget:
         """A slim band: the method chip on the left, a stats strip on the right
@@ -385,9 +371,7 @@ class BaseCorrectionTab(DiiveTab):
         self.run_btn.setEnabled(False)
         self.add_btn.setEnabled(False)
         self.status.setText("Applying correction...")
-        threading.Thread(
-            target=self._worker, args=(series, kwargs, lat, lon, utc),
-            daemon=True).start()
+        self._runner.run(self._compute_payload, series, kwargs, lat, lon, utc)
 
     def _apply(self, series, kwargs: dict, coords: tuple):
         """Compute the corrected series; return ``(corrected, extra)``.
@@ -403,25 +387,30 @@ class BaseCorrectionTab(DiiveTab):
             lat=lat, lon=lon, utc_offset=utc, showplot=False)
         return corrected, {}
 
+    def _compute_payload(self, series, kwargs: dict, lat, lon, utc) -> dict:
+        """Apply the correction off-thread and return the result payload; raises on
+        error (the runner forwards to :meth:`_on_failed`)."""
+        corrected, extra = self._apply(series, kwargs, (lat, lon, utc))
+        corrected = corrected.copy()
+        corrected.name = f"{series.name}_{self.method_suffix}"
+        result = pd.DataFrame({corrected.name: corrected})
+        tag = self.method_suffix.lower()
+        result.attrs[ATTRS_KEY] = {
+            corrected.name: provenance_attr(
+                origin=MODIFIED, parent=str(series.name), operation=self.title,
+                params=kwargs, tags=[tag, "corrected"]),
+        }
+        n_changed = int(self._changed_mask(series, corrected).sum())
+        return {"var": series.name, "corrected": corrected,
+                "result": result, "n_changed": n_changed, "extra": extra}
+
     def _worker(self, series, kwargs: dict, lat, lon, utc) -> None:
+        """Synchronous compute + dispatch — tests call this directly; the GUI runs
+        :meth:`_compute_payload` on the worker thread instead."""
         try:
-            corrected, extra = self._apply(series, kwargs, (lat, lon, utc))
-            corrected = corrected.copy()
-            corrected.name = f"{series.name}_{self.method_suffix}"
-            result = pd.DataFrame({corrected.name: corrected})
-            tag = self.method_suffix.lower()
-            result.attrs[ATTRS_KEY] = {
-                corrected.name: provenance_attr(
-                    origin=MODIFIED, parent=str(series.name), operation=self.title,
-                    params=kwargs, tags=[tag, "corrected"]),
-            }
-            n_changed = int(self._changed_mask(series, corrected).sum())
-            payload = {"var": series.name, "corrected": corrected,
-                       "result": result, "n_changed": n_changed, "extra": extra}
-        except Exception as err:  # surface the library error to the user
-            self._sig.run_failed.emit(str(err))
-            return
-        self._sig.run_done.emit(payload)
+            self._on_done(self._compute_payload(series, kwargs, lat, lon, utc))
+        except Exception as err:
+            self._on_failed(str(err))
 
     # --- result rendering hooks (overridable) ---
     def _hero_metrics(self, payload: dict) -> list:

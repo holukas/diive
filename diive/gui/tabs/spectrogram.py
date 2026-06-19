@@ -26,16 +26,14 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QSpinBox,
-    QSplitter,
     QVBoxLayout,
     QWidget,
 )
 
 import diive as dv
 from diive.gui import theme
-from diive.gui.tabs.base import DiiveTab
+from diive.gui.tabs._explorer_base import SingleVariableExplorerTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
-from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 #: A variable with a strong daily cycle makes the spectrogram instantly legible.
 _DEFAULT_VAR = "NEE_CUT_REF_f"
@@ -53,28 +51,20 @@ _EXPLANATION = (
 )
 
 
-class SpectrogramTab(DiiveTab):
+class SpectrogramTab(SingleVariableExplorerTab):
     """Spectrogram (time-frequency) view of the selected variable."""
 
     title = "Spectrogram"
+    #: A variable with a strong daily cycle makes the spectrogram instantly legible.
+    default_var = _DEFAULT_VAR
 
-    def build(self) -> QWidget:
-        self._df = None
-        self._target = None
+    def _init_state(self) -> None:
         self._spec = None           # dict from dv.analysis.spectrogram
         self._valid_index = None    # timestamps of the non-NaN samples
         self._rec_per_day = 1.0
         self._error = None
 
-        root = QWidget()
-        outer = QVBoxLayout(root)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.varpanel = VariablePanel()
-        self.varpanel.selected.connect(self._on_select)
-
+    def _build_right(self) -> QWidget:
         right = QWidget()
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 0, 0, 0)
@@ -83,14 +73,7 @@ class SpectrogramTab(DiiveTab):
         rl.addWidget(self._build_controls())
         self.canvas = MplCanvas()
         rl.addWidget(self.canvas, stretch=1)
-
-        splitter.addWidget(self.varpanel)
-        splitter.addWidget(right)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        lock_panel_handle(splitter)  # fixed-width list → no misleading ↔ cursor
-        outer.addWidget(splitter)
-        return root
+        return right
 
     # --- sub-widgets ---------------------------------------------------
     def _build_explanation(self) -> QWidget:
@@ -131,7 +114,7 @@ class SpectrogramTab(DiiveTab):
         lay.addWidget(self.window)
 
         self.update_btn = QPushButton("Update")
-        self.update_btn.clicked.connect(self._update_current)
+        self.update_btn.clicked.connect(self._recompute)
         lay.addWidget(self.update_btn)
 
         lay.addSpacing(14)
@@ -172,30 +155,6 @@ class SpectrogramTab(DiiveTab):
         t = state.get("target")
         if t and self._df is not None and t in self._df.columns:
             self._on_select(t)
-
-    def on_data_loaded(self, df, created: set | None = None) -> None:
-        self._df = df
-        self.varpanel.set_variables(df.columns, created)
-        cols = [str(c) for c in df.columns]
-        numeric = df.select_dtypes(include="number").columns.tolist()
-        if _DEFAULT_VAR in cols and _DEFAULT_VAR in numeric:
-            default = _DEFAULT_VAR
-        elif numeric:
-            default = str(numeric[0])
-        else:
-            return
-        self._on_select(default)
-
-    def _on_select(self, name: str, _additive: bool = False) -> None:
-        if not name or self._df is None:
-            return
-        self._target = name
-        self.varpanel.set_panels([name])
-        self.varpanel.run_with_loading(name, self._compute)
-
-    def _update_current(self) -> None:
-        if self._target is not None and self._df is not None:
-            self.varpanel.run_with_loading(self._target, self._compute)
 
     def _on_view_changed(self, _v=None) -> None:
         # Frequency limit / colormap are cheap -> re-render without recomputing.

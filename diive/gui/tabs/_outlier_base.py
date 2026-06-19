@@ -18,8 +18,6 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-import threading
-
 import pandas as pd
 from matplotlib.lines import Line2D
 from PySide6.QtCore import QObject, Signal
@@ -43,6 +41,7 @@ from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.variable_panel import VariablePanel
+from diive.gui.widgets.worker import WorkerRunner
 
 # --- Outlier preview palette ------------------------------------------------
 # Colours used across the outlier tabs' preview plots, centralised here.
@@ -58,9 +57,9 @@ _C_MUTED = "#6B7780"    # secondary/help text
 
 
 class _OutlierSignals(QObject):
-    """Qt signals for the tab (DiiveTab is a plain ABC, not a QObject)."""
-    run_done = Signal(object)
-    run_failed = Signal(str)
+    """Qt signals for the tab (DiiveTab is a plain ABC, not a QObject). The
+    run done/failed plumbing lives in :class:`WorkerRunner`; this carries only
+    the live-progress and feature-emit signals."""
     features_created = Signal(object)
     # (iteration, n_outliers, cleaned_series, bounds) — progress bar + live plot;
     # bounds is (lower, upper) data-unit Series for this iteration, or None.
@@ -114,6 +113,9 @@ class BaseOutlierTab(DiiveTab):
         self._sig = _OutlierSignals()
         #: Exposed bound signal the main window connects to (merges the columns).
         self.featuresCreated = self._sig.features_created
+        self._runner = WorkerRunner()
+        self._runner.done.connect(self._on_done)
+        self._runner.failed.connect(self._on_failed)
 
         root = QWidget()
         layout = QHBoxLayout(root)
@@ -132,8 +134,6 @@ class BaseOutlierTab(DiiveTab):
         self.canvas = MplCanvas()
         layout.addWidget(self.canvas, stretch=1)
 
-        self._sig.run_done.connect(self._on_done)
-        self._sig.run_failed.connect(self._on_failed)
         self._sig.progress.connect(self._on_progress)
         # Seed the day/night coords from Site details and stay in sync with edits.
         self._seed_site()
@@ -380,54 +380,58 @@ class BaseOutlierTab(DiiveTab):
             self._draw(series)
         # Snapshot widget state on the GUI thread; the worker must not read live
         # Qt widgets from a background thread.
-        threading.Thread(
-            target=self._worker,
-            args=(series, kwargs, self.repeat_cb.isChecked(),
-                  self.daynight_cb.isChecked()),
-            daemon=True).start()
+        self._runner.run(self._compute_payload, series, kwargs,
+                         self.repeat_cb.isChecked(), self.daynight_cb.isChecked())
+
+    def _compute_payload(self, series, kwargs: dict, repeat: bool,
+                         separate: bool = False) -> dict:
+        """Run the library detector off-thread and return the result payload.
+        Emits ``progress`` per iteration (the GUI thread renders it); raises on
+        error (the runner forwards to :meth:`_on_failed`)."""
+        h = self._make_detector(series, kwargs)
+        # Daytime mask is computed in __init__; expose it for live colouring
+        # before run() starts firing progress callbacks.
+        self._live_is_daytime = getattr(h, "is_daytime", None) if separate else None
+
+        def cb(it, n, s):
+            # Read the iteration's data-unit detection band off the detector.
+            lo, hi = h.last_lower_bound, h.last_upper_bound
+            bounds = (lo.copy(), hi.copy()) if lo is not None and hi is not None else None
+            self._sig.progress.emit(it, n, s, bounds)
+
+        h.run(repeat=repeat, progress_callback=cb)
+        cleaned = h.filteredseries.copy()
+        cleaned.name = f"{series.name}_{self.method_suffix}"
+        flag = h.overall_flag.copy()  # name: FLAG_{var}_OUTLIER_{method}_TEST
+        result = pd.DataFrame({cleaned.name: cleaned, flag.name: flag})
+        # Provenance for the metadata store: the cleaned series is a modified
+        # copy of the parent; the flag is derived from it.
+        tag = self.method_suffix.lower()
+        result.attrs[ATTRS_KEY] = {
+            cleaned.name: provenance_attr(
+                origin=MODIFIED, parent=str(series.name), operation=self.title,
+                params=kwargs, tags=[tag, "outliers-removed"]),
+            flag.name: provenance_attr(
+                origin=DERIVED, parent=str(series.name),
+                operation=f"{self.title} flag", params=kwargs,
+                tags=["flag", tag]),
+        }
+        # Day/night split of the outliers (only when separation was on).
+        is_daytime = getattr(h, "is_daytime", None) if separate else None
+        return {
+            "var": series.name, "cleaned": cleaned, "flag": flag,
+            "result": result, "n_outliers": int((flag == 2).sum()),
+            "is_daytime": is_daytime,
+        }
 
     def _worker(self, series, kwargs: dict, repeat: bool,
                 separate: bool = False) -> None:
+        """Synchronous compute + dispatch — tests call this directly; the GUI runs
+        :meth:`_compute_payload` on the worker thread instead."""
         try:
-            h = self._make_detector(series, kwargs)
-            # Daytime mask is computed in __init__; expose it for live colouring
-            # before run() starts firing progress callbacks.
-            self._live_is_daytime = getattr(h, "is_daytime", None) if separate else None
-
-            def cb(it, n, s):
-                # Read the iteration's data-unit detection band off the detector.
-                lo, hi = h.last_lower_bound, h.last_upper_bound
-                bounds = (lo.copy(), hi.copy()) if lo is not None and hi is not None else None
-                self._sig.progress.emit(it, n, s, bounds)
-
-            h.run(repeat=repeat, progress_callback=cb)
-            cleaned = h.filteredseries.copy()
-            cleaned.name = f"{series.name}_{self.method_suffix}"
-            flag = h.overall_flag.copy()  # name: FLAG_{var}_OUTLIER_{method}_TEST
-            result = pd.DataFrame({cleaned.name: cleaned, flag.name: flag})
-            # Provenance for the metadata store: the cleaned series is a modified
-            # copy of the parent; the flag is derived from it.
-            tag = self.method_suffix.lower()
-            result.attrs[ATTRS_KEY] = {
-                cleaned.name: provenance_attr(
-                    origin=MODIFIED, parent=str(series.name), operation=self.title,
-                    params=kwargs, tags=[tag, "outliers-removed"]),
-                flag.name: provenance_attr(
-                    origin=DERIVED, parent=str(series.name),
-                    operation=f"{self.title} flag", params=kwargs,
-                    tags=["flag", tag]),
-            }
-            # Day/night split of the outliers (only when separation was on).
-            is_daytime = getattr(h, "is_daytime", None) if separate else None
-            payload = {
-                "var": series.name, "cleaned": cleaned, "flag": flag,
-                "result": result, "n_outliers": int((flag == 2).sum()),
-                "is_daytime": is_daytime,
-            }
-        except Exception as err:  # surface the library error to the user
-            self._sig.run_failed.emit(str(err))
-            return
-        self._sig.run_done.emit(payload)
+            self._on_done(self._compute_payload(series, kwargs, repeat, separate))
+        except Exception as err:
+            self._on_failed(str(err))
 
     def _on_progress(self, iteration: int, n_outliers: int, cleaned, bounds) -> None:
         """Fill the bar as repeated iterations remove outliers. Total iterations
