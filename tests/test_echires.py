@@ -161,6 +161,39 @@ class TestPwbPerGasWindow(unittest.TestCase):
         self.assertLessEqual(clipped, 3.0)
         self.assertNotAlmostEqual(clipped, 8.0, places=3)
 
+    # ---- an edge-pinned detection is a failed detection (never applied) ----
+    def test_edge_pinned_detection_rejected(self):
+        import numpy as np
+        from diive.flux.hires.lag_pwb import PreWhiteningBootstrap
+        df = self._core_fixture(30)
+        pwb = PreWhiteningBootstrap(df, 'w', 's', 't', hz=20, lag_max_s=10,
+                                    n_bootstrap=29, random_state=123)
+        # Symmetric +/-10 s window -> edges at +/-200 records. A zero-width HDI
+        # (every replicate agreed) is exactly what a real edge pin produces.
+        pwb._win_lo_idx, pwb._win_hi_idx, pwb._lag_max_records = 0, 400, 200
+        pwb._hdi_lo_s = pwb._hdi_hi_s = 0.0
+        # Interior mode -> usable and reliable.
+        pwb._tlag_records = 16
+        self.assertFalse(pwb.is_edge_pinned)
+        self.assertAlmostEqual(pwb.tlag_s, 0.8)
+        self.assertTrue(pwb.is_reliable)
+        # Edge mode (window boundary) -> rejected: NaN lag + HDI, not reliable.
+        pwb._tlag_records = -200
+        self.assertTrue(pwb.is_edge_pinned)
+        self.assertTrue(np.isnan(pwb.tlag_s))
+        self.assertFalse(pwb.is_reliable)
+        self.assertTrue(np.isnan(pwb.hdi_range_s))
+        # Per-gas window [0, 5] s -> edges at its OWN bounds (0 and 100 records),
+        # not the global +/-10 s.
+        pwb._win_lo_idx, pwb._win_hi_idx = 200, 300
+        pwb._tlag_records = 0    # lower bound (0 s)
+        self.assertTrue(pwb.is_edge_pinned)
+        pwb._tlag_records = 100  # upper bound (5 s)
+        self.assertTrue(pwb.is_edge_pinned)
+        pwb._tlag_records = 60   # 3 s, interior -> kept
+        self.assertFalse(pwb.is_edge_pinned)
+        self.assertAlmostEqual(pwb.tlag_s, 3.0)
+
     # ---- pipeline rejects a malformed per_gas_lag ----
     def test_pipeline_rejects_bad_per_gas_lag(self):
         import tempfile

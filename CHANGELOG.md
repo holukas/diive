@@ -473,6 +473,20 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
 
 ### Fixes
 
+- **PWB time-lag: edge-pinned detections are rejected at the source.** A chunk with no real W-scalar coupling produces
+  a flat, noisy pre-whitened CCF whose `argmax` is pushed to the search-window edge (the `na.locf` edge-fill makes every
+  position a candidate). Every bootstrap replicate then agrees on that edge, so the detection comes back pinned at the
+  window boundary with an HDI range of **0.0** — which falsely passed the S1 reliability test (`hdi < hdi_thresh`) and
+  was accepted as the most reliable possible detection. These spurious edge lags appeared directly as `±lag_max`
+  outliers and, worse, poisoned the leading/trailing gap-fill: `fill_tlag_gaps` backfills leading NaNs from the first
+  valid value, so a single boundary artefact could stamp the edge lag across an entire leading block of
+  genuinely-unreliable chunks. A lag at the window edge is **always** a failed detection — the true peak lies at or
+  beyond the limit, so it is undetermined, not measured (EddyPro likewise discards boundary lags). `PreWhiteningBootstrap`
+  now rejects it at detection time: the new `is_edge_pinned` property is True when the bootstrap mode lag sits on the
+  search-window boundary, and then `tlag_s` + the HDI report `NaN` and `is_reliable` is `False`, so the lag never enters
+  PWBOPT or gets applied. The edge is each gas's **own** window (`lws`/`uws`), not the global `±lag_max_s`. The raw mode
+  position stays on `tlag_records` for diagnostics (the per-chunk plot still shows where it landed). Genuine interior
+  HDI=0 detections (a sharp, high-SNR peak where every replicate agrees — the common, *good* case) are untouched.
 - **`UstarMovingPointDetection` rewritten for ONEFlux parity and speed.** Validated line-by-line against the reference
   C source (`oneflux_steps/ustar_mp/src/ustar.c`) and re-implemented on numpy arrays (~8x faster per `detect()`, and
   the per-iteration object construction + `DataFrame.copy()` in bootstrap loops is gone). **Behaviour changes toward

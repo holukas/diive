@@ -537,14 +537,42 @@ class PreWhiteningBootstrap:
 
     @property
     def tlag_records(self) -> int:
-        """Bootstrap (PWB) time lag in records (mode over N_B samples)."""
+        """Bootstrap (PWB) time lag in records (mode over N_B samples).
+
+        This is the raw mode position even when it falls on the search-window
+        edge (see ``is_edge_pinned``); the *reported* lag ``tlag_s`` is NaN in
+        that case.  Kept raw for diagnostics (e.g. the per-chunk plot).
+        """
         if self._tlag_records is None:
             raise RuntimeError("Call run() first.")
         return self._tlag_records
 
     @property
+    def is_edge_pinned(self) -> bool:
+        """True if the bootstrap mode lag sits on the search-window boundary.
+
+        A peak at the window edge means the true peak lies at or beyond the
+        window limit -- the lag is undetermined, not measured.  A chunk with no
+        real W-scalar coupling produces a flat, noisy cross-correlation whose
+        ``argmax`` is pushed to the edge by the na.locf edge-fill; every
+        bootstrap replicate then agrees there, faking a zero-width HDI.  Such
+        edge detections are treated as failures: ``tlag_s`` and the HDI are NaN
+        and ``is_reliable`` is False, so the lag is never carried into PWBOPT or
+        applied -- matching EddyPro, which also discards boundary lags.  The
+        edge is each gas's *own* window (``lws``/``uws``), not the global
+        ``+/-lag_max_s``.
+        """
+        if self._tlag_records is None:
+            raise RuntimeError("Call run() first.")
+        lo = self._win_lo_idx - self._lag_max_records
+        hi = self._win_hi_idx - self._lag_max_records
+        return self._tlag_records <= lo or self._tlag_records >= hi
+
+    @property
     def tlag_s(self) -> float:
-        """Bootstrap (PWB) time lag in seconds."""
+        """Bootstrap (PWB) time lag in seconds (NaN if edge-pinned = failed)."""
+        if self.is_edge_pinned:
+            return np.nan
         return self.tlag_records / self.hz
 
     @property
@@ -556,17 +584,17 @@ class PreWhiteningBootstrap:
 
     @property
     def hdi_lo_s(self) -> float:
-        """Lower bound of 95% HDI in seconds."""
+        """Lower bound of 95% HDI in seconds (NaN if edge-pinned = failed)."""
         if self._hdi_lo_s is None:
             raise RuntimeError("Call run() first.")
-        return self._hdi_lo_s
+        return np.nan if self.is_edge_pinned else self._hdi_lo_s
 
     @property
     def hdi_hi_s(self) -> float:
-        """Upper bound of 95% HDI in seconds."""
+        """Upper bound of 95% HDI in seconds (NaN if edge-pinned = failed)."""
         if self._hdi_hi_s is None:
             raise RuntimeError("Call run() first.")
-        return self._hdi_hi_s
+        return np.nan if self.is_edge_pinned else self._hdi_hi_s
 
     @property
     def hdi_range_s(self) -> float:
@@ -575,7 +603,12 @@ class PreWhiteningBootstrap:
 
     @property
     def is_reliable(self) -> bool:
-        """True if HDI range < 0.5 s (S1 reliability criterion, paper Section 2.3)."""
+        """True if HDI range < 0.5 s (S1 reliability criterion, paper Section 2.3).
+
+        Always False for an edge-pinned detection (a failed detection).
+        """
+        if self.is_edge_pinned:
+            return False
         return self.hdi_range_s < 0.5
 
     @property
@@ -2322,6 +2355,11 @@ class PwbBatchDetection:
               -> accept for temporal continuity.
         S3 -- unreliable -> carry forward the last known optimal lag.
 
+        Edge-pinned detections (lag at the search-window boundary) are already
+        NaN here: ``PreWhiteningBootstrap`` rejects them at detection time (an
+        edge lag is a failed detection and is never applied, matching EddyPro),
+        so this method only sees usable lags or NaN gaps.
+
         Args:
             tlag_s: Detected PWB lags in seconds (NaN where detection failed).
             hdi_range_s: 95% HDI range in seconds per period.
@@ -2383,7 +2421,9 @@ class PwbBatchDetection:
         Args:
             pwbopt_s: Optimal lag series from ``apply_pwbopt()``.
             tlag_s_raw: Raw PWB lags before PWBOPT.  Used to compute the
-                median fallback.  Ignored when ``None``.
+                median fallback.  Ignored when ``None``.  Edge-pinned detections
+                are already NaN (rejected at detection time), so they do not
+                pollute the median.
             fallback: Constant lag in seconds used as last resort.
 
         Returns:
@@ -2395,7 +2435,7 @@ class PwbBatchDetection:
 
         if result.isna().any() and tlag_s_raw is not None:
             raw = np.asarray(tlag_s_raw, dtype=float)
-            median_raw = np.nanmedian(raw)
+            median_raw = np.nanmedian(raw) if np.any(~np.isnan(raw)) else np.nan
             if np.isfinite(median_raw):
                 result = result.fillna(median_raw)
 
