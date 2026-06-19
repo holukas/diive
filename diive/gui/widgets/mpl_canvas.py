@@ -20,8 +20,11 @@ from matplotlib.backends.backend_qtagg import (
     NavigationToolbar2QT,
 )
 from matplotlib.figure import Figure
+from PySide6.QtCore import QEvent
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
+    QAbstractScrollArea,
+    QApplication,
     QCheckBox,
     QHBoxLayout,
     QLabel,
@@ -135,6 +138,31 @@ class MplCanvas(QWidget):
         # so panels adapt to the real widget size. Pan/zoom doesn't resize, so
         # it stays frozen -- see draw()/_on_resize.
         self._canvas.mpl_connect("resize_event", self._on_resize)
+
+        # The matplotlib canvas accepts wheel events, so a wheel over a plot
+        # embedded in a scroll area (e.g. the results dashboards) would not
+        # scroll the page. Filter the canvas's wheel events and forward them to
+        # an enclosing scroll area instead. diive binds no wheel interaction on
+        # the canvas, so nothing is lost.
+        self._canvas.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if obj is self._canvas and event.type() == QEvent.Type.Wheel:
+            area = self._enclosing_scroll_area()
+            if area is not None:
+                QApplication.sendEvent(area.viewport(), event)
+                return True  # consumed here; the scroll area handled it
+        return super().eventFilter(obj, event)
+
+    def _enclosing_scroll_area(self) -> QAbstractScrollArea | None:
+        """Nearest ancestor scroll area, or None if this canvas isn't inside one
+        (e.g. a standalone plotting tab — then the wheel is left to the canvas)."""
+        w = self.parentWidget()
+        while w is not None:
+            if isinstance(w, QAbstractScrollArea):
+                return w
+            w = w.parentWidget()
+        return None
 
     def save_dpi(self) -> int:
         """Current DPI selected for figure export (read by the Save action)."""

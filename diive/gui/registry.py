@@ -21,6 +21,7 @@ from diive.gui.tabs.events import EventsTab
 from diive.gui.tabs.features import FeatureEngineerTab
 from diive.gui.tabs.fluxchain import FluxChainTab
 from diive.gui.tabs.gapfilling import XGBoostGapFillingTab
+from diive.gui.tabs.gapfilling_mds import MdsGapFillingTab
 from diive.gui.tabs.gapfilling_randomforest import RandomForestGapFillingTab
 from diive.gui.tabs.gaps import GapDashboardTab
 from diive.gui.tabs.log import LogTab
@@ -136,10 +137,11 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Set to value": SetToValueTab,
         "Set exact values to missing": SetExactToMissingTab,
     },
-    # Gap-filling (dv.gapfilling). Its own menu — will grow (MDS, ...).
+    # Gap-filling (dv.gapfilling). Its own menu.
     "Gap-filling": {
         "XGBoost gap-filling": XGBoostGapFillingTab,
         "Random Forest gap-filling": RandomForestGapFillingTab,
+        "MDS gap-filling": MdsGapFillingTab,
     },
     # Exploratory analysis & diagnostics (dv.analysis).
     "Analyze": {
@@ -167,7 +169,7 @@ SINGLE_INSTANCE_TABS: set[str] = {
     "Time lag analysis",
     "Nighttime partitioning (ONEFlux)", "Nighttime partitioning (REddyProc)",
     "Daytime partitioning (REddyProc)", "Daytime partitioning (ONEFlux)",
-    "XGBoost gap-filling", "Random Forest gap-filling",
+    "XGBoost gap-filling", "Random Forest gap-filling", "MDS gap-filling",
     "Data profile", "Gaps & coverage",
     "Driver explorer", "Seasonal trend & anomalies", "Spectrogram",
     "Metadata explorer", "Select variables", "Rename variables", "3D surface",

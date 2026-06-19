@@ -107,6 +107,23 @@
   is trained on the selected feature columns directly (no feature-engineering settings). A **Copy Python** button copies a
   runnable script; **Add results to dataset** emits the gap-filled + ISFILLED flag columns with DERIVED provenance and
   keeps the Results dashboard intact. All computation is library work (`XGBoostTS` / `RandomForestTS`).
+- **Gap-filling ▸ MDS gap-filling** tab (`tabs/gapfilling_mds.py`, single-instance) — Marginal Distribution Sampling
+  (`dv.gapfilling.FluxMDS`, Reichstein et al. 2005). MDS is not an ML regressor, so this tab is not an `MlGapFillingTab`
+  subclass; it reuses the same shared chrome (`tab_chrome` title bar + list header, `WorkerRunner`, `SubTabs`) but offers
+  a target (flux) list, a **fixed three-driver picker** (SWIN / TA / VPD, auto-seeded by name with availability markers,
+  prefers gap-filled `_f`, skips `FLAG_*`) and similarity tolerances (`swin_tol`, `ta_tol`, `vpd_tol`, `avg_min_n_vals`) —
+  no feature list, no SHAP, no held-out test (MDS has none). Its **Results** page is a slimmed dashboard
+  (`widgets/mds_results.py::MdsResultsPanel`): Configuration + in-sample scores + a **per-quality-level breakdown** table,
+  a **quality-level bar plot** (records per level, grey observed + blue gradient for looser tiers), a
+  predicted-vs-observed scatter, the cumulative sum, and a **full-width quality time series** (the gap-filled series with
+  each point coloured + markered by its quality level, mean ± SD whiskers). A **progress bar** tracks the run across the
+  MDS quality levels and the **Log tab** streams a per-level line (`Quality N (…): filled X gaps, Y remaining`). **Add
+  results to dataset** emits `*_gfMDS` + `FLAG_*_gfMDS_ISFILLED` with DERIVED provenance; **Copy Python** renders a
+  `FluxMDS(...).run()` script (`mds_gapfill_to_code`). New library helpers keep the domain knowledge out of the GUI:
+  `FluxMDS.run(progress_callback=)` (per-quality-level progress + per-level `info` logging at the caller's verbosity),
+  `FluxMDS.plot_quality_timeseries(ax=)` (the embeddable colour/marker-by-quality time series, also the top panel of the
+  standalone `showplot`), `FluxMDS.quality_breakdown()` (per-level `level`/`count`/`pct`/`description` DataFrame) and
+  module-level `mds_quality_description()` — the last two also backing the console report's Quality Distribution table.
   - **Long-term (per-year) mode** — both ML gap-filling tabs now offer a **Long-term mode** checkbox that, instead of one
     model for the whole record, builds one model per calendar year from that year plus its two closest neighbours
     (`LongTermGapFillingXGBoostTS` / `LongTermGapFillingRandomForestTS`). The checkbox is **selectable only when the record

@@ -559,8 +559,26 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   live on a `QObject` helper because `DiiveTab` is a plain `ABC`, not a `QObject` — class-level `Signal`s on a `DiiveTab`
   won't bind. When lazily creating a menu tab, call `tab.widget()` (builds it) **before** connecting `featuresCreated`,
   which `build()` sets.
+- **MDS gap-filling tab** (`tabs/gapfilling_mds.py`, `Gap-filling ▸ MDS gap-filling`, single-instance) — **not** an
+  `MlGapFillingTab` subclass: MDS (`dv.gapfilling.FluxMDS`) is not a trained regressor (no SHAP, no held-out test split,
+  no feature reduction; fixed SWIN/TA/VPD drivers, not a free feature list), so it shares only the *chrome*
+  (`tab_chrome.build_titlebar`/`list_header`, `WorkerRunner`, `SubTabs`) — a self-contained `DiiveTab`. Inputs: a target
+  (flux) list + a **fixed three-driver picker** (SWIN / TA / VPD combos auto-seeded by name with ✓/✗ markers, prefer
+  gap-filled `_f`, skip `FLAG_*`; reuses `_partitioning_base._auto_pick`) + similarity tolerances (`swin_tol` low/high,
+  `ta_tol` °C, `vpd_tol` kPa, `avg_min_n_vals`). Flag `FLAG_*_gfMDS_ISFILLED` is 0 = observed, 1+ = gap-filled at that
+  **quality level** (higher = looser meteorological match). Codegen `mds_gapfill_to_code` (no feature list / no
+  reduction). Its Results page is the slimmed **`MdsResultsPanel`** (`widgets/mds_results.py`, reuses
+  `gapfill_results._Card`): Configuration + **in-sample** scores (MDS has no held-out test) + a **per-quality-level
+  breakdown** table, then a **quality-level bar plot** (records per level) + predicted-vs-observed scatter + cumulative
+  sum. The level→description map is library domain knowledge — `FluxMDS.quality_breakdown()` (→ `level`/`count`/`pct`/
+  `description` DataFrame) and module-level `mds_quality_description()`, both also backing the console report's Quality
+  Distribution table. A **progress bar** (driven by `FluxMDS.run(progress_callback=)`, a worker→GUI queued signal) tracks
+  the quality levels, and per-level `info` logging (`Quality N (…): filled X gaps, Y remaining`, threaded through
+  `self.verbose` so it shows at verbose>=2 / the GUI Log tab but is silent at the library default verbose=1) streams the
+  fill progress. The Results page also shows a **full-width colour/marker-by-quality time series** via the embeddable
+  `FluxMDS.plot_quality_timeseries(ax=)` (two-phase; also the top panel of the standalone `showplot`).
 - **ML gap-filling tabs — `MlGapFillingTab` template** (`tabs/_ml_gapfilling_base.py`). The XGBoost tab's whole
-  layout/flow is a **reusable template** so every ML gap-filler (**XGBoost** + **Random Forest** now, MDS-style next, ...)
+  layout/flow is a **reusable template** so every ML gap-filler (**XGBoost** + **Random Forest**)
   shares one identical UI. The base owns everything generic; a concrete tab is a thin subclass overriding a small **method-hook
   surface**: class attrs `title` / `method_name` / `method_chip_label`+`_bg`+`_fg` (the hero chip), and methods
   `_model_class()` (the library `*TS` class), `_build_model_box()` (the hyperparameter `QGroupBox`), `_method_kwargs()`

@@ -89,6 +89,50 @@ def randomforest_gapfill_to_code(target: str, features: list[str], kwargs: dict,
         df_var=df_var, load_hint=load_hint)
 
 
+def mds_gapfill_to_code(target: str, swin: str, ta: str, vpd: str, kwargs: dict, *,
+                        df_var: str = "df",
+                        load_hint: str | None = None) -> str:
+    """Render a ``FluxMDS(...).run()`` gap-filling snippet as a string.
+
+    MDS is not an ML regressor: it fills gaps by marginal-distribution sampling
+    on three fixed meteorological drivers (SWIN / TA / VPD) with similarity
+    tolerances — so unlike the ML renderer there are no feature list and no SHAP
+    reduction. ``swin``/``ta``/``vpd`` name the driver columns; ``kwargs`` carries
+    the tolerances (``swin_tol``/``ta_tol``/``vpd_tol``/``avg_min_n_vals``).
+
+    Args:
+        target: the flux column to gap-fill.
+        swin: short-wave incoming radiation column (W m-2).
+        ta: air-temperature column (deg C).
+        vpd: vapour-pressure-deficit column (kPa).
+        kwargs: FluxMDS tolerance kwargs (without ``df``/``flux``/``swin``/``ta``/``vpd``).
+        df_var: variable name used for the input DataFrame.
+        load_hint: if given, prepend ``df = <load_hint>`` so the snippet runs as-is.
+
+    Returns:
+        A runnable Python snippet as a string.
+    """
+    lines = ["import diive as dv", ""]
+    if load_hint is not None:
+        lines += [f"{df_var} = {load_hint}", ""]
+    lines += [f"target = {target!r}",
+              "",
+              "model = dv.gapfilling.FluxMDS(",
+              f"    df={df_var},",
+              "    flux=target,",
+              f"    swin={swin!r},",
+              f"    ta={ta!r},",
+              f"    vpd={vpd!r},"]
+    for key, value in kwargs.items():
+        lines.append(f"    {key}={value!r},")
+    lines += [")",
+              "model.run()",
+              "",
+              "gapfilled = model.get_gapfilled_target()  # observed + filled (*_gfMDS)",
+              "flag = model.get_flag()  # 0 = observed, 1+ = gap-filled (quality level)"]
+    return "\n".join(lines) + "\n"
+
+
 def longterm_ml_gapfill_to_code(class_name: str, gapfilled_suffix: str,
                                 target: str, features: list[str], kwargs: dict, *,
                                 reduce: bool = False,

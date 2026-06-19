@@ -2617,3 +2617,99 @@ def test_events_tab_and_dialog_build(window):
     dlg = AddEventDialog(window._full_data.index.min(), window._full_data.index.max())
     ev = dlg.make_event()  # default = instant at data start
     assert not ev.is_range
+
+
+def test_mds_gapfill_to_code():
+    # The MDS codegen renders a runnable FluxMDS(...).run() snippet with the three
+    # drivers + tolerances; no feature list and no SHAP reduction (unlike ML).
+    from diive.gapfilling.codegen import mds_gapfill_to_code
+    code = mds_gapfill_to_code(
+        "NEE", "Rg_f", "Tair_f", "VPD_f",
+        {"swin_tol": [20, 50], "ta_tol": 2.5, "vpd_tol": 0.5, "avg_min_n_vals": 5})
+    assert "dv.gapfilling.FluxMDS(" in code
+    assert "flux=target" in code and "swin='Rg_f'" in code
+    assert "ta='Tair_f'" in code and "vpd='VPD_f'" in code
+    assert "ta_tol=2.5" in code and "model.run()" in code
+    assert "reduce_features" not in code  # MDS has none
+    assert "_gfMDS" in code
+
+
+def test_mds_quality_breakdown_helper():
+    # The library exposes the per-quality-level breakdown (level/count/pct/desc)
+    # the GUI plot reads, keeping the level->description map in the library.
+    from diive.gapfilling.mds import FluxMDS, mds_quality_description
+    df = dv.load_exampledata_parquet()
+    df = dv.times.keep_daterange(df, "2022-07-01", "2022-07-31 23:30")
+    model = FluxMDS(df=df, flux="NEE_CUT_REF_orig", swin="Rg_f", ta="Tair_f",
+                    vpd="VPD_f", verbose=0)
+    # The progress callback fires per quality level and reaches done == total.
+    progress = []
+    model.run(progress_callback=lambda *a: progress.append(a))
+    assert progress and progress[-1][0] == progress[-1][1]  # last done == total
+    bd = model.quality_breakdown()
+    assert list(bd.columns) == ["level", "count", "pct", "description"]
+    assert (bd["level"] == 0).any()  # observed row present
+    assert int(bd["count"].sum()) == len(df)
+    assert mds_quality_description(0) == "measured"
+    assert "7 days" in mds_quality_description(1)
+
+    # The colour/marker-by-quality time series embeds into a supplied axes.
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    model.plot_quality_timeseries(ax=ax)
+    assert ax.get_lines()  # drew at least one quality series
+    plt.close(fig)
+
+
+def test_gapfilling_mds_tab(app, example_year):
+    # The MDS tab builds, auto-seeds the three drivers, runs synchronously and
+    # emits the *_gfMDS + flag columns; the slimmed Results panel populates.
+    from PySide6.QtWidgets import QApplication
+    from diive.gui.tabs.gapfilling_mds import MdsGapFillingTab
+    df = example_year
+    tab = MdsGapFillingTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._set_target("NEE_CUT_REF_orig")
+
+    # Drivers auto-seed to present columns (availability marker ✓).
+    drivers = tab._driver_names()
+    assert all(v in df.columns for v in drivers.values())
+    assert "VPD" in drivers["vpd"].upper() and "TA" in drivers["ta"].upper()
+
+    # Reproducible snippet reflects the current target + drivers.
+    code = tab._python_code()
+    assert "FluxMDS(" in code and "NEE_CUT_REF_orig" in code
+
+    # Pin the drivers and run the worker synchronously (the runner forwards to
+    # _on_done; calling _compute_payload + _on_done directly keeps it off-thread).
+    swin, ta, vpd = "Rg_f", "Tair_f", "VPD_f"
+    work = df[["NEE_CUT_REF_orig", swin, ta, vpd]].copy()
+    payload = tab._compute_payload(work, "NEE_CUT_REF_orig", swin, ta, vpd,
+                                   tab._method_kwargs())
+    tab._on_done(payload)
+    QApplication.processEvents()
+    assert tab._result_df is not None
+    assert "NEE_CUT_REF_orig_gfMDS" in tab._result_df.columns
+    assert "FLAG_NEE_CUT_REF_orig_gfMDS_ISFILLED" in tab._result_df.columns
+    assert tab.add_btn.isEnabled()
+    # Heatmaps + results panel rendered without a failure message.
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                if "Plot failed" in t.get_text()]
+
+    # A wheel over a results-panel plot must scroll the dashboard: every embedded
+    # canvas resolves the enclosing scroll area so it can forward wheel events.
+    from diive.gui.widgets.mpl_canvas import MplCanvas
+    panel_canvases = tab.results_panel.findChildren(MplCanvas)
+    assert panel_canvases
+    assert all(c._enclosing_scroll_area() is tab.results_panel for c in panel_canvases)
+
+    # Config round-trips through save/restore (target + drivers + tolerances).
+    tab.vpd_tol.setValue(0.8)
+    state = tab.save_state()
+    tab2 = MdsGapFillingTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2._target == "NEE_CUT_REF_orig"
+    assert tab2.vpd_tol.value() == 0.8

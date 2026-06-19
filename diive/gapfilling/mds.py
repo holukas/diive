@@ -382,16 +382,6 @@ class _FluxMDS:
         measured_count = flagcounts.get(0, 0)
         if quality_counts:
             rule("Quality Distribution", min_level=2)
-            quality_descriptions = {
-                1: 'SWIN, TA, VPD: 7 days',
-                2: 'SWIN, TA, VPD: 14 days',
-                3: 'SWIN only: 7 days',
-                4: 'Diurnal cycle: 1 h same day',
-                5: 'Diurnal cycle: 1 h within 1 day',
-                6: 'SWIN, TA, VPD: 21 days',
-                7: 'SWIN, TA, VPD: 28 days',
-                8: 'SWIN only: 14 days',
-            }
             table = Table(show_header=True, header_style="bold cyan", box=None, padding=(0, 2))
             table.add_column("Level", style="dim", no_wrap=True)
             table.add_column("Count", justify="right")
@@ -401,17 +391,7 @@ class _FluxMDS:
                           f"{100.0 * measured_count / potential_vals:.1f}%", "measured")
             for q, cnt in sorted(quality_counts.items()):
                 pct = 100.0 * cnt / potential_vals
-                if q in quality_descriptions:
-                    desc = quality_descriptions[q]
-                elif 9 <= q <= 24:
-                    desc = f'SWIN, TA, VPD: {35 + (q - 9) * 7} days'
-                elif 25 <= q <= 40:
-                    desc = f'SWIN only: {21 + (q - 25) * 7} days'
-                elif q >= 41:
-                    desc = f'Diurnal cycle: {21 + (q - 41) * 7} days'
-                else:
-                    desc = 'unknown'
-                table.add_row(str(q), f"{cnt:,d}", f"{pct:.1f}%", desc)
+                table.add_row(str(q), f"{cnt:,d}", f"{pct:.1f}%", mds_quality_description(q))
             _console.print(table)
 
         self.report_scores()
@@ -625,6 +605,39 @@ class _FluxMDS:
         return df
 
 
+#: MDS quality-level descriptions for the fixed A1-B4 tiers (Reichstein 2005).
+_MDS_QUALITY_FIXED = {
+    1: 'SWIN, TA, VPD: 7 days',
+    2: 'SWIN, TA, VPD: 14 days',
+    3: 'SWIN only: 7 days',
+    4: 'Diurnal cycle: 1 h same day',
+    5: 'Diurnal cycle: 1 h within 1 day',
+    6: 'SWIN, TA, VPD: 21 days',
+    7: 'SWIN, TA, VPD: 28 days',
+    8: 'SWIN only: 14 days',
+}
+
+
+def mds_quality_description(quality: int) -> str:
+    """Human description of an MDS gap-filling quality level (flag value).
+
+    0 = measured; 1-8 = the fixed A1-B4 hierarchy; 9+ = the progressively relaxed
+    C+ tiers (Reichstein et al. 2005). Higher levels relax the meteorological match.
+    """
+    q = int(quality)
+    if q == 0:
+        return 'measured'
+    if q in _MDS_QUALITY_FIXED:
+        return _MDS_QUALITY_FIXED[q]
+    if 9 <= q <= 24:
+        return f'SWIN, TA, VPD: {35 + (q - 9) * 7} days'
+    if 25 <= q <= 40:
+        return f'SWIN only: {21 + (q - 25) * 7} days'
+    if q >= 41:
+        return f'Diurnal cycle: {21 + (q - 41) * 7} days'
+    return 'unknown'
+
+
 class FluxMDS:
     """Gap-filling for ecosystem fluxes using Marginal Distribution Sampling (MDS).
 
@@ -778,54 +791,114 @@ class FluxMDS:
             raise Exception(f'Not available: model scores for gap-filling.')
         return self._scores
 
-    def run(self):
-        """Execute optimized MDS gap-filling algorithm."""
+    def quality_breakdown(self) -> DataFrame:
+        """Per-quality-level breakdown of the gap-filling flag.
+
+        One row per flag value present, sorted ascending: level 0 = measured,
+        1+ = gap-filled at that quality tier (higher = looser meteorological
+        match). Columns: ``level``, ``count``, ``pct`` (% of all records),
+        ``description``. This is the data behind the console report's Quality
+        Distribution table and the GUI quality-level plot.
+        """
+        flag = self.gapfilling_df_[self.target_gapfilled_flag]
+        total = len(flag)
+        counts = flag.value_counts().sort_index()
+        rows = [
+            {'level': int(level), 'count': int(count),
+             'pct': 100.0 * count / total if total else 0.0,
+             'description': mds_quality_description(int(level))}
+            for level, count in counts.items()
+        ]
+        return DataFrame(rows, columns=['level', 'count', 'pct', 'description'])
+
+    @staticmethod
+    def _level_plan() -> list:
+        """The ordered MDS quality hierarchy as ``(kind, days, hours, quality)``
+        steps. ``kind`` is ``'all'`` (SWIN+TA+VPD), ``'two'`` (SWIN only) or
+        ``'mdc'`` (mean diurnal cycle). Driving ``run`` from this single list lets
+        it report per-level progress without duplicating the sequence."""
+        plan = [
+            ('all', 7, 0, 1),    # A1: SWIN, TA, VPD within 7 days (highest quality)
+            ('all', 14, 0, 2),   # A2: SWIN, TA, VPD within 14 days
+            ('two', 7, 0, 3),    # A3: SWIN only within 7 days
+            ('mdc', 0, 1, 4),    # A4: same hour within |dt| <= 1h on same day
+            ('mdc', 1, 1, 5),    # B1: same hour within |dt| <= 1 day
+            ('all', 21, 0, 6),   # B2: SWIN, TA, VPD within 21 days
+            ('all', 28, 0, 7),   # B3: SWIN, TA, VPD within 28 days
+            ('two', 14, 0, 8),   # B4: SWIN only within 14 days
+        ]
+        quality = 8                                  # C+: SWIN, TA, VPD, 35-140 days
+        for d in range(35, 147, 7):
+            quality += 1
+            plan.append(('all', d, 0, quality))
+        quality = 24                                 # C+: SWIN only, 21-140 days
+        for d in range(21, 147, 7):
+            quality += 1
+            plan.append(('two', d, 0, quality))
+        quality = 42                                 # C+: same hour, 21-140 days
+        for d in range(21, 147, 7):
+            quality += 1
+            plan.append(('mdc', d, 1, quality))
+        return plan
+
+    def _emit_subprogress(self, i: int, n_gaps: int, predictions) -> None:
+        """Mid-level progress tick from the per-gap loops, so the bar advances
+        *within* a long quality level instead of only at its end.
+
+        Progress is measured in **gaps**: already-filled gaps from prior levels
+        plus the valid predictions computed so far in this level (those gaps will
+        be filled when the level finishes). So the percentage reflects how many
+        gaps are (about to be) filled, not how many quality levels have run."""
+        cb = getattr(self, '_progress_callback', None)
+        if cb is None or self._initial_gaps <= 0:
+            return
+        will_fill = int(np.count_nonzero(~np.isnan(predictions[:i])))
+        filled = self._filled_before_level + will_fill
+        remaining = self._initial_gaps - filled
+        cb(filled, self._initial_gaps, self._cur_quality, 0, remaining)
+
+    def run(self, progress_callback=None):
+        """Execute optimized MDS gap-filling algorithm.
+
+        Args:
+            progress_callback: optional ``callable(filled, total, quality, n_filled,
+                n_remaining)`` for a GUI progress bar. ``filled``/``total`` count
+                **gaps** (filled so far / total gaps to fill), so the percentage is
+                gap-based; ``quality`` is the current quality level.
+        """
         rule(f"MDS Gap-Filling: {self.flux}")
 
         locs_missing = self.gapfilling_df_['.PREDICTIONS'].isnull()
         self._missing_mask = locs_missing.copy()
 
-        # A1: SWIN, TA, VPD, NEE available within 7 days (highest quality gap-filling).
-        self._run_all_available(days=7, quality=1)
-
-        # A2: SWIN, TA, VPD, NEE available within 14 days
-        self._run_all_available(days=14, quality=2)
-
-        # A3: SWIN, NEE available within 7 days
-        self._run_two_available(days=7, quality=3)
-
-        # A4: NEE available within |dt| <= 1h on same day
-        self._run_mdc(days=0, hours=1, quality=4)
-
-        # B1: same hour NEE available within |dt| <= 1 day
-        self._run_mdc(days=1, hours=1, quality=5)
-
-        # B2: SWIN, TA, VPD, NEE available within 21 days
-        self._run_all_available(days=21, quality=6)
-
-        # B3: SWIN, TA, VPD, NEE available within 28 days
-        self._run_all_available(days=28, quality=7)
-
-        # B4: SWIN, NEE available within 14 days
-        self._run_two_available(days=14, quality=8)
-
-        # C+: SWIN, TA, VPD, NEE available within 35-140 days
-        quality = 8
-        for d in range(35, 147, 7):
-            quality += 1
-            self._run_all_available(days=d, quality=quality)
-
-        # C+: SWIN, NEE available within 21-140 days
-        quality = 24
-        for d in range(21, 147, 7):
-            quality += 1
-            self._run_two_available(days=d, quality=quality)
-
-        # C+: same hour NEE available within |dt| <= 7-X days
-        quality = 42
-        for d in range(21, 147, 7):
-            quality += 1
-            self._run_mdc(days=d, hours=1, quality=quality)
+        runners = {'all': self._run_all_available, 'two': self._run_two_available}
+        plan = self._level_plan()
+        # Progress state shared with the per-gap loops (see _emit_subprogress).
+        # Everything is measured in gaps: total = the gaps present at the start.
+        self._progress_callback = progress_callback
+        self._initial_gaps = int(self._missing_mask.sum())
+        for kind, days, hours, quality in plan:
+            before = int(self._missing_mask.sum())
+            self._cur_quality = quality
+            self._filled_before_level = self._initial_gaps - before
+            if kind == 'mdc':
+                self._run_mdc(days=days, hours=hours, quality=quality)
+            else:
+                runners[kind](days=days, quality=quality)
+            remaining = int(self._missing_mask.sum())
+            n_filled = before - remaining
+            # Log only the levels that actually filled something, at the caller's
+            # verbosity (hidden at the default verbose=1; shown at >=2, e.g. GUI).
+            if n_filled > 0:
+                info(f"Quality {quality} ({mds_quality_description(quality)}): "
+                     f"filled {n_filled:,} gaps, {remaining:,} remaining",
+                     verbose=self.verbose)
+            if progress_callback is not None:
+                progress_callback(self._initial_gaps - remaining, self._initial_gaps,
+                                  quality, n_filled, remaining)
+            if remaining == 0:
+                break
+        self._progress_callback = None
 
         # Gap-filled measurement time series
         self.gapfilling_df_[self.target_gapfilled] = self.gapfilling_df_[self.flux].fillna(
@@ -850,6 +923,65 @@ class FluxMDS:
 
         info(f"MDS gap-filling done: {self.flux}")
 
+    def _flag_style(self, ix: int):
+        """(colour, marker) for the ix-th sorted quality level — wraps when the
+        record has more levels than the palette/marker list."""
+        colors = colorwheel_36_blackfirst()
+        markers = generate_plot_marker_list()
+        color = colors[35] if ix > (len(colors) - 1) else colors[ix]
+        marker = markers[9] if ix > (len(markers) - 1) else markers[ix]
+        return color, marker
+
+    def plot_quality_timeseries(self, ax=None, legend: bool = True,
+                                ax_labels_fontsize: int = None,
+                                legend_textsize: int = None,
+                                legend_ncol: int = None):
+        """Plot the gap-filled series over time, each point coloured + markered by
+        its MDS quality level (0 = measured, 1+ = gap-filled; mean ± SD whiskers on
+        the filled points).
+
+        Two-phase: ``ax=None`` builds a standalone figure; pass an ``ax`` (e.g. a
+        GUI canvas axes) to embed it. Returns the axes used.
+
+        The quality hierarchy has many levels, so the legend is placed *below* the
+        axes across several columns (``legend_ncol``, auto-sized for ~6 rows when
+        ``None``) — otherwise it overlaps and is clipped.
+        """
+        if ax_labels_fontsize is None:
+            ax_labels_fontsize = theme.AX_LABELS_FONTSIZE_12
+        if legend_textsize is None:
+            legend_textsize = theme.FONTSIZE_TXT_LEGEND_SMALL_9
+        if ax is None:
+            fig = plt.figure(facecolor='white', figsize=(16, 5), dpi=100, layout='constrained')
+            ax = fig.add_subplot(1, 1, 1)
+        flag = self.gapfilling_df_[self.target_gapfilled_flag]
+        levels = sorted(flag.unique())
+        for ix, uf in enumerate(levels):
+            data = self.gapfilling_df_.loc[flag == uf, :]
+            n_vals = data[self.target_gapfilled].count()
+            label = (f"measured ({self.flux})" if uf == 0
+                     else f"gap-filled quality {int(uf)}, mean ± SD")
+            color, marker = self._flag_style(ix)
+            ax.plot(data.index, data[self.target_gapfilled],
+                    label=f"{label} ({n_vals} values)", color=color, linestyle='none',
+                    markeredgewidth=1, marker=marker, alpha=1, markersize=5,
+                    markeredgecolor=color, fillstyle='full')
+            if uf > 0:
+                ax.errorbar(data.index, data[self.target_gapfilled], data['.PREDICTIONS_SD'],
+                            elinewidth=5, ecolor=color, alpha=.2, fmt='none')
+        # ax_xlabel_txt='' avoids default_format's `False` default rendering a
+        # literal "False" x-axis label (the axis is dates, no label needed).
+        default_format(ax=ax, ax_xlabel_txt='', ax_ylabel_txt=f"{self.flux}",
+                       ax_labels_fontsize=ax_labels_fontsize)
+        if legend:
+            # Auto-size columns for ~6 rows so the many quality levels stay
+            # readable; place the legend below the axes so it never covers data.
+            ncol = legend_ncol or max(2, min(10, -(-len(levels) // 6)))
+            default_legend(ax=ax, textsize=legend_textsize, ncol=ncol,
+                           loc='upper center', bbox_to_anchor=(0.5, -0.12))
+        nice_date_ticks(ax=ax)
+        return ax
+
     def showplot(self):
         """Display MDS gap-filling results with plots."""
         fig = plt.figure(facecolor='white', figsize=(16, 9), dpi=100, layout='constrained')
@@ -857,28 +989,15 @@ class FluxMDS:
         ax = fig.add_subplot(gs[0, 0])
         ax_flag = fig.add_subplot(gs[1, 0], sharex=ax)
         ax_counts = fig.add_subplot(gs[2, 0], sharex=ax)
+        # Top panel: the colour/marker-by-quality time series (shared with the GUI).
+        self.plot_quality_timeseries(ax=ax, legend=False)
         flag = self.gapfilling_df_[self.target_gapfilled_flag]
-        uniqueflags = list(flag.unique())
-        uniqueflags.sort()
-        colors = colorwheel_36_blackfirst()
-        maxcolors = len(colors)
-        markers = generate_plot_marker_list()
-        maxmarker = len(markers)
-        for ix, uf in enumerate(uniqueflags):
-            locs = flag == uf
-            data = self.gapfilling_df_.loc[locs, :]
+        for ix, uf in enumerate(sorted(flag.unique())):
+            data = self.gapfilling_df_.loc[flag == uf, :]
             label = f"measured ({self.flux})" if uf == 0 else f"gap-filled quality {uf}, mean ± SD"
             n_vals = data[self.target_gapfilled].count()
-            color = colors[35] if ix > (maxcolors - 1) else colors[ix]
-            marker = markers[9] if ix > (maxmarker - 1) else markers[ix]
-            ax.plot(data.index, data[self.target_gapfilled],
-                    label=f"{label} ({n_vals} values)", color=color, linestyle='none', markeredgewidth=1,
-                    marker=marker, alpha=1, markersize=5, markeredgecolor=color, fillstyle='full')
-
+            color, marker = self._flag_style(ix)
             if uf > 0:
-                ax.errorbar(data.index, data[self.target_gapfilled], data['.PREDICTIONS_SD'],
-                            elinewidth=5, ecolor=color, alpha=.2, fmt='none')
-
                 ax_counts.plot(data.index, data['.PREDICTIONS_COUNTS'],
                                label=f"{label} ({n_vals} values)", color=color, linestyle='none', markeredgewidth=1,
                                marker=marker, alpha=1, markersize=5, markeredgecolor=color, fillstyle='full')
@@ -888,7 +1007,6 @@ class FluxMDS:
                          marker=marker, alpha=1, markersize=5, markeredgecolor=color, fillstyle='full')
         fig.suptitle(f"Variable {self.flux} gap-filled using MDS: {self.target_gapfilled}",
                      fontsize=theme.FIGHEADER_FONTSIZE)
-        default_format(ax=ax, ax_ylabel_txt=f"{self.flux}", ax_labels_fontsize=theme.AX_LABELS_FONTSIZE_12)
         ax.tick_params(labelbottom=False)
         ax_flag.tick_params(labelbottom=False)
         default_format(ax=ax_flag, ax_ylabel_txt="flag value", ax_labels_fontsize=theme.AX_LABELS_FONTSIZE_12)
@@ -896,7 +1014,6 @@ class FluxMDS:
                        ax_labels_fontsize=theme.AX_LABELS_FONTSIZE_12)
         default_legend(ax=ax_flag, textsize=theme.FONTSIZE_TXT_LEGEND_SMALL_9, ncol=2)
 
-        nice_date_ticks(ax=ax)
         nice_date_ticks(ax=ax_flag)
         nice_date_ticks(ax=ax_counts)
         fig.show()
@@ -955,16 +1072,6 @@ class FluxMDS:
         measured_count = flagcounts.get(0, 0)
         if quality_counts:
             rule("Quality Distribution", min_level=2)
-            quality_descriptions = {
-                1: 'SWIN, TA, VPD: 7 days',
-                2: 'SWIN, TA, VPD: 14 days',
-                3: 'SWIN only: 7 days',
-                4: 'Diurnal cycle: 1 h same day',
-                5: 'Diurnal cycle: 1 h within 1 day',
-                6: 'SWIN, TA, VPD: 21 days',
-                7: 'SWIN, TA, VPD: 28 days',
-                8: 'SWIN only: 14 days',
-            }
             table = Table(show_header=True, header_style="bold cyan", box=None, padding=(0, 2))
             table.add_column("Level", style="dim", no_wrap=True)
             table.add_column("Count", justify="right")
@@ -974,17 +1081,7 @@ class FluxMDS:
                           f"{100.0 * measured_count / potential_vals:.1f}%", "measured")
             for q, cnt in sorted(quality_counts.items()):
                 pct = 100.0 * cnt / potential_vals
-                if q in quality_descriptions:
-                    desc = quality_descriptions[q]
-                elif 9 <= q <= 24:
-                    desc = f'SWIN, TA, VPD: {35 + (q - 9) * 7} days'
-                elif 25 <= q <= 40:
-                    desc = f'SWIN only: {21 + (q - 25) * 7} days'
-                elif q >= 41:
-                    desc = f'Diurnal cycle: {21 + (q - 41) * 7} days'
-                else:
-                    desc = 'unknown'
-                table.add_row(str(q), f"{cnt:,d}", f"{pct:.1f}%", desc)
+                table.add_row(str(q), f"{cnt:,d}", f"{pct:.1f}%", mds_quality_description(q))
             _console.print(table)
 
         self.report_scores()
@@ -1154,6 +1251,8 @@ class FluxMDS:
 
         # Process each gap row
         for i in range(n_gaps):
+            if (i & 1023) == 0:  # report progress every ~1k gaps (cheap, frequent)
+                self._emit_subprogress(i, n_gaps, predictions)
             gap_idx = gap_indices[i]
             start = np.datetime64(start_times[i])
             end = np.datetime64(end_times[i])
@@ -1213,6 +1312,8 @@ class FluxMDS:
 
         # Process each gap row
         for i in range(n_gaps):
+            if (i & 1023) == 0:  # report progress every ~1k gaps (cheap, frequent)
+                self._emit_subprogress(i, n_gaps, predictions)
             gap_idx = gap_indices[i]
             start = np.datetime64(start_times[i])
             end = np.datetime64(end_times[i])
@@ -1261,6 +1362,8 @@ class FluxMDS:
 
         # Process each gap row (no meteorological conditions, just time window)
         for i in range(n_gaps):
+            if (i & 1023) == 0:  # report progress every ~1k gaps (cheap, frequent)
+                self._emit_subprogress(i, n_gaps, predictions)
             start = np.datetime64(start_times[i])
             end = np.datetime64(end_times[i])
 
@@ -1298,6 +1401,8 @@ class FluxMDS:
 
         # Process each gap row
         for i in range(n_gaps):
+            if (i & 1023) == 0:  # report progress every ~1k gaps (cheap, frequent)
+                self._emit_subprogress(i, n_gaps, predictions)
             gap_idx = gap_indices[i]
             start = np.datetime64(start_times[i])
             end = np.datetime64(end_times[i])
