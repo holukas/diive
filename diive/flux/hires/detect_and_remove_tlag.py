@@ -2304,74 +2304,121 @@ class PerFilePipeline:
 
         Called at the start of ``run()`` (the moment the output folders exist,
         before any processing) so an interrupted or crashed run still records
-        exactly what it was asked to do. Plain text, one setting per line.
+        exactly what it was asked to do. Plain text: each setting is its value
+        followed by a one-line explanation, so the file is self-documenting.
         """
-        scalars_str = ('\n'.join(f'    {k} <- {v}'
-                                 for k, v in self.scalars.items())
-                       if self.scalars else '    (none)')
+
+        def _block(title: str, rows: list) -> list:
+            """Render a section: 'key : value' + an indented description each."""
+            out = [title, '-' * len(title)]
+            for key, val, desc in rows:
+                out.append(f'{key:<20} : {val}')
+                out.append(f'                       {desc}')
+            out.append('')
+            return out
+
+        scalars_str = (', '.join(f'{k} <- {v}' for k, v in self.scalars.items())
+                       if self.scalars else '(none)')
         lines = [
             'diive PWB time-lag detect + remove -- run settings',
             '==================================================',
             '',
-            'Settings used for this run (written at run start). The output is',
+            'Settings used for this run (written at run start, before any',
+            'processing, so a crashed/cancelled run is still documented). Each',
+            'entry shows the value used and a short explanation. The output is',
             f'produced by diive-tlag-pwb-detect-remove into: {self.output_dir}',
             '',
-            'paths',
-            '-----',
-            f'input_dir            : {self.input_dir}',
-            f'output_dir           : {self.output_dir}',
-            f'file_pattern         : {self.file_pattern}',
-            '',
-            'columns',
-            '-------',
-            f'wind U / V / W       : {self.col_u} / {self.col_v} / {self.col_w}',
-            f'sonic temperature    : {self.col_tsonic}',
-            'scalars (label <- column):',
-            scalars_str,
-            '',
-            'PWB detection',
-            '-------------',
-            f'hz                   : {self.hz}',
-            f'lag_max_s            : {self.lag_max_s}',
-            f'n_bootstrap          : {self.n_bootstrap}',
-            f'block_length_s       : {self.block_length_s}',
-            f'lws / uws (window)   : {self.lws} / {self.uws}',
-            f'per_gas_lag          : {self.per_gas_lag or "(none)"}',
-            f'random_state         : {self.random_state}',
-            '',
-            'chunking',
-            '--------',
-            f'chunk_seconds        : {self.chunk_seconds}',
-            f'min_chunk_seconds    : {self.min_chunk_seconds}',
-            f'chunk_name_template  : {self.chunk_name_template}',
-            f'start_time_regex     : {self.start_time_regex}',
-            f'start_time_format    : {self.start_time_format}',
-            '',
-            'PWBOPT (best-lag selection)',
-            '---------------------------',
-            f'hdi_thresh           : {self.hdi_thresh}',
-            f'dev_thresh           : {self.dev_thresh}',
-            f'hdi_prefilter        : {self.hdi_prefilter}',
-            f'lag_column_template  : {self.lag_column_template}',
-            '',
-            'file format',
-            '-----------',
-            f'skiprows             : {self.skiprows}',
-            f'extra_rows           : {self.extra_rows}',
-            f'sep                  : {self.sep!r}',
-            f'lineterm             : {self.lineterm!r}',
-            f'na_values            : {self.na_values}',
-            f'na_rep               : {self.na_rep}',
-            '',
-            'execution / output layout',
-            '-------------------------',
-            f'n_workers            : {self.n_workers}',
-            f'strict               : {self.strict}',
-            f'save_plots           : {self.save_plots}',
-            f'detect_subdir        : {self.detect_subdir}',
-            f'data_subdir          : {self.data_subdir}',
-            '',
         ]
+        lines += _block('paths', [
+            ('input_dir', self.input_dir,
+             'Folder scanned for raw EC files (read-only; never modified).'),
+            ('output_dir', self.output_dir,
+             'Folder all results are written to (this folder).'),
+            ('file_pattern', self.file_pattern,
+             'Glob selecting which files in input_dir are processed.'),
+        ])
+        lines += _block('columns', [
+            ('wind U / V / W', f'{self.col_u} / {self.col_v} / {self.col_w}',
+             'Sonic wind component columns (used for the double rotation).'),
+            ('sonic temperature', self.col_tsonic,
+             'Sonic temperature column (T_SONIC fallback signal for PWB).'),
+            ('scalars', scalars_str,
+             'Gas columns to time-lag-correct, as LABEL <- column.'),
+        ])
+        lines += _block('PWB detection', [
+            ('hz', self.hz,
+             'Sampling frequency in Hz (records per second).'),
+            ('lag_max_s', self.lag_max_s,
+             'Half-width of the lag search window (s); the CCF is computed '
+             'over +/-lag_max_s and the peak searched within it.'),
+            ('n_bootstrap', self.n_bootstrap,
+             'Block-bootstrap replicates per chunk (PWB; paper uses 99).'),
+            ('block_length_s', self.block_length_s,
+             'Bootstrap block length (s); long enough to contain the lag '
+             '(paper floor 20 s).'),
+            ('lws / uws (window)', f'{self.lws} / {self.uws}',
+             'Optional asymmetric search window [lower, upper] (s); '
+             'None = the full symmetric +/-lag_max_s.'),
+            ('per_gas_lag', self.per_gas_lag or "(none)",
+             'Per-gas window overrides {label: {lag_max_s, block_length_s, '
+             'lws, uws}}; a gas without an entry uses the global values.'),
+            ('random_state', self.random_state,
+             'Seed for a reproducible bootstrap; None = non-deterministic.'),
+        ])
+        lines += _block('chunking', [
+            ('chunk_seconds', self.chunk_seconds,
+             'Length of each averaging period a file is split into (s).'),
+            ('min_chunk_seconds', self.min_chunk_seconds,
+             'Chunks shorter than this (lead/trailing remnants) are skipped.'),
+            ('chunk_name_template', self.chunk_name_template,
+             'Pattern for naming each output chunk file.'),
+            ('start_time_regex', self.start_time_regex,
+             'Regex capturing the start timestamp from the input filename '
+             '(needed for the {starttime} field).'),
+            ('start_time_format', self.start_time_format,
+             'strptime format parsing the captured timestamp text.'),
+        ])
+        lines += _block('PWBOPT (best-lag selection)', [
+            ('hdi_thresh', self.hdi_thresh,
+             'S1 threshold (s): a chunk whose 95% HDI range is below this is '
+             'trusted directly as reliable.'),
+            ('dev_thresh', self.dev_thresh,
+             'S2 threshold (s): an uncertain chunk is still accepted if its '
+             'lag is within this of the previous reliable lag.'),
+            ('hdi_prefilter', self.hdi_prefilter,
+             'Drop detections with an HDI range above this (s) before '
+             'PWBOPT runs; 0 = off.'),
+            ('lag_column_template', self.lag_column_template,
+             'Which PWBOPT lag column is removed in phase 2 (default the '
+             'pre-filtered, gap-filled best lag).'),
+        ])
+        lines += _block('file format', [
+            ('skiprows', self.skiprows,
+             'Metadata lines before the header row.'),
+            ('extra_rows', self.extra_rows,
+             'Units/source rows after the header row.'),
+            ('sep', repr(self.sep),
+             'Column separator.'),
+            ('lineterm', repr(self.lineterm),
+             "Output line terminator; 'auto' reproduces the input file's."),
+            ('na_values', self.na_values,
+             'Strings read as missing values.'),
+            ('na_rep', self.na_rep,
+             'String written for missing values in the output.'),
+        ])
+        lines += _block('execution / output layout', [
+            ('n_workers', self.n_workers,
+             'Parallel worker processes; None = all CPU cores.'),
+            ('strict', self.strict,
+             'True = abort the whole run on the first chunk error; '
+             'False = skip the chunk and log it.'),
+            ('save_plots', self.save_plots,
+             'Whether per-chunk + summary diagnostic figures are written.'),
+            ('detect_subdir', self.detect_subdir,
+             'Subfolder for step-1 detection diagnostics + results.'),
+            ('data_subdir', self.data_subdir,
+             'Subfolder for the step-2 lag-corrected chunks (deliverable).'),
+        ])
         try:
             (self.output_dir / 'run_settings.txt').write_text(
                 '\n'.join(lines), encoding='utf-8')
@@ -2389,6 +2436,16 @@ class PerFilePipeline:
         scalars_str = ', '.join(f'{k} <- {v}' for k, v in self.scalars.items())
         plots_note = ('present' if self.save_plots
                       else 'not generated (pass --save-plots to enable)')
+        # The TUI-loadable settings YAML is written by the CLI/TUI wrapper
+        # before the run, not by PerFilePipeline itself — so only mention it
+        # when it is actually present (a direct Python-API run has none).
+        yaml_note = ''
+        if (self.output_dir / 'detect_remove_tui_settings.yaml').exists():
+            yaml_note = (
+                "detect_remove_tui_settings.yaml\n"
+                "                    Machine-readable copy of the settings,\n"
+                "                    reloadable in the detect+remove TUI (Load\n"
+                "                    button or drag-drop) to inspect or rerun.\n")
         text = (
             "diive PWB time-lag detection + removal -- output folder\n"
             "=======================================================\n"
@@ -2420,8 +2477,9 @@ class PerFilePipeline:
             f"    >>> Use THIS folder ({self.data_subdir}/) as the input directory\n"
             "    for the next flux-processing step. <<<\n"
             "\n"
-            "run_settings.txt    All settings used for this run "
-            "(written at run start).\n"
+            "run_settings.txt    Every setting used for this run, each with a\n"
+            "                    one-line explanation (written at run start).\n"
+            f"{yaml_note}"
             "log.txt             Plain-text console log of the run.\n"
             "README.txt          This file.\n"
             "\n"

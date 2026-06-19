@@ -397,6 +397,9 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
   or reproduce it — the same file the TUI itself drops. New `write_run_settings_yaml` in `detect_and_remove_tlag_tui.py`
   mirrors the TUI's field schema (per-gas search windows reconstructed into the `Win s` field); the CLI lazy-imports it,
   so a headless install without the `gui`/textual extra simply skips the file (best-effort, never blocks a run).
+- **`run_settings.txt` is now self-documenting** — the per-run settings dump written by `PerFilePipeline` gives each
+  setting a one-line explanation (not just the value), and the output-folder `README.txt` documents every output file
+  and folder, including the new `detect_remove_tui_settings.yaml` (listed only when present).
 - **`TlagApplier`** — apply PWB-detected lags from a `tlag_results.csv` to raw files (shift each scalar by
   `round(tlag_s·hz)` rows), preserving header and column order; handles arbitrary text formats; parallel; CLI
   `diive-tlag-apply-batch`. Example: `examples/flux/hires/flux_apply_tlag_cli.py`.
