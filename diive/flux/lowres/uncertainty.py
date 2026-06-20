@@ -18,9 +18,16 @@ from pandas import DataFrame, Series
 from uncertainties import ufloat
 
 import diive.core.plotting.styles.LightTheme as theme
+from diive.core.dfun.frames import df_between_two_dates
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
 from diive.core.plotting.scatter import ScatterXY
 from diive.core.utils.console import console as _console, info
+from diive.gapfilling.similarity import (
+    TA_TOLERANCE,
+    VPD_TOLERANCE,
+    swin_tolerance,
+    window_mean_sd_count,
+)
 
 
 # todo
@@ -38,15 +45,27 @@ class RandomUncertaintyPAS20:
     Hierarchical random uncertainty quantification for eddy covariance flux data.
 
     Implements the PAS20 (Pastorello et al. 2020) uncertainty methodology
-    which applies four hierarchical methods to estimate random measurement uncertainty
+    which applies hierarchical methods to estimate random measurement uncertainty
     in flux measurements. The approach fills gaps and propagates uncertainties through
     gap-filling to produce cumulative uncertainty estimates.
 
+    Methods 1 and 2 are faithful ports of the ONEFlux C reference
+    (``oneflux_steps/nee_proc/src/randunc.c``, functions ``random_method_1`` /
+    ``random_method_2``). Methods 3 and 4 are diive extensions (not in ONEFlux):
+    ONEFlux leaves a record's random uncertainty undefined when method 2 finds no
+    similar fluxes, whereas methods 3 and 4 relax the matching further to guarantee
+    every record gets an estimate.
+
     Core Methods:
-    * **Method 1** — Similarity-based uncertainty (Ta, VPD, SW_IN window matching)
-    * **Method 2** — Rolling window standard deviation
-    * **Method 3** — Expanded rolling window (iterative until all records covered)
-    * **Method 4** — Global fallback standard deviation
+    * **Method 1** (ONEFlux) — standard deviation of measured fluxes in a sliding
+      ±7-day / ±1-hour window under similar meteorological conditions (TA, VPD,
+      SW_IN), requiring more than 5 matching values.
+    * **Method 2** (ONEFlux) — median of the method-1 uncertainties of similar
+      fluxes (within ±20%, floor 2 µmol) in a ±14-day window.
+    * **Method 3** (diive extension) — median of method-1 uncertainties of similar
+      fluxes over the whole record (no time window).
+    * **Method 4** (diive extension) — median of the uncertainties of the fluxes
+      closest in magnitude, with no similarity restriction.
 
     Key Features:
     * Hierarchical approach ensures all records have uncertainty estimates
@@ -108,8 +127,8 @@ class RandomUncertaintyPAS20:
         self._calc_random_uncertainty()
         self._calc_cumulative_uncertainty_propagation()
 
-    def _calc_random_uncertainty(self, ta_similarity: float = 2.5, vpd_similarity: float = 5,
-                                 swin_similarity: float = 50):
+    def _calc_random_uncertainty(self, ta_similarity: float = TA_TOLERANCE,
+                                 vpd_similarity: float = VPD_TOLERANCE):
 
         # Initialize window count columns for all methods
         self._randunc_results['WINDOW_N_VALS_METHOD1'] = np.nan
@@ -117,23 +136,13 @@ class RandomUncertaintyPAS20:
         self._randunc_results['WINDOW_N_VALS_METHOD3'] = np.nan
         self._randunc_results['WINDOW_N_VALS_METHOD4'] = np.nan
 
-        self._method1(ta_similarity=ta_similarity, vpd_similarity=vpd_similarity, swin_similarity=swin_similarity,
+        # ONEFlux methods (randunc.c): ±7-day/±1-hour std (method 1),
+        # then ±14-day median of method-1 results (method 2).
+        self._method1(ta_similarity=ta_similarity, vpd_similarity=vpd_similarity,
                       winsize_days=7, winsize_hours=1)
+        self._method2(winsize_days=14)
 
-        self._method2(winsize_days=5, winsize_hours=1)
-
-        # Method 2 is repeated with expanding time windows to get uncertainty for all records
-        missing = True
-        winsize_days = 5
-        n_missing_randunc_prev = 0
-        while missing:
-            winsize_days += 1
-            self._method2(winsize_days=winsize_days, winsize_hours=1)
-            n_missing_randunc = self.randunc_results[self.randunccol].isnull().sum()
-            missing = True if n_missing_randunc > 0 else False
-            if n_missing_randunc == n_missing_randunc_prev: missing = False
-            n_missing_randunc_prev = n_missing_randunc
-
+        # diive extensions to fill records ONEFlux leaves undefined (see class docstring).
         self._method3()
         self._method4()
 
@@ -236,10 +245,10 @@ class RandomUncertaintyPAS20:
 
         method_data = {
             'Method': [
-                '1: Sliding Window (±7d, ±1h)',
-                '2: Expanding Window (±5d+, ±1h)',
-                '3: Similar Flux Range (no window)',
-                '4: Nearest 5 Fluxes'
+                '1: Sliding Window (+/-7d, +/-1h) [ONEFlux]',
+                '2: Similar Flux Median (+/-14d) [ONEFlux]',
+                '3: Similar Flux Median (no window) [diive]',
+                '4: Nearest Fluxes [diive]'
             ],
             'Records': [method1_count, method2_count, method3_count, method4_count],
             'Percentage': [
@@ -373,7 +382,7 @@ class RandomUncertaintyPAS20:
     def _make_subset(self):
         return self.df[[self.fluxcol, self.fluxgapfilledcol, self.tacol, self.vpdcol, self.swincol]].copy()
 
-    def _method1(self, ta_similarity: float = 2.5, vpd_similarity: float = 5, swin_similarity: float = 50,
+    def _method1(self, ta_similarity: float = TA_TOLERANCE, vpd_similarity: float = VPD_TOLERANCE,
                  winsize_days: int = 7, winsize_hours: int = 1):
         """
 
@@ -408,13 +417,9 @@ class RandomUncertaintyPAS20:
             cur_vpd = self.subset.loc[ix, self.vpdcol]
             cur_swin = self.subset.loc[ix, self.swincol]
 
-            # Window limits
-            cur_ta_upper = cur_ta + ta_similarity
-            cur_ta_lower = cur_ta - ta_similarity
-            cur_swin_upper = cur_swin + swin_similarity
-            cur_swin_lower = cur_swin - swin_similarity
-            cur_vpd_upper = cur_vpd + vpd_similarity
-            cur_vpd_lower = cur_vpd - vpd_similarity
+            # SWIN tolerance is clamped to the radiation level of the current record
+            # (ONEFlux: tolerance grows with SWIN between 20 and 50 W m-2).
+            cur_swin_tol = swin_tolerance(cur_swin)
 
             # Time range of window
             start_dt = cur_dt - dt.timedelta(days=winsize_days)
@@ -423,23 +428,24 @@ class RandomUncertaintyPAS20:
             endtime = (cur_dt + dt.timedelta(hours=winsize_hours)).time()
 
             # Window data, datetime range
-            from diive.core.dfun.frames import df_between_two_dates
             subset_win = df_between_two_dates(df=self.subset, start_date=start_dt, end_date=end_dt).copy()
 
             # Window data, limit datetime range to +/- 1 hour
             subset_win = subset_win.between_time(start_time=starttime, end_time=endtime)  # Thank you pandas!!
 
-            # Remove data outside limits
-            _filter = (subset_win[self.tacol] >= cur_ta_lower) & (subset_win[self.tacol] <= cur_ta_upper)
-            subset_win = subset_win[_filter]
-            _filter = (subset_win[self.swincol] >= cur_swin_lower) & (subset_win[self.swincol] <= cur_swin_upper)
-            subset_win = subset_win[_filter]
-            _filter = (subset_win[self.vpdcol] >= cur_vpd_lower) & (subset_win[self.vpdcol] <= cur_vpd_upper)
+            # Keep records within tolerance of the current meteo conditions.
+            # ONEFlux uses a strict less-than on the absolute difference.
+            _filter = (
+                    ((subset_win[self.tacol] - cur_ta).abs() < ta_similarity)
+                    & ((subset_win[self.swincol] - cur_swin).abs() < cur_swin_tol)
+                    & ((subset_win[self.vpdcol] - cur_vpd).abs() < vpd_similarity)
+            )
             subset_win = subset_win[_filter]
 
-            # Calculate if min. 5 values, otherwise NaN
-            n_vals = subset_win[self.fluxcol].count()
-            randunc = subset_win[self.fluxcol].std() if n_vals >= 5 else np.nan
+            # ONEFlux requires more than 5 matching values; the uncertainty is the
+            # sample standard deviation (N-1) of the similar fluxes.
+            _, randunc, n_vals = window_mean_sd_count(
+                subset_win[self.fluxcol].to_numpy(), min_count=6, ddof=1)
 
             self._randunc_results.loc[cur_dt, self.randunccol] = randunc
             self._randunc_results.loc[cur_dt, 'WINDOW_N_VALS_METHOD1'] = n_vals
@@ -447,7 +453,7 @@ class RandomUncertaintyPAS20:
         toc = time.time() - tic
         info(f"Time needed: {toc:.2f}s")
 
-    def _method2(self, winsize_days: int = 5, winsize_hours: int = 1):
+    def _method2(self, winsize_days: int = 14):
         """
 
         From Pastorello et al. (2020):
@@ -465,12 +471,17 @@ class RandomUncertaintyPAS20:
             similar is defined as in the range of +/- 20% (but not less than 2 umolCO2 m-2 s-1).
             NEE is always expressed as umolCO2 m-2 s-1
 
+        Note:
+            The Pastorello et al. (2020) text describes a ±5-day / ±1-hour window, but the
+            ONEFlux C reference (``random_method_2``) uses a ±14-day window with no
+            time-of-day restriction. This implementation follows the C code.
+
         """
-        info(f"Calculating random uncertainty with window size +/-{winsize_days} days "
-             f"and +/-{winsize_hours} hours (method 2) ...")
+        info(f"Calculating random uncertainty with window size +/-{winsize_days} days (method 2) ...")
         tic = time.time()
+        # Snapshot: method 2 draws only from method-1 results (rows whose
+        # uncertainty is already set at this point), never from its own output.
         subset = self.randunc_results.copy()
-        ix_missing_randunc = subset[self.randunccol].isnull()
 
         for ix in subset.index:
             # Current data
@@ -480,33 +491,30 @@ class RandomUncertaintyPAS20:
             cur_dt = pd.to_datetime(ix)
             cur_gapfilledflux = subset.loc[ix, self.fluxgapfilledcol]
 
-            # Window limits
-            # Similar is defined as in the range of +/- 20% (but not less than 2 umolCO2 m-2 s-1)
-            cur_gapfilledflux_perc20 = cur_gapfilledflux * 0.2
-            add = 2 if cur_gapfilledflux_perc20 < 2 else cur_gapfilledflux_perc20
+            # Flux-similarity limits: +/- 20% of the flux magnitude, but not less
+            # than 2 umolCO2 m-2 s-1 (ONEFlux uses the absolute value, so the
+            # window is symmetric for negative fluxes too).
+            add = abs(cur_gapfilledflux) * 0.2
+            if add < 2:
+                add = 2
             cur_flux_upper = cur_gapfilledflux + add
             cur_flux_lower = cur_gapfilledflux - add
 
-            # Time range of window
+            # Time range of window (no time-of-day restriction in ONEFlux method 2)
             start_dt = cur_dt - dt.timedelta(days=winsize_days)
             end_dt = cur_dt + dt.timedelta(days=winsize_days)
-            starttime = (cur_dt - dt.timedelta(hours=winsize_hours)).time()
-            endtime = (cur_dt + dt.timedelta(hours=winsize_hours)).time()
+            subset_win = df_between_two_dates(df=subset, start_date=start_dt, end_date=end_dt)
 
-            # Window data, datetime range
-            from diive.core.dfun.frames import df_between_two_dates
-            subset_win = df_between_two_dates(df=subset, start_date=start_dt, end_date=end_dt).copy()
+            # Keep method-1 results (non-null uncertainty) for similar fluxes.
+            _filter = (
+                    (subset_win[self.fluxgapfilledcol] >= cur_flux_lower)
+                    & (subset_win[self.fluxgapfilledcol] <= cur_flux_upper)
+                    & subset_win[self.randunccol].notna()
+            )
+            similar_randunc = subset_win.loc[_filter, self.randunccol]
 
-            # Window data, limit datetime range to +/- 1 hour
-            subset_win = subset_win.between_time(start_time=starttime, end_time=endtime)  # Thank you pandas!!
-
-            # Remove data outside limits
-            _filter = (subset_win[self.fluxgapfilledcol] >= cur_flux_lower) \
-                      & (subset_win[self.fluxgapfilledcol] <= cur_flux_upper)
-            subset_win = subset_win[_filter]
-
-            n_vals = subset_win[self.randunccol].count()
-            randunc = subset_win[self.randunccol].median()
+            n_vals = similar_randunc.count()
+            randunc = similar_randunc.median()  # NaN when no similar fluxes found
 
             self._randunc_results.loc[cur_dt, self.randunccol] = randunc
             self._randunc_results.loc[cur_dt, 'WINDOW_N_VALS_METHOD2'] = n_vals
@@ -516,12 +524,12 @@ class RandomUncertaintyPAS20:
 
     def _method3(self):
         """
-        Fill left-over gaps with uncertainty from similar fluxes
+        diive extension (not in ONEFlux): fill left-over gaps with the median
+        uncertainty of similar fluxes over the whole record (no time window).
         """
         info(f"Calculating random uncertainty from similar fluxes (method 3) ...")
         tic = time.time()
         subset = self.randunc_results.copy()
-        ix_missing_randunc = subset[self.randunccol].isnull()
 
         for ix in subset.index:
             # Current data
@@ -531,22 +539,20 @@ class RandomUncertaintyPAS20:
             cur_dt = pd.to_datetime(ix)
             cur_gapfilledflux = subset.loc[ix, self.fluxgapfilledcol]
 
-            # Window limits
-            # Similar is defined as in the range of +/- 20% (but not less than 2 umolCO2 m-2 s-1)
-            cur_gapfilledflux_perc20 = cur_gapfilledflux * 0.2
-            add = 2 if cur_gapfilledflux_perc20 < 2 else cur_gapfilledflux_perc20
+            # Flux-similarity limits: +/- 20% of the flux magnitude, floor 2 umolCO2 m-2 s-1
+            add = abs(cur_gapfilledflux) * 0.2
+            if add < 2:
+                add = 2
             cur_flux_upper = cur_gapfilledflux + add
             cur_flux_lower = cur_gapfilledflux - add
 
-            subset_win = subset.copy()
-
             # Remove data outside limits
-            _filter = (subset_win[self.fluxgapfilledcol] >= cur_flux_lower) \
-                      & (subset_win[self.fluxgapfilledcol] <= cur_flux_upper)
-            subset_win = subset_win[_filter]
+            _filter = (subset[self.fluxgapfilledcol] >= cur_flux_lower) \
+                      & (subset[self.fluxgapfilledcol] <= cur_flux_upper)
+            similar_randunc = subset.loc[_filter, self.randunccol]
 
-            n_vals = subset_win[self.randunccol].count()
-            randunc = subset_win[self.randunccol].median()
+            n_vals = similar_randunc.count()
+            randunc = similar_randunc.median()
 
             self._randunc_results.loc[cur_dt, self.randunccol] = randunc
             self._randunc_results.loc[cur_dt, 'WINDOW_N_VALS_METHOD3'] = n_vals
@@ -556,10 +562,11 @@ class RandomUncertaintyPAS20:
 
     def _method4(self):
         """
-        Fill left-over gaps with uncertainty from fluxes closest to current flux,
-        without similarity restrictions
+        diive extension (not in ONEFlux): fill left-over gaps with the median
+        uncertainty of the fluxes closest in magnitude to the current flux,
+        without similarity restrictions.
 
-        Useful if there are fluxes higher outside the +/- 20% flux similarity used
+        Useful if there are fluxes outside the +/- 20% flux similarity used
         in method 2 and method 3.
         """
         info(f"Calculating random uncertainty from similar fluxes (method 4) ...")

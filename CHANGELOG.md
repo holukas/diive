@@ -396,6 +396,18 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
   regressor.
 - **SHAP-based feature reduction** — replaced permutation importance with SHAP values.
 - **`FluxMDS` 4x speedup** — vectorization and in-place updates; results bit-identical to previous implementation.
+- **`FluxMDS` SWIN tolerance now ONEFlux-faithful** — the shortwave-radiation similarity tolerance is the *target*
+  record's own SWIN clamped into `[swin_tol_min, swin_tol_max]` (continuous, grows with radiation between 20 and
+  50 W m-2), matching the ONEFlux `common.c` gap-filler. Previously diive used a binary 20/50 split keyed off the
+  *candidate* record. Gap-fill values and quality-level distributions shift slightly; total coverage is unchanged.
+  Both the optimized `FluxMDS` and the reference `_FluxMDS` were updated and remain bit-identical to each other.
+- **Random uncertainty (`RandomUncertaintyPAS20`) aligned to the ONEFlux C reference** — methods 1 and 2 now follow
+  `oneflux_steps/nee_proc/src/randunc.c`: method 1 uses the clamped SWIN tolerance, strict `<` matching and requires
+  more than 5 similar values; method 2 uses a fixed ±14-day window with no time-of-day restriction, drawing only from
+  method-1 results, and fixes a sign bug in the ±20% flux-similarity range for negative fluxes. Methods 3 and 4 are
+  retained as documented diive extensions (ONEFlux leaves some records undefined). The shared meteorological-similarity
+  primitives now live in `diive.gapfilling.similarity` (`swin_tolerance`, `window_mean_sd_count`, tolerance constants),
+  used by both MDS gap-filling and random-uncertainty estimation.
 
 ### New Classes & Functions
 

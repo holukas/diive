@@ -69,10 +69,10 @@ class TestGapFilling(unittest.TestCase):
 
         results = mds.gapfilling_df_
         self.assertEqual(len(results), 1488)
-        self.assertEqual(mds.scores_['r2'], 0.648227237609387)
-        self.assertAlmostEqual(mds.scores_['medae'], 2.0329177096370477, places=10)
+        self.assertEqual(mds.scores_['r2'], 0.6463321323005897)
+        self.assertAlmostEqual(mds.scores_['medae'], 2.002954166666667, places=10)
         self.assertEqual(results[mds.target_gapfilled].isnull().sum(), 0)
-        self.assertEqual(results[mds.target_gapfilled_flag].sum(), 1919)
+        self.assertEqual(results[mds.target_gapfilled_flag].sum(), 1895)
         counts = Counter(results[mds.target_gapfilled_flag])
         # Missing in measured as indicated by flag > 0
         a = results[mds.target_gapfilled_flag][results[mds.target_gapfilled_flag] > 0].count()
@@ -81,9 +81,9 @@ class TestGapFilling(unittest.TestCase):
         self.assertEqual(a, 770)
         self.assertEqual(b, 770)
         self.assertEqual(counts[0], 718)
-        self.assertEqual(counts[1], 166)
-        self.assertEqual(counts[2], 59)
-        self.assertEqual(counts[3], 545)
+        self.assertEqual(counts[1], 174)
+        self.assertEqual(counts[2], 67)
+        self.assertEqual(counts[3], 529)
 
     def test_gapfilling_longterm_randomforest(self):
         from diive.configs.exampledata import load_exampledata_parquet

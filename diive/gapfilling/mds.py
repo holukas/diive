@@ -22,6 +22,7 @@ from diive.core.plotting.plotfuncs import nice_date_ticks
 from diive.core.plotting.styles.LightTheme import colorwheel_36_blackfirst, generate_plot_marker_list
 from diive.core.utils.console import console as _console, detail, info, rule
 from diive.gapfilling.scores import prediction_scores
+from diive.gapfilling.similarity import swin_tolerance, window_mean_sd_count
 
 
 class _FluxMDS:
@@ -510,13 +511,17 @@ class _FluxMDS:
         return _df
 
     def _a_1_2(self, row):
+        # SWIN tolerance is clamped to the target record's radiation level
+        # (ONEFlux common.c), so it is computed per gap, not from precomputed
+        # candidate-based limits. TA/VPD use fixed tolerances, so their
+        # precomputed limit columns are equivalent.
+        swin_tol = swin_tolerance(row[self.swin], self.swin_tol[0], self.swin_tol[1])
         locs = (
                 (self.gapfilling_df_.index >= row['.START'])
                 & (self.gapfilling_df_.index <= row['.END'])
                 & (self.gapfilling_df_[f'.{self.ta}_UPPERLIM'] > row[self.ta])
                 & (self.gapfilling_df_[f'.{self.ta}_LOWERLIM'] < row[self.ta])
-                & (self.gapfilling_df_[f'.{self.swin}_UPPERLIM'] > row[self.swin])
-                & (self.gapfilling_df_[f'.{self.swin}_LOWERLIM'] < row[self.swin])
+                & ((self.gapfilling_df_[self.swin] - row[self.swin]).abs() < swin_tol)
                 & (self.gapfilling_df_[f'.{self.vpd}_UPPERLIM'] > row[self.vpd])
                 & (self.gapfilling_df_[f'.{self.vpd}_LOWERLIM'] < row[self.vpd])
         )
@@ -524,11 +529,11 @@ class _FluxMDS:
         return avg, sd, counts
 
     def _a3(self, row):
+        swin_tol = swin_tolerance(row[self.swin], self.swin_tol[0], self.swin_tol[1])
         locs = (
                 (self.gapfilling_df_.index >= row['.START'])
                 & (self.gapfilling_df_.index <= row['.END'])
-                & (self.gapfilling_df_[f'.{self.swin}_UPPERLIM'] > row[self.swin])
-                & (self.gapfilling_df_[f'.{self.swin}_LOWERLIM'] < row[self.swin])
+                & ((self.gapfilling_df_[self.swin] - row[self.swin]).abs() < swin_tol)
         )
         avg, sd, counts = self._calc_avg(locs=locs)
         return avg, sd, counts
@@ -551,22 +556,9 @@ class _FluxMDS:
         return avg, sd, counts
 
     def _calc_avg(self, locs: bool) -> [float, float]:
-        _df = self.gapfilling_df_.loc[locs, [self.flux]].copy()
-        _array = _df[self.flux].to_numpy()
-        counts = len(_array[~np.isnan(_array)])
-
-        # Return NaN if no flux records available
-        if counts == 0:
-            avg = np.nan
-            sd = np.nan
-            return avg, sd, counts
-
-        if counts >= self.avg_min_n_vals:
-            avg = np.nanmean(_array)
-            sd = np.nanstd(_array)
-        else:
-            avg = np.nan
-            sd = np.nan
+        # Shared reduction (population SD, ddof=0) with the random-uncertainty step.
+        _array = self.gapfilling_df_.loc[locs, self.flux].to_numpy()
+        avg, sd, counts = window_mean_sd_count(_array, min_count=self.avg_min_n_vals, ddof=0)
         return avg, sd, counts
 
     def _add_newcols(self) -> pd.DataFrame:
@@ -683,7 +675,10 @@ class FluxMDS:
             swin: Name of short-wave incoming radiation variable (W m-2)
             ta: Name of air temperature variable (°C)
             vpd: Name of vapor pressure deficit variable (kPa)
-            swin_tol: SWIN tolerance [low_rad, high_rad] (default: [20, 50])
+            swin_tol: SWIN tolerance clamp bounds [min, max] in W m-2 (default
+                [20, 50]). Following ONEFlux, a record's SWIN similarity tolerance
+                is its own SWIN value clamped into this range, so the tolerance
+                grows with radiation from 20 up to 50 W m-2.
             ta_tol: TA tolerance in °C (default: 2.5)
             vpd_tol: VPD tolerance in kPa (default: 0.5)
             avg_min_n_vals: Minimum records for average (default: 5)
@@ -1270,28 +1265,27 @@ class FluxMDS:
             window_swin = gf_swin[start_idx:end_idx]
             window_vpd = gf_vpd[start_idx:end_idx]
 
-            # Apply meteorological similarity conditions
-            # Check if window data is within tolerance of gap row values
-            # SWIN tolerance depends on whether the RECORD's SWIN is low or high radiation
-            lowrad_mask = window_swin <= 50
-            swin_tol_window = np.where(lowrad_mask, self.swin_tol[0], self.swin_tol[1])
+            # Apply meteorological similarity conditions: keep candidates within
+            # tolerance of the GAP (target) record's values. The SWIN tolerance is
+            # clamped to the target record's radiation level (ONEFlux common.c:
+            # tolerance grows with SWIN between 20 and 50 W m-2).
+            swin_tol = swin_tolerance(gap_swin, self.swin_tol[0], self.swin_tol[1])
 
             locs = (
                     (window_ta < gap_ta + self.ta_tol)
                     & (window_ta > gap_ta - self.ta_tol)
-                    & (window_swin < gap_swin + swin_tol_window)
-                    & (window_swin > gap_swin - swin_tol_window)
+                    & (window_swin < gap_swin + swin_tol)
+                    & (window_swin > gap_swin - swin_tol)
                     & (window_vpd < gap_vpd + self.vpd_tol)
                     & (window_vpd > gap_vpd - self.vpd_tol)
             )
 
             matching_flux = window_flux[locs]
-            valid_flux = matching_flux[~np.isnan(matching_flux)]
-
-            if len(valid_flux) >= self.avg_min_n_vals:
-                predictions[i] = np.mean(valid_flux)
-                sds[i] = np.std(valid_flux)
-                counts[i] = len(valid_flux)
+            pred, sd, cnt = window_mean_sd_count(matching_flux, self.avg_min_n_vals, ddof=0)
+            if not np.isnan(pred):
+                predictions[i] = pred
+                sds[i] = sd
+                counts[i] = cnt
 
         return predictions, sds, counts
 
@@ -1327,22 +1321,20 @@ class FluxMDS:
             window_flux = gf_flux[start_idx:end_idx]
             window_swin = gf_swin[start_idx:end_idx]
 
-            # Apply SWIN similarity condition only
-            # SWIN tolerance depends on whether the RECORD's SWIN is low or high radiation
-            lowrad_mask = window_swin <= 50
-            swin_tol_window = np.where(lowrad_mask, self.swin_tol[0], self.swin_tol[1])
+            # Apply SWIN similarity condition only. The tolerance is clamped to the
+            # gap (target) record's radiation level (ONEFlux common.c).
+            swin_tol = swin_tolerance(gap_swin, self.swin_tol[0], self.swin_tol[1])
             locs = (
-                    (window_swin < gap_swin + swin_tol_window)
-                    & (window_swin > gap_swin - swin_tol_window)
+                    (window_swin < gap_swin + swin_tol)
+                    & (window_swin > gap_swin - swin_tol)
             )
 
             matching_flux = window_flux[locs]
-            valid_flux = matching_flux[~np.isnan(matching_flux)]
-
-            if len(valid_flux) >= self.avg_min_n_vals:
-                predictions[i] = np.mean(valid_flux)
-                sds[i] = np.std(valid_flux)
-                counts[i] = len(valid_flux)
+            pred, sd, cnt = window_mean_sd_count(matching_flux, self.avg_min_n_vals, ddof=0)
+            if not np.isnan(pred):
+                predictions[i] = pred
+                sds[i] = sd
+                counts[i] = cnt
 
         return predictions, sds, counts
 
@@ -1373,12 +1365,11 @@ class FluxMDS:
 
             # Extract flux data within time window
             window_flux = gf_flux[start_idx:end_idx]
-            valid_flux = window_flux[~np.isnan(window_flux)]
-
-            if len(valid_flux) >= self.avg_min_n_vals:
-                predictions[i] = np.mean(valid_flux)
-                sds[i] = np.std(valid_flux)
-                counts[i] = len(valid_flux)
+            pred, sd, cnt = window_mean_sd_count(window_flux, self.avg_min_n_vals, ddof=0)
+            if not np.isnan(pred):
+                predictions[i] = pred
+                sds[i] = sd
+                counts[i] = cnt
 
         return predictions, sds, counts
 
@@ -1419,12 +1410,11 @@ class FluxMDS:
             # Filter by hour and valid flux values
             hour_mask = window_hours == row_hour
             matching_flux = window_flux[hour_mask]
-            valid_flux = matching_flux[~np.isnan(matching_flux)]
-
-            if len(valid_flux) >= self.avg_min_n_vals:
-                predictions[i] = np.mean(valid_flux)
-                sds[i] = np.std(valid_flux)
-                counts[i] = len(valid_flux)
+            pred, sd, cnt = window_mean_sd_count(matching_flux, self.avg_min_n_vals, ddof=0)
+            if not np.isnan(pred):
+                predictions[i] = pred
+                sds[i] = sd
+                counts[i] = cnt
 
         return predictions, sds, counts
 
