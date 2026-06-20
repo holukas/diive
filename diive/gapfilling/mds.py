@@ -1237,23 +1237,25 @@ class FluxMDS:
         sds = np.full(n_gaps, np.nan)
         counts = np.zeros(n_gaps, dtype=int)
 
-        # Pre-extract arrays for faster access
+        # Pre-extract arrays for faster access (avoid per-gap DataFrame .iloc lookups)
         gf_index_values = self.gapfilling_df_.index.to_numpy()
         gf_flux = self.gapfilling_df_[self.flux].values
         gf_ta = self.gapfilling_df_[self.ta].values
         gf_swin = self.gapfilling_df_[self.swin].values
         gf_vpd = self.gapfilling_df_[self.vpd].values
+        start_values = start_times.to_numpy()
+        end_values = end_times.to_numpy()
 
         # Process each gap row
         for i in range(n_gaps):
             if (i & 1023) == 0:  # report progress every ~1k gaps (cheap, frequent)
                 self._emit_subprogress(i, n_gaps, predictions)
             gap_idx = gap_indices[i]
-            start = np.datetime64(start_times[i])
-            end = np.datetime64(end_times[i])
-            gap_ta = self._gapfilling_df.iloc[gap_idx][self.ta]
-            gap_swin = self._gapfilling_df.iloc[gap_idx][self.swin]
-            gap_vpd = self._gapfilling_df.iloc[gap_idx][self.vpd]
+            start = start_values[i]
+            end = end_values[i]
+            gap_ta = gf_ta[gap_idx]
+            gap_swin = gf_swin[gap_idx]
+            gap_vpd = gf_vpd[gap_idx]
 
             # Find time window using searchsorted (O(log n))
             start_idx = gf_index_values.searchsorted(start, side='left')
@@ -1303,15 +1305,17 @@ class FluxMDS:
         gf_index_values = self.gapfilling_df_.index.to_numpy()
         gf_flux = self.gapfilling_df_[self.flux].values
         gf_swin = self.gapfilling_df_[self.swin].values
+        start_values = start_times.to_numpy()
+        end_values = end_times.to_numpy()
 
         # Process each gap row
         for i in range(n_gaps):
             if (i & 1023) == 0:  # report progress every ~1k gaps (cheap, frequent)
                 self._emit_subprogress(i, n_gaps, predictions)
             gap_idx = gap_indices[i]
-            start = np.datetime64(start_times[i])
-            end = np.datetime64(end_times[i])
-            gap_swin = self._gapfilling_df.iloc[gap_idx][self.swin]
+            start = start_values[i]
+            end = end_values[i]
+            gap_swin = gf_swin[gap_idx]
 
             # Find time window using searchsorted (O(log n))
             start_idx = gf_index_values.searchsorted(start, side='left')
@@ -1351,13 +1355,15 @@ class FluxMDS:
         # Pre-extract arrays
         gf_index_values = self.gapfilling_df_.index.to_numpy()
         gf_flux = self.gapfilling_df_[self.flux].values
+        start_values = start_times.to_numpy()
+        end_values = end_times.to_numpy()
 
         # Process each gap row (no meteorological conditions, just time window)
         for i in range(n_gaps):
             if (i & 1023) == 0:  # report progress every ~1k gaps (cheap, frequent)
                 self._emit_subprogress(i, n_gaps, predictions)
-            start = np.datetime64(start_times[i])
-            end = np.datetime64(end_times[i])
+            start = start_values[i]
+            end = end_values[i]
 
             # Find time window using searchsorted (O(log n))
             start_idx = gf_index_values.searchsorted(start, side='left')
@@ -1389,15 +1395,17 @@ class FluxMDS:
         gf_index_values = gf_index.to_numpy()
         gf_flux = self.gapfilling_df_[self.flux].values
         gf_hours = gf_index.hour.to_numpy()
+        start_values = start_times.to_numpy()
+        end_values = end_times.to_numpy()
 
         # Process each gap row
         for i in range(n_gaps):
             if (i & 1023) == 0:  # report progress every ~1k gaps (cheap, frequent)
                 self._emit_subprogress(i, n_gaps, predictions)
             gap_idx = gap_indices[i]
-            start = np.datetime64(start_times[i])
-            end = np.datetime64(end_times[i])
-            row_hour = self._gapfilling_df.index[gap_idx].hour
+            start = start_values[i]
+            end = end_values[i]
+            row_hour = gf_hours[gap_idx]
 
             # Find time window using searchsorted (O(log n))
             start_idx = gf_index_values.searchsorted(start, side='left')
