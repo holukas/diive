@@ -99,7 +99,7 @@ straight back into diive, GUI or library.
 
 ---
 
-## Tabs
+## Working with tabs
 
 The window opens with **Overview** and **Log**. These two stay open: they have no
 close button. Other tabs open from the menus and can be closed (×). Most can be
@@ -113,9 +113,14 @@ file, a date-range change, added features), which is handy for comparing while y
 change the data elsewhere. A pin marker appears on the tab; right-click → **Unpin**
 to let it follow the data again. Overview and Log are always live.
 
-### Overview (first tab)
+The sections below are grouped by **menu**: each menu is a heading, and each of its
+entries is a sub-heading.
 
-Click a variable to see, for that variable:
+---
+
+## Overview
+
+The first tab, focused on every load. Click a variable to see, for that variable:
 
 - a **figure** with several panels: the full time series (the variable name sits in
   a badge in its top-left), a cumulative sum (shaded to zero), a per-month diel
@@ -123,39 +128,11 @@ Click a variable to see, for that variable:
 - a **ribbon of statistics** along the bottom (count, mean, SD, min/max,
   percentiles, and more). **Hover** any one for a short description of what it is.
 
-### Plot menu (heatmaps · time series · diel cycle · cumulative · ridgeline · scatter · hexbin · histogram · 3D surface)
+---
+
+## Plot
 
 Each plot method opens as its own tab (the menu shows a small icon for each).
-
-- **Heatmap date/time.** A date × time-of-day grid.
-- **Heatmap year/month.** One cell per year × month. Pick the aggregation (mean,
-  sum, and so on) and optionally show *ranks*.
-- **Time series.** The variable as a line over time. Ctrl+click more variables to
-  stack them in extra panels (shared time axis), each its own colour.
-- **Diel cycle.** The mean daily cycle (value by time of day) with a ±SD band, and
-  optionally one curve per month.
-- **Cumulative year.** One cumulative-sum curve per year, overlaid by day of year.
-  Optionally **highlight a year** (chosen from a dropdown of the years present in
-  the data) and show a mean reference.
-- **Scatter XY.** Click two variables for X and Y; a third, optional, colours the
-  points. Optionally bin the x-axis and show a trend. One panel.
-- **Hexbin.** Like Scatter XY but for very dense data: the plane is tiled with
-  hexagons coloured by how many points fall in each. Pick variables by **X / Y / Z**
-  role (it needs all three; Z drives the colour).
-- **Ridgeline.** One stacked density curve per period (group by month, week, or
-  year). Set the overlap, shading, and KDE bandwidth. One variable at a time.
-- **Histogram.** The distribution of one variable: bars of counts, with the peak
-  bin highlighted and a z-score scale along the top. Set the number of bins and
-  toggle the counts, info box, z-score axis, title, and grid.
-- **3D surface.** The variable's date × time-of-day grid rendered as a rotatable,
-  GPU-accelerated 3-D relief, the three-dimensional analogue of the date/time
-  heatmap. The diel band, seasonal swings, and gaps become hills and valleys you
-  can orbit. Controls: **Colormap**, **Vertical exaggeration** (height of the
-  relief; 0 is flat), **Smooth shading**, **Show mesh** (overlay the grid lines),
-  **Smooth terrain** (round the surface into rolling hills by subdividing the mesh;
-  0 is off), and **Reset view**. This needs the optional **`gui3d`** extra
-  (PyVista/VTK); without it the tab shows install instructions instead of failing.
-
 Selecting variables works the same way across the per-variable types:
 
 - **Click** a variable to plot it.
@@ -173,44 +150,111 @@ Selecting variables works the same way across the per-variable types:
 controls. Adjust as many as you like, then click **Update plot** (below the
 controls) to apply them all at once: the plot does not change while you are still
 editing. Clicking a *variable* in the list, by contrast, updates the plot
-immediately. Available controls:
+immediately.
 
-- *Heatmap:* colormap (with a **Reverse colormap** toggle), min/max colour values,
-  missing-value colour, orientation (vertical or horizontal), date-axis ticks,
-  grid, colorbar (show, label, decimals, extend arrows), and optionally overlaying
-  the numeric values on the cells.
-- *Time series:* title, line width, opacity, point markers (and marker size),
-  whether to connect across gaps, and the axis labels and units.
-- *Diel cycle:* mean and ±SD band, one curve per month (each month its own
-  colour), legend position, and labels.
-- *Scatter XY:* marker size and opacity, the Z colormap (with **Reverse** and a Z
-  min/max), an optional title, and bin aggregation.
-- *Axes* (time series, scatter, cumulative year; Y-only for the diel cycle): set
-  **X/Y min/max** (blank means automatic), **log** scaling, **invert Y**, and add a
-  **grid**.
+**Axes** (time series, scatter, cumulative year; Y-only for the diel cycle): set
+**X/Y min/max** (blank means automatic), **log** scaling, **invert Y**, and add a
+**grid**. Line *colours* for time series come from **Settings ▸ Appearance**, so a
+variable keeps the same colour everywhere.
 
-  Line *colours* for time series come from **Settings ▸ Appearance**, so a variable
-  keeps the same colour everywhere.
+### Heatmap date/time
 
-### Events menu
+A date × time-of-day grid. Settings: colormap (with a **Reverse colormap** toggle),
+min/max colour values, missing-value colour, orientation (vertical or horizontal),
+date-axis ticks, grid, colorbar (show, label, decimals, extend arrows), and
+optionally overlaying the numeric values on the cells.
+
+### Heatmap year/month
+
+One cell per year × month. Pick the aggregation (mean, sum, and so on) and
+optionally show *ranks*. Same colormap, colour-range, and colorbar settings as the
+date/time heatmap.
+
+### Time series
+
+The variable as a line over time. Ctrl+click more variables to stack them in extra
+panels (shared time axis), each its own colour. Settings: title, line width,
+opacity, point markers (and marker size), whether to connect across gaps, and the
+axis labels and units, plus the shared **Axes** controls.
+
+### Diel cycle
+
+The mean daily cycle (value by time of day) with a ±SD band, and optionally one
+curve per month. Settings: mean and ±SD band, one curve per month (each month its
+own colour), legend position, and labels. The fixed 0 to 24 h x-axis is left alone;
+only the **Axes** Y controls apply.
+
+### Cumulative year
+
+One cumulative-sum curve per year, overlaid by day of year. Optionally **highlight
+a year** (chosen from a dropdown of the years present in the data) and show a mean
+reference. The shared **Axes** controls apply.
+
+### Scatter XY
+
+Click two variables for X and Y; a third, optional, colours the points. Optionally
+bin the x-axis and show a trend. One panel. Settings: marker size and opacity, the
+Z colormap (with **Reverse** and a Z min/max), an optional title, and bin
+aggregation, plus the shared **Axes** controls.
+
+### Hexbin
+
+Like Scatter XY but for very dense data: the plane is tiled with hexagons coloured
+by how many points fall in each. Pick variables by **X / Y / Z** role (it needs all
+three; Z drives the colour). A **Reverse colormap** toggle is available.
+
+### Ridgeline
+
+One stacked density curve per period (group by month, week, or year). Set the
+overlap, shading, and KDE bandwidth. One variable at a time.
+
+### Histogram
+
+The distribution of one variable: bars of counts, with the peak bin highlighted and
+a z-score scale along the top. Set the number of bins and toggle the counts, info
+box, z-score axis, title, and grid. One variable at a time.
+
+### 3D surface
+
+The variable's date × time-of-day grid rendered as a rotatable, GPU-accelerated 3-D
+relief, the three-dimensional analogue of the date/time heatmap. The diel band,
+seasonal swings, and gaps become hills and valleys you can orbit. Controls:
+**Colormap**, **Vertical exaggeration** (height of the relief; 0 is flat), **Smooth
+shading**, **Show mesh** (overlay the grid lines), **Smooth terrain** (round the
+surface into rolling hills by subdividing the mesh; 0 is off), and **Reset view**.
+This needs the optional **`gui3d`** extra (PyVista/VTK); without it the tab shows
+install instructions instead of failing.
+
+---
+
+## Events
 
 Mark **when something happened** at the site (fertilization, harvest, grazing, a
 management step, a sensor swap) and overlay those markers on the plots. Each event
 is stored as a `0/1` column (`EVENT_<name>`, where 1 means the event took place),
-so it travels with the data and can be used like any other flag.
+so it travels with the data and can be used like any other flag. When events are
+visible, they are drawn on the time-series, cumulative, and daily panels (labels on
+the time series) and along the y-axis of the date/time heatmap. Events are saved
+with the project and between sessions, and are rebuilt on the current index when you
+load new data.
 
-- **Events ▸ Add event…** opens a dialog: a **name**, a **category** (the combo
-  lists your existing categories), one of three timing modes (a single date/time,
-  a from/to period, or a start plus a duration) with calendar pickers, and a
-  **colour**.
-- **Events ▸ Show events on plots** is the master visibility toggle (the same
-  switch as the checkbox on the Events tab).
+### Add event…
 
-**Events ▸ Events** opens the full manager: a reflowing board of event **cards**
-on a soft-grey board, one per event, sorted by start date and accented by category
-colour. Each card shows a category pill, the title, the date settings, a
-relative-time hint ("in 3 mo", "5 d ago", "ongoing"), a mini bar showing where the
-event sits in the loaded record, and a description preview. On each card:
+Opens a dialog: a **name**, a **category** (the combo lists your existing
+categories), one of three timing modes (a single date/time, a from/to period, or a
+start plus a duration) with calendar pickers, and a **colour**.
+
+### Show events on plots
+
+The master visibility toggle (the same switch as the checkbox on the Events tab).
+
+### Events
+
+Opens the full manager: a reflowing board of event **cards** on a soft-grey board,
+one per event, sorted by start date and accented by category colour. Each card shows
+a category pill, the title, the date settings, a relative-time hint ("in 3 mo", "5 d
+ago", "ongoing"), a mini bar showing where the event sits in the loaded record, and
+a description preview. On each card:
 
 - **double-click** to edit;
 - the **trashcan** deletes it;
@@ -222,13 +266,13 @@ Above the board: a **filter** field, a **Group** combo (None / Category / Year),
 event…**. A dashed **＋ Add event** ghost card sits at the end of the board.
 
 **Manage categories…** edits the category palette (add, rename, recolour, remove).
-A category colour overrides the default on the cards and on the plot overlays. When
-events are visible, they are drawn on the time-series, cumulative, and daily panels
-(labels on the time series) and along the y-axis of the date/time heatmap. Events
-are saved with the project and between sessions, and are rebuilt on the current
-index when you load new data.
+A category colour overrides the default on the cards and on the plot overlays.
 
-### Analyze ▸ Data profile
+---
+
+## Analyze
+
+### Data profile
 
 A whole-dataset overview that answers "what did I just load?". A strip across the
 top shows dataset-level facts: record count, number of variables, overall missing
@@ -241,7 +285,7 @@ are tinted red in proportion to their missing %, and constant columns are flagge
 substring. All profiling is the library's `dv.analysis.profile_dataframe` /
 `dataframe_overview`.
 
-### Analyze ▸ Gaps & coverage
+### Gaps & coverage
 
 A dashboard for finding and inspecting **missing data**. Pick a variable on the
 left (it opens on the one with the most gaps); the right side shows:
@@ -257,7 +301,7 @@ timeline, or click anywhere on the timeline to jump to the nearest gap (it gets
 highlighted and its table row is selected). Use **Long gap ≥ (records)** to set
 what counts as a "long" gap (48 records is one day for half-hourly data).
 
-### Analyze ▸ Driver explorer
+### Driver explorer
 
 Find **what relates to a variable**, useful before gap-filling or when interpreting
 a flux. Pick a **target** on the left; the table ranks every other variable by how
@@ -274,7 +318,7 @@ target-vs-driver scatter.
 - Changing the method or max lag takes effect on **Rank drivers**; picking a new
   target updates immediately.
 
-### Analyze ▸ Seasonal trend & anomalies
+### Seasonal trend & anomalies
 
 See whether a variable is **changing over the years** and which years stood out.
 Pick a variable; it is split into:
@@ -295,7 +339,7 @@ two boxes.
 - The decomposition needs at least about 2 years of data (the anomaly view works
   with fewer).
 
-### Analyze ▸ Spectrogram
+### Spectrogram
 
 See **when** a variable's cycles are strong. A spectrogram shows time along the
 bottom, frequency (cycles per day) up the side, and colour for power. A bright
@@ -308,7 +352,11 @@ in the growing season. An explanation is shown above the plot.
 - **Max cycles/day** sets how far up the frequency axis to look, and **Colormap**
   changes the colours. Both update immediately.
 
-### Outliers ▸ Hampel filter
+---
+
+## Outliers
+
+### Hampel filter
 
 Detect spikes with the **Hampel filter**, a robust median-based test. Pick a
 variable; the top panel shows it with detected outliers marked, the bottom panel
@@ -348,7 +396,7 @@ number of iterations. **Add cleaned + flag to dataset** adds two new columns
 (`{var}_HAMPEL` and its flag) to the variable list. **Copy Python** (the quiet link
 at the bottom) puts the equivalent diive script on the clipboard.
 
-### Outliers ▸ Local SD filter
+### Local SD filter
 
 Flags points that deviate from a **rolling-window median** by more than a number of
 standard deviations. It shares the Hampel tab's two-panel preview, live preview,
@@ -366,7 +414,7 @@ parameters differ:
 
 Adds `{var}_LOCALSD` and its flag to the variable list.
 
-### Outliers ▸ Z-score filter
+### Z-score filter
 
 Flags points whose absolute **z-score** (deviation from the mean in units of
 standard deviation) exceeds a threshold. Shares the Hampel tab's two-panel preview,
@@ -381,7 +429,7 @@ Python**. Only the parameters differ:
 
 Adds `{var}_ZSCORE` and its flag to the variable list.
 
-### Outliers ▸ Z-score (rolling) filter
+### Z-score (rolling) filter
 
 Like the z-score filter, but the mean and standard deviation are computed in a
 **rolling window** centred on each point, so the band adapts to local variability.
@@ -398,7 +446,7 @@ built around) is drawn as a solid line between the upper and lower limits.
 
 Adds `{var}_ZSCOREROLLING` and its flag to the variable list.
 
-### Outliers ▸ Z-score (increments) filter
+### Z-score (increments) filter
 
 Targets **abrupt changes**: a point is flagged only when the z-scores of its
 forward, backward, *and* combined increments all exceed the threshold. This
@@ -415,7 +463,7 @@ band to draw. Parameter:
 Adds `{var}_ZSCOREINCREMENTS` and its flag to the variable list (the flag column
 keeps the library's `FLAG_{var}_OUTLIER_INCRZ_TEST` name).
 
-### Outliers ▸ Trim-low filter
+### Trim-low filter
 
 Removes low outliers with a **symmetric trim**: it rejects the values below a
 **lower limit**, then rejects an equal number of the **highest** values, keeping
@@ -437,7 +485,7 @@ kept set is not a single upper/lower envelope. Parameters:
 Adds `{var}_TRIMLOW` and its flag (`FLAG_{var}_OUTLIER_TRIMLOW_TEST`) to the
 variable list.
 
-### Outliers ▸ Absolute limits filter
+### Absolute limits filter
 
 The simplest, one-sided test: flag everything **outside a fixed range**. Set a
 **Min** and **Max**; any value below the min or above the max is rejected, and the
@@ -448,7 +496,7 @@ colouring, **Add to dataset**, and **Copy Python** as the other tabs.
 
 Adds `{var}_ABSLIM` and its flag to the variable list.
 
-### Outliers ▸ Local Outlier Factor filter
+### Local Outlier Factor filter
 
 A density-based test (`LocalOutlierFactor`): a point is an outlier when its local
 density is substantially lower than that of its nearest neighbours. Parameters:
@@ -460,7 +508,7 @@ density is substantially lower than that of its nearest neighbours. Parameters:
 
 Adds `{var}_LOF` and its flag to the variable list.
 
-### Outliers ▸ Manual removal
+### Manual removal
 
 Remove **known** bad records by hand, with no statistics. List the timestamps
 and/or periods to drop (a calibration window, a sensor failure you already know
@@ -469,7 +517,7 @@ day/night mode; the selection is just the records you named.
 
 Adds `{var}_MANUAL` and its flag to the variable list.
 
-### Outliers ▸ Stepwise screening
+### Stepwise screening
 
 Chain several outlier tests on one variable and see what each step removes. Unlike
 the single-method tabs (one detector, one pass), each step runs on the data the
@@ -491,7 +539,7 @@ is shown so the plots stay large:
   variable name, e.g. *SW - shortwave radiation*) decides which corrections are
   physically meaningful and shows only those. The **Run corrections** button applies
   them. (The same corrections are also available one-per-tab under the **Corrections**
-  menu — see below.)
+  menu, described below.)
 - **Report.** The per-step screening statistics (retained / rejected, day/night),
   with **Copy report**.
 
@@ -499,23 +547,25 @@ is shown so the plots stay large:
 flag, the QCF-filtered series, and (if any corrections ran) the corrected series.
 **Copy Python** copies a reproducible script for the whole chain.
 
-### Corrections ▸ Remove nighttime zero offset
+---
 
-Apply a single data correction to one variable, with a before/after preview. The
-**Corrections** menu has one tab per correction; they all share the same layout —
-**click a variable** in the **Target** list on the left, set the options in the
+## Corrections
+
+The **Corrections** menu has one tab per correction; they all share the same layout.
+**Click a variable** in the **Target** list on the left, set the options in the
 middle, and the right side previews the **original** against the **corrected**
 series. **Run correction** applies it, **Add corrected to dataset** keeps the result
 (a new `{var}_…` column; your original is never changed), and **Copy Python** (top
 bar) copies a reproducible script. Each correction is its own tab, so any correction
-is available for any variable — the suggested use is just a hint.
+is available for any variable; the suggested use is just a hint.
 
-This first one is for variables that should read **zero at night** (shortwave
-radiation, PPFD). For each day it works out the average of that day's nighttime
-values (the **offset**), subtracts it from all of the day's records, then forces the
-nighttime to zero. It needs the **site coordinates** (from **Settings ▸ Project
-settings**) to tell day from night; the latitude / longitude / UTC offset are shown
-and pre-filled.
+### Remove nighttime zero offset
+
+For variables that should read **zero at night** (shortwave radiation, PPFD). For
+each day it works out the average of that day's nighttime values (the **offset**),
+subtracts it from all of the day's records, then forces the nighttime to zero. It
+needs the **site coordinates** (from **Settings ▸ Project settings**) to tell day
+from night; the latitude / longitude / UTC offset are shown and pre-filled.
 
 - **Clamp negative values to zero** *(on by default).* After the offset is removed
   and the night zeroed, set any remaining negative values (daytime included) to zero
@@ -526,35 +576,39 @@ The preview shows the **four stages** stacked: the original series, the daily
 offset, the series after subtracting the offset, and the final corrected series
 (each with a zero line so dips below zero stand out). The stats band at the top
 reports how many records were **below zero before** the correction (overall and at
-night) and **after** it — the after counts show a green **0 ✓** once nothing remains
+night) and **after** it. The after counts show a green **0 ✓** once nothing remains
 below zero. Adds `{var}_NIGHTOFFSET`.
 
-### Corrections ▸ Remove relative humidity offset
+### Remove relative humidity offset
 
 For **relative humidity** that drifts above 100%. The daily mean of the values
 exceeding 100% is removed as an offset and anything still over 100% is capped at 100.
 Same layout as above (no site coordinates needed). Adds `{var}_RHOFFSET`.
 
-### Corrections ▸ Set to max threshold / Set to min threshold
+### Set to max threshold / Set to min threshold
 
 Cap or floor a variable at a known physical limit: every value **above** (max) or
-**below** (min) the **Threshold** you set is replaced with the threshold. Generic —
-works on any variable. Adds `{var}_SETMAX` or `{var}_SETMIN`.
+**below** (min) the **Threshold** you set is replaced with the threshold. This works
+on any variable. Adds `{var}_SETMAX` or `{var}_SETMIN`.
 
-### Corrections ▸ Set to value
+### Set to value
 
-Overwrite every record inside one or more **date ranges** with a fixed **value** —
+Overwrite every record inside one or more **date ranges** with a fixed **value**,
 for example to blank out a period of known instrument trouble. Enter ranges separated
 by `;`, using `..` for a range (`2022-04-01..2022-04-05`) or a single timestamp on
 its own. Adds `{var}_SETVAL`.
 
-### Corrections ▸ Set exact values to missing
+### Set exact values to missing
 
 Set records that **exactly equal** any of the values you list (comma-separated, e.g.
-`0, -9999`) to missing (NaN) — handy for dropping a stuck sentinel value. Adds
+`0, -9999`) to missing (NaN). Useful for dropping a stuck sentinel value. Adds
 `{var}_SETMISSING`.
 
-### Data ▸ Select variables
+---
+
+## Data
+
+### Select variables
 
 Pick a subset of variables to focus the **Overview** list on. Click a variable on
 the left (*Available*) to move it to the right (*Selected*); click one on the right
@@ -563,7 +617,7 @@ to remove it. **Add all →** (under the Available list) moves everything across
 Overview** restricts the Overview's variable list to your selection. Your data is
 not changed (load new data or re-open to reset).
 
-### Data ▸ Rename variables
+### Rename variables
 
 Add a common **prefix and/or suffix** to **all** variables at once, for example to
 tag every column with a site code (`CH-DAV_…`) or a year (`…_2024`). Type a prefix
@@ -575,7 +629,7 @@ as the right-click **Rename…** on any variable list). Renaming is non-destruct
 the source file, and each variable keeps its tags, notes, and history under the new
 name.
 
-### Data ▸ Metadata explorer
+### Metadata explorer
 
 See and edit the metadata that travels with each variable, useful once a variable
 has been through several steps (load → outlier filter → gap-fill → …) and you want
@@ -607,7 +661,7 @@ are kept only for data you load yourself.
 name in two different files keeps separate tags. Origin and history are recomputed
 each session as you work.
 
-### Data ▸ Feature engineering
+### Feature engineering
 
 Build new features (lags, rolling stats, differences, EMA, polynomials, STL,
 timestamp parts, and more) with diive's feature engineer:
@@ -625,7 +679,11 @@ When you add new columns (here or from an Outliers tab), the **Overview jumps
 straight to the new variable**: it clears any active filter, scrolls the new row
 into view, and plots it, so you can see the result right away.
 
-### Flux ▸ Flux processing chain
+---
+
+## Flux
+
+### Flux processing chain
 
 A guided workspace for the flux processing chain, covering **Input + Level 2 +
 Level 3.1 + Level 3.2 + Level 3.3 + Level 4.1** (gap-filling). Pick the flux column
@@ -656,7 +714,7 @@ run stays scriptable.
 > flags). The bundled CH-DAV example is a processed product and won't run the chain,
 > so load a level-1 EC dataset.
 
-### Flux ▸ USTAR detection
+### USTAR detection
 
 Detect the friction-velocity (u\*) threshold on its own, without running the whole
 chain, useful for exploring thresholds or getting a number for elsewhere. Pick the
@@ -673,7 +731,7 @@ order), and:
 The threshold detection follows the ONEFlux moving-point method (Papale et al.
 2006). Results appear as a table on the left and a plot on the right.
 
-### Flux ▸ Time lag analysis
+### Time lag analysis
 
 Find the **optimal time lag for each gas** in raw eddy-covariance data. The gas
 analyser sits downstream of the sonic anemometer, so each gas signal arrives a
@@ -697,7 +755,7 @@ on the right with a results readout below it.
 > click **Load example TLAG data** to load a bundled dataset locally so you can try
 > the feature.
 
-### Flux ▸ NEE partitioning
+### NEE partitioning
 
 Split measured net ecosystem exchange (NEE) into its two component fluxes, **gross
 primary production (GPP)** and **ecosystem respiration (RECO)**, using one of four
@@ -738,7 +796,11 @@ variables.
 > temperature, VPD, and radiation columns, so you can try these tabs on it right
 > away.
 
-### Gap-filling ▸ XGBoost gap-filling
+---
+
+## Gap-filling
+
+### XGBoost gap-filling
 
 Fill the gaps in one variable with an **XGBoost** model (gradient-boosted trees),
 trained on other variables you pick as predictors. This tab does gap-filling only:
@@ -792,13 +854,13 @@ Click **Run gap-filling** (it runs in the background). When it finishes:
 
 Open the **Results** sub-tab for a fuller report of the same run:
 
-- A top row of tables — **Model performance** (held-out-test vs in-sample scores
+- A top row of tables: **Model performance** (held-out-test vs in-sample scores
   across R²/RMSE/MAE/MedAE/MAPE/MAXE/MSE), **Configuration** (the exact settings, for
-  reproducibility), **Feature reduction** (only if you enabled it — each feature's
+  reproducibility), **Feature reduction** (only if you enabled it; each feature's
   importance vs. the random-baseline threshold, with kept features in green, dropped
   in grey, and an ⓘ button explaining the threshold equation), and **Gap-fill
   quality** (the observed / model-filled / fallback-filled breakdown + coverage).
-- A row of plots — **predicted vs. observed** (with a 1:1 line), the **SHAP
+- A row of plots: **predicted vs. observed** (with a 1:1 line), the **SHAP
   importance** bar chart, the gap-filled **diel cycle** by month, and the **cumulative
   sum**. Hover any table value for an explanation.
 
@@ -833,19 +895,46 @@ gap-filling task, in which training always covers the same conditions as the
 interspersed gaps. It would also conflate fill accuracy with changes in the
 driver-target relationship between periods.
 
-### Gap-filling ▸ Random Forest gap-filling
+### Random Forest gap-filling
 
 Fill the gaps in one variable with a **Random Forest** model, trained on the
 predictors you pick. The tab works **exactly like the XGBoost gap-filling tab**
-above — the same Model/Results sub-tabs, target/feature lists, performance band,
-heatmaps, SHAP table and Results dashboard — only the model controls differ:
+above (the same Model/Results sub-tabs, target/feature lists, performance band,
+heatmaps, SHAP table, and Results dashboard); only the model controls differ:
 n_estimators, max_depth (**none** = grow trees fully), min_samples_split,
 min_samples_leaf, max_features (`all` / `sqrt` / `log2`), test size, random seed,
 n_jobs and negative-value handling. **Add results to dataset** appends the
 gap-filled series (`{target}_gfRF`) and its fill flag. Use this when you want a
-robust, less tuning-sensitive alternative to XGBoost.
+less tuning-sensitive alternative to XGBoost.
 
-### Settings ▸ Project settings
+### MDS gap-filling
+
+Fill the gaps in one variable with **marginal distribution sampling (MDS)**, the
+FLUXNET look-up-table method. Unlike XGBoost and Random Forest, MDS is **not a
+trained regressor**: it has no SHAP importances, no held-out test split, and no
+feature reduction. Instead it fills each gap from records with **similar
+meteorological conditions** using three fixed drivers: shortwave-in radiation, air
+temperature, and VPD.
+
+Pick a **target** (flux) on the left and the **three driver columns** (SWIN / TA /
+VPD combos, auto-seeded by name with ✓ / ✗ markers; gap-filled `_f` versions are
+preferred). Set the **similarity tolerances** (SWIN low/high, TA in °C, VPD in kPa)
+and the minimum number of similar records to average. Driver units matter: TA must
+be °C and VPD kPa (the library warns on suspicious medians).
+
+A **progress bar** tracks the quality levels as the fill runs (higher level = looser
+meteorological match). The **Results** sub-tab shows the configuration, in-sample
+scores, a **per-quality-level breakdown** table and bar plot, a predicted-vs-observed
+scatter, the cumulative sum, and a colour-by-quality time series. The fill flag
+(`FLAG_{var}_gfMDS_ISFILLED`) is 0 for observed and 1+ for the quality level at which
+each gap was filled. **Add results to dataset** appends the gap-filled series and its
+flag; **Copy Python** copies a reproducible script.
+
+---
+
+## Settings
+
+### Project settings
 
 Settings for the current project:
 
@@ -867,7 +956,7 @@ body into; **drag** it by its top bar to arrange it, drag the bottom-right corne
 colour), and **✕** to remove it. The notes save automatically with the project (and
 between sessions), so they travel inside the `.diive` folder.
 
-### Settings ▸ Appearance
+### Appearance
 
 Customise the **Studio** look (the GUI's single design: near-white surfaces,
 pill-shaped tabs, a slim header with drop-down menus) with a **live preview**, so
@@ -877,7 +966,9 @@ colours update across the whole app as you change them:
 - the variable-list **width** (applies to every tab);
 - **Reset to defaults** to undo.
 
-### Log
+---
+
+## Log
 
 Mirrors diive's console output (file loading, feature engineering progress, and so
 on) in colour. **Save…** writes the log to a text file; **Clear** empties it.
