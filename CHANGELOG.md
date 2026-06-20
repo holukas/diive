@@ -36,6 +36,11 @@
   negative-to-zero clamp explicit and optional. New `nighttime_zero_offset_diagnostics` / `NighttimeZeroOffsetResult`
   expose every intermediate series + below-zero stats. The persisted correction-key value (`'radiation_zero_offset'`) is
   unchanged, so saved projects still load.
+- **MDS gap-fill flag semantics changed** — `FluxMDS`'s `FLAG_*_gfMDS_ISFILLED` no longer carries the old granular 1-60
+  quality levels. It is now `method * 1000 + time_window` (0 = measured), e.g. `1014` = all-drivers method at a 14-day
+  window, `2014` = SWIN-only at 14 days, `3001` = diurnal at 1 day, so both the ONEFlux driver method and the window are
+  recoverable; the faithful ONEFlux 1/2/3 quality is kept alongside in `.PREDICTIONS_QUALITY`. `avg_min_n_vals` default
+  changed 5 -> 2. Code that compared the flag to the old 1-60 levels must update. See *Gap-Filling*.
 
 ### Desktop GUI (new)
 
@@ -376,6 +381,17 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
 
 ### Gap-Filling
 
+- **MDS gap-filling is now a faithful ONEFlux port** — `FluxMDS` re-implements the
+  ONEFlux marginal-distribution-sampling cascade (Reichstein 2005 / Vekuri 2023) instead of the previous discrete-window
+  formulation: the **6-stage expanding-window cascade** (all-drivers 14/28 d -> SWIN-only 14 d -> diurnal 1/3/5 d ->
+  all-drivers 42-154 d -> SWIN-only 28-154 d -> diurnal 7-427 d, first stage to reach the sample threshold wins), a
+  **>=2-sample acceptance rule** (`avg_min_n_vals` default changed 5 -> 2), the **N-1 (sample) standard deviation**, and
+  the **+/-1 h diurnal band**. The cascade lives in a new shared module
+  `diive.gapfilling.similarity` (`mds_gapfill_cascade`, `meteo_similar_mask`, `mds_quality_from`, `mds_granular_flag`)
+  used by both the gap-filler and the daytime-partitioning NEE-uncertainty step, so there is one implementation of the
+  similarity scan. New `sym_mean` option (Vekuri 2023 symmetric mean, off by default). The previous private
+  `_FluxMDS` reference class was removed (the optimized/reference split is gone). Validated against native ONEFlux (CH-DAV): fill values
+  r ~ 0.9997-0.99997, quality flags 99.95-99.97% exact (residual = ONEFlux's float32 tolerance-boundary quantization).
 - **`SWINGapFillerXGBoost`** — physics-aware gap-filler for shortwave incoming radiation. Nighttime gaps are set to
   zero (no solar radiation after sunset); daytime gaps are filled with XGBoost trained on daytime data only. Requires
   only lat/lon/UTC offset — no meteorological driver variables needed by default. Optional `context_df` for TA/VPD
@@ -400,7 +416,6 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
   record's own SWIN clamped into `[swin_tol_min, swin_tol_max]` (continuous, grows with radiation between 20 and
   50 W m-2), matching the ONEFlux `common.c` gap-filler. Previously diive used a binary 20/50 split keyed off the
   *candidate* record. Gap-fill values and quality-level distributions shift slightly; total coverage is unchanged.
-  Both the optimized `FluxMDS` and the reference `_FluxMDS` were updated and remain bit-identical to each other.
 - **Random uncertainty (`RandomUncertaintyPAS20`) aligned to the ONEFlux C reference** — methods 1 and 2 now follow
   `oneflux_steps/nee_proc/src/randunc.c`: method 1 uses the clamped SWIN tolerance, strict `<` matching and requires
   more than 5 similar values; method 2 uses a fixed ±14-day window with no time-of-day restriction, drawing only from

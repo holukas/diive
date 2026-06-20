@@ -131,7 +131,7 @@ def run_level41_mds(
         swin_tol: list | None = None,
         ta_tol: float = 2.5,
         vpd_tol: float = 0.5,
-        avg_min_n_vals: int = 5,
+        avg_min_n_vals: int = 2,
 ) -> FluxLevelData:
     """
     Level-4.1: Gap-fill using Marginal Data Substitution (MDS).

@@ -2651,7 +2651,9 @@ def test_mds_quality_breakdown_helper():
     assert (bd["level"] == 0).any()  # observed row present
     assert int(bd["count"].sum()) == len(df)
     assert mds_quality_description(0) == "measured"
-    assert "7 days" in mds_quality_description(1)
+    # Granular flag = method*1000 + time_window (days): 2014 = SWIN-only, 14 d.
+    desc = mds_quality_description(2014)
+    assert "SWIN only" in desc and "14" in desc
 
     # The colour/marker-by-quality time series embeds into a supplied axes.
     import matplotlib

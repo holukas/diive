@@ -46,7 +46,7 @@ Gradient boosting. Often more accurate than Random Forest but requires more tuni
 No training. Fills gaps by finding similar conditions elsewhere in your data.
 
 - **gapfill_mds.py** — Original MDS implementation
-- **gapfill_mds_comparison.py** — Comparison of original vs. optimized variants
+- **gapfill_mds_comparison.py** — MDS reproducibility / determinism check (two runs are bit-identical)
 
 ### SW_IN Physics + XGBoost
 

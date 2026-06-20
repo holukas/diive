@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -239,11 +240,20 @@ class MdsGapFillingTab(DiiveTab):
         self.vpd_tol.setToolTip("VPD match tolerance, in kPa.")
         f.addRow("VPD tol (kPa)", self.vpd_tol)
         self.avg_min_n_vals = QSpinBox(); self.avg_min_n_vals.setRange(0, 1000)
-        self.avg_min_n_vals.setValue(5)
+        self.avg_min_n_vals.setValue(2)
         self.avg_min_n_vals.setToolTip(
             "Minimum number of matching records required to compute a gap-fill "
-            "average. Fewer matches than this leaves the gap for a looser level.")
-        f.addRow("Min records for mean", self.avg_min_n_vals)
+            "average. ONEFlux uses 2; larger values are stricter (a gap with "
+            "fewer matches falls through to a looser stage).")
+        f.addRow("Min samples for mean", self.avg_min_n_vals)
+        self.sym_mean = QCheckBox("Symmetric mean (Vekuri 2023)")
+        self.sym_mean.setChecked(False)
+        self.sym_mean.setToolTip(
+            "Use the Vekuri (2023) symmetric mean for the SWIN-driven methods "
+            "(splits similar samples by radiation above/below the target and "
+            "averages the two halves) instead of the plain mean. Off by default "
+            "(standard ONEFlux).")
+        f.addRow("", self.sym_mean)
         return box
 
     def _build_results(self) -> QWidget:
@@ -377,7 +387,7 @@ class MdsGapFillingTab(DiiveTab):
         return {**self._combos,
                 "swin_tol_low": self.swin_tol_low, "swin_tol_high": self.swin_tol_high,
                 "ta_tol": self.ta_tol, "vpd_tol": self.vpd_tol,
-                "avg_min_n_vals": self.avg_min_n_vals}
+                "avg_min_n_vals": self.avg_min_n_vals, "sym_mean": self.sym_mean}
 
     def save_state(self) -> dict:
         from diive.gui.widgets.state_utils import save_controls
@@ -398,6 +408,7 @@ class MdsGapFillingTab(DiiveTab):
             "ta_tol": self.ta_tol.value(),
             "vpd_tol": self.vpd_tol.value(),
             "avg_min_n_vals": self.avg_min_n_vals.value(),
+            "sym_mean": self.sym_mean.isChecked(),
         }
 
     def _python_code(self) -> str | None:

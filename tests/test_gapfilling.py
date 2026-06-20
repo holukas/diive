@@ -69,21 +69,25 @@ class TestGapFilling(unittest.TestCase):
 
         results = mds.gapfilling_df_
         self.assertEqual(len(results), 1488)
-        self.assertEqual(mds.scores_['r2'], 0.6463321323005897)
-        self.assertAlmostEqual(mds.scores_['medae'], 2.002954166666667, places=10)
+        self.assertEqual(mds.scores_['r2'], 0.720601595663773)
+        self.assertAlmostEqual(mds.scores_['medae'], 1.70347175141243, places=10)
         self.assertEqual(results[mds.target_gapfilled].isnull().sum(), 0)
-        self.assertEqual(results[mds.target_gapfilled_flag].sum(), 1895)
-        counts = Counter(results[mds.target_gapfilled_flag])
+        # Faithful ONEFlux quality (1/2/3) averaged over the gap predictions.
+        self.assertAlmostEqual(mds.scores_['mean_quality_flag_gap_predictions'],
+                               1.1285714285714286, places=10)
+        flag = results[mds.target_gapfilled_flag]
+        counts = Counter(flag.dropna().astype(int))
         # Missing in measured as indicated by flag > 0
-        a = results[mds.target_gapfilled_flag][results[mds.target_gapfilled_flag] > 0].count()
+        a = flag[flag > 0].count()
         # Missing in measured
         b = results[mds.flux].isnull().sum()
         self.assertEqual(a, 770)
         self.assertEqual(b, 770)
-        self.assertEqual(counts[0], 718)
-        self.assertEqual(counts[1], 174)
-        self.assertEqual(counts[2], 67)
-        self.assertEqual(counts[3], 529)
+        # Flag is granular: 0 = measured, else method*1000 + time_window (days).
+        self.assertEqual(counts[0], 718)       # measured
+        self.assertEqual(counts[1014], 515)    # method 1 (SWIN+TA+VPD), 14 d
+        self.assertEqual(counts[1028], 99)     # method 1, 28 d
+        self.assertEqual(counts[2014], 156)    # method 2 (SWIN only), 14 d
 
     def test_gapfilling_longterm_randomforest(self):
         from diive.configs.exampledata import load_exampledata_parquet

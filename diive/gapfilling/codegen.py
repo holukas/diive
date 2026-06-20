@@ -129,7 +129,7 @@ def mds_gapfill_to_code(target: str, swin: str, ta: str, vpd: str, kwargs: dict,
               "model.run()",
               "",
               "gapfilled = model.get_gapfilled_target()  # observed + filled (*_gfMDS)",
-              "flag = model.get_flag()  # 0 = observed, 1+ = gap-filled (quality level)"]
+              "flag = model.get_flag()  # 0 = observed, else method*1000 + window (granular)"]
     return "\n".join(lines) + "\n"
 
 

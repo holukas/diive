@@ -94,7 +94,7 @@ Used by `FeatureEngineer` class, fed into gap-filling models.
 | Random Forest         | Yes      | 8-stage engineered                | Interpretable, robust             |
 | XGBoost               | Yes      | 8-stage engineered                | Non-linear, efficient             |
 | SWINGapFillerXGBoost  | Yes      | SW_IN_POT + timestamps (+ opt. TA/VPD) | SW_IN with physical nighttime constraint; `nighttime_threshold=0.001` matches `remove_nighttime_zero_offset` |
-| MDS                   | No       | Meteorological similarity         | No overfitting risk               |
+| MDS                   | No       | Meteorological similarity         | Faithful ONEFlux port (`similarity.mds_gapfill_cascade`); no overfitting |
 | Linear Interp.        | No       | None                              | Small gaps only                   |
 
 **Results:** All gap-filling classes expose `.results` (after `.run()`) returning `GapFillingResult`:
@@ -565,8 +565,9 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   (`tab_chrome.build_titlebar`/`list_header`, `WorkerRunner`, `SubTabs`) — a self-contained `DiiveTab`. Inputs: a target
   (flux) list + a **fixed three-driver picker** (SWIN / TA / VPD combos auto-seeded by name with ✓/✗ markers, prefer
   gap-filled `_f`, skip `FLAG_*`; reuses `_partitioning_base._auto_pick`) + similarity tolerances (`swin_tol` low/high,
-  `ta_tol` °C, `vpd_tol` kPa, `avg_min_n_vals`). Flag `FLAG_*_gfMDS_ISFILLED` is 0 = observed, 1+ = gap-filled at that
-  **quality level** (higher = looser meteorological match). Codegen `mds_gapfill_to_code` (no feature list / no
+  `ta_tol` °C, `vpd_tol` kPa, `avg_min_n_vals` default 2, plus a `sym_mean` toggle). Flag `FLAG_*_gfMDS_ISFILLED` is
+  0 = observed, else the **granular** `method*1000 + time_window` (e.g. `1014` = all-drivers/14 d, `2014` = SWIN-only/14 d,
+  `3001` = diurnal/1 d); the faithful ONEFlux 1/2/3 quality is in `.PREDICTIONS_QUALITY`. Codegen `mds_gapfill_to_code` (no feature list / no
   reduction). Its Results page is the slimmed **`MdsResultsPanel`** (`widgets/mds_results.py`, reuses
   `gapfill_results._Card`): Configuration + **in-sample** scores (MDS has no held-out test) + a **per-quality-level
   breakdown** table, then a **quality-level bar plot** (records per level) + predicted-vs-observed scatter + cumulative
