@@ -181,8 +181,9 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
             otherwise only at missing ``tofill`` records (gap-filling mode).
         longest_marginal_gap: leading/trailing gaps longer than this many days
             are left unfilled (ONEFlux ``longestMarginalgap``).
-        progress_callback: optional ``callable(filled_so_far, total)`` invoked
-            after each cascade pass (gap counts), for a progress bar.
+        progress_callback: optional ``callable(gaps_filled, total_gaps, quality)``
+            invoked during/after each cascade pass (gap counts + the current
+            1/2/3 quality), for a progress bar.
 
     Returns:
         dict of per-record arrays (np.nan / 0 where unfilled): ``filled`` (mean),
@@ -227,6 +228,9 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
     # Records eligible to receive a fill: not in an excluded marginal gap, and
     # (gap-filling mode) originally missing — uncertainty mode predicts all.
     eligible = ~large if fill_all else (~large & ~target_valid)
+    # Progress is reported over the actual gaps (originally-missing eligible
+    # records), even in fill_all mode where measured records are also predicted.
+    gap_eligible = ~large & ~target_valid
 
     def gaps():
         return np.where(eligible & ~np.isfinite(filled))[0]
@@ -264,15 +268,20 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
         method[index] = m
         time_window[index] = tw
 
-    total_eligible = int(eligible.sum())
+    total_gaps = int(gap_eligible.sum())
+    _PROGRESS_EVERY = 1024  # emit within a pass every ~1k gaps for a smooth bar
 
-    def emit():
+    def emit(quality):
         if progress_callback is not None:
-            progress_callback(int(np.isfinite(filled[eligible]).sum()), total_eligible)
+            progress_callback(int(np.isfinite(filled[gap_eligible]).sum()),
+                              total_gaps, int(quality))
 
     def meteo_pass(t_window, m, *, drivers):
         """One pass with the all-drivers / SWIN-only meteo predicate."""
-        for index in gaps():
+        q = mds_quality_from(m, t_window)
+        for k, index in enumerate(gaps()):
+            if progress_callback is not None and (k % _PROGRESS_EVERY) == 0:
+                emit(q)
             w = window_idx(index, t_window)
             nongap = w[np.isfinite(tofill[w])]
             if nongap.size < min_samples:
@@ -282,50 +291,49 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
                                             **drivers)]
             if sel.size >= min_samples:
                 fill_at(index, sel, m, t_window)
+        emit(q)
 
     def mdc_pass(t_window):
         """One diurnal (+/- 1 h, same time-of-day) pass."""
-        for index in gaps():
+        q = mds_quality_from(METHOD_MDC, t_window)
+        for k, index in enumerate(gaps()):
+            if progress_callback is not None and (k % _PROGRESS_EVERY) == 0:
+                emit(q)
             w = window_idx(index, t_window)
             nongap = w[np.isfinite(tofill[w])]
             sel = nongap[np.abs(hr[nongap] - hr[index]) < 1.1]
             if sel.size >= min_samples:
                 fill_at(index, sel, METHOD_MDC, t_window)
+        emit(q)
 
     # Loop 1: all drivers, windows 14 & 28 days
     for it in range(2):
         if gaps().size == 0:
             break
         meteo_pass((it + 1) * _TW_ORIG, METHOD_ALL, drivers=dict(swin=swin, ta=ta, vpd=vpd))
-        emit()
     # Loop 2: SWIN only, window 14 days
     if gaps().size:
         meteo_pass(_TW_ORIG, METHOD_SWIN, drivers=dict(swin=swin))
-        emit()
     # Loop 3: diurnal, windows 1, 3, 5 days
     for it in range(3):
         if gaps().size == 0:
             break
         mdc_pass((2 * it + 1) * 1)
-        emit()
     # Loop 4: all drivers, windows 42..154 days
     for it in range(2, 11):
         if gaps().size == 0:
             break
         meteo_pass((it + 1) * _TW_ORIG, METHOD_ALL, drivers=dict(swin=swin, ta=ta, vpd=vpd))
-        emit()
     # Loop 5: SWIN only, windows 28..154 days
     for it in range(1, 11):
         if gaps().size == 0:
             break
         meteo_pass((it + 1) * _TW_ORIG, METHOD_SWIN, drivers=dict(swin=swin))
-        emit()
     # Loop 6: diurnal, windows 7..427 days
     for it in range(61):
         if gaps().size == 0:
             break
         mdc_pass((it + 1) * (_TW_ORIG * 0.5))
-        emit()
 
     quality = mds_quality_from(method, time_window)
     flag = mds_granular_flag(method, time_window)

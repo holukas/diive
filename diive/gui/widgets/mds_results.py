@@ -167,6 +167,7 @@ class MdsResultsPanel(QScrollArea):
             ("ta_tol", f"{model.ta_tol} °C"),
             ("vpd_tol", f"{model.vpd_tol} kPa"),
             ("avg_min_n_vals", str(model.avg_min_n_vals)),
+            ("sym_mean", str(model.sym_mean)),
         ]
         # No stretch: label + value hug their content and cluster left.
         table = self._make_table(["Parameter", "Value"], len(rows), stretch_col=None)
@@ -197,19 +198,19 @@ class MdsResultsPanel(QScrollArea):
     # --- quality breakdown ---------------------------------------------
     def _quality_card(self, breakdown: pd.DataFrame) -> _Card:
         card = _Card(
-            "Gap-fill quality (MDS levels)",
-            "How the records break down by gap-fill quality level. Level 0 = "
-            "observed; 1+ = gap-filled, higher = looser meteorological match "
-            "(Reichstein et al. 2005).")
+            "Gap-fill quality (MDS flags)",
+            "How the records break down by gap-fill flag. Flag 0 = observed; "
+            "non-zero = gap-filled (method*1000 + window), higher = looser "
+            "meteorological match (Reichstein et al. 2005 / ONEFlux).")
         rows = len(breakdown)
-        # Stretch the description column so Level/Records/% stay compact on the
-        # left instead of the level number floating far from its header.
-        table = self._make_table(["Level", "Records", "%", "Match window"], rows,
+        # Stretch the description column so Flag/Records/% stay compact on the
+        # left instead of the flag number floating far from its header.
+        table = self._make_table(["Flag", "Records", "%", "Match window"], rows,
                                   stretch_col=3)
         for r, row in enumerate(breakdown.itertuples(index=False)):
             obs = row.level == 0
             tip = "Observed (measured) records." if obs else \
-                f"Gap-filled at quality level {row.level}: {row.description}."
+                f"Gap-filled, flag {row.level}: {row.description}."
             self._set_cell(table, r, 0, str(row.level), bold=True, tooltip=tip,
                            color="#455A64" if obs else None)
             self._set_cell(table, r, 1, f"{row.count:,}", tooltip=tip)
@@ -269,7 +270,7 @@ class MdsResultsPanel(QScrollArea):
         bars = ax.bar(positions, counts, color=colors, edgecolor="white", linewidth=0.5)
         ax.set_xticks(positions)
         ax.set_xticklabels([str(lv) for lv in levels], fontsize=_PLOT_FONT)
-        ax.set_xlabel("Quality level (0 = observed, higher = looser match)", fontsize=_PLOT_FONT)
+        ax.set_xlabel("Gap-fill flag (0 = observed, higher = looser match)", fontsize=_PLOT_FONT)
         ax.set_ylabel("Records", fontsize=_PLOT_FONT)
         ax.tick_params(labelsize=_PLOT_FONT)
         # Value labels on top of each bar.

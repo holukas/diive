@@ -238,15 +238,15 @@ class _MdsGapFillingBase:
             return a
 
         flux_arr = arr(self.flux)
-        n_gaps_total = int(np.isnan(flux_arr).sum())
 
         # Predict at every record (fill_all): gap predictions fill the gaps, and
         # predictions at measured records give the in-sample score (matches the
         # standard MDS validation). Marginal gaps are filled unless disabled.
         _cb = None
         if progress_callback is not None:
-            def _cb(filled, total):  # translate to the GUI 5-arg signature
-                progress_callback(filled, total or 1, 0, 0, (total or 0) - filled)
+            def _cb(gaps_filled, gaps_total, quality):  # -> GUI 5-arg signature
+                progress_callback(gaps_filled, gaps_total or 1, quality, 0,
+                                  (gaps_total or 0) - gaps_filled)
 
         res = mds_gapfill_cascade(
             flux_arr, arr(self.swin), arr(self.ta), arr(self.vpd), hr, nperday,
@@ -287,11 +287,6 @@ class _MdsGapFillingBase:
         q_gap = res['quality'][filled_gap]
         self._scores['mean_quality_flag_gap_predictions'] = (
             float(np.mean(q_gap)) if q_gap.size else float('nan'))
-
-        if progress_callback is not None:
-            n_filled = int(filled_gap.sum())
-            progress_callback(n_filled, n_gaps_total or 1, 0, n_filled,
-                              (n_gaps_total or 0) - n_filled)
 
         info(f"MDS gap-filling done: {self.flux}", verbose=self.verbose)
 
@@ -344,13 +339,21 @@ class _MdsGapFillingBase:
             label = (f"measured ({self.flux})" if uf == 0
                      else f"{mds_quality_description(int(uf))}, mean +/- SD")
             color, marker = self._flag_style(ix)
+            # Layer by quality tier so the best data is on top: measured (0) at the
+            # very top, then quality 1 -> 2 -> 3; whiskers sit just under their
+            # markers. (Draw order alone would bury measured under the looser fills.)
+            tier = 0 if uf == 0 else mds_quality_from(int(uf) // 1000, int(uf) % 1000)
+            zmark = 10 - tier
+            # Smaller markers for measured so the dense observed series reads as
+            # fine points on top rather than a heavy black layer.
+            ms = 1.5 if uf == 0 else 5
             ax.plot(data.index, data[self.target_gapfilled],
                     label=f"{label} ({n_vals} values)", color=color, linestyle='none',
-                    markeredgewidth=1, marker=marker, alpha=1, markersize=5,
-                    markeredgecolor=color, fillstyle='full')
+                    markeredgewidth=1, marker=marker, alpha=1, markersize=ms,
+                    markeredgecolor=color, fillstyle='full', zorder=zmark)
             if uf > 0:
                 ax.errorbar(data.index, data[self.target_gapfilled], data['.PREDICTIONS_SD'],
-                            elinewidth=5, ecolor=color, alpha=.2, fmt='none')
+                            elinewidth=5, ecolor=color, alpha=.2, fmt='none', zorder=zmark - 0.5)
         default_format(ax=ax, ax_xlabel_txt='', ax_ylabel_txt=f"{self.flux}",
                        ax_labels_fontsize=ax_labels_fontsize)
         if legend:
