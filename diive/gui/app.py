@@ -395,6 +395,9 @@ class MainWindow(QMainWindow):
                 # Set the 3-D surface (GPU/VTK) apart from the 2-D plot methods.
                 if menu_name == "Plot" and label == "3D surface":
                     menu.addSeparator()
+                # Set the random-uncertainty tool apart from the partitioning tabs.
+                if menu_name == "Flux" and label == "Random uncertainty (PAS20)":
+                    menu.addSeparator()
                 # Escape '&' so Qt doesn't read it as a mnemonic marker (would
                 # render "Gaps & coverage" as an underlined "Gaps _coverage").
                 act = QAction(menu_icon(label), label.replace("&", "&&"), self)

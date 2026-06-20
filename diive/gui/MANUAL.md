@@ -796,6 +796,66 @@ variables.
 > temperature, VPD, and radiation columns, so you can try these tabs on it right
 > away.
 
+### Random uncertainty (PAS20)
+
+Estimate the **random measurement uncertainty** of a flux — the ±1σ scatter you'd
+expect from repeating the same half-hour under the same conditions. This is the
+hierarchical 4-method approach of Pastorello et al. (2020), a faithful port of the
+ONEFlux `randunc` reference. It is separate from the gap-filling (model) uncertainty.
+
+Pick the **input columns** (auto-filled, with a green ✓ / red ✗ availability marker):
+the *measured* flux, the *gap-filled* flux (used for the cumulative propagation), and
+the three meteorological similarity drivers — **air temperature (TA)**, **VPD** and
+**shortwave-in radiation (SW_IN)**. The **VPD is in kPa** toggle says whether your VPD
+column is in kPa (the diive convention, default) or hPa.
+
+Every record is assigned an uncertainty by the first of four methods that succeeds
+(each is more permissive than the last, so no record is left without an estimate):
+
+1. **Method 1 — direct standard deviation (ONEFlux).** For a record with a *measured*
+   flux, look at all other measured fluxes in a sliding **±7-day, ±1-hour** window
+   (same time of day) that occurred under *similar meteorological conditions* — the
+   same similarity test as MDS gap-filling: TA within ±2.5 °C, VPD within ±5 hPa, and
+   SW_IN within a radiation-dependent band (±20–50 W m⁻²). If **more than 5** such
+   fluxes exist, the uncertainty is their standard deviation. This is the only method
+   that measures uncertainty directly; methods 2–4 reuse these values.
+2. **Method 2 — median of similar fluxes (ONEFlux).** For records method 1 couldn't
+   do (gap-filled half-hours, or measured ones with too few similar fluxes), take the
+   **median of the method-1 uncertainties** of fluxes of *similar magnitude* (within
+   ±20 %, but at least ±2 µmol CO₂ m⁻² s⁻¹) in a **±14-day** window.
+3. **Method 3 — median over the whole record (diive extension).** Like method 2 but
+   with **no time window** — the median of method-1 uncertainties of all
+   similar-magnitude fluxes across the entire record. Fills the few records method 2
+   still couldn't.
+4. **Method 4 — nearest fluxes (diive extension).** A last resort with no similarity
+   restriction: sort all records by flux magnitude and take the **median uncertainty
+   of the ~10 closest** in magnitude. Methods 3 and 4 are diive additions (ONEFlux
+   leaves these records undefined) so that every record gets an estimate.
+
+Click **Run uncertainty** (it runs in the background, with a progress bar over the
+four methods). The hero band reports the **mean / median** per-record uncertainty,
+the number of records covered, and the final **cumulative ±σ**. The preview shows
+three panels:
+
+- **top** — the flux with its ±σ band (daily means);
+- **bottom left** — the cumulative flux with its propagated uncertainty bounds.
+  Random errors are assumed independent, so the cumulative uncertainty is their
+  quadrature sum (√Σσ²) — it grows much more slowly than the flux itself;
+- **bottom right** — uncertainty vs. flux magnitude, the classic Hollinger &
+  Richardson (2005) scaling (uncertainty rises with |flux|). This panel shows
+  **method-1 records only** (the directly-measured uncertainties); the method 2–4
+  fallbacks are medians of repeated values and would otherwise paint as misleading
+  horizontal streaks.
+
+**Add result to dataset** appends a single `{flux}_RANDUNC` column (the per-record
+±σ). The status line and the **Method 1/2/3/4 records** counts tell you how much of
+the record each method covered — a high method-1 share means most uncertainties are
+directly measured rather than inferred.
+
+> Tolerances and window sizes follow the ONEFlux reference and are not adjustable.
+> The cumulative panel and the `{flux}_RANDUNC` column are also available from the
+> library via `dv.flux.RandomUncertaintyPAS20`.
+
 ---
 
 ## Gap-filling

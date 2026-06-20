@@ -82,6 +82,17 @@
   variables**, **Rename variables** (add a prefix/suffix to all variables, or one at a time, with a live preview),
   **Metadata explorer**, **Feature engineering**; plus **Appearance**, **Project settings** (author, description, site
   details, and a **sticky-note wall** — all saved with the project), and **Log**.
+- **Flux ▸ Random uncertainty (PAS20)** (new tab, `tabs/uncertainty_randunc.py`) — estimate the random measurement
+  uncertainty of a flux with the hierarchical 4-method PAS20 cascade (`dv.flux.RandomUncertaintyPAS20`, ONEFlux port).
+  Auto-seeded pickers for the measured + gap-filled flux and the three similarity drivers (TA, VPD, SW_IN) with ✓/✗
+  availability markers and a VPD-in-kPa toggle; a worker-thread run with a **progress bar over the four methods**
+  (new optional `RandomUncertaintyPAS20.run(progress_callback=...)`); a three-panel preview — a flux ± uncertainty
+  band and the cumulative-uncertainty bounds, plus a measured-flux vs random-uncertainty scatter (method-1 / direct-SD
+  records only — the Hollinger & Richardson 2005 flux-magnitude scaling; the median-fallback methods 2-4 are excluded so
+  their repeated values don't paint as horizontal streaks); **Add result to dataset** emits the single `{flux}_RANDUNC` column with DERIVED provenance; and a
+  **Copy Python** button (new `randunc_to_code` codegen) for a reproducible script. Laid out like the data-correction
+  tabs — a fixed-width **Settings** column (header -> description -> inputs/options -> Run -> status -> Add) beside a
+  method **hero** band (mean / median / records / cumulative ±σ) over the preview, with Copy Python in the title bar.
 - **Corrections menu** — the high-resolution data corrections, now also as **standalone tabs, one per correction**, on a
   reusable **`BaseCorrectionTab` template** (`tabs/_correction_base.py`; the RF/XGB shared-template approach): **Remove
   nighttime zero offset**, **Remove relative humidity offset**, **Set to max / min threshold**, **Set to value**, **Set
@@ -531,6 +542,20 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
 
 ### Fixes
 
+- **`RandomUncertaintyPAS20`: cumulative uncertainty no longer poisoned by a single NaN.** The cumulative random-
+  uncertainty propagation built an object-dtype `ufloat` running sum, so one missing per-record flux or uncertainty
+  turned every *later* `UNC_CUMULATIVE` value into NaN (while the cumulative flux, a float cumsum, kept skipping NaN —
+  an inconsistency). It now computes the quadrature directly as `sqrt((randunc**2).cumsum())` with pandas skipna
+  semantics, so a missing record contributes nothing instead of nullifying the tail; the `FLUX+/-UNC` ufloat column is
+  rebuilt from the two cumulative Series (O(n) instead of the old O(n²) ufloat cumsum). Results on complete data are
+  unchanged.
+- **`RandomUncertaintyPAS20`: ~35x faster (vectorised the 4-method hot loops).** The per-record loops rebuilt a pandas
+  DataFrame slice (`df_between_two_dates` + `between_time`) and used scalar `.loc` access on every iteration, and
+  method 4 re-sorted the whole frame inside the loop. They now pull each column into numpy once and locate each record's
+  time window by position via `searchsorted` on the sorted timestamps (`between_time`'s wrap-around ±1 h band reproduced
+  on the window's time-of-day), method 3 sorts by flux once so its ±20% band is a contiguous slice, and method 4's sort
+  is hoisted out of the loop. One full year of half-hourly data drops from ~18 s to ~0.5 s; output is **bit-identical**
+  (verified column-by-column on a full year, max abs diff 0.0). No public API change.
 - **PWB time-lag: edge-pinned detections are rejected at the source.** A chunk with no real W-scalar coupling produces
   a flat, noisy pre-whitened CCF whose `argmax` is pushed to the search-window edge (the `na.locf` edge-fill makes every
   position a candidate). Every bootstrap replicate then agrees on that edge, so the detection comes back pinned at the

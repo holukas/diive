@@ -7,7 +7,6 @@ Calculate random and systematic uncertainties for flux measurements.
 Part of the diive library: https://github.com/holukas/diive
 """
 
-import datetime as dt
 import time
 
 import matplotlib.gridspec as gridspec
@@ -18,7 +17,6 @@ from pandas import DataFrame, Series
 from uncertainties import ufloat
 
 import diive.core.plotting.styles.LightTheme as theme
-from diive.core.dfun.frames import df_between_two_dates
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
 from diive.core.plotting.scatter import ScatterXY
 from diive.core.utils.console import console as _console, info
@@ -26,7 +24,6 @@ from diive.gapfilling.similarity import (
     TA_TOLERANCE,
     VPD_TOLERANCE,
     swin_tolerance,
-    window_mean_sd_count,
 )
 
 
@@ -76,8 +73,12 @@ class RandomUncertaintyPAS20:
         Hollinger, D. Y., & Richardson, A. D. (2005). Uncertainty in eddy covariance measurements
             and its application to physiological models. Tree Physiology, 25(7), 873–885.
             https://doi.org/10.1093/treephys/25.7.873
-        Pastorello, G. et al. (2020). The FLUXNET2015 dataset and the ONEFlux processing
-            pipeline for eddy covariance data. 27. https://doi.org/10.1038/s41597-020-0534-3
+        Pastorello, G., Trotta, C., Canfora, E., Chu, H., Christianson, D., Cheah, Y.-W.,
+            Poindexter, C., Chen, J., Elbashandy, A., Humphrey, M., Isaac, P., Polidori, D.,
+            Reichstein, M., Ribeca, A., Van Ingen, C., Vuichard, N., Zhang, L., Amiro, B.,
+            Ammann, C., … Papale, D. (2020). The FLUXNET2015 dataset and the ONEFlux processing
+            pipeline for eddy covariance data. Scientific Data, 7(1), 225.
+            https://doi.org/10.1038/s41597-020-0534-3
 
     Example:
         See `examples/flux/lowres/flux_uncertainty.py` for complete examples of
@@ -143,12 +144,22 @@ class RandomUncertaintyPAS20:
         """Return the calculated random uncertainty as series"""
         return self.randunc_results[self.randunccol]
 
-    def run(self):
-        self._calc_random_uncertainty()
+    def run(self, progress_callback=None):
+        """Run the 4-method hierarchical uncertainty quantification.
+
+        Args:
+            progress_callback: optional ``callable(phase, n_phases, done, total)``
+                for a GUI progress bar. ``phase`` is 1..4 (the method being run),
+                ``n_phases`` is 4, and ``done``/``total`` track the per-record loop
+                within that method. The per-record loops (method 1 especially)
+                dominate runtime, hence the within-method reporting.
+        """
+        self._calc_random_uncertainty(progress_callback=progress_callback)
         self._calc_cumulative_uncertainty_propagation()
 
     def _calc_random_uncertainty(self, ta_similarity: float = TA_TOLERANCE,
-                                 vpd_similarity: float = VPD_TOLERANCE):
+                                 vpd_similarity: float = VPD_TOLERANCE,
+                                 progress_callback=None):
 
         # Initialize window count columns for all methods
         self._randunc_results['WINDOW_N_VALS_METHOD1'] = np.nan
@@ -159,18 +170,35 @@ class RandomUncertaintyPAS20:
         # ONEFlux methods (randunc.c): ±7-day/±1-hour std (method 1),
         # then ±14-day median of method-1 results (method 2).
         self._method1(ta_similarity=ta_similarity, vpd_similarity=vpd_similarity,
-                      winsize_days=7, winsize_hours=1)
-        self._method2(winsize_days=14)
+                      winsize_days=7, winsize_hours=1, progress_callback=progress_callback)
+        self._method2(winsize_days=14, progress_callback=progress_callback)
 
         # diive extensions to fill records ONEFlux leaves undefined (see class docstring).
-        self._method3()
-        self._method4()
+        self._method3(progress_callback=progress_callback)
+        self._method4(progress_callback=progress_callback)
+
+    @staticmethod
+    def _report_progress(progress_callback, phase: int, i: int, total: int):
+        """Emit (phase, n_phases=4, done, total) at ~1% steps and on the last record."""
+        if progress_callback is None:
+            return
+        step = max(1, total // 100)
+        if i % step == 0 or i == total - 1:
+            progress_callback(phase, 4, i + 1, total)
 
     def _calc_cumulative_uncertainty_propagation(self):
         """Calculate the cumulative random uncertainty propagation
 
-        Uses the uncertainties package for proper error propagation.
-        Assumes independent measurement uncertainties (random errors).
+        Propagates the per-record random uncertainties through the running flux
+        sum. Random errors are assumed independent, so the cumulative uncertainty
+        is their quadrature (root-sum-of-squares) combination:
+
+            UNC_CUMULATIVE[k] = sqrt( sum_{i<=k} randunc_i^2 )
+
+        Both running sums use pandas' skipna semantics, so a missing flux or
+        uncertainty for a single record leaves the downstream cumulatives defined
+        (that record simply contributes nothing). This avoids the failure mode of
+        an object-dtype ``ufloat`` cumsum, where one NaN poisons every later value.
         """
 
         fluxunc = 'FLUX+/-UNC'
@@ -178,27 +206,29 @@ class RandomUncertaintyPAS20:
         flux_lower = 'FLUX-UNC'
         unc_cum = 'UNC_CUMULATIVE'
 
-        # Combine gapfilled flux and random uncertainties to ufloats (from uncertainty package)
-        subset = self.randunc_results[[self.fluxgapfilledcol, self.randunccol]].copy()
+        flux = self.randunc_results[self.fluxgapfilledcol]
+        randunc = self.randunc_results[self.randunccol]
 
-        # Combine gap-filled flux measurements with random uncertainties as ufloat objects
-        # ufloat(value, uncertainty) creates objects that propagate errors correctly during arithmetic
-        subset[fluxunc] = subset.apply(lambda row: ufloat(row[self.fluxgapfilledcol], row[self.randunccol]), axis=1)
+        subset_cumu = pd.DataFrame(index=flux.index)
+        # Cumulative flux (skips NaN flux, as before).
+        subset_cumu[self.fluxgapfilledcol] = flux.cumsum()
 
-        # Calculate cumulatives using only the necessary columns
-        # This avoids unnecessary operations and makes the intent clearer
-        subset_cumu = pd.DataFrame(index=subset.index)
-        subset_cumu[self.fluxgapfilledcol] = subset[self.fluxgapfilledcol].cumsum()
+        # Quadrature sum of independent random errors. Count a record's variance
+        # only where it contributes to the flux sum; cumsum skips NaN, so a record
+        # with a missing uncertainty contributes nothing rather than nullifying the
+        # rest of the series.
+        variance = (randunc ** 2).where(flux.notna())
+        subset_cumu[unc_cum] = np.sqrt(variance.cumsum())
 
-        # Cumsum on ufloat Series properly propagates uncertainties via __add__ operator
-        # Result: cumulative flux with sqrt-of-sum-of-squares error propagation
-        subset_cumu[fluxunc] = subset[fluxunc].cumsum()
+        # Cumulative flux with its uncertainty as ufloat objects (value = cumulative
+        # flux, std = cumulative uncertainty); kept for the report's +/- notation.
+        # Built directly from the two Series above (O(n)) instead of an O(n^2)
+        # running ufloat cumsum.
+        subset_cumu[fluxunc] = [
+            ufloat(n if pd.notna(n) else np.nan, s if pd.notna(s) else np.nan)
+            for n, s in zip(subset_cumu[self.fluxgapfilledcol], subset_cumu[unc_cum])]
 
-        # Extract the cumulative uncertainty (standard deviation) from each ufloat
-        # The uncertainties package stores std_dev in the .s attribute
-        subset_cumu[unc_cum] = subset_cumu[fluxunc].apply(lambda row: row.s if row is not None else np.nan)
-
-        # Calculate upper and lower cumulative flux bounds
+        # Calculate upper and lower cumulative flux bounds (+/- 1 sigma)
         subset_cumu[flux_upper] = subset_cumu[self.fluxgapfilledcol].add(subset_cumu[unc_cum])
         subset_cumu[flux_lower] = subset_cumu[self.fluxgapfilledcol].sub(subset_cumu[unc_cum])
 
@@ -403,7 +433,7 @@ class RandomUncertaintyPAS20:
         return self.df[[self.fluxcol, self.fluxgapfilledcol, self.tacol, self.vpdcol, self.swincol]].copy()
 
     def _method1(self, ta_similarity: float = TA_TOLERANCE, vpd_similarity: float = VPD_TOLERANCE,
-                 winsize_days: int = 7, winsize_hours: int = 1):
+                 winsize_days: int = 7, winsize_hours: int = 1, progress_callback=None):
         """
 
         From Pastorello et al. (2020):
@@ -428,52 +458,71 @@ class RandomUncertaintyPAS20:
         info(f"Calculating random uncertainty with window size +/-{winsize_days} days "
              f"and +/-{winsize_hours} hours (method 1) ...")
         tic = time.time()
-        for ix in self.subset.index:
-            # Current data
-            cur_dt = pd.to_datetime(ix)
-            cur_flux = self.subset.loc[ix, self.fluxcol]
-            if np.isnan(cur_flux): continue
-            cur_ta = self.subset.loc[ix, self.tacol]
-            cur_vpd = self.subset.loc[ix, self.vpdcol] * self._vpd_factor
-            cur_swin = self.subset.loc[ix, self.swincol]
 
+        # Vectorised inner loop: pull the columns into numpy once and locate each
+        # record's +/-winsize_days window by position via searchsorted on the
+        # (sorted) timestamps, instead of building a fresh DataFrame slice per
+        # record. Bit-identical to the pandas version: df_between_two_dates is
+        # inclusive on both ends, and between_time's +/-1 h time-of-day band
+        # (which wraps around midnight) is reproduced on the window's time-of-day.
+        idx = self.subset.index
+        index_values = idx.values  # datetime64, for searchsorted
+        flux = self.subset[self.fluxcol].to_numpy(dtype=float)
+        ta = self.subset[self.tacol].to_numpy(dtype=float)
+        vpd = self.subset[self.vpdcol].to_numpy(dtype=float) * self._vpd_factor
+        swin = self.subset[self.swincol].to_numpy(dtype=float)
+        hr = (idx.hour + idx.minute / 60.0 + idx.second / 3600.0).to_numpy(dtype=float)
+
+        randunc_out = self._randunc_results[self.randunccol].to_numpy(dtype=float).copy()
+        nvals_out = self._randunc_results['WINDOW_N_VALS_METHOD1'].to_numpy(dtype=float).copy()
+
+        win = np.timedelta64(int(winsize_days), 'D')
+        measured = np.where(np.isfinite(flux))[0]
+        for k, i in enumerate(measured):
+            self._report_progress(progress_callback, 1, k, measured.size)
+            cur_ta = ta[i]
+            cur_vpd = vpd[i]
+            cur_swin = swin[i]
             # SWIN tolerance is clamped to the radiation level of the current record
             # (ONEFlux: tolerance grows with SWIN between 20 and 50 W m-2).
             cur_swin_tol = swin_tolerance(cur_swin)
 
-            # Time range of window
-            start_dt = cur_dt - dt.timedelta(days=winsize_days)
-            end_dt = cur_dt + dt.timedelta(days=winsize_days)
-            starttime = (cur_dt - dt.timedelta(hours=winsize_hours)).time()
-            endtime = (cur_dt + dt.timedelta(hours=winsize_hours)).time()
+            # +/-winsize_days window by position (df_between_two_dates is inclusive).
+            t = index_values[i]
+            lo = int(np.searchsorted(index_values, t - win, side='left'))
+            hi = int(np.searchsorted(index_values, t + win, side='right'))
 
-            # Window data, datetime range
-            subset_win = df_between_two_dates(df=self.subset, start_date=start_dt, end_date=end_dt).copy()
+            # +/-winsize_hours time-of-day band: the time-of-day of (t - 1 h) ..
+            # (t + 1 h), inclusive and wrap-aware (matches pandas between_time).
+            start_h = (hr[i] - winsize_hours) % 24.0
+            end_h = (hr[i] + winsize_hours) % 24.0
+            hw = hr[lo:hi]
+            if start_h <= end_h:
+                tmask = (hw >= start_h) & (hw <= end_h)
+            else:  # band crosses midnight
+                tmask = (hw >= start_h) | (hw <= end_h)
 
-            # Window data, limit datetime range to +/- 1 hour
-            subset_win = subset_win.between_time(start_time=starttime, end_time=endtime)  # Thank you pandas!!
+            # Meteorological similarity (strict < on the absolute difference);
+            # only finite fluxes contribute to the standard deviation.
+            fw = flux[lo:hi]
+            sel = (tmask
+                   & (np.abs(ta[lo:hi] - cur_ta) < ta_similarity)
+                   & (np.abs(swin[lo:hi] - cur_swin) < cur_swin_tol)
+                   & (np.abs(vpd[lo:hi] - cur_vpd) < vpd_similarity)
+                   & np.isfinite(fw))
+            vals = fw[sel]
+            n_vals = vals.size
+            # ONEFlux requires more than 5 matching values; sample SD (N-1).
+            randunc_out[i] = np.std(vals, ddof=1) if n_vals >= 6 else np.nan
+            nvals_out[i] = n_vals
 
-            # Keep records within tolerance of the current meteo conditions.
-            # ONEFlux uses a strict less-than on the absolute difference.
-            _filter = (
-                    ((subset_win[self.tacol] - cur_ta).abs() < ta_similarity)
-                    & ((subset_win[self.swincol] - cur_swin).abs() < cur_swin_tol)
-                    & ((subset_win[self.vpdcol] * self._vpd_factor - cur_vpd).abs() < vpd_similarity)
-            )
-            subset_win = subset_win[_filter]
-
-            # ONEFlux requires more than 5 matching values; the uncertainty is the
-            # sample standard deviation (N-1) of the similar fluxes.
-            _, randunc, n_vals = window_mean_sd_count(
-                subset_win[self.fluxcol].to_numpy(), min_count=6, ddof=1)
-
-            self._randunc_results.loc[cur_dt, self.randunccol] = randunc
-            self._randunc_results.loc[cur_dt, 'WINDOW_N_VALS_METHOD1'] = n_vals
+        self._randunc_results[self.randunccol] = randunc_out
+        self._randunc_results['WINDOW_N_VALS_METHOD1'] = nvals_out
 
         toc = time.time() - tic
         info(f"Time needed: {toc:.2f}s")
 
-    def _method2(self, winsize_days: int = 14):
+    def _method2(self, winsize_days: int = 14, progress_callback=None):
         """
 
         From Pastorello et al. (2020):
@@ -501,86 +550,92 @@ class RandomUncertaintyPAS20:
         tic = time.time()
         # Snapshot: method 2 draws only from method-1 results (rows whose
         # uncertainty is already set at this point), never from its own output.
-        subset = self.randunc_results.copy()
+        # Pulled into numpy once; each record's +/-winsize_days window is a
+        # contiguous slice located by searchsorted (bit-identical to the pandas
+        # df_between_two_dates slice, which is inclusive on both ends).
+        idx = self.randunc_results.index
+        index_values = idx.values
+        gf = self.randunc_results[self.fluxgapfilledcol].to_numpy(dtype=float)
+        randunc = self.randunc_results[self.randunccol].to_numpy(dtype=float)
+        out = randunc.copy()
+        nvals_out = self._randunc_results['WINDOW_N_VALS_METHOD2'].to_numpy(dtype=float).copy()
 
-        for ix in subset.index:
-            # Current data
-            cur_randunc = subset.loc[ix, self.randunccol]
-            if not np.isnan(cur_randunc): continue  # Continue with next if random uncertainty already available
-
-            cur_dt = pd.to_datetime(ix)
-            cur_gapfilledflux = subset.loc[ix, self.fluxgapfilledcol]
-
+        win = np.timedelta64(int(winsize_days), 'D')
+        todo = np.where(~np.isfinite(randunc))[0]
+        for k, i in enumerate(todo):
+            self._report_progress(progress_callback, 2, k, todo.size)
+            cur_gf = gf[i]
             # Flux-similarity limits: +/- 20% of the flux magnitude, but not less
             # than 2 umolCO2 m-2 s-1 (ONEFlux uses the absolute value, so the
             # window is symmetric for negative fluxes too).
-            add = abs(cur_gapfilledflux) * 0.2
+            add = abs(cur_gf) * 0.2
             if add < 2:
                 add = 2
-            cur_flux_upper = cur_gapfilledflux + add
-            cur_flux_lower = cur_gapfilledflux - add
+            upper = cur_gf + add
+            lower = cur_gf - add
 
-            # Time range of window (no time-of-day restriction in ONEFlux method 2)
-            start_dt = cur_dt - dt.timedelta(days=winsize_days)
-            end_dt = cur_dt + dt.timedelta(days=winsize_days)
-            subset_win = df_between_two_dates(df=subset, start_date=start_dt, end_date=end_dt)
-
+            t = index_values[i]
+            lo = int(np.searchsorted(index_values, t - win, side='left'))
+            hi = int(np.searchsorted(index_values, t + win, side='right'))
+            gw = gf[lo:hi]
+            rw = randunc[lo:hi]
             # Keep method-1 results (non-null uncertainty) for similar fluxes.
-            _filter = (
-                    (subset_win[self.fluxgapfilledcol] >= cur_flux_lower)
-                    & (subset_win[self.fluxgapfilledcol] <= cur_flux_upper)
-                    & subset_win[self.randunccol].notna()
-            )
-            similar_randunc = subset_win.loc[_filter, self.randunccol]
+            similar = rw[(gw >= lower) & (gw <= upper) & np.isfinite(rw)]
+            n_vals = similar.size
+            out[i] = np.median(similar) if n_vals > 0 else np.nan  # NaN when none found
+            nvals_out[i] = n_vals
 
-            n_vals = similar_randunc.count()
-            randunc = similar_randunc.median()  # NaN when no similar fluxes found
-
-            self._randunc_results.loc[cur_dt, self.randunccol] = randunc
-            self._randunc_results.loc[cur_dt, 'WINDOW_N_VALS_METHOD2'] = n_vals
+        self._randunc_results[self.randunccol] = out
+        self._randunc_results['WINDOW_N_VALS_METHOD2'] = nvals_out
 
         toc = time.time() - tic
         info(f"Time needed: {toc:.2f}s")
 
-    def _method3(self):
+    def _method3(self, progress_callback=None):
         """
         diive extension (not in ONEFlux): fill left-over gaps with the median
         uncertainty of similar fluxes over the whole record (no time window).
         """
         info(f"Calculating random uncertainty from similar fluxes (method 3) ...")
         tic = time.time()
-        subset = self.randunc_results.copy()
+        gf = self.randunc_results[self.fluxgapfilledcol].to_numpy(dtype=float)
+        randunc = self.randunc_results[self.randunccol].to_numpy(dtype=float)
+        out = randunc.copy()
+        nvals_out = self._randunc_results['WINDOW_N_VALS_METHOD3'].to_numpy(dtype=float).copy()
 
-        for ix in subset.index:
-            # Current data
-            cur_randunc = subset.loc[ix, self.randunccol]
-            if not np.isnan(cur_randunc): continue  # Continue with next if random uncertainty already available
+        # Sort by gap-filled flux once so each record's +/-20% flux band is a
+        # contiguous slice (searchsorted), instead of masking the whole record per
+        # gap. NaN fluxes sort to the end (np.argsort) and never enter a band.
+        order = np.argsort(gf, kind='stable')
+        gf_sorted = gf[order]
+        randunc_sorted = randunc[order]
 
-            cur_dt = pd.to_datetime(ix)
-            cur_gapfilledflux = subset.loc[ix, self.fluxgapfilledcol]
-
+        todo = np.where(~np.isfinite(randunc))[0]
+        for k, i in enumerate(todo):
+            self._report_progress(progress_callback, 3, k, todo.size)
+            cur_gf = gf[i]
+            if not np.isfinite(cur_gf):  # no finite +/-20% band -> no similar fluxes
+                nvals_out[i] = 0
+                continue
             # Flux-similarity limits: +/- 20% of the flux magnitude, floor 2 umolCO2 m-2 s-1
-            add = abs(cur_gapfilledflux) * 0.2
+            add = abs(cur_gf) * 0.2
             if add < 2:
                 add = 2
-            cur_flux_upper = cur_gapfilledflux + add
-            cur_flux_lower = cur_gapfilledflux - add
+            lo = int(np.searchsorted(gf_sorted, cur_gf - add, side='left'))
+            hi = int(np.searchsorted(gf_sorted, cur_gf + add, side='right'))
+            seg = randunc_sorted[lo:hi]
+            valid = seg[np.isfinite(seg)]
+            n_vals = valid.size
+            out[i] = np.median(valid) if n_vals > 0 else np.nan
+            nvals_out[i] = n_vals
 
-            # Remove data outside limits
-            _filter = (subset[self.fluxgapfilledcol] >= cur_flux_lower) \
-                      & (subset[self.fluxgapfilledcol] <= cur_flux_upper)
-            similar_randunc = subset.loc[_filter, self.randunccol]
-
-            n_vals = similar_randunc.count()
-            randunc = similar_randunc.median()
-
-            self._randunc_results.loc[cur_dt, self.randunccol] = randunc
-            self._randunc_results.loc[cur_dt, 'WINDOW_N_VALS_METHOD3'] = n_vals
+        self._randunc_results[self.randunccol] = out
+        self._randunc_results['WINDOW_N_VALS_METHOD3'] = nvals_out
 
         toc = time.time() - tic
         info(f"Time needed: {toc:.2f}s")
 
-    def _method4(self):
+    def _method4(self, progress_callback=None):
         """
         diive extension (not in ONEFlux): fill left-over gaps with the median
         uncertainty of the fluxes closest in magnitude to the current flux,
@@ -591,28 +646,33 @@ class RandomUncertaintyPAS20:
         """
         info(f"Calculating random uncertainty from similar fluxes (method 4) ...")
         tic = time.time()
-        subset = self.randunc_results.copy()
+        subset = self.randunc_results
 
-        for ix in subset.index:
-            # Current data
-            cur_randunc = subset.loc[ix, self.randunccol]
-            if not np.isnan(cur_randunc): continue  # Continue with next if random uncertainty already available
+        # Sort by gap-filled flux ONCE (the old code re-sorted the whole frame on
+        # every iteration); a deterministic sort gives identical neighbour windows.
+        subset_sorted = subset.sort_values(by=self.fluxgapfilledcol, ascending=True)
+        sorted_index = subset_sorted.index
+        randunc_sorted = subset_sorted[self.randunccol].to_numpy(dtype=float)
 
-            cur_dt = pd.to_datetime(ix)
-            cur_gapfilledflux = subset.loc[ix, self.fluxgapfilledcol]
+        record_index = subset.index
+        randunc = subset[self.randunccol].to_numpy(dtype=float)
+        out = randunc.copy()
+        nvals_out = self._randunc_results['WINDOW_N_VALS_METHOD4'].to_numpy(dtype=float).copy()
 
-            subset_win = subset.sort_values(by=self.fluxgapfilledcol, ascending=True)
-            cur_ix = subset_win.index.get_loc(cur_dt)
-            start_ix = cur_ix - 5
-            start_ix = 0 if start_ix < 0 else start_ix
+        todo = np.where(~np.isfinite(randunc))[0]
+        for k, i in enumerate(todo):
+            self._report_progress(progress_callback, 4, k, todo.size)
+            cur_ix = sorted_index.get_loc(record_index[i])
+            start_ix = max(0, cur_ix - 5)
             end_ix = cur_ix + 5
-            subset_win = subset_win.iloc[start_ix:end_ix]
+            seg = randunc_sorted[start_ix:end_ix]
+            valid = seg[np.isfinite(seg)]
+            n_vals = valid.size
+            out[i] = np.median(valid) if n_vals > 0 else np.nan
+            nvals_out[i] = n_vals
 
-            n_vals = subset_win[self.randunccol].count()
-            randunc = subset_win[self.randunccol].median()
-
-            self._randunc_results.loc[cur_dt, self.randunccol] = randunc
-            self._randunc_results.loc[cur_dt, 'WINDOW_N_VALS_METHOD4'] = n_vals
+        self._randunc_results[self.randunccol] = out
+        self._randunc_results['WINDOW_N_VALS_METHOD4'] = nvals_out
 
         toc = time.time() - tic
         info(f"Time needed: {toc:.2f}s")

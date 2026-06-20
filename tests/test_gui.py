@@ -2634,6 +2634,20 @@ def test_mds_gapfill_to_code():
     assert "_gfMDS" in code
 
 
+def test_randunc_to_code():
+    # The random-uncertainty codegen renders a runnable
+    # RandomUncertaintyPAS20(...).run() snippet from the five inputs + VPD unit.
+    from diive.flux.lowres.codegen import randunc_to_code
+    code = randunc_to_code(
+        fluxcol="NEE_CUT_REF_orig", fluxgapfilledcol="NEE_CUT_REF_f",
+        tacol="Tair_f", vpdcol="VPD_f", swincol="Rg_f", vpd_in_kpa=False)
+    assert "dv.flux.RandomUncertaintyPAS20(" in code
+    assert "fluxcol=flux" in code and "fluxgapfilledcol='NEE_CUT_REF_f'" in code
+    assert "tacol='Tair_f'" in code and "vpdcol='VPD_f'" in code and "swincol='Rg_f'" in code
+    assert "vpd_in_kpa=False" in code and "randunc.run()" in code
+    assert "_RANDUNC" in code
+
+
 def test_mds_quality_breakdown_helper():
     # The library exposes the per-quality-level breakdown (level/count/pct/desc)
     # the GUI plot reads, keeping the level->description map in the library.
@@ -2663,6 +2677,51 @@ def test_mds_quality_breakdown_helper():
     model.plot_quality_timeseries(ax=ax)
     assert ax.get_lines()  # drew at least one quality series
     plt.close(fig)
+
+
+def test_random_uncertainty_tab(app, example_year):
+    # The random-uncertainty tab builds, auto-seeds the five inputs, runs the
+    # PAS20 cascade synchronously and emits a single {flux}_RANDUNC column.
+    from PySide6.QtWidgets import QApplication
+    from diive.gui.tabs.uncertainty_randunc import RandomUncertaintyTab
+    # One month keeps the per-record cascade fast in the test.
+    df = dv.times.keep_daterange(example_year, "2021-03-01", "2021-03-31 23:30")
+    tab = RandomUncertaintyTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+
+    # Inputs auto-seed to present columns; the measured flux avoids the _F column.
+    picks = tab._picks()
+    assert all(v in df.columns for v in picks.values())
+    assert picks["flux"] != picks["flux_f"]
+
+    # Copy Python renders a runnable snippet reflecting the current picks.
+    code = tab._python_code()
+    assert "RandomUncertaintyPAS20(" in code and picks["flux"] in code
+
+    # Drive the worker synchronously: _compute_payload off-thread, then _on_done.
+    payload = tab._compute_payload(df[[picks["flux"], picks["flux_f"], picks["ta"],
+                                       picks["vpd"], picks["swin"]]].copy(),
+                                   picks, tab.vpd_in_kpa.isChecked())
+    tab._on_done(payload)
+    QApplication.processEvents()
+    assert tab._result_df is not None
+    assert list(tab._result_df.columns) == [f"{picks['flux']}_RANDUNC"]
+    assert tab.add_btn.isEnabled()
+    # The preview rendered without a failure message.
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                if "Plot failed" in t.get_text()]
+    # Three panels incl. the measured-flux vs uncertainty scatter.
+    titles = [a.get_title() for a in tab.canvas.fig.axes]
+    assert any("Uncertainty vs flux" in t for t in titles)
+
+    # Config round-trips through save/restore (the input picks + VPD unit).
+    tab.vpd_in_kpa.setChecked(False)
+    state = tab.save_state()
+    tab2 = RandomUncertaintyTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2._picks()["flux"] == picks["flux"]
+    assert tab2.vpd_in_kpa.isChecked() is False
 
 
 def test_gapfilling_mds_tab(app, example_year):
