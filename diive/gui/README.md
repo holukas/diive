@@ -97,7 +97,9 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 
 **Adding a tab:** always-on tabs (Overview, Log) go in `TAB_CLASSES`. Menu-opened tabs go in `registry.MENU_TABS`
 (grouped by menu; values are factories) — they open as **new numbered instances** each time (Heatmap 1, 2, 3 ...), all
-closable, unless listed in `SINGLE_INSTANCE_TABS` (e.g. Appearance). The main window is agnostic to concrete tabs.
+closable, unless listed in `SINGLE_INSTANCE_TABS` — reserved for the app-wide singleton editors Appearance, Project
+settings, and Metadata explorer, which re-selecting focuses instead of duplicating. The main window is agnostic to
+concrete tabs.
 
 **Menu icons:** every menu entry (File/Data/Plot/Outliers/Flux/Analyze/Settings/Help) gets a small `QPainter`-drawn glyph via
 `gui/icons.py::menu_icon(label)`, matched to the label by keyword (`&` mnemonics stripped first). `_build_menus` wraps

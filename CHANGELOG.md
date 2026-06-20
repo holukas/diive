@@ -192,6 +192,9 @@
   deserialization). Tab rename is left-double-click only.
 - **Studio look** (minimal: near-white surfaces, pill tabs, frameless rounded window with an inline-dropdown header),
   edited live in **Appearance**. Tabs reorder, rename, close, and **pin** (freeze their dataset). App/taskbar icon added.
+- **Every menu tab can open more than once** — re-selecting a menu entry opens a new numbered instance (`Hampel filter
+  1`, `Hampel filter 2`, ...), like the plot tabs already did. Only the app-wide singleton editors stay single-instance
+  (Appearance, Project settings, Metadata explorer); re-selecting those focuses the open one.
 - **Standalone Windows build** for sharing the GUI without a Python/uv install: a PyInstaller one-folder spec under
   `packaging/` (`build_gui.ps1` → `dist/diive-gui/` + a zip). Users unzip and run `diive-gui.exe`. See
   `packaging/README.md`. Opt-in `build` dependency group (`uv sync --extra gui --group build`).

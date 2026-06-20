@@ -163,17 +163,10 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 }
 
 #: Menu tabs that may exist only once (re-selecting focuses the existing one).
-#: Everything else opens a new, numbered instance each time.
+#: Everything else opens a new, numbered instance each time ("Hampel filter 1",
+#: "Hampel filter 2", ...). Reserved for tabs that edit a single app-wide
+#: singleton, where a second copy would show conflicting state: Appearance
+#: (theme.manager) and Project settings (site.manager), plus Metadata explorer
+#: (the target of the "Edit metadata..." relay from every variable list).
 SINGLE_INSTANCE_TABS: set[str] = {
-    "Appearance", "Project settings", "Flux processing chain", "USTAR detection",
-    "Time lag analysis",
-    "Nighttime partitioning (ONEFlux)", "Nighttime partitioning (REddyProc)",
-    "Daytime partitioning (REddyProc)", "Daytime partitioning (ONEFlux)",
-    "XGBoost gap-filling", "Random Forest gap-filling", "MDS gap-filling",
-    "Data profile", "Gaps & coverage",
-    "Driver explorer", "Seasonal trend & anomalies", "Spectrogram",
-    "Metadata explorer", "Select variables", "Rename variables", "3D surface",
-    "Stepwise screening", "Events",
-    "Remove nighttime zero offset", "Remove relative humidity offset",
-    "Set to max threshold", "Set to min threshold", "Set to value",
-    "Set exact values to missing"}
+    "Appearance", "Project settings", "Metadata explorer"}
