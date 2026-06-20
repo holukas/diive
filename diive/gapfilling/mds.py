@@ -101,6 +101,7 @@ class _MdsGapFillingBase:
                  avg_min_n_vals: int = 2,
                  sym_mean: bool = False,
                  fill_marginal_gaps: bool = True,
+                 vpd_in_kpa: bool = True,
                  verbose: int = 1):
         """Gap-fill an ecosystem flux by marginal distribution sampling (MDS).
 
@@ -114,7 +115,7 @@ class _MdsGapFillingBase:
             flux: flux variable to gap-fill.
             swin: short-wave incoming radiation (W m-2).
             ta: air temperature (deg C).
-            vpd: vapor pressure deficit (kPa).
+            vpd: vapor pressure deficit. Unit set by *vpd_in_kpa*.
             swin_tol: SWIN tolerance clamp ``[min, max]`` in W m-2 (default
                 ``[20, 50]``). Following ONEFlux, a record's SWIN tolerance is its
                 own SWIN clamped into this range (grows with radiation).
@@ -128,6 +129,9 @@ class _MdsGapFillingBase:
                 ``gf_mds`` gap-filling behaviour). If False, leave leading/
                 trailing gaps longer than 60 days unfilled (the ONEFlux
                 ``uncert_via_gapFill`` ``longestMarginalgap`` guard).
+            vpd_in_kpa: if True (default), *vpd* is in kPa and *vpd_tol* applies
+                directly. If False, *vpd* is in hPa and is converted to kPa
+                internally so the kPa *vpd_tol* still applies.
             verbose: verbosity level.
         """
         _required = {
@@ -160,6 +164,7 @@ class _MdsGapFillingBase:
         self.avg_min_n_vals = avg_min_n_vals if avg_min_n_vals else 2
         self.sym_mean = sym_mean
         self.fill_marginal_gaps = fill_marginal_gaps
+        self.vpd_in_kpa = vpd_in_kpa
         self.verbose = verbose
 
         self._scores = dict()
@@ -238,6 +243,10 @@ class _MdsGapFillingBase:
             return a
 
         flux_arr = arr(self.flux)
+        # vpd_tol is in kPa; convert an hPa VPD column so the tolerance applies.
+        vpd_arr = arr(self.vpd)
+        if not self.vpd_in_kpa:
+            vpd_arr = vpd_arr * 0.1
 
         # Predict at every record (fill_all): gap predictions fill the gaps, and
         # predictions at measured records give the in-sample score (matches the
@@ -249,7 +258,7 @@ class _MdsGapFillingBase:
                                   (gaps_total or 0) - gaps_filled)
 
         res = mds_gapfill_cascade(
-            flux_arr, arr(self.swin), arr(self.ta), arr(self.vpd), hr, nperday,
+            flux_arr, arr(self.swin), arr(self.ta), vpd_arr, hr, nperday,
             min_samples=self.avg_min_n_vals,
             swin_tol=(self.swin_tol[0], self.swin_tol[1]),
             ta_tol=self.ta_tol, vpd_tol=self.vpd_tol,

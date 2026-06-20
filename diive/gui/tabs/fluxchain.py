@@ -1002,8 +1002,7 @@ class FluxChainTab(DiiveTab):
         gv.addLayout(form)
         self.mds_mark = self._info_marker()
         gv.addWidget(self.mds_mark)
-        vpd_note = QLabel("Units: VPD in kPa (EddyPro outputs hPa — divide by 10), "
-                          "TA in °C. The library warns on suspicious medians.")
+        vpd_note = QLabel("Units: VPD in kPa, TA in °C.")
         vpd_note.setWordWrap(True)
         vpd_note.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
         gv.addWidget(vpd_note)

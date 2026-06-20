@@ -212,7 +212,7 @@ Key `data.levels` fields: `level2`, `level2_qcf`, `level31`, `level31_qcf`, `lev
 
 **Critical pitfalls:**
 
-- MDS requires exact units: W/m² (radiation), °C (temp), **kPa (VPD)** — EddyPro outputs VPD in hPa; divide by 10. `run_level41_mds` warns when VPD median > 10 (likely hPa), TA median > 100 (likely Kelvin), TA median > 50, or SW_IN median > 2000.
+- MDS requires exact units: W/m² (radiation), °C (temp), **kPa (VPD)**. The required units are stated in the `FluxMDS` / `run_level41_mds` docstrings; inputs are not validated (the caller is responsible).
 - USTAR filtering applies ONLY to CO2/CH4/N2O; for H/LE use `thresholds=[0], threshold_labels=['CUT_NONE']`. `run_level33_constant_ustar` raises if a non-zero threshold is passed for an energy-flux basevar (`H2O`, `T_SONIC`, lowercase variants).
 - L3.2 and L3.3 require L3.1; L3.3 also requires L3.2 (USTAR filtering must operate on outlier-screened data — `run_level33_*` raises if `level32_qcf` is None). For H/LE call `run_level31(data, set_storage_to_zero=True)`. `run_chain` runs L3.2 unconditionally; users who must skip it use the composable API.
 - L4.1 features and MDS driver columns must exist in `data.full_df`, not `data.fpc_df`. Use `add_driver()` to add computed drivers to the right place.
@@ -513,7 +513,7 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   (constant pooled → `CUT_16/50/84`) vs **VUT** (per-year → `VUT_16/50/84`); the detected thresholds appear in the stage
   summary and Copy Python renders the chosen `mode`. L4.1 shows a SW_IN/TA/VPD driver-availability marker. **L4.1** ticks rf / xgb / mds (additive across methods — each
   replaces only its own previous result), picks rf/xgb predictor features + MDS SW_IN/TA/VPD driver columns (MDS units:
-  VPD kPa, TA °C — the library warns on suspicious medians; driver auto-pick skips `FLAG_*` columns), fans out one
+  VPD kPa, TA °C — stated in the docstrings, not validated; driver auto-pick skips `FLAG_*` columns), fans out one
   gap-fill per USTAR scenario. **Reproducibility:** a shared **Random seed** field (default 42) is always passed to
   rf/xgb (`cfg["rf_kwargs"]/["xgb_kwargs"]["random_state"]`) — without it sklearn/xgboost reseed every run and the
   output drifts; it's also emitted in `level41_to_code`. The page also exposes **Reduce features (SHAP)** and per-method

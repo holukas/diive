@@ -422,7 +422,10 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
   method-1 results, and fixes a sign bug in the ±20% flux-similarity range for negative fluxes. Methods 3 and 4 are
   retained as documented diive extensions (ONEFlux leaves some records undefined). The shared meteorological-similarity
   primitives now live in `diive.gapfilling.similarity` (`swin_tolerance`, `window_mean_sd_count`, tolerance constants),
-  used by both MDS gap-filling and random-uncertainty estimation.
+  used by both MDS gap-filling and random-uncertainty estimation. New `vpd_in_kpa=True` argument: VPD is taken in kPa
+  (diive convention, matching the MDS gap-filler) and converted to hPa internally for the faithful 5-hPa similarity
+  tolerance, so VPD units are now consistent across the ONEFlux ports (pass `vpd_in_kpa=False` for an hPa column). The
+  constructor docstring now states the expected unit of every input column.
 
 ### New Classes & Functions
 

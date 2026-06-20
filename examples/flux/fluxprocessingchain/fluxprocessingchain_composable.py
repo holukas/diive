@@ -339,10 +339,7 @@ print("XGBoost gap-filling complete")
 # Step 7c: gap-fill with MDS (branch from same L3.3 state)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Driver columns must exist in ``data.full_df``. MDS requires VPD in
-# **kPa** (EddyPro outputs hPa — divide by 10 if needed).
-# ``run_level41_mds`` warns automatically when the median VPD looks like
-# hPa (> 10) or TA looks like Kelvin.
+# Driver columns must exist in ``data.full_df``. MDS requires VPD in **kPa**.
 
 VPD_COL = 'VPD_T1_47_1_gfXG'
 vpd_median = data.full_df[VPD_COL].median()

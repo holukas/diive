@@ -315,6 +315,7 @@ class MlGapFillingTab(DiiveTab):
             f"Train {self.method_name} on the selected features and fill the target's gaps.")
         theme.set_button_role(self.run_btn, "confirm")
         self.run_btn.clicked.connect(self._run)
+        self.run_btn.setEnabled(False)  # until a target + >=1 feature are selected
         self.add_btn = QPushButton("Add results to dataset")
         self.add_btn.setToolTip("Append the gap-filled series and its flag to the variable list.")
         self.add_btn.setEnabled(False)
@@ -630,7 +631,18 @@ class MlGapFillingTab(DiiveTab):
     def _feature_cols(self) -> list[str]:
         return [f for f in self.picker.selected_names() if f != self._target]
 
+    def _inputs_valid(self) -> bool:
+        """True when a target and at least one feature are selected."""
+        return bool(self._target) and len(self._feature_cols()) > 0
+
+    def _update_run_enabled(self) -> None:
+        """Enable Run only with a target + >=1 feature (and not running)."""
+        if getattr(self, "run_btn", None) is None or self._runner.is_running:
+            return
+        self.run_btn.setEnabled(self._inputs_valid())
+
     def _update_status(self, *_) -> None:
+        self._update_run_enabled()
         if self._runner.is_running:
             return
         feats = self._feature_cols()
@@ -762,9 +774,12 @@ class MlGapFillingTab(DiiveTab):
         return model, model.get_gapfilled_target(), model.get_flag(), scores
 
     def _set_running(self, on: bool) -> None:
-        self.run_btn.setEnabled(not on)
         if on:
+            self.run_btn.setEnabled(False)
             self.add_btn.setEnabled(False)
+        else:
+            # Re-gate on input validity rather than blindly re-enabling.
+            self.run_btn.setEnabled(self._inputs_valid())
 
     # --- results -------------------------------------------------------
     def _on_done(self, payload) -> None:

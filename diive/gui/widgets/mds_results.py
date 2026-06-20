@@ -168,6 +168,7 @@ class MdsResultsPanel(QScrollArea):
             ("vpd_tol", f"{model.vpd_tol} kPa"),
             ("avg_min_n_vals", str(model.avg_min_n_vals)),
             ("sym_mean", str(model.sym_mean)),
+            ("vpd_in_kpa", str(model.vpd_in_kpa)),
         ]
         # No stretch: label + value hug their content and cluster left.
         table = self._make_table(["Parameter", "Value"], len(rows), stretch_col=None)

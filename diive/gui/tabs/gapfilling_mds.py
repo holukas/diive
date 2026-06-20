@@ -68,7 +68,7 @@ _DRIVERS = [
     {"key": "ta", "label": "TA (°C)", "needles": ["TA", "TAIR"],
      "tip": "Air-temperature driver, in degrees Celsius."},
     {"key": "vpd", "label": "VPD (kPa)", "needles": ["VPD"],
-     "tip": "Vapour-pressure-deficit driver, in kPa (not hPa — divide EddyPro hPa by 10)."},
+     "tip": "Vapour-pressure-deficit driver, in kPa (not hPa)."},
 ]
 
 
@@ -117,6 +117,7 @@ class MdsGapFillingTab(DiiveTab):
         self.run_btn.setToolTip("Fill the target's gaps with MDS similarity matching.")
         theme.set_button_role(self.run_btn, "confirm")
         self.run_btn.clicked.connect(self._run)
+        self.run_btn.setEnabled(False)  # until a target + the three drivers are set
         self.add_btn = QPushButton("Add results to dataset")
         self.add_btn.setToolTip("Append the gap-filled series and its flag to the variable list.")
         self.add_btn.setEnabled(False)
@@ -202,7 +203,7 @@ class MdsGapFillingTab(DiiveTab):
 
     def _build_settings(self) -> QWidget:
         host = QWidget()
-        host.setFixedWidth(320)
+        host.setFixedWidth(360)
         outer = QVBoxLayout(host)
         outer.setContentsMargins(6, 6, 6, 6)
         scroll = QScrollArea()
@@ -239,6 +240,13 @@ class MdsGapFillingTab(DiiveTab):
         self.vpd_tol.setDecimals(2); self.vpd_tol.setSingleStep(0.1); self.vpd_tol.setValue(0.5)
         self.vpd_tol.setToolTip("VPD match tolerance, in kPa.")
         f.addRow("VPD tol (kPa)", self.vpd_tol)
+        self.vpd_in_kpa = QCheckBox("VPD driver is in kPa")
+        self.vpd_in_kpa.setChecked(True)
+        self.vpd_in_kpa.setToolTip(
+            "Check if the VPD driver column is in kPa (default). Uncheck if it "
+            "is in hPa - it is then converted to kPa internally so the kPa "
+            "tolerance still applies.")
+        f.addRow(self.vpd_in_kpa)
         self.avg_min_n_vals = QSpinBox(); self.avg_min_n_vals.setRange(0, 1000)
         self.avg_min_n_vals.setValue(2)
         self.avg_min_n_vals.setToolTip(
@@ -253,7 +261,7 @@ class MdsGapFillingTab(DiiveTab):
             "(splits similar samples by radiation above/below the target and "
             "averages the two halves) instead of the plain mean. Off by default "
             "(standard ONEFlux).")
-        f.addRow("", self.sym_mean)
+        f.addRow(self.sym_mean)
         return box
 
     def _build_results(self) -> QWidget:
@@ -364,7 +372,25 @@ class MdsGapFillingTab(DiiveTab):
     def _driver_names(self) -> dict:
         return {k: c.currentText() for k, c in self._combos.items()}
 
+    def _inputs_valid(self) -> bool:
+        """True when a target and three distinct, valid driver columns are set."""
+        if not self._target:
+            return False
+        drivers = self._driver_names()
+        if any(v not in self._all_cols for v in drivers.values()):
+            return False
+        return len({self._target, *drivers.values()}) == 4
+
+    def _update_run_enabled(self) -> None:
+        """Enable the Run button only when the inputs are valid (and not running)."""
+        if getattr(self, "run_btn", None) is None:
+            return
+        if getattr(self, "_runner", None) is not None and self._runner.is_running:
+            return
+        self.run_btn.setEnabled(self._inputs_valid())
+
     def _update_status(self, *_) -> None:
+        self._update_run_enabled()
         if getattr(self, "_runner", None) is not None and self._runner.is_running:
             return
         if getattr(self, "status", None) is None:
@@ -387,7 +413,8 @@ class MdsGapFillingTab(DiiveTab):
         return {**self._combos,
                 "swin_tol_low": self.swin_tol_low, "swin_tol_high": self.swin_tol_high,
                 "ta_tol": self.ta_tol, "vpd_tol": self.vpd_tol,
-                "avg_min_n_vals": self.avg_min_n_vals, "sym_mean": self.sym_mean}
+                "avg_min_n_vals": self.avg_min_n_vals, "sym_mean": self.sym_mean,
+                "vpd_in_kpa": self.vpd_in_kpa}
 
     def save_state(self) -> dict:
         from diive.gui.widgets.state_utils import save_controls
@@ -409,6 +436,7 @@ class MdsGapFillingTab(DiiveTab):
             "vpd_tol": self.vpd_tol.value(),
             "avg_min_n_vals": self.avg_min_n_vals.value(),
             "sym_mean": self.sym_mean.isChecked(),
+            "vpd_in_kpa": self.vpd_in_kpa.isChecked(),
         }
 
     def _python_code(self) -> str | None:
@@ -471,9 +499,12 @@ class MdsGapFillingTab(DiiveTab):
         return out, work[target], gapfilled, model, target
 
     def _set_running(self, on: bool) -> None:
-        self.run_btn.setEnabled(not on)
         if on:
+            self.run_btn.setEnabled(False)
             self.add_btn.setEnabled(False)
+        else:
+            # Re-gate on input validity rather than blindly re-enabling.
+            self.run_btn.setEnabled(self._inputs_valid())
 
     def _on_progress(self, permille: int, quality: int, remaining: int) -> None:
         """Update the progress bar as the MDS quality levels are worked (queued

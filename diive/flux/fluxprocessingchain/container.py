@@ -343,8 +343,7 @@ class FluxConfig:
     """Air temperature column for MDS (deg C; must be in ``data.full_df``)."""
 
     mds_vpd: str | None = None
-    """VPD column for MDS (**kPa**; must be in ``data.full_df``).
-    EddyPro outputs VPD in hPa — divide by 10 before assigning here."""
+    """VPD column for MDS (**kPa**; must be in ``data.full_df``)."""
 
     # ----- NEE partitioning (Level-4.2) -----
     # Each ``partition_*`` flag enables one of the four faithful partitioning

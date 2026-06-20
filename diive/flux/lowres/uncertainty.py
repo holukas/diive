@@ -90,13 +90,33 @@ class RandomUncertaintyPAS20:
                  fluxgapfilledcol: str,
                  tacol: str,
                  vpdcol: str,
-                 swincol: str):
+                 swincol: str,
+                 vpd_in_kpa: bool = True):
+        """Random uncertainty estimation.
+
+        Args:
+            df: DataFrame with the columns below and a regular datetime index.
+            fluxcol: measured flux to estimate uncertainty for (umol CO2 m-2 s-1).
+            fluxgapfilledcol: gap-filled flux (umol CO2 m-2 s-1).
+            tacol: air temperature (deg C). Similarity tolerance: 2.5 deg C.
+            vpdcol: vapor pressure deficit. Unit is set by ``vpd_in_kpa``.
+            swincol: short-wave incoming radiation (W m-2). Similarity tolerance:
+                the record's own SW_IN clamped into [20, 50] W m-2.
+            vpd_in_kpa: if True (default, diive convention, matching the MDS
+                gap-filler) ``vpdcol`` is in kPa and is converted to hPa
+                internally for the faithful ONEFlux 5-hPa similarity tolerance.
+                Pass False if ``vpdcol`` is already in hPa.
+        """
         self.df = df
         self.fluxcol = fluxcol
         self.fluxgapfilledcol = fluxgapfilledcol
         self.tacol = tacol
         self.vpdcol = vpdcol
         self.swincol = swincol
+        self.vpd_in_kpa = vpd_in_kpa
+        # The ONEFlux VPD similarity tolerance is 5 hPa; convert a kPa column to
+        # hPa for the comparison while leaving the user-facing results in kPa.
+        self._vpd_factor = 10.0 if vpd_in_kpa else 1.0
 
         self.subset = self._make_subset()
         self._randunc_results = self.subset.copy()
@@ -414,7 +434,7 @@ class RandomUncertaintyPAS20:
             cur_flux = self.subset.loc[ix, self.fluxcol]
             if np.isnan(cur_flux): continue
             cur_ta = self.subset.loc[ix, self.tacol]
-            cur_vpd = self.subset.loc[ix, self.vpdcol]
+            cur_vpd = self.subset.loc[ix, self.vpdcol] * self._vpd_factor
             cur_swin = self.subset.loc[ix, self.swincol]
 
             # SWIN tolerance is clamped to the radiation level of the current record
@@ -438,7 +458,7 @@ class RandomUncertaintyPAS20:
             _filter = (
                     ((subset_win[self.tacol] - cur_ta).abs() < ta_similarity)
                     & ((subset_win[self.swincol] - cur_swin).abs() < cur_swin_tol)
-                    & ((subset_win[self.vpdcol] - cur_vpd).abs() < vpd_similarity)
+                    & ((subset_win[self.vpdcol] * self._vpd_factor - cur_vpd).abs() < vpd_similarity)
             )
             subset_win = subset_win[_filter]
 
