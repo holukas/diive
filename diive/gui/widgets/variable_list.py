@@ -17,9 +17,9 @@ from __future__ import annotations
 
 from html import escape
 
-from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtGui import QMouseEvent
-from PySide6.QtWidgets import QListWidget, QToolTip
+from PySide6.QtCore import QEvent, QMimeData, Qt, Signal
+from PySide6.QtGui import QDrag, QMouseEvent
+from PySide6.QtWidgets import QApplication, QListWidget, QToolTip
 
 from diive.core.metadata import ORIGINAL
 from diive.gui import metadata_store
@@ -31,6 +31,17 @@ class VariableList(QListWidget):
     #: Emitted on item click as (variable_name, additive); additive is True
     #: when Ctrl was held.
     selected = Signal(str, bool)
+
+    def __init__(self, parent=None, draggable: bool = False) -> None:
+        """`draggable`: allow dragging a variable name out as plain text (e.g. to
+        drop it onto the plotting tab's colour-by field). In draggable mode the
+        plain-click selection is emitted on *release* (not press) so that starting
+        a drag does not also fire a selection; Ctrl+click is unchanged."""
+        super().__init__(parent)
+        self._draggable = draggable
+        self._press_item = None
+        self._press_pos = None
+        self._dragging = False
 
     def _name(self, item) -> str:
         """Variable name for an item: the UserRole value, or the text."""
@@ -88,5 +99,37 @@ class VariableList(QListWidget):
             # Consume the event so the selection highlight is not changed.
             self.selected.emit(self._name(item), True)
             return
+        if self._draggable:
+            # Defer the plain-select to release so a drag does not also select.
+            self._press_item = item
+            self._press_pos = event.position().toPoint()
+            self._dragging = False
+            super().mousePressEvent(event)
+            return
         super().mousePressEvent(event)
         self.selected.emit(self._name(item), False)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if (self._draggable and self._press_item is not None and not self._dragging
+                and event.buttons() & Qt.MouseButton.LeftButton):
+            moved = (event.position().toPoint() - self._press_pos).manhattanLength()
+            if moved >= QApplication.startDragDistance():
+                self._dragging = True
+                drag = QDrag(self)
+                mime = QMimeData()
+                mime.setText(self._name(self._press_item))
+                drag.setMimeData(mime)
+                drag.exec(Qt.DropAction.CopyAction)
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if self._draggable and self._press_item is not None:
+            item, dragged = self._press_item, self._dragging
+            self._press_item = self._press_pos = None
+            super().mouseReleaseEvent(event)
+            # A plain click (no drag) selects on release.
+            if not dragged and item is self.itemAt(event.position().toPoint()):
+                self.selected.emit(self._name(item), False)
+            return
+        super().mouseReleaseEvent(event)

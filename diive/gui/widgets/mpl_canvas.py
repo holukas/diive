@@ -186,6 +186,25 @@ class MplCanvas(QWidget):
         grid = self.fig.subplots(1, n, squeeze=False, sharex=sharex, sharey=sharey)
         return list(grid[0])
 
+    def reset_history(self) -> None:
+        """Reset the navigation toolbar's view history to the current view.
+
+        Each render recreates the axes (``new_axes`` clears the figure), so the
+        toolbar's per-axes view stack ends up referencing discarded axes and its
+        Home/Back/Forward buttons do nothing. Clearing the stack and recording
+        the current view makes Home reset to the freshly rendered (full) view.
+        Call AFTER ``draw()`` so the captured axes positions are the solved ones.
+        """
+        if self._toolbar is not None:
+            self._toolbar.update()        # clear the stale per-axes view stack
+            self._toolbar.push_current()  # the current view becomes Home
+
+    def push_view(self) -> None:
+        """Record the current view as a new history entry (e.g. after restoring a
+        zoom on top of the just-captured Home view, so Home still returns to it)."""
+        if self._toolbar is not None:
+            self._toolbar.push_current()
+
     def _on_resize(self, _event) -> None:
         """Re-solve the constrained layout for the new size, then re-freeze.
 

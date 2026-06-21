@@ -18,20 +18,59 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
 )
+
+#: Sentinel entry meaning "no colour-by variable" in the colour-by dropdown.
+_COLORBY_NONE = "(none)"
+
+
+class _DropComboBox(QComboBox):
+    """A non-editable combo that also accepts a variable name dropped onto it as
+    plain text (drag a variable from the list into the field). If the dropped
+    name is one of its items, it is selected."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802 (Qt override)
+        if event.mimeData().hasText():
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event) -> None:  # noqa: N802
+        if event.mimeData().hasText():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event) -> None:  # noqa: N802
+        text = event.mimeData().text().strip()
+        i = self.findText(text)
+        if i >= 0:
+            self.setCurrentIndex(i)
+            event.acceptProposedAction()
+
+
+#: Modern line-colour presets offered as one-click swatches (hex, name).
+_LINE_COLOR_PRESETS = [
+    ("#2196F3", "Blue"), ("#3F51B5", "Indigo"), ("#009688", "Teal"),
+    ("#43A047", "Green"), ("#FB8C00", "Orange"), ("#FFB300", "Amber"),
+    ("#E53935", "Red"), ("#8E24AA", "Purple"), ("#607D8B", "Blue-grey"),
+    ("#37474F", "Ink"),
+]
 
 #: Plot-method identifiers; the tab dispatches on these and passes one to this
 #: panel so it can build the matching set of controls.
@@ -80,6 +119,9 @@ class PlotSettingsPanel(QScrollArea):
         self._plot_type = plot_type
         self.setWidgetResizable(True)
         self.setFixedWidth(320)
+        # Drop the scroll-area's outer frame so the settings sit borderless
+        # (the inner group boxes carry their own framing).
+        self.setFrameShape(QScrollArea.Shape.NoFrame)
 
         inner = QWidget()
         self._col = QVBoxLayout(inner)
@@ -345,6 +387,114 @@ class PlotSettingsPanel(QScrollArea):
             "show_grid", "show_legend"])
 
         self._build_axes_group()
+
+        # Built last so the new colour field is appended at the end of the
+        # positional control order, keeping older saved plot states aligned.
+        self._build_color_group()
+
+    def _build_color_group(self) -> None:
+        """A 'Line color' section: a hex field (the persisted source of truth), a
+        row of modern preset swatches, and a system colour-dialog button. The
+        swatches/dialog only set the hex field, so the value round-trips through
+        it for save/restore (and per-subplot settings)."""
+        grp = QGroupBox("Line color")
+        form = QFormLayout(grp)
+
+        self.line_color = QLineEdit("auto")
+        self.line_color.setPlaceholderText("auto / #RRGGBB / name")
+        self.line_color.setToolTip(
+            "Line and marker colour. 'auto' uses the theme palette colour for "
+            "this panel. Type a hex code (#2196F3) or a matplotlib colour name, "
+            "click a swatch, or use Pick.")
+        form.addRow("Color", self.line_color)
+
+        swatches = QWidget()
+        row = QHBoxLayout(swatches)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(3)
+        self._color_swatches: list[tuple[str, QPushButton]] = []
+        for hexcode, name in _LINE_COLOR_PRESETS:
+            b = QPushButton()
+            b.setFixedSize(18, 18)
+            b.setCheckable(True)
+            b.setCursor(Qt.PointingHandCursor)
+            b.setToolTip(name)
+            b.setStyleSheet(
+                f"QPushButton {{ background: {hexcode}; border: 1px solid #B0BEC5; "
+                f"border-radius: 4px; }} "
+                f"QPushButton:checked {{ border: 2px solid #263238; }}")
+            b.clicked.connect(lambda _c=False, h=hexcode: self.line_color.setText(h))
+            self._color_swatches.append((hexcode, b))
+            row.addWidget(b)
+        row.addStretch(1)
+        pick = QPushButton("Pick…")
+        pick.setToolTip("Choose a colour from the system colour dialog.")
+        pick.clicked.connect(self._pick_line_color)
+        row.addWidget(pick)
+        form.addRow(swatches)  # spanning row -> not part of positional state
+
+        self.line_color.textChanged.connect(self._sync_color_swatches)
+        self._sync_color_swatches(self.line_color.text())
+
+        # Colour-by-variable: colour the line by another variable's value via a
+        # colormap. Pick from the dropdown or drag a variable from the list onto
+        # it. When set, the single colour above is ignored.
+        self.color_by = _DropComboBox()
+        self.color_by.addItem(_COLORBY_NONE)
+        self.color_by.setToolTip(
+            "Colour the line by another variable's value (via the colormap "
+            "below). Pick one here, or drag a variable from the list onto this "
+            "field. '(none)' uses the single colour above.")
+        form.addRow("Color by", self.color_by)
+        self.colorby_cmap = QComboBox()
+        self.colorby_cmap.setEditable(True)
+        self.colorby_cmap.addItems(_COLORMAPS)
+        self.colorby_cmap.setCurrentText("RdYlBu_r")
+        self.colorby_cmap.setToolTip("Colormap used to colour the line by the "
+                                     "colour-by variable.")
+        form.addRow("Color-by map", self.colorby_cmap)
+
+        self._col.addWidget(grp)
+
+    def set_colorby_options(self, names) -> None:
+        """Populate the colour-by dropdown with the dataset's variable names,
+        keeping the current pick if it still exists. No-op for non-time-series."""
+        if not hasattr(self, "color_by"):
+            return
+        cur = self.color_by.currentText()
+        self.color_by.blockSignals(True)
+        self.color_by.clear()
+        self.color_by.addItem(_COLORBY_NONE)
+        self.color_by.addItems([str(n) for n in names])
+        i = self.color_by.findText(cur)
+        self.color_by.setCurrentIndex(i if i >= 0 else 0)
+        self.color_by.blockSignals(False)
+
+    def _pick_line_color(self) -> None:
+        from PySide6.QtGui import QColor
+        from PySide6.QtWidgets import QColorDialog
+        cur = QColor(self.line_color.text().strip())
+        if not cur.isValid():
+            cur = QColor("#2196F3")
+        chosen = QColorDialog.getColor(cur, self, "Line color")
+        if chosen.isValid():
+            self.line_color.setText(chosen.name())  # '#rrggbb'
+
+    def _sync_color_swatches(self, text: str) -> None:
+        """Check the swatch matching the current hex (none for 'auto'/custom)."""
+        norm = (text or "").strip().lower()
+        for hexcode, b in self._color_swatches:
+            b.setChecked(norm == hexcode.lower())
+
+    def _line_color_value(self) -> str | None:
+        """The chosen line colour, or None for 'auto' (theme palette fallback)."""
+        text = self.line_color.text().strip()
+        return None if (not text or text.lower() == "auto") else text
+
+    def _color_by_value(self) -> str | None:
+        """The chosen colour-by variable, or None when '(none)' is selected."""
+        text = self.color_by.currentText().strip()
+        return None if (not text or text == _COLORBY_NONE) else text
 
     # --- ridgeline controls ---
     def _build_ridgeline(self) -> None:
@@ -937,6 +1087,9 @@ class PlotSettingsPanel(QScrollArea):
             "marker": self.marker.isChecked(),
             "markersize": self.markersize.value(),
             "drop_gaps": self.drop_gaps.isChecked(),
+            "color": self._line_color_value(),
+            "color_by": self._color_by_value(),
+            "color_by_cmap": self.colorby_cmap.currentText().strip() or "RdYlBu_r",
             "_format": self._format_values(),
             "_axes": self._axes_values(),
         }

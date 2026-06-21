@@ -25,7 +25,7 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QPushButton,
@@ -37,7 +37,9 @@ from PySide6.QtWidgets import (
 import diive as dv
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.flow_layout import FlowLayout
 from diive.gui.widgets.mpl_canvas import MplCanvas
+from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.plot_settings import (
     CUMULATIVE_YEAR,
     DIELCYCLE,
@@ -70,6 +72,66 @@ _MAX_PANELS = 5
 # Time-series line colors are read live from theme.manager.ts_colors.
 
 
+class _PanelPills(QWidget):
+    """A wrapping row of segmented pill buttons — one per subplot panel — for
+    choosing which panel's settings the controls below currently edit.
+
+    Reuses the `SubTabs` pill look (accent fill on the active pill) but without a
+    stacked widget: there is one settings panel; switching pills only swaps which
+    panel's saved settings are loaded into it. Labels wrap (`FlowLayout`) so they
+    fit the narrow settings column; long variable names are elided with a tooltip.
+    """
+
+    changed = Signal(int)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._buttons: list[QPushButton] = []
+        self._flow = FlowLayout(self, margin=0, hspacing=4, vspacing=4)
+        theme.manager.changed.connect(self._apply_style)
+
+    def set_panels(self, labels: list[str], current: int = 0) -> None:
+        while self._flow.count():
+            item = self._flow.takeAt(0)
+            w = item.widget() if item is not None else None
+            if w is not None:
+                w.deleteLater()
+        self._buttons = []
+        for i, label in enumerate(labels):
+            b = QPushButton(self._elide(label))
+            b.setToolTip(label)
+            b.setCheckable(True)
+            b.setChecked(i == current)
+            b.setCursor(Qt.PointingHandCursor)
+            b.clicked.connect(lambda _checked=False, idx=i: self._on_click(idx))
+            self._buttons.append(b)
+            self._flow.addWidget(b)
+        self._apply_style()
+
+    def set_current(self, idx: int) -> None:
+        for i, b in enumerate(self._buttons):
+            b.setChecked(i == idx)
+
+    def _on_click(self, idx: int) -> None:
+        self.set_current(idx)
+        self.changed.emit(idx)
+
+    @staticmethod
+    def _elide(text: str, n: int = 16) -> str:
+        return text if len(text) <= n else text[: n - 1] + "…"
+
+    def _apply_style(self) -> None:
+        accent = theme.manager.tokens.get("ACCENT", "#3A4D5C")
+        border = theme.manager.tokens.get("BORDER", "#E6E6E3")
+        qss = (
+            f"QPushButton {{ padding: 4px 10px; border: 0.5px solid {border}; "
+            f"border-radius: 6px; background: transparent; }} "
+            f"QPushButton:checked {{ background: {accent}; color: white; "
+            f"border-color: {accent}; }}")
+        for b in self._buttons:
+            b.setStyleSheet(qss)
+
+
 class PlottingTab(DiiveTab):
     """One plot method (heatmap, time series, ...) as its own closable tab."""
 
@@ -82,28 +144,59 @@ class PlottingTab(DiiveTab):
         self._df = None
         self._panels: list[str] = []
         self._xyz: list[str] = []  # hexbin/scatter role order: [X, Y, Z]
+        # Per-subplot settings: each panel keeps its own raw control snapshot
+        # (PlotSettingsPanel.state()), keyed by variable name. `_active_panel`
+        # is the one the live controls currently edit.
+        self._panel_settings: dict[str, list] = {}
+        self._active_panel: str | None = None
+        self._last_axes: list = []  # main panel axes of the last render (for zoom-preserve)
 
         root = QWidget()
-        layout = QHBoxLayout(root)
-        layout.setContentsMargins(0, 0, 0, 0)
+        outer = QVBoxLayout(root)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # Main header (tracked/bold, e.g. "TIME SERIES PLOT"), matching the
+        # correction/gap-filling tabs' title bar.
+        outer.addLayout(build_titlebar(f"{self.title} plot"))
+
+        body = QWidget()
+        layout = QHBoxLayout(body)
+        layout.setContentsMargins(10, 4, 10, 4)
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Shared variable list (filter + pills). Plain click resets to one
-        # panel; Ctrl+click toggles additional panels.
-        self.varpanel = VariablePanel()
+        # Shared variable list (filter + pills) under its own header. Plain click
+        # resets to one panel; Ctrl+click toggles additional panels. Time series
+        # lists are draggable so a variable can be dropped onto the colour-by field.
+        self.varpanel = VariablePanel(draggable=self._plot_type == TIMESERIES)
         self.varpanel.selected.connect(self._on_selected)
+        left = QWidget()
+        llay = QVBoxLayout(left)
+        llay.setContentsMargins(0, 0, 0, 0)
+        llay.addWidget(list_header("Variable", "click to plot"))
+        llay.addWidget(self.varpanel, 1)
 
-        # Middle: plot-parameter controls plus an explicit "Update plot" button.
-        # Editing a control does NOT re-render — the user clicks the button to
-        # apply all pending changes at once (a single, consistent trigger across
-        # every control type). Variable selection in the list still renders live.
+        # Middle: plot-parameter controls (under a header) plus an explicit
+        # "Update plot" button. Editing a control does NOT re-render — the user
+        # clicks the button to apply all pending changes at once (a single,
+        # consistent trigger across every control type). Variable selection in
+        # the list still renders live.
         self.settings = PlotSettingsPanel(self._plot_type)
+        # Segmented pill row to pick which subplot's settings to edit (shown only
+        # with more than one panel). Switching a pill swaps the loaded settings.
+        self.panel_pills = _PanelPills()
+        self.panel_pills.changed.connect(self._on_pill_changed)
+        self.panel_pills.setVisible(False)
         self.update_btn = QPushButton("Update plot")
-        self.update_btn.clicked.connect(lambda: self._render())
+        theme.set_button_role(self.update_btn, "confirm")
+        # Keep the current pan/zoom when applying setting changes.
+        self.update_btn.clicked.connect(lambda: self._render(preserve_view=True))
         middle = QWidget()
         mlay = QVBoxLayout(middle)
         mlay.setContentsMargins(0, 0, 0, 0)
         mlay.setSpacing(4)
+        mlay.addWidget(list_header("Plot settings", "adjust & update"))
+        mlay.addWidget(self.panel_pills)
         mlay.addWidget(self.settings, 1)
         mlay.addWidget(self.update_btn)
 
@@ -114,7 +207,7 @@ class PlottingTab(DiiveTab):
         if self._plot_type == RIDGELINE:
             self.canvas.auto_layout = False
 
-        splitter.addWidget(self.varpanel)
+        splitter.addWidget(left)
         splitter.addWidget(middle)
         splitter.addWidget(self.canvas)
         splitter.setStretchFactor(0, 0)   # list keeps its width
@@ -125,6 +218,7 @@ class PlottingTab(DiiveTab):
         # settings/canvas handle stays draggable.
         lock_panel_handle(splitter)
         layout.addWidget(splitter)
+        outer.addWidget(body, stretch=1)
 
         # Live theme preview: repaint pills, and re-render if colors affect the
         # current plot (time-series line colors).
@@ -144,6 +238,72 @@ class PlottingTab(DiiveTab):
         if self._plot_type in (TIMESERIES, DIELCYCLE) and self._panels:
             self._render()
 
+    # --- per-subplot settings ------------------------------------------------
+    def _capture_active(self) -> None:
+        """Save the live control values into the active panel's settings slot."""
+        if self._active_panel is not None:
+            self._panel_settings[self._active_panel] = self.settings.state()
+
+    def _sync_panel_settings(self, active: str | None = None) -> None:
+        """Reconcile per-panel snapshots to the current panels, pick the active
+        panel, load its settings into the controls, and rebuild the pills.
+
+        New panels are seeded from the current control state (so a Ctrl+click
+        panel inherits the active panel's look, then can be tweaked); snapshots
+        for removed panels are dropped.
+        """
+        self._capture_active()
+        baseline = self.settings.state()  # seed for newly added panels
+        panels = self._panels
+        self._panel_settings = {
+            n: s for n, s in self._panel_settings.items() if n in panels}
+        for n in panels:
+            if n in self._panel_settings:
+                continue
+            # Seed a new panel from the active baseline, but give additional
+            # panels a distinct line colour so a stacked panel doesn't repeat the
+            # active panel's (possibly explicit) colour.
+            self.settings.apply_state(baseline)
+            self._assign_distinct_color(n)
+            self._panel_settings[n] = self.settings.state()
+        if active in panels:
+            self._active_panel = active
+        elif self._active_panel not in panels:
+            self._active_panel = panels[0] if panels else None
+        if self._active_panel is not None:
+            self.settings.apply_state(self._panel_settings[self._active_panel])
+        self._sync_pills()
+
+    def _assign_distinct_color(self, name: str) -> None:
+        """Give a newly added subplot (panel position > 0) a distinct line colour
+        from the theme palette, so it doesn't repeat the active panel's colour.
+        The primary panel (position 0) keeps its 'auto' default."""
+        if not hasattr(self.settings, "line_color"):
+            return
+        idx = self._panels.index(name)
+        if idx == 0:
+            return
+        ts_colors = theme.manager.ts_colors
+        if ts_colors:
+            self.settings.line_color.setText(ts_colors[idx % len(ts_colors)])
+
+    def _sync_pills(self) -> None:
+        panels = self._panels
+        show = len(panels) > 1
+        self.panel_pills.setVisible(show)
+        if show:
+            cur = panels.index(self._active_panel) if self._active_panel in panels else 0
+            self.panel_pills.set_panels(list(panels), cur)
+
+    def _on_pill_changed(self, idx: int) -> None:
+        """Switch the controls to edit another panel's settings (no re-render —
+        the user applies changes with Update plot)."""
+        if idx < 0 or idx >= len(self._panels):
+            return
+        self._capture_active()
+        self._active_panel = self._panels[idx]
+        self.settings.apply_state(self._panel_settings.get(self._active_panel))
+
     def on_data_loaded(self, df, created: set | None = None) -> None:
         """Populate the variable list from the dataset and render.
 
@@ -152,10 +312,15 @@ class PlottingTab(DiiveTab):
         self._df = df
         self._panels = []
         self._xyz = []
+        self._panel_settings = {}
+        self._active_panel = None
         self.varpanel.set_variables(df.columns, created)
         if self._plot_type == CUMULATIVE_YEAR:
             # Offer the data's years in the highlight-year dropdown.
             self.settings.set_years(sorted(set(df.index.year)))
+        if self._plot_type == TIMESERIES:
+            # Offer every column as a colour-by variable.
+            self.settings.set_colorby_options(df.columns)
         self._select_default()
 
     def _select_default(self) -> None:
@@ -180,11 +345,15 @@ class PlottingTab(DiiveTab):
             self._panels = [cols[0]]
         else:
             self._panels = []
+        self._sync_panel_settings(active=self._panels[0] if self._panels else None)
         self._render()
 
     def save_state(self) -> dict:
+        self._capture_active()  # fold pending edits into the active panel's slot
         sel = self._xyz if self._plot_type in _XYZ_TYPES else self._panels
-        return {"sel": list(sel), "settings": self.settings.state()}
+        return {"sel": list(sel), "settings": self.settings.state(),
+                "panel_settings": dict(self._panel_settings),
+                "active": self._active_panel}
 
     def restore_state(self, state: dict) -> None:
         if "settings" in state:
@@ -193,6 +362,18 @@ class PlottingTab(DiiveTab):
         sel = [n for n in (state.get("sel") or []) if n in names]
         for i, name in enumerate(sel):
             self._on_selected(name, i > 0)  # replay clicks (first resets, rest add)
+        # Overlay the saved per-panel settings (the replay above seeded panels
+        # from the shared snapshot); then restore the active panel + controls.
+        for n, snap in (state.get("panel_settings") or {}).items():
+            if n in self._panel_settings:
+                self._panel_settings[n] = snap
+        active = state.get("active")
+        if active in self._panel_settings:
+            self._active_panel = active
+        if self._active_panel is not None and self._panel_settings.get(self._active_panel):
+            self.settings.apply_state(self._panel_settings[self._active_panel])
+        self._sync_pills()
+        self._render()
 
     def _on_selected(self, name: str, additive: bool) -> None:
         if not name:
@@ -213,6 +394,7 @@ class PlottingTab(DiiveTab):
             # The ridgeline uses the whole figure; the histogram is information-
             # dense (counts, z-score axis) -> both are single-variable.
             self._panels = [name]
+            self._sync_panel_settings(active=name)
             self.varpanel.run_with_loading(name, self._render)
             return
         if additive:
@@ -225,15 +407,21 @@ class PlottingTab(DiiveTab):
                 return  # cap reached -- ignore further panels
         else:
             self._panels = [name]
+        self._sync_panel_settings(active=name)
         self.varpanel.run_with_loading(name, self._render)
 
-    def _render(self) -> None:
+    def _render(self, preserve_view: bool = False) -> None:
         """Render one panel per entry in `self._panels`.
 
         Heatmaps go side by side (shared date/time-of-day axes; date labels on
         the leftmost only). Time series stack top to bottom (shared time x-axis;
         x labels on the bottom panel only, independent y per panel). The
         ridgeline is single-variable and manages its own figure.
+
+        `preserve_view` keeps the current pan/zoom (axis limits) across the
+        rebuild — set by the "Update plot" button so tweaking a setting doesn't
+        snap the view back to the full data range. Selection changes render with
+        `preserve_view=False` so a newly picked variable shows in full.
         """
         if self._plot_type == HEXBIN:
             self._render_hexbin()
@@ -251,8 +439,20 @@ class PlottingTab(DiiveTab):
             # All panels toggled off -- show a blank canvas.
             self.canvas.new_axes(1)
             self.canvas.draw()
+            self.canvas.reset_history()
+            self._last_axes = []
             self._mark_selected()
             return
+
+        # Capture the current view to optionally restore it after the rebuild
+        # (matplotlib Axes stay readable until new_axes clears the figure).
+        prev_limits = None
+        if preserve_view and self._last_axes:
+            prev_limits = [(ax.get_xlim(), ax.get_ylim()) for ax in self._last_axes]
+
+        # Persist any pending edits to the active panel before drawing, so the
+        # per-panel snapshots are current.
+        self._capture_active()
 
         if self._plot_type in _HEATMAP_TYPES:
             axes = self.canvas.new_axes(
@@ -261,8 +461,26 @@ class PlottingTab(DiiveTab):
             axes = self.canvas.new_axes(
                 len(self._panels), orientation="vertical", sharex=True, sharey=False)
 
+        # Restore the pre-update view only when the panel layout is unchanged.
+        restore = prev_limits if (prev_limits and len(prev_limits) == len(axes)) else None
+
+        # Each panel draws with its own settings: load that panel's snapshot into
+        # the controls, draw, then apply its Axes options. This is the *full*
+        # view (data extent, honouring any explicit limits) — what Home resets to.
+        # `explicit` records which dims the user pinned, so the preserved zoom
+        # below doesn't override an explicit limit.
+        explicit: list[tuple[bool, bool]] = []
         for i, (ax, name) in enumerate(zip(axes, self._panels)):
+            if self._panel_settings.get(name) is not None:
+                self.settings.apply_state(self._panel_settings[name])
             self._draw_one(ax, name, i)
+            self._apply_axes([ax])
+            axo = self.settings.values().get("_axes") or {}
+            explicit.append((
+                axo.get("xmin") is not None or axo.get("xmax") is not None,
+                axo.get("ymin") is not None or axo.get("ymax") is not None))
+        if self._active_panel is not None and self._panel_settings.get(self._active_panel):
+            self.settings.apply_state(self._panel_settings[self._active_panel])
 
         if self._plot_type in _HEATMAP_TYPES:
             # y axis only on the leftmost panel.
@@ -275,8 +493,26 @@ class PlottingTab(DiiveTab):
                 ax.set_xlabel("")
                 ax.tick_params(labelbottom=False)
 
-        self._apply_axes(axes)
+        # Draw the full view and make it the toolbar's Home view.
         self.canvas.draw()
+        self.canvas.reset_history()
+
+        # Re-apply the preserved zoom on top (Update plot keeps the view), but
+        # never override a dim the user pinned with an explicit limit. Recorded
+        # as a second history entry so Home still returns to the full view.
+        if restore is not None:
+            changed = False
+            for i, ax in enumerate(axes):
+                if not explicit[i][0]:
+                    ax.set_xlim(restore[i][0])
+                if not explicit[i][1]:
+                    ax.set_ylim(restore[i][1])
+                changed = changed or not all(explicit[i])
+            if changed:
+                self.canvas.draw_idle()
+                self.canvas.push_view()
+
+        self._last_axes = list(axes)
         self._mark_selected()
 
     def _apply_axes(self, axes) -> None:
@@ -337,6 +573,7 @@ class PlottingTab(DiiveTab):
                 ax.text(0.5, 0.5, f"Cannot plot '{name}':\n{err}", ha="center",
                         va="center", wrap=True, transform=ax.transAxes)
         self.canvas.draw()
+        self.canvas.reset_history()
         self._mark_selected()
 
     def _render_hexbin(self) -> None:
@@ -381,6 +618,7 @@ class PlottingTab(DiiveTab):
             ax.text(0.5, 0.5, f"Cannot plot hexbin:\n{err}", ha="center",
                     va="center", wrap=True, transform=ax.transAxes)
         self.canvas.draw()
+        self.canvas.reset_history()
         self._mark_selected()
 
     def _render_scatter(self) -> None:
@@ -420,6 +658,7 @@ class PlottingTab(DiiveTab):
             ax.text(0.5, 0.5, f"Cannot plot scatter:\n{err}", ha="center",
                     va="center", wrap=True, transform=ax.transAxes)
         self.canvas.draw()
+        self.canvas.reset_history()
         self._mark_selected()
 
     def _draw_one(self, ax, name: str, index: int = 0) -> None:
@@ -467,17 +706,28 @@ class PlottingTab(DiiveTab):
                     cb_labelsize=opts["cb_labelsize"],
                 )
             elif self._plot_type == TIMESERIES:
+                # Explicit per-panel colour wins; "auto" falls back to the theme
+                # palette colour for this panel. The line colour also colours the
+                # markers (single library plot() call).
                 ts_colors = theme.manager.ts_colors
+                color = opts.get("color") or ts_colors[index % len(ts_colors)]
+                # Colour-by-variable: pass the second series; the library colours
+                # the line by its values (the single colour is then ignored).
+                cby = opts.get("color_by")
+                color_series = (self._df[cby] if cby and cby in self._df.columns
+                                else None)
                 # Chrome (title/labels/units/fonts) goes through the shared
                 # FormatStyle; the line-rendering args stay direct.
                 fmt = dict(opts["_format"])
                 if fmt.get("title") is None:
                     fmt["title"] = name  # default the title to the variable name
-                dv.plotting.TimeSeries(series, drop_gaps=opts["drop_gaps"]).plot(
+                dv.plotting.TimeSeries(
+                    series, drop_gaps=opts["drop_gaps"], color_series=color_series).plot(
                     ax=ax, format_style=dv.plotting.FormatStyle(**fmt),
-                    color=ts_colors[index % len(ts_colors)],
+                    color=color,
                     linewidth=opts["linewidth"], alpha=opts["alpha"],
                     marker=opts["marker"], markersize=opts["markersize"],
+                    cmap=opts["color_by_cmap"], color_label=cby,
                 )
             elif self._plot_type == DIELCYCLE:
                 ts_colors = theme.manager.ts_colors

@@ -27,6 +27,8 @@ from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
     QFrame,
@@ -37,6 +39,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QTextBrowser,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -108,10 +112,11 @@ class MdsGapFillingTab(DiiveTab):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
+        self.info_btn = self._build_info_button()
         self.copy_btn = CopyPythonButton(self._python_code)
         self.copy_btn.setToolTip(
             "Copy a runnable diive script reproducing this gap-filling run.")
-        outer.addLayout(build_titlebar(self.title, self.copy_btn))
+        outer.addLayout(build_titlebar(self.title, self.info_btn, self.copy_btn))
 
         self.run_btn = QPushButton("Run gap-filling")
         self.run_btn.setToolTip("Fill the target's gaps with MDS similarity matching.")
@@ -134,6 +139,122 @@ class MdsGapFillingTab(DiiveTab):
         return root
 
     _list_header = staticmethod(list_header)
+
+    # --- method info ---------------------------------------------------
+    def _build_info_button(self) -> QToolButton:
+        """A small circular 'i' button opening a detailed method explanation."""
+        btn = QToolButton()
+        btn.setText("i")
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setToolTip("How does MDS gap-filling work? (detailed explanation)")
+        btn.setFixedSize(22, 22)
+        accent = theme.manager.tokens.get("ACCENT", "#3A4D5C")
+        btn.setStyleSheet(
+            "QToolButton { border: none; border-radius: 11px; background: "
+            f"{accent}; color: white; font-style: italic; font-weight: 600; "
+            "font-size: 13px; }"
+            "QToolButton:hover { background: #2A3942; }"
+            + theme.manager.tooltip_qss())
+        btn.clicked.connect(self._show_method_info)
+        return btn
+
+    def _show_method_info(self) -> None:
+        dlg = QDialog(self.subtabs)
+        dlg.setWindowTitle("MDS gap-filling — method explanation")
+        dlg.resize(640, 640)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(0, 0, 0, 0)
+        browser = QTextBrowser()
+        browser.setOpenExternalLinks(True)
+        browser.setStyleSheet("QTextBrowser { border: none; padding: 16px 20px; }")
+        browser.setHtml(self._METHOD_INFO_HTML)
+        lay.addWidget(browser, stretch=1)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dlg.reject)
+        buttons.accepted.connect(dlg.accept)
+        bwrap = QHBoxLayout()
+        bwrap.setContentsMargins(12, 6, 12, 12)
+        bwrap.addStretch(1)
+        bwrap.addWidget(buttons)
+        lay.addLayout(bwrap)
+        dlg.exec()
+
+    #: Detailed, code-based explanation of the MDS algorithm (see
+    #: ``diive.gapfilling.mds`` and ``diive.gapfilling.similarity``).
+    _METHOD_INFO_HTML = """
+    <h2>Marginal Distribution Sampling (MDS)</h2>
+    <p>MDS is a statistical, <b>training-free</b> gap-filler. A missing flux value
+    is replaced by the <b>average measured flux during meteorologically similar
+    conditions</b> in a window of time around the gap. diive's implementation
+    (<code>dv.gapfilling.FluxMDS</code>) is a faithful port of the ONEFlux
+    marginal-distribution-sampling gap-filler (Reichstein et al., 2005), down to
+    its 6-stage expanding-window cascade, the &ge;2-sample acceptance rule and the
+    1/2/3 quality collapse.</p>
+
+    <h3>Drivers and similarity</h3>
+    <p>Three fixed meteorological drivers define "similar conditions":</p>
+    <ul>
+      <li><b>SWIN</b> — short-wave incoming radiation (W&nbsp;m<sup>-2</sup>)</li>
+      <li><b>TA</b> — air temperature (&deg;C)</li>
+      <li><b>VPD</b> — vapour pressure deficit (kPa)</li>
+    </ul>
+    <p>A complete record counts as similar to the gap when each driver is within
+    its tolerance band:</p>
+    <ul>
+      <li><b>SWIN tolerance</b> is radiation-dependent: it grows linearly from the
+      <i>low</i> value (default 20&nbsp;W&nbsp;m<sup>-2</sup>, used in dim light) to
+      the <i>high</i> value (default 50) as radiation increases — tighter matching
+      at low light where the flux changes fastest.</li>
+      <li><b>TA tolerance</b> — fixed band (default &plusmn;2.5&nbsp;&deg;C).</li>
+      <li><b>VPD tolerance</b> — fixed band (default &plusmn;0.5&nbsp;kPa). If your
+      VPD column is in hPa, untick "VPD driver is in kPa" and it is converted
+      internally so the kPa tolerance still applies.</li>
+    </ul>
+
+    <h3>The 6-stage cascade</h3>
+    <p>Each gap is filled by the <b>first stage that succeeds</b> (first success
+    wins). The window starts narrow and expands; weaker similarity (fewer drivers,
+    longer windows) is only used once the stronger options are exhausted. Each
+    stage needs at least <b>"Min samples for mean"</b> matches (default 2, the
+    ONEFlux rule) to accept a fill:</p>
+    <ol>
+      <li><b>All drivers</b> (SWIN+TA+VPD), windows <b>14</b> &amp; <b>28</b> days &rarr; method 1</li>
+      <li><b>SWIN only</b>, window <b>14</b> days &rarr; method 2</li>
+      <li><b>Diurnal cycle</b> (same time of day &plusmn;1&nbsp;h), windows <b>1, 3, 5</b> days &rarr; method 3</li>
+      <li><b>All drivers</b>, windows <b>42 … 154</b> days &rarr; method 1</li>
+      <li><b>SWIN only</b>, windows <b>28 … 154</b> days &rarr; method 2</li>
+      <li><b>Diurnal cycle</b> &plusmn;1&nbsp;h, windows <b>7 … 427</b> days &rarr; method 3</li>
+    </ol>
+    <p>Each accepted fill is the mean of the similar measured fluxes in the
+    window; the spread of those values (N-1 standard deviation) and the count are
+    recorded too. Optionally the <b>symmetric mean (Vekuri 2023)</b> can be used
+    for the SWIN-driven methods, which splits the similar samples by radiation
+    above/below the target and averages the two halves to reduce a known bias.</p>
+
+    <h3>Quality of each fill</h3>
+    <p>Every filled value carries a quality. The faithful ONEFlux quality is
+    collapsed to <b>1 / 2 / 3</b> (best to worst) from the method and window:
+    closer matches with the full driver set in short windows are quality&nbsp;1;
+    SWIN-only or long-window fills degrade to 2, then 3. diive additionally stores
+    a <b>granular flag</b> in <code>FLAG_…_gfMDS_ISFILLED</code> that encodes
+    <code>method&nbsp;&times;&nbsp;1000&nbsp;+&nbsp;window&nbsp;(days)</code> — so
+    <code>1014</code> means "all drivers, 14-day window", <code>2014</code> means
+    "SWIN only, 14-day window", <code>3001</code> means "diurnal cycle, 1-day
+    window". <code>0</code> = measured (not filled). The Results page breaks the
+    fills down per quality level.</p>
+
+    <h3>Output</h3>
+    <p>"Add results to dataset" appends two columns: the gap-filled series
+    (<code>…_gfMDS</code>, observed values kept, gaps filled) and its granular
+    flag column. "Copy Python" reproduces the exact run as a runnable diive
+    script.</p>
+
+    <p style="color:#6B7780;"><i>Reference: Reichstein et al. (2005),
+    <a href="https://doi.org/10.1111/j.1365-2486.2005.001002.x">Global Change
+    Biology 11(9), 1424-1439</a>. Symmetric mean: Vekuri et al. (2023),
+    <a href="https://doi.org/10.1038/s41598-023-28827-2">Scientific Reports 13,
+    1720</a>.</i></p>
+    """
 
     # --- pages ---------------------------------------------------------
     def _build_model_page(self) -> QWidget:

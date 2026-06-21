@@ -143,19 +143,26 @@ Selecting variables works the same way across the per-variable types:
     just switches it.
 - **Ctrl + click** a shown variable again to remove its panel.
 - Use the small toolbar (bottom-right of the plot) to pan, zoom, and save the
-  figure. Zooming one panel zooms them all. Set **Save DPI** (next to the toolbar)
-  before saving for a higher-resolution image than the screen.
+  figure. Zooming one panel zooms them all; the **Home** button resets to the full
+  view. Set **Save DPI** (next to the toolbar) before saving for a
+  higher-resolution image than the screen.
 
 **Settings (middle column).** Between the variable list and the plot is a panel of
 controls. Adjust as many as you like, then click **Update plot** (below the
 controls) to apply them all at once: the plot does not change while you are still
-editing. Clicking a *variable* in the list, by contrast, updates the plot
-immediately.
+editing, and applying the changes **keeps your current pan/zoom** (it does not snap
+back to the full view). Clicking a *variable* in the list, by contrast, updates the
+plot immediately and shows it in full.
+
+**Per-subplot settings.** When you compare several variables in stacked/side-by-side
+panels, a row of **panel pills** appears above the settings (one per panel). Click a
+pill to edit *that* panel's settings on their own — line width, colour, title, axes,
+everything is independent per subplot. A newly added panel inherits the active
+panel's look but is given a distinct line colour automatically.
 
 **Axes** (time series, scatter, cumulative year; Y-only for the diel cycle): set
 **X/Y min/max** (blank means automatic), **log** scaling, **invert Y**, and add a
-**grid**. Line *colours* for time series come from **Settings ▸ Appearance**, so a
-variable keeps the same colour everywhere.
+**grid**. An explicit limit you set here always wins over the kept pan/zoom.
 
 ### Heatmap date/time
 
@@ -176,6 +183,17 @@ The variable as a line over time. Ctrl+click more variables to stack them in ext
 panels (shared time axis), each its own colour. Settings: title, line width,
 opacity, point markers (and marker size), whether to connect across gaps, and the
 axis labels and units, plus the shared **Axes** controls.
+
+**Line colour.** Pick a colour for the line (and its markers): type a hex code or
+matplotlib colour name, click one of the preset swatches, or use **Pick…** for a
+colour dialog. `auto` (the default) uses the theme palette colour. With per-subplot
+settings, each panel keeps its own colour.
+
+**Colour by another variable.** Instead of a single colour, colour the line by a
+second variable's value via a colormap — e.g. a flux line coloured by air
+temperature. Choose the variable in the **Color by** dropdown (or **drag** it from
+the variable list onto the field) and pick the **Color-by map** colormap; a colorbar
+is added. `(none)` returns to the single colour above.
 
 ### Diel cycle
 
