@@ -788,6 +788,18 @@ faithful method ports, each on its own tab:
 - **Daytime partitioning (ONEFlux).** The FLUXNET2015 light-response method (Lasslop
   et al. 2010, ONEFlux). Columns end in `_DT_OF`.
 
+The two families get at the split differently. The **nighttime** methods read
+respiration straight from nighttime NEE, when photosynthesis is switched off, fit its
+temperature response, extrapolate that response into the daytime, and recover GPP as
+the leftover. The **daytime** methods fit a light-response curve to daytime NEE and
+separate GPP and RECO together, so they also draw on VPD and radiation. ONEFlux and
+REddyProc are two established reference implementations of these algorithms. Running
+more than one and comparing is a common sanity check, which is why each writes its own
+column suffix and all four can sit in the dataset side by side.
+
+A note on signs: NEE is negative when the ecosystem takes up carbon. GPP and RECO come
+back as positive fluxes, related by NEE = RECO - GPP.
+
 On each tab, pick the **input columns** (auto-filled from the data, with a green ✓ /
 red ✗ marker showing whether the chosen column exists):
 
@@ -873,6 +885,52 @@ directly measured rather than inferred.
 > Tolerances and window sizes follow the ONEFlux reference and are not adjustable.
 > The cumulative panel and the `{flux}_RANDUNC` column are also available from the
 > library via `dv.flux.RandomUncertaintyPAS20`.
+
+### Joint uncertainty (PAS20)
+
+Combine the **random measurement uncertainty** (above) with the **filtering
+uncertainty** — the spread you get from the different USTAR-threshold scenarios — into
+one *joint* uncertainty per record. This is the ONEFlux `compute_join` calculation
+(Pastorello et al. 2020): the two error sources are added in quadrature,
+
+```
+JOINTUNC = √( RANDUNC² + ((scenario_upper − scenario_lower) / divisor)² )
+```
+
+so the joint uncertainty is always at least as large as the random part alone. Run the
+**Random uncertainty (PAS20)** tab first to produce the `{flux}_RANDUNC` column this
+tab needs.
+
+Set the **Scenario percentiles** — this picks both the divisor and which scenario
+columns are auto-selected:
+
+- **NEE — USTAR scenarios (16th / 84th ÷ 2).** For NEE, the lower/upper scenarios are
+  the 16th and 84th USTAR-threshold percentile fluxes (e.g. `NEE_CUT_16` / `NEE_CUT_84`).
+  These bracket ±1σ, so their range is divided by **2**.
+- **Energy flux LE/H (25th / 75th ÷ IQR 1.349).** For the energy fluxes, the scenarios
+  are the 25th/75th energy-balance-correction percentiles — the interquartile range,
+  which is **1.349** standard deviations wide.
+
+Then pick the **input columns** (auto-filled, with ✓ / ✗ availability markers): the
+random-uncertainty column, the lower and upper scenario fluxes (biased to match the
+random-uncertainty column's flux), and the gap-filled flux (the central line the band
+brackets). Click **Run joint uncertainty**. The hero band reports the **mean joint**
+uncertainty alongside its **random** and **scenario** components and the final
+**cumulative ±σ**. The preview shows three panels:
+
+- **top** — the flux with its ±σ joint band (daily means);
+- **bottom left** — the **component decomposition**: the random, scenario and joint
+  uncertainties side by side, so you can see which source dominates;
+- **bottom right** — the cumulative flux with its propagated joint bounds. The random
+  part is independent (quadrature, √Σσ²) while the scenario (threshold) choice is
+  *fully correlated* across the record — the same threshold applies to every half-hour
+  — so its cumulative term is the running spread of the cumulative scenario sums; the
+  two are then combined in quadrature.
+
+**Add result to dataset** appends a single `{flux}_JOINTUNC` column.
+
+> The same calculation is available from the library via
+> `dv.flux.JointUncertaintyPAS20`.
 
 ---
 
@@ -997,8 +1055,9 @@ temperature, and VPD.
 Pick a **target** (flux) on the left and the **three driver columns** (SWIN / TA /
 VPD combos, auto-seeded by name with ✓ / ✗ markers; gap-filled `_f` versions are
 preferred). Set the **similarity tolerances** (SWIN low/high, TA in °C, VPD in kPa)
-and the minimum number of similar records to average. Driver units matter: TA must
-be °C and VPD kPa (the library warns on suspicious medians).
+and the minimum number of similar records to average. Driver units matter: TA must be
+in °C and VPD in kPa. diive does not check the units, so a column in the wrong unit
+produces a wrong fill with no warning.
 
 A **progress bar** tracks the quality levels as the fill runs (higher level = looser
 meteorological match). The **Results** sub-tab shows the configuration, in-sample
