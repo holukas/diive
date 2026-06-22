@@ -242,6 +242,7 @@ class ScopPhysics:
         self.ts_spar = None
 
     def get_results(self) -> pd.DataFrame:
+        """Return the self-heating physics results DataFrame."""
         frame = {
             self.cols.fct_unsc_gf: self.fct_unsc_gf,
             self.cols.fct_unsc: self.fct_unsc,
@@ -265,6 +266,7 @@ class ScopPhysics:
 
     def run(self, correction_method_base: Literal["JAR09", "BUR06", "BUR08"] = "JAR09",
             gapfill: bool = True):
+        """Compute the self-heating correction (Burba/Jarvi physics)."""
         if correction_method_base == "BUR06":
             self.ts = self._estimate_surface_temp_bur06()
             self.fct_unsc = self._flux_correction_term_unscaled_jar09_bur06(ts=self.ts)
@@ -1122,6 +1124,7 @@ class ScopOptimizer:
         _console.print("\n")
 
     def get(self) -> pd.DataFrame:
+        """Return the fitted scaling-factors DataFrame."""
         return self.scaling_factors_df
 
 
@@ -1197,11 +1200,13 @@ class ScopApplicator:
             self.df['Lv'] = self.latent_heat_vaporization
 
     def get_results(self) -> pd.DataFrame:
+        """Return the corrected results DataFrame."""
         return self.df
 
     def run(self):
 
         # Assign scaling factors depending on the class var (e.g. USTAR)
+        """Apply the self-heating correction to the data."""
         self.df = self._assign_scaling_factors()
 
         # Calculate final flux correction term

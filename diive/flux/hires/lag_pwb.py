@@ -2212,6 +2212,7 @@ class PwbBatchDetection:
             strict: bool = False,
             file_date_format: str | None = None,
     ):
+        """Set up batch PWB time-lag detection. See the class docstring."""
         if usecols is None or col_names is None:
             raise ValueError("usecols and col_names must both be provided.")
         if len(usecols) != len(col_names):

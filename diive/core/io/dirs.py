@@ -1,3 +1,4 @@
+"""Directory helpers (verify/create output directories)."""
 from pathlib import Path
 from typing import Union
 

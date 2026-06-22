@@ -27,6 +27,7 @@ class RidgeLinePlot:
     """
 
     def __init__(self, series: pd.Series):
+        """Set up a ridgeline plot for *series* (one stacked density per group/year). See :meth:`plot`."""
         self.series = series
 
         self.xlim = None

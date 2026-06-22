@@ -56,6 +56,7 @@ class WaterfallPlot:
                  resample: str = 'D',
                  agg: str = 'sum',
                  uptake_is_negative: bool = True):
+        """Aggregate the series and compute the running totals. See the class docstring for parameters."""
         self.series_units = series_units
         self.varname = series.name
         self.uptake_is_negative = uptake_is_negative

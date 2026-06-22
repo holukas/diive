@@ -358,12 +358,14 @@ class InfoScreen(ModalScreen):
     BINDINGS = [('escape', 'close', 'Close'), ('q', 'close', 'Close')]
 
     def compose(self) -> ComposeResult:
+        """Build the info-screen widgets."""
         with Vertical(id='dialog'):
             with VerticalScroll(id='infoscroll'):
                 yield Static(_INFO_TEXT, id='infotext')
             yield Button('Close', id='close', variant='primary')
 
     def action_close(self) -> None:
+        """Close the info screen."""
         self.dismiss()
 
     @on(Button.Pressed, '#close')
@@ -378,11 +380,13 @@ class ColumnPickerScreen(ModalScreen):
     BINDINGS = [('escape', 'cancel', 'Cancel')]
 
     def __init__(self, title: str, columns: list):
+        """Set up the column-picker modal with a title and the available columns."""
         super().__init__()
         self._title = title
         self._columns = columns
 
     def compose(self) -> ComposeResult:
+        """Build the column-picker widgets."""
         with Vertical(id='colpick'):
             yield Static(f'[b #7aa2f7]{self._title}[/]\n'
                          'Select a column (Enter), or Esc to cancel:')
@@ -394,9 +398,11 @@ class ColumnPickerScreen(ModalScreen):
                 yield Button('Cancel', id='colcancel')
 
     def on_mount(self) -> None:
+        """Focus the option list when the screen is mounted."""
         self.query_one('#collist', OptionList).focus()
 
     def action_cancel(self) -> None:
+        """Dismiss the picker without choosing a column."""
         self.dismiss(None)
 
     @on(Button.Pressed, '#colcancel')
@@ -414,10 +420,12 @@ class LoadScreen(ModalScreen):
     BINDINGS = [('escape', 'cancel', 'Cancel')]
 
     def __init__(self, default_path: str = ''):
+        """Set up the settings-load modal with an optional default path."""
         super().__init__()
         self._default_path = default_path
 
     def compose(self) -> ComposeResult:
+        """Build the load-screen widgets."""
         with Vertical(id='dialog'):
             yield Static('[b #7aa2f7]Load settings YAML[/]\n'
                          'Enter the path to a settings .yaml file:', id='loadinfo')
@@ -428,6 +436,7 @@ class LoadScreen(ModalScreen):
                 yield Button('Cancel', id='loadcancel')
 
     def action_cancel(self) -> None:
+        """Dismiss the load screen without loading."""
         self.dismiss(None)
 
     @on(Button.Pressed, '#loadcancel')
@@ -881,6 +890,7 @@ class DetectRemoveTUI(App):
                 ('i', 'info', 'Info'), ('q', 'quit', 'Quit')]
 
     def __init__(self, demo: bool = False):
+        """Set up the detect-and-remove TUI (demo mode needs no data)."""
         super().__init__()
         self.demo = demo
         self._phase = None  # tracks detect->remove handoff for the bar
@@ -892,6 +902,7 @@ class DetectRemoveTUI(App):
 
     # ---- layout: title / [settings | console] / footer ----------------
     def compose(self) -> ComposeResult:
+        """Build the main application widgets."""
         yield Static('diive · PWB time-lag detect + remove', id='title')
         with Horizontal(id='body'):
             with VerticalScroll(id='settings'):
@@ -1188,6 +1199,7 @@ class DetectRemoveTUI(App):
 
     # ---- Check (preflight) ---------------------------------------------
     def action_check(self) -> None:
+        """Run the preflight check, unless a run is already in progress."""
         if not self._busy:
             self._start_check()
 
@@ -1197,6 +1209,7 @@ class DetectRemoveTUI(App):
 
     # ---- Stop ----------------------------------------------------------
     def action_stop(self) -> None:
+        """Cancel the running pipeline (finishing in-flight chunks)."""
         if self._busy and self._cancel_event is not None:
             self._cancel_event.set()
             self.query_one('#stop', Button).disabled = True
@@ -1208,6 +1221,7 @@ class DetectRemoveTUI(App):
 
     # ---- Open output folder --------------------------------------------
     def action_open(self) -> None:
+        """Open the last output folder in the system file manager."""
         d = self._last_output_dir
         if not d or not Path(d).exists():
             self._status('no output folder yet — run first', _DIM)
@@ -1223,6 +1237,7 @@ class DetectRemoveTUI(App):
         self.action_open()
 
     def on_mount(self) -> None:
+        """Initialize the UI and restore saved settings when the app is mounted."""
         # Worker-row pool: all hidden until a worker becomes active.
         self._wfree: list[int] = list(range(_MAX_WORKER_ROWS))
         self._wpid: dict[int, int] = {}    # worker pid -> row index
@@ -1266,18 +1281,23 @@ class DetectRemoveTUI(App):
 
     # ---- actions / buttons ---------------------------------------------
     def action_quit(self) -> None:
+        """Quit the application."""
         self.exit()
 
     def action_save(self) -> None:
+        """Save the current settings to disk."""
         self._save_settings(announce=True)
 
     def action_run(self) -> None:
+        """Start the detect-and-remove run."""
         self._start()
 
     def action_info(self) -> None:
+        """Show the info/help screen."""
         self.push_screen(InfoScreen())
 
     def action_reset(self) -> None:
+        """Reset the PWB & chunking fields to their defaults."""
         self._reset_params()
 
     @on(Button.Pressed, '#reset')
@@ -1299,6 +1319,7 @@ class DetectRemoveTUI(App):
         self._save_settings(announce=True)
 
     def action_load(self) -> None:
+        """Open the settings-load screen."""
         self.push_screen(LoadScreen(str(_SETTINGS_PATH)), self._on_loaded)
 
     @on(Button.Pressed, '#load')
@@ -1662,6 +1683,7 @@ class DetectRemoveTUI(App):
             return
 
     def ui_update(self, phase: str, done: int, total: int, line) -> None:
+        """Update the progress bar and worker rows for the current pipeline phase."""
         try:
             bar = self.query_one('#bar', ProgressBar)
         except NoMatches:

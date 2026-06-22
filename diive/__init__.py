@@ -1,3 +1,12 @@
+"""
+diive: time series processing for ecosystem research
+====================================================
+
+A Python library for eddy covariance and meteorological time series: gap-filling,
+flux processing, outlier detection, corrections, QA/QC, analysis and plotting.
+
+https://github.com/holukas/diive
+"""
 from importlib.metadata import PackageNotFoundError, version
 
 from diive import analysis

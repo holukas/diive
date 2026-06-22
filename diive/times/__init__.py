@@ -1,3 +1,4 @@
+"""Public namespace: dv.times (timestamp handling)."""
 from diive.core.times.resampling import resample_to_daily_agg
 from diive.core.times.resampling import resample_to_monthly_agg_matrix
 from diive.core.times.times import DetectFrequency

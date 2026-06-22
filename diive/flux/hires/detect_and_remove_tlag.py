@@ -1755,6 +1755,7 @@ class PerFilePipeline:
             uws: float | None = None,
             per_gas_lag: dict | None = None,
     ):
+        """Set up the per-file detect-and-remove pipeline. See the class docstring."""
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
         self.col_u = col_u

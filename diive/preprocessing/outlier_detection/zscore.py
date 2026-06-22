@@ -245,6 +245,8 @@ class zScore(FlagBase):
 
 @ConsoleOutputDecorator()
 class zScoreRolling(FlagBase):
+    """Flag outliers by the z-score within a rolling window. See :meth:`__init__`."""
+
     flagid = 'OUTLIER_ZSCOREROLLING'
 
     def __init__(self,

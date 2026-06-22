@@ -19,8 +19,10 @@ from diive.core.times.times import DetectFrequency
 
 
 class FlagBase:
+    """Base class for flag/outlier detectors: holds the series and exposes the flag and filtered result."""
 
     def __init__(self, series: Series, flagid: str, idstr: str = None, verbose: bool = True):
+        """Store the series and flag identifiers; ensure the index has a frequency."""
         self.series = series
         self._flagid = flagid
         self._idstr = validate_id_string(idstr=idstr)
@@ -56,6 +58,7 @@ class FlagBase:
         return self.filteredseries
 
     def get_flag(self):
+        """Return the overall flag Series."""
         return self.overall_flag
 
     @property
@@ -145,6 +148,7 @@ class FlagBase:
         return flagname
 
     def generate_iteration_filtered_variable_name(self, iteration: int):
+        """Build the filtered-series column name for a given detection *iteration*."""
         filteredname = f"{self.series.name}_FILTERED-AFTER-ITER{iteration}"
         return filteredname
 

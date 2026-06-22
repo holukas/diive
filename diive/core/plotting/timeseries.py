@@ -1,3 +1,11 @@
+"""
+PLOTTING: TIME SERIES
+=====================
+
+Time series plots with optional colour-by-value and interactive Bokeh output.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 import os
 import tempfile
 import matplotlib.dates as mdates

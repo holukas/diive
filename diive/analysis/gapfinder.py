@@ -412,6 +412,7 @@ class GapStats:
     def __init__(self,
                  series: Series,
                  long_gap_records: int = 48):
+        """Compute gap statistics for a series. See the class docstring for parameters."""
         self._series = series.copy()
         self._series_col = series.name
         self.long_gap_records = long_gap_records

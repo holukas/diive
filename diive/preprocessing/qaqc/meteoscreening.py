@@ -128,6 +128,7 @@ class StepwiseMeteoScreeningDb:
             site_lon: float,
             utc_offset: int
     ):
+        """Set up stepwise meteo screening. See the class docstring."""
         self.site = site
         self._data_detailed = data_detailed.copy()
         # self.measurement = measurement
@@ -227,10 +228,12 @@ class StepwiseMeteoScreeningDb:
             self.outlier_detection[field].showplot_cleaned(interactive=interactive)
 
     def showplot_outlier_detection_qcf_heatmaps(self, **kwargs):
+        """Show the QCF outlier-detection heatmaps."""
         for field in self.fields:
             self.outlier_detection_qcf[field].showplot_qcf_heatmaps(**kwargs)
 
     def showplot_outlier_detection_qcf_timeseries(self, **kwargs):
+        """Show the QCF outlier-detection time series."""
         for field in self.fields:
             self.outlier_detection_qcf[field].showplot_qcf_timeseries(**kwargs)
 
@@ -306,14 +309,17 @@ class StepwiseMeteoScreeningDb:
             p.plot() if not interactive else p.plot_interactive()
 
     def report_outlier_detection_qcf_evolution(self):
+        """Print the QCF flag-evolution report."""
         for field in self.fields:
             self.outlier_detection_qcf[field].report_qcf_evolution()
 
     def report_outlier_detection_qcf_flags(self):
+        """Print the QCF flags report."""
         for field in self.fields:
             self.outlier_detection_qcf[field].report_qcf_flags()
 
     def report_outlier_detection_qcf_series(self):
+        """Print the QCF series report."""
         for field in self.fields:
             self.outlier_detection_qcf[field].report_qcf_series()
 
@@ -385,17 +391,8 @@ class StepwiseMeteoScreeningDb:
         separate_daytime_nighttime : bool, default False
             If False, apply single threshold across all records (global mode).
             If True, apply separate thresholds to daytime and nighttime records.
-            Requires lat, lon, utc_offset when True.
-        lat : float, default None
-            Site latitude in decimal degrees (-90 to 90). Required only when
-            separate_daytime_nighttime=True. Used to compute solar elevation and determine
-            day/night boundaries.
-        lon : float, default None
-            Site longitude in decimal degrees (-180 to 180). Required only when
-            separate_daytime_nighttime=True.
-        utc_offset : int, default None
-            UTC offset in hours (e.g., 1 for UTC+1). Required only when
-            separate_daytime_nighttime=True. Used to align solar time with local time.
+            Day/night boundaries are derived from the site location (``site_lat``,
+            ``site_lon``, ``utc_offset``) supplied when the class was initialized.
         showplot : bool, default False
             If True, display outlier visualization.
         plottitle : str, default None
@@ -638,6 +635,7 @@ class StepwiseMeteoScreeningDb:
                  agg: Literal['mean', 'sum'] = 'mean',
                  mincounts_perc: float = .25):
 
+        """Resample the screened series to the target frequency."""
         for field in self.fields:
 
             # Resample to 30MIN
@@ -663,6 +661,7 @@ class StepwiseMeteoScreeningDb:
                                    daytime_accept_qcf_below: int = 2,
                                    nighttime_accept_qcf_below: int = 2) -> FlagQCF:
 
+        """Finalize outlier detection and aggregate the QCF flag."""
         for field in self.fields:
             # Detect new columns
             newcols = frames.detect_new_columns(df=self.outlier_detection[field].flags,

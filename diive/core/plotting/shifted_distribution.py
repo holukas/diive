@@ -54,6 +54,8 @@ class ShiftedDistributionPlot:
         zone_labels: list = None,
         zone_colors: list = None,
     ):
+        """Fit the reference/comparison KDEs and zone breakpoints. See the class docstring
+        for parameters (``zone_labels``/``zone_colors`` here are deprecated — pass them to :meth:`plot`)."""
         self.series = series
         self.ref_period = ref_period
         self.comp_period = comp_period
@@ -97,9 +99,11 @@ class ShiftedDistributionPlot:
         return np.exp(log_dens)
 
     def get_fig(self):
+        """Return the matplotlib Figure (available after :meth:`plot`)."""
         return self.fig
 
     def get_ax(self):
+        """Return the matplotlib Axes (available after :meth:`plot`)."""
         return self.ax
 
     def plot(

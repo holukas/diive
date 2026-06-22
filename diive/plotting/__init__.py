@@ -1,3 +1,4 @@
+"""Public namespace: dv.plotting (visualization classes)."""
 from diive.core.plotting.bar import LongtermAnomaliesYear
 from diive.core.plotting.styles.format import FormatStyle
 from diive.core.plotting.cumulative import Cumulative

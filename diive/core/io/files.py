@@ -1,3 +1,4 @@
+"""Read and write data files (CSV, parquet, ...)."""
 import os
 import pickle
 import time
@@ -54,6 +55,7 @@ def to_diive_format(data: DataFrame, timestamp_name: str = None) -> DataFrame:
 
 
 def set_outpath(outpath: str or None, filename: str, fileextension: str):
+    """Build the output file path from *outpath*, *filename* and *fileextension*."""
     if outpath:
         outpath = Path(outpath)
         filepath = Path(outpath) / f"{filename}.{fileextension}"

@@ -55,6 +55,7 @@ class FlagMultipleConstantUstarThresholds:
 
     def __init__(self, series, ustar, thresholds, threshold_labels,
                  showplot: bool = True, verbose: bool = True, idstr: str = None):
+        """Set up flagging for several constant USTAR thresholds. See the class docstring for parameters."""
         self.series = series
         self.ustar = ustar
         self.thresholds = thresholds
@@ -73,9 +74,11 @@ class FlagMultipleConstantUstarThresholds:
         return self._results
 
     def get_results(self) -> DataFrame:
+        """Return the results DataFrame (flux, USTAR and one flag column per threshold)."""
         return self.results
 
     def calc(self):
+        """Compute one USTAR threshold flag per scenario and append them to the results."""
         for ix, threshold in enumerate(self.thresholds):
             idstr = f"{self.idstr}_{self.threshold_labels[ix]}" if self.idstr else f"{self.threshold_labels[ix]}"
             ust = FlagSingleConstantUstarThreshold(
@@ -93,6 +96,8 @@ class FlagMultipleConstantUstarThresholds:
 
 @ConsoleOutputDecorator()
 class FlagSingleConstantUstarThreshold(FlagBase):
+    """Flag records below a single constant USTAR threshold. See :meth:`__init__`."""
+
     flagid = 'USTAR'
 
     def __init__(self,
@@ -102,7 +107,16 @@ class FlagSingleConstantUstarThreshold(FlagBase):
                  idstr: str = None,
                  showplot: bool = False,
                  verbose: bool = False):
-        """xxx"""
+        """Flag records below a single constant USTAR threshold.
+
+        Args:
+            series: Flux series to flag.
+            ustar: Friction velocity (USTAR) series aligned to *series*.
+            threshold: Records with ``ustar < threshold`` are flagged as rejected.
+            idstr: Optional identifier string appended to the flag column name.
+            showplot: If True, show the default rejected-values plot.
+            verbose: If True, print detection statistics.
+        """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.ustar = ustar
         self.threshold = threshold
@@ -115,13 +129,7 @@ class FlagSingleConstantUstarThreshold(FlagBase):
         #     self.fig, self.ax, self.ax2 = self._plot_init()
 
     def calc(self):
-        """Calculate overall flag, based on individual flags from multiple iterations.
-
-        Args:
-            repeat: If *True*, the outlier detection is repeated until all
-                outliers are removed.
-
-        """
+        """Calculate the overall flag (single pass; USTAR thresholding does not iterate)."""
 
         self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=False)
         if self.showplot:
@@ -170,6 +178,7 @@ class FlagMultipleVariableUstarThresholds:
 
     def __init__(self, series, ustar, threshold_series: dict,
                  showplot: bool = True, verbose: bool = True, idstr: str = None):
+        """Set up flagging for per-record (variable) USTAR thresholds. See the class docstring."""
         self.series = series
         self.ustar = ustar
         self.threshold_series = threshold_series
@@ -180,14 +189,17 @@ class FlagMultipleVariableUstarThresholds:
 
     @property
     def results(self) -> DataFrame:
+        """Return the results DataFrame (flux, USTAR and one flag column per scenario)."""
         if not isinstance(self._results, DataFrame):
             raise Exception("No USTAR flags available.")
         return self._results
 
     def get_results(self) -> DataFrame:
+        """Return the results DataFrame (flux, USTAR and one flag column per scenario)."""
         return self.results
 
     def calc(self):
+        """Compute one USTAR flag per scenario from its per-record threshold and append them."""
         for label, thr in self.threshold_series.items():
             idstr = f"{self.idstr}_{label}" if self.idstr else f"{label}"
             ust = FlagSingleConstantUstarThreshold(
@@ -225,6 +237,7 @@ class UstarThresholdConstantScenarios:
     """
 
     def __init__(self, series: Series, ustar: Series, swinpot: Series):
+        """Set up constant-threshold USTAR scenario testing. See the class docstring."""
         self.series = series
         self.ustar = ustar
         self.swinpot = swinpot
@@ -414,6 +427,7 @@ class UstarDetectionMPT:
             lat: float = None,
             lon: float = None
     ):
+        """Set up moving-point-threshold USTAR detection. See the class docstring for parameters."""
         self.df = df.copy()
         self.nee_col = nee_col
         self.ta_col = ta_col
@@ -478,6 +492,7 @@ class UstarDetectionMPT:
         return results_df
 
     def run(self):
+        """Run the bootstrap moving-point USTAR threshold detection across all seasons and years."""
 
         # Collect essential results from all bts runs
         self.results_seasons_df = self.init_results_seasons_df()  # Reset df
@@ -627,6 +642,7 @@ class UstarDetectionMPT:
         return results_years_df
 
     def collect_yearly_thresholds(self, bts_run):
+        """Collect the per-year USTAR thresholds detected in one bootstrap run."""
         years = self.daynight_ustar_fullres_df.index.year.unique()
         if bts_run == 0:  # TODO hier weiter
             yearly_thresholds_df = pd.DataFrame(columns=years)  # Reset df
@@ -849,6 +865,7 @@ class UstarDetectionMPT:
 
     def ustar_subclass_info(self, cur_season, cur_class, cur_subclass, cur_flux, cur_ustar, cur_following_mean,
                             nxt_following_mean, nxt_flux, cur_flux_perc, nxt_flux_perc):
+        """Log diagnostic info for the current TA-class / USTAR-subclass during threshold search."""
         if cur_following_mean == '-no-more-subclasses-':
             cur_following_mean = cur_flux_perc = nxt_following_mean = nxt_flux_perc = nxt_flux = -9999
 

@@ -102,12 +102,14 @@ class ProvenanceEntry:
         return text
 
     def to_dict(self) -> dict:
+        """Serialize this provenance entry to a plain dict."""
         return {"operation": self.operation, "params": self.params,
                 "parent": self.parent, "timestamp": self.timestamp,
                 "source": self.source}
 
     @classmethod
     def from_dict(cls, d: dict) -> "ProvenanceEntry":
+        """Build a ProvenanceEntry from a serialized dict."""
         return cls(operation=d.get("operation", ""), params=dict(d.get("params") or {}),
                    parent=d.get("parent"), timestamp=d.get("timestamp"),
                    source=d.get("source", FUNCTION))
@@ -132,6 +134,7 @@ class VariableMetadata:
 
     @property
     def tags(self) -> set[str]:
+        """All tags on this variable as a set."""
         return set(self._tag_sources)
 
     def add_tag(self, tag: str, *, source: str = FUNCTION) -> None:
@@ -142,9 +145,11 @@ class VariableMetadata:
         self._tag_sources[tag] = source
 
     def remove_tag(self, tag: str) -> None:
+        """Remove *tag* if present (no-op otherwise)."""
         self._tag_sources.pop(tag, None)
 
     def is_user_tag(self, tag: str) -> bool:
+        """Return True if *tag* was set by the user (vs. auto-tagging)."""
         return self._tag_sources.get(tag) == USER
 
     def user_tags(self) -> list[str]:
@@ -184,6 +189,7 @@ class MetadataStore:
     """Dict-like collection of :class:`VariableMetadata`, keyed by variable name."""
 
     def __init__(self) -> None:
+        """Create an empty metadata store."""
         self._items: dict[str, VariableMetadata] = {}
 
     def __contains__(self, name: str) -> bool:
@@ -285,9 +291,11 @@ class MetadataStore:
         return {n: md.description for n, md in self._items.items() if md.description}
 
     def add_user_tag(self, name: str, tag: str) -> None:
+        """Add a user-set *tag* to variable *name*."""
         self.get(name).add_tag(tag, source=USER)
 
     def remove_user_tag(self, name: str, tag: str) -> None:
+        """Remove user *tag* from variable *name* (no-op if absent)."""
         md = self._items.get(str(name))
         if md is not None:
             md.remove_tag(tag)

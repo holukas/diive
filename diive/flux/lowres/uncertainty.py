@@ -401,6 +401,7 @@ class RandomUncertaintyPAS20:
         plt.show()
 
     def showplot_random_uncertainty(self):
+        """Plot the random-uncertainty results."""
         fig = plt.figure(facecolor='white', figsize=(18, 9))
         fig.suptitle("Random Uncertainties - 4-Method Hierarchical Analysis",
                      fontsize=theme.FIGHEADER_FONTSIZE, y=0.98)

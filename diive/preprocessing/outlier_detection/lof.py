@@ -110,6 +110,8 @@ def suggest_lof_params(series: Series) -> dict:
 
 @ConsoleOutputDecorator()
 class LocalOutlierFactor(FlagBase):
+    """Flag outliers using the scikit-learn Local Outlier Factor. See :meth:`__init__`."""
+
     flagid = "OUTLIER_LOF"
 
     def __init__(self,

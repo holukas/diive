@@ -140,6 +140,7 @@ class OptimizeParamsTS:
         return self._cv_n_splits
 
     def optimize(self):
+        """Run the hyperparameter search and store the best parameters and scores."""
 
         y, X, X_names, timestamp = \
             fr.convert_to_arrays(df=self.model_df,

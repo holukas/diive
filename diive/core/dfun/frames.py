@@ -339,6 +339,7 @@ def df_unique_values(df):
 
 
 def flatten_multiindex_all_df_cols(df: DataFrame, keep_first_row_only: bool = False) -> DataFrame:
+    """Flatten a MultiIndex column header to single-level names (keep only the variable name if requested)."""
     if keep_first_row_only:
         # Keep only the first row (variabels) of the MultiIndex column names
         vars = [col[0] for col in df.columns]

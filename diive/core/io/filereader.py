@@ -81,6 +81,7 @@ class ConfigFileReader:
         self.validation = validation
 
     def read(self) -> dict:
+        """Read the YAML config file, optionally validating it, and return it as a dict."""
         with open(self.configfilepath, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
         if self.validation == 'filetype':
@@ -363,6 +364,7 @@ class ReadFileType:
         self.data_df, self.metadata_df = self._readfile()
 
     def get_filedata(self) -> tuple[DataFrame, DataFrame]:
+        """Return the ``(data_df, metadata_df)`` read from the file."""
         return self.data_df, self.metadata_df
 
     def _readfile(self) -> tuple[DataFrame, DataFrame]:
@@ -410,6 +412,7 @@ class DataFileReader:
             output_middle_timestamp: bool = True,
             compression: str = None
     ):
+        """Configure how to read a single data file (header layout, NA values, timestamp convention, ...)."""
 
         self.filepath = filepath if isinstance(filepath, Path) else Path(filepath)
 
@@ -495,6 +498,7 @@ class DataFileReader:
         return data_metadata_df
 
     def get_data(self) -> tuple[DataFrame, DataFrame]:
+        """Return the ``(data_df, metadata_df)`` read from the file."""
         return self.data_df, self.metadata_df
 
     def _convert_timestamp_idx_col(self, var):
@@ -616,6 +620,7 @@ class DataFileReader:
 
 
 def example_ep_fluxnet():
+    """Runnable example: read an EddyPro FLUXNET file."""
     from diive.core.times.times import insert_timestamp, format_timestamp_to_fluxnet_format
 
     FOLDER = r"F:\TMP\FRU\Level-1_FF-202303_FF-202401_2005-2023\Level-1_results_fluxnet"
@@ -654,6 +659,7 @@ def example_ep_fluxnet():
 
 
 def example_toa5():
+    """Runnable example: read a TOA5 file."""
     corrected = r"C:\Users\holukas\Downloads\corrected_files\c-CH-OE2_iDL_BOX1_0_1_TBL1_20220629-1714.dat"
     uncorrected = r"C:\Users\holukas\Downloads\corrected_files\CH-OE2_iDL_BOX1_0_1_TBL1_20220629-1714.dat"
 

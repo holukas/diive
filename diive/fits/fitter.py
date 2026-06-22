@@ -1,3 +1,4 @@
+"""Curve fitting with confidence and prediction intervals."""
 from typing import Literal
 
 import matplotlib.gridspec as gridspec
@@ -74,6 +75,7 @@ class BinFitterCP:
         self.fit_results = {}  # Stores fit results
 
     def run(self):
+        """Run the binned curve fit."""
         self.fit_results = self._fit()
         return self
 
@@ -83,6 +85,7 @@ class BinFitterCP:
         return self.fit_results
 
     def get_results(self):
+        """Return the fit results."""
         return self.fit_results
 
     @staticmethod
@@ -273,6 +276,7 @@ class BinFitterCP:
 
         # Fitplot. Honor a caller-supplied axes (two-phase contract); only create
         # and show our own figure when ax is None.
+        """Show the fit plot."""
         own_fig = ax is None
         if own_fig:
             fig = plt.figure(facecolor='white', figsize=(9, 9), dpi=100)

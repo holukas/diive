@@ -10,7 +10,10 @@ import logging
 
 
 class QTextEditLogger(logging.Handler):
+    """Logging handler that appends formatted records to a read-only Qt text widget."""
+
     def __init__(self, parent, lyt):
+        """Create the read-only text widget and add it to the given layout."""
         super().__init__()
         self.widget = qw.QTextEdit(parent)
         # self.widget = qw.QPlainTextEdit(parent)
@@ -18,6 +21,7 @@ class QTextEditLogger(logging.Handler):
         lyt.addWidget(self.widget)
 
     def emit(self, record):
+        """Format *record* and append it to the text widget."""
         msg = self.format(record)
         self.widget.append(msg)
         # self.widget.appendPlainText(msg)

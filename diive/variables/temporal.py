@@ -17,6 +17,8 @@ from diive.core.utils.console import detail
 
 
 class DaytimeNighttimeFlag:
+    """Derive daytime/nighttime flags from potential radiation. See :meth:`__init__`."""
+
     swinpot_col = 'SW_IN_POT'
     daytime_col = 'DAYTIME'
     nighttime_col = 'NIGHTTIME'

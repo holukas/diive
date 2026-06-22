@@ -1,3 +1,4 @@
+"""Resample time series to coarser aggregates."""
 from typing import Literal
 
 import numpy as np

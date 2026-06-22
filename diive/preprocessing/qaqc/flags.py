@@ -70,10 +70,12 @@ class MissingValues(FlagBase):
     flagid = 'MISSING'
 
     def __init__(self, series: Series, idstr: str = None, verbose: bool = False):
+        """Set up the missing-values flag for a series. See the class docstring."""
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.verbose = verbose
 
     def calc(self, repeat=False):
+        """Flag missing values in the series."""
         self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=False)
         # if self.showplot:
         #     self.defaultplot(n_iterations=1)

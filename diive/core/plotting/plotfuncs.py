@@ -1,3 +1,12 @@
+"""
+PLOTTING: SHARED HELPER FUNCTIONS
+=================================
+
+Low-level helpers shared across the plotting classes: figure/axes setup, spine
+and tick formatting, legends, grids, zero lines and a quick exploratory plot.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 import copy
 import time
 from pathlib import Path
@@ -17,6 +26,7 @@ from diive.core.utils.console import info
 
 # TODO generalize for other classes
 def set_fig(ax: plt.Axes):
+    """Return ``(fig, ax, showplot)``: reuse a given *ax*, or create a new figure if None."""
     if ax:
         # If ax is given, plot directly to ax, no fig needed
         fig = None
@@ -33,6 +43,7 @@ def set_fig(ax: plt.Axes):
 
 
 def make_patch_spines_invisible(ax):
+    """Keep the frame on but hide the axes background patch and all spines."""
     ax.set_frame_on(True)
     ax.patch.set_visible(False)
     for sp in ax.spines.to_numpy()():
@@ -40,15 +51,18 @@ def make_patch_spines_invisible(ax):
 
 
 def show_ticks_on_all_spines(ax, left=True, right=True, top=True, bottom=True):
+    """Enable tick marks on the selected spines."""
     ax.tick_params(left=left, right=right, top=top, bottom=bottom)
 
 
 def hide_ticks_and_ticklabels(ax):
+    """Hide all tick marks and tick labels on *ax*."""
     ax.tick_params(left=False, right=False, top=False, bottom=False,
                    labelleft=False, labelright=False, labeltop=False, labelbottom=False)
 
 
 def hide_xaxis_yaxis(ax):
+    """Hide both the x- and y-axis of *ax*."""
     x_axis = ax.axes.get_xaxis()
     x_axis.set_visible(False)
     y_axis = ax.axes.get_yaxis()
@@ -56,6 +70,7 @@ def hide_xaxis_yaxis(ax):
 
 
 def remove_prev_lines(ax):
+    """Remove all overlay lines (markers, limit lines) above the main line-0 plot."""
     # Every time the slider multiplier is changed to a new value,
     # the marker that shows the outlier values are drawn.
     # In case there is already a marker in the plot, it needs to be
@@ -151,6 +166,7 @@ def default_format(ax,
 
 
 def format_ticks(ax, width, length, direction, color, labelsize):
+    """Apply consistent tick width/length/direction/colour/label size on both axes."""
     ax.tick_params(axis='x', width=width, length=length, direction=direction,
                    colors=color, labelsize=labelsize)
     ax.tick_params(axis='y', width=width, length=length, direction=direction,
@@ -161,6 +177,7 @@ def format_ticks(ax, width, length, direction, color, labelsize):
 
 
 def format_spines(ax, color, lw):
+    """Set the colour and line width of all four spines."""
     lw = theme.LINEWIDTH_SPINES if not lw else lw
     spines = ['top', 'bottom', 'left', 'right']
     for spine in spines:
@@ -170,11 +187,13 @@ def format_spines(ax, color, lw):
 
 
 def non_numeric_error(ax):
+    """Draw a centred 'data are non-numeric' message in place of a plot."""
     plt.text(0.5, 0.5, 'Sorry, no plot. Data are non-numeric.', horizontalalignment='center',
              verticalalignment='center', transform=ax.transAxes, bbox=dict(facecolor='red', alpha=0.5))
 
 
 def clear_ax(ax):
+    """Clear all artists from *ax*."""
     ax.clear()
 
 
@@ -206,6 +225,7 @@ def pause(interval):
 
 
 def make_secondary_yaxis(ax):
+    """Create and return a secondary (twin) y-axis on the right spine."""
     # Secondary y-axis
     twin_ax = ax.twinx()
     ax_offset = 1
@@ -217,6 +237,7 @@ def make_secondary_yaxis(ax):
 
 
 def has_twin(ax):
+    """Return True if *ax* already has a twin axis sharing its bounding box."""
     # Check if axis already has a secondary axis
     # https://stackoverflow.com/questions/36209575/how-to-detect-if-a-twin-axis-has-been-generated-for-a-matplotlib-axis
     for other_ax in ax.fig.axes:
@@ -290,6 +311,7 @@ def default_legend(ax,
                    textsize: int = theme.FONTSIZE_TXT_LEGEND,
                    markerscale: float = None,
                    title: str = None):
+    """Add a legend styled with the diive house defaults (transparent, configurable colour/columns)."""
     # fontP = FontProperties()
     # fontP.set_size('x-large')
     if from_line_collection:
@@ -314,15 +336,18 @@ def default_legend(ax,
 
 
 def default_grid(ax):
+    """Draw the diive default dashed grid."""
     ax.grid(True, ls='--', color=theme.COLOR_LINE_GRID, lw=theme.LINEWIDTH_SPINES, zorder=0)
 
 
 def wheel_markers_7():
+    """Return the 7 default marker styles used for cycling through series."""
     markers = ['o', '^', 'v', 's', 'D', '*', 'd']
     return markers
 
 
 def add_ax_title_inside(txt, ax):
+    """Place a title *txt* inside the axes at the top-left corner."""
     text = ax.text(0.01, 0.97, f"{txt}",
                    size=FONTSIZE_HEADER_AXIS, color=FONTCOLOR_HEADER_AXIS,
                    backgroundcolor='none', transform=ax.transAxes, alpha=1,
@@ -331,6 +356,7 @@ def add_ax_title_inside(txt, ax):
 
 
 def add_zeroline_y(data: Series or DataFrame, ax):
+    """Draw a horizontal zero line, but only when *data* spans both negative and positive values."""
     if isinstance(data, DataFrame):
         # Min/max across all columns in DataFrame
         _min = data.min().min()
@@ -344,6 +370,7 @@ def add_zeroline_y(data: Series or DataFrame, ax):
 
 
 def remove_line(line):
+    """Remove a matplotlib line if it exists (no-op when None)."""
     if line is None:
         pass
     else:
@@ -351,6 +378,7 @@ def remove_line(line):
 
 
 def set_xylim(ax, series):
+    """Set x/y limits to the index and value range of *series* (no-op on empty/invalid data)."""
     try:
         ax.set_xlim(series.index.min(), series.index.max())
         ax.set_ylim(series.min(), series.max())
@@ -361,6 +389,7 @@ def set_xylim(ax, series):
 def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: bool = True,
               title: str = None, saveplot: str or Path = None, showplot: bool = False,
               showstats: bool = True) -> None:
+    """Quick exploratory plot of a Series/DataFrame/list of Series, one subplot per column (optional)."""
     if isinstance(data, Series):
         data = pd.DataFrame(data)
     elif isinstance(data, list):
@@ -455,6 +484,7 @@ def create_ax(facecolor: str = 'white',
 
 
 def setup_figax(ax, figsize):
+    """Return ``(fig, ax, showplot)``: reuse a given *ax*, or create a new figure of *figsize* if None."""
     # Create axis
     if ax:
         # If ax is given, plot directly to ax, no fig needed
@@ -480,6 +510,7 @@ def n_legend_cols(n_legend_entries: int) -> int:
 
 
 def example_quickplot():
+    """Demo of :func:`quickplot` on bundled example VPD data."""
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
     df = df.loc[df.index.year == 2021].copy()

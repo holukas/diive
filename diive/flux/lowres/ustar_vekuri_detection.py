@@ -113,6 +113,7 @@ class UstarVekuriThresholdDetection:
         bootstrapping_times: int = 100,
         verbose: int = 0,
     ):
+        """Set up Vekuri USTAR threshold detection. See the class docstring."""
         if df is None or df.empty:
             raise ValueError("Input DataFrame cannot be None or empty")
 

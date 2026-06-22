@@ -113,6 +113,7 @@ FONTSIZE_INFO_DEFAULT = 6
 
 
 def adjust_color_lightness(color, amount=0.5):
+    """Lighten or darken *color* by *amount* (in HLS space) and return the result."""
     # https://stackoverflow.com/questions/37765197/darken-or-lighten-a-color-in-matplotlib
     import matplotlib.colors as mc
     import colorsys
@@ -185,6 +186,7 @@ def colorwheel_36_wider():
 
 
 def colors_4_season(shade):
+    """Return a list of 4 season colours at the given shade."""
     list_4colors = [lightgreen(shade), red(shade), brown(shade), lightblue(shade)]
     return list_4colors
 
@@ -224,12 +226,14 @@ def colors_24():
 
 
 def colors_6():
+    """Return a list of distinguishable 500-shade colours."""
     list_6colors = [deeporange(500), orange(500), amber(500),
                     blue(500), cyan(500)]
     return list_6colors
 
 
 def generate_plot_marker_list():
+    """Return a dict mapping an index to a matplotlib marker style."""
     plot_marker_dict = {0: 'o', 1: 's', 2: 'v', 3: '^',
                         4: '<', 5: '>', 6: 'd', 7: 'H',
                         8: 'D', 9: 'p'}

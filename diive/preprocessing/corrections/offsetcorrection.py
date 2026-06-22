@@ -72,9 +72,11 @@ class MeasurementOffsetFromReplicate:
         self.measurement_corrected = self._correct_measurement()
 
     def get_corrected_measurement(self):
+        """Return the offset-corrected measurement series."""
         return self.measurement_corrected
 
     def get_offset(self):
+        """Return the detected offset (from the replicate measurement)."""
         return self.offset
 
     def _correct_measurement(self):
@@ -428,6 +430,7 @@ class WindDirOffset:
         self._correct_wind_directions()
 
     def get_corrected_wind_directions(self):
+        """Return the offset-corrected wind direction series."""
         return self.winddir_shifted
 
     def get_yearly_offsets(self) -> DataFrame:

@@ -1,3 +1,13 @@
+"""
+PLOTTING: BOOTSTRAP FIT PLOT
+============================
+
+Plot a bootstrap regression fit (scatter, fit line, optional prediction interval).
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
+
 def fitplot(
         flux_bts_results: dict,
         ax,
@@ -13,6 +23,7 @@ def fitplot(
         size_scatter: int = 60,
         fit_type: str = 'quadratic_offset'
 ):
+    """Plot a bootstrap fit on *ax*: scatter of x/y plus the fit line and optional prediction interval."""
     # x/y
     _numvals_y = len(flux_bts_results['y'])
     try:

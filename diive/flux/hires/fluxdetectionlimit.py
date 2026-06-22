@@ -217,6 +217,7 @@ class FluxDetectionLimit:
             create_covariance_plot: bool = True,
             title_covariance_plot: str = None
     ):
+        """Set up flux detection-limit estimation. See the class docstring."""
         self.hires_df = df.copy()
         self.u_col = u_col
         self.v_col = v_col
@@ -264,6 +265,7 @@ class FluxDetectionLimit:
     def run(self):
 
         # Calculate turbulent fluctuations
+        """Run the flux detection-limit estimation."""
         self.hires_df = self._turbulent_fluctuations(df=self.hires_df)
 
         # Calculate covariances
@@ -323,9 +325,11 @@ class FluxDetectionLimit:
         return subset_cov_max_ix, subset_cov_max_shift
 
     def get_detection_limit(self) -> dict:
+        """Return the estimated flux detection limit."""
         return self.results
 
     def get_fig_cov(self) -> matplotlib.figure.Figure:
+        """Return the covariance diagnostic figure."""
         fig_cov = self.maxcov_obj.plot_scatter_cov(
             title=f"Covariance vs time lag {self.title_covariance_plot}", showplot=False)
         return fig_cov

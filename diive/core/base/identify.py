@@ -1,3 +1,4 @@
+"""Identify related/relevant variable columns by name."""
 from pandas import DataFrame
 
 

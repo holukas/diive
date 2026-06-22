@@ -22,6 +22,12 @@ from diive.core.utils.console import detail, info, rule
 
 
 class LongTermGapFillingBase:
+    """Base class for long-term gap-filling with per-year models built from neighbouring years.
+
+    See :meth:`__init__` for parameters and attributes; use the
+    :class:`LongTermGapFillingRandomForestTS` / :class:`LongTermGapFillingXGBoostTS`
+    subclasses, which preset the regressor.
+    """
 
     def __init__(self,
                  regressor,
@@ -284,6 +290,12 @@ class LongTermGapFillingBase:
         self._collect()
 
     def showplot_feature_ranks_per_year(self, title: str = None, subtitle: str = None):
+        """Plot a bump chart of each feature's importance rank across years.
+
+        Args:
+            title: Optional figure title.
+            subtitle: Optional axes subtitle.
+        """
 
         # kudos: https://stackoverflow.com/questions/68095438/how-to-make-a-bump-chart
         # kudos: https://stackoverflow.com/questions/57923198/way-to-change-only-the-width-of-marker-in-scatterplot-but-not-height
@@ -359,6 +371,7 @@ class LongTermGapFillingBase:
 
 
 class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
+    """Long-term Random Forest gap-filling with per-year models. See :meth:`__init__`."""
 
     def __init__(self,
                  input_df: DataFrame,
@@ -391,6 +404,7 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
 
 
 class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
+    """Long-term XGBoost gap-filling with per-year models. See :meth:`__init__`."""
 
     def __init__(self,
                  input_df: DataFrame,

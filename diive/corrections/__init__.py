@@ -1,3 +1,4 @@
+"""Public namespace: dv.corrections (offset/gain and value corrections)."""
 from diive.preprocessing.corrections import MeasurementOffsetFromReplicate
 from diive.preprocessing.corrections import NighttimeZeroOffsetResult
 from diive.preprocessing.corrections import WindDirOffset

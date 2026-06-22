@@ -34,6 +34,7 @@ pd.set_option('display.width', 1000)
 
 
 class MlRegressorGapFillingBase:
+    """Base class for ML-regressor gap-fillers (Random Forest, XGBoost): training, scoring and gap-filling."""
 
     def __init__(self,
                  regressor,

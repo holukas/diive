@@ -1,3 +1,4 @@
+"""Regression helpers built on statsmodels."""
 from statsmodels.formula import api as smf
 
 

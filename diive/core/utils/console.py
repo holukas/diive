@@ -36,14 +36,17 @@ class _TeeConsole(Console):
     """
 
     def __init__(self, *args, **kwargs) -> None:
+        """Create the tee console with an empty list of mirror sinks."""
         super().__init__(*args, **kwargs)
         self._mirrors: list = []
 
     def add_mirror(self, mirror) -> None:
+        """Register a mirror sink to receive copies of console output."""
         if mirror not in self._mirrors:
             self._mirrors.append(mirror)
 
     def remove_mirror(self, mirror) -> None:
+        """Unregister a previously added mirror sink (no-op if absent)."""
         if mirror in self._mirrors:
             self._mirrors.remove(mirror)
 
@@ -55,10 +58,12 @@ class _TeeConsole(Console):
                 pass  # a broken sink must not break library output
 
     def print(self, *args, **kwargs) -> None:
+        """Print and forward the call to every registered mirror."""
         super().print(*args, **kwargs)
         self._forward("print", args, kwargs)
 
     def log(self, *args, **kwargs) -> None:
+        """Log and forward the call to every registered mirror."""
         # `log` writes directly (it does not route through `self.print`), so it
         # must forward to mirrors itself.
         super().log(*args, **kwargs)

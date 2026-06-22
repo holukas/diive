@@ -23,6 +23,7 @@ from scipy.stats import zscore
 
 
 class StratifiedAnalysis:
+    """Analyze y across bins of x, stratified into bins of z. See :meth:`__init__`."""
 
     def __init__(self,
                  df: DataFrame,
@@ -90,12 +91,14 @@ class StratifiedAnalysis:
 
     @property
     def df(self) -> DataFrame:
+        """The input DataFrame (NaN-dropped)."""
         if self._df is None:
             raise Exception('No data available.')
         return self._df
 
     @property
     def binaggs(self) -> dict:
+        """Per-z-bin aggregates as a dict of DataFrames (raises if :meth:`calcbins` not yet run)."""
         if not self._binaggs:
             raise Exception('No binned means available, try to run .calcbins() first.')
         return self._binaggs
@@ -152,6 +155,7 @@ class StratifiedAnalysis:
         # print(f"Time elapsed: {end_time - start_time}")
 
     def calcbins(self):
+        """Compute the stratified bin aggregates (with counts and 16th/84th percentile errors) into ``binaggs``."""
         # counter = 0
         grouped = self.df.groupby(by=self.z_group_col, observed=True, as_index=True, sort=True, group_keys=True)
         for g, g_df in grouped:
@@ -227,6 +231,16 @@ class StratifiedAnalysis:
                                 path: Path or str = None,
                                 emphasize_lines: bool = True,
                                 **kwargs):
+        """Plot y-vs-x curves with error bars, one line per z bin (a stratified-bin-means plot).
+
+        Args:
+            ax: Optional matplotlib axes to draw on; a new figure is created if None.
+            saveplot: If True, save the figure to *path*.
+            title: Optional plot title.
+            path: Output path used when *saveplot* is True.
+            emphasize_lines: If True, draw connecting lines with stronger emphasis.
+            **kwargs: Forwarded to the underlying plotting call.
+        """
 
         # Figure size and legend number of columns
         n_col = 1  # int(self.n_bins_var1 / 20)

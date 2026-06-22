@@ -1,3 +1,12 @@
+"""
+PLOTTING: CUMULATIVE SUMS
+=========================
+
+Cumulative-sum plots: per-year overlays (:class:`CumulativeYear`) and per-column
+cumulatives (:class:`Cumulative`).
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 import warnings
 
 from pandas import Series
@@ -144,6 +153,15 @@ class CumulativeYear:
 
     def plot(self, ax=None, format_style: FormatStyle = None, showplot: bool = True,
              digits_after_comma: int = 2, highlight_year_color: str = None):
+        """Plot one cumulative-sum curve per year on a shared day-of-year axis.
+
+        Args:
+            ax: Matplotlib axes to draw on; a standalone figure is created if None.
+            format_style: Shared chrome (title/labels/fonts/grid/legend). None = house style.
+            showplot: If True and a new figure was created, show it.
+            digits_after_comma: Decimal places for the end-of-year total in each legend label.
+            highlight_year_color: Colour for the highlighted year; defaults to red.
+        """
         # Fold the legacy units kwarg onto the (copied) style; the dynamic title and
         # the per-year legend stay class-owned, so suppress those on the applied style.
         style = (format_style or FormatStyle()).merged(yunits=self.series_units)
@@ -210,6 +228,7 @@ class Cumulative:
                  units: str = None,
                  start_year: int = None,
                  end_year: int = None):
+        """Compute cumulative sums per column. See the class docstring for parameters."""
         self.df = df
         self.units = units
         self.start_year = start_year if start_year else self.df.index.year.min()
@@ -272,6 +291,16 @@ class Cumulative:
              show_title: bool = True,
              fill: bool = False
              ):
+        """Plot the cumulative sum of each column, with the final total in each legend label.
+
+        Args:
+            ax: Matplotlib axes to draw on; a standalone figure is created if None.
+            format_style: Shared chrome (title/labels/fonts/grid/legend). None = house style.
+            showplot: If True and a new figure was created, show it.
+            digits_after_comma: Decimal places for the end-of-series total in each legend label.
+            show_title: If True, draw the auto-generated title.
+            fill: If True, shade the area between each curve and zero.
+        """
         # Units come from the constructor; all other chrome comes from format_style.
         style = (format_style or FormatStyle()).merged(yunits=self.units)
 

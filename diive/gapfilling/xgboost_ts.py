@@ -19,6 +19,10 @@ from diive.core.ml.common import MlRegressorGapFillingBase
 
 
 class XGBoostTS(MlRegressorGapFillingBase):
+    """Gap-fill a time series with XGBoost gradient-boosting regression.
+
+    See :meth:`__init__` for parameters, methods and attributes.
+    """
 
     def __init__(self, input_df: DataFrame, target_col: str or tuple, verbose: int = 0,
                  test_size: float = 0.25, below_zero: str = None, **kwargs):

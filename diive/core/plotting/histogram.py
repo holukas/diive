@@ -1,3 +1,11 @@
+"""
+PLOTTING: HISTOGRAM
+===================
+
+Histogram plot with optional z-score overlay and peak-bin highlighting.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 import math
 import warnings
 
@@ -34,6 +42,7 @@ class HistogramPlot:
 
     def __init__(self, series: Series = None, method=None, n_bins: int or list = None,
                  ignore_fringe_bins: list = False, s: Series = None):
+        """Set up the histogram. See the class docstring for parameters (``s`` is a deprecated alias for ``series``)."""
 
         # `s` is the deprecated name for `series` (renamed for consistency with
         # the other plotting classes, which all take `series`).
@@ -58,9 +67,11 @@ class HistogramPlot:
         self.edges = None
 
     def get_fig(self):
+        """Return the matplotlib Figure (available after :meth:`plot`)."""
         return self.fig
 
     def get_ax(self):
+        """Return the matplotlib Axes (available after :meth:`plot`)."""
         return self.ax
 
     def plot(self, ax=None, format_style: FormatStyle = None,

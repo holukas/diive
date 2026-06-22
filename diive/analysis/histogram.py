@@ -17,6 +17,7 @@ from pandas import DataFrame, Series
 
 
 class Histogram:
+    """Compute a histogram from a Series with flexible binning. See :meth:`__init__`."""
 
     def __init__(self,
                  series: Series = None,

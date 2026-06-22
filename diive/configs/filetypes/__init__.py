@@ -1,3 +1,4 @@
+"""Built-in file-type configuration definitions."""
 import os
 import pathlib
 from pathlib import Path

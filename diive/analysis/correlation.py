@@ -141,6 +141,7 @@ class DailyCorrelation:
     """
 
     def __init__(self, s1: Series, s2: Series, mincorr: float = 0.8):
+        """Compute daily correlations between two series. See the class docstring for parameters."""
         if not (-1 <= mincorr <= 1):
             raise ValueError("mincorr must be between -1 and 1.")
         if s1.name is None or s2.name is None:

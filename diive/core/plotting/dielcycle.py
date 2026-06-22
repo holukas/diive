@@ -1,3 +1,11 @@
+"""
+PLOTTING: DIEL CYCLE
+====================
+
+Plot the mean diel (24-hour) cycle of a time series, optionally one curve per month.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 import calendar
 
 import matplotlib.pyplot as plt
@@ -10,6 +18,7 @@ from diive.core.times.resampling import diel_cycle
 
 
 class DielCycle:
+    """Plot the diel (24-hour) cycle of a time series. See :meth:`__init__` and :meth:`plot`."""
 
     def __init__(self, series: Series):
         """Plot diel cycles of time series.
@@ -33,6 +42,7 @@ class DielCycle:
         self.show_xlabel = True
 
     def get_data(self) -> DataFrame:
+        """Return the diel-cycle aggregates DataFrame (raises if :meth:`plot` not yet run)."""
         return self.diel_cycles_df
 
     @property

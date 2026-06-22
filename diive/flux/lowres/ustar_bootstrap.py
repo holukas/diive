@@ -156,6 +156,7 @@ class UstarBootstrapThresholds:
         n_jobs: int = 1,
         verbose: int = 0,
     ):
+        """Set up multi-year bootstrap USTAR threshold detection. See the class docstring."""
         if df is None or df.empty:
             raise ValueError("Input DataFrame cannot be None or empty")
         if not isinstance(df.index, pd.DatetimeIndex):

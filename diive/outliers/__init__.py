@@ -1,3 +1,4 @@
+"""Public namespace: dv.outliers (outlier detection methods)."""
 from diive.preprocessing.outlier_detection import AbsoluteLimits
 from diive.preprocessing.outlier_detection import AbsoluteLimitsDaytimeNighttime
 from diive.preprocessing.outlier_detection import LocalOutlierFactor

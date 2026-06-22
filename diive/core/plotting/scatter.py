@@ -1,3 +1,11 @@
+"""
+PLOTTING: SCATTER XY
+====================
+
+Scatter plot of x vs y with optional z colour-coding and bin aggregation.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 from typing import Literal
 
 import matplotlib.pyplot as plt
@@ -10,6 +18,8 @@ from diive.core.plotting.styles.format import FormatStyle
 
 
 class ScatterXY:
+    """Scatter plot of x vs y with optional z colour-coding and bin aggregation. See :meth:`__init__`."""
+
     def __init__(
             self,
             x: Series,

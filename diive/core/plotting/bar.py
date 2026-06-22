@@ -1,3 +1,11 @@
+"""
+PLOTTING: LONG-TERM ANNUAL ANOMALIES BAR PLOT
+=============================================
+
+Bar plot of yearly anomalies relative to a long-term reference period.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 import pandas as pd
 from pandas import Series
 

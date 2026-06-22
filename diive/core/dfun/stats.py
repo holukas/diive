@@ -1,3 +1,4 @@
+"""Summary-statistic helpers for Series and DataFrames."""
 # import diive.pkgs.dfun
 # from stats.boxes import insert_statsboxes_txt
 import numpy as np
@@ -9,30 +10,37 @@ from diive.core.funcs.funcs import zscore
 
 
 def q75(x):
+    """Return the 75th percentile of *x* (for use as a pandas aggregation)."""
     return x.quantile(0.75)
 
 
 def q50(x):
+    """Return the 50th percentile of *x* (for use as a pandas aggregation)."""
     return x.quantile(0.5)
 
 
 def q25(x):
+    """Return the 25th percentile of *x* (for use as a pandas aggregation)."""
     return x.quantile(0.25)
 
 
 def q99(x):
+    """Return the 99th percentile of *x* (for use as a pandas aggregation)."""
     return x.quantile(0.99)
 
 
 def q01(x):
+    """Return the 1th percentile of *x* (for use as a pandas aggregation)."""
     return x.quantile(0.01)
 
 
 def q05(x):
+    """Return the 5th percentile of *x* (for use as a pandas aggregation)."""
     return x.quantile(0.05)
 
 
 def q95(x):
+    """Return the 95th percentile of *x* (for use as a pandas aggregation)."""
     return x.quantile(0.95)
 
 

@@ -109,6 +109,7 @@ class SWINGapFillerXGBoost:
                  features_ema: list = None,
                  verbose: int = 0,
                  **kwargs):
+        """Construct the gap-filler. See the class docstring for the full parameter list."""
         if series is None or series.empty:
             raise ValueError("series is empty — nothing to gap-fill.")
         if series.notna().sum() == 0:
@@ -174,6 +175,7 @@ class SWINGapFillerXGBoost:
 
     @property
     def results(self) -> GapFillingResult:
+        """GapFillingResult produced by :meth:`run` (raises if called before run)."""
         if self._results is None:
             raise RuntimeError("Call .run() before accessing .results")
         return self._results

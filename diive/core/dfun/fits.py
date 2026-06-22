@@ -34,6 +34,7 @@ pd.set_option('display.max_rows', 30)
 
 
 def groupagg(df, num_bins, bin_col) -> pd.DataFrame:
+    """Bin *bin_col* into *num_bins* groups and return per-bin aggregates."""
     # Divide into groups of x
 
     # # Alternative: using .cut
@@ -66,6 +67,7 @@ def groupagg(df, num_bins, bin_col) -> pd.DataFrame:
 
 
 def fit_to_bins_linreg(df, x_col, y_col, bin_col):
+    """Fit a linear regression of *y_col* on *x_col* within each bin of *bin_col*."""
     # https://www.geeksforgeeks.org/python-implementation-of-polynomial-regression/
     # https://towardsdatascience.com/a-beginners-guide-to-linear-regression-in-python-with-scikit-learn-83a8f7ae2b4f
 
@@ -138,6 +140,7 @@ def fit_to_bins_linreg(df, x_col, y_col, bin_col):
 
 
 def fit_to_bins_polyreg(df, x_col, y_col, degree, bin_col=None):
+    """Fit a polynomial regression of degree *degree* of *y_col* on *x_col*, optionally per bin."""
     # https://www.geeksforgeeks.org/python-implementation-of-polynomial-regression/
     # https://scikit-learn.org/stable/modules/linear_model.html#polynomial-regression-extending-linear-models-with-basis-functions
 
