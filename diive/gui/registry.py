@@ -44,6 +44,7 @@ from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
 from diive.gui.tabs.spectrogram import SpectrogramTab
 from diive.gui.tabs.stepwise import StepwiseScreeningTab
 from diive.gui.tabs.timelag import TimeLagAnalysisTab
+from diive.gui.tabs.uncertainty_jointunc import JointUncertaintyTab
 from diive.gui.tabs.uncertainty_randunc import RandomUncertaintyTab
 from diive.gui.tabs.ustar_detection import UstarDetectionTab
 from diive.gui.tabs.overview import OverviewTab
@@ -128,6 +129,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Daytime partitioning (REddyProc)": DaytimePartitioningReddyProcTab,
         "Daytime partitioning (ONEFlux)": DaytimePartitioningOneFluxTab,
         "Random uncertainty (PAS20)": RandomUncertaintyTab,
+        "Joint uncertainty (PAS20)": JointUncertaintyTab,
     },
     # Data corrections (dv.corrections). One tab per correction, all sharing
     # BaseCorrectionTab (the RF/XGB shared-template approach).

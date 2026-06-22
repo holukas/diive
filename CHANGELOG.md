@@ -93,6 +93,14 @@
   **Copy Python** button (new `randunc_to_code` codegen) for a reproducible script. Laid out like the data-correction
   tabs — a fixed-width **Settings** column (header -> description -> inputs/options -> Run -> status -> Add) beside a
   method **hero** band (mean / median / records / cumulative ±σ) over the preview, with Copy Python in the title bar.
+- **Flux ▸ Joint uncertainty (PAS20)** (new tab, `tabs/uncertainty_jointunc.py`) — combine the per-record random
+  uncertainty with the flux-filtering scenario-ensemble percentile spread in quadrature, the faithful ONEFlux
+  `compute_join` (new `dv.flux.JointUncertaintyPAS20` / `joint_uncertainty_pas20`): `JOINTUNC = √(RANDUNC² +
+  ((upper − lower)/divisor)²)`. A **Scenario percentiles** selector picks the convention — NEE USTAR scenarios (16th/84th
+  ÷ 2) or energy-flux LE/H (25th/75th ÷ IQR 1.349) — and seeds the scenario pickers biased to the random-uncertainty
+  column's flux. Three-panel preview: flux ± joint band, random-vs-scenario component decomposition, and the cumulative
+  joint bounds (random part propagated in quadrature, the fully-correlated scenario part as the running spread of the
+  cumulative scenario sums). **Add** emits `{base}_JOINTUNC` (DERIVED); **Copy Python** via the new `jointunc_to_code`.
 - **Corrections menu** — the high-resolution data corrections, now also as **standalone tabs, one per correction**, on a
   reusable **`BaseCorrectionTab` template** (`tabs/_correction_base.py`; the RF/XGB shared-template approach): **Remove
   nighttime zero offset**, **Remove relative humidity offset**, **Set to max / min threshold**, **Set to value**, **Set
@@ -443,6 +451,12 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
 
 ### New Classes & Functions
 
+- **`JointUncertaintyPAS20` / `joint_uncertainty_pas20`** (`dv.flux`, `diive.flux.lowres.uncertainty`) — faithful
+  ONEFlux `compute_join` port: per-record joint uncertainty `√(RANDUNC² + ((scenario_upper − scenario_lower)/divisor)²)`
+  combining the random measurement uncertainty with the flux-filtering scenario-ensemble percentile spread.
+  `divisor` constants `JOINT_DIVISOR_1SIGMA=2.0` (NEE 16th/84th USTAR scenarios) and `JOINT_DIVISOR_IQR=1.349` (LE/H
+  25th/75th). Cumulative propagation treats the independent random term as quadrature and the fully-correlated scenario
+  term as the running spread of the cumulative scenario sums. Codegen `jointunc_to_code`.
 - **`RidgeLinePlot.plot(fig=...)`** — optional `fig` parameter to render the stacked-density ridges into an existing
   figure (cleared first) instead of creating a new one, e.g. to embed in a GUI canvas. Backward-compatible.
 - **`TimeLagAnalysis.plot_gas(fig=...)`** — optional `fig` parameter to render the 4-panel time-lag figure into an

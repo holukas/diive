@@ -27,14 +27,55 @@ from diive.gapfilling.similarity import (
 )
 
 
-# todo
-# class JointUncertaintyPAS20:
-#
-#     def __init__(self, df: DataFrame, randunccol: str):
-#         self.df = df
-#         self.randunccol = randunccol
-#
-#         self.df['JOINTUNC'] = np.nan
+#: Divisor that turns a percentile range into a 1-sigma-equivalent for the joint
+#: uncertainty. ONEFlux uses the 16th/84th percentiles for NEE (which bracket
+#: +/-1 sigma, so the range is divided by 2) and the 25th/75th percentiles for
+#: the energy fluxes LE/H (the interquartile range, IQR = 1.349 sigma).
+JOINT_DIVISOR_1SIGMA = 2.0    # 16th/84th percentiles (NEE USTAR scenarios)
+JOINT_DIVISOR_IQR = 1.349     # 25th/75th percentile IQR (LE/H energy-balance corr.)
+
+
+def joint_uncertainty_pas20(randunc: Series,
+                            scenario_lower: Series,
+                            scenario_upper: Series,
+                            divisor: float = JOINT_DIVISOR_1SIGMA) -> Series:
+    """Per-record joint uncertainty (Pastorello et al. 2020 / ONEFlux ``compute_join``).
+
+    Combines, in quadrature, the random measurement uncertainty with the
+    uncertainty from the flux-partitioning/filtering scenario ensemble (for NEE:
+    the USTAR-threshold percentile scenarios; for LE/H: the energy-balance
+    correction percentiles). The scenario spread is first converted to a
+    1-sigma-equivalent by ``divisor``:
+
+        JOINTUNC = sqrt( RANDUNC^2 + ((scenario_upper - scenario_lower) / divisor)^2 )
+
+    Faithful port of ONEFlux ``compute_join`` (``oneflux_steps/nee_proc/src/dataset.c``)
+    and the energy-flux variant (``energy_proc/src/dataset.c``). ONEFlux returns an
+    invalid value when any of the three inputs is invalid; here that maps to NaN,
+    which numpy propagates through ``sqrt`` automatically.
+
+    Args:
+        randunc: per-record random uncertainty (e.g. ``{flux}_RANDUNC`` from
+            :class:`RandomUncertaintyPAS20`).
+        scenario_lower: lower-percentile scenario flux (NEE: 16th, e.g.
+            ``NEE_CUT_16``; LE/H: 25th, e.g. ``LEcorr25``).
+        scenario_upper: upper-percentile scenario flux (NEE: 84th, e.g.
+            ``NEE_CUT_84``; LE/H: 75th, e.g. ``LEcorr75``).
+        divisor: percentile-range -> 1-sigma factor. Use
+            :data:`JOINT_DIVISOR_1SIGMA` (2.0) for the 16th/84th NEE percentiles
+            and :data:`JOINT_DIVISOR_IQR` (1.349) for the 25th/75th LE/H IQR.
+
+    Returns:
+        The joint uncertainty as a Series aligned to ``randunc``'s index, NaN
+        where any input is missing.
+    """
+    randunc = randunc.astype(float)
+    scenario_lower = scenario_lower.astype(float).reindex(randunc.index)
+    scenario_upper = scenario_upper.astype(float).reindex(randunc.index)
+    scenario_sigma = (scenario_upper - scenario_lower) / divisor
+    joint = np.sqrt(randunc ** 2 + scenario_sigma ** 2)
+    joint.name = 'JOINTUNC'
+    return joint
 
 
 class RandomUncertaintyPAS20:
@@ -676,3 +717,176 @@ class RandomUncertaintyPAS20:
 
         toc = time.time() - tic
         info(f"Time needed: {toc:.2f}s")
+
+
+class JointUncertaintyPAS20:
+    """Joint uncertainty estimation (Pastorello et al. 2020 / ONEFlux ``compute_join``).
+
+    Combines the per-record **random measurement uncertainty** (e.g.
+    ``{flux}_RANDUNC`` from :class:`RandomUncertaintyPAS20`) with the
+    **scenario-ensemble uncertainty** from the flux-partitioning/filtering
+    percentile scenarios, added in quadrature:
+
+        JOINTUNC = sqrt( RANDUNC^2 + ((scenario_upper - scenario_lower) / divisor)^2 )
+
+    For NEE the scenario ensemble is the USTAR-threshold percentile scenarios and
+    the 16th/84th percentiles bracket +/-1 sigma (``divisor=2``, the default,
+    :data:`JOINT_DIVISOR_1SIGMA`); ONEFlux emits this as e.g.
+    ``NEE_CUT_REF_JOINTUNC``. For the energy fluxes LE/H the ensemble is the
+    energy-balance-correction percentiles and the 25th/75th interquartile range
+    is used (``divisor=`` :data:`JOINT_DIVISOR_IQR` ``=1.349``), emitted as
+    ``LE_CORR_JOINTUNC`` / ``H_CORR_JOINTUNC``.
+
+    Faithful port of the ONEFlux ``compute_join`` helper
+    (``oneflux_steps/nee_proc/src/dataset.c``) and its energy-flux variant
+    (``energy_proc/src/dataset.c``).
+
+    Cumulative propagation treats the two error sources differently, matching
+    their nature: the random error is independent between records and propagates
+    in quadrature, whereas the scenario (e.g. USTAR-threshold) choice is fully
+    correlated across the record — the same threshold applies to every half-hour
+    — so its cumulative uncertainty is the running spread of the cumulative
+    scenario sums. The two cumulative terms are then combined in quadrature.
+
+    References:
+        Pastorello et al. (2020), Scientific Data 7, 225.
+        https://doi.org/10.1038/s41597-020-0534-3
+
+    Example:
+        See ``examples/flux/lowres/flux_uncertainty.py``.
+    """
+
+    def __init__(self,
+                 df: DataFrame,
+                 randunccol: str,
+                 scenario_lower_col: str,
+                 scenario_upper_col: str,
+                 fluxgapfilledcol: str | None = None,
+                 divisor: float = JOINT_DIVISOR_1SIGMA,
+                 name: str | None = None):
+        """Joint uncertainty estimation.
+
+        Args:
+            df: DataFrame with the columns below and a regular datetime index.
+            randunccol: per-record random uncertainty (e.g. ``NEE_CUT_REF_RANDUNC``).
+            scenario_lower_col: lower-percentile scenario flux (NEE: 16th, e.g.
+                ``NEE_CUT_16``; LE/H: 25th).
+            scenario_upper_col: upper-percentile scenario flux (NEE: 84th, e.g.
+                ``NEE_CUT_84``; LE/H: 75th).
+            fluxgapfilledcol: optional gap-filled flux for the cumulative
+                propagation (the central line the cumulative band brackets). When
+                omitted, only the per-record joint uncertainty is computed.
+            divisor: percentile-range -> 1-sigma factor. :data:`JOINT_DIVISOR_1SIGMA`
+                (2.0, default) for the 16th/84th NEE percentiles,
+                :data:`JOINT_DIVISOR_IQR` (1.349) for the 25th/75th LE/H IQR.
+            name: output column name. Defaults to the random-uncertainty column
+                with a trailing ``_RANDUNC`` replaced by ``_JOINTUNC`` (so
+                ``NEE_CUT_REF_RANDUNC`` -> ``NEE_CUT_REF_JOINTUNC``), else
+                ``{randunccol}_JOINTUNC``.
+        """
+        self.df = df
+        self.randunccol = randunccol
+        self.scenario_lower_col = scenario_lower_col
+        self.scenario_upper_col = scenario_upper_col
+        self.fluxgapfilledcol = fluxgapfilledcol
+        self.divisor = divisor
+
+        if name is not None:
+            self.jointunccol = name
+        elif randunccol.endswith('_RANDUNC'):
+            self.jointunccol = randunccol[:-len('_RANDUNC')] + '_JOINTUNC'
+        else:
+            self.jointunccol = f"{randunccol}_JOINTUNC"
+
+        #: per-record scenario (e.g. USTAR-filtering) 1-sigma-equivalent term.
+        self.scenarionunccol = f"{self.jointunccol}_SCENARIO"
+
+        self._jointunc_results: DataFrame | None = None
+        self._jointunc_results_cumulatives: DataFrame | None = None
+
+    @property
+    def jointunc_results(self) -> DataFrame:
+        """Results subset: random term, scenario term and the joint uncertainty."""
+        if not isinstance(self._jointunc_results, DataFrame):
+            raise Exception("No results available. Call .run() first.")
+        return self._jointunc_results
+
+    @property
+    def jointunc_results_cumulatives(self) -> DataFrame:
+        """Cumulative flux with the propagated joint-uncertainty bounds."""
+        if not isinstance(self._jointunc_results_cumulatives, DataFrame):
+            raise Exception(
+                "No cumulatives available. Pass fluxgapfilledcol and call .run().")
+        return self._jointunc_results_cumulatives
+
+    @property
+    def jointunc_series(self) -> Series:
+        """Return the joint uncertainty as a series."""
+        return self.jointunc_results[self.jointunccol]
+
+    def run(self) -> None:
+        """Compute the per-record joint uncertainty (and cumulatives if a
+        gap-filled flux was provided)."""
+        randunc = self.df[self.randunccol]
+        lower = self.df[self.scenario_lower_col]
+        upper = self.df[self.scenario_upper_col]
+
+        joint = joint_uncertainty_pas20(randunc, lower, upper, divisor=self.divisor)
+        scenario_sigma = (upper.astype(float).reindex(randunc.index)
+                          - lower.astype(float).reindex(randunc.index)) / self.divisor
+
+        out = DataFrame(index=randunc.index)
+        out[self.randunccol] = randunc.astype(float)
+        out[self.scenarionunccol] = scenario_sigma
+        out[self.jointunccol] = joint
+        self._jointunc_results = out
+
+        if self.fluxgapfilledcol is not None:
+            self._calc_cumulative(lower, upper, randunc)
+
+    def _calc_cumulative(self, lower: Series, upper: Series, randunc: Series) -> None:
+        """Cumulative flux with its propagated joint-uncertainty bounds.
+
+        The random term is independent -> quadrature accumulation
+        ``sqrt(cumsum(randunc^2))``; the scenario (USTAR) term is fully correlated
+        -> the running spread of the cumulative scenario sums
+        ``(cumsum(upper) - cumsum(lower)) / divisor``. Both use pandas' skipna
+        cumsum so a single missing record never poisons the tail.
+        """
+        flux = self.df[self.fluxgapfilledcol].astype(float)
+        lower = lower.astype(float).reindex(flux.index)
+        upper = upper.astype(float).reindex(flux.index)
+        randunc = randunc.astype(float).reindex(flux.index)
+
+        cum = DataFrame(index=flux.index)
+        cum[self.fluxgapfilledcol] = flux.cumsum()
+
+        # Random part: count a record's variance only where it contributes to the
+        # flux sum (cumsum skips NaN, mirroring RandomUncertaintyPAS20).
+        variance = (randunc ** 2).where(flux.notna())
+        cum_random = np.sqrt(variance.cumsum())
+        # Scenario part: fully correlated across records -> running spread of the
+        # cumulative scenario sums.
+        cum_scenario = (upper.cumsum() - lower.cumsum()) / self.divisor
+
+        cum['UNC_RANDOM_CUMULATIVE'] = cum_random
+        cum['UNC_SCENARIO_CUMULATIVE'] = cum_scenario
+        cum['UNC_CUMULATIVE'] = np.sqrt(cum_random ** 2 + cum_scenario ** 2)
+        cum['FLUX+UNC'] = cum[self.fluxgapfilledcol] + cum['UNC_CUMULATIVE']
+        cum['FLUX-UNC'] = cum[self.fluxgapfilledcol] - cum['UNC_CUMULATIVE']
+        self._jointunc_results_cumulatives = cum
+
+    def report_summary(self) -> None:
+        """Report a compact joint-uncertainty summary."""
+        joint = self.jointunc_series
+        rand = self.jointunc_results[self.randunccol]
+        scen = self.jointunc_results[self.scenarionunccol]
+        n = int(joint.notna().sum())
+        _console.print(f"\n{'=' * 80}")
+        _console.print("JOINT UNCERTAINTY (PAS20) SUMMARY")
+        _console.print(f"{'=' * 80}")
+        _console.print(f"Output column: {self.jointunccol}  |  records with estimate: {n:,}")
+        _console.print(f"  random term      mean: {rand.mean():.4f}  median: {rand.median():.4f}")
+        _console.print(f"  scenario term    mean: {scen.mean():.4f}  median: {scen.median():.4f}")
+        _console.print(f"  joint            mean: {joint.mean():.4f}  median: {joint.median():.4f}")
+        _console.print(f"{'=' * 80}\n")

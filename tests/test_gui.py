@@ -2724,6 +2724,48 @@ def test_random_uncertainty_tab(app, example_year):
     assert tab2.vpd_in_kpa.isChecked() is False
 
 
+def test_joint_uncertainty_tab(app, example_year):
+    # The joint-uncertainty tab builds, auto-seeds randunc + the 16th/84th USTAR
+    # scenarios biased to the randunc flux, runs synchronously and emits a single
+    # {base}_JOINTUNC column.
+    from PySide6.QtWidgets import QApplication
+    from diive.gui.tabs.uncertainty_jointunc import JointUncertaintyTab
+    df = dv.times.keep_daterange(example_year, "2021-03-01", "2021-03-31 23:30").copy()
+    # Fabricate the RANDUNC column the tab needs (the cascade itself is tested
+    # in test_uncertainty.py; here only the joint plumbing matters).
+    df["NEE_CUT_REF_RANDUNC"] = 1.5
+    tab = JointUncertaintyTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+
+    # Scenario picks bias to the randunc flux base (NEE, not GPP).
+    picks = tab._picks()
+    assert all(v in df.columns for v in picks.values())
+    assert picks["randunc"] == "NEE_CUT_REF_RANDUNC"
+    assert picks["lower"] == "NEE_CUT_16_f" and picks["upper"] == "NEE_CUT_84_f"
+    assert tab._divisor() == 2.0
+
+    code = tab._python_code()
+    assert "JointUncertaintyPAS20(" in code and "NEE_CUT_16_f" in code
+
+    payload = tab._compute_payload(
+        df[[picks["randunc"], picks["lower"], picks["upper"], picks["flux_f"]]].copy(),
+        picks, tab._divisor())
+    tab._on_done(payload)
+    QApplication.processEvents()
+    assert tab._result_df is not None
+    assert list(tab._result_df.columns) == ["NEE_CUT_REF_JOINTUNC"]
+    assert tab.add_btn.isEnabled()
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                if "Plot failed" in t.get_text()]
+    titles = [a.get_title() for a in tab.canvas.fig.axes]
+    assert any("decomposition" in t.lower() for t in titles)
+
+    # Switching the percentile convention re-picks scenarios + the divisor.
+    tab.divisor_combo.setCurrentIndex(1)
+    assert tab._divisor() != 2.0
+
+
 def test_gapfilling_mds_tab(app, example_year):
     # The MDS tab builds, auto-seeds the three drivers, runs synchronously and
     # emits the *_gfMDS + flag columns; the slimmed Results panel populates.
