@@ -42,6 +42,9 @@ class LocalOutlierFactorTab(BaseOutlierTab):
              "original, a cleaned copy, and the flag.")
     settings_title = "Local Outlier Factor settings"
     method_suffix = "LOF"
+    method_chip_label = "LOF"
+    method_chip_bg = "#F3E5F5"
+    method_chip_fg = "#6A1B9A"
 
     def _add_method_rows(self, form: QFormLayout) -> None:
         self.n_neighbors = QSpinBox()

@@ -43,6 +43,9 @@ class TrimLowOutlierTab(BaseOutlierTab):
              "Keeps the original, a cleaned copy, and the flag.")
     settings_title = "Trim-low settings"
     method_suffix = "TRIMLOW"
+    method_chip_label = "TRIM LOW"
+    method_chip_bg = "#FFF3E0"
+    method_chip_fg = "#E65100"
     # TrimLow's day/night handling is method-specific and opt-in (which period to
     # screen, default whole series), not the standard per-period-threshold
     # separation — so the shared box is off and the optional coordinates live in

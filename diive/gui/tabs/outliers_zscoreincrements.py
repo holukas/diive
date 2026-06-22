@@ -34,6 +34,9 @@ class ZScoreIncrementsOutlierTab(BaseOutlierTab):
              "threshold. Keeps the original, a cleaned copy, and the flag.")
     settings_title = "Z-score increments settings"
     method_suffix = "ZSCOREINCREMENTS"
+    method_chip_label = "Z-SCORE INCR"
+    method_chip_bg = "#E0F2F1"
+    method_chip_fg = "#00695C"
     supports_daynight = False
 
     def _add_method_rows(self, form: QFormLayout) -> None:

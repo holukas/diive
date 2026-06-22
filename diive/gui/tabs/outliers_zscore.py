@@ -35,6 +35,9 @@ class ZScoreOutlierTab(BaseOutlierTab):
              "a cleaned copy, and the flag.")
     settings_title = "Z-score settings"
     method_suffix = "ZSCORE"
+    method_chip_label = "Z-SCORE"
+    method_chip_bg = "#E0F7FA"
+    method_chip_fg = "#00838F"
 
     def _add_method_rows(self, form: QFormLayout) -> None:
         self.thres = QDoubleSpinBox()

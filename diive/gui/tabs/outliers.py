@@ -30,6 +30,9 @@ class HampelOutlierTab(BaseOutlierTab):
              "Keeps the original, a cleaned copy, and the flag.")
     settings_title = "Hampel settings"
     method_suffix = "HAMPEL"
+    method_chip_label = "HAMPEL"
+    method_chip_bg = "#FFEBEE"
+    method_chip_fg = "#C62828"
 
     def _add_method_rows(self, form: QFormLayout) -> None:
         self.window = QSpinBox()

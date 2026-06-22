@@ -2,7 +2,9 @@
 GUI.TABS._OUTLIER_BASE: SHARED BASE FOR OUTLIER-DETECTION TABS
 =============================================================
 
-Common machinery for the GUI's outlier-detection tabs (Hampel, Local SD, …):
+Common machinery for the GUI's outlier-detection tabs (Hampel, Local SD, …),
+sharing the correction/gap-filling tabs' chrome (title bar with Copy Python,
+``Target``/``Settings`` list headers, a method **hero chip** with a stats strip):
 the variable list, the two-panel preview (original + outlier markers on top, the
 cleaned series on the bottom), a worker thread that runs the library detector,
 an iteration progress bar, live per-iteration preview, an optional detection-limit
@@ -25,6 +27,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -38,8 +41,10 @@ from PySide6.QtWidgets import (
 from diive.core.metadata import ATTRS_KEY, DERIVED, MODIFIED, provenance_attr
 from diive.gui import site, theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.tabs.overview import _chip, _MetricSlot, _stat_separator
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
+from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel
 from diive.gui.widgets.worker import WorkerRunner
 
@@ -80,6 +85,10 @@ class BaseOutlierTab(DiiveTab):
     settings_title = "Settings"
     #: Suffix for the cleaned column name, e.g. "HAMPEL" -> "{var}_HAMPEL".
     method_suffix = "OUTLIER"
+    #: Hero chip (method identity), mirroring the correction / gap-filling tabs.
+    method_chip_label = "OUTLIERS"
+    method_chip_bg = "#FFEBEE"
+    method_chip_fg = "#C62828"
     #: Whether the method supports daytime/nighttime separation. When False, the
     #: day/night box is omitted (e.g. rolling/increment z-score have no day/night).
     supports_daynight = True
@@ -118,21 +127,46 @@ class BaseOutlierTab(DiiveTab):
         self._runner.failed.connect(self._on_failed)
 
         root = QWidget()
-        layout = QHBoxLayout(root)
+        outer = QVBoxLayout(root)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        # Left: pick the variable to clean.
+        # Title bar (correction/gap-filling-style header): a tracked, bold title with
+        # Copy Python at the far-right edge.
+        self.copy_btn = CopyPythonButton(self._python_code)
+        self.copy_btn.setToolTip(
+            "Copy a runnable diive script reproducing this outlier detection.")
+        outer.addLayout(build_titlebar(self.title, self.copy_btn))
+
+        # Body: target list | settings | hero + preview.
+        body = QWidget()
+        layout = QHBoxLayout(body)
+        layout.setContentsMargins(10, 4, 10, 4)
+
+        # Left: pick the variable to clean (the target).
+        tcol = QVBoxLayout()
+        tcol.addWidget(self._list_header("Target", "click to set target"))
         self.varpanel = VariablePanel()
+        self.varpanel.list.setToolTip("Click a variable to set it as the detection target.")
         self.varpanel.selected.connect(lambda name, _ctrl: self._select(name))
-        layout.addWidget(self.varpanel)
+        tcol.addWidget(self.varpanel, stretch=1)
+        layout.addLayout(tcol)
 
         # Middle: settings + run/add.
         mid = self._build_settings()
         mid.setFixedWidth(290)
         layout.addWidget(mid)
 
-        # Right: preview (original + outliers + cleaned).
+        # Right: hero chip over the original/outliers + cleaned preview.
+        right = QWidget()
+        rlay = QVBoxLayout(right)
+        rlay.setContentsMargins(0, 0, 0, 0)
+        rlay.addWidget(self._build_hero())
         self.canvas = MplCanvas()
-        layout.addWidget(self.canvas, stretch=1)
+        rlay.addWidget(self.canvas, stretch=1)
+        layout.addWidget(right, stretch=1)
+
+        outer.addWidget(body, stretch=1)
 
         self._sig.progress.connect(self._on_progress)
         # Seed the day/night coords from Site details and stay in sync with edits.
@@ -140,9 +174,67 @@ class BaseOutlierTab(DiiveTab):
         site.manager.changed.connect(self._on_site_changed)
         return root
 
+    _list_header = staticmethod(list_header)
+
+    def _build_hero(self) -> QWidget:
+        """A slim band: the method chip on the left, a stats strip on the right
+        (filled in after a run via :meth:`_hero_metrics`). The description lives
+        only in the settings panel — not repeated here."""
+        hero = QFrame()
+        hero.setStyleSheet("QFrame { background: #FAFAFA; border-radius: 8px; }")
+        h = QHBoxLayout(hero)
+        h.setContentsMargins(12, 8, 12, 8)
+        h.setSpacing(12)
+        chip = _chip(self.method_chip_label, self.method_chip_bg, self.method_chip_fg)
+        h.addWidget(chip)
+        h.addStretch(1)
+        # Metrics strip: rebuilt after each run from _hero_metrics(payload).
+        self._metrics_host = QWidget()
+        self._metrics_lay = QHBoxLayout(self._metrics_host)
+        self._metrics_lay.setContentsMargins(0, 0, 0, 0)
+        self._metrics_lay.setSpacing(12)
+        h.addWidget(self._metrics_host)
+        return hero
+
+    def _clear_hero(self) -> None:
+        while self._metrics_lay.count():
+            w = self._metrics_lay.takeAt(0).widget()
+            if w is not None:
+                w.deleteLater()
+
+    def _update_hero(self, payload: dict) -> None:
+        """Rebuild the hero stats strip from the subclass's metrics."""
+        self._clear_hero()
+        for i, (name, value, tip) in enumerate(self._hero_metrics(payload)):
+            if i > 0:
+                self._metrics_lay.addWidget(_stat_separator())
+            slot = _MetricSlot()
+            slot.update_metric(name, value, tip)
+            self._metrics_lay.addWidget(slot)
+
+    def _hero_metrics(self, payload: dict) -> list:
+        """Return ``[(name, value, tooltip), ...]`` for the hero stats strip
+        (overridable). Default: outliers + iterations, plus the day/night split
+        when separation was used."""
+        metrics = [
+            ("OUTLIERS", f"{payload['n_outliers']:,}", "Records flagged as outliers"),
+            ("ITERATIONS", str(self._n_iter),
+             "Detection passes that ran (repeat-until-clean)"),
+        ]
+        if payload["is_daytime"] is not None:
+            n_day, n_night = self._daynight_counts(payload["flag"], payload["is_daytime"])
+            metrics.append(("DAYTIME", f"{n_day:,}", "Outliers flagged in daytime records"))
+            metrics.append(("NIGHTTIME", f"{n_night:,}", "Outliers flagged in nighttime records"))
+        return metrics
+
     def _build_settings(self) -> QWidget:
         panel = QWidget()
         outer = QVBoxLayout(panel)
+        # No top margin so the "Settings" header top-aligns with the "Target"
+        # header (the target column's sub-layout has no top margin either).
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        outer.addWidget(self._list_header("Settings", "set parameters & run"))
 
         intro = QLabel(self.intro)
         intro.setWordWrap(True)
@@ -223,6 +315,7 @@ class BaseOutlierTab(DiiveTab):
             self._dn_widgets = ()
 
         self.run_btn = QPushButton(self.run_label)
+        theme.set_button_role(self.run_btn, "confirm")
         self.run_btn.clicked.connect(self._run)
         outer.addWidget(self.run_btn)
 
@@ -244,12 +337,6 @@ class BaseOutlierTab(DiiveTab):
         outer.addWidget(self.add_btn)
 
         outer.addStretch(1)
-
-        # Reproducible snippet (library codegen) — a quiet footer action.
-        self.copy_btn = CopyPythonButton(self._python_code)
-        self.copy_btn.setFlat(True)
-        self.copy_btn.setStyleSheet(f"color: {_C_MUTED}; text-align: left;")
-        outer.addWidget(self.copy_btn)
         return panel
 
     # --- subclass hooks ---
@@ -342,6 +429,7 @@ class BaseOutlierTab(DiiveTab):
         self._result_df = None
         self.varpanel.set_panels([name])
         self.add_btn.setEnabled(False)
+        self._clear_hero()
         self.status.setText(f"Selected '{name}'. Set parameters and detect outliers.")
         # Plot the raw series immediately (top panel); the cleaned panel fills in
         # after detection runs.
@@ -596,6 +684,7 @@ class BaseOutlierTab(DiiveTab):
         self.progress.setVisible(False)
         self._result_df = payload["result"]
         self._last_payload = payload  # for re-render when the limit toggle changes
+        self._update_hero(payload)
         self._draw(self._df[payload["var"]], flag=payload["flag"],
                    cleaned=payload["cleaned"], n_outliers=payload["n_outliers"],
                    is_daytime=payload["is_daytime"],

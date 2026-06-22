@@ -33,6 +33,9 @@ class ZScoreRollingOutlierTab(BaseOutlierTab):
              "variability. Keeps the original, a cleaned copy, and the flag.")
     settings_title = "Rolling z-score settings"
     method_suffix = "ZSCOREROLLING"
+    method_chip_label = "Z-SCORE ROLL"
+    method_chip_bg = "#FFF8E1"
+    method_chip_fg = "#F57F17"
     supports_daynight = False
     # The band is rolling_mean ± threshold * rolling_std, so its centre is the
     # rolling mean — worth showing alongside the limits for this method.
