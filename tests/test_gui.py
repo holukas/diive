@@ -256,6 +256,57 @@ def test_plot_settings_live_render(window):
     assert not _fallback(ym)
 
 
+def test_windrose_tab(app):
+    # The wind rose is role-picked (value + wind direction required, colour
+    # optional) and polar. The bundled CH-DAV example has no wind direction, so
+    # build a synthetic frame carrying one.
+    import numpy as np
+    import pandas as pd
+    from diive.gui.tabs.plotting import PlottingTab
+    from diive.gui.widgets.plot_settings import WINDROSE
+
+    idx = pd.date_range("2021-01-01", periods=2000, freq="30min")
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({
+        "co2_flux": rng.normal(-2, 5, len(idx)),
+        "wind_dir": rng.uniform(0, 360, len(idx)),
+        "air_temperature": rng.normal(285, 4, len(idx)),
+    }, index=idx)
+
+    def _fallback(tab):
+        return [t for ax in tab.canvas.fig.axes for t in ax.texts
+                if "Cannot plot" in t.get_text()]
+
+    tab = PlottingTab(WINDROSE, "Wind rose")
+    tab.widget()
+    tab.on_data_loaded(df, set())
+    QApplication.processEvents()
+
+    # Settings expose the wind-rose parameter set; defaults are seeded.
+    vals = tab.settings.values()
+    assert {"agg", "n_sectors", "z_agg", "cmap", "show_colorbar"} <= set(vals)
+    # Value + direction auto-seeded -> a polar axes + colorbar, no error fallback.
+    assert tab._xyz == ["co2_flux", "wind_dir"]
+    assert any(ax.name == "polar" for ax in tab.canvas.fig.axes)
+    assert not _fallback(tab)
+
+    # Add the optional colour variable and change the aggregation.
+    tab._on_selected("air_temperature", True)
+    tab.settings.wr_agg.setCurrentText("median")
+    tab.settings.wr_nsectors.setValue(16)
+    tab.update_btn.click()
+    QApplication.processEvents()
+    assert tab._xyz == ["co2_flux", "wind_dir", "air_temperature"]
+    assert not _fallback(tab)
+
+    # Hiding the colorbar drops the extra axes (only the polar axes remains).
+    tab.settings.wr_show_colorbar.setChecked(False)
+    tab.update_btn.click()
+    QApplication.processEvents()
+    assert len(tab.canvas.fig.axes) == 1
+    assert not _fallback(tab)
+
+
 def test_params_apply_only_on_update_button(window):
     # Editing a parameter must NOT re-render; only the "Update plot" button
     # applies pending changes. (Variable selection still renders live — covered

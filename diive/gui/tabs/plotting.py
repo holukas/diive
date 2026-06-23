@@ -50,11 +50,13 @@ from diive.gui.widgets.plot_settings import (
     RIDGELINE,
     SCATTER,
     TIMESERIES,
+    WINDROSE,
     PlotSettingsPanel,
 )
 
-#: Plot types that pick variables by X/Y/Z role (not comparison panels).
-_XYZ_TYPES = (HEXBIN, SCATTER)
+#: Plot types that pick variables by role (not comparison panels): hexbin/scatter
+#: X/Y/Z and the wind rose value/wind-direction/colour.
+_XYZ_TYPES = (HEXBIN, SCATTER, WINDROSE)
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 #: Plot types laid out like a heatmap (panels side by side, shared axes).
@@ -202,9 +204,10 @@ class PlottingTab(DiiveTab):
 
         # Right: embedded matplotlib canvas.
         self.canvas = MplCanvas()
-        # The ridgeline builds its own overlapping gridspec; keep the canvas
-        # from re-flowing it (constrained layout / resize).
-        if self._plot_type == RIDGELINE:
+        # The ridgeline builds its own overlapping gridspec; the wind rose builds
+        # its own polar axes (+ colorbar) and sets its own margins. Keep the
+        # canvas from re-flowing either (constrained layout / resize).
+        if self._plot_type in (RIDGELINE, WINDROSE):
             self.canvas.auto_layout = False
 
         splitter.addWidget(left)
@@ -339,6 +342,18 @@ class PlottingTab(DiiveTab):
             self._xyz = preferred if all(c in cols for c in preferred) else cols[:2]
             self._render()
             return
+        if self._plot_type == WINDROSE:
+            # Needs a value + a wind-direction column. Seed the value with a flux
+            # (or the first column) and the direction with the first wind-direction
+            # -named column, if any (the bundled CH-DAV example has none, so the
+            # tab then shows a prompt to pick variables).
+            wd = next((c for c in cols if any(t in c.lower()
+                       for t in ("wind_dir", "winddir", "wd", "_dir"))), None)
+            val = next((c for c in ("NEE_CUT_REF_f", "Tair_f") if c in cols),
+                       cols[0] if cols else None)
+            self._xyz = [c for c in (val, wd) if c]
+            self._render()
+            return
         if _DEFAULT_VAR in cols:
             self._panels = [_DEFAULT_VAR]
         elif cols:
@@ -433,6 +448,10 @@ class PlottingTab(DiiveTab):
 
         if self._plot_type == RIDGELINE:
             self._render_ridgeline()
+            return
+
+        if self._plot_type == WINDROSE:
+            self._render_windrose()
             return
 
         if not self._panels:
@@ -656,6 +675,55 @@ class PlottingTab(DiiveTab):
         except Exception as err:
             ax.clear()
             ax.text(0.5, 0.5, f"Cannot plot scatter:\n{err}", ha="center",
+                    va="center", wrap=True, transform=ax.transAxes)
+        self.canvas.draw()
+        self.canvas.reset_history()
+        self._mark_selected()
+
+    def _render_windrose(self) -> None:
+        """Render the wind rose: a variable aggregated into wind-direction sectors.
+
+        Role-picked (1 = value, 2 = wind direction, 3 = optional colour variable);
+        value + direction are required, the colour variable is optional. The plot
+        is polar with its own colorbar, so — like the ridgeline — it builds its own
+        axes on the canvas figure (the tab leaves the layout to it).
+        """
+        self.settings.set_xyz(*(self._xyz + [None, None, None])[:3])
+        fig = self.canvas.fig
+        fig.clear()
+        fig.set_layout_engine("none")
+        if len(self._xyz) < 2:
+            ax = fig.add_subplot(111)
+            ax.axis("off")
+            ax.text(0.5, 0.5,
+                    f"Click 2 variables: value, then wind direction  "
+                    f"(colour optional)  ({len(self._xyz)}/2)",
+                    ha="center", va="center", transform=ax.transAxes)
+            self.canvas.draw()
+            self._mark_selected()
+            return
+        valn, wdn = self._xyz[0], self._xyz[1]
+        zn = self._xyz[2] if len(self._xyz) >= 3 else None
+        opts = self.settings.values()
+        ax = fig.add_subplot(111, projection="polar")
+        try:
+            dv.plotting.WindRosePlot(
+                series=self._df[valn], wind_dir=self._df[wdn],
+                agg=opts["agg"], n_sectors=opts["n_sectors"],
+                z=(self._df[zn] if zn else None), z_agg=opts["z_agg"],
+            ).plot(
+                ax=ax, format_style=dv.plotting.FormatStyle(**opts["_format"]),
+                cmap=opts["cmap"], color=opts["color"],
+                vmin=opts["vmin"], vmax=opts["vmax"],
+                show_colorbar=opts["show_colorbar"], cb_label=opts["cb_label"],
+                cb_digits_after_comma=opts["cb_digits_after_comma"],
+                max_sector_labels=opts["max_sector_labels"],
+            )
+        except Exception as err:
+            fig.clear()
+            ax = fig.add_subplot(111)
+            ax.axis("off")
+            ax.text(0.5, 0.5, f"Cannot plot wind rose:\n{err}", ha="center",
                     va="center", wrap=True, transform=ax.transAxes)
         self.canvas.draw()
         self.canvas.reset_history()

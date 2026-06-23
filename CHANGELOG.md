@@ -459,7 +459,8 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
   zero line so negative aggregates like CO2 uptake hang inward of the zero circle). An optional `z`/`z_agg` second
   variable colours the bars by its own per-sector aggregate (bar length stays the main variable; the colour aggregate is
   added as a `Z` results column). Exposes the full per-sector statistics as a tidy `.results` DataFrame and a Rich
-  `report()` table (auto-printed with `verbose=True`). Example `plot_windrose_basic.py`.
+  `report()` table (auto-printed with `verbose=True`). Example `plot_windrose_basic.py`. Also wired into the **GUI**
+  Plot menu as a role-picked (value + wind direction, optional colour) polar plotting tab.
 - **`JointUncertaintyPAS20` / `joint_uncertainty_pas20`** (`dv.flux`, `diive.flux.lowres.uncertainty`) — faithful
   ONEFlux `compute_join` port: per-record joint uncertainty `√(RANDUNC² + ((scenario_upper − scenario_lower)/divisor)²)`
   combining the random measurement uncertainty with the flux-filtering scenario-ensemble percentile spread.

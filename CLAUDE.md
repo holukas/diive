@@ -425,18 +425,19 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
 - **Two-phase plot classes are GUI-ready.** The plotting tab renders diive plots straight into an embedded canvas via
   `Plot(series).plot(ax=canvas.ax, fig=canvas.fig)`; no GUI-specific plot variants needed.
 - **`Plot` menu = one closable tab per method.** There is no single "Plotting" tab. Each plot method (Heatmap date/time,
-  Heatmap year/month, Time series, Diel cycle, Cumulative year, Ridgeline, Scatter XY, Hexbin, Histogram, ...) is a menu-activated,
+  Heatmap year/month, Time series, Diel cycle, Cumulative year, Ridgeline, Scatter XY, Hexbin, Histogram, Wind rose, ...) is a menu-activated,
   closable `PlottingTab(plot_type, title)` instance, registered as a factory in `registry.MENU_TABS["Plot"]`. **All** menu
   entries (every menu, not just Plot) get a small `QPainter`-drawn glyph via `gui/icons.py::menu_icon(label)`
   (keyword-matched; `&` mnemonics stripped). Add a method = add a factory there + a branch in `plotting._draw_one` +
-  matching controls in `plot_settings`. Most types pick **comparison panels** (Ctrl+click); Hexbin and Scatter XY instead
-  pick variables by **X/Y/Z role** (`_XYZ_TYPES`, role readout via `settings.set_xyz`) — Scatter needs X+Y (Z optional for
-  colour), Hexbin needs all three. The two heatmap kinds share `_HEATMAP_TYPES` for the side-by-side layout; the per-var
-  line plots stack vertically. The **ridgeline** and the **histogram** are single-variable (Ctrl+click replaces, never
-  stacks): the histogram is information-dense (bar counts + a z-score twiny axis + peak/info box), the ridgeline is the
-  exception to the per-`ax` model — `RidgeLinePlot` builds its own stacked-density gridspec on the whole figure, gets
-  `canvas.fig` via the class's `fig=` param, and the tab sets `canvas.auto_layout=False` so the constrained-layout
-  freeze/resize machinery leaves its manual gridspec alone (see `_render_ridgeline`).
+  matching controls in `plot_settings`. Most types pick **comparison panels** (Ctrl+click); Hexbin, Scatter XY and the
+  **Wind rose** instead pick variables by **role** (`_XYZ_TYPES`, role readout via `settings.set_xyz`) — Scatter needs X+Y
+  (Z optional for colour), Hexbin needs all three, the Wind rose needs value+wind-direction (third pick = optional `z`
+  colour variable). The two heatmap kinds share `_HEATMAP_TYPES` for the side-by-side layout; the per-var
+  line plots stack vertically. The **ridgeline**, **histogram** and **wind rose** are single-figure: the histogram is
+  information-dense (bar counts + a z-score twiny axis + peak/info box); the ridgeline and wind rose are the
+  exceptions to the per-`ax` model — `RidgeLinePlot` builds its own stacked-density gridspec, and the **wind rose** builds
+  its own **polar** axes (+ colorbar) via `_render_windrose`; both get `canvas.fig` directly and the tab sets
+  `canvas.auto_layout=False` so the constrained-layout freeze/resize machinery leaves their manual layout alone.
 - **GUI-only presentation passes (no library param).** A few settings have no `plot()` kwarg and are applied *after* the
   diive plot renders (like the Overview's uniform-font pass): (1) the **Axes** group (`plot_settings._build_axes_group`)
   — X/Y limits, log X/Y, invert Y, additive grid — on the line/scatter types (`TIMESERIES`, `CUMULATIVE_YEAR`, `SCATTER`,

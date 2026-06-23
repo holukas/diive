@@ -59,6 +59,7 @@ from diive.gui.tabs.plotting import (
     RIDGELINE,
     SCATTER,
     TIMESERIES,
+    WINDROSE,
     PlottingTab,
 )
 from diive.gui.tabs.settings import SettingsTab
@@ -104,6 +105,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Scatter XY": lambda: PlottingTab(SCATTER, "Scatter XY"),
         "Hexbin": lambda: PlottingTab(HEXBIN, "Hexbin"),
         "Histogram": lambda: PlottingTab(HISTOGRAM, "Histogram"),
+        "Wind rose": lambda: PlottingTab(WINDROSE, "Wind rose"),
         "3D surface": Surface3DTab,
     },
     "Outliers": {

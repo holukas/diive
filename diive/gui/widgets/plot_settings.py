@@ -83,6 +83,10 @@ CUMULATIVE_YEAR = "Cumulative year"
 HEXBIN = "Hexbin"
 SCATTER = "Scatter (XY)"
 HISTOGRAM = "Histogram"
+WINDROSE = "Wind rose"
+
+#: Per-sector aggregations offered for the wind rose (match WindRosePlot's agg).
+_WINDROSE_AGGS = ["mean", "median", "min", "max", "sum", "std", "count"]
 
 #: Period grouping for the ridgeline (one density ridge per group).
 _RIDGELINE_HOW = ["monthly", "weekly", "yearly"]
@@ -143,6 +147,8 @@ class PlotSettingsPanel(QScrollArea):
             self._build_scatter()
         elif plot_type == HISTOGRAM:
             self._build_histogram()
+        elif plot_type == WINDROSE:
+            self._build_windrose()
 
         self._col.addStretch(1)
         # Keep every form within the panel's fixed width: wrap a row's field
@@ -212,6 +218,7 @@ class PlotSettingsPanel(QScrollArea):
             HEXBIN: dv.plotting.HexbinPlot.plot,
             SCATTER: dv.plotting.ScatterXY.plot,
             HISTOGRAM: dv.plotting.HistogramPlot.plot,
+            WINDROSE: dv.plotting.WindRosePlot.plot,
         }.get(self._plot_type)
         docs = param_docs(method) if method else {}
 
@@ -287,6 +294,22 @@ class PlotSettingsPanel(QScrollArea):
             tip = param_docs(dv.plotting.HistogramPlot.__init__).get("n_bins")
             if tip:
                 self.hist_nbins.setToolTip(tip)
+        elif self._plot_type == WINDROSE:
+            pairs = [
+                ("cmap", self.wr_cmap), ("color", self.wr_color),
+                ("vmin", self.wr_vmin), ("vmax", self.wr_vmax),
+                ("show_colorbar", self.wr_show_colorbar),
+                ("cb_label", self.wr_cb_label),
+                ("cb_digits_after_comma", self.wr_cb_digits),
+                ("max_sector_labels", self.wr_max_labels),
+            ]
+            # agg/n_sectors/z_agg are __init__ params, not in plot().
+            init_docs = param_docs(dv.plotting.WindRosePlot.__init__)
+            for param, widget in [("agg", self.wr_agg), ("n_sectors", self.wr_nsectors),
+                                  ("z_agg", self.wr_zagg)]:
+                tip = init_docs.get(param)
+                if tip:
+                    widget.setToolTip(tip)
         else:
             pairs = []
         for param, widget in pairs:
@@ -613,8 +636,8 @@ class PlotSettingsPanel(QScrollArea):
         self.cy_highlight.blockSignals(False)
 
     def set_xyz(self, x: str | None, y: str | None, z: str | None) -> None:
-        """Update the X/Y/Z role readout (hexbin / scatter)."""
-        if self._plot_type not in (HEXBIN, SCATTER):
+        """Update the role readout (hexbin / scatter X/Y/Z, wind-rose value/dir/colour)."""
+        if self._plot_type not in (HEXBIN, SCATTER, WINDROSE):
             return
         self.x_role.setText(x or "—")
         self.y_role.setText(y or "—")
@@ -677,6 +700,81 @@ class PlotSettingsPanel(QScrollArea):
             "fonts", "show_grid", "show_legend"])
 
         self._build_axes_group()
+
+    # --- wind-rose controls ---
+    def _build_windrose(self) -> None:
+        # Role readout: the tab fills these via set_xyz as the user clicks
+        # variables (1 = value, 2 = wind direction, 3 = optional colour). The list
+        # highlight numbers the same picks.
+        roles = QGroupBox("Variables")
+        form = QFormLayout(roles)
+        hint = QLabel("Click list in order →")
+        hint.setStyleSheet("color: #90A4AE;")
+        form.addRow(hint)
+        self.x_role = QLabel("—")
+        self.y_role = QLabel("—")
+        self.z_role = QLabel("—")
+        for lbl in (self.x_role, self.y_role, self.z_role):
+            lbl.setStyleSheet("color: #455A64;")
+        form.addRow("Value", self.x_role)
+        form.addRow("Wind direction", self.y_role)
+        form.addRow("Colour (optional)", self.z_role)
+        self._col.addWidget(roles)
+
+        agg = QGroupBox("Aggregation")
+        form = QFormLayout(agg)
+        self.wr_agg = QComboBox()
+        self.wr_agg.addItems(_WINDROSE_AGGS)
+        self.wr_agg.currentTextChanged.connect(self.changed)
+        form.addRow("Aggregate (bar)", self.wr_agg)
+        self.wr_nsectors = self._spin(8, 2, 180, form, "Sectors")
+        self.wr_zagg = QComboBox()
+        self.wr_zagg.addItems(_WINDROSE_AGGS)
+        self.wr_zagg.setToolTip("Aggregation for the optional colour variable.")
+        self.wr_zagg.currentTextChanged.connect(self.changed)
+        form.addRow("Aggregate (colour)", self.wr_zagg)
+        self.wr_max_labels = self._spin(16, 2, 64, form, "Max sector labels")
+        self._col.addWidget(agg)
+
+        colors = QGroupBox("Colors")
+        form = QFormLayout(colors)
+        self.wr_cmap = QComboBox()
+        self.wr_cmap.setEditable(True)
+        self.wr_cmap.addItems(_COLORMAPS)
+        self.wr_cmap.setCurrentText("RdYlBu_r")
+        self.wr_cmap.currentTextChanged.connect(self.changed)
+        form.addRow("Colormap", self.wr_cmap)
+        self.wr_reverse_cmap = self._check("Reverse colormap", form)
+        self.wr_color = QLineEdit()
+        self.wr_color.setPlaceholderText("(use colormap)")
+        self.wr_color.setToolTip("Single solid bar colour (hex or name). When set, "
+                                 "overrides the colormap and hides the colorbar.")
+        self.wr_color.editingFinished.connect(self.changed)
+        form.addRow("Single color", self.wr_color)
+        self.wr_vmin = QLineEdit()
+        self.wr_vmin.setPlaceholderText("auto")
+        self.wr_vmin.editingFinished.connect(self.changed)
+        form.addRow("Color min", self.wr_vmin)
+        self.wr_vmax = QLineEdit()
+        self.wr_vmax.setPlaceholderText("auto")
+        self.wr_vmax.editingFinished.connect(self.changed)
+        form.addRow("Color max", self.wr_vmax)
+        self._col.addWidget(colors)
+
+        cbar = QGroupBox("Colorbar")
+        form = QFormLayout(cbar)
+        self.wr_show_colorbar = self._check("Show colorbar", form, checked=True)
+        self.wr_cb_label = QLineEdit()
+        self.wr_cb_label.setPlaceholderText("(auto)")
+        self.wr_cb_label.editingFinished.connect(self.changed)
+        form.addRow("Label", self.wr_cb_label)
+        self.wr_cb_digits = QComboBox()
+        self.wr_cb_digits.addItems(["auto", "0", "1", "2", "3", "4"])
+        self.wr_cb_digits.currentTextChanged.connect(self.changed)
+        form.addRow("Decimals", self.wr_cb_digits)
+        self._col.addWidget(cbar)
+
+        self._build_format_group(fields=["title", "fonts"])
 
     # --- histogram controls ---
     def _build_histogram(self) -> None:
@@ -1069,6 +1167,23 @@ class PlotSettingsPanel(QScrollArea):
                 "vmax": self._float_or_none(self.sc_vmax.text()),
                 "_format": self._format_values(),
                 "_axes": self._axes_values(),
+            }
+        if self._plot_type == WINDROSE:
+            digits = self.wr_cb_digits.currentText()
+            return {
+                "agg": self.wr_agg.currentText(),
+                "n_sectors": self.wr_nsectors.value(),
+                "z_agg": self.wr_zagg.currentText(),
+                "max_sector_labels": self.wr_max_labels.value(),
+                "cmap": self._reverse_cmap(self.wr_cmap.currentText().strip() or "RdYlBu_r",
+                                           self.wr_reverse_cmap.isChecked()),
+                "color": self.wr_color.text().strip() or None,
+                "vmin": self._float_or_none(self.wr_vmin.text()),
+                "vmax": self._float_or_none(self.wr_vmax.text()),
+                "show_colorbar": self.wr_show_colorbar.isChecked(),
+                "cb_label": self.wr_cb_label.text().strip() or None,
+                "cb_digits_after_comma": None if digits == "auto" else int(digits),
+                "_format": self._format_values(),
             }
         if self._plot_type == HISTOGRAM:
             return {
