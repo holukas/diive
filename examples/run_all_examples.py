@@ -39,6 +39,7 @@ EXAMPLE_FILES = [
     'visualization/plot_scatter_xy_colored.py',
     'visualization/plot_treering_temperature.py',
     'visualization/plot_treering_line_temperature.py',
+    'visualization/plot_windrose_basic.py',
     # Times
     'times/times_timestamp_sanitizer.py',
     'times/times_keep_daterange.py',

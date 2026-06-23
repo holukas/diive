@@ -2,7 +2,7 @@
 
 Examples demonstrating visualization and plotting functions for time series and flux data.
 
-22 examples across 10+ plot types.
+23 examples across 10+ plot types.
 
 ## Examples by Plot Type
 
@@ -50,6 +50,9 @@ Examples demonstrating visualization and plotting functions for time series and 
 - **plot_treering_line_temperature.py** — Tree-ring radial line plot: each year as a line trace around
   a full circle; radial displacement encodes value; single-color and per-year colormap variants with
   optional fill between baseline and line
+- **plot_windrose_basic.py** — Wind rose: a variable aggregated into wind-direction sectors
+  (mean/median/min/max/sum/std/count) drawn as polar bars; baseline handles negative aggregates; the
+  per-sector results table is available on `.results` and printed as a Rich table
 
 ### Other Plots
 
@@ -99,4 +102,4 @@ uv run python examples/visualization/plot_scatter_xy_colored.py
 uv run python examples/run_all_examples.py
 ```
 
-All 22 examples follow the two-phase design pattern.
+All 23 examples follow the two-phase design pattern.

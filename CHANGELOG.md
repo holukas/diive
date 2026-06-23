@@ -451,6 +451,15 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
 
 ### New Classes & Functions
 
+- **`WindRosePlot`** (`dv.plotting`, `diive.core.plotting.windrose`) — radial (polar bar) plot that aggregates any
+  variable into wind-direction sectors. Bins wind direction (degrees, meteorological convention) into `n_sectors`
+  North-centred compass sectors (4/8/16 get compass labels, others degree labels) and reduces the paired variable per
+  sector by a chosen aggregation (`mean`/`median`/`min`/`max`/`sum`/`std`/`count`). Two-phase design: data + aggregation
+  in `__init__`, styling in `plot()` (value-mapped colormap + colorbar, North-up clockwise layout, bars anchored at the
+  zero line so negative aggregates like CO2 uptake hang inward of the zero circle). An optional `z`/`z_agg` second
+  variable colours the bars by its own per-sector aggregate (bar length stays the main variable; the colour aggregate is
+  added as a `Z` results column). Exposes the full per-sector statistics as a tidy `.results` DataFrame and a Rich
+  `report()` table (auto-printed with `verbose=True`). Example `plot_windrose_basic.py`.
 - **`JointUncertaintyPAS20` / `joint_uncertainty_pas20`** (`dv.flux`, `diive.flux.lowres.uncertainty`) — faithful
   ONEFlux `compute_join` port: per-record joint uncertainty `√(RANDUNC² + ((scenario_upper − scenario_lower)/divisor)²)`
   combining the random measurement uncertainty with the flux-filtering scenario-ensemble percentile spread.

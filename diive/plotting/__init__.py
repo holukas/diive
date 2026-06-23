@@ -16,6 +16,7 @@ from diive.core.plotting.surface_grid import DateTimeSurface, datetime_surface_g
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.plotting.treering import TreeRingPlot
 from diive.core.plotting.waterfall import WaterfallPlot
+from diive.core.plotting.windrose import WindRosePlot
 
 __all__ = [
     'FormatStyle',
@@ -36,4 +37,5 @@ __all__ = [
     'TimeSeries',
     'TreeRingPlot',
     'WaterfallPlot',
+    'WindRosePlot',
 ]

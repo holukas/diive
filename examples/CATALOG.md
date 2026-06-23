@@ -44,6 +44,7 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 | [**plot_other_plots.py**](visualization/plot_other_plots.py) | Specialized plot types (long-term anomalies, trends) |
 | [**plot_treering_temperature.py**](visualization/plot_treering_temperature.py) | Tree-ring spiral plot: annual rings with color-coded values, month labels, year separators, colorbar extension |
 | [**plot_treering_line_temperature.py**](visualization/plot_treering_line_temperature.py) | Tree-ring radial line plot: each year as a line trace around a full circle, single-color and per-year colormap variants with optional fill |
+| [**plot_windrose_basic.py**](visualization/plot_windrose_basic.py) | Wind rose: a variable aggregated into wind-direction sectors (mean/median/min/max/sum/std/count) drawn as polar bars, with a per-sector results table |
 
 See: [visualization/README.md](visualization/README.md)
 
