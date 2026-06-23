@@ -168,6 +168,64 @@ class TestPlots(unittest.TestCase):
         self.assertEqual(len(fig.axes), 1)
         plt.close(fig)
 
+    def test_compound_extremes(self):
+        import numpy as np
+        import pandas as pd
+        from diive.analysis.compoundextremes import CompoundExtremes, CAT_NONE, CAT_COMPOUND
+        from diive.core.plotting.compoundextremes import CompoundExtremesPlot
+
+        # Deterministic synthetic series with one guaranteed compound month.
+        idx = pd.date_range('2010-01-01', periods=120, freq='MS', name='TIMESTAMP_MIDDLE')
+        rng = np.random.default_rng(0)
+        v1 = pd.Series(rng.normal(0, 1, 120), index=idx, name='VPD')
+        v2 = pd.Series(rng.normal(0, 1, 120), index=idx, name='SWC')
+        v1.iloc[60] += 10.0
+        v2.iloc[60] -= 10.0  # same month -> compound
+        ce = CompoundExtremes(var1=v1, var2=v2, agg='monthly', threshold=2.0,
+                              var1_extreme='high', var2_extreme='low',
+                              standardize_by='record', var1_label='Air', var2_label='Soil')
+
+        # Build the plot straight from the analysis instance.
+        cep = CompoundExtremesPlot.from_compound_extremes(ce)
+        # Threshold lines are signed by each variable's extreme direction.
+        self.assertEqual(cep.threshold_x, 2.0)
+        self.assertEqual(cep.threshold_y, -2.0)
+
+        fig, ax = plt.subplots()
+        cep.plot(ax=ax)
+        from matplotlib.axes._axes import Axes
+        self.assertIsInstance(ax, Axes)
+        # Quadrant lines drawn (one vertical + one horizontal).
+        self.assertIn(2.0, [l.get_xdata()[0] for l in ax.get_lines()])
+        self.assertIn(-2.0, [l.get_ydata()[0] for l in ax.get_lines()])
+        # One scatter collection per present category; compound is present here.
+        labels = [t.get_text() for t in ax.get_legend().get_texts()]
+        self.assertIn('Compound', labels)
+        self.assertIn('None', labels)
+        plt.close(fig)
+
+        # Custom styling + pre-classified data path (arbitrary category labels).
+        x = pd.Series([0.0, 3.0, 0.0, 3.0], name='x z')
+        y = pd.Series([0.0, 0.0, -3.0, -3.0], name='y z')
+        cat = pd.Series(['normal', 'A', 'B', 'both'])
+        styles = {'both': {'color': '#D32F2F', 'marker': 'D', 'label': 'Compound'}}
+        plot = CompoundExtremesPlot(x=x, y=y, category=cat, category_styles=styles,
+                                    category_order=['normal', 'A', 'B', 'both'],
+                                    threshold_x=2.0, threshold_y=-2.0)
+        self.assertEqual(plot.category_styles['both']['label'], 'Compound')
+        fig, ax = plt.subplots()
+        plot.plot(ax=ax, annotate=False, legend=True)
+        self.assertEqual(ax.get_xlabel(), 'x z')
+        self.assertEqual(ax.get_ylabel(), 'y z')
+        plt.close(fig)
+
+        # Threshold lines can be disabled.
+        fig, ax = plt.subplots()
+        CompoundExtremesPlot(x=x, y=y, category=cat,
+                             threshold_x=None, threshold_y=None).plot(ax=ax)
+        self.assertEqual(len(ax.get_lines()), 0)
+        plt.close(fig)
+
     def test_dielcycle_legend_loc(self):
         import pandas as pd
         from diive.core.plotting.dielcycle import DielCycle

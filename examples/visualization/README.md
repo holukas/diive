@@ -2,7 +2,7 @@
 
 Examples demonstrating visualization and plotting functions for time series and flux data.
 
-23 examples across 10+ plot types.
+24 examples across 10+ plot types.
 
 ## Examples by Plot Type
 
@@ -53,6 +53,9 @@ Examples demonstrating visualization and plotting functions for time series and 
 - **plot_windrose_basic.py** — Wind rose: a variable aggregated into wind-direction sectors
   (mean/median/min/max/sum/std/count) drawn as polar bars; baseline handles negative aggregates; the
   per-sector results table is available on `.results` and printed as a Rich table
+- **plot_compound_extremes.py** — `CompoundExtremesPlot`: quadrant scatter of two standardized drivers
+  (z-scores) coloured/marked by compound-extreme category with dashed threshold lines (after Wang et al.,
+  Fig. 2); built from a fitted `CompoundExtremes`, with custom styling, or from pre-classified data
 
 ### Other Plots
 
@@ -102,4 +105,4 @@ uv run python examples/visualization/plot_scatter_xy_colored.py
 uv run python examples/run_all_examples.py
 ```
 
-All 23 examples follow the two-phase design pattern.
+All 24 examples follow the two-phase design pattern.
