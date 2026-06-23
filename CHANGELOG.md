@@ -451,6 +451,17 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
 
 ### New Classes & Functions
 
+- **`CompoundExtremes`** (`dv.analysis`, `diive.analysis.compoundextremes`) — classify time periods (months or days)
+  into compound-extreme categories from the standardized anomalies (z-scores) of two driver variables. The canonical
+  use is compound dry-hot detection (after Wang et al., Fig. 2): a period is an *atmospheric* dryness extreme when VPD
+  is anomalously high, a *soil* dryness extreme when soil water content is anomalously low, and a *compound* extreme
+  when both occur. Each variable has a configurable extreme direction (`high`/`low`) and threshold; periods are
+  aggregated to monthly/daily resolution and standardized either deseasonalized (`standardize_by='season'` — per
+  calendar month / day-of-year, the default) or over the whole record (`'record'`). Exposes `.results` (per-period
+  z-scores, extreme flags, category code + human label), `.counts`, and `.labels`. Companion plot **`CompoundExtremesPlot`**
+  (`dv.plotting`, `diive.core.plotting.compoundextremes`) — the quadrant scatter of the two z-scores, coloured/marked by
+  category with dashed threshold lines and per-point period annotations; build it directly from a fitted analysis via
+  `CompoundExtremesPlot.from_compound_extremes(ce)`. Two-phase design. Example `analysis_compound_extremes.py`.
 - **`WindRosePlot`** (`dv.plotting`, `diive.core.plotting.windrose`) — radial (polar bar) plot that aggregates any
   variable into wind-direction sectors. Bins wind direction (degrees, meteorological convention) into `n_sectors`
   North-centred compass sectors (4/8/16 get compass labels, others degree labels) and reduces the paired variable per

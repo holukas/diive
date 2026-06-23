@@ -2,7 +2,7 @@
 
 Examples demonstrating statistical analysis, decomposition, and pattern detection for time series data.
 
-12 examples covering correlation, spectral analysis, gap detection, grid aggregation, and decomposition.
+13 examples covering correlation, spectral analysis, gap detection, grid aggregation, decomposition, and compound-extreme detection.
 
 ## Examples by Method
 
@@ -17,6 +17,10 @@ Examples demonstrating statistical analysis, decomposition, and pattern detectio
 
 - **analysis_seasonaltrend.py** — STL decomposition separating trend and seasonality
 - **analysis_harmonic.py** — `harmonic_analysis` + `spectrogram`: amplitude/phase of the diel and annual cycles, window effect, and a time-frequency map
+
+### Extremes
+
+- **analysis_compound_extremes.py** — `CompoundExtremes` + `CompoundExtremesPlot`: classify months/days into none/air/soil/compound dry-hot extremes from VPD and SWC z-scores, with the quadrant scatter (after Wang et al., Fig. 2)
 
 ### Distribution & Ranges
 
@@ -82,6 +86,9 @@ uv run python examples/analysis/analysis_optimumrange.py
 # Spatial & spectral analysis
 uv run python examples/analysis/analysis_gridaggregator.py
 uv run python examples/analysis/analysis_harmonic.py
+
+# Compound-extreme detection
+uv run python examples/analysis/analysis_compound_extremes.py
 
 # Specialized analysis
 uv run python examples/analysis/analysis_decoupling.py

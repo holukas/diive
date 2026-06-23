@@ -1,5 +1,6 @@
 """Public namespace: dv.plotting (visualization classes)."""
 from diive.core.plotting.bar import LongtermAnomaliesYear
+from diive.core.plotting.compoundextremes import CompoundExtremesPlot
 from diive.core.plotting.styles.format import FormatStyle
 from diive.core.plotting.cumulative import Cumulative
 from diive.core.plotting.cumulative import CumulativeYear
@@ -20,6 +21,7 @@ from diive.core.plotting.windrose import WindRosePlot
 
 __all__ = [
     'FormatStyle',
+    'CompoundExtremesPlot',
     'LongtermAnomaliesYear',
     'Cumulative',
     'CumulativeYear',

@@ -7,6 +7,7 @@ Comprehensive toolkit: decomposition, correlation, gap detection, histograms, gr
 Part of the diive library: https://github.com/holukas/diive
 """
 
+from diive.analysis.compoundextremes import CompoundExtremes
 from diive.analysis.correlation import DailyCorrelation, rank_drivers
 from diive.analysis.granger import GrangerCausality
 
@@ -29,6 +30,7 @@ from diive.fits.fitter import BinFitterCP
 
 __all__ = [
     'BinFitterCP',
+    'CompoundExtremes',
     'count_gaps',
     'DailyCorrelation',
     'daily_correlation',

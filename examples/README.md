@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**120 examples across 10 organized folders by functional domain.**
+**121 examples across 10 organized folders by functional domain.**
 
 ## Structure
 
@@ -40,7 +40,7 @@ examples/
 │   ├── times_statistics.py
 │   ├── times_diel_cycles.py
 │   └── times_temporal_matrices.py
-├── analysis/              # Time series analysis (12 examples)
+├── analysis/              # Time series analysis (13 examples)
 │   ├── analysis_seasonaltrend.py
 │   ├── analysis_driveranalysis.py
 │   ├── analysis_gapfinder.py

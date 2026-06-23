@@ -66,6 +66,7 @@ See: [visualization/README.md](visualization/README.md)
 | [**analysis_optimumrange.py**](analysis/analysis_optimumrange.py) | Find optimal value ranges, condition-based filtering |
 | [**analysis_quantiles.py**](analysis/analysis_quantiles.py) | Percentile and quantile calculations, non-parametric statistics |
 | [**analysis_harmonic.py**](analysis/analysis_harmonic.py) | `harmonic_analysis` + `spectrogram`: diel/annual cycles, window effect, time-frequency map |
+| [**analysis_compound_extremes.py**](analysis/analysis_compound_extremes.py) | `CompoundExtremes` + `CompoundExtremesPlot`: classify months/days into none/air/soil/compound dry-hot extremes from VPD & SWC z-scores |
 
 See: [analysis/README.md](analysis/README.md)
 

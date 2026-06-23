@@ -51,6 +51,7 @@ EXAMPLE_FILES = [
     # Analysis
     'analysis/analysis_daily_correlation.py',
     'analysis/analysis_driveranalysis.py',
+    'analysis/analysis_compound_extremes.py',
     'analysis/analysis_granger.py',
     'analysis/analysis_decoupling.py',
     'analysis/analysis_gapfinder.py',
