@@ -11,6 +11,7 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.tabs.compound_extremes import CompoundExtremesTab
 from diive.gui.tabs.corrections_nighttime_offset import NighttimeZeroOffsetTab
 from diive.gui.tabs.corrections_relativehumidity_offset import RelativeHumidityOffsetTab
 from diive.gui.tabs.corrections_set_missing import SetExactToMissingTab
@@ -154,6 +155,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Data profile": ProfileTab,
         "Gaps & coverage": GapDashboardTab,
         "Driver explorer": DriverExplorerTab,
+        "Compound extremes": CompoundExtremesTab,
         "Seasonal trend & anomalies": SeasonalTrendTab,
         "Spectrogram": SpectrogramTab,
     },

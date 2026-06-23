@@ -710,6 +710,15 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   method/max-lag apply on a **Rank drivers** button (the lag scan can be heavier). Table sorts numerically via a small
   `_NumItem` (sorts on the stored value, not display text). Defaults to `NEE_CUT_REF_f` (a continuous flux makes the
   ranking informative), else the first numeric column.
+- **Compound extremes tab** (`tabs/compound_extremes.py`, `Analyze ▸ Compound extremes`). Classify months/days into
+  none/air/soil/compound dry-hot extremes from two drivers' z-scores and render the quadrant scatter (Wang et al. Fig.
+  2). Standalone `DiiveTab` (computation is fast → synchronous, no `WorkerRunner`): two **role-based variable combos**
+  (var1 auto-picks `VPD`, var2 `SWC`/`SOIL`/`SWP`) with ✓/✗ availability markers (reuses `_partitioning_base._auto_pick`),
+  per-variable extreme-direction combos (high/low), threshold, `agg` monthly/daily, `standardize_by` season/record,
+  editable category labels (Air/Soil). Run builds `dv.analysis.CompoundExtremes` and renders
+  `dv.plotting.CompoundExtremesPlot.from_compound_extremes(ce)` into one `MplCanvas` axes; the status line shows the
+  per-category counts. **Copy Python** → library `compound_extremes_to_code` (in `diive/analysis/compoundextremes.py`).
+  Analysis/visualization only — does not emit columns to the dataset. All algorithms are library work.
 - **Seasonal-trend & anomaly explorer tab** (`tabs/seasonaltrend.py`, `Analyze ▸ Seasonal-trend & anomalies`,
   single-instance). "Is this variable changing over the years?" Decomposes a variable's **daily-mean** series into
   trend/seasonal/residual (4 stacked panels) and, in a second **view**, shows each year's anomaly vs a reference period.

@@ -48,7 +48,9 @@
   developer map `diive/gui/README.md`.
 - Tabs: **Overview** (per-variable stats ribbon + multi-panel figure); per-method **Plot** tabs (heatmaps, time series,
   diel cycle, cumulative year, ridgeline, scatter XY, hexbin, histogram; multi-instance, each with a live settings
-  panel); **Analyze** tabs **Gaps & coverage**, **Driver explorer**, **Seasonal-trend & anomalies**, **Spectrogram**;
+  panel); **Analyze** tabs **Gaps & coverage**, **Driver explorer**, **Compound extremes** (classify months/days into
+  none/air/soil/compound dry-hot extremes from two drivers' z-scores + quadrant scatter, Wang et al. Fig. 2),
+  **Seasonal-trend & anomalies**, **Spectrogram**;
   **Flux processing chain** (Input + L2 + L3.1 storage correction + L3.2 outlier-detection chain + L3.3 constant-USTAR
   filtering + L4.1 gap-filling — rf / xgb / mds, additive across methods, one gap-fill per USTAR scenario, with a
   cumulative / heatmap method comparison; a shared Random seed makes rf/xgb reproducible, plus per-method

@@ -325,6 +325,57 @@ def test_windrose_tab(app):
     assert not _fallback(tab)
 
 
+def test_compound_extremes_tab(app):
+    # Analyze ▸ Compound extremes: two role-based variable combos (VPD / SWC) auto
+    # seeded, run classifies + renders the quadrant scatter, Copy Python emits a
+    # runnable snippet. The bundled CH-DAV example carries VPD_f + SWC_FF0_0.15_1.
+    from diive.configs.exampledata import load_exampledata_parquet
+    from diive.gui.tabs.compound_extremes import CompoundExtremesTab
+
+    df = load_exampledata_parquet()
+    tab = CompoundExtremesTab()
+    tab.widget()
+    tab.on_data_loaded(df, set())
+    QApplication.processEvents()
+
+    # Variable combos auto-seed VPD / SWC and show the availability tick.
+    assert tab.var1_combo.currentText() == "VPD_f"
+    assert tab.var2_combo.currentText() == "SWC_FF0_0.15_1"
+    assert tab._avail1.text() == "✓" and tab._avail2.text() == "✓"
+    # Default directions: var1 high (VPD), var2 low (SWC).
+    assert tab.dir1_combo.currentText() == "high"
+    assert tab.dir2_combo.currentText() == "low"
+
+    # Run classifies + plots. Default = monthly, deseasonalized, threshold 2.
+    tab.run_btn.click()
+    QApplication.processEvents()
+    assert tab._ce is not None
+    assert len(tab._ce.results) == 120  # 10 years x 12 months
+    assert int(tab._ce.counts["Air"]) == 3
+    assert "monthly periods" in tab.status.text()
+    # One axes with the scatter drawn (>=1 collection).
+    assert len(tab.canvas.fig.axes) == 1
+    assert tab.canvas.fig.axes[0].collections
+
+    # Switching to whole-record standardization changes the flagged set.
+    tab.std_combo.setCurrentText("Whole-record")
+    tab.run_btn.click()
+    QApplication.processEvents()
+    assert int(tab._ce.counts["Soil"]) == 4
+
+    # Copy Python yields a runnable CompoundExtremes snippet.
+    code = tab._python_code()
+    assert "dv.analysis.CompoundExtremes(" in code
+    assert "CompoundExtremesPlot" in code
+    assert "'VPD_f'" in code and "'SWC_FF0_0.15_1'" in code
+
+    # Same-variable selection is rejected with a message, not a crash.
+    tab.var2_combo.setCurrentText("VPD_f")
+    tab.run_btn.click()
+    QApplication.processEvents()
+    assert "must differ" in tab.status.text()
+
+
 def test_params_apply_only_on_update_button(window):
     # Editing a parameter must NOT re-render; only the "Update plot" button
     # applies pending changes. (Variable selection still renders live — covered

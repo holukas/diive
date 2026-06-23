@@ -336,6 +336,34 @@ target-vs-driver scatter.
 - Changing the method or max lag takes effect on **Rank drivers**; picking a new
   target updates immediately.
 
+### Compound extremes
+
+Find **dry-hot extremes** by combining two drivers. Each month or day is turned into
+a **z-score** (how far from normal it was) for both variables, and classified into
+four types, shown as a quadrant scatter (after Wang et al.):
+
+- **None** — neither variable was extreme (black dots).
+- **Air** — high VPD only, atmospheric dryness (orange triangles).
+- **Soil** — low soil water content only, soil dryness (dark-red squares).
+- **Compound** — both at once (red diamonds), the most stressful case.
+
+Pick **Variable 1** (e.g. VPD) and **Variable 2** (e.g. soil water content) on the
+left; sensible columns are auto-selected with a ✓/✗ availability marker. The status
+line and the scatter update on **Run**.
+
+- **Variable 1 / 2 extreme.** Which tail counts as extreme — *high* (e.g. high VPD)
+  or *low* (e.g. low soil water). Defaults: variable 1 high, variable 2 low.
+- **Threshold (sigma).** How far from normal a z-score must be to count as extreme
+  (default 2). The dashed lines on the plot mark this threshold.
+- **Resolution.** Classify **monthly** or **daily** periods.
+- **Standardize by.** *Deseasonalized* (recommended) compares each month/day against
+  the same time of year across all years, so the normal seasonal cycle does not count
+  as "extreme". *Whole-record* uses one average over everything (simpler, but summer
+  months tend to flag).
+- **Category labels.** Rename the single-variable categories (default *Air* / *Soil*)
+  to match your drivers; they appear in the legend and point labels.
+- **Copy Python** copies a runnable script that reproduces the classification and plot.
+
 ### Seasonal trend & anomalies
 
 See whether a variable is **changing over the years** and which years stood out.

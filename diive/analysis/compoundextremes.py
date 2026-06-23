@@ -207,3 +207,70 @@ class CompoundExtremes:
         df['PERIOD'] = df.index.strftime(fmt)
 
         self._results = df
+
+
+def compound_extremes_to_code(
+        var1: str,
+        var2: str,
+        *,
+        agg: str = 'monthly',
+        var1_extreme: str = 'high',
+        var2_extreme: str = 'low',
+        threshold: float = 2.0,
+        var1_threshold: float = None,
+        var2_threshold: float = None,
+        standardize_by: str = 'season',
+        var1_label: str = 'Air',
+        var2_label: str = 'Soil',
+        df_var: str = 'df',
+        load_hint: str = None,
+        with_plot: bool = True,
+) -> str:
+    """Render a ``CompoundExtremes(...)`` (+ optional plot) snippet as a string.
+
+    Mirrors what the GUI's compound-extremes tab runs. Belongs in the library
+    (not the GUI): it encodes the exact API call shape and must stay correct as
+    that API evolves; the GUI only calls it.
+
+    Args:
+        var1: first driver column (e.g. VPD).
+        var2: second driver column (e.g. SWC).
+        agg / var1_extreme / var2_extreme / threshold / var1_threshold /
+        var2_threshold / standardize_by / var1_label / var2_label: passed
+            straight through to :class:`CompoundExtremes` (per-variable
+            thresholds are emitted only when set).
+        df_var: variable name used for the input DataFrame.
+        load_hint: if given, prepend ``df = <load_hint>`` so the snippet runs as-is.
+        with_plot: also emit the ``CompoundExtremesPlot`` lines.
+
+    Returns:
+        A runnable Python snippet as a string.
+    """
+    lines = ["import diive as dv", ""]
+    if with_plot:
+        lines = ["import matplotlib.pyplot as plt", *lines]
+    if load_hint is not None:
+        lines += [f"{df_var} = {load_hint}", ""]
+    lines += ["ce = dv.analysis.CompoundExtremes(",
+              f"    var1={df_var}[{var1!r}],",
+              f"    var2={df_var}[{var2!r}],",
+              f"    agg={agg!r},",
+              f"    var1_extreme={var1_extreme!r},",
+              f"    var2_extreme={var2_extreme!r},",
+              f"    threshold={threshold!r},"]
+    if var1_threshold is not None:
+        lines.append(f"    var1_threshold={var1_threshold!r},")
+    if var2_threshold is not None:
+        lines.append(f"    var2_threshold={var2_threshold!r},")
+    lines += [f"    standardize_by={standardize_by!r},",
+              f"    var1_label={var1_label!r},",
+              f"    var2_label={var2_label!r},",
+              ")",
+              "print(ce.counts)"]
+    if with_plot:
+        lines += ["",
+                  "ce_plot = dv.plotting.CompoundExtremesPlot.from_compound_extremes(ce)",
+                  "fig, ax = plt.subplots(figsize=(9, 8))",
+                  "ce_plot.plot(ax=ax)",
+                  "fig.show()"]
+    return "\n".join(lines) + "\n"
