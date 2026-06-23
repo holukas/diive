@@ -27,9 +27,15 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QApplication,
     QHBoxLayout,
+    QHeaderView,
+    QLabel,
     QPushButton,
     QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -212,7 +218,19 @@ class PlottingTab(DiiveTab):
 
         splitter.addWidget(left)
         splitter.addWidget(middle)
-        splitter.addWidget(self.canvas)
+        # The wind rose also surfaces its per-sector aggregation as a table (with
+        # a copy-to-clipboard button) below the canvas; every other plot type puts
+        # the bare canvas on the right.
+        if self._plot_type == WINDROSE:
+            right = QSplitter(Qt.Orientation.Vertical)
+            right.addWidget(self.canvas)
+            right.addWidget(self._build_windrose_results())
+            right.setStretchFactor(0, 1)
+            right.setStretchFactor(1, 0)
+            right.setSizes([560, 240])
+            splitter.addWidget(right)
+        else:
+            splitter.addWidget(self.canvas)
         splitter.setStretchFactor(0, 0)   # list keeps its width
         splitter.setStretchFactor(1, 0)   # settings keep their width
         splitter.setStretchFactor(2, 1)   # canvas takes extra space
@@ -680,13 +698,77 @@ class PlottingTab(DiiveTab):
         self.canvas.reset_history()
         self._mark_selected()
 
+    def _build_windrose_results(self) -> QWidget:
+        """The wind rose's per-sector results table + a copy-to-clipboard button."""
+        panel = QWidget()
+        lay = QVBoxLayout(panel)
+        lay.setContentsMargins(0, 4, 0, 0)
+        lay.setSpacing(4)
+
+        head = QHBoxLayout()
+        head.addWidget(list_header("Per-sector results", "aggregation table"))
+        head.addStretch(1)
+        self.wr_copy_btn = QPushButton("Copy table")
+        self.wr_copy_btn.setToolTip("Copy the per-sector table to the clipboard "
+                                    "(tab-separated, pastes into Excel).")
+        self.wr_copy_btn.clicked.connect(self._copy_windrose_table)
+        self.wr_copy_btn.setEnabled(False)
+        head.addWidget(self.wr_copy_btn)
+        lay.addLayout(head)
+
+        self.wr_table = QTableWidget()
+        self.wr_table.verticalHeader().setVisible(False)
+        self.wr_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.wr_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        lay.addWidget(self.wr_table, 1)
+        self._wr_results = None  # the last rendered .results DataFrame
+        return panel
+
+    def _fill_windrose_table(self, results) -> None:
+        """Populate the results table from a WindRosePlot `.results` DataFrame."""
+        self._wr_results = results
+        cols = ["Sector"] + list(results.columns)
+        self.wr_table.setColumnCount(len(cols))
+        self.wr_table.setHorizontalHeaderLabels(cols)
+        self.wr_table.setRowCount(len(results))
+        for r, (sector, row) in enumerate(results.iterrows()):
+            cells = [str(sector)] + [
+                ("" if v != v else  # NaN
+                 (f"{int(v)}" if c in ("N_VALS",) else f"{v:.3g}"))
+                for c, v in row.items()
+            ]
+            for cidx, text in enumerate(cells):
+                item = QTableWidgetItem(text)
+                if cidx > 0:
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignRight
+                                          | Qt.AlignmentFlag.AlignVCenter)
+                self.wr_table.setItem(r, cidx, item)
+        hdr = self.wr_table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        for c in range(1, len(cols)):
+            hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.Stretch)
+        self.wr_copy_btn.setEnabled(True)
+
+    def _copy_windrose_table(self) -> None:
+        """Copy the per-sector results to the clipboard as tab-separated text."""
+        if self._wr_results is None:
+            return
+        # index_label keeps the sector column header; \t pastes cleanly into Excel.
+        text = self._wr_results.to_csv(sep="\t", index_label="Sector")
+        QApplication.clipboard().setText(text)
+        self.wr_copy_btn.setText("Copied ✓")
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(1200, lambda: self.wr_copy_btn.setText("Copy table"))
+
     def _render_windrose(self) -> None:
         """Render the wind rose: a variable aggregated into wind-direction sectors.
 
         Role-picked (1 = value, 2 = wind direction, 3 = optional colour variable);
         value + direction are required, the colour variable is optional. The plot
         is polar with its own colorbar, so — like the ridgeline — it builds its own
-        axes on the canvas figure (the tab leaves the layout to it).
+        axes on the canvas figure (the tab leaves the layout to it). The per-sector
+        `.results` table is mirrored into the side table and reported to the Log
+        (Rich console), since both come from the same library object.
         """
         self.settings.set_xyz(*(self._xyz + [None, None, None])[:3])
         fig = self.canvas.fig
@@ -707,11 +789,12 @@ class PlottingTab(DiiveTab):
         opts = self.settings.values()
         ax = fig.add_subplot(111, projection="polar")
         try:
-            dv.plotting.WindRosePlot(
+            rose = dv.plotting.WindRosePlot(
                 series=self._df[valn], wind_dir=self._df[wdn],
                 agg=opts["agg"], n_sectors=opts["n_sectors"],
                 z=(self._df[zn] if zn else None), z_agg=opts["z_agg"],
-            ).plot(
+            )
+            rose.plot(
                 ax=ax, format_style=dv.plotting.FormatStyle(**opts["_format"]),
                 cmap=opts["cmap"], color=opts["color"],
                 vmin=opts["vmin"], vmax=opts["vmax"],
@@ -719,6 +802,13 @@ class PlottingTab(DiiveTab):
                 cb_digits_after_comma=opts["cb_digits_after_comma"],
                 max_sector_labels=opts["max_sector_labels"],
             )
+            self._fill_windrose_table(rose.results)
+            # Rich per-sector table + summary lines -> streamed to the Log tab.
+            # Bump verbosity so report()'s info() summary lines also print (the
+            # table prints regardless); set after construction to avoid a second
+            # report during __init__.
+            rose.verbose = 2
+            rose.report()
         except Exception as err:
             fig.clear()
             ax = fig.add_subplot(111)

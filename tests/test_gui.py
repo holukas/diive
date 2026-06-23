@@ -290,6 +290,20 @@ def test_windrose_tab(app):
     assert any(ax.name == "polar" for ax in tab.canvas.fig.axes)
     assert not _fallback(tab)
 
+    # Per-sector results table is populated (8 sectors x value columns).
+    assert tab.wr_table.rowCount() == 8
+    headers = [tab.wr_table.horizontalHeaderItem(c).text()
+               for c in range(tab.wr_table.columnCount())]
+    assert headers[0] == "Sector" and "MEAN" in headers and "N_VALS" in headers
+    assert tab.wr_table.item(0, 0).text() == "N"  # first sector is North
+
+    # Copy-to-clipboard writes the table as tab-separated text.
+    assert tab.wr_copy_btn.isEnabled()
+    tab._copy_windrose_table()
+    clip = QApplication.clipboard().text()
+    assert clip.splitlines()[0].startswith("Sector\t")
+    assert len(clip.splitlines()) == 9  # header + 8 sectors
+
     # Add the optional colour variable and change the aggregation.
     tab._on_selected("air_temperature", True)
     tab.settings.wr_agg.setCurrentText("median")
@@ -298,6 +312,10 @@ def test_windrose_tab(app):
     QApplication.processEvents()
     assert tab._xyz == ["co2_flux", "wind_dir", "air_temperature"]
     assert not _fallback(tab)
+    # Optional colour variable adds a Z column to the results table.
+    headers = [tab.wr_table.horizontalHeaderItem(c).text()
+               for c in range(tab.wr_table.columnCount())]
+    assert "Z" in headers
 
     # Hiding the colorbar drops the extra axes (only the polar axes remains).
     tab.settings.wr_show_colorbar.setChecked(False)

@@ -437,7 +437,10 @@ PyInstaller one-folder build in `packaging/` (`build_gui.ps1`); see `packaging/R
   information-dense (bar counts + a z-score twiny axis + peak/info box); the ridgeline and wind rose are the
   exceptions to the per-`ax` model — `RidgeLinePlot` builds its own stacked-density gridspec, and the **wind rose** builds
   its own **polar** axes (+ colorbar) via `_render_windrose`; both get `canvas.fig` directly and the tab sets
-  `canvas.auto_layout=False` so the constrained-layout freeze/resize machinery leaves their manual layout alone.
+  `canvas.auto_layout=False` so the constrained-layout freeze/resize machinery leaves their manual layout alone. The wind
+  rose additionally surfaces its library `.results` per-sector table below the canvas (a `QTableWidget` filled by
+  `_fill_windrose_table`, with a **Copy table** button → tab-separated clipboard text via `_copy_windrose_table`) and
+  streams the library's Rich `report()` (table + summary) to the **Log** tab on each render.
 - **GUI-only presentation passes (no library param).** A few settings have no `plot()` kwarg and are applied *after* the
   diive plot renders (like the Overview's uniform-font pass): (1) the **Axes** group (`plot_settings._build_axes_group`)
   — X/Y limits, log X/Y, invert Y, additive grid — on the line/scatter types (`TIMESERIES`, `CUMULATIVE_YEAR`, `SCATTER`,
