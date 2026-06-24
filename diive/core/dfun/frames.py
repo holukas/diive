@@ -58,6 +58,66 @@ def keep_vars(data: DataFrame | Series,
     return out
 
 
+def keep_records_where(data: DataFrame,
+                       target: str,
+                       condition_var: str,
+                       lower: float = None,
+                       upper: float = None,
+                       inclusive: str = 'both',
+                       set_to_nan: bool = True,
+                       verbose: bool = False) -> Series:
+    """Select records of one variable based on the value of another variable.
+
+    Returns the ``target`` variable restricted to the records where a second
+    variable (``condition_var``) falls within ``[lower, upper]``. A
+    non-destructive conditional subselection (the row-on-a-condition analogue of
+    ``keep_vars`` / ``times.keep_daterange``): the input is left untouched.
+
+    At least one of ``lower``/``upper`` must be given; an unset bound means that
+    side is open (no limit). Records where ``condition_var`` is NaN are never
+    kept (a missing condition can't satisfy the range).
+
+    Args:
+        data: DataFrame containing both ``target`` and ``condition_var``.
+        target: Column to select records from.
+        condition_var: Column whose value decides which records are kept.
+        lower: Lower limit for ``condition_var``; ``None`` = open below.
+        upper: Upper limit for ``condition_var``; ``None`` = open above.
+        inclusive: Which bounds are inclusive, passed to ``Series.between``:
+            ``'both'`` (default), ``'neither'``, ``'left'`` or ``'right'``.
+        set_to_nan: If True (default), keep the full index and set non-matching
+            records to NaN (preserves regular time spacing). If False, drop the
+            non-matching records and return only the matching ones.
+        verbose: Print how many records were kept.
+
+    Returns:
+        A copy of ``data[target]`` restricted to the matching records.
+
+    Raises:
+        ValueError: If a column is missing or both limits are ``None``.
+    """
+    for col in (target, condition_var):
+        if col not in data.columns:
+            raise ValueError(f"Column '{col}' not found in data.")
+    if lower is None and upper is None:
+        raise ValueError("At least one of 'lower' / 'upper' must be given.")
+
+    cond = data[condition_var]
+    eff_lower = cond.min() if lower is None else lower
+    eff_upper = cond.max() if upper is None else upper
+    mask = cond.between(eff_lower, eff_upper, inclusive=inclusive)
+
+    series = data[target].copy()
+    if set_to_nan:
+        out = series.where(mask)
+    else:
+        out = series[mask]
+    if verbose:
+        info(f"Kept {int(mask.sum())} of {len(mask)} records of '{target}' "
+             f"where '{condition_var}' in [{eff_lower}, {eff_upper}] ({inclusive}).")
+    return out
+
+
 def compare_len_header_vs_data(n_cols_data: int, n_cols_header: int, varnames_list: list, varunits_list: list):
     """
     Check whether there are more data columns than given in the header

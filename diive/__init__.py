@@ -22,6 +22,7 @@ from diive import times
 
 from diive.configs.exampledata import load_exampledata_parquet
 from diive.configs.exampledata import load_exampledata_parquet_lae
+from diive.core.dfun.frames import keep_records_where
 from diive.core.dfun.frames import keep_vars
 from diive.core.dfun.frames import transform_yearmonth_matrix_to_longform
 from diive.core.dfun.stats import sstats
@@ -56,6 +57,7 @@ __all__ = [
     'load_exampledata_parquet',
     'load_exampledata_parquet_lae',
     'keep_vars',
+    'keep_records_where',
     'transform_yearmonth_matrix_to_longform',
     'sstats',
     'ReadFileType',
