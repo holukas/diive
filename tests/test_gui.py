@@ -376,6 +376,89 @@ def test_compound_extremes_tab(app):
     assert "must differ" in tab.status.text()
 
 
+def test_select_records_tab(app):
+    # Data ▸ Select records by condition: pick a target (left list), build
+    # keep/remove operations from a condition variable + range, stack several,
+    # then emit the {target}_SEL column.
+    import diive as dv
+    from diive.core.metadata import ATTRS_KEY
+    from diive.gui.tabs.select_records import SelectRecordsTab
+
+    df = dv.load_exampledata_parquet()
+    tab = SelectRecordsTab()
+    tab.widget()
+    tab.on_data_loaded(df, set())
+    QApplication.processEvents()
+
+    out_name = "NEE_CUT_REF_f_SEL"
+    tab._select("NEE_CUT_REF_f")
+    QApplication.processEvents()
+    # Undo/Reset disabled, Add disabled until an operation is applied.
+    assert not tab.undo_btn.isEnabled() and not tab.add_btn.isEnabled()
+
+    # Step 1 — KEEP where Tair_f in [15, 20].
+    tab.cond_combo.setCurrentText("Tair_f")
+    QApplication.processEvents()
+    assert tab.cond_mark.text() == "✓"
+    tab.lower.setValue(15.0)
+    tab.upper.setValue(20.0)
+    tab.mode.setCurrentIndex(0)  # keep
+    tab._apply_op()
+    QApplication.processEvents()
+    keep1 = df["Tair_f"].between(15.0, 20.0)
+    target_valid = df["NEE_CUT_REF_f"].notna()
+    assert int((tab._keep_mask & target_valid).sum()) == int((keep1 & target_valid).sum())
+    assert tab.add_btn.isEnabled() and tab.undo_btn.isEnabled()
+    assert len(tab._steps) == 1
+
+    # Step 2 — REMOVE where VPD_f in [10, 100] (operations stack).
+    tab.cond_combo.setCurrentText("VPD_f")
+    QApplication.processEvents()
+    tab.lower.setValue(10.0)
+    tab.upper.setValue(100.0)
+    tab.mode.setCurrentIndex(1)  # remove
+    tab._apply_op()
+    QApplication.processEvents()
+    remove2 = df["VPD_f"].between(10.0, 100.0)
+    expected_mask = keep1 & ~remove2
+    assert int((tab._keep_mask & target_valid).sum()) == int((expected_mask & target_valid).sum())
+    assert len(tab._steps) == 2
+
+    # Add emits the accumulated working series with provenance (all steps).
+    emitted = {}
+    tab.featuresCreated.connect(lambda d: emitted.update(df=d))
+    tab._add()
+    QApplication.processEvents()
+    assert out_name in emitted["df"].columns
+    assert emitted["df"].attrs[ATTRS_KEY][out_name]["params"]["steps"] == tab._steps
+    sel = emitted["df"][out_name]
+    assert len(sel) == len(df)  # full index kept (out-of-range -> NaN)
+    assert int(sel.notna().sum()) == int((expected_mask & target_valid).sum())
+
+    # Copy Python: one keep_records_where line per step, with invert for remove.
+    code = tab._python_code()
+    compile(code, "<gen>", "exec")
+    assert code.count("dv.keep_records_where(") == 2
+    assert "condition_var='Tair_f'" in code and "condition_var='VPD_f'" in code
+    assert "invert=True" in code  # the remove step
+
+    # Undo drops the last step and rebuilds the mask.
+    tab._undo()
+    QApplication.processEvents()
+    assert len(tab._steps) == 1
+    assert int((tab._keep_mask & target_valid).sum()) == int((keep1 & target_valid).sum())
+
+    # Reset clears everything back to the full target.
+    tab._reset_steps()
+    QApplication.processEvents()
+    assert tab._steps == [] and not tab.add_btn.isEnabled()
+    assert bool(tab._keep_mask.all())
+
+    # The condition may be the target itself (filter a variable by its own value).
+    tab.cond_combo.setCurrentText("NEE_CUT_REF_f")
+    assert tab._validate() is None
+
+
 def test_params_apply_only_on_update_button(window):
     # Editing a parameter must NOT re-render; only the "Update plot" button
     # applies pending changes. (Variable selection still renders live — covered

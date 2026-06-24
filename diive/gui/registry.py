@@ -42,6 +42,7 @@ from diive.gui.tabs.partitioning_nighttime_oneflux import NighttimePartitioningO
 from diive.gui.tabs.partitioning_nighttime_reddyproc import NighttimePartitioningReddyProcTab
 from diive.gui.tabs.profile import ProfileTab
 from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
+from diive.gui.tabs.select_records import SelectRecordsTab
 from diive.gui.tabs.spectrogram import SpectrogramTab
 from diive.gui.tabs.stepwise import StepwiseScreeningTab
 from diive.gui.tabs.timelag import TimeLagAnalysisTab
@@ -86,6 +87,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         # data/variable preparation: subset, per-variable metadata, and the
         # feature engineer (which derives new columns).
         "Select variables": VariableSelectorTab,
+        "Select records by condition": SelectRecordsTab,
         "Rename variables": RenameVariablesTab,
         "Metadata explorer": MetadataExplorerTab,
         "Feature engineering": FeatureEngineerTab,

@@ -58,6 +58,19 @@ nee_hot = dv.keep_records_where(
 print(f"\nMean NEE where Tair_f >= 20: {nee_hot.mean():.3f}")
 
 # %%
+# Remove the in-range records instead of keeping them
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+# invert=True keeps the records *outside* the range — i.e. it removes the
+# selected (in-range) ones. Here: drop NEE wherever Tair_f is in [10, 20].
+nee_not_mild = dv.keep_records_where(
+    df, target='NEE_CUT_REF_f', condition_var='Tair_f',
+    lower=10, upper=20, invert=True, verbose=True,
+)
+
+print(f"\nKept {nee_not_mild.notna().sum()} records (mild-temperature ones removed).")
+
+# %%
 # Visualize which records were selected
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

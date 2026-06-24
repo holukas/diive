@@ -43,6 +43,20 @@ class TestKeepRecordsWhere(unittest.TestCase):
                                  lower=-100, upper=100)
         self.assertTrue(np.isnan(out.iloc[3]))
 
+    def test_invert_removes_in_range(self):
+        # invert keeps records OUTSIDE the range (removes the in-range ones).
+        out = keep_records_where(self.df, target='NEE', condition_var='TA',
+                                 lower=10, upper=20, invert=True, set_to_nan=False)
+        # In-range TA = {15, 12} (idx 1, 4) removed; all others kept (incl. the
+        # NaN-condition idx 3 and idx 5 whose TA=30 is out of range).
+        self.assertEqual(list(out.index), [0, 2, 3, 5, 6])
+
+    def test_invert_keeps_nan_condition(self):
+        # A missing condition can't be "in the removed range", so it stays.
+        out = keep_records_where(self.df, target='NEE', condition_var='TA',
+                                 lower=-100, upper=100, invert=True)
+        self.assertEqual(out.iloc[3], 4.0)  # idx 3: TA is NaN -> kept
+
     def test_inclusive_neither(self):
         out = keep_records_where(self.df, target='NEE', condition_var='TA',
                                  lower=12, upper=15, inclusive='neither',
