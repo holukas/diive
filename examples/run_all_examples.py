@@ -109,6 +109,7 @@ EXAMPLE_FILES = [
     'fits/fit_binfittercp.py',
     'fits/fit_fitter.py',
     # Flux - Processing chain
+    'flux/fluxprocessingchain/fluxprocessingchain_level2.py',
     'flux/fluxprocessingchain/fluxprocessingchain_runchain.py',
     'flux/fluxprocessingchain/fluxprocessingchain_composable.py',
     'flux/fluxprocessingchain/fluxprocessingchain_partitioning.py',

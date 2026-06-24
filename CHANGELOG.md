@@ -719,6 +719,10 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
 
 ### Examples & Documentation
 
+- New example + test for **Level 2 in isolation**: `fluxprocessingchain_level2.py` runs `run_level2` standalone on a
+  real EddyPro FLUXNET output file (Level-0), covering `level2_test_inputs`, the QCF-filtered vs. high-quality (QCF=0)
+  series, and the accept-threshold effect; `TestFluxProcessingChainLevel2` in `tests/test_fluxprocessingchain.py` mirrors
+  it (QCF/flag outputs, pure-function contract, skipped-test handling, config-validation errors, threshold monotonicity).
 - New examples: `fluxprocessingchain_composable.py` (full L2->L4.1), `fluxprocessingchain_multiflux.py` (multi-flux
   loop), `qaqc_detect_timestamp_shifts.py`, `flux_lag_pwb.py`, `flux_lag_pwb_batch.py`, `plot_treering_temperature.py`,
   4 I/O examples, USTAR method comparison, `gapfill_swin.py` (SW_IN physics + XGBoost),
