@@ -31,6 +31,7 @@ from diive.gui import events as events_store
 from diive.gui import metadata_store
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.flow_layout import FlowLayout
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
@@ -294,8 +295,11 @@ class _HeroBand(QFrame):
     Built **once** with persistent widgets — `set_variable` only updates their
     text/visibility, never tears them down — so switching variables can't flicker.
     The only per-call rebuild is the tag chips (variable count), confined to a
-    small sub-container. Vertical size policy is Fixed: the structure is constant,
-    so the band keeps a constant height and never resizes the canvas below.
+    small sub-container. The stat slots sit in a wrapping `FlowLayout` so a narrow
+    window (e.g. a high-DPI laptop) stacks them into extra rows instead of forcing
+    the band — and the figure beside it — wider than the screen (which clipped the
+    plots on the right). Vertical policy is therefore height-for-width Minimum: the
+    band grows taller as the stats wrap rather than overflowing horizontally.
     """
 
     #: Metric slots grouped into rows (logical order). Each entry is
@@ -330,7 +334,9 @@ class _HeroBand(QFrame):
         self.setStyleSheet(
             f"QFrame#heroband {{ background: #FFFFFF; border: 1px solid {border};"
             f" border-radius: 10px; }}")
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        sp = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        sp.setHeightForWidth(True)
+        self.setSizePolicy(sp)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 11, 16, 11)
         lay.setSpacing(8)
@@ -365,19 +371,25 @@ class _HeroBand(QFrame):
         idrow.addStretch(1)
         lay.addLayout(idrow)
 
-        # --- stat rows (persistent slots, keyed by label) --------------------
+        # --- stat slots (persistent, wrapping flow) --------------------------
+        # A FlowLayout so the slots reflow onto extra rows when the band is too
+        # narrow to hold them all on one line, instead of imposing a min-width
+        # wider than the window (which pushed the figure off the right edge).
         self._slots: dict[str, _MetricSlot] = {}
+        stats_host = QWidget()
+        hsp = stats_host.sizePolicy()
+        hsp.setHeightForWidth(True)
+        hsp.setVerticalPolicy(QSizePolicy.Policy.Minimum)
+        stats_host.setSizePolicy(hsp)
+        flow = FlowLayout(stats_host, margin=0, hspacing=14, vspacing=8)
         for row in self._STAT_ROWS:
-            rowlay = QHBoxLayout()
-            rowlay.setSpacing(14)
             for i, (label, _tip) in enumerate(row):
                 if i > 0:
-                    rowlay.addWidget(_stat_separator())
+                    flow.addWidget(_stat_separator())
                 slot = _MetricSlot()
                 self._slots[label] = slot
-                rowlay.addWidget(slot)
-            rowlay.addStretch(1)
-            lay.addLayout(rowlay)
+                flow.addWidget(slot)
+        lay.addWidget(stats_host)
 
     def set_variable(self, name: str, series) -> None:
         meta = metadata_store.manager.store.peek(name)  # None if untracked

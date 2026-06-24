@@ -56,6 +56,7 @@ from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.overview import _MetricSlot, _chip_qss, _stat_separator
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.dual_variable_picker import DualVariablePicker
+from diive.gui.widgets.flow_layout import FlowLayout
 from diive.gui.widgets.gapfill_results import GapFillResultsPanel
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.sub_tabs import SubTabs
@@ -139,7 +140,9 @@ class _PerformanceHero(QFrame):
         self.setStyleSheet(
             f"QFrame#perfhero {{ background: #FFFFFF; border: 1px solid {border};"
             f" border-radius: 10px; }}")
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        sp = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        sp.setHeightForWidth(True)
+        self.setSizePolicy(sp)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 11, 16, 11)
         lay.setSpacing(8)
@@ -174,18 +177,24 @@ class _PerformanceHero(QFrame):
         idrow.addStretch(1)
         lay.addLayout(idrow)
 
-        # --- metric row (persistent slots) ---
+        # --- metric slots (persistent, wrapping flow) ---
+        # A FlowLayout so the 8 slots reflow onto extra rows on a narrow window
+        # instead of forcing the band — and the heatmaps beside it — wider than
+        # the screen (which clipped the plots on the right).
         self._slots: dict[str, _MetricSlot] = {}
-        rowlay = QHBoxLayout()
-        rowlay.setSpacing(14)
+        stats_host = QWidget()
+        hsp = stats_host.sizePolicy()
+        hsp.setHeightForWidth(True)
+        hsp.setVerticalPolicy(QSizePolicy.Policy.Minimum)
+        stats_host.setSizePolicy(hsp)
+        flow = FlowLayout(stats_host, margin=0, hspacing=14, vspacing=8)
         for i, (label, _tip) in enumerate(self._METRICS):
             if i > 0:
-                rowlay.addWidget(_stat_separator())
+                flow.addWidget(_stat_separator())
             slot = _MetricSlot()
             self._slots[label] = slot
-            rowlay.addWidget(slot)
-        rowlay.addStretch(1)
-        lay.addLayout(rowlay)
+            flow.addWidget(slot)
+        lay.addWidget(stats_host)
 
         self.reset()
 
