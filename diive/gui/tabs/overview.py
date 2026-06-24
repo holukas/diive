@@ -795,8 +795,10 @@ class OverviewTab(DiiveTab):
                     ax=ax, showplot=False, show_title=False, fill=True)
             elif plot_type == "Diel cycle":
                 # One auto-coloured line per month (seasonal diel pattern).
+                # Compact multi-column legend maps each colour to its month.
                 dv.plotting.DielCycle(series).plot(
-                    ax=ax, format_style=dv.plotting.FormatStyle(show_legend=False),
+                    ax=ax, format_style=dv.plotting.FormatStyle(
+                        show_legend=True, legend_ncol=2, legend_fontsize=6),
                     each_month=True, linewidth=1.1)
                 ax.axhline(0, color=_ZERO_COLOR, linestyle="--", linewidth=1.0,
                            alpha=0.6, zorder=1)
