@@ -663,6 +663,25 @@ to remove it. **Add all →** (under the Available list) moves everything across
 Overview** restricts the Overview's variable list to your selection. Your data is
 not changed (load new data or re-open to reset).
 
+### Select records by condition
+
+Build a filtered copy of one variable (the **target**) using the value of another
+variable (the **condition**). Click a target on the left, then build an
+**operation** in the settings: pick a condition variable, a **lower** / **upper**
+range (untick a side for an open bound), the boundary inclusivity, and an
+**action** — *Keep selected records* (drop everything except the in-range ones) or
+*Remove selected records* (drop the in-range ones, keep the rest). **Select
+records** applies the operation to a working selection.
+
+Operations **stack**: change the condition, range, or action and apply again to
+narrow further — for example *keep where Tair in [15, 20]* then *remove where VPD
+in [10, 100]*. The preview updates after each step (the condition's band and the
+last operation's selected points on top, the surviving records on the target
+below). **Undo last** / **Reset** walk the chain back, and the condition may be the
+target itself (filter a variable by its own value). **Add selection to dataset**
+appends the result as a new `{target}_SEL` column (out-of-range records set to
+missing; the time index is preserved). **Copy Python** yields a runnable script.
+
 ### Rename variables
 
 Add a common **prefix and/or suffix** to **all** variables at once, for example to

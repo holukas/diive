@@ -81,9 +81,11 @@
   set-exact-to-missing — emitting a corrected column and extending the **Copy Python** script. Its layout is a
   segmented inspector (Outliers / Corrections / Report) beside an always-large plot stage, with edits applied only on a
   **Run** button. Data menu **Select
-  variables**, **Rename variables** (add a prefix/suffix to all variables, or one at a time, with a live preview),
-  **Metadata explorer**, **Feature engineering**; plus **Appearance**, **Project settings** (author, description, site
-  details, and a **sticky-note wall** — all saved with the project), and **Log**.
+  variables**, **Select records by condition** (build stacked keep/remove operations that filter a target by another
+  variable's range, with a live preview, undo/reset, and an emitted `{target}_SEL` column), **Rename variables** (add a
+  prefix/suffix to all variables, or one at a time, with a live preview), **Metadata explorer**, **Feature engineering**;
+  plus **Appearance**, **Project settings** (author, description, site details, and a **sticky-note wall** — all saved
+  with the project), and **Log**.
 - **Flux ▸ Random uncertainty (PAS20)** (new tab, `tabs/uncertainty_randunc.py`) — estimate the random measurement
   uncertainty of a flux with the hierarchical 4-method PAS20 cascade (`dv.flux.RandomUncertaintyPAS20`, ONEFlux port).
   Auto-seeded pickers for the measured + gap-filled flux and the three similarity drivers (TA, VPD, SW_IN) with ✓/✗
@@ -552,6 +554,14 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
   series (detail panel + draggable full-series selector). `TimeSeries` also keeps gaps visible by default
   (`drop_gaps=False`), adopts the Material Design palette, and `plot()` gained `linewidth`/`alpha`/`marker` and
   returns the axes. Example: `examples/visualization/plot_timeseries_rangetool.py`.
+- **`keep_records_where`** (top-level `dv.keep_records_where`, `diive.core.dfun.frames`) — select records of one
+  variable (the *target*) based on the value of another (the *condition*): keep the target where the condition falls
+  within `[lower, upper]`. A non-destructive row-on-a-condition subselection (the conditional analogue of `keep_vars`
+  / `times.keep_daterange`); either bound may be open, `inclusive` controls boundary inclusion, `invert=True` keeps the
+  records *outside* the range (removes the in-range ones), and `set_to_nan=True` (default) masks out-of-range records to
+  NaN to preserve the time index (else drops them). Companion codegen `select_records_to_code` renders a chain of
+  keep/remove selections as a runnable script. Wired into the **GUI** as the Data-menu *Select records by condition* tab.
+  Example: `examples/analysis/analysis_keep_records_where.py`.
 
 ### Refactoring
 
