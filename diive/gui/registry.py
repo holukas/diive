@@ -81,16 +81,20 @@ TAB_CLASSES: list[type[DiiveTab]] = [
 #: Each plot method is its own tab; add a new method by adding a PlottingTab
 #: factory here (and a branch in plotting._draw_one).
 MENU_TABS: dict[str, dict[str, callable]] = {
+    # Scope the working dataset (non-destructive subselection). Merged into the
+    # manually-built Data menu next to the date-range actions; see
+    # MainWindow._build_menus. Not given its own top-level menu.
     "Data": {
-        # Merged into the manually-built Data menu (date-range actions); see
-        # MainWindow._build_menus. Not given its own top-level menu. These are
-        # data/variable preparation: subset, per-variable metadata, and the
-        # feature engineer (which derives new columns).
         "Select variables": VariableSelectorTab,
+    },
+    # Create & manage individual variables (columns). Built manually in
+    # MainWindow so the "Add timestamp column..." action can sit between the
+    # create tabs and a separator splits create from manage.
+    "Variables": {
+        "Feature engineering": FeatureEngineerTab,
         "Select records by condition": SelectRecordsTab,
         "Rename variables": RenameVariablesTab,
         "Metadata explorer": MetadataExplorerTab,
-        "Feature engineering": FeatureEngineerTab,
     },
     # Time-stamped event markers (annotations layered over the data, not column
     # operations) — its own top-level menu. Built manually in MainWindow so the

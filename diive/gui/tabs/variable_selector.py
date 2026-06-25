@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.dual_variable_picker import DualVariablePicker
+from diive.gui.widgets.tab_chrome import build_titlebar
 
 
 class _SelectorSignals(QObject):
@@ -54,13 +55,21 @@ class VariableSelectorTab(DiiveTab):
 
         root = QWidget()
         outer = QVBoxLayout(root)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addLayout(build_titlebar(self.title))
+
+        body = QWidget()
+        body_lay = QVBoxLayout(body)
+        body_lay.setContentsMargins(10, 4, 10, 4)
+        outer.addWidget(body, stretch=1)
 
         intro = QLabel(
             "Click a variable on the left to add it to your selection; click one "
             "on the right to remove it. Confirm to show only those in the Overview.")
         intro.setWordWrap(True)
         intro.setStyleSheet("color: #6B7780;")
-        outer.addWidget(intro)
+        body_lay.addWidget(intro)
 
         # Footer buttons. Available: "Add all". Selected: "Clear" (danger, red)
         # + "Confirm" (confirm, green) side by side so the primary action is
@@ -88,12 +97,12 @@ class VariableSelectorTab(DiiveTab):
         lists = QHBoxLayout()
         lists.addWidget(self.picker)
         lists.addStretch(1)
-        outer.addLayout(lists, stretch=1)
+        body_lay.addLayout(lists, stretch=1)
 
         # Status line below the lists.
         self.status = QLabel("")
         self.status.setStyleSheet("color: #6B7780;")
-        outer.addWidget(self.status)
+        body_lay.addWidget(self.status)
         self._on_changed()
         return root
 

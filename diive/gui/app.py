@@ -343,33 +343,46 @@ class MainWindow(QMainWindow):
         file_menu = add_menu("&File")
         file_menu.addAction(_act("&Open data file...", self._open_file, "Ctrl+O"))
         file_menu.addAction(_act("Open &project...", self._open_project, "Ctrl+Shift+O"))
-        file_menu.addAction(_act("Load &example data", self._load_example))
         file_menu.addSeparator()
         file_menu.addAction(_act("&Save project", self._save_project, "Ctrl+S"))
         file_menu.addAction(_act("Save project &as...", self._save_project_as, "Ctrl+Shift+S"))
-        file_menu.addAction(_act("Save data as par&quet...", self._save_file))
+        file_menu.addSeparator()
+        file_menu.addAction(_act("&Export data as...", self._save_file))
         file_menu.addSeparator()
         file_menu.addAction(_act("E&xit", self.close, "Ctrl+Q"))
 
-        data_menu = add_menu("&Data")
-        data_menu.addAction(_act("Select date &range...", self._select_daterange, "Ctrl+R"))
-        self._reset_range_act = _act("Reset to &full range", self._reset_range)
-        self._reset_range_act.setEnabled(False)
-        data_menu.addAction(self._reset_range_act)
-        self._reset_subset_act = _act("Reset to all &variables", self._reset_var_subset)
-        self._reset_subset_act.setEnabled(False)
-        data_menu.addAction(self._reset_subset_act)
-        data_menu.addSeparator()
-        data_menu.addAction(_act("Add timestamp co&lumn...", self._add_timestamp_column))
-        # Menu-tab entries that belong under Data (e.g. Select variables) are
-        # merged into this manually-built menu rather than getting their own.
-        data_menu.addSeparator()
-        for label in MENU_TABS.get("Data", {}):
+        def _menu_tab_act(label):
+            """A QAction that opens the Data menu-tab with the given label."""
             # Escape '&' so Qt doesn't read it as a mnemonic marker (would render
             # "Gaps & coverage" as an underlined "Gaps _coverage").
             act = QAction(menu_icon(label), label.replace("&", "&&"), self)
             act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))
-            data_menu.addAction(act)
+            return act
+
+        data_menu = add_menu("&Data")
+        # Date-range subselection paired with its reset.
+        data_menu.addAction(_act("Select date &range...", self._select_daterange, "Ctrl+R"))
+        self._reset_range_act = _act("Reset to &full range", self._reset_range)
+        self._reset_range_act.setEnabled(False)
+        data_menu.addAction(self._reset_range_act)
+        data_menu.addSeparator()
+        # Variable subselection paired with its reset.
+        data_menu.addAction(_menu_tab_act("Select variables"))
+        self._reset_subset_act = _act("Reset to all &variables", self._reset_var_subset)
+        self._reset_subset_act.setEnabled(False)
+        data_menu.addAction(self._reset_subset_act)
+
+        # Variables: create new columns (feature engineer, timestamp, condition
+        # filter), a separator, then manage existing ones (rename, metadata).
+        # Built manually so the "Add timestamp column..." action interleaves with
+        # the create tabs.
+        variables_menu = add_menu("&Variables")
+        variables_menu.addAction(_menu_tab_act("Feature engineering"))
+        variables_menu.addAction(_act("Add timestamp co&lumn...", self._add_timestamp_column))
+        variables_menu.addAction(_menu_tab_act("Select records by condition"))
+        variables_menu.addSeparator()
+        variables_menu.addAction(_menu_tab_act("Rename variables"))
+        variables_menu.addAction(_menu_tab_act("Metadata explorer"))
 
         # Events: the Events tab (full list/edit UI) first, then a quick "add
         # one" + a master toggle for showing them on plots. Built manually so
@@ -388,7 +401,7 @@ class MainWindow(QMainWindow):
         events_menu.addAction(self._show_events_act)
 
         for menu_name, group in MENU_TABS.items():
-            if menu_name in ("Data", "Events"):
+            if menu_name in ("Data", "Variables", "Events"):
                 continue  # built manually above
             menu = add_menu(f"&{menu_name}")
             for label in group:
@@ -413,6 +426,8 @@ class MainWindow(QMainWindow):
                     menu.addSeparator()
 
         help_menu = add_menu("&Help")
+        help_menu.addAction(_act("Load &example data", self._load_example))
+        help_menu.addSeparator()
         help_menu.addAction(_act("&User manual", self._user_manual))
         help_menu.addAction(_act("&About", self._about))
 
@@ -1041,9 +1056,9 @@ class MainWindow(QMainWindow):
         success(f"Added {len(new_df.columns)} variable(s) from {source}")
 
     def _save_file(self) -> None:
-        """Save the current dataset as a diive-format parquet file."""
+        """Export the current dataset as a diive-format parquet or CSV file."""
         if self._data is None:
-            QMessageBox.information(self, "Save data", "No data loaded yet.")
+            QMessageBox.information(self, "Export data", "No data loaded yet.")
             return
         # Need a valid timestamp index name; ask if the current one isn't valid.
         ts_name = self._data.index.name
@@ -1054,22 +1069,33 @@ class MainWindow(QMainWindow):
                 ALLOWED_TIMESTAMP_NAMES, 1, False)
             if not ok:
                 return
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Save data as parquet", "data.parquet", "Parquet (*.parquet)")
+        path, selected = QFileDialog.getSaveFileName(
+            self, "Export data", "data.parquet",
+            "Parquet (*.parquet);;CSV (*.csv)")
         if not path:
             return
         p = Path(path)
+        # The chosen filter wins, but honour an explicit extension the user typed.
+        is_csv = (p.suffix.lower() == ".csv"
+                  or (p.suffix.lower() != ".parquet" and "csv" in selected.lower()))
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            diive.save_parquet(
-                filename=p.stem, data=self._data, outpath=str(p.parent),
-                enforce_diive_format=True, timestamp_name=ts_name)
+            if is_csv:
+                data = self._data.copy()
+                data.index.name = ts_name
+                if p.suffix.lower() != ".csv":
+                    p = p.with_suffix(".csv")
+                data.to_csv(p)
+            else:
+                diive.save_parquet(
+                    filename=p.stem, data=self._data, outpath=str(p.parent),
+                    enforce_diive_format=True, timestamp_name=ts_name)
         except Exception as err:
             QApplication.restoreOverrideCursor()
-            QMessageBox.critical(self, "Save failed", f"Could not save:\n{err}")
+            QMessageBox.critical(self, "Export failed", f"Could not export:\n{err}")
             return
         QApplication.restoreOverrideCursor()
-        success(f"Saved {p.stem}.parquet")
+        success(f"Exported {p.stem}{'.csv' if is_csv else '.parquet'}")
 
     # --- projects ------------------------------------------------------
     def _save_project(self) -> None:
