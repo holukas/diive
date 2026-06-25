@@ -321,6 +321,7 @@ class Cumulative:
         color_list = theme.colorwheel_36()  # get some colors
 
         # Plot yearly cumulatives
+        end_points = []  # (x, y, color, text) — annotated after y-limits are final
         for ix, col in enumerate(self.cumulative):
             series = self.cumulative[col]
             label = f"{col}: {series.dropna().iloc[-1]:.{digits_after_comma}f}"
@@ -343,13 +344,14 @@ class Cumulative:
             y = series.iloc[-1]
 
             self.ax.plot(x, y, color=color, alpha=1, marker="o", markeredgecolor=color, ms=10)
-
-            self.ax.text(x, y, f"  {y:.{digits_after_comma}f}",
-                         size=12, color=color,
-                         backgroundcolor='none', alpha=1,
-                         horizontalalignment='left', verticalalignment='center', zorder=99)
+            end_points.append((x, y, color, f"{y:.{digits_after_comma}f}"))
 
         self._apply_format(style)
+
+        # End-of-series totals, placed inside the axes (after _apply_format sets
+        # the final y-limits, which the placement reads).
+        for x, y, color, text in end_points:
+            pf.annotate_end_value(self.ax, x, y, text, color)
 
         if self._own_fig and showplot:
             self.fig.show()

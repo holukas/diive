@@ -9,6 +9,7 @@ Part of the diive library: https://github.com/holukas/diive
 import math
 import warnings
 
+import numpy as np
 import pandas as pd
 
 import diive.core.plotting.plotfuncs as pf
@@ -76,7 +77,8 @@ class HistogramPlot:
 
     def plot(self, ax=None, format_style: FormatStyle = None,
              highlight_peak: bool = True, show_zscores: bool = True, show_zscore_values: bool = True,
-             show_info: bool = True, show_counts: bool = True, show_title: bool = True):
+             show_info: bool = True, show_counts: bool = True, show_title: bool = True,
+             show_kde: bool = False, show_mean: bool = False, show_median: bool = False):
         """Generate histogram plot with optional styling.
 
         Chrome (title, x-label, grid, fonts, colours) comes from a shared
@@ -95,6 +97,13 @@ class HistogramPlot:
             show_info: Show method and peak information text (default: True)
             show_counts: Show count labels on each bar (default: True)
             show_title: Display title (default: True)
+            show_kde: Overlay a Gaussian-KDE fit line, scaled to the counts (default: False)
+            show_mean: Draw a dashed vertical line at the mean (default: False)
+            show_median: Draw a dashed vertical line at the median (default: False)
+
+        When ``show_kde``/``show_mean``/``show_median`` are set, their artists are
+        labelled with the numeric values so the shared legend (built by
+        :class:`~diive.plotting.FormatStyle`) doubles as a compact stats readout.
         """
         # show_title=False suppresses the title via an empty string on a copied style.
         style = format_style or FormatStyle()
@@ -123,6 +132,28 @@ class HistogramPlot:
         # Peak: highlight bin with most counts
         if highlight_peak:
             bars[ix_max].set_fc('#FFA726')
+
+        # Distribution overlays: a KDE fit line plus dashed mean/median markers.
+        # Each carries its value in the label so the shared legend reads as a
+        # small stats panel. The KDE density is scaled by N * bin_width so it
+        # sits on the same counts axis as the bars.
+        if show_kde or show_mean or show_median:
+            vals = self.s.dropna().to_numpy()
+            bin_width = self.edges[1] - self.edges[0]
+            if show_kde and vals.size > 1 and bin_width > 0:
+                from scipy.stats import gaussian_kde
+                xvals = np.linspace(self.edges[0], self.edges[-1], 200)
+                yvals = gaussian_kde(vals)(xvals) * self.counts.sum() * bin_width
+                self.ax.plot(xvals, yvals, color="#5E35B1", linewidth=2,
+                             zorder=500, label="KDE")
+            if show_mean and vals.size:
+                mean_val = float(np.mean(vals))
+                self.ax.axvline(mean_val, color="#D81B60", linestyle="--",
+                                linewidth=1.5, zorder=600, label=f"mean = {mean_val:.3g}")
+            if show_median and vals.size:
+                median_val = float(np.median(vals))
+                self.ax.axvline(median_val, color="#1E88E5", linestyle="--",
+                                linewidth=1.5, zorder=600, label=f"median = {median_val:.3g}")
 
         if show_info:
             info_txt = f"method: {self.method}"

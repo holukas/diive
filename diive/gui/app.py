@@ -1343,7 +1343,7 @@ def run() -> int:
     app.processEvents()  # paint the splash before the (blocking) window build
 
     window = MainWindow(cfg, autoload=False)  # build the UI now; load data deferred
-    window.show()
+    window.showMaximized()  # always start maximized (restored geometry is the un-maximize size)
     splash.raise_()
 
     # Defer the data load (last project or example) onto the event loop so the

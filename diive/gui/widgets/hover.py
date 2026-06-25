@@ -22,7 +22,15 @@ from __future__ import annotations
 
 import numpy as np
 from matplotlib.collections import QuadMesh
-from matplotlib.dates import ConciseDateConverter, DateConverter, num2date
+from matplotlib.dates import (
+    AutoDateFormatter,
+    ConciseDateConverter,
+    ConciseDateFormatter,
+    DateConverter,
+    DateFormatter,
+    DateLocator,
+    num2date,
+)
 
 #: Tooltip / marker ink (blue-grey 800), matching the GUI's neutral accents.
 _INK = "#37474F"
@@ -215,7 +223,11 @@ class HoverAnnotator:
         if not np.isfinite(value):
             return "—"
         if self._is_date_axis(axis):
-            return num2date(value).strftime("%Y-%m-%d %H:%M")
+            # A panel can opt into a date-only label (e.g. daily aggregates,
+            # where the time is always 00:00) by tagging its axes.
+            date_only = getattr(getattr(axis, "axes", None), "_diive_hover_dateonly", False)
+            fmt = "%Y-%m-%d" if date_only else "%Y-%m-%d %H:%M"
+            return num2date(value).strftime(fmt)
         if self._is_hours_axis(axis) and 0 <= value <= 24:
             hours = int(value)
             minutes = int(round((value - hours) * 60))
@@ -227,13 +239,24 @@ class HoverAnnotator:
     @staticmethod
     def _is_date_axis(axis) -> bool:
         """True when matplotlib treats this axis as dates (its floats are date
-        ordinals), detected from the unit converter set when datetimes were
-        plotted — not from the value's magnitude."""
+        ordinals) — detected from the unit converter, or from the major
+        formatter/locator, not from the value's magnitude.
+
+        The formatter/locator fallback matters because several plot paths render
+        date ticks WITHOUT registering a matplotlib ``DateConverter``: a
+        ``LineCollection`` of pre-converted ordinals, a bare ``xaxis.axis_date()``,
+        or pandas' own date converter (which isn't a ``DateConverter`` subclass).
+        Without it, those axes' values were shown as raw ordinals (e.g. 20590)."""
         try:
             conv = axis.get_converter()  # matplotlib >= 3.10
         except AttributeError:
             conv = getattr(axis, "converter", None)
-        return isinstance(conv, (DateConverter, ConciseDateConverter))
+        if isinstance(conv, (DateConverter, ConciseDateConverter)):
+            return True
+        if isinstance(axis.get_major_formatter(),
+                      (DateFormatter, AutoDateFormatter, ConciseDateFormatter)):
+            return True
+        return isinstance(axis.get_major_locator(), DateLocator)
 
     @staticmethod
     def _is_hours_axis(axis) -> bool:

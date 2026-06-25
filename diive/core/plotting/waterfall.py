@@ -159,15 +159,17 @@ class WaterfallPlot:
                 self.ax.plot([x0, x1], [y, y], color=theme.COLOR_LINE_ZERO,
                              lw=theme.LINEWIDTH_SPINES, alpha=0.4, zorder=9)
 
-        # Annotate the final running total.
+        # Mark the final running total (annotation is placed after _apply_format,
+        # once the y-limits are final, so the label stays inside the axes).
         x_last = self.cumulative.index[-1]
         y_last = self.cumulative.iloc[-1]
         self.ax.plot(x_last, y_last, marker='o', ms=8, color=theme.COLOR_LINE_ZERO, zorder=11)
-        self.ax.text(x_last, y_last, f"  {y_last:.{digits_after_comma}f}",
-                     size=12, color=theme.COLOR_LINE_ZERO,
-                     horizontalalignment='left', verticalalignment='center', zorder=11)
 
         self._apply_format(style)
+
+        pf.annotate_end_value(self.ax, x_last, y_last,
+                              f"{y_last:.{digits_after_comma}f}",
+                              theme.COLOR_LINE_ZERO, zorder=11)
 
         if self._own_fig and showplot:
             self.fig.show()

@@ -24,6 +24,31 @@ from diive.core.times.times import current_datetime
 from diive.core.utils.console import info
 
 
+def annotate_end_value(ax: plt.Axes, x, y, text: str, color: str,
+                       size: float = 12, zorder: int = 99, pad_points: float = 6):
+    """Annotate a series' end value *inside* the axes.
+
+    The end point sits at the right data edge, so a right-aligned (rightward-
+    growing) label spills past the right spine. The label is therefore anchored
+    to the LEFT of the point; its vertical anchor flips to whichever side keeps
+    it inside when the point sits near the top or bottom of the current y-range.
+
+    Call this AFTER the axes y-limits are final (the placement reads them).
+    """
+    ylo, yhi = ax.get_ylim()
+    span = yhi - ylo
+    frac = (y - ylo) / span if span else 0.5
+    if frac > 0.85:
+        va, voff = 'top', -pad_points       # near the top -> text below the point
+    elif frac < 0.15:
+        va, voff = 'bottom', pad_points     # near the bottom -> text above
+    else:
+        va, voff = 'center', 0
+    ax.annotate(text, xy=(x, y), xytext=(-pad_points, voff),
+                textcoords='offset points', ha='right', va=va,
+                size=size, color=color, zorder=zorder)
+
+
 # TODO generalize for other classes
 def set_fig(ax: plt.Axes):
     """Return ``(fig, ax, showplot)``: reuse a given *ax*, or create a new figure if None."""
