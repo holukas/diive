@@ -122,11 +122,18 @@ entries is a sub-heading.
 
 The first tab, focused on every load. Click a variable to see, for that variable:
 
-- a **figure** with several panels: the full time series (the variable name sits in
-  a badge in its top-left), a cumulative sum (shaded to zero), a per-month diel
-  cycle, the daily mean, and a date/time heatmap;
+- a **figure** with several panels (the variable name is the figure title): a tall
+  **time series** across the top, a full-height **date/time heatmap** down the right,
+  and a bottom strip of smaller panels — a **cumulative** sum, a per-month **diel
+  cycle**, the **daily mean ± SD**, a **distribution** (histogram with a KDE curve and
+  mean/median markers), and a **cumulative waterfall**. The cumulative and waterfall
+  panels show their running total inside the axes.
 - a **ribbon of statistics** along the bottom (count, mean, SD, min/max,
   percentiles, and more). **Hover** any one for a short description of what it is.
+
+The datetime panels (time series, cumulative, daily mean, waterfall) share an x-axis,
+so panning or zooming one zooms them all to the same period; the diel cycle and
+heatmap live in their own domains and stay put.
 
 ---
 
@@ -242,6 +249,25 @@ shading**, **Show mesh** (overlay the grid lines), **Smooth terrain** (round the
 surface into rolling hills by subdividing the mesh; 0 is off), and **Reset view**.
 This needs the optional **`gui3d`** extra (PyVista/VTK); without it the tab shows
 install instructions instead of failing.
+
+### Wind rose
+
+A variable aggregated into **wind-direction sectors** and drawn as a polar rose — for
+example mean flux, temperature, or concentration by the direction the wind came from.
+Pick variables by **role** (like Hexbin/Scatter): the **value** to aggregate first,
+then the **wind-direction** column (required), and optionally a third **colour**
+variable. Settings:
+
+- **Aggregation.** How to combine the values in each sector (mean, median, min, max,
+  sum, std, count).
+- **Sectors.** How many direction bins to split the compass into (default 8).
+- **Colour aggregation / colormap / colour range.** When a colour variable is given,
+  how to aggregate it per sector and how to map it to colour, plus the colorbar.
+- **Max sector labels.** How many compass labels to draw around the rim.
+
+Below the plot, a **per-sector results table** lists the aggregated value (and count)
+for each direction; **Copy** puts it on the clipboard, and the same breakdown is
+echoed to the **Log** tab.
 
 ---
 
@@ -759,6 +785,12 @@ flux of the deepest level shows as a heatmap. **Copy Python** puts the exact,
 reproducible diive script for what you did on the clipboard, so a point-and-click
 run stays scriptable.
 
+Each level has its own **Add to dataset** button (next to that level's run button),
+enabled once the level has run. It appends that level's output columns (its flags,
+QCF flag, gap-filled series, and the QCF-filtered flux — level-qualified names like
+`FC_L3.1_QCF` so they don't collide) to the main variable list, so you can pull
+intermediate results out of the chain without waiting for the whole pipeline.
+
 **Level 3.3: USTAR filtering** has two modes (a *Mode* dropdown):
 
 - **Constant thresholds.** Type one or more known u\* thresholds (m s⁻¹) with
@@ -1170,7 +1202,7 @@ on) in colour. **Save…** writes the log to a text file; **Clear** empties it.
 - Your appearance settings, site details, window size and position, last-used
   filetype, variable tags and notes, and most-recent project are **remembered**
   between sessions.
-- The window sizes itself to your screen on first launch.
+- The window opens **maximized** to make the most of your screen.
 - A short loading cue appears on a variable while its plot is being drawn.
 - Stuck, or something looks off? Check the **Log** tab for messages.
 
