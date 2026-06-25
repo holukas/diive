@@ -181,12 +181,12 @@ class PlottingTab(DiiveTab):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # Title-bar action: a "Copy Python" button (where a codegen exists for
-        # this plot type -> scatter), right-aligned like the gap-filling tabs.
-        title_trailing = []
-        if self._plot_type == SCATTER:
-            self.copy_btn = CopyPythonButton(self._python_code)
-            title_trailing.append(self.copy_btn)
+        # Title-bar action: a "Copy Python" button, right-aligned like the
+        # gap-filling tabs. Every plot type has a codegen (see `_python_code`);
+        # the button is a no-op while the current role picks are incomplete
+        # (the provider returns None).
+        self.copy_btn = CopyPythonButton(self._python_code)
+        title_trailing = [self.copy_btn]
 
         # Main header (tracked/bold, e.g. "TIME SERIES PLOT"), matching the
         # correction/gap-filling tabs' title bar.
@@ -528,23 +528,56 @@ class PlottingTab(DiiveTab):
     def _python_code(self) -> str | None:
         """Runnable snippet reproducing the current plot (Copy Python button).
 
-        Only the scatter tab has a codegen so far; returns None otherwise or when
-        the role picks are incomplete.
+        Every plot type has a library codegen. Returns None when the current
+        selection is incomplete (e.g. a hexbin/scatter/wind-rose role not yet
+        picked, or no variable selected) — the Copy Python button is then a
+        no-op. Multi-panel tabs (heatmap/time series/diel cycle) reproduce the
+        active panel's variable as a single-figure snippet.
         """
-        if self._plot_type != SCATTER or len(self._xyz) < 2:
-            return None
-        from diive.core.plotting.scatter import scatter_to_code
-        xn, yn = self._xyz[0], self._xyz[1]
-        zn = self._xyz[2] if len(self._xyz) >= 3 else None
+        from diive.core.plotting import codegen
         opts = self.settings.values()
-        return scatter_to_code(
-            xn, yn, zn,
-            nbins=opts["nbins"], binagg=opts["binagg"],
-            cmap=opts["cmap"], show_colorbar=opts["show_colorbar"],
-            markersize=opts["markersize"], alpha=opts["alpha"],
-            vmin=opts["vmin"], vmax=opts["vmax"],
-            format_kwargs=opts.get("_format"),
-        )
+        pt = self._plot_type
+
+        if pt == SCATTER:
+            if len(self._xyz) < 2:
+                return None
+            from diive.core.plotting.scatter import scatter_to_code
+            xn, yn = self._xyz[0], self._xyz[1]
+            zn = self._xyz[2] if len(self._xyz) >= 3 else None
+            return scatter_to_code(
+                xn, yn, zn,
+                nbins=opts["nbins"], binagg=opts["binagg"],
+                cmap=opts["cmap"], show_colorbar=opts["show_colorbar"],
+                markersize=opts["markersize"], alpha=opts["alpha"],
+                vmin=opts["vmin"], vmax=opts["vmax"],
+                format_kwargs=opts.get("_format"),
+            )
+        if pt == HEXBIN:
+            if len(self._xyz) < 3:
+                return None
+            return codegen.hexbin_to_code(*self._xyz[:3], opts)
+        if pt == WINDROSE:
+            if len(self._xyz) < 2:
+                return None
+            zn = self._xyz[2] if len(self._xyz) >= 3 else None
+            return codegen.windrose_to_code(self._xyz[0], self._xyz[1], zn, opts)
+
+        # Single-/multi-panel variable plots: reproduce the active (or first) panel.
+        name = self._active_panel or (self._panels[0] if self._panels else None)
+        if not name:
+            return None
+        builder = {
+            HEATMAP: codegen.heatmap_datetime_to_code,
+            HEATMAP_YEARMONTH: codegen.heatmap_yearmonth_to_code,
+            TIMESERIES: codegen.timeseries_to_code,
+            DIELCYCLE: codegen.dielcycle_to_code,
+            CUMULATIVE_YEAR: codegen.cumulative_year_to_code,
+            HISTOGRAM: codegen.histogram_to_code,
+            RIDGELINE: codegen.ridgeline_to_code,
+        }.get(pt)
+        if builder is None:
+            return None
+        return builder(name, opts)
 
     def _render(self, preserve_view: bool = False) -> None:
         """Render one panel per entry in `self._panels`.

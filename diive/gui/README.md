@@ -134,7 +134,9 @@ trigger is identical for every control type (no `editingFinished`-vs-`valueChang
 comparison types, variable selection in the list *does* still render live (`_on_selected` → `run_with_loading`); for the
 role-dropdown types (`_ROLE_DROPDOWN_TYPES` = Scatter, Wind rose) the roles are assigned via X/Y/Colour `_DropComboBox`
 dropdowns (pick or drag from the list) and apply on Update like any other setting (`_build_role_combos` / `set_xyz` /
-`xyz_values`; Scatter also has a **Copy Python** button, `scatter_to_code`). Hexbin still cycles roles by click order.
+`xyz_values`). Hexbin still cycles roles by click order. **Every** plot tab has a title-bar **Copy Python** button
+(`_python_code` dispatches per plot type to the library codegen: `scatter_to_code` in `scatter.py`, the rest in
+`core/plotting/codegen.py`); it is a no-op while role picks are incomplete. Multi-panel tabs emit the active panel's variable.
 `_draw_one` reads `settings.values()` into the library plot call. The panel is GUI-only (it just collects parameters); the
 `HEATMAP`/`TIMESERIES` constants live in `plot_settings.py` and `plotting.py` re-exports them (so no import cycle). Line
 *colours* stay theme-driven (`theme.manager.ts_colors`, Appearance tab), not duplicated here. Add a parameter = add a

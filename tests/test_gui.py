@@ -359,6 +359,60 @@ def test_windrose_tab(app):
     assert len(tab.canvas.fig.axes) == 1
     assert not _fallback(tab)
 
+    # Copy Python lives in the title bar and emits a runnable WindRosePlot snippet.
+    from diive.gui.widgets.copy_button import CopyPythonButton
+    assert isinstance(tab.copy_btn, CopyPythonButton)
+    code = tab._python_code()
+    assert "dv.plotting.WindRosePlot(" in code and "co2_flux" in code
+
+
+def test_all_plot_tabs_have_copy_python(app):
+    """Every plot tab carries a Copy Python button whose codegen yields a
+    runnable snippet for the right diive plot class (the GUI separation rule:
+    the snippet is built by the library, the button only copies it)."""
+    import numpy as np
+    import pandas as pd
+    from diive.gui.tabs.plotting import PlottingTab
+    from diive.gui.widgets.copy_button import CopyPythonButton
+    from diive.gui.widgets import plot_settings as ps
+
+    idx = pd.date_range("2021-01-01", periods=4000, freq="30min",
+                        name="TIMESTAMP_MIDDLE")
+    rng = np.random.default_rng(1)
+    df = pd.DataFrame({
+        "NEE_CUT_REF_f": rng.normal(-2, 5, len(idx)),
+        "Tair_f": rng.normal(10, 6, len(idx)),
+        "VPD_f": rng.uniform(0, 25, len(idx)),
+        "wind_dir": rng.uniform(0, 360, len(idx)),
+    }, index=idx)
+
+    # plot type -> the dv.plotting class its snippet must call.
+    cases = {
+        ps.HEATMAP: "HeatmapDateTime",
+        ps.HEATMAP_YEARMONTH: "HeatmapYearMonth",
+        ps.TIMESERIES: "TimeSeries",
+        ps.DIELCYCLE: "DielCycle",
+        ps.CUMULATIVE_YEAR: "CumulativeYear",
+        ps.HISTOGRAM: "HistogramPlot",
+        ps.RIDGELINE: "RidgeLinePlot",
+        ps.HEXBIN: "HexbinPlot",
+        ps.SCATTER: "ScatterXY",
+        ps.WINDROSE: "WindRosePlot",
+    }
+    for plot_type, classname in cases.items():
+        tab = PlottingTab(plot_type, plot_type)
+        tab.widget()
+        tab.on_data_loaded(df, set())
+        QApplication.processEvents()
+        assert isinstance(tab.copy_btn, CopyPythonButton), plot_type
+        code = tab._python_code()
+        assert code is not None, plot_type
+        assert f"dv.plotting.{classname}(" in code, plot_type
+        assert ".plot(" in code and code.rstrip().endswith("plt.show()"), plot_type
+        # The snippet runs against a frame named `df` without raising.
+        ns = {"df": df}
+        exec(code.replace("plt.show()", 'plt.close("all")'), ns)
+
 
 def test_compound_extremes_tab(app):
     # Analyze ▸ Compound extremes: two role-based variable combos (VPD / SWC) auto

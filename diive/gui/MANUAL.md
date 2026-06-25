@@ -167,6 +167,11 @@ comparison types, clicking a *variable* in the list updates the plot immediately
 shows it in full; for Scatter XY and the Wind rose, changing a role dropdown waits
 for **Update plot** like any other setting.
 
+**Copy Python.** Every plot tab has a **Copy Python** button (top-right) that copies
+a runnable script reproducing the current plot with its settings. For tabs that
+compare several stacked or side-by-side panels, the script reproduces the active
+panel (the one whose settings are showing).
+
 **Per-subplot settings.** When you compare several variables in stacked/side-by-side
 panels, a row of **panel pills** appears above the settings (one per panel). Click a
 pill to edit *that* panel's settings on their own — line width, colour, title, axes,
@@ -241,8 +246,7 @@ of the settings (or **drag** a variable from the list onto a field) — the same
 variable may fill more than one role (e.g. colour the points by X). One panel.
 Optionally bin the x-axis and show a trend. Settings: marker size and opacity, the
 colour-variable colormap (with **Reverse** and a min/max), an optional title, and bin
-aggregation, plus the shared **Axes** controls. **Copy Python** (top-right) copies a
-runnable snippet that reproduces the current scatter. Hovering a point shows its X, Y
+aggregation, plus the shared **Axes** controls. Hovering a point shows its X, Y
 (and colour) value.
 
 ### Hexbin

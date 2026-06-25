@@ -88,8 +88,11 @@
   with the project), and **Log**.
 - **Plot tabs — refinements.** **Scatter XY** and **Wind rose** now assign variables to roles via **X/Y/Colour**
   (value/wind-direction/colour) dropdowns — pick one or **drag** it from the variable list onto a field — instead of
-  clicking the list in order; Scatter gained a **Copy Python** button (`scatter_to_code`) and a point hover showing
-  x/y(/z), and the wind-rose per-sector table moved to the **right** of the plot. **Diel cycle** gained an
+  clicking the list in order; Scatter gained a point hover showing
+  x/y(/z), and the wind-rose per-sector table moved to the **right** of the plot. **Every** plot tab now carries a
+  title-bar **Copy Python** button that emits a runnable snippet for the current plot — backed by a new library codegen
+  module (`core/plotting/codegen.py`) with one `*_to_code` per plot class (heatmap date/time + year/month, time series,
+  diel cycle, cumulative year, histogram, ridgeline, hexbin, wind rose; scatter keeps `scatter_to_code`). **Diel cycle** gained an
   **Aggregation** dropdown (mean/median/min/max/p25/p75), an **Uncertainty band** dropdown (±SD/±SE/IQR/Min–Max/None),
   a **Curves** dropdown (per-month vs overall), per-month **colour schemes**, and **markers**; stacking several
   variables (Ctrl+click) gives each its own settings sub-tab and draws **one** shared, auto-column legend. The
