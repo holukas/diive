@@ -1382,6 +1382,56 @@ def test_flux_chain_tab_per_level_run(app):
     assert not tab.rail._cards[3]._reached
 
 
+def test_flux_chain_tab_add_level_results(app):
+    # Each level can push its results (flag/QCF columns + QCF-filtered flux) to
+    # the dataset via featuresCreated, after the level has run.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.core.metadata import ATTRS_KEY, DERIVED
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab()
+    tab.widget()
+    emitted = {}
+    tab.featuresCreated.connect(lambda d: emitted.update(df=d))
+    tab.on_data_loaded(df)
+    fluxcol = tab.fluxcol.currentText()
+
+    # Before any run, the "Add to dataset" buttons are all disabled.
+    assert not tab._level_add_btns[1].isEnabled()
+
+    def run(idx):
+        plan = tab._level_plan(idx)
+        assert plan is not None
+        tab._level_worker(plan, tab._data, tab._df)
+        QApplication.processEvents()
+
+    run(0)
+    run(1)                                   # L2
+    run(2)                                   # L3.1
+    assert tab._reached == 2
+    # The add buttons for reached levels (L2, L3.1) are now enabled; L3.2 not.
+    assert tab._level_add_btns[1].isEnabled()
+    assert tab._level_add_btns[2].isEnabled()
+    assert not tab._level_add_btns[3].isEnabled()
+
+    # Adding L3.1 emits its flag columns + the level-qualified filtered flux,
+    # tagged with DERIVED provenance pointing back at the flux column.
+    tab._add_level(2)
+    QApplication.processEvents()
+    out = emitted["df"]
+    assert out is not None and len(out.columns) > 0
+    # The filtered flux is level-qualified (storage correction renames FC->NEE at
+    # L3.1, so the QCF-filtered flux is e.g. NEE_L3.1_QCF) and a flag col is present.
+    assert any(str(c).endswith("_L3.1_QCF") for c in out.columns)
+    assert any(str(c).startswith("FLAG_L3.1") for c in out.columns)
+    assert fluxcol not in out.columns                     # never clobbers the source
+    prov = out.attrs[ATTRS_KEY]
+    assert set(prov) == set(out.columns)
+    assert all(prov[c]["origin"] == DERIVED for c in out.columns)
+    assert all(prov[c]["parent"] == fluxcol for c in out.columns)
+
+
 def test_flux_chain_tab_level41(app):
     # L4.1 gap-filling: fan out one gap-fill per USTAR scenario. MDS is fast and
     # has no ML training, so drive a real run with it; rf/xgb are checked via codegen.

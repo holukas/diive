@@ -68,7 +68,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+import pandas as pd
+
 import diive as dv
+from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
 from diive.flux.fluxprocessingchain import (
     VM97_SUBTESTS, init_flux_data, level2_test_inputs, level31_storage_col,
     level31_to_code, level32_to_code, level33_to_code, level41_to_code,
@@ -119,6 +122,7 @@ class _ChainSignals(QObject):
     done = Signal(object)        # FluxLevelData (run-all completion)
     level_done = Signal(object)  # (FluxLevelData, stage_idx) — single-level run
     failed = Signal(str)
+    features_created = Signal(object)  # DataFrame — a level's results pushed to dataset
 
 
 class FluxChainTab(DiiveTab):
@@ -132,10 +136,13 @@ class FluxChainTab(DiiveTab):
         self._reached = -1        # deepest stage index run on _data (-1 = none)
         self._running = False
         self._level_run_btns: dict[int, QPushButton] = {}
+        self._level_add_btns: dict[int, QPushButton] = {}
         self._sig = _ChainSignals()
         self._sig.done.connect(self._on_done)
         self._sig.level_done.connect(self._on_level_done)
         self._sig.failed.connect(self._on_failed)
+        # MainWindow auto-wires this to merge the emitted columns into the dataset.
+        self.featuresCreated = self._sig.features_created
 
         root = QWidget()
         outer = QVBoxLayout(root)
@@ -244,6 +251,23 @@ class FluxChainTab(DiiveTab):
         btn.clicked.connect(lambda: self._run_level(idx))
         self._level_run_btns[idx] = btn
         return btn
+
+    def _level_add_button(self, idx: int) -> QPushButton:
+        """An "Add to dataset" button for a level, enabled once that level ran."""
+        btn = QPushButton("Add to dataset")
+        btn.setToolTip("Add this level's flag/QCF columns and QCF-filtered flux to "
+                       "the dataset (available everywhere in the app).")
+        btn.clicked.connect(lambda: self._add_level(idx))
+        self._level_add_btns[idx] = btn
+        return btn
+
+    def _level_button_row(self, idx: int, run_label: str) -> QHBoxLayout:
+        """Run button + its "Add to dataset" button on one row."""
+        row = QHBoxLayout()
+        row.addWidget(self._level_run_button(idx, run_label))
+        row.addWidget(self._level_add_button(idx))
+        row.addStretch(1)
+        return row
 
     # --- pipeline rail navigation + status ---
     def _select_stage(self, idx: int) -> None:
@@ -388,7 +412,7 @@ class FluxChainTab(DiiveTab):
             if key == "raw_data_screening_vm97":
                 cb.toggled.connect(lambda *_: self._refresh_vm97_enabled())
                 v.addLayout(self._vm97_subtests())
-        v.addWidget(self._level_run_button(1, "Run Level 2"))
+        v.addLayout(self._level_button_row(1, "Run Level 2"))
         return box
 
     def _col_picker_row(self, key: str) -> QFormLayout:
@@ -608,7 +632,7 @@ class FluxChainTab(DiiveTab):
         v.addLayout(form)
         self.strg_mark = self._info_marker()
         v.addWidget(self.strg_mark)
-        v.addWidget(self._level_run_button(2, "Run Level 3.1"))
+        v.addLayout(self._level_button_row(2, "Run Level 3.1"))
         return box
 
     def _level32_group(self) -> QGroupBox:
@@ -643,7 +667,7 @@ class FluxChainTab(DiiveTab):
             b.clicked.connect(slot)
             row.addWidget(b)
         v.addLayout(row)
-        v.addWidget(self._level_run_button(3, "Run Level 3.2"))
+        v.addLayout(self._level_button_row(3, "Run Level 3.2"))
         self._on_l32_method_changed()  # seed the first param widget
         return box
 
@@ -719,7 +743,7 @@ class FluxChainTab(DiiveTab):
 
         v.addWidget(self._level33_constant_box())
         v.addWidget(self._level33_detect_box())
-        v.addWidget(self._level_run_button(4, "Run Level 3.3"))
+        v.addLayout(self._level_button_row(4, "Run Level 3.3"))
         self._sync_l33_mode()
         return box
 
@@ -926,7 +950,7 @@ class FluxChainTab(DiiveTab):
         self.l41_view.addItems(["Cumulative comparison", "Gap-filled heatmaps"])
         form2.addRow("Comparison view", self.l41_view)
         v.addLayout(form2)
-        v.addWidget(self._level_run_button(5, "Run Level 4.1"))
+        v.addLayout(self._level_button_row(5, "Run Level 4.1"))
         self._sync_l41_visibility()
         return box
 
@@ -1656,19 +1680,83 @@ class FluxChainTab(DiiveTab):
         self._running = on
         if on:
             self.run_btn.setEnabled(False)
-            for b in self._level_run_btns.values():
+            for b in (*self._level_run_btns.values(), *self._level_add_btns.values()):
                 b.setEnabled(False)
         else:
             self._update_level_buttons()
 
     def _update_level_buttons(self) -> None:
-        """A level's run button is enabled only once its predecessor has run."""
+        """A level's run button is enabled only once its predecessor has run; its
+        "Add to dataset" button only once that level itself has run."""
         if getattr(self, "_running", False):
             return
         has = self._df is not None
         self.run_btn.setEnabled(has)
         for idx, b in self._level_run_btns.items():
             b.setEnabled(has and (idx == 0 or self._reached >= idx - 1))
+        for idx, b in self._level_add_btns.items():
+            b.setEnabled(has and self._reached >= idx)
+
+    # --- pushing a level's results back into the dataset ---
+    #: Stage index -> the idstr(s) keying that level's columns in added_columns.
+    _LEVEL_IDSTRS = {1: ("L2",), 2: ("L3.1",), 3: ("L3.2",), 4: ("L3.3",),
+                     5: ("L4.1_mds", "L4.1_rf", "L4.1_xgb")}
+
+    def _level_output_columns(self, idx: int, data) -> list[str]:
+        """The fpc_df columns a level appended (flags / QCF / gap-filled)."""
+        added = getattr(data, "added_columns", {}) or {}
+        cols: list[str] = []
+        for idstr in self._LEVEL_IDSTRS.get(idx, ()):
+            cols += [c for c in added.get(idstr, []) if c in data.fpc_df.columns]
+        return cols
+
+    def _level_filtered_series(self, idx: int, data) -> dict[str, pd.Series]:
+        """The QCF-filtered flux series a level produced, keyed by column name.
+
+        Series names are already level-qualified (e.g. ``FC_L3.1_QCF``), so they
+        don't collide with the original flux column. L3.3 has one per USTAR
+        scenario; L4.1 has none (its gap-filled columns are in fpc_df)."""
+        out: dict[str, pd.Series] = {}
+        if idx in (1, 2, 3):
+            s = data.filteredseries
+            if s is not None and getattr(s, "name", None):
+                out[str(s.name)] = s
+        elif idx == 4:
+            scen = getattr(data.levels, "filteredseries_level33_qcf", None) or {}
+            for label, s in scen.items():
+                if s is None:
+                    continue
+                name = str(getattr(s, "name", "") or f"{data.meta.fluxcol}_L3.3_{label}_QCF")
+                while name in out:  # defensive: keep every scenario distinct
+                    name = f"{name}_{label}"
+                out[name] = s
+        return out
+
+    def _add_level(self, idx: int) -> None:
+        """Emit this level's columns + filtered flux to the app-wide dataset."""
+        data = self._data
+        if data is None or self._reached < idx:
+            return
+        label = _STAGES[idx][0]
+        cols = self._level_output_columns(idx, data)
+        filtered = self._level_filtered_series(idx, data)
+        if not cols and not filtered:
+            self.summary.setPlainText(f"{label}: no columns to add.")
+            return
+        out = data.fpc_df.loc[:, cols].copy() if cols \
+            else pd.DataFrame(index=data.fpc_df.index)
+        for name, s in filtered.items():
+            out[name] = s.reindex(out.index)
+        out.attrs[ATTRS_KEY] = {
+            str(c): provenance_attr(
+                origin=DERIVED, parent=str(data.meta.fluxcol),
+                operation=f"Flux processing chain {label}",
+                tags=["fluxchain", label.lower()])
+            for c in out.columns
+        }
+        self.featuresCreated.emit(out)
+        self.summary.setPlainText(
+            f"Added {len(out.columns)} {label} column(s) to the dataset.")
 
     # --- the killer button: the exact reproducible script ---
     def _code(self) -> str:
