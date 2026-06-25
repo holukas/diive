@@ -86,6 +86,20 @@
   prefix/suffix to all variables, or one at a time, with a live preview), **Metadata explorer**, **Feature engineering**;
   plus **Appearance**, **Project settings** (author, description, site details, and a **sticky-note wall** — all saved
   with the project), and **Log**.
+- **Plot tabs — refinements.** **Scatter XY** and **Wind rose** now assign variables to roles via **X/Y/Colour**
+  (value/wind-direction/colour) dropdowns — pick one or **drag** it from the variable list onto a field — instead of
+  clicking the list in order; Scatter gained a **Copy Python** button (`scatter_to_code`) and a point hover showing
+  x/y(/z), and the wind-rose per-sector table moved to the **right** of the plot. **Diel cycle** gained an
+  **Aggregation** dropdown (mean/median/min/max/p25/p75), an **Uncertainty band** dropdown (±SD/±SE/IQR/Min–Max/None),
+  a **Curves** dropdown (per-month vs overall), per-month **colour schemes**, and **markers**; stacking several
+  variables (Ctrl+click) gives each its own settings sub-tab and draws **one** shared, auto-column legend. The
+  **Update plot** button moved to its own left-aligned row below the tab header, is **disabled until something
+  changes**, and now applies on click only (no live re-render). The year/month heatmap hover labels cells as
+  `Month`/`Year` instead of a clock time. Fixes: the ridgeline **overlap** slider now takes effect on the embedded
+  figure; flipping a heatmap's **orientation** no longer leaves an empty plot (the kept pan/zoom is dropped when it
+  falls off the new data); the **grid** toggle works (single source in *Format*); a scatter can colour points by one of
+  its own X/Y variables without erroring; and the window is sized to the screen **work area** so the bottom of a tab is
+  never clipped behind the taskbar.
 - **Flux ▸ Random uncertainty (PAS20)** (new tab, `tabs/uncertainty_randunc.py`) — estimate the random measurement
   uncertainty of a flux with the hierarchical 4-method PAS20 cascade (`dv.flux.RandomUncertaintyPAS20`, ONEFlux port).
   Auto-seeded pickers for the measured + gap-filled flux and the three similarity drivers (TA, VPD, SW_IN) with ✓/✗

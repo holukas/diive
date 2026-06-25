@@ -46,6 +46,25 @@ class TestPlots(unittest.TestCase):
         self.assertEqual(coll.norm.vmax, 8)
         plt.close(fig)
 
+    def test_scatter_same_variable_in_two_roles(self):
+        # A variable may fill more than one role (e.g. colour points by x, or
+        # x == y): duplicate names must not collapse xy_df columns into a frame.
+        import pandas as pd
+        from diive.core.plotting.scatter import ScatterXY
+        idx = pd.date_range("2021-01-01", periods=200, freq="30min")
+        x = pd.Series(range(200), index=idx, name="Tair", dtype=float)
+        y = pd.Series([v * 2.0 for v in range(200)], index=idx, name="NEE")
+        # z shares x's name; raw and binned paths must both render.
+        fig, ax = plt.subplots()
+        ScatterXY(x=x, y=y, z=x.copy()).plot(ax=ax, show_colorbar=True)
+        self.assertTrue(ax.collections)
+        self.assertEqual(ax.get_xlabel(), "Tair")  # display name preserved
+        plt.close(fig)
+        fig, ax = plt.subplots()
+        ScatterXY(x=x, y=y, z=x.copy(), nbins=10, binagg="median").plot(ax=ax)
+        self.assertTrue(ax.collections)
+        plt.close(fig)
+
     def test_timeseries_title_and_markersize(self):
         # On a caller ax, an explicit title is honored and marker size applied.
         import pandas as pd

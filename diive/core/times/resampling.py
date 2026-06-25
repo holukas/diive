@@ -202,19 +202,30 @@ def diel_cycle(series: Series,
                mean: bool = True,
                std: bool = True,
                median: bool = False,
+               quantiles: bool = False,
+               minmax: bool = False,
                each_month: bool = False,
                ) -> pd.DataFrame:
     """Calculate diel cycles grouped by time
 
+    Args:
+        quantiles: Also compute the 25th/75th percentiles (columns ``q25``/``q75``).
+        minmax: Also compute the per-time-of-day minimum/maximum (``min``/``max``).
+
     See Also:
         examples/visualization/dielcycle.py — Diurnal cycle visualization with DielCycle class
     """
+    from diive.core.dfun.stats import q25, q75
 
     # Build list with agg strings
     aggstr = ['count']  # Available values always counted
     aggstr.append('mean') if mean else aggstr
     aggstr.append('std') if std else aggstr
     aggstr.append('median') if median else aggstr
+    if quantiles:
+        aggstr.extend([q25, q75])  # -> columns 'q25'/'q75' (function names)
+    if minmax:
+        aggstr.extend(['min', 'max'])
 
     if each_month:
         aggs = series.groupby([series.index.month, series.index.time]).agg(aggstr)

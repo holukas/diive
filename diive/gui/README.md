@@ -128,23 +128,28 @@ z-score axis, counts, info box, title and grid.
 strip of controls, one per `plot()` parameter of the underlying diive plot class (heatmap: colormap, vmin/vmax,
 orientation, colorbar, cell-value overlay, ticks, grid, …; time series: line width, opacity, markers, drop-gaps,
 labels/units). **Editing a control does NOT re-render** — the tab's **Update plot** button (`PlottingTab.update_btn`,
-below the settings) reads `settings.values()` and calls `_render()` on click, so the apply trigger is identical for
-every control type (no `editingFinished`-vs-`valueChanged` inconsistency). Controls still emit `changed`, but the tab
-no longer connects it to a render. (Variable selection in the list *does* still render live, via
-`_on_selected` → `run_with_loading`; that's the one interaction the user singled out as wanting immediate.) `_draw_one`
-reads `settings.values()` into the library plot call. The panel is GUI-only (it just collects parameters); the
+a left-aligned row just below the tab header) reads `settings.values()` and calls `_render()` on click, so the apply
+trigger is identical for every control type (no `editingFinished`-vs-`valueChanged` inconsistency). The button is
+**dirty-gated**: disabled until `settings.changed` (or `xyz_changed`) fires, re-disabled at each render. For the
+comparison types, variable selection in the list *does* still render live (`_on_selected` → `run_with_loading`); for the
+role-dropdown types (`_ROLE_DROPDOWN_TYPES` = Scatter, Wind rose) the roles are assigned via X/Y/Colour `_DropComboBox`
+dropdowns (pick or drag from the list) and apply on Update like any other setting (`_build_role_combos` / `set_xyz` /
+`xyz_values`; Scatter also has a **Copy Python** button, `scatter_to_code`). Hexbin still cycles roles by click order.
+`_draw_one` reads `settings.values()` into the library plot call. The panel is GUI-only (it just collects parameters); the
 `HEATMAP`/`TIMESERIES` constants live in `plot_settings.py` and `plotting.py` re-exports them (so no import cycle). Line
 *colours* stay theme-driven (`theme.manager.ts_colors`, Appearance tab), not duplicated here. Add a parameter = add a
 control in `plot_settings._build_*` + a key in `values()` + pass it through in `_draw_one`.
 
 **GUI-only post-render passes:** a couple of settings have no library `plot()` parameter and are applied *after* the
 diive plot renders, analogous to the Overview's uniform-font pass:
-- **Axes group** (`_build_axes_group`) — X/Y limits (blank = auto), log X/Y, invert Y, add grid. Present on the
+- **Axes group** (`_build_axes_group`) — X/Y limits (blank = auto), log X/Y, invert Y. Present on the
   line/scatter types only (`TIMESERIES`, `CUMULATIVE_YEAR`, `SCATTER`, and Y-only for `DIELCYCLE`); `values()` carries
   them under the `_axes` key and `plotting._apply_axes(axes)` applies them to the data axes. It is **plot-type-aware**:
   heatmaps and the ridgeline have no `_axes` (no-op), and the diel cycle's fixed 0–24 h x-axis is left alone (Y-only
-  group). The grid toggle is additive (turns grid on; never strips a plot type's native grid). For shared multi-panel
-  stacks the limits apply to every panel.
+  group). For shared multi-panel stacks the limits apply to every panel. The grid is **not** here — it has a single
+  source in the Format group's `show_grid` (a duplicate Axes grid could only add, never remove, so it appeared broken).
+  `_apply_axes` also re-applies the preserved pan/zoom only when the kept range still **overlaps** the new data
+  (`_ranges_overlap`), so e.g. flipping a heatmap's orientation can't scroll the view off the data.
 - **Reverse colormap** — a checkbox in the Colors group (heatmap, heatmap year/month, hexbin, scatter) that appends/strips
   the matplotlib `_r` suffix on the chosen cmap in `values()` (`_reverse_cmap`); no library change.
 

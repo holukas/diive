@@ -154,7 +154,13 @@ class RidgeLinePlot:
                                   layout=None, dpi=self.fig_dpi)
 
         gs = (grid_spec.GridSpec(len(self.ys_unique), 1))
-        gs.update(wspace=0, hspace=0, left=0.09, right=0.97, top=0.95, bottom=0.07)
+        # Set hspace up front (negative -> ridges overlap). Doing it here, before
+        # the subplots are added, means each axis is positioned with the overlap
+        # baked in. A later gs.update(hspace=...) only repositions axes of figures
+        # registered with pyplot's Gcf, so it is a silent no-op for an embedded
+        # GUI figure (created directly, not via plt.figure) -- the overlap would
+        # never apply there.
+        gs.update(wspace=0, hspace=self.hspace, left=0.09, right=0.97, top=0.95, bottom=0.07)
 
         # Create empty list for dynamic number of plots (rows)
         ax_objs = []
@@ -307,7 +313,6 @@ class RidgeLinePlot:
 
         # ax_objs.reverse()
 
-        gs.update(hspace=self.hspace)
         # Figure title from the shared chrome: text (style.title or series name)
         # with the style's resolved font/colour. style.title == "" suppresses it.
         title = self.style.title if self.style.title is not None else self.series.name

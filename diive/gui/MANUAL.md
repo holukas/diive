@@ -145,21 +145,27 @@ Selecting variables works the same way across the per-variable types:
 - **Click** a variable to plot it.
 - **Ctrl + click** more variables to compare them in extra panels (up to 5):
   - *Heatmaps* line up **side by side** (shared axes).
-  - *Time series* **stack** top-to-bottom (shared time axis), each its own colour.
+  - *Time series* and *diel cycles* **stack** top-to-bottom (shared x-axis), each
+    panel with its own settings sub-tab.
   - The ridgeline, histogram, and 3D surface show a single variable, so Ctrl+click
     just switches it.
 - **Ctrl + click** a shown variable again to remove its panel.
+- *Scatter XY* and *Wind rose* instead assign variables to **roles** via the
+  dropdowns in their settings (or by **dragging** a variable from the list onto a
+  field) — see those sections below. Hexbin still picks by clicking in order.
 - Use the small toolbar (bottom-right of the plot) to pan, zoom, and save the
   figure. Zooming one panel zooms them all; the **Home** button resets to the full
   view. Set **Save DPI** (next to the toolbar) before saving for a
   higher-resolution image than the screen.
 
 **Settings (middle column).** Between the variable list and the plot is a panel of
-controls. Adjust as many as you like, then click **Update plot** (below the
-controls) to apply them all at once: the plot does not change while you are still
-editing, and applying the changes **keeps your current pan/zoom** (it does not snap
-back to the full view). Clicking a *variable* in the list, by contrast, updates the
-plot immediately and shows it in full.
+controls. Adjust as many as you like, then click **Update plot** (just below the tab
+header) to apply them all at once: the plot does not change while you are still
+editing. The button is greyed out until something changes, and applying the changes
+**keeps your current pan/zoom** (it does not snap back to the full view). For the
+comparison types, clicking a *variable* in the list updates the plot immediately and
+shows it in full; for Scatter XY and the Wind rose, changing a role dropdown waits
+for **Update plot** like any other setting.
 
 **Per-subplot settings.** When you compare several variables in stacked/side-by-side
 panels, a row of **panel pills** appears above the settings (one per panel). Click a
@@ -168,8 +174,9 @@ everything is independent per subplot. A newly added panel inherits the active
 panel's look but is given a distinct line colour automatically.
 
 **Axes** (time series, scatter, cumulative year; Y-only for the diel cycle): set
-**X/Y min/max** (blank means automatic), **log** scaling, **invert Y**, and add a
-**grid**. An explicit limit you set here always wins over the kept pan/zoom.
+**X/Y min/max** (blank means automatic), **log** scaling, and **invert Y**. An
+explicit limit you set here always wins over the kept pan/zoom. (The grid is toggled
+once, in the **Format** group's *Show grid*.)
 
 ### Heatmap date/time
 
@@ -204,10 +211,22 @@ is added. `(none)` returns to the single colour above.
 
 ### Diel cycle
 
-The mean daily cycle (value by time of day) with a ±SD band, and optionally one
-curve per month. Settings: mean and ±SD band, one curve per month (each month its
-own colour), legend position, and labels. The fixed 0 to 24 h x-axis is left alone;
-only the **Axes** Y controls apply.
+The daily cycle (value by time of day), optionally one curve per month. Settings:
+
+- **Aggregation** — the central curve: mean, median, min, max, or the 25th/75th
+  percentile.
+- **Uncertainty band** — the shaded band around the curve: ±SD, ±SE, IQR
+  (25–75 %), Min–Max, or None.
+- **Curves** — *one curve per month* (each month its own colour, the seasonal
+  pattern) or *one curve overall* (a single curve over all data).
+- **Color scheme** — for the per-month curves: the default month palette or a
+  colormap (Viridis, Spectral, Turbo, …).
+- **Show markers** (and marker size), plus labels and legend position.
+
+Ctrl+click more variables to stack them as extra panels, each with its own settings
+sub-tab. Because all panels share the same months, the **legend is drawn once** and
+its column count is set automatically (more columns for more months). The fixed 0 to
+24 h x-axis is left alone; only the **Axes** Y controls apply.
 
 ### Cumulative year
 
@@ -217,10 +236,14 @@ reference. The shared **Axes** controls apply.
 
 ### Scatter XY
 
-Click two variables for X and Y; a third, optional, colours the points. Optionally
-bin the x-axis and show a trend. One panel. Settings: marker size and opacity, the
-Z colormap (with **Reverse** and a Z min/max), an optional title, and bin
-aggregation, plus the shared **Axes** controls.
+Assign **X**, **Y**, and an optional **Colour** variable in the dropdowns at the top
+of the settings (or **drag** a variable from the list onto a field) — the same
+variable may fill more than one role (e.g. colour the points by X). One panel.
+Optionally bin the x-axis and show a trend. Settings: marker size and opacity, the
+colour-variable colormap (with **Reverse** and a min/max), an optional title, and bin
+aggregation, plus the shared **Axes** controls. **Copy Python** (top-right) copies a
+runnable snippet that reproduces the current scatter. Hovering a point shows its X, Y
+(and colour) value.
 
 ### Hexbin
 
@@ -254,9 +277,9 @@ install instructions instead of failing.
 
 A variable aggregated into **wind-direction sectors** and drawn as a polar rose — for
 example mean flux, temperature, or concentration by the direction the wind came from.
-Pick variables by **role** (like Hexbin/Scatter): the **value** to aggregate first,
-then the **wind-direction** column (required), and optionally a third **colour**
-variable. Settings:
+Assign the **Value**, the **Wind direction** column, and an optional **Colour
+variable** in the dropdowns (or **drag** a variable from the list onto a field).
+Settings:
 
 - **Aggregation.** How to combine the values in each sector (mean, median, min, max,
   sum, std, count).
@@ -265,9 +288,9 @@ variable. Settings:
   how to aggregate it per sector and how to map it to colour, plus the colorbar.
 - **Max sector labels.** How many compass labels to draw around the rim.
 
-Below the plot, a **per-sector results table** lists the aggregated value (and count)
-for each direction; **Copy** puts it on the clipboard, and the same breakdown is
-echoed to the **Log** tab.
+To the right of the plot, a **per-sector results table** lists the aggregated value
+(and count) for each direction; **Copy** puts it on the clipboard, and the same
+breakdown is echoed to the **Log** tab.
 
 ---
 

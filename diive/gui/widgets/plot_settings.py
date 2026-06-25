@@ -91,6 +91,27 @@ _WINDROSE_AGGS = ["mean", "median", "min", "max", "sum", "std", "count"]
 #: Period grouping for the ridgeline (one density ridge per group).
 _RIDGELINE_HOW = ["monthly", "weekly", "yearly"]
 
+#: Diel-cycle central aggregations: display label -> DielCycle.plot `agg` value.
+_DIELCYCLE_AGGS = {
+    "Mean": "mean", "Median": "median", "Min": "min", "Max": "max",
+    "25th percentile": "p25", "75th percentile": "p75",
+}
+#: Diel-cycle uncertainty bands: display label -> DielCycle.plot `band` value.
+_DIELCYCLE_BANDS = {
+    "± SD": "sd", "± SE": "se", "IQR (25-75%)": "iqr",
+    "Min-Max": "minmax", "None": "none",
+}
+#: Diel-cycle per-month colour schemes: display label -> colormap (None = the
+#: diive 12-month palette).
+_DIELCYCLE_COLORSCHEMES = {
+    "Months (default)": None, "Viridis": "viridis", "Plasma": "plasma",
+    "Spectral": "Spectral", "Turbo": "turbo", "Twilight": "twilight",
+    "Rainbow": "rainbow", "HSV": "hsv", "Cool-warm": "coolwarm",
+}
+#: Diel-cycle curve modes (per month vs a single overall curve).
+_DIELCYCLE_PERMONTH = "One curve per month"
+_DIELCYCLE_OVERALL = "One curve overall"
+
 #: Year/month aggregation methods offered in the dropdown.
 _YEARMONTH_AGGS = ["mean", "median", "sum", "min", "max", "std"]
 
@@ -117,6 +138,9 @@ class PlotSettingsPanel(QScrollArea):
     """
 
     changed = Signal()
+    #: Emitted when a scatter X/Y/Colour role picker changes (dropdown or drop).
+    #: Unlike `changed`, the tab DOES re-render live on this (variable selection).
+    xyz_changed = Signal()
 
     def __init__(self, plot_type: str) -> None:
         super().__init__()
@@ -247,8 +271,9 @@ class PlotSettingsPanel(QScrollArea):
                      ("shade_percentile", self.shade_percentile), ("kd_kwargs", self.bandwidth),
                      ("show_mean_line", self.show_mean_line), ("ascending", self.ascending)]
         elif self._plot_type == DIELCYCLE:
-            pairs = [("mean", self.dc_mean), ("std", self.dc_std),
-                     ("each_month", self.dc_each_month)]
+            pairs = [("agg", self.dc_agg), ("band", self.dc_band),
+                     ("each_month", self.dc_curves), ("cmap", self.dc_colorscheme),
+                     ("marker", self.dc_marker), ("markersize", self.dc_markersize)]
         elif self._plot_type == CUMULATIVE_YEAR:
             pairs = [("show_reference", self.cy_show_reference),
                      ("highlight_year", self.cy_highlight), ("digits_after_comma", self.cy_digits),
@@ -405,15 +430,15 @@ class PlotSettingsPanel(QScrollArea):
         self.drop_gaps = self._check("Drop gaps (connect)", form)
         self._col.addWidget(line)
 
+        # Colour (incl. the colour-by-variable dropdown) sits near the top, next
+        # to the line settings, matching where the other plots place colour.
+        self._build_color_group()
+
         self._build_format_group(fields=[
             "title", "xlabel", "ylabel", "yunits", "fonts",
             "show_grid", "show_legend"])
 
         self._build_axes_group()
-
-        # Built last so the new colour field is appended at the end of the
-        # positional control order, keeping older saved plot states aligned.
-        self._build_color_group()
 
     def _build_color_group(self) -> None:
         """A 'Line color' section: a hex field (the persisted source of truth), a
@@ -457,6 +482,11 @@ class PlotSettingsPanel(QScrollArea):
         form.addRow(swatches)  # spanning row -> not part of positional state
 
         self.line_color.textChanged.connect(self._sync_color_swatches)
+        # Mark the plot dirty (enable Update plot) when the colour changes -- via
+        # typing, a swatch, the Pick dialog, or a saved-state restore (all route
+        # through the hex field's text). Without this the Update button stays
+        # disabled after a colour edit and appears not to work.
+        self.line_color.textChanged.connect(self.changed)
         self._sync_color_swatches(self.line_color.text())
 
         # Colour-by-variable: colour the line by another variable's value via a
@@ -468,6 +498,7 @@ class PlotSettingsPanel(QScrollArea):
             "Colour the line by another variable's value (via the colormap "
             "below). Pick one here, or drag a variable from the list onto this "
             "field. '(none)' uses the single colour above.")
+        self.color_by.currentTextChanged.connect(self.changed)
         form.addRow("Color by", self.color_by)
         self.colorby_cmap = QComboBox()
         self.colorby_cmap.setEditable(True)
@@ -475,6 +506,7 @@ class PlotSettingsPanel(QScrollArea):
         self.colorby_cmap.setCurrentText("RdYlBu_r")
         self.colorby_cmap.setToolTip("Colormap used to colour the line by the "
                                      "colour-by variable.")
+        self.colorby_cmap.currentTextChanged.connect(self.changed)
         form.addRow("Color-by map", self.colorby_cmap)
 
         self._col.addWidget(grp)
@@ -635,29 +667,82 @@ class PlotSettingsPanel(QScrollArea):
         self.cy_highlight.setCurrentIndex(idx if idx >= 0 else 0)
         self.cy_highlight.blockSignals(False)
 
+    def _build_role_combos(self, labels) -> list:
+        """Build the three role dropdowns (X/Y/Colour, value/dir/colour) shared by
+        the scatter and wind-rose tabs: two required pickers and a final optional
+        one (a leading '(none)'). Each is a drop target -- a variable dragged from
+        the list onto it is assigned -- and a change re-routes through
+        ``xyz_changed`` (the variable selection). Returns the three combos."""
+        self._role_none_ok = [False, False, True]
+        self._role_combos = []
+        for none_ok in self._role_none_ok:
+            combo = _DropComboBox()
+            if none_ok:
+                combo.addItem(_COLORBY_NONE)
+            combo.currentTextChanged.connect(self.xyz_changed)
+            self._role_combos.append(combo)
+        return self._role_combos
+
     def set_xyz(self, x: str | None, y: str | None, z: str | None) -> None:
-        """Update the role readout (hexbin / scatter X/Y/Z, wind-rose value/dir/colour)."""
-        if self._plot_type not in (HEXBIN, SCATTER, WINDROSE):
+        """Reflect the X/Y/Z role assignment into the controls.
+
+        Scatter / wind rose use dropdown pickers (set the current item without
+        re-emitting); hexbin uses a passive click-in-order readout label.
+        """
+        if getattr(self, "_role_combos", None) is not None:
+            for combo, name, none_ok in zip(self._role_combos, (x, y, z), self._role_none_ok):
+                combo.blockSignals(True)
+                i = combo.findText(name) if name else -1
+                combo.setCurrentIndex(i if i >= 0 else (0 if none_ok else combo.currentIndex()))
+                combo.blockSignals(False)
+            return
+        if self._plot_type != HEXBIN:
             return
         self.x_role.setText(x or "—")
         self.y_role.setText(y or "—")
         self.z_role.setText(z or "—")
 
+    def set_xyz_options(self, names) -> None:
+        """Populate the role dropdowns with the dataset's variable names, keeping
+        each current pick if it still exists. No-op when there are no dropdowns."""
+        if getattr(self, "_role_combos", None) is None:
+            return
+        names = [str(n) for n in names]
+        for combo, none_ok in zip(self._role_combos, self._role_none_ok):
+            cur = combo.currentText()
+            combo.blockSignals(True)
+            combo.clear()
+            if none_ok:
+                combo.addItem(_COLORBY_NONE)
+            combo.addItems(names)
+            i = combo.findText(cur)
+            combo.setCurrentIndex(i if i >= 0 else 0)
+            combo.blockSignals(False)
+
+    def xyz_values(self) -> list:
+        """Current role picks as [x, y] (+ [colour] when the optional one is set)."""
+        x, y, z = (c.currentText().strip() for c in self._role_combos)
+        picks = [n for n in (x, y) if n]
+        if z and z != _COLORBY_NONE:
+            picks.append(z)
+        return picks
+
     # --- scatter (XY) controls ---
     def _build_scatter(self) -> None:
         roles = QGroupBox("Variables")
         form = QFormLayout(roles)
-        hint = QLabel("Click list in order →")
+        hint = QLabel("Drag a variable from the list onto a field, or pick one "
+                      "from the dropdowns.")
+        hint.setWordWrap(True)
         hint.setStyleSheet("color: #90A4AE;")
         form.addRow(hint)
-        self.x_role = QLabel("—")
-        self.y_role = QLabel("—")
-        self.z_role = QLabel("—")
-        for lbl in (self.x_role, self.y_role, self.z_role):
-            lbl.setStyleSheet("color: #455A64;")
-        form.addRow("X", self.x_role)
-        form.addRow("Y", self.y_role)
-        form.addRow("Z (colour, optional)", self.z_role)
+        # X and Y are required; Colour (Z) is optional. Shared role-dropdown
+        # trio (drag a variable onto a field or pick it); see _build_role_combos.
+        self.sc_x, self.sc_y, self.sc_z = self._build_role_combos(
+            ["X", "Y", "Colour (optional)"])
+        for label, combo in (("X", self.sc_x), ("Y", self.sc_y),
+                             ("Colour (optional)", self.sc_z)):
+            form.addRow(label, combo)
         self._col.addWidget(roles)
 
         binning = QGroupBox("Binning")
@@ -703,22 +788,21 @@ class PlotSettingsPanel(QScrollArea):
 
     # --- wind-rose controls ---
     def _build_windrose(self) -> None:
-        # Role readout: the tab fills these via set_xyz as the user clicks
-        # variables (1 = value, 2 = wind direction, 3 = optional colour). The list
-        # highlight numbers the same picks.
         roles = QGroupBox("Variables")
         form = QFormLayout(roles)
-        hint = QLabel("Click list in order →")
+        hint = QLabel("Drag a variable from the list onto a field, or pick one "
+                      "from the dropdowns.")
+        hint.setWordWrap(True)
         hint.setStyleSheet("color: #90A4AE;")
         form.addRow(hint)
-        self.x_role = QLabel("—")
-        self.y_role = QLabel("—")
-        self.z_role = QLabel("—")
-        for lbl in (self.x_role, self.y_role, self.z_role):
-            lbl.setStyleSheet("color: #455A64;")
-        form.addRow("Value", self.x_role)
-        form.addRow("Wind direction", self.y_role)
-        form.addRow("Colour (optional)", self.z_role)
+        # Value + wind direction are required; colour is optional. Same role-
+        # dropdown trio as the scatter tab (drag onto a field or pick).
+        self.wr_value, self.wr_winddir, self.wr_zcol = self._build_role_combos(
+            ["Value", "Wind direction", "Colour (optional)"])
+        for label, combo in (("Value", self.wr_value),
+                             ("Wind direction", self.wr_winddir),
+                             ("Colour variable (optional)", self.wr_zcol)):
+            form.addRow(label, combo)
         self._col.addWidget(roles)
 
         agg = QGroupBox("Aggregation")
@@ -803,14 +887,39 @@ class PlotSettingsPanel(QScrollArea):
     def _build_dielcycle(self) -> None:
         grp = QGroupBox("Diel cycle")
         form = QFormLayout(grp)
-        self.dc_mean = self._check("Show mean", form, checked=True)
-        self.dc_std = self._check("Show ± SD band", form, checked=True)
-        self.dc_each_month = self._check("One curve per month", form)
+        # Central aggregation drawn as the curve (default mean). Display labels
+        # map to DielCycle.plot's `agg` values in values().
+        self.dc_agg = QComboBox()
+        self.dc_agg.addItems(list(_DIELCYCLE_AGGS.keys()))
+        self.dc_agg.currentTextChanged.connect(self.changed)
+        form.addRow("Aggregation", self.dc_agg)
+        # Uncertainty band around the curve (default SD).
+        self.dc_band = QComboBox()
+        self.dc_band.addItems(list(_DIELCYCLE_BANDS.keys()))
+        self.dc_band.setCurrentText("± SD")
+        self.dc_band.currentTextChanged.connect(self.changed)
+        form.addRow("Uncertainty band", self.dc_band)
+        # One curve per month (seasonal) vs a single curve over all data.
+        self.dc_curves = QComboBox()
+        self.dc_curves.addItems([_DIELCYCLE_PERMONTH, _DIELCYCLE_OVERALL])
+        self.dc_curves.currentTextChanged.connect(self.changed)
+        form.addRow("Curves", self.dc_curves)
+        # Per-month colour scheme (only matters in "per month" mode).
+        self.dc_colorscheme = QComboBox()
+        self.dc_colorscheme.addItems(list(_DIELCYCLE_COLORSCHEMES.keys()))
+        self.dc_colorscheme.currentTextChanged.connect(self.changed)
+        form.addRow("Color scheme", self.dc_colorscheme)
+        # Optional markers at each time-of-day point.
+        self.dc_marker = self._check("Show markers", form)
+        self.dc_markersize = self._dspin(4.0, 0.5, 20.0, 0.5, 1, form, "Marker size")
         self._col.addWidget(grp)
 
+        # Legend position only -- the column count is set automatically from the
+        # number of months (see the diel-cycle render), and the legend is shown
+        # on a single panel since all subplots share the same months.
         self._build_format_group(fields=[
             "title", "ylabel", "yunits", "fonts",
-            "show_grid", "show_legend", "legend"])
+            "show_grid", "show_legend", "legend_loc"])
 
         self._build_axes_group(yonly=True)
 
@@ -877,7 +986,9 @@ class PlotSettingsPanel(QScrollArea):
             self.ax_logx = self._check("Log X", form)
         self.ax_logy = self._check("Log Y", form)
         self.ax_invert_y = self._check("Invert Y", form)
-        self.ax_grid = self._check("Show grid", form)
+        # Grid is controlled by the Format group's "Show grid" (the single source
+        # of truth) -- no duplicate here, which previously could only add a grid,
+        # never remove it, so toggling it appeared not to work.
         self._col.addWidget(grp)
 
     def _axes_values(self) -> dict | None:
@@ -893,7 +1004,6 @@ class PlotSettingsPanel(QScrollArea):
             "logx": self.ax_logx.isChecked() if has_x else False,
             "logy": self.ax_logy.isChecked(),
             "invert_y": self.ax_invert_y.isChecked(),
-            "grid": self.ax_grid.isChecked(),
         }
 
     #: Matplotlib legend locations offered in the Format group's legend combo.
@@ -945,11 +1055,14 @@ class PlotSettingsPanel(QScrollArea):
             self.fmt_grid = self._check("Show grid", form, checked=grid_default)
         if "show_legend" in fields:
             self.fmt_legend = self._check("Show legend", form, checked=True)
-        if "legend" in fields:
+        if "legend" in fields or "legend_loc" in fields:
             self.fmt_legend_loc = QComboBox()
             self.fmt_legend_loc.addItems(self._LEGEND_LOCS)
             self.fmt_legend_loc.currentTextChanged.connect(self.changed)
             form.addRow("Legend position", self.fmt_legend_loc)
+        if "legend" in fields:
+            # Manual column count (the diel cycle uses "legend_loc" instead and
+            # sets columns automatically from the month count).
             self.fmt_legend_ncol = self._spin(1, 1, 6, form, "Legend columns")
 
         self._col.addWidget(grp)
@@ -979,6 +1092,7 @@ class PlotSettingsPanel(QScrollArea):
             out["show_legend"] = self.fmt_legend.isChecked()
         if hasattr(self, "fmt_legend_loc"):
             out["legend_loc"] = self.fmt_legend_loc.currentText()
+        if hasattr(self, "fmt_legend_ncol"):
             out["legend_ncol"] = self.fmt_legend_ncol.value()
         return out
 
@@ -1113,9 +1227,12 @@ class PlotSettingsPanel(QScrollArea):
             }
         if self._plot_type == DIELCYCLE:
             return {
-                "mean": self.dc_mean.isChecked(),
-                "std": self.dc_std.isChecked(),
-                "each_month": self.dc_each_month.isChecked(),
+                "agg": _DIELCYCLE_AGGS[self.dc_agg.currentText()],
+                "band": _DIELCYCLE_BANDS[self.dc_band.currentText()],
+                "each_month": self.dc_curves.currentText() == _DIELCYCLE_PERMONTH,
+                "cmap": _DIELCYCLE_COLORSCHEMES[self.dc_colorscheme.currentText()],
+                "marker": self.dc_marker.isChecked(),
+                "markersize": self.dc_markersize.value(),
                 "_format": self._format_values(),
                 "_axes": self._axes_values(),
             }

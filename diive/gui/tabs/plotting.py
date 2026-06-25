@@ -44,6 +44,7 @@ import diive as dv
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.flow_layout import FlowLayout
+from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.plot_settings import (
@@ -63,10 +64,19 @@ from diive.gui.widgets.plot_settings import (
 #: Plot types that pick variables by role (not comparison panels): hexbin/scatter
 #: X/Y/Z and the wind rose value/wind-direction/colour.
 _XYZ_TYPES = (HEXBIN, SCATTER, WINDROSE)
+
+#: Role-picked types whose roles are assigned via X/Y/Colour dropdowns (drag onto
+#: a field or pick) rather than clicking the list in order. Hexbin still cycles.
+_ROLE_DROPDOWN_TYPES = (SCATTER, WINDROSE)
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 #: Plot types laid out like a heatmap (panels side by side, shared axes).
 _HEATMAP_TYPES = (HEATMAP, HEATMAP_YEARMONTH)
+
+#: Plot types that support several variables at once -- one subplot per variable
+#: (with its own settings sub-tab), added via Ctrl+click. Heatmaps tile side by
+#: side; time series and diel cycles stack with a shared x-axis.
+_MULTI_PANEL_TYPES = _HEATMAP_TYPES + (TIMESERIES, DIELCYCLE)
 
 #: Column selected on startup -- gap-filled (continuous) NEE from the bundled
 #: CH-DAV example dataset.
@@ -74,6 +84,13 @@ _DEFAULT_VAR = "NEE_CUT_REF_f"
 
 #: Maximum number of side-by-side panels (further Ctrl+clicks are ignored).
 _MAX_PANELS = 5
+
+
+def _ranges_overlap(a, b) -> bool:
+    """True if the closed intervals `a` and `b` overlap (order-insensitive)."""
+    a0, a1 = sorted(a)
+    b0, b1 = sorted(b)
+    return a0 <= b1 and b0 <= a1
 
 # Plot-method identifiers (HEATMAP / TIMESERIES) are defined in plot_settings
 # and re-exported here so the registry can keep importing them from this module.
@@ -164,9 +181,32 @@ class PlottingTab(DiiveTab):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
+        # Title-bar action: a "Copy Python" button (where a codegen exists for
+        # this plot type -> scatter), right-aligned like the gap-filling tabs.
+        title_trailing = []
+        if self._plot_type == SCATTER:
+            self.copy_btn = CopyPythonButton(self._python_code)
+            title_trailing.append(self.copy_btn)
+
         # Main header (tracked/bold, e.g. "TIME SERIES PLOT"), matching the
         # correction/gap-filling tabs' title bar.
-        outer.addLayout(build_titlebar(f"{self.title} plot"))
+        outer.addLayout(build_titlebar(f"{self.title} plot", *title_trailing))
+
+        # "Update plot" button, left-aligned in its own row just below the header
+        # (mirrors the gap-filling tabs' Run button). The plot updates ONLY on a
+        # click: editing a control or changing a scatter X/Y/Colour dropdown marks
+        # it dirty (enables the button) but does not re-render. Disabled until
+        # something changes, re-disabled after each render.
+        self.update_btn = QPushButton("Update plot")
+        theme.set_button_role(self.update_btn, "confirm")
+        self.update_btn.setEnabled(False)
+        # Keep the current pan/zoom when applying setting changes.
+        self.update_btn.clicked.connect(lambda: self._render(preserve_view=True))
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(10, 0, 10, 4)
+        action_row.addWidget(self.update_btn)
+        action_row.addStretch(1)
+        outer.addLayout(action_row)
 
         body = QWidget()
         layout = QHBoxLayout(body)
@@ -174,31 +214,44 @@ class PlottingTab(DiiveTab):
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
         # Shared variable list (filter + pills) under its own header. Plain click
-        # resets to one panel; Ctrl+click toggles additional panels. Time series
-        # lists are draggable so a variable can be dropped onto the colour-by field.
-        self.varpanel = VariablePanel(draggable=self._plot_type == TIMESERIES)
+        # resets to one panel; Ctrl+click toggles additional panels. Time-series,
+        # scatter and wind-rose lists are draggable so a variable can be dropped
+        # onto a colour-by / X / Y / Colour / value / wind-direction field.
+        self.varpanel = VariablePanel(
+            draggable=self._plot_type in (TIMESERIES, SCATTER, WINDROSE))
         self.varpanel.selected.connect(self._on_selected)
         left = QWidget()
         llay = QVBoxLayout(left)
         llay.setContentsMargins(0, 0, 0, 0)
-        llay.addWidget(list_header("Variable", "click to plot"))
+        # Header hint matches the tab's selection model: scatter assigns roles via
+        # dropdowns (drag onto a field); the multi-panel tabs add a per-variable
+        # subplot (with its own settings sub-tab) on Ctrl+click; the rest plot the
+        # clicked variable.
+        if self._plot_type == SCATTER:
+            list_hint = "drag onto a field"
+        elif self._plot_type in _MULTI_PANEL_TYPES:
+            list_hint = "click to plot · Ctrl+click to add"
+        else:
+            list_hint = "click to plot"
+        llay.addWidget(list_header("Variable", list_hint))
         llay.addWidget(self.varpanel, 1)
 
-        # Middle: plot-parameter controls (under a header) plus an explicit
-        # "Update plot" button. Editing a control does NOT re-render — the user
-        # clicks the button to apply all pending changes at once (a single,
-        # consistent trigger across every control type). Variable selection in
-        # the list still renders live.
+        # Middle: plot-parameter controls under a header. Editing a control does
+        # NOT re-render; the Update plot button below the header applies pending
+        # changes. Variable selection in the list still renders live.
         self.settings = PlotSettingsPanel(self._plot_type)
+        # Any control edit marks the plot dirty -> enables the Update plot button.
+        self.settings.changed.connect(self._mark_dirty)
+        # Scatter / wind rose assign variables through the role dropdowns (pick or
+        # drag onto them), not by clicking the list; a change marks the plot dirty
+        # and waits for the Update plot button (no live re-render).
+        if self._plot_type in _ROLE_DROPDOWN_TYPES:
+            self.settings.xyz_changed.connect(self._on_xyz_changed)
         # Segmented pill row to pick which subplot's settings to edit (shown only
         # with more than one panel). Switching a pill swaps the loaded settings.
         self.panel_pills = _PanelPills()
         self.panel_pills.changed.connect(self._on_pill_changed)
         self.panel_pills.setVisible(False)
-        self.update_btn = QPushButton("Update plot")
-        theme.set_button_role(self.update_btn, "confirm")
-        # Keep the current pan/zoom when applying setting changes.
-        self.update_btn.clicked.connect(lambda: self._render(preserve_view=True))
         middle = QWidget()
         mlay = QVBoxLayout(middle)
         mlay.setContentsMargins(0, 0, 0, 0)
@@ -206,7 +259,6 @@ class PlottingTab(DiiveTab):
         mlay.addWidget(list_header("Plot settings", "adjust & update"))
         mlay.addWidget(self.panel_pills)
         mlay.addWidget(self.settings, 1)
-        mlay.addWidget(self.update_btn)
 
         # Right: embedded matplotlib canvas.
         self.canvas = MplCanvas()
@@ -219,15 +271,15 @@ class PlottingTab(DiiveTab):
         splitter.addWidget(left)
         splitter.addWidget(middle)
         # The wind rose also surfaces its per-sector aggregation as a table (with
-        # a copy-to-clipboard button) below the canvas; every other plot type puts
-        # the bare canvas on the right.
+        # a copy-to-clipboard button) to the right of the canvas; every other plot
+        # type puts the bare canvas on the right.
         if self._plot_type == WINDROSE:
-            right = QSplitter(Qt.Orientation.Vertical)
+            right = QSplitter(Qt.Orientation.Horizontal)
             right.addWidget(self.canvas)
             right.addWidget(self._build_windrose_results())
             right.setStretchFactor(0, 1)
             right.setStretchFactor(1, 0)
-            right.setSizes([560, 240])
+            right.setSizes([620, 300])
             splitter.addWidget(right)
         else:
             splitter.addWidget(self.canvas)
@@ -342,6 +394,10 @@ class PlottingTab(DiiveTab):
         if self._plot_type == TIMESERIES:
             # Offer every column as a colour-by variable.
             self.settings.set_colorby_options(df.columns)
+        if self._plot_type in _ROLE_DROPDOWN_TYPES:
+            # Offer every column in the role dropdowns (scatter X/Y/Colour,
+            # wind-rose value/wind-direction/colour).
+            self.settings.set_xyz_options(df.columns)
         self._select_default()
 
     def _select_default(self) -> None:
@@ -358,6 +414,7 @@ class PlottingTab(DiiveTab):
             # Scatter needs X and Y (Z optional for colour); seed a driver/flux pair.
             preferred = ["Tair_f", "NEE_CUT_REF_f"]
             self._xyz = preferred if all(c in cols for c in preferred) else cols[:2]
+            self.settings.set_xyz(*(self._xyz + [None, None, None])[:3])
             self._render()
             return
         if self._plot_type == WINDROSE:
@@ -370,6 +427,7 @@ class PlottingTab(DiiveTab):
             val = next((c for c in ("NEE_CUT_REF_f", "Tair_f") if c in cols),
                        cols[0] if cols else None)
             self._xyz = [c for c in (val, wd) if c]
+            self.settings.set_xyz(*(self._xyz + [None, None, None])[:3])
             self._render()
             return
         if _DEFAULT_VAR in cols:
@@ -393,8 +451,15 @@ class PlottingTab(DiiveTab):
             self.settings.apply_state(state["settings"])  # before the render reads them
         names = set(self.varpanel.names())
         sel = [n for n in (state.get("sel") or []) if n in names]
-        for i, name in enumerate(sel):
-            self._on_selected(name, i > 0)  # replay clicks (first resets, rest add)
+        if self._plot_type in _ROLE_DROPDOWN_TYPES:
+            # Restore the role picks straight into the dropdowns (list clicks no
+            # longer assign roles for scatter / wind rose).
+            self.settings.set_xyz_options(self.varpanel.names())
+            self._xyz = sel
+            self.settings.set_xyz(*(sel + [None, None, None])[:3])
+        else:
+            for i, name in enumerate(sel):
+                self._on_selected(name, i > 0)  # replay clicks (first resets, rest add)
         # Overlay the saved per-panel settings (the replay above seeded panels
         # from the shared snapshot); then restore the active panel + controls.
         for n, snap in (state.get("panel_settings") or {}).items():
@@ -410,6 +475,10 @@ class PlottingTab(DiiveTab):
 
     def _on_selected(self, name: str, additive: bool) -> None:
         if not name:
+            return
+        if self._plot_type in _ROLE_DROPDOWN_TYPES:
+            # Scatter / wind-rose roles are assigned via the dropdowns (pick or
+            # drag a variable onto them); clicking the list does not assign a role.
             return
         if self._plot_type in _XYZ_TYPES:
             # Click cycles roles: fill X, then Y, then Z; clicking an assigned
@@ -443,6 +512,40 @@ class PlottingTab(DiiveTab):
         self._sync_panel_settings(active=name)
         self.varpanel.run_with_loading(name, self._render)
 
+    def _on_xyz_changed(self) -> None:
+        """A scatter X/Y/Colour dropdown changed (pick or drag-drop): rebuild the
+        role list and mark the plot dirty. The plot updates only when the user
+        clicks Update plot (the list highlight refreshes immediately as feedback)."""
+        self._xyz = self.settings.xyz_values()
+        self._mark_selected()
+        self._mark_dirty()
+
+    def _mark_dirty(self) -> None:
+        """A setting changed since the last render: enable the Update plot button
+        so the user can apply it (no auto-render)."""
+        self.update_btn.setEnabled(True)
+
+    def _python_code(self) -> str | None:
+        """Runnable snippet reproducing the current plot (Copy Python button).
+
+        Only the scatter tab has a codegen so far; returns None otherwise or when
+        the role picks are incomplete.
+        """
+        if self._plot_type != SCATTER or len(self._xyz) < 2:
+            return None
+        from diive.core.plotting.scatter import scatter_to_code
+        xn, yn = self._xyz[0], self._xyz[1]
+        zn = self._xyz[2] if len(self._xyz) >= 3 else None
+        opts = self.settings.values()
+        return scatter_to_code(
+            xn, yn, zn,
+            nbins=opts["nbins"], binagg=opts["binagg"],
+            cmap=opts["cmap"], show_colorbar=opts["show_colorbar"],
+            markersize=opts["markersize"], alpha=opts["alpha"],
+            vmin=opts["vmin"], vmax=opts["vmax"],
+            format_kwargs=opts.get("_format"),
+        )
+
     def _render(self, preserve_view: bool = False) -> None:
         """Render one panel per entry in `self._panels`.
 
@@ -456,6 +559,8 @@ class PlottingTab(DiiveTab):
         snap the view back to the full data range. Selection changes render with
         `preserve_view=False` so a newly picked variable shows in full.
         """
+        # A render applies the current settings -> nothing pending to update.
+        self.update_btn.setEnabled(False)
         if self._plot_type == HEXBIN:
             self._render_hexbin()
             return
@@ -537,14 +642,20 @@ class PlottingTab(DiiveTab):
         # Re-apply the preserved zoom on top (Update plot keeps the view), but
         # never override a dim the user pinned with an explicit limit. Recorded
         # as a second history entry so Home still returns to the full view.
+        #
+        # Skip a dim whose preserved range no longer overlaps the new data range:
+        # e.g. flipping a heatmap's orientation swaps the x-axis from hours (0-24)
+        # to dates, so restoring the old hour limits would scroll the view far off
+        # the data and show an empty plot.
         if restore is not None:
             changed = False
             for i, ax in enumerate(axes):
-                if not explicit[i][0]:
+                if not explicit[i][0] and _ranges_overlap(ax.get_xlim(), restore[i][0]):
                     ax.set_xlim(restore[i][0])
-                if not explicit[i][1]:
+                    changed = True
+                if not explicit[i][1] and _ranges_overlap(ax.get_ylim(), restore[i][1]):
                     ax.set_ylim(restore[i][1])
-                changed = changed or not all(explicit[i])
+                    changed = True
             if changed:
                 self.canvas.draw_idle()
                 self.canvas.push_view()
@@ -576,10 +687,6 @@ class PlottingTab(DiiveTab):
                 ax.set_yscale("log")
             if ax_opts["invert_y"]:
                 ax.invert_yaxis()
-            if ax_opts["grid"]:
-                # Additive: turn the grid on without stripping a plot type's
-                # native grid (e.g. the time series' default y-grid) when unset.
-                ax.grid(True)
 
     def _render_ridgeline(self) -> None:
         """Render the ridgeline, which builds its own stacked-density figure.
@@ -678,10 +785,11 @@ class PlottingTab(DiiveTab):
         zn = self._xyz[2] if len(self._xyz) >= 3 else None
         opts = self.settings.values()
         try:
-            cols = [xn, yn] + ([zn] if zn else [])
-            sub = self._df[cols].dropna(subset=[xn, yn])
+            # Pass each role as its own Series (ScatterXY aligns/drops NaNs and
+            # tolerates the same variable used in two roles, e.g. colour-by-X).
             dv.plotting.ScatterXY(
-                x=sub[xn], y=sub[yn], z=(sub[zn] if zn else None),
+                x=self._df[xn], y=self._df[yn],
+                z=(self._df[zn] if zn else None),
                 nbins=opts["nbins"], binagg=opts["binagg"],
             ).plot(
                 ax=ax, format_style=dv.plotting.FormatStyle(**opts["_format"]),
@@ -778,7 +886,7 @@ class PlottingTab(DiiveTab):
             ax = fig.add_subplot(111)
             ax.axis("off")
             ax.text(0.5, 0.5,
-                    f"Click 2 variables: value, then wind direction  "
+                    f"Pick a value and a wind-direction variable  "
                     f"(colour optional)  ({len(self._xyz)}/2)",
                     ha="center", va="center", transform=ax.transAxes)
             self.canvas.draw()
@@ -863,6 +971,15 @@ class PlottingTab(DiiveTab):
                     show_values_fontsize=opts["show_values_fontsize"],
                     cb_labelsize=opts["cb_labelsize"],
                 )
+                # Both axes are plain integers (month 1-12, calendar year). Tag
+                # them so the hover tooltip labels them as Month/Year instead of
+                # misreading the 1-12 month axis as a clock time (05:30).
+                if opts["ax_orientation"] == "vertical":
+                    ax.xaxis._diive_hover_intlabel = "Month"
+                    ax.yaxis._diive_hover_intlabel = "Year"
+                else:
+                    ax.xaxis._diive_hover_intlabel = "Year"
+                    ax.yaxis._diive_hover_intlabel = "Month"
             elif self._plot_type == TIMESERIES:
                 # Explicit per-panel colour wins; "auto" falls back to the theme
                 # palette colour for this panel. The line colour also colours the
@@ -896,9 +1013,19 @@ class PlottingTab(DiiveTab):
                 fmt = dict(opts["_format"])
                 if fmt.get("title") is None:
                     fmt["title"] = name  # default the title to the variable name
+                # All stacked panels share the same months, so draw the legend on
+                # the first panel only. Auto column count keeps it compact (and
+                # stops a tall 1-column legend from collapsing the layout): 3
+                # columns for >8 months, 2 for >4, else 1.
+                n_months = (series.dropna().index.month.nunique()
+                            if opts["each_month"] else 1)
+                fmt["legend_ncol"] = 3 if n_months > 8 else (2 if n_months > 4 else 1)
+                fmt["show_legend"] = bool(fmt.get("show_legend", True)) and index == 0
                 dv.plotting.DielCycle(series).plot(
                     ax=ax, format_style=dv.plotting.FormatStyle(**fmt), color=color,
-                    mean=opts["mean"], std=opts["std"], each_month=opts["each_month"],
+                    agg=opts["agg"], band=opts["band"], each_month=opts["each_month"],
+                    cmap=opts["cmap"], marker=opts["marker"],
+                    markersize=opts["markersize"],
                 )
             elif self._plot_type == CUMULATIVE_YEAR:
                 dv.plotting.CumulativeYear(

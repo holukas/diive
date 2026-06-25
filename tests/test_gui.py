@@ -188,6 +188,9 @@ def test_plot_settings_live_render(window):
         return [t for ax in tab.canvas.fig.axes for t in ax.texts
                 if "Cannot plot" in t.get_text()]
 
+    # Update plot is disabled until a setting changes (nothing pending after the
+    # initial render), enabled by an edit, and disabled again after applying.
+    assert tab.update_btn.isEnabled() is False
     # Toggle a spread of non-default settings; params apply only on "Update
     # plot", after which the heatmap must still draw (no error-fallback text).
     tab.settings.cmap.setCurrentText("viridis")
@@ -197,10 +200,21 @@ def test_plot_settings_live_render(window):
     tab.settings.show_values.setChecked(True)
     tab.settings.cb_extend.setCurrentText("both")
     tab.settings.fmt_axlabel_fs.setValue(8)
+    assert tab.update_btn.isEnabled() is True  # an edit marked it dirty
     tab.update_btn.click()
     QApplication.processEvents()
     assert tab.settings.values()["cmap"] == "viridis"
     assert not _fallback(tab)
+    assert tab.update_btn.isEnabled() is False  # cleared after applying
+    # Flipping orientation must not leave the view on the old (hours) axis range:
+    # the preserved zoom only re-applies when it overlaps the new data, so the
+    # date-axis mesh stays in view (previously it scrolled off -> empty plot).
+    import numpy as _np
+    hax = tab.canvas.fig.axes[0]
+    _qm = next(c for c in hax.collections if c.__class__.__name__ == "QuadMesh")
+    _cx = _np.asarray(_qm.get_coordinates())[..., 0]
+    _xl = hax.get_xlim()
+    assert min(_xl) <= _cx.max() and _cx.min() <= max(_xl)  # data is in view
 
     # Reverse-colormap toggle (heatmap): appends/strips the _r suffix.
     tab.settings.cmap.setCurrentText("viridis")
@@ -226,6 +240,20 @@ def test_plot_settings_live_render(window):
     assert not _fallback(ts)
     # Explicit title overrides the variable-name default.
     assert any(a.get_title() == "Custom title" for a in ts.canvas.fig.axes)
+
+    # Colour controls now mark the plot dirty (Update plot enables) -- previously
+    # changing the colour / colour-by did not, so the button appeared dead.
+    assert ts.update_btn.isEnabled() is False
+    ts.settings.color_by.setCurrentText("Tair_f")
+    assert ts.update_btn.isEnabled() is True
+    ts.update_btn.click()
+    QApplication.processEvents()
+    assert not _fallback(ts)
+    ts.settings.color_by.setCurrentText("(none)")
+    ts.update_btn.click()
+    QApplication.processEvents()
+    ts.settings.line_color.setText("#FF0000")  # swatch/dialog route through this
+    assert ts.update_btn.isEnabled() is True
 
     # GUI-only Axes pass: log Y + a Y limit take effect on the data axis.
     ts.settings.ax_logy.setChecked(True)
@@ -304,13 +332,20 @@ def test_windrose_tab(app):
     assert clip.splitlines()[0].startswith("Sector\t")
     assert len(clip.splitlines()) == 9  # header + 8 sectors
 
-    # Add the optional colour variable and change the aggregation.
-    tab._on_selected("air_temperature", True)
+    # Roles are assigned via the dropdowns (drag onto a field or pick), not by
+    # clicking the list -- a list click does not change the roles.
+    tab._on_selected("air_temperature", False)
+    assert tab._xyz == ["co2_flux", "wind_dir"]
+    # Add the optional colour variable via its dropdown (marks dirty, no live
+    # re-render) and change the aggregation.
+    assert tab.update_btn.isEnabled() is False
+    tab.settings.wr_zcol.setCurrentText("air_temperature")
+    assert tab.update_btn.isEnabled() is True
+    assert tab._xyz == ["co2_flux", "wind_dir", "air_temperature"]
     tab.settings.wr_agg.setCurrentText("median")
     tab.settings.wr_nsectors.setValue(16)
     tab.update_btn.click()
     QApplication.processEvents()
-    assert tab._xyz == ["co2_flux", "wind_dir", "air_temperature"]
     assert not _fallback(tab)
     # Optional colour variable adds a Z column to the results table.
     headers = [tab.wr_table.horizontalHeaderItem(c).text()
@@ -524,6 +559,53 @@ def test_daterange_dialog_clamps_and_orders(app):
     assert got_start >= start and got_end <= end
 
 
+def test_window_geometry_clamped_to_screen(app, monkeypatch, example_year):
+    # A restored geometry larger than / off the screen (e.g. saved on a bigger
+    # monitor) must be pulled back fully on-screen, else the bottom of a full-
+    # height tab (the Log) and its scrollbar end up unreachable.
+    from PySide6.QtWidgets import QApplication
+    import diive
+    monkeypatch.setattr(diive, "load_exampledata_parquet", lambda: example_year.copy())
+    from diive.gui.app import MainWindow
+    win = MainWindow()  # not shown: offscreen applies resize reliably pre-show
+    try:
+        avail = QApplication.primaryScreen().availableGeometry()
+        win.move(avail.x() + 150, avail.y() + 150)
+        win.resize(avail.width() + 500, avail.height() + 400)
+        win._clamp_to_screen()
+        fg = win.frameGeometry()
+        assert fg.width() <= avail.width() and fg.height() <= avail.height()
+        assert fg.right() <= avail.right() and fg.bottom() <= avail.bottom()
+        assert fg.x() >= avail.x() and fg.y() >= avail.y()
+    finally:
+        win.close()
+        win.deleteLater()
+
+
+def test_window_fills_workarea_without_clipping(app, monkeypatch, example_year):
+    # The startup show must fit the window inside the screen's work area. The
+    # Overview's height-for-width stats band reports a very tall *minimum*; if
+    # that floor exceeds the work area the window is forced taller than the
+    # screen and the bottom of every tab (e.g. a plot's x-axis label and the
+    # canvas toolbar) is clipped off-screen.
+    from PySide6.QtWidgets import QApplication
+    import diive
+    monkeypatch.setattr(diive, "load_exampledata_parquet", lambda: example_year.copy())
+    from diive.gui.app import MainWindow
+    win = MainWindow()
+    try:
+        win.show_filling_workarea()
+        app.processEvents()
+        avail = win.screen().availableGeometry()
+        g = win.geometry()
+        assert g.height() <= avail.height()  # fits vertically (was clipped before)
+        assert g.width() <= avail.width()
+        assert g.bottom() <= avail.bottom()
+    finally:
+        win.close()
+        win.deleteLater()
+
+
 def test_overview_layout_stable_on_zoom(window):
     # The canvas freezes constrained layout after rendering so zoom/pan don't
     # continuously reflow the panels. The heatmap colorbar can trigger a one-time
@@ -606,6 +688,29 @@ def test_hover_value_lookup(app, example_year):
     _, _, text2, marker2 = canvas2.hover._heatmap_value(ax2, qm, ev2)
     assert marker2 is False
     assert f"{float(vals[5, 10]):.4g}" in text2
+
+    # Scatter panel: snaps to the nearest point and reports x, y (+ z when the
+    # points are colour-coded).
+    canvas3 = MplCanvas()
+    ax3 = canvas3.new_axes(1)[0]
+    x3 = example_year["Tair_f"]
+    y3 = example_year["NEE_CUT_REF_f"]
+    dv.plotting.ScatterXY(x=x3, y=y3, z=x3.copy()).plot(ax=ax3, show_colorbar=True)
+    canvas3.draw()
+    coll = next(c for c in ax3.collections
+                if c.__class__.__name__ == "PathCollection")
+    offs = np.asarray(coll.get_offsets(), float)
+    j = len(offs) // 2
+    pj = ax3.transData.transform(offs[j])
+    ev3 = types.SimpleNamespace(inaxes=ax3, xdata=offs[j, 0], ydata=offs[j, 1],
+                                x=pj[0], y=pj[1])
+    hx3, hy3, text3, marker3 = canvas3.hover._value_at(ax3, ev3)
+    assert marker3 is True
+    assert "x:" in text3 and "y:" in text3 and "z:" in text3
+    # A cursor far from any point reports nothing for the scatter.
+    ev_far = types.SimpleNamespace(inaxes=ax3, xdata=offs[j, 0], ydata=offs[j, 1],
+                                   x=pj[0] + 500, y=pj[1] + 500)
+    assert canvas3.hover._scatter_value(ax3, coll, ev_far) is None
 
 
 def test_save_dpi_spinbox(app):
@@ -1598,18 +1703,34 @@ def test_diel_cycle_tab(window):
     fig = tab.canvas.fig
     assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
     vals = tab.settings.values()
-    assert {"mean", "std", "each_month"} <= set(vals)
+    assert {"agg", "band", "each_month"} <= set(vals)
+    # Defaults: mean curve, SD band, one curve per month.
+    assert vals["agg"] == "mean" and vals["band"] == "sd" and vals["each_month"] is True
     assert "legend_loc" in vals["_format"]  # chrome now lives in the shared Format group
-    # Ctrl+click stacks a second variable (shared time-of-day x-axis).
+    # Ctrl+click stacks a second variable (shared time-of-day x-axis): one
+    # subplot per variable, each with its own settings sub-tab (panel pills).
     tab._on_selected("Tair_f", True)
     QApplication.processEvents()
     assert tab._panels == ["NEE_CUT_REF_f", "Tair_f"]
+    assert len([a for a in tab.canvas.fig.axes]) == 2  # one subplot per variable
+    assert set(tab._panel_settings) == {"NEE_CUT_REF_f", "Tair_f"}
+    assert tab.panel_pills.isVisibleTo(tab.widget())  # per-var settings sub-tabs
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    # Each variable's settings sub-tab is independent: a median curve on Tair_f
+    # must not change the mean curve kept for NEE.
+    tab.panel_pills.changed.emit(1)  # switch the controls to the Tair_f panel
+    tab.settings.dc_agg.setCurrentText("Median")
+    tab.update_btn.click()
+    QApplication.processEvents()
+    tab.panel_pills.changed.emit(0)  # back to NEE
+    assert tab.settings.dc_agg.currentText() == "Mean"
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
-    # Per-month colouring: with "one curve per month" on, the GUI must pass
-    # color=None so DielCycle auto-colours each month distinctly (the bug fix).
-    tab._panels = ["Tair_f"]
-    tab.settings.dc_each_month.setChecked(True)
+    # Per-month colouring: with "one curve per month" (default), the GUI must
+    # pass color=None so DielCycle auto-colours each month distinctly.
+    tab._on_selected("Tair_f", False)  # single panel, active panel synced
+    QApplication.processEvents()
+    tab.settings.dc_curves.setCurrentText("One curve per month")
     tab.update_btn.click()  # params apply on the button, not on edit
     QApplication.processEvents()
     ax = tab.canvas.fig.axes[0]
@@ -1617,12 +1738,45 @@ def test_diel_cycle_tab(window):
                    for l in ax.get_lines()}
     assert len(line_colors) > 1  # months drawn in different colours, not all one
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
-    # Legend position is wired through.
-    tab.settings.fmt_legend_loc.setCurrentText("upper right")
+
+    # Every aggregation x band option renders without error (overall = one curve).
+    tab.settings.dc_curves.setCurrentText("One curve overall")
+    for agg_label in ("Mean", "Median", "Min", "Max", "25th percentile", "75th percentile"):
+        tab.settings.dc_agg.setCurrentText(agg_label)
+        for band_label in ("± SD", "± SE", "IQR (25-75%)", "Min-Max", "None"):
+            tab.settings.dc_band.setCurrentText(band_label)
+            tab.update_btn.click()
+            QApplication.processEvents()
+            assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                        if "Cannot plot" in t.get_text()]
+
+    # Colour scheme + markers reach the plot.
+    tab.settings.dc_curves.setCurrentText("One curve per month")
+    tab.settings.dc_colorscheme.setCurrentText("Viridis")
+    tab.settings.dc_marker.setChecked(True)
     tab.update_btn.click()
     QApplication.processEvents()
-    assert tab.settings.values()["_format"]["legend_loc"] == "upper right"
+    assert tab.settings.values()["cmap"] == "viridis"
+    assert tab.settings.values()["marker"] is True
+    assert any(l.get_marker() not in (None, "None", "") for l in tab.canvas.fig.axes[0].get_lines())
+
+    # Shared legend across stacked panels: with 5 variables the layout holds and
+    # only one panel carries the legend. Make every panel per-month so they all
+    # carry a 12-entry legend if it were not shared.
+    tab.settings.dc_curves.setCurrentText("One curve per month")
+    tab._panels = ["NEE_CUT_REF_f", "Tair_f", "VPD_f", "Reco_CUT_REF", "GPP_CUT_REF_f"]
+    tab._sync_panel_settings(active="NEE_CUT_REF_f")
+    tab._render()
+    QApplication.processEvents()
+    main_axes = [a for a in tab.canvas.fig.axes]
+    assert len(main_axes) == 5
+    legended = [a for a in main_axes if a.get_legend() is not None]
+    assert len(legended) == 1  # one shared legend, not one per panel
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+
+    # Legend column count is automatic from the month count (12 months -> 3 cols).
+    leg = legended[0].get_legend()
+    assert leg._ncols == 3
 
 
 def test_scatter_tab(window):
@@ -1643,7 +1797,23 @@ def test_scatter_tab(window):
     QApplication.processEvents()
     assert len(tab.canvas.fig.axes) >= 2  # scatter + colorbar
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
-    assert tab.settings.z_role.text() == "VPD_f"  # role readout updated
+    assert tab.settings.sc_z.currentText() == "VPD_f"  # colour dropdown reflects it
+
+    # Picking via the dropdowns drives the role assignment but does NOT re-render
+    # on its own -- it marks the plot dirty (enables Update plot).
+    tab._render()  # clean slate (button disabled)
+    assert tab.update_btn.isEnabled() is False
+    tab.settings.sc_x.setCurrentText("VPD_f")
+    QApplication.processEvents()
+    assert tab._xyz[0] == "VPD_f"
+    assert tab.update_btn.isEnabled() is True  # dirty, awaiting the button
+    # Clearing the colour dropdown drops Z -> plain 2-variable scatter (on update).
+    tab.settings.sc_z.setCurrentIndex(0)  # "(none)"
+    QApplication.processEvents()
+    assert len(tab._xyz) == 2
+    tab.update_btn.click()
+    QApplication.processEvents()
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
     # Marker size / opacity reach the scatter collection.
     tab.settings.sc_markersize.setValue(80)
@@ -1673,6 +1843,22 @@ def test_scatter_tab(window):
     assert lo > hi  # inverted
     assert {round(lo), round(hi)} == {0, 5}
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+
+    # Copy Python lives in the title bar and emits a runnable ScatterXY snippet.
+    from diive.gui.widgets.copy_button import CopyPythonButton
+    assert isinstance(tab.copy_btn, CopyPythonButton)
+    code = tab._python_code()
+    assert "dv.plotting.ScatterXY(" in code and ".plot(" in code
+    assert tab._xyz[0] in code and tab._xyz[1] in code
+
+    # Update plot is dirty-gated: a setting edit enables it, a render clears it.
+    tab._render()
+    assert tab.update_btn.isEnabled() is False
+    tab.settings.sc_markersize.setValue(55)
+    assert tab.update_btn.isEnabled() is True
+    tab.update_btn.click()
+    QApplication.processEvents()
+    assert tab.update_btn.isEnabled() is False
 
 
 def test_cumulative_year_tab(window):

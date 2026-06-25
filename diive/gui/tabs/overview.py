@@ -845,10 +845,13 @@ class OverviewTab(DiiveTab):
                     ax=ax, showplot=False, show_title=False, fill=True)
             elif plot_type == "Diel cycle":
                 # One auto-coloured line per month (seasonal diel pattern).
-                # Compact multi-column legend maps each colour to its month.
+                # Compact multi-column legend maps each colour to its month;
+                # spread to 3 columns when more than 8 months are present.
+                legend_ncol = 3 if series.dropna().index.month.nunique() > 8 else 2
                 dv.plotting.DielCycle(series).plot(
                     ax=ax, format_style=dv.plotting.FormatStyle(
-                        show_legend=True, legend_ncol=2, legend_fontsize=_FONT_SIZE),
+                        show_legend=True, legend_ncol=legend_ncol,
+                        legend_fontsize=_FONT_SIZE),
                     each_month=True, linewidth=1.1)
                 ax.axhline(0, color=_ZERO_COLOR, linestyle="--", linewidth=1.0,
                            alpha=0.6, zorder=1)
@@ -859,7 +862,8 @@ class OverviewTab(DiiveTab):
                 ax.fill_between(daily.index, (daily - sd).to_numpy(),
                                 (daily + sd).to_numpy(), color=_DAILY_COLOR,
                                 alpha=0.2, edgecolor="none", zorder=0)
-                dv.plotting.TimeSeries(daily).plot(ax=ax, color=_DAILY_COLOR, linewidth=1.4)
+                dv.plotting.TimeSeries(daily).plot(ax=ax, color=_DAILY_COLOR,
+                                                   linewidth=0.8, marker=True, markersize=2.5)
                 ax.axhline(0, color=_ZERO_COLOR, linestyle="--", linewidth=1.0,
                            alpha=0.6, zorder=0)
             elif plot_type == "Histogram":

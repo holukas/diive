@@ -160,6 +160,7 @@ class MainWindow(QMainWindow):
         geo = self._config.get("geometry")
         if geo:
             self.restoreGeometry(QByteArray.fromBase64(geo.encode("ascii")))
+            self._clamp_to_screen()
         else:
             self._size_to_screen()
         # The stylesheet is applied app-wide by theme.manager (see run()), so
@@ -322,6 +323,55 @@ class MainWindow(QMainWindow):
         frame = self.frameGeometry()
         frame.moveCenter(avail.center())
         self.move(frame.topLeft())
+
+    def show_filling_workarea(self) -> None:
+        """Show the window filling the screen's available work area.
+
+        Used instead of ``showMaximized()`` for the frameless/translucent Studio
+        shell: a frameless maximize on Windows covers the *full* screen including
+        the taskbar, which hides the bottom of the active tab (a plot's x-axis
+        label and the canvas toolbar) behind it. ``availableGeometry()`` excludes
+        the taskbar, so the whole window stays on the visible work area.
+
+        Also lowers the window's minimum size: the Overview's height-for-width
+        stats band reports a very tall *minimum* (its single-column height at the
+        minimum width), which otherwise forces the window taller than the work
+        area -- the layout-enforced floor cannot be met, so the bottom of every
+        tab is clipped off-screen. At real (wide) sizes the band is only a row or
+        two tall, so a modest floor is safe.
+        """
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is not None:
+            avail = screen.availableGeometry()
+            self.setMinimumSize(min(1000, avail.width()), min(640, avail.height()))
+            self.setGeometry(avail)
+        self.show()
+
+    def _clamp_to_screen(self) -> None:
+        """Keep a restored window within the current screen's available area.
+
+        A geometry saved on a larger or secondary monitor (or before a resolution
+        change) can place the window's bottom/right off-screen. On the frameless
+        Studio shell that silently hides whatever sits at the bottom of the active
+        tab — most visibly the newest Log output, with the scrollbar's lower end
+        unreachable. Shrink to fit and nudge fully back on-screen.
+        """
+        if self.isMaximized() or self.isFullScreen():
+            return  # Qt already fits these to the screen
+        frame = self.frameGeometry()
+        screen = QApplication.screenAt(frame.center()) or QApplication.primaryScreen()
+        if screen is None:
+            return
+        avail = screen.availableGeometry()
+        w = min(frame.width(), avail.width())
+        h = min(frame.height(), avail.height())
+        if w != frame.width() or h != frame.height():
+            self.resize(w, h)
+            frame = self.frameGeometry()
+        x = min(max(frame.x(), avail.x()), avail.right() - frame.width() + 1)
+        y = min(max(frame.y(), avail.y()), avail.bottom() - frame.height() + 1)
+        if x != frame.x() or y != frame.y():
+            self.move(x, y)
 
     def _build_menus(self, add_menu) -> None:
         """Populate the menu tree, creating each top-level menu via `add_menu`.
@@ -1369,7 +1419,9 @@ def run() -> int:
     app.processEvents()  # paint the splash before the (blocking) window build
 
     window = MainWindow(cfg, autoload=False)  # build the UI now; load data deferred
-    window.showMaximized()  # always start maximized (restored geometry is the un-maximize size)
+    # Fill the work area (not showMaximized: a frameless maximize covers the
+    # taskbar and clips the bottom of the active tab off-screen).
+    window.show_filling_workarea()
     splash.raise_()
 
     # Defer the data load (last project or example) onto the event loop so the

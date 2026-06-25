@@ -21,7 +21,7 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import numpy as np
-from matplotlib.collections import QuadMesh
+from matplotlib.collections import PathCollection, QuadMesh
 from matplotlib.dates import (
     AutoDateFormatter,
     ConciseDateConverter,
@@ -34,6 +34,11 @@ from matplotlib.dates import (
 
 #: Tooltip / marker ink (blue-grey 800), matching the GUI's neutral accents.
 _INK = "#37474F"
+
+#: Max pixel distance from the cursor to a scatter point for it to register a
+#: hover (beyond this the cursor is "in empty space" and other artists, e.g. a
+#: binned trend line, may answer instead).
+_SCATTER_PICK_RADIUS = 24.0
 
 
 class HoverAnnotator:
@@ -146,11 +151,47 @@ class HoverAnnotator:
         for coll in ax.collections:
             if isinstance(coll, QuadMesh):
                 return self._heatmap_value(ax, coll, event)
+        # Scatter points (ax.scatter -> PathCollection) take priority over a
+        # binned trend line, but only when the cursor is near a point; otherwise
+        # fall through so the line still answers.
+        scatter = next((c for c in ax.collections
+                        if isinstance(c, PathCollection) and c.get_visible()), None)
+        if scatter is not None:
+            hit = self._scatter_value(ax, scatter, event)
+            if hit is not None:
+                return hit
         lines = [ln for ln in ax.get_lines()
                  if ln.get_visible() and np.asarray(ln.get_xdata()).size > 2]
         if lines:
             return self._line_value(ax, lines, event)
         return None
+
+    def _scatter_value(self, ax, coll, event):
+        """Nearest scatter point to the cursor as ``(x, y, text, show_marker)``.
+
+        Shows the point's x and y, plus its colour value (z) when the scatter is
+        colour-coded. Returns ``None`` when no point is within the pick radius.
+        """
+        offsets = np.asarray(coll.get_offsets(), dtype=float)  # (N, 2) data coords
+        if offsets.size == 0:
+            return None
+        pix = ax.transData.transform(offsets)  # -> pixels, matching event.x/y
+        dx = pix[:, 0] - event.x
+        dy = pix[:, 1] - event.y
+        d2 = dx * dx + dy * dy
+        idx = int(np.argmin(d2))
+        if d2[idx] > _SCATTER_PICK_RADIUS ** 2:
+            return None
+        xd, yd = offsets[idx]
+        text = (f"x: {self._fmt_axis(ax.xaxis, xd)}\n"
+                f"y: {self._fmt_axis(ax.yaxis, yd)}")
+        # A colour-coded scatter carries its z values in the mappable array.
+        arr = coll.get_array()
+        if arr is not None:
+            arr = np.asarray(arr, dtype=float)
+            if arr.size == offsets.shape[0] and np.isfinite(arr[idx]):
+                text += f"\nz: {arr[idx]:.4g}"
+        return xd, yd, text, True
 
     def _line_value(self, ax, lines, event):
         best = None  # (pixel_dist_sq, x, y)
@@ -222,6 +263,12 @@ class HoverAnnotator:
         """
         if not np.isfinite(value):
             return "—"
+        # A panel can tag an axis as integer-valued (e.g. the year/month
+        # heatmap's Month/Year axes), labelling the value and skipping the
+        # date / time-of-day heuristics below.
+        intlabel = getattr(axis, "_diive_hover_intlabel", None)
+        if intlabel is not None:
+            return f"{intlabel} {int(np.floor(value))}"
         if self._is_date_axis(axis):
             # A panel can opt into a date-only label (e.g. daily aggregates,
             # where the time is always 00:00) by tagging its axes.
