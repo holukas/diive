@@ -797,6 +797,28 @@ When you add new columns (here or from an Outliers tab), the **Overview jumps
 straight to the new variable**: it clears any active filter, scrolls the new row
 into view, and plots it, so you can see the result right away.
 
+### Combine variables
+
+Build a new variable by combining two existing ones, with all three shown as
+date/time heatmaps side by side.
+
+1. **Drag** a variable from the list onto **Heatmap 1**, and another onto
+   **Heatmap 2** (only these two are drop targets). Each plots as you drop it.
+2. Pick how to **Combine** them:
+   - **Multiply / Add / Subtract / Divide** — element-wise arithmetic of
+     heatmap 1 (a) and heatmap 2 (b).
+   - **Fill gaps of a with b** — keep heatmap 1 and fill only its gaps with the
+     matching values from heatmap 2.
+3. **Keep overlapping data points only** (arithmetic methods): when ticked, a
+   result is kept only where *both* variables have a value; when unticked, a
+   missing value is treated as the operation's identity (0 for add/subtract, 1 for
+   multiply/divide) so one-sided records survive. (It is disabled for *Fill gaps*,
+   which is always a union.)
+4. **Heatmap 3** previews the combined result and updates live as you change the
+   method or the overlap option.
+5. Edit the **Name** (a default is suggested) and click **Add … to dataset** to
+   append the new column. **Copy Python** yields a runnable script.
+
 ---
 
 ## Flux

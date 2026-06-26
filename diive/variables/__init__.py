@@ -33,6 +33,8 @@ from diive.variables.temporal import (
 from diive.variables.utilities import (
     generate_noisy_timeseries,
     add_impulse_noise,
+    combine_variables,
+    combine_variables_to_code,
 )
 
 # Classification
@@ -64,6 +66,8 @@ __all__ = [
     # utilities
     'generate_noisy_timeseries',
     'add_impulse_noise',
+    'combine_variables',
+    'combine_variables_to_code',
     # classification
     'classify_variable',
     'VariableClass',

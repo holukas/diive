@@ -428,6 +428,7 @@ class MainWindow(QMainWindow):
         # the create tabs.
         variables_menu = add_menu("&Variables")
         variables_menu.addAction(_menu_tab_act("Feature engineering"))
+        variables_menu.addAction(_menu_tab_act("Combine variables"))
         variables_menu.addAction(_act("Add timestamp co&lumn...", self._add_timestamp_column))
         variables_menu.addAction(_menu_tab_act("Select records by condition"))
         variables_menu.addSeparator()

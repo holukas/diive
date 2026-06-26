@@ -83,7 +83,11 @@
   **Run** button. Data menu **Select
   variables**, **Select records by condition** (build stacked keep/remove operations that filter a target by another
   variable's range, with a live preview, undo/reset, and an emitted `{target}_SEL` column), **Rename variables** (add a
-  prefix/suffix to all variables, or one at a time, with a live preview), **Metadata explorer**, **Feature engineering**;
+  prefix/suffix to all variables, or one at a time, with a live preview), **Metadata explorer**, **Feature engineering**,
+  **Combine variables** (drag a variable onto heatmap 1 and another onto heatmap 2, pick a method —
+  multiply/add/subtract/divide, or fill the gaps of one with the other — and "keep overlapping only", preview the result
+  in heatmap 3, then add it as a new column, with **Copy Python**; backed by the new `dv.variables.combine_variables` /
+  `combine_variables_to_code`);
   plus **Appearance**, **Project settings** (author, description, site details, and a **sticky-note wall** — all saved
   with the project), and **Log**.
 - **Plot tabs — refinements.** **Scatter XY** and **Wind rose** now assign variables to roles via **X/Y/Colour**

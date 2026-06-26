@@ -11,6 +11,7 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.tabs.combine_variables import CombineVariablesTab
 from diive.gui.tabs.compound_extremes import CompoundExtremesTab
 from diive.gui.tabs.corrections_nighttime_offset import NighttimeZeroOffsetTab
 from diive.gui.tabs.corrections_relativehumidity_offset import RelativeHumidityOffsetTab
@@ -92,6 +93,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
     # create tabs and a separator splits create from manage.
     "Variables": {
         "Feature engineering": FeatureEngineerTab,
+        "Combine variables": CombineVariablesTab,
         "Select records by condition": SelectRecordsTab,
         "Rename variables": RenameVariablesTab,
         "Metadata explorer": MetadataExplorerTab,
