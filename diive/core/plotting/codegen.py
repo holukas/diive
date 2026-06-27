@@ -178,6 +178,47 @@ def cumulative_year_to_code(varname: str, opts: dict, *, df_name: str = "df") ->
     return _script("CumulativeYear", ctor, plot)
 
 
+def cumulative_to_code(varname: str, opts: dict, *, df_name: str = "df") -> str:
+    """Reproduce a :class:`Cumulative` (running total across the whole record)."""
+    # Cumulative takes a DataFrame (one curve per column); a single-column frame
+    # plots one cumulative curve.
+    ctor = [f"    {df_name}[[{varname!r}]],"]
+    ctor += _kw_lines({"units": opts["units"]})
+    plot = ["    ax=ax,", "    showplot=False,"]
+    fmt_line = _fmt_line(opts.get("_format"))
+    if fmt_line:
+        plot.append(fmt_line)
+    plot += _kw_lines({
+        "digits_after_comma": opts["digits_after_comma"],
+        "show_title": opts["show_title"],
+        "fill": opts["fill"],
+    })
+    return _script("Cumulative", ctor, plot)
+
+
+def waterfall_to_code(varname: str, opts: dict, *, df_name: str = "df") -> str:
+    """Reproduce a :class:`WaterfallPlot` (cumulative budget of period contributions)."""
+    ctor = [f"    {df_name}[{varname!r}],"]
+    ctor += _kw_lines({
+        "series_units": opts["series_units"],
+        "resample": opts["resample"],
+        "agg": opts["agg"],
+        "uptake_is_negative": opts["uptake_is_negative"],
+    })
+    plot = ["    ax=ax,", "    showplot=False,"]
+    fmt_line = _fmt_line(opts.get("_format"))
+    if fmt_line:
+        plot.append(fmt_line)
+    plot += _kw_lines({
+        "digits_after_comma": opts["digits_after_comma"],
+        "color_uptake": opts["color_uptake"],
+        "color_release": opts["color_release"],
+        "bar_width": opts["bar_width"],
+        "show_connectors": opts["show_connectors"],
+    })
+    return _script("WaterfallPlot", ctor, plot)
+
+
 def histogram_to_code(varname: str, opts: dict, *, df_name: str = "df") -> str:
     """Reproduce a :class:`HistogramPlot`."""
     ctor = [

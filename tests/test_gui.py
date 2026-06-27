@@ -394,12 +394,15 @@ def test_all_plot_tabs_have_copy_python(app):
         ps.TIMESERIES: "TimeSeries",
         ps.DIELCYCLE: "DielCycle",
         ps.CUMULATIVE_YEAR: "CumulativeYear",
+        ps.CUMULATIVE: "Cumulative",
         ps.HISTOGRAM: "HistogramPlot",
         ps.RIDGELINE: "RidgeLinePlot",
+        ps.SHIFTEDDIST: "ShiftedDistributionPlot",
         ps.HEXBIN: "HexbinPlot",
         ps.SCATTER: "ScatterXY",
         ps.WINDROSE: "WindRosePlot",
         ps.TREERING: "TreeRingPlot",
+        ps.WATERFALL: "WaterfallPlot",
     }
     for plot_type, classname in cases.items():
         tab = PlottingTab(plot_type, plot_type)

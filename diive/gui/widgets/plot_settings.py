@@ -81,12 +81,20 @@ TIMESERIES = "Time series"
 RIDGELINE = "Ridgeline"
 DIELCYCLE = "Diel cycle"
 CUMULATIVE_YEAR = "Cumulative year"
+CUMULATIVE = "Cumulative"
 HEXBIN = "Hexbin"
 SCATTER = "Scatter (XY)"
 HISTOGRAM = "Histogram"
 SHIFTEDDIST = "Shifted distribution"
 WINDROSE = "Wind rose"
 TREERING = "Tree ring"
+WATERFALL = "Waterfall"
+
+#: Resampling period the waterfall aggregates each bar over (WaterfallPlot
+#: `resample`). Editable, so any pandas offset alias can be typed.
+_WATERFALL_FREQS = ["D", "W", "ME", "MS", "YE"]
+#: Aggregation applied within each waterfall period (WaterfallPlot `agg`).
+_WATERFALL_AGGS = ["sum", "mean", "median", "min", "max"]
 
 #: Zone-label presets for the shifted distribution (5 labels, lowest->highest).
 #: "Temperature" is the library default (None -> the class's own defaults); the
@@ -192,6 +200,8 @@ class PlotSettingsPanel(QScrollArea):
             self._build_dielcycle()
         elif plot_type == CUMULATIVE_YEAR:
             self._build_cumulative_year()
+        elif plot_type == CUMULATIVE:
+            self._build_cumulative()
         elif plot_type == HEXBIN:
             self._build_hexbin()
         elif plot_type == SCATTER:
@@ -204,6 +214,8 @@ class PlotSettingsPanel(QScrollArea):
             self._build_windrose()
         elif plot_type == TREERING:
             self._build_treering()
+        elif plot_type == WATERFALL:
+            self._build_waterfall()
 
         self._col.addStretch(1)
         # Keep every form within the panel's fixed width: wrap a row's field
@@ -271,12 +283,14 @@ class PlotSettingsPanel(QScrollArea):
             RIDGELINE: dv.plotting.RidgeLinePlot.plot,
             DIELCYCLE: dv.plotting.DielCycle.plot,
             CUMULATIVE_YEAR: dv.plotting.CumulativeYear.__init__,
+            CUMULATIVE: dv.plotting.Cumulative.plot,
             HEXBIN: dv.plotting.HexbinPlot.plot,
             SCATTER: dv.plotting.ScatterXY.plot,
             HISTOGRAM: dv.plotting.HistogramPlot.plot,
             SHIFTEDDIST: dv.plotting.ShiftedDistributionPlot.plot,
             WINDROSE: dv.plotting.WindRosePlot.plot,
             TREERING: dv.plotting.TreeRingPlot.plot,
+            WATERFALL: dv.plotting.WaterfallPlot.plot,
         }.get(self._plot_type)
         docs = param_docs(method) if method else {}
 
@@ -312,6 +326,13 @@ class PlotSettingsPanel(QScrollArea):
             pairs = [("show_reference", self.cy_show_reference),
                      ("highlight_year", self.cy_highlight), ("digits_after_comma", self.cy_digits),
                      ("series_units", self.cy_units), ("yearly_end_date", self.cy_yearly_end)]
+        elif self._plot_type == CUMULATIVE:
+            pairs = [("digits_after_comma", self.cu_digits),
+                     ("show_title", self.cu_show_title), ("fill", self.cu_fill)]
+            # units is an __init__ param, not in plot().
+            tip = param_docs(dv.plotting.Cumulative.__init__).get("units")
+            if tip:
+                self.cu_units.setToolTip(tip)
         elif self._plot_type == HEXBIN:
             pairs = [
                 ("cmap", self.cmap), ("vmin", self.vmin), ("vmax", self.vmax),
@@ -422,6 +443,23 @@ class PlotSettingsPanel(QScrollArea):
                                   ("amplitude_scale", self.tr_amplitude),
                                   ("ring_width", self.tr_ring_width)]:
                 tip = line_docs.get(param)
+                if tip:
+                    widget.setToolTip(tip)
+        elif self._plot_type == WATERFALL:
+            pairs = [
+                ("digits_after_comma", self.wf_digits),
+                ("color_uptake", self.wf_color_uptake),
+                ("color_release", self.wf_color_release),
+                ("bar_width", self.wf_bar_width),
+                ("show_connectors", self.wf_connectors),
+            ]
+            # series_units/resample/agg/uptake_is_negative are __init__ params.
+            init_docs = param_docs(dv.plotting.WaterfallPlot.__init__)
+            for param, widget in [("series_units", self.wf_units),
+                                  ("resample", self.wf_resample),
+                                  ("agg", self.wf_agg),
+                                  ("uptake_is_negative", self.wf_uptake_negative)]:
+                tip = init_docs.get(param)
                 if tip:
                     widget.setToolTip(tip)
         else:
@@ -1277,6 +1315,76 @@ class PlotSettingsPanel(QScrollArea):
 
         self._build_axes_group()
 
+    # --- cumulative (whole-record running total) controls ---
+    def _build_cumulative(self) -> None:
+        grp = QGroupBox("Cumulative")
+        form = QFormLayout(grp)
+        self.cu_digits = self._spin(0, 0, 6, form, "Label decimals")
+        self.cu_show_title = self._check("Show title", form, checked=True)
+        self.cu_fill = self._check("Shade to zero", form)
+        self._col.addWidget(grp)
+
+        labels = QGroupBox("Labels")
+        form = QFormLayout(labels)
+        self.cu_units = QLineEdit()
+        self.cu_units.setPlaceholderText("e.g. gC m-2")
+        self.cu_units.editingFinished.connect(self.changed)
+        form.addRow("Units", self.cu_units)
+        self._col.addWidget(labels)
+
+        self._build_format_group(fields=["fonts", "show_grid", "show_legend"])
+
+        self._build_axes_group()
+
+    # --- waterfall (cumulative budget) controls ---
+    def _build_waterfall(self) -> None:
+        agg = QGroupBox("Aggregation")
+        form = QFormLayout(agg)
+        # resample/agg aggregate the series to one bar per period; editable so any
+        # pandas offset alias can be typed.
+        self.wf_resample = QComboBox()
+        self.wf_resample.setEditable(True)
+        self.wf_resample.addItems(_WATERFALL_FREQS)
+        self.wf_resample.currentTextChanged.connect(self.changed)
+        form.addRow("Resample", self.wf_resample)
+        self.wf_agg = QComboBox()
+        self.wf_agg.addItems(_WATERFALL_AGGS)
+        self.wf_agg.currentTextChanged.connect(self.changed)
+        form.addRow("Aggregation", self.wf_agg)
+        # Sign convention: with the default, negative = uptake (sink, blue).
+        self.wf_uptake_negative = self._check(
+            "Uptake is negative (NEE)", form, checked=True)
+        self._col.addWidget(agg)
+
+        bars = QGroupBox("Bars")
+        form = QFormLayout(bars)
+        self.wf_color_uptake = QLineEdit("#2196F3")
+        self.wf_color_uptake.setPlaceholderText("#2196F3")
+        self.wf_color_uptake.editingFinished.connect(self.changed)
+        form.addRow("Uptake color", self.wf_color_uptake)
+        self.wf_color_release = QLineEdit("#F44336")
+        self.wf_color_release.setPlaceholderText("#F44336")
+        self.wf_color_release.editingFinished.connect(self.changed)
+        form.addRow("Release color", self.wf_color_release)
+        # 0 -> "auto" (~80% of the median period spacing).
+        self.wf_bar_width = self._dspin(0.0, 0.0, 365.0, 0.5, 1, form, "Bar width (days)")
+        self.wf_bar_width.setSpecialValueText("auto")
+        self.wf_connectors = self._check("Connector lines", form, checked=True)
+        self._col.addWidget(bars)
+
+        labels = QGroupBox("Labels")
+        form = QFormLayout(labels)
+        self.wf_units = QLineEdit()
+        self.wf_units.setPlaceholderText("e.g. gC m-2")
+        self.wf_units.editingFinished.connect(self.changed)
+        form.addRow("Units", self.wf_units)
+        self.wf_digits = self._spin(0, 0, 6, form, "Total decimals")
+        self._col.addWidget(labels)
+
+        self._build_format_group(fields=["title", "ylabel", "fonts", "show_grid"])
+
+        self._build_axes_group()
+
     # --- shared "Axes" group (GUI-only: limits/scale/grid applied post-render) ---
     def _build_axes_group(self, yonly: bool = False) -> None:
         """Build the GUI-only Axes group (limits, log scale, invert, grid).
@@ -1568,6 +1676,31 @@ class PlotSettingsPanel(QScrollArea):
                 "digits_after_comma": self.cy_digits.value(),
                 "series_units": self.cy_units.text().strip() or None,
                 "yearly_end_date": self.cy_yearly_end.text().strip() or None,
+                "_format": self._format_values(),
+                "_axes": self._axes_values(),
+            }
+        if self._plot_type == CUMULATIVE:
+            return {
+                "units": self.cu_units.text().strip() or None,
+                "digits_after_comma": self.cu_digits.value(),
+                "show_title": self.cu_show_title.isChecked(),
+                "fill": self.cu_fill.isChecked(),
+                "_format": self._format_values(),
+                "_axes": self._axes_values(),
+            }
+        if self._plot_type == WATERFALL:
+            return {
+                # __init__ params
+                "series_units": self.wf_units.text().strip() or None,
+                "resample": self.wf_resample.currentText().strip() or "D",
+                "agg": self.wf_agg.currentText(),
+                "uptake_is_negative": self.wf_uptake_negative.isChecked(),
+                # plot() params (bar_width 0 -> auto/None)
+                "digits_after_comma": self.wf_digits.value(),
+                "color_uptake": self.wf_color_uptake.text().strip() or "#2196F3",
+                "color_release": self.wf_color_release.text().strip() or "#F44336",
+                "bar_width": self.wf_bar_width.value() or None,
+                "show_connectors": self.wf_connectors.isChecked(),
                 "_format": self._format_values(),
                 "_axes": self._axes_values(),
             }

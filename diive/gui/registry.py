@@ -53,6 +53,7 @@ from diive.gui.tabs.ustar_detection import UstarDetectionTab
 from diive.gui.tabs.overview import OverviewTab
 from diive.gui.tabs.rename_variables import RenameVariablesTab
 from diive.gui.tabs.plotting import (
+    CUMULATIVE,
     CUMULATIVE_YEAR,
     DIELCYCLE,
     HEATMAP,
@@ -62,8 +63,10 @@ from diive.gui.tabs.plotting import (
     HISTOGRAM,
     RIDGELINE,
     SCATTER,
+    SHIFTEDDIST,
     TIMESERIES,
     TREERING,
+    WATERFALL,
     WINDROSE,
     PlottingTab,
 )
@@ -113,12 +116,15 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Time series": lambda: PlottingTab(TIMESERIES, "Time series"),
         "Diel cycle": lambda: PlottingTab(DIELCYCLE, "Diel cycle"),
         "Cumulative year": lambda: PlottingTab(CUMULATIVE_YEAR, "Cumulative year"),
+        "Cumulative": lambda: PlottingTab(CUMULATIVE, "Cumulative"),
         "Ridgeline": lambda: PlottingTab(RIDGELINE, "Ridgeline"),
         "Scatter XY": lambda: PlottingTab(SCATTER, "Scatter XY"),
         "Hexbin": lambda: PlottingTab(HEXBIN, "Hexbin"),
         "Histogram": lambda: PlottingTab(HISTOGRAM, "Histogram"),
+        "Shifted distribution": lambda: PlottingTab(SHIFTEDDIST, "Shifted distribution"),
         "Wind rose": lambda: PlottingTab(WINDROSE, "Wind rose"),
         "Tree ring": lambda: PlottingTab(TREERING, "Tree ring"),
+        "Waterfall": lambda: PlottingTab(WATERFALL, "Waterfall"),
         "3D surface": Surface3DTab,
     },
     "Outliers": {

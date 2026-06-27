@@ -48,6 +48,7 @@ from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.plot_settings import (
+    CUMULATIVE,
     CUMULATIVE_YEAR,
     DIELCYCLE,
     HEATMAP,
@@ -60,6 +61,7 @@ from diive.gui.widgets.plot_settings import (
     SHIFTEDDIST,
     TIMESERIES,
     TREERING,
+    WATERFALL,
     WINDROSE,
     PlotSettingsPanel,
 )
@@ -394,6 +396,9 @@ class PlottingTab(DiiveTab):
         if self._plot_type == CUMULATIVE_YEAR:
             # Offer the data's years in the highlight-year dropdown.
             self.settings.set_years(sorted(set(df.index.year)))
+        if self._plot_type == SHIFTEDDIST:
+            # Seed the reference/comparison periods from the data's year range.
+            self.settings.set_periods(sorted(set(df.index.year)))
         if self._plot_type == TIMESERIES:
             # Offer every column as a colour-by variable.
             self.settings.set_colorby_options(df.columns)
@@ -495,9 +500,12 @@ class PlottingTab(DiiveTab):
                 self._xyz = self._xyz[1:] + [name]
             self.varpanel.run_with_loading(name, self._render)
             return
-        if self._plot_type in (RIDGELINE, HISTOGRAM, TREERING):
+        if self._plot_type in (RIDGELINE, HISTOGRAM, TREERING, SHIFTEDDIST,
+                               WATERFALL):
             # The ridgeline and tree ring use the whole (polar) figure; the
-            # histogram is information-dense (counts, z-score axis) -> all
+            # histogram is information-dense (counts, z-score axis); the shifted
+            # distribution compares two periods of one variable; the waterfall
+            # packs a dense bar budget with an end-total annotation -> all
             # single-variable.
             self._panels = [name]
             self._sync_panel_settings(active=name)
@@ -580,9 +588,12 @@ class PlottingTab(DiiveTab):
             TIMESERIES: codegen.timeseries_to_code,
             DIELCYCLE: codegen.dielcycle_to_code,
             CUMULATIVE_YEAR: codegen.cumulative_year_to_code,
+            CUMULATIVE: codegen.cumulative_to_code,
             HISTOGRAM: codegen.histogram_to_code,
             RIDGELINE: codegen.ridgeline_to_code,
+            SHIFTEDDIST: codegen.shifted_distribution_to_code,
             TREERING: codegen.treering_to_code,
+            WATERFALL: codegen.waterfall_to_code,
         }.get(pt)
         if builder is None:
             return None
@@ -625,6 +636,10 @@ class PlottingTab(DiiveTab):
 
         if self._plot_type == TREERING:
             self._render_treering()
+            return
+
+        if self._plot_type == SHIFTEDDIST:
+            self._render_shifted_distribution()
             return
 
         if not self._panels:
@@ -820,6 +835,50 @@ class PlottingTab(DiiveTab):
             fig.clear()
             ax = fig.add_subplot(111)
             ax.axis("off")
+            ax.text(0.5, 0.5, f"Cannot plot '{name}':\n{err}", ha="center",
+                    va="center", wrap=True, transform=ax.transAxes)
+        self.canvas.draw()
+        self.canvas.reset_history()
+        self._mark_selected()
+
+    def _render_shifted_distribution(self) -> None:
+        """Render the shifted distribution: one variable's density compared
+        between a reference and a comparison period.
+
+        Single-variable, single-axis. The plot draws its zone labels just above
+        the top spine and a padded left-aligned title, so the canvas manages its
+        own margins (`canvas.auto_layout` is False for this tab) with extra
+        headroom rather than letting constrained layout clip them.
+        """
+        fig = self.canvas.fig
+        fig.clear()
+        fig.set_layout_engine("none")
+        # Place the single axes with an explicit rect (left, bottom, width,
+        # height) rather than subplots_adjust: the "none" layout engine is a
+        # placeholder that rejects subplots_adjust, but honours add_axes. The top
+        # edge sits at 0.82 to leave headroom for the zone labels (drawn just
+        # above the top spine) and the padded left-aligned title.
+        ax = fig.add_axes((0.08, 0.12, 0.89, 0.70))
+        if not self._panels:
+            self.canvas.draw()
+            self.canvas.reset_history()
+            self._mark_selected()
+            return
+        name = self._panels[0]
+        opts = self.settings.values()
+        try:
+            dv.plotting.ShiftedDistributionPlot(
+                series=self._df[name],
+                ref_period=opts["ref_period"], comp_period=opts["comp_period"],
+            ).plot(
+                ax=ax, format_style=dv.plotting.FormatStyle(**opts["_format"]),
+                ref_label=opts["ref_label"], comp_label=opts["comp_label"],
+                zone_labels=opts["zone_labels"],
+                show_legend=opts["show_legend"], show_title=opts["show_title"],
+                show_xaxis=opts["show_xaxis"], show_yaxis=opts["show_yaxis"],
+            )
+        except Exception as err:
+            ax.clear()
             ax.text(0.5, 0.5, f"Cannot plot '{name}':\n{err}", ha="center",
                     va="center", wrap=True, transform=ax.transAxes)
         self.canvas.draw()
@@ -1190,6 +1249,33 @@ class PlottingTab(DiiveTab):
                 ).plot(ax=ax, showplot=False,
                        format_style=dv.plotting.FormatStyle(**opts["_format"]),
                        digits_after_comma=opts["digits_after_comma"])
+            elif self._plot_type == CUMULATIVE:
+                # Plain running total across the whole record (one curve). The
+                # class takes a DataFrame (one curve per column); a single-column
+                # frame plots this variable's cumulative sum.
+                dv.plotting.Cumulative(
+                    df=series.to_frame(), units=opts["units"],
+                ).plot(ax=ax, showplot=False,
+                       format_style=dv.plotting.FormatStyle(**opts["_format"]),
+                       digits_after_comma=opts["digits_after_comma"],
+                       show_title=opts["show_title"], fill=opts["fill"])
+            elif self._plot_type == WATERFALL:
+                # Cumulative budget: contributions aggregated to one floating bar
+                # per period (resample/agg), building up a running total. Keeps
+                # its own auto title unless the user sets one.
+                dv.plotting.WaterfallPlot(
+                    series, series_units=opts["series_units"],
+                    resample=opts["resample"], agg=opts["agg"],
+                    uptake_is_negative=opts["uptake_is_negative"],
+                ).plot(
+                    ax=ax, showplot=False,
+                    format_style=dv.plotting.FormatStyle(**opts["_format"]),
+                    digits_after_comma=opts["digits_after_comma"],
+                    color_uptake=opts["color_uptake"],
+                    color_release=opts["color_release"],
+                    bar_width=opts["bar_width"],
+                    show_connectors=opts["show_connectors"],
+                )
             elif self._plot_type == HISTOGRAM:
                 fmt = dict(opts["_format"])
                 if fmt.get("title") is None:

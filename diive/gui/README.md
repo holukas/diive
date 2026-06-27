@@ -113,7 +113,7 @@ borderless panels, monochrome line icons, uppercase tracked labels, and a framel
 `STUDIO_TYPOGRAPHY`; `MainWindow` always builds the frameless shell (`_build_studio_chrome`).
 
 **Plot menu:** each method is its own closable tab, with a small drawn icon. The **Plot** menu lists methods (Heatmap
-date/time, Heatmap year/month, Heatmap x/y/z, Time series, Diel cycle, Cumulative year, Ridgeline, Scatter XY, Hexbin, Histogram, Wind rose); selecting one
+date/time, Heatmap year/month, Heatmap x/y/z, Time series, Diel cycle, Cumulative year, Cumulative, Ridgeline, Scatter XY, Hexbin, Histogram, Shifted distribution, Wind rose); selecting one
 opens a new `PlottingTab(plot_type, title)` instance. Add a method via a factory in `registry.MENU_TABS["Plot"]` + a
 branch in `plotting._draw_one` (and matching controls in `plot_settings`). Ctrl+click adds comparison panels: heatmaps
 (both kinds, in `_HEATMAP_TYPES`) go side by side (shared x/y); time series and diel cycle stack top-to-bottom (shared
@@ -124,6 +124,12 @@ freeze/resize machinery doesn't reflow its overlapping ridges) — see `_render_
 The **histogram** is also single-variable (it's information-dense: bar counts + a z-score twiny axis + peak/info box),
 but a normal per-`ax` plot — `HistogramPlot(series, n_bins=...).plot(ax=...)` with toggles for the peak highlight,
 z-score axis, counts, info box, title and grid.
+The **shifted distribution** is single-variable too: it compares one variable's KDE between a reference and a comparison
+period (`ShiftedDistributionPlot(series, ref_period, comp_period).plot(ax=...)`), colouring the comparison curve by the
+reference period's ±1σ/±3σ zones. The two periods are partial date strings (a year, or `YYYY-MM-DD`), seeded by
+`set_periods` from the data's year range (earlier half vs later half). Like the ridgeline it sets `canvas.auto_layout=False`
+and places its single axes with an explicit rect (`add_axes`) so the zone labels above the top spine aren't clipped — see
+`_render_shifted_distribution`.
 
 **Plot settings:** between the variable list and the canvas sits a `PlotSettingsPanel(plot_type)` — a scrollable
 strip of controls, one per `plot()` parameter of the underlying diive plot class (heatmap: colormap, vmin/vmax,
