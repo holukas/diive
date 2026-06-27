@@ -130,6 +130,15 @@ reference period's ±1σ/±3σ zones. The two periods are partial date strings (
 `set_periods` from the data's year range (earlier half vs later half). Like the ridgeline it sets `canvas.auto_layout=False`
 and places its single axes with an explicit rect (`add_axes`) so the zone labels above the top spine aren't clipped — see
 `_render_shifted_distribution`.
+The **heatmap x/y/z** is role-picked (X/Y/Z by click order, in `_XYZ_TYPES` like Hexbin) but `HeatmapXYZ` needs one Z per
+(x,y) bin, so the tab **pre-aggregates** the raw data via `dv.analysis.GridAggregator` and feeds the binned grid through
+`HeatmapXYZ.from_gridaggregator(...)` rather than passing raw columns — see `_render_heatmap_xyz`.
+The **tree ring** is single-variable and whole-figure/polar: like the ridgeline/wind rose it sets `canvas.auto_layout=False`
+(polar axes, no constrained-layout reflow). Its **line** style dispatches to `TreeRingPlot.plot_line` instead of `.plot`
+(the codegen `_script` gained a `plot_method` arg to emit the matching call) — see `_render_treering`.
+The **cumulative** is single-variable but flows through the standard panel machinery (a branch in `_draw_one`, so it's
+Ctrl+click multi-panel capable) like Cumulative year; it calls `Cumulative(df=series.to_frame(), ...)`. **Distinct from
+Cumulative year** (`CUMULATIVE` whole-record running total vs `CUMULATIVE_YEAR` per-year reset).
 
 **Plot settings:** between the variable list and the canvas sits a `PlotSettingsPanel(plot_type)` — a scrollable
 strip of controls, one per `plot()` parameter of the underlying diive plot class (heatmap: colormap, vmin/vmax,

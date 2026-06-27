@@ -145,14 +145,15 @@ Selecting variables works the same way across the per-variable types:
 - **Click** a variable to plot it.
 - **Ctrl + click** more variables to compare them in extra panels (up to 5):
   - *Heatmaps* line up **side by side** (shared axes).
-  - *Time series* and *diel cycles* **stack** top-to-bottom (shared x-axis), each
-    panel with its own settings sub-tab.
-  - The ridgeline, histogram, and 3D surface show a single variable, so Ctrl+click
-    just switches it.
+  - *Time series*, *diel cycles*, and the *cumulative* **stack** top-to-bottom
+    (shared x-axis), each panel with its own settings sub-tab.
+  - The ridgeline, histogram, shifted distribution, tree ring, waterfall, and 3D
+    surface show a single variable, so Ctrl+click just switches it.
 - **Ctrl + click** a shown variable again to remove its panel.
 - *Scatter XY* and *Wind rose* instead assign variables to **roles** via the
   dropdowns in their settings (or by **dragging** a variable from the list onto a
-  field) — see those sections below. Hexbin still picks by clicking in order.
+  field) — see those sections below. Hexbin and Heatmap x/y/z still pick by clicking
+  in order.
 - Use the small toolbar (bottom-right of the plot) to pan, zoom, and save the
   figure. Zooming one panel zooms them all; the **Home** button resets to the full
   view. Set **Save DPI** (next to the toolbar) before saving for a
@@ -196,6 +197,23 @@ One cell per year × month. Pick the aggregation (mean, sum, and so on) and
 optionally show *ranks*. Same colormap, colour-range, and colorbar settings as the
 date/time heatmap.
 
+### Heatmap x/y/z
+
+A heatmap of a **Z** value over a grid of two driver variables. Click three
+variables in the list **in order**: the 1st is the **X** driver, the 2nd is the
+**Y** driver, and the 3rd is the **Z** value. The raw data is binned into an X/Y
+grid and each cell is coloured by the aggregated Z. Settings:
+
+- **Binning** — *quantiles* (equal counts per bin) or *equal-width* bins, and the
+  **number of bins** along each axis.
+- **Aggregation** — how to combine the Z values in each cell (mean, median, min,
+  max, sum, count).
+- **Minimum values per bin** — cells with fewer points are left empty.
+
+Plus the usual colormap, colour-range, colorbar, and cell-value settings. Unlike
+**Hexbin**, which tiles the raw points into hexagons, this bins the two drivers into
+a rectangular grid.
+
 ### Time series
 
 The variable as a line over time. Ctrl+click more variables to stack them in extra
@@ -233,11 +251,21 @@ sub-tab. Because all panels share the same months, the **legend is drawn once** 
 its column count is set automatically (more columns for more months). The fixed 0 to
 24 h x-axis is left alone; only the **Axes** Y controls apply.
 
+### Cumulative
+
+The running cumulative total across the whole record, drawn as one continuous
+curve. Unlike **Cumulative year**, the sum is not reset at each calendar year, so
+the curve keeps climbing (or falling) over the full period. Settings: units, the
+number of decimals on the label, whether to show the title, and **shade to zero**
+(fill between the curve and the zero line). Ctrl+click more variables to stack them
+in extra panels.
+
 ### Cumulative year
 
-One cumulative-sum curve per year, overlaid by day of year. Optionally **highlight
-a year** (chosen from a dropdown of the years present in the data) and show a mean
-reference. The shared **Axes** controls apply.
+One cumulative-sum curve per year, overlaid by day of year. The sum restarts each
+calendar year (the difference from **Cumulative**, which runs straight through).
+Optionally **highlight a year** (chosen from a dropdown of the years present in the
+data) and show a mean reference. The shared **Axes** controls apply.
 
 ### Scatter XY
 
@@ -265,6 +293,14 @@ overlap, shading, and KDE bandwidth. One variable at a time.
 The distribution of one variable: bars of counts, with the peak bin highlighted and
 a z-score scale along the top. Set the number of bins and toggle the counts, info
 box, z-score axis, title, and grid. One variable at a time.
+
+### Shifted distribution
+
+Compares one variable's distribution in a **reference period** against a
+**comparison period** — for example an early span of years against a later one, to
+see whether the distribution has shifted. The two periods are seeded from the years
+present in the data and can be edited. One variable at a time. Settings: the zone
+labels and the usual display toggles (legend, title, axes).
 
 ### 3D surface
 
@@ -295,6 +331,30 @@ Settings:
 To the right of the plot, a **per-sector results table** lists the aggregated value
 (and count) for each direction; **Copy** puts it on the clipboard, and the same
 breakdown is echoed to the **Log** tab.
+
+### Tree ring
+
+One variable drawn as concentric **annual rings** on a circular (polar) plot, one
+ring per year, with the earliest year innermost. Two styles:
+
+- **Filled** — a colour mesh, each ring coloured by the variable's value.
+- **Line** — a radial trace per year that wiggles in and out with the value.
+
+Settings: the **resample frequency** (how the data is aggregated around each ring),
+month labels and month lines, and year labels and year separators. One variable at
+a time.
+
+### Waterfall
+
+A variable's cumulative budget shown as a **waterfall**: each bar is one period's
+net contribution, stacked onto the running total so the bars walk up and down to the
+final sum. One variable at a time. Settings:
+
+- **Resample period** and **aggregation** — the period each bar covers and how its
+  values are combined.
+- **Uptake is negative** — flip the orientation so that uptake (a negative flux)
+  draws downward.
+- **Bar colours and width**, **connector lines** between bars, and the **units**.
 
 ---
 

@@ -409,6 +409,7 @@ def treering_to_code(varname: str, opts: dict, *, df_name: str = "df") -> str:
         "year_label_frequency": opts["year_label_frequency"],
         "cb_label": opts["cb_label"],
         "cb_digits_after_comma": opts["cb_digits_after_comma"],
+        "cb_labelsize": opts["cb_labelsize"],
     }
     if opts["style"] == "line":
         kwargs.update({

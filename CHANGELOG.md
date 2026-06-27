@@ -107,6 +107,17 @@
   falls off the new data); the **grid** toggle works (single source in *Format*); a scatter can colour points by one of
   its own X/Y variables without erroring; and the window is sized to the screen **work area** so the bottom of a tab is
   never clipped behind the taskbar.
+- **Plot menu — five new plot tabs.** **Heatmap x/y/z** (`HeatmapXYZ`) — a heatmap of a Z value over a grid of two
+  driver variables: the raw data are binned with `GridAggregator` (quantile or equal-width bins, number of bins,
+  aggregation) and each X/Y cell is coloured by the aggregated Z; X/Y/Z are role-picked (dropdowns / drag).
+  **Shifted distribution** (`ShiftedDistributionPlot`) — compares a variable's distribution between a reference period
+  and a comparison period. **Tree ring** (`TreeRingPlot`) — one variable drawn as concentric annual rings on a polar
+  plot, filled (colour mesh) or line style. **Cumulative** (`Cumulative`) — a running cumulative total across the whole
+  record (distinct from **Cumulative year**, which resets each calendar year), with stacked multi-variable panels.
+  **Waterfall** (`WaterfallPlot`) — the cumulative budget as a waterfall of per-period contributions. Each has a
+  title-bar **Copy Python** button.
+- **Fix: Tree ring Copy Python** now includes `cb_labelsize` (colorbar font size) so the emitted snippet matches the
+  rendered plot.
 - **Flux ▸ Random uncertainty (PAS20)** (new tab, `tabs/uncertainty_randunc.py`) — estimate the random measurement
   uncertainty of a flux with the hierarchical 4-method PAS20 cascade (`dv.flux.RandomUncertaintyPAS20`, ONEFlux port).
   Auto-seeded pickers for the measured + gap-filled flux and the three similarity drivers (TA, VPD, SW_IN) with ✓/✗
