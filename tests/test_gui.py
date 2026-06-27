@@ -390,6 +390,7 @@ def test_all_plot_tabs_have_copy_python(app):
     cases = {
         ps.HEATMAP: "HeatmapDateTime",
         ps.HEATMAP_YEARMONTH: "HeatmapYearMonth",
+        ps.HEATMAP_XYZ: "HeatmapXYZ",
         ps.TIMESERIES: "TimeSeries",
         ps.DIELCYCLE: "DielCycle",
         ps.CUMULATIVE_YEAR: "CumulativeYear",
@@ -398,6 +399,7 @@ def test_all_plot_tabs_have_copy_python(app):
         ps.HEXBIN: "HexbinPlot",
         ps.SCATTER: "ScatterXY",
         ps.WINDROSE: "WindRosePlot",
+        ps.TREERING: "TreeRingPlot",
     }
     for plot_type, classname in cases.items():
         tab = PlottingTab(plot_type, plot_type)
@@ -407,7 +409,10 @@ def test_all_plot_tabs_have_copy_python(app):
         assert isinstance(tab.copy_btn, CopyPythonButton), plot_type
         code = tab._python_code()
         assert code is not None, plot_type
-        assert f"dv.plotting.{classname}(" in code, plot_type
+        # Most snippets call the class directly; HeatmapXYZ goes through the
+        # `from_gridaggregator` classmethod, so accept both forms.
+        assert (f"dv.plotting.{classname}(" in code
+                or f"dv.plotting.{classname}." in code), plot_type
         assert ".plot(" in code and code.rstrip().endswith("plt.show()"), plot_type
         # The snippet runs against a frame named `df` without raising.
         ns = {"df": df}

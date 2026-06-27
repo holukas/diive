@@ -51,19 +51,22 @@ from diive.gui.widgets.plot_settings import (
     CUMULATIVE_YEAR,
     DIELCYCLE,
     HEATMAP,
+    HEATMAP_XYZ,
     HEATMAP_YEARMONTH,
     HEXBIN,
     HISTOGRAM,
     RIDGELINE,
     SCATTER,
+    SHIFTEDDIST,
     TIMESERIES,
+    TREERING,
     WINDROSE,
     PlotSettingsPanel,
 )
 
-#: Plot types that pick variables by role (not comparison panels): hexbin/scatter
-#: X/Y/Z and the wind rose value/wind-direction/colour.
-_XYZ_TYPES = (HEXBIN, SCATTER, WINDROSE)
+#: Plot types that pick variables by role (not comparison panels): hexbin and
+#: x/y/z heatmap X/Y/Z, scatter X/Y/Z, and the wind rose value/wind-dir/colour.
+_XYZ_TYPES = (HEXBIN, HEATMAP_XYZ, SCATTER, WINDROSE)
 
 #: Role-picked types whose roles are assigned via X/Y/Colour dropdowns (drag onto
 #: a field or pick) rather than clicking the list in order. Hexbin still cycles.
@@ -265,7 +268,7 @@ class PlottingTab(DiiveTab):
         # The ridgeline builds its own overlapping gridspec; the wind rose builds
         # its own polar axes (+ colorbar) and sets its own margins. Keep the
         # canvas from re-flowing either (constrained layout / resize).
-        if self._plot_type in (RIDGELINE, WINDROSE):
+        if self._plot_type in (RIDGELINE, WINDROSE, TREERING, SHIFTEDDIST):
             self.canvas.auto_layout = False
 
         splitter.addWidget(left)
@@ -403,8 +406,8 @@ class PlottingTab(DiiveTab):
     def _select_default(self) -> None:
         """Highlight and render the startup variable(s)."""
         cols = [str(c) for c in self._df.columns]
-        if self._plot_type == HEXBIN:
-            # Hexbin needs three variables; seed a sensible driver/driver/flux
+        if self._plot_type in (HEXBIN, HEATMAP_XYZ):
+            # Both need three variables; seed a sensible driver/driver/flux
             # triple so the tab shows something on open.
             preferred = ["Tair_f", "VPD_f", "NEE_CUT_REF_f"]
             self._xyz = preferred if all(c in cols for c in preferred) else cols[:3]
@@ -492,9 +495,10 @@ class PlottingTab(DiiveTab):
                 self._xyz = self._xyz[1:] + [name]
             self.varpanel.run_with_loading(name, self._render)
             return
-        if self._plot_type in (RIDGELINE, HISTOGRAM):
-            # The ridgeline uses the whole figure; the histogram is information-
-            # dense (counts, z-score axis) -> both are single-variable.
+        if self._plot_type in (RIDGELINE, HISTOGRAM, TREERING):
+            # The ridgeline and tree ring use the whole (polar) figure; the
+            # histogram is information-dense (counts, z-score axis) -> all
+            # single-variable.
             self._panels = [name]
             self._sync_panel_settings(active=name)
             self.varpanel.run_with_loading(name, self._render)
@@ -556,6 +560,10 @@ class PlottingTab(DiiveTab):
             if len(self._xyz) < 3:
                 return None
             return codegen.hexbin_to_code(*self._xyz[:3], opts)
+        if pt == HEATMAP_XYZ:
+            if len(self._xyz) < 3:
+                return None
+            return codegen.heatmap_xyz_to_code(*self._xyz[:3], opts)
         if pt == WINDROSE:
             if len(self._xyz) < 2:
                 return None
@@ -574,6 +582,7 @@ class PlottingTab(DiiveTab):
             CUMULATIVE_YEAR: codegen.cumulative_year_to_code,
             HISTOGRAM: codegen.histogram_to_code,
             RIDGELINE: codegen.ridgeline_to_code,
+            TREERING: codegen.treering_to_code,
         }.get(pt)
         if builder is None:
             return None
@@ -598,6 +607,10 @@ class PlottingTab(DiiveTab):
             self._render_hexbin()
             return
 
+        if self._plot_type == HEATMAP_XYZ:
+            self._render_heatmap_xyz()
+            return
+
         if self._plot_type == SCATTER:
             self._render_scatter()
             return
@@ -608,6 +621,10 @@ class PlottingTab(DiiveTab):
 
         if self._plot_type == WINDROSE:
             self._render_windrose()
+            return
+
+        if self._plot_type == TREERING:
+            self._render_treering()
             return
 
         if not self._panels:
@@ -753,6 +770,62 @@ class PlottingTab(DiiveTab):
         self.canvas.reset_history()
         self._mark_selected()
 
+    def _render_treering(self) -> None:
+        """Render the tree ring: one variable as concentric annual rings.
+
+        Single-variable and polar: like the wind rose it builds its own polar
+        axes + colorbar on the canvas figure (the tab leaves the layout to it,
+        `canvas.auto_layout` is False). The render style picks the filled colour
+        mesh (`plot`) or the radial line traces (`plot_line`).
+        """
+        fig = self.canvas.fig
+        fig.clear()
+        fig.set_layout_engine("none")
+        if not self._panels:
+            self.canvas.draw()
+            self._mark_selected()
+            return
+        name = self._panels[0]
+        opts = self.settings.values()
+        ax = fig.add_subplot(111, projection="polar")
+        try:
+            tr = dv.plotting.TreeRingPlot(
+                df=self._df[[name]], value_col=name,
+                resample_freq=opts["resample_freq"],
+            )
+            fmt = dict(opts["_format"])
+            if fmt.get("title") is None:
+                fmt["title"] = name  # default the title to the variable name
+            common = dict(
+                ax=ax, format_style=dv.plotting.FormatStyle(**fmt),
+                cmap=opts["cmap"], vmin=opts["vmin"], vmax=opts["vmax"],
+                show_month_labels=opts["show_month_labels"],
+                show_month_lines=opts["show_month_lines"],
+                show_year_labels=opts["show_year_labels"],
+                show_year_separators=opts["show_year_separators"],
+                year_label_frequency=opts["year_label_frequency"],
+                cb_label=opts["cb_label"],
+                cb_digits_after_comma=opts["cb_digits_after_comma"],
+                cb_labelsize=opts["cb_labelsize"],
+            )
+            if opts["style"] == "line":
+                tr.plot_line(
+                    linewidth=opts["linewidth"], alpha=opts["alpha"],
+                    amplitude_scale=opts["amplitude_scale"],
+                    ring_width=opts["ring_width"], **common,
+                )
+            else:
+                tr.plot(**common)
+        except Exception as err:
+            fig.clear()
+            ax = fig.add_subplot(111)
+            ax.axis("off")
+            ax.text(0.5, 0.5, f"Cannot plot '{name}':\n{err}", ha="center",
+                    va="center", wrap=True, transform=ax.transAxes)
+        self.canvas.draw()
+        self.canvas.reset_history()
+        self._mark_selected()
+
     def _render_hexbin(self) -> None:
         """Render the hexbin (single figure): z aggregated into 2D x/y bins.
 
@@ -793,6 +866,54 @@ class PlottingTab(DiiveTab):
         except Exception as err:
             ax.clear()
             ax.text(0.5, 0.5, f"Cannot plot hexbin:\n{err}", ha="center",
+                    va="center", wrap=True, transform=ax.transAxes)
+        self.canvas.draw()
+        self.canvas.reset_history()
+        self._mark_selected()
+
+    def _render_heatmap_xyz(self) -> None:
+        """Render the x/y/z heatmap (single figure): z aggregated into a 2D grid
+        of x/y bins.
+
+        Needs all three roles set. ``HeatmapXYZ`` requires pre-aggregated input
+        (one z value per unique (x, y) bin), so the raw variables are first binned
+        and aggregated through ``GridAggregator`` (rows with a missing x or y are
+        dropped jointly; z may keep NaNs — ignored during aggregation).
+        """
+        self.settings.set_xyz(*(self._xyz + [None, None, None])[:3])
+        ax = self.canvas.new_axes(1)[0]
+        if len(self._xyz) < 3:
+            ax.text(0.5, 0.5,
+                    f"Click 3 variables to set X, Y, Z  ({len(self._xyz)}/3)",
+                    ha="center", va="center", transform=ax.transAxes)
+            self.canvas.draw()
+            self._mark_selected()
+            return
+        xn, yn, zn = self._xyz
+        opts = self.settings.values()
+        try:
+            sub = self._df[[xn, yn, zn]].dropna(subset=[xn, yn])
+            agg = dv.analysis.GridAggregator(
+                x=sub[xn], y=sub[yn], z=sub[zn],
+                binning_type=opts["binning_type"], n_bins=opts["n_bins"],
+                aggfunc=opts["aggfunc"],
+                min_n_vals_per_bin=opts["min_n_vals_per_bin"],
+            )
+            dv.plotting.HeatmapXYZ.from_gridaggregator(agg, xn, yn, zn).plot(
+                ax=ax, fig=self.canvas.fig,
+                format_style=dv.plotting.FormatStyle(**opts["_format"]),
+                cmap=opts["cmap"], vmin=opts["vmin"], vmax=opts["vmax"],
+                color_bad=opts["color_bad"], zlabel=opts["zlabel"],
+                cb_digits_after_comma=opts["cb_digits_after_comma"],
+                cb_extend=opts["cb_extend"], show_colormap=opts["show_colormap"],
+                show_values=opts["show_values"],
+                show_values_n_dec_places=opts["show_values_n_dec_places"],
+                show_values_fontsize=opts["show_values_fontsize"],
+                cb_labelsize=opts["cb_labelsize"],
+            )
+        except Exception as err:
+            ax.clear()
+            ax.text(0.5, 0.5, f"Cannot plot heatmap:\n{err}", ha="center",
                     va="center", wrap=True, transform=ax.transAxes)
         self.canvas.draw()
         self.canvas.reset_history()

@@ -56,12 +56,14 @@ from diive.gui.tabs.plotting import (
     CUMULATIVE_YEAR,
     DIELCYCLE,
     HEATMAP,
+    HEATMAP_XYZ,
     HEATMAP_YEARMONTH,
     HEXBIN,
     HISTOGRAM,
     RIDGELINE,
     SCATTER,
     TIMESERIES,
+    TREERING,
     WINDROSE,
     PlottingTab,
 )
@@ -107,6 +109,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
     "Plot": {
         "Heatmap date/time": lambda: PlottingTab(HEATMAP, "Heatmap date/time"),
         "Heatmap year/month": lambda: PlottingTab(HEATMAP_YEARMONTH, "Heatmap year/month"),
+        "Heatmap x/y/z": lambda: PlottingTab(HEATMAP_XYZ, "Heatmap x/y/z"),
         "Time series": lambda: PlottingTab(TIMESERIES, "Time series"),
         "Diel cycle": lambda: PlottingTab(DIELCYCLE, "Diel cycle"),
         "Cumulative year": lambda: PlottingTab(CUMULATIVE_YEAR, "Cumulative year"),
@@ -115,6 +118,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Hexbin": lambda: PlottingTab(HEXBIN, "Hexbin"),
         "Histogram": lambda: PlottingTab(HISTOGRAM, "Histogram"),
         "Wind rose": lambda: PlottingTab(WINDROSE, "Wind rose"),
+        "Tree ring": lambda: PlottingTab(TREERING, "Tree ring"),
         "3D surface": Surface3DTab,
     },
     "Outliers": {

@@ -43,8 +43,13 @@ def _kw_lines(kwargs: dict) -> list[str]:
 
 def _script(class_name: str, ctor_lines: list[str], plot_lines: list[str], *,
             fig_line: str = "fig, ax = plt.subplots(figsize=(8, 8))",
-            pre_lines: list[str] | None = None) -> str:
-    """Assemble the imports + figure setup + ``Class(...).plot(...)`` call."""
+            pre_lines: list[str] | None = None,
+            plot_method: str = "plot") -> str:
+    """Assemble the imports + figure setup + ``Class(...).plot(...)`` call.
+
+    ``plot_method`` names the phase-2 method to call (default ``"plot"``); a few
+    classes expose alternative renderers (e.g. ``TreeRingPlot.plot_line``).
+    """
     pre = ("\n".join(pre_lines) + "\n") if pre_lines else ""
     return (
         "import matplotlib.pyplot as plt\n"
@@ -54,7 +59,7 @@ def _script(class_name: str, ctor_lines: list[str], plot_lines: list[str], *,
         + f"{fig_line}\n"
         f"dv.plotting.{class_name}(\n"
         + "\n".join(ctor_lines) + "\n"
-        ").plot(\n"
+        f").{plot_method}(\n"
         + "\n".join(plot_lines) + "\n"
         ")\n"
         "plt.show()\n"
@@ -214,6 +219,28 @@ def ridgeline_to_code(varname: str, opts: dict, *, df_name: str = "df") -> str:
                    fig_line="fig = plt.figure(figsize=(9, 11))")
 
 
+def shifted_distribution_to_code(varname: str, opts: dict, *,
+                                 df_name: str = "df") -> str:
+    """Reproduce a :class:`ShiftedDistributionPlot` (reference vs comparison period)."""
+    ctor = [
+        f"    series={df_name}[{varname!r}],",
+        f"    ref_period={tuple(opts['ref_period'])!r},",
+        f"    comp_period={tuple(opts['comp_period'])!r},",
+    ]
+    plot = ["    ax=ax,"]
+    fmt_line = _fmt_line(opts.get("_format"))
+    if fmt_line:
+        plot.append(fmt_line)
+    plot += _kw_lines({
+        "ref_label": opts["ref_label"], "comp_label": opts["comp_label"],
+        "zone_labels": opts["zone_labels"],
+        "show_legend": opts["show_legend"], "show_title": opts["show_title"],
+        "show_xaxis": opts["show_xaxis"], "show_yaxis": opts["show_yaxis"],
+    })
+    return _script("ShiftedDistributionPlot", ctor, plot,
+                   fig_line="fig, ax = plt.subplots(figsize=(16, 7))")
+
+
 def hexbin_to_code(xcol: str, ycol: str, zcol: str, opts: dict, *,
                    df_name: str = "df") -> str:
     """Reproduce a :class:`HexbinPlot` (z aggregated into 2D x/y bins)."""
@@ -246,6 +273,47 @@ def hexbin_to_code(xcol: str, ycol: str, zcol: str, opts: dict, *,
     return _script("HexbinPlot", ctor, plot, pre_lines=pre)
 
 
+def heatmap_xyz_to_code(xcol: str, ycol: str, zcol: str, opts: dict, *,
+                        df_name: str = "df") -> str:
+    """Reproduce a :class:`HeatmapXYZ` (z aggregated into a 2D grid of x/y bins).
+
+    The raw x/y/z variables are first binned and aggregated with
+    :class:`~diive.analysis.gridaggregator.GridAggregator`, because ``HeatmapXYZ``
+    needs pre-aggregated input (one z value per unique (x, y) bin).
+    """
+    pre = [
+        f"sub = {df_name}[[{xcol!r}, {ycol!r}, {zcol!r}]]"
+        f".dropna(subset=[{xcol!r}, {ycol!r}])",
+        "agg = dv.analysis.GridAggregator(",
+        f"    x=sub[{xcol!r}], y=sub[{ycol!r}], z=sub[{zcol!r}],",
+        f"    binning_type={opts['binning_type']!r}, n_bins={opts['n_bins']!r},",
+        f"    aggfunc={opts['aggfunc']!r}, "
+        f"min_n_vals_per_bin={opts['min_n_vals_per_bin']!r},",
+        ")",
+    ]
+    ctor = [
+        "    agg,",
+        f"    {xcol!r},",
+        f"    {ycol!r},",
+        f"    {zcol!r},",
+    ]
+    plot = ["    ax=ax,", "    fig=fig,"]
+    fmt_line = _fmt_line(opts.get("_format"))
+    if fmt_line:
+        plot.append(fmt_line)
+    plot += _kw_lines({
+        "cmap": opts["cmap"], "vmin": opts["vmin"], "vmax": opts["vmax"],
+        "color_bad": opts["color_bad"], "zlabel": opts["zlabel"],
+        "cb_digits_after_comma": opts["cb_digits_after_comma"],
+        "cb_extend": opts["cb_extend"], "show_colormap": opts["show_colormap"],
+        "show_values": opts["show_values"],
+        "show_values_n_dec_places": opts["show_values_n_dec_places"],
+        "show_values_fontsize": opts["show_values_fontsize"],
+        "cb_labelsize": opts["cb_labelsize"],
+    })
+    return _script("HeatmapXYZ.from_gridaggregator", ctor, plot, pre_lines=pre)
+
+
 def windrose_to_code(valuecol: str, winddircol: str, zcol: str | None, opts: dict, *,
                      df_name: str = "df") -> str:
     """Reproduce a :class:`WindRosePlot` (polar, per-sector aggregate)."""
@@ -273,3 +341,43 @@ def windrose_to_code(valuecol: str, winddircol: str, zcol: str | None, opts: dic
         "WindRosePlot", ctor, plot,
         fig_line='fig, ax = plt.subplots(figsize=(9, 9), '
                  'subplot_kw={"projection": "polar"})')
+
+
+def treering_to_code(varname: str, opts: dict, *, df_name: str = "df") -> str:
+    """Reproduce a :class:`TreeRingPlot` (concentric annual rings on a polar axis).
+
+    ``opts['style']`` selects the renderer: ``'filled'`` -> ``plot`` (a colour
+    mesh per ring), ``'line'`` -> ``plot_line`` (one radial line trace per year,
+    wiggling by the data value). The line style adds a few extra parameters.
+    """
+    ctor = [
+        f"    df={df_name}[[{varname!r}]],",
+        f"    value_col={varname!r},",
+        f"    resample_freq={opts['resample_freq']!r},",
+    ]
+    plot = ["    ax=ax,"]
+    fmt_line = _fmt_line(opts.get("_format"))
+    if fmt_line:
+        plot.append(fmt_line)
+    kwargs = {
+        "cmap": opts["cmap"], "vmin": opts["vmin"], "vmax": opts["vmax"],
+        "show_month_labels": opts["show_month_labels"],
+        "show_month_lines": opts["show_month_lines"],
+        "show_year_labels": opts["show_year_labels"],
+        "show_year_separators": opts["show_year_separators"],
+        "year_label_frequency": opts["year_label_frequency"],
+        "cb_label": opts["cb_label"],
+        "cb_digits_after_comma": opts["cb_digits_after_comma"],
+    }
+    if opts["style"] == "line":
+        kwargs.update({
+            "linewidth": opts["linewidth"], "alpha": opts["alpha"],
+            "amplitude_scale": opts["amplitude_scale"],
+            "ring_width": opts["ring_width"],
+        })
+    plot += _kw_lines(kwargs)
+    return _script(
+        "TreeRingPlot", ctor, plot,
+        fig_line='fig, ax = plt.subplots(figsize=(10, 10), '
+                 'subplot_kw={"projection": "polar"})',
+        plot_method=("plot_line" if opts["style"] == "line" else "plot"))

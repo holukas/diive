@@ -76,6 +76,7 @@ _LINE_COLOR_PRESETS = [
 #: panel so it can build the matching set of controls.
 HEATMAP = "Heatmap (date/time)"
 HEATMAP_YEARMONTH = "Heatmap (year/month)"
+HEATMAP_XYZ = "Heatmap (x/y/z)"
 TIMESERIES = "Time series"
 RIDGELINE = "Ridgeline"
 DIELCYCLE = "Diel cycle"
@@ -83,7 +84,26 @@ CUMULATIVE_YEAR = "Cumulative year"
 HEXBIN = "Hexbin"
 SCATTER = "Scatter (XY)"
 HISTOGRAM = "Histogram"
+SHIFTEDDIST = "Shifted distribution"
 WINDROSE = "Wind rose"
+TREERING = "Tree ring"
+
+#: Zone-label presets for the shifted distribution (5 labels, lowest->highest).
+#: "Temperature" is the library default (None -> the class's own defaults); the
+#: generic preset suits any variable. The display label maps to the label list
+#: passed to ShiftedDistributionPlot.plot(zone_labels=...).
+_SHIFTEDDIST_ZONE_PRESETS = {
+    "Temperature (default)": None,
+    "Generic (low/high)": ["Extremely low", "Low", "Normal", "High", "Extremely high"],
+}
+
+#: Tree-ring render styles: display label -> TreeRingPlot method selector.
+_TREERING_STYLES = {"Filled rings": "filled", "Line traces": "line"}
+
+#: Resampling frequency offered for the tree-ring angular resolution (one slot
+#: per resampled step; finer = more slices per ring). Maps the combo to the
+#: TreeRingPlot __init__ `resample_freq`.
+_TREERING_FREQS = ["D", "h", "30min"]
 
 #: Per-sector aggregations offered for the wind rose (match WindRosePlot's agg).
 _WINDROSE_AGGS = ["mean", "median", "min", "max", "sum", "std", "count"]
@@ -114,6 +134,11 @@ _DIELCYCLE_OVERALL = "One curve overall"
 
 #: Year/month aggregation methods offered in the dropdown.
 _YEARMONTH_AGGS = ["mean", "median", "sum", "min", "max", "std"]
+
+#: x/y/z heatmap binning: GridAggregator binning strategies (custom needs
+#: explicit edges, so it is omitted here) and aggregation functions.
+_XYZ_BINNING_TYPES = ["quantiles", "equal_width"]
+_XYZ_AGGFUNCS = ["mean", "median", "min", "max", "sum", "count"]
 
 #: Curated colormaps offered in the heatmap dropdown (it stays editable, so any
 #: valid matplotlib name can also be typed). Diverging first (the diive
@@ -157,6 +182,8 @@ class PlotSettingsPanel(QScrollArea):
 
         if plot_type in (HEATMAP, HEATMAP_YEARMONTH):
             self._build_heatmap(yearmonth=plot_type == HEATMAP_YEARMONTH)
+        elif plot_type == HEATMAP_XYZ:
+            self._build_heatmap_xyz()
         elif plot_type == TIMESERIES:
             self._build_timeseries()
         elif plot_type == RIDGELINE:
@@ -171,8 +198,12 @@ class PlotSettingsPanel(QScrollArea):
             self._build_scatter()
         elif plot_type == HISTOGRAM:
             self._build_histogram()
+        elif plot_type == SHIFTEDDIST:
+            self._build_shifted_distribution()
         elif plot_type == WINDROSE:
             self._build_windrose()
+        elif plot_type == TREERING:
+            self._build_treering()
 
         self._col.addStretch(1)
         # Keep every form within the panel's fixed width: wrap a row's field
@@ -235,6 +266,7 @@ class PlotSettingsPanel(QScrollArea):
         method = {
             HEATMAP: dv.plotting.HeatmapDateTime.plot,
             HEATMAP_YEARMONTH: dv.plotting.HeatmapYearMonth.plot,
+            HEATMAP_XYZ: dv.plotting.HeatmapXYZ.plot,
             TIMESERIES: dv.plotting.TimeSeries.plot,
             RIDGELINE: dv.plotting.RidgeLinePlot.plot,
             DIELCYCLE: dv.plotting.DielCycle.plot,
@@ -242,7 +274,9 @@ class PlotSettingsPanel(QScrollArea):
             HEXBIN: dv.plotting.HexbinPlot.plot,
             SCATTER: dv.plotting.ScatterXY.plot,
             HISTOGRAM: dv.plotting.HistogramPlot.plot,
+            SHIFTEDDIST: dv.plotting.ShiftedDistributionPlot.plot,
             WINDROSE: dv.plotting.WindRosePlot.plot,
+            TREERING: dv.plotting.TreeRingPlot.plot,
         }.get(self._plot_type)
         docs = param_docs(method) if method else {}
 
@@ -296,6 +330,26 @@ class PlotSettingsPanel(QScrollArea):
                 tip = init_docs.get(param)
                 if tip:
                     widget.setToolTip(tip)
+        elif self._plot_type == HEATMAP_XYZ:
+            pairs = [
+                ("cmap", self.cmap), ("vmin", self.vmin), ("vmax", self.vmax),
+                ("color_bad", self.color_bad), ("zlabel", self.zlabel),
+                ("cb_digits_after_comma", self.cb_digits), ("cb_extend", self.cb_extend),
+                ("show_colormap", self.show_colormap), ("show_values", self.show_values),
+                ("show_values_n_dec_places", self.show_values_dec),
+                ("show_values_fontsize", self.show_values_fontsize),
+                ("cb_labelsize", self.cb_labelsize),
+            ]
+            # binning_type/n_bins/aggfunc/min_n_vals_per_bin are GridAggregator
+            # params (the raw x/y/z are binned before HeatmapXYZ plots them).
+            init_docs = param_docs(dv.analysis.GridAggregator.__init__)
+            for param, widget in [("binning_type", self.xyz_binning_type),
+                                  ("n_bins", self.xyz_nbins),
+                                  ("aggfunc", self.xyz_aggfunc),
+                                  ("min_n_vals_per_bin", self.xyz_min_n)]:
+                tip = init_docs.get(param)
+                if tip:
+                    widget.setToolTip(tip)
         elif self._plot_type == SCATTER:
             pairs = [
                 ("cmap", self.sc_cmap), ("show_colorbar", self.sc_show_colorbar),
@@ -319,6 +373,15 @@ class PlotSettingsPanel(QScrollArea):
             tip = param_docs(dv.plotting.HistogramPlot.__init__).get("n_bins")
             if tip:
                 self.hist_nbins.setToolTip(tip)
+        elif self._plot_type == SHIFTEDDIST:
+            pairs = [
+                ("ref_label", self.sd_ref_label), ("comp_label", self.sd_comp_label),
+                ("show_legend", self.sd_show_legend),
+                ("show_title", self.sd_show_title),
+                ("show_xaxis", self.sd_show_xaxis),
+                ("show_yaxis", self.sd_show_yaxis),
+                ("zone_labels", self.sd_zones),
+            ]
         elif self._plot_type == WINDROSE:
             pairs = [
                 ("cmap", self.wr_cmap), ("color", self.wr_color),
@@ -333,6 +396,32 @@ class PlotSettingsPanel(QScrollArea):
             for param, widget in [("agg", self.wr_agg), ("n_sectors", self.wr_nsectors),
                                   ("z_agg", self.wr_zagg)]:
                 tip = init_docs.get(param)
+                if tip:
+                    widget.setToolTip(tip)
+        elif self._plot_type == TREERING:
+            pairs = [
+                ("cmap", self.tr_cmap), ("vmin", self.tr_vmin), ("vmax", self.tr_vmax),
+                ("show_month_labels", self.tr_month_labels),
+                ("show_month_lines", self.tr_month_lines),
+                ("show_year_labels", self.tr_year_labels),
+                ("show_year_separators", self.tr_year_separators),
+                ("year_label_frequency", self.tr_year_freq),
+                ("cb_label", self.tr_cb_label),
+                ("cb_digits_after_comma", self.tr_cb_digits),
+                ("cb_labelsize", self.tr_cb_labelsize),
+            ]
+            # resample_freq is an __init__ param; the line-only knobs are
+            # documented on plot_line(), not plot().
+            init_docs = param_docs(dv.plotting.TreeRingPlot.__init__)
+            tip = init_docs.get("resample_freq")
+            if tip:
+                self.tr_resample.setToolTip(tip)
+            line_docs = param_docs(dv.plotting.TreeRingPlot.plot_line)
+            for param, widget in [("linewidth", self.tr_linewidth),
+                                  ("alpha", self.tr_alpha),
+                                  ("amplitude_scale", self.tr_amplitude),
+                                  ("ring_width", self.tr_ring_width)]:
+                tip = line_docs.get(param)
                 if tip:
                     widget.setToolTip(tip)
         else:
@@ -648,6 +737,93 @@ class PlotSettingsPanel(QScrollArea):
         self._build_format_group(fields=[
             "title", "xlabel", "ylabel", "fonts", "show_grid"])
 
+    # --- x/y/z heatmap controls ---
+    def _build_heatmap_xyz(self) -> None:
+        # Read-only readout of the current X/Y/Z role assignment (same click-in-
+        # order model as hexbin); the list highlight numbers the picks 1/2/3.
+        roles = QGroupBox("Variables")
+        form = QFormLayout(roles)
+        hint = QLabel("Click list in order →")
+        hint.setStyleSheet("color: #90A4AE;")
+        form.addRow(hint)
+        self.x_role = QLabel("—")
+        self.y_role = QLabel("—")
+        self.z_role = QLabel("—")
+        for lbl in (self.x_role, self.y_role, self.z_role):
+            lbl.setStyleSheet("color: #455A64;")
+        form.addRow("X (driver)", self.x_role)
+        form.addRow("Y (driver)", self.y_role)
+        form.addRow("Z (value)", self.z_role)
+        self._col.addWidget(roles)
+
+        # Binning: HeatmapXYZ needs pre-aggregated input (one z per x/y bin), so
+        # the raw variables are binned and aggregated through GridAggregator.
+        binning = QGroupBox("Binning")
+        form = QFormLayout(binning)
+        self.xyz_binning_type = QComboBox()
+        self.xyz_binning_type.addItems(_XYZ_BINNING_TYPES)
+        self.xyz_binning_type.currentTextChanged.connect(self.changed)
+        form.addRow("Binning", self.xyz_binning_type)
+        self.xyz_nbins = self._spin(10, 2, 100, form, "Number of bins")
+        self.xyz_aggfunc = QComboBox()
+        self.xyz_aggfunc.addItems(_XYZ_AGGFUNCS)
+        self.xyz_aggfunc.currentTextChanged.connect(self.changed)
+        form.addRow("Aggregation", self.xyz_aggfunc)
+        self.xyz_min_n = self._spin(1, 1, 10000, form, "Min values/bin")
+        self._col.addWidget(binning)
+
+        colors = QGroupBox("Colors")
+        form = QFormLayout(colors)
+        self.cmap = QComboBox()
+        self.cmap.setEditable(True)
+        self.cmap.addItems(_COLORMAPS)
+        self.cmap.currentTextChanged.connect(self.changed)
+        form.addRow("Colormap", self.cmap)
+        self.vmin = QLineEdit()
+        self.vmin.setPlaceholderText("auto")
+        self.vmin.editingFinished.connect(self.changed)
+        form.addRow("Min value", self.vmin)
+        self.vmax = QLineEdit()
+        self.vmax.setPlaceholderText("auto")
+        self.vmax.editingFinished.connect(self.changed)
+        form.addRow("Max value", self.vmax)
+        self.color_bad = QComboBox()
+        self.color_bad.setEditable(True)
+        self.color_bad.addItems(_BAD_COLORS)
+        self.color_bad.currentTextChanged.connect(self.changed)
+        form.addRow("Missing color", self.color_bad)
+        self.reverse_cmap = self._check("Reverse colormap", form)
+        self._col.addWidget(colors)
+
+        cbar = QGroupBox("Colorbar")
+        form = QFormLayout(cbar)
+        self.show_colormap = self._check("Show colorbar", form, checked=True)
+        self.zlabel = QLineEdit()
+        self.zlabel.setPlaceholderText("(units)")
+        self.zlabel.editingFinished.connect(self.changed)
+        form.addRow("Label", self.zlabel)
+        self.cb_digits = QComboBox()
+        self.cb_digits.addItems(["0", "1", "2", "3", "4"])
+        self.cb_digits.setCurrentText("2")
+        self.cb_digits.currentTextChanged.connect(self.changed)
+        form.addRow("Decimals", self.cb_digits)
+        self.cb_extend = QComboBox()
+        self.cb_extend.addItems(["neither", "both", "min", "max"])
+        self.cb_extend.currentTextChanged.connect(self.changed)
+        form.addRow("Extend arrows", self.cb_extend)
+        self.cb_labelsize = self._fontspin(form, "Colorbar font")
+        self._col.addWidget(cbar)
+
+        vals = QGroupBox("Cell values")
+        form = QFormLayout(vals)
+        self.show_values = self._check("Overlay values", form)
+        self.show_values_dec = self._spin(0, 0, 6, form, "Decimals")
+        self.show_values_fontsize = self._fontspin(form, "Value font")
+        self._col.addWidget(vals)
+
+        self._build_format_group(fields=[
+            "title", "xlabel", "ylabel", "fonts", "show_grid"])
+
     def set_years(self, years) -> None:
         """Populate the cumulative-year highlight dropdown from the data's years.
 
@@ -696,7 +872,7 @@ class PlotSettingsPanel(QScrollArea):
                 combo.setCurrentIndex(i if i >= 0 else (0 if none_ok else combo.currentIndex()))
                 combo.blockSignals(False)
             return
-        if self._plot_type != HEXBIN:
+        if self._plot_type not in (HEXBIN, HEATMAP_XYZ):
             return
         self.x_role.setText(x or "—")
         self.y_role.setText(y or "—")
@@ -860,6 +1036,81 @@ class PlotSettingsPanel(QScrollArea):
 
         self._build_format_group(fields=["title", "fonts"])
 
+    # --- tree-ring controls ---
+    def _build_treering(self) -> None:
+        data = QGroupBox("Data")
+        form = QFormLayout(data)
+        # resample_freq sets the angular resolution of each ring (one slot per
+        # resampled step). Editable so any pandas offset alias can be typed.
+        self.tr_resample = QComboBox()
+        self.tr_resample.setEditable(True)
+        self.tr_resample.addItems(_TREERING_FREQS)
+        self.tr_resample.currentTextChanged.connect(self.changed)
+        form.addRow("Resample", self.tr_resample)
+        # Render style: filled colour mesh per ring vs one radial line trace per
+        # year (TreeRingPlot.plot vs .plot_line).
+        self.tr_style = QComboBox()
+        self.tr_style.addItems(list(_TREERING_STYLES.keys()))
+        self.tr_style.currentTextChanged.connect(self.changed)
+        form.addRow("Render style", self.tr_style)
+        self._col.addWidget(data)
+
+        colors = QGroupBox("Colors")
+        form = QFormLayout(colors)
+        self.tr_cmap = QComboBox()
+        self.tr_cmap.setEditable(True)
+        self.tr_cmap.addItems(_COLORMAPS)
+        self.tr_cmap.setCurrentText("RdBu_r")  # TreeRingPlot.plot default
+        self.tr_cmap.currentTextChanged.connect(self.changed)
+        form.addRow("Colormap", self.tr_cmap)
+        self.tr_reverse_cmap = self._check("Reverse colormap", form)
+        self.tr_vmin = QLineEdit()
+        self.tr_vmin.setPlaceholderText("auto")
+        self.tr_vmin.editingFinished.connect(self.changed)
+        form.addRow("Min value", self.tr_vmin)
+        self.tr_vmax = QLineEdit()
+        self.tr_vmax.setPlaceholderText("auto")
+        self.tr_vmax.editingFinished.connect(self.changed)
+        form.addRow("Max value", self.tr_vmax)
+        self._col.addWidget(colors)
+
+        rings = QGroupBox("Rings")
+        form = QFormLayout(rings)
+        self.tr_month_labels = self._check("Month labels", form, checked=True)
+        self.tr_month_lines = self._check("Month boundary lines", form)
+        self.tr_year_labels = self._check("Year labels", form, checked=True)
+        self.tr_year_separators = self._check("Year separators", form, checked=True)
+        self.tr_year_freq = self._spin(10, 1, 100, form, "Year label every")
+        self._col.addWidget(rings)
+
+        # Line-trace style only: a radial wiggle whose amplitude/width and line
+        # look are configurable. Ignored by the filled style.
+        lines = QGroupBox("Line traces")
+        form = QFormLayout(lines)
+        note = QLabel("Applies to the 'Line traces' render style.")
+        note.setWordWrap(True)
+        note.setStyleSheet("color: #90A4AE;")
+        form.addRow(note)
+        self.tr_linewidth = self._dspin(1.2, 0.2, 10.0, 0.2, 1, form, "Line width")
+        self.tr_alpha = self._dspin(0.85, 0.05, 1.0, 0.05, 2, form, "Opacity")
+        self.tr_amplitude = self._dspin(0.5, 0.0, 2.0, 0.1, 2, form, "Amplitude")
+        self.tr_ring_width = self._dspin(0.35, 0.05, 2.0, 0.05, 2, form, "Ring width")
+        self._col.addWidget(lines)
+
+        cbar = QGroupBox("Colorbar")
+        form = QFormLayout(cbar)
+        self.tr_cb_label = QLineEdit()
+        self.tr_cb_label.setPlaceholderText("(units)")
+        self.tr_cb_label.editingFinished.connect(self.changed)
+        form.addRow("Label", self.tr_cb_label)
+        self.tr_cb_digits = self._spin(1, 0, 6, form, "Decimals")
+        self.tr_cb_labelsize = self._fontspin(form, "Colorbar font")
+        self._col.addWidget(cbar)
+
+        # Tree ring is polar: only the title (+ title font) of the shared chrome
+        # applies, like the wind rose.
+        self._build_format_group(fields=["title", "fonts"])
+
     # --- histogram controls ---
     def _build_histogram(self) -> None:
         binning = QGroupBox("Bins")
@@ -882,6 +1133,79 @@ class PlotSettingsPanel(QScrollArea):
         self._col.addWidget(zgrp)
 
         self._build_format_group(fields=["title", "xlabel", "fonts", "show_grid"])
+
+    # --- shifted-distribution controls ---
+    def _build_shifted_distribution(self) -> None:
+        # Two date periods compared on one density axis. Each field is a partial
+        # date string passed straight to the library's label slicing (a year like
+        # "2018", or "2018-06" / "2018-06-15"). Seeded from the data's year range
+        # by set_periods() when data loads.
+        periods = QGroupBox("Periods")
+        form = QFormLayout(periods)
+        self.sd_ref_start = self._dateedit(form, "Reference start")
+        self.sd_ref_end = self._dateedit(form, "Reference end")
+        self.sd_comp_start = self._dateedit(form, "Comparison start")
+        self.sd_comp_end = self._dateedit(form, "Comparison end")
+        self._col.addWidget(periods)
+
+        zones = QGroupBox("Zones")
+        form = QFormLayout(zones)
+        # Zone breakpoints come from the reference period's mean ±1σ/±3σ (in the
+        # library); the panel only picks the 5 labels drawn above the curve.
+        self.sd_zones = QComboBox()
+        self.sd_zones.addItems(list(_SHIFTEDDIST_ZONE_PRESETS.keys()))
+        self.sd_zones.currentTextChanged.connect(self.changed)
+        form.addRow("Zone labels", self.sd_zones)
+        self._col.addWidget(zones)
+
+        disp = QGroupBox("Display")
+        form = QFormLayout(disp)
+        self.sd_ref_label = QLineEdit()
+        self.sd_ref_label.setPlaceholderText("(auto: Reference …)")
+        self.sd_ref_label.editingFinished.connect(self.changed)
+        form.addRow("Reference label", self.sd_ref_label)
+        self.sd_comp_label = QLineEdit()
+        self.sd_comp_label.setPlaceholderText("(auto: Comparison …)")
+        self.sd_comp_label.editingFinished.connect(self.changed)
+        form.addRow("Comparison label", self.sd_comp_label)
+        self.sd_show_legend = self._check("Show legend", form, checked=True)
+        self.sd_show_title = self._check("Show title", form, checked=True)
+        self.sd_show_xaxis = self._check("Show x-axis", form, checked=True)
+        self.sd_show_yaxis = self._check("Show y-axis", form, checked=False)
+        self._col.addWidget(disp)
+
+        self._build_format_group(fields=["title", "xlabel", "fonts"])
+
+    def _dateedit(self, form, label) -> QLineEdit:
+        edit = QLineEdit()
+        edit.setPlaceholderText("YYYY or YYYY-MM-DD")
+        edit.editingFinished.connect(self.changed)
+        form.addRow(label, edit)
+        return edit
+
+    def set_periods(self, years) -> None:
+        """Seed the reference/comparison period fields from the data's years.
+
+        Splits the available years in half (reference = earlier half, comparison
+        = later half) so the tab shows a meaningful shift on open. Only fills
+        empty fields, so a restored project / user edit is never clobbered.
+        """
+        if self._plot_type != SHIFTEDDIST:
+            return
+        years = sorted({int(y) for y in years})
+        if not years:
+            return
+        mid = len(years) // 2
+        if mid == 0:  # single year -> compare it to itself (no shift)
+            ref = comp = (str(years[0]), str(years[0]))
+        else:
+            ref = (str(years[0]), str(years[mid - 1]))
+            comp = (str(years[mid]), str(years[-1]))
+        seeds = [(self.sd_ref_start, ref[0]), (self.sd_ref_end, ref[1]),
+                 (self.sd_comp_start, comp[0]), (self.sd_comp_end, comp[1])]
+        for edit, value in seeds:
+            if not edit.text().strip():
+                edit.setText(value)
 
     # --- diel-cycle controls ---
     def _build_dielcycle(self) -> None:
@@ -1051,7 +1375,7 @@ class PlotSettingsPanel(QScrollArea):
             self.fmt_ticks_fs = self._fontspin(form, "Tick font")
         if "show_grid" in fields:
             grid_default = self._plot_type not in (
-                HEATMAP, HEATMAP_YEARMONTH, HEXBIN)
+                HEATMAP, HEATMAP_YEARMONTH, HEATMAP_XYZ, HEXBIN)
             self.fmt_grid = self._check("Show grid", form, checked=grid_default)
         if "show_legend" in fields:
             self.fmt_legend = self._check("Show legend", form, checked=True)
@@ -1271,6 +1595,31 @@ class PlotSettingsPanel(QScrollArea):
                 "cb_labelsize": _font(self.cb_labelsize),
                 "_format": self._format_values(),
             }
+        if self._plot_type == HEATMAP_XYZ:
+            def _font(sp):
+                return sp.value() or None
+            return {
+                # GridAggregator (binning) params
+                "binning_type": self.xyz_binning_type.currentText(),
+                "n_bins": self.xyz_nbins.value(),
+                "aggfunc": self.xyz_aggfunc.currentText(),
+                "min_n_vals_per_bin": self.xyz_min_n.value(),
+                # plot() styling params
+                "cmap": self._reverse_cmap(self.cmap.currentText().strip() or "RdYlBu_r",
+                                           self.reverse_cmap.isChecked()),
+                "vmin": self._float_or_none(self.vmin.text()),
+                "vmax": self._float_or_none(self.vmax.text()),
+                "color_bad": self.color_bad.currentText().strip() or "grey",
+                "zlabel": self.zlabel.text().strip() or None,
+                "cb_digits_after_comma": int(self.cb_digits.currentText()),
+                "cb_extend": self.cb_extend.currentText(),
+                "show_colormap": self.show_colormap.isChecked(),
+                "show_values": self.show_values.isChecked(),
+                "show_values_n_dec_places": self.show_values_dec.value(),
+                "show_values_fontsize": _font(self.show_values_fontsize),
+                "cb_labelsize": _font(self.cb_labelsize),
+                "_format": self._format_values(),
+            }
         if self._plot_type == SCATTER:
             return {
                 "nbins": self.sc_nbins.value(),
@@ -1311,6 +1660,47 @@ class PlotSettingsPanel(QScrollArea):
                 "show_title": self.hist_title.isChecked(),
                 "show_zscores": self.hist_zscores.isChecked(),
                 "show_zscore_values": self.hist_zvalues.isChecked(),
+                "_format": self._format_values(),
+            }
+        if self._plot_type == SHIFTEDDIST:
+            def _p(edit):
+                return edit.text().strip() or None
+            return {
+                "ref_period": (_p(self.sd_ref_start), _p(self.sd_ref_end)),
+                "comp_period": (_p(self.sd_comp_start), _p(self.sd_comp_end)),
+                "ref_label": self.sd_ref_label.text().strip() or None,
+                "comp_label": self.sd_comp_label.text().strip() or None,
+                "zone_labels": _SHIFTEDDIST_ZONE_PRESETS[self.sd_zones.currentText()],
+                "show_legend": self.sd_show_legend.isChecked(),
+                "show_title": self.sd_show_title.isChecked(),
+                "show_xaxis": self.sd_show_xaxis.isChecked(),
+                "show_yaxis": self.sd_show_yaxis.isChecked(),
+                "_format": self._format_values(),
+            }
+        if self._plot_type == TREERING:
+            return {
+                # __init__ param
+                "resample_freq": self.tr_resample.currentText().strip() or "D",
+                # which renderer: 'filled' (plot) or 'line' (plot_line)
+                "style": _TREERING_STYLES[self.tr_style.currentText()],
+                # shared plot()/plot_line() params
+                "cmap": self._reverse_cmap(self.tr_cmap.currentText().strip() or "RdBu_r",
+                                           self.tr_reverse_cmap.isChecked()),
+                "vmin": self._float_or_none(self.tr_vmin.text()),
+                "vmax": self._float_or_none(self.tr_vmax.text()),
+                "show_month_labels": self.tr_month_labels.isChecked(),
+                "show_month_lines": self.tr_month_lines.isChecked(),
+                "show_year_labels": self.tr_year_labels.isChecked(),
+                "show_year_separators": self.tr_year_separators.isChecked(),
+                "year_label_frequency": self.tr_year_freq.value(),
+                "cb_label": self.tr_cb_label.text().strip() or None,
+                "cb_digits_after_comma": self.tr_cb_digits.value(),
+                "cb_labelsize": self.tr_cb_labelsize.value() or None,
+                # line-trace-only params
+                "linewidth": self.tr_linewidth.value(),
+                "alpha": self.tr_alpha.value(),
+                "amplitude_scale": self.tr_amplitude.value(),
+                "ring_width": self.tr_ring_width.value(),
                 "_format": self._format_values(),
             }
         return {

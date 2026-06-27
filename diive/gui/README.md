@@ -113,7 +113,7 @@ borderless panels, monochrome line icons, uppercase tracked labels, and a framel
 `STUDIO_TYPOGRAPHY`; `MainWindow` always builds the frameless shell (`_build_studio_chrome`).
 
 **Plot menu:** each method is its own closable tab, with a small drawn icon. The **Plot** menu lists methods (Heatmap
-date/time, Heatmap year/month, Time series, Diel cycle, Cumulative year, Ridgeline, Scatter XY, Hexbin, Histogram, Wind rose); selecting one
+date/time, Heatmap year/month, Heatmap x/y/z, Time series, Diel cycle, Cumulative year, Ridgeline, Scatter XY, Hexbin, Histogram, Wind rose); selecting one
 opens a new `PlottingTab(plot_type, title)` instance. Add a method via a factory in `registry.MENU_TABS["Plot"]` + a
 branch in `plotting._draw_one` (and matching controls in `plot_settings`). Ctrl+click adds comparison panels: heatmaps
 (both kinds, in `_HEATMAP_TYPES`) go side by side (shared x/y); time series and diel cycle stack top-to-bottom (shared
