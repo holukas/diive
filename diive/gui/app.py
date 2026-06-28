@@ -481,6 +481,11 @@ class MainWindow(QMainWindow):
         help_menu.addSeparator()
         help_menu.addAction(_act("&User manual", self._user_manual))
         help_menu.addAction(_act("&Changelog", self._changelog))
+        help_menu.addSeparator()
+        help_menu.addAction(_act("View on &GitHub", self._view_on_github))
+        help_menu.addAction(_act("&Report an issue", self._report_issue))
+        help_menu.addAction(_act("diive on &PyPI", self._view_on_pypi))
+        help_menu.addSeparator()
         help_menu.addAction(_act("&About", self._about))
 
     def _data_for(self, tab):
@@ -1343,6 +1348,27 @@ class MainWindow(QMainWindow):
 
         QDesktopServices.openUrl(
             QUrl("https://github.com/holukas/diive/blob/main/CHANGELOG.md"))
+
+    def _view_on_github(self) -> None:
+        """Open the source repository in the default browser."""
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+
+        QDesktopServices.openUrl(QUrl("https://github.com/holukas/diive"))
+
+    def _report_issue(self) -> None:
+        """Open the GitHub issue tracker in the default browser."""
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+
+        QDesktopServices.openUrl(QUrl("https://github.com/holukas/diive/issues"))
+
+    def _view_on_pypi(self) -> None:
+        """Open the PyPI project page in the default browser."""
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+
+        QDesktopServices.openUrl(QUrl("https://pypi.org/project/diive/"))
 
     def _about(self) -> None:
         # Reuse the startup splash artwork as the About dialog.
