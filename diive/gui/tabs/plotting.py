@@ -70,9 +70,10 @@ from diive.gui.widgets.plot_settings import (
 #: x/y/z heatmap X/Y/Z, scatter X/Y/Z, and the wind rose value/wind-dir/colour.
 _XYZ_TYPES = (HEXBIN, HEATMAP_XYZ, SCATTER, WINDROSE)
 
-#: Role-picked types whose roles are assigned via X/Y/Colour dropdowns (drag onto
-#: a field or pick) rather than clicking the list in order. Hexbin still cycles.
-_ROLE_DROPDOWN_TYPES = (SCATTER, WINDROSE)
+#: Role-picked types whose roles are assigned via X/Y/Z dropdowns (drag a variable
+#: onto a field or pick it from the complete list) rather than clicking the list in
+#: order. This is the standard role-selection method for every X/Y/Z plot type.
+_ROLE_DROPDOWN_TYPES = (SCATTER, WINDROSE, HEXBIN, HEATMAP_XYZ)
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 #: Plot types laid out like a heatmap (panels side by side, shared axes).
@@ -219,20 +220,21 @@ class PlottingTab(DiiveTab):
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
         # Shared variable list (filter + pills) under its own header. Plain click
-        # resets to one panel; Ctrl+click toggles additional panels. Time-series,
-        # scatter and wind-rose lists are draggable so a variable can be dropped
-        # onto a colour-by / X / Y / Colour / value / wind-direction field.
+        # resets to one panel; Ctrl+click toggles additional panels. Time-series
+        # and every role-dropdown list (scatter, wind rose, hexbin, x/y/z heatmap)
+        # are draggable so a variable can be dropped onto a colour-by / X / Y /
+        # Z / Colour / value / wind-direction field.
         self.varpanel = VariablePanel(
-            draggable=self._plot_type in (TIMESERIES, SCATTER, WINDROSE))
+            draggable=self._plot_type in (TIMESERIES,) + _ROLE_DROPDOWN_TYPES)
         self.varpanel.selected.connect(self._on_selected)
         left = QWidget()
         llay = QVBoxLayout(left)
         llay.setContentsMargins(0, 0, 0, 0)
-        # Header hint matches the tab's selection model: scatter assigns roles via
-        # dropdowns (drag onto a field); the multi-panel tabs add a per-variable
-        # subplot (with its own settings sub-tab) on Ctrl+click; the rest plot the
-        # clicked variable.
-        if self._plot_type == SCATTER:
+        # Header hint matches the tab's selection model: role-dropdown types assign
+        # variables via dropdowns (drag onto a field); the multi-panel tabs add a
+        # per-variable subplot (with its own settings sub-tab) on Ctrl+click; the
+        # rest plot the clicked variable.
+        if self._plot_type in _ROLE_DROPDOWN_TYPES:
             list_hint = "drag onto a field"
         elif self._plot_type in _MULTI_PANEL_TYPES:
             list_hint = "click to plot · Ctrl+click to add"
@@ -416,6 +418,7 @@ class PlottingTab(DiiveTab):
             # triple so the tab shows something on open.
             preferred = ["Tair_f", "VPD_f", "NEE_CUT_REF_f"]
             self._xyz = preferred if all(c in cols for c in preferred) else cols[:3]
+            self.settings.set_xyz(*(self._xyz + [None, None, None])[:3])
             self._render()
             return
         if self._plot_type == SCATTER:

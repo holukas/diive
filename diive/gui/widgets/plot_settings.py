@@ -698,22 +698,19 @@ class PlotSettingsPanel(QScrollArea):
 
     # --- hexbin controls ---
     def _build_hexbin(self) -> None:
-        # Read-only readout of the current X/Y/Z role assignment (the tab sets
-        # these via set_xyz as the user clicks variables). The list highlight
-        # numbers the same picks 1/2/3 = X/Y/Z.
+        # X/Y/Z role dropdowns (drag a variable from the list onto a field or pick
+        # it). All three are required -- hexbin needs two drivers + a value.
         roles = QGroupBox("Variables")
         form = QFormLayout(roles)
-        hint = QLabel("Click list in order →")
+        hint = QLabel("Drag a variable from the list onto a field, or pick one "
+                      "from the dropdowns.")
+        hint.setWordWrap(True)
         hint.setStyleSheet("color: #90A4AE;")
         form.addRow(hint)
-        self.x_role = QLabel("—")
-        self.y_role = QLabel("—")
-        self.z_role = QLabel("—")
-        for lbl in (self.x_role, self.y_role, self.z_role):
-            lbl.setStyleSheet("color: #455A64;")
-        form.addRow("X (driver)", self.x_role)
-        form.addRow("Y (driver)", self.y_role)
-        form.addRow("Z (flux)", self.z_role)
+        labels = ("X (driver)", "Y (driver)", "Z (flux)")
+        for label, combo in zip(labels, self._build_role_combos(
+                labels, none_ok=(False, False, False))):
+            form.addRow(label, combo)
         self._col.addWidget(roles)
 
         binning = QGroupBox("Binning")
@@ -777,21 +774,19 @@ class PlotSettingsPanel(QScrollArea):
 
     # --- x/y/z heatmap controls ---
     def _build_heatmap_xyz(self) -> None:
-        # Read-only readout of the current X/Y/Z role assignment (same click-in-
-        # order model as hexbin); the list highlight numbers the picks 1/2/3.
+        # X/Y/Z role dropdowns (drag a variable from the list onto a field or pick
+        # it). All three are required -- the heatmap needs two drivers + a value.
         roles = QGroupBox("Variables")
         form = QFormLayout(roles)
-        hint = QLabel("Click list in order →")
+        hint = QLabel("Drag a variable from the list onto a field, or pick one "
+                      "from the dropdowns.")
+        hint.setWordWrap(True)
         hint.setStyleSheet("color: #90A4AE;")
         form.addRow(hint)
-        self.x_role = QLabel("—")
-        self.y_role = QLabel("—")
-        self.z_role = QLabel("—")
-        for lbl in (self.x_role, self.y_role, self.z_role):
-            lbl.setStyleSheet("color: #455A64;")
-        form.addRow("X (driver)", self.x_role)
-        form.addRow("Y (driver)", self.y_role)
-        form.addRow("Z (value)", self.z_role)
+        labels = ("X (driver)", "Y (driver)", "Z (value)")
+        for label, combo in zip(labels, self._build_role_combos(
+                labels, none_ok=(False, False, False))):
+            form.addRow(label, combo)
         self._col.addWidget(roles)
 
         # Binning: HeatmapXYZ needs pre-aggregated input (one z per x/y bin), so
@@ -881,40 +876,37 @@ class PlotSettingsPanel(QScrollArea):
         self.cy_highlight.setCurrentIndex(idx if idx >= 0 else 0)
         self.cy_highlight.blockSignals(False)
 
-    def _build_role_combos(self, labels) -> list:
-        """Build the three role dropdowns (X/Y/Colour, value/dir/colour) shared by
-        the scatter and wind-rose tabs: two required pickers and a final optional
-        one (a leading '(none)'). Each is a drop target -- a variable dragged from
-        the list onto it is assigned -- and a change re-routes through
-        ``xyz_changed`` (the variable selection). Returns the three combos."""
-        self._role_none_ok = [False, False, True]
+    def _build_role_combos(self, labels, none_ok=(False, False, True)) -> list:
+        """Build the three role dropdowns (X/Y/Colour, value/dir/colour, X/Y/Z)
+        shared by the scatter, wind-rose, hexbin and x/y/z-heatmap tabs. Each is a
+        drop target -- a variable dragged from the list onto it is assigned -- and
+        a change re-routes through ``xyz_changed`` (the variable selection).
+
+        ``none_ok`` flags which roles are optional (a leading '(none)' entry):
+        scatter/wind-rose make the colour role optional ``(False, False, True)``,
+        while hexbin / x-y-z heatmap need all three ``(False, False, False)``.
+        Returns the three combos."""
+        self._role_none_ok = list(none_ok)
         self._role_combos = []
-        for none_ok in self._role_none_ok:
+        for ok in self._role_none_ok:
             combo = _DropComboBox()
-            if none_ok:
+            if ok:
                 combo.addItem(_COLORBY_NONE)
             combo.currentTextChanged.connect(self.xyz_changed)
             self._role_combos.append(combo)
         return self._role_combos
 
     def set_xyz(self, x: str | None, y: str | None, z: str | None) -> None:
-        """Reflect the X/Y/Z role assignment into the controls.
-
-        Scatter / wind rose use dropdown pickers (set the current item without
-        re-emitting); hexbin uses a passive click-in-order readout label.
-        """
-        if getattr(self, "_role_combos", None) is not None:
-            for combo, name, none_ok in zip(self._role_combos, (x, y, z), self._role_none_ok):
-                combo.blockSignals(True)
-                i = combo.findText(name) if name else -1
-                combo.setCurrentIndex(i if i >= 0 else (0 if none_ok else combo.currentIndex()))
-                combo.blockSignals(False)
+        """Reflect the X/Y/Z role assignment into the role dropdowns (scatter,
+        wind rose, hexbin, x/y/z heatmap), setting the current item without
+        re-emitting ``xyz_changed``. No-op for plot types without role combos."""
+        if getattr(self, "_role_combos", None) is None:
             return
-        if self._plot_type not in (HEXBIN, HEATMAP_XYZ):
-            return
-        self.x_role.setText(x or "—")
-        self.y_role.setText(y or "—")
-        self.z_role.setText(z or "—")
+        for combo, name, none_ok in zip(self._role_combos, (x, y, z), self._role_none_ok):
+            combo.blockSignals(True)
+            i = combo.findText(name) if name else -1
+            combo.setCurrentIndex(i if i >= 0 else (0 if none_ok else combo.currentIndex()))
+            combo.blockSignals(False)
 
     def set_xyz_options(self, names) -> None:
         """Populate the role dropdowns with the dataset's variable names, keeping

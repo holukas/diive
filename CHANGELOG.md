@@ -90,9 +90,10 @@
   `combine_variables_to_code`);
   plus **Appearance**, **Project settings** (author, description, site details, and a **sticky-note wall** — all saved
   with the project), and **Log**.
-- **Plot tabs — refinements.** **Scatter XY** and **Wind rose** now assign variables to roles via **X/Y/Colour**
-  (value/wind-direction/colour) dropdowns — pick one or **drag** it from the variable list onto a field — instead of
-  clicking the list in order; Scatter gained a point hover showing
+- **Plot tabs — refinements.** Every X/Y/Z role-picked plot type — **Scatter XY**, **Wind rose**, **Hexbin**, and
+  **Heatmap x/y/z** — now assigns variables to roles via dropdowns (X/Y/Colour, value/wind-direction/colour, X/Y/Z) —
+  pick one from the complete list or **drag** it from the variable list onto a field — instead of clicking the list in
+  order. Scatter and Wind rose keep the colour role optional; Hexbin and Heatmap x/y/z require all three. Scatter gained a point hover showing
   x/y(/z), and the wind-rose per-sector table moved to the **right** of the plot. **Every** plot tab now carries a
   title-bar **Copy Python** button that emits a runnable snippet for the current plot — backed by a new library codegen
   module (`core/plotting/codegen.py`) with one `*_to_code` per plot class (heatmap date/time + year/month, time series,
