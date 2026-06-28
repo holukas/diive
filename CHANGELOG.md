@@ -268,16 +268,18 @@
 
 - **Tab-chrome harmonization** — every tab now wears the same `tab_chrome.build_titlebar` header instead of a hand-rolled
   one. The single-variable explorer tabs (**Driver explorer**, **Gaps & coverage**, **Seasonal-trend & anomalies**,
-  **Spectrogram**, **3D surface**) gain a title bar via their shared `SingleVariableExplorerTab` base, and the
-  **Flux processing chain** and **USTAR detection** tabs drop their duplicated title rows for the helper. The Feature
-  engineering tab's column captions reuse the shared `tab_chrome.list_header`. Presentation-only; no behaviour change.
-- **Copy Python on the explorer tabs** — the five single-variable explorer tabs above each gain a **Copy Python** button
-  that copies a runnable diive script reproducing the current view (computation + plot). As with every other tab, the
-  GUI only *asks* the library for the snippet (GUI <-> library separation): new library codegen functions
-  `rank_drivers_to_code` (`analysis/correlation.py`), `gapstats_to_code` (`analysis/gapfinder.py`), `spectrogram_to_code`
-  (`analysis/harmonic.py`), `seasonal_trend_to_code` (`analysis/seasonaltrend.py`, decomposition + anomaly views), and
-  `datetime_surface_to_code` (`core/plotting/codegen.py`, a matplotlib 3-D surface so it runs without the GPU extra). The
-  `SingleVariableExplorerTab` base mounts the button automatically for any subclass that overrides `_python_code`.
+  **Spectrogram**, **3D surface**) gain a title bar via their shared `SingleVariableExplorerTab` base; the **Feature
+  engineering**, **Rename variables**, and **Metadata explorer** tabs gain one too; and the **Flux processing chain** and
+  **USTAR detection** tabs drop their duplicated title rows for the helper. The Feature engineering tab's column captions
+  reuse the shared `tab_chrome.list_header`. Presentation-only; no behaviour change.
+- **Copy Python on the explorer + feature tabs** — the five single-variable explorer tabs above plus **Feature
+  engineering** each gain a **Copy Python** button that copies a runnable diive script reproducing the current view
+  (computation + plot). As with every other tab, the GUI only *asks* the library for the snippet (GUI <-> library
+  separation): new library codegen functions `rank_drivers_to_code` (`analysis/correlation.py`), `gapstats_to_code`
+  (`analysis/gapfinder.py`), `spectrogram_to_code` (`analysis/harmonic.py`), `seasonal_trend_to_code`
+  (`analysis/seasonaltrend.py`, decomposition + anomaly views), `datetime_surface_to_code` (`core/plotting/codegen.py`, a
+  matplotlib 3-D surface so it runs without the GPU extra), and `feature_engineer_to_code` (`core/ml/feature_engineer.py`).
+  The `SingleVariableExplorerTab` base mounts the button automatically for any subclass that overrides `_python_code`.
 
 Library additions used by the GUI (all backward-compatible):
 

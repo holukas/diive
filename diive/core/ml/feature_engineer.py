@@ -761,3 +761,45 @@ class FeatureEngineer:
                    f"components={components_to_extract}) for {len([c for c in feature_cols if any(nc.startswith(f'.{c}_STL') for nc in newcols)])} "
                    f"complete columns: {newcols}", verbose=self.verbose)
         return df
+
+
+def feature_engineer_to_code(varnames, kwargs: dict, *, df_name: str = "df") -> str:
+    """Render a runnable :class:`FeatureEngineer` snippet reproducing a run.
+
+    Mirrors the GUI's Feature-engineering tab: build a working frame from the
+    selected variables plus the required target placeholder, run
+    ``FeatureEngineer(**kwargs).fit_transform(...)``, and keep only the newly
+    engineered columns. Belongs in the library (not the GUI): it encodes the
+    exact call shape and must stay correct as that API evolves; the GUI only
+    calls it (the GUI <-> library separation rule).
+
+    Args:
+        varnames: selected source columns the per-variable stages transform
+            (may be empty for index-only stages: timestamps / record number).
+        kwargs: the ``FeatureEngineer`` constructor keyword arguments, including
+            ``target_col`` (the placeholder column name).
+        df_name: variable name used for the input DataFrame.
+
+    Returns:
+        A runnable Python snippet as a string.
+    """
+    target_col = kwargs.get("target_col", "_target_")
+    cols = [str(c) for c in varnames]
+    sel = "[" + ", ".join(repr(c) for c in cols) + "]"
+    lines = [
+        "import diive as dv",
+        "",
+        f"work = {df_name}[{sel}].copy()",
+        f"work[{target_col!r}] = 0.0  # FeatureEngineer requires a target placeholder",
+        "",
+        "features = dv.gapfilling.FeatureEngineer(",
+    ]
+    lines += [f"    {k}={v!r}," for k, v in kwargs.items()]
+    lines += [
+        ").fit_transform(work)",
+        "",
+        "# Keep only the newly engineered columns.",
+        "features = features[[c for c in features.columns if c not in work.columns]]",
+        "print(features.head())",
+    ]
+    return "\n".join(lines) + "\n"
