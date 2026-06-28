@@ -141,6 +141,18 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
         if self._target is not None:
             self._render()
 
+    # --- codegen -------------------------------------------------------
+    def _python_code(self) -> str | None:
+        if self._df is None or self._target is None or self._target not in self._df.columns:
+            return None
+        from diive.analysis.seasonaltrend import seasonal_trend_to_code
+        view = "anomalies" if self.view.currentText() == _VIEW_ANOM else "decomposition"
+        return seasonal_trend_to_code(
+            self._target, method=self.method.currentText().lower(),
+            robust=self.robust.isChecked(), seasonal_period=_PERIOD_DAYS,
+            view=view, reference_start_year=self.ref_start.value(),
+            reference_end_year=self.ref_end.value())
+
     def _on_ref_changed(self, _value: int) -> None:
         # Cheap: only the anomaly view depends on the reference period.
         if not self._loading_ctrls and self._yearly is not None \

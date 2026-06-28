@@ -385,3 +385,79 @@ class SeasonalTrendDecomposition:
     def __str__(self) -> str:
         """String representation (alias for summary)."""
         return self.summary()
+
+
+def seasonal_trend_to_code(
+        varname: str,
+        *,
+        method: str = 'stl',
+        robust: bool = True,
+        seasonal_period: int = 365,
+        view: str = 'decomposition',
+        reference_start_year: int | None = None,
+        reference_end_year: int | None = None,
+        df_name: str = 'df',
+) -> str:
+    """Render a runnable seasonal-trend snippet for the current GUI view.
+
+    Mirrors the GUI's Seasonal-trend & anomalies tab. ``view='decomposition'``
+    resamples to a daily mean and runs :class:`SeasonalTrendDecomposition`,
+    plotting the observed/trend/seasonal/residual panels; ``view='anomalies'``
+    plots the yearly-mean anomaly via :class:`~diive.plotting.LongtermAnomaliesYear`.
+    Belongs in the library (not the GUI): it encodes the exact call shape and
+    must stay correct as that API evolves; the GUI only calls it (the GUI <->
+    library separation rule).
+
+    Args:
+        varname: column to analyse.
+        method / robust / seasonal_period: passed to
+            :class:`SeasonalTrendDecomposition` (decomposition view).
+        view: ``'decomposition'`` or ``'anomalies'``.
+        reference_start_year / reference_end_year: reference period for the
+            anomaly view.
+        df_name: variable name used for the input DataFrame.
+
+    Returns:
+        A runnable Python snippet as a string.
+    """
+    lines = ["import matplotlib.pyplot as plt", "import diive as dv", ""]
+    if view == 'anomalies':
+        lines += [
+            f"yearly = {df_name}[{varname!r}].resample('YE').mean()",
+            "yearly.index = yearly.index.year  # LongtermAnomaliesYear keys on integer years",
+            "yearly = yearly.dropna()",
+            f"yearly.name = {varname!r}",
+            "anom = dv.plotting.LongtermAnomaliesYear(",
+            "    series=yearly,",
+            f"    reference_start_year={reference_start_year!r},",
+            f"    reference_end_year={reference_end_year!r},",
+            f"    series_label={varname!r},",
+            ")",
+            "fig, ax = plt.subplots(figsize=(10, 5))",
+            "anom.plot(ax=ax)",
+            "plt.show()",
+        ]
+    else:
+        # The GUI speeds up the STL Loess with a jump proportional to the period.
+        jump = max(1, round(seasonal_period / 30))
+        lines += [
+            f"daily = dv.times.resample_to_daily_agg({df_name}[{varname!r}], agg='mean').dropna()",
+            "std = dv.analysis.SeasonalTrendDecomposition(",
+            "    daily,",
+            f"    method={method!r},",
+            f"    seasonal_period={seasonal_period!r},",
+            f"    robust={robust!r},",
+            f"    seasonal_jump={jump!r},",
+            f"    trend_jump={jump!r},",
+            ")",
+            "",
+            "fig, axes = plt.subplots(4, 1, figsize=(11, 8), sharex=True)",
+            "for ax, (label, comp) in zip(axes, [",
+            "        ('Observed', daily), ('Trend', std.trend),",
+            "        ('Seasonal', std.seasonal), ('Residual', std.residual)]):",
+            "    ax.plot(comp.index, comp.to_numpy(), linewidth=1.0)",
+            "    ax.set_ylabel(label)",
+            f"axes[0].set_title({varname!r} + ' - seasonal-trend decomposition')",
+            "plt.show()",
+        ]
+    return "\n".join(lines) + "\n"

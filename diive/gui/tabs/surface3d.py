@@ -167,6 +167,13 @@ class Surface3DTab(SingleVariableExplorerTab):
             self.canvas.reset_camera()
             self.canvas.render()
 
+    # --- codegen -------------------------------------------------------
+    def _python_code(self) -> str | None:
+        if self._df is None or self._target is None or self._target not in self._df.columns:
+            return None
+        from diive.core.plotting.codegen import datetime_surface_to_code
+        return datetime_surface_to_code(self._target, cmap=self.cmap.currentText())
+
     # --- rendering -----------------------------------------------------
     def _compute(self) -> None:
         if self.canvas is None or self._target is None:

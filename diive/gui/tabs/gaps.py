@@ -151,6 +151,13 @@ class GapDashboardTab(SingleVariableExplorerTab):
         self._fill_table()
         self._render_figure()
 
+    # --- codegen -------------------------------------------------------
+    def _python_code(self) -> str | None:
+        if self._df is None or self._target is None or self._target not in self._df.columns:
+            return None
+        from diive.analysis.gapfinder import gapstats_to_code
+        return gapstats_to_code(self._target, long_gap_records=self.threshold.value())
+
     def _fill_stats(self) -> None:
         s = self._gs.summary
         wm = s["worst_month"]

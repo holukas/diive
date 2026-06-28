@@ -27,7 +27,6 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QFrame,
     QGroupBox,
-    QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
@@ -45,6 +44,7 @@ from diive.flux.lowres.ustar_mp_detection import UstarMovingPointDetection
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
+from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.worker import WorkerRunner
 
 
@@ -78,18 +78,10 @@ class UstarDetectionTab(DiiveTab):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        bar = QHBoxLayout()
-        bar.setContentsMargins(10, 8, 10, 8)
-        title = QLabel(theme.manager.label_text("USTAR threshold detection"))
-        title.setFont(theme.manager.tracked_font(point_delta=1.0))
-        title.setStyleSheet("font-weight: bold;")
-        bar.addWidget(title)
-        bar.addStretch(1)
         self.run_btn = QPushButton("Run detection")
         theme.set_button_role(self.run_btn, "confirm")
         self.run_btn.clicked.connect(self._run)
-        bar.addWidget(self.run_btn)
-        outer.addLayout(bar)
+        outer.addLayout(build_titlebar("USTAR threshold detection", self.run_btn))
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._build_controls())

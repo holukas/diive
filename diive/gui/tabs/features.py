@@ -36,6 +36,7 @@ from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
 from diive.core.ml.feature_engineer import FeatureEngineer
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.tab_chrome import list_header
 from diive.gui.widgets.variable_panel import VariablePanel
 
 #: Placeholder target column (FeatureEngineer requires one; excluded from output).
@@ -79,7 +80,7 @@ class FeatureEngineerTab(DiiveTab):
         avail_col.setFixedWidth(self.available_width())
         avail_box = QVBoxLayout(avail_col)
         avail_box.setContentsMargins(0, 0, 0, 0)
-        avail_box.addWidget(self._caption("Available variables", "click to add"))
+        avail_box.addWidget(list_header("Available variables", "click to add"))
         self.available = VariablePanel()
         self.available.selected.connect(lambda name, _ctrl: self._add_feature(name))
         avail_box.addWidget(self.available)
@@ -90,7 +91,7 @@ class FeatureEngineerTab(DiiveTab):
         sel_col.setFixedWidth(220)
         sel_box = QVBoxLayout(sel_col)
         sel_box.setContentsMargins(0, 0, 0, 0)
-        sel_box.addWidget(self._caption("Selected features", "double-click to remove"))
+        sel_box.addWidget(list_header("Selected features", "double-click to remove"))
         self.selected = QListWidget()
         self.selected.itemDoubleClicked.connect(self._remove_feature)
         sel_box.addWidget(self.selected)
@@ -193,13 +194,6 @@ class FeatureEngineerTab(DiiveTab):
     def available_width() -> int:
         """Fixed width of the available-variables column (matches the var list)."""
         return theme.manager.list_width
-
-    @staticmethod
-    def _caption(title: str, hint: str) -> QLabel:
-        """A compact column caption: bold title + a smaller grey hint."""
-        label = QLabel(f"<b>{title}</b> <span style='color:#90A4AE'>({hint})</span>")
-        label.setWordWrap(True)
-        return label
 
     @staticmethod
     def _group(title: str, checkbox: QCheckBox, rows: list) -> QGroupBox:

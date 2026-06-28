@@ -161,6 +161,19 @@ class SpectrogramTab(SingleVariableExplorerTab):
         if self._spec is not None:
             self._render()
 
+    # --- codegen -------------------------------------------------------
+    def _python_code(self) -> str | None:
+        if self._df is None or self._target is None or self._target not in self._df.columns:
+            return None
+        from diive.analysis.harmonic import spectrogram_to_code
+        nperseg = self.nperseg.value()
+        return spectrogram_to_code(
+            self._target, nperseg=nperseg,
+            noverlap=int(nperseg * self.overlap.value() / 100),
+            window=self.window.currentText(),
+            max_cycles_per_day=self.max_freq.value(),
+            cmap=self.cmap.currentText())
+
     def _compute(self) -> None:
         series = self._df[self._target]
         valid = series.dropna()

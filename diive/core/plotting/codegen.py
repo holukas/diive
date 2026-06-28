@@ -423,3 +423,31 @@ def treering_to_code(varname: str, opts: dict, *, df_name: str = "df") -> str:
         fig_line='fig, ax = plt.subplots(figsize=(10, 10), '
                  'subplot_kw={"projection": "polar"})',
         plot_method=("plot_line" if opts["style"] == "line" else "plot"))
+
+
+def datetime_surface_to_code(varname: str, *, cmap: str = "viridis",
+                             df_name: str = "df") -> str:
+    """Reproduce the 3-D date x time-of-day relief surface.
+
+    The GUI renders it with PyVista (GPU); this snippet rebuilds the same numeric
+    grid via :func:`~diive.plotting.datetime_surface_grid` and draws a matplotlib
+    3-D surface so it runs anywhere without the optional 3-D extra.
+    """
+    return (
+        "import matplotlib.pyplot as plt\n"
+        "import numpy as np\n"
+        "import diive as dv\n"
+        "\n"
+        f"grid = dv.plotting.datetime_surface_grid({df_name}[{varname!r}])\n"
+        "xx, yy = np.meshgrid(grid.x_hours, grid.y_days)\n"
+        "z = np.ma.masked_invalid(grid.z)\n"
+        "\n"
+        "fig = plt.figure(figsize=(10, 7))\n"
+        "ax = fig.add_subplot(111, projection='3d')\n"
+        f"ax.plot_surface(xx, yy, z, cmap={cmap!r})\n"
+        "ax.set_xlabel('Time of day (hours)')\n"
+        "ax.set_ylabel('Days since start')\n"
+        f"ax.set_zlabel({varname!r})\n"
+        f"ax.set_title('3D surface - ' + {varname!r})\n"
+        "plt.show()\n"
+    )

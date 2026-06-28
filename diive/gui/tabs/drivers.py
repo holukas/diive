@@ -149,6 +149,15 @@ class DriverExplorerTab(SingleVariableExplorerTab):
         self._fill_stats()
         self._fill_table()
 
+    # --- codegen -------------------------------------------------------
+    def _python_code(self) -> str | None:
+        if self._df is None or self._target is None or self._target not in self._df.columns:
+            return None
+        from diive.analysis.correlation import rank_drivers_to_code
+        return rank_drivers_to_code(
+            self._target, method=self.method.currentText().lower(),
+            max_lag=self.max_lag.value())
+
     def _fill_stats(self) -> None:
         res = self._ranked
         top_name = res.iloc[0]["DRIVER"] if (res is not None and not res.empty) else "—"

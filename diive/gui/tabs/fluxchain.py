@@ -87,6 +87,7 @@ from diive.gui.widgets.feature_picker import FeaturePicker
 from diive.gui.widgets.flux_pipeline_rail import PipelineRail
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.stepwise_method_params import STEP_METHOD_BY_KEY, method_labels
+from diive.gui.widgets.tab_chrome import build_titlebar
 
 #: Pipeline stages shown on the rail -> (badge, title). Index = stacked page +
 #: the level reached after a run (see _level_to_stage).
@@ -148,23 +149,15 @@ class FluxChainTab(DiiveTab):
         outer = QVBoxLayout(root)
 
         # Action bar: title + the chain-wide actions (run the whole chain, copy).
-        bar = QHBoxLayout()
-        title = QLabel(theme.manager.label_text("Flux processing chain"))
-        title.setFont(theme.manager.tracked_font(point_delta=1.0))
-        title.setStyleSheet("font-weight: bold;")
-        bar.addWidget(title)
-        bar.addStretch(1)
         self.run_btn = QPushButton("Run through Level 3.1")
         self.run_btn.setToolTip("Run the whole chain from scratch through the deepest "
                                 "configured level.")
         self.run_btn.clicked.connect(self._run)
         theme.set_button_role(self.run_btn, "confirm")
-        bar.addWidget(self.run_btn)
         # Standardized copy button: copies the script to the clipboard with a
         # "Copied ✓" flash — no code dump in the summary box.
         self.code_btn = CopyPythonButton(self._code)
-        bar.addWidget(self.code_btn)
-        outer.addLayout(bar)
+        outer.addLayout(build_titlebar("Flux processing chain", self.run_btn, self.code_btn))
 
         # Pipeline rail: the chain as selectable stage cards (the navigation).
         self.rail = PipelineRail(_STAGES)

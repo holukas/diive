@@ -42,6 +42,8 @@ from PySide6.QtWidgets import (
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.overview import _StatCard
+from diive.gui.widgets.copy_button import CopyPythonButton
+from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 
@@ -65,6 +67,16 @@ class SingleVariableExplorerTab(DiiveTab):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
+        # Shared tab title bar (matches every other result/analysis tab); a
+        # Copy-Python button is added only when the subclass provides codegen.
+        actions = []
+        if type(self)._python_code is not SingleVariableExplorerTab._python_code:
+            self.copy_btn = CopyPythonButton(self._python_code)
+            self.copy_btn.setToolTip(
+                "Copy a runnable diive script reproducing this view.")
+            actions.append(self.copy_btn)
+        outer.addLayout(build_titlebar(self.title, *actions))
+
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.varpanel = VariablePanel()
         self.varpanel.selected.connect(self._on_select)
@@ -73,10 +85,17 @@ class SingleVariableExplorerTab(DiiveTab):
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         lock_panel_handle(splitter)  # fixed-width list → no misleading ↔ cursor
-        outer.addWidget(splitter)
+        outer.addWidget(splitter, stretch=1)  # body absorbs all extra vertical space
         return root
 
     # --- subclass hooks ------------------------------------------------
+    def _python_code(self) -> str | None:
+        """Runnable snippet reproducing this view (subclass hook). Returning a
+        non-default override adds a Copy-Python button to the title bar; the
+        string itself must come from a library codegen function (the GUI never
+        builds the script — strict GUI<->library separation). Default None."""
+        return None
+
     def _init_state(self) -> None:
         """Initialise extra per-tab state attributes (subclass hook). Runs at the
         start of ``build`` before any widgets are created."""
