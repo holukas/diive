@@ -220,7 +220,9 @@
   missing %, duplicate timestamps/rows, inferred frequency, time span, memory) above a sortable per-variable table
   (dtype, count, missing count/%, number of gaps, unique values, zeros, constant flag, mean/SD/min/median/max), with a
   variable filter and missing-% colour tint. Backed by the new library functions
-  `dv.analysis.profile_dataframe` / `dv.analysis.dataframe_overview` / `dv.analysis.count_gaps`.
+  `dv.analysis.profile_dataframe` / `dv.analysis.dataframe_overview` / `dv.analysis.count_gaps`. The table fills its
+  width *proportionally* (columns snug to content, leftover shared mostly to the Variable column so the numbers stay
+  compact and no column balloons; scales down to fit when too wide) with zebra rows and a clean header.
 - **Projects** (`File ▸ Save project` / `Open project`): save the full working state to a self-contained
   ``<name>.diive`` folder — the dataset (`data.parquet`), the complete per-variable metadata (tags, notes,
   origin/provenance), project settings (author, description, site details), and the active date range, marked by a
@@ -270,8 +272,8 @@
 - **Tab-chrome harmonization** — every tab now wears the same `tab_chrome.build_titlebar` header instead of a hand-rolled
   one. The single-variable explorer tabs (**Driver explorer**, **Gaps & coverage**, **Seasonal-trend & anomalies**,
   **Spectrogram**, **3D surface**) gain a title bar via their shared `SingleVariableExplorerTab` base; the **Feature
-  engineering**, **Rename variables**, and **Metadata explorer** tabs gain one too; and the **Flux processing chain** and
-  **USTAR detection** tabs drop their duplicated title rows for the helper. The Feature engineering tab's column captions
+  engineering**, **Rename variables**, **Metadata explorer**, and **Data profile** tabs gain one too; and the **Flux
+  processing chain** and **USTAR detection** tabs drop their duplicated title rows for the helper. The Feature engineering tab's column captions
   reuse the shared `tab_chrome.list_header`. Presentation-only; no behaviour change.
 - **Copy Python on the explorer + feature tabs** — the five single-variable explorer tabs above plus **Feature
   engineering** each gain a **Copy Python** button that copies a runnable diive script reproducing the current view

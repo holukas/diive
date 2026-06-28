@@ -150,10 +150,11 @@ Selecting variables works the same way across the per-variable types:
   - The ridgeline, histogram, shifted distribution, tree ring, waterfall, and 3D
     surface show a single variable, so Ctrl+click just switches it.
 - **Ctrl + click** a shown variable again to remove its panel.
-- *Scatter XY* and *Wind rose* instead assign variables to **roles** via the
-  dropdowns in their settings (or by **dragging** a variable from the list onto a
-  field) — see those sections below. Hexbin and Heatmap x/y/z still pick by clicking
-  in order.
+- The **role-based** types — *Scatter XY*, *Wind rose*, *Hexbin*, and *Heatmap
+  x/y/z* — instead assign variables to **roles** (X / Y / Z, etc.) via the dropdowns
+  in their settings, picking from the full variable list or by **dragging** a
+  variable from the list onto a field. Clicking the list does nothing for these
+  types; see their sections below.
 - Use the small toolbar (bottom-right of the plot) to pan, zoom, and save the
   figure. Zooming one panel zooms them all; the **Home** button resets to the full
   view. Set **Save DPI** (next to the toolbar) before saving for a
@@ -165,8 +166,8 @@ header) to apply them all at once: the plot does not change while you are still
 editing. The button is greyed out until something changes, and applying the changes
 **keeps your current pan/zoom** (it does not snap back to the full view). For the
 comparison types, clicking a *variable* in the list updates the plot immediately and
-shows it in full; for Scatter XY and the Wind rose, changing a role dropdown waits
-for **Update plot** like any other setting.
+shows it in full; for the role-based types (Scatter XY, Wind rose, Hexbin, Heatmap
+x/y/z), changing a role dropdown waits for **Update plot** like any other setting.
 
 **Copy Python.** Every plot tab has a **Copy Python** button (top-right) that copies
 a runnable script reproducing the current plot with its settings. For tabs that
@@ -199,10 +200,11 @@ date/time heatmap.
 
 ### Heatmap x/y/z
 
-A heatmap of a **Z** value over a grid of two driver variables. Click three
-variables in the list **in order**: the 1st is the **X** driver, the 2nd is the
-**Y** driver, and the 3rd is the **Z** value. The raw data is binned into an X/Y
-grid and each cell is coloured by the aggregated Z. Settings:
+A heatmap of a **Z** value over a grid of two driver variables. Assign the **X**
+driver, **Y** driver, and **Z** value in the three dropdowns at the top of the
+settings (or **drag** a variable from the list onto a field); all three are
+required. The raw data is binned into an X/Y grid and each cell is coloured by the
+aggregated Z. Settings:
 
 - **Binning** — *quantiles* (equal counts per bin) or *equal-width* bins, and the
   **number of bins** along each axis.
@@ -280,8 +282,10 @@ aggregation, plus the shared **Axes** controls. Hovering a point shows its X, Y
 ### Hexbin
 
 Like Scatter XY but for very dense data: the plane is tiled with hexagons coloured
-by how many points fall in each. Pick variables by **X / Y / Z** role (it needs all
-three; Z drives the colour). A **Reverse colormap** toggle is available.
+by how many points fall in each. Assign the **X**, **Y**, and **Z** variables in the
+three dropdowns at the top of the settings (or **drag** a variable from the list onto
+a field); all three are required and Z drives the colour. A **Reverse colormap**
+toggle is available.
 
 ### Ridgeline
 
@@ -311,7 +315,8 @@ seasonal swings, and gaps become hills and valleys you can orbit. Controls:
 shading**, **Show mesh** (overlay the grid lines), **Smooth terrain** (round the
 surface into rolling hills by subdividing the mesh; 0 is off), and **Reset view**.
 This needs the optional **`gui3d`** extra (PyVista/VTK); without it the tab shows
-install instructions instead of failing.
+install instructions instead of failing. **Copy Python** (top-right) copies a script
+that builds the same surface as a Matplotlib 3-D plot (so it runs without the extra).
 
 ### Wind rose
 
@@ -431,6 +436,8 @@ The map is **clickable**: click a row in the table to highlight that gap on the
 timeline, or click anywhere on the timeline to jump to the nearest gap (it gets
 highlighted and its table row is selected). Use **Long gap ≥ (records)** to set
 what counts as a "long" gap (48 records is one day for half-hourly data).
+**Copy Python** (top-right) copies a runnable script that reproduces the gap
+statistics and plots.
 
 ### Driver explorer
 
@@ -448,6 +455,8 @@ target-vs-driver scatter.
   lag.
 - Changing the method or max lag takes effect on **Rank drivers**; picking a new
   target updates immediately.
+- **Copy Python** (top-right) copies a script that reproduces the ranking and the
+  top-driver scatter.
 
 ### Compound extremes
 
@@ -497,6 +506,8 @@ two boxes.
   years update immediately.
 - The decomposition needs at least about 2 years of data (the anomaly view works
   with fewer).
+- **Copy Python** (top-right) copies a script for the current **View**
+  (decomposition or yearly anomalies).
 
 ### Spectrogram
 
@@ -510,6 +521,7 @@ in the growing season. An explanation is shown above the plot.
   These apply on **Update**.
 - **Max cycles/day** sets how far up the frequency axis to look, and **Colormap**
   changes the colours. Both update immediately.
+- **Copy Python** (top-right) copies a script that reproduces the spectrogram.
 
 ---
 
@@ -852,6 +864,9 @@ timestamp parts, and more) with diive's feature engineer:
    features*.
 4. **Add features to variable list.** The new columns appear everywhere with a
    **✦ NEW** pill and can be plotted like any other variable.
+
+**Copy Python** (top-right) copies a runnable script that reproduces the feature
+engineering for the selected variables and stages.
 
 When you add new columns (here or from an Outliers tab), the **Overview jumps
 straight to the new variable**: it clears any active filter, scrolls the new row
