@@ -1,3 +1,4 @@
+"""Split large data files into smaller chunks."""
 import os
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from diive.flux.hires.windrotation import WindDoubleRotation, reynolds_decomposi
 
 
 class FileSplitter:
+    """Split one large (eddy covariance) data file into smaller time-based parts. See :meth:`__init__`."""
 
     def __init__(
             self,
@@ -122,9 +124,11 @@ class FileSplitter:
         return self._splitstats_df
 
     def get_stats(self) -> tuple[DataFrame, DataFrame]:
+        """Return the ``(filestats_df, splitstats_df)`` stats DataFrames."""
         return self.filestats_df, self.splitstats_df
 
     def run(self):
+        """Read the file, split it into parts of *data_split_duration* and write each part out."""
         info(f"Working on file '{self.filepath.name}' ({self.filepath})")
 
         # Read file
@@ -268,6 +272,7 @@ def setup_output_dirs(outdir: str, del_previous_results=False):
 
 
 class FileSplitterMulti:
+    """Search a folder for matching files and split each one with :class:`FileSplitter`. See :meth:`__init__`."""
 
     def __init__(
             self,
@@ -371,6 +376,7 @@ class FileSplitterMulti:
             self.c_var = None
 
     def run(self):
+        """Search for files, detect them and split each into smaller parts."""
         outdirs = self._setup_output_dirs()
         filelist = self._search_files()
         files_overview_df = self._detect_files(filelist=filelist)
@@ -463,6 +469,7 @@ class FileSplitterMulti:
 
 
 def example():
+    """Runnable usage example for :class:`FileSplitterMulti`."""
     SEARCHDIRS = [r'F:\CURRENT\DAS_trimmed\2024_filtered_CH4']
     OUTDIR = r'F:\CURRENT\DAS_trimmed\2024_filtered_CH4_trimmed'
     C = 'CH4_DRY_[QCL-C2]'
@@ -511,6 +518,7 @@ def example():
 
 
 def example2():
+    """Second runnable usage example for :class:`FileSplitterMulti`."""
     OUTDIR = r'P:\Flux\RDS_calculations\DEG_EddyMercury\Magic file for Diive\OUT'
     SEARCHDIRS = [r'P:\Flux\RDS_calculations\DEG_EddyMercury\Magic file for Diive\IN']
     PATTERN = 'DEG_*.csv'

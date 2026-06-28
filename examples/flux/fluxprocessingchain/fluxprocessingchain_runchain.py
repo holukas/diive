@@ -89,7 +89,7 @@ print(data)
 # Step 2 — register VPD in kPa
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# MDS needs VPD in **kPa**, but EddyPro outputs it in hPa. Convert and
+# MDS needs VPD in **kPa**; the input VPD here is in hPa. Convert and
 # register the result via ``add_driver`` — this puts the column into
 # ``data.full_df`` (where L4.1 reads from), not into ``data.fpc_df``.
 # If the column is already in the right unit elsewhere in ``df`` you can

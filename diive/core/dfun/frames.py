@@ -58,6 +58,111 @@ def keep_vars(data: DataFrame | Series,
     return out
 
 
+def keep_records_where(data: DataFrame,
+                       target: str,
+                       condition_var: str,
+                       lower: float = None,
+                       upper: float = None,
+                       inclusive: str = 'both',
+                       invert: bool = False,
+                       set_to_nan: bool = True,
+                       verbose: bool = False) -> Series:
+    """Select records of one variable based on the value of another variable.
+
+    Returns the ``target`` variable restricted to the records where a second
+    variable (``condition_var``) falls within ``[lower, upper]``. A
+    non-destructive conditional subselection (the row-on-a-condition analogue of
+    ``keep_vars`` / ``times.keep_daterange``): the input is left untouched.
+
+    At least one of ``lower``/``upper`` must be given; an unset bound means that
+    side is open (no limit). With ``invert=False`` (default), records where
+    ``condition_var`` is NaN are never kept (a missing condition can't satisfy
+    the range); with ``invert=True`` they are kept (a missing condition can't be
+    in the removed range either).
+
+    Args:
+        data: DataFrame containing both ``target`` and ``condition_var``.
+        target: Column to select records from.
+        condition_var: Column whose value decides which records are kept.
+        lower: Lower limit for ``condition_var``; ``None`` = open below.
+        upper: Upper limit for ``condition_var``; ``None`` = open above.
+        inclusive: Which bounds are inclusive, passed to ``Series.between``:
+            ``'both'`` (default), ``'neither'``, ``'left'`` or ``'right'``.
+        invert: If True, keep records where ``condition_var`` is *outside* the
+            range instead of inside it (i.e. remove the in-range records).
+        set_to_nan: If True (default), keep the full index and set non-matching
+            records to NaN (preserves regular time spacing). If False, drop the
+            non-matching records and return only the matching ones.
+        verbose: Print how many records were kept.
+
+    Returns:
+        A copy of ``data[target]`` restricted to the matching records.
+
+    Raises:
+        ValueError: If a column is missing or both limits are ``None``.
+    """
+    for col in (target, condition_var):
+        if col not in data.columns:
+            raise ValueError(f"Column '{col}' not found in data.")
+    if lower is None and upper is None:
+        raise ValueError("At least one of 'lower' / 'upper' must be given.")
+
+    cond = data[condition_var]
+    eff_lower = cond.min() if lower is None else lower
+    eff_upper = cond.max() if upper is None else upper
+    mask = cond.between(eff_lower, eff_upper, inclusive=inclusive)
+    if invert:
+        mask = ~mask  # NaN condition -> between is False -> ~ -> kept (not removed)
+
+    series = data[target].copy()
+    if set_to_nan:
+        out = series.where(mask)
+    else:
+        out = series[mask]
+    if verbose:
+        where = "outside" if invert else "in"
+        info(f"Kept {int(mask.sum())} of {len(mask)} records of '{target}' "
+             f"where '{condition_var}' {where} [{eff_lower}, {eff_upper}] ({inclusive}).")
+    return out
+
+
+def select_records_to_code(target: str,
+                           steps: list[dict],
+                           out_var: str = "selected") -> str:
+    """Render a sequence of keep/remove selections as a runnable snippet.
+
+    Each step is a dict ``{"cond", "lower", "upper", "inclusive", "mode"}`` where
+    ``mode`` is ``"keep"`` (keep the in-range records) or ``"remove"`` (drop them,
+    rendered as ``invert=True``). Steps chain on the working column: the first
+    reads ``target`` from ``df``, each later one re-selects the result so the
+    masks accumulate. ``dv`` and a DataFrame ``df`` are assumed already in scope.
+
+    Returns:
+        A snippet (one ``dv.keep_records_where`` line per step) ending in a
+        newline. With no steps, a plain copy of the target column.
+    """
+    if not steps:
+        return f"{out_var} = df[{target!r}].copy()\n"
+    lines = []
+    for i, step in enumerate(steps):
+        if i == 0:
+            args = [f"df, target={target!r}"]
+        else:
+            # Chain on the working column: feed it back in via assign + re-select.
+            args = [f"df.assign(**{{{out_var!r}: {out_var}}}), target={out_var!r}"]
+        args.append(f"condition_var={step['cond']!r}")
+        if step.get("lower") is not None:
+            args.append(f"lower={step['lower']!r}")
+        if step.get("upper") is not None:
+            args.append(f"upper={step['upper']!r}")
+        if step.get("inclusive", "both") != "both":
+            args.append(f"inclusive={step['inclusive']!r}")
+        if step.get("mode") == "remove":
+            args.append("invert=True")
+        lines.append(f"{out_var} = dv.keep_records_where({', '.join(args)})")
+    return "\n".join(lines) + "\n"
+
+
 def compare_len_header_vs_data(n_cols_data: int, n_cols_header: int, varnames_list: list, varunits_list: list):
     """
     Check whether there are more data columns than given in the header
@@ -339,6 +444,7 @@ def df_unique_values(df):
 
 
 def flatten_multiindex_all_df_cols(df: DataFrame, keep_first_row_only: bool = False) -> DataFrame:
+    """Flatten a MultiIndex column header to single-level names (keep only the variable name if requested)."""
     if keep_first_row_only:
         # Keep only the first row (variabels) of the MultiIndex column names
         vars = [col[0] for col in df.columns]

@@ -1,11 +1,20 @@
+"""
+PLOTTING: HISTOGRAM
+===================
+
+Histogram plot with optional z-score overlay and peak-bin highlighting.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 import math
 import warnings
 
+import numpy as np
 import pandas as pd
 
 import diive.core.plotting.plotfuncs as pf
 from diive.core.funcs.funcs import zscore, val_from_zscore
-from diive.core.plotting.plotfuncs import default_format
+from diive.core.plotting.styles.format import FormatStyle
 
 # pd.options.display.width = None
 # pd.options.display.max_columns = None
@@ -34,6 +43,7 @@ class HistogramPlot:
 
     def __init__(self, series: Series = None, method=None, n_bins: int or list = None,
                  ignore_fringe_bins: list = False, s: Series = None):
+        """Set up the histogram. See the class docstring for parameters (``s`` is a deprecated alias for ``series``)."""
 
         # `s` is the deprecated name for `series` (renamed for consistency with
         # the other plotting classes, which all take `series`).
@@ -58,28 +68,48 @@ class HistogramPlot:
         self.edges = None
 
     def get_fig(self):
+        """Return the matplotlib Figure (available after :meth:`plot`)."""
         return self.fig
 
     def get_ax(self):
+        """Return the matplotlib Axes (available after :meth:`plot`)."""
         return self.ax
 
-    def plot(self, ax=None, xlabel: str = None, title: str = None, highlight_peak: bool = True,
-             show_zscores: bool = True, show_zscore_values: bool = True, show_info: bool = True,
-             show_counts: bool = True, show_title: bool = True, show_grid: bool = True):
+    def plot(self, ax=None, format_style: FormatStyle = None,
+             highlight_peak: bool = True, show_zscores: bool = True, show_zscore_values: bool = True,
+             show_info: bool = True, show_counts: bool = True, show_title: bool = True,
+             show_kde: bool = False, show_mean: bool = False, show_median: bool = False):
         """Generate histogram plot with optional styling.
+
+        Chrome (title, x-label, grid, fonts, colours) comes from a shared
+        :class:`~diive.plotting.FormatStyle` so it matches every other diive plot.
+        The histogram-specific rendering (bar colour, peak highlight, z-score
+        twiny axis, info/counts boxes and their toggles) stays here.
 
         Args:
             ax: Matplotlib axes (creates new if None)
-            xlabel: X-axis label (default: empty)
-            title: Plot title (default: "{series.name} (between {start_date} and {end_date})")
+            format_style: A :class:`~diive.plotting.FormatStyle` describing the chrome.
+                When None the diive house style is used. Default title:
+                "{series.name} (between {start_date} and {end_date})".
             highlight_peak: Highlight the bin with most counts (default: True)
             show_zscores: Show z-score overlay on top axis (default: True)
             show_zscore_values: Display z-score values and corresponding data values (default: True)
             show_info: Show method and peak information text (default: True)
             show_counts: Show count labels on each bar (default: True)
             show_title: Display title (default: True)
-            show_grid: Display gridlines (default: True)
+            show_kde: Overlay a Gaussian-KDE fit line, scaled to the counts (default: False)
+            show_mean: Draw a dashed vertical line at the mean (default: False)
+            show_median: Draw a dashed vertical line at the median (default: False)
+
+        When ``show_kde``/``show_mean``/``show_median`` are set, their artists are
+        labelled with the numeric values so the shared legend (built by
+        :class:`~diive.plotting.FormatStyle`) doubles as a compact stats readout.
         """
+        # show_title=False suppresses the title via an empty string on a copied style.
+        style = format_style or FormatStyle()
+        if not show_title:
+            style = style.merged(title="")
+
         # Setup
         self.ax = ax
         self.fig, self.ax, showplot = pf.setup_figax(ax=self.ax, figsize=(16, 9))
@@ -93,12 +123,6 @@ class HistogramPlot:
         )
         self.ax.set_xticks(self.edges)
 
-        if show_title:
-            plot_title = title if title else f"{self.s.name} (between {self.first_date} and {self.last_date})"
-            self.ax.set_title(plot_title, fontsize=24, weight='bold')
-
-        xlabel_text = xlabel if xlabel else ""
-
         ix_max = self.counts.argmax()
 
         # Show counts for each bar
@@ -108,6 +132,28 @@ class HistogramPlot:
         # Peak: highlight bin with most counts
         if highlight_peak:
             bars[ix_max].set_fc('#FFA726')
+
+        # Distribution overlays: a KDE fit line plus dashed mean/median markers.
+        # Each carries its value in the label so the shared legend reads as a
+        # small stats panel. The KDE density is scaled by N * bin_width so it
+        # sits on the same counts axis as the bars.
+        if show_kde or show_mean or show_median:
+            vals = self.s.dropna().to_numpy()
+            bin_width = self.edges[1] - self.edges[0]
+            if show_kde and vals.size > 1 and bin_width > 0:
+                from scipy.stats import gaussian_kde
+                xvals = np.linspace(self.edges[0], self.edges[-1], 200)
+                yvals = gaussian_kde(vals)(xvals) * self.counts.sum() * bin_width
+                self.ax.plot(xvals, yvals, color="#5E35B1", linewidth=2,
+                             zorder=500, label="KDE")
+            if show_mean and vals.size:
+                mean_val = float(np.mean(vals))
+                self.ax.axvline(mean_val, color="#D81B60", linestyle="--",
+                                linewidth=1.5, zorder=600, label=f"mean = {mean_val:.3g}")
+            if show_median and vals.size:
+                median_val = float(np.median(vals))
+                self.ax.axvline(median_val, color="#1E88E5", linestyle="--",
+                                linewidth=1.5, zorder=600, label=f"median = {median_val:.3g}")
 
         if show_info:
             info_txt = f"method: {self.method}"
@@ -153,9 +199,9 @@ class HistogramPlot:
             self.axx.tick_params(axis='x', colors='#AB47BC', labelsize=16)
             self.axx.set_xlabel("z-score", color='#AB47BC', fontsize=16)
 
-        default_format(ax=self.ax, ax_xlabel_txt=xlabel_text, ax_ylabel_txt="counts",
-                       ticks_width=2, ticks_length=6, ticks_direction='in',
-                       spines_lw=1, showgrid=show_grid)
+        # Shared formatting layer: title/x-label/y-label/fonts/grid.
+        style.apply(ax=self.ax, default_title=f"{self.s.name} (between {self.first_date} and {self.last_date})",
+                    default_xlabel="", default_ylabel="Counts")
 
         self.ax.locator_params(axis='both', nbins=10)
 

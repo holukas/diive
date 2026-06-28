@@ -23,12 +23,10 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
-    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QPushButton,
-    QScrollArea,
     QSpinBox,
     QSplitter,
     QTableWidget,
@@ -38,14 +36,10 @@ from PySide6.QtWidgets import (
 )
 
 import diive as dv
-from diive.gui import theme
-from diive.gui.tabs.base import DiiveTab
-from diive.gui.tabs.overview import _StatCard, _fmt
+from diive.gui.tabs._explorer_base import SingleVariableExplorerTab
+from diive.gui.tabs.overview import _fmt
 from diive.gui.widgets.mpl_canvas import MplCanvas
-from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
-#: Preferred default target (a continuous flux makes the ranking informative).
-_DEFAULT_TARGET = "NEE_CUT_REF_f"
 _DRIVER_ROLE = Qt.ItemDataRole.UserRole + 1
 
 
@@ -63,26 +57,18 @@ class _NumItem(QTableWidgetItem):
             return super().__lt__(other)
 
 
-class DriverExplorerTab(DiiveTab):
+class DriverExplorerTab(SingleVariableExplorerTab):
     """Rank drivers of a target variable; click one to see the scatter."""
 
     title = "Driver explorer"
+    #: A continuous flux makes the ranking informative.
+    default_var = "NEE_CUT_REF_f"
 
-    def build(self) -> QWidget:
-        self._df = None
-        self._target = None
+    def _init_state(self) -> None:
         self._ranked = None    # DataFrame from rank_drivers
         self._filling = False  # guard table-selection echo during repopulation
 
-        root = QWidget()
-        outer = QVBoxLayout(root)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.varpanel = VariablePanel()
-        self.varpanel.selected.connect(self._on_select)
-
+    def _build_right(self) -> QWidget:
         right = QWidget()
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 0, 0, 0)
@@ -98,36 +84,9 @@ class DriverExplorerTab(DiiveTab):
         hsplit.setStretchFactor(1, 1)
         hsplit.setSizes([380, 560])
         rl.addWidget(hsplit, stretch=1)
-
-        splitter.addWidget(self.varpanel)
-        splitter.addWidget(right)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        lock_panel_handle(splitter)  # fixed-width list → no misleading ↔ cursor
-        outer.addWidget(splitter)
-        return root
+        return right
 
     # --- sub-widgets ---------------------------------------------------
-    def _build_stats_strip(self) -> QWidget:
-        strip = QScrollArea()
-        strip.setWidgetResizable(True)
-        strip.setFixedHeight(92)
-        strip.setFrameShape(QFrame.Shape.NoFrame)
-        strip.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        strip.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        list_bg = theme.manager.tokens["LIST_BG"]
-        border = theme.manager.tokens["BORDER"]
-        strip.setStyleSheet(
-            f"QScrollArea {{ background: {list_bg}; border-bottom: 1px solid {border}; }}")
-        host = QWidget()
-        host.setStyleSheet(f"background: {list_bg};")
-        self.stats_layout = QHBoxLayout(host)
-        self.stats_layout.setContentsMargins(10, 8, 10, 8)
-        self.stats_layout.setSpacing(8)
-        self.stats_layout.addStretch(1)
-        strip.setWidget(host)
-        return strip
-
     def _build_controls(self) -> QWidget:
         bar = QWidget()
         lay = QHBoxLayout(bar)
@@ -148,7 +107,7 @@ class DriverExplorerTab(DiiveTab):
         lay.addWidget(self.max_lag)
         lay.addSpacing(12)
         self.rank_btn = QPushButton("Rank drivers")
-        self.rank_btn.clicked.connect(self._rank_current)
+        self.rank_btn.clicked.connect(self._recompute)
         lay.addWidget(self.rank_btn)
         lay.addStretch(1)
         return bar
@@ -182,31 +141,7 @@ class DriverExplorerTab(DiiveTab):
         if t and self._df is not None and t in self._df.columns:
             self._on_select(t)
 
-    def on_data_loaded(self, df, created: set | None = None) -> None:
-        self._df = df
-        self.varpanel.set_variables(df.columns, created)
-        cols = [str(c) for c in df.columns]
-        numeric = df.select_dtypes(include="number").columns.tolist()
-        if _DEFAULT_TARGET in cols and _DEFAULT_TARGET in numeric:
-            default = _DEFAULT_TARGET
-        elif numeric:
-            default = str(numeric[0])
-        else:
-            return
-        self._on_select(default)
-
-    def _on_select(self, name: str, _additive: bool = False) -> None:
-        if not name or self._df is None:
-            return
-        self._target = name
-        self.varpanel.set_panels([name])
-        self.varpanel.run_with_loading(name, self._rank)
-
-    def _rank_current(self) -> None:
-        if self._target is not None and self._df is not None:
-            self.varpanel.run_with_loading(self._target, self._rank)
-
-    def _rank(self) -> None:
+    def _compute(self) -> None:
         # Ranking is the library's; the tab only reads the result back.
         method = self.method.currentText().lower()
         self._ranked = dv.analysis.rank_drivers(
@@ -214,11 +149,16 @@ class DriverExplorerTab(DiiveTab):
         self._fill_stats()
         self._fill_table()
 
+    # --- codegen -------------------------------------------------------
+    def _python_code(self) -> str | None:
+        if self._df is None or self._target is None or self._target not in self._df.columns:
+            return None
+        from diive.analysis.correlation import rank_drivers_to_code
+        return rank_drivers_to_code(
+            self._target, method=self.method.currentText().lower(),
+            max_lag=self.max_lag.value())
+
     def _fill_stats(self) -> None:
-        while self.stats_layout.count() > 1:  # keep the trailing stretch
-            item = self.stats_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
         res = self._ranked
         top_name = res.iloc[0]["DRIVER"] if (res is not None and not res.empty) else "—"
         top_r = f"{res.iloc[0]['CORR']:+.3f}" if (res is not None and not res.empty) else "—"
@@ -231,8 +171,7 @@ class DriverExplorerTab(DiiveTab):
             ("Method", self.method.currentText()),
             ("Target coverage", f"{target_cov:.0f}%"),
         ]
-        for i, (name, value) in enumerate(cards):
-            self.stats_layout.insertWidget(i, _StatCard(name, value))
+        self._set_stat_cards(cards)
 
     def _fill_table(self) -> None:
         res = self._ranked
@@ -299,7 +238,8 @@ class DriverExplorerTab(DiiveTab):
             sub = pd.concat([x.rename(driver), y.rename(self._target)], axis=1).dropna()
             title = f"{self._target} vs. {driver}" + (f"  (lag {lag:+d} rec.)" if lag else "")
             dv.plotting.ScatterXY(x=sub[driver], y=sub[self._target]).plot(
-                ax=ax, title=title, xlabel=driver, ylabel=self._target)
+                ax=ax, format_style=dv.plotting.FormatStyle(
+                    title=title, xlabel=driver, ylabel=self._target))
         except Exception as err:
             ax.clear()
             ax.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",

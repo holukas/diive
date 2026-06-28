@@ -1,3 +1,12 @@
+"""
+PLOTTING: CUMULATIVE SUMS
+=========================
+
+Cumulative-sum plots: per-year overlays (:class:`CumulativeYear`) and per-column
+cumulatives (:class:`Cumulative`).
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 import warnings
 
 from pandas import Series
@@ -5,6 +14,7 @@ from pandas.core.interchange.dataframe_protocol import DataFrame
 
 import diive.core.plotting.plotfuncs as pf
 import diive.core.plotting.styles.LightTheme as theme
+from diive.core.plotting.styles.format import FormatStyle
 from diive.core.times.times import remove_after_date, keep_years, doy_cumulatives_per_year, doy_mean_cumulative
 
 
@@ -103,7 +113,9 @@ class CumulativeYear:
                              label="mean±1sd")
 
 
-    def _apply_format(self):
+    def _apply_format(self, style: FormatStyle):
+        # The figure-level dynamic title uses the larger FIGHEADER_FONTSIZE and may
+        # live on fig.suptitle, so it stays here rather than going through style.apply.
         title = f"Cumulatives per year ({self.uniq_years.min()}-{self.uniq_years.max()}), " \
                 f"until DOY {int(self.cumulatives_per_year_df.index[-1])}"
         if self._own_fig:
@@ -115,17 +127,19 @@ class CumulativeYear:
         ymax = self.cumulatives_per_year_df.max().max()
         self.ax.set_ylim(ymin, ymax)
 
-        pf.add_zeroline_y(ax=self.ax, data=self.cumulatives_per_year_df)
+        # Shared chrome (facecolor/ticks/spines/labels/units/grid/zeroline). Title is
+        # owned above and the per-year legend (custom ncol + labelspacing) below, so
+        # suppress both on the applied copy; keep style.show_legend to gate the legend.
+        chrome = style.merged(title="")
+        chrome.show_legend = False
+        chrome.apply(ax=self.ax, default_xlabel='Month', default_ylabel=self.varname,
+                     zeroline_data=self.cumulatives_per_year_df)
 
-        pf.default_format(ax=self.ax,
-                          ax_xlabel_txt='Month',
-                          ax_ylabel_txt=self.varname,
-                          txt_ylabel_units=self.series_units)
-
-        n_legend_cols = pf.n_legend_cols(n_legend_entries=len(self.uniq_years))
-        pf.default_legend(ax=self.ax,
-                          labelspacing=0.2,
-                          ncol=n_legend_cols)
+        if style.show_legend and self.ax.get_legend_handles_labels()[0]:
+            n_legend_cols = pf.n_legend_cols(n_legend_entries=len(self.uniq_years))
+            pf.default_legend(ax=self.ax,
+                              labelspacing=0.2,
+                              ncol=n_legend_cols)
 
         pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='month')
 
@@ -137,8 +151,20 @@ class CumulativeYear:
         return self.ax
 
 
-    def plot(self, ax=None, showplot: bool = True, digits_after_comma: int = 2,
-             highlight_year_color: str = None):
+    def plot(self, ax=None, format_style: FormatStyle = None, showplot: bool = True,
+             digits_after_comma: int = 2, highlight_year_color: str = None):
+        """Plot one cumulative-sum curve per year on a shared day-of-year axis.
+
+        Args:
+            ax: Matplotlib axes to draw on; a standalone figure is created if None.
+            format_style: Shared chrome (title/labels/fonts/grid/legend). None = house style.
+            showplot: If True and a new figure was created, show it.
+            digits_after_comma: Decimal places for the end-of-year total in each legend label.
+            highlight_year_color: Colour for the highlighted year; defaults to red.
+        """
+        # Fold the legacy units kwarg onto the (copied) style; the dynamic title and
+        # the per-year legend stay class-owned, so suppress those on the applied style.
+        style = (format_style or FormatStyle()).merged(yunits=self.series_units)
         # Phase 2: use the caller's axes, or create a standalone figure.
         if ax is None:
             self.fig, self.ax = pf.create_ax()
@@ -172,7 +198,7 @@ class CumulativeYear:
         if self.show_reference:
             self._add_reference(digits_after_comma=digits_after_comma)
 
-        self._apply_format()
+        self._apply_format(style)
 
         if self._own_fig and showplot:
             self.fig.show()
@@ -202,6 +228,7 @@ class Cumulative:
                  units: str = None,
                  start_year: int = None,
                  end_year: int = None):
+        """Compute cumulative sums per column. See the class docstring for parameters."""
         self.df = df
         self.units = units
         self.start_year = start_year if start_year else self.df.index.year.min()
@@ -222,7 +249,9 @@ class Cumulative:
         self.ax = None
         self._own_fig = False
 
-    def _apply_format(self):
+    def _apply_format(self, style: FormatStyle):
+        # The dynamic title uses the larger FIGHEADER_FONTSIZE and may live on
+        # fig.suptitle, so it stays here rather than going through style.apply.
         if self.show_title:
             title = f"Cumulatives ({self.cumulative.index.min()}-{self.cumulative.index.max()})"
             if self._own_fig:
@@ -234,15 +263,18 @@ class Cumulative:
         ymax = ymax * 1.05 if ymax > 0 else ymax * 0.95
         ymin = ymin * 0.95 if ymin > 0 else ymin * 1.05
         self.ax.set_ylim(ymin, ymax)
-        pf.add_zeroline_y(ax=self.ax, data=self.cumulative)
         ax_ylabel_txt = self.ylabel if self.ylabel else "Cumulative"
-        pf.default_format(ax=self.ax,
-                          ax_xlabel_txt="Date",
-                          ax_ylabel_txt=ax_ylabel_txt,
-                          txt_ylabel_units=self.units,
-                          showgrid=self.show_grid)
-        n_legend_cols = pf.n_legend_cols(n_legend_entries=len(self.cumulative.columns))
-        if self.show_legend:
+
+        # Shared chrome (facecolor/ticks/spines/labels/units/grid/zeroline). Title is
+        # owned above and the multi-column legend (custom ncol + labelspacing) below, so
+        # suppress both on the applied copy; keep style.show_legend to gate the legend.
+        chrome = style.merged(title="")
+        chrome.show_legend = False
+        chrome.apply(ax=self.ax, default_xlabel="Date", default_ylabel=ax_ylabel_txt,
+                     zeroline_data=self.cumulative)
+
+        if style.show_legend:
+            n_legend_cols = pf.n_legend_cols(n_legend_entries=len(self.cumulative.columns))
             pf.default_legend(ax=self.ax,
                               labelspacing=0.2,
                               ncol=n_legend_cols)
@@ -254,14 +286,24 @@ class Cumulative:
         """Return axis"""
         return self.ax
 
-    def plot(self, ax=None, showplot: bool = True,
+    def plot(self, ax=None, format_style: FormatStyle = None, showplot: bool = True,
              digits_after_comma: int = 0,
-             show_grid: bool = True,
-             show_legend: bool = True,
-             ylabel: str = None,
              show_title: bool = True,
              fill: bool = False
              ):
+        """Plot the cumulative sum of each column, with the final total in each legend label.
+
+        Args:
+            ax: Matplotlib axes to draw on; a standalone figure is created if None.
+            format_style: Shared chrome (title/labels/fonts/grid/legend). None = house style.
+            showplot: If True and a new figure was created, show it.
+            digits_after_comma: Decimal places for the end-of-series total in each legend label.
+            show_title: If True, draw the auto-generated title.
+            fill: If True, shade the area between each curve and zero.
+        """
+        # Units come from the constructor; all other chrome comes from format_style.
+        style = (format_style or FormatStyle()).merged(yunits=self.units)
+
         # Phase 2: use the caller's axes, or create a standalone figure.
         if ax is None:
             self.fig, self.ax = pf.create_ax()
@@ -272,14 +314,14 @@ class Cumulative:
             self._own_fig = False
         self.ax.xaxis.axis_date()
 
-        self.show_grid = show_grid
-        self.show_legend = show_legend
-        self.ylabel = ylabel
+        # show_title has no FormatStyle field (the dynamic title is class-owned), so it
+        # stays on the instance and is read by _apply_format.
         self.show_title = show_title
 
         color_list = theme.colorwheel_36()  # get some colors
 
         # Plot yearly cumulatives
+        end_points = []  # (x, y, color, text) — annotated after y-limits are final
         for ix, col in enumerate(self.cumulative):
             series = self.cumulative[col]
             label = f"{col}: {series.dropna().iloc[-1]:.{digits_after_comma}f}"
@@ -302,13 +344,14 @@ class Cumulative:
             y = series.iloc[-1]
 
             self.ax.plot(x, y, color=color, alpha=1, marker="o", markeredgecolor=color, ms=10)
+            end_points.append((x, y, color, f"{y:.{digits_after_comma}f}"))
 
-            self.ax.text(x, y, f"  {y:.{digits_after_comma}f}",
-                         size=12, color=color,
-                         backgroundcolor='none', alpha=1,
-                         horizontalalignment='left', verticalalignment='center', zorder=99)
+        self._apply_format(style)
 
-        self._apply_format()
+        # End-of-series totals, placed inside the axes (after _apply_format sets
+        # the final y-limits, which the placement reads).
+        for x, y, color, text in end_points:
+            pf.annotate_end_value(self.ax, x, y, text, color)
 
         if self._own_fig and showplot:
             self.fig.show()

@@ -75,14 +75,27 @@ class EventManager(QObject):
         self.categories: dict[str, str] = dict(DEFAULT_CATEGORIES)
 
     def add(self, event: Event) -> None:
+        self._register_category(event)
         self.events.append(event)
         self.changed.emit()
 
     def replace(self, index: int, event: Event) -> None:
         """Replace the event at ``index`` (used when editing an existing event)."""
         if 0 <= index < len(self.events):
+            self._register_category(event)
             self.events[index] = event
             self.changed.emit()
+
+    def _register_category(self, event: Event) -> None:
+        """Add an event's category to the palette if it's a new one, so a category
+        typed when adding an event (e.g. via the editable combo) shows up in the
+        *Manage categories* dialog. Resolves its colour from the event's own
+        colour, else the library default. Silent (no signal) — the ``changed``
+        emitted by the caller already repaints; this only keeps the palette in
+        sync with the categories actually in play."""
+        cat = (event.category or "").strip()
+        if cat and cat not in self.categories:
+            self.categories[cat] = event.resolved_color(0, colors=self.categories)
 
     def remove(self, index: int) -> None:
         if 0 <= index < len(self.events):
@@ -204,6 +217,8 @@ class EventManager(QObject):
             except Exception:
                 continue  # tolerate older/garbled entries rather than fail the load
         self.events = loaded
+        for ev in self.events:
+            self._register_category(ev)
         self.changed.emit()
 
 

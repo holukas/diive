@@ -10,6 +10,104 @@ Part of the diive library: https://github.com/holukas/diive
 import numpy as np
 import pandas as pd
 
+#: Arithmetic methods accepted by :func:`combine_variables`, mapping each to the
+#: pandas Series operator and the operation's identity (the fill value used for a
+#: missing operand when ``keep_overlap_only=False``).
+_COMBINE_METHODS = {
+    'add': ('add', 0),
+    'subtract': ('sub', 0),
+    'multiply': ('mul', 1),
+    'divide': ('truediv', 1),
+}
+
+
+def combine_variables(
+        series1: pd.Series,
+        series2: pd.Series,
+        method: str = 'multiply',
+        keep_overlap_only: bool = True,
+        name: str | None = None,
+) -> pd.Series:
+    """Combine two time series element-wise by an arithmetic operation.
+
+    The two series are aligned on their (timestamp) index and combined record by
+    record. ``method`` selects the operation:
+
+    =============  ========  ============================
+    method         symbol    identity (fill value)
+    =============  ========  ============================
+    ``add``           +              0
+    ``subtract``      -              0
+    ``multiply``      *              1
+    ``divide``        /              1
+    =============  ========  ============================
+
+    ``method='fillgaps'`` is a special case: it keeps ``series1`` and fills only
+    its gaps (NaNs) with the matching values of ``series2`` (a
+    ``series1.combine_first(series2)``). ``keep_overlap_only`` is ignored for it
+    (filling gaps is, by definition, a union).
+
+    Args:
+        series1: First (left-hand) series.
+        series2: Second (right-hand) series.
+        method: One of ``'add'``, ``'subtract'``, ``'multiply'``, ``'divide'``,
+            ``'fillgaps'``.
+        keep_overlap_only: If True (default), the result is missing (NaN) wherever
+            *either* input is missing — only overlapping (both-present) records get
+            a value. If False, a missing value is treated as the operation's
+            identity (0 for add/subtract, 1 for multiply/divide), so records
+            present in only one input survive. Ignored for ``'fillgaps'``.
+        name: Name for the returned series. Defaults to a generated
+            ``{series1.name}_{METHOD}_{series2.name}`` label.
+
+    Returns:
+        The combined series, indexed by the union of the two inputs' indexes.
+    """
+    if method == 'fillgaps':
+        # Keep series1, fill only its gaps with series2 (union over the indexes).
+        result = series1.combine_first(series2)
+    elif method in _COMBINE_METHODS:
+        op, identity = _COMBINE_METHODS[method]
+        # fill_value=None keeps pandas' default (NaN where either operand is NaN);
+        # the identity lets a one-sided record survive when overlap is not required.
+        fill_value = None if keep_overlap_only else identity
+        result = getattr(series1, op)(series2, fill_value=fill_value)
+    else:
+        choices = sorted(list(_COMBINE_METHODS) + ['fillgaps'])
+        raise ValueError(f"Unknown method '{method}'. Choose from {choices}.")
+    if name is None:
+        name = f"{series1.name}_{method.upper()}_{series2.name}"
+    result.name = name
+    return result
+
+
+def combine_variables_to_code(
+        var1: str,
+        var2: str,
+        method: str = 'multiply',
+        keep_overlap_only: bool = True,
+        name: str | None = None,
+) -> str:
+    """Render a :func:`combine_variables` call as a runnable snippet.
+
+    Assumes ``dv`` and a DataFrame ``df`` are already in scope. Returns the
+    snippet ending in a newline (the result is bound to ``combined``).
+
+    Args:
+        var1: Column name for the first (left-hand) operand.
+        var2: Column name for the second (right-hand) operand.
+        method: Combine method (see :func:`combine_variables`).
+        keep_overlap_only: Rendered only when False (True is the default).
+        name: Output series name, rendered as ``name=`` when given.
+    """
+    args = [f"df[{var1!r}]", f"df[{var2!r}]", f"method={method!r}"]
+    # keep_overlap_only is meaningless for the gap-fill method (always a union).
+    if not keep_overlap_only and method != 'fillgaps':
+        args.append("keep_overlap_only=False")
+    if name:
+        args.append(f"name={name!r}")
+    return f"combined = dv.variables.combine_variables({', '.join(args)})\n"
+
 
 def generate_noisy_timeseries(
         start_date='2024-01-01',

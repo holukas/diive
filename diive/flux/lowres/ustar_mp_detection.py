@@ -148,6 +148,7 @@ class UstarMovingPointDetection:
         verbose: int = 0,
     ):
         # Validate input
+        """Set up moving-point USTAR threshold detection. See the class docstring."""
         if df is None or df.empty:
             raise ValueError("Input DataFrame cannot be None or empty")
         if forward_mode_n < 1:

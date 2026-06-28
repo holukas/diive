@@ -11,6 +11,7 @@ Examples demonstrating flux processing, quality control, and high-resolution ana
 ## Contents
 
 ### Processing Chain
+- **fluxprocessingchain/fluxprocessingchain_level2.py** — Level 2 in isolation: load a real EddyPro FLUXNET output file, `init_flux_data`, then `run_level2` to expand the EddyPro quality diagnostics into per-test flags and one overall QCF. Shows `level2_test_inputs` (which column each test reads), the QCF-filtered vs. high-quality (QCF=0) series, and the effect of the accept threshold. The smallest standalone entry point into the chain.
 - **fluxprocessingchain/fluxprocessingchain_runchain.py** — Single-call `run_chain(data, FluxConfig)` example. Minimal config drives the full L2→L4.1 pipeline with sensible defaults. The easy path; use this when you want the chain to "just work".
 - **fluxprocessingchain/fluxprocessingchain_composable.py** — Full L2→L4.1 pipeline using composable callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; on-demand `gap_stats()` after L3.3; `plot_gapfilled_heatmaps()` (side-by-side heatmap comparison) and `plot_cumulative_comparison()` (all methods on one axes) after L4.1. The full-control path — every detector class, model hyperparameter, MDS tolerance, and diagnostic flag is reachable here.
 

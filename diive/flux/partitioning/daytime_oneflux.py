@@ -67,11 +67,11 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
-from scipy import stats
 from scipy.optimize import leastsq
 
 from diive.core.utils.console import info, warn, success
 from diive.flux.partitioning._report import partitioning_report
+from diive.gapfilling.similarity import mds_gapfill_cascade
 
 # Lloyd & Taylor reference/regression temperatures (degC), as in ONEFlux.
 TREF = 15.0
@@ -105,7 +105,6 @@ _NO_CONVERGENCE_RETRY = 20
 _RG_TOL = 50.0
 _TA_TOL = 2.5
 _VPD_TOL = 5.0
-_TW_ORIG = 14   # base window (days)
 
 
 def _notnan(a):
@@ -346,170 +345,28 @@ def _uncert_via_gapfill(nee, rg, ta, vpd, hr, nperday, longest_marginal_gap=60):
     """Reichstein-style marginal-distribution look-up gap-fill of NEE.
 
     Returns ``nee_fs_unc`` (the per-record standard deviation of the look-up
-    neighbours), the weight ``sigd`` used by the fits. All inputs use the
-    ONEFlux ``-9999`` sentinel; ``rg``/``ta`` are measured (gappy), ``vpd``
-    filled.
+    neighbours), the weight ``sigd`` used by the fits, in the ONEFlux ``-9999``
+    sentinel convention. All inputs use the sentinel; ``rg``/``ta`` are measured
+    (gappy), ``vpd`` filled.
+
+    Thin wrapper over the shared MDS cascade
+    (:func:`diive.gapfilling.similarity.mds_gapfill_cascade`): the uncertainty
+    variant uses ``min_samples=10`` (ONEFlux ``>9``) and predicts at every record
+    (``fill_all``). The cascade preserves the input float32 dtype for the
+    tolerance comparisons, so this keeps ONEFlux FLOAT_PREC boundary behaviour.
     """
-    n = nee.size
-    tofill_orig = nee.copy()
-    filled_val = np.full(n, NAN)
-    filled_s = np.full(n, NAN)
-    tofill = np.full(n, NAN)
+    def to_nan(x):
+        x = np.asarray(x)
+        out = np.where(x > NAN_TEST, x, np.nan)
+        return out.astype(x.dtype) if np.issubdtype(x.dtype, np.floating) else out
 
-    large = np.zeros(n)
-    ok = np.where(tofill_orig > NAN_TEST)[0]
-    if ok.size == 0:
-        return filled_s
-    firstvalid, lastvalid = int(ok.min()), int(ok.max())
-    if firstvalid > (48 * longest_marginal_gap):
-        large[:(firstvalid + 1 - (48 * longest_marginal_gap))] = 1
-    if lastvalid < (n - (48 * longest_marginal_gap)):
-        large[(lastvalid + (48 * longest_marginal_gap)):] = 1
-
-    # The window offset pattern depends only on t_window (constant within a
-    # pass), so build it once per distinct t_window instead of per gap.
-    _offset_cache = {}
-
-    def window_idx(index, t_window):
-        off = _offset_cache.get(t_window)
-        if off is None:
-            off = np.append(-np.arange(t_window / 2.0 * nperday),
-                            np.arange(t_window / 2.0 * nperday - 1) + 1)
-            _offset_cache[t_window] = off
-        w = index + off
-        np.clip(w, 0, n - 1, out=w)
-        return w.astype(int)
-
-    def fill_at(index, sel, method_window):
-        vals = tofill_orig[sel]
-        filled_val[index] = stats.tmean(vals)
-        filled_s[index] = stats.tstd(vals)
-
-    def gaps():
-        return np.where((tofill < NAN_TEST) & (large == 0))[0]
-
-    # Loop 1: meteo LUT (Rg, Ta, VPD), windows 14 & 28 days
-    it = 0
-    while True:
-        ko = gaps()
-        t_window = (it + 1) * _TW_ORIG
-        if ko.size == 0:
-            return filled_s
-        for index in ko:
-            w = window_idx(index, t_window)
-            avg = np.where(tofill_orig[w] > NAN_TEST)[0]
-            if avg.size > 9:
-                w = w[avg]
-                sel = np.where((np.abs(ta[w] - ta[index]) < _TA_TOL) &
-                               (np.abs(rg[w] - rg[index]) < max(min(_RG_TOL, rg[index]), 20)) &
-                               (np.abs(vpd[w] - vpd[index]) < _VPD_TOL) &
-                               (rg[w] > NAN_TEST) & (vpd[w] > NAN_TEST) & (ta[w] > NAN_TEST))[0]
-                if sel.size > 9:
-                    fill_at(index, w[sel], t_window)
-        tofill[:] = filled_val
-        it += 1
-        if it > 1:
-            break
-
-    # Loop 2: Rg-only LUT, window 14 days
-    tofill[:] = filled_val
-    it = 0
-    while True:
-        t_window = (it + 1) * _TW_ORIG
-        ko = gaps()
-        if ko.size == 0:
-            return filled_s
-        for index in ko:
-            w = window_idx(index, t_window)
-            sel = np.where((np.abs(rg[w] - rg[index]) < max(min(_RG_TOL, rg[index]), 20)) &
-                           (tofill_orig[w] > NAN_TEST) & (rg[w] > NAN_TEST))[0]
-            if sel.size > 9:
-                fill_at(index, w[sel], t_window)
-        tofill[:] = filled_val
-        it += 1
-        if it > 0:
-            break
-
-    # Loop 3: diurnal +-1h, windows 1, 3, 5 days
-    tofill[:] = filled_val
-    it = 0
-    while True:
-        ko = gaps()
-        t_window = (2 * it + 1) * 1
-        if ko.size == 0:
-            return filled_s
-        for index in ko:
-            w = window_idx(index, t_window)
-            sel = np.where((np.abs(hr[w] - hr[index]) < 1.1) & (tofill_orig[w] > NAN_TEST))[0]
-            if sel.size > 9:
-                fill_at(index, w[sel], t_window)
-        tofill[:] = filled_val
-        it += 1
-        if it > 2:
-            break
-
-    # Loop 4: meteo LUT (large windows, Cat. B)
-    it = 2
-    while True:
-        ko = gaps()
-        t_window = (it + 1) * _TW_ORIG
-        if ko.size == 0:
-            return filled_s
-        for index in ko:
-            w = window_idx(index, t_window)
-            avg = np.where(tofill_orig[w] > NAN_TEST)[0]
-            if avg.size > 9:
-                w = w[avg]
-                sel = np.where((np.abs(ta[w] - ta[index]) < _TA_TOL) &
-                               (np.abs(rg[w] - rg[index]) < max(min(_RG_TOL, rg[index]), 20)) &
-                               (np.abs(vpd[w] - vpd[index]) < _VPD_TOL) &
-                               (rg[w] > NAN_TEST) & (vpd[w] > NAN_TEST) & (ta[w] > NAN_TEST))[0]
-                if sel.size > 9:
-                    fill_at(index, w[sel], t_window)
-        tofill[:] = filled_val
-        it += 1
-        if it > 10:
-            break
-
-    # Loop 5: Rg-only LUT (large windows, Cat. B)
-    tofill[:] = filled_val
-    it = 1
-    while True:
-        t_window = (it + 1) * _TW_ORIG
-        ko = gaps()
-        if ko.size == 0:
-            return filled_s
-        for index in ko:
-            w = window_idx(index, t_window)
-            sel = np.where((np.abs(rg[w] - rg[index]) < max(min(_RG_TOL, rg[index]), 20)) &
-                           (tofill_orig[w] > NAN_TEST) & (rg[w] > NAN_TEST))[0]
-            if sel.size > 9:
-                fill_at(index, w[sel], t_window)
-        tofill[:] = filled_val
-        it += 1
-        if it > 10:
-            break
-
-    # Loop 6: diurnal (large windows, Cat. C)
-    tw_half = _TW_ORIG * 0.5
-    tofill[:] = filled_val
-    it = 0
-    while True:
-        ko = gaps()
-        t_window = (it + 1) * tw_half
-        if ko.size == 0:
-            return filled_s
-        for index in ko:
-            w = window_idx(index, t_window)
-            sel = np.where((np.abs(hr[w] - hr[index]) < 1.1) & (tofill_orig[w] > NAN_TEST))[0]
-            if sel.size > 9:
-                fill_at(index, w[sel], t_window)
-        tofill[:] = filled_val
-        it += 1
-        if it > 60:
-            break
-
-    return filled_s
+    res = mds_gapfill_cascade(
+        to_nan(nee), to_nan(rg), to_nan(ta), to_nan(vpd), np.asarray(hr), nperday,
+        min_samples=10, swin_tol=(20.0, _RG_TOL), ta_tol=_TA_TOL, vpd_tol=_VPD_TOL,
+        ddof=1, fill_all=True, longest_marginal_gap=longest_marginal_gap,
+    )
+    sd = res['sd']
+    return np.where(np.isfinite(sd), sd, NAN)
 
 
 # --------------------------------------------------------------------------- #

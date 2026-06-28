@@ -24,6 +24,7 @@ from diive.core.utils.console import info, warn
 
 
 class FindOptimumRange:
+    """Find the range of a driver (x) for which a response (y) is optimized. See :meth:`__init__`."""
 
     def __init__(self,
                  df: DataFrame,
@@ -101,6 +102,7 @@ class FindOptimumRange:
         return self._results_optrange
 
     def find_optimum(self):
+        """Run the binning, rolling aggregation and optimum-range search; populate ``results_optrange``."""
         bin_aggs_df = self._divide_xdata_into_bins()
 
         winsize = int(self.n_bins * self.rwinsize)
@@ -248,6 +250,17 @@ class FindOptimumRange:
                 ylabel: str = None,
                 xunit: str = None,
                 yunit: str = None):
+        """Display the optimum-range analysis figure.
+
+        Args:
+            saveplot: If True, save the figure to *path*.
+            title: Optional figure title.
+            path: Output path used when *saveplot* is True.
+            xlabel: Axis label for the driver (x); defaults to the column name.
+            ylabel: Axis label for the response (y); defaults to the column name.
+            xunit: Optional unit appended to the x label.
+            yunit: Optional unit appended to the y label.
+        """
         n_years = len(self.results_optrange['vals_in_optimum_range_df'])
 
         # Top panel scales with number of years; middle and timeseries panels are fixed

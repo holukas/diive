@@ -118,7 +118,8 @@ class VariablePanel(QWidget):
     #: handles it so it can unbind any open editor before the store changes.
     clearRequested = Signal(str)
 
-    def __init__(self, parent=None, clearable: bool = False) -> None:
+    def __init__(self, parent=None, clearable: bool = False,
+                 draggable: bool = False) -> None:
         super().__init__(parent)
         self.setObjectName("varpanel")  # white pane bg via QSS (search/list keep theirs)
         layout = QVBoxLayout(self)
@@ -131,7 +132,7 @@ class VariablePanel(QWidget):
         self.search.setPlaceholderText("Fuzzy filter variables...")
         self.search.textChanged.connect(self._apply_filter)
 
-        self.list = VariableList()
+        self.list = VariableList(draggable=draggable)
         self.list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self._delegate = VariableDelegate(self.list)
         self.list.setItemDelegate(self._delegate)

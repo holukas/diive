@@ -1,3 +1,4 @@
+"""Public namespace: dv.qaqc (quality control flags and screening)."""
 from diive.preprocessing.qaqc import FlagQCF
 from diive.preprocessing.qaqc import StepwiseMeteoScreeningDb
 from diive.preprocessing.qaqc import (

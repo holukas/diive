@@ -30,6 +30,10 @@ OptimizeParamsRFTS = OptimizeParamsTS
 
 
 class RandomForestTS(MlRegressorGapFillingBase):
+    """Gap-fill a time series with scikit-learn Random Forest regression.
+
+    See :meth:`__init__` for parameters, methods and attributes.
+    """
 
     def __init__(self,
                  input_df: DataFrame,
@@ -113,6 +117,7 @@ class QuickFillRFTS:
     """
 
     def __init__(self, df: DataFrame, target_col: str or tuple):
+        """Set up minimal feature engineering and a small Random Forest. See the class docstring."""
         from diive.core.ml.feature_engineer import FeatureEngineer
 
         self.df = df.copy()
@@ -159,17 +164,22 @@ class QuickFillRFTS:
         )
 
     def fill(self):
+        """Train the model and fill gaps in the target series."""
         self.rfts.trainmodel(showplot_scores=False, showplot_importance=False)
         self.rfts.fillgaps(showplot_scores=False, showplot_importance=False)
 
-    def gapfilling_df(self):
+    def gapfilling_df(self) -> DataFrame:
+        """Return the gap-filling result DataFrame (gap-filled target and flags)."""
         return self.rfts.gapfilling_df_
 
     def report(self):
+        """Print the gap-filling report."""
         return self.rfts.report_gapfilling()
 
     def get_gapfilled_target(self) -> Series:
+        """Return the gap-filled target series."""
         return self.rfts.get_gapfilled_target()
 
     def get_flag(self) -> Series:
+        """Return the gap-filling flag series (0=observed, 1=gap-filled, 2=fallback)."""
         return self.rfts.get_flag()

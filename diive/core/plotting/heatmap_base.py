@@ -20,9 +20,10 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 from diive.core.io.files import verify_dir
-from diive.core.plotting.plotfuncs import default_format, format_spines, hide_xaxis_yaxis, hide_ticks_and_ticklabels, \
+from diive.core.plotting.plotfuncs import hide_xaxis_yaxis, hide_ticks_and_ticklabels, \
     make_patch_spines_invisible
 from diive.core.plotting.styles import LightTheme as theme
+from diive.core.plotting.styles.format import FormatStyle
 from diive.core.times.times import TimestampSanitizer, insert_timestamp
 
 
@@ -197,14 +198,12 @@ class HeatmapBase:
              figdpi: int = 72,
              ax=None,
              ax_orientation: str = "vertical",
-             title: str = None,
+             format_style: FormatStyle = None,
              vmin: float = None,
              vmax: float = None,
              cb_digits_after_comma: int | str = 2,
              cb_labelsize: float = theme.AX_LABELS_FONTSIZE,
              cb_extend: str = 'neither',
-             axlabels_fontsize: float = theme.AX_LABELS_FONTSIZE,
-             ticks_labelsize: float = theme.TICKS_LABELS_FONTSIZE,
              minticks: int = 3,
              maxticks: int = 10,
              cmap: str = 'RdYlBu_r',
@@ -214,8 +213,7 @@ class HeatmapBase:
              show_less_xticklabels: bool = False,
              show_values: bool = False,
              show_values_fontsize: float = theme.AX_LABELS_FONTSIZE,
-             show_values_n_dec_places: int = 0,
-             show_grid: bool = False):
+             show_values_n_dec_places: int = 0):
         """Render heatmap with matplotlib styling (Phase 2 of two-phase design).
 
         All styling and presentation parameters go here. This method is abstract
@@ -236,8 +234,12 @@ class HeatmapBase:
             ax_orientation: Layout of the date/time axes.
                 ``'vertical'`` (default) — date on y, time-of-day on x.
                 ``'horizontal'`` — date on x, time-of-day on y.
-            title: Plot title.  When *None* an auto-title is generated from the
-                   series name and frequency string.  Pass ``title=""`` to suppress.
+            format_style: A :class:`~diive.core.plotting.styles.format.FormatStyle`
+                describing the shared chrome (title, axis labels, font sizes,
+                tick/spine colours, grid, legend). When *None* the diive house
+                style is used (with the grid off). The colorbar is
+                heatmap-specific and is configured by the ``cb_*``/``zlabel``
+                arguments, not by the style.
             vmin: Lower bound of the colour scale.  *None* = auto from data.
             vmax: Upper bound of the colour scale.  *None* = auto from data.
             cb_digits_after_comma: Decimal places shown on colorbar tick labels.
@@ -248,8 +250,6 @@ class HeatmapBase:
             cb_extend: Colorbar extension arrows.  One of ``'neither'`` (default),
                        ``'both'``, ``'min'``, or ``'max'``.  Use ``'both'`` when
                        ``vmin``/``vmax`` clip the data range.
-            axlabels_fontsize: Font size for x-axis and y-axis labels.
-            ticks_labelsize: Font size for tick mark labels on both axes.
             minticks: Minimum number of major ticks on date axes.  Defaults to 3.
             maxticks: Maximum number of major ticks on date axes.  Defaults to 10.
             cmap: Matplotlib colormap name (e.g. ``'RdYlBu_r'``, ``'viridis'``).
@@ -268,7 +268,6 @@ class HeatmapBase:
             show_values_fontsize: Font size for the cell-value overlay text.
             show_values_n_dec_places: Decimal places for the cell-value overlay.
                                       Defaults to 0.
-            show_grid: Draw a grid on the axes.  Defaults to *False*.
 
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
@@ -288,7 +287,7 @@ class HeatmapBase:
 
         # Store styling parameters
         self.ax_orientation = ax_orientation
-        self.title = title
+        self.format_style = format_style
         self.cmap = cmap
         self.vmin = vmin
         self.vmax = vmax
@@ -299,8 +298,6 @@ class HeatmapBase:
         self.cb_labelsize = cb_labelsize
         self.cb_extend = cb_extend
         self.color_bad = color_bad
-        self.axlabels_fontsize = axlabels_fontsize
-        self.ticks_labelsize = ticks_labelsize
         self.minticks = minticks
         self.maxticks = maxticks
         self.zlabel = zlabel
@@ -309,7 +306,6 @@ class HeatmapBase:
         self.showvalues_fontsize = show_values_fontsize
         self.showvalues_n_dec_places = show_values_n_dec_places
         self.show_colormap = show_colormap
-        self.show_grid = show_grid
 
     def show(self):
         """Generates the heatmap plot with defaults and displays the figure.
@@ -504,24 +500,32 @@ class HeatmapBase:
                 appended to the auto-generated title (e.g. ``'30min'``,
                 ``'mean, MS'``).  Pass *None* to omit.
         """
-        if shown_freq:
-            title = self.title if self.title else f"{self.series.name} ({shown_freq})"
-        else:
-            title = self.title if self.title else ""
-        self.ax.set_title(title, color='black', size=self.axlabels_fontsize)
-        # Colorbar
-        # Inside your class, assuming self.ax is an Axes object
+        # Auto-title from series name + frequency (heatmap-specific), used as the
+        # caller default when the style/legacy title is unset.
+        auto_title = f"{self.series.name} ({shown_freq})" if shown_freq else None
+
+        # Shared chrome (title, axis labels, ticks, spines, grid) via FormatStyle.
+        # Encode the heatmap's distinctive look on the default style: black spines
+        # (lw 2) + outward ticks (length 4, width 2). Heatmaps never draw a legend
+        # and default to grid OFF (FormatStyle defaults show_grid=True). All chrome
+        # now comes only from the caller's format_style.
+        style = self.format_style or FormatStyle(
+            show_grid=False, show_legend=False, show_zeroline=False,
+            chrome_color='black', spine_linewidth=2,
+            ticks_direction='out', ticks_length=4, ticks_width=2)
+
+        # Colorbar — heatmap-specific, configured by cb_*/zlabel, not the FormatStyle.
+        # The colorbar label size tracks the resolved style's axis-label font size.
         fig = self.ax.get_figure()
         if self.show_colormap:
+            cb_label_fs = style.axlabel_fontsize if style.axlabel_fontsize is not None else theme.FONTSIZE_AXLABEL
             cb = fig.colorbar(plot, ax=self.ax, format=f"%.{int(self.cb_digits_after_comma)}f",
                               label=self.zlabel, extend=self.cb_extend)
-            cb.set_label(label=self.zlabel, size=self.axlabels_fontsize, labelpad=20)
+            cb.set_label(label=self.zlabel, size=cb_label_fs, labelpad=20)
             cb.ax.tick_params(labelsize=self.cb_labelsize)
-        default_format(ax=self.ax, ax_xlabel_txt=ax_xlabel_txt, ax_ylabel_txt=ax_ylabel_txt,
-                       ticks_direction='out', ticks_length=4, ticks_width=2,
-                       ax_labels_fontsize=self.axlabels_fontsize, showgrid=self.show_grid,
-                       ticks_labels_fontsize=self.ticks_labelsize)
-        format_spines(ax=self.ax, color='black', lw=2)
+
+        style.apply(ax=self.ax, default_title=auto_title,
+                    default_xlabel=ax_xlabel_txt, default_ylabel=ax_ylabel_txt)
         self.ax.tick_params(left=True, right=False, top=False, bottom=True)
 
 

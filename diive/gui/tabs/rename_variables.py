@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 
 from diive.gui import metadata_store, theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.tab_chrome import build_titlebar
 
 
 class _RenameSignals(QObject):
@@ -52,7 +53,12 @@ class RenameVariablesTab(DiiveTab):
         self.variablesRenamed = self._sig.variables_renamed
 
         root = QWidget()
-        outer = QVBoxLayout(root)
+        root_lay = QVBoxLayout(root)
+        root_lay.setContentsMargins(0, 0, 0, 0)
+        root_lay.setSpacing(0)
+        root_lay.addLayout(build_titlebar(self.title))  # shared tab header
+        body = QWidget()
+        outer = QVBoxLayout(body)
 
         intro = QLabel(
             "Add a common prefix and/or suffix to every variable name. The "
@@ -102,6 +108,7 @@ class RenameVariablesTab(DiiveTab):
         footer.addWidget(self.apply_btn)
         outer.addLayout(footer)
 
+        root_lay.addWidget(body, stretch=1)
         self._refresh()
         return root
 

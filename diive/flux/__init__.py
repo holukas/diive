@@ -38,7 +38,9 @@ from diive.flux.hires.detect_and_remove_tlag import process_one_file
 from diive.flux.hires.windrotation import WindDoubleRotation
 from diive.flux.hires.windrotation import reynolds_decomposition
 from diive.flux.lowres.timelag_analysis import TimeLagAnalysis
+from diive.flux.lowres.uncertainty import JointUncertaintyPAS20
 from diive.flux.lowres.uncertainty import RandomUncertaintyPAS20
+from diive.flux.lowres.uncertainty import joint_uncertainty_pas20
 from diive.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
 from diive.flux.lowres.ustar_mp_detection import UstarMovingPointDetection
 from diive.flux.lowres.ustar_vekuri_detection import UstarVekuriThresholdDetection
@@ -77,6 +79,8 @@ __all__ = [
     'reynolds_decomposition',
     'TimeLagAnalysis',
     'RandomUncertaintyPAS20',
+    'JointUncertaintyPAS20',
+    'joint_uncertainty_pas20',
     'UstarBootstrapThresholds',
     'UstarMovingPointDetection',
     'UstarVekuriThresholdDetection',

@@ -32,6 +32,18 @@ parseable start time, is chunked the legacy way (fixed steps from its start).
    each scalar + sonic temperature, producing one ``tlag_s`` per gas
    per chunk. Nothing is written yet.
 
+**Per-gas search windows.** Each gas can be given its own time-lag search
+window via ``per_gas_lag`` (``{label: {lag_max_s, block_length_s, lws, uws}}``)
+or, on the CLI, ``--scalar "H2O:h2o@lag=30;uws=25"`` plus global ``--lws`` /
+``--uws``. A positive-only window (e.g. ``[0, 5]``) keeps only physical
+tube-delay lags (closed-path delay > 0); a long-inlet gas such as H2O can use a
+wider window than the dry gases in the same run -- needed because EddyPro
+applies one lag setting to all gases downstream. ``window_to_lag_params`` maps a
+window to per-gas params: ``lag_max_s = max(|lws|, |uws|)`` and
+``block_length_s = max(20 s, 2*half)`` (the paper's 20 s block floor, growing
+for a wide window). A gas without a window uses the global ``lag_max_s``
+symmetrically.
+
 **PWBOPT — choose the best lag:** with every chunk's raw detection in hand,
 apply the PWBOPT decision rule (S1/S2/S3 carry-forward + gap-fill, paper
 Section 2.3) across the full chunk sequence in temporal order. This is what
@@ -567,6 +579,114 @@ def _ensure_headless_backend() -> None:
         matplotlib.use('Agg', force=True)
 
 
+# ---------------------------------------------------------------------------
+# Per-gas time-lag window resolution.
+#
+# By default every gas shares the global lag_max_s / block_length_s and the
+# optional global lws/uws window. A long-inlet gas (e.g. H2O) often needs a
+# wider or shifted search window than the dry gases (CH4/N2O) -- and because
+# EddyPro applies one uniform lag setting to all gases, that per-gas alignment
+# must be baked in here. Per-gas overrides are a dict {label -> {lag_max_s,
+# block_length_s, lws, uws}}; unset keys fall back to the global value.
+# ---------------------------------------------------------------------------
+
+# Compact aliases accepted after '@' in a LABEL:column@... scalar token.
+_GAS_SPEC_ALIASES = {
+    'lag': 'lag_max_s', 'lag_max': 'lag_max_s', 'lagmax': 'lag_max_s',
+    'block': 'block_length_s', 'block_length': 'block_length_s',
+    'lws': 'lws', 'uws': 'uws',
+}
+
+
+def parse_scalar_spec(token: str) -> tuple[str, str, dict]:
+    """Parse a ``LABEL:column`` scalar token with an optional per-gas window.
+
+    Syntax::
+
+        CH4:ch4                              # global lag settings
+        H2O:h2o@lag=30                       # lag_max_s=30 for this gas
+        H2O:h2o@lag=30;uws=25                # + asymmetric window upper bound
+        H2O:h2o@lag=30;lws=0;uws=25;block=60 # all four, seconds
+
+    The part after ``@`` is ``;``-separated ``key=value`` pairs. Keys: ``lag``
+    / ``lag_max`` (lag_max_s), ``block`` (block_length_s), ``lws``, ``uws`` --
+    all in seconds. Returns ``(label, column, overrides)`` with *overrides*
+    keyed by the canonical ``PreWhiteningBootstrap`` argument names (empty when
+    there is no ``@`` part). Raises ``ValueError`` on a malformed token.
+    """
+    main, _, spec = token.partition('@')
+    if ':' not in main:
+        raise ValueError(f"scalar must be LABEL:column, got {token!r}")
+    label, col = main.split(':', 1)
+    label, col = label.strip(), col.strip()
+    if not label or not col:
+        raise ValueError(f"scalar must be LABEL:column, got {token!r}")
+    overrides: dict = {}
+    for piece in spec.split(';'):
+        piece = piece.strip()
+        if not piece:
+            continue
+        if '=' not in piece:
+            raise ValueError(
+                f"per-gas option must be key=value, got {piece!r} in {token!r}")
+        key, val = piece.split('=', 1)
+        canon = _GAS_SPEC_ALIASES.get(key.strip().lower())
+        if canon is None:
+            raise ValueError(
+                f"unknown per-gas option {key.strip()!r} in {token!r}; "
+                f"allowed: lag, block, lws, uws")
+        try:
+            overrides[canon] = float(val.strip())
+        except ValueError:
+            raise ValueError(
+                f"per-gas option {key.strip()!r} needs a number, got "
+                f"{val.strip()!r} in {token!r}")
+    return label, col, overrides
+
+
+def _resolve_gas_lag(label, lag_max_s, block_length_s, lws, uws,
+                     gas_lag_overrides):
+    """Resolve ``(lag_max_s, block_length_s, lws, uws)`` for one gas.
+
+    A gas listed in *gas_lag_overrides* uses its overrides, falling back to the
+    global values for unset keys. Overriding ``lag_max_s`` but not
+    ``block_length_s`` re-couples the block to ``2*lag_max_s`` (R's
+    ``l = LAG.MAX*2``) rather than silently keeping the global block length.
+    """
+    o = (gas_lag_overrides or {}).get(label) or {}
+    g_lag = o.get('lag_max_s', lag_max_s)
+    if 'block_length_s' in o:
+        g_block = o['block_length_s']
+    elif 'lag_max_s' in o:
+        g_block = 2.0 * g_lag
+    else:
+        g_block = block_length_s
+    return g_lag, g_block, o.get('lws', lws), o.get('uws', uws)
+
+
+def window_to_lag_params(lws: float, uws: float, min_block_s: float = 20.0) -> dict:
+    """Convert an asymmetric search window ``[lws, uws]`` (seconds) to PWB params.
+
+    The CCF computation half-width (``lag_max_s``) is the window's larger
+    absolute bound, so the requested window always fits inside the computed
+    range. The bootstrap block length follows R's ``l = 2*LAG.MAX`` coupling but
+    is **floored at** ``min_block_s`` (default 20 s, the paper's value): a narrow
+    window does not shrink the block below what is needed to preserve the
+    autocorrelation structure, yet the block still grows past the floor for a
+    wide window so it keeps containing a long lag (e.g. ``[0, 25]`` -> 50 s).
+    Returns a ``per_gas_lag`` entry for one gas. A symmetric window ``[-x, x]``
+    yields ``lag_max_s=x`` with ``lws=-x, uws=x``, which reduces to the plain
+    symmetric search (the windowed argmax spans the whole CCF) -- i.e. setting a
+    gas's window to ``[-lag_max, +lag_max]`` is identical to no override.
+    """
+    if uws <= lws:
+        raise ValueError(
+            f"search window upper bound ({uws}) must exceed lower bound ({lws}).")
+    half = max(abs(lws), abs(uws))
+    return {'lag_max_s': half, 'block_length_s': max(min_block_s, 2.0 * half),
+            'lws': lws, 'uws': uws}
+
+
 def process_one_file(
         input_path: Path,
         output_dir: Path,
@@ -598,6 +718,9 @@ def process_one_file(
         dev_thresh: float = 0.5,
         hdi_prefilter: float = 1.0,
         lag_column_template: str = '{prefix}_tlag_final_pf_s',
+        lws: float | None = None,
+        uws: float | None = None,
+        gas_lag_overrides: dict | None = None,
         progress_queue=None,
 ) -> list:
     """Run the two-phase PWB pipeline on one (possibly multi-hour) input file.
@@ -759,17 +882,22 @@ def process_one_file(
                     # Per-chunk + per-gas reproducible seed.
                     seed = (None if random_state is None
                             else int(random_state) + ci * 100 + gi)
+                    g_lag, g_block, g_lws, g_uws = _resolve_gas_lag(
+                        label, lag_max_s, block_length_s, lws, uws,
+                        gas_lag_overrides)
                     pwb = PreWhiteningBootstrap(
                         df=pwb_df,
                         var_w='W_rot',
                         var_scalar=label,
                         var_tsonic='T_SONIC',
                         hz=hz,
-                        lag_max_s=lag_max_s,
+                        lag_max_s=g_lag,
                         n_bootstrap=n_bootstrap,
-                        block_length_s=block_length_s,
+                        block_length_s=g_block,
                         segment_name=chunk_period,
                         random_state=seed,
+                        lws=g_lws,
+                        uws=g_uws,
                     )
                     pwb.run()
                     res = pwb.results
@@ -950,6 +1078,9 @@ def detect_one_chunk(
         strict: bool,
         save_plots: bool,
         plots_dir: Path | None,
+        lws: float | None = None,
+        uws: float | None = None,
+        gas_lag_overrides: dict | None = None,
         progress_queue=None,
 ) -> dict:
     """Phase 1: detect the per-gas time lag for one chunk (writes no data).
@@ -1098,17 +1229,21 @@ def detect_one_chunk(
             })
             seed = (None if random_state is None
                     else int(random_state) + gi)
+            g_lag, g_block, g_lws, g_uws = _resolve_gas_lag(
+                label, lag_max_s, block_length_s, lws, uws, gas_lag_overrides)
             pwb = PreWhiteningBootstrap(
                 df=pwb_df,
                 var_w='W_rot',
                 var_scalar=label,
                 var_tsonic='T_SONIC',
                 hz=hz,
-                lag_max_s=lag_max_s,
+                lag_max_s=g_lag,
                 n_bootstrap=n_bootstrap,
-                block_length_s=block_length_s,
+                block_length_s=g_block,
                 segment_name=chunk_period,
                 random_state=seed,
+                lws=g_lws,
+                uws=g_uws,
             )
             pwb.run()
             res = pwb.results
@@ -1616,7 +1751,11 @@ class PerFilePipeline:
             dev_thresh: float = 0.5,
             hdi_prefilter: float = 1.0,
             lag_column_template: str = '{prefix}_tlag_final_pf_s',
+            lws: float | None = None,
+            uws: float | None = None,
+            per_gas_lag: dict | None = None,
     ):
+        """Set up the per-file detect-and-remove pipeline. See the class docstring."""
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
         self.col_u = col_u
@@ -1663,6 +1802,28 @@ class PerFilePipeline:
         # the pre-filtered, gap-filled "best" lag — the same column
         # TlagApplier removes.
         self.lag_column_template = lag_column_template
+        # Global optional asymmetric search window (seconds), applied to every
+        # gas unless a per-gas entry overrides it.
+        self.lws = lws
+        self.uws = uws
+        # Per-gas time-lag window overrides: {label -> {lag_max_s,
+        # block_length_s, lws, uws}}. A long-inlet gas (e.g. H2O) can take a
+        # wider/shifted window than the dry gases in the same run -- which the
+        # uniform EddyPro lag setting downstream cannot do.
+        per_gas_lag = per_gas_lag or {}
+        unknown_gas = set(per_gas_lag) - set(scalars)
+        if unknown_gas:
+            raise ValueError(
+                f"per_gas_lag references unknown gas label(s) {sorted(unknown_gas)}; "
+                f"known scalars are {sorted(scalars)}.")
+        allowed = {'lag_max_s', 'block_length_s', 'lws', 'uws'}
+        for lbl, ov in per_gas_lag.items():
+            bad = set(ov) - allowed
+            if bad:
+                raise ValueError(
+                    f"per_gas_lag[{lbl!r}] has unknown key(s) {sorted(bad)}; "
+                    f"allowed: {sorted(allowed)}.")
+        self.per_gas_lag = per_gas_lag
 
         self._summary: DataFrame | None = None
         # Result-file paths, populated by run() -> _write_summary_and_plots.
@@ -1925,6 +2086,9 @@ class PerFilePipeline:
                     lag_max_s=self.lag_max_s,
                     n_bootstrap=self.n_bootstrap,
                     block_length_s=self.block_length_s,
+                    lws=self.lws,
+                    uws=self.uws,
+                    gas_lag_overrides=self.per_gas_lag,
                     chunk_seconds=self.chunk_seconds,
                     chunk_name_template=self.chunk_name_template,
                     start_time_regex=self.start_time_regex,
@@ -2141,72 +2305,121 @@ class PerFilePipeline:
 
         Called at the start of ``run()`` (the moment the output folders exist,
         before any processing) so an interrupted or crashed run still records
-        exactly what it was asked to do. Plain text, one setting per line.
+        exactly what it was asked to do. Plain text: each setting is its value
+        followed by a one-line explanation, so the file is self-documenting.
         """
-        scalars_str = ('\n'.join(f'    {k} <- {v}'
-                                 for k, v in self.scalars.items())
-                       if self.scalars else '    (none)')
+
+        def _block(title: str, rows: list) -> list:
+            """Render a section: 'key : value' + an indented description each."""
+            out = [title, '-' * len(title)]
+            for key, val, desc in rows:
+                out.append(f'{key:<20} : {val}')
+                out.append(f'                       {desc}')
+            out.append('')
+            return out
+
+        scalars_str = (', '.join(f'{k} <- {v}' for k, v in self.scalars.items())
+                       if self.scalars else '(none)')
         lines = [
             'diive PWB time-lag detect + remove -- run settings',
             '==================================================',
             '',
-            'Settings used for this run (written at run start). The output is',
+            'Settings used for this run (written at run start, before any',
+            'processing, so a crashed/cancelled run is still documented). Each',
+            'entry shows the value used and a short explanation. The output is',
             f'produced by diive-tlag-pwb-detect-remove into: {self.output_dir}',
             '',
-            'paths',
-            '-----',
-            f'input_dir            : {self.input_dir}',
-            f'output_dir           : {self.output_dir}',
-            f'file_pattern         : {self.file_pattern}',
-            '',
-            'columns',
-            '-------',
-            f'wind U / V / W       : {self.col_u} / {self.col_v} / {self.col_w}',
-            f'sonic temperature    : {self.col_tsonic}',
-            'scalars (label <- column):',
-            scalars_str,
-            '',
-            'PWB detection',
-            '-------------',
-            f'hz                   : {self.hz}',
-            f'lag_max_s            : {self.lag_max_s}',
-            f'n_bootstrap          : {self.n_bootstrap}',
-            f'block_length_s       : {self.block_length_s}',
-            f'random_state         : {self.random_state}',
-            '',
-            'chunking',
-            '--------',
-            f'chunk_seconds        : {self.chunk_seconds}',
-            f'min_chunk_seconds    : {self.min_chunk_seconds}',
-            f'chunk_name_template  : {self.chunk_name_template}',
-            f'start_time_regex     : {self.start_time_regex}',
-            f'start_time_format    : {self.start_time_format}',
-            '',
-            'PWBOPT (best-lag selection)',
-            '---------------------------',
-            f'hdi_thresh           : {self.hdi_thresh}',
-            f'dev_thresh           : {self.dev_thresh}',
-            f'hdi_prefilter        : {self.hdi_prefilter}',
-            f'lag_column_template  : {self.lag_column_template}',
-            '',
-            'file format',
-            '-----------',
-            f'skiprows             : {self.skiprows}',
-            f'extra_rows           : {self.extra_rows}',
-            f'sep                  : {self.sep!r}',
-            f'lineterm             : {self.lineterm!r}',
-            f'na_values            : {self.na_values}',
-            f'na_rep               : {self.na_rep}',
-            '',
-            'execution / output layout',
-            '-------------------------',
-            f'n_workers            : {self.n_workers}',
-            f'strict               : {self.strict}',
-            f'save_plots           : {self.save_plots}',
-            f'detect_subdir        : {self.detect_subdir}',
-            f'data_subdir          : {self.data_subdir}',
-            '',
         ]
+        lines += _block('paths', [
+            ('input_dir', self.input_dir,
+             'Folder scanned for raw EC files (read-only; never modified).'),
+            ('output_dir', self.output_dir,
+             'Folder all results are written to (this folder).'),
+            ('file_pattern', self.file_pattern,
+             'Glob selecting which files in input_dir are processed.'),
+        ])
+        lines += _block('columns', [
+            ('wind U / V / W', f'{self.col_u} / {self.col_v} / {self.col_w}',
+             'Sonic wind component columns (used for the double rotation).'),
+            ('sonic temperature', self.col_tsonic,
+             'Sonic temperature column (T_SONIC fallback signal for PWB).'),
+            ('scalars', scalars_str,
+             'Gas columns to time-lag-correct, as LABEL <- column.'),
+        ])
+        lines += _block('PWB detection', [
+            ('hz', self.hz,
+             'Sampling frequency in Hz (records per second).'),
+            ('lag_max_s', self.lag_max_s,
+             'Half-width of the lag search window (s); the CCF is computed '
+             'over +/-lag_max_s and the peak searched within it.'),
+            ('n_bootstrap', self.n_bootstrap,
+             'Block-bootstrap replicates per chunk (PWB; paper uses 99).'),
+            ('block_length_s', self.block_length_s,
+             'Bootstrap block length (s); long enough to contain the lag '
+             '(paper floor 20 s).'),
+            ('lws / uws (window)', f'{self.lws} / {self.uws}',
+             'Optional asymmetric search window [lower, upper] (s); '
+             'None = the full symmetric +/-lag_max_s.'),
+            ('per_gas_lag', self.per_gas_lag or "(none)",
+             'Per-gas window overrides {label: {lag_max_s, block_length_s, '
+             'lws, uws}}; a gas without an entry uses the global values.'),
+            ('random_state', self.random_state,
+             'Seed for a reproducible bootstrap; None = non-deterministic.'),
+        ])
+        lines += _block('chunking', [
+            ('chunk_seconds', self.chunk_seconds,
+             'Length of each averaging period a file is split into (s).'),
+            ('min_chunk_seconds', self.min_chunk_seconds,
+             'Chunks shorter than this (lead/trailing remnants) are skipped.'),
+            ('chunk_name_template', self.chunk_name_template,
+             'Pattern for naming each output chunk file.'),
+            ('start_time_regex', self.start_time_regex,
+             'Regex capturing the start timestamp from the input filename '
+             '(needed for the {starttime} field).'),
+            ('start_time_format', self.start_time_format,
+             'strptime format parsing the captured timestamp text.'),
+        ])
+        lines += _block('PWBOPT (best-lag selection)', [
+            ('hdi_thresh', self.hdi_thresh,
+             'S1 threshold (s): a chunk whose 95% HDI range is below this is '
+             'trusted directly as reliable.'),
+            ('dev_thresh', self.dev_thresh,
+             'S2 threshold (s): an uncertain chunk is still accepted if its '
+             'lag is within this of the previous reliable lag.'),
+            ('hdi_prefilter', self.hdi_prefilter,
+             'Drop detections with an HDI range above this (s) before '
+             'PWBOPT runs; 0 = off.'),
+            ('lag_column_template', self.lag_column_template,
+             'Which PWBOPT lag column is removed in phase 2 (default the '
+             'pre-filtered, gap-filled best lag).'),
+        ])
+        lines += _block('file format', [
+            ('skiprows', self.skiprows,
+             'Metadata lines before the header row.'),
+            ('extra_rows', self.extra_rows,
+             'Units/source rows after the header row.'),
+            ('sep', repr(self.sep),
+             'Column separator.'),
+            ('lineterm', repr(self.lineterm),
+             "Output line terminator; 'auto' reproduces the input file's."),
+            ('na_values', self.na_values,
+             'Strings read as missing values.'),
+            ('na_rep', self.na_rep,
+             'String written for missing values in the output.'),
+        ])
+        lines += _block('execution / output layout', [
+            ('n_workers', self.n_workers,
+             'Parallel worker processes; None = all CPU cores.'),
+            ('strict', self.strict,
+             'True = abort the whole run on the first chunk error; '
+             'False = skip the chunk and log it.'),
+            ('save_plots', self.save_plots,
+             'Whether per-chunk + summary diagnostic figures are written.'),
+            ('detect_subdir', self.detect_subdir,
+             'Subfolder for step-1 detection diagnostics + results.'),
+            ('data_subdir', self.data_subdir,
+             'Subfolder for the step-2 lag-corrected chunks (deliverable).'),
+        ])
         try:
             (self.output_dir / 'run_settings.txt').write_text(
                 '\n'.join(lines), encoding='utf-8')
@@ -2224,6 +2437,16 @@ class PerFilePipeline:
         scalars_str = ', '.join(f'{k} <- {v}' for k, v in self.scalars.items())
         plots_note = ('present' if self.save_plots
                       else 'not generated (pass --save-plots to enable)')
+        # The TUI-loadable settings YAML is written by the CLI/TUI wrapper
+        # before the run, not by PerFilePipeline itself — so only mention it
+        # when it is actually present (a direct Python-API run has none).
+        yaml_note = ''
+        if (self.output_dir / 'detect_remove_tui_settings.yaml').exists():
+            yaml_note = (
+                "detect_remove_tui_settings.yaml\n"
+                "                    Machine-readable copy of the settings,\n"
+                "                    reloadable in the detect+remove TUI (Load\n"
+                "                    button or drag-drop) to inspect or rerun.\n")
         text = (
             "diive PWB time-lag detection + removal -- output folder\n"
             "=======================================================\n"
@@ -2255,8 +2478,9 @@ class PerFilePipeline:
             f"    >>> Use THIS folder ({self.data_subdir}/) as the input directory\n"
             "    for the next flux-processing step. <<<\n"
             "\n"
-            "run_settings.txt    All settings used for this run "
-            "(written at run start).\n"
+            "run_settings.txt    Every setting used for this run, each with a\n"
+            "                    one-line explanation (written at run start).\n"
+            f"{yaml_note}"
             "log.txt             Plain-text console log of the run.\n"
             "README.txt          This file.\n"
             "\n"
@@ -2527,9 +2751,13 @@ def _build_parser():
                    help='Column name for sonic temperature.')
     # --- Scalars ---
     p.add_argument('--scalar', dest='scalars', action='append',
-                   metavar='LABEL:column', required=True,
+                   metavar='LABEL:column[@lag=..;uws=..]', required=True,
                    help='Gas label and column name in the raw file, e.g. '
-                        '"CH4:CH4_DRY_[LGR-A]". Repeat for each gas.')
+                        '"CH4:CH4_DRY_[LGR-A]". Repeat for each gas. Append '
+                        'an optional per-gas time-lag window after "@" as '
+                        '";"-separated key=value pairs (seconds): lag (lag_max), '
+                        'block, lws, uws -- e.g. "H2O:h2o@lag=30;uws=25" gives '
+                        'a long-inlet gas a wider window than the dry gases.')
     # --- PWB parameters ---
     p.add_argument('--hz', type=int, default=20,
                    help='Sampling frequency in Hz.')
@@ -2539,6 +2767,12 @@ def _build_parser():
                    help='Number of block-bootstrap replicates (paper: 99).')
     p.add_argument('--block-length', type=float, default=20.0,
                    help='Bootstrap block length [s] (paper: L = 20 s).')
+    p.add_argument('--lws', type=float, default=None,
+                   help='Optional lower limit [s] of an asymmetric lag search '
+                        'window applied to all gases (per-gas "@lws=" overrides).')
+    p.add_argument('--uws', type=float, default=None,
+                   help='Optional upper limit [s] of the asymmetric lag search '
+                        'window applied to all gases (per-gas "@uws=" overrides).')
     p.add_argument('--random-state', type=int, default=None,
                    help='Base seed for reproducible bootstrap. Each file, '
                         'chunk and gas gets a derived seed.')
@@ -2670,13 +2904,16 @@ def _cli_main():
         sys.exit(1)
 
     scalars = {}
+    per_gas_lag: dict = {}
     for token in args.scalars:
-        if ':' not in token:
-            print(f'ERROR: --scalar must be LABEL:column, got {token!r}',
-                  file=sys.stderr)
+        try:
+            label, col, overrides = parse_scalar_spec(token)
+        except ValueError as e:
+            print(f'ERROR: {e}', file=sys.stderr)
             sys.exit(1)
-        label, col = token.split(':', 1)
         scalars[label] = col
+        if overrides:
+            per_gas_lag[label] = overrides
 
     # Argparse delivers backslash-escapes literally; translate so the user
     # can type ``--sep "\t"`` or ``--lineterm "\r\n"`` and get the
@@ -2693,6 +2930,18 @@ def _cli_main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     log_path = output_dir / 'log.txt'
+
+    # Drop a TUI-loadable settings YAML so this CLI run can be reopened/edited
+    # in the detect+remove TUI. Optional: needs the textual ('gui') extra, and
+    # a missing TUI module or any write error must never stop the run.
+    settings_yaml = None
+    try:
+        from diive.flux.hires.detect_and_remove_tlag_tui import (
+            write_run_settings_yaml)
+        settings_yaml = write_run_settings_yaml(
+            output_dir, args, scalars, per_gas_lag)
+    except Exception:
+        settings_yaml = None
 
     pipeline = PerFilePipeline(
         input_dir=input_dir,
@@ -2728,6 +2977,9 @@ def _cli_main():
         dev_thresh=args.dev_thresh,
         hdi_prefilter=args.hdi_prefilter,
         lag_column_template=args.lag_column_template,
+        lws=args.lws,
+        uws=args.uws,
+        per_gas_lag=per_gas_lag,
     )
 
     files = sorted(input_dir.glob(args.file_pattern))
@@ -2780,6 +3032,9 @@ def _cli_main():
     out(f'[dim]align :[/dim]  lag column '
         f'[bold]{args.lag_column_template}[/bold] '
         f'[dim](phase 2 shifts scalars by this PWBOPT lag to remove it)[/dim]')
+    if settings_yaml:
+        out(f'[dim]config:[/dim]  {settings_yaml}  '
+            f'[dim](reload in the TUI to inspect/reproduce)[/dim]')
     out(f'[dim]data  :[/dim]  lag-corrected chunks -> '
         f'[bold]{output_dir / args.data_subdir}[/bold]  '
         f'[dim](step 2; next-step input)[/dim]')

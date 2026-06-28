@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**119 examples across 10 organized folders by functional domain.**
+**122 examples across 10 organized folders by functional domain.**
 
 ## Structure
 
@@ -10,7 +10,7 @@ Examples are organized by **functional domain**, not source code structure:
 
 ```
 examples/
-├── visualization/         # Plotting and visualization (22 examples)
+├── visualization/         # Plotting and visualization (24 examples)
 │   ├── plot_heatmap_datetime_basic.py
 │   ├── plot_heatmap_advanced.py
 │   ├── plot_heatmap_xyz_basic.py
@@ -40,7 +40,7 @@ examples/
 │   ├── times_statistics.py
 │   ├── times_diel_cycles.py
 │   └── times_temporal_matrices.py
-├── analysis/              # Time series analysis (12 examples)
+├── analysis/              # Time series analysis (13 examples)
 │   ├── analysis_seasonaltrend.py
 │   ├── analysis_driveranalysis.py
 │   ├── analysis_gapfinder.py
@@ -59,8 +59,9 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (26 examples)
+├── flux/                  # Eddy covariance flux processing (27 examples)
 │   ├── fluxprocessingchain/
+│   │   ├── fluxprocessingchain_level2.py
 │   │   ├── fluxprocessingchain_runchain.py
 │   │   ├── fluxprocessingchain_composable.py
 │   │   └── fluxprocessingchain_partitioning.py

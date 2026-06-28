@@ -46,10 +46,17 @@ labels = ['Extremely cold / Cold', 'Cold / Normal', 'Normal / Hot', 'Hot / Extre
 for label, bp in zip(labels, sdp.breakpoints):
     print(f"  {label}: {bp:.2f} deg C")
 
-sdp.plot(
-    ax=None,
+# The plot's chrome (title, x-label, fonts, colours, grid) now lives in a shared
+# FormatStyle. The colored patch legend and axis-visibility toggles stay direct
+# arguments because they are specific to this plot, not part of the shared style.
+style = dv.plotting.FormatStyle(
     title='Air Temperature Distribution Shift',
     xlabel='Air Temperature (deg C)',
+)
+
+sdp.plot(
+    ax=None,
+    format_style=style,
     ref_label='Reference 2013-2016',
     comp_label='Comparison 2019-2022',
     show_legend=True,

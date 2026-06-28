@@ -207,6 +207,7 @@ class DriverAnalysis:
         stl_period: Optional[int] = None,
     ):
         # Announce experimental status once per process (see _EXPERIMENTAL_WARNED).
+        """Set up driver analysis. See the class docstring."""
         global _EXPERIMENTAL_WARNED
         if not _EXPERIMENTAL_WARNED:
             import warnings

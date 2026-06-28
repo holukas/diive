@@ -75,6 +75,7 @@ class StepwiseOutlierDetection:
             idstr: str = None,
             output_middle_timestamp: bool = True
     ):
+        """Set up stepwise outlier detection. See the class docstring."""
         self.dfin = dfin.copy()
         self.col = col
         self._series = self.dfin[self.col].copy()

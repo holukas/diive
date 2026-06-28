@@ -434,3 +434,76 @@ def multi_scale_harmonics(
             continue
 
     return {'scales': scales}
+
+
+def spectrogram_to_code(
+        varname: str,
+        *,
+        nperseg: int = 256,
+        noverlap: int | None = None,
+        window: str = 'hann',
+        max_cycles_per_day: float | None = None,
+        cmap: str = 'viridis',
+        df_name: str = 'df',
+) -> str:
+    """Render a runnable :func:`spectrogram` snippet (compute + time-frequency plot).
+
+    Mirrors what the GUI's Spectrogram tab shows: the short-time Fourier transform
+    over the series, mapped onto calendar-time x cycles-per-day axes and drawn with
+    ``pcolormesh`` (the segment centres mapped back to real timestamps so the
+    x-axis stays calendar time even across gaps). Belongs in the library (not the
+    GUI): it encodes the exact call shape and must stay correct as that API
+    evolves; the GUI only calls it (the GUI <-> library separation rule).
+
+    Args:
+        varname: Column to analyse.
+        nperseg / noverlap / window: passed straight to :func:`spectrogram`.
+        max_cycles_per_day: upper limit of the frequency (y) axis, or None.
+        cmap: matplotlib colormap name.
+        df_name: variable name used for the input DataFrame.
+
+    Returns:
+        A runnable Python snippet as a string.
+    """
+    lines = [
+        "import matplotlib.dates as mdates",
+        "import matplotlib.pyplot as plt",
+        "import numpy as np",
+        "import pandas as pd",
+        "import diive as dv",
+        "",
+        f"series = {df_name}[{varname!r}]",
+        "spec = dv.analysis.spectrogram(",
+        "    series,",
+        f"    nperseg={nperseg!r},",
+        f"    noverlap={noverlap!r},",
+        f"    window={window!r},",
+        ")",
+        "",
+        "# Map each segment centre (in valid-sample positions) to its real",
+        "# timestamp, so the x-axis is calendar time even across gaps.",
+        "valid_index = series.dropna().index",
+        f"delta = pd.Series({df_name}.index).diff().median()",
+        "rec_per_day = pd.Timedelta('1D') / delta",
+        "cycles_per_day = spec['frequencies'] * rec_per_day",
+        "pos = np.clip(np.round(spec['times']).astype(int), 0, len(valid_index) - 1)",
+        "x = mdates.date2num(valid_index[pos].to_pydatetime())",
+        "",
+        "fig, ax = plt.subplots(figsize=(12, 5))",
+        "mesh = ax.pcolormesh(x, cycles_per_day, spec['power_db'],",
+        f"                     shading='gouraud', cmap={cmap!r})",
+    ]
+    if max_cycles_per_day is not None:
+        lines.append(f"ax.set_ylim(0, {max_cycles_per_day!r})")
+    lines += [
+        "ax.axhline(1.0, color='white', linestyle='--', linewidth=0.8, alpha=0.7)",
+        "ax.xaxis_date()",
+        "ax.xaxis.set_major_formatter(",
+        "    mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))",
+        "ax.set_xlabel('Time')",
+        "ax.set_ylabel('Frequency (cycles per day)')",
+        f"ax.set_title('Spectrogram - ' + {varname!r})",
+        "fig.colorbar(mesh, ax=ax, fraction=0.025, pad=0.01).set_label('Power (dB)')",
+        "plt.show()",
+    ]
+    return "\n".join(lines) + "\n"

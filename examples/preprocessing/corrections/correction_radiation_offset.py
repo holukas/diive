@@ -40,7 +40,7 @@ print(f"  Range: {series.min():.2f} to {series.max():.2f} W/m²")
 # 3. Calculates mean radiation during night as the offset
 # 4. Subtracts this offset and sets nighttime to zero
 
-series_corr = dv.corrections.remove_radiation_zero_offset(
+series_corr = dv.corrections.remove_nighttime_zero_offset(
     series=series,
     lat=SITE_LAT,
     lon=SITE_LON,

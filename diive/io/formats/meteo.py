@@ -19,11 +19,14 @@ from diive.core.utils.console import info
 
 
 class FormatMeteoForEddyProFluxProcessing:
+    """Reformat a meteo DataFrame into the EddyPro flux-processing input layout."""
+
     # Timestamp columns for EddyPro
     colname_timestamp1 = ('TIMESTAMP_1', 'yyyy-mm-dd')
     colname_timestamp2 = ('TIMESTAMP_2', 'HH:MM')
 
     def __init__(self, df: pd.DataFrame, cols: dict):
+        """Store the data and the ``{old: (new, unit)}`` column-renaming map."""
         self._df = df.copy()
         self.cols = cols
 
@@ -35,9 +38,11 @@ class FormatMeteoForEddyProFluxProcessing:
         return self._df
 
     def get_results(self):
+        """Return the reformatted DataFrame."""
         return self.df
 
     def run(self):
+        """Sanitize timestamps, split date/time, fill gaps with -9999 and rename columns."""
         self._df = self._sanitize_timestamp()
         self._df = self._split_timestamp_date_time()
 
@@ -84,11 +89,14 @@ class FormatMeteoForEddyProFluxProcessing:
 
 
 class FormatMeteoForFluxnetUpload:
+    """Reformat a meteo DataFrame into the FLUXNET upload layout (START/END timestamps)."""
+
     # Timestamp columns for EddyPro
     colname_timestamp1 = ('TIMESTAMP_1', 'yyyy-mm-dd')
     colname_timestamp2 = ('TIMESTAMP_2', 'HH:MM')
 
     def __init__(self, df: pd.DataFrame, cols: dict):
+        """Store the data and the ``{old: new}`` column-renaming map."""
         self._df = df.copy()
         self.cols = cols
 
@@ -100,9 +108,11 @@ class FormatMeteoForFluxnetUpload:
         return self._df
 
     def get_results(self):
+        """Return the reformatted DataFrame."""
         return self.df
 
     def run(self):
+        """Sanitize timestamps, insert START/END columns, fill gaps with -9999 and rename columns."""
         self._df = self._sanitize_timestamp()
         self._df = self._insert_timestamps_start_end()
 

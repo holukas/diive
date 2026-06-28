@@ -61,6 +61,15 @@ Implementation notes:
 - var_tsonic is required: the 4-combination RFlux v3.2.0 logic always runs.
   T_SONIC combinations are especially valuable for trace gases (N2O, CH4) with
   a weak scalar x W signal.
+- Optional lws/uws restrict the bootstrap peak search to an asymmetric window
+  [lws, uws] in seconds (RFlux's lws/uws). The CCF is still computed
+  symmetrically over +/-lag_max; only the argmax is windowed, so the negative
+  half beyond the window is computed-but-diagnostic.  Both None (default) =
+  full symmetric search, byte-identical to prior behaviour.  A positive-only
+  window (e.g. lws=0, uws=25) keeps only physical tube-delay lags -- useful for
+  a long-inlet gas such as H2O.  See window_to_lag_params in
+  detect_and_remove_tlag.py for the window -> (lag_max, block) mapping used by
+  the pipeline.
 
 Input data requirement:
     All classes in this module require **wind-rotation-corrected**
@@ -368,6 +377,8 @@ class PreWhiteningBootstrap:
             wdt: int = 5,
             random_state: int | np.random.Generator | None = None,
             segment_name: str = 'segment',
+            lws: float | None = None,
+            uws: float | None = None,
     ):
         """
         Store data and parameters. No computation is performed here.
@@ -406,6 +417,18 @@ class PreWhiteningBootstrap:
                 leaves the bootstrap non-reproducible.
             segment_name (str): Identifier for this averaging period. Defaults
                 to 'segment'.
+            lws (float | None): Lower limit of an optional asymmetric search
+                window in seconds.  uws (float | None): upper limit.  When
+                either is set, the bootstrap peak search and the diagnostic
+                ``tlag_pw`` are restricted to lags within ``[lws, uws]`` (the
+                unset bound falls back to ``-lag_max_s`` / ``+lag_max_s``).
+                Use e.g. ``lws=0, uws=25`` to keep only physical positive
+                tube-delay lags up to 25 s -- useful for a long-inlet gas such
+                as H2O whose lag is large and where unphysical negative-lag
+                peaks would otherwise compete.  Both ``None`` (default) ->
+                full symmetric window, identical to prior behaviour.  Mirrors
+                RFlux's lws/uws, but here the window constrains the *returned*
+                PWB lag (R computes a windowed variant separately).
         """
         self.df = df
         self.var_w = var_w
@@ -416,10 +439,14 @@ class PreWhiteningBootstrap:
         self.n_bootstrap = n_bootstrap
 
         # Block length defaults to R's l = LAG.MAX * 2 (coupled to lag_max_s).
+        # A block LONGER than the coupling is fine -- it preserves more
+        # autocorrelation structure and is intentional when a per-gas window
+        # floors the block (window_to_lag_params). Only a block SHORTER than
+        # 2*lag_max risks being too small to contain the lag, so warn just then.
         if block_length_s is None:
             block_length_s = 2.0 * lag_max_s
-        elif abs(block_length_s - 2.0 * lag_max_s) > 1e-9:
-            warn(f"block_length_s={block_length_s} s differs from R's coupled "
+        elif block_length_s < 2.0 * lag_max_s - 1e-9:
+            warn(f"block_length_s={block_length_s} s is shorter than R's coupled "
                  f"default 2 * lag_max_s = {2.0 * lag_max_s} s.")
         self.block_length_s = block_length_s
         self.wdt = wdt
@@ -431,6 +458,26 @@ class PreWhiteningBootstrap:
         self._lag_max_records = int(round(lag_max_s * hz))
         # Block length in records (R: l = LAG.MAX * 2)
         self._block_length_records = int(round(block_length_s * hz))
+
+        # Optional asymmetric search window [lws, uws] in seconds. None on both
+        # -> the full symmetric window, so _windowed_argmax reduces to a plain
+        # argmax over the whole CCF (no behaviour change vs. prior versions).
+        self.lws = lws
+        self.uws = uws
+        if lws is not None or uws is not None:
+            lo_s = -lag_max_s if lws is None else lws
+            hi_s = lag_max_s if uws is None else uws
+            lo_rec = max(-self._lag_max_records, int(round(lo_s * hz)))
+            hi_rec = min(self._lag_max_records, int(round(hi_s * hz)))
+            if hi_rec <= lo_rec:
+                raise ValueError(
+                    f"Empty search window: [{lo_s}, {hi_s}] s resolves to no "
+                    f"lags within +/-lag_max_s={lag_max_s} s.")
+            self._win_lo_idx = lo_rec + self._lag_max_records
+            self._win_hi_idx = hi_rec + self._lag_max_records  # inclusive
+        else:
+            self._win_lo_idx = 0
+            self._win_hi_idx = 2 * self._lag_max_records  # inclusive (full)
 
         # --- Results populated by run() ---
         # PW results (full-data scalar-AR CCF, for diagnostic panels)
@@ -490,14 +537,42 @@ class PreWhiteningBootstrap:
 
     @property
     def tlag_records(self) -> int:
-        """Bootstrap (PWB) time lag in records (mode over N_B samples)."""
+        """Bootstrap (PWB) time lag in records (mode over N_B samples).
+
+        This is the raw mode position even when it falls on the search-window
+        edge (see ``is_edge_pinned``); the *reported* lag ``tlag_s`` is NaN in
+        that case.  Kept raw for diagnostics (e.g. the per-chunk plot).
+        """
         if self._tlag_records is None:
             raise RuntimeError("Call run() first.")
         return self._tlag_records
 
     @property
+    def is_edge_pinned(self) -> bool:
+        """True if the bootstrap mode lag sits on the search-window boundary.
+
+        A peak at the window edge means the true peak lies at or beyond the
+        window limit -- the lag is undetermined, not measured.  A chunk with no
+        real W-scalar coupling produces a flat, noisy cross-correlation whose
+        ``argmax`` is pushed to the edge by the na.locf edge-fill; every
+        bootstrap replicate then agrees there, faking a zero-width HDI.  Such
+        edge detections are treated as failures: ``tlag_s`` and the HDI are NaN
+        and ``is_reliable`` is False, so the lag is never carried into PWBOPT or
+        applied -- matching EddyPro, which also discards boundary lags.  The
+        edge is each gas's *own* window (``lws``/``uws``), not the global
+        ``+/-lag_max_s``.
+        """
+        if self._tlag_records is None:
+            raise RuntimeError("Call run() first.")
+        lo = self._win_lo_idx - self._lag_max_records
+        hi = self._win_hi_idx - self._lag_max_records
+        return self._tlag_records <= lo or self._tlag_records >= hi
+
+    @property
     def tlag_s(self) -> float:
-        """Bootstrap (PWB) time lag in seconds."""
+        """Bootstrap (PWB) time lag in seconds (NaN if edge-pinned = failed)."""
+        if self.is_edge_pinned:
+            return np.nan
         return self.tlag_records / self.hz
 
     @property
@@ -509,17 +584,17 @@ class PreWhiteningBootstrap:
 
     @property
     def hdi_lo_s(self) -> float:
-        """Lower bound of 95% HDI in seconds."""
+        """Lower bound of 95% HDI in seconds (NaN if edge-pinned = failed)."""
         if self._hdi_lo_s is None:
             raise RuntimeError("Call run() first.")
-        return self._hdi_lo_s
+        return np.nan if self.is_edge_pinned else self._hdi_lo_s
 
     @property
     def hdi_hi_s(self) -> float:
-        """Upper bound of 95% HDI in seconds."""
+        """Upper bound of 95% HDI in seconds (NaN if edge-pinned = failed)."""
         if self._hdi_hi_s is None:
             raise RuntimeError("Call run() first.")
-        return self._hdi_hi_s
+        return np.nan if self.is_edge_pinned else self._hdi_hi_s
 
     @property
     def hdi_range_s(self) -> float:
@@ -528,7 +603,12 @@ class PreWhiteningBootstrap:
 
     @property
     def is_reliable(self) -> bool:
-        """True if HDI range < 0.5 s (S1 reliability criterion, paper Section 2.3)."""
+        """True if HDI range < 0.5 s (S1 reliability criterion, paper Section 2.3).
+
+        Always False for an edge-pinned detection (a failed detection).
+        """
+        if self.is_edge_pinned:
+            return False
         return self.hdi_range_s < 0.5
 
     @property
@@ -552,6 +632,8 @@ class PreWhiteningBootstrap:
             'hdi_range_s': self.hdi_range_s,
             'is_reliable': self.is_reliable,
             'n_bootstrap': self.n_bootstrap,
+            'lws': self.lws,
+            'uws': self.uws,
         }
 
     # ------------------------------------------------------------------
@@ -651,7 +733,7 @@ class PreWhiteningBootstrap:
         self._n_eff = len(s_fa)
 
         # tlag_pw = argmax of the UNSMOOTHED PW CCF (R: tl_pww <- which.max(abs(ccf_pww)))
-        tl0 = int(np.nanargmax(np.abs(self._pw_ccf)))
+        tl0 = self._windowed_argmax(self._pw_ccf)
         self._tlag_pw_records = tl0 - self._lag_max_records
         self._corr_pw = float(self._pw_ccf[tl0])
 
@@ -930,10 +1012,26 @@ class PreWhiteningBootstrap:
         all_smooth = self._na_locf_rows(
             self._smooth_rows(all_ccf, self.wdt)
         )
-        peak_indices = np.nanargmax(np.abs(all_smooth), axis=1)
+        peak_indices = self._windowed_argmax(all_smooth)
         boot_lags = peak_indices.astype(int) - self._lag_max_records
 
         return boot_lags, mean_smooth_ccf
+
+    def _windowed_argmax(self, mat: np.ndarray):
+        """Argmax of ``|mat|`` restricted to the lws/uws window.
+
+        ``mat`` is a signed CCF array, shape ``(N,)`` or ``(N_B, N)`` with
+        ``N = 2*lag_max_records + 1``.  Returns the peak index (or per-row
+        indices) *into the full array*, so the caller subtracts
+        ``lag_max_records`` to get the lag in records.  With no window set the
+        slice spans the whole array, so this is identical to a plain argmax
+        over ``|mat|`` -- the default path is unchanged.
+        """
+        lo, hi = self._win_lo_idx, self._win_hi_idx
+        a = np.abs(mat)
+        if a.ndim == 1:
+            return int(np.nanargmax(a[lo:hi + 1])) + lo
+        return np.nanargmax(a[:, lo:hi + 1], axis=1) + lo
 
     def _batch_ccf_fft(self, X: np.ndarray, Y: np.ndarray) -> np.ndarray:
         """
@@ -2114,6 +2212,7 @@ class PwbBatchDetection:
             strict: bool = False,
             file_date_format: str | None = None,
     ):
+        """Set up batch PWB time-lag detection. See the class docstring."""
         if usecols is None or col_names is None:
             raise ValueError("usecols and col_names must both be provided.")
         if len(usecols) != len(col_names):
@@ -2257,6 +2356,11 @@ class PwbBatchDetection:
               -> accept for temporal continuity.
         S3 -- unreliable -> carry forward the last known optimal lag.
 
+        Edge-pinned detections (lag at the search-window boundary) are already
+        NaN here: ``PreWhiteningBootstrap`` rejects them at detection time (an
+        edge lag is a failed detection and is never applied, matching EddyPro),
+        so this method only sees usable lags or NaN gaps.
+
         Args:
             tlag_s: Detected PWB lags in seconds (NaN where detection failed).
             hdi_range_s: 95% HDI range in seconds per period.
@@ -2318,7 +2422,9 @@ class PwbBatchDetection:
         Args:
             pwbopt_s: Optimal lag series from ``apply_pwbopt()``.
             tlag_s_raw: Raw PWB lags before PWBOPT.  Used to compute the
-                median fallback.  Ignored when ``None``.
+                median fallback.  Ignored when ``None``.  Edge-pinned detections
+                are already NaN (rejected at detection time), so they do not
+                pollute the median.
             fallback: Constant lag in seconds used as last resort.
 
         Returns:
@@ -2330,7 +2436,7 @@ class PwbBatchDetection:
 
         if result.isna().any() and tlag_s_raw is not None:
             raw = np.asarray(tlag_s_raw, dtype=float)
-            median_raw = np.nanmedian(raw)
+            median_raw = np.nanmedian(raw) if np.any(~np.isnan(raw)) else np.nan
             if np.isfinite(median_raw):
                 result = result.fillna(median_raw)
 

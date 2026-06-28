@@ -139,6 +139,18 @@ class _CorrectionRow(QWidget):
         self._param_widgets.append(field)
 
     def _build_params(self, key: str, outer: QVBoxLayout) -> None:
+        if key == CORR_RADIATION_ZERO_OFFSET:
+            self.clamp = QCheckBox("Clamp negative values to zero")
+            self.clamp.setChecked(True)
+            self.clamp.setToolTip(
+                "Set remaining negatives (daytime included) to zero after the "
+                "offset is removed and the night is zeroed. Uncheck to keep them.")
+            self.clamp.toggled.connect(lambda *_: self.changed.emit())
+            h = QHBoxLayout()
+            h.setContentsMargins(22, 0, 0, 0)
+            h.addWidget(self.clamp)
+            outer.addLayout(h)
+            self._param_widgets.append(self.clamp)
         if key in (CORR_SETTO_MAX, CORR_SETTO_MIN):
             self.threshold = _value_spin()
             self.threshold.setValue(30.0 if key == CORR_SETTO_MAX else -5.0)
@@ -166,6 +178,8 @@ class _CorrectionRow(QWidget):
         return self.enable.isChecked() and self.enable.isEnabled()
 
     def kwargs(self) -> dict:
+        if self.key == CORR_RADIATION_ZERO_OFFSET:
+            return {"clamp_negatives": self.clamp.isChecked()}
         if self.key in (CORR_SETTO_MAX, CORR_SETTO_MIN):
             return {"threshold": self.threshold.value()}
         if self.key == CORR_SETTO_VALUE:
@@ -187,7 +201,9 @@ class _CorrectionRow(QWidget):
     # --- state (raw control values, for project save/restore) ---
     def get_state(self) -> dict:
         st: dict = {"enabled": self.enable.isChecked()}
-        if self.key in (CORR_SETTO_MAX, CORR_SETTO_MIN):
+        if self.key == CORR_RADIATION_ZERO_OFFSET:
+            st["clamp_negatives"] = self.clamp.isChecked()
+        elif self.key in (CORR_SETTO_MAX, CORR_SETTO_MIN):
             st["threshold"] = self.threshold.value()
         elif self.key == CORR_SETTO_VALUE:
             st["dates"] = self.dates.text()
@@ -198,7 +214,9 @@ class _CorrectionRow(QWidget):
 
     def set_state(self, st: dict) -> None:
         self.enable.setChecked(bool(st.get("enabled", False)))
-        if self.key in (CORR_SETTO_MAX, CORR_SETTO_MIN) and "threshold" in st:
+        if self.key == CORR_RADIATION_ZERO_OFFSET:
+            self.clamp.setChecked(bool(st.get("clamp_negatives", True)))
+        elif self.key in (CORR_SETTO_MAX, CORR_SETTO_MIN) and "threshold" in st:
             self.threshold.setValue(float(st["threshold"]))
         elif self.key == CORR_SETTO_VALUE:
             self.dates.setText(str(st.get("dates", "")))

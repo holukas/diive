@@ -412,6 +412,7 @@ class GapStats:
     def __init__(self,
                  series: Series,
                  long_gap_records: int = 48):
+        """Compute gap statistics for a series. See the class docstring for parameters."""
         self._series = series.copy()
         self._series_col = series.name
         self.long_gap_records = long_gap_records
@@ -1049,3 +1050,50 @@ class GapStats:
             f"(bar annotations = number of gap periods)",
             fontsize=10,
         )
+
+
+def gapstats_to_code(
+        varname: str,
+        *,
+        long_gap_records: int = 48,
+        df_name: str = 'df',
+        with_plot: bool = True,
+) -> str:
+    """Render a runnable :class:`GapStats` snippet (summary + availability/timeline).
+
+    Mirrors the GUI's Gaps & coverage tab: build :class:`GapStats`, print the
+    summary and the long-gap table, and (optionally) draw the availability
+    heatmap over the gap/spike timeline. Belongs in the library (not the GUI):
+    it encodes the exact call shape and must stay correct as that API evolves;
+    the GUI only calls it (the GUI <-> library separation rule).
+
+    Args:
+        varname: column to analyse.
+        long_gap_records: gaps with at least this many missing records are
+            reported as long gaps (passed to :class:`GapStats`).
+        df_name: variable name used for the input DataFrame.
+        with_plot: also emit the availability-heatmap + timeline plot lines.
+
+    Returns:
+        A runnable Python snippet as a string.
+    """
+    lines = ["import diive as dv", ""]
+    if with_plot:
+        lines = ["import matplotlib.pyplot as plt", *lines]
+    lines += [
+        "gs = dv.analysis.GapStats(",
+        f"    {df_name}[{varname!r}],",
+        f"    long_gap_records={long_gap_records!r},",
+        ")",
+        "print(gs.summary)",
+        "print(gs.long_gaps)",
+    ]
+    if with_plot:
+        lines += [
+            "",
+            "fig, (ax_hm, ax_tl) = plt.subplots(2, 1, figsize=(12, 7))",
+            "gs.plot_availability_heatmap(ax=ax_hm)",
+            "gs.plot_gap_spike_timeline(ax=ax_tl)",
+            "plt.show()",
+        ]
+    return "\n".join(lines) + "\n"

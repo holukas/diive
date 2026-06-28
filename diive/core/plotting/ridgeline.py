@@ -10,7 +10,9 @@ import pandas as pd
 from matplotlib.pyplot import cm
 from sklearn.neighbors import KernelDensity
 
+from diive.core.plotting.styles import LightTheme as theme
 from diive.core.plotting.styles.LightTheme import adjust_color_lightness
+from diive.core.plotting.styles.format import FormatStyle
 from diive.core.utils.console import detail
 
 
@@ -25,6 +27,7 @@ class RidgeLinePlot:
     """
 
     def __init__(self, series: pd.Series):
+        """Set up a ridgeline plot for *series* (one stacked density per group/year). See :meth:`plot`."""
         self.series = series
 
         self.xlim = None
@@ -35,12 +38,10 @@ class RidgeLinePlot:
         self.colors = None
         self.assigned_colors = {}
         self.hspace = None
-        self.xlabel = None
         self.fig_width = None
         self.fig_height = None
         self.fig_dpi = None
         self.shade_percentile = None
-        self.fig_title = None
         self.fig = None
         self.showplot = None
         self.ascending = False
@@ -52,34 +53,33 @@ class RidgeLinePlot:
         """Return matplotlib figure in which plot was generated."""
         return self.fig
 
-    def _update_params(self, xlim: list, ylim: list, hspace: float, xlabel: str,
+    def _update_params(self, xlim: list, ylim: list, hspace: float,
                        fig_width: float, fig_height: float, shade_percentile: float,
-                       show_mean_line: bool, fig_title: str, fig_dpi: float, showplot: bool,
-                       ascending: bool, verbose: bool = False, kd_kwargs: dict = None,
-                       fig=None):
+                       show_mean_line: bool, fig_dpi: float, showplot: bool,
+                       ascending: bool, style: FormatStyle, verbose: bool = False,
+                       kd_kwargs: dict = None, fig=None):
         self.xlim = xlim
         self.ylim = ylim
         self.hspace = hspace
-        self.xlabel = xlabel
         self.fig_width = fig_width
         self.fig_height = fig_height
         self.shade_percentile = shade_percentile
         self.show_mean_line = show_mean_line
-        self.fig_title = fig_title
         self.fig_dpi = fig_dpi
         self.showplot = showplot
         self.ascending = ascending
+        self.style = style
         self.verbose = verbose
         self.kd_kwargs = kd_kwargs
         self._fig_external = fig
         return None
 
-    def plot(self, xlim: list = None, ylim: list = None, hspace: float = -0.5, xlabel: str = None,
+    def plot(self, xlim: list = None, ylim: list = None, hspace: float = -0.5,
              fig_width: float = 8, fig_height: float = 8,
              shade_percentile: float = 0.5, show_mean_line: bool = False,
-             fig_title: str = None, fig_dpi: float = 72, showplot: bool = True,
+             fig_dpi: float = 72, showplot: bool = True,
              ascending: bool = False, how: str = 'weekly', kd_kwargs: dict = None,
-             fig=None):
+             fig=None, format_style: FormatStyle = None):
         """Render the ridgeline plot.
 
         Args:
@@ -88,13 +88,19 @@ class RidgeLinePlot:
                 creating a new figure -- e.g. for embedding in a GUI canvas. The
                 ``fig_width``/``fig_height``/``fig_dpi`` args are then ignored.
                 Pass ``showplot=False`` with this.
+            format_style: A :class:`~diive.plotting.FormatStyle` describing the
+                shared chrome. Only the parts that fit this stacked-density layout
+                are honoured here: the bottom x-axis label (text/units, font, colour)
+                and the figure title (text, font, colour). The per-ridge grid, spines,
+                ticks and shading stay fixed.
             (other args unchanged)
         """
-        self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
+        style = format_style or FormatStyle()
+        self._update_params(xlim=xlim, ylim=ylim, hspace=hspace,
                             fig_width=fig_width, fig_height=fig_height,
                             shade_percentile=shade_percentile, show_mean_line=show_mean_line,
-                            fig_title=fig_title, fig_dpi=fig_dpi, showplot=showplot,
-                            ascending=ascending, kd_kwargs=kd_kwargs, fig=fig)
+                            fig_dpi=fig_dpi, showplot=showplot,
+                            ascending=ascending, style=style, kd_kwargs=kd_kwargs, fig=fig)
         self.ys, self.ys_unique = self._y_index(how=how)
         self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
         self.assigned_colors = self._assign_colors(how=how)
@@ -148,7 +154,13 @@ class RidgeLinePlot:
                                   layout=None, dpi=self.fig_dpi)
 
         gs = (grid_spec.GridSpec(len(self.ys_unique), 1))
-        gs.update(wspace=0, hspace=0, left=0.09, right=0.97, top=0.95, bottom=0.07)
+        # Set hspace up front (negative -> ridges overlap). Doing it here, before
+        # the subplots are added, means each axis is positioned with the overlap
+        # baked in. A later gs.update(hspace=...) only repositions axes of figures
+        # registered with pyplot's Gcf, so it is a silent no-op for an embedded
+        # GUI figure (created directly, not via plt.figure) -- the overlap would
+        # never apply there.
+        gs.update(wspace=0, hspace=self.hspace, left=0.09, right=0.97, top=0.95, bottom=0.07)
 
         # Create empty list for dynamic number of plots (rows)
         ax_objs = []
@@ -252,9 +264,17 @@ class RidgeLinePlot:
 
             # Show x labels only for last axis
             if i == len(self.ys_unique) - 1:
-                self.xlabel = self.series.name if not self.xlabel else self.xlabel
-                self.ax.set_xlabel(self.xlabel, fontsize=16)
-                # self.ax.set_xlabel(self.xlabel, fontsize=16, fontweight="bold")
+                # Bottom x-axis label from the shared chrome: text (style.xlabel or
+                # series name) plus units, with the style's resolved font/colour.
+                xlabel = self.style.xlabel if self.style.xlabel is not None else self.series.name
+                if xlabel and self.style.xunits:
+                    xlabel = f"{xlabel} {self.style.xunits}"
+                axlabel_fs = (self.style.axlabel_fontsize
+                              if self.style.axlabel_fontsize is not None else theme.FONTSIZE_AXLABEL)
+                text_color = (self.style.text_color
+                              if self.style.text_color is not None else theme.COLOR_TEXT)
+                self.ax.set_xlabel(xlabel or "", fontsize=axlabel_fs, color=text_color,
+                                   fontweight=self.style.axlabel_fontweight)
             else:
                 self.ax.set_xticklabels([])
                 self.ax.set_xticks([])
@@ -293,12 +313,16 @@ class RidgeLinePlot:
 
         # ax_objs.reverse()
 
-        gs.update(hspace=self.hspace)
-        if not self.fig_title:
-            title = self.series.name
-        else:
-            title = self.fig_title
-        self.fig.suptitle(title, fontsize=20)
+        # Figure title from the shared chrome: text (style.title or series name)
+        # with the style's resolved font/colour. style.title == "" suppresses it.
+        title = self.style.title if self.style.title is not None else self.series.name
+        if title:
+            title_fs = (self.style.title_fontsize
+                        if self.style.title_fontsize is not None else theme.FONTSIZE_TITLE)
+            text_color = (self.style.text_color
+                          if self.style.text_color is not None else theme.COLOR_TEXT)
+            self.fig.suptitle(title, fontsize=title_fs, color=text_color,
+                              fontweight=self.style.title_fontweight)
         # plt.tight_layout()
         if self.showplot:
             self.fig.show()

@@ -31,6 +31,7 @@ from diive.gui import events as events_store
 from diive.gui import metadata_store
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.flow_layout import FlowLayout
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
@@ -42,24 +43,26 @@ def _is_flag(name: str) -> bool:
     worth auto-plotting; the Overview prefers the cleaned data column instead."""
     return str(name).startswith("FLAG_")
 
-# Overview figure layout (2 rows x 4 cols): the time series spans the top-left
-# three columns with the date/time heatmap top-right; below them sit the
-# cumulative, diel-cycle, daily-mean and histogram panels. Add panels by
+# Overview figure layout (3 rows x 6 cols): the date/time heatmap fills the
+# right column (col 5) top-to-bottom. The time series spans the top two rows
+# across the left five columns; the bottom row holds every other panel
+# (cumulative, diel-cycle, daily-mean, histogram, waterfall). Add panels by
 # extending _PANELS. Each entry: (gridspec row-slice, gridspec col-slice, type).
 _PANELS = [
-    ((0, slice(0, 3)), "Time series"),
-    ((0, 3), "Heatmap (date/time)"),
-    ((1, 0), "Cumulative"),
-    ((1, 1), "Diel cycle"),
-    ((1, 2), "Daily mean"),
-    ((1, 3), "Histogram"),
+    ((slice(0, 2), slice(0, 5)), "Time series"),
+    ((slice(0, 3), 5), "Heatmap (date/time)"),
+    ((2, 0), "Cumulative"),
+    ((2, 1), "Diel cycle"),
+    ((2, 2), "Daily mean"),
+    ((2, 3), "Histogram"),
+    ((2, 4), "Waterfall"),
 ]
 
 # Panels whose x-axis is the datetime index: linked via a shared x-axis so
 # zooming/panning one zooms all of them to the same time period. The diel cycle
 # (x = hour of day) and the heatmap (x = time of day, date on the y-axis) live in
 # different domains and are intentionally left unlinked.
-_DATETIME_X_PANELS = {"Time series", "Cumulative", "Daily mean"}
+_DATETIME_X_PANELS = {"Time series", "Cumulative", "Daily mean", "Waterfall"}
 
 # Short, uniform panel headers (the variable name lives in the figure suptitle).
 _PANEL_TITLES = {
@@ -69,9 +72,9 @@ _PANEL_TITLES = {
     "Daily mean": "Daily mean ± SD",
     "Histogram": "Distribution",
     "Heatmap (date/time)": "Heatmap",
+    "Waterfall": "Cumulative waterfall",
 }
 _TITLE_FONTSIZE = 10
-_TITLE_COLOR = "#37474F"  # blue-grey 800 — fallback header colour (heatmap)
 
 # One size for every tick number, axis label, and in-plot annotation across all
 # panels, so the overview reads cleanly despite the plot classes' own defaults.
@@ -79,14 +82,15 @@ _FONT_SIZE = 9
 
 # diive overview tick/spine standard, applied uniformly to every panel (the plot
 # classes' own tick/spine styles vary): ticks point inward, thin and short
-# (matching the cumulative panel); all four spines shown at the same thin width;
+# (matching the cumulative panel); the top and right spine are hidden for an open
+# look (except on the heatmap, which keeps its full frame — see _style_panel);
 # no grid (the zero reference line is enough).
 _TICK_LENGTH = 4
 _LINE_WIDTH = 0.8
 
 # Refined, mutually distinct line colours so each panel reads at a glance and
 # looks professional (the bright Material blue read as garish).
-_TS_COLOR = "#546E7A"     # blue-grey 600 — time series (refined, professional)
+_TS_COLOR = "#22303C"     # near-black ink — time series (lets the heatmap carry the colour)
 _DAILY_COLOR = "#26A69A"  # teal 400 — daily mean (line + SD band)
 # The diel cycle now draws one auto-coloured line per month (no single colour).
 _ZERO_COLOR = "#90A4AE"   # blue-grey 300 — zero reference line
@@ -295,8 +299,11 @@ class _HeroBand(QFrame):
     Built **once** with persistent widgets — `set_variable` only updates their
     text/visibility, never tears them down — so switching variables can't flicker.
     The only per-call rebuild is the tag chips (variable count), confined to a
-    small sub-container. Vertical size policy is Fixed: the structure is constant,
-    so the band keeps a constant height and never resizes the canvas below.
+    small sub-container. The stat slots sit in a wrapping `FlowLayout` so a narrow
+    window (e.g. a high-DPI laptop) stacks them into extra rows instead of forcing
+    the band — and the figure beside it — wider than the screen (which clipped the
+    plots on the right). Vertical policy is therefore height-for-width Minimum: the
+    band grows taller as the stats wrap rather than overflowing horizontally.
     """
 
     #: Metric slots grouped into rows (logical order). Each entry is
@@ -331,7 +338,9 @@ class _HeroBand(QFrame):
         self.setStyleSheet(
             f"QFrame#heroband {{ background: #FFFFFF; border: 1px solid {border};"
             f" border-radius: 10px; }}")
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        sp = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        sp.setHeightForWidth(True)
+        self.setSizePolicy(sp)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 11, 16, 11)
         lay.setSpacing(8)
@@ -366,19 +375,25 @@ class _HeroBand(QFrame):
         idrow.addStretch(1)
         lay.addLayout(idrow)
 
-        # --- stat rows (persistent slots, keyed by label) --------------------
+        # --- stat slots (persistent, wrapping flow) --------------------------
+        # A FlowLayout so the slots reflow onto extra rows when the band is too
+        # narrow to hold them all on one line, instead of imposing a min-width
+        # wider than the window (which pushed the figure off the right edge).
         self._slots: dict[str, _MetricSlot] = {}
+        stats_host = QWidget()
+        hsp = stats_host.sizePolicy()
+        hsp.setHeightForWidth(True)
+        hsp.setVerticalPolicy(QSizePolicy.Policy.Minimum)
+        stats_host.setSizePolicy(hsp)
+        flow = FlowLayout(stats_host, margin=0, hspacing=14, vspacing=8)
         for row in self._STAT_ROWS:
-            rowlay = QHBoxLayout()
-            rowlay.setSpacing(14)
             for i, (label, _tip) in enumerate(row):
                 if i > 0:
-                    rowlay.addWidget(_stat_separator())
+                    flow.addWidget(_stat_separator())
                 slot = _MetricSlot()
                 self._slots[label] = slot
-                rowlay.addWidget(slot)
-            rowlay.addStretch(1)
-            lay.addLayout(rowlay)
+                flow.addWidget(slot)
+        lay.addWidget(stats_host)
 
     def set_variable(self, name: str, series) -> None:
         meta = metadata_store.manager.store.peek(name)  # None if untracked
@@ -504,7 +519,9 @@ class OverviewTab(DiiveTab):
         right = QWidget()
         right_lay = QVBoxLayout(right)
         right_lay.setContentsMargins(0, 0, 0, 0)
-        right_lay.setSpacing(0)
+        # Small gap so the figure (and its panel titles) isn't flush against the
+        # hero band above it.
+        right_lay.setSpacing(10)
         self.hero = _HeroBand()
         right_lay.addWidget(self.hero)
         self.canvas = MplCanvas()
@@ -602,10 +619,10 @@ class OverviewTab(DiiveTab):
         engine = fig.get_layout_engine()
         if engine is not None:
             try:
-                engine.set(w_pad=0.015, h_pad=0.02, wspace=0.0, hspace=0.03)
+                engine.set(w_pad=0.015, h_pad=0.02, wspace=0.0, hspace=0.10)
             except (AttributeError, TypeError):
                 pass
-        gs = fig.add_gridspec(2, 4)
+        gs = fig.add_gridspec(3, 6)
         # Full series for the current range; the diel cycle re-slices it on zoom.
         self._zoom_series = series
         panel_axes: dict[str, object] = {}
@@ -645,6 +662,14 @@ class OverviewTab(DiiveTab):
             self._heatmap_ax.get_ylim() if self._heatmap_ax is not None else None)
         self._shared_x_ax = shared_x_ax  # for focus_on() navigation
         if shared_x_ax is not None:
+            # A little right-only padding on the shared datetime axis so the
+            # cumulative / waterfall endpoint markers aren't clipped by the right
+            # spine; the left end stays at the exact start. Done before the zoom
+            # callback is connected so this initial set_xlim doesn't fire it.
+            shared_x_ax.autoscale_view()
+            x0, x1 = shared_x_ax.get_xlim()
+            if x1 > x0:
+                shared_x_ax.set_xlim(x0, x1 + (x1 - x0) * 0.03)
             shared_x_ax.callbacks.connect("xlim_changed", self._on_zoom)
         self.canvas.draw()
 
@@ -710,13 +735,41 @@ class OverviewTab(DiiveTab):
             # The selected variable is known, so the value axis needs no label
             # (the heatmap's y-axis is Date and keeps its label).
             ax.set_ylabel("")
-            legend = ax.get_legend()
-            if legend is not None:
-                legend.remove()
-        # Header tinted to match the panel's line, for quick visual pairing.
-        ax.set_title(_PANEL_TITLES.get(plot_type, plot_type),
-                     fontsize=_TITLE_FONTSIZE, fontweight=500,
-                     color=self._line_color(ax))
+            # Two panels keep their legend: the diel cycle (one entry per month —
+            # the only key to which colour is which month) and the histogram (its
+            # KDE/mean/median legend doubles as a stats readout). Every other panel
+            # sheds its redundant single-series legend.
+            if plot_type not in ("Diel cycle", "Histogram"):
+                legend = ax.get_legend()
+                if legend is not None:
+                    legend.remove()
+        # Panel header in the Qt-header style used elsewhere (e.g. the gap-filling
+        # tab): tracked uppercase, bold, monochrome ink. matplotlib has no
+        # letter-spacing, so the tracking is approximated by the uppercasing alone.
+        ax.set_title(theme.manager.label_text(_PANEL_TITLES.get(plot_type, plot_type)),
+                     fontsize=_TITLE_FONTSIZE, fontweight="bold",
+                     color=theme.manager.tokens["INK"])
+        # Spines: an open look — hide the top and right spine on every panel
+        # except the heatmap (which keeps its full frame). Set here (not in
+        # _panel_fonts) because the heatmap exception needs the plot type.
+        hide_top_right = plot_type != "Heatmap (date/time)"
+        for side, spine in ax.spines.items():
+            visible = not (hide_top_right and side in ("top", "right"))
+            spine.set_visible(visible)
+            if visible:
+                spine.set_linewidth(_LINE_WIDTH)
+        # The daily-mean panel aggregates to one value per day, so its hover
+        # tooltip needs only the date (the time is always 00:00). The hover
+        # reads this flag off the axes (see widgets/hover.py).
+        ax._diive_hover_dateonly = (plot_type == "Daily mean")
+        if hide_top_right:
+            ax.tick_params(top=False, right=False, labeltop=False, labelright=False)
+            # Fit the x-axis exactly to the data ends (drop matplotlib's 5%
+            # autoscale margin); re-enable x autoscale so it applies even when a
+            # plot class pinned the view. The zoom path sets explicit xlim, which
+            # overrides this, so live zoom/pan is unaffected.
+            ax.set_xmargin(0)
+            ax.autoscale(enable=True, axis="x")
 
     @staticmethod
     def _panel_fonts(ax) -> None:
@@ -725,9 +778,8 @@ class OverviewTab(DiiveTab):
         ax.tick_params(axis="both", labelsize=_FONT_SIZE, direction="in",
                        width=_LINE_WIDTH, length=_TICK_LENGTH)
         ax.grid(False)
-        for spine in ax.spines.values():
-            spine.set_visible(True)
-            spine.set_linewidth(_LINE_WIDTH)
+        # Spine visibility/width is set per-panel in _style_panel (it needs the
+        # plot type to keep the heatmap's full frame); not touched here.
         ax.xaxis.label.set_size(_FONT_SIZE)
         ax.yaxis.label.set_size(_FONT_SIZE)
         for txt in ax.texts:
@@ -776,21 +828,12 @@ class OverviewTab(DiiveTab):
         # engine and could abort an in-progress resize re-solve).
         self.canvas.draw_idle()
 
-    @staticmethod
-    def _line_color(ax) -> str:
-        """Colour of the panel's main data line (the zorder-99 line the diive
-        plot classes draw), used to tint the header. Falls back to the neutral
-        title colour for panels without a line (the heatmap)."""
-        for line in ax.get_lines():
-            if line.get_zorder() == 99:
-                return line.get_color()
-        return _TITLE_COLOR
-
     def _draw_panel(self, ax, series, plot_type: str) -> None:
         try:
             if plot_type == "Time series":
                 dv.plotting.TimeSeries(series).plot(
-                    ax=ax, color=_TS_COLOR, linewidth=1.4)
+                    ax=ax, color=_TS_COLOR, linewidth=0.7,
+                    marker=True, markersize=2.5)
                 # Zero reference line only when the data straddles zero (e.g.
                 # fluxes) — pointless for all-positive variables far from zero.
                 smin, smax = series.min(), series.max()
@@ -802,8 +845,14 @@ class OverviewTab(DiiveTab):
                     ax=ax, showplot=False, show_title=False, fill=True)
             elif plot_type == "Diel cycle":
                 # One auto-coloured line per month (seasonal diel pattern).
+                # Compact multi-column legend maps each colour to its month;
+                # spread to 3 columns when more than 8 months are present.
+                legend_ncol = 3 if series.dropna().index.month.nunique() > 8 else 2
                 dv.plotting.DielCycle(series).plot(
-                    ax=ax, each_month=True, show_legend=False, linewidth=1.1)
+                    ax=ax, format_style=dv.plotting.FormatStyle(
+                        show_legend=True, legend_ncol=legend_ncol,
+                        legend_fontsize=_FONT_SIZE),
+                    each_month=True, linewidth=1.1)
                 ax.axhline(0, color=_ZERO_COLOR, linestyle="--", linewidth=1.0,
                            alpha=0.6, zorder=1)
             elif plot_type == "Daily mean":
@@ -813,16 +862,25 @@ class OverviewTab(DiiveTab):
                 ax.fill_between(daily.index, (daily - sd).to_numpy(),
                                 (daily + sd).to_numpy(), color=_DAILY_COLOR,
                                 alpha=0.2, edgecolor="none", zorder=0)
-                dv.plotting.TimeSeries(daily).plot(ax=ax, color=_DAILY_COLOR, linewidth=1.4)
+                dv.plotting.TimeSeries(daily).plot(ax=ax, color=_DAILY_COLOR,
+                                                   linewidth=0.8, marker=True, markersize=2.5)
                 ax.axhline(0, color=_ZERO_COLOR, linestyle="--", linewidth=1.0,
                            alpha=0.6, zorder=0)
             elif plot_type == "Histogram":
                 # Compact distribution: drop the z-score twiny axis, counts and
                 # info box so it reads cleanly at panel size.
-                dv.plotting.HistogramPlot(series).plot(
-                    ax=ax, show_title=False, show_zscores=False,
+                dv.plotting.HistogramPlot(series, n_bins=20).plot(
+                    ax=ax, format_style=dv.plotting.FormatStyle(
+                        show_grid=False, legend_fontsize=_FONT_SIZE),
+                    show_title=False, show_zscores=False,
                     show_zscore_values=False, show_info=False,
-                    show_counts=False, show_grid=False, highlight_peak=True)
+                    show_counts=False, highlight_peak=True,
+                    show_kde=True, show_mean=True, show_median=True)
+            elif plot_type == "Waterfall":
+                # Daily contributions building a running total (NEE convention:
+                # uptake negative). Connectors/annotation read fine at panel size.
+                dv.plotting.WaterfallPlot(series, resample="D", agg="sum").plot(
+                    ax=ax, showplot=False)
             elif plot_type == "Heatmap (date/time)":
                 dv.plotting.HeatmapDateTime(series).plot(
                     ax=ax, fig=self.canvas.fig, cb_digits_after_comma="auto")

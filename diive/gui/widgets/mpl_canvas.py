@@ -20,8 +20,11 @@ from matplotlib.backends.backend_qtagg import (
     NavigationToolbar2QT,
 )
 from matplotlib.figure import Figure
+from PySide6.QtCore import QEvent
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
+    QAbstractScrollArea,
+    QApplication,
     QCheckBox,
     QHBoxLayout,
     QLabel,
@@ -59,7 +62,14 @@ class MplCanvas(QWidget):
     is cleared first), drawing into them, then `draw()`.
     """
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, *,
+                 show_toolbar: bool = True) -> None:
+        """Embeddable matplotlib canvas.
+
+        ``show_toolbar=False`` omits the bottom navigation/DPI/hover row. The
+        toolbar's many buttons impose a wide minimum width, so dropping it lets
+        the canvas shrink into a narrow side panel (e.g. the gap-filling SHAP
+        panel)."""
         super().__init__(parent)
 
         # Give this widget a light palette BEFORE building the toolbar. The
@@ -94,7 +104,7 @@ class MplCanvas(QWidget):
         self._dpi_spin.setSingleStep(50)
         self._dpi_spin.setValue(150)
         self._dpi_spin.setToolTip("DPI used when saving the figure")
-        self._toolbar = _SaveDpiToolbar(self._canvas, self, self.save_dpi)
+        self._toolbar = _SaveDpiToolbar(self._canvas, self, self.save_dpi) if show_toolbar else None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -107,23 +117,52 @@ class MplCanvas(QWidget):
         self.hover = HoverAnnotator(self)
 
         # Bottom row: a "Hover values" toggle next to the navigation toolbar,
-        # both pushed to the right corner by a stretch.
-        self._hover_toggle = QCheckBox("Hover values")
-        self._hover_toggle.setChecked(True)
-        self._hover_toggle.toggled.connect(self.hover.set_enabled)
-        bottom = QHBoxLayout()
-        bottom.setContentsMargins(0, 0, 4, 2)
-        bottom.addStretch(1)
-        bottom.addWidget(QLabel("Save DPI"))
-        bottom.addWidget(self._dpi_spin)
-        bottom.addWidget(self._hover_toggle)
-        bottom.addWidget(self._toolbar)
-        layout.addLayout(bottom)
+        # both pushed to the right corner by a stretch. Omitted when the toolbar
+        # is hidden (its width minimum would otherwise stop the canvas going narrow).
+        if show_toolbar:
+            self._hover_toggle = QCheckBox("Hover values")
+            self._hover_toggle.setChecked(True)
+            self._hover_toggle.toggled.connect(self.hover.set_enabled)
+            bottom = QHBoxLayout()
+            bottom.setContentsMargins(0, 0, 4, 2)
+            bottom.addStretch(1)
+            bottom.addWidget(QLabel("Save DPI"))
+            bottom.addWidget(self._dpi_spin)
+            bottom.addWidget(self._hover_toggle)
+            bottom.addWidget(self._toolbar)
+            layout.addLayout(bottom)
+        else:
+            self._hover_toggle = None
 
         # Re-solve the (frozen) constrained layout whenever the canvas resizes,
         # so panels adapt to the real widget size. Pan/zoom doesn't resize, so
         # it stays frozen -- see draw()/_on_resize.
         self._canvas.mpl_connect("resize_event", self._on_resize)
+
+        # The matplotlib canvas accepts wheel events, so a wheel over a plot
+        # embedded in a scroll area (e.g. the results dashboards) would not
+        # scroll the page. Filter the canvas's wheel events and forward them to
+        # an enclosing scroll area instead. diive binds no wheel interaction on
+        # the canvas, so nothing is lost.
+        self._canvas.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if obj is self._canvas and event.type() == QEvent.Type.Wheel:
+            area = self._enclosing_scroll_area()
+            if area is not None:
+                QApplication.sendEvent(area.viewport(), event)
+                return True  # consumed here; the scroll area handled it
+        return super().eventFilter(obj, event)
+
+    def _enclosing_scroll_area(self) -> QAbstractScrollArea | None:
+        """Nearest ancestor scroll area, or None if this canvas isn't inside one
+        (e.g. a standalone plotting tab — then the wheel is left to the canvas)."""
+        w = self.parentWidget()
+        while w is not None:
+            if isinstance(w, QAbstractScrollArea):
+                return w
+            w = w.parentWidget()
+        return None
 
     def save_dpi(self) -> int:
         """Current DPI selected for figure export (read by the Save action)."""
@@ -146,6 +185,25 @@ class MplCanvas(QWidget):
             return list(grid[:, 0])
         grid = self.fig.subplots(1, n, squeeze=False, sharex=sharex, sharey=sharey)
         return list(grid[0])
+
+    def reset_history(self) -> None:
+        """Reset the navigation toolbar's view history to the current view.
+
+        Each render recreates the axes (``new_axes`` clears the figure), so the
+        toolbar's per-axes view stack ends up referencing discarded axes and its
+        Home/Back/Forward buttons do nothing. Clearing the stack and recording
+        the current view makes Home reset to the freshly rendered (full) view.
+        Call AFTER ``draw()`` so the captured axes positions are the solved ones.
+        """
+        if self._toolbar is not None:
+            self._toolbar.update()        # clear the stale per-axes view stack
+            self._toolbar.push_current()  # the current view becomes Home
+
+    def push_view(self) -> None:
+        """Record the current view as a new history entry (e.g. after restoring a
+        zoom on top of the just-captured Home view, so Home still returns to it)."""
+        if self._toolbar is not None:
+            self._toolbar.push_current()
 
     def _on_resize(self, _event) -> None:
         """Re-solve the constrained layout for the new size, then re-freeze.

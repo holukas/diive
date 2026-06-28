@@ -17,11 +17,9 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-import threading
-
 import numpy as np
 import pandas as pd
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -29,7 +27,6 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QFrame,
     QGroupBox,
-    QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
@@ -47,6 +44,8 @@ from diive.flux.lowres.ustar_mp_detection import UstarMovingPointDetection
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
+from diive.gui.widgets.tab_chrome import build_titlebar
+from diive.gui.widgets.worker import WorkerRunner
 
 
 def _auto_pick(cols: list[str], needle: str, *, prefer: str | None = None,
@@ -63,12 +62,6 @@ def _auto_pick(cols: list[str], needle: str, *, prefer: str | None = None,
     return ""
 
 
-class _Signals(QObject):
-    """Qt signals (DiiveTab is a plain ABC, not a QObject)."""
-    done = Signal(object)   # (mode, payload)
-    failed = Signal(str)
-
-
 class UstarDetectionTab(DiiveTab):
     """Detect the USTAR threshold (moving point, Papale 2006)."""
 
@@ -76,28 +69,19 @@ class UstarDetectionTab(DiiveTab):
 
     def build(self) -> QWidget:
         self._df = None
-        self._running = False
-        self._sig = _Signals()
-        self._sig.done.connect(self._on_done)
-        self._sig.failed.connect(self._on_failed)
+        self._runner = WorkerRunner()
+        self._runner.done.connect(self._on_done)
+        self._runner.failed.connect(self._on_failed)
 
         root = QWidget()
         outer = QVBoxLayout(root)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        bar = QHBoxLayout()
-        bar.setContentsMargins(10, 8, 10, 8)
-        title = QLabel(theme.manager.label_text("USTAR threshold detection"))
-        title.setFont(theme.manager.tracked_font(point_delta=1.0))
-        title.setStyleSheet("font-weight: bold;")
-        bar.addWidget(title)
-        bar.addStretch(1)
         self.run_btn = QPushButton("Run detection")
         theme.set_button_role(self.run_btn, "confirm")
         self.run_btn.clicked.connect(self._run)
-        bar.addWidget(self.run_btn)
-        outer.addLayout(bar)
+        outer.addLayout(build_titlebar("USTAR threshold detection", self.run_btn))
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._build_controls())
@@ -265,7 +249,7 @@ class UstarDetectionTab(DiiveTab):
         return tuple(out)
 
     def _run(self) -> None:
-        if self._df is None or self._running:
+        if self._df is None or self._runner.is_running:
             return
         cols = {str(c) for c in self._df.columns}
         picks = {"nee_col": self.nee_col.currentText(),
@@ -296,25 +280,29 @@ class UstarDetectionTab(DiiveTab):
 
         self._set_running(True)
         self.status.setText("Running bootstrap…" if bootstrap else "Detecting…")
-        threading.Thread(target=self._worker, args=(self._df, kwargs, boot_cfg),
-                         daemon=True).start()
+        self._runner.run(self._compute_payload, self._df, kwargs, boot_cfg)
+
+    def _compute_payload(self, df, kwargs, boot_cfg):
+        """Run the library detector(s) off-thread; return ``(mode, data)``."""
+        if boot_cfg is None:
+            det = UstarMovingPointDetection(df, verbose=0, **kwargs)
+            res = det.detect()
+            annual = det.get_annual_thresholds().get("threshold")
+            return "single", (res.copy(), annual)
+        boot = UstarBootstrapThresholds(
+            df, detector_class=UstarMovingPointDetection,
+            detector_kwargs=kwargs, verbose=0, **boot_cfg)
+        annual = boot.run()
+        cut = boot.get_cut_threshold()
+        return "bootstrap", (annual.copy(), cut)
 
     def _worker(self, df, kwargs, boot_cfg) -> None:
+        """Synchronous compute + dispatch — tests call this directly; the GUI runs
+        :meth:`_compute_payload` on the worker thread instead."""
         try:
-            if boot_cfg is None:
-                det = UstarMovingPointDetection(df, verbose=0, **kwargs)
-                res = det.detect()
-                annual = det.get_annual_thresholds().get("threshold")
-                self._sig.done.emit(("single", (res.copy(), annual)))
-            else:
-                boot = UstarBootstrapThresholds(
-                    df, detector_class=UstarMovingPointDetection,
-                    detector_kwargs=kwargs, verbose=0, **boot_cfg)
-                annual = boot.run()
-                cut = boot.get_cut_threshold()
-                self._sig.done.emit(("bootstrap", (annual.copy(), cut)))
+            self._on_done(self._compute_payload(df, kwargs, boot_cfg))
         except Exception as err:
-            self._sig.failed.emit(str(err))
+            self._on_failed(str(err))
 
     # --- results -------------------------------------------------------
     def _on_done(self, payload) -> None:
@@ -334,7 +322,6 @@ class UstarDetectionTab(DiiveTab):
         self.canvas.draw()
 
     def _set_running(self, on: bool) -> None:
-        self._running = on
         self.run_btn.setEnabled(not on)
 
     def _fill_table(self, headers: list[str], rows: list[tuple[str, str]]) -> None:

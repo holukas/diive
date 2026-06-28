@@ -306,6 +306,7 @@ class FluxQualityFlagsEddyPro:
 
     def gas_completeness_test(self, thres_good: float = 0.99, thres_ok: float = 0.97,
                               expect_nr_col: str = None, basevar_nr_col: str = None):
+        """Flag records that fail the gas completeness check."""
         flag = flag_fluxbasevar_completeness_eddypro_test(df=self.dfin, flux=self.fluxcol,
                                                           fluxbasevar=self.fluxbasevar,
                                                           idstr=self.idstr,
@@ -316,6 +317,7 @@ class FluxQualityFlagsEddyPro:
 
 
 def example():
+    """Runnable usage example."""
     pass
 
 

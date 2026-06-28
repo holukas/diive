@@ -121,6 +121,7 @@ class FormatEddyProFluxnetFileForUpload:
                  use_wind: bool = False,
                  use_meteo: bool = False,
                  add_runid: bool = True):
+        """Configure the conversion (site, folders, which variable groups to include). See the class docstring."""
         self.site = site
         self.sourcedir = sourcedir
         self.outdir = outdir
@@ -187,6 +188,7 @@ class FormatEddyProFluxnetFileForUpload:
         return req_vars
 
     def mergefiles(self, limit_n_files: int = None):
+        """Search the source folder for ``_fluxnet_`` files and merge them into one DataFrame."""
         self._merged_df = loadfiles(filetype='EDDYPRO-FLUXNET-CSV-30MIN',
                                     sourcedir=self.sourcedir,
                                     limit_n_files=limit_n_files,
@@ -237,6 +239,7 @@ class FormatEddyProFluxnetFileForUpload:
         info(f"Available values of {var} after removing fluxes: {n_vals_after}")
 
     def apply_fluxnet_format(self):
+        """Subset required variables, set -9999 missing values, rename to FLUXNET codes and add timestamps."""
         self._subset_fluxnet = self._make_subset(df=self.merged_df)
         self._subset_fluxnet = self._missing_values(df=self._subset_fluxnet)
         self._subset_fluxnet = self._rename_to_variable_codes(df=self._subset_fluxnet)
@@ -252,6 +255,7 @@ class FormatEddyProFluxnetFileForUpload:
         self._save_one_file_per_year(df=self._subset_fluxnet)
 
     def get_data(self):
+        """Return the FLUXNET-formatted variable subset."""
         return self._subset_fluxnet
 
     def _save_one_file_per_year(self, df: DataFrame):

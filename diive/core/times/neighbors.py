@@ -1,3 +1,4 @@
+"""Find neighbouring years/records for time series."""
 from pandas import DataFrame
 
 from diive.core.funcs.funcs import find_nearest_val

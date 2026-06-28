@@ -23,6 +23,15 @@ print(f"Loaded {len(df)} total records")
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # Compare distributions across different years to identify temporal patterns.
+# The chrome (x-label, grid) is identical for every year, so build one shared
+# ``FormatStyle`` and reuse it across all the per-year plots. Only the title
+# changes per year, passed as the legacy ``title=`` argument, which the plot
+# folds onto the shared style.
+
+style = dv.plotting.FormatStyle(
+    xlabel='NEE flux',  # Same x-axis label for every year
+    show_grid=True
+)
 
 years = df.index.year.unique()[:3]
 
@@ -39,15 +48,13 @@ for year in years:
     )
     hist.plot(
         ax=None,                      # Create new figure
-        xlabel='NEE flux',            # X-axis label
-        title=f"Year {year}",         # Custom title
+        # Shared chrome, with just the per-year title overridden via .merged()
+        format_style=style.merged(title=f"Year {year}"),
         highlight_peak=True,          # Highlight bin with most counts
         show_zscores=True,            # Show z-score overlay
         show_zscore_values=True,      # Show z-score values
         show_info=True,               # Show method and peak info
-        show_counts=True,             # Label bar heights
-        show_title=True,              # Display title
-        show_grid=True                # Show gridlines
+        show_counts=True              # Label bar heights
     )
 
     print(f"Year {year}: {len(year_series)} records, mean={year_series.mean():.2f}, std={year_series.std():.2f}")

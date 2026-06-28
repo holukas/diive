@@ -8,6 +8,7 @@ Part of the diive library: https://github.com/holukas/diive
 """
 
 import decimal
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -71,9 +72,11 @@ class MeasurementOffsetFromReplicate:
         self.measurement_corrected = self._correct_measurement()
 
     def get_corrected_measurement(self):
+        """Return the offset-corrected measurement series."""
         return self.measurement_corrected
 
     def get_offset(self):
+        """Return the detected offset (from the replicate measurement)."""
         return self.offset
 
     def _correct_measurement(self):
@@ -193,29 +196,131 @@ def remove_relativehumidity_offset(series: Series,
     return series_corr_max100
 
 
+@dataclass
+class NighttimeZeroOffsetResult:
+    """Intermediate series + below-zero stats of the nighttime zero-offset
+    correction, for inspection/plotting.
+
+    ``corrected`` is identical to :func:`remove_nighttime_zero_offset`'s output.
+
+    Attributes:
+        input: Original (uncorrected) series.
+        offset: Daily nighttime-mean offset broadcast to the hires timestamps
+            (days without nighttime data filled with the median daily offset).
+        corrected_by_offset: ``input - offset``, before nighttime is forced to
+            zero and remaining negatives are clamped.
+        corrected: Final corrected series (nighttime forced to zero, remaining
+            negative values clamped to zero).
+        nighttime_flag: 1 where nighttime, 0 where daytime.
+        n_below_zero_before: Records below zero in ``input``.
+        n_below_zero_before_night: Nighttime records below zero in ``input``.
+        n_below_zero_after: Records below zero in ``corrected`` (expected 0).
+        n_below_zero_after_night: Nighttime records below zero in ``corrected``
+            (expected 0).
+        n_night: Number of nighttime records.
+    """
+    input: Series
+    offset: Series
+    corrected_by_offset: Series
+    corrected: Series
+    nighttime_flag: Series
+    n_below_zero_before: int
+    n_below_zero_before_night: int
+    n_below_zero_after: int
+    n_below_zero_after_night: int
+    n_night: int
+
+
+def _nighttime_zero_offset(series: Series,
+                           lat: float,
+                           lon: float,
+                           utc_offset: int,
+                           clamp_negatives: bool = True) -> NighttimeZeroOffsetResult:
+    """Compute the nighttime zero-offset correction and all intermediate series.
+
+    Shared by :func:`remove_nighttime_zero_offset` (returns only the final series)
+    and :func:`nighttime_zero_offset_diagnostics` (returns the full result). Does
+    not mutate *series*. When ``clamp_negatives`` is False, daytime negatives that
+    remain after the offset is removed are kept instead of being clamped to zero
+    (nighttime is forced to zero either way).
+    """
+    outname = series.name
+    work = series.rename("input_data")
+
+    # Detect nighttime
+    dnf = DaytimeNighttimeFlag(
+        timestamp_index=work.index,
+        nighttime_threshold=0.001,
+        lat=lat,
+        lon=lon,
+        utc_offset=utc_offset)
+    nighttimeflag = dnf.get_nighttime_flag()
+    nighttime_ix = nighttimeflag == 1
+
+    # Calculate offset as the daily nighttime mean, broadcast to hires; days
+    # without nighttime data fall back to the median daily offset.
+    series_nighttime = work.loc[nighttime_ix]
+    _offset = frames.aggregated_as_hires(aggregate_series=series_nighttime,
+                                         to_freq='D',
+                                         to_agg='mean',
+                                         hires_timestamp=work.index,
+                                         interpolate_missing_vals=True)
+    _offset = _offset.fillna(_offset.median()).rename("offset")
+
+    # Subtract offset from the variable (value - offset). Offset examples
+    # assuming a measured value of 120: negative offset -8 -> 120 - (-8) = 128;
+    # positive offset +8 -> 120 - (+8) = 112.
+    _series_corr = work.sub(_offset).rename("corrected_by_offset")
+
+    # Force nighttime to zero, then optionally clamp remaining (daytime) negatives.
+    final = _series_corr.copy()
+    final.loc[nighttime_ix] = 0
+    if clamp_negatives:
+        final.loc[final < 0] = 0
+
+    return NighttimeZeroOffsetResult(
+        input=work.rename(outname),
+        offset=_offset,
+        corrected_by_offset=_series_corr,
+        corrected=final.rename(outname),
+        nighttime_flag=nighttimeflag,
+        n_below_zero_before=int((work < 0).sum()),
+        n_below_zero_before_night=int((work[nighttime_ix] < 0).sum()),
+        n_below_zero_after=int((final < 0).sum()),
+        n_below_zero_after_night=int((final[nighttime_ix] < 0).sum()),
+        n_night=int(nighttime_ix.sum()),
+    )
+
+
 @ConsoleOutputDecorator()
-def remove_radiation_zero_offset(series: Series,
+def remove_nighttime_zero_offset(series: Series,
                                  lat: float,
                                  lon: float,
                                  utc_offset: int,
-                                 showplot: bool = False) -> Series:
-    """Correct nighttime offset from all radiation data and set nighttime to zero
+                                 showplot: bool = False,
+                                 clamp_negatives: bool = True) -> Series:
+    """Remove a nighttime zero-offset from a variable that should read zero at night
 
-    Works for radiation data where radiation should be zero during nighttime.
-
-    Nighttime flag is calculated and used to detect nighttime data. Then,
-    for each radiation variable, the nighttime radiation mean is calculated for
-    each day in the dataset. This mean is the offset by which daytime and nighttime
-    radiation data are corrected. Finally, after the application of the offset,
-    nighttime data are set to zero.
+    General-purpose: works for any variable expected to be zero during nighttime
+    (e.g. shortwave radiation, PPFD). A nighttime flag is calculated and used to
+    detect nighttime data. Then, for each day, the mean of that day's nighttime
+    values is the offset by which all of the day's records are corrected (days
+    without nighttime data use the median of all daily offsets). Finally, after
+    the offset is applied, nighttime values are set to zero and (when
+    ``clamp_negatives``) any remaining negative values are clamped to zero —
+    enforcing the variable's physical floor of zero.
 
     Args:
-        series: Data for radiation variable that is corrected
-        lat: Latitude of the location where radiation data were recorded
-        lon: Longitude of the location where radiation data were recorded
+        series: Data for the variable that is corrected
+        lat: Latitude of the location where data were recorded
+        lon: Longitude of the location where data were recorded
         utc_offset: UTC offset of *timestamp_index*, e.g. 1 for UTC+01:00
             The datetime index of the resulting Series will be in this timezone.
         showplot: Show plot
+        clamp_negatives: If True (default), set remaining negative values (daytime
+            included) to zero after the offset is removed, enforcing a physical
+            floor of zero. If False, keep those negatives (nighttime is still
+            forced to zero).
 
     Returns:
         Corrected series
@@ -223,77 +328,45 @@ def remove_radiation_zero_offset(series: Series,
     Example:
         See `examples/preprocessing/corrections/correction_radiation_offset.py`
     """
+    result = _nighttime_zero_offset(series, lat=lat, lon=lon, utc_offset=utc_offset,
+                                    clamp_negatives=clamp_negatives)
 
-    outname = series.name
-    series.name = "input_data"
-
-    # Detect nighttime
-    dnf = DaytimeNighttimeFlag(
-        timestamp_index=series.index,
-        nighttime_threshold=0.001,
-        lat=lat,
-        lon=lon,
-        utc_offset=utc_offset)
-    nighttimeflag = dnf.get_nighttime_flag()
-    # daytime = dnf.get_daytime_flag()
-
-    # # Debug
-    # import diive as dv
-    # hm = dv.heatmap_datetime(series=series)
-    # hm.show()
-
-    nighttime_ix = nighttimeflag == 1
-
-    # Get series nighttime data
-    series_nighttime = series.loc[nighttime_ix]
-    nighttime_datetimes = series_nighttime.index
-
-    # Calculate offset as the daily nighttime mean
-    _offset = frames.aggregated_as_hires(aggregate_series=series_nighttime,
-                                         to_freq='D',
-                                         to_agg='mean',
-                                         hires_timestamp=series.index,
-                                         interpolate_missing_vals=True)
-
-    # from diive.core.plotting.timeseries import TimeSeries
-    # TimeSeries(series=_offset).plot()
-
-    # Gap-fill offset values
-    _offset = _offset.fillna(_offset.median())
-    # offset = offset.interpolate().ffill().bfill()
-    _offset = _offset.rename("offset")
-
-    # Subtract offset from radiation column (rad_col - offset)
-    # Offset examples assuming measured radiation is 120:
-    #   In case of negative offset -8:
-    #       (measured radiation should be zero but -8 was measured)
-    #       120 - (-8) = 128
-    #   In case of positive offset +8:
-    #       (measured radiation should be zero but +8 was measured)
-    #       120 - (+8) = 112
-    _series_corr = series.sub(_offset)
-    _series_corr = _series_corr.rename("corrected_by_offset")
-
-    # Set nighttime radiation to zero (based on potential radiation)
-    series_corr_settozero = _series_corr.copy()
-    series_corr_settozero.loc[nighttime_ix] = 0
-    series_corr_settozero = series_corr_settozero.rename("corrected_by_offset_and_night_settozero")
-
-    # Set still remaining negative values to zero
-    series_corr_settozero.loc[series_corr_settozero < 0] = 0
-
-    # Plot
     if showplot:
-        quickplot([series, _series_corr,
-                   series_corr_settozero, _offset],
+        quickplot([result.input, result.corrected_by_offset,
+                   result.corrected, result.offset],
                   subplots=True,
                   showplot=showplot,
-                  title=f"Removing radiation zero-offset from {outname}")
+                  title=f"Removing nighttime zero-offset from {result.input.name}")
 
-    # Rename for output
-    series_corr_settozero = series_corr_settozero.rename(outname)
+    return result.corrected
 
-    return series_corr_settozero
+
+def nighttime_zero_offset_diagnostics(series: Series,
+                                      lat: float,
+                                      lon: float,
+                                      utc_offset: int,
+                                      clamp_negatives: bool = True) -> NighttimeZeroOffsetResult:
+    """Nighttime zero-offset correction with every intermediate series exposed.
+
+    Same computation as :func:`remove_nighttime_zero_offset` (``result.corrected``
+    is identical), but additionally returns the daily offset, the offset-subtracted
+    series, the nighttime flag, and the count of below-zero records before/after
+    the correction (overall and nighttime) — for inspection and plotting.
+
+    Args:
+        series: Data for the variable that is corrected.
+        lat: Latitude of the location where data were recorded.
+        lon: Longitude of the location where data were recorded.
+        utc_offset: UTC offset of the timestamp index, e.g. 1 for UTC+01:00.
+        clamp_negatives: If True (default), clamp remaining negatives to zero (see
+            :func:`remove_nighttime_zero_offset`). With False, ``n_below_zero_after``
+            reflects the daytime negatives that were kept.
+
+    Returns:
+        A :class:`NighttimeZeroOffsetResult`.
+    """
+    return _nighttime_zero_offset(series, lat=lat, lon=lon, utc_offset=utc_offset,
+                                  clamp_negatives=clamp_negatives)
 
 
 class WindDirOffset:
@@ -357,6 +430,7 @@ class WindDirOffset:
         self._correct_wind_directions()
 
     def get_corrected_wind_directions(self):
+        """Return the offset-corrected wind direction series."""
         return self.winddir_shifted
 
     def get_yearly_offsets(self) -> DataFrame:

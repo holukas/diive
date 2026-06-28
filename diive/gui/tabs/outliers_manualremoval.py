@@ -35,6 +35,9 @@ class ManualRemovalOutlierTab(BaseOutlierTab):
              "original, a cleaned copy, and the flag.")
     settings_title = "Records to remove"
     method_suffix = "MANUAL"
+    method_chip_label = "MANUAL"
+    method_chip_bg = "#ECEFF1"
+    method_chip_fg = "#37474F"
     supports_daynight = False
     supports_repeat = False
     run_label = "Flag listed dates"

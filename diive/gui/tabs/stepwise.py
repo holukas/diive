@@ -862,8 +862,10 @@ class StepwiseScreeningTab(DiiveTab):
         # 3) Heatmap of the cleaned series.
         try:
             dv.plotting.HeatmapDateTime(cleaned).plot(
-                ax=ax_heat, fig=fig, title="cleaned", cb_digits_after_comma="auto",
-                axlabels_fontsize=8, ticks_labelsize=7, cb_labelsize=7)
+                ax=ax_heat, fig=fig,
+                format_style=dv.plotting.FormatStyle(
+                    title="cleaned", axlabel_fontsize=8, ticks_fontsize=7),
+                cb_digits_after_comma="auto", cb_labelsize=7)
             ax_heat.title.set_fontsize(9)
         except Exception as err:
             ax_heat.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",
@@ -873,9 +875,10 @@ class StepwiseScreeningTab(DiiveTab):
         flag = qcf.flagqcf
         try:
             dv.plotting.HeatmapDateTime(flag.rename("QCF")).plot(
-                ax=ax_qcf_heat, fig=fig, title="QCF (0/1/2)", vmin=0, vmax=2,
-                cmap=_QCF_CMAP, cb_digits_after_comma=0,
-                axlabels_fontsize=8, ticks_labelsize=7, cb_labelsize=7)
+                ax=ax_qcf_heat, fig=fig, vmin=0, vmax=2,
+                format_style=dv.plotting.FormatStyle(
+                    title="QCF (0/1/2)", axlabel_fontsize=8, ticks_fontsize=7),
+                cmap=_QCF_CMAP, cb_digits_after_comma=0, cb_labelsize=7)
             ax_qcf_heat.title.set_fontsize(9)
         except Exception as err:
             ax_qcf_heat.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center",

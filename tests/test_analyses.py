@@ -326,5 +326,74 @@ class TestAnalyses(unittest.TestCase):
         self.assertEqual(ov['freq'], '30min')
 
 
+    def test_compound_extremes(self):
+        import numpy as np
+        import pandas as pd
+        import diive as dv
+        from diive.analysis.compoundextremes import (CompoundExtremes, CAT_NONE,
+                                                     CAT_VAR1, CAT_VAR2, CAT_COMPOUND)
+        from diive.configs.exampledata import load_exampledata_parquet
+        df = load_exampledata_parquet()
+        vpd = df['VPD_f'].copy()
+        swc = df['SWC_FF0_0.15_1'].copy()
+
+        # Monthly, deseasonalized: high VPD / low SWC, threshold 2 sigma.
+        ce = CompoundExtremes(var1=vpd, var2=swc, agg='monthly', threshold=2.0,
+                              var1_extreme='high', var2_extreme='low',
+                              standardize_by='season', var1_label='Air', var2_label='Soil')
+        res = ce.results
+        self.assertEqual(len(res), 120)  # 10 years x 12 months
+        # Deseasonalized z-scores have ~zero mean per calendar month.
+        self.assertAlmostEqual(res['VPD_f_Z'].mean(), 0.0, places=6)
+        counts = ce.counts
+        self.assertEqual(counts['None'], 117)
+        self.assertEqual(counts['Air'], 3)
+        self.assertEqual(counts['Soil'], 0)
+        self.assertEqual(counts['Compound'], 0)
+        # counts reconcile with the per-period rows.
+        self.assertEqual(counts.sum(), len(res))
+        # Extreme flags agree with the z-score thresholds + directions.
+        self.assertTrue((res.loc[res['VAR1_EXTREME'], 'VPD_f_Z'] >= 2.0).all())
+        self.assertTrue((res.loc[res['VAR2_EXTREME'], 'SWC_FF0_0.15_1_Z'] <= -2.0).all())
+        # Category codes follow the flags.
+        air = res[res['CATEGORY'] == CAT_VAR1]
+        self.assertTrue((air['VAR1_EXTREME'] & ~air['VAR2_EXTREME']).all())
+        self.assertListEqual(sorted(res['CATEGORY'].unique()), sorted({CAT_NONE, CAT_VAR1}))
+        # PERIOD labels are %Y-%m for monthly.
+        self.assertRegex(res['PERIOD'].iloc[0], r'^\d{4}-\d{2}$')
+
+        # Whole-record standardization flags a different set (seasonal cycle kept).
+        ce_rec = CompoundExtremes(var1=vpd, var2=swc, agg='monthly', threshold=2.0,
+                                  standardize_by='record', var1_label='Air', var2_label='Soil')
+        rec = ce_rec.counts
+        self.assertEqual(rec['None'], 113)
+        self.assertEqual(rec['Air'], 3)
+        self.assertEqual(rec['Soil'], 4)
+
+        # Daily resolution, deseasonalized by day-of-year.
+        ce_day = CompoundExtremes(var1=vpd, var2=swc, agg='daily', threshold=2.0,
+                                  standardize_by='season', var1_label='Air', var2_label='Soil')
+        self.assertEqual(ce_day.counts['Air'], 83)
+        self.assertEqual(ce_day.counts['Soil'], 7)
+        self.assertRegex(ce_day.results['PERIOD'].iloc[0], r'^\d{4}-\d{2}-\d{2}$')
+
+        # Synthetic series with a guaranteed compound period exercises CAT_COMPOUND.
+        idx = pd.date_range('2010-01-01', periods=120, freq='MS', name='TIMESTAMP_MIDDLE')
+        rng = np.random.default_rng(0)
+        v1 = pd.Series(rng.normal(0, 1, 120), index=idx, name='A')
+        v2 = pd.Series(rng.normal(0, 1, 120), index=idx, name='B')
+        v1.iloc[60] += 10.0   # force high A
+        v2.iloc[60] -= 10.0   # force low B at the same month -> compound
+        ce_syn = CompoundExtremes(var1=v1, var2=v2, agg='monthly', threshold=2.0,
+                                  var1_extreme='high', var2_extreme='low',
+                                  standardize_by='record')
+        self.assertEqual(ce_syn.results['CATEGORY'].iloc[60], CAT_COMPOUND)
+        self.assertEqual(ce_syn.counts['Compound'], 1)
+
+        # var1/var2 with identical names is rejected.
+        with self.assertRaises(ValueError):
+            CompoundExtremes(var1=vpd.rename('X'), var2=swc.rename('X'))
+
+
 if __name__ == '__main__':
     unittest.main()

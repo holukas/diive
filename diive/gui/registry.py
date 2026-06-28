@@ -11,10 +11,20 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.tabs.combine_variables import CombineVariablesTab
+from diive.gui.tabs.compound_extremes import CompoundExtremesTab
+from diive.gui.tabs.corrections_nighttime_offset import NighttimeZeroOffsetTab
+from diive.gui.tabs.corrections_relativehumidity_offset import RelativeHumidityOffsetTab
+from diive.gui.tabs.corrections_set_missing import SetExactToMissingTab
+from diive.gui.tabs.corrections_setto_threshold import SetToMaxThresholdTab, SetToMinThresholdTab
+from diive.gui.tabs.corrections_setto_value import SetToValueTab
 from diive.gui.tabs.drivers import DriverExplorerTab
 from diive.gui.tabs.events import EventsTab
 from diive.gui.tabs.features import FeatureEngineerTab
 from diive.gui.tabs.fluxchain import FluxChainTab
+from diive.gui.tabs.gapfilling import XGBoostGapFillingTab
+from diive.gui.tabs.gapfilling_mds import MdsGapFillingTab
+from diive.gui.tabs.gapfilling_randomforest import RandomForestGapFillingTab
 from diive.gui.tabs.gaps import GapDashboardTab
 from diive.gui.tabs.log import LogTab
 from diive.gui.tabs.metadata_explorer import MetadataExplorerTab
@@ -33,22 +43,31 @@ from diive.gui.tabs.partitioning_nighttime_oneflux import NighttimePartitioningO
 from diive.gui.tabs.partitioning_nighttime_reddyproc import NighttimePartitioningReddyProcTab
 from diive.gui.tabs.profile import ProfileTab
 from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
+from diive.gui.tabs.select_records import SelectRecordsTab
 from diive.gui.tabs.spectrogram import SpectrogramTab
 from diive.gui.tabs.stepwise import StepwiseScreeningTab
 from diive.gui.tabs.timelag import TimeLagAnalysisTab
+from diive.gui.tabs.uncertainty_jointunc import JointUncertaintyTab
+from diive.gui.tabs.uncertainty_randunc import RandomUncertaintyTab
 from diive.gui.tabs.ustar_detection import UstarDetectionTab
 from diive.gui.tabs.overview import OverviewTab
 from diive.gui.tabs.rename_variables import RenameVariablesTab
 from diive.gui.tabs.plotting import (
+    CUMULATIVE,
     CUMULATIVE_YEAR,
     DIELCYCLE,
     HEATMAP,
+    HEATMAP_XYZ,
     HEATMAP_YEARMONTH,
     HEXBIN,
     HISTOGRAM,
     RIDGELINE,
     SCATTER,
+    SHIFTEDDIST,
     TIMESERIES,
+    TREERING,
+    WATERFALL,
+    WINDROSE,
     PlottingTab,
 )
 from diive.gui.tabs.settings import SettingsTab
@@ -68,27 +87,44 @@ TAB_CLASSES: list[type[DiiveTab]] = [
 #: Each plot method is its own tab; add a new method by adding a PlottingTab
 #: factory here (and a branch in plotting._draw_one).
 MENU_TABS: dict[str, dict[str, callable]] = {
+    # Scope the working dataset (non-destructive subselection). Merged into the
+    # manually-built Data menu next to the date-range actions; see
+    # MainWindow._build_menus. Not given its own top-level menu.
     "Data": {
-        # Merged into the manually-built Data menu (date-range actions); see
-        # MainWindow._build_menus. Not given its own top-level menu. These are
-        # data/variable preparation: subset, per-variable metadata, and the
-        # feature engineer (which derives new columns).
         "Select variables": VariableSelectorTab,
+    },
+    # Create & manage individual variables (columns). Built manually in
+    # MainWindow so the "Add timestamp column..." action can sit between the
+    # create tabs and a separator splits create from manage.
+    "Variables": {
+        "Feature engineering": FeatureEngineerTab,
+        "Combine variables": CombineVariablesTab,
+        "Select records by condition": SelectRecordsTab,
         "Rename variables": RenameVariablesTab,
         "Metadata explorer": MetadataExplorerTab,
-        "Feature engineering": FeatureEngineerTab,
+    },
+    # Time-stamped event markers (annotations layered over the data, not column
+    # operations) — its own top-level menu. Built manually in MainWindow so the
+    # "Add event..." / "Show events on plots" actions sit above the tab entry.
+    "Events": {
         "Events": EventsTab,
     },
     "Plot": {
         "Heatmap date/time": lambda: PlottingTab(HEATMAP, "Heatmap date/time"),
         "Heatmap year/month": lambda: PlottingTab(HEATMAP_YEARMONTH, "Heatmap year/month"),
+        "Heatmap x/y/z": lambda: PlottingTab(HEATMAP_XYZ, "Heatmap x/y/z"),
         "Time series": lambda: PlottingTab(TIMESERIES, "Time series"),
         "Diel cycle": lambda: PlottingTab(DIELCYCLE, "Diel cycle"),
         "Cumulative year": lambda: PlottingTab(CUMULATIVE_YEAR, "Cumulative year"),
+        "Cumulative": lambda: PlottingTab(CUMULATIVE, "Cumulative"),
         "Ridgeline": lambda: PlottingTab(RIDGELINE, "Ridgeline"),
         "Scatter XY": lambda: PlottingTab(SCATTER, "Scatter XY"),
         "Hexbin": lambda: PlottingTab(HEXBIN, "Hexbin"),
         "Histogram": lambda: PlottingTab(HISTOGRAM, "Histogram"),
+        "Shifted distribution": lambda: PlottingTab(SHIFTEDDIST, "Shifted distribution"),
+        "Wind rose": lambda: PlottingTab(WINDROSE, "Wind rose"),
+        "Tree ring": lambda: PlottingTab(TREERING, "Tree ring"),
+        "Waterfall": lambda: PlottingTab(WATERFALL, "Waterfall"),
         "3D surface": Surface3DTab,
     },
     "Outliers": {
@@ -113,12 +149,31 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Nighttime partitioning (REddyProc)": NighttimePartitioningReddyProcTab,
         "Daytime partitioning (REddyProc)": DaytimePartitioningReddyProcTab,
         "Daytime partitioning (ONEFlux)": DaytimePartitioningOneFluxTab,
+        "Random uncertainty (PAS20)": RandomUncertaintyTab,
+        "Joint uncertainty (PAS20)": JointUncertaintyTab,
+    },
+    # Data corrections (dv.corrections). One tab per correction, all sharing
+    # BaseCorrectionTab (the RF/XGB shared-template approach).
+    "Corrections": {
+        "Remove nighttime zero offset": NighttimeZeroOffsetTab,
+        "Remove relative humidity offset": RelativeHumidityOffsetTab,
+        "Set to max threshold": SetToMaxThresholdTab,
+        "Set to min threshold": SetToMinThresholdTab,
+        "Set to value": SetToValueTab,
+        "Set exact values to missing": SetExactToMissingTab,
+    },
+    # Gap-filling (dv.gapfilling). Its own menu.
+    "Gap-filling": {
+        "XGBoost gap-filling": XGBoostGapFillingTab,
+        "Random Forest gap-filling": RandomForestGapFillingTab,
+        "MDS gap-filling": MdsGapFillingTab,
     },
     # Exploratory analysis & diagnostics (dv.analysis).
     "Analyze": {
         "Data profile": ProfileTab,
         "Gaps & coverage": GapDashboardTab,
         "Driver explorer": DriverExplorerTab,
+        "Compound extremes": CompoundExtremesTab,
         "Seasonal trend & anomalies": SeasonalTrendTab,
         "Spectrogram": SpectrogramTab,
     },
@@ -134,13 +189,10 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 }
 
 #: Menu tabs that may exist only once (re-selecting focuses the existing one).
-#: Everything else opens a new, numbered instance each time.
+#: Everything else opens a new, numbered instance each time ("Hampel filter 1",
+#: "Hampel filter 2", ...). Reserved for tabs that edit a single app-wide
+#: singleton, where a second copy would show conflicting state: Appearance
+#: (theme.manager) and Project settings (site.manager), plus Metadata explorer
+#: (the target of the "Edit metadata..." relay from every variable list).
 SINGLE_INSTANCE_TABS: set[str] = {
-    "Appearance", "Project settings", "Flux processing chain", "USTAR detection",
-    "Time lag analysis",
-    "Nighttime partitioning (ONEFlux)", "Nighttime partitioning (REddyProc)",
-    "Daytime partitioning (REddyProc)", "Daytime partitioning (ONEFlux)",
-    "Data profile", "Gaps & coverage",
-    "Driver explorer", "Seasonal trend & anomalies", "Spectrogram",
-    "Metadata explorer", "Select variables", "Rename variables", "3D surface",
-    "Stepwise screening", "Events"}
+    "Appearance", "Project settings", "Metadata explorer"}

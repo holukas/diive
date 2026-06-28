@@ -1,3 +1,4 @@
+"""Name-pattern groups for classifying variables."""
 AIR_TEMPERATURE_METEO = ['*TA_*', 'Ta_*']
 AIR_TEMPERATURE_EDDYPRO = ['*air_temperature*']
 AIR_TEMPERATURE = AIR_TEMPERATURE_METEO + AIR_TEMPERATURE_EDDYPRO

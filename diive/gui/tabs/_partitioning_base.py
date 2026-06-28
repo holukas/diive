@@ -21,8 +21,6 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-import threading
-
 import numpy as np
 import pandas as pd
 from PySide6.QtCore import QObject, Qt, Signal
@@ -45,6 +43,8 @@ from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
 from diive.gui import site, theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
+from diive.gui.widgets.tab_chrome import build_titlebar
+from diive.gui.widgets.worker import WorkerRunner
 
 _C_NEE = "#90A4AE"    # blue-grey 300 — measured NEE (recedes)
 _C_RECO = "#E53935"   # red 600       — ecosystem respiration
@@ -67,9 +67,8 @@ def _auto_pick(cols: list[str], needle: str, *, prefer: str | None = None,
 
 
 class _Signals(QObject):
-    """Qt signals (DiiveTab is a plain ABC, not a QObject)."""
-    done = Signal(object)
-    failed = Signal(str)
+    """Qt signal (DiiveTab is a plain ABC, not a QObject). Run done/failed
+    plumbing lives in :class:`WorkerRunner`."""
     features_created = Signal(object)
 
 
@@ -103,39 +102,30 @@ class BasePartitioningTab(DiiveTab):
     # --- build ---------------------------------------------------------
     def build(self) -> QWidget:
         self._df = None
-        self._running = False
         self._results: pd.DataFrame | None = None
         self._nee_key = self.inputs[0]["key"] if self.inputs else "nee"
         self._combos: dict[str, QComboBox] = {}
         self._avail: dict[str, QLabel] = {}
         self._sig = _Signals()
-        self._sig.done.connect(self._on_done)
-        self._sig.failed.connect(self._on_failed)
         #: Exposed bound signal the main window connects to (merges the columns).
         self.featuresCreated = self._sig.features_created
+        self._runner = WorkerRunner()
+        self._runner.done.connect(self._on_done)
+        self._runner.failed.connect(self._on_failed)
 
         root = QWidget()
         outer = QVBoxLayout(root)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        bar = QHBoxLayout()
-        bar.setContentsMargins(10, 8, 10, 8)
-        title = QLabel(theme.manager.label_text(self.title))
-        title.setFont(theme.manager.tracked_font(point_delta=1.0))
-        title.setStyleSheet("font-weight: bold;")
-        bar.addWidget(title)
-        bar.addStretch(1)
         self.run_btn = QPushButton("Run partitioning")
         theme.set_button_role(self.run_btn, "confirm")
         self.run_btn.clicked.connect(self._run)
-        bar.addWidget(self.run_btn)
         self.add_btn = QPushButton("Add results to dataset")
         self.add_btn.setEnabled(False)
         self.add_btn.clicked.connect(self._add)
         theme.set_button_role(self.add_btn, "confirm")
-        bar.addWidget(self.add_btn)
-        outer.addLayout(bar)
+        outer.addLayout(build_titlebar(self.title, self.run_btn, self.add_btn))
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._build_controls())
@@ -337,7 +327,7 @@ class BasePartitioningTab(DiiveTab):
         return {k: c.currentText() for k, c in self._combos.items()}
 
     def _run(self) -> None:
-        if self._df is None or self._running:
+        if self._df is None or self._runner.is_running:
             return
         cols = {str(c) for c in self._df.columns}
         picks = self._picks()
@@ -370,33 +360,29 @@ class BasePartitioningTab(DiiveTab):
 
         self._set_running(True)
         self.status.setText("Partitioning… (this can take a while per year)")
-        threading.Thread(
-            target=self._worker,
-            args=(series_map, coords, vpd_in_kpa, picks[self._nee_key]),
-            daemon=True).start()
+        self._runner.run(self._compute_payload, series_map, coords, vpd_in_kpa,
+                         picks[self._nee_key])
 
-    def _worker(self, series_map, coords, vpd_in_kpa, nee_name) -> None:
-        try:
-            part = self._build_partitioner(series_map, coords, vpd_in_kpa)
-            part.run()
-            results = part.results.copy()
-            # Provenance: every output column is derived from the measured NEE.
-            attrs = {}
-            for col in results.columns:
-                attrs[str(col)] = provenance_attr(
-                    origin=DERIVED, parent=str(nee_name), operation=self.title,
-                    tags=["partitioning", self.method_suffix.lower()])
-            results.attrs[ATTRS_KEY] = attrs
-            self._sig.done.emit(results)
-        except Exception as err:
-            self._sig.failed.emit(str(err))
+    def _compute_payload(self, series_map, coords, vpd_in_kpa, nee_name):
+        """Run the library partitioner off-thread; return the results DataFrame.
+        Raises on error (the runner forwards to :meth:`_on_failed`)."""
+        part = self._build_partitioner(series_map, coords, vpd_in_kpa)
+        part.run()
+        results = part.results.copy()
+        # Provenance: every output column is derived from the measured NEE.
+        attrs = {}
+        for col in results.columns:
+            attrs[str(col)] = provenance_attr(
+                origin=DERIVED, parent=str(nee_name), operation=self.title,
+                tags=["partitioning", self.method_suffix.lower()])
+        results.attrs[ATTRS_KEY] = attrs
+        return results
 
     def _build_partitioner(self, series_map: dict, coords: dict, vpd_in_kpa: bool):
         """Construct the (not-yet-run) library partitioner (subclass hook)."""
         raise NotImplementedError
 
     def _set_running(self, on: bool) -> None:
-        self._running = on
         self.run_btn.setEnabled(not on)
         if on:
             self.add_btn.setEnabled(False)

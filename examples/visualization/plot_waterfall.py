@@ -32,7 +32,8 @@ series = series.loc[(series.index.year == 2019) & (series.index.month == 6)]
 #
 # Half-hourly NEE is aggregated to daily sums internally. With the NEE convention
 # (negative = uptake), uptake days are blue and release days are red. The running
-# total builds toward the net annual flux annotated at the end.
+# total builds toward the net annual flux annotated at the end. With no
+# ``format_style`` the diive house style is used (auto title from the date range).
 
 dv.plotting.WaterfallPlot(
     series=series,
@@ -40,3 +41,29 @@ dv.plotting.WaterfallPlot(
     resample='D',
     uptake_is_negative=True,
 ).plot(showplot=True)
+
+# %%
+# Customizing the chrome with FormatStyle
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# Chrome (title, axis labels, font sizes, colours, ...) is supplied through a
+# shared ``FormatStyle``. The bar colours and the final-total decimals stay as
+# direct ``plot()`` arguments, since they render the data rather than the chrome.
+# The y-axis units still come from ``series_units`` on the constructor.
+
+style = dv.plotting.FormatStyle(
+    title='Cumulative CO2 budget (June 2019)',
+    axlabel_fontsize=12,
+    ticks_fontsize=11,
+)
+
+dv.plotting.WaterfallPlot(
+    series=series,
+    series_units=series_units,
+    resample='D',
+    uptake_is_negative=True,
+).plot(
+    format_style=style,
+    digits_after_comma=1,  # data-rendering: decimals on the net-total annotation
+    showplot=True,
+)

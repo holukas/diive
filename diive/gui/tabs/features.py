@@ -36,6 +36,8 @@ from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
 from diive.core.ml.feature_engineer import FeatureEngineer
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.copy_button import CopyPythonButton
+from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel
 
 #: Placeholder target column (FeatureEngineer requires one; excluded from output).
@@ -70,7 +72,18 @@ class FeatureEngineerTab(DiiveTab):
         self.featuresCreated = self._sig.features_created
 
         root = QWidget()
-        layout = QHBoxLayout(root)
+        outer = QVBoxLayout(root)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # Shared tab title bar with a Copy-Python button (matches every other tab).
+        self.copy_btn = CopyPythonButton(self._python_code)
+        self.copy_btn.setToolTip(
+            "Copy a runnable diive script reproducing this feature-engineering run.")
+        outer.addLayout(build_titlebar(self.title, self.copy_btn))
+
+        body = QWidget()
+        layout = QHBoxLayout(body)
 
         # Fixed-width columns packed left (trailing stretch), so the controls
         # stay compact and readable instead of stretching across the wide window.
@@ -79,7 +92,7 @@ class FeatureEngineerTab(DiiveTab):
         avail_col.setFixedWidth(self.available_width())
         avail_box = QVBoxLayout(avail_col)
         avail_box.setContentsMargins(0, 0, 0, 0)
-        avail_box.addWidget(self._caption("Available variables", "click to add"))
+        avail_box.addWidget(list_header("Available variables", "click to add"))
         self.available = VariablePanel()
         self.available.selected.connect(lambda name, _ctrl: self._add_feature(name))
         avail_box.addWidget(self.available)
@@ -90,7 +103,7 @@ class FeatureEngineerTab(DiiveTab):
         sel_col.setFixedWidth(220)
         sel_box = QVBoxLayout(sel_col)
         sel_box.setContentsMargins(0, 0, 0, 0)
-        sel_box.addWidget(self._caption("Selected features", "double-click to remove"))
+        sel_box.addWidget(list_header("Selected features", "double-click to remove"))
         self.selected = QListWidget()
         self.selected.itemDoubleClicked.connect(self._remove_feature)
         sel_box.addWidget(self.selected)
@@ -102,6 +115,7 @@ class FeatureEngineerTab(DiiveTab):
         layout.addWidget(settings)
         layout.addStretch(1)
 
+        outer.addWidget(body, stretch=1)
         self._sig.run_done.connect(self._on_run_done)
         self._sig.run_failed.connect(self._on_run_failed)
         return root
@@ -193,13 +207,6 @@ class FeatureEngineerTab(DiiveTab):
     def available_width() -> int:
         """Fixed width of the available-variables column (matches the var list)."""
         return theme.manager.list_width
-
-    @staticmethod
-    def _caption(title: str, hint: str) -> QLabel:
-        """A compact column caption: bold title + a smaller grey hint."""
-        label = QLabel(f"<b>{title}</b> <span style='color:#90A4AE'>({hint})</span>")
-        label.setWordWrap(True)
-        return label
 
     @staticmethod
     def _group(title: str, checkbox: QCheckBox, rows: list) -> QGroupBox:
@@ -315,6 +322,19 @@ class FeatureEngineerTab(DiiveTab):
         kwargs["vectorize_timestamps"] = self.ts_cb.isChecked()
         kwargs["add_continuous_record_number"] = self.rec_cb.isChecked()
         return kwargs
+
+    # --- codegen -------------------------------------------------------
+    def _python_code(self) -> str | None:
+        if self._df is None:
+            return None
+        names = [self.selected.item(i).text() for i in range(self.selected.count())]
+        try:
+            kwargs = self._collect_settings()
+        except ValueError:
+            return None
+        kwargs.pop("verbose", None)  # GUI-logging concern, not part of the run
+        from diive.core.ml.feature_engineer import feature_engineer_to_code
+        return feature_engineer_to_code(names, kwargs)
 
     def _run_worker(self, work, kwargs: dict) -> None:
         try:

@@ -44,6 +44,8 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 | [**plot_other_plots.py**](visualization/plot_other_plots.py) | Specialized plot types (long-term anomalies, trends) |
 | [**plot_treering_temperature.py**](visualization/plot_treering_temperature.py) | Tree-ring spiral plot: annual rings with color-coded values, month labels, year separators, colorbar extension |
 | [**plot_treering_line_temperature.py**](visualization/plot_treering_line_temperature.py) | Tree-ring radial line plot: each year as a line trace around a full circle, single-color and per-year colormap variants with optional fill |
+| [**plot_windrose_basic.py**](visualization/plot_windrose_basic.py) | Wind rose: a variable aggregated into wind-direction sectors (mean/median/min/max/sum/std/count) drawn as polar bars, with a per-sector results table |
+| [**plot_compound_extremes.py**](visualization/plot_compound_extremes.py) | `CompoundExtremesPlot`: quadrant scatter of two z-scores coloured/marked by compound-extreme category with threshold lines (Wang et al., Fig. 2); from a fitted analysis, custom styling, or pre-classified data |
 
 See: [visualization/README.md](visualization/README.md)
 
@@ -65,6 +67,7 @@ See: [visualization/README.md](visualization/README.md)
 | [**analysis_optimumrange.py**](analysis/analysis_optimumrange.py) | Find optimal value ranges, condition-based filtering |
 | [**analysis_quantiles.py**](analysis/analysis_quantiles.py) | Percentile and quantile calculations, non-parametric statistics |
 | [**analysis_harmonic.py**](analysis/analysis_harmonic.py) | `harmonic_analysis` + `spectrogram`: diel/annual cycles, window effect, time-frequency map |
+| [**analysis_compound_extremes.py**](analysis/analysis_compound_extremes.py) | `CompoundExtremes` + `CompoundExtremesPlot`: classify months/days into none/air/soil/compound dry-hot extremes from VPD & SWC z-scores |
 
 See: [analysis/README.md](analysis/README.md)
 
@@ -174,6 +177,7 @@ See: [features/README.md](features/README.md)
 
 | Example | Description |
 |---------|-------------|
+| [**fluxprocessingchain_level2.py**](flux/fluxprocessingchain/fluxprocessingchain_level2.py) | Level 2 in isolation — load a real EddyPro FLUXNET output file, `init_flux_data`, `run_level2`; expand EddyPro quality diagnostics into per-test flags + one overall QCF. `level2_test_inputs` (column each test reads), QCF-filtered vs. high-quality (QCF=0) series, accept-threshold effect. The smallest standalone entry into the chain |
 | [**fluxprocessingchain_runchain.py**](flux/fluxprocessingchain/fluxprocessingchain_runchain.py) | Single-call `run_chain(data, FluxConfig)` — minimal config drives the full L2→L4.1 pipeline with sensible defaults. Shows the easy path; for full control over per-detector / per-model knobs use the composable example below |
 | [**fluxprocessingchain_composable.py**](flux/fluxprocessingchain/fluxprocessingchain_composable.py) | Full L2→L4.1 pipeline using composable level callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; `gap_stats()` after L3.3; `plot_gapfilled_heatmaps()` and `plot_cumulative_comparison()` after L4.1 |
 | [**fluxprocessingchain_partitioning.py**](flux/fluxprocessingchain/fluxprocessingchain_partitioning.py) | Level 4.2 NEE→GPP+RECO partitioning wired into the chain; all four variants (`run_level42_nighttime_oneflux` / `_nighttime_reddyproc` / `_daytime_reddyproc` / `_daytime_oneflux`) via `run_chain`, one fit per USTAR scenario; `partitioned_cols()` to discover the `*_NT_OF` / `*_NT_RP` / `*_DT_RP` / `*_DT_OF` output columns |
@@ -233,7 +237,7 @@ See: [flux/README.md](flux/README.md)
 | [**gapfill_xgboost.py**](gapfilling/gapfill_xgboost.py) | XGBoost | Yes |
 | [**gapfill_optimize_xgboost.py**](gapfilling/gapfill_optimize_xgboost.py) | XGBoost with hyperparameter tuning | Yes |
 | [**gapfill_mds.py**](gapfilling/gapfill_mds.py) | Meteorological Data Similarity | No |
-| [**gapfill_mds_comparison.py**](gapfilling/gapfill_mds_comparison.py) | MDS variants comparison | No |
+| [**gapfill_mds_comparison.py**](gapfilling/gapfill_mds_comparison.py) | MDS reproducibility / determinism check | No |
 | [**gapfill_comparison.py**](gapfilling/gapfill_comparison.py) | Compare all methods side-by-side | Mixed |
 | [**gapfill_swin.py**](gapfilling/gapfill_swin.py) | SW_IN physics + XGBoost (nighttime zero, daytime ML) | Yes |
 

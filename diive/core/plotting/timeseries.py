@@ -1,6 +1,18 @@
+"""
+PLOTTING: TIME SERIES
+=====================
+
+Time series plots with optional colour-by-value and interactive Bokeh output.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 import os
 import tempfile
+import matplotlib.dates as mdates
+import numpy as np
 import pandas as pd
+from matplotlib.collections import LineCollection
+from matplotlib.colors import Normalize
 from bokeh.layouts import column
 from bokeh.models import BoxZoomTool, PanTool, ResetTool, WheelZoomTool, WheelPanTool, UndoTool, \
     RedoTool, SaveTool, HoverTool, BoxSelectTool, RangeTool
@@ -9,6 +21,7 @@ from bokeh.plotting import figure, show, output_file
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
+from diive.core.plotting.styles.format import FormatStyle
 
 # Material Design palette, matching diive's plotting conventions (CLAUDE.md):
 # blue 500 for lines, blue-grey shades for ink/gridlines/reference.
@@ -40,7 +53,8 @@ class TimeSeries:
 
     def __init__(self,
                  series: Series,
-                 drop_gaps: bool = False):
+                 drop_gaps: bool = False,
+                 color_series: Series = None):
         """
         Prepare time series data for plotting.
 
@@ -50,6 +64,12 @@ class TimeSeries:
                 so gaps remain visible — matplotlib and Bokeh break the line at
                 NaNs rather than drawing a continuous line across missing periods,
                 which would misrepresent data coverage.
+            color_series: Optional second series whose values colour the line (and
+                markers) via a colormap instead of a single colour — e.g. colour a
+                flux line by air temperature. Aligned to `series`' index; segments
+                are coloured by the mean of their endpoints' values. When given,
+                `plot()`'s `cmap`/`color_vmin`/`color_vmax`/`show_colorbar`/
+                `color_label` apply and the scalar `color` argument is ignored.
 
         See Also:
             plot : Render the time series with matplotlib styling options
@@ -58,6 +78,10 @@ class TimeSeries:
         self.varname = series.name
         if drop_gaps:
             self.series = self.series.dropna()
+        # Align the colour-by series to the (possibly gap-dropped) index.
+        self.color_series = (color_series.reindex(self.series.index)
+                             if color_series is not None else None)
+        self.color_name = color_series.name if color_series is not None else None
 
     def plot_interactive(self, height: int = 600, width: int = 1200, save_to_file: bool = False):
         """
@@ -270,26 +294,81 @@ class TimeSeries:
 
         show(column(detail, overview))
 
-    def plot(self, ax=None, color: str = None, series_units: str = None, xlabel: str = None, ylabel: str = None,
-             title: str = None, linewidth: float = 2.2, alpha: float = 0.95, marker: bool = False,
-             markersize: float = 3):
+    def _plot_colored_line(self, color_vals, cmap, color_vmin, color_vmax,
+                           linewidth, alpha, marker, markersize,
+                           show_colorbar, color_label):
+        """Draw the series as a `LineCollection` coloured by `color_vals`.
+
+        Each segment between consecutive samples is coloured by the mean of its
+        endpoints' colour values; segments touching a NaN in the data (a gap) are
+        dropped so the line breaks rather than bridging. A `LineCollection` does
+        not autoscale the axes, so x/y limits are set explicitly.
+        """
+        x = mdates.date2num(self.series.index)
+        y = self.series.to_numpy(dtype=float)
+        points = np.array([x, y]).T.reshape(-1, 1, 2)
+        segments = np.concatenate([points[:-1], points[1:]], axis=1)
+        seg_c = (color_vals[:-1] + color_vals[1:]) / 2.0
+        keep = ~(np.isnan(y[:-1]) | np.isnan(y[1:]))  # skip gap-touching segments
+        segments, seg_c = segments[keep], seg_c[keep]
+
+        vmin = color_vmin if color_vmin is not None else np.nanmin(color_vals)
+        vmax = color_vmax if color_vmax is not None else np.nanmax(color_vals)
+        norm = Normalize(vmin=vmin, vmax=vmax)
+        lc = LineCollection(segments, cmap=cmap, norm=norm)
+        lc.set_array(seg_c)
+        lc.set_linewidth(linewidth)
+        lc.set_alpha(alpha)
+        lc.set_zorder(99)
+        self.ax.add_collection(lc)
+
+        if marker:
+            self.ax.scatter(x, y, c=color_vals, cmap=cmap, norm=norm,
+                            s=markersize ** 2, edgecolors='none', alpha=alpha, zorder=100)
+
+        # LineCollection does not autoscale; set limits from the data.
+        self.ax.set_xlim(np.nanmin(x), np.nanmax(x))
+        finite = np.isfinite(y)
+        if finite.any():
+            ymin, ymax = float(np.min(y[finite])), float(np.max(y[finite]))
+            pad = (ymax - ymin) * 0.05 or 1.0
+            self.ax.set_ylim(ymin - pad, ymax + pad)
+        self.ax.xaxis_date()
+
+        if show_colorbar:
+            cb = self.ax.figure.colorbar(lc, ax=self.ax, pad=0.01)
+            cb.set_label(color_label or self.color_name or '')
+
+    def plot(self, ax=None, format_style: FormatStyle = None, color: str = None,
+             linewidth: float = 2.2, alpha: float = 0.95, marker: bool = False, markersize: float = 3,
+             cmap: str = 'viridis', color_vmin: float = None, color_vmax: float = None,
+             show_colorbar: bool = True, color_label: str = None):
         """
         Render time series plot with matplotlib styling (Phase 2 of two-phase design).
 
-        All styling and presentation parameters go here. Can be called multiple times
-        on the same TimeSeries object to plot on different axes with different styling.
+        Chrome (title, labels, units, font sizes, colours, grid, legend) comes from
+        a shared :class:`~diive.plotting.FormatStyle` so it looks and is configured
+        the same way as every other diive plot. The data-rendering arguments
+        (``color``/``linewidth``/``alpha``/``marker``/``markersize``) are specific to
+        the line itself and stay here. Can be called multiple times on the same
+        object to draw on different axes with different styling.
 
         Args:
-            ax: Matplotlib axes to plot on. If None, creates new figure and displays it
-            color: Line color (default: Material Design blue #2196F3)
-            series_units: Units label appended to y-axis label (optional, e.g., '(°C)')
-            xlabel: X-axis label (default: 'Date')
-            ylabel: Y-axis label (default: series name)
-            title: Figure title (default: series name if creating new figure)
-            linewidth: Line width in points (default: 2.2)
-            alpha: Line/marker opacity, 0-1 (default: 0.95)
-            marker: If True, draw a point marker at each observation (default: False)
-            markersize: Point marker size in points, used only when marker=True (default: 3)
+            ax: Matplotlib axes to plot on. If None, creates a new figure and displays it.
+            format_style: A :class:`~diive.plotting.FormatStyle` describing the chrome
+                (title, labels, units, fonts, colours, grid, legend). When None the
+                diive house style is used.
+            color: Line color (default: Material Design blue #2196F3). Ignored when
+                a `color_series` was given (the line is then colormap-coloured).
+            linewidth: Line width in points (default: 2.2).
+            alpha: Line/marker opacity, 0-1 (default: 0.95).
+            marker: If True, draw a point marker at each observation (default: False).
+            markersize: Point marker size in points, used only when marker=True (default: 3).
+            cmap: Colormap used when a `color_series` was given (default: 'viridis').
+            color_vmin: Lower bound of the colour scale (default: the color_series min).
+            color_vmax: Upper bound of the colour scale (default: the color_series max).
+            show_colorbar: Draw a colorbar for the colour-by series (default: True).
+            color_label: Colorbar label (default: the color_series name).
 
         Returns:
             The matplotlib axes the series was drawn on (the new axes when ax=None),
@@ -297,9 +376,13 @@ class TimeSeries:
 
         Example:
             >>> ts = dv.plotting.TimeSeries(series=data)
-            >>> ax = ts.plot(ax=ax1, color='#2196F3', title='My Plot')  # Plot on axis
-            >>> ts.plot(title='Same Data, Different Style')  # New figure with different styling
+            >>> ax = ts.plot(ax=ax1, color='#2196F3')  # Plot on axis
+            >>> style = dv.plotting.FormatStyle(title='Custom', yunits='(°C)')
+            >>> ts.plot(format_style=style)  # New figure with a shared style
         """
+        # Chrome comes only from the caller-supplied style.
+        style = format_style or FormatStyle()
+
         # Create axis
         if ax is not None:
             # If ax is given, plot directly to ax, no fig needed
@@ -313,72 +396,39 @@ class TimeSeries:
             self.showplot = True
 
         color = color if color else _COLOR_LINE
-        label = self.series.name
 
-        # NaNs are kept (unless drop_gaps=True) so the line breaks at gaps
-        # instead of bridging them.
-        self.ax.plot(self.series.index,
-                     self.series,
-                     color=color, alpha=alpha,
-                     linewidth=linewidth,
-                     linestyle='-',
-                     marker='o' if marker else None,
-                     markersize=markersize if marker else 0,
-                     markeredgecolor='none',
-                     zorder=99, label=label)
+        # Colour-by-variable mode: draw the line as a colormap-coloured
+        # LineCollection. Falls back to a plain line if the colour series has
+        # fewer than two finite values to scale.
+        color_vals = (self.color_series.to_numpy(dtype=float)
+                      if self.color_series is not None else None)
+        if color_vals is not None and np.isfinite(color_vals).sum() >= 2:
+            self._plot_colored_line(color_vals, cmap, color_vmin, color_vmax,
+                                    linewidth, alpha, marker, markersize,
+                                    show_colorbar, color_label)
+        else:
+            # NaNs are kept (unless drop_gaps=True) so the line breaks at gaps
+            # instead of bridging them.
+            self.ax.plot(self.series.index,
+                         self.series,
+                         color=color, alpha=alpha,
+                         linewidth=linewidth,
+                         linestyle='-',
+                         marker='o' if marker else None,
+                         markersize=markersize if marker else 0,
+                         markeredgecolor='none',
+                         zorder=99, label=self.series.name)
 
-        self._apply_format(series_units=series_units, xlabel=xlabel, ylabel=ylabel, color=color)
+        # Shared formatting layer: title/labels/units/fonts/grid/legend/zeroline.
+        style.apply(ax=self.ax, default_title=self.series.name, default_xlabel='Date',
+                    default_ylabel=self.varname, zeroline_data=self.series)
+
+        # Nice date ticks (time-series specific, not part of the shared chrome).
+        pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='auto')
 
         if self.showplot:
-            # Publication-ready styling with white background
             self.fig.patch.set_facecolor('white')
-            self.ax.set_facecolor('white')
-
-            if title:
-                self.fig.suptitle(title, fontsize=16, fontweight=500, color=_COLOR_INK, y=0.98)
-            else:
-                self.fig.suptitle(self.series.name, fontsize=16, fontweight=500, color=_COLOR_INK, y=0.98)
             self.fig.tight_layout(pad=1.2)
             self.fig.show()
-        elif title:
-            # When drawing onto a caller-supplied ax, honor an explicit title
-            # (there is no figure suptitle in that case).
-            self.ax.set_title(title, fontsize=14, fontweight=500, color=_COLOR_INK)
 
         return self.ax
-
-    def _apply_format(self, series_units: str = None, xlabel: str = None, ylabel: str = None, color: str = None):
-        """Format matplotlib plot with modern scientific design principles"""
-
-        # Publication-ready gridline styling (subtle, not distracting)
-        self.ax.grid(True, axis='y', alpha=0.2, linestyle='-', linewidth=0.7, color=_COLOR_GRID)
-        self.ax.set_axisbelow(True)
-
-        # Publication-ready spine styling (all spines visible for professional look)
-        for spine in ['top', 'right', 'left', 'bottom']:
-            self.ax.spines[spine].set_color(_COLOR_INK)
-            self.ax.spines[spine].set_linewidth(1.2)
-
-        # Zero line if applicable (subtle reference)
-        if self.series.min() < 0 < self.series.max():
-            self.ax.axhline(y=0, color=_COLOR_ZERO, linestyle='--', linewidth=1.0, alpha=0.5, zorder=0)
-
-        # Publication-ready axis labels and tick styling (all larger)
-        self.ax.set_xlabel(xlabel or 'Date', fontsize=13, fontweight=600, color=_COLOR_INK, labelpad=10)
-        self.ax.set_ylabel((ylabel or self.varname) + (f' {series_units}' if series_units else ''),
-                           fontsize=13, fontweight=600, color=_COLOR_INK, labelpad=10)
-
-        # Publication-ready tick styling
-        self.ax.tick_params(axis='both', which='major', labelsize=12, colors=_COLOR_INK,
-                           length=6, width=1.0, pad=6)
-        self.ax.tick_params(axis='both', which='minor', length=4, width=0.7)
-
-        # Publication-ready legend styling
-        if self.ax.get_legend_handles_labels()[0]:
-            legend = self.ax.legend(loc='upper left', framealpha=0.98, fancybox=False,
-                                    edgecolor=_COLOR_INK, facecolor='white', fontsize=11,
-                                    frameon=True, shadow=False)
-            legend.get_frame().set_linewidth(1.0)
-
-        # Nice date ticks
-        pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='auto')

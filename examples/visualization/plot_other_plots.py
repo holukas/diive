@@ -48,9 +48,14 @@ anomaly_plot = dv.plotting.LongtermAnomaliesYear(
     reference_start_year=2015,        # First year of reference period
     reference_end_year=2017           # Last year of reference period
 )
+# Chrome (here just the title) goes into a shared FormatStyle; data-specific
+# settings like the series units stay on the plot class constructor above.
+style = dv.plotting.FormatStyle(
+    title='Annual Air Temperature Anomalies (2013-2022)'  # Custom title
+)
 anomaly_plot.plot(
     ax=None,                          # Create new figure
-    title='Annual Air Temperature Anomalies (2013-2022)'  # Custom title
+    format_style=style                # Reusable chrome (title, fonts, colours, ...)
 )
 
 print("\nPlotted air temperature anomalies")

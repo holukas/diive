@@ -1,3 +1,4 @@
+"""General numeric helpers (z-scores, nearest value, binning, ...)."""
 from collections import Counter
 
 import numpy as np
@@ -18,6 +19,7 @@ def find_duplicates_in_list(lst: list) -> dict:
 
 
 def validate_id_string(idstr: str):
+    """Normalize an identifier string to start with an underscore (None/empty passes through)."""
     if idstr:
         # idstr = idstr if idstr.endswith('_') else f'{idstr}_'
         idstr = idstr if idstr.startswith('_') else f'_{idstr}'

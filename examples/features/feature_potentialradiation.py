@@ -190,7 +190,7 @@ dv.plotting.HeatmapDateTime(
     series=sw_in_pot,
     ax_orientation='horizontal'
 ).plot(
-    title='Potential Shortwave Radiation - Daily & Hourly Patterns',
+    format_style=dv.plotting.FormatStyle(title='Potential Shortwave Radiation - Daily & Hourly Patterns'),
     zlabel='W/m²',
     cb_digits_after_comma=0,
     figsize=(14, 6)

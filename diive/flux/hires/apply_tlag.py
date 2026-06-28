@@ -441,6 +441,7 @@ class TlagApplier:
             n_workers: int | None = None,
             strict: bool = False,
     ):
+        """Set up time-lag application from a results file. See the class docstring."""
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
         self.results_csv = Path(results_csv)

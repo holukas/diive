@@ -20,13 +20,14 @@ import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 from diive.core.utils.console import info, detail
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
+from diive.core.plotting.styles.format import FormatStyle
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.times.resampling import resample_series_to_30MIN
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import detect_freq_groups
 from diive.analysis import daily_correlation
 from diive.variables.radiation import potrad
-from diive.preprocessing.corrections import remove_radiation_zero_offset, remove_relativehumidity_offset
+from diive.preprocessing.corrections import remove_nighttime_zero_offset, remove_relativehumidity_offset
 from diive.preprocessing.corrections import set_exact_values_to_missing, setto_threshold, setto_value
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 from diive.preprocessing.qaqc.flags import MissingValues
@@ -58,7 +59,7 @@ class StepwiseMeteoScreeningDb:
     - `.flag_outliers_trim_low_test()`: Remove values below threshold and remove an equal amount of records from high end of data
 
     Implemented corrections:
-    - `.correction_remove_radiation_zero_offset()`: Remove nighttime offset from all radiation data and set nighttime to zero
+    - `.correction_remove_nighttime_zero_offset()`: Remove nighttime offset from a variable that should be zero at night (e.g. radiation) and set nighttime to zero
     - `.correction_remove_relativehumidity_offset()`: Remove relative humidity offset
     - `.correction_setto_max_threshold()`: Set values above a threshold value to threshold value
     - `.correction_setto_min_threshold()`: Set values below a threshold value to threshold value
@@ -127,6 +128,7 @@ class StepwiseMeteoScreeningDb:
             site_lon: float,
             utc_offset: int
     ):
+        """Set up stepwise meteo screening. See the class docstring."""
         self.site = site
         self._data_detailed = data_detailed.copy()
         # self.measurement = measurement
@@ -226,10 +228,12 @@ class StepwiseMeteoScreeningDb:
             self.outlier_detection[field].showplot_cleaned(interactive=interactive)
 
     def showplot_outlier_detection_qcf_heatmaps(self, **kwargs):
+        """Show the QCF outlier-detection heatmaps."""
         for field in self.fields:
             self.outlier_detection_qcf[field].showplot_qcf_heatmaps(**kwargs)
 
     def showplot_outlier_detection_qcf_timeseries(self, **kwargs):
+        """Show the QCF outlier-detection time series."""
         for field in self.fields:
             self.outlier_detection_qcf[field].showplot_qcf_timeseries(**kwargs)
 
@@ -267,10 +271,12 @@ class StepwiseMeteoScreeningDb:
                          color="#FFA726", alpha=1, markersize=3, markeredgecolor='none')
 
             # Heatmaps
-            kwargs_heatmap = dict(cb_labelsize=10, axlabels_fontsize=10, ticks_labelsize=10,
-                                  minticks=3, maxticks=99)
-            HeatmapDateTime(series=series_orig).plot(ax=ax_heatmap_hires_before, **kwargs_heatmap)
-            HeatmapDateTime(series=series_resampled).plot(ax=ax_heatmap_resampled_after, **kwargs_heatmap)
+            kwargs_heatmap = dict(cb_labelsize=10, minticks=3, maxticks=99)
+            format_style_heatmap = FormatStyle(axlabel_fontsize=10, ticks_fontsize=10)
+            HeatmapDateTime(series=series_orig).plot(ax=ax_heatmap_hires_before,
+                                                     format_style=format_style_heatmap, **kwargs_heatmap)
+            HeatmapDateTime(series=series_resampled).plot(ax=ax_heatmap_resampled_after,
+                                                          format_style=format_style_heatmap, **kwargs_heatmap)
 
             # Format time series
             default_format(ax=ax_orig, ticks_labels_fontsize=10)
@@ -303,14 +309,17 @@ class StepwiseMeteoScreeningDb:
             p.plot() if not interactive else p.plot_interactive()
 
     def report_outlier_detection_qcf_evolution(self):
+        """Print the QCF flag-evolution report."""
         for field in self.fields:
             self.outlier_detection_qcf[field].report_qcf_evolution()
 
     def report_outlier_detection_qcf_flags(self):
+        """Print the QCF flags report."""
         for field in self.fields:
             self.outlier_detection_qcf[field].report_qcf_flags()
 
     def report_outlier_detection_qcf_series(self):
+        """Print the QCF series report."""
         for field in self.fields:
             self.outlier_detection_qcf[field].report_qcf_series()
 
@@ -382,17 +391,8 @@ class StepwiseMeteoScreeningDb:
         separate_daytime_nighttime : bool, default False
             If False, apply single threshold across all records (global mode).
             If True, apply separate thresholds to daytime and nighttime records.
-            Requires lat, lon, utc_offset when True.
-        lat : float, default None
-            Site latitude in decimal degrees (-90 to 90). Required only when
-            separate_daytime_nighttime=True. Used to compute solar elevation and determine
-            day/night boundaries.
-        lon : float, default None
-            Site longitude in decimal degrees (-180 to 180). Required only when
-            separate_daytime_nighttime=True.
-        utc_offset : int, default None
-            UTC offset in hours (e.g., 1 for UTC+1). Required only when
-            separate_daytime_nighttime=True. Used to align solar time with local time.
+            Day/night boundaries are derived from the site location (``site_lat``,
+            ``site_lon``, ``utc_offset``) supplied when the class was initialized.
         showplot : bool, default False
             If True, display outlier visualization.
         plottitle : str, default None
@@ -548,11 +548,11 @@ class StepwiseMeteoScreeningDb:
                 n_jobs=n_jobs
             )
 
-    def correction_remove_radiation_zero_offset(self):
-        """Remove nighttime offset from all radiation data and set nighttime to zero"""
+    def correction_remove_nighttime_zero_offset(self):
+        """Remove nighttime offset from variables that should be zero at night (e.g. radiation)"""
         for field in self.fields:
             self._series_hires_cleaned[field] = \
-                remove_radiation_zero_offset(series=self._series_hires_cleaned[field],
+                remove_nighttime_zero_offset(series=self._series_hires_cleaned[field],
                                              lat=self.site_lat, lon=self.site_lon,
                                              utc_offset=self.utc_offset, showplot=True)
 
@@ -635,6 +635,7 @@ class StepwiseMeteoScreeningDb:
                  agg: Literal['mean', 'sum'] = 'mean',
                  mincounts_perc: float = .25):
 
+        """Resample the screened series to the target frequency."""
         for field in self.fields:
 
             # Resample to 30MIN
@@ -660,6 +661,7 @@ class StepwiseMeteoScreeningDb:
                                    daytime_accept_qcf_below: int = 2,
                                    nighttime_accept_qcf_below: int = 2) -> FlagQCF:
 
+        """Finalize outlier detection and aggregate the QCF flag."""
         for field in self.fields:
             # Detect new columns
             newcols = frames.detect_new_columns(df=self.outlier_detection[field].flags,

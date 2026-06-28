@@ -1,15 +1,26 @@
+"""
+PLOTTING: DIEL CYCLE
+====================
+
+Plot the mean diel (24-hour) cycle of a time series, optionally one curve per month.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 import calendar
+from typing import Literal
 
 import matplotlib.pyplot as plt
+import numpy as np
 from pandas import Series, DataFrame
 
 import diive.core.plotting.styles.LightTheme as theme
-from diive.core.plotting.plotfuncs import default_format, format_spines, default_legend, add_zeroline_y
 from diive.core.plotting.plotfuncs import set_fig
+from diive.core.plotting.styles.format import FormatStyle
 from diive.core.times.resampling import diel_cycle
 
 
 class DielCycle:
+    """Plot the diel (24-hour) cycle of a time series. See :meth:`__init__` and :meth:`plot`."""
 
     def __init__(self, series: Series):
         """Plot diel cycles of time series.
@@ -28,16 +39,12 @@ class DielCycle:
         self.fig = None
         self.ax = None
         self.showplot = False
-        self.title = None
-        self.ylabel = None
-        self.txt_ylabel_units = None
         self._diel_cycles_df = None
-        self.showgrid = True
         self.show_xticklabels = True
         self.show_xlabel = True
-        self.show_legend = True
 
     def get_data(self) -> DataFrame:
+        """Return the diel-cycle aggregates DataFrame (raises if :meth:`plot` not yet run)."""
         return self.diel_cycles_df
 
     @property
@@ -47,45 +54,106 @@ class DielCycle:
             raise Exception(f'No diel cycles dataframe available. Please run .plot() first.')
         return self._diel_cycles_df
 
+    @staticmethod
+    def _month_colors(n: int, cmap: str = None) -> list:
+        """Colours for up to `n` per-month curves: sampled from `cmap` if given,
+        else the diive 12-month palette."""
+        if cmap:
+            mpl_cmap = plt.get_cmap(cmap)
+            return [mpl_cmap(i / max(1, n - 1)) for i in range(max(n, 1))]
+        return theme.colors_12_months()
+
+    def _band_bounds(self, month, agg_col: str, band: str, central: Series):
+        """Return (lower, upper) Series for the uncertainty band, or (None, None).
+
+        `sd`/`se` are symmetric around the central curve; `iqr`/`minmax` are the
+        raw percentile / range columns (independent of the central aggregation).
+        """
+        row = self.diel_cycles_df.loc[month]
+        if band == 'sd':
+            sd = row['std']
+            return central - sd, central + sd
+        if band == 'se':
+            se = row['std'] / np.sqrt(row['count'])
+            return central - se, central + se
+        if band == 'iqr':
+            return row['q25'], row['q75']
+        if band == 'minmax':
+            return row['min'], row['max']
+        return None, None
+
+    #: Central aggregation -> (diel_cycle column, diel_cycle flag needed).
+    _AGG_COLUMN = {
+        'mean': ('mean', 'mean'), 'median': ('median', 'median'),
+        'min': ('min', 'minmax'), 'max': ('max', 'minmax'),
+        'p25': ('q25', 'quantiles'), 'p75': ('q75', 'quantiles'),
+    }
+
     def plot(self,
              ax: plt.Axes = None,
-             title: str = None,
+             format_style: FormatStyle = None,
              color: str = None,
-             txt_ylabel_units: str = None,
-             mean: bool = True,
-             std: bool = True,
+             agg: Literal['mean', 'median', 'min', 'max', 'p25', 'p75'] = 'mean',
+             band: Literal['none', 'sd', 'se', 'iqr', 'minmax'] = 'sd',
              each_month: bool = False,
+             cmap: str = None,
+             marker: bool = False,
+             markersize: float = 4,
              linewidth: float = 2,
-             legend_n_col: int = 1,
-             legend_loc: str = 'best',
              ylim: list = None,
-             ylabel: str = None,
-             showgrid: bool = True,
              show_xticklabels: bool = True,
              show_xlabel: bool = True,
-             show_legend: bool = True,
+             mean: bool = None,
+             std: bool = None,
              **kwargs):
         """Plot the diel (24-hour) cycle, optionally one curve per month.
 
+        Chrome (title, labels, units, font sizes, colours, grid, legend, zero
+        line) comes from a shared :class:`~diive.plotting.FormatStyle`.
+
         Args:
-            legend_loc: Matplotlib legend location, e.g. 'best', 'upper right',
-                'lower left', 'center' (default: 'best').
+            agg: Central aggregation drawn as the curve: ``'mean'``, ``'median'``,
+                ``'min'``, ``'max'``, ``'p25'`` or ``'p75'`` (25th/75th percentile).
+            band: Uncertainty band drawn around the curve: ``'sd'`` (±1 standard
+                deviation), ``'se'`` (±1 standard error), ``'iqr'`` (25th-75th
+                percentile), ``'minmax'`` (per-time-of-day range), or ``'none'``.
+            each_month: One curve per month (seasonal pattern) instead of a single
+                curve over all data.
+            cmap: Colormap name to draw the per-month colours from (``each_month``
+                only). ``None`` uses the diive 12-month palette.
+            marker: Draw a marker at each time-of-day point.
+            markersize: Marker size (when ``marker`` is True).
+            format_style: A :class:`~diive.plotting.FormatStyle` describing the
+                chrome. When None the diive house style is used.
+            mean: Deprecated. Kept for back-compat; ignored (use ``agg``).
+            std: Deprecated. Kept for back-compat; ``False`` maps to ``band='none'``.
         """
 
-        self.title = title
-        self.legend_loc = legend_loc
-        self.txt_ylabel_units = txt_ylabel_units
-        self.ylabel = ylabel
-        self.showgrid = showgrid
+        # Back-compat: the old boolean std= toggle maps onto the band selector.
+        if std is not None and band == 'sd':
+            band = 'sd' if std else 'none'
+
+        agg = agg.lower()
+        band = band.lower()
+        agg_col, agg_flag = self._AGG_COLUMN.get(agg, ('mean', 'mean'))
+
         self.show_xticklabels = show_xticklabels
         self.show_xlabel = show_xlabel
-        self.show_legend = show_legend
 
-        # Resample
-        self._diel_cycles_df = diel_cycle(series=self.series,
-                                          mean=mean,
-                                          std=std,
-                                          each_month=each_month)
+        style = format_style or FormatStyle()
+
+        # Resample, computing only the aggregates the chosen curve + band need.
+        flags = {'mean': False, 'std': False, 'median': False,
+                 'quantiles': False, 'minmax': False}
+        flags[agg_flag] = True
+        if band in ('sd', 'se'):
+            flags['std'] = True
+        elif band == 'iqr':
+            flags['quantiles'] = True
+        elif band == 'minmax':
+            flags['minmax'] = True
+        self._diel_cycles_df = diel_cycle(series=self.series, each_month=each_month,
+                                          **flags)
 
         months = set(self.diel_cycles_df.index.get_level_values(0).tolist())
 
@@ -95,70 +163,58 @@ class DielCycle:
         n_months = len(months)
         alpha = 0.05 if n_months > 10 else 0.1
         auto_color = True if not color else False
+        month_colors = self._month_colors(n_months, cmap) if auto_color else None
         for counter, month in enumerate(months):
 
-            means = self.diel_cycles_df.loc[month]['mean']
-            if means.isnull().all():
+            central = self.diel_cycles_df.loc[month][agg_col]
+            if central.isnull().all():
                 continue
             else:
                 counter_plotted += 1
 
-            means_add_sd = self.diel_cycles_df.loc[month]['mean+sd']
-            means_sub_sd = self.diel_cycles_df.loc[month]['mean-sd']
+            lower, upper = self._band_bounds(month, agg_col, band, central)
 
             if auto_color:
-                color = theme.colors_12_months()[counter_plotted]
+                color = month_colors[counter_plotted % len(month_colors)]
 
-            # monthstr = calendar.month_name[month] if each_month else 'Mittelwert'
-            monthstr = calendar.month_abbr[month] if each_month else 'mean'
+            monthstr = calendar.month_abbr[month] if each_month else agg
 
             # Convert datetime.time index to decimal hours for a clean numeric x-axis.
             # Using datetime.time objects directly creates a categorical axis whose
             # registered categories may not include exact hour boundaries (e.g. when
             # timestamps are at :15/:45 offsets), causing set_xticks to fail.
-            x_decimal = [t.hour + t.minute / 60 + t.second / 3600 for t in means.index]
-            means_numeric = means.copy()
-            means_numeric.index = x_decimal
-            means_numeric.plot(ax=self.ax, label=f'{monthstr}', color=color, zorder=99,
-                                lw=linewidth, **kwargs)
+            x_decimal = [t.hour + t.minute / 60 + t.second / 3600 for t in central.index]
+            central_numeric = central.copy()
+            central_numeric.index = x_decimal
+            central_numeric.plot(ax=self.ax, label=f'{monthstr}', color=color, zorder=99,
+                                 lw=linewidth,
+                                 marker='o' if marker else None, markersize=markersize,
+                                 **kwargs)
 
-            # label = "Mittelwert ± 1 Standardabweichung"
-            label = None
-            # label = "mean±1sd" if counter == 0 else ""
-            self.ax.fill_between(x_decimal,
-                                 means_add_sd.to_numpy(),
-                                 means_sub_sd.to_numpy(),
-                                 alpha=alpha, zorder=0, color=color, edgecolor='none',
-                                 label=label)
+            if lower is not None:
+                self.ax.fill_between(x_decimal,
+                                     upper.to_numpy(),
+                                     lower.to_numpy(),
+                                     alpha=alpha, zorder=0, color=color, edgecolor='none',
+                                     label=None)
 
-        self._format(title=title, legend_n_col=legend_n_col, ylim=ylim)
+        # Shared formatting layer: title/labels/units/fonts/grid/legend/zeroline.
+        style.apply(ax=self.ax, default_xlabel="Time (hours of day)",
+                    default_ylabel=self.series.name,
+                    zeroline_data=self.diel_cycles_df[agg_col])
 
-        if self.showplot:
-            self.fig.show()
-
-    def _format(self, title, legend_n_col, ylim):
-
-        if title:
-            self.ax.set_title(title, color='black', fontsize=24)
-        ax_xlabel_txt = "Time (hours of day)"
-        ylabel = self.ylabel if self.ylabel else self.series.name
-        default_format(ax=self.ax, ax_xlabel_txt=ax_xlabel_txt, ax_ylabel_txt=ylabel,
-                       txt_ylabel_units=self.txt_ylabel_units,
-                       ticks_direction='in', ticks_length=8, ticks_width=2,
-                       ax_labels_fontsize=20,
-                       ticks_labels_fontsize=20,
-                       showgrid=self.showgrid)
+        # show_xlabel=False blanks the (already-set) x-label.
         if not self.show_xlabel:
             self.ax.set_xlabel("")
-        format_spines(ax=self.ax, color='black', lw=1)
-        if self.show_legend:
-            default_legend(ax=self.ax, ncol=legend_n_col, loc=self.legend_loc)
-        add_zeroline_y(ax=self.ax, data=self.diel_cycles_df['mean'])
+
+        # Fixed 0-24h diel x-axis with hourly ticks (domain-specific, not chrome).
         self.ax.set_xticks([3, 6, 9, 12, 15, 18, 21])
         self.ax.set_xticklabels([3, 6, 9, 12, 15, 18, 21])
         if not self.show_xticklabels:
             self.ax.set_xticklabels([])
         self.ax.set_xlim([0, 24])
         self.ax.set_ylim(ylim)
+
         if self.showplot:
             self.fig.tight_layout()
+            self.fig.show()

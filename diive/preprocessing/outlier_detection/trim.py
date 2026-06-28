@@ -65,6 +65,8 @@ from diive.preprocessing.outlier_detection.common import create_daytime_nighttim
 
 @ConsoleOutputDecorator()
 class TrimLow(FlagBase):
+    """Flag the lowest values (and an equal count of the highest) as outliers. See :meth:`__init__`."""
+
     flagid = 'OUTLIER_TRIMLOW'
 
     def __init__(self,

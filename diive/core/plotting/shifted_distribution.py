@@ -19,7 +19,8 @@ from sklearn.neighbors import KernelDensity
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
-from diive.core.plotting.plotfuncs import default_format
+from diive.core.plotting.styles import LightTheme as theme
+from diive.core.plotting.styles.format import FormatStyle
 
 
 class ShiftedDistributionPlot:
@@ -53,6 +54,8 @@ class ShiftedDistributionPlot:
         zone_labels: list = None,
         zone_colors: list = None,
     ):
+        """Fit the reference/comparison KDEs and zone breakpoints. See the class docstring
+        for parameters (``zone_labels``/``zone_colors`` here are deprecated — pass them to :meth:`plot`)."""
         self.series = series
         self.ref_period = ref_period
         self.comp_period = comp_period
@@ -96,16 +99,17 @@ class ShiftedDistributionPlot:
         return np.exp(log_dens)
 
     def get_fig(self):
+        """Return the matplotlib Figure (available after :meth:`plot`)."""
         return self.fig
 
     def get_ax(self):
+        """Return the matplotlib Axes (available after :meth:`plot`)."""
         return self.ax
 
     def plot(
         self,
         ax=None,
-        title: str = None,
-        xlabel: str = None,
+        format_style: FormatStyle = None,
         ref_label: str = None,
         comp_label: str = None,
         show_legend: bool = True,
@@ -120,8 +124,9 @@ class ShiftedDistributionPlot:
 
         Args:
             ax: Matplotlib axes (creates new figure if None).
-            title: Plot title. Defaults to series name.
-            xlabel: X-axis label. Defaults to series name.
+            format_style: A :class:`~diive.plotting.FormatStyle` describing the chrome
+                (title/x-label/font sizes/colours/ticks/grid). When None the diive house
+                style is used.
             ref_label: Legend label for reference period.
             comp_label: Legend label for comparison period.
             show_legend: Show legend (default True).
@@ -136,6 +141,11 @@ class ShiftedDistributionPlot:
         # then the class defaults.
         zone_labels = zone_labels or self.zone_labels or self._DEFAULT_LABELS
         zone_colors = zone_colors or self.zone_colors or self._DEFAULT_COLORS
+
+        # The custom left-aligned title and patch legend are rendered below, so this
+        # plot drives apply() with the legend suppressed and only uses it for the
+        # shared chrome (facecolor/ticks/spines/x-label/grid).
+        style = format_style or FormatStyle()
 
         self.ax = ax
         self.fig, self.ax, showplot = pf.setup_figax(ax=self.ax, figsize=figsize)
@@ -170,16 +180,15 @@ class ShiftedDistributionPlot:
         for bp_val in bp:
             self.ax.axvline(bp_val, color='white', linewidth=1.0, alpha=0.7, linestyle='--', zorder=5)
 
-        _xlabel = xlabel or (str(self.series.name) if self.series.name else "")
-        default_format(
-            ax=self.ax,
-            ax_xlabel_txt=_xlabel,
-            ax_ylabel_txt="Density",
-            ticks_width=1.5,
-            ticks_length=5,
-            ticks_direction='in',
-            showgrid=False,
-        )
+        # Shared chrome: facecolor/ticks/spines/x-label/grid. The y-label ("Density"),
+        # the custom left-aligned title, and the patch legend are handled separately
+        # below, so suppress them here. This plot has no zero reference line and no grid.
+        _default_xlabel = str(self.series.name) if self.series.name else ""
+        chrome = style.merged(ylabel="Density")
+        chrome.show_grid = False
+        chrome.show_zeroline = False
+        chrome.show_legend = False
+        chrome.apply(ax=self.ax, default_title="", default_xlabel=_default_xlabel)
         self.ax.spines['top'].set_visible(False)
         self.ax.spines['right'].set_visible(False)
         self.ax.tick_params(right=False, top=False)
@@ -205,16 +214,24 @@ class ShiftedDistributionPlot:
                 ha='center', va='bottom', clip_on=False,
             )
 
-        if show_title:
-            _title = title or f"Shifted distribution: {self.series.name}"
-            self.ax.set_title(_title, fontsize=16, fontweight='bold', loc='left', pad=28)
+        # Title font/colour/weight come from the style; the left-aligned, padded
+        # placement is this plot's own layout (not part of the shared chrome). An
+        # empty style.title ("") still suppresses the title.
+        if show_title and style.title != "":
+            _title = style.title if style.title is not None else f"Shifted distribution: {self.series.name}"
+            title_fs = style.title_fontsize if style.title_fontsize is not None else theme.FONTSIZE_TITLE
+            title_color = style.text_color if style.text_color is not None else theme.COLOR_TEXT
+            self.ax.set_title(_title, fontsize=title_fs, fontweight=style.title_fontweight,
+                              color=title_color, loc='left', pad=28)
 
-        if show_legend:
+        # Custom patch legend with this plot's own anchor; only the font size is shared.
+        if show_legend and style.show_legend:
+            legend_fs = style.legend_fontsize if style.legend_fontsize is not None else theme.FONTSIZE_LEGEND
             ref_patch = Patch(facecolor='none', edgecolor='#546E7A', hatch='///', label=_ref_label)
             comp_patch = Patch(facecolor='#90A4AE', label=_comp_label)
             self.ax.legend(
                 handles=[ref_patch, comp_patch],
-                fontsize=11, framealpha=0.0, edgecolor='none',
+                fontsize=legend_fs, framealpha=0.0, edgecolor='none',
                 loc='upper left', bbox_to_anchor=(0.01, 0.99),
             )
 

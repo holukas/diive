@@ -1,4 +1,7 @@
+"""Public namespace: dv.plotting (visualization classes)."""
 from diive.core.plotting.bar import LongtermAnomaliesYear
+from diive.core.plotting.compoundextremes import CompoundExtremesPlot
+from diive.core.plotting.styles.format import FormatStyle
 from diive.core.plotting.cumulative import Cumulative
 from diive.core.plotting.cumulative import CumulativeYear
 from diive.core.plotting.dielcycle import DielCycle
@@ -14,8 +17,11 @@ from diive.core.plotting.surface_grid import DateTimeSurface, datetime_surface_g
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.plotting.treering import TreeRingPlot
 from diive.core.plotting.waterfall import WaterfallPlot
+from diive.core.plotting.windrose import WindRosePlot
 
 __all__ = [
+    'FormatStyle',
+    'CompoundExtremesPlot',
     'LongtermAnomaliesYear',
     'Cumulative',
     'CumulativeYear',
@@ -33,4 +39,5 @@ __all__ = [
     'TimeSeries',
     'TreeRingPlot',
     'WaterfallPlot',
+    'WindRosePlot',
 ]

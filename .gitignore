@@ -2,6 +2,9 @@
 *.parquet
 *.html
 
+# Build identifier stamped in by packaging/build_gui.ps1 (packaged builds only)
+diive/gui/_build_info.txt
+
 # Development utilities (not for distribution)
 /dev_scripts/
 

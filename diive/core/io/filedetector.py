@@ -1,3 +1,4 @@
+"""Detect and group data files by name pattern."""
 import datetime as dt
 import os
 import sys
@@ -15,6 +16,7 @@ pd.set_option('display.width', 1000)
 
 
 class FileDetector:
+    """Build an overview of available and missing (expected) data files. See :meth:`__init__`."""
 
     def __init__(self,
                  filelist: list,
@@ -26,7 +28,6 @@ class FileDetector:
 
         Args:
             filelist: List of found files
-            file_pattern: Pattern to identify files
             file_date_format: Datetime information contained in file name
             file_generation_res: Regular interval at which files were created, e.g. '6h' for every 6 hours
             data_res: Interval in seconds at which data are logged, e.g. 0.05
@@ -55,6 +56,7 @@ class FileDetector:
         return self._files_overview_df
 
     def get_results(self) -> DataFrame:
+        """Return the files-overview DataFrame."""
         return self.files_overview_df
 
     def run(self):
@@ -67,6 +69,7 @@ class FileDetector:
         self._files_overview_df = self.restrict_numfiles()
 
     def restrict_numfiles(self):
+        """Trim the overview to the first *files_how_many* available files (if set)."""
         # Consider file limit
         _files_overview_df = self.files_overview_df.copy()
 
@@ -191,6 +194,7 @@ def read_segments_file(filepath):
 
 
 def add_data_stats(df, true_resolution, filename, found_records) -> DataFrame:
+    """Return a one-row stats DataFrame (first/last record, duration, count, frequency) for a file."""
     # Detect overall frequency
     cols = [
         'first_record',
@@ -214,6 +218,7 @@ def add_data_stats(df, true_resolution, filename, found_records) -> DataFrame:
 
 
 def generate_missing_cols(header_cols_df, more_data_cols_than_header_cols, num_missing_header_cols):
+    """Append ``unknown_N`` placeholder names when there are more data columns than header columns."""
     # Generate missing header columns if necessary
     header_cols_list = header_cols_df.columns.to_list()
     generated_missing_header_cols_list = []
@@ -226,10 +231,12 @@ def generate_missing_cols(header_cols_df, more_data_cols_than_header_cols, num_m
 
 
 def detect_dates():
+    """Placeholder (not implemented)."""
     pass
 
 
 def length_data_cols(filepath, header_rows_list, skip_rows_list):
+    """Return the number of columns in the first data row after the header section."""
     # Check number of columns of the first data row after the header part
     skip_num_lines = len(header_rows_list) + len(skip_rows_list)
     first_data_row_df = pd.read_csv(filepath,
@@ -240,6 +247,7 @@ def length_data_cols(filepath, header_rows_list, skip_rows_list):
 
 
 def length_header_cols(filepath, header_rows_list, skip_rows_list):
+    """Return the header column count and the parsed header DataFrame."""
     # Check number of columns of the header part
     header_cols_df = pd.read_csv(filepath,
                                  skiprows=skip_rows_list,
@@ -249,6 +257,7 @@ def length_header_cols(filepath, header_rows_list, skip_rows_list):
 
 
 def data_vs_header(num_data_cols, num_header_cols):
+    """Return ``(more_data_than_header, n_missing_header_cols)`` comparing column counts."""
     # Check if there are more data columns than header columns
     if num_data_cols > num_header_cols:
         more_data_cols_than_header_cols = True
@@ -263,6 +272,7 @@ def data_vs_header(num_data_cols, num_header_cols):
 
 
 def example():
+    """Runnable usage example for :class:`FileDetector`."""
     SEARCHDIRS = [r'F:\Sync\luhk_work\20 - CODING\27 - VARIOUS\dyco\_testdata']
     PATTERN = 'CH-DAS_*.csv.gz'
 

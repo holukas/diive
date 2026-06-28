@@ -56,7 +56,7 @@ df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
 # ^^^^^^^^^^^^^^^^^^^
 #
 # Both MDS (L4.1) and the daytime partitioning variants want VPD in **kPa**;
-# EddyPro outputs hPa. Convert once and register via ``add_driver`` so the
+# the input VPD here is in hPa. Convert once and register via ``add_driver`` so the
 # column lands in ``data.full_df`` where the levels read their drivers.
 
 data = init_flux_data(

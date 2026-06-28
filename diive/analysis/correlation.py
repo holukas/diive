@@ -141,6 +141,7 @@ class DailyCorrelation:
     """
 
     def __init__(self, s1: Series, s2: Series, mincorr: float = 0.8):
+        """Compute daily correlations between two series. See the class docstring for parameters."""
         if not (-1 <= mincorr <= 1):
             raise ValueError("mincorr must be between -1 and 1.")
         if s1.name is None or s2.name is None:
@@ -383,3 +384,54 @@ class DailyCorrelation:
         if showplot:
             plt.show()
         return fig
+
+
+def rank_drivers_to_code(
+        target: str,
+        *,
+        method: str = 'pearson',
+        max_lag: int = 0,
+        df_name: str = 'df',
+        with_plot: bool = True,
+) -> str:
+    """Render a runnable :func:`rank_drivers` snippet (+ top-driver scatter).
+
+    Mirrors the GUI's Driver explorer tab: rank every candidate column against
+    ``target`` and (optionally) scatter the target against its strongest driver
+    at that driver's best lag. Belongs in the library (not the GUI): it encodes
+    the exact call shape and must stay correct as that API evolves; the GUI only
+    calls it (the GUI <-> library separation rule).
+
+    Args:
+        target: target column to rank drivers against.
+        method / max_lag: passed straight to :func:`rank_drivers`.
+        df_name: variable name used for the input DataFrame.
+        with_plot: also emit the top-driver scatter lines.
+
+    Returns:
+        A runnable Python snippet as a string.
+    """
+    lines = ["import diive as dv", ""]
+    if with_plot:
+        lines = ["import matplotlib.pyplot as plt", *lines]
+    lines += [
+        "ranked = dv.analysis.rank_drivers(",
+        f"    {df_name},",
+        f"    target={target!r},",
+        f"    method={method!r},",
+        f"    max_lag={max_lag!r},",
+        ")",
+        "print(ranked)",
+    ]
+    if with_plot:
+        lines += [
+            "",
+            "# Scatter the target against its strongest driver (at that driver's best lag).",
+            "top = ranked.iloc[0]",
+            f"x = {df_name}[top['DRIVER']].shift(int(top['BEST_LAG']))",
+            f"sc = dv.plotting.ScatterXY(x=x, y={df_name}[{target!r}])",
+            "fig, ax = plt.subplots(figsize=(7, 7))",
+            "sc.plot(ax=ax)",
+            "plt.show()",
+        ]
+    return "\n".join(lines) + "\n"

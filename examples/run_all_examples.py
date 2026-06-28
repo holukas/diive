@@ -39,6 +39,8 @@ EXAMPLE_FILES = [
     'visualization/plot_scatter_xy_colored.py',
     'visualization/plot_treering_temperature.py',
     'visualization/plot_treering_line_temperature.py',
+    'visualization/plot_windrose_basic.py',
+    'visualization/plot_compound_extremes.py',
     # Times
     'times/times_timestamp_sanitizer.py',
     'times/times_keep_daterange.py',
@@ -50,6 +52,7 @@ EXAMPLE_FILES = [
     # Analysis
     'analysis/analysis_daily_correlation.py',
     'analysis/analysis_driveranalysis.py',
+    'analysis/analysis_compound_extremes.py',
     'analysis/analysis_granger.py',
     'analysis/analysis_decoupling.py',
     'analysis/analysis_gapfinder.py',
@@ -106,6 +109,7 @@ EXAMPLE_FILES = [
     'fits/fit_binfittercp.py',
     'fits/fit_fitter.py',
     # Flux - Processing chain
+    'flux/fluxprocessingchain/fluxprocessingchain_level2.py',
     'flux/fluxprocessingchain/fluxprocessingchain_runchain.py',
     'flux/fluxprocessingchain/fluxprocessingchain_composable.py',
     'flux/fluxprocessingchain/fluxprocessingchain_partitioning.py',

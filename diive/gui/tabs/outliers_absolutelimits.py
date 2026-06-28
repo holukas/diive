@@ -43,6 +43,9 @@ class AbsoluteLimitsTab(BaseOutlierTab):
              "Keeps the original, a cleaned copy, and the flag.")
     settings_title = "Absolute limits settings"
     method_suffix = "ABSLIM"
+    method_chip_label = "ABS LIMITS"
+    method_chip_bg = "#E3F2FD"
+    method_chip_fg = "#1565C0"
 
     def _add_method_rows(self, form: QFormLayout) -> None:
         # No universal default exists for a value range, so the limits are seeded

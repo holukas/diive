@@ -1,3 +1,4 @@
+"""Timestamp sanitization, frequency detection and conversions."""
 import datetime as dt
 import fnmatch
 import time
@@ -190,6 +191,7 @@ class TimestampSanitizer:
         self._run()
 
     def get(self) -> Union[Series, DataFrame]:
+        """Return the sanitized DataFrame."""
         return self.data
 
     def get_status(self) -> dict:
@@ -355,6 +357,7 @@ class DetectFrequency:
     """
 
     def __init__(self, index: pd.DatetimeIndex, verbose: bool = False):
+        """Set up frequency detection for an index. See the class docstring."""
         self.index = index
         self.verbose = verbose
         # self.freq_expected = freq_expected
@@ -475,6 +478,7 @@ class DetectFrequency:
             )
 
     def get(self) -> str:
+        """Return the detected frequency string."""
         return self.freq
 
 
@@ -1929,6 +1933,7 @@ def keep_daterange(data: Union[Series, DataFrame],
 
 
 def calc_doy_timefraction(input_series: Series) -> DataFrame:
+    """Return a DataFrame with year, day-of-year and intra-day time fraction per timestamp."""
     df = pd.DataFrame(input_series)
     df['YEAR'] = df.index.year
     df['DOY'] = df.index.dayofyear
@@ -1941,6 +1946,7 @@ def calc_doy_timefraction(input_series: Series) -> DataFrame:
 
 
 def doy_cumulatives_per_year(series: Series) -> DataFrame:
+    """Return cumulative sums by day-of-year time, one column per year."""
     df = calc_doy_timefraction(input_series=series)
     return df.pivot(index='DOY_TIME', columns='YEAR', values=series.name).cumsum()
 

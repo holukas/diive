@@ -40,6 +40,7 @@ from diive.core.metadata import (
 )
 from diive.gui import metadata_store, theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 #: Background tint per origin (matches the "modified/derived/original" wording).
@@ -78,6 +79,7 @@ class MetadataExplorerTab(DiiveTab):
         outer = QVBoxLayout(root)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
+        outer.addLayout(build_titlebar(self.title))  # shared tab header
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.varpanel = VariablePanel(clearable=True)

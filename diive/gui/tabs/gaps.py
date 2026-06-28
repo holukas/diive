@@ -25,11 +25,9 @@ import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QScrollArea,
     QSpinBox,
     QSplitter,
     QTableWidget,
@@ -39,11 +37,9 @@ from PySide6.QtWidgets import (
 )
 
 import diive as dv
-from diive.gui import theme
-from diive.gui.tabs.base import DiiveTab
-from diive.gui.tabs.overview import _StatCard, _fmt
+from diive.gui.tabs._explorer_base import SingleVariableExplorerTab
+from diive.gui.tabs.overview import _fmt
 from diive.gui.widgets.mpl_canvas import MplCanvas
-from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 _MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -58,29 +54,19 @@ def _dur(value) -> str:
     return str(value) if pd.notna(value) else "n/a"
 
 
-class GapDashboardTab(DiiveTab):
+class GapDashboardTab(SingleVariableExplorerTab):
     """Gap & coverage dashboard for the selected variable."""
 
     title = "Gaps & coverage"
 
-    def build(self) -> QWidget:
-        self._df = None
-        self._current = None
+    def _init_state(self) -> None:
         self._gs = None                 # current GapStats (library)
         self._long_gaps = None          # DataFrame shown in the table
         self._timeline_ax = None
         self._highlight = []            # overlay artists to clear on reselect
         self._syncing = False           # guard table<->plot selection echo
 
-        root = QWidget()
-        outer = QVBoxLayout(root)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.varpanel = VariablePanel()
-        self.varpanel.selected.connect(self._on_select)
-
+    def _build_right(self) -> QWidget:
         right = QWidget()
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 0, 0, 0)
@@ -99,36 +85,9 @@ class GapDashboardTab(DiiveTab):
         vsplit.setStretchFactor(1, 0)
         vsplit.setSizes([460, 200])
         rl.addWidget(vsplit, stretch=1)
-
-        splitter.addWidget(self.varpanel)
-        splitter.addWidget(right)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        lock_panel_handle(splitter)  # fixed-width list → no misleading ↔ cursor
-        outer.addWidget(splitter)
-        return root
+        return right
 
     # --- sub-widgets ---------------------------------------------------
-    def _build_stats_strip(self) -> QWidget:
-        strip = QScrollArea()
-        strip.setWidgetResizable(True)
-        strip.setFixedHeight(92)
-        strip.setFrameShape(QFrame.Shape.NoFrame)
-        strip.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        strip.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        list_bg = theme.manager.tokens["LIST_BG"]
-        border = theme.manager.tokens["BORDER"]
-        strip.setStyleSheet(
-            f"QScrollArea {{ background: {list_bg}; border-bottom: 1px solid {border}; }}")
-        host = QWidget()
-        host.setStyleSheet(f"background: {list_bg};")
-        self.stats_layout = QHBoxLayout(host)
-        self.stats_layout.setContentsMargins(10, 8, 10, 8)
-        self.stats_layout.setSpacing(8)
-        self.stats_layout.addStretch(1)
-        strip.setWidget(host)
-        return strip
-
     def _build_controls(self) -> QWidget:
         bar = QWidget()
         lay = QHBoxLayout(bar)
@@ -163,7 +122,7 @@ class GapDashboardTab(DiiveTab):
 
     # --- data flow -----------------------------------------------------
     def save_state(self) -> dict:
-        return {"var": self._current, "threshold": self.threshold.value()}
+        return {"var": self._target, "threshold": self.threshold.value()}
 
     def restore_state(self, state: dict) -> None:
         from diive.gui.widgets.state_utils import set_widget_value
@@ -172,42 +131,34 @@ class GapDashboardTab(DiiveTab):
         if v and self._df is not None and v in self._df.columns:
             self._on_select(v)
 
-    def on_data_loaded(self, df, created: set | None = None) -> None:
-        self._df = df
-        self.varpanel.set_variables(df.columns, created)
-        if df.shape[1] == 0:
-            return
+    def _default_variable(self, df) -> str | None:
         # Default to the variable with the most missing values — the most useful
         # starting point for a gap dashboard. Fall back to the first column when
         # the dataset has no gaps at all.
+        if df.shape[1] == 0:
+            return None
         missing = df.isna().sum()
-        default = str(missing.idxmax()) if missing.max() > 0 else str(df.columns[0])
-        self._on_select(default)
-
-    def _on_select(self, name: str, _additive: bool = False) -> None:
-        if not name or self._df is None:
-            return
-        self._current = name
-        self.varpanel.set_panels([name])
-        self.varpanel.run_with_loading(name, self._compute_and_render)
+        return str(missing.idxmax()) if missing.max() > 0 else str(df.columns[0])
 
     def _on_threshold(self, _value: int) -> None:
-        if self._current is not None and self._df is not None:
-            self._compute_and_render()
+        self._recompute()
 
-    def _compute_and_render(self) -> None:
+    def _compute(self) -> None:
         # All gap logic is the library's; the tab only reads results back.
-        series = self._df[self._current]
+        series = self._df[self._target]
         self._gs = dv.analysis.GapStats(series, long_gap_records=self.threshold.value())
         self._fill_stats()
         self._fill_table()
         self._render_figure()
 
+    # --- codegen -------------------------------------------------------
+    def _python_code(self) -> str | None:
+        if self._df is None or self._target is None or self._target not in self._df.columns:
+            return None
+        from diive.analysis.gapfinder import gapstats_to_code
+        return gapstats_to_code(self._target, long_gap_records=self.threshold.value())
+
     def _fill_stats(self) -> None:
-        while self.stats_layout.count() > 1:  # keep the trailing stretch
-            item = self.stats_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
         s = self._gs.summary
         wm = s["worst_month"]
         cards = [
@@ -218,8 +169,7 @@ class GapDashboardTab(DiiveTab):
             ("Longest dur.", _dur(s["longest_gap_duration"])),
             ("Worst month", _MONTHS[wm] if wm else "—"),
         ]
-        for i, (name, value) in enumerate(cards):
-            self.stats_layout.insertWidget(i, _StatCard(name, value))
+        self._set_stat_cards(cards)
 
     def _fill_table(self) -> None:
         lg = self._gs.long_gaps.reset_index(drop=True)

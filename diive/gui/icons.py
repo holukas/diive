@@ -122,6 +122,33 @@ def _ln_folder() -> QIcon:  # open data file
     return QIcon(pm)
 
 
+def _ln_project() -> QIcon:  # open project (folder with a star marker)
+    pm, p = _line_canvas()
+    p.drawPolyline(_poly([(2, 12.5), (2, 4.5), (6, 4.5), (7.5, 6), (14, 6),
+                          (14, 12.5), (2, 12.5)]))
+    c, r = QPointF(10.5, 9.5), 2.4
+    star = []
+    for k in range(10):
+        a = -math.pi / 2 + k * math.pi / 5
+        rr = r if k % 2 == 0 else r * 0.45
+        star.append((c.x() + rr * math.cos(a), c.y() + rr * math.sin(a)))
+    star.append(star[0])
+    p.drawPolyline(_poly(star))
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_book() -> QIcon:  # user manual (open book)
+    pm, p = _line_canvas()
+    p.drawPolyline(_poly([(8, 4), (4, 3), (2, 3.5), (2, 12.5), (4, 12),
+                          (8, 13)]))                       # left page
+    p.drawPolyline(_poly([(8, 4), (12, 3), (14, 3.5), (14, 12.5), (12, 12),
+                          (8, 13)]))                       # right page
+    p.drawLine(8, 4, 8, 13)                                # spine
+    p.end()
+    return QIcon(pm)
+
+
 def _ln_document() -> QIcon:  # load example data
     pm, p = _line_canvas()
     p.drawPolyline(_poly([(9.5, 2), (4, 2), (4, 14), (12, 14), (12, 4.5), (9.5, 2),
@@ -137,6 +164,62 @@ def _ln_save() -> QIcon:  # save data as parquet
     p.drawPolyline(_poly([(3, 3), (11, 3), (13, 5), (13, 13), (3, 13), (3, 3)]))
     p.drawRect(QRectF(5, 3, 4, 2.6))      # slider
     p.drawRect(QRectF(5, 8.5, 6, 4.5))    # label
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_export() -> QIcon:  # export data as (tray + outgoing up-arrow)
+    pm, p = _line_canvas()
+    p.drawPolyline(_poly([(3, 9), (3, 13), (13, 13), (13, 9)]))  # tray
+    p.drawLine(8, 2, 8, 9.5)                                     # shaft
+    p.drawPolyline(_poly([(5, 5), (8, 2), (11, 5)]))             # arrowhead
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_checklist() -> QIcon:  # select variables (pick items from a list)
+    pm, p = _line_canvas()
+    for i, y in enumerate((4, 8, 12)):
+        p.drawRect(QRectF(2, y - 1.5, 3, 3))            # checkbox
+        p.drawLine(7, y, 14, y)                          # item label
+        if i < 2:
+            p.drawPolyline(_poly([(2.6, y), (3.3, y + 1), (4.6, y - 1.4)]))  # tick
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_clock() -> QIcon:  # add timestamp column
+    pm, p = _line_canvas()
+    p.drawEllipse(QRectF(2.5, 2.5, 11, 11))
+    p.drawLine(8, 8, 8, 4.6)     # hour hand
+    p.drawLine(8, 8, 11, 9)      # minute hand
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_funnel() -> QIcon:  # select records by condition (filter rows)
+    pm, p = _line_canvas()
+    p.drawPolyline(_poly([(2.5, 3), (13.5, 3), (9.5, 8), (9.5, 13.5),
+                          (6.5, 11.5), (6.5, 8), (2.5, 3)]))
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_tag() -> QIcon:  # rename variables (label)
+    pm, p = _line_canvas()
+    p.drawPolyline(_poly([(2.5, 8), (6, 4.5), (13, 4.5), (13, 11.5),
+                          (6, 11.5), (2.5, 8)]))
+    p.drawEllipse(QRectF(4.4, 7.4, 1.2, 1.2))   # hole
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_props() -> QIcon:  # metadata explorer (per-variable properties)
+    pm, p = _line_canvas()
+    p.drawRoundedRect(QRectF(2, 2.5, 12, 11), 1.5, 1.5)
+    for y in (5.5, 8, 10.5):
+        p.drawEllipse(QRectF(4, y - 0.6, 1.2, 1.2))   # bullet
+        p.drawLine(6.5, y, 11.5, y)                    # value
     p.end()
     return QIcon(pm)
 
@@ -218,10 +301,17 @@ _LINE_RULES = [
     ("hampel", _ln_scatter),
     ("outlier", _ln_scatter),
     ("histogram", _ln_bars),
+    ("timestamp", _ln_clock),
     ("time", _ln_chart),
     ("series", _ln_chart),
+    ("select variables", _ln_checklist),
+    ("select records", _ln_funnel),
+    ("metadata", _ln_props),
+    ("open project", _ln_project),
     ("open", _ln_folder),
+    ("manual", _ln_book),
     ("example", _ln_document),
+    ("export", _ln_export),
     ("save", _ln_save),
     ("exit", _ln_exit),
     ("date range", _ln_calendar),
@@ -233,7 +323,8 @@ _LINE_RULES = [
     ("anomal", _ln_chart),
     ("spectro", _ln_grid),
     ("feature", _ln_gear),
-    ("rename", _ln_document),
+    ("combine", _ln_grid),
+    ("rename", _ln_tag),
     ("chain", _ln_wave),
     ("flux", _ln_wave),
     ("appearance", _ln_palette),

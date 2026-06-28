@@ -83,6 +83,7 @@ class DetectTimestampShifts:
             lon: float = None,
             utc_offset: int = 1,
     ):
+        """Set up timestamp-shift detection. See the class docstring."""
         if not isinstance(df.index, pd.DatetimeIndex):
             raise TypeError("df must have a DatetimeIndex")
 

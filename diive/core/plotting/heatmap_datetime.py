@@ -28,6 +28,7 @@ from diive.core.times.resampling import resample_to_monthly_agg_matrix
 from diive.core.plotting.heatmap_base import HeatmapBase
 from diive.core.plotting.plotfuncs import nice_date_ticks
 from diive.core.plotting.styles import LightTheme as theme
+from diive.core.plotting.styles.format import FormatStyle
 
 
 class HeatmapDateTime(HeatmapBase):
@@ -198,7 +199,7 @@ class HeatmapDateTime(HeatmapBase):
              figsize: tuple = None,
              figdpi: int = 72,
              ax_orientation: str = None,
-             title: str = None,
+             format_style: FormatStyle = None,
              vmin: float = None,
              vmax: float = None,
              cmap: str = 'RdYlBu_r',
@@ -206,8 +207,6 @@ class HeatmapDateTime(HeatmapBase):
              cb_digits_after_comma: int | str = 2,
              cb_labelsize: float = None,
              cb_extend: str = 'neither',
-             axlabels_fontsize: float = None,
-             ticks_labelsize: float = None,
              minticks: int = 3,
              maxticks: int = 10,
              color_bad: str = 'grey',
@@ -215,8 +214,7 @@ class HeatmapDateTime(HeatmapBase):
              show_less_xticklabels: bool = False,
              show_values: bool = False,
              show_values_fontsize: float = None,
-             show_values_n_dec_places: int = 0,
-             show_grid: bool = False):
+             show_values_n_dec_places: int = 0):
         """Render HeatmapDateTime with matplotlib styling (Phase 2 of two-phase design).
 
         All styling and presentation parameters go here. Can be called multiple times
@@ -230,7 +228,9 @@ class HeatmapDateTime(HeatmapBase):
             ax_orientation: Layout of axes. If None, uses value from __init__()
                 ``'vertical'`` — dates on y-axis, hours on x-axis (default)
                 ``'horizontal'`` — dates on x-axis, hours on y-axis
-            title: Plot title (auto-generated if None)
+            format_style: Shared chrome (title/labels/fonts/ticks/spines/grid) via
+                :class:`~diive.core.plotting.styles.format.FormatStyle`. None = house
+                style (grid off). The colorbar stays ``cb_*``/``zlabel``-controlled.
             vmin: Minimum color value (auto from data if None)
             vmax: Maximum color value (auto from data if None)
             cmap: Colormap name (default: 'RdYlBu_r')
@@ -238,8 +238,6 @@ class HeatmapDateTime(HeatmapBase):
             cb_digits_after_comma: Decimal places on colorbar labels (default: 2)
             cb_labelsize: Font size for colorbar tick labels
             cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
-            axlabels_fontsize: Font size for axis labels
-            ticks_labelsize: Font size for tick labels
             minticks: Minimum major ticks on date axis (default: 3)
             maxticks: Maximum major ticks on date axis (default: 10)
             color_bad: Color for NaN cells (default: 'grey')
@@ -248,7 +246,6 @@ class HeatmapDateTime(HeatmapBase):
             show_values: Overlay numeric values on cells (default: False)
             show_values_fontsize: Font size for value overlay text
             show_values_n_dec_places: Decimal places for value overlay (default: 0)
-            show_grid: Show gridlines (default: False)
 
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
@@ -260,10 +257,6 @@ class HeatmapDateTime(HeatmapBase):
         # Use theme defaults if not provided
         if cb_labelsize is None:
             cb_labelsize = theme.AX_LABELS_FONTSIZE
-        if axlabels_fontsize is None:
-            axlabels_fontsize = theme.AX_LABELS_FONTSIZE
-        if ticks_labelsize is None:
-            ticks_labelsize = theme.TICKS_LABELS_FONTSIZE
         if show_values_fontsize is None:
             show_values_fontsize = theme.AX_LABELS_FONTSIZE
 
@@ -274,7 +267,7 @@ class HeatmapDateTime(HeatmapBase):
             figsize=figsize,
             figdpi=figdpi,
             ax_orientation=ax_orientation,
-            title=title,
+            format_style=format_style,
             vmin=vmin,
             vmax=vmax,
             cmap=cmap,
@@ -282,8 +275,6 @@ class HeatmapDateTime(HeatmapBase):
             cb_digits_after_comma=cb_digits_after_comma,
             cb_labelsize=cb_labelsize,
             cb_extend=cb_extend,
-            axlabels_fontsize=axlabels_fontsize,
-            ticks_labelsize=ticks_labelsize,
             minticks=minticks,
             maxticks=maxticks,
             color_bad=color_bad,
@@ -291,8 +282,7 @@ class HeatmapDateTime(HeatmapBase):
             show_less_xticklabels=show_less_xticklabels,
             show_values=show_values,
             show_values_fontsize=show_values_fontsize,
-            show_values_n_dec_places=show_values_n_dec_places,
-            show_grid=show_grid
+            show_values_n_dec_places=show_values_n_dec_places
         )
 
         # Domain-specific rendering (pcolormesh + formatting)
@@ -439,7 +429,7 @@ class HeatmapYearMonth(HeatmapBase):
              figsize: tuple = None,
              figdpi: int = 72,
              ax_orientation: str = None,
-             title: str = None,
+             format_style: FormatStyle = None,
              vmin: float = None,
              vmax: float = None,
              cmap: str = None,
@@ -447,8 +437,6 @@ class HeatmapYearMonth(HeatmapBase):
              cb_digits_after_comma: int | str = 2,
              cb_labelsize: float = None,
              cb_extend: str = 'neither',
-             axlabels_fontsize: float = None,
-             ticks_labelsize: float = None,
              minticks: int = 3,
              maxticks: int = 10,
              color_bad: str = 'grey',
@@ -456,8 +444,7 @@ class HeatmapYearMonth(HeatmapBase):
              show_less_xticklabels: bool = False,
              show_values: bool = False,
              show_values_fontsize: float = None,
-             show_values_n_dec_places: int = 0,
-             show_grid: bool = False):
+             show_values_n_dec_places: int = 0):
         """Render HeatmapYearMonth with matplotlib styling (Phase 2 of two-phase design).
 
         All styling and presentation parameters go here. Can be called multiple times
@@ -469,7 +456,9 @@ class HeatmapYearMonth(HeatmapBase):
             figsize: Figure size as (width, height) in inches. Only used when ax is None
             figdpi: Figure DPI. Only used when ax is None. Defaults to 72
             ax_orientation: Layout of axes. If None, uses value from __init__()
-            title: Plot title (auto-generated if None)
+            format_style: Shared chrome (title/labels/fonts/ticks/spines/grid) via
+                :class:`~diive.core.plotting.styles.format.FormatStyle`. None = house
+                style (grid off). The colorbar stays ``cb_*``/``zlabel``-controlled.
             vmin: Minimum color value (auto from data if None)
             vmax: Maximum color value (auto from data if None)
             cmap: Colormap name (auto-selected if None: 'RdYlBu' for ranks, 'RdYlBu_r' for raw)
@@ -477,8 +466,6 @@ class HeatmapYearMonth(HeatmapBase):
             cb_digits_after_comma: Decimal places on colorbar labels (default: 2)
             cb_labelsize: Font size for colorbar tick labels
             cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
-            axlabels_fontsize: Font size for axis labels
-            ticks_labelsize: Font size for tick labels
             minticks: Minimum major ticks (default: 3)
             maxticks: Maximum major ticks (default: 10)
             color_bad: Color for NaN cells (default: 'grey')
@@ -487,7 +474,6 @@ class HeatmapYearMonth(HeatmapBase):
             show_values: Overlay numeric values on cells (default: False)
             show_values_fontsize: Font size for value overlay text
             show_values_n_dec_places: Decimal places for value overlay (default: 0)
-            show_grid: Show gridlines (default: False)
 
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
@@ -503,10 +489,6 @@ class HeatmapYearMonth(HeatmapBase):
         # Use theme defaults if not provided
         if cb_labelsize is None:
             cb_labelsize = theme.AX_LABELS_FONTSIZE
-        if axlabels_fontsize is None:
-            axlabels_fontsize = theme.AX_LABELS_FONTSIZE
-        if ticks_labelsize is None:
-            ticks_labelsize = theme.TICKS_LABELS_FONTSIZE
         if show_values_fontsize is None:
             show_values_fontsize = theme.AX_LABELS_FONTSIZE
 
@@ -517,7 +499,7 @@ class HeatmapYearMonth(HeatmapBase):
             figsize=figsize,
             figdpi=figdpi,
             ax_orientation=ax_orientation,
-            title=title,
+            format_style=format_style,
             vmin=vmin,
             vmax=vmax,
             cmap=cmap,
@@ -525,8 +507,6 @@ class HeatmapYearMonth(HeatmapBase):
             cb_digits_after_comma=cb_digits_after_comma,
             cb_labelsize=cb_labelsize,
             cb_extend=cb_extend,
-            axlabels_fontsize=axlabels_fontsize,
-            ticks_labelsize=ticks_labelsize,
             minticks=minticks,
             maxticks=maxticks,
             color_bad=color_bad,
@@ -534,8 +514,7 @@ class HeatmapYearMonth(HeatmapBase):
             show_less_xticklabels=show_less_xticklabels,
             show_values=show_values,
             show_values_fontsize=show_values_fontsize,
-            show_values_n_dec_places=show_values_n_dec_places,
-            show_grid=show_grid
+            show_values_n_dec_places=show_values_n_dec_places
         )
 
         # Domain-specific rendering (pcolormesh + formatting)

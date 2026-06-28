@@ -307,5 +307,114 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
                 data, ta='TA_1_1_1', sw_in='SW_IN_1_1_1', ta_f='TA_F')
 
 
+class TestFluxProcessingChainLevel2(unittest.TestCase):
+    """Level 2 in isolation: quality-flag expansion + QCF on EddyPro output.
+
+    Mirrors ``examples/flux/fluxprocessingchain/fluxprocessingchain_level2.py``,
+    which runs L2 standalone on a real EddyPro FLUXNET output file.
+    """
+
+    def _init_data(self, **init_kwargs):
+        from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+        from diive.flux.fluxprocessingchain import init_flux_data
+
+        df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
+                              if c in df.columns])
+        kwargs = dict(site_lat=46.583056, site_lon=9.790639, utc_offset=1,
+                      nighttime_threshold=20,
+                      daytime_accept_qcf_below=2, nighttime_accept_qcf_below=2)
+        kwargs.update(init_kwargs)
+        return init_flux_data(df=df, fluxcol='FC', **kwargs)
+
+    def test_level2_produces_qcf_and_flags(self):
+        """L2 emits the QCF-filtered flux, the HQ series, and per-test flags."""
+        from diive.flux.fluxprocessingchain import run_level2
+
+        data = self._init_data()
+        out = run_level2(
+            data,
+            ssitc={'apply': True, 'setflag_timeperiod': None},
+            gas_completeness={'apply': True},
+            spectral_correction_factor={'apply': True},
+            signal_strength={
+                'apply': True,
+                'signal_strength_col': 'CUSTOM_SIGNAL_STRENGTH_IRGA72_MEAN',
+                'method': 'discard below', 'threshold': 60,
+            },
+            raw_data_screening_vm97={
+                'apply': True,
+                'spikes': True, 'amplitude': False, 'dropout': True,
+                'abslim': False, 'skewkurt_hf': False, 'skewkurt_sf': False,
+                'discont_hf': False, 'discont_sf': False,
+            },
+        )
+
+        # Pure-function contract: the input container is untouched.
+        self.assertEqual(data.level_ids, [])
+        self.assertIsNone(data.filteredseries)
+
+        # Output has L2 results.
+        self.assertEqual(out.level_ids, ['L2'])
+        self.assertEqual(out.filteredseries.name, 'FC_L2_QCF')
+        self.assertIsNotNone(out.levels.level2)
+        self.assertIsNotNone(out.levels.level2_qcf)
+
+        # The HQ (QCF=0) series is a strict subset of the accepted (QCF<2) flux.
+        n_accepted = out.filteredseries.dropna().count()
+        n_hq = out.levels.filteredseries_hq.dropna().count()
+        self.assertGreater(n_accepted, 0)
+        self.assertLessEqual(n_hq, n_accepted)
+
+        # The enabled tests each produced a flag column under the L2 idstr.
+        cols = [str(c) for c in out.fpc_df.columns]
+        self.assertTrue(any('SSITC' in c for c in cols))
+        self.assertTrue(any('VM97_SPIKE' in c for c in cols))
+        self.assertTrue(any('VM97_DROPOUT' in c for c in cols))
+        self.assertTrue(any(c.endswith('_QCF') for c in cols))
+
+    def test_level2_skips_unset_tests(self):
+        """A test whose config is omitted produces no flag column for it."""
+        from diive.flux.fluxprocessingchain import run_level2
+
+        out = run_level2(self._init_data(),
+                         ssitc={'apply': True, 'setflag_timeperiod': None})
+        cols = [str(c) for c in out.fpc_df.columns]
+        self.assertTrue(any('SSITC' in c for c in cols))
+        # VM97 raw-data screening was not requested.
+        self.assertFalse(any('VM97_SPIKE' in c for c in cols))
+
+    def test_level2_signal_strength_requires_keys(self):
+        """Enabling signal_strength without its keys raises a clear KeyError."""
+        from diive.flux.fluxprocessingchain import run_level2
+
+        with self.assertRaises(KeyError):
+            run_level2(self._init_data(), signal_strength={'apply': True})
+
+    def test_level2_vm97_requires_all_eight_subkeys(self):
+        """Enabling VM97 with a missing sub-key raises a clear KeyError."""
+        from diive.flux.fluxprocessingchain import run_level2
+
+        with self.assertRaises(KeyError):
+            run_level2(self._init_data(),
+                       raw_data_screening_vm97={'apply': True, 'spikes': True})
+
+    def test_level2_accept_threshold_changes_retained_count(self):
+        """A stricter daytime accept threshold cannot retain more records."""
+        from diive.flux.fluxprocessingchain import run_level2
+
+        settings = dict(
+            ssitc={'apply': True, 'setflag_timeperiod': None},
+            gas_completeness={'apply': True},
+            spectral_correction_factor={'apply': True},
+        )
+        lenient = run_level2(self._init_data(daytime_accept_qcf_below=2,
+                                             nighttime_accept_qcf_below=2), **settings)
+        strict = run_level2(self._init_data(daytime_accept_qcf_below=1,
+                                            nighttime_accept_qcf_below=1), **settings)
+        self.assertLessEqual(strict.filteredseries.dropna().count(),
+                             lenient.filteredseries.dropna().count())
+
+
 if __name__ == '__main__':
     unittest.main()

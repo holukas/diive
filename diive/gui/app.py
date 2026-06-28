@@ -160,6 +160,7 @@ class MainWindow(QMainWindow):
         geo = self._config.get("geometry")
         if geo:
             self.restoreGeometry(QByteArray.fromBase64(geo.encode("ascii")))
+            self._clamp_to_screen()
         else:
             self._size_to_screen()
         # The stylesheet is applied app-wide by theme.manager (see run()), so
@@ -323,6 +324,55 @@ class MainWindow(QMainWindow):
         frame.moveCenter(avail.center())
         self.move(frame.topLeft())
 
+    def show_filling_workarea(self) -> None:
+        """Show the window filling the screen's available work area.
+
+        Used instead of ``showMaximized()`` for the frameless/translucent Studio
+        shell: a frameless maximize on Windows covers the *full* screen including
+        the taskbar, which hides the bottom of the active tab (a plot's x-axis
+        label and the canvas toolbar) behind it. ``availableGeometry()`` excludes
+        the taskbar, so the whole window stays on the visible work area.
+
+        Also lowers the window's minimum size: the Overview's height-for-width
+        stats band reports a very tall *minimum* (its single-column height at the
+        minimum width), which otherwise forces the window taller than the work
+        area -- the layout-enforced floor cannot be met, so the bottom of every
+        tab is clipped off-screen. At real (wide) sizes the band is only a row or
+        two tall, so a modest floor is safe.
+        """
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is not None:
+            avail = screen.availableGeometry()
+            self.setMinimumSize(min(1000, avail.width()), min(640, avail.height()))
+            self.setGeometry(avail)
+        self.show()
+
+    def _clamp_to_screen(self) -> None:
+        """Keep a restored window within the current screen's available area.
+
+        A geometry saved on a larger or secondary monitor (or before a resolution
+        change) can place the window's bottom/right off-screen. On the frameless
+        Studio shell that silently hides whatever sits at the bottom of the active
+        tab — most visibly the newest Log output, with the scrollbar's lower end
+        unreachable. Shrink to fit and nudge fully back on-screen.
+        """
+        if self.isMaximized() or self.isFullScreen():
+            return  # Qt already fits these to the screen
+        frame = self.frameGeometry()
+        screen = QApplication.screenAt(frame.center()) or QApplication.primaryScreen()
+        if screen is None:
+            return
+        avail = screen.availableGeometry()
+        w = min(frame.width(), avail.width())
+        h = min(frame.height(), avail.height())
+        if w != frame.width() or h != frame.height():
+            self.resize(w, h)
+            frame = self.frameGeometry()
+        x = min(max(frame.x(), avail.x()), avail.right() - frame.width() + 1)
+        y = min(max(frame.y(), avail.y()), avail.bottom() - frame.height() + 1)
+        if x != frame.x() or y != frame.y():
+            self.move(x, y)
+
     def _build_menus(self, add_menu) -> None:
         """Populate the menu tree, creating each top-level menu via `add_menu`.
 
@@ -343,50 +393,74 @@ class MainWindow(QMainWindow):
         file_menu = add_menu("&File")
         file_menu.addAction(_act("&Open data file...", self._open_file, "Ctrl+O"))
         file_menu.addAction(_act("Open &project...", self._open_project, "Ctrl+Shift+O"))
-        file_menu.addAction(_act("Load &example data", self._load_example))
         file_menu.addSeparator()
         file_menu.addAction(_act("&Save project", self._save_project, "Ctrl+S"))
         file_menu.addAction(_act("Save project &as...", self._save_project_as, "Ctrl+Shift+S"))
-        file_menu.addAction(_act("Save data as par&quet...", self._save_file))
+        file_menu.addSeparator()
+        file_menu.addAction(_act("&Export data as...", self._save_file))
         file_menu.addSeparator()
         file_menu.addAction(_act("E&xit", self.close, "Ctrl+Q"))
 
-        data_menu = add_menu("&Data")
-        data_menu.addAction(_act("Select date &range...", self._select_daterange, "Ctrl+R"))
-        self._reset_range_act = _act("Reset to &full range", self._reset_range)
-        self._reset_range_act.setEnabled(False)
-        data_menu.addAction(self._reset_range_act)
-        self._reset_subset_act = _act("Reset to all &variables", self._reset_var_subset)
-        self._reset_subset_act.setEnabled(False)
-        data_menu.addAction(self._reset_subset_act)
-        data_menu.addSeparator()
-        data_menu.addAction(_act("Add timestamp co&lumn...", self._add_timestamp_column))
-        # Events: add one, and a quick master toggle for showing them on plots
-        # (the Events tab below has the full list/edit UI + the same toggle).
-        data_menu.addSeparator()
-        data_menu.addAction(_act("Add e&vent...", self._add_event))
-        self._show_events_act = QAction(menu_icon("Show events"), "Show e&vents on plots", self)
-        self._show_events_act.setCheckable(True)
-        self._show_events_act.setChecked(events.manager.visible)
-        self._show_events_act.toggled.connect(events.manager.set_visible)
-        data_menu.addAction(self._show_events_act)
-        # Menu-tab entries that belong under Data (e.g. Select variables) are
-        # merged into this manually-built menu rather than getting their own.
-        data_menu.addSeparator()
-        for label in MENU_TABS.get("Data", {}):
+        def _menu_tab_act(label):
+            """A QAction that opens the Data menu-tab with the given label."""
             # Escape '&' so Qt doesn't read it as a mnemonic marker (would render
             # "Gaps & coverage" as an underlined "Gaps _coverage").
             act = QAction(menu_icon(label), label.replace("&", "&&"), self)
             act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))
-            data_menu.addAction(act)
+            return act
+
+        data_menu = add_menu("&Data")
+        # Date-range subselection paired with its reset.
+        data_menu.addAction(_act("Select date &range...", self._select_daterange, "Ctrl+R"))
+        self._reset_range_act = _act("Reset to &full range", self._reset_range)
+        self._reset_range_act.setEnabled(False)
+        data_menu.addAction(self._reset_range_act)
+        data_menu.addSeparator()
+        # Variable subselection paired with its reset.
+        data_menu.addAction(_menu_tab_act("Select variables"))
+        self._reset_subset_act = _act("Reset to all &variables", self._reset_var_subset)
+        self._reset_subset_act.setEnabled(False)
+        data_menu.addAction(self._reset_subset_act)
+
+        # Variables: create new columns (feature engineer, timestamp, condition
+        # filter), a separator, then manage existing ones (rename, metadata).
+        # Built manually so the "Add timestamp column..." action interleaves with
+        # the create tabs.
+        variables_menu = add_menu("&Variables")
+        variables_menu.addAction(_menu_tab_act("Feature engineering"))
+        variables_menu.addAction(_menu_tab_act("Combine variables"))
+        variables_menu.addAction(_act("Add timestamp co&lumn...", self._add_timestamp_column))
+        variables_menu.addAction(_menu_tab_act("Select records by condition"))
+        variables_menu.addSeparator()
+        variables_menu.addAction(_menu_tab_act("Rename variables"))
+        variables_menu.addAction(_menu_tab_act("Metadata explorer"))
+
+        # Events: the Events tab (full list/edit UI) first, then a quick "add
+        # one" + a master toggle for showing them on plots. Built manually so
+        # the tab entry sits above the actions.
+        events_menu = add_menu("&Events")
+        for label in MENU_TABS.get("Events", {}):
+            act = QAction(menu_icon(label), label.replace("&", "&&"), self)
+            act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))
+            events_menu.addAction(act)
+        events_menu.addSeparator()
+        events_menu.addAction(_act("Add e&vent...", self._add_event))
+        self._show_events_act = QAction(menu_icon("Show events"), "Show e&vents on plots", self)
+        self._show_events_act.setCheckable(True)
+        self._show_events_act.setChecked(events.manager.visible)
+        self._show_events_act.toggled.connect(events.manager.set_visible)
+        events_menu.addAction(self._show_events_act)
 
         for menu_name, group in MENU_TABS.items():
-            if menu_name == "Data":
-                continue  # already merged into the Data menu built above
+            if menu_name in ("Data", "Variables", "Events"):
+                continue  # built manually above
             menu = add_menu(f"&{menu_name}")
             for label in group:
                 # Set the 3-D surface (GPU/VTK) apart from the 2-D plot methods.
                 if menu_name == "Plot" and label == "3D surface":
+                    menu.addSeparator()
+                # Set the random-uncertainty tool apart from the partitioning tabs.
+                if menu_name == "Flux" and label == "Random uncertainty (PAS20)":
                     menu.addSeparator()
                 # Escape '&' so Qt doesn't read it as a mnemonic marker (would
                 # render "Gaps & coverage" as an underlined "Gaps _coverage").
@@ -403,7 +477,15 @@ class MainWindow(QMainWindow):
                     menu.addSeparator()
 
         help_menu = add_menu("&Help")
+        help_menu.addAction(_act("Load &example data", self._load_example))
+        help_menu.addSeparator()
         help_menu.addAction(_act("&User manual", self._user_manual))
+        help_menu.addAction(_act("&Changelog", self._changelog))
+        help_menu.addSeparator()
+        help_menu.addAction(_act("View on &GitHub", self._view_on_github))
+        help_menu.addAction(_act("&Report an issue", self._report_issue))
+        help_menu.addAction(_act("diive on &PyPI", self._view_on_pypi))
+        help_menu.addSeparator()
         help_menu.addAction(_act("&About", self._about))
 
     def _data_for(self, tab):
@@ -993,14 +1075,47 @@ class MainWindow(QMainWindow):
         self._set_data(df, source="example data (CH-DAV)", persist_metadata=False)
 
     def _open_file(self) -> None:
-        dlg = OpenDataDialog(self)
-        if dlg.exec() == QDialog.DialogCode.Accepted and dlg.dataframe is not None:
+        dlg = OpenDataDialog(self, can_add=self._full_data is not None)
+        if dlg.exec() != QDialog.DialogCode.Accepted or dlg.dataframe is None:
+            return
+        if dlg.load_mode == "add" and self._full_data is not None:
+            self._add_dataset(dlg.dataframe, dlg.source_name)
+        else:
             self._set_data(dlg.dataframe, source=dlg.source_name)
 
+    def _add_dataset(self, new_df, source: str) -> None:
+        """Merge a second loaded dataset onto the current one (shared index).
+
+        Used for comparing datasets side by side (e.g. two processing runs of the
+        same site). Columns align on the timestamp index via `_add_features`. A
+        same-named column would overwrite the existing one, so collisions are
+        flagged first — the user is expected to load with a label to avoid them.
+        """
+        collisions = [c for c in new_df.columns if c in self._full_data.columns]
+        if collisions:
+            preview = ", ".join(collisions[:5]) + ("..." if len(collisions) > 5 else "")
+            resp = QMessageBox.question(
+                self, "Variable name collision",
+                f"{len(collisions)} variable(s) already exist and would be "
+                f"overwritten:\n{preview}\n\nLoad again with a label (e.g. 'v2') "
+                f"to keep them separate.\n\nOverwrite anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if resp != QMessageBox.StandardButton.Yes:
+                return
+        # Seed an "original" provenance baseline for the merged-in columns, as a
+        # plain load does — `_add_features` only records provenance from attrs.
+        metadata_store.manager.store.record_original(
+            new_df.columns, operation=f"Imported from {source}",
+            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"))
+        self._add_features(new_df)
+        metadata_store.manager.notify()
+        success(f"Added {len(new_df.columns)} variable(s) from {source}")
+
     def _save_file(self) -> None:
-        """Save the current dataset as a diive-format parquet file."""
+        """Export the current dataset as a diive-format parquet or CSV file."""
         if self._data is None:
-            QMessageBox.information(self, "Save data", "No data loaded yet.")
+            QMessageBox.information(self, "Export data", "No data loaded yet.")
             return
         # Need a valid timestamp index name; ask if the current one isn't valid.
         ts_name = self._data.index.name
@@ -1011,22 +1126,33 @@ class MainWindow(QMainWindow):
                 ALLOWED_TIMESTAMP_NAMES, 1, False)
             if not ok:
                 return
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Save data as parquet", "data.parquet", "Parquet (*.parquet)")
+        path, selected = QFileDialog.getSaveFileName(
+            self, "Export data", "data.parquet",
+            "Parquet (*.parquet);;CSV (*.csv)")
         if not path:
             return
         p = Path(path)
+        # The chosen filter wins, but honour an explicit extension the user typed.
+        is_csv = (p.suffix.lower() == ".csv"
+                  or (p.suffix.lower() != ".parquet" and "csv" in selected.lower()))
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            diive.save_parquet(
-                filename=p.stem, data=self._data, outpath=str(p.parent),
-                enforce_diive_format=True, timestamp_name=ts_name)
+            if is_csv:
+                data = self._data.copy()
+                data.index.name = ts_name
+                if p.suffix.lower() != ".csv":
+                    p = p.with_suffix(".csv")
+                data.to_csv(p)
+            else:
+                diive.save_parquet(
+                    filename=p.stem, data=self._data, outpath=str(p.parent),
+                    enforce_diive_format=True, timestamp_name=ts_name)
         except Exception as err:
             QApplication.restoreOverrideCursor()
-            QMessageBox.critical(self, "Save failed", f"Could not save:\n{err}")
+            QMessageBox.critical(self, "Export failed", f"Could not export:\n{err}")
             return
         QApplication.restoreOverrideCursor()
-        success(f"Saved {p.stem}.parquet")
+        success(f"Exported {p.stem}{'.csv' if is_csv else '.parquet'}")
 
     # --- projects ------------------------------------------------------
     def _save_project(self) -> None:
@@ -1066,6 +1192,11 @@ class MainWindow(QMainWindow):
             self._source = name
             self._apply_range()  # refresh title with the project name
 
+    def _log_tab(self):
+        """The always-on Log tab, located by type (order-independent)."""
+        from diive.gui.tabs.log import LogTab
+        return next((t for t in self._tabs if isinstance(t, LogTab)), None)
+
     def _write_project(self, folder, name: str) -> bool:
         """Write the current data + metadata + site/range into `folder`."""
         from diive.core.io.project import DiiveProject, save_project
@@ -1081,6 +1212,7 @@ class MainWindow(QMainWindow):
             "tabs": self._open_tabs_state(),  # reopen the same workspace on load
             "overview": self._tabs[0].save_state(),  # selected variable
             "active_tab": self._tabwidget.tabText(self._tabwidget.currentIndex()),
+            "log": self._log_tab().save_state() if self._log_tab() else None,
         }
         project = DiiveProject(
             name=name, data=self._full_data,
@@ -1167,6 +1299,12 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self._restore_tabs(project.extras.get("tabs"))  # reopens tabs; lands on Overview
+        log_tab = self._log_tab()
+        if log_tab is not None:
+            try:
+                log_tab.restore_state(project.extras.get("log") or {})
+            except Exception:
+                pass
         self._restore_active_tab(project.extras.get("active_tab"))
         success(f"Opened project '{project.name}'")
         return True
@@ -1202,6 +1340,35 @@ class MainWindow(QMainWindow):
                 return
         QDesktopServices.openUrl(
             QUrl("https://github.com/holukas/diive/blob/main/diive/gui/MANUAL.md"))
+
+    def _changelog(self) -> None:
+        """Open the repo changelog (GitHub) in the default browser."""
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+
+        QDesktopServices.openUrl(
+            QUrl("https://github.com/holukas/diive/blob/main/CHANGELOG.md"))
+
+    def _view_on_github(self) -> None:
+        """Open the source repository in the default browser."""
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+
+        QDesktopServices.openUrl(QUrl("https://github.com/holukas/diive"))
+
+    def _report_issue(self) -> None:
+        """Open the GitHub issue tracker in the default browser."""
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+
+        QDesktopServices.openUrl(QUrl("https://github.com/holukas/diive/issues"))
+
+    def _view_on_pypi(self) -> None:
+        """Open the PyPI project page in the default browser."""
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+
+        QDesktopServices.openUrl(QUrl("https://pypi.org/project/diive/"))
 
     def _about(self) -> None:
         # Reuse the startup splash artwork as the About dialog.
@@ -1288,7 +1455,9 @@ def run() -> int:
     app.processEvents()  # paint the splash before the (blocking) window build
 
     window = MainWindow(cfg, autoload=False)  # build the UI now; load data deferred
-    window.show()
+    # Fill the work area (not showMaximized: a frameless maximize covers the
+    # taskbar and clips the bottom of the active tab off-screen).
+    window.show_filling_workarea()
     splash.raise_()
 
     # Defer the data load (last project or example) onto the event loop so the

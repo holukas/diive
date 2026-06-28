@@ -21,6 +21,20 @@ print(f"Loaded {len(series)} NEE flux records")
 print(f"Statistics: mean={series.mean():.2f}, std={series.std():.2f}")
 
 # %%
+# A shared FormatStyle for the chrome
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# Chrome (title, axis labels, fonts, colours, grid) is described once with a
+# ``FormatStyle`` and reused across both histograms below, so they share an
+# identical look. Histogram-specific toggles (peak highlight, z-scores, info /
+# count boxes) stay as direct ``plot()`` arguments — they are not chrome.
+
+style = dv.plotting.FormatStyle(
+    xlabel='NEE flux',  # title left at None -> auto-generated from series name
+    show_grid=True,  # gridlines are chrome -> set on the style, not plot()
+)
+
+# %%
 # Create histogram with z-score overlay
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
@@ -34,15 +48,13 @@ hist = dv.plotting.HistogramPlot(
 )
 hist.plot(
     ax=None,  # Create new figure
-    xlabel='NEE flux',  # X-axis label
-    title=None,  # Auto-generated from series name
+    format_style=style,  # Shared chrome (x-label, auto title, ...)
     highlight_peak=True,  # Highlight bin with most counts
     show_zscores=True,  # Show z-score overlay
     show_zscore_values=True,  # Show z-score values
     show_info=True,  # Show method and peak info
     show_counts=True,  # Label bar heights
     show_title=True,  # Display title
-    show_grid=True  # Show gridlines
 )
 
 print("\nPlotted histogram with z-scores and peak highlighting")
@@ -66,13 +78,12 @@ hist_custom = dv.plotting.HistogramPlot(
 )
 hist_custom.plot(
     ax=None,
-    xlabel='NEE flux',
+    format_style=style,  # same shared chrome as the first histogram
     highlight_peak=True,
     show_zscores=False,  # z-scores not meaningful with unequal bins
     show_info=True,
     show_counts=True,
-    show_title=True,
-    show_grid=True
+    show_title=True
 )
 
 print(f"Custom bins: {custom_edges}")

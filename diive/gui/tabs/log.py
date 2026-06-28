@@ -24,3 +24,13 @@ class LogTab(DiiveTab):
     def build(self) -> QWidget:
         self.console = ConsolePanel()
         return self.console
+
+    def save_state(self) -> dict:
+        """Persist the accumulated log text with the project."""
+        return {"text": self.console.contents()}
+
+    def restore_state(self, state: dict) -> None:
+        """Restore log text saved with the project."""
+        text = (state or {}).get("text") or ""
+        if text:
+            self.console.restore(text)

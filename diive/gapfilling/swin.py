@@ -49,9 +49,9 @@ class SWINGapFillerXGBoost:
             ``SW_IN_POT < nighttime_threshold`` are classified as nighttime; records
             with ``SW_IN_POT >= nighttime_threshold`` are daytime. Default: 0.001,
             which matches the threshold used internally by
-            ``remove_radiation_zero_offset`` so that the day/night split is
+            ``remove_nighttime_zero_offset`` so that the day/night split is
             consistent whether or not offset correction is enabled.
-        correct_nighttime_offset: If True, apply remove_radiation_zero_offset() to the
+        correct_nighttime_offset: If True, apply remove_nighttime_zero_offset() to the
             series before gap-filling. This corrects sensors that measure small non-zero
             (often negative) values at night by subtracting the daily mean nighttime
             value as an offset from the whole series, then setting nighttime to zero.
@@ -109,6 +109,7 @@ class SWINGapFillerXGBoost:
                  features_ema: list = None,
                  verbose: int = 0,
                  **kwargs):
+        """Construct the gap-filler. See the class docstring for the full parameter list."""
         if series is None or series.empty:
             raise ValueError("series is empty — nothing to gap-fill.")
         if series.notna().sum() == 0:
@@ -174,6 +175,7 @@ class SWINGapFillerXGBoost:
 
     @property
     def results(self) -> GapFillingResult:
+        """GapFillingResult produced by :meth:`run` (raises if called before run)."""
         if self._results is None:
             raise RuntimeError("Call .run() before accessing .results")
         return self._results
@@ -300,7 +302,7 @@ class SWINGapFillerXGBoost:
             rule(f"SW_IN Gap-Filling ({target_col})")
 
         # Capture the original gap mask BEFORE any correction is applied.
-        # remove_radiation_zero_offset() zeros ALL nighttime positions (including NaN),
+        # remove_nighttime_zero_offset() zeros ALL nighttime positions (including NaN),
         # so using working_series.isna() afterwards would miss those nighttime gaps
         # and assign them flag=0 (observed) instead of flag=2 (physics fill).
         original_gaps = self.series.isna()
@@ -310,11 +312,11 @@ class SWINGapFillerXGBoost:
         series_corrected = None
         if self.correct_nighttime_offset:
             from diive.preprocessing.corrections.offsetcorrection import (
-                remove_radiation_zero_offset,
+                remove_nighttime_zero_offset,
             )
             if self.verbose >= 1:
                 info("Applying nighttime offset correction ...")
-            series_corrected = remove_radiation_zero_offset(
+            series_corrected = remove_nighttime_zero_offset(
                 series=self.series.copy(),  # copy to prevent mutation of self.series.name
                 lat=self.lat,
                 lon=self.lon,

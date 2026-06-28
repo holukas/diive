@@ -35,25 +35,30 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `widgets/category_dialog.py` | `CategoryDialog` — add / rename / recolour / remove event categories (edits `events.manager.categories`; seeded with `category1/2/3`, the last one can't be deleted) |
 | `widgets/add_event_dialog.py` | `AddEventDialog` — name/category, three timing modes (single date/time, from/to, start + duration) with calendar pickers + colour; `make_event()` returns a `diive.events.Event` |
 | `tabs/settings.py` | Appearance settings tab — live colour editing with a pill/highlight preview |
-| `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`); window sized to ~88% of screen |
+| `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`); window starts maximized |
 | `splash.py` | Startup splash + **Help ▸ About** dialog (`QPainter`-drawn waves + wordmark/version/tagline/credits); `AUTHOR` + `SUPPORTERS` |
 | `build_manual.py` | Renders `MANUAL.md` → `MANUAL.html` (the styled manual **Help ▸ User manual** opens). Dependency-free; run `python -m diive.gui.build_manual` after editing the Markdown. `MANUAL.html` is generated — don't hand-edit |
 | `registry.py` | `TAB_CLASSES` (always-on), `MENU_TABS` (menu-opened factories), `SINGLE_INSTANCE_TABS` |
 | `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df, created)` — the extension point |
-| `tabs/overview.py` | Overview tab (first/default): 2×4 panel figure (top, varname badge inside the time-series panel) + a compact borderless **metrics ribbon** (`_StatItem`, `dv.sstats` + `SSTATS_DESCRIPTIONS` tooltips); panels via `_PANELS`. Exposes `_StatCard` for the Gaps/Drivers/Seasonal tabs |
+| `tabs/overview.py` | Overview tab (first/default): 3×6 panel figure (tall time series top, full-height date/time heatmap right, bottom strip of cumulative/diel/daily/histogram/waterfall; varname in the figure suptitle; datetime panels share an x-axis) + a compact borderless **metrics ribbon** (`_StatItem`, `dv.sstats` + `SSTATS_DESCRIPTIONS` tooltips); panels via `_PANELS`. Exposes `_StatCard` for the Gaps/Drivers/Seasonal tabs |
 | `tabs/variable_selector.py` | **Select variables** tab — dual-list picker (available ↔ selected); `subsetSelected` → `MainWindow._apply_var_subset` (app-wide narrowing via `dv.keep_vars`). Opts into `_full_data` (`wants_full_data`) so it can always pick from every column |
 | `tabs/rename_variables.py` | **Rename variables** tab — add a prefix/suffix to all variables with a live old→new preview; double-click a row to rename one; `variablesRenamed` → `MainWindow._rename_variables` |
+| `tabs/combine_variables.py` | **Combine variables** tab — drag a variable onto **heatmap 1** and another onto **heatmap 2** (`_HeatmapSlot` drop targets), pick a method (multiply/add/subtract/divide, or fill a's gaps with b) + "keep overlapping only", and **heatmap 3** previews the result; **Add to dataset** emits `{name}` (DERIVED), **Copy Python** emits the `dv.variables.combine_variables_to_code` snippet. All maths is the library's `dv.variables.combine_variables`; the tab only collects operands/method, previews the three date/time heatmaps, and emits the column |
 | `tabs/site.py` | **Project settings** tab — author/description + site details form (→ `site.manager`) plus the **notes wall** (`widgets/notes_wall.py`) filling the empty space |
 | `tabs/plotting.py` | `PlottingTab(plot_type)` — one closable tab per plot method (opened from the Plot menu); var list + live settings panel + canvas |
 | `icons.py` | `menu_icon(label)` — tiny `QPainter`-drawn glyphs for **all** menu entries (folder/disk/calendar/gear/palette/… + plot shapes), keyword-matched |
 | `widgets/plot_settings.py` | `PlotSettingsPanel(plot_type)` — live plot-parameter controls (between list and canvas); `changed` re-renders; defines `HEATMAP`/`TIMESERIES` |
 | `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
-| `tabs/fluxchain.py` | Flux processing chain tab — Input + L2 + L3.1 + L3.2 + L3.3 + L4.1 via the composable callables (`init_flux_data`/`run_level2`/`run_level31`/`make_level32_detector`+`run_level32`/`run_level33_constant_ustar`/`run_level33_ustar_detection`/`run_level41_*`); L3.3 supports constant thresholds **or** moving-point detection (Apply: CUT / VUT); shows the deepest level's QCF-filtered flux as a heatmap, **Copy Python** emits a reproducible script |
+| `tabs/fluxchain.py` | Flux processing chain tab — Input + L2 + L3.1 + L3.2 + L3.3 + L4.1 via the composable callables (`init_flux_data`/`run_level2`/`run_level31`/`make_level32_detector`+`run_level32`/`run_level33_constant_ustar`/`run_level33_ustar_detection`/`run_level41_*`); L3.3 supports constant thresholds **or** moving-point detection (Apply: CUT / VUT); shows the deepest level's QCF-filtered flux as a heatmap, **Copy Python** emits a reproducible script. Per-level **Add to dataset** buttons (`_add_level`, gated on the level having run) emit that level's columns + QCF-filtered flux via `featuresCreated` (DERIVED provenance) |
 | `tabs/ustar_detection.py` | **USTAR detection** tab — standalone moving-point u\* threshold detection (`UstarMovingPointDetection`): single seasonal detection (per-season + annual) or multi-year bootstrap (`UstarBootstrapThresholds`) for VUT (per-year) + CUT (constant); table + diagnostic plot, worker thread |
 | `tabs/timelag.py` | Time-lag analysis tab — pick a gas, analyse its `*_TLAG_ACTUAL` lag distribution (`dv.flux.TimeLagAnalysis`), embed the 4-panel peak/range/EddyPro figure; **Load example TLAG data** loads the bundled level-0 lag dataset locally |
 | `tabs/_partitioning_base.py` | `BasePartitioningTab` — shared machinery for the NEE-partitioning tabs (declarative input-column combos + ✓/✗ markers, site coords from `site.manager`, optional VPD-in-kPa toggle, worker thread, GPP/RECO daily-mean + cumulative preview, Add results). Subclasses set `inputs`/`needs_*`/`reco_col`/`gpp_col` and implement `_build_partitioner` |
 | `tabs/partitioning_nighttime_oneflux.py` / `tabs/partitioning_nighttime_reddyproc.py` | Nighttime NEE→GPP+RECO partitioning tabs (`dv.flux.NighttimePartitioningOneFlux` → `*_NT_OF` / `NighttimePartitioningReddyProc` → `*_NT_RP`) — `BasePartitioningTab` subclasses |
 | `tabs/partitioning_daytime_reddyproc.py` / `tabs/partitioning_daytime_oneflux.py` | Daytime NEE→GPP+RECO partitioning tabs (`dv.flux.DaytimePartitioningReddyProc` → `*_DT_RP` / `DaytimePartitioningOneFlux` → `*_DT_OF`) — `BasePartitioningTab` subclasses; show the VPD-in-kPa toggle |
+| `tabs/_ml_gapfilling_base.py` | `MlGapFillingTab` — **template** for the ML gap-filling tabs (Model/Results sub-tabs, three-list target/feature picker, performance hero, observed-vs-gap-filled heatmaps + SHAP table, Results dashboard, SHAP feature reduction, worker/emit flow). Subclasses set `title`/`method_name`/`method_chip_*` and implement `_model_class`/`_build_model_box`/`_method_kwargs`/`_method_controls`/`_codegen` |
+| `tabs/gapfilling.py` | XGBoost gap-filling tab (`dv.gapfilling.XGBoostTS` → `*_gfXG`) — `MlGapFillingTab` subclass; `Gap-filling ▸ XGBoost gap-filling`, own top-level **Gap-filling** menu |
+| `tabs/gapfilling_randomforest.py` | Random Forest gap-filling tab (`dv.gapfilling.RandomForestTS` → `*_gfRF`) — `MlGapFillingTab` subclass; `Gap-filling ▸ Random Forest gap-filling` |
+| `widgets/gapfill_results.py` | `GapFillResultsPanel` — the ML gap-filler **Results** dashboard: card layout of the console-report tables (performance / configuration / feature-reduction with info-button equation + dashed-red threshold line + coloured verdicts / gap-fill quality) over a row of plots (predicted-vs-observed, SHAP, diel cycle, cumulative). Reads only library model attributes |
 | `tabs/gaps.py` | Gap & coverage dashboard — stat cards + clickable gap map (`GapStats` availability heatmap + gap timeline) + long-gap table |
 | `tabs/drivers.py` | Driver explorer — rank variables by correlation with a target (`rank_drivers`, optional lag scan); click a driver for its scatter |
 | `tabs/seasonaltrend.py` | Seasonal-trend & anomaly explorer — STL/classical/harmonic decomposition + yearly anomalies vs a reference period |
@@ -68,6 +73,9 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `tabs/outliers_trim.py` | Trim-low tab (`dv.outliers.TrimLow`) — symmetric positional trim; `supports_daynight = False`, opt-in `trim_daytime`/`trim_nighttime` rows, no detection band |
 | `tabs/outliers_manualremoval.py` | Manual removal tab (`dv.outliers.ManualRemoval`) — flag known timestamps/periods; `supports_daynight = False`, `supports_repeat = False`, no detection band |
 | `tabs/stepwise.py` | Stepwise screening tab (`dv.outliers.StepwiseOutlierDetection`) — chain multiple outlier methods with QCF aggregation, plus a **corrections** phase (`dv.corrections.apply_corrections` on the QCF-filtered series). Layout: shared variable list + a segmented inspector (Outliers / Corrections / Report, one `QStackedWidget` page shown at a time) + a large always-visible plot grid; a **measurement** dropdown gates applicable corrections; per-section **Run outliers** / **Run corrections** buttons apply edits (nothing auto-runs); runs invalidated only when the variable's data actually changes |
+| `tabs/_correction_base.py` | `BaseCorrectionTab` — **template** for the standalone Corrections tabs (XGBoost-style title bar + Copy Python, "Target (click to set target)" var list, "Settings" panel, method hero chip with a stats strip, original/corrected two-panel preview, worker thread, Add). Routes through the library `apply_corrections` / `corrections_to_code`; subclasses set `corr_key`/`method_suffix`/`method_chip_*`/`needs_coords` and implement `_add_method_rows`/`_current_kwargs`/`_validate`/`_method_controls`, and may override `_apply` (return `(corrected, extra)`), `_hero_metrics`, `_render_result`, `_status_text` for richer output. One tab per correction, so all corrections are independently available (measurement is a hint, not a lock) |
+| `tabs/corrections_nighttime_offset.py` / `tabs/corrections_relativehumidity_offset.py` | Offset-removal correction tabs (`dv.corrections.remove_nighttime_zero_offset` / `remove_relativehumidity_offset`) — `BaseCorrectionTab` subclasses. **Remove nighttime zero offset** (`NighttimeZeroOffsetTab`) is for variables that read zero at night (SW/PPFD); needs site coords, has a **Clamp negative values to zero** checkbox (`clamp_negatives`, default on), and overrides the hooks to show a **4-panel diagnostic preview** (original → daily offset → series−offset → final corrected) + a **below-zero stats hero** (records < 0 before/after, overall + nighttime, confirming the night no longer dips below zero), driven by the library's `nighttime_zero_offset_diagnostics`. The same `clamp_negatives` option is mirrored on the stepwise panel (`widgets/corrections_panel.py`) |
+| `tabs/corrections_setto_threshold.py` / `tabs/corrections_setto_value.py` / `tabs/corrections_set_missing.py` | Generic correction tabs (`dv.corrections.setto_threshold` max/min, `setto_value`, `set_exact_values_to_missing`) — `BaseCorrectionTab` subclasses; own top-level **Corrections** menu |
 | `tabs/metadata_explorer.py` | Metadata explorer — per-variable origin badge, editable tag chips (favorite/add/remove, auto-coloured), a 50-word note, provenance timeline; reads `metadata_store.manager` |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
 | `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar (with a Save-DPI spinbox); attaches a `HoverAnnotator` |
@@ -85,11 +93,14 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `widgets/stepwise_cards.py` | The stepwise chain's editable **method cards** (`StepCard` shows every setting + removed count + reorder ▲▼ / edit / delete; `AddStepCard`; `StepEditorDialog`) — display widgets around the `stepwise_method_params` registry |
 | `widgets/corrections_panel.py` | `CorrectionsPanel` — checkable correction rows filtered to the selected measurement (`dv.qaqc.corrections_for_measurement`), with inline descriptions; parses date-range / value text into the `{"key","kwargs"}` corrections `apply_corrections` consumes |
 | `widgets/copy_button.py` | Reusable **Copy Python** button — copies library-generated code to the clipboard (GUI never builds the script, only copies it) |
+| `widgets/sub_tabs.py` | `SubTabs` — standardized in-tab sub-navigation (segmented pills over a `QStackedWidget`) for output-heavy tabs; `add_page`/`set_page`/`changed`, `add_corner_widget` (action buttons by the pills) + `add_corner_separator` (faded `_CornerSeparator` divider) |
 | `widgets/state_utils.py` | `save_controls`/`restore_controls` — serialize a tab's standard Qt controls by stable key for `save_state`/`restore_state` |
 
 **Adding a tab:** always-on tabs (Overview, Log) go in `TAB_CLASSES`. Menu-opened tabs go in `registry.MENU_TABS`
 (grouped by menu; values are factories) — they open as **new numbered instances** each time (Heatmap 1, 2, 3 ...), all
-closable, unless listed in `SINGLE_INSTANCE_TABS` (e.g. Appearance). The main window is agnostic to concrete tabs.
+closable, unless listed in `SINGLE_INSTANCE_TABS` — reserved for the app-wide singleton editors Appearance, Project
+settings, and Metadata explorer, which re-selecting focuses instead of duplicating. The main window is agnostic to
+concrete tabs.
 
 **Menu icons:** every menu entry (File/Data/Plot/Outliers/Flux/Analyze/Settings/Help) gets a small `QPainter`-drawn glyph via
 `gui/icons.py::menu_icon(label)`, matched to the label by keyword (`&` mnemonics stripped first). `_build_menus` wraps
@@ -102,7 +113,7 @@ borderless panels, monochrome line icons, uppercase tracked labels, and a framel
 `STUDIO_TYPOGRAPHY`; `MainWindow` always builds the frameless shell (`_build_studio_chrome`).
 
 **Plot menu:** each method is its own closable tab, with a small drawn icon. The **Plot** menu lists methods (Heatmap
-date/time, Heatmap year/month, Time series, Diel cycle, Cumulative year, Ridgeline, Scatter XY, Hexbin, Histogram); selecting one
+date/time, Heatmap year/month, Heatmap x/y/z, Time series, Diel cycle, Cumulative year, Cumulative, Ridgeline, Scatter XY, Hexbin, Histogram, Shifted distribution, Wind rose); selecting one
 opens a new `PlottingTab(plot_type, title)` instance. Add a method via a factory in `registry.MENU_TABS["Plot"]` + a
 branch in `plotting._draw_one` (and matching controls in `plot_settings`). Ctrl+click adds comparison panels: heatmaps
 (both kinds, in `_HEATMAP_TYPES`) go side by side (shared x/y); time series and diel cycle stack top-to-bottom (shared
@@ -113,28 +124,51 @@ freeze/resize machinery doesn't reflow its overlapping ridges) — see `_render_
 The **histogram** is also single-variable (it's information-dense: bar counts + a z-score twiny axis + peak/info box),
 but a normal per-`ax` plot — `HistogramPlot(series, n_bins=...).plot(ax=...)` with toggles for the peak highlight,
 z-score axis, counts, info box, title and grid.
+The **shifted distribution** is single-variable too: it compares one variable's KDE between a reference and a comparison
+period (`ShiftedDistributionPlot(series, ref_period, comp_period).plot(ax=...)`), colouring the comparison curve by the
+reference period's ±1σ/±3σ zones. The two periods are partial date strings (a year, or `YYYY-MM-DD`), seeded by
+`set_periods` from the data's year range (earlier half vs later half). Like the ridgeline it sets `canvas.auto_layout=False`
+and places its single axes with an explicit rect (`add_axes`) so the zone labels above the top spine aren't clipped — see
+`_render_shifted_distribution`.
+The **heatmap x/y/z** is role-picked (X/Y/Z by click order, in `_XYZ_TYPES` like Hexbin) but `HeatmapXYZ` needs one Z per
+(x,y) bin, so the tab **pre-aggregates** the raw data via `dv.analysis.GridAggregator` and feeds the binned grid through
+`HeatmapXYZ.from_gridaggregator(...)` rather than passing raw columns — see `_render_heatmap_xyz`.
+The **tree ring** is single-variable and whole-figure/polar: like the ridgeline/wind rose it sets `canvas.auto_layout=False`
+(polar axes, no constrained-layout reflow). Its **line** style dispatches to `TreeRingPlot.plot_line` instead of `.plot`
+(the codegen `_script` gained a `plot_method` arg to emit the matching call) — see `_render_treering`.
+The **cumulative** is single-variable but flows through the standard panel machinery (a branch in `_draw_one`, so it's
+Ctrl+click multi-panel capable) like Cumulative year; it calls `Cumulative(df=series.to_frame(), ...)`. **Distinct from
+Cumulative year** (`CUMULATIVE` whole-record running total vs `CUMULATIVE_YEAR` per-year reset).
 
 **Plot settings:** between the variable list and the canvas sits a `PlotSettingsPanel(plot_type)` — a scrollable
 strip of controls, one per `plot()` parameter of the underlying diive plot class (heatmap: colormap, vmin/vmax,
 orientation, colorbar, cell-value overlay, ticks, grid, …; time series: line width, opacity, markers, drop-gaps,
 labels/units). **Editing a control does NOT re-render** — the tab's **Update plot** button (`PlottingTab.update_btn`,
-below the settings) reads `settings.values()` and calls `_render()` on click, so the apply trigger is identical for
-every control type (no `editingFinished`-vs-`valueChanged` inconsistency). Controls still emit `changed`, but the tab
-no longer connects it to a render. (Variable selection in the list *does* still render live, via
-`_on_selected` → `run_with_loading`; that's the one interaction the user singled out as wanting immediate.) `_draw_one`
-reads `settings.values()` into the library plot call. The panel is GUI-only (it just collects parameters); the
+a left-aligned row just below the tab header) reads `settings.values()` and calls `_render()` on click, so the apply
+trigger is identical for every control type (no `editingFinished`-vs-`valueChanged` inconsistency). The button is
+**dirty-gated**: disabled until `settings.changed` (or `xyz_changed`) fires, re-disabled at each render. For the
+comparison types, variable selection in the list *does* still render live (`_on_selected` → `run_with_loading`); for the
+role-dropdown types (`_ROLE_DROPDOWN_TYPES` = Scatter, Wind rose, Hexbin, Heatmap x/y/z) the roles are assigned via
+X/Y/Z `_DropComboBox` dropdowns (pick from the complete list or drag a variable onto a field) and apply on Update like
+any other setting (`_build_role_combos(labels, none_ok=)` / `set_xyz` / `xyz_values`); list-click is a no-op. Scatter and
+Wind rose make the colour role optional; Hexbin and Heatmap x/y/z require all three. **Every** plot tab has a title-bar **Copy Python** button
+(`_python_code` dispatches per plot type to the library codegen: `scatter_to_code` in `scatter.py`, the rest in
+`core/plotting/codegen.py`); it is a no-op while role picks are incomplete. Multi-panel tabs emit the active panel's variable.
+`_draw_one` reads `settings.values()` into the library plot call. The panel is GUI-only (it just collects parameters); the
 `HEATMAP`/`TIMESERIES` constants live in `plot_settings.py` and `plotting.py` re-exports them (so no import cycle). Line
 *colours* stay theme-driven (`theme.manager.ts_colors`, Appearance tab), not duplicated here. Add a parameter = add a
 control in `plot_settings._build_*` + a key in `values()` + pass it through in `_draw_one`.
 
 **GUI-only post-render passes:** a couple of settings have no library `plot()` parameter and are applied *after* the
 diive plot renders, analogous to the Overview's uniform-font pass:
-- **Axes group** (`_build_axes_group`) — X/Y limits (blank = auto), log X/Y, invert Y, add grid. Present on the
+- **Axes group** (`_build_axes_group`) — X/Y limits (blank = auto), log X/Y, invert Y. Present on the
   line/scatter types only (`TIMESERIES`, `CUMULATIVE_YEAR`, `SCATTER`, and Y-only for `DIELCYCLE`); `values()` carries
   them under the `_axes` key and `plotting._apply_axes(axes)` applies them to the data axes. It is **plot-type-aware**:
   heatmaps and the ridgeline have no `_axes` (no-op), and the diel cycle's fixed 0–24 h x-axis is left alone (Y-only
-  group). The grid toggle is additive (turns grid on; never strips a plot type's native grid). For shared multi-panel
-  stacks the limits apply to every panel.
+  group). For shared multi-panel stacks the limits apply to every panel. The grid is **not** here — it has a single
+  source in the Format group's `show_grid` (a duplicate Axes grid could only add, never remove, so it appeared broken).
+  `_apply_axes` also re-applies the preserved pan/zoom only when the kept range still **overlaps** the new data
+  (`_ranges_overlap`), so e.g. flipping a heatmap's orientation can't scroll the view off the data.
 - **Reverse colormap** — a checkbox in the Colors group (heatmap, heatmap year/month, hexbin, scatter) that appends/strips
   the matplotlib `_r` suffix on the chosen cmap in `values()` (`_reverse_cmap`); no library change.
 

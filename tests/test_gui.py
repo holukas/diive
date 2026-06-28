@@ -188,6 +188,9 @@ def test_plot_settings_live_render(window):
         return [t for ax in tab.canvas.fig.axes for t in ax.texts
                 if "Cannot plot" in t.get_text()]
 
+    # Update plot is disabled until a setting changes (nothing pending after the
+    # initial render), enabled by an edit, and disabled again after applying.
+    assert tab.update_btn.isEnabled() is False
     # Toggle a spread of non-default settings; params apply only on "Update
     # plot", after which the heatmap must still draw (no error-fallback text).
     tab.settings.cmap.setCurrentText("viridis")
@@ -196,11 +199,22 @@ def test_plot_settings_live_render(window):
     tab.settings.vmax.setText("5")
     tab.settings.show_values.setChecked(True)
     tab.settings.cb_extend.setCurrentText("both")
-    tab.settings.axlabels_fontsize.setValue(8)
+    tab.settings.fmt_axlabel_fs.setValue(8)
+    assert tab.update_btn.isEnabled() is True  # an edit marked it dirty
     tab.update_btn.click()
     QApplication.processEvents()
     assert tab.settings.values()["cmap"] == "viridis"
     assert not _fallback(tab)
+    assert tab.update_btn.isEnabled() is False  # cleared after applying
+    # Flipping orientation must not leave the view on the old (hours) axis range:
+    # the preserved zoom only re-applies when it overlaps the new data, so the
+    # date-axis mesh stays in view (previously it scrolled off -> empty plot).
+    import numpy as _np
+    hax = tab.canvas.fig.axes[0]
+    _qm = next(c for c in hax.collections if c.__class__.__name__ == "QuadMesh")
+    _cx = _np.asarray(_qm.get_coordinates())[..., 0]
+    _xl = hax.get_xlim()
+    assert min(_xl) <= _cx.max() and _cx.min() <= max(_xl)  # data is in view
 
     # Reverse-colormap toggle (heatmap): appends/strips the _r suffix.
     tab.settings.cmap.setCurrentText("viridis")
@@ -211,19 +225,35 @@ def test_plot_settings_live_render(window):
 
     window._open_menu_tab("Time series")
     ts = window._menu_tab_list[-1]
-    assert {"linewidth", "alpha", "marker", "drop_gaps", "markersize", "title",
-            "_axes"} <= set(ts.settings.values())
+    ts_vals = ts.settings.values()
+    assert {"linewidth", "alpha", "marker", "drop_gaps", "markersize", "_format",
+            "_axes"} <= set(ts_vals)
+    assert "title" in ts_vals["_format"]  # chrome now in the shared Format group
     ts.settings.marker.setChecked(True)
     ts.settings.drop_gaps.setChecked(True)
     ts.settings.linewidth.setValue(4.0)
     ts.settings.markersize.setValue(6.0)
-    ts.settings.series_units.setText("umol")
-    ts.settings.title.setText("Custom title")
+    ts.settings.fmt_yunits.setText("umol")
+    ts.settings.fmt_title.setText("Custom title")
     ts.update_btn.click()  # params apply on the button, not on edit
     QApplication.processEvents()
     assert not _fallback(ts)
     # Explicit title overrides the variable-name default.
     assert any(a.get_title() == "Custom title" for a in ts.canvas.fig.axes)
+
+    # Colour controls now mark the plot dirty (Update plot enables) -- previously
+    # changing the colour / colour-by did not, so the button appeared dead.
+    assert ts.update_btn.isEnabled() is False
+    ts.settings.color_by.setCurrentText("Tair_f")
+    assert ts.update_btn.isEnabled() is True
+    ts.update_btn.click()
+    QApplication.processEvents()
+    assert not _fallback(ts)
+    ts.settings.color_by.setCurrentText("(none)")
+    ts.update_btn.click()
+    QApplication.processEvents()
+    ts.settings.line_color.setText("#FF0000")  # swatch/dialog route through this
+    assert ts.update_btn.isEnabled() is True
 
     # GUI-only Axes pass: log Y + a Y limit take effect on the data axis.
     ts.settings.ax_logy.setChecked(True)
@@ -252,6 +282,278 @@ def test_plot_settings_live_render(window):
     ym.update_btn.click()
     QApplication.processEvents()
     assert not _fallback(ym)
+
+
+def test_windrose_tab(app):
+    # The wind rose is role-picked (value + wind direction required, colour
+    # optional) and polar. The bundled CH-DAV example has no wind direction, so
+    # build a synthetic frame carrying one.
+    import numpy as np
+    import pandas as pd
+    from diive.gui.tabs.plotting import PlottingTab
+    from diive.gui.widgets.plot_settings import WINDROSE
+
+    idx = pd.date_range("2021-01-01", periods=2000, freq="30min")
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({
+        "co2_flux": rng.normal(-2, 5, len(idx)),
+        "wind_dir": rng.uniform(0, 360, len(idx)),
+        "air_temperature": rng.normal(285, 4, len(idx)),
+    }, index=idx)
+
+    def _fallback(tab):
+        return [t for ax in tab.canvas.fig.axes for t in ax.texts
+                if "Cannot plot" in t.get_text()]
+
+    tab = PlottingTab(WINDROSE, "Wind rose")
+    tab.widget()
+    tab.on_data_loaded(df, set())
+    QApplication.processEvents()
+
+    # Settings expose the wind-rose parameter set; defaults are seeded.
+    vals = tab.settings.values()
+    assert {"agg", "n_sectors", "z_agg", "cmap", "show_colorbar"} <= set(vals)
+    # Value + direction auto-seeded -> a polar axes + colorbar, no error fallback.
+    assert tab._xyz == ["co2_flux", "wind_dir"]
+    assert any(ax.name == "polar" for ax in tab.canvas.fig.axes)
+    assert not _fallback(tab)
+
+    # Per-sector results table is populated (8 sectors x value columns).
+    assert tab.wr_table.rowCount() == 8
+    headers = [tab.wr_table.horizontalHeaderItem(c).text()
+               for c in range(tab.wr_table.columnCount())]
+    assert headers[0] == "Sector" and "MEAN" in headers and "N_VALS" in headers
+    assert tab.wr_table.item(0, 0).text() == "N"  # first sector is North
+
+    # Copy-to-clipboard writes the table as tab-separated text.
+    assert tab.wr_copy_btn.isEnabled()
+    tab._copy_windrose_table()
+    clip = QApplication.clipboard().text()
+    assert clip.splitlines()[0].startswith("Sector\t")
+    assert len(clip.splitlines()) == 9  # header + 8 sectors
+
+    # Roles are assigned via the dropdowns (drag onto a field or pick), not by
+    # clicking the list -- a list click does not change the roles.
+    tab._on_selected("air_temperature", False)
+    assert tab._xyz == ["co2_flux", "wind_dir"]
+    # Add the optional colour variable via its dropdown (marks dirty, no live
+    # re-render) and change the aggregation.
+    assert tab.update_btn.isEnabled() is False
+    tab.settings.wr_zcol.setCurrentText("air_temperature")
+    assert tab.update_btn.isEnabled() is True
+    assert tab._xyz == ["co2_flux", "wind_dir", "air_temperature"]
+    tab.settings.wr_agg.setCurrentText("median")
+    tab.settings.wr_nsectors.setValue(16)
+    tab.update_btn.click()
+    QApplication.processEvents()
+    assert not _fallback(tab)
+    # Optional colour variable adds a Z column to the results table.
+    headers = [tab.wr_table.horizontalHeaderItem(c).text()
+               for c in range(tab.wr_table.columnCount())]
+    assert "Z" in headers
+
+    # Hiding the colorbar drops the extra axes (only the polar axes remains).
+    tab.settings.wr_show_colorbar.setChecked(False)
+    tab.update_btn.click()
+    QApplication.processEvents()
+    assert len(tab.canvas.fig.axes) == 1
+    assert not _fallback(tab)
+
+    # Copy Python lives in the title bar and emits a runnable WindRosePlot snippet.
+    from diive.gui.widgets.copy_button import CopyPythonButton
+    assert isinstance(tab.copy_btn, CopyPythonButton)
+    code = tab._python_code()
+    assert "dv.plotting.WindRosePlot(" in code and "co2_flux" in code
+
+
+def test_all_plot_tabs_have_copy_python(app):
+    """Every plot tab carries a Copy Python button whose codegen yields a
+    runnable snippet for the right diive plot class (the GUI separation rule:
+    the snippet is built by the library, the button only copies it)."""
+    import numpy as np
+    import pandas as pd
+    from diive.gui.tabs.plotting import PlottingTab
+    from diive.gui.widgets.copy_button import CopyPythonButton
+    from diive.gui.widgets import plot_settings as ps
+
+    idx = pd.date_range("2021-01-01", periods=4000, freq="30min",
+                        name="TIMESTAMP_MIDDLE")
+    rng = np.random.default_rng(1)
+    df = pd.DataFrame({
+        "NEE_CUT_REF_f": rng.normal(-2, 5, len(idx)),
+        "Tair_f": rng.normal(10, 6, len(idx)),
+        "VPD_f": rng.uniform(0, 25, len(idx)),
+        "wind_dir": rng.uniform(0, 360, len(idx)),
+    }, index=idx)
+
+    # plot type -> the dv.plotting class its snippet must call.
+    cases = {
+        ps.HEATMAP: "HeatmapDateTime",
+        ps.HEATMAP_YEARMONTH: "HeatmapYearMonth",
+        ps.HEATMAP_XYZ: "HeatmapXYZ",
+        ps.TIMESERIES: "TimeSeries",
+        ps.DIELCYCLE: "DielCycle",
+        ps.CUMULATIVE_YEAR: "CumulativeYear",
+        ps.CUMULATIVE: "Cumulative",
+        ps.HISTOGRAM: "HistogramPlot",
+        ps.RIDGELINE: "RidgeLinePlot",
+        ps.SHIFTEDDIST: "ShiftedDistributionPlot",
+        ps.HEXBIN: "HexbinPlot",
+        ps.SCATTER: "ScatterXY",
+        ps.WINDROSE: "WindRosePlot",
+        ps.TREERING: "TreeRingPlot",
+        ps.WATERFALL: "WaterfallPlot",
+    }
+    for plot_type, classname in cases.items():
+        tab = PlottingTab(plot_type, plot_type)
+        tab.widget()
+        tab.on_data_loaded(df, set())
+        QApplication.processEvents()
+        assert isinstance(tab.copy_btn, CopyPythonButton), plot_type
+        code = tab._python_code()
+        assert code is not None, plot_type
+        # Most snippets call the class directly; HeatmapXYZ goes through the
+        # `from_gridaggregator` classmethod, so accept both forms.
+        assert (f"dv.plotting.{classname}(" in code
+                or f"dv.plotting.{classname}." in code), plot_type
+        assert ".plot(" in code and code.rstrip().endswith("plt.show()"), plot_type
+        # The snippet runs against a frame named `df` without raising.
+        ns = {"df": df}
+        exec(code.replace("plt.show()", 'plt.close("all")'), ns)
+
+
+def test_compound_extremes_tab(app):
+    # Analyze ▸ Compound extremes: two role-based variable combos (VPD / SWC) auto
+    # seeded, run classifies + renders the quadrant scatter, Copy Python emits a
+    # runnable snippet. The bundled CH-DAV example carries VPD_f + SWC_FF0_0.15_1.
+    from diive.configs.exampledata import load_exampledata_parquet
+    from diive.gui.tabs.compound_extremes import CompoundExtremesTab
+
+    df = load_exampledata_parquet()
+    tab = CompoundExtremesTab()
+    tab.widget()
+    tab.on_data_loaded(df, set())
+    QApplication.processEvents()
+
+    # Variable combos auto-seed VPD / SWC and show the availability tick.
+    assert tab.var1_combo.currentText() == "VPD_f"
+    assert tab.var2_combo.currentText() == "SWC_FF0_0.15_1"
+    assert tab._avail1.text() == "✓" and tab._avail2.text() == "✓"
+    # Default directions: var1 high (VPD), var2 low (SWC).
+    assert tab.dir1_combo.currentText() == "high"
+    assert tab.dir2_combo.currentText() == "low"
+
+    # Run classifies + plots. Default = monthly, deseasonalized, threshold 2.
+    tab.run_btn.click()
+    QApplication.processEvents()
+    assert tab._ce is not None
+    assert len(tab._ce.results) == 120  # 10 years x 12 months
+    assert int(tab._ce.counts["Air"]) == 3
+    assert "monthly periods" in tab.status.text()
+    # One axes with the scatter drawn (>=1 collection).
+    assert len(tab.canvas.fig.axes) == 1
+    assert tab.canvas.fig.axes[0].collections
+
+    # Switching to whole-record standardization changes the flagged set.
+    tab.std_combo.setCurrentText("Whole-record")
+    tab.run_btn.click()
+    QApplication.processEvents()
+    assert int(tab._ce.counts["Soil"]) == 4
+
+    # Copy Python yields a runnable CompoundExtremes snippet.
+    code = tab._python_code()
+    assert "dv.analysis.CompoundExtremes(" in code
+    assert "CompoundExtremesPlot" in code
+    assert "'VPD_f'" in code and "'SWC_FF0_0.15_1'" in code
+
+    # Same-variable selection is rejected with a message, not a crash.
+    tab.var2_combo.setCurrentText("VPD_f")
+    tab.run_btn.click()
+    QApplication.processEvents()
+    assert "must differ" in tab.status.text()
+
+
+def test_select_records_tab(app):
+    # Data ▸ Select records by condition: pick a target (left list), build
+    # keep/remove operations from a condition variable + range, stack several,
+    # then emit the {target}_SEL column.
+    import diive as dv
+    from diive.core.metadata import ATTRS_KEY
+    from diive.gui.tabs.select_records import SelectRecordsTab
+
+    df = dv.load_exampledata_parquet()
+    tab = SelectRecordsTab()
+    tab.widget()
+    tab.on_data_loaded(df, set())
+    QApplication.processEvents()
+
+    out_name = "NEE_CUT_REF_f_SEL"
+    tab._select("NEE_CUT_REF_f")
+    QApplication.processEvents()
+    # Undo/Reset disabled, Add disabled until an operation is applied.
+    assert not tab.undo_btn.isEnabled() and not tab.add_btn.isEnabled()
+
+    # Step 1 — KEEP where Tair_f in [15, 20].
+    tab.cond_combo.setCurrentText("Tair_f")
+    QApplication.processEvents()
+    assert tab.cond_mark.text() == "✓"
+    tab.lower.setValue(15.0)
+    tab.upper.setValue(20.0)
+    tab.mode.setCurrentIndex(0)  # keep
+    tab._apply_op()
+    QApplication.processEvents()
+    keep1 = df["Tair_f"].between(15.0, 20.0)
+    target_valid = df["NEE_CUT_REF_f"].notna()
+    assert int((tab._keep_mask & target_valid).sum()) == int((keep1 & target_valid).sum())
+    assert tab.add_btn.isEnabled() and tab.undo_btn.isEnabled()
+    assert len(tab._steps) == 1
+
+    # Step 2 — REMOVE where VPD_f in [10, 100] (operations stack).
+    tab.cond_combo.setCurrentText("VPD_f")
+    QApplication.processEvents()
+    tab.lower.setValue(10.0)
+    tab.upper.setValue(100.0)
+    tab.mode.setCurrentIndex(1)  # remove
+    tab._apply_op()
+    QApplication.processEvents()
+    remove2 = df["VPD_f"].between(10.0, 100.0)
+    expected_mask = keep1 & ~remove2
+    assert int((tab._keep_mask & target_valid).sum()) == int((expected_mask & target_valid).sum())
+    assert len(tab._steps) == 2
+
+    # Add emits the accumulated working series with provenance (all steps).
+    emitted = {}
+    tab.featuresCreated.connect(lambda d: emitted.update(df=d))
+    tab._add()
+    QApplication.processEvents()
+    assert out_name in emitted["df"].columns
+    assert emitted["df"].attrs[ATTRS_KEY][out_name]["params"]["steps"] == tab._steps
+    sel = emitted["df"][out_name]
+    assert len(sel) == len(df)  # full index kept (out-of-range -> NaN)
+    assert int(sel.notna().sum()) == int((expected_mask & target_valid).sum())
+
+    # Copy Python: one keep_records_where line per step, with invert for remove.
+    code = tab._python_code()
+    compile(code, "<gen>", "exec")
+    assert code.count("dv.keep_records_where(") == 2
+    assert "condition_var='Tair_f'" in code and "condition_var='VPD_f'" in code
+    assert "invert=True" in code  # the remove step
+
+    # Undo drops the last step and rebuilds the mask.
+    tab._undo()
+    QApplication.processEvents()
+    assert len(tab._steps) == 1
+    assert int((tab._keep_mask & target_valid).sum()) == int((keep1 & target_valid).sum())
+
+    # Reset clears everything back to the full target.
+    tab._reset_steps()
+    QApplication.processEvents()
+    assert tab._steps == [] and not tab.add_btn.isEnabled()
+    assert bool(tab._keep_mask.all())
+
+    # The condition may be the target itself (filter a variable by its own value).
+    tab.cond_combo.setCurrentText("NEE_CUT_REF_f")
+    assert tab._validate() is None
 
 
 def test_params_apply_only_on_update_button(window):
@@ -317,6 +619,53 @@ def test_daterange_dialog_clamps_and_orders(app):
     # Picks default to the full span and stay within bounds.
     got_start, got_end = dlg.selected_range()
     assert got_start >= start and got_end <= end
+
+
+def test_window_geometry_clamped_to_screen(app, monkeypatch, example_year):
+    # A restored geometry larger than / off the screen (e.g. saved on a bigger
+    # monitor) must be pulled back fully on-screen, else the bottom of a full-
+    # height tab (the Log) and its scrollbar end up unreachable.
+    from PySide6.QtWidgets import QApplication
+    import diive
+    monkeypatch.setattr(diive, "load_exampledata_parquet", lambda: example_year.copy())
+    from diive.gui.app import MainWindow
+    win = MainWindow()  # not shown: offscreen applies resize reliably pre-show
+    try:
+        avail = QApplication.primaryScreen().availableGeometry()
+        win.move(avail.x() + 150, avail.y() + 150)
+        win.resize(avail.width() + 500, avail.height() + 400)
+        win._clamp_to_screen()
+        fg = win.frameGeometry()
+        assert fg.width() <= avail.width() and fg.height() <= avail.height()
+        assert fg.right() <= avail.right() and fg.bottom() <= avail.bottom()
+        assert fg.x() >= avail.x() and fg.y() >= avail.y()
+    finally:
+        win.close()
+        win.deleteLater()
+
+
+def test_window_fills_workarea_without_clipping(app, monkeypatch, example_year):
+    # The startup show must fit the window inside the screen's work area. The
+    # Overview's height-for-width stats band reports a very tall *minimum*; if
+    # that floor exceeds the work area the window is forced taller than the
+    # screen and the bottom of every tab (e.g. a plot's x-axis label and the
+    # canvas toolbar) is clipped off-screen.
+    from PySide6.QtWidgets import QApplication
+    import diive
+    monkeypatch.setattr(diive, "load_exampledata_parquet", lambda: example_year.copy())
+    from diive.gui.app import MainWindow
+    win = MainWindow()
+    try:
+        win.show_filling_workarea()
+        app.processEvents()
+        avail = win.screen().availableGeometry()
+        g = win.geometry()
+        assert g.height() <= avail.height()  # fits vertically (was clipped before)
+        assert g.width() <= avail.width()
+        assert g.bottom() <= avail.bottom()
+    finally:
+        win.close()
+        win.deleteLater()
 
 
 def test_overview_layout_stable_on_zoom(window):
@@ -401,6 +750,29 @@ def test_hover_value_lookup(app, example_year):
     _, _, text2, marker2 = canvas2.hover._heatmap_value(ax2, qm, ev2)
     assert marker2 is False
     assert f"{float(vals[5, 10]):.4g}" in text2
+
+    # Scatter panel: snaps to the nearest point and reports x, y (+ z when the
+    # points are colour-coded).
+    canvas3 = MplCanvas()
+    ax3 = canvas3.new_axes(1)[0]
+    x3 = example_year["Tair_f"]
+    y3 = example_year["NEE_CUT_REF_f"]
+    dv.plotting.ScatterXY(x=x3, y=y3, z=x3.copy()).plot(ax=ax3, show_colorbar=True)
+    canvas3.draw()
+    coll = next(c for c in ax3.collections
+                if c.__class__.__name__ == "PathCollection")
+    offs = np.asarray(coll.get_offsets(), float)
+    j = len(offs) // 2
+    pj = ax3.transData.transform(offs[j])
+    ev3 = types.SimpleNamespace(inaxes=ax3, xdata=offs[j, 0], ydata=offs[j, 1],
+                                x=pj[0], y=pj[1])
+    hx3, hy3, text3, marker3 = canvas3.hover._value_at(ax3, ev3)
+    assert marker3 is True
+    assert "x:" in text3 and "y:" in text3 and "z:" in text3
+    # A cursor far from any point reports nothing for the scatter.
+    ev_far = types.SimpleNamespace(inaxes=ax3, xdata=offs[j, 0], ydata=offs[j, 1],
+                                   x=pj[0] + 500, y=pj[1] + 500)
+    assert canvas3.hover._scatter_value(ax3, coll, ev_far) is None
 
 
 def test_save_dpi_spinbox(app):
@@ -679,7 +1051,7 @@ def test_stepwise_screening_corrections(app):
     code = tab._code_provider()
     compile(code, "<gen>", "exec")
     assert "corrected = cleaned.copy()" in code
-    assert "remove_radiation_zero_offset" in code
+    assert "remove_nighttime_zero_offset" in code
 
     # Switching to a non-radiation measurement drops the radiation correction.
     idx = tab.meas_combo.findData("TA")
@@ -687,6 +1059,84 @@ def test_stepwise_screening_corrections(app):
     QApplication.processEvents()
     assert "radiation_zero_offset" not in tab.corrections_panel._rows
     assert "setto_max" in tab.corrections_panel._rows
+
+
+def test_correction_tabs(app):
+    # The standalone correction tabs (RF/XGB-style shared template): each is one
+    # correction on a selected variable, producing a corrected column + provenance,
+    # with a reproducible script. Available for any variable (no measurement lock).
+    import diive as dv
+    from diive.core.metadata import ATTRS_KEY
+    from diive.gui.tabs.corrections_nighttime_offset import NighttimeZeroOffsetTab
+    from diive.gui.tabs.corrections_setto_threshold import SetToMaxThresholdTab
+    from diive.gui.tabs.corrections_set_missing import SetExactToMissingTab
+    from diive.gui import site
+
+    site.manager.update(author="t", description="", name="X", latitude=47.4,
+                        longitude=8.5, elevation=500, utc_offset=1)
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-06-01", periods=48 * 10, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.0)
+    df = df.rename(columns={"observed_value": "SW_IN_T1_2_1"})
+    df.index.name = "TIMESTAMP_END"
+
+    # --- Nighttime zero offset: needs coords (seeded from the site) ---
+    tab = NighttimeZeroOffsetTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._select("SW_IN_T1_2_1")
+    assert tab.needs_coords and tab.lat.value() == pytest.approx(47.4)
+
+    emitted = {}
+    tab.featuresCreated.connect(lambda d: emitted.update(df=d))
+    tab._worker(df["SW_IN_T1_2_1"], tab._current_kwargs(),
+                tab.lat.value(), tab.lon.value(), tab.utc.value())
+    QApplication.processEvents()
+    assert list(tab._result_df.columns) == ["SW_IN_T1_2_1_NIGHTOFFSET"]
+    assert "SW_IN_T1_2_1_NIGHTOFFSET" in tab._result_df.attrs[ATTRS_KEY]
+    assert tab.add_btn.isEnabled()
+    # Diagnostics power the multi-panel preview + below-zero hero stats; after
+    # the correction no records remain below zero (night forced to zero + clamp).
+    e = tab._last_payload["extra"]
+    assert {"offset", "corrected_by_offset", "n_below_zero_after",
+            "n_below_zero_after_night"} <= e.keys()
+    assert e["n_below_zero_after"] == 0
+    assert e["n_below_zero_after_night"] == 0
+    # clamp_negatives is on by default and omitted from the script; turning it off
+    # surfaces in both the kwargs and the generated code.
+    assert tab.clamp_cb.isChecked() and tab._current_kwargs() == {"clamp_negatives": True}
+    assert "clamp_negatives" not in tab._python_code()
+    tab.clamp_cb.setChecked(False)
+    assert "clamp_negatives=False" in tab._python_code()
+    tab.clamp_cb.setChecked(True)
+    tab._add()
+    QApplication.processEvents()
+    assert "SW_IN_T1_2_1_NIGHTOFFSET" in emitted["df"].columns
+    code = tab._python_code()
+    compile(code, "<gen>", "exec")
+    assert "remove_nighttime_zero_offset" in code  # general-purpose library fn
+
+    # --- Set to max threshold: a generic, parameterized correction ---
+    tmax = SetToMaxThresholdTab()
+    tmax.widget()
+    tmax.on_data_loaded(df)
+    tmax._select("SW_IN_T1_2_1")
+    tmax.threshold.setValue(5.0)
+    tmax._worker(df["SW_IN_T1_2_1"], tmax._current_kwargs(), None, None, None)
+    QApplication.processEvents()
+    corrected = tmax._result_df["SW_IN_T1_2_1_SETMAX"]
+    assert corrected.max() <= 5.0 + 1e-9            # capped
+    assert "setto_threshold" in tmax._python_code()
+
+    # --- Validation: set-exact-to-missing needs values before it runs ---
+    miss = SetExactToMissingTab()
+    miss.widget()
+    miss.on_data_loaded(df)
+    miss._select("SW_IN_T1_2_1")
+    miss._run()                                      # no values entered
+    assert miss._result_df is None
+    assert "value" in miss.status.text().lower()
 
 
 def test_flux_chain_tab_level33_detection(app):
@@ -1099,6 +1549,56 @@ def test_flux_chain_tab_per_level_run(app):
     assert not tab.rail._cards[3]._reached
 
 
+def test_flux_chain_tab_add_level_results(app):
+    # Each level can push its results (flag/QCF columns + QCF-filtered flux) to
+    # the dataset via featuresCreated, after the level has run.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.core.metadata import ATTRS_KEY, DERIVED
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab()
+    tab.widget()
+    emitted = {}
+    tab.featuresCreated.connect(lambda d: emitted.update(df=d))
+    tab.on_data_loaded(df)
+    fluxcol = tab.fluxcol.currentText()
+
+    # Before any run, the "Add to dataset" buttons are all disabled.
+    assert not tab._level_add_btns[1].isEnabled()
+
+    def run(idx):
+        plan = tab._level_plan(idx)
+        assert plan is not None
+        tab._level_worker(plan, tab._data, tab._df)
+        QApplication.processEvents()
+
+    run(0)
+    run(1)                                   # L2
+    run(2)                                   # L3.1
+    assert tab._reached == 2
+    # The add buttons for reached levels (L2, L3.1) are now enabled; L3.2 not.
+    assert tab._level_add_btns[1].isEnabled()
+    assert tab._level_add_btns[2].isEnabled()
+    assert not tab._level_add_btns[3].isEnabled()
+
+    # Adding L3.1 emits its flag columns + the level-qualified filtered flux,
+    # tagged with DERIVED provenance pointing back at the flux column.
+    tab._add_level(2)
+    QApplication.processEvents()
+    out = emitted["df"]
+    assert out is not None and len(out.columns) > 0
+    # The filtered flux is level-qualified (storage correction renames FC->NEE at
+    # L3.1, so the QCF-filtered flux is e.g. NEE_L3.1_QCF) and a flag col is present.
+    assert any(str(c).endswith("_L3.1_QCF") for c in out.columns)
+    assert any(str(c).startswith("FLAG_L3.1") for c in out.columns)
+    assert fluxcol not in out.columns                     # never clobbers the source
+    prov = out.attrs[ATTRS_KEY]
+    assert set(prov) == set(out.columns)
+    assert all(prov[c]["origin"] == DERIVED for c in out.columns)
+    assert all(prov[c]["parent"] == fluxcol for c in out.columns)
+
+
 def test_flux_chain_tab_level41(app):
     # L4.1 gap-filling: fan out one gap-fill per USTAR scenario. MDS is fast and
     # has no ML training, so drive a real run with it; rf/xgb are checked via codegen.
@@ -1264,17 +1764,35 @@ def test_diel_cycle_tab(window):
     assert tab._panels  # default variable rendered
     fig = tab.canvas.fig
     assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
-    assert {"mean", "std", "each_month", "legend_loc"} <= set(tab.settings.values())
-    # Ctrl+click stacks a second variable (shared time-of-day x-axis).
+    vals = tab.settings.values()
+    assert {"agg", "band", "each_month"} <= set(vals)
+    # Defaults: mean curve, SD band, one curve per month.
+    assert vals["agg"] == "mean" and vals["band"] == "sd" and vals["each_month"] is True
+    assert "legend_loc" in vals["_format"]  # chrome now lives in the shared Format group
+    # Ctrl+click stacks a second variable (shared time-of-day x-axis): one
+    # subplot per variable, each with its own settings sub-tab (panel pills).
     tab._on_selected("Tair_f", True)
     QApplication.processEvents()
     assert tab._panels == ["NEE_CUT_REF_f", "Tair_f"]
+    assert len([a for a in tab.canvas.fig.axes]) == 2  # one subplot per variable
+    assert set(tab._panel_settings) == {"NEE_CUT_REF_f", "Tair_f"}
+    assert tab.panel_pills.isVisibleTo(tab.widget())  # per-var settings sub-tabs
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    # Each variable's settings sub-tab is independent: a median curve on Tair_f
+    # must not change the mean curve kept for NEE.
+    tab.panel_pills.changed.emit(1)  # switch the controls to the Tair_f panel
+    tab.settings.dc_agg.setCurrentText("Median")
+    tab.update_btn.click()
+    QApplication.processEvents()
+    tab.panel_pills.changed.emit(0)  # back to NEE
+    assert tab.settings.dc_agg.currentText() == "Mean"
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
-    # Per-month colouring: with "one curve per month" on, the GUI must pass
-    # color=None so DielCycle auto-colours each month distinctly (the bug fix).
-    tab._panels = ["Tair_f"]
-    tab.settings.dc_each_month.setChecked(True)
+    # Per-month colouring: with "one curve per month" (default), the GUI must
+    # pass color=None so DielCycle auto-colours each month distinctly.
+    tab._on_selected("Tair_f", False)  # single panel, active panel synced
+    QApplication.processEvents()
+    tab.settings.dc_curves.setCurrentText("One curve per month")
     tab.update_btn.click()  # params apply on the button, not on edit
     QApplication.processEvents()
     ax = tab.canvas.fig.axes[0]
@@ -1282,12 +1800,45 @@ def test_diel_cycle_tab(window):
                    for l in ax.get_lines()}
     assert len(line_colors) > 1  # months drawn in different colours, not all one
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
-    # Legend position is wired through.
-    tab.settings.dc_legend_loc.setCurrentText("upper right")
+
+    # Every aggregation x band option renders without error (overall = one curve).
+    tab.settings.dc_curves.setCurrentText("One curve overall")
+    for agg_label in ("Mean", "Median", "Min", "Max", "25th percentile", "75th percentile"):
+        tab.settings.dc_agg.setCurrentText(agg_label)
+        for band_label in ("± SD", "± SE", "IQR (25-75%)", "Min-Max", "None"):
+            tab.settings.dc_band.setCurrentText(band_label)
+            tab.update_btn.click()
+            QApplication.processEvents()
+            assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                        if "Cannot plot" in t.get_text()]
+
+    # Colour scheme + markers reach the plot.
+    tab.settings.dc_curves.setCurrentText("One curve per month")
+    tab.settings.dc_colorscheme.setCurrentText("Viridis")
+    tab.settings.dc_marker.setChecked(True)
     tab.update_btn.click()
     QApplication.processEvents()
-    assert tab.settings.values()["legend_loc"] == "upper right"
+    assert tab.settings.values()["cmap"] == "viridis"
+    assert tab.settings.values()["marker"] is True
+    assert any(l.get_marker() not in (None, "None", "") for l in tab.canvas.fig.axes[0].get_lines())
+
+    # Shared legend across stacked panels: with 5 variables the layout holds and
+    # only one panel carries the legend. Make every panel per-month so they all
+    # carry a 12-entry legend if it were not shared.
+    tab.settings.dc_curves.setCurrentText("One curve per month")
+    tab._panels = ["NEE_CUT_REF_f", "Tair_f", "VPD_f", "Reco_CUT_REF", "GPP_CUT_REF_f"]
+    tab._sync_panel_settings(active="NEE_CUT_REF_f")
+    tab._render()
+    QApplication.processEvents()
+    main_axes = [a for a in tab.canvas.fig.axes]
+    assert len(main_axes) == 5
+    legended = [a for a in main_axes if a.get_legend() is not None]
+    assert len(legended) == 1  # one shared legend, not one per panel
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+
+    # Legend column count is automatic from the month count (12 months -> 3 cols).
+    leg = legended[0].get_legend()
+    assert leg._ncols == 3
 
 
 def test_scatter_tab(window):
@@ -1298,15 +1849,33 @@ def test_scatter_tab(window):
     # Seeded with X, Y (2 vars) -> plain scatter renders.
     assert len(tab._xyz) >= 2
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    sc_vals = tab.settings.values()
     assert {"nbins", "binagg", "cmap", "show_colorbar", "markersize", "alpha",
-            "vmin", "vmax", "title", "_axes"} <= set(tab.settings.values())
+            "vmin", "vmax", "_format", "_axes"} <= set(sc_vals)
+    assert "title" in sc_vals["_format"]  # chrome moved into the shared Format group
     # Add a third variable (Z) -> colour scatter (extra colorbar axis).
     tab._xyz = ["Tair_f", "NEE_CUT_REF_f", "VPD_f"]
     tab._render()
     QApplication.processEvents()
     assert len(tab.canvas.fig.axes) >= 2  # scatter + colorbar
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
-    assert tab.settings.z_role.text() == "VPD_f"  # role readout updated
+    assert tab.settings.sc_z.currentText() == "VPD_f"  # colour dropdown reflects it
+
+    # Picking via the dropdowns drives the role assignment but does NOT re-render
+    # on its own -- it marks the plot dirty (enables Update plot).
+    tab._render()  # clean slate (button disabled)
+    assert tab.update_btn.isEnabled() is False
+    tab.settings.sc_x.setCurrentText("VPD_f")
+    QApplication.processEvents()
+    assert tab._xyz[0] == "VPD_f"
+    assert tab.update_btn.isEnabled() is True  # dirty, awaiting the button
+    # Clearing the colour dropdown drops Z -> plain 2-variable scatter (on update).
+    tab.settings.sc_z.setCurrentIndex(0)  # "(none)"
+    QApplication.processEvents()
+    assert len(tab._xyz) == 2
+    tab.update_btn.click()
+    QApplication.processEvents()
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
     # Marker size / opacity reach the scatter collection.
     tab.settings.sc_markersize.setValue(80)
@@ -1336,6 +1905,22 @@ def test_scatter_tab(window):
     assert lo > hi  # inverted
     assert {round(lo), round(hi)} == {0, 5}
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+
+    # Copy Python lives in the title bar and emits a runnable ScatterXY snippet.
+    from diive.gui.widgets.copy_button import CopyPythonButton
+    assert isinstance(tab.copy_btn, CopyPythonButton)
+    code = tab._python_code()
+    assert "dv.plotting.ScatterXY(" in code and ".plot(" in code
+    assert tab._xyz[0] in code and tab._xyz[1] in code
+
+    # Update plot is dirty-gated: a setting edit enables it, a render clears it.
+    tab._render()
+    assert tab.update_btn.isEnabled() is False
+    tab.settings.sc_markersize.setValue(55)
+    assert tab.update_btn.isEnabled() is True
+    tab.update_btn.click()
+    QApplication.processEvents()
+    assert tab.update_btn.isEnabled() is False
 
 
 def test_cumulative_year_tab(window):
@@ -1423,7 +2008,7 @@ def test_gap_dashboard_tab(window):
         QApplication.processEvents()
 
     # Defaults to the gappiest variable so the dashboard is useful on open.
-    assert tab._current == "NEE_CUT_84_orig"
+    assert tab._target == "NEE_CUT_84_orig"
     fig = tab.canvas.fig
     assert len(fig.axes) >= 2  # availability heatmap + gap timeline (+ colorbars)
     assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
@@ -2089,7 +2674,7 @@ def test_project_restores_per_tab_state(window, tmp_path, monkeypatch):
     ts._on_selected(cols[0], False)
     ts._on_selected(cols[1], True)
     ts.settings.linewidth.setValue(4.5)
-    ts.settings.title.setText("My plot")
+    ts.settings.fmt_title.setText("My plot")
     # Overview focused on a specific variable; the Time series tab is active.
     ovar = str(window._data.columns[3])
     window._tabs[0]._on_select(ovar)
@@ -2111,7 +2696,7 @@ def test_project_restores_per_tab_state(window, tmp_path, monkeypatch):
     ts2 = next(t for t in window._menu_tab_list if t._menu_label == "Time series")
     assert ts2._panels == cols  # the two selected variables came back
     assert ts2.settings.linewidth.value() == 4.5  # settings restored too
-    assert ts2.settings.title.text() == "My plot"
+    assert ts2.settings.fmt_title.text() == "My plot"
     assert window._tabs[0]._current == ovar  # Overview selection restored
     # The previously-active tab regains focus (not just landing on Overview).
     cur = window._tabwidget.currentIndex()
@@ -2533,3 +3118,202 @@ def test_events_tab_and_dialog_build(window):
     dlg = AddEventDialog(window._full_data.index.min(), window._full_data.index.max())
     ev = dlg.make_event()  # default = instant at data start
     assert not ev.is_range
+
+
+def test_mds_gapfill_to_code():
+    # The MDS codegen renders a runnable FluxMDS(...).run() snippet with the three
+    # drivers + tolerances; no feature list and no SHAP reduction (unlike ML).
+    from diive.gapfilling.codegen import mds_gapfill_to_code
+    code = mds_gapfill_to_code(
+        "NEE", "Rg_f", "Tair_f", "VPD_f",
+        {"swin_tol": [20, 50], "ta_tol": 2.5, "vpd_tol": 0.5, "avg_min_n_vals": 5})
+    assert "dv.gapfilling.FluxMDS(" in code
+    assert "flux=target" in code and "swin='Rg_f'" in code
+    assert "ta='Tair_f'" in code and "vpd='VPD_f'" in code
+    assert "ta_tol=2.5" in code and "model.run()" in code
+    assert "reduce_features" not in code  # MDS has none
+    assert "_gfMDS" in code
+
+
+def test_randunc_to_code():
+    # The random-uncertainty codegen renders a runnable
+    # RandomUncertaintyPAS20(...).run() snippet from the five inputs + VPD unit.
+    from diive.flux.lowres.codegen import randunc_to_code
+    code = randunc_to_code(
+        fluxcol="NEE_CUT_REF_orig", fluxgapfilledcol="NEE_CUT_REF_f",
+        tacol="Tair_f", vpdcol="VPD_f", swincol="Rg_f", vpd_in_kpa=False)
+    assert "dv.flux.RandomUncertaintyPAS20(" in code
+    assert "fluxcol=flux" in code and "fluxgapfilledcol='NEE_CUT_REF_f'" in code
+    assert "tacol='Tair_f'" in code and "vpdcol='VPD_f'" in code and "swincol='Rg_f'" in code
+    assert "vpd_in_kpa=False" in code and "randunc.run()" in code
+    assert "_RANDUNC" in code
+
+
+def test_mds_quality_breakdown_helper():
+    # The library exposes the per-quality-level breakdown (level/count/pct/desc)
+    # the GUI plot reads, keeping the level->description map in the library.
+    from diive.gapfilling.mds import FluxMDS, mds_quality_description
+    df = dv.load_exampledata_parquet()
+    df = dv.times.keep_daterange(df, "2022-07-01", "2022-07-31 23:30")
+    model = FluxMDS(df=df, flux="NEE_CUT_REF_orig", swin="Rg_f", ta="Tair_f",
+                    vpd="VPD_f", verbose=0)
+    # The progress callback fires per quality level and reaches done == total.
+    progress = []
+    model.run(progress_callback=lambda *a: progress.append(a))
+    assert progress and progress[-1][0] == progress[-1][1]  # last done == total
+    bd = model.quality_breakdown()
+    assert list(bd.columns) == ["level", "count", "pct", "description"]
+    assert (bd["level"] == 0).any()  # observed row present
+    assert int(bd["count"].sum()) == len(df)
+    assert mds_quality_description(0) == "measured"
+    # Granular flag = method*1000 + time_window (days): 2014 = SWIN-only, 14 d.
+    desc = mds_quality_description(2014)
+    assert "SWIN only" in desc and "14" in desc
+
+    # The colour/marker-by-quality time series embeds into a supplied axes.
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    model.plot_quality_timeseries(ax=ax)
+    assert ax.get_lines()  # drew at least one quality series
+    plt.close(fig)
+
+
+def test_random_uncertainty_tab(app, example_year):
+    # The random-uncertainty tab builds, auto-seeds the five inputs, runs the
+    # PAS20 cascade synchronously and emits a single {flux}_RANDUNC column.
+    from PySide6.QtWidgets import QApplication
+    from diive.gui.tabs.uncertainty_randunc import RandomUncertaintyTab
+    # One month keeps the per-record cascade fast in the test.
+    df = dv.times.keep_daterange(example_year, "2021-03-01", "2021-03-31 23:30")
+    tab = RandomUncertaintyTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+
+    # Inputs auto-seed to present columns; the measured flux avoids the _F column.
+    picks = tab._picks()
+    assert all(v in df.columns for v in picks.values())
+    assert picks["flux"] != picks["flux_f"]
+
+    # Copy Python renders a runnable snippet reflecting the current picks.
+    code = tab._python_code()
+    assert "RandomUncertaintyPAS20(" in code and picks["flux"] in code
+
+    # Drive the worker synchronously: _compute_payload off-thread, then _on_done.
+    payload = tab._compute_payload(df[[picks["flux"], picks["flux_f"], picks["ta"],
+                                       picks["vpd"], picks["swin"]]].copy(),
+                                   picks, tab.vpd_in_kpa.isChecked())
+    tab._on_done(payload)
+    QApplication.processEvents()
+    assert tab._result_df is not None
+    assert list(tab._result_df.columns) == [f"{picks['flux']}_RANDUNC"]
+    assert tab.add_btn.isEnabled()
+    # The preview rendered without a failure message.
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                if "Plot failed" in t.get_text()]
+    # Three panels incl. the measured-flux vs uncertainty scatter.
+    titles = [a.get_title() for a in tab.canvas.fig.axes]
+    assert any("Uncertainty vs flux" in t for t in titles)
+
+    # Config round-trips through save/restore (the input picks + VPD unit).
+    tab.vpd_in_kpa.setChecked(False)
+    state = tab.save_state()
+    tab2 = RandomUncertaintyTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2._picks()["flux"] == picks["flux"]
+    assert tab2.vpd_in_kpa.isChecked() is False
+
+
+def test_joint_uncertainty_tab(app, example_year):
+    # The joint-uncertainty tab builds, auto-seeds randunc + the 16th/84th USTAR
+    # scenarios biased to the randunc flux, runs synchronously and emits a single
+    # {base}_JOINTUNC column.
+    from PySide6.QtWidgets import QApplication
+    from diive.gui.tabs.uncertainty_jointunc import JointUncertaintyTab
+    df = dv.times.keep_daterange(example_year, "2021-03-01", "2021-03-31 23:30").copy()
+    # Fabricate the RANDUNC column the tab needs (the cascade itself is tested
+    # in test_uncertainty.py; here only the joint plumbing matters).
+    df["NEE_CUT_REF_RANDUNC"] = 1.5
+    tab = JointUncertaintyTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+
+    # Scenario picks bias to the randunc flux base (NEE, not GPP).
+    picks = tab._picks()
+    assert all(v in df.columns for v in picks.values())
+    assert picks["randunc"] == "NEE_CUT_REF_RANDUNC"
+    assert picks["lower"] == "NEE_CUT_16_f" and picks["upper"] == "NEE_CUT_84_f"
+    assert tab._divisor() == 2.0
+
+    code = tab._python_code()
+    assert "JointUncertaintyPAS20(" in code and "NEE_CUT_16_f" in code
+
+    payload = tab._compute_payload(
+        df[[picks["randunc"], picks["lower"], picks["upper"], picks["flux_f"]]].copy(),
+        picks, tab._divisor())
+    tab._on_done(payload)
+    QApplication.processEvents()
+    assert tab._result_df is not None
+    assert list(tab._result_df.columns) == ["NEE_CUT_REF_JOINTUNC"]
+    assert tab.add_btn.isEnabled()
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                if "Plot failed" in t.get_text()]
+    titles = [a.get_title() for a in tab.canvas.fig.axes]
+    assert any("decomposition" in t.lower() for t in titles)
+
+    # Switching the percentile convention re-picks scenarios + the divisor.
+    tab.divisor_combo.setCurrentIndex(1)
+    assert tab._divisor() != 2.0
+
+
+def test_gapfilling_mds_tab(app, example_year):
+    # The MDS tab builds, auto-seeds the three drivers, runs synchronously and
+    # emits the *_gfMDS + flag columns; the slimmed Results panel populates.
+    from PySide6.QtWidgets import QApplication
+    from diive.gui.tabs.gapfilling_mds import MdsGapFillingTab
+    df = example_year
+    tab = MdsGapFillingTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._set_target("NEE_CUT_REF_orig")
+
+    # Drivers auto-seed to present columns (availability marker ✓).
+    drivers = tab._driver_names()
+    assert all(v in df.columns for v in drivers.values())
+    assert "VPD" in drivers["vpd"].upper() and "TA" in drivers["ta"].upper()
+
+    # Reproducible snippet reflects the current target + drivers.
+    code = tab._python_code()
+    assert "FluxMDS(" in code and "NEE_CUT_REF_orig" in code
+
+    # Pin the drivers and run the worker synchronously (the runner forwards to
+    # _on_done; calling _compute_payload + _on_done directly keeps it off-thread).
+    swin, ta, vpd = "Rg_f", "Tair_f", "VPD_f"
+    work = df[["NEE_CUT_REF_orig", swin, ta, vpd]].copy()
+    payload = tab._compute_payload(work, "NEE_CUT_REF_orig", swin, ta, vpd,
+                                   tab._method_kwargs())
+    tab._on_done(payload)
+    QApplication.processEvents()
+    assert tab._result_df is not None
+    assert "NEE_CUT_REF_orig_gfMDS" in tab._result_df.columns
+    assert "FLAG_NEE_CUT_REF_orig_gfMDS_ISFILLED" in tab._result_df.columns
+    assert tab.add_btn.isEnabled()
+    # Heatmaps + results panel rendered without a failure message.
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                if "Plot failed" in t.get_text()]
+
+    # A wheel over a results-panel plot must scroll the dashboard: every embedded
+    # canvas resolves the enclosing scroll area so it can forward wheel events.
+    from diive.gui.widgets.mpl_canvas import MplCanvas
+    panel_canvases = tab.results_panel.findChildren(MplCanvas)
+    assert panel_canvases
+    assert all(c._enclosing_scroll_area() is tab.results_panel for c in panel_canvases)
+
+    # Config round-trips through save/restore (target + drivers + tolerances).
+    tab.vpd_tol.setValue(0.8)
+    state = tab.save_state()
+    tab2 = MdsGapFillingTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2._target == "NEE_CUT_REF_orig"
+    assert tab2.vpd_tol.value() == 0.8

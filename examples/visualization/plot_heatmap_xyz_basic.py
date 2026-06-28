@@ -53,17 +53,19 @@ hm = dv.plotting.HeatmapXYZ.from_gridaggregator(
     z_col='NEE_CUT_REF_f'  # Original z series name
 )
 
+# Chrome (title/fonts) lives in a FormatStyle; the colorbar (cmap/vmin/vmax/
+# cb_*) and the value/grid overlays stay direct on plot() -- FormatStyle does
+# not own the colorbar.
 hm.plot(
     ax=None,  # Create new figure
-    title='NEE binned by Temperature and VPD',
+    format_style=dv.plotting.FormatStyle(title='NEE binned by Temperature and VPD', show_grid=True),
     figsize=(10, 8),  # Figure size
     cmap='RdYlGn',  # Colormap (red=low uptake, green=high)
     vmin=-5,  # Minimum color value (umol/m2/s)
     vmax=5,  # Maximum color value
     cb_digits_after_comma=1,  # Colorbar precision
     show_values=True,  # Overlay bin values
-    show_values_n_dec_places=1,  # 1 decimal place for values
-    show_grid=True  # Show grid lines
+    show_values_n_dec_places=1  # 1 decimal place for values
 )
 
 print("Plotted HeatmapXYZ with temperature x VPD bins")
@@ -83,13 +85,12 @@ hm2 = dv.plotting.HeatmapXYZ.from_gridaggregator(
 
 hm2.plot(
     ax=None,
-    title='NEE Response Surface (Continuous)',
+    format_style=dv.plotting.FormatStyle(title='NEE Response Surface (Continuous)'),
     figsize=(10, 8),
     cmap='viridis',  # Alternative colormap
     vmin=-5,
     vmax=5,
     show_values=False,  # Don't show values
-    show_grid=False,  # Cleaner without grid
     show_colormap=True  # Show colorbar
 )
 
@@ -120,13 +121,12 @@ hm_std = dv.plotting.HeatmapXYZ.from_gridaggregator(
 )
 hm_std.plot(
     ax=None,
-    title='NEE within-bin variability (std)',
+    format_style=dv.plotting.FormatStyle(title='NEE within-bin variability (std)', show_grid=True),
     figsize=(10, 8),
     cmap='YlOrRd',  # low std = yellow, high std = red
     cb_digits_after_comma=1,
     show_values=True,
-    show_values_n_dec_places=1,
-    show_grid=True
+    show_values_n_dec_places=1
 )
 
 print("Plotted HeatmapXYZ with std aggregation")

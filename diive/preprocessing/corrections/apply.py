@@ -19,7 +19,7 @@ from __future__ import annotations
 from pandas import Series
 
 from diive.preprocessing.corrections.offsetcorrection import (
-    remove_radiation_zero_offset,
+    remove_nighttime_zero_offset,
     remove_relativehumidity_offset,
 )
 from diive.preprocessing.corrections.setto import (
@@ -70,8 +70,10 @@ def apply_corrections(series: Series,
         key = corr["key"]
         kwargs = corr.get("kwargs", {})
         if key == CORR_RADIATION_ZERO_OFFSET:
-            out = remove_radiation_zero_offset(series=out, lat=lat, lon=lon,
-                                               utc_offset=utc_offset, showplot=showplot)
+            out = remove_nighttime_zero_offset(
+                series=out, lat=lat, lon=lon, utc_offset=utc_offset,
+                clamp_negatives=kwargs.get("clamp_negatives", True),
+                showplot=showplot)
         elif key == CORR_RELATIVEHUMIDITY_OFFSET:
             out = remove_relativehumidity_offset(series=out, showplot=showplot)
         elif key == CORR_SETTO_MAX:

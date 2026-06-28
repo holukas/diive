@@ -32,6 +32,9 @@ class LocalSDOutlierTab(BaseOutlierTab):
              "copy, and the flag.")
     settings_title = "Local SD settings"
     method_suffix = "LOCALSD"
+    method_chip_label = "LOCAL SD"
+    method_chip_bg = "#E8F5E9"
+    method_chip_fg = "#2E7D32"
 
     def _add_method_rows(self, form: QFormLayout) -> None:
         self.winsize = QSpinBox()

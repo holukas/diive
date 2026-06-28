@@ -93,7 +93,7 @@ from textual.widgets import (Button, Footer, Input, Label, OptionList,
 from textual.widgets.option_list import Option
 
 from diive.flux.hires.detect_and_remove_tlag import (
-    _WHITESPACE_SEP, PerFilePipeline)
+    _WHITESPACE_SEP, PerFilePipeline, parse_scalar_spec, window_to_lag_params)
 
 
 def _scan_columns(input_dir: str, file_pattern: str, skiprows: int,
@@ -209,7 +209,7 @@ Screen { background: #1a1b26; color: #a9b1d6; }
 }
 #console { width: 1fr; padding: 0 1; }
 
-.section { color: #7aa2f7; text-style: bold; height: 1; margin: 1 0 0 0; }
+.section { color: #7aa2f7; text-style: bold; height: 1; margin: 0; }
 .field { height: 1; }
 .flabel { width: 16; color: #565f89; content-align: left middle; }
 .fin {
@@ -225,9 +225,14 @@ Screen { background: #1a1b26; color: #a9b1d6; }
 Switch { height: 1; border: none; background: #24283b; }
 Switch.-on { background: #2f334d; }
 
-#controls { height: 3; margin: 1 0 0 0; }
-#controls2 { height: 3; }
+#controls { height: 1; margin: 1 0 0 0; }
+#controls2 { height: 1; }
 Button { margin: 0 1 0 0; min-width: 8; height: 3; }
+/* Flat single-row action buttons on the left form, so the settings panel
+   fits without a vertical scrollbar on high-DPI (4k-scaled) screens. The
+   right-panel Copy log and the modal-dialog buttons keep the default 3-row
+   height. The height:1 + border:none pattern matches .clearbtn/.pickbtn. */
+#controls Button, #controls2 Button { height: 1; border: none; }
 Button#run { background: #7aa2f7; color: #1a1b26; text-style: bold; }
 Button#check { background: #2f334d; color: #e0af68; }
 Button#stop { background: #2f334d; color: #f7768e; }
@@ -274,6 +279,11 @@ InfoScreen { align: center middle; background: #1a1b26 70%; }
     background: #2f334d; color: #7aa2f7; content-align: center middle;
 }
 .pickbtn:hover { background: #3b4261; }
+.reseedbtn {
+    width: 3; min-width: 3; height: 1; margin: 0 0 0 1; border: none;
+    background: #2f334d; color: #bb9af7; content-align: center middle;
+}
+.reseedbtn:hover { background: #3b4261; }
 ColumnPickerScreen { align: center middle; background: #1a1b26 70%; }
 #colpick {
     width: 80%; max-width: 72; height: auto; max-height: 80%;
@@ -320,6 +330,21 @@ _INFO_TEXT = (
     " Wide-HDI (unreliable) chunks are replaced by the neighbouring good lag,\n"
     " so a spurious per-chunk value is never applied.\n"
     "\n"
+    "[b #bb9af7]Per-gas search windows (Win s)[/]\n"
+    " Each gas gets its own [b]LABEL:\\[lower,upper][/] window (seconds) over\n"
+    " which the lag is searched. Set them by physics:\n"
+    " • A [b]positive-only[/] window (e.g. N2O:\\[0,5]) keeps only physical\n"
+    "   tube-delay lags (closed-path delay > 0), the paper's advice.\n"
+    " • A [b]long-inlet[/] gas needs a wider window than the dry gases —\n"
+    "   e.g. N2O:\\[0,5] beside H2O:\\[0,20]. EddyPro later applies one lag\n"
+    "   setting to all gases, so each gas must be pre-aligned here.\n"
+    " • Per gas, lag_max = the larger |bound| and the bootstrap block\n"
+    "   length = max(20 s, 2x the window half-width): never below the\n"
+    "   paper's 20 s (long enough to contain the lag and preserve the\n"
+    "   correlation structure), but it grows for a wide window.\n"
+    " • Keep the expected lag in the [b]middle[/] of the window, not on an\n"
+    "   edge — a peak detected at the boundary is treated as unreliable.\n"
+    "\n"
     "[#e0af68]Note:[/] downstream flux software must run with EC time-lag\n"
     "maximization DISABLED — the delay is already corrected here.\n"
     "\n"
@@ -333,12 +358,14 @@ class InfoScreen(ModalScreen):
     BINDINGS = [('escape', 'close', 'Close'), ('q', 'close', 'Close')]
 
     def compose(self) -> ComposeResult:
+        """Build the info-screen widgets."""
         with Vertical(id='dialog'):
             with VerticalScroll(id='infoscroll'):
                 yield Static(_INFO_TEXT, id='infotext')
             yield Button('Close', id='close', variant='primary')
 
     def action_close(self) -> None:
+        """Close the info screen."""
         self.dismiss()
 
     @on(Button.Pressed, '#close')
@@ -353,11 +380,13 @@ class ColumnPickerScreen(ModalScreen):
     BINDINGS = [('escape', 'cancel', 'Cancel')]
 
     def __init__(self, title: str, columns: list):
+        """Set up the column-picker modal with a title and the available columns."""
         super().__init__()
         self._title = title
         self._columns = columns
 
     def compose(self) -> ComposeResult:
+        """Build the column-picker widgets."""
         with Vertical(id='colpick'):
             yield Static(f'[b #7aa2f7]{self._title}[/]\n'
                          'Select a column (Enter), or Esc to cancel:')
@@ -369,9 +398,11 @@ class ColumnPickerScreen(ModalScreen):
                 yield Button('Cancel', id='colcancel')
 
     def on_mount(self) -> None:
+        """Focus the option list when the screen is mounted."""
         self.query_one('#collist', OptionList).focus()
 
     def action_cancel(self) -> None:
+        """Dismiss the picker without choosing a column."""
         self.dismiss(None)
 
     @on(Button.Pressed, '#colcancel')
@@ -389,10 +420,12 @@ class LoadScreen(ModalScreen):
     BINDINGS = [('escape', 'cancel', 'Cancel')]
 
     def __init__(self, default_path: str = ''):
+        """Set up the settings-load modal with an optional default path."""
         super().__init__()
         self._default_path = default_path
 
     def compose(self) -> ComposeResult:
+        """Build the load-screen widgets."""
         with Vertical(id='dialog'):
             yield Static('[b #7aa2f7]Load settings YAML[/]\n'
                          'Enter the path to a settings .yaml file:', id='loadinfo')
@@ -403,6 +436,7 @@ class LoadScreen(ModalScreen):
                 yield Button('Cancel', id='loadcancel')
 
     def action_cancel(self) -> None:
+        """Dismiss the load screen without loading."""
         self.dismiss(None)
 
     @on(Button.Pressed, '#loadcancel')
@@ -424,13 +458,13 @@ _FIELDS = [
     ('col_v', 'Wind V', 'column name for V'),
     ('col_w', 'Wind W', 'column name for W'),
     ('col_tsonic', 'Sonic T', 'column name for T_SONIC'),
-    ('scalars', 'Scalars', 'LABEL:column, e.g. CH4:ch4,N2O:n2o'),
+    ('scalars', 'Scalars', 'LABEL:column,...  e.g. CH4:ch4,N2O:n2o'),
     ('hz', 'Frequency', 'default 20  (samples per second)'),
     ('chunk', 'Chunk s', 'default 1800  (= 30 min)'),
     ('minchunk', 'Min chunk s', 'default 300  (skip shorter chunks)'),
     ('nboot', 'Bootstraps', 'default 99  (PWB replicates, paper value)'),
-    ('lagmax', 'Lag max s', 'default 10.0  (CCF search half-width)'),
-    ('block', 'Block s', 'default 20.0  (bootstrap block length)'),
+    ('lagmax', 'Lag max s', 'default 10.0  (seeds each gas window below)'),
+    ('winranges', 'Win s', 'per-gas LABEL:[lower,upper]  (⟳ re-seeds from Lag max)'),
     # --- PWBOPT (best-lag selection across chunks) ---
     ('hdithresh', 'HDI thresh', 'default 0.5  (S1: reliable if HDI range <)'),
     ('devthresh', 'Dev thresh', 'default 0.5  (S2: accept if within of prev)'),
@@ -465,6 +499,32 @@ _PATH_FIELDS = ['input_dir', 'output_dir']
 # header. The four single-column fields replace their value on pick; the
 # scalars field inserts the column at the cursor (so you build LABEL:column).
 _COL_PICK_FIELDS = ['col_u', 'col_v', 'col_w', 'col_tsonic', 'scalars']
+
+# The per-gas window field gets a ⟳ button that re-seeds every gas window to the
+# symmetric [-Lag max, +Lag max] default (e.g. after editing Lag max s).
+_WIN_FIELDS = ['winranges']
+
+# Per-gas window text format: LABEL:[lower,upper] entries, comma-separated. The
+# inner brackets carry their own comma, so split with a regex, not str.split.
+_WIN_RE = re.compile(r'([^\s:,\[\]]+)\s*:\s*\[\s*(-?\d+(?:\.\d+)?)\s*,'
+                     r'\s*(-?\d+(?:\.\d+)?)\s*\]')
+
+
+def parse_win_ranges(text: str) -> dict:
+    """Parse ``CH4:[-10,10],H2O:[0,25]`` -> ``{'CH4': (-10.0, 10.0), ...}``."""
+    return {m.group(1): (float(m.group(2)), float(m.group(3)))
+            for m in _WIN_RE.finditer(text or '')}
+
+
+def _fmt_win_num(x: float) -> str:
+    """Render a window bound without a trailing ``.0`` (so [-10,10] not [-10.0,10.0])."""
+    return str(int(x)) if float(x).is_integer() else f'{x:g}'
+
+
+def format_win_ranges(items) -> str:
+    """Build the window text from ``[(label, lower, upper), ...]`` in order."""
+    return ','.join(f'{lbl}:[{_fmt_win_num(a)},{_fmt_win_num(b)}]'
+                    for lbl, a, b in items)
 
 
 # --- Live field validation (blank is always allowed = use default) ---------
@@ -501,7 +561,6 @@ _VALIDATORS = {
     'minchunk': [Function(_opt_num, 'a number of seconds')],
     'nboot': [Function(_opt_int, 'whole number, e.g. 99')],
     'lagmax': [Function(_opt_num, 'a number of seconds')],
-    'block': [Function(_opt_num, 'a number of seconds')],
     'workers': [Function(_opt_int, 'whole number (blank = all cores)')],
     'skiprows': [Function(_opt_int, 'whole number')],
     'extrarows': [Function(_opt_int, 'whole number')],
@@ -539,7 +598,7 @@ _DEFAULTS = {
 
 # PWB & chunking params that fall back to a default when left blank (see
 # _collect). The Reset button clears exactly these.
-_RESET_FIELDS = ['hz', 'chunk', 'minchunk', 'nboot', 'lagmax', 'block',
+_RESET_FIELDS = ['hz', 'chunk', 'minchunk', 'nboot', 'lagmax',
                  'workers', 'hdithresh', 'devthresh', 'hdiprefilter']
 
 # Longer per-field explanations. Shown as a hover tooltip on the field and
@@ -561,7 +620,8 @@ _HELP = {
     'scalars':
         'Gases to time-align. Format LABEL:column, comma-separated, e.g. '
         'CH4:CH4_DRY_[LGR-A],N2O:N2O_DRY_[LGR-A]. LABEL is your short name; '
-        'column is the header name in the file.',
+        'column is the header name in the file. This field selects the gases '
+        'only — set each gas\'s search window in "Win s" below.',
     'hz': 'Sampling frequency in Hz (samples per second). Typically 10 or 20.',
     'chunk': 'Length of each processing chunk in seconds. 1800 = 30 min, the '
              'standard EC averaging interval. One output file per chunk.',
@@ -569,10 +629,25 @@ _HELP = {
                 'enough records for the block-bootstrap. Default 300 (5 min).',
     'nboot': 'Number of block-bootstrap replicates per chunk. 99 is the paper '
              'value; fewer is faster but noisier HDIs.',
-    'lagmax': 'Half-width of the lag search window in seconds. The detector '
-              'looks for lags within ±this range. Default 10.',
-    'block': 'Bootstrap block length in seconds (preserves short-range '
-             'autocorrelation when resampling). Paper value 20.',
+    'lagmax': 'Default lag search half-width (seconds). It only SEEDS each '
+              'gas window in "Win s" with [-this, +this]; once a gas has a '
+              'window there, that window is used and this value is ignored for '
+              'it. The ⟳ button re-seeds all windows from this. Default 10.',
+    'winranges':
+        'Per-gas lag search window, one LABEL:[lower,upper] (seconds) per gas, '
+        'auto-filled from your Scalars + Lag max. The lag is searched only '
+        'inside [lower,upper]; an asymmetric, positive-only window like '
+        'H2O:[0,25] keeps only physical tube-delay lags (delay > 0, as the '
+        'paper recommends for closed-path gases) and lets a long-inlet gas use '
+        'a wider range than the dry gases — e.g. N2O:[0,5] (a ~1.8 s lag) next '
+        'to H2O:[0,20]. Per gas, lag_max = the larger |bound| (the CCF is still '
+        'computed symmetric over +/-lag_max, only the peak search is windowed) '
+        'and the block length = max(20 s, 2x the window half-width): never '
+        'below the paper\'s 20 s, growing so a wide window still contains a long '
+        'lag. Keep your expected lag in the MIDDLE of the window, not on an '
+        'edge — a detection at the boundary is treated as unreliable. Press ⟳ '
+        'to reset all windows to the symmetric Lag max default; leave a gas out '
+        '(or clear the field) to use the plain symmetric Lag max for it.',
     'hdithresh':
         'S1 threshold (seconds). A chunk whose 95% HDI range is below this is '
         'flagged reliable (S1) and its detected lag is trusted directly.',
@@ -655,6 +730,87 @@ def _load_settings() -> dict:
         return {}
 
 
+def _winranges_from_cli(scalars: dict, per_gas_lag: dict,
+                        global_lws, global_uws) -> str:
+    """Rebuild the TUI 'Win s' field from a CLI run's per-gas windows.
+
+    The CLI carries windows as ``per_gas_lag`` overrides (``lws``/``uws`` or a
+    symmetric ``lag_max_s``) plus optional global ``--lws``/``--uws``; the TUI
+    field is ``LABEL:[lower,upper]``.  A gas with both bounds round-trips
+    exactly; a gas with only a symmetric ``lag_max_s`` becomes ``[-L, L]``; a
+    gas with no window at all is omitted (it falls back to the global Lag max,
+    matching the CLI).
+    """
+    items = []
+    for label in scalars:
+        ov = per_gas_lag.get(label, {}) or {}
+        lws = ov.get('lws', global_lws)
+        uws = ov.get('uws', global_uws)
+        if lws is not None and uws is not None:
+            items.append((label, lws, uws))
+        elif 'lag_max_s' in ov:
+            L = ov['lag_max_s']
+            items.append((label, -L, L))
+    return format_win_ranges(items) if items else ''
+
+
+def write_run_settings_yaml(output_dir, args, scalars: dict,
+                            per_gas_lag: dict) -> str | None:
+    """Drop a TUI-loadable settings YAML into a CLI run's output folder.
+
+    Mirrors the App's ``_settings_dict`` schema (``_FIELD_IDS`` + ``_SWITCHES``)
+    so a ``diive-tlag-pwb-detect-remove`` run's settings load straight back into
+    the TUI (Load button or drag-drop) to inspect or reproduce the run.  ``args``
+    is the CLI's parsed argparse namespace.  Best-effort: returns the path
+    written, or ``None`` on failure (a settings copy must never block a run).
+    """
+    try:
+        data = {
+            'input_dir': str(args.input_dir),
+            'output_dir': str(args.output_dir),
+            'col_u': args.col_u, 'col_v': args.col_v, 'col_w': args.col_w,
+            'col_tsonic': args.col_tsonic,
+            'scalars': ','.join(f'{lbl}:{col}' for lbl, col in scalars.items()),
+            'hz': str(args.hz),
+            'chunk': _fmt_win_num(args.chunk_seconds),
+            'minchunk': _fmt_win_num(args.min_chunk_seconds),
+            'nboot': str(args.n_bootstrap),
+            'lagmax': _fmt_win_num(args.lag_max),
+            'winranges': _winranges_from_cli(scalars, per_gas_lag,
+                                             args.lws, args.uws),
+            'hdithresh': _fmt_win_num(args.hdi_thresh),
+            'devthresh': _fmt_win_num(args.dev_thresh),
+            'hdiprefilter': _fmt_win_num(args.hdi_prefilter),
+            'lagcol': args.lag_column_template,
+            'skiprows': str(args.skiprows),
+            'extrarows': str(args.extra_rows),
+            'sep': args.sep,
+            'filepattern': args.file_pattern,
+            'navalues': ' '.join(args.na_values) if args.na_values else '',
+            'narep': args.na_rep,
+            'lineterm': args.lineterm,
+            'streg': args.start_time_regex or '',
+            'stfmt': args.start_time_format,
+            'ctmpl': args.chunk_name_template,
+            'detectsub': args.detect_subdir,
+            'datasub': args.data_subdir,
+            'workers': '' if args.n_workers is None else str(args.n_workers),
+            'randomstate': ('' if args.random_state is None
+                            else str(args.random_state)),
+            'saveplots': bool(args.save_plots),
+            'strict': bool(args.strict),
+        }
+        # Keep only known fields so a CLI-side typo can't write a key the TUI
+        # would silently ignore; the load tolerates missing keys (uses defaults).
+        known = set(_FIELD_IDS) | set(_SWITCHES)
+        data = {k: v for k, v in data.items() if k in known}
+        path = Path(output_dir) / _OUTPUT_SETTINGS_NAME
+        path.write_text(yaml.safe_dump(data, sort_keys=False), encoding='utf-8')
+        return str(path)
+    except Exception:
+        return None
+
+
 def _summary_lines(summary, scalars, hz, cancelled: bool = False) -> list:
     """Build the post-run summary block: counts + reliability + median lag."""
     import numpy as np
@@ -734,6 +890,7 @@ class DetectRemoveTUI(App):
                 ('i', 'info', 'Info'), ('q', 'quit', 'Quit')]
 
     def __init__(self, demo: bool = False):
+        """Set up the detect-and-remove TUI (demo mode needs no data)."""
         super().__init__()
         self.demo = demo
         self._phase = None  # tracks detect->remove handoff for the bar
@@ -745,6 +902,7 @@ class DetectRemoveTUI(App):
 
     # ---- layout: title / [settings | console] / footer ----------------
     def compose(self) -> ComposeResult:
+        """Build the main application widgets."""
         yield Static('diive · PWB time-lag detect + remove', id='title')
         with Horizontal(id='body'):
             with VerticalScroll(id='settings'):
@@ -764,7 +922,7 @@ class DetectRemoveTUI(App):
                 yield self._field('minchunk')
                 yield self._field('nboot')
                 yield self._field('lagmax')
-                yield self._field('block')
+                yield self._field('winranges')
                 yield Static('PWBOPT (best-lag selection)', classes='section')
                 yield self._field('hdithresh')
                 yield self._field('devthresh')
@@ -832,11 +990,14 @@ class DetectRemoveTUI(App):
         if validators:
             inp.validators = validators
         children = [lbl, inp]
-        # Path fields get a ✕ clear button; column fields get a ▾ picker.
+        # Path fields get a ✕ clear button; column fields get a ▾ picker; the
+        # per-gas window field gets a ⟳ button to re-seed from Lag max s.
         if fid in _PATH_FIELDS:
             children.append(Button('✕', id=f'clr_{fid}', classes='clearbtn'))
         elif fid in _COL_PICK_FIELDS:
             children.append(Button('▾', id=f'pick_{fid}', classes='pickbtn'))
+        elif fid in _WIN_FIELDS:
+            children.append(Button('⟳', id=f'reseed_{fid}', classes='reseedbtn'))
         return Horizontal(*children, classes='field')
 
     def _switch_row(self, label: str, sid: str) -> Horizontal:
@@ -888,6 +1049,61 @@ class DetectRemoveTUI(App):
 
         self.push_screen(ColumnPickerScreen(f'Columns in {f0.name}', cols),
                          _assign)
+
+    # ---- per-gas window field (auto-sync to the selected scalars) -------
+    def _scalar_labels(self) -> list:
+        """Ordered, de-duplicated gas labels currently typed in Scalars.
+
+        Only complete ``LABEL:column`` tokens count, so a half-typed label
+        (no colon yet) does not spawn a transient window entry while typing.
+        """
+        labels, seen = [], set()
+        for tok in self.query_one('#scalars', Input).value.split(','):
+            tok = tok.strip()
+            if ':' not in tok:
+                continue
+            lbl = tok.split(':', 1)[0].strip()
+            if lbl and lbl not in seen:
+                seen.add(lbl)
+                labels.append(lbl)
+        return labels
+
+    def _lagmax_value(self) -> float:
+        try:
+            return float(self.query_one('#lagmax', Input).value.strip() or 10.0)
+        except ValueError:
+            return 10.0
+
+    def _sync_win_field(self, reseed: bool = False) -> None:
+        """Reconcile the Win field to the gases in Scalars.
+
+        Adds a default ``[-lagmax, +lagmax]`` window for each newly-typed gas,
+        drops windows for gases no longer present, and keeps windows the user
+        has already edited (unless ``reseed`` rewrites them all to the default).
+        Only writes when the text actually changes, so it never disturbs the
+        cursor while typing in another field.
+        """
+        try:
+            win_inp = self.query_one('#winranges', Input)
+        except NoMatches:
+            return
+        existing = {} if reseed else parse_win_ranges(win_inp.value)
+        lm = self._lagmax_value()
+        items = [(lbl, *existing.get(lbl, (-lm, lm)))
+                 for lbl in self._scalar_labels()]
+        new_text = format_win_ranges(items)
+        if new_text != win_inp.value:
+            win_inp.value = new_text
+
+    @on(Input.Changed, '#scalars')
+    def _on_scalars_changed(self, event: Input.Changed) -> None:
+        self._sync_win_field()
+
+    @on(Button.Pressed, '.reseedbtn')
+    def _on_reseed(self, event: Button.Pressed) -> None:
+        event.stop()
+        self._sync_win_field(reseed=True)
+        self._status('per-gas windows re-seeded from Lag max s', _LAV)
 
     def on_descendant_focus(self, event: events.DescendantFocus) -> None:
         """Echo a field's help into the status line when it gains focus, so
@@ -967,7 +1183,8 @@ class DetectRemoveTUI(App):
             self.query_one(f'#{sid}', Switch).disabled = not enabled
         for bid in ('save', 'load', 'reset',
                     *(f'clr_{f}' for f in _PATH_FIELDS),
-                    *(f'pick_{f}' for f in _COL_PICK_FIELDS)):
+                    *(f'pick_{f}' for f in _COL_PICK_FIELDS),
+                    *(f'reseed_{f}' for f in _WIN_FIELDS)):
             try:
                 self.query_one(f'#{bid}', Button).disabled = not enabled
             except NoMatches:
@@ -982,6 +1199,7 @@ class DetectRemoveTUI(App):
 
     # ---- Check (preflight) ---------------------------------------------
     def action_check(self) -> None:
+        """Run the preflight check, unless a run is already in progress."""
         if not self._busy:
             self._start_check()
 
@@ -991,6 +1209,7 @@ class DetectRemoveTUI(App):
 
     # ---- Stop ----------------------------------------------------------
     def action_stop(self) -> None:
+        """Cancel the running pipeline (finishing in-flight chunks)."""
         if self._busy and self._cancel_event is not None:
             self._cancel_event.set()
             self.query_one('#stop', Button).disabled = True
@@ -1002,6 +1221,7 @@ class DetectRemoveTUI(App):
 
     # ---- Open output folder --------------------------------------------
     def action_open(self) -> None:
+        """Open the last output folder in the system file manager."""
         d = self._last_output_dir
         if not d or not Path(d).exists():
             self._status('no output folder yet — run first', _DIM)
@@ -1017,6 +1237,7 @@ class DetectRemoveTUI(App):
         self.action_open()
 
     def on_mount(self) -> None:
+        """Initialize the UI and restore saved settings when the app is mounted."""
         # Worker-row pool: all hidden until a worker becomes active.
         self._wfree: list[int] = list(range(_MAX_WORKER_ROWS))
         self._wpid: dict[int, int] = {}    # worker pid -> row index
@@ -1045,6 +1266,10 @@ class DetectRemoveTUI(App):
         for sid in _SWITCHES:
             self.query_one(f'#{sid}', Switch).value = bool(loaded.get(sid, False))
 
+        # Reconcile the per-gas window field with the loaded scalars (adds any
+        # gas missing a window, drops stale ones; keeps saved/edited windows).
+        self._sync_win_field()
+
         if self.demo:
             self.query_one('#input_dir', Input).value = '(demo — no data needed)'
             self.query_one('#output_dir', Input).value = '(demo)'
@@ -1056,18 +1281,23 @@ class DetectRemoveTUI(App):
 
     # ---- actions / buttons ---------------------------------------------
     def action_quit(self) -> None:
+        """Quit the application."""
         self.exit()
 
     def action_save(self) -> None:
+        """Save the current settings to disk."""
         self._save_settings(announce=True)
 
     def action_run(self) -> None:
+        """Start the detect-and-remove run."""
         self._start()
 
     def action_info(self) -> None:
+        """Show the info/help screen."""
         self.push_screen(InfoScreen())
 
     def action_reset(self) -> None:
+        """Reset the PWB & chunking fields to their defaults."""
         self._reset_params()
 
     @on(Button.Pressed, '#reset')
@@ -1089,6 +1319,7 @@ class DetectRemoveTUI(App):
         self._save_settings(announce=True)
 
     def action_load(self) -> None:
+        """Open the settings-load screen."""
         self.push_screen(LoadScreen(str(_SETTINGS_PATH)), self._on_loaded)
 
     @on(Button.Pressed, '#load')
@@ -1452,6 +1683,7 @@ class DetectRemoveTUI(App):
             return
 
     def ui_update(self, phase: str, done: int, total: int, line) -> None:
+        """Update the progress bar and worker rows for the current pipeline phase."""
         try:
             bar = self.query_one('#bar', ProgressBar)
         except NoMatches:
@@ -1596,15 +1828,31 @@ class DetectRemoveTUI(App):
         def g(i):
             return self.query_one(f'#{i}', Input).value.strip()
 
+        # Scalars field selects the gases only (LABEL:column); per-gas search
+        # windows live in the Win field.
         scalars = {}
         for tok in g('scalars').split(','):
             tok = tok.strip()
             if not tok:
                 continue
-            label, col = tok.split(':', 1)
-            scalars[label.strip()] = col.strip()
+            label, col, _ = parse_scalar_spec(tok)
+            scalars[label] = col
         if not scalars:
             raise ValueError('no scalars (use LABEL:column, comma-separated)')
+        # Per-gas lag windows from the Win field: LABEL:[lower,upper] (seconds).
+        # Each window sets that gas's lag_max (= window half-width) and block
+        # length (2x half), so a long-inlet gas (H2O) gets its own range while
+        # the dry gases keep theirs. A gas without a window uses the global
+        # Lag max s symmetrically.
+        per_gas_lag: dict = {}
+        windows = parse_win_ranges(g('winranges'))
+        for label, (lo, hi) in windows.items():
+            if label not in scalars:
+                continue  # stale entry for a removed gas; ignore
+            try:
+                per_gas_lag[label] = window_to_lag_params(lo, hi)
+            except ValueError as e:
+                raise ValueError(f'window for {label}: {e}')
         in_dir, out_dir = g('input_dir'), g('output_dir')
         if not in_dir or not out_dir:
             raise ValueError('input dir and output dir are required')
@@ -1646,7 +1894,7 @@ class DetectRemoveTUI(App):
             hz=int(g('hz') or 20),
             lag_max_s=float(g('lagmax') or 10.0),
             n_bootstrap=int(g('nboot') or 99),
-            block_length_s=float(g('block') or 20.0),
+            per_gas_lag=per_gas_lag,
             chunk_seconds=float(g('chunk') or 1800),
             min_chunk_seconds=float(g('minchunk') or 300),
             n_workers=workers if workers > 0 else None,

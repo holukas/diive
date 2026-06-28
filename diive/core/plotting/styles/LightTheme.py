@@ -72,6 +72,23 @@ AX_LABELS_FONTSIZE_12 = 12
 AX_LABELS_FONTCOLOR = black()
 AX_LABELS_FONTWEIGHT = 'normal'
 
+# ============================================================================
+# STANDARD PLOT STYLE
+# Single source of truth for the shared formatting layer
+# (`diive.plotting.FormatStyle`). Every plot class that consumes a FormatStyle
+# falls back to these values, so changing them here restyles all of them at
+# once. The names are deliberately canonical (TITLE / AXLABEL / TICKS / LEGEND)
+# to give one vocabulary across the whole plotting package.
+# ============================================================================
+FONTSIZE_TITLE = 16  # plot title
+FONTWEIGHT_TITLE = 'bold'
+FONTSIZE_AXLABEL = AX_LABELS_FONTSIZE  # x/y axis labels
+FONTWEIGHT_AXLABEL = AX_LABELS_FONTWEIGHT
+FONTSIZE_TICKS = 16  # tick labels (mirrors TICKS_LABELS_FONTSIZE below)
+COLOR_TEXT = black()  # title + axis labels
+COLOR_CHROME = black()  # ticks + spines
+COLOR_FACE = white()  # axes background
+
 INFOTXT_FONTSIZE = 12
 
 FONTSIZE_ANNOTATIONS_SMALL = 12
@@ -96,6 +113,7 @@ FONTSIZE_INFO_DEFAULT = 6
 
 
 def adjust_color_lightness(color, amount=0.5):
+    """Lighten or darken *color* by *amount* (in HLS space) and return the result."""
     # https://stackoverflow.com/questions/37765197/darken-or-lighten-a-color-in-matplotlib
     import matplotlib.colors as mc
     import colorsys
@@ -168,6 +186,7 @@ def colorwheel_36_wider():
 
 
 def colors_4_season(shade):
+    """Return a list of 4 season colours at the given shade."""
     list_4colors = [lightgreen(shade), red(shade), brown(shade), lightblue(shade)]
     return list_4colors
 
@@ -207,12 +226,14 @@ def colors_24():
 
 
 def colors_6():
+    """Return a list of distinguishable 500-shade colours."""
     list_6colors = [deeporange(500), orange(500), amber(500),
                     blue(500), cyan(500)]
     return list_6colors
 
 
 def generate_plot_marker_list():
+    """Return a dict mapping an index to a matplotlib marker style."""
     plot_marker_dict = {0: 'o', 1: 's', 2: 'v', 3: '^',
                         4: '<', 5: '>', 6: 'd', 7: 'H',
                         8: 'D', 9: 'p'}

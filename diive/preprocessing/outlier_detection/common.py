@@ -12,6 +12,7 @@ from diive.variables import DaytimeNighttimeFlag
 
 def create_daytime_nighttime_flags(timestamp_index, lat, lon, utc_offset):
     # Detect daytime and nighttime
+    """Return daytime/nighttime flags (0/1 and boolean) from potential radiation for an index."""
     dnf = DaytimeNighttimeFlag(
         timestamp_index=timestamp_index,
         nighttime_threshold=20,

@@ -131,7 +131,7 @@ def run_level41_mds(
         swin_tol: list | None = None,
         ta_tol: float = 2.5,
         vpd_tol: float = 0.5,
-        avg_min_n_vals: int = 5,
+        avg_min_n_vals: int = 2,
 ) -> FluxLevelData:
     """
     Level-4.1: Gap-fill using Marginal Data Substitution (MDS).
@@ -147,8 +147,6 @@ def run_level41_mds(
             Must exist in ``data.full_df``.
         vpd: Column name for vapour pressure deficit (**kPa**).
             Must exist in ``data.full_df``.
-            EddyPro outputs VPD in hPa — divide by 10 before passing here.
-            A ``UserWarning`` is raised automatically if the median looks like hPa.
         swin_tol: Tolerance window for radiation matching [absolute, relative].
         ta_tol: Temperature tolerance (deg C).
         vpd_tol: VPD tolerance (kPa).
@@ -159,7 +157,6 @@ def run_level41_mds(
         ``data.levels.level41_mds[ustar_scenario]``.
     """
     from diive.gapfilling.mds import FluxMDS
-    import warnings
 
     # Validate that all three driver columns exist in full_df before the loop.
     missing_drivers = [c for c in (swin, ta, vpd) if c not in data.full_df.columns]
@@ -169,54 +166,6 @@ def run_level41_mds(
             f"Driver columns must exist in the original input DataFrame (data.full_df), "
             f"not only in data.fpc_df. "
             f"Available columns: {list(data.full_df.columns)}"
-        )
-
-    # Sanity-check driver units. MDS uses absolute tolerances on raw values,
-    # so wrong units silently break similarity matching without raising —
-    # warn loudly when medians fall outside the physical range expected for
-    # the documented units.
-
-    # VPD must be kPa (typical 0.05–3). EddyPro outputs hPa (10x larger).
-    vpd_median = data.full_df[vpd].median()
-    if vpd_median > 10:
-        warnings.warn(
-            f"VPD column '{vpd}' has a median of {vpd_median:.1f} — this looks "
-            f"like hPa, but MDS requires kPa (typical daytime values: 0.5-3 kPa). "
-            f"Divide your VPD column by 10 before calling run_level41_mds().",
-            UserWarning,
-            stacklevel=2,
-        )
-
-    # TA must be degrees Celsius (typical -30..+40). A median > 100 is almost
-    # certainly Kelvin (typical median ~283); a median > 50 is implausible.
-    ta_median = data.full_df[ta].median()
-    if ta_median > 100:
-        warnings.warn(
-            f"TA column '{ta}' has a median of {ta_median:.1f} - this looks "
-            f"like Kelvin, but MDS requires degrees Celsius (typical values "
-            f"-30..+40 deg C). Subtract 273.15 before calling run_level41_mds().",
-            UserWarning,
-            stacklevel=2,
-        )
-    elif ta_median > 50:
-        warnings.warn(
-            f"TA column '{ta}' has a median of {ta_median:.1f} deg C - this is "
-            f"outside the plausible range for air temperature. Check the unit "
-            f"and column choice before calling run_level41_mds().",
-            UserWarning,
-            stacklevel=2,
-        )
-
-    # SW_IN must be W m-2 (overall median typically 50-300; nighttime zeros pull
-    # it down). A median > 2000 is implausible for half-hourly SW_IN in W m-2.
-    swin_median = data.full_df[swin].median()
-    if swin_median > 2000:
-        warnings.warn(
-            f"SW_IN column '{swin}' has a median of {swin_median:.0f} - this is "
-            f"implausibly high for shortwave-in (W m-2). Check unit and column "
-            f"choice before calling run_level41_mds().",
-            UserWarning,
-            stacklevel=2,
         )
 
     rule("Level 4.1: Gap-Filling (MDS)")

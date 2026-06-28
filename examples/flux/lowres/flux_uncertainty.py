@@ -32,6 +32,10 @@ subset = data_df[[
     'Tair_f', 'VPD_f', 'Rg_f'
 ]].copy()
 
+# The example VPD_f is in hPa; RandomUncertaintyPAS20 expects kPa (diive
+# convention, vpd_in_kpa=True), so convert it.
+subset['VPD_f'] = subset['VPD_f'].multiply(0.1)
+
 print("=" * 80)
 print("Random Uncertainty Estimation (PAS20 Method)")
 print("=" * 80)

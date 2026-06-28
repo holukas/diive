@@ -159,7 +159,7 @@ mscr.flag_outliers_localsd_test(separate_daytime_nighttime=True, n_sd=[2.5, 2.5]
 
 # mscr.showplot_orig()
 # mscr.showplot_cleaned()
-# mscr.correction_remove_radiation_zero_offset()  # Remove radiation zero offset
+# mscr.correction_remove_nighttime_zero_offset()  # Remove radiation zero offset
 # mscr.correction_remove_relativehumidity_offset()  # Remove relative humidity offset
 # mscr.correction_setto_max_threshold(threshold=30)  # Set to max threshold
 # mscr.correction_setto_min_threshold(threshold=-5)  # Set to min threshold

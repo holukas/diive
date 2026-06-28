@@ -39,6 +39,7 @@ from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.drivers import _NumItem
 from diive.gui.tabs.overview import _StatCard, _fmt
+from diive.gui.widgets.tab_chrome import build_titlebar
 
 #: Table columns: (header, profile-key, numeric?, align-right?).
 _COLUMNS = [
@@ -69,6 +70,49 @@ def _human_bytes(n: int) -> str:
     return f"{size:.1f} TB"
 
 
+class _ProfileTable(QTableWidget):
+    """Profiling table that always fills its width without over-spreading.
+
+    The old layout stretched a single column (Variable), which ballooned on a
+    wide window while the numbers clustered to the right — reading as stretched.
+    Here every column is sized snugly to its content; the leftover width is then
+    handed mostly to the flexible text column (Variable) and only a little to the
+    numeric columns, so the table fills the viewport with the numbers staying
+    compact and no column dominating. When the content is wider than the viewport
+    everything scales down to fit (no horizontal scroll). Recomputed on resize."""
+
+    _COL_PADDING = 14            # snug breathing room on each column's content
+    _TEXT_COL = 0               # the flexible (Variable) column
+    _TEXT_SHARE = 0.55          # fraction of leftover width given to the text column
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 (Qt override)
+        super().resizeEvent(event)
+        self.distribute_columns()
+
+    def distribute_columns(self) -> None:
+        n = self.columnCount()
+        if n == 0 or self.rowCount() == 0:
+            return
+        hdr = self.horizontalHeader()
+        content = [max(self.sizeHintForColumn(c), hdr.sectionSizeHint(c))
+                   + self._COL_PADDING for c in range(n)]
+        base = sum(content)
+        avail = self.viewport().width()
+        if base >= avail:                       # too wide: scale down to fit
+            scale = avail / base
+            widths = [w * scale for w in content]
+        else:                                   # fill: text col takes the lion's share
+            extra = avail - base
+            widths = list(content)
+            widths[self._TEXT_COL] += extra * self._TEXT_SHARE
+            rest = extra * (1.0 - self._TEXT_SHARE) / max(1, n - 1)
+            for c in range(n):
+                if c != self._TEXT_COL:
+                    widths[c] += rest
+        for c, w in enumerate(widths):
+            self.setColumnWidth(c, int(round(w)))
+
+
 class ProfileTab(DiiveTab):
     """Per-variable profiling table for the whole loaded dataset."""
 
@@ -83,6 +127,7 @@ class ProfileTab(DiiveTab):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
+        outer.addLayout(build_titlebar(self.title))  # shared tab header (no codegen)
         outer.addWidget(self._build_stats_strip())
         outer.addWidget(self._build_filter_bar())
         outer.addWidget(self._build_table(), stretch=1)
@@ -125,7 +170,7 @@ class ProfileTab(DiiveTab):
         return bar
 
     def _build_table(self) -> QWidget:
-        self.table = QTableWidget()
+        self.table = _ProfileTable()
         self.table.setColumnCount(len(_COLUMNS))
         self.table.setHorizontalHeaderLabels([c[0] for c in _COLUMNS])
         self.table.verticalHeader().setVisible(False)
@@ -133,10 +178,27 @@ class ProfileTab(DiiveTab):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setSortingEnabled(True)
+        # Proportional fill (see _ProfileTable): Interactive sections whose widths
+        # this tab recomputes, instead of a single ballooning stretch column.
         hdr = self.table.horizontalHeader()
-        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for c in range(1, len(_COLUMNS)):
-            hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        hdr.setStretchLastSection(False)
+        hdr.setHighlightSections(False)
+        # Beauty: zebra rows, a clean header band, comfortable rows, and soft
+        # row separators instead of a hard grid. (Style only the widget/header,
+        # never ``::item`` — that would disable the per-cell missing-% tint and
+        # the red 'constant' foreground.)
+        self.table.setAlternatingRowColors(True)
+        self.table.setShowGrid(False)
+        self.table.verticalHeader().setDefaultSectionSize(28)
+        t = theme.manager.tokens
+        self.table.setStyleSheet(
+            f"QTableWidget {{ background: {t['CANVAS']};"
+            f" alternate-background-color: {t['LIST_BG']};"
+            f" border: none; outline: none; }}"
+            f"QHeaderView::section {{ background: {t['CANVAS']}; color: {t['INK']};"
+            f" padding: 7px 10px; border: none;"
+            f" border-bottom: 1px solid {t['ACCENT']}; font-weight: 600; }}")
         return self.table
 
     # --- data flow -----------------------------------------------------
@@ -198,6 +260,7 @@ class ProfileTab(DiiveTab):
                     self.table.setItem(r, c, item)
         finally:
             self.table.setSortingEnabled(True)
+        self.table.distribute_columns()  # fill width once content is in
 
     def _make_cell(self, key: str, value, numeric: bool) -> QTableWidgetItem:
         if key == "CONSTANT":
