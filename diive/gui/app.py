@@ -480,6 +480,7 @@ class MainWindow(QMainWindow):
         help_menu.addAction(_act("Load &example data", self._load_example))
         help_menu.addSeparator()
         help_menu.addAction(_act("&User manual", self._user_manual))
+        help_menu.addAction(_act("&Changelog", self._changelog))
         help_menu.addAction(_act("&About", self._about))
 
     def _data_for(self, tab):
@@ -1334,6 +1335,14 @@ class MainWindow(QMainWindow):
                 return
         QDesktopServices.openUrl(
             QUrl("https://github.com/holukas/diive/blob/main/diive/gui/MANUAL.md"))
+
+    def _changelog(self) -> None:
+        """Open the repo changelog (GitHub) in the default browser."""
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+
+        QDesktopServices.openUrl(
+            QUrl("https://github.com/holukas/diive/blob/main/CHANGELOG.md"))
 
     def _about(self) -> None:
         # Reuse the startup splash artwork as the About dialog.
