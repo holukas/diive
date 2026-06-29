@@ -265,6 +265,25 @@ class Surface3DTab(SingleVariableExplorerTab):
         self.smoothing.valueChanged.connect(self._rerender_view)
         form.addRow("Smooth terrain", self.smoothing)
 
+        # Optional cast shadows from an overhead spotlight. Off = flat, evenly
+        # lit (true colours, no haze). On = short cast shadows for a little depth;
+        # "Shadow length" lowers the light so they stretch out.
+        self.shadows = QCheckBox("Shadows")
+        self.shadows.setChecked(False)
+        self.shadows.setToolTip("Cast short shadows from an overhead spotlight "
+                                "for a little depth (off = flat, evenly lit). "
+                                "May be unavailable on some graphics drivers.")
+        self.shadows.toggled.connect(self._on_shadows_changed)
+        form.addRow(self.shadows)
+
+        self.shadow_len = QSpinBox()
+        self.shadow_len.setRange(1, 10)
+        self.shadow_len.setValue(3)
+        self.shadow_len.setToolTip("Shadow length: 1 = short (high light), "
+                                   "10 = long (low light).")
+        self.shadow_len.valueChanged.connect(self._rerender_view)
+        form.addRow("Shadow length", self.shadow_len)
+
         lay.addLayout(form)
 
         self.smooth = QCheckBox("Smooth shading")
@@ -295,6 +314,7 @@ class Surface3DTab(SingleVariableExplorerTab):
         # initial enabled state (those two controls only apply to the surface).
         self.style.currentTextChanged.connect(self._on_style_changed)
         self._sync_style_enabled()
+        self._sync_shadows_enabled()  # grey out Shadow length when shadows off
 
         lay.addStretch(1)
         return col
@@ -308,6 +328,7 @@ class Surface3DTab(SingleVariableExplorerTab):
                      "opacity": self.opacity,
                      "ystretch": self.ystretch, "ybin": self.ybin,
                      "ybin_agg": self.ybin_agg,
+                     "shadows": self.shadows, "shadow_len": self.shadow_len,
                      "smooth": self.smooth, "edges": self.edges,
                      "smoothing": self.smoothing})}
 
@@ -317,10 +338,12 @@ class Surface3DTab(SingleVariableExplorerTab):
                           "exag": self.exag, "opacity": self.opacity,
                           "ystretch": self.ystretch, "ybin": self.ybin,
                           "ybin_agg": self.ybin_agg,
+                          "shadows": self.shadows, "shadow_len": self.shadow_len,
                           "smooth": self.smooth, "edges": self.edges,
                           "smoothing": self.smoothing},
                          state.get("controls") or state)
         self._sync_style_enabled()
+        self._sync_shadows_enabled()
         t = state.get("target")
         if t and self._df is not None and t in self._df.columns:
             self._on_select(t)
@@ -342,11 +365,22 @@ class Surface3DTab(SingleVariableExplorerTab):
         self._rerender_view()
 
     def _sync_style_enabled(self) -> None:
-        # Smooth shading and terrain smoothing only mean something for the
-        # interpolated surface; grey them out for the (flat-by-design) heatmap.
+        # Terrain smoothing (mesh subdivision) only applies to the interpolated
+        # surface; grey it out for the heatmap. Smooth shading stays available in
+        # both styles (off = crisp facets, on = rounded lighting).
         surface = self.style.currentText() == _STYLE_SURFACE
-        self.smooth.setEnabled(surface)
         self.smoothing.setEnabled(surface)
+
+    def _on_shadows_changed(self, _checked: bool) -> None:
+        self._sync_shadows_enabled()
+        self._rerender_view()
+
+    def _sync_shadows_enabled(self) -> None:
+        self.shadow_len.setEnabled(self.shadows.isChecked())
+
+    def _shadow_elevation(self) -> float:
+        # Shadow length 1..10 -> light elevation 80..30 deg (short -> long).
+        return 80.0 - (self.shadow_len.value() - 1) * (50.0 / 9.0)
 
     # --- codegen -------------------------------------------------------
     def _python_code(self) -> str | None:
@@ -410,7 +444,7 @@ class Surface3DTab(SingleVariableExplorerTab):
             # opacity 1. Thresholding to the finite value range removes those
             # cells, leaving a fully opaque mesh.
             mesh = mesh.threshold([zmin, zmax], scalars="values", all_scalars=True)
-            smooth_shading = False
+            smooth_shading = self.smooth.isChecked()
             hide_nan = False
         else:
             xx, yy = np.meshgrid(xn, yn)  # (D, T), matching z
@@ -438,10 +472,19 @@ class Surface3DTab(SingleVariableExplorerTab):
         )
         if hide_nan:
             add_kwargs["nan_opacity"] = 0.0  # hide gap cells
+        shadows = self.shadows.isChecked()
+        if shadows:
+            # High ambient keeps colours essentially flat (no hazy face shading);
+            # a little diffuse lets the cast shadows read as gentle darkening.
+            add_kwargs.update(ambient=0.85, diffuse=0.3, specular=0.0)
+        else:
+            # Fully flat: every face its true colourmap colour, no shading.
+            add_kwargs.update(ambient=1.0, diffuse=0.0, specular=0.0)
 
         p = self.canvas.plotter
         p.clear()
         p.add_mesh(mesh, **add_kwargs)
+        self.canvas.apply_shadows(shadows, self._shadow_elevation())
         p.show_axes()  # orientation marker (X=time of day, Y=date, Z=value)
         # Snap to the default 45° framing only for a newly selected variable; a
         # settings tweak re-renders in place so the user keeps their current view.

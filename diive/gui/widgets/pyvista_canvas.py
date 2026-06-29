@@ -75,19 +75,73 @@ class Pyvista3DCanvas(QWidget):
         """Frame the current scene."""
         self.plotter.reset_camera()
 
-    def frame_default(self, zoom: float = 1.4) -> None:
+    def frame_default(self, zoom: float = 1.2) -> None:
         """Default framing: a 45°-ish view from the lower-left, zoomed to fill.
 
         Looks down the (+X, -Y, +Z) corner so the date (Y) axis runs from the
         lower-left to the upper-right of the screen (time reads diagonally
-        upward). ``reset_camera`` then frames the scene and the extra zoom
-        tightens the margins the bounding-sphere fit leaves around an elongated
-        surface.
+        upward). Parallel (orthographic) projection keeps the elongated relief
+        centred in the viewport — perspective would enlarge the near end and push
+        the surface off to a corner. ``reset_camera`` frames the scene and the
+        extra zoom tightens the margins the bounding-sphere fit leaves.
         """
+        self.plotter.enable_parallel_projection()
         self.plotter.view_vector((1.0, -1.0, 1.0), viewup=(0.0, 0.0, 1.0))
         self.plotter.reset_camera()
         if zoom != 1.0:
             self.plotter.camera.zoom(zoom)
+
+    def apply_shadows(self, shadows: bool, elevation: float = 70.0,
+                      azimuth: float = 315.0) -> None:
+        """Flat even light, or cast shadows from an overhead spotlight.
+
+        With ``shadows`` off, a single camera headlight gives even, flat
+        illumination (paired with high-ambient colouring the mesh shows its true
+        colours). With it on, a positional spotlight above the scene aimed from
+        (``azimuth``, ``elevation``) degrees casts real shadows via VTK shadow
+        mapping — a high ``elevation`` keeps them short. A spotlight (positional)
+        is used because VTK shadow maps need one; the wide cone + no attenuation
+        keep the surface evenly lit. Shadow mapping is wrapped defensively (it can
+        be unavailable on software/offscreen OpenGL backends).
+        """
+        import math
+
+        import pyvista as pv
+
+        p = self.plotter
+        try:
+            p.disable_ssao()  # drop any previously-enabled occlusion pass
+        except Exception:
+            pass
+        p.remove_all_lights()
+        if not shadows:
+            p.add_light(pv.Light(light_type="headlight"))  # even, flat fill
+            try:
+                p.disable_shadows()
+            except Exception:
+                pass
+            return
+
+        # Position a spotlight on the (azimuth, elevation) ray, out beyond the
+        # scene, pointed at its centre.
+        b = p.bounds  # xmin, xmax, ymin, ymax, zmin, zmax
+        cx, cy, cz = (b[0] + b[1]) / 2, (b[2] + b[3]) / 2, (b[4] + b[5]) / 2
+        diag = math.dist((b[0], b[2], b[4]), (b[1], b[3], b[5])) or 1.0
+        el, az = math.radians(elevation), math.radians(azimuth)
+        dx, dy, dz = (math.cos(el) * math.sin(az),
+                      math.cos(el) * math.cos(az), math.sin(el))
+        dist = diag * 1.5
+        light = pv.Light(position=(cx + dx * dist, cy + dy * dist, cz + dz * dist),
+                         focal_point=(cx, cy, cz),
+                         light_type="scene light", intensity=0.9)
+        light.positional = True
+        light.cone_angle = 80.0               # wide enough to cover the scene
+        light.attenuation_values = (1, 0, 0)  # constant — no distance falloff
+        p.add_light(light)
+        try:
+            p.enable_shadows()
+        except Exception:
+            pass  # shadow mapping unsupported on this GL backend
 
     def closeEvent(self, event) -> None:
         # QtInteractor holds a VTK render window that must be closed explicitly,
