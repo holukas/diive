@@ -75,6 +75,20 @@ class Pyvista3DCanvas(QWidget):
         """Frame the current scene."""
         self.plotter.reset_camera()
 
+    def frame_default(self, zoom: float = 1.4) -> None:
+        """Default framing: a 45°-ish view from the lower-left, zoomed to fill.
+
+        Looks down the (+X, -Y, +Z) corner so the date (Y) axis runs from the
+        lower-left to the upper-right of the screen (time reads diagonally
+        upward). ``reset_camera`` then frames the scene and the extra zoom
+        tightens the margins the bounding-sphere fit leaves around an elongated
+        surface.
+        """
+        self.plotter.view_vector((1.0, -1.0, 1.0), viewup=(0.0, 0.0, 1.0))
+        self.plotter.reset_camera()
+        if zoom != 1.0:
+            self.plotter.camera.zoom(zoom)
+
     def closeEvent(self, event) -> None:
         # QtInteractor holds a VTK render window that must be closed explicitly,
         # else it can leak / warn on shutdown.
