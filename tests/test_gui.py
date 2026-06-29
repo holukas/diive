@@ -3283,6 +3283,20 @@ def test_gapfilling_mds_tab(app, example_year):
     assert all(v in df.columns for v in drivers.values())
     assert "VPD" in drivers["vpd"].upper() and "TA" in drivers["ta"].upper()
 
+    # The driver combos are drag-drop targets, and the 'Available drivers' list is
+    # a draggable search source listing every column except the target.
+    from diive.gui.widgets.plot_settings import _DropComboBox
+    assert all(isinstance(c, _DropComboBox) for c in tab._combos.values())
+    assert all(c.acceptDrops() for c in tab._combos.values())
+    assert tab.driver_list.list._draggable
+    listed = set(tab.driver_list.names())
+    assert "NEE_CUT_REF_orig" not in listed
+    assert {"Rg_f", "Tair_f", "VPD_f"} <= listed
+    # Dropping a variable name (as a draggable list emits it) lands in the combo.
+    i = tab._combos["swin"].findText("Rg_f")
+    tab._combos["swin"].setCurrentIndex(i)
+    assert tab._driver_names()["swin"] == "Rg_f"
+
     # Reproducible snippet reflects the current target + drivers.
     code = tab._python_code()
     assert "FluxMDS(" in code and "NEE_CUT_REF_orig" in code
