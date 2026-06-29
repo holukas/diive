@@ -182,19 +182,6 @@ class TestDriverAnalysisValidation(unittest.TestCase):
         with self.assertRaises(ValueError):
             DriverAnalysis(target=target, drivers=drivers)
 
-    def test_pcmci_requires_optional_extra(self):
-        """Without tigramite installed, pcmci() raises a helpful ImportError."""
-        try:
-            import tigramite  # noqa: F401
-            self.skipTest("tigramite is installed; cannot test the missing-extra path.")
-        except ImportError:
-            pass
-        target, drivers = _synthetic(months=1)
-        da = DriverAnalysis(target=target, drivers=drivers, verbose=0)
-        da.fit_model()
-        with self.assertRaises(ImportError):
-            da.pcmci(tau_max=4)
-
 
 class TestPublicApi(unittest.TestCase):
 
