@@ -58,15 +58,33 @@ pip install 'diive[gui,gui3d]'    # add the 3-D surface view (PyVista/VTK)
 diive-gui                         # launch
 ```
 
-**Everything (from a repo checkout)** — all extras (`gui`, `gui3d`) plus the
-optional `db` dependency group (InfluxDB download/upload via `influxdb-client`):
+### Development install (from a repo checkout)
+
+Working from a clone, [uv](https://docs.astral.sh/uv/) installs the library plus
+whichever optional pieces you need. Optional features split across two uv
+mechanisms — **extras** (`--extra`) and **dependency groups** (`--group`) — so
+`--all-extras` alone is *not* "everything": it covers the extras but not the
+groups.
 
 ```bash
-uv sync --all-extras --group db
+uv sync                                          # core library + dev tooling (default)
+uv sync --extra gui                              # + PySide6 desktop GUI (diive-gui)
+uv sync --extra gui --extra gui3d                # + 3-D surface view (PyVista/VTK)
+uv sync --group db                               # + InfluxDB I/O (influxdb-client)
+uv sync --extra gui --group build                # + standalone-app packaging (PyInstaller)
+uv sync --all-extras --group db                  # everything: all extras + InfluxDB
 ```
 
-`db` is a dependency group rather than an extra, so `--all-extras` alone does not
-include it — pass `--group db` as well.
+| Option | Kind | Pulls in |
+|---|---|---|
+| *(none)* | — | core library + `dev` group (tests, lint, docs) |
+| `--extra gui` | extra | PySide6 desktop GUI |
+| `--extra gui3d` | extra | PyVista/VTK 3-D surface tab (needs `gui`) |
+| `--group db` | group | `influxdb-client` (InfluxDB download/upload) |
+| `--group build` | group | PyInstaller (build the standalone GUI; needs `gui`) |
+
+`dev` is synced by default; `db` and `build` are opt-in groups. Combine flags
+freely, e.g. `uv sync --extra gui --extra gui3d --group db --group build`.
 
 ### Quick start
 
