@@ -60,6 +60,7 @@ from diive.gui.widgets.stepwise_cards import (
     StepCard,
     StepEditorDialog,
 )
+from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.variable_panel import VariablePanel
 from diive.preprocessing.corrections import apply_corrections
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
@@ -119,7 +120,12 @@ class StepwiseScreeningTab(DiiveTab):
         self.featuresCreated = self._sig.features_created
 
         root = QWidget()
-        layout = QHBoxLayout(root)
+        root_lay = QVBoxLayout(root)
+        root_lay.setContentsMargins(0, 0, 0, 0)
+        root_lay.setSpacing(0)
+        root_lay.addLayout(build_titlebar(self.title))  # shared tab header
+        body = QWidget()
+        layout = QHBoxLayout(body)
 
         # Left: the shared variable list (identical to every other tab).
         self.varpanel = VariablePanel()
@@ -149,6 +155,7 @@ class StepwiseScreeningTab(DiiveTab):
         rlayout.addWidget(self.canvas, stretch=1)
 
         layout.addWidget(right, stretch=1)
+        root_lay.addWidget(body, stretch=1)
         return root
 
     # --- inspector (segmented: Outliers / Corrections / Report) ---

@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.variable_delegate import (
     CREATED_ROLE,
     NAME_ROLE,
@@ -81,7 +82,12 @@ class SettingsTab(DiiveTab):
         self._swatches: list[_ColorSwatch] = []
 
         root = QWidget()
-        layout = QHBoxLayout(root)
+        root_lay = QVBoxLayout(root)
+        root_lay.setContentsMargins(0, 0, 0, 0)
+        root_lay.setSpacing(0)
+        root_lay.addLayout(build_titlebar(self.title))  # shared tab header
+        body = QWidget()
+        layout = QHBoxLayout(body)
 
         # Left: scrollable settings.
         scroll = QScrollArea()
@@ -117,6 +123,7 @@ class SettingsTab(DiiveTab):
         right.addWidget(self.preview, stretch=1)
         layout.addLayout(right)
 
+        root_lay.addWidget(body, stretch=1)
         theme.manager.changed.connect(self._on_theme_changed)
         return root
 

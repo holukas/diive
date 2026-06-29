@@ -39,6 +39,7 @@ import diive as dv
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
+from diive.gui.widgets.tab_chrome import build_titlebar
 
 #: Suffix marking the measured-lag columns the analysis consumes.
 _TLAG_SUFFIX = "_TLAG_ACTUAL"
@@ -64,7 +65,12 @@ class TimeLagAnalysisTab(DiiveTab):
         self._gases: list[str] = []
 
         root = QWidget()
-        row = QHBoxLayout(root)
+        root_lay = QVBoxLayout(root)
+        root_lay.setContentsMargins(0, 0, 0, 0)
+        root_lay.setSpacing(0)
+        root_lay.addLayout(build_titlebar(self.title))  # shared tab header
+        body = QWidget()
+        row = QHBoxLayout(body)
 
         # Left: fixed-width, scrollable config column.
         scroll = QScrollArea()
@@ -99,6 +105,7 @@ class TimeLagAnalysisTab(DiiveTab):
         right.addWidget(self.results)
         row.addLayout(right, stretch=1)
 
+        root_lay.addWidget(body, stretch=1)
         self._update_availability()
         return root
 

@@ -10,10 +10,11 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.console_panel import ConsolePanel
+from diive.gui.widgets.tab_chrome import build_titlebar
 
 
 class LogTab(DiiveTab):
@@ -23,7 +24,13 @@ class LogTab(DiiveTab):
 
     def build(self) -> QWidget:
         self.console = ConsolePanel()
-        return self.console
+        root = QWidget()
+        outer = QVBoxLayout(root)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addLayout(build_titlebar(self.title))  # shared tab header
+        outer.addWidget(self.console, stretch=1)
+        return root
 
     def save_state(self) -> dict:
         """Persist the accumulated log text with the project."""
