@@ -92,6 +92,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
     # MainWindow._build_menus. Not given its own top-level menu.
     "Data": {
         "Select variables": VariableSelectorTab,
+        "Select records by condition": SelectRecordsTab,
     },
     # Create & manage individual variables (columns). Built manually in
     # MainWindow so the "Add timestamp column..." action can sit between the
@@ -99,7 +100,6 @@ MENU_TABS: dict[str, dict[str, callable]] = {
     "Variables": {
         "Feature engineering": FeatureEngineerTab,
         "Combine variables": CombineVariablesTab,
-        "Select records by condition": SelectRecordsTab,
         "Rename variables": RenameVariablesTab,
         "Metadata explorer": MetadataExplorerTab,
     },

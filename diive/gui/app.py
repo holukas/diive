@@ -421,16 +421,18 @@ class MainWindow(QMainWindow):
         self._reset_subset_act = _act("Reset to all &variables", self._reset_var_subset)
         self._reset_subset_act.setEnabled(False)
         data_menu.addAction(self._reset_subset_act)
+        data_menu.addSeparator()
+        # Record subselection (rows kept on a condition variable) -- a sibling of
+        # the date-range and variable subsets above.
+        data_menu.addAction(_menu_tab_act("Select records by condition"))
 
-        # Variables: create new columns (feature engineer, timestamp, condition
-        # filter), a separator, then manage existing ones (rename, metadata).
-        # Built manually so the "Add timestamp column..." action interleaves with
-        # the create tabs.
+        # Variables: create new columns (feature engineer, timestamp), a
+        # separator, then manage existing ones (rename, metadata). Built manually
+        # so the "Add timestamp column..." action interleaves with the create tabs.
         variables_menu = add_menu("&Variables")
         variables_menu.addAction(_menu_tab_act("Feature engineering"))
         variables_menu.addAction(_menu_tab_act("Combine variables"))
         variables_menu.addAction(_act("Add timestamp co&lumn...", self._add_timestamp_column))
-        variables_menu.addAction(_menu_tab_act("Select records by condition"))
         variables_menu.addSeparator()
         variables_menu.addAction(_menu_tab_act("Rename variables"))
         variables_menu.addAction(_menu_tab_act("Metadata explorer"))
