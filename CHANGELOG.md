@@ -283,6 +283,16 @@
   (`analysis/seasonaltrend.py`, decomposition + anomaly views), `datetime_surface_to_code` (`core/plotting/codegen.py`, a
   matplotlib 3-D surface so it runs without the GPU extra), and `feature_engineer_to_code` (`core/ml/feature_engineer.py`).
   The `SingleVariableExplorerTab` base mounts the button automatically for any subclass that overrides `_python_code`.
+- **3D surface tab** (`Plot ▸ 3D surface`, single-instance, optional `gui3d` extra): the date×time-of-day grid as a
+  rotatable PyVista relief. **Style** picks an extruded heatmap (default — one flat bar per cell, the 2-D heatmap raised
+  into 3-D) or a smooth interpolated surface. **Y stretch** widens the date axis into a landscape; **Y cell (days)** +
+  **Cell aggregator** average several days into each cell to widen the bars and tame single-day spikes; plus **Vertical
+  exaggeration**, **Opacity**, **Colormap**, **Smooth terrain** (surface style only), **Smooth shading**, and **Show
+  mesh**. An optional **Shadows** toggle casts short shadows from an overhead spotlight, with an adjustable **Shadow
+  length** (off by default; needs a GPU that supports VTK shadow mapping). The default view frames the relief from the
+  lower-left at 45° in orthographic projection and stays put when settings change; it re-frames only on a new variable.
+  Needs `gui3d` (`pyvista` + `pyvistaqt`); without it the tab shows install instructions. **Copy Python** emits a
+  matplotlib 3-D surface (`datetime_surface_to_code`) that runs without the extra.
 
 Library additions used by the GUI (all backward-compatible):
 

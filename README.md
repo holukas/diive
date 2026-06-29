@@ -53,8 +53,9 @@ uv pip install diive
 **Optional desktop GUI** (PySide6, not installed by default):
 
 ```bash
-pip install 'diive[gui]'   # or: uv sync --extra gui
-diive-gui                  # launch
+pip install 'diive[gui]'          # or: uv sync --extra gui
+pip install 'diive[gui,gui3d]'    # add the 3-D surface view (PyVista/VTK)
+diive-gui                         # launch
 ```
 
 ### Quick start
@@ -193,7 +194,7 @@ Load and save parquet files, read single or batch EddyPro output, detect and spl
 
 ### Desktop GUI (optional)
 
-A PySide6 desktop app (`diive-gui`, install with the `gui` extra) for interactive exploration: an Overview tab (per-variable stats + multi-panel figure); per-method plot tabs (heatmaps, time series, diel cycle, cumulative, ridgeline, scatter, hexbin, histogram — opened from the Plot menu, multiple at once); Analyze tabs (gaps & coverage, driver explorer, seasonal-trend & anomalies, spectrogram); nine outlier-detection tabs (Hampel, Local SD, absolute limits, three z-score variants, local outlier factor, trim-low, manual removal) with live previews, plus a stepwise screening chain; Flux tabs — a guided processing chain, standalone u\* threshold detection, and four NEE→GPP+RECO partitioning tabs (nighttime / daytime × ONEFlux / REddyProc); and Data tools to select variables, select records by a condition variable's range, rename and tag variables, and engineer features. Every variable carries editable metadata (tags + full provenance history); the whole working state — data, metadata, project settings, sticky notes, and open tabs — saves to a portable `.diive` **project** folder. See the [GUI user manual](diive/gui/MANUAL.md).
+A PySide6 desktop app (`diive-gui`, install with the `gui` extra) for interactive exploration: an Overview tab (per-variable stats + multi-panel figure); per-method plot tabs (heatmaps, time series, diel cycle, cumulative, ridgeline, scatter, hexbin, histogram — opened from the Plot menu, multiple at once) plus a single-instance, GPU-accelerated 3-D surface relief (optional `gui3d` extra); Analyze tabs (gaps & coverage, driver explorer, seasonal-trend & anomalies, spectrogram); nine outlier-detection tabs (Hampel, Local SD, absolute limits, three z-score variants, local outlier factor, trim-low, manual removal) with live previews, plus a stepwise screening chain; Flux tabs — a guided processing chain, standalone u\* threshold detection, and four NEE→GPP+RECO partitioning tabs (nighttime / daytime × ONEFlux / REddyProc); and Data tools to select variables, select records by a condition variable's range, rename and tag variables, and engineer features. Every variable carries editable metadata (tags + full provenance history); the whole working state — data, metadata, project settings, sticky notes, and open tabs — saves to a portable `.diive` **project** folder. See the [GUI user manual](diive/gui/MANUAL.md).
 
 ---
 

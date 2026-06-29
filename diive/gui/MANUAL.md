@@ -309,14 +309,24 @@ labels and the usual display toggles (legend, title, axes).
 ### 3D surface
 
 The variable's date × time-of-day grid rendered as a rotatable, GPU-accelerated 3-D
-relief, the three-dimensional analogue of the date/time heatmap. The diel band,
-seasonal swings, and gaps become hills and valleys you can orbit. Controls:
-**Colormap**, **Vertical exaggeration** (height of the relief; 0 is flat), **Smooth
-shading**, **Show mesh** (overlay the grid lines), **Smooth terrain** (round the
-surface into rolling hills by subdividing the mesh; 0 is off), and **Reset view**.
-This needs the optional **`gui3d`** extra (PyVista/VTK); without it the tab shows
-install instructions instead of failing. **Copy Python** (top-right) copies a script
-that builds the same surface as a Matplotlib 3-D plot (so it runs without the extra).
+relief, the three-dimensional analogue of the date/time heatmap. **Style** picks the
+look: *Extruded heatmap* (the default) draws one flat bar per cell, like the 2-D
+heatmap raised into 3-D, so the grid reads as stepped rectangles at different heights;
+*Smooth surface* interpolates the grid into continuous hills and valleys you can orbit.
+Controls: **Colormap**; **Vertical exaggeration** (relief height; 0 is flat);
+**Opacity**; **Y stretch** (widens the date axis so the plot reads as a landscape
+rather than a thin ridge); **Y cell (days)** with **Cell aggregator** (average, median,
+max, or min several days into each cell, to widen the bars and tame single-day spikes);
+**Smooth terrain** (round the surface into rolling hills by subdividing the mesh;
+surface style only); **Shadows** with **Shadow length** (cast short shadows from an
+overhead spotlight for depth; off by default); **Smooth shading**; and **Show mesh**
+(overlay the grid lines). **Reset view** frames the relief from the lower-left at a 45°
+angle. Drag to rotate, Shift+drag to pan, Ctrl+drag to roll, scroll to zoom. Changing a
+setting re-renders in place and keeps your current view; picking a new variable
+re-frames. This needs the optional **`gui3d`** extra (PyVista/VTK); without it the tab
+shows install instructions instead of failing. **Copy Python** (top-right) copies a
+script that builds the same surface as a Matplotlib 3-D plot (so it runs without the
+extra).
 
 ### Wind rose
 
