@@ -42,7 +42,7 @@ from PySide6.QtWidgets import (
 
 import diive
 from diive.core.utils.console import info, success
-from diive.gui import config, events, metadata_store, site, theme
+from diive.gui import config, db, events, metadata_store, site, theme
 from diive.gui.registry import (
     MENU_TAB_CLASSES,
     MENU_TABS,
@@ -300,6 +300,10 @@ class MainWindow(QMainWindow):
             return m
         self._build_menus(_add_menu)
 
+        # Reflect the database-connection state as a header pill.
+        db.manager.changed.connect(self._refresh_db_pill)
+        self._refresh_db_pill()
+
         rlay.addWidget(self._header)
         rlay.addWidget(self._tabwidget, 1)
         self.setCentralWidget(root)
@@ -372,6 +376,11 @@ class MainWindow(QMainWindow):
         y = min(max(frame.y(), avail.y()), avail.bottom() - frame.height() + 1)
         if x != frame.x() or y != frame.y():
             self.move(x, y)
+
+    def _refresh_db_pill(self) -> None:
+        """Sync the header's database-connection pill with ``db.manager``."""
+        if self._header is not None:
+            self._header.set_db_status(db.manager.connected, db.manager.status_text())
 
     def _build_menus(self, add_menu) -> None:
         """Populate the menu tree, creating each top-level menu via `add_menu`.
@@ -1406,6 +1415,7 @@ class MainWindow(QMainWindow):
             "theme": theme.manager.as_dict(),
             "site": site.manager.as_dict(),
             "events": events.manager.as_dict(),
+            "database": db.manager.as_dict(),  # path only — never the token
             "geometry": bytes(self.saveGeometry().toBase64()).decode("ascii"),
             "last_filetype": odd._last_choice,
             "variable_metadata": self._saved_metadata,
@@ -1446,6 +1456,7 @@ def run() -> int:
     theme.manager.apply()
     site.manager.load_dict(cfg.get("site", {}))
     events.manager.load_dict(cfg.get("events", {}))
+    db.manager.load_dict(cfg.get("database", {}))
     from diive.gui.widgets import open_data_dialog as odd
     odd._last_choice = cfg.get("last_filetype")
 

@@ -3017,10 +3017,11 @@ def test_studio_chrome_builds_frameless_with_header(app, monkeypatch, example_ye
         assert win.windowFlags() & Qt.WindowType.FramelessWindowHint
         assert _tabs(win) == ["Overview", "Log"]
         # The full menu tree lives as inline dropdown buttons in the header
-        # (File/Data/Plot/Outliers/Flux/Analyze/Settings/Help), each with a populated QMenu.
+        # (File/Data/Variables/Events/Plot/Outliers/Flux/Corrections/
+        # Gap-filling/Analyze/Settings/Database/Help), each with a populated QMenu.
         from PySide6.QtWidgets import QToolButton
         menu_btns = win._header.findChildren(QToolButton, "headermenu")
-        assert len(menu_btns) == 8
+        assert len(menu_btns) == 13
         assert all(b.menu() is not None and b.menu().actions() for b in menu_btns)
         # Open and Save live inside the File menu (no separate buttons).
         file_items = [a.text() for a in menu_btns[0].menu().actions()]

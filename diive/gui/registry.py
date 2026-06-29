@@ -13,6 +13,8 @@ from __future__ import annotations
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.combine_variables import CombineVariablesTab
 from diive.gui.tabs.compound_extremes import CompoundExtremesTab
+from diive.gui.tabs.database import DatabaseConnectionTab
+from diive.gui.tabs.database_explorer import DatabaseExplorerTab
 from diive.gui.tabs.corrections_nighttime_offset import NighttimeZeroOffsetTab
 from diive.gui.tabs.corrections_relativehumidity_offset import RelativeHumidityOffsetTab
 from diive.gui.tabs.corrections_set_missing import SetExactToMissingTab
@@ -181,6 +183,13 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Appearance": SettingsTab,
         "Project settings": ProjectSettingsTab,
     },
+    # Database I/O (dbc-influxdb, optional 'db' extra). Its own top-level menu,
+    # kept last (just before Help) — will grow Download/Upload entries alongside
+    # the connection editor.
+    "Database": {
+        "Database connection": DatabaseConnectionTab,
+        "Database explorer": DatabaseExplorerTab,
+    },
 }
 
 #: Flat label -> factory lookup (used to open a tab by its menu label).
@@ -193,6 +202,8 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 #: "Hampel filter 2", ...). Reserved for tabs that edit a single app-wide
 #: singleton, where a second copy would show conflicting state: Appearance
 #: (theme.manager) and Project settings (site.manager), plus Metadata explorer
-#: (the target of the "Edit metadata..." relay from every variable list).
+#: (the target of the "Edit metadata..." relay from every variable list), plus
+#: Database connection (the single app-wide dbc-influxdb handle).
 SINGLE_INSTANCE_TABS: set[str] = {
-    "Appearance", "Project settings", "Metadata explorer"}
+    "Appearance", "Project settings", "Metadata explorer",
+    "Database connection", "Database explorer"}

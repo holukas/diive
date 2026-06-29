@@ -17,7 +17,8 @@ See `CHANGELOG.md` for version history.
 ## Quick Start
 
 ```bash
-uv sync
+uv sync                              # core + dev
+uv sync --all-extras --group db      # everything: GUI, 3D, causal + InfluxDB (dbc-influxdb)
 uv run pytest tests/test_gapfilling.py -v
 uv run python script.py
 uv run pytest tests/ -v
@@ -29,6 +30,18 @@ uv add package_name
 **Python:** 3.12-3.13 | **Package Manager:** `uv`
 
 **Key dependencies (minimum pins):** pandas 3.0+, numpy 2.2+, scikit-learn 1.6+, xgboost 3.0+, matplotlib 3.10+, statsmodels 0.14+, pyarrow 19.0+
+
+**Optional dependencies** split across two uv mechanisms (so `--all-extras` alone is *not* "everything"):
+
+| Kind | Name | Pulls in | Install |
+|---|---|---|---|
+| extra | `gui` | PySide6 desktop GUI | `uv sync --extra gui` |
+| extra | `gui3d` | PyVista/VTK 3D surface tab | `uv sync --extra gui3d` |
+| extra | `causal` | Granger causality deps | `uv sync --extra causal` |
+| group | `db` | `dbc-influxdb` (InfluxDB download/upload) | `uv sync --group db` |
+| group | `dev` | test/lint/notebook tooling (synced by default) | — |
+
+`db` is a **dependency group**, not an extra (personal/local InfluxDB workflow — see the `[tool.uv.sources]` comment in `pyproject.toml`), so it needs `--group db`. Install all of the above with `uv sync --all-extras --group db`.
 
 ## Project Structure
 

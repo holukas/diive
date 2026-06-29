@@ -63,6 +63,13 @@ class StudioHeaderBar(QWidget):
         lay.addWidget(self._title)
         lay.addStretch(1)
 
+        # Database-connection pill, far right. Hidden until connected, then a
+        # clearly-coloured green "Connected: ..." badge.
+        self._db_pill = QLabel("")
+        self._db_pill.setFont(theme.manager.tracked_font())
+        self._db_pill.setVisible(False)
+        lay.addWidget(self._db_pill)
+
     def add_menu(self, label: str, menu: QMenu) -> QToolButton:
         """Add a top-level dropdown button (e.g. "File ⌄") wired to `menu`.
 
@@ -116,6 +123,22 @@ class StudioHeaderBar(QWidget):
 
     def set_title(self, text: str) -> None:
         self._title.setText(theme.manager.label_text(text))
+
+    def set_db_status(self, connected: bool, text: str = "") -> None:
+        """Show/hide the database-connection pill in the header.
+
+        When *connected*, a green badge reads *text* (e.g. "Connected:
+        InfluxDB @ ..."); otherwise the pill is hidden.
+        """
+        if not connected:
+            self._db_pill.setVisible(False)
+            return
+        self._db_pill.setText(theme.manager.label_text(text))
+        self._db_pill.setStyleSheet(
+            "QLabel { background: #2E7D32; color: white; border-radius: 9px; "
+            "padding: 3px 10px; }" + theme.manager.tooltip_qss())
+        self._db_pill.setToolTip(text)
+        self._db_pill.setVisible(True)
 
     # --- frameless window drag ---
     def mousePressEvent(self, event) -> None:

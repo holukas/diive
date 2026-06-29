@@ -23,6 +23,18 @@ uv sync --extra gui --extra gui3d --group build
 
 Without `gui3d` the app builds fine and the 3-D tab shows an install notice.
 
+To include **InfluxDB support** (the Database tabs), add the `db` group before
+building — the spec bundles `dbc-influxdb` + `influxdb-client` only when present:
+
+```powershell
+uv sync --extra gui --group db --group build
+.\packaging\build_gui.ps1
+```
+
+Without `db` the app builds fine and the Database tabs show an install notice.
+Combine extras/groups freely, e.g.
+`uv sync --extra gui --extra gui3d --group db --group build` for everything.
+
 `build_gui.ps1` automatically **renders the GUI user manual** (`diive/gui/MANUAL.md`
 → `diive/gui/MANUAL.html`) before PyInstaller runs, so the exe always ships a
 fresh copy (Help ▸ User manual opens it). To regenerate it by hand — e.g. after
@@ -53,7 +65,7 @@ for dev iteration.)
 
 | File | Purpose |
 |---|---|
-| `diive_gui.spec` | PyInstaller build recipe (one-folder; bundles `diive/configs` data + `diive/gui/MANUAL.html`; collects shap/xgboost/sklearn/... ; excludes unused Qt + the causal extra) |
+| `diive_gui.spec` | PyInstaller build recipe (one-folder; bundles `diive/configs` data + `diive/gui/MANUAL.html`; collects shap/xgboost/sklearn/... ; conditionally bundles the `gui3d` and `db` optionals when installed; excludes unused Qt + the causal extra) |
 | `launch_diive_gui.py` | Frozen-app entry point (calls `diive.gui.launch`) |
 | `build_gui.ps1` | Build + zip helper (also renders `MANUAL.md` → `MANUAL.html` first) |
 | `make_icon.py` | Renders the splash-motif app icon to `diive.ico` (run once when the icon art changes) |
