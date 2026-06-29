@@ -11,7 +11,7 @@ in as filter / leaf steps.
 
 Needs an active connection (see the Database connection tab); the backend lives
 in ``diive.gui.db.manager``. All schema queries are the backend's job
-(``diive.core.io.db`` over ``dbc-influxdb``); this tab only renders lists and
+(``diive.core.io.db``); this tab only renders lists and
 runs each query on a worker thread so the UI never blocks. It refreshes whenever
 the connection changes.
 

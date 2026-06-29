@@ -11,7 +11,7 @@ remembered (safe to write to the plaintext GUI prefs). The token stays in the
 ``<dir>_secret`` file on disk, read by the backend each time it is built.
 
 This holds *state + a handle only* (no domain logic): connecting, browsing and
-download/upload are the backend's job (library + ``dbc-influxdb``). The InfluxDB
+download/upload are the backend's job (``diive.core.io.db``). The InfluxDB
 backend needs the optional ``db`` dependency group; :func:`influxdb_available`
 reports whether it is installed so the GUI can degrade gracefully.
 

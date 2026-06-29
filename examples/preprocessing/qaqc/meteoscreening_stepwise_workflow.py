@@ -40,8 +40,8 @@ BUCKET_PROCESSED = f'{SITE}_processed'  # The 'bucket' where data are stored in 
 # Download data from database
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-from dbc_influxdb import dbcInflux
-dbc = dbcInflux(dirconf=DIRCONF)
+from diive.core.io.db.influx import InfluxIO
+dbc = InfluxIO(dirconf=DIRCONF)
 data_simple, data_detailed, assigned_measurements = dbc.download(
     bucket=BUCKET_RAW,
     measurements=[MEASUREMENT],
@@ -199,8 +199,8 @@ for v in mscr.resampled_detailed.keys():
 # Database Upload (Optional)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-# # from dbc_influxdb import dbcInflux
-# # dbc = dbcInflux(dirconf=DIRCONF)
+# # from diive.core.io.db.influx import InfluxIO
+# # dbc = InfluxIO(dirconf=DIRCONF)
 # # for v in mscr.resampled_detailed.keys():
 # #     # mscr.resampled_detailed[v][v] = mscr.resampled_detailed[v][v].multiply(999)
 # #     # mscr.resampled_detailed[v]['hpos'] = '999'

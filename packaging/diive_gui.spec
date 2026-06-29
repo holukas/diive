@@ -99,21 +99,20 @@ if _ilu.find_spec("pyvista") is not None and _ilu.find_spec("pyvistaqt") is not 
     # static analyzer keeps it (collect_all covers it, but pin it explicitly).
     hiddenimports += ["vtkmodules.qt.QVTKRenderWindowInteractor"]
 
-# --- optional InfluxDB support (db group: dbc-influxdb) -------------------
-# Only bundled if dbc-influxdb is installed in the build env (uv sync --group
-# db). diive imports it lazily (diive/core/io/db/influxdb.py imports dbc_influxdb
-# inside the backend constructor), so PyInstaller's static analysis can miss it;
-# collect_all pins both dbc_influxdb and its influxdb_client dependency along
-# with their submodules + data. Without the db group the GUI's Database tabs
-# show an install notice (influxdb_available() -> False), matching the runtime
-# lazy-import design. reactivex/certifi/pytz/dateutil are plain imports the
-# static analyzer already finds once influxdb_client is reached.
-if _ilu.find_spec("dbc_influxdb") is not None:
-    for _pkg in ["dbc_influxdb", "influxdb_client"]:
-        _d, _b, _h = collect_all(_pkg, filter_submodules=_no_test_submodules)
-        datas += _d
-        binaries += _b
-        hiddenimports += _h
+# --- optional InfluxDB support (db group: influxdb-client) ----------------
+# diive's InfluxDB engine (diive/core/io/db/influx) ships with diive; its only
+# third-party requirement is influxdb_client, bundled here when present in the
+# build env (uv sync --group db). The client is imported lazily (inside the
+# engine's connection/upload code), so PyInstaller's static analysis can miss
+# it; collect_all pins it along with its submodules + data. Without the db group
+# the GUI's Database tabs show an install notice (influxdb_available() -> False),
+# matching the runtime lazy-import design. reactivex/certifi are plain imports
+# the static analyzer already finds once influxdb_client is reached.
+if _ilu.find_spec("influxdb_client") is not None:
+    _d, _b, _h = collect_all("influxdb_client", filter_submodules=_no_test_submodules)
+    datas += _d
+    binaries += _b
+    hiddenimports += _h
 
 # --- Qt modules we never use (keep the build smaller) --------------------
 # matplotlib's qtagg backend only needs QtWidgets/QtGui/QtCore. Dropping
@@ -137,9 +136,6 @@ excludes = [
     "PySide6.QtSerialPort",
     "PySide6.QtNfc",
     "PySide6.QtTextToSpeech",
-    # Causal-discovery extra is intentionally NOT shipped in the GUI build.
-    "tigramite",
-    "econml",
     # Dev-only / unused-at-runtime heavyweights.
     "tkinter",
     "IPython",

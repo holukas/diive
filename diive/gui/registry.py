@@ -183,7 +183,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Appearance": SettingsTab,
         "Project settings": ProjectSettingsTab,
     },
-    # Database I/O (dbc-influxdb, optional 'db' extra). Its own top-level menu,
+    # Database I/O (InfluxDB, optional 'db' group). Its own top-level menu,
     # kept last (just before Help) — will grow Download/Upload entries alongside
     # the connection editor.
     "Database": {
@@ -203,7 +203,7 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 #: singleton, where a second copy would show conflicting state: Appearance
 #: (theme.manager) and Project settings (site.manager), plus Metadata explorer
 #: (the target of the "Edit metadata..." relay from every variable list), plus
-#: Database connection (the single app-wide dbc-influxdb handle).
+#: Database connection (the single app-wide InfluxDB handle).
 SINGLE_INSTANCE_TABS: set[str] = {
     "Appearance", "Project settings", "Metadata explorer",
     "Database connection", "Database explorer"}

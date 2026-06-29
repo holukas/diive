@@ -515,6 +515,16 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
 
 ### New Classes & Functions
 
+- **InfluxDB engine `InfluxIO`** (`diive.core.io.db.influx`) — diive's own InfluxDB v2 download / upload / delete /
+  schema-browsing engine, a clean in-house port of the former external `dbc-influxdb` package. diive no longer depends
+  on `dbc-influxdb`; the optional `db` dependency group now installs only `influxdb-client` (`uv sync --group db`),
+  imported lazily so the default `uv sync` never pulls it in. Improvements over the original: diive console output
+  (no `logging`), no `pytz` / `dateutil` dependency, and the data-version / units schema helpers
+  (`show_data_versions_in_bucket`, `show_units_in_field`, `data_version`-filtered `show_measurements_in_bucket` /
+  `show_fields_in_measurement`, public `test_connection`) that back the GUI Database explorer. The Textual TUI was not
+  ported (the desktop GUI's Database tabs replace it). GUI access is unchanged: the **Database connection** and
+  **Database explorer** tabs talk to it through the generic `InfluxDBBackend` adapter (`diive.core.io.db`).
+
 - **`CompoundExtremes`** (`dv.analysis`, `diive.analysis.compoundextremes`) — classify time periods (months or days)
   into compound-extreme categories from the standardized anomalies (z-scores) of two driver variables. The canonical
   use is compound dry-hot detection (after Wang et al., Fig. 2): a period is an *atmospheric* dryness extreme when VPD
@@ -751,8 +761,8 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
 
 - **`DriverAnalysis` (EXPERIMENTAL)** — evidence-triangulation driver attribution for flux time series across three
   epistemic layers: association (SHAP vs a `.RANDOM` benchmark, ALE curves 1D/2D), temporal prediction (lagged,
-  scale-resolved, regime-stratified importance), and opt-in causal (`GrangerCausality`, plus PCMCI(+)/CATE behind the
-  `diive[causal]` extra). Time-aware splits, held-out scores, SHAP/ALE never presented as causal. Also exposes
+  scale-resolved, regime-stratified importance), and an opt-in causal layer (a deseasonalized `GrangerCausality`
+  sanity check). Time-aware splits, held-out scores, SHAP/ALE never presented as causal. Also exposes
   standalone `accumulated_local_effects` / `_2d` and `AleCurve`. **Provisional:** lives in
   `dv.analysis.experimental`, emits a one-time `ExperimentalWarning`; see `examples/analysis/analysis_driveranalysis.py`.
 - **`GapStats`** — extended gap analysis wrapping `GapFinder` via composition.  Adds monthly and annual

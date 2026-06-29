@@ -24,7 +24,7 @@ uv sync --extra gui --extra gui3d --group build
 Without `gui3d` the app builds fine and the 3-D tab shows an install notice.
 
 To include **InfluxDB support** (the Database tabs), add the `db` group before
-building — the spec bundles `dbc-influxdb` + `influxdb-client` only when present:
+building — the spec bundles `influxdb-client` only when present:
 
 ```powershell
 uv sync --extra gui --group db --group build
@@ -65,7 +65,7 @@ for dev iteration.)
 
 | File | Purpose |
 |---|---|
-| `diive_gui.spec` | PyInstaller build recipe (one-folder; bundles `diive/configs` data + `diive/gui/MANUAL.html`; collects shap/xgboost/sklearn/... ; conditionally bundles the `gui3d` and `db` optionals when installed; excludes unused Qt + the causal extra) |
+| `diive_gui.spec` | PyInstaller build recipe (one-folder; bundles `diive/configs` data + `diive/gui/MANUAL.html`; collects shap/xgboost/sklearn/... ; conditionally bundles the `gui3d` and `db` optionals when installed; excludes unused Qt modules) |
 | `launch_diive_gui.py` | Frozen-app entry point (calls `diive.gui.launch`) |
 | `build_gui.ps1` | Build + zip helper (also renders `MANUAL.md` → `MANUAL.html` first) |
 | `make_icon.py` | Renders the splash-motif app icon to `diive.ico` (run once when the icon art changes) |
@@ -106,5 +106,3 @@ once — that exercises the lazy imports.
   exe would unpack everything to a temp dir on each launch (slow/flaky).
 - **Windows only** — PyInstaller does not cross-compile. A macOS/Linux build
   must run on that OS.
-- The **causal** extra (tigramite, econml) is intentionally excluded — it is
-  hard to freeze and unused by the core GUI.

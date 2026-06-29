@@ -204,7 +204,7 @@ def _example_FormatMeteoForEddyProFluxProcessing_dataFromParquetFile():
 
 def _example_FormatMeteoForEddyProFluxProcessing_dataFromDatabase():
     # Download example data from database
-    from dbc_influxdb import dbcInflux  # Needed for communicating with the database
+    from diive.core.io.db.influx import InfluxIO  # Needed for communicating with the database
     SITE = 'ch-fru'  # Site name
     SW_IN = 'SW_IN_T1_1_1'
     RH = 'RH_T1_2_1'
@@ -219,7 +219,7 @@ def _example_FormatMeteoForEddyProFluxProcessing_dataFromDatabase():
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
     data_version = "meteoscreening_diive"
     DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'
-    dbc = dbcInflux(dirconf=DIRCONF)
+    dbc = InfluxIO(dirconf=DIRCONF)
     data_simple, data_detailed, assigned_measurements = \
         dbc.download(bucket=f'{SITE}_processed',
                      measurements=MEASUREMENTS,
@@ -251,7 +251,7 @@ def _example_FormatMeteoForEddyProFluxProcessing_dataFromDatabase():
 
 def _example_fromDatabase_FormatMeteoForFluxnetUpload():
     # Download example data from database
-    from dbc_influxdb import dbcInflux  # Needed for communicating with the database
+    from diive.core.io.db.influx import InfluxIO  # Needed for communicating with the database
     SITE = 'ch-fru'  # Site name
     START = '2024-01-01 00:01:00'  # Download data starting with this date
     STOP = '2025-01-01 00:01:00'  # Download data before this date (the stop date itself is not included)
@@ -289,7 +289,7 @@ def _example_fromDatabase_FormatMeteoForFluxnetUpload():
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
     data_version = "meteoscreening_diive"
     DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'
-    dbc = dbcInflux(dirconf=DIRCONF)
+    dbc = InfluxIO(dirconf=DIRCONF)
     df, _, _ = \
         dbc.download(bucket=f'{SITE}_processed',
                      measurements=MEASUREMENTS,

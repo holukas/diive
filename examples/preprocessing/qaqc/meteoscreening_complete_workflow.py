@@ -11,7 +11,7 @@ Here is an overview of what is done:
 - (1) **USER SETTINGS**: Specify general settings for the site and variable
 - (2) **AUTO-SETTINGS**: Automatic configuration of derived settings
 - (3) **DOWNLOAD DATA FROM DATABASE**: Original raw data are downloaded from the database
-  using dbc-influxdb
+  using diive's InfluxDB engine (diive.core.io.db.influx)
 - (4) **METEOSCREENING**: The downloaded data is quality-screened using diive. The
   screening is done on high-resolution data, then resampled to 30MIN time resolution
 - (5) **UPLOAD DATA TO DATABASE**: The screened and resampled data are uploaded back
@@ -24,8 +24,8 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
-from dbc_influxdb import dbcInflux
 
+from diive.core.io.db.influx import InfluxIO
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.times.times import DetectFrequency
 from diive.preprocessing.qaqc.meteoscreening import StepwiseMeteoScreeningDb
@@ -38,8 +38,8 @@ pd.set_option('display.width', 1000)
 
 dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 print(f"Example started: {dt_string}")
-version_dbc = importlib.metadata.version("dbc_influxdb")
-print(f"dbc-influxdb version: v{version_dbc}")
+version_idb = importlib.metadata.version("influxdb_client")
+print(f"influxdb-client version: v{version_idb}")
 version_diive = importlib.metadata.version("diive")
 print(f"diive version: v{version_diive}")
 
@@ -119,11 +119,11 @@ print(f"Bucket containing processed data (destination bucket): {BUCKET_PROCESSED
 # Connect to Database
 # ^^^^^^^^^^^^^^^^^^^
 
-dbc = dbcInflux(dirconf=DIRCONF)
+dbc = InfluxIO(dirconf=DIRCONF)
 
 # %%
-# Download Data from Database with dbc-influxdb
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Download Data from Database
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # Download the raw meteorological data. The dbc library downloads three variables:
 #
@@ -735,8 +735,8 @@ for v in mscr.resampled_detailed.keys():
             f"{'#' * 20}(!)TEST FAILED - The resampled variable {v} does not have the expected time resolution of {_checkfreq}.{'#' * 20}")
 
 # %%
-# Upload Data to Database with dbc-influxdb
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Upload Data to Database
+# ^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # Upload screened and resampled data back to the database. The upload preserves
 # all database tags and marks data with 'meteoscreening_diive' version.
@@ -759,7 +759,7 @@ for v in mscr.resampled_detailed.keys():
 #
 # Download the data back from the database to verify successful upload.
 
-dbc_verify = dbcInflux(dirconf=DIRCONF)
+dbc_verify = InfluxIO(dirconf=DIRCONF)
 
 MEASUREMENT = ['TA']
 data_simple, data_detailed, assigned_measurements = dbc_verify.download(

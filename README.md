@@ -58,6 +58,16 @@ pip install 'diive[gui,gui3d]'    # add the 3-D surface view (PyVista/VTK)
 diive-gui                         # launch
 ```
 
+**Everything (from a repo checkout)** — all extras (`gui`, `gui3d`) plus the
+optional `db` dependency group (InfluxDB download/upload via `influxdb-client`):
+
+```bash
+uv sync --all-extras --group db
+```
+
+`db` is a dependency group rather than an extra, so `--all-extras` alone does not
+include it — pass `--group db` as well.
+
 ### Quick start
 
 ```python

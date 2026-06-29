@@ -18,7 +18,7 @@ See `CHANGELOG.md` for version history.
 
 ```bash
 uv sync                              # core + dev
-uv sync --all-extras --group db      # everything: GUI, 3D, causal + InfluxDB (dbc-influxdb)
+uv sync --all-extras --group db      # everything: GUI, 3D + InfluxDB (influxdb-client)
 uv run pytest tests/test_gapfilling.py -v
 uv run python script.py
 uv run pytest tests/ -v
@@ -37,11 +37,10 @@ uv add package_name
 |---|---|---|---|
 | extra | `gui` | PySide6 desktop GUI | `uv sync --extra gui` |
 | extra | `gui3d` | PyVista/VTK 3D surface tab | `uv sync --extra gui3d` |
-| extra | `causal` | Granger causality deps | `uv sync --extra causal` |
-| group | `db` | `dbc-influxdb` (InfluxDB download/upload) | `uv sync --group db` |
+| group | `db` | `influxdb-client` (backs diive's InfluxDB engine, `diive/core/io/db/influx`) | `uv sync --group db` |
 | group | `dev` | test/lint/notebook tooling (synced by default) | — |
 
-`db` is a **dependency group**, not an extra (personal/local InfluxDB workflow — see the `[tool.uv.sources]` comment in `pyproject.toml`), so it needs `--group db`. Install all of the above with `uv sync --all-extras --group db`.
+`db` is a **dependency group**, not an extra (personal/local InfluxDB workflow), so it needs `--group db`. Install all of the above with `uv sync --all-extras --group db`. The InfluxDB download/upload/delete engine lives in `diive/core/io/db/influx` (`InfluxIO`); `influxdb-client` is imported lazily, so the default `uv sync` never pulls it in.
 
 ## Project Structure
 

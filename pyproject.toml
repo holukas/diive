@@ -38,14 +38,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Heavy causal-discovery libraries used only by DriverAnalysis Layer 3
-# (DriverAnalysis.pcmci / .cate). They are lazy-imported, so the core install
-# never needs them. Install with: pip install 'diive[causal]'  (or, with uv:
-# uv sync --extra causal). tigramite -> PCMCI(+); econml -> CATE.
-causal = [
-    "tigramite>=5.2",
-    "econml>=0.15",
-]
 # PySide6 (Qt) desktop GUI. Optional so headless/library users never pull in
 # Qt. Install with: pip install 'diive[gui]'  (or: uv sync --extra gui).
 gui = [
@@ -71,19 +63,11 @@ diive-gui = "diive.gui._cli:_gui_main"
 [tool.uv]
 python-preference = "managed"
 
-# Local editable source for dbc-influxdb. Only consulted when the opt-in 'db'
-# group below is synced (uv sync --group db), so contributors who run the
-# default `uv sync` never need the ../poet checkout. dbc-influxdb is also on
-# PyPI (https://pypi.org/project/dbc-influxdb/) for anyone who wants it without
-# the local checkout.
-[tool.uv.sources]
-dbc-influxdb = { path = "../poet/dbc-influxdb", editable = true }
-
 [dependency-groups]
-# dbc-influxdb is a personal dev dependency (local InfluxDB workflow) and is NOT
-# part of the default sync — other contributors use their own database setup.
-# Opt in with: uv sync --group db
-db = ["dbc-influxdb"]
+# InfluxDB v2 support for diive's in-house engine (diive/core/io/db/influx).
+# Personal/local InfluxDB workflow, NOT part of the default sync — other
+# contributors use their own database setup. Opt in with: uv sync --group db
+db = ["influxdb-client>=1.37.0"]
 dev = [
     "jupyterlab>=4.3.6,<5.0.0",
     "ipykernel>=7.2.0",

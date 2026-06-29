@@ -7,15 +7,15 @@ built here (a :class:`~diive.core.io.db.base.DatabaseBackend`) is stored in
 ``diive.gui.db.manager`` and reused by the Database explorer (and future
 download / upload tabs).
 
-InfluxDB is the only backend today: it is configured by a ``dbc-influxdb`` config
-directory whose ``<dir>_secret`` sibling carries the url/org/token. This tab
-holds no secrets — it only remembers the directory *path* and shows the resolved
-url/org after a successful connect.
+InfluxDB is the only backend today: it is configured by a config directory whose
+``<dir>_secret`` sibling carries the url/org/token. This tab holds no secrets —
+it only remembers the directory *path* and shows the resolved url/org after a
+successful connect.
 
 Strict GUI<->library separation: all database work lives in the library
-(``diive.core.io.db``) and ``dbc-influxdb``; this tab only collects the path,
-fires the connection test on a worker thread, and shows the result. Without the
-optional ``db`` extra it shows install instructions instead of failing.
+(``diive.core.io.db``); this tab only collects the path, fires the connection
+test on a worker thread, and shows the result. Without the optional ``db`` group
+it shows install instructions instead of failing.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -77,7 +77,7 @@ class DatabaseConnectionTab(DiiveTab):
             return root
 
         intro = QLabel(
-            "Connect diive to an InfluxDB through a dbc-influxdb config "
+            "Connect diive to an InfluxDB through a config "
             "directory. Credentials (url, org, token) are read from the "
             "'<dir>_secret' sibling folder — diive only remembers the directory "
             "path, never the token. Use 'Test connection' to verify the server "
@@ -137,7 +137,7 @@ class DatabaseConnectionTab(DiiveTab):
     def _browse(self) -> None:
         start = db.manager.dirconf or ""
         chosen = QFileDialog.getExistingDirectory(
-            self.widget(), "Select dbc-influxdb config directory", start)
+            self.widget(), "Select InfluxDB config directory", start)
         if chosen:
             self.path.setText(chosen)
 
