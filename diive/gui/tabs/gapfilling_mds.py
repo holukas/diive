@@ -34,7 +34,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QProgressBar,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -49,7 +48,7 @@ from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
 from diive.gapfilling.codegen import mds_gapfill_to_code
 from diive.gapfilling.mds import FluxMDS
 from diive.gui import theme
-from diive.gui.tabs._partitioning_base import _auto_pick
+from diive.variables import auto_pick_column
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mds_results import MdsResultsPanel
@@ -58,6 +57,7 @@ from diive.gui.widgets.plot_settings import _DropComboBox
 from diive.gui.widgets.sub_tabs import SubTabs
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel
+from diive.gui.widgets.progress_bar import ProgressBar
 from diive.gui.widgets.worker import WorkerRunner
 
 _C_MUTED = "#6B7780"
@@ -412,10 +412,7 @@ class MdsGapFillingTab(DiiveTab):
         self.status.setStyleSheet("padding: 6px 10px; color: #444;")
         v.addWidget(self.status)
         # Progress over the MDS quality levels — hidden until a run starts.
-        self.progress = QProgressBar()
-        self.progress.setTextVisible(True)
-        self.progress.setFixedHeight(16)
-        self.progress.setVisible(False)
+        self.progress = ProgressBar()
         pwrap = QWidget()
         pl = QVBoxLayout(pwrap)
         pl.setContentsMargins(10, 0, 10, 4)
@@ -500,7 +497,7 @@ class MdsGapFillingTab(DiiveTab):
                 guess = ""
                 for needle in spec["needles"]:  # try each naming alternative
                     # Prefer a gap-filled driver ('_f'); never pick a flag column.
-                    guess = _auto_pick(cols, needle, prefer="_F", avoid="FLAG")
+                    guess = auto_pick_column(cols, needle, prefer="_F", avoid="FLAG")
                     if guess:
                         break
                 if guess:
@@ -632,9 +629,7 @@ class MdsGapFillingTab(DiiveTab):
         work = self._df[[target, swin, ta, vpd]].copy()
         self._set_running(True)
         # Indeterminate (busy) until the first quality level reports in.
-        self.progress.setRange(0, 0)
-        self.progress.setFormat("Preparing…")
-        self.progress.setVisible(True)
+        self.progress.start_busy("Preparing…")
         self.status.setText("Gap-filling… (MDS similarity matching — this can take a while)")
         self._runner.run(self._compute_payload, work, target, swin, ta, vpd, kwargs)
 
@@ -675,16 +670,15 @@ class MdsGapFillingTab(DiiveTab):
         """Update the progress bar as the MDS quality levels are worked (queued
         from the worker thread). ``permille`` (0-1000) carries the within-level
         progress, so the bar moves continuously through the slow early levels."""
-        self.progress.setRange(0, 1000)
-        self.progress.setValue(max(0, min(1000, permille)))
-        self.progress.setFormat(
+        self.progress.set_progress(
+            permille,
             f"Quality level {quality}  ·  {remaining:,} gaps remaining  ·  {permille / 10:.0f}%")
 
     # --- results -------------------------------------------------------
     def _on_done(self, payload) -> None:
         out, observed, gapfilled, model, target = payload
         self._set_running(False)
-        self.progress.setVisible(False)
+        self.progress.finish()
         self._result_df = out
         n_filled = int((out[str(gapfilled.name)].notna() & observed.isna()).sum())
         self.status.setText(
@@ -695,12 +689,9 @@ class MdsGapFillingTab(DiiveTab):
 
     def _on_failed(self, msg: str) -> None:
         self._set_running(False)
-        self.progress.setVisible(False)
+        self.progress.finish()
         self.status.setText(f"Failed: {msg}")
-        ax = self.canvas.new_axes(1)[0]
-        ax.text(0.5, 0.5, "Gap-filling failed", ha="center", va="center",
-                transform=ax.transAxes)
-        self.canvas.draw()
+        self.canvas.show_message("Gap-filling failed")
         self.results_panel.reset(f"Gap-filling failed: {msg}")
 
     def _plot(self, observed, gapfilled) -> None:
