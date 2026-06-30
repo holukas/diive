@@ -1978,21 +1978,23 @@ def test_hexbin_tab(window):
     fig = tab.canvas.fig
     assert fig.axes and fig.axes[0].collections  # hexbin polycollection drawn
     assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
-    # Role readout reflects the assignment.
-    assert tab.settings.x_role.text() == tab._xyz[0]
-    assert tab.settings.z_role.text() == tab._xyz[2]
+    # Role dropdowns reflect the assignment.
+    assert tab.settings._role_combos[0].currentText() == tab._xyz[0]
+    assert tab.settings._role_combos[2].currentText() == tab._xyz[2]
 
-    # Click cycling: clicking an assigned variable removes it; an incomplete
-    # selection shows the prompt instead of a plot.
+    # Roles come from the dropdowns; clicking the variable list is a no-op for
+    # role-picked plots (it must not disturb the assignment).
     x0 = tab._xyz[0]
     tab._on_selected(x0, False)
     QApplication.processEvents()
-    assert x0 not in tab._xyz and len(tab._xyz) == 2
-    assert any("X, Y, Z" in t.get_text() for a in tab.canvas.fig.axes for t in a.texts)
-    # Re-adding fills the freed slot again (back to three).
-    tab._on_selected(x0, False)
+    assert tab._xyz[0] == x0 and len(tab._xyz) == 3
+    # Reassigning a role via its dropdown updates the assignment.
+    combo = tab.settings._role_combos[0]
+    other = next(combo.itemText(i) for i in range(combo.count())
+                 if combo.itemText(i) and combo.itemText(i) not in tab._xyz)
+    combo.setCurrentText(other)
     QApplication.processEvents()
-    assert len(tab._xyz) == 3
+    assert tab._xyz[0] == other and len(tab._xyz) == 3
 
 
 def test_gap_dashboard_tab(window):
