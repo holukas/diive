@@ -327,6 +327,25 @@ Library additions used by the GUI (all backward-compatible):
   `last_upper_bound` (the per-iteration detection band in data units; `None` for the increment method, which has no
   data-unit band) — matching `Hampel` / `LocalSD`. `zScore` also gains `thres_zscore_daytime` / `thres_zscore_nighttime`
   per-period overrides (default `None` → fall back to the global `thres_zscore`), per the day/night threshold convention.
+- **Database menu (InfluxDB I/O).** **Database connection** (point at a config directory, test it; the path is
+  remembered, never the token; a green *Connected* pill appears in the header) and **Database explorer** (drill
+  bucket → data version → measurement → field → a **field overview** of every tag plus the first/last record; **download
+  a field** for a date range and plot it, with a **UTC offset** that defaults to the project timezone, a **Match dataset
+  time range** button, a **progressive chunked download that fills the plot in** with a progress bar and an elapsed-time
+  report, and download caching so plotting and screening don't re-fetch). All over the new in-diive InfluxDB engine
+  (`diive.core.io.db`, optional `db` group); the Database tabs show an install notice when it's absent.
+- **Meteo screening (database) tab** — the **full Stepwise-screening experience plus resampling**, for a high-resolution
+  field handed over from the Database explorer. The Stepwise and database screening tabs now share **`ScreeningTabBase`**
+  (variable list + Outliers/Corrections/Report inspector + method-card chain + QCF + preview + save/restore); the
+  database variant adds a **Resample** page whose target **defaults to the working dataset's detected resolution** (and
+  is a **no-op when the data already match it**), then adds the screened, resampled column converted to the dataset's
+  **middle-of-period** timestamp so it aligns on merge — with a collision rename, an overlap guard, the InfluxDB origin
+  and all database tags recorded in the column's history, and a **download-vs-project-timezone mismatch warning** (the
+  database stores UTC; the offset must match your dataset's timezone).
+- **`resample_series_to_freq`** (`diive.core.times.resampling`) — generalises `resample_series_to_30MIN` to any target
+  resolution (`'30min'`, `'10min'`, `'1h'`, …); `resample_series_to_30MIN` now wraps it. Returns the series unchanged
+  when it is already at the requested resolution. `StepwiseMeteoScreeningDb.resample` honours arbitrary resolutions
+  (and a `FlagQCF` call there that had drifted from the current API is fixed).
 
 ### Flux Processing Chain
 

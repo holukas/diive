@@ -14,6 +14,10 @@ pip install 'diive[gui]'     # or: uv sync --extra gui
 diive-gui
 ```
 
+For the optional **Database** tabs (read/write an InfluxDB), also install the
+`db` dependency group: `uv sync --group db` (or `pip install influxdb-client`).
+Without it the Database tabs show a short install notice instead of failing.
+
 A splash screen with a loading spinner appears while the app starts. diive then
 **reopens the project you had open last**. If you haven't saved one yet, the
 bundled example dataset (CH-DAV, 37 variables) loads automatically so you can try
@@ -1279,6 +1283,71 @@ scatter, the cumulative sum, and a colour-by-quality time series. The fill flag
 (`FLAG_{var}_gfMDS_ISFILLED`) is 0 for observed and 1+ for the quality level at which
 each gap was filled. **Add results to dataset** appends the gap-filled series and its
 flag; **Copy Python** copies a reproducible script.
+
+---
+
+## Database
+
+Read measurement data straight from an **InfluxDB** time-series database, screen
+high-resolution meteo, resample it, and merge it into your dataset. These tabs
+need the optional `db` dependency group (see **Install & launch**); without it
+they show an install notice. The header shows a green **Connected** pill once a
+connection is live.
+
+> **Timezone — important.** The database always stores timestamps in **UTC**, but
+> you normally work in your station's local time (e.g. **UTC+1**, CET). The
+> download converts UTC to a **UTC offset** you choose, and that offset **must
+> match your dataset's timezone** or the merged data land at the wrong time. The
+> offset defaults to your **project timezone** (Project settings), and the tabs
+> warn you if it doesn't match.
+
+### Database connection
+
+Point diive at an InfluxDB and test the connection.
+
+- **Config directory.** Pick the configuration folder (the connection's
+  `url` / `org` / `token` live in its `<dir>_secret` sibling). diive remembers the
+  **directory path only — never the token**.
+- **Test connection** verifies the server is reachable and fills in the resolved
+  URL / org. Once connected, the explorer and the screening tab can use it.
+
+### Database explorer
+
+Browse what's in the database and pull data out.
+
+- **Drill down** through the columns: **bucket → data version → measurements →
+  fields**. Selecting a field shows a **field overview** — every database tag it
+  carries (units, gain, offset, …) plus the **first and last record** timestamps.
+- **Download & plot.** Pick a **start / end** range and a **UTC offset** (see the
+  timezone note above; a line under the controls always tells you the active
+  timezone), then **Download & plot**. **Match dataset time range** sets the range
+  so the result lines up with your working dataset (accounting for the
+  end-of-period ↔ middle-of-period convention). High-resolution downloads run in
+  chunks with a **progress bar and a plot that fills in** as data arrive, and the
+  status reports **how long it took**.
+- **Send to Meteo screening →** hands the downloaded field (with its tags) to the
+  Meteo screening tab. A download is reused, not repeated, if you do both.
+
+### Meteo screening (database)
+
+The **full screening experience of the Stepwise screening tab** (outlier-test
+cards, corrections, QCF, the live preview, Copy Python — see
+[Stepwise screening](#stepwise-screening)) applied to a high-resolution field from
+the database, **plus a Resample step**.
+
+- Receive a field from the explorer, screen it exactly as you would any variable
+  (chain outlier tests, apply corrections, check the QCF).
+- **Resample** (extra inspector page). The target resolution **defaults to your
+  working dataset's resolution**, detected automatically; the info line shows the
+  source vs. target resolution and whether resampling is needed. **If the data are
+  already at the target resolution, no resampling is done** (so already-30MIN data
+  merge straight through).
+- **Add resampled to dataset** appends the screened, resampled column. Its
+  timestamps are converted to your dataset's **middle-of-period** convention so it
+  aligns on merge, it is **renamed with a suffix** if the name already exists, and
+  it is **refused with an explanation** if its time range doesn't overlap your
+  dataset. The new column's history records the database origin and **all its
+  tags** (and the timezone it was downloaded in).
 
 ---
 
