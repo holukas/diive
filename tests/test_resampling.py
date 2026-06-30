@@ -47,6 +47,13 @@ class TestResampleToFreq(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             resample_series_to_freq(s, '10min')
 
+    def test_same_resolution_is_noop(self):
+        # Processed 30MIN data "resampled" to 30min: no aggregation, values kept.
+        s = self._hires(freq='30min')
+        out = resample_series_to_freq(s, '30min', agg='mean', mincounts_perc=0.9)
+        self.assertEqual(len(out), len(s))
+        self.assertTrue(out.equals(s))
+
 
 class TestResampling(unittest.TestCase):
 

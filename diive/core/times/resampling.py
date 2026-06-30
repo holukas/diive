@@ -154,6 +154,16 @@ def resample_series_to_freq(series: Series,
             f"Target frequency {to_freqstr} must be lower time resolution than "
             f"source frequency {series.index.freqstr}.")
 
+    # Already at the target resolution (e.g. processed 30MIN data resampled to
+    # 30min): aggregating would be a no-op, so just return the series in the
+    # requested timestamp convention.
+    if current_freq == requested_freq:
+        info(f"Data already at {to_freqstr} resolution; no resampling needed.")
+        out = series.copy()
+        if output_timestamp_shows == 'middle':
+            out = convert_series_timestamp_to_middle(data=out)
+        return out
+
     _series = series.copy()
 
     # Make middle timestamp, for correct resampling
