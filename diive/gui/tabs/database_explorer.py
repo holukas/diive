@@ -39,7 +39,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from diive.gui import db, theme
+from diive.gui import db, site, theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.progress_bar import ProgressBar
@@ -188,17 +188,20 @@ class DatabaseExplorerTab(DiiveTab):
         self._dl_group = QGroupBox("Time range")
         form = QFormLayout(self._dl_group)
         # UTC offset of the start/end below AND of the returned timestamps. The
-        # DB stores everything in UTC; our stations log in CET (winter time),
-        # which is UTC+1 — the default. (CEST summer time would be +2.)
+        # DB stores everything in UTC; the download converts to this offset. It
+        # MUST match the working dataset's timezone or the merged data are shifted,
+        # so it defaults to the project's configured timezone (else CET = +1).
         self._utc_offset = QDoubleSpinBox()
         self._utc_offset.setRange(-12.0, 14.0)
         self._utc_offset.setSingleStep(1.0)
         self._utc_offset.setDecimals(1)
-        self._utc_offset.setValue(1.0)
+        self._utc_offset.setValue(
+            float(site.manager.utc_offset) if site.manager.configured else 1.0)
         self._utc_offset.setToolTip(
             "Timezone (offset to UTC, hours) the start/end are given in and the "
-            "downloaded data are returned in. Default 1 = CET (Central European "
-            "winter time); the database itself stores all data in UTC.")
+            "downloaded data are returned in. The database stores all data in UTC; "
+            "set this to your dataset's timezone (default = the project timezone, "
+            "or 1 = CET). A wrong offset silently shifts the merged data.")
         self._utc_offset.valueChanged.connect(self._on_offset_changed)
         self._start_edit = QDateTimeEdit()
         self._start_edit.setDisplayFormat(_DT_FORMAT)
@@ -218,6 +221,15 @@ class DatabaseExplorerTab(DiiveTab):
         self._match_btn.clicked.connect(self._match_dataset_range)
         form.addRow("", self._match_btn)
         lay.addWidget(self._dl_group)
+
+        # Visible (not just tooltip) timezone note — the database stores UTC, so
+        # the offset must match the dataset's timezone or the merge is shifted.
+        self._tz_note = QLabel()
+        self._tz_note.setWordWrap(True)
+        self._tz_note.setStyleSheet("color: #6B7780; font-size: 11px;")
+        self._utc_offset.valueChanged.connect(self._update_tz_note)
+        lay.addWidget(self._tz_note)
+        self._update_tz_note()
 
         self._download_btn = QPushButton("Download && plot")
         self._download_btn.setToolTip(
@@ -482,6 +494,18 @@ class DatabaseExplorerTab(DiiveTab):
         sign = "+" if total >= 0 else "-"
         hours, mins = divmod(abs(total) // 60, 60)
         return f"UTC{sign}{hours:02d}:{mins:02d}"
+
+    def _update_tz_note(self, *_) -> None:
+        """Keep the visible timezone note in sync with the chosen offset."""
+        note = (f"All times here are <b>{self._offset_label()}</b>. The database "
+                f"stores UTC; this offset must match your dataset's timezone.")
+        if site.manager.configured:
+            same = float(self._utc_offset.value()) == float(site.manager.utc_offset)
+            note += (" Default is the project timezone"
+                     + (" (matches)." if same else " — currently differs!"))
+        else:
+            note += " Default 1 = CET."
+        self._tz_note.setText(note)
 
     def _apply_offset_to_pickers(self) -> None:
         """Shift the (UTC) record span into the chosen offset and default the
