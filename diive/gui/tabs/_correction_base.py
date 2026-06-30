@@ -361,6 +361,13 @@ class BaseCorrectionTab(DiiveTab):
         if self._df is None or self._var is None:
             self.status.setText("Select a variable on the left first.")
             return
+        if self.needs_coords and not site.manager.configured:
+            self.status.setText(
+                "This correction needs the site location for its day/night split, "
+                "but no coordinates are configured. Set latitude, longitude and UTC "
+                "offset in Settings -> Project settings first (running now would "
+                "silently use (0, 0) at UTC and corrupt the result).")
+            return
         kwargs = self._current_kwargs()
         err = self._validate(kwargs)
         if err:

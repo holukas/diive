@@ -383,6 +383,7 @@ class MdsGapFillingTab(DiiveTab):
             "Check if the VPD driver column is in kPa (default). Uncheck if it "
             "is in hPa - it is then converted to kPa internally so the kPa "
             "tolerance still applies.")
+        self.vpd_in_kpa.toggled.connect(self._update_status)  # refresh unit warning
         f.addRow(self.vpd_in_kpa)
         self.avg_min_n_vals = QSpinBox(); self.avg_min_n_vals.setRange(0, 1000)
         self.avg_min_n_vals.setValue(2)
@@ -550,9 +551,27 @@ class MdsGapFillingTab(DiiveTab):
             self.status.setText(
                 f"Target: {self._target}. Pick valid columns for: {', '.join(missing)}.")
         else:
-            self.status.setText(
-                f"Target: {self._target} — drivers SWIN={drivers['swin']}, "
-                f"TA={drivers['ta']}, VPD={drivers['vpd']}. Run gap-filling.")
+            text = (f"Target: {self._target} — drivers SWIN={drivers['swin']}, "
+                    f"TA={drivers['ta']}, VPD={drivers['vpd']}. Run gap-filling.")
+            unit_warn = self._vpd_unit_warning(drivers["vpd"])
+            if unit_warn:
+                text += " " + unit_warn
+            self.status.setText(text)
+
+    def _vpd_unit_warning(self, vpd_col: str) -> str | None:
+        """Soft, non-blocking heuristic: if the chosen VPD column name suggests a
+        unit that disagrees with the 'VPD driver is in kPa' checkbox, warn — leaving
+        it wrong mis-scales the fills ~100x. Never blocks the run; the library does
+        not validate units (the caller owns them)."""
+        name = vpd_col.lower()
+        in_kpa = self.vpd_in_kpa.isChecked()
+        if "hpa" in name and in_kpa:
+            return ("WARNING: VPD column name contains 'hPa' but 'VPD driver is in "
+                    "kPa' is checked - untick it if the column is in hPa.")
+        if "kpa" in name and not in_kpa:
+            return ("WARNING: VPD column name contains 'kPa' but 'VPD driver is in "
+                    "kPa' is unchecked - tick it if the column is in kPa.")
+        return None
 
     # --- state ---------------------------------------------------------
     def _controls(self) -> dict:

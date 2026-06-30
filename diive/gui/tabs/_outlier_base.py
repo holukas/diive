@@ -448,6 +448,14 @@ class BaseOutlierTab(DiiveTab):
         if self._df is None or self._var is None:
             self.status.setText("Select a variable on the left first.")
             return
+        if self.daynight_cb.isChecked() and not site.manager.configured:
+            self.status.setText(
+                "Daytime/nighttime separation needs the site location, but no "
+                "coordinates are configured. Set latitude, longitude and UTC offset "
+                "in Settings -> Project settings first, or untick 'Separate daytime "
+                "/ nighttime' (running now would silently split at (0, 0) at UTC and "
+                "corrupt the result).")
+            return
         kwargs = self._current_kwargs()
         series = self._df[self._var]
         self.run_btn.setEnabled(False)
