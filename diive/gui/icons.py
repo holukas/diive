@@ -511,45 +511,90 @@ def _ln_generic() -> QIcon:
 
 #: (keyword in lowercased label) -> icon factory. First match wins, in order.
 #: Thin-line monochrome glyphs (the only icon set; ink colour from gui/theme.py).
+#: ORDER IS LOAD-BEARING: several labels contain a more-general keyword as a
+#: substring, so the specific rule must precede the generic one. Notably
+#: "partition"/"lag"/"offset" must beat "time" (day/nighttime, "time lag",
+#: "nighttime zero offset"), "gap-filling" must beat "gap", "reset" must beat
+#: "set to" ("Reset to full range"), "screening" must beat "database" ("Meteo
+#: screening (database)"), and "removal" must beat "manual" ("Manual removal").
 _LINE_RULES = [
+    # Plot methods (specific shapes first).
     ("heatmap", _ln_grid),
+    ("hexbin", _ln_hexbin),
     ("ridge", _ln_wave),
     ("diel", _ln_wave),
-    ("cumulative", _ln_chart),
     ("scatter", _ln_scatter),
+    ("histogram", _ln_bars),
+    ("shifted distribution", _ln_distribution),
+    ("distribution", _ln_distribution),
+    ("wind rose", _ln_windrose),
+    ("tree ring", _ln_treering),
+    ("waterfall", _ln_waterfall),
+    ("surface", _ln_surface3d),
+    ("cumulative", _ln_chart),
+    # Screening & outlier filters.
     ("stepwise", _ln_steps),
     ("screening", _ln_steps),
-    ("hampel", _ln_scatter),
-    ("outlier", _ln_scatter),
-    ("histogram", _ln_bars),
+    ("hampel", _ln_outlier),
+    ("removal", _ln_outlier),       # "Manual removal" -- before "manual"
+    ("filter", _ln_outlier),
+    ("outlier", _ln_outlier),
+    # Flux tools (partition/ustar/uncertainty/lag before generic "time").
+    ("partition", _ln_partition),
+    ("ustar", _ln_ustar),
+    ("uncertainty", _ln_uncertainty),
+    ("time lag", _ln_lag),
+    ("lag", _ln_lag),
+    ("chain", _ln_wave),
+    ("flux", _ln_wave),
+    # Date-range reset (before corrections' "set to": "Reset to full range").
+    ("date range", _ln_calendar),
+    ("reset", _ln_reset),
+    # Corrections (offset before generic "time": "nighttime zero offset").
+    ("offset", _ln_correction),
+    ("set to", _ln_correction),
+    ("set exact", _ln_correction),
+    # Gap-filling before "gap" (gaps & coverage).
+    ("gap-filling", _ln_gapfill),
+    ("gap", _ln_grid),
+    ("coverage", _ln_grid),
+    # Timestamps / generic time series.
     ("timestamp", _ln_clock),
     ("time", _ln_chart),
     ("series", _ln_chart),
+    # Variable management.
     ("select variables", _ln_checklist),
     ("select records", _ln_funnel),
     ("metadata", _ln_props),
-    ("open project", _ln_project),
-    ("open", _ln_folder),
-    ("manual", _ln_book),
-    ("example", _ln_document),
-    ("export", _ln_export),
-    ("save", _ln_save),
-    ("exit", _ln_exit),
-    ("date range", _ln_calendar),
-    ("reset", _ln_reset),
-    ("gap", _ln_grid),
-    ("coverage", _ln_grid),
+    ("feature", _ln_gear),
+    ("combine", _ln_grid),
+    ("rename", _ln_tag),
+    ("profile", _ln_profile),
+    # Analysis.
     ("driver", _ln_chart),
     ("season", _ln_chart),
     ("anomal", _ln_chart),
     ("spectro", _ln_grid),
-    ("feature", _ln_gear),
-    ("combine", _ln_grid),
-    ("rename", _ln_tag),
-    ("chain", _ln_wave),
-    ("flux", _ln_wave),
+    ("extreme", _ln_extremes),
+    ("compound", _ln_extremes),
+    # Events.
+    ("event", _ln_event),
+    # File / settings / help.
+    ("open project", _ln_project),
+    ("open", _ln_folder),
+    ("user manual", _ln_book),
+    ("changelog", _ln_document),
+    ("example", _ln_document),
+    ("export", _ln_export),
+    ("save", _ln_save),
+    ("exit", _ln_exit),
     ("appearance", _ln_palette),
+    ("settings", _ln_settings),
+    ("github", _ln_github),
+    ("issue", _ln_issue),
+    ("report", _ln_issue),
     ("about", _ln_info),
+    ("database", _ln_database),
     ("overview", _ln_grid),
     ("log", _ln_document),
 ]
