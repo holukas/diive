@@ -198,12 +198,10 @@ class SpectrogramTab(SingleVariableExplorerTab):
 
     # --- rendering -----------------------------------------------------
     def _render(self) -> None:
-        ax = self.canvas.new_axes(1)[0]
         if self._spec is None:
-            ax.text(0.5, 0.5, self._error or "No spectrogram",
-                    ha="center", va="center", wrap=True, transform=ax.transAxes)
-            self.canvas.draw()
+            self.canvas.show_message(self._error or "No spectrogram")
             return
+        ax = self.canvas.new_axes(1)[0]
         try:
             spec = self._spec
             cycles_per_day = spec["frequencies"] * self._rec_per_day
@@ -223,8 +221,6 @@ class SpectrogramTab(SingleVariableExplorerTab):
             ax.set_title(f"Spectrogram — {self._target}")
             cb = self.canvas.fig.colorbar(mesh, ax=ax, fraction=0.025, pad=0.01)
             cb.set_label("Power (dB)")
+            self.canvas.draw()
         except Exception as err:
-            ax.clear()
-            ax.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",
-                    wrap=True, transform=ax.transAxes)
-        self.canvas.draw()
+            self.canvas.show_message(f"Cannot plot:\n{err}")

@@ -224,12 +224,10 @@ class DriverExplorerTab(SingleVariableExplorerTab):
         self._render_scatter(match.iloc[0])
 
     def _render_scatter(self, row) -> None:
-        ax = self.canvas.new_axes(1)[0]
         if row is None:
-            ax.text(0.5, 0.5, "No drivers to show", ha="center", va="center",
-                    transform=ax.transAxes)
-            self.canvas.draw()
+            self.canvas.show_message("No drivers to show")
             return
+        ax = self.canvas.new_axes(1)[0]
         driver = str(row["DRIVER"])
         lag = int(row["BEST_LAG"])
         try:
@@ -240,8 +238,6 @@ class DriverExplorerTab(SingleVariableExplorerTab):
             dv.plotting.ScatterXY(x=sub[driver], y=sub[self._target]).plot(
                 ax=ax, format_style=dv.plotting.FormatStyle(
                     title=title, xlabel=driver, ylabel=self._target))
+            self.canvas.draw()
         except Exception as err:
-            ax.clear()
-            ax.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",
-                    wrap=True, transform=ax.transAxes)
-        self.canvas.draw()
+            self.canvas.show_message(f"Cannot plot:\n{err}")

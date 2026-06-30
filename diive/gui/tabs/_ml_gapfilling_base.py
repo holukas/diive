@@ -817,10 +817,7 @@ class MlGapFillingTab(DiiveTab):
         self._set_running(False)
         self.hero.reset(self._target)
         self.status.setText(f"Failed: {msg}")
-        ax = self.canvas.new_axes(1)[0]
-        ax.text(0.5, 0.5, "Gap-filling failed", ha="center", va="center",
-                transform=ax.transAxes)
-        self.canvas.draw()
+        self.canvas.show_message("Gap-filling failed")
         self.results_panel.reset(f"Gap-filling failed: {msg}")
 
     def _fill_shap_table(self, model) -> None:
