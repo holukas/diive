@@ -120,11 +120,12 @@ class _StudioTabBar(QTabBar):
 class _StudioRoot(QWidget):
     """Root container for the frameless Studio chrome.
 
-    Paints a rounded, soft-gradient backdrop over the window's translucent
-    background (giving the window its rounded corners + ambient frame).
+    Paints a soft-gradient backdrop filling the opaque frameless window. Square
+    corners (the window is not translucent — see MainWindow._build_studio_chrome
+    for why) so it fills its whole rect with no unpainted corners.
     """
 
-    _RADIUS = 14
+    _RADIUS = 0
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -272,7 +273,11 @@ class MainWindow(QMainWindow):
         from diive.gui.widgets.header_bar import StudioHeaderBar
 
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        # NOTE: deliberately NOT WA_TranslucentBackground. A translucent top-level
+        # is a Windows *layered* window, and an embedded VTK/OpenGL render window
+        # (the 3-D surface tab's canvas) cannot composite into a layered window —
+        # it paints nothing and the tab behind it shows through. The window is a
+        # plain opaque frameless rectangle (square corners).
         self._tabwidget.setObjectName("studiotabs")  # scopes the pill-tab QSS
         # Studio pills carry a small favicon-style glyph; give the always-on
         # tabs theirs now and flag later menu tabs to get one on open.
