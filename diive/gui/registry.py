@@ -201,11 +201,14 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 
 #: Menu tabs that may exist only once (re-selecting focuses the existing one).
 #: Everything else opens a new, numbered instance each time ("Hampel filter 1",
-#: "Hampel filter 2", ...). Reserved for tabs that edit a single app-wide
-#: singleton, where a second copy would show conflicting state: Appearance
-#: (theme.manager) and Project settings (site.manager), plus Metadata explorer
-#: (the target of the "Edit metadata..." relay from every variable list), plus
-#: Database connection (the single app-wide InfluxDB handle).
+#: "Hampel filter 2", ...). Two kinds belong here: tabs that edit a single
+#: app-wide singleton, where a second copy would show conflicting state —
+#: Appearance (theme.manager) and Project settings (site.manager), plus Metadata
+#: explorer (the target of the "Edit metadata..." relay from every variable
+#: list), plus the Database tabs (the single app-wide InfluxDB handle); and the
+#: single-variable explorers (Driver explorer, Gaps & coverage, Spectrogram),
+#: where a duplicate would just re-do the same heavy compute on the same data.
 SINGLE_INSTANCE_TABS: set[str] = {
     "Appearance", "Project settings", "Metadata explorer",
-    "Database connection", "Database explorer", "Meteo screening (database)"}
+    "Database connection", "Database explorer", "Meteo screening (database)",
+    "Driver explorer", "Gaps & coverage", "Spectrogram"}
