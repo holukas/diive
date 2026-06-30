@@ -29,8 +29,11 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import threading
+import traceback
 
 from PySide6.QtCore import QObject, Signal
+
+from diive.core.utils.console import error
 
 
 class WorkerRunner(QObject):
@@ -68,6 +71,10 @@ class WorkerRunner(QObject):
             result = fn(*args, **kwargs)
         except Exception as err:  # surface the library error to the GUI
             self._running = False
+            # The short message goes to the per-tab status label via `failed`;
+            # the full type+traceback goes to the diive console so it lands in
+            # the Log tab (its sink marshals to the GUI thread via a Qt signal).
+            error(f"Background task failed:\n{traceback.format_exc()}")
             self.failed.emit(str(err))
             return
         self._running = False
