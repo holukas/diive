@@ -40,8 +40,10 @@ from PySide6.QtWidgets import (
 )
 
 from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
+from diive.flux.partitioning.codegen import partitioning_to_code
 from diive.gui import site, theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.worker import WorkerRunner
@@ -125,7 +127,10 @@ class BasePartitioningTab(DiiveTab):
         self.add_btn.setEnabled(False)
         self.add_btn.clicked.connect(self._add)
         theme.set_button_role(self.add_btn, "confirm")
-        outer.addLayout(build_titlebar(self.title, self.run_btn, self.add_btn))
+        self.copy_btn = CopyPythonButton(self._python_code)
+        self.copy_btn.setToolTip(
+            "Copy a runnable diive script reproducing this partitioning.")
+        outer.addLayout(build_titlebar(self.title, self.run_btn, self.add_btn, self.copy_btn))
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._build_controls())
@@ -325,6 +330,32 @@ class BasePartitioningTab(DiiveTab):
     # --- run -----------------------------------------------------------
     def _picks(self) -> dict[str, str]:
         return {k: c.currentText() for k, c in self._combos.items()}
+
+    def _python_code(self) -> str | None:
+        """Runnable snippet reproducing this partitioning, or None when the inputs
+        are incomplete (button no-op, mirroring :meth:`_run`'s validation)."""
+        if self._df is None:
+            self.status.setText("Load data first to copy its code.")
+            return None
+        cols = {str(c) for c in self._df.columns}
+        picks = self._picks()
+        # Drop optional inputs left as "(none)"; require every other pick to be valid.
+        clean: dict[str, str] = {}
+        for spec in self.inputs:
+            val = picks[spec["key"]]
+            if spec.get("optional") and val == "(none)":
+                continue
+            if not val or val not in cols:
+                self.status.setText("Pick valid input columns first to copy its code.")
+                return None
+            clean[spec["key"]] = val
+        lat = self.lat.value() if self.lat is not None else None
+        lon = self.lon.value() if self.lon is not None else None
+        utc = self.utc.value() if self.utc is not None else None
+        vpd_in_kpa = self.vpd_kpa_cb.isChecked() if self.vpd_kpa_cb is not None else True
+        return partitioning_to_code(
+            self.method_suffix, clean, lat=lat, lon=lon, utc_offset=utc,
+            vpd_in_kpa=vpd_in_kpa)
 
     def _run(self) -> None:
         if self._df is None or self._runner.is_running:
