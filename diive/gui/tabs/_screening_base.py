@@ -166,6 +166,17 @@ class ScreeningTabBase(DiiveTab):
         info_row.addWidget(self.qcf_label)
         rlayout.addLayout(info_row)
 
+        # Global pending banner over the preview: reflects uncommitted work in
+        # ANY stage (outlier steps and/or corrections), so it stays visible even
+        # when the user is on a page they never ran. Hidden when all is committed.
+        self.pending_banner = QLabel("")
+        self.pending_banner.setWordWrap(True)
+        self.pending_banner.setVisible(False)
+        self.pending_banner.setStyleSheet(
+            "QLabel { background: #FFF3CD; color: #664D03; border: 0.5px solid "
+            "#FFE69C; border-radius: 6px; padding: 6px 8px; }")
+        rlayout.addWidget(self.pending_banner)
+
         self.canvas = MplCanvas()
         rlayout.addWidget(self.canvas, stretch=1)
 
@@ -407,6 +418,40 @@ class ScreeningTabBase(DiiveTab):
         if corr_btn is not None:
             corr_btn.setText(
                 "Run corrections •" if self._corr_dirty else "Run corrections")
+        self._refresh_pending_banner()
+
+    def _pending_steps_count(self) -> int:
+        """Enabled outlier steps that haven't been run (chain edited since run)."""
+        return len(self._enabled_steps()) if self._chain_dirty else 0
+
+    def _pending_corrections_count(self) -> int:
+        """Configured corrections not yet applied (edited since last Run)."""
+        panel = getattr(self, "corrections_panel", None)
+        if panel is None or not self._corr_dirty:
+            return 0
+        return len(panel.corrections())
+
+    def _refresh_pending_banner(self) -> None:
+        """Show/hide the global pending banner over the preview. It reflects
+        uncommitted work in EVERY stage, not just the active page, so corrections
+        configured on an unseen page can't silently go unapplied."""
+        banner = getattr(self, "pending_banner", None)
+        if banner is None:
+            return
+        n_steps = self._pending_steps_count()
+        n_corr = self._pending_corrections_count()
+        if not n_steps and not n_corr:
+            banner.setVisible(False)
+            return
+        parts = []
+        if n_steps:
+            parts.append(f"{n_steps} outlier step{'s' if n_steps != 1 else ''}")
+        if n_corr:
+            parts.append(f"{n_corr} correction{'s' if n_corr != 1 else ''}")
+        banner.setText(
+            f"{' and '.join(parts)} pending - run them (Run outliers / Run "
+            f"corrections) before adding.")
+        banner.setVisible(True)
 
     # --- card strip ---
     def _rebuild_cards(self) -> None:
@@ -563,7 +608,8 @@ class ScreeningTabBase(DiiveTab):
         self._draw_raw(self._df[name])
         self._refresh_run_buttons()
         if self._chain_dirty or self._corr_dirty:
-            self.status.setText(f"Selected '{name}'. Click Run chain to apply.")
+            self.status.setText(
+                f"Selected '{name}'. Click Run outliers / Run corrections to apply.")
         else:
             self.status.setText(f"Selected '{name}'. Add outlier tests to build a chain.")
 
@@ -788,7 +834,22 @@ class ScreeningTabBase(DiiveTab):
         cols.attrs[ATTRS_KEY] = attrs
         return cols
 
+    def _pending_guard(self) -> bool:
+        """Refuse to Add while any stage has uncommitted work; point the user at
+        the banner. Returns True when blocked (caller must abort)."""
+        n_steps = self._pending_steps_count()
+        n_corr = self._pending_corrections_count()
+        if not n_steps and not n_corr:
+            return False
+        self.status.setText(
+            "Not added: pending work in another stage - run it (see the banner "
+            "above the plot) before adding.")
+        self._refresh_pending_banner()
+        return True
+
     def _add_to_dataset(self) -> None:
+        if self._pending_guard():
+            return
         if self._result_df is None or self._result_df.empty:
             return
         self.featuresCreated.emit(self._result_df)

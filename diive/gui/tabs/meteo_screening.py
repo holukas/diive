@@ -27,6 +27,7 @@ from __future__ import annotations
 import pandas as pd
 from pandas.tseries.frequencies import to_offset
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -99,12 +100,20 @@ class MeteoScreeningTab(ScreeningTabBase):
             "aggregate to be computed (else the resampled value is missing). "
             "0.9 (default) requires 90% coverage; lower values accept "
             "sparsely-populated intervals.")
+        self._add_qcf = QCheckBox("Also add QCF flag")
+        self._add_qcf.setChecked(True)  # transparency by default: keep the audit trail
+        self._add_qcf.setToolTip(
+            "Also emit the QCF quality flag at the target resolution (0=good, "
+            "1=marginal, 2=rejected). Aggregated as the WORST flag per interval, "
+            "so a single rejected record flags the whole resampled value.")
         f.addRow("Resolution", self._freq)
         f.addRow("Aggregation", self._agg)
         f.addRow("Min. records (frac)", self._mincounts)
+        f.addRow("", self._add_qcf)
         for w in (self._freq, self._agg):
             w.currentTextChanged.connect(self._on_resample_changed)
         self._mincounts.valueChanged.connect(self._on_resample_changed)
+        self._add_qcf.toggled.connect(self._on_resample_changed)
         v.addWidget(box)
         hint = QLabel(
             "The screened (and corrected) series is resampled to this resolution, "
@@ -287,25 +296,71 @@ class MeteoScreeningTab(ScreeningTabBase):
             **db_tags,
         }
         pills = [t for t in ["from-database", "meteo-screened", units, data_version] if t]
-        out = pd.DataFrame({name: series_mid})
-        out.attrs[ATTRS_KEY] = {
+        pieces = {name: series_mid}
+        attrs = {
             name: provenance_attr(
                 origin=DERIVED, parent=None, operation=self.provenance_op,
                 params=history, tags=pills),
         }
+
+        # Optional QCF flag at the resampled resolution: aggregate as the WORST
+        # (max) flag per interval, NOT the mean — QCF is a 0/1/2 quality code, so
+        # a single rejected record must mark the whole resampled value as rejected.
+        qcf_mid = self._resampled_qcf(freq, series_mid.index)
+        if qcf_mid is not None:
+            qcf_name = self._unique_name(f"{name}_QCF",
+                                         extra={name})  # avoid colliding with the value col
+            qcf_mid.name = qcf_name
+            pieces[qcf_name] = qcf_mid
+            attrs[qcf_name] = provenance_attr(
+                origin=DERIVED, parent=name, operation=f"{self.provenance_op} QCF",
+                params=history, tags=[t for t in ["from-database", "qcf", data_version] if t])
+
+        out = pd.DataFrame(pieces)
+        out.attrs[ATTRS_KEY] = attrs
         return out
 
-    def _unique_name(self, field: str) -> str:
-        """A column name not already in the working dataset (numeric suffix)."""
-        if field not in self._dataset_columns:
+    def _resampled_qcf(self, freq: str, value_index):
+        """The overall QCF flag resampled to *freq* (worst flag per interval),
+        END -> MIDDLE, and aligned to the resampled value's index. Returns None
+        when the checkbox is off or no outlier chain has run (no QCF to emit)."""
+        if not self._add_qcf.isChecked() or self._payload is None:
+            return None
+        flag = self._payload["qcf"].flagqcf
+        if flag is None or flag.dropna().empty:
+            return None
+        flag_end = flag.copy()
+        flag_end.index.name = "TIMESTAMP_END"
+        try:
+            resampled_end = resample_series_to_freq(
+                flag_end, to_freqstr=freq, agg="max",
+                mincounts_perc=self._mincounts.value())
+        except Exception:
+            return None
+        if resampled_end.dropna().empty:
+            return None
+        resampled_end.index.name = "TIMESTAMP_END"
+        qcf_mid = convert_series_timestamp_to_middle(resampled_end)
+        # Align 1:1 to the value column so every emitted value has its flag (and
+        # no orphan flags for intervals where the value was dropped).
+        return qcf_mid.reindex(value_index)
+
+    def _unique_name(self, field: str, extra: set | None = None) -> str:
+        """A column name not already in the working dataset (numeric suffix).
+        ``extra`` adds names emitted in this same batch (e.g. the value column)
+        that aren't in the dataset yet but must still not be collided with."""
+        taken = self._dataset_columns | (extra or set())
+        if field not in taken:
             return field
         i = 1
-        while f"{field}_{i}" in self._dataset_columns:
+        while f"{field}_{i}" in taken:
             i += 1
         return f"{field}_{i}"
 
     # --- add: overlap guard + meaningful status ---
     def _add_to_dataset(self) -> None:
+        if self._pending_guard():
+            return
         if self._result_df is None or self._result_df.empty:
             return
         name = str(self._result_df.columns[0])
