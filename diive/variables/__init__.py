@@ -40,6 +40,7 @@ from diive.variables.utilities import (
 # Classification
 from diive.variables.classification import (
     classify_variable,
+    auto_pick_column,
     VariableClass,
     CATEGORY_CARBON,
     CATEGORY_WATER,
@@ -70,6 +71,7 @@ __all__ = [
     'combine_variables_to_code',
     # classification
     'classify_variable',
+    'auto_pick_column',
     'VariableClass',
     'CATEGORY_CARBON',
     'CATEGORY_WATER',

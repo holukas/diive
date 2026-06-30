@@ -91,3 +91,32 @@ def classify_variable(name: str) -> VariableClass | None:
         if name.startswith(prefix):
             return VariableClass(kind=kind, category=category)
     return None
+
+
+def auto_pick_column(columns, needle: str, *, prefer: str | None = None,
+                     avoid: str | None = None) -> str:
+    """First column name matching ``needle`` by the FluxNet naming conventions.
+
+    Name-based seeding for variable pickers: scan ``columns`` for one whose
+    upper-cased name contains ``needle``. With ``prefer`` set, a column that also
+    contains ``prefer`` ranks ahead of a plain match; ``avoid`` excludes columns
+    containing that substring. Returns ``""`` when nothing matches.
+
+    ``needle`` / ``prefer`` / ``avoid`` are compared against the upper-cased
+    column name, so pass them upper-cased (the FluxNet column convention).
+
+    Args:
+        columns: Candidate column names.
+        needle: Substring the column name must contain.
+        prefer: Optional substring that ranks a match first when present.
+        avoid: Optional substring that disqualifies a column.
+    """
+    up = [(c, c.upper()) for c in columns]
+    if prefer:
+        for c, u in up:
+            if needle in u and prefer in u and (avoid is None or avoid not in u):
+                return c
+    for c, u in up:
+        if needle in u and (avoid is None or avoid not in u):
+            return c
+    return ""

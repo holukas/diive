@@ -33,6 +33,7 @@ from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.flow_layout import FlowLayout
 from diive.gui.widgets.mpl_canvas import MplCanvas
+from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 _DEFAULT_VAR = "NEE_CUT_REF_f"
@@ -285,6 +286,51 @@ class _MetricSlot(QWidget):
             w.setToolTip(full)
 
 
+class HeroBand(QFrame):
+    """A slim result band: a method chip on the left and a strip of metric slots
+    on the right, rebuilt after each run from ``(name, value, tooltip)`` tuples.
+
+    The single source for the hero strip that was copy-pasted across the
+    correction, outlier, uncertainty and select-records tabs. Presentation only —
+    the metric list comes from each tab's own ``_hero_metrics`` hook. (The richer
+    Overview ``_HeroBand`` and the ML ``_PerformanceHero`` keep their own
+    persistent identity rows; this covers the plain chip + on-demand strip case.)
+    """
+
+    def __init__(self, chip_label: str, chip_bg: str, chip_fg: str,
+                 parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setStyleSheet("QFrame { background: #FAFAFA; border-radius: 8px; }")
+        h = QHBoxLayout(self)
+        h.setContentsMargins(12, 8, 12, 8)
+        h.setSpacing(12)
+        h.addWidget(_chip(chip_label, chip_bg, chip_fg))
+        h.addStretch(1)
+        # Metrics strip: rebuilt after each run from set_metrics().
+        self._metrics_host = QWidget()
+        self._metrics_lay = QHBoxLayout(self._metrics_host)
+        self._metrics_lay.setContentsMargins(0, 0, 0, 0)
+        self._metrics_lay.setSpacing(12)
+        h.addWidget(self._metrics_host)
+
+    def set_metrics(self, metrics) -> None:
+        """Rebuild the strip from ``[(name, value, tooltip), ...]``."""
+        self.clear()
+        for i, (name, value, tip) in enumerate(metrics):
+            if i > 0:
+                self._metrics_lay.addWidget(_stat_separator())
+            slot = _MetricSlot()
+            slot.update_metric(name, value, tip)
+            self._metrics_lay.addWidget(slot)
+
+    def clear(self) -> None:
+        """Remove all metric slots (e.g. on failure or before a re-run)."""
+        while self._metrics_lay.count():
+            w = self._metrics_lay.takeAt(0).widget()
+            if w is not None:
+                w.deleteLater()
+
+
 class _HeroBand(QFrame):
     """Identity + full-stats header for the selected variable.
 
@@ -507,6 +553,10 @@ class OverviewTab(DiiveTab):
         outer = QVBoxLayout(root)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
+
+        # Title bar, matching every other tab. The right column's hero band still
+        # carries the per-variable identity + stats below it.
+        outer.addLayout(build_titlebar(self.title))
 
         # Variable list (left, full height) | right column (figure over stats).
         splitter = QSplitter(Qt.Orientation.Horizontal)
