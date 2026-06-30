@@ -615,14 +615,54 @@ def pin_icon() -> QIcon:
     return QIcon(pm)
 
 
-def close_icon() -> QIcon:
-    """A small, clearly visible "×" for tab close buttons (ink-coloured)."""
+def close_icon(color: str | None = None) -> QIcon:
+    """A small, clearly visible "×" for tab/window close buttons.
+
+    ``color`` overrides the ink (e.g. white for a red close-button hover);
+    defaults to the theme ink."""
     pm, p = _canvas()
-    pen = QPen(_line_ink(), 1.7)
+    pen = QPen(QColor(color) if color else _line_ink(), 1.7)
     pen.setCapStyle(Qt.PenCapStyle.RoundCap)
     p.setPen(pen)
     p.drawLine(QPointF(4.5, 4.5), QPointF(11.5, 11.5))
     p.drawLine(QPointF(11.5, 4.5), QPointF(4.5, 11.5))
+    p.end()
+    return QIcon(pm)
+
+
+def minimize_icon(color: str | None = None) -> QIcon:
+    """A window-minimize glyph: a single horizontal bar near the bottom."""
+    pm, p = _canvas()
+    pen = QPen(QColor(color) if color else _line_ink(), 1.5)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    p.drawLine(QPointF(4.0, 10.5), QPointF(12.0, 10.5))
+    p.end()
+    return QIcon(pm)
+
+
+def maximize_icon(color: str | None = None) -> QIcon:
+    """A window-maximize glyph: a single rounded square outline."""
+    pm, p = _canvas()
+    pen = QPen(QColor(color) if color else _line_ink(), 1.4)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRoundedRect(QRectF(4.0, 4.0, 8.0, 8.0), 1.2, 1.2)
+    p.end()
+    return QIcon(pm)
+
+
+def restore_icon(color: str | None = None) -> QIcon:
+    """A window-restore glyph: two overlapping squares (the classic restore)."""
+    pm, p = _canvas()
+    pen = QPen(QColor(color) if color else _line_ink(), 1.3)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawPolyline(_poly([(6.2, 5.5), (6.2, 3.6), (12.4, 3.6),
+                          (12.4, 9.8), (10.5, 9.8)]))   # back square (open corner)
+    p.drawRect(QRectF(3.6, 6.2, 6.2, 6.2))              # front square
     p.end()
     return QIcon(pm)
 

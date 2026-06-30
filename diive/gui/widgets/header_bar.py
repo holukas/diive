@@ -20,11 +20,18 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QPoint, Qt
+from PySide6.QtCore import QEvent, QPoint, QSize, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QMenu, QToolButton, QWidget
+from PySide6.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QLabel,
+    QMenu,
+    QToolButton,
+    QWidget,
+)
 
-from diive.gui import theme
+from diive.gui import icons, theme
 
 
 class StudioHeaderBar(QWidget):
@@ -70,6 +77,67 @@ class StudioHeaderBar(QWidget):
         self._db_pill.setVisible(False)
         lay.addWidget(self._db_pill)
 
+        # Window controls (minimize / maximize-restore / close) in the far-right
+        # corner: a frameless window has no native title-bar buttons.
+        lay.addSpacing(8)
+        self._maxed = False           # filled-to-work-area vs. normal geometry
+        self._normal_geo = None       # geometry to restore to
+        self._build_window_controls(lay)
+
+    # --- window controls (frameless title-bar buttons) ---
+    def _control_button(self, icon, tooltip: str, slot, *, danger=False) -> QToolButton:
+        btn = QToolButton()
+        btn.setObjectName("winclose" if danger else "winctl")
+        btn.setIcon(icon)
+        btn.setIconSize(QSize(16, 16))
+        btn.setFixedSize(QSize(38, 28))
+        btn.setAutoRaise(True)
+        btn.setToolTip(tooltip)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        hover = "#E81123" if danger else "rgba(0, 0, 0, 0.08)"
+        btn.setStyleSheet(
+            "QToolButton { border: none; background: transparent; border-radius: 6px; }"
+            f"QToolButton:hover {{ background: {hover}; }}"
+            + theme.manager.tooltip_qss())
+        btn.clicked.connect(slot)
+        return btn
+
+    def _build_window_controls(self, lay: QHBoxLayout) -> None:
+        self._btn_min = self._control_button(
+            icons.minimize_icon(), "Minimize", self._minimize)
+        self._btn_max = self._control_button(
+            icons.maximize_icon(), "Maximize", self._toggle_max)
+        self._btn_close = self._control_button(
+            icons.close_icon(), "Close", lambda: self.window().close(), danger=True)
+        # White × on the red hover; restore the ink × when the cursor leaves.
+        self._btn_close.installEventFilter(self)
+        for b in (self._btn_min, self._btn_max, self._btn_close):
+            lay.addWidget(b)
+
+    def _minimize(self) -> None:
+        self.window().showMinimized()
+
+    def _toggle_max(self) -> None:
+        """Toggle between filling the screen work area and the normal geometry.
+
+        Uses ``availableGeometry`` (not ``showMaximized``) because a *frameless*
+        maximize on Windows covers the taskbar and clips the active tab's bottom
+        (same rationale as MainWindow.show_filling_workarea)."""
+        win = self.window()
+        if self._maxed:
+            if self._normal_geo is not None:
+                win.setGeometry(self._normal_geo)
+            self._maxed = False
+        else:
+            self._normal_geo = win.geometry()
+            screen = win.screen() or QApplication.primaryScreen()
+            if screen is not None:
+                win.setGeometry(screen.availableGeometry())
+            self._maxed = True
+        self._btn_max.setIcon(
+            icons.restore_icon() if self._maxed else icons.maximize_icon())
+        self._btn_max.setToolTip("Restore" if self._maxed else "Maximize")
+
     def add_menu(self, label: str, menu: QMenu) -> QToolButton:
         """Add a top-level dropdown button (e.g. "File ⌄") wired to `menu`.
 
@@ -105,6 +173,13 @@ class StudioHeaderBar(QWidget):
 
     def eventFilter(self, obj, event) -> bool:
         et = event.type()
+        # Close button: white × on the red hover background, ink × otherwise.
+        if obj is getattr(self, "_btn_close", None):
+            if et == QEvent.Type.Enter:
+                obj.setIcon(icons.close_icon("#FFFFFF"))
+            elif et == QEvent.Type.Leave:
+                obj.setIcon(icons.close_icon())
+            return False
         # Hover over a header button opens its menu (when none is grabbing).
         if et == QEvent.Type.Enter and obj in self._buttons:
             self._show_menu(obj)
