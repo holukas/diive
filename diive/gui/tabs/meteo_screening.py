@@ -93,10 +93,12 @@ class MeteoScreeningTab(ScreeningTabBase):
         self._mincounts = QDoubleSpinBox()
         self._mincounts.setRange(0.0, 1.0)
         self._mincounts.setSingleStep(0.05)
-        self._mincounts.setValue(0.25)
+        self._mincounts.setValue(0.9)
         self._mincounts.setToolTip(
-            "Minimum fraction of records an interval must have to be aggregated "
-            "(else the resampled value is missing).")
+            "Minimum fraction of an interval that must be present for the "
+            "aggregate to be computed (else the resampled value is missing). "
+            "0.9 (default) requires 90% coverage; lower values accept "
+            "sparsely-populated intervals.")
         f.addRow("Resolution", self._freq)
         f.addRow("Aggregation", self._agg)
         f.addRow("Min. records (frac)", self._mincounts)
@@ -141,6 +143,19 @@ class MeteoScreeningTab(ScreeningTabBase):
         except Exception:
             return a == b
 
+    def _agg_hint(self) -> str:
+        """Flag a plain arithmetic mean on a circular/bounded variable (non-blocking)."""
+        if self._agg.currentText() != "mean":
+            return ""
+        meas = detect_measurement(self._var) if self._var else None
+        if meas == "WD":
+            return ("  NOTE: wind direction is circular; a plain mean is misleading "
+                    "across the 0/360 deg wrap.")
+        if meas == "RH":
+            return ("  NOTE: relative humidity is bounded (0-100%); a plain mean can "
+                    "be misleading.")
+        return ""
+
     def _update_resample_info(self) -> None:
         """Show source vs target resolution and whether resampling will happen."""
         src = self._source_freq or "?"
@@ -151,7 +166,7 @@ class MeteoScreeningTab(ScreeningTabBase):
         else:
             verdict = f"-> resample to {selected} ({self._agg.currentText()})."
         self._resample_info.setText(
-            f"Source: {src}  ·  dataset target: {tgt}  {verdict}")
+            f"Source: {src}  ·  dataset target: {tgt}  {verdict}{self._agg_hint()}")
 
     def _on_resample_changed(self, *_) -> None:
         """Resample settings changed: refresh the info + rebuild the column."""
