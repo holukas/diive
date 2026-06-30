@@ -27,11 +27,9 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,
     QFormLayout,
-    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QProgressBar,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -41,9 +39,10 @@ from PySide6.QtWidgets import (
 from diive.core.metadata import ATTRS_KEY, DERIVED, MODIFIED, provenance_attr
 from diive.gui import site, theme
 from diive.gui.tabs.base import DiiveTab
-from diive.gui.tabs.overview import _chip, _MetricSlot, _stat_separator
+from diive.gui.tabs.overview import HeroBand
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
+from diive.gui.widgets.progress_bar import ProgressBar
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel
 from diive.gui.widgets.worker import WorkerRunner
@@ -180,37 +179,16 @@ class BaseOutlierTab(DiiveTab):
         """A slim band: the method chip on the left, a stats strip on the right
         (filled in after a run via :meth:`_hero_metrics`). The description lives
         only in the settings panel — not repeated here."""
-        hero = QFrame()
-        hero.setStyleSheet("QFrame { background: #FAFAFA; border-radius: 8px; }")
-        h = QHBoxLayout(hero)
-        h.setContentsMargins(12, 8, 12, 8)
-        h.setSpacing(12)
-        chip = _chip(self.method_chip_label, self.method_chip_bg, self.method_chip_fg)
-        h.addWidget(chip)
-        h.addStretch(1)
-        # Metrics strip: rebuilt after each run from _hero_metrics(payload).
-        self._metrics_host = QWidget()
-        self._metrics_lay = QHBoxLayout(self._metrics_host)
-        self._metrics_lay.setContentsMargins(0, 0, 0, 0)
-        self._metrics_lay.setSpacing(12)
-        h.addWidget(self._metrics_host)
-        return hero
+        self._hero = HeroBand(self.method_chip_label, self.method_chip_bg,
+                              self.method_chip_fg)
+        return self._hero
 
     def _clear_hero(self) -> None:
-        while self._metrics_lay.count():
-            w = self._metrics_lay.takeAt(0).widget()
-            if w is not None:
-                w.deleteLater()
+        self._hero.clear()
 
     def _update_hero(self, payload: dict) -> None:
         """Rebuild the hero stats strip from the subclass's metrics."""
-        self._clear_hero()
-        for i, (name, value, tip) in enumerate(self._hero_metrics(payload)):
-            if i > 0:
-                self._metrics_lay.addWidget(_stat_separator())
-            slot = _MetricSlot()
-            slot.update_metric(name, value, tip)
-            self._metrics_lay.addWidget(slot)
+        self._hero.set_metrics(self._hero_metrics(payload))
 
     def _hero_metrics(self, payload: dict) -> list:
         """Return ``[(name, value, tooltip), ...]`` for the hero stats strip
@@ -320,10 +298,7 @@ class BaseOutlierTab(DiiveTab):
         outer.addWidget(self.run_btn)
 
         # Iteration progress (visible only while a repeat-until-clean run is going).
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 100)
-        self.progress.setTextVisible(True)
-        self.progress.setVisible(False)
+        self.progress = ProgressBar()
         outer.addWidget(self.progress)
 
         self.status = QLabel("Select a variable on the left.")
@@ -462,9 +437,7 @@ class BaseOutlierTab(DiiveTab):
         self.add_btn.setEnabled(False)
         self._first_n = None  # outlier count of the first iteration (for the %)
         self._n_iter = 0      # iterations that ran (last seen via progress)
-        self.progress.setValue(0)
-        self.progress.setFormat("starting…")
-        self.progress.setVisible(True)
+        self.progress.set_progress(0, "starting…")
         self.status.setText("Detecting outliers...")
         # For live preview: draw the base view now so both panels exist and can be
         # updated each iteration. Seed "previous cleaned" + "original" with the full
@@ -543,8 +516,7 @@ class BaseOutlierTab(DiiveTab):
             pct = max(0, min(99, round((1 - n_outliers / self._first_n) * 100)))
         else:
             pct = 0
-        self.progress.setValue(pct)
-        self.progress.setFormat(f"iteration {iteration} — {n_outliers} outliers")
+        self.progress.set_progress(pct * 10, f"iteration {iteration} — {n_outliers} outliers")
         # Keep every iteration's band so the final render can show them all, even
         # when live preview is off.
         if bounds is not None:
@@ -687,9 +659,7 @@ class BaseOutlierTab(DiiveTab):
 
     def _on_done(self, payload: dict) -> None:
         self.run_btn.setEnabled(True)
-        self.progress.setValue(100)
-        self.progress.setFormat("done")
-        self.progress.setVisible(False)
+        self.progress.finish()
         self._result_df = payload["result"]
         self._last_payload = payload  # for re-render when the limit toggle changes
         self._update_hero(payload)
@@ -711,7 +681,7 @@ class BaseOutlierTab(DiiveTab):
 
     def _on_failed(self, msg: str) -> None:
         self.run_btn.setEnabled(True)
-        self.progress.setVisible(False)
+        self.progress.finish()
         self.status.setText(f"Failed: {msg}")
 
     def _rerender_last(self) -> None:

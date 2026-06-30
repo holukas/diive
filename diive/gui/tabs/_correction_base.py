@@ -28,7 +28,6 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFormLayout,
-    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -41,7 +40,7 @@ from PySide6.QtWidgets import (
 from diive.core.metadata import ATTRS_KEY, MODIFIED, provenance_attr
 from diive.gui import site, theme
 from diive.gui.tabs.base import DiiveTab
-from diive.gui.tabs.overview import _chip, _MetricSlot, _stat_separator
+from diive.gui.tabs.overview import HeroBand
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
@@ -158,37 +157,16 @@ class BaseCorrectionTab(DiiveTab):
         """A slim band: the method chip on the left, a stats strip on the right
         (filled in after a run via :meth:`_hero_metrics`). The description lives
         only in the settings panel — not repeated here."""
-        hero = QFrame()
-        hero.setStyleSheet("QFrame { background: #FAFAFA; border-radius: 8px; }")
-        h = QHBoxLayout(hero)
-        h.setContentsMargins(12, 8, 12, 8)
-        h.setSpacing(12)
-        chip = _chip(self.method_chip_label, self.method_chip_bg, self.method_chip_fg)
-        h.addWidget(chip)
-        h.addStretch(1)
-        # Metrics strip: rebuilt after each run from _hero_metrics(payload).
-        self._metrics_host = QWidget()
-        self._metrics_lay = QHBoxLayout(self._metrics_host)
-        self._metrics_lay.setContentsMargins(0, 0, 0, 0)
-        self._metrics_lay.setSpacing(12)
-        h.addWidget(self._metrics_host)
-        return hero
+        self._hero = HeroBand(self.method_chip_label, self.method_chip_bg,
+                              self.method_chip_fg)
+        return self._hero
 
     def _clear_hero(self) -> None:
-        while self._metrics_lay.count():
-            w = self._metrics_lay.takeAt(0).widget()
-            if w is not None:
-                w.deleteLater()
+        self._hero.clear()
 
     def _update_hero(self, payload: dict) -> None:
         """Rebuild the hero stats strip from the subclass's metrics."""
-        self._clear_hero()
-        for i, (name, value, tip) in enumerate(self._hero_metrics(payload)):
-            if i > 0:
-                self._metrics_lay.addWidget(_stat_separator())
-            slot = _MetricSlot()
-            slot.update_metric(name, value, tip)
-            self._metrics_lay.addWidget(slot)
+        self._hero.set_metrics(self._hero_metrics(payload))
 
     def _build_settings(self) -> QWidget:
         panel = QWidget()

@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
-    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -39,7 +38,7 @@ from diive.core.dfun.frames import keep_records_where, select_records_to_code
 from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
-from diive.gui.tabs.overview import _MetricSlot, _chip, _stat_separator
+from diive.gui.tabs.overview import HeroBand
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
@@ -258,46 +257,27 @@ class SelectRecordsTab(DiiveTab):
         return cb
 
     def _build_hero(self) -> QWidget:
-        hero = QFrame()
-        hero.setStyleSheet("QFrame { background: #FAFAFA; border-radius: 8px; }")
-        h = QHBoxLayout(hero)
-        h.setContentsMargins(12, 8, 12, 8)
-        h.setSpacing(12)
-        h.addWidget(_chip(self.method_chip_label, self.method_chip_bg, self.method_chip_fg))
-        h.addStretch(1)
-        self._metrics_host = QWidget()
-        self._metrics_lay = QHBoxLayout(self._metrics_host)
-        self._metrics_lay.setContentsMargins(0, 0, 0, 0)
-        self._metrics_lay.setSpacing(12)
-        h.addWidget(self._metrics_host)
-        return hero
+        self._hero = HeroBand(self.method_chip_label, self.method_chip_bg,
+                              self.method_chip_fg)
+        return self._hero
 
     def _clear_hero(self) -> None:
-        while self._metrics_lay.count():
-            w = self._metrics_lay.takeAt(0).widget()
-            if w is not None:
-                w.deleteLater()
+        self._hero.clear()
 
     def _update_hero(self) -> None:
-        self._clear_hero()
         if self._target is None or self._keep_mask is None:
+            self._hero.clear()
             return
         target_s = self._df[self._target]
         n_orig = int(target_s.notna().sum())
         n_kept = int((self._keep_mask & target_s.notna()).sum())
         pct = (100.0 * n_kept / n_orig) if n_orig else 0.0
-        metrics = [
+        self._hero.set_metrics([
             ("KEPT", f"{n_kept:,}", "Valid target records remaining after the operations"),
             ("OF VALID", f"{n_orig:,}", "Valid (non-missing) target records to begin with"),
             ("SHARE", f"{pct:.1f}%", "Share of valid records kept"),
             ("STEPS", f"{len(self._steps)}", "Number of operations applied"),
-        ]
-        for i, (name, value, tip) in enumerate(metrics):
-            if i > 0:
-                self._metrics_lay.addWidget(_stat_separator())
-            slot = _MetricSlot()
-            slot.update_metric(name, value, tip)
-            self._metrics_lay.addWidget(slot)
+        ])
 
     # --- data / inputs -------------------------------------------------
     def on_data_loaded(self, df, created: set | None = None) -> None:

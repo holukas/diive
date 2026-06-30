@@ -34,9 +34,10 @@ from PySide6.QtWidgets import (
 )
 
 from diive.analysis.compoundextremes import CompoundExtremes, compound_extremes_to_code
+from diive.variables import auto_pick_column
 from diive.gui import theme
-from diive.gui.tabs._partitioning_base import _auto_pick
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.tabs.overview import HeroBand
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.tab_chrome import build_titlebar
@@ -85,6 +86,9 @@ class CompoundExtremesTab(DiiveTab):
         self.status.setStyleSheet("padding: 6px 10px; color: #444;")
         self.status.setWordWrap(True)
         rl.addWidget(self.status)
+        # Headline period counts, filled after a run.
+        self.hero = HeroBand("COMPOUND", "#FFF3E0", "#E65100")
+        rl.addWidget(self.hero)
         self.canvas = MplCanvas()
         rl.addWidget(self.canvas, stretch=1)
         splitter.addWidget(right)
@@ -191,7 +195,7 @@ class CompoundExtremesTab(DiiveTab):
                 combo.setCurrentText(cur)
             else:
                 for needle in needles:
-                    guess = _auto_pick(cols, needle)
+                    guess = auto_pick_column(cols, needle)
                     if guess:
                         combo.setCurrentText(guess)
                         break
@@ -246,6 +250,7 @@ class CompoundExtremesTab(DiiveTab):
     def _run(self) -> None:
         if self._df is None:
             return
+        self.hero.clear()  # drop stale totals; refilled on success
         p = self._params()
         cols = {str(c) for c in self._df.columns}
         if p["var1"] not in cols or p["var2"] not in cols:
@@ -272,6 +277,11 @@ class CompoundExtremesTab(DiiveTab):
         counts = ce.counts
         summary = ", ".join(f"{label}: {int(n)}" for label, n in counts.items())
         self.status.setText(f"{len(ce.results)} {ce.agg} periods — {summary}.")
+        metrics = [(f"{ce.agg.upper()} PERIODS", f"{len(ce.results):,}",
+                    "Total classified periods")]
+        metrics += [(str(label).upper(), f"{int(n):,}", f"{label} periods")
+                    for label, n in counts.items()]
+        self.hero.set_metrics(metrics)
         ax = self.canvas.new_axes(1)[0]
         CompoundExtremesPlot.from_compound_extremes(ce).plot(ax=ax)
         self.canvas.draw()
