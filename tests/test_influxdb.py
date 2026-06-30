@@ -43,6 +43,22 @@ class TestInfluxFluxQL(unittest.TestCase):
         self.assertIn('r["_measurement"] == "TA" and r["varname"] == "TA_T1_2_1"', q)
         self.assertIn("start: -9999d", q)
 
+    def test_field_records_query(self):
+        q = " ".join(fluxql.field_records(
+            bucket="b", measurement="TA", field="TA_T1_2_1",
+            data_version="raw", reducer="last").split())
+        self.assertIn('from(bucket: "b")', q)
+        self.assertIn("|> range(start: -9999d)", q)
+        self.assertIn('r["_measurement"] == "TA" and r["_field"] == "TA_T1_2_1" '
+                      'and r["data_version"] == "raw"', q)
+        self.assertTrue(q.rstrip().endswith("|> last()"))
+
+    def test_field_records_query_no_version(self):
+        q = " ".join(fluxql.field_records(
+            bucket="b", measurement="TA", field="TA_T1_2_1", reducer="first").split())
+        self.assertNotIn("data_version", q)
+        self.assertTrue(q.rstrip().endswith("|> first()"))
+
     def test_fields_in_measurement_query(self):
         q = " ".join(fluxql.fields_in_measurement("b", "TA", days=9999).split())
         self.assertIn("schema.measurementFieldKeys(", q)

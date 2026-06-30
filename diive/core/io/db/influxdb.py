@@ -94,3 +94,107 @@ class InfluxDBBackend(DatabaseBackend):
         return self._io.show_units_in_field(
             bucket=bucket, measurement=measurement, field=field,
             data_version=data_version, verbose=False)
+
+    def field_overview(self, bucket: str, measurement: str, field: str,
+                       data_version: str | None = None) -> dict:
+        """Full overview of *field*: all tags (incl. units) plus first / last
+        record timestamps. See
+        :meth:`~diive.core.io.db.influx.influxio.InfluxIO.show_field_overview`."""
+        return self._io.show_field_overview(
+            bucket=bucket, measurement=measurement, field=field,
+            data_version=data_version, verbose=False)
+
+    def download_field(self, bucket: str, measurement: str, field: str,
+                       start: str, stop: str, data_version: str | None = None,
+                       utc_offset: int | float = 0):
+        """Download one *field* between *start* and *stop* as a pandas Series.
+
+        Times are interpreted in / returned for the ``utc_offset`` timezone
+        (default UTC, since the explorer browses the database directly). Returns
+        the field's data Series (empty Series if no records in range)."""
+        data_simple, _, _ = self._io.download(
+            bucket=bucket, start=start, stop=stop,
+            timezone_offset_to_utc_hours=utc_offset,
+            data_version=[data_version] if data_version else None,
+            measurements=[measurement], fields=[field])
+        if field in data_simple.columns:
+            return data_simple[field]
+        import pandas as pd
+        return pd.Series(dtype="float64", name=field)
+
+    def download_detailed(self, bucket: str, measurement: str, field: str,
+                          start: str, stop: str, data_version: str | None = None,
+                          utc_offset: int | float = 1) -> dict:
+        """Download one *field* with its tags as a ``data_detailed`` dict.
+
+        Returns ``{field: DataFrame}`` where the DataFrame carries the field's
+        data column plus every database tag (units, gain, offset, data_version,
+        ...) on a ``TIMESTAMP_END`` index — the input shape
+        :class:`~diive.qaqc.StepwiseMeteoScreeningDb` consumes. Times are
+        interpreted in the ``utc_offset`` timezone (default CET, +1)."""
+        _, data_detailed, _ = self._io.download(
+            bucket=bucket, start=start, stop=stop,
+            timezone_offset_to_utc_hours=utc_offset,
+            data_version=[data_version] if data_version else None,
+            measurements=[measurement], fields=[field])
+        return data_detailed
+
+    @staticmethod
+    def _chunk_bounds(start: str, stop: str, n_chunks: int) -> list[str]:
+        """Split ``[start, stop]`` into ``n_chunks`` adjacent sub-ranges.
+
+        Returns ``n_chunks + 1`` boundary strings; chunk i is ``[b[i], b[i+1])``
+        (download stop is exclusive, so chunks neither overlap nor gap)."""
+        import pandas as pd
+        n = max(1, int(n_chunks))
+        edges = pd.date_range(pd.Timestamp(start), pd.Timestamp(stop), periods=n + 1)
+        return [e.strftime("%Y-%m-%d %H:%M:%S") for e in edges]
+
+    def download_field_chunked(self, bucket: str, measurement: str, field: str,
+                               start: str, stop: str, data_version: str | None = None,
+                               utc_offset: int | float = 1, n_chunks: int = 1,
+                               progress_callback=None):
+        """Download a field in *n_chunks* time slices, accumulating the Series.
+
+        After each chunk, calls ``progress_callback(accumulated_series, done, total)``
+        so the GUI can show a growing plot + determinate progress. Returns the full
+        Series."""
+        import pandas as pd
+        bounds = self._chunk_bounds(start, stop, n_chunks)
+        acc = pd.Series(dtype="float64", name=field)
+        for i in range(len(bounds) - 1):
+            s = self.download_field(bucket, measurement, field, bounds[i],
+                                    bounds[i + 1], data_version, utc_offset)
+            if s is not None and not s.empty:
+                acc = pd.concat([acc, s])
+                acc = acc[~acc.index.duplicated(keep="last")].sort_index()
+            if progress_callback is not None:
+                progress_callback(acc, i + 1, len(bounds) - 1)
+        return acc
+
+    def download_detailed_chunked(self, bucket: str, measurement: str, field: str,
+                                  start: str, stop: str, data_version: str | None = None,
+                                  utc_offset: int | float = 1, n_chunks: int = 1,
+                                  progress_callback=None) -> dict:
+        """Download a field's ``data_detailed`` in *n_chunks* slices, merging tags.
+
+        After each chunk, calls ``progress_callback(accumulated_field_series, done,
+        total)`` (the field's data column, for a growing plot). Returns the merged
+        ``data_detailed`` dict."""
+        bounds = self._chunk_bounds(start, stop, n_chunks)
+        merged: dict = {}
+        for i in range(len(bounds) - 1):
+            dd = self.download_detailed(bucket, measurement, field, bounds[i],
+                                        bounds[i + 1], data_version, utc_offset)
+            for key, frame in dd.items():
+                if key in merged:
+                    merged[key] = merged[key].combine_first(frame)
+                    merged[key] = merged[key][
+                        ~merged[key].index.duplicated(keep="last")].sort_index()
+                else:
+                    merged[key] = frame
+            if progress_callback is not None:
+                acc = merged.get(field)
+                series = acc[field] if (acc is not None and field in acc.columns) else None
+                progress_callback(series, i + 1, len(bounds) - 1)
+        return merged

@@ -105,6 +105,30 @@ def predicatestring(conditions: dict) -> str:
     return f'(r) => {" and ".join(parts)}'
 
 
+def field_records(bucket: str, measurement: str, field: str,
+                  data_version: str | None = None, reducer: str = 'last',
+                  days: int = 9999) -> str:
+    """Reduce *field*'s records (raw, un-pivoted) to one point per series.
+
+    Used to build a field overview: filtered to *measurement* / *field* (and
+    optionally *data_version*), then reduced with *reducer* (``'last'`` or
+    ``'first'``). Each returned row is one series (one unique tag-set), carrying
+    all of its tag columns plus ``_time`` / ``_value`` -- so the tags that ever
+    applied to the field, and the first / last record time, are recoverable.
+    """
+    conditions = {'_measurement': measurement, '_field': field}
+    if data_version:
+        conditions['data_version'] = data_version
+    predicate = predicatestring(conditions)
+    query = f'''
+    from(bucket: "{bucket}")
+    |> range(start: -{days}d)
+    |> filter(fn: {predicate})
+    |> {reducer}()
+    '''
+    return query
+
+
 def tag_values(bucket: str, tag: str, conditions: dict | None = None,
                days: int = 9999) -> str:
     """Distinct values of *tag* in *bucket*, optionally narrowed by *conditions*.

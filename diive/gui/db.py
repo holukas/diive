@@ -42,6 +42,15 @@ class DbConnectionManager(QObject):
 
     #: Emitted when the path or connection state changes.
     changed = Signal()
+    #: Emitted (with a payload dict) to ask the app to open the Meteo screening
+    #: tab on a high-res field downloaded in the Database explorer. MainWindow
+    #: handles it (opens/focuses the tab and calls its ``load_staged``).
+    screeningRequested = Signal(object)
+
+    def request_screening(self, payload: dict) -> None:
+        """Ask the app to hand *payload* (staged high-res field) to the Meteo
+        screening tab."""
+        self.screeningRequested.emit(payload)
 
     def __init__(self) -> None:
         super().__init__()

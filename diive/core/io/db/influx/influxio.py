@@ -561,6 +561,68 @@ class InfluxIO:
                  f"{units}", verbose=self.verbose)
         return units
 
+    def show_field_overview(self, bucket: str, measurement: str, field: str,
+                            data_version: str | None = None,
+                            verbose: bool = True) -> dict:
+        """Overview of a single *field*: all its tags (incl. units) plus the
+        first and last record timestamps.
+
+        Reduces the field's records to one point per series with ``first()`` /
+        ``last()`` (see :func:`fluxql.field_records`), then collects, per tag, the
+        distinct values across all series, and the overall first / last record
+        time (in UTC, as the database stores them).
+
+        Returns a dict ``{bucket, measurement, field, data_version, n_series,
+        tags: {tag: [values]}, first: 'YYYY-MM-DD HH:MM:SS'|None, last: ...}``.
+        Empty (no records) yields an empty ``tags`` and ``first``/``last`` None.
+        """
+        overview = {'bucket': bucket, 'measurement': measurement, 'field': field,
+                    'data_version': data_version, 'n_series': 0, 'tags': {},
+                    'first': None, 'last': None}
+
+        last_df = self._query_one_df(fluxql.field_records(
+            bucket=bucket, measurement=measurement, field=field,
+            data_version=data_version, reducer='last'))
+        if last_df.empty:
+            if verbose:
+                info(f"No records found for {field} in {measurement} of {bucket}.",
+                     verbose=self.verbose)
+            return overview
+
+        overview['n_series'] = len(last_df)
+
+        # Per tag, the distinct values seen across all of the field's series
+        # (e.g. units that changed over time show up as more than one value).
+        tags = {}
+        for tag in TAGS:
+            if tag in last_df.columns:
+                vals = []
+                for v in last_df[tag].tolist():
+                    sv = '' if v is None else str(v)
+                    if sv not in vals:
+                        vals.append(sv)
+                tags[tag] = vals
+        overview['tags'] = tags
+
+        if '_time' in last_df.columns:
+            last_ts = pd.to_datetime(last_df['_time']).max()
+            overview['last'] = (last_ts.strftime('%Y-%m-%d %H:%M:%S')
+                                if pd.notna(last_ts) else None)
+
+        first_df = self._query_one_df(fluxql.field_records(
+            bucket=bucket, measurement=measurement, field=field,
+            data_version=data_version, reducer='first'))
+        if not first_df.empty and '_time' in first_df.columns:
+            first_ts = pd.to_datetime(first_df['_time']).min()
+            overview['first'] = (first_ts.strftime('%Y-%m-%d %H:%M:%S')
+                                 if pd.notna(first_ts) else None)
+
+        if verbose:
+            info(f"Overview for {field} in {measurement} of {bucket}: "
+                 f"{overview['n_series']} series, records {overview['first']} "
+                 f"to {overview['last']} (UTC).", verbose=self.verbose)
+        return overview
+
     def show_buckets(self) -> list:
         """Show all (non-system) buckets in the database"""
         query = fluxql.buckets()
@@ -606,6 +668,15 @@ class InfluxIO:
         with get_client(self.conf_db) as client:
             query_api = get_query_api(client)
             return query_api.query_data_frame(query=query)
+
+    def _query_one_df(self, query: str):
+        """Run *query* and return a single DataFrame (concatenated if the client
+        returns one frame per series; empty DataFrame if there are no rows)."""
+        res = self._query_df(query)
+        if isinstance(res, list):
+            frames = [f for f in res if not f.empty]
+            return pd.concat(frames, ignore_index=True) if frames else DataFrame()
+        return res
 
     def _values_from_query(self, query: str) -> list:
         """Run *query* and return its ``_value`` column as a list ([] if empty).
