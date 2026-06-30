@@ -1,10 +1,51 @@
 import unittest
 
+import numpy as np
+import pandas as pd
+
 import diive as dv
 import diive.configs.exampledata as ed
 from diive.configs.exampledata import load_exampledata_parquet_long
 from diive.core.dfun.frames import transform_yearmonth_matrix_to_longform
-from diive.core.times.resampling import diel_cycle
+from diive.core.times.resampling import (
+    diel_cycle,
+    resample_series_to_30MIN,
+    resample_series_to_freq,
+)
+
+
+class TestResampleToFreq(unittest.TestCase):
+    """General-resolution downsampling (resample_series_to_freq)."""
+
+    def _hires(self, freq='10min', days=3):
+        idx = pd.date_range('2022-06-01 00:10:00', periods=days * 24 * 6, freq=freq)
+        idx.name = 'TIMESTAMP_END'
+        return pd.Series(np.arange(len(idx), dtype=float), index=idx, name='TA')
+
+    def test_10min_to_30min_mean_end(self):
+        s = self._hires()
+        out = resample_series_to_freq(s, '30min', agg='mean', mincounts_perc=0.9)
+        self.assertEqual(out.index.name, 'TIMESTAMP_END')
+        # First 30MIN bin labelled at its END holds the first three 10-min values.
+        self.assertEqual(out.index[0], pd.Timestamp('2022-06-01 00:30:00'))
+        self.assertAlmostEqual(out.iloc[0], 1.0)  # mean of 0,1,2
+
+    def test_10min_to_1h_sum(self):
+        s = self._hires()
+        out = resample_series_to_freq(s, '1h', agg='sum', mincounts_perc=0.9)
+        self.assertEqual(out.index[0], pd.Timestamp('2022-06-01 01:00:00'))
+        self.assertAlmostEqual(out.iloc[0], float(0 + 1 + 2 + 3 + 4 + 5))
+
+    def test_30MIN_wrapper_matches_general(self):
+        s = self._hires()
+        self.assertTrue(
+            resample_series_to_30MIN(s, agg='mean').equals(
+                resample_series_to_freq(s, '30min', agg='mean')))
+
+    def test_upsampling_rejected(self):
+        s = self._hires(freq='30min')
+        with self.assertRaises(NotImplementedError):
+            resample_series_to_freq(s, '10min')
 
 
 class TestResampling(unittest.TestCase):

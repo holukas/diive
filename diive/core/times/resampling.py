@@ -91,12 +91,12 @@ def resample_to_daily_agg(series: Series,
 
 
 @ConsoleOutputDecorator()
-def resample_series_to_30MIN(series: Series,
-                             to_freqstr: Literal['30T', '30min'] = '30min',
-                             agg: Literal['mean', 'sum'] = 'mean',
-                             mincounts_perc: float = .9,
-                             output_timestamp_shows: Literal['middle', 'end'] = 'end') -> Series:
-    """Downsample data to 30-minute time resolution
+def resample_series_to_freq(series: Series,
+                            to_freqstr: str = '30min',
+                            agg: Literal['mean', 'sum'] = 'mean',
+                            mincounts_perc: float = .9,
+                            output_timestamp_shows: Literal['middle', 'end'] = 'end') -> Series:
+    """Downsample data to an arbitrary (lower) time resolution.
 
     Input data must have timestamp showing the END of the time period.
     Before resampling, the timestamp is converted to show the MIDDLE
@@ -105,6 +105,15 @@ def resample_series_to_30MIN(series: Series,
 
     Using the selected aggregation method and while also considering the
     minimum required values in the aggregation time window.
+
+    Args:
+        series: regular-frequency time series with a TIMESTAMP_END index.
+        to_freqstr: target pandas offset alias, e.g. '30min', '10min', '1h'.
+            Must be a *lower* time resolution than the source (downsampling only).
+        agg: aggregation method ('mean' or 'sum').
+        mincounts_perc: minimum fraction (0-1) of the maximum possible records
+            an interval must have for its aggregate to be kept (else NaN).
+        output_timestamp_shows: 'end' (default) or 'middle' of the period.
 
     Note regarding .resample:
     https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.resample.html
@@ -119,25 +128,19 @@ def resample_series_to_30MIN(series: Series,
     See here for a table of updated date offsets in pandas 2.2+:
     https://pandas.pydata.org/docs/user_guide/timeseries.html#dateoffset-objects
 
-    By default, for weekly aggregation the first day of the week in pandas is Sunday, but diive uses Monday.
-
     https://stackoverflow.com/questions/48340463/how-to-understand-closed-and-label-arguments-in-pandas-resample-method
         closed='right' =>  ( 3:00, 6:00 ]  or  3:00 <  x <= 6:00
         closed='left'  =>  [ 3:00, 6:00 )  or  3:00 <= x <  6:00
 
     """
 
-    # '30T' is the deprecated pandas alias for '30min' (removed in pandas 4);
-    # normalize so the deprecated form keeps working without emitting warnings.
-    if to_freqstr == '30T':
-        to_freqstr = '30min'
+    # 'T' is the deprecated pandas minute alias (removed in pandas 4); normalize
+    # e.g. '30T' -> '30min', '10T' -> '10min' so the old forms keep working.
+    if to_freqstr.endswith('T'):
+        to_freqstr = f"{to_freqstr[:-1]}min"
 
     current_freq = to_offset(series.index.freqstr)
     requested_freq = to_offset(to_freqstr)
-
-    # Resampling only 30MIN time resolution
-    if not any(chr in to_freqstr for chr in ['30T', '30min']):
-        raise NotImplementedError("Error during resampling: Only resampling to 30 minutes (30min) allowed.")
 
     # Timestamp must be regular
     if not series.index.freq:
@@ -195,6 +198,27 @@ def resample_series_to_30MIN(series: Series,
             agg_ser = TimestampSanitizer(data=agg_ser, output_middle_timestamp=False).get()
 
     return agg_ser
+
+
+def resample_series_to_30MIN(series: Series,
+                             to_freqstr: Literal['30T', '30min'] = '30min',
+                             agg: Literal['mean', 'sum'] = 'mean',
+                             mincounts_perc: float = .9,
+                             output_timestamp_shows: Literal['middle', 'end'] = 'end') -> Series:
+    """Downsample data to 30-minute time resolution.
+
+    Thin wrapper around :func:`resample_series_to_freq` kept for back-compat;
+    use that function directly for other resolutions. See it for full details.
+    """
+    if to_freqstr == '30T':
+        to_freqstr = '30min'
+    if to_freqstr != '30min':
+        raise NotImplementedError(
+            "resample_series_to_30MIN only resamples to 30min; "
+            "use resample_series_to_freq for other resolutions.")
+    return resample_series_to_freq(
+        series=series, to_freqstr='30min', agg=agg,
+        mincounts_perc=mincounts_perc, output_timestamp_shows=output_timestamp_shows)
 
 
 def diel_cycle(series: Series,

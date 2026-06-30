@@ -22,7 +22,7 @@ from diive.core.utils.console import info, detail
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
 from diive.core.plotting.styles.format import FormatStyle
 from diive.core.plotting.timeseries import TimeSeries
-from diive.core.times.resampling import resample_series_to_30MIN
+from diive.core.times.resampling import resample_series_to_freq
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import detect_freq_groups
 from diive.analysis import daily_correlation
@@ -631,21 +631,22 @@ class StepwiseMeteoScreeningDb:
         return daily_correlations
 
     def resample(self,
-                 to_freqstr: Literal['30T', '30min'] = '30min',
+                 to_freqstr: str = '30min',
                  agg: Literal['mean', 'sum'] = 'mean',
                  mincounts_perc: float = .25):
 
-        """Resample the screened series to the target frequency."""
+        """Resample the screened series to the target frequency (default 30min,
+        but any lower resolution, e.g. '10min', '1h')."""
         for field in self.fields:
 
-            # Resample to 30MIN
-            series_resampled = resample_series_to_30MIN(series=self._series_hires_cleaned[field],
-                                                        to_freqstr=to_freqstr,
-                                                        agg=agg,
-                                                        mincounts_perc=mincounts_perc)
+            # Resample to the target resolution
+            series_resampled = resample_series_to_freq(series=self._series_hires_cleaned[field],
+                                                       to_freqstr=to_freqstr,
+                                                       agg=agg,
+                                                       mincounts_perc=mincounts_perc)
 
             # Update tags with resampling info
-            self._tags[field]['freq'] = '30min'
+            self._tags[field]['freq'] = to_freqstr
             self._tags[field]['data_version'] = 'meteoscreening_diive'
 
             # Create df that includes the resampled series and its tags
@@ -671,13 +672,14 @@ class StepwiseMeteoScreeningDb:
             for col in newcols:
                 detail(f"++Added new column {col}.")
 
-            # Calculate overall quality flag QCF
-            qcf = FlagQCF(series=self.data_detailed[field][field],
-                          df=self.data_detailed[field],
+            # Calculate overall quality flag QCF. FlagQCF auto-detects all
+            # FLAG_*_TEST columns; idstr only names the output columns. No
+            # swinpot here, so the day/night QCF split is off (the outlier tests
+            # are still day/night-aware via the site coordinates).
+            qcf = FlagQCF(df=self.data_detailed[field],
+                          target_col=field,
                           idstr='METSCR',
-                          swinpot=None
-                          # nighttime_threshold=nighttime_threshold
-                          )
+                          swinpot_col=None)
             qcf.calculate(daytime_accept_qcf_below=daytime_accept_qcf_below,
                           nighttime_accept_qcf_below=nighttime_accept_qcf_below)
             self._data_detailed[field] = qcf.get()
