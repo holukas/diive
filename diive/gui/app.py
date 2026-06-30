@@ -242,6 +242,8 @@ class MainWindow(QMainWindow):
         metadata_store.manager.renameRequested.connect(self._rename_one_variable)
         # Variable-list "Delete…" (any tab) confirms and drops the column.
         metadata_store.manager.deleteRequested.connect(self._delete_variable)
+        # "Send to Meteo screening" (Database explorer) opens the screening tab.
+        db.manager.screeningRequested.connect(self._send_to_meteo_screening)
 
         # Keep each event's 0/1 flag column in sync with the event list, and the
         # menu toggle in sync with the visibility flag (which the Events tab also
@@ -617,6 +619,15 @@ class MainWindow(QMainWindow):
         for tab in self._menu_tab_list:
             if getattr(tab, "_menu_label", None) == "Metadata explorer":
                 tab.select_variable(name)
+                break
+
+    def _send_to_meteo_screening(self, payload) -> None:
+        """Open (or focus) the Meteo screening tab and hand it the staged field."""
+        label = "Meteo screening (database)"
+        self._open_menu_tab(label)  # single-instance: focuses/opens
+        for tab in self._menu_tab_list:
+            if getattr(tab, "_menu_label", None) == label:
+                tab.load_staged(payload)
                 break
 
     def _open_menu_tab(self, label: str) -> None:

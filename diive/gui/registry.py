@@ -15,6 +15,7 @@ from diive.gui.tabs.combine_variables import CombineVariablesTab
 from diive.gui.tabs.compound_extremes import CompoundExtremesTab
 from diive.gui.tabs.database import DatabaseConnectionTab
 from diive.gui.tabs.database_explorer import DatabaseExplorerTab
+from diive.gui.tabs.meteo_screening import MeteoScreeningTab
 from diive.gui.tabs.corrections_nighttime_offset import NighttimeZeroOffsetTab
 from diive.gui.tabs.corrections_relativehumidity_offset import RelativeHumidityOffsetTab
 from diive.gui.tabs.corrections_set_missing import SetExactToMissingTab
@@ -189,6 +190,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
     "Database": {
         "Database connection": DatabaseConnectionTab,
         "Database explorer": DatabaseExplorerTab,
+        "Meteo screening (database)": MeteoScreeningTab,
     },
 }
 
@@ -206,4 +208,4 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 #: Database connection (the single app-wide InfluxDB handle).
 SINGLE_INSTANCE_TABS: set[str] = {
     "Appearance", "Project settings", "Metadata explorer",
-    "Database connection", "Database explorer"}
+    "Database connection", "Database explorer", "Meteo screening (database)"}
