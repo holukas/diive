@@ -109,6 +109,30 @@ def combine_variables_to_code(
     return f"combined = dv.variables.combine_variables({', '.join(args)})\n"
 
 
+def calc_vpd_from_ta_rh_to_code(
+        ta_col: str,
+        rh_col: str,
+        name: str | None = None,
+) -> str:
+    """Render a :func:`~diive.variables.thermodynamic.calc_vpd_from_ta_rh` call
+    as a runnable snippet.
+
+    Assumes ``dv`` and a DataFrame ``df`` are already in scope. Returns the
+    snippet ending in a newline (the result is bound to ``vpd``, in kPa).
+
+    Args:
+        ta_col: Column name holding air temperature in degC.
+        rh_col: Column name holding relative humidity in %.
+        name: Output series name, rendered as a trailing ``.rename()`` when given
+            (the library function names the result ``'VPD'``).
+    """
+    code = (f"vpd = dv.variables.calc_vpd_from_ta_rh("
+            f"df, rh_col={rh_col!r}, ta_col={ta_col!r})\n")
+    if name:
+        code += f"vpd = vpd.rename({name!r})\n"
+    return code
+
+
 def generate_noisy_timeseries(
         start_date='2024-01-01',
         periods=365,
