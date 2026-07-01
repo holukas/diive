@@ -11,10 +11,12 @@ orchestrates the choice and shows the result.
 Selecting multiple files merges them into one dataset (same filetype assumed).
 
 An optional **label** prefixes every loaded variable (``v1`` -> ``v1_NEE``) so a
-second dataset can be loaded alongside the first without column-name collisions
--- e.g. comparing two processing runs of the same site. The **load mode**
-(Replace / Add to current) decides whether the load replaces the current dataset
-or merges onto it (only offered when data is already loaded).
+second dataset can be loaded alongside the first as all-new columns -- e.g.
+comparing two processing runs of the same site. The **load mode** (Replace / Add
+to current) decides whether the load replaces the current dataset or extends it
+(only offered when data is already loaded). "Add to current" unions the
+timestamps and never overwrites existing values (new data only fills new rows /
+gaps); same-named variables are extended, new ones are added.
 
 No default filetype is assumed (there are many) -- the user picks explicitly,
 except for ``.parquet`` which is unambiguous and preselected. The preview reads
@@ -199,8 +201,9 @@ class OpenDataDialog(QDialog):
             "optional prefix for every variable, e.g. v1 -> v1_NEE")
         self.label_edit.setToolTip(
             "Prefixes every loaded variable with '<label>_'. Use it to keep a\n"
-            "second dataset (e.g. a different processing run of the same site)\n"
-            "separate from the first instead of overwriting same-named columns.")
+            "second dataset (e.g. a different processing run of the same site) as\n"
+            "separate, all-new columns. Without a label, same-named variables are\n"
+            "extended in place (existing values kept) when adding to current data.")
         opt_row.addWidget(self.label_edit, stretch=1)
         opt_row.addWidget(QLabel("Load mode:"))
         self.mode_combo = QComboBox()
@@ -209,8 +212,11 @@ class OpenDataDialog(QDialog):
             self.mode_combo.addItem("Add to current data", "add")
         self.mode_combo.setToolTip(
             "Replace: discard the current dataset and load this one.\n"
-            "Add to current: merge these variables onto the current dataset on\n"
-            "the shared timestamp index (for comparing datasets side by side).")
+            "Add to current: extend the current dataset. Timestamps are unioned\n"
+            "(new periods appended); existing values are never overwritten (new\n"
+            "data only fills new rows/gaps). Same-named variables are extended;\n"
+            "new ones are added. Use a Label to keep a second run's columns\n"
+            "separate (all-new names) for side-by-side comparison instead.")
         opt_row.addWidget(self.mode_combo)
         layout.addLayout(opt_row)
 

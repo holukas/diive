@@ -1115,33 +1115,62 @@ class MainWindow(QMainWindow):
             self._set_data(dlg.dataframe, source=dlg.source_name)
 
     def _add_dataset(self, new_df, source: str) -> None:
-        """Merge a second loaded dataset onto the current one (shared index).
+        """Merge another loaded dataset into the current one without overwriting.
 
-        Used for comparing datasets side by side (e.g. two processing runs of the
-        same site). Columns align on the timestamp index via `_add_features`. A
-        same-named column would overwrite the existing one, so collisions are
-        flagged first — the user is expected to load with a label to avoid them.
+        "Add to current data" *extends* the record rather than replacing it: the
+        timestamp indexes are unioned (so new time periods are appended) and the
+        two frames are combined so existing (non-null) values always win — the new
+        data only fills timestamps/gaps the current dataset doesn't already cover.
+        Nothing existing is overwritten.
+
+        Columns already present are *extended in place* (the extension is recorded
+        in their metadata, not flagged NEW); genuinely new columns are added and
+        flagged NEW. Loading with a label keeps a second run's columns separate
+        (all-new names) for side-by-side comparison; without one, same-named
+        variables are simply extended.
         """
-        collisions = [c for c in new_df.columns if c in self._full_data.columns]
-        if collisions:
-            preview = ", ".join(collisions[:5]) + ("..." if len(collisions) > 5 else "")
-            resp = QMessageBox.question(
-                self, "Variable name collision",
-                f"{len(collisions)} variable(s) already exist and would be "
-                f"overwritten:\n{preview}\n\nLoad again with a label (e.g. 'v2') "
-                f"to keep them separate.\n\nOverwrite anyway?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No)
-            if resp != QMessageBox.StandardButton.Yes:
-                return
-        # Seed an "original" provenance baseline for the merged-in columns, as a
-        # plain load does — `_add_features` only records provenance from attrs.
-        metadata_store.manager.store.record_original(
-            new_df.columns, operation=f"Imported from {source}",
-            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"))
-        self._add_features(new_df)
+        existing = self._full_data
+        new_cols = [str(c) for c in new_df.columns if str(c) not in existing.columns]
+        extended_cols = [str(c) for c in new_df.columns if str(c) in existing.columns]
+
+        # Union the timestamp index so new periods extend the record, then combine
+        # so existing values are preserved and the new data only fills new rows /
+        # gaps (combine_first: self wins). Keep the original column order (existing
+        # first, then the new ones) and the timestamp index name.
+        union_index = existing.index.union(new_df.index)
+        merged = existing.reindex(union_index).combine_first(new_df.reindex(union_index))
+        merged = merged[list(existing.columns) + new_cols]
+        merged.index.name = existing.index.name
+        n_new_rows = len(union_index) - len(existing.index)
+        self._full_data = merged
+
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+        store = metadata_store.manager.store
+        # New columns: seed an 'original' baseline (like a plain load) + flag NEW.
+        if new_cols:
+            store.record_original(
+                new_cols, operation=f"Imported from {source}", timestamp=ts)
+            self._created |= set(new_cols)
+            # Keep new columns visible under an active subset (mirrors _add_features).
+            if self._var_subset is not None:
+                self._var_subset += [c for c in new_cols if c not in self._var_subset]
+        # Extended columns: don't flag NEW — just document the extension in the
+        # variable's metadata (a provenance entry noting the source + added rows).
+        for col in extended_cols:
+            store.record_derived(
+                col, operation=f"Extended with data from {source}",
+                params={"new_rows": int(n_new_rows)}, timestamp=ts)
         metadata_store.manager.notify()
-        success(f"Added {len(new_df.columns)} variable(s) from {source}")
+        self._apply_range()
+
+        parts = []
+        if extended_cols:
+            parts.append(f"extended {len(extended_cols)} variable(s)")
+        if new_cols:
+            parts.append(f"added {len(new_cols)} new variable(s)")
+        if n_new_rows:
+            parts.append(f"+{n_new_rows:,} new timestamps")
+        success(f"Merged {source}: " + (", ".join(parts) if parts else "no changes"))
 
     def _save_file(self) -> None:
         """Export the current dataset as a diive-format parquet or CSV file."""

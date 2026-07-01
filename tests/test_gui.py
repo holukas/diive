@@ -612,6 +612,58 @@ def test_gui_daterange_subselection(window):
     assert not window._reset_range_act.isEnabled()
 
 
+def test_add_dataset_extends_without_overwrite(window):
+    # "Add to current data" must EXTEND the record, not replace it: union the
+    # timestamps (append new periods), keep existing values on overlap (never
+    # overwrite), fill only new rows/gaps from the incoming file. Existing
+    # variables are extended (documented in metadata, NOT flagged NEW); only
+    # genuinely new columns get the NEW flag.
+    from diive.gui import metadata_store
+
+    step = pd.Timedelta("30min")
+    base_idx = pd.date_range("2021-01-01", periods=6, freq="30min",
+                             name="TIMESTAMP_END")
+    base = pd.DataFrame({"TA": [1., 2., 3., 4., 5., 6.],
+                         "RH": [10., 20., 30., 40., 50., 60.]}, index=base_idx)
+    window._set_data(base, source="base.parquet")
+    QApplication.processEvents()
+
+    # Incoming file: overlaps the last two timestamps (different values, must be
+    # ignored), adds three new timestamps for TA, and brings one brand-new column.
+    overlap = base_idx[-2:]
+    new_ts = pd.date_range(base_idx[-1] + step, periods=3, freq="30min")
+    new_idx = overlap.append(new_ts)
+    new_df = pd.DataFrame({"TA": [999.] * 5, "NEWVAR": [7., 8., 9., 10., 11.]},
+                          index=new_idx)
+    new_df.index.name = "TIMESTAMP_END"
+
+    window._add_dataset(new_df, "more.parquet")
+    QApplication.processEvents()
+    fd = window._full_data
+
+    # New timestamps appended; existing values on the overlap are preserved.
+    assert len(fd) == 9
+    assert list(fd["TA"].loc[overlap]) == [5., 6.]      # existing wins, not 999
+    assert list(fd["TA"].loc[new_ts]) == [999.] * 3     # new rows filled from file
+    # Brand-new column added, NaN where the old record had no data for it.
+    assert "NEWVAR" in fd.columns
+    assert pd.isna(fd["NEWVAR"].loc[base_idx[0]])
+    assert list(fd["NEWVAR"].loc[new_ts]) == [9., 10., 11.]
+
+    # NEW flag: only the genuinely new column, never the extended existing ones.
+    assert "NEWVAR" in window._created
+    assert "TA" not in window._created and "RH" not in window._created
+
+    # Metadata: the extended column records the extension; an untouched existing
+    # column does not; the new column gets an 'Imported from' baseline.
+    store = metadata_store.manager.store
+    assert any("Extended with data from" in p.operation
+               for p in store.peek("TA").provenance)
+    assert not any("Extended" in p.operation for p in store.peek("RH").provenance)
+    assert any("Imported from" in p.operation
+               for p in store.peek("NEWVAR").provenance)
+
+
 def test_daterange_dialog_clamps_and_orders(app):
     from diive.gui.widgets.daterange_dialog import DateRangeDialog
     start, end = pd.Timestamp("2020-01-01"), pd.Timestamp("2020-12-31 23:30")
