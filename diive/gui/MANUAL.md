@@ -314,23 +314,40 @@ labels and the usual display toggles (legend, title, axes).
 
 The variable's date × time-of-day grid rendered as a rotatable, GPU-accelerated 3-D
 relief, the three-dimensional analogue of the date/time heatmap. **Style** picks the
-look: *Extruded heatmap* (the default) draws one flat bar per cell, like the 2-D
-heatmap raised into 3-D, so the grid reads as stepped rectangles at different heights;
-*Smooth surface* interpolates the grid into continuous hills and valleys you can orbit.
-Controls: **Colormap**; **Vertical exaggeration** (relief height; 0 is flat);
-**Opacity**; **Y stretch** (widens the date axis so the plot reads as a landscape
-rather than a thin ridge); **Y cell (days)** with **Cell aggregator** (average, median,
-max, or min several days into each cell, to widen the bars and tame single-day spikes);
-**Smooth terrain** (round the surface into rolling hills by subdividing the mesh;
-surface style only); **Shadows** with **Shadow length** (cast short shadows from an
-overhead spotlight for depth; off by default); **Smooth shading**; and **Show mesh**
-(overlay the grid lines). **Reset view** frames the relief from the lower-left at a 45°
-angle. Drag to rotate, Shift+drag to pan, Ctrl+drag to roll, scroll to zoom. Changing a
-setting re-renders in place and keeps your current view; picking a new variable
-re-frames. This needs the optional **`gui3d`** extra (PyVista/VTK); without it the tab
-shows install instructions instead of failing. **Copy Python** (top-right) copies a
-script that builds the same surface as a Matplotlib 3-D plot (so it runs without the
-extra).
+look: *Extruded heatmap* (the default) draws one flat bar per cell, like the 2-D heatmap
+raised into 3-D, so the grid reads as stepped bars — each bar (top and its step-risers)
+is one uniform heatmap colour; *Smooth surface* interpolates the grid into continuous
+hills and valleys you can orbit.
+
+**Relief controls:** **Colormap**; **Vertical exaggeration** (relief height; 0 is flat);
+**Opacity**; **Y stretch** (widens the date axis so the plot reads as a landscape rather
+than a thin ridge; up to 100); **Y cell (days)** with **Cell aggregator**. The
+aggregator has two families: the *block* options (mean, median, max, min) collapse every
+N days into one wider cell to tame single-day spikes, while *rolling mean* / *rolling
+median* keep full daily resolution and instead smooth each day over a centred window of N
+days (gaps are preserved either way). Also **Smooth terrain** (round the surface into
+rolling hills by subdividing the mesh; surface style only); **Shadows** with **Shadow
+length** (cast short shadows from an overhead spotlight for depth; off by default);
+**Smooth shading**; and **Show mesh** (overlay the grid lines).
+
+**View buttons** snap the camera to fixed angles and maximise the plot in the viewport:
+**Isometric** (the default lower-left 45° framing, also used on load), **Top**, **Front**,
+**Back**, **Left**, **Right**, plus two gently-tilted presentation views — **Front 20°**
+(straight-on from the front, 20° above horizontal) and **Side 20°**. **Orbit** slowly
+turns the scene with a gentle rise-and-fall sweep; **Flyover** glides over the relief
+along the date axis from the first record to the last and back; **Speed** sets the pace of
+both. Any animation stops as soon as you touch the camera or pick a view. Drag to rotate,
+Shift+drag to pan, Ctrl+drag to roll, scroll to zoom. Changing a setting re-renders in
+place and keeps your current view; picking a new variable re-frames to Isometric.
+
+**Export** (needs no internet): **VR (.glb)** writes the styled surface as a self-contained
+binary glTF with the colours baked into a texture (imports directly into PowerPoint via
+*Insert ▸ 3D Models*, Blender, and Meta Quest / WebXR viewers); **3D print (.stl)** writes
+a watertight solid with a base plate, ready to slice and print.
+
+This needs the optional **`gui3d`** extra (PyVista/VTK); without it the tab shows install
+instructions instead of failing. **Copy Python** (top-right) copies a script that builds
+the same surface as a Matplotlib 3-D plot (so it runs without the extra).
 
 ### Wind rose
 

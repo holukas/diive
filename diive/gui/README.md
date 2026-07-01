@@ -66,7 +66,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `tabs/drivers.py` | Driver explorer — rank variables by correlation with a target (`rank_drivers`, optional lag scan); click a driver for its scatter |
 | `tabs/seasonaltrend.py` | Seasonal-trend & anomaly explorer — STL/classical/harmonic decomposition + yearly anomalies vs a reference period |
 | `tabs/spectrogram.py` | Spectrogram explorer — time-frequency map (`dv.analysis.spectrogram`) on calendar/cycles-per-day axes + an explanation |
-| `tabs/surface3d.py` | 3-D surface explorer — date×time-of-day relief rendered with PyVista (`dv.plotting.datetime_surface_grid` for the grid); extruded-heatmap (stepped bars, default) or smooth-surface style, Y-stretch + day-binning, optional cast shadows; optional `gui3d` extra, shows install notice if absent |
+| `tabs/surface3d.py` | 3-D surface explorer — date×time-of-day relief rendered with PyVista (`dv.plotting.datetime_surface_grid` for the grid); extruded-heatmap (stepped bars, uniform per-cell colour, default) or smooth-surface style, Y-stretch (≤100) + day-binning/rolling smooth, view presets, cinematic orbit/flyover, glTF/STL export, optional cast shadows (off by default); optional `gui3d` extra, shows install notice if absent |
 | `widgets/pyvista_canvas.py` | `Pyvista3DCanvas` — embedded `pyvistaqt.QtInteractor` (GPU/VTK render window); lazy-imports VTK, `pyvista_available()` gate + `Missing3DDependency`. `frame_default` = orthographic lower-left 45° framing; `apply_shadows` = flat headlight or overhead spotlight + shadow mapping |
 | `tabs/_outlier_base.py` | `BaseOutlierTab` — shared machinery for the Outliers tabs (var list, two-panel preview, worker thread, iteration progress, live preview, limit lines, day/night colouring, Add/Copy Python). `supports_daynight` toggles the day/night box |
 | `tabs/outliers.py` / `tabs/outliers_localsd.py` | Hampel / Local SD outlier tabs (`dv.outliers.Hampel` / `LocalSD`) — `BaseOutlierTab` subclasses |
@@ -262,18 +262,37 @@ called `STL.fit(weights=…)`, which isn't supported — STL had been raising on
 its date×time-of-day grid is rendered as a GPU-accelerated, rotatable relief — the 3-D analogue of the date/time heatmap.
 The numeric grid is the **library's** `dv.plotting.datetime_surface_grid(series)` → `DateTimeSurface` (sanitize + pivot to
 a complete date×time matrix; pure domain logic, no rendering backend). Everything else is presentation in the tab. Two
-**Style**s: an **extruded heatmap** (default) builds a doubled-coordinate "staircase" `StructuredGrid` so each cell is a
-flat bar with vertical walls (`_extruded_grid`), with NaN cells removed via `threshold` so the opaque mesh needs no
-translucent pass; or a **smooth surface** with optional `subdivide` + `smooth_taubin` rounding. The base is normalised
-(hours-vs-days ranges differ wildly), the date axis widened by **Y stretch**, and rows optionally binned by day
-(`_bin_rows`, NaN-aware mean/median/max/min) to widen the bars; relief height comes from the exaggeration control. Colour
-is by the real values (extruded mode renders opaque; the smooth mode hides gaps via `nan_opacity=0`). Lighting is flat by
-default (true colours); an optional **Shadows** toggle casts short shadows from an overhead spotlight via `enable_shadows`,
-with an adjustable length (`Pyvista3DCanvas.apply_shadows`). `frame_default` sets an orthographic lower-left 45° view that
-re-frames only when the variable changes, so a settings tweak keeps the user's current view. 3-D is the optional
-**`gui3d`** extra (`pyvista` + `pyvistaqt`, VTK-based) — lazy-imported like `gui`/`causal`, so a plain `gui` install never
-pulls in VTK; without it the tab shows an install notice (`widgets/pyvista_canvas.py::pyvista_available`) instead of
-failing. Install: `uv sync --extra gui --extra gui3d`.
+**Style**s: an **extruded heatmap** (default) builds a doubled-coordinate "staircase" `StructuredGrid` (`_extruded_grid`)
+so each cell is a flat bar with step-risers between neighbours (open underneath — a draped heatmap, not solid bars on a
+base plane), coloured by **cell data** (`_staircase_cell_values`) so every top and riser is one flat heatmap colour with
+no gradient blending — a riser takes the *taller* neighbour's value so a bar's front matches its top; NaN cells are removed
+via `threshold`. The **smooth surface** style adds optional `subdivide` + `smooth_taubin` rounding. The base is normalised
+(hours-vs-days ranges differ wildly), the date axis widened by **Y stretch** (≤100), and rows optionally coarsened by day:
+`_bin_rows` block-aggregates every N days (NaN-aware mean/median/max/min) or, for the `rolling mean`/`rolling median`
+options, `_roll_rows` slides a centred N-day window keeping full resolution (gaps preserved). Relief height comes from the
+exaggeration control. Lighting is flat by default (true colours); an optional **Shadows** toggle (off by default) casts
+short shadows from an overhead spotlight via `enable_shadows`, with an adjustable length (`Pyvista3DCanvas.apply_shadows`).
+
+**Camera:** `set_view(vector, viewup, tight=)` frames a fixed direction; the preset buttons (Isometric/Top/Front/Back/
+Left/Right + tilted Front 20°/Side 20°, from `_VIEWS`) pass `tight=True` so `_fit_tight` maximises the plot in the viewport
+for that orientation, while `frame_default` (loose bounding-sphere fit) is used for framing that must survive rotation.
+Two timer-driven animations share one **Speed** knob: **Orbit** (`orbit_step`, turntable with a sine rise-and-fall sweep)
+and **Flyover** (`fly_to`, a low pass whose look-point sweeps the whole record, camera trailing in cross-section-width
+units so it starts close regardless of record length); either stops on any camera interaction (a VTK observer via
+`on_interaction_start`) or when a preset is picked. On load / new variable the tab frames to the tight Isometric view;
+a settings tweak re-renders in place and keeps the current view. Because a render during tab construction (before the GL
+window is realised) can mis-bake the shadow map, `Pyvista3DCanvas.on_first_show` re-renders once the widget is actually
+shown.
+
+**Export:** **VR (.glb)** builds a dedicated textured mesh (`_build_export_surface`) — per-cell boxes for the extruded
+style (`_extruded_box_geometry`, one texel per bar so every face is uniform) or a UV-mapped sheet for the smooth style —
+with the colormap baked into an **emissive** texture (viewers like PowerPoint ignore per-vertex colours and unlit-style
+emissive avoids their lighting washing the colours out; saturation is boosted via `_EXPORT_SATURATION`), exported to a true
+binary `.glb` through `trimesh`. **3D print (.stl)** writes a watertight solid with a base plate (`_printable_solid`).
+
+3-D is the optional **`gui3d`** extra (`pyvista` + `pyvistaqt` + `trimesh`, VTK-based) — lazy-imported like `gui`/`causal`,
+so a plain `gui` install never pulls in VTK; without it the tab shows an install notice
+(`widgets/pyvista_canvas.py::pyvista_available`) instead of failing. Install: `uv sync --extra gui --extra gui3d`.
 
 **Spectrogram explorer (`tabs/spectrogram.py`):** opened from **Analyze ▸ Spectrogram** (single-instance). Pick a
 variable → a spectrogram (short-time FFT) shows how the strength of its cycles changes over time, with a plain-language
