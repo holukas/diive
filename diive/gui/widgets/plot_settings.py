@@ -35,33 +35,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from diive.gui.widgets.drop_combo import DropComboBox as _DropComboBox
+
 #: Sentinel entry meaning "no colour-by variable" in the colour-by dropdown.
 _COLORBY_NONE = "(none)"
-
-
-class _DropComboBox(QComboBox):
-    """A non-editable combo that also accepts a variable name dropped onto it as
-    plain text (drag a variable from the list into the field). If the dropped
-    name is one of its items, it is selected."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.setAcceptDrops(True)
-
-    def dragEnterEvent(self, event) -> None:  # noqa: N802 (Qt override)
-        if event.mimeData().hasText():
-            event.acceptProposedAction()
-
-    def dragMoveEvent(self, event) -> None:  # noqa: N802
-        if event.mimeData().hasText():
-            event.acceptProposedAction()
-
-    def dropEvent(self, event) -> None:  # noqa: N802
-        text = event.mimeData().text().strip()
-        i = self.findText(text)
-        if i >= 0:
-            self.setCurrentIndex(i)
-            event.acceptProposedAction()
 
 
 #: Modern line-colour presets offered as one-click swatches (hex, name).

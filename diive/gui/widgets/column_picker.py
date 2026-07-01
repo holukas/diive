@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from diive.gui.widgets.drop_combo import DropComboBox
 from diive.variables import auto_pick_column
 
 #: Sentinel shown for an unselected optional input.
@@ -61,8 +62,15 @@ class ColumnPicker(QGroupBox):
         self._avail: dict[str, QLabel] = {}
         self._cols: set[str] = set()
         form = QFormLayout(self)
+        # In a narrow, fixed-width column a long label + a column-name-wide combo
+        # don't fit on one line, and QFormLayout would otherwise starve the label
+        # to zero width (invisible). Wrapping long rows puts the label on its own
+        # line above the field so it's always readable.
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         for spec in specs:
-            combo = QComboBox()
+            # DropComboBox so a variable can be dragged from a VariablePanel list
+            # straight onto the field (harmless where no draggable list is shown).
+            combo = DropComboBox()
             if spec.get("tip"):
                 combo.setToolTip(spec["tip"])
             avail = QLabel("")
