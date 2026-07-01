@@ -443,8 +443,10 @@ class MainWindow(QMainWindow):
         data_menu.addAction(_menu_tab_act("Select records by condition"))
 
         # Variables: create new columns (feature engineer, timestamp), a
-        # separator, then manage existing ones (rename, metadata). Built manually
-        # so the "Add timestamp column..." action interleaves with the create tabs.
+        # separator, then manage existing ones (rename, metadata), then a
+        # "Calculate" section with the derived-variable calculators. Built
+        # manually so the "Add timestamp column..." action interleaves with the
+        # create tabs and the Calculate section sits at the end.
         variables_menu = add_menu("&Variables")
         variables_menu.addAction(_menu_tab_act("Feature engineering"))
         variables_menu.addAction(_menu_tab_act("Combine variables"))
@@ -452,6 +454,8 @@ class MainWindow(QMainWindow):
         variables_menu.addSeparator()
         variables_menu.addAction(_menu_tab_act("Rename variables"))
         variables_menu.addAction(_menu_tab_act("Metadata explorer"))
+        variables_menu.addSection("Calculate")
+        variables_menu.addAction(_menu_tab_act("VPD (TA + RH)"))
 
         # Events: the Events tab (full list/edit UI) first, then a quick "add
         # one" + a master toggle for showing them on plots. Built manually so

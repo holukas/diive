@@ -568,6 +568,7 @@ _LINE_RULES = [
     ("metadata", _ln_props),
     ("feature", _ln_gear),
     ("combine", _ln_grid),
+    ("calculate", _ln_gear),        # derived-variable calculators (VPD, ...)
     ("rename", _ln_tag),
     ("profile", _ln_profile),
     # Analysis.

@@ -87,7 +87,11 @@
   **Combine variables** (drag a variable onto heatmap 1 and another onto heatmap 2, pick a method —
   multiply/add/subtract/divide, or fill the gaps of one with the other — and "keep overlapping only", preview the result
   in heatmap 3, then add it as a new column, with **Copy Python**; backed by the new `dv.variables.combine_variables` /
-  `combine_variables_to_code`);
+  `combine_variables_to_code`), **VPD (TA + RH)** (a new Variables ▸ **Calculate** section; vapor pressure deficit in
+  kPa from air temperature + relative humidity via `dv.variables.calc_vpd_from_ta_rh`; a draggable variable list, TA/RH input fields you drag a
+  variable onto or pick, a **Calculate** button, and TA / RH / VPD date/time-heatmap previews; emits `VPD_kPa` (DERIVED),
+  with **Copy Python** backed by the new `calc_vpd_from_ta_rh_to_code`; first of a reusable `BaseDerivedVariableTab`
+  family for single-formula derived variables);
   plus **Appearance**, **Project settings** (author, description, site details, and a **sticky-note wall** — all saved
   with the project), and **Log**.
 - **Plot tabs — refinements.** Every X/Y/Z role-picked plot type — **Scatter XY**, **Wind rose**, **Hexbin**, and

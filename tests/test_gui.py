@@ -1139,6 +1139,70 @@ def test_correction_tabs(app):
     assert "value" in miss.status.text().lower()
 
 
+def test_derived_variable_vpd_tab(app):
+    # The derived-variable tabs (BaseDerivedVariableTab subclasses): one library
+    # formula from a few existing columns, previewed and emitted as a DERIVED
+    # column with a reproducible script. VPD is the first / reference subclass.
+    from diive.core.metadata import ATTRS_KEY
+    from diive.gui.tabs.derived_vpd import VpdFromTaRhTab
+
+    idx = pd.date_range("2024-06-01", periods=48 * 10, freq="30min",
+                        name="TIMESTAMP_END")
+    df = pd.DataFrame(
+        {"TA": 15.0 + 5.0 * pd.Series(range(len(idx)), index=idx).mod(48) / 48.0,
+         "RH": 60.0 + pd.Series(range(len(idx)), index=idx).mod(30).astype(float)},
+        index=idx)
+
+    tab = VpdFromTaRhTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    # Inputs auto-seed by name and preview immediately; but nothing is computed
+    # until Calculate is pressed (Add stays disabled, result panel empty).
+    assert tab.picker.picks() == {"ta": "TA", "rh": "RH"}
+    assert tab._out_name() == "VPD_kPa"
+    assert tab.varpanel.list.count() == 2               # the shared variable list
+    assert tab._result is None and not tab.add_btn.isEnabled()
+
+    tab._calculate()
+    QApplication.processEvents()
+    assert tab._result is not None and tab._result.name == "VPD_kPa"
+    # VPD matches the library function exactly (the tab only wires it up).
+    expected = dv.variables.calc_vpd_from_ta_rh(df, rh_col="RH", ta_col="TA")
+    pd.testing.assert_series_equal(
+        tab._result, expected.rename("VPD_kPa"), check_names=True)
+    assert tab.add_btn.isEnabled()
+
+    emitted = {}
+    tab.featuresCreated.connect(lambda d: emitted.update(df=d))
+    tab._add()
+    QApplication.processEvents()
+    assert list(emitted["df"].columns) == ["VPD_kPa"]
+    prov = emitted["df"].attrs[ATTRS_KEY]["VPD_kPa"]
+    assert prov["origin"] == "derived" and "vpd" in prov["tags"]
+
+    # Copy Python reproduces the calculation and compiles.
+    code = tab._python_code()
+    compile(code, "<gen>", "exec")
+    assert "calc_vpd_from_ta_rh" in code and "VPD_kPa" in code
+
+    # Dragging a variable onto a field is a plain-text drop onto a DropComboBox;
+    # simulate the effect (setCurrentText) — it stales the result until the next
+    # Calculate and refreshes that input's preview.
+    tab.picker.combos()["ta"].setCurrentText("RH")      # valid column, recomputes previews
+    QApplication.processEvents()
+    assert tab._result is None and not tab.add_btn.isEnabled()
+
+    # A pick that isn't a real column (e.g. a stale restored selection) makes
+    # Calculate + Copy Python no-ops.
+    combo = tab.picker.combos()["rh"]
+    combo.addItem("NOT_A_COLUMN")
+    combo.setCurrentText("NOT_A_COLUMN")
+    QApplication.processEvents()
+    tab._calculate()
+    assert tab._result is None and not tab.add_btn.isEnabled()
+    assert tab._python_code() is None
+
+
 def test_flux_chain_tab_level33_detection(app):
     # L3.3 supports auto-detecting the USTAR threshold (moving point bootstrap)
     # as an alternative to constant thresholds. The detected CUT percentiles
