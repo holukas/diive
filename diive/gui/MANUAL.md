@@ -349,6 +349,25 @@ This needs the optional **`gui3d`** extra (PyVista/VTK); without it the tab show
 instructions instead of failing. **Copy Python** (top-right) copies a script that builds
 the same surface as a Matplotlib 3-D plot (so it runs without the extra).
 
+### 3D surface (X/Y/Z)
+
+The coordinate-surface sibling of the 3D surface: instead of a variable's date ×
+time-of-day grid, it renders an arbitrary **Z over X and Y**. Pick three variables by
+**dragging** each from the list onto the **X**, **Y**, or **Z (height / colour)** field
+(clicking the list does nothing here — drag is how roles are assigned). The scattered
+points are gridded onto a regular X-Y mesh and shown as the same rotatable relief.
+
+Two extra controls set the gridding: **Bins (X/Y)** (how many equal-width bins to split
+each axis into) and **Z aggregator** (how the Z values falling in each cell are combined —
+mean, median, max, min, or sum). **Empty cells stay empty** — a bin with no data is a
+genuine hole in the surface, not a floor tile.
+
+Everything else matches the 3D surface tab: the same relief controls (style, colormap,
+exaggeration, opacity, Y stretch, smooth terrain, shadows, smooth shading, mesh), the same
+view presets and orbit/flyover animations, and the same **VR (.glb)** / **3D print (.stl)**
+exports. **Copy Python** copies a script that grids the data with
+`dv.analysis.GridAggregator` and draws the surface in Matplotlib (no 3-D extra needed).
+
 ### Wind rose
 
 A variable aggregated into **wind-direction sectors** and drawn as a polar rose — for

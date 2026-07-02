@@ -67,6 +67,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `tabs/seasonaltrend.py` | Seasonal-trend & anomaly explorer — STL/classical/harmonic decomposition + yearly anomalies vs a reference period |
 | `tabs/spectrogram.py` | Spectrogram explorer — time-frequency map (`dv.analysis.spectrogram`) on calendar/cycles-per-day axes + an explanation |
 | `tabs/surface3d.py` | 3-D surface explorer — date×time-of-day relief rendered with PyVista (`dv.plotting.datetime_surface_grid` for the grid); extruded-heatmap (stepped bars, uniform per-cell colour, default) or smooth-surface style, Y-stretch (≤100) + day-binning/rolling smooth, view presets, cinematic orbit/flyover, glTF/STL export, optional cast shadows (off by default); optional `gui3d` extra, shows install notice if absent |
+| `tabs/surfacexyz.py` | 3-D **X/Y/Z** coordinate surface — subclasses `Surface3DTab`, reusing its controls/camera/animation/export; renders Z over two chosen X/Y variables (drag onto X/Y/Z fields) gridded by `dv.analysis.GridAggregator`; adds Bins/Z-aggregator controls; empty bins render as holes (`_drop_gap_risers`) |
 | `widgets/pyvista_canvas.py` | `Pyvista3DCanvas` — embedded `pyvistaqt.QtInteractor` (GPU/VTK render window); lazy-imports VTK, `pyvista_available()` gate + `Missing3DDependency`. `frame_default` = orthographic lower-left 45° framing; `apply_shadows` = flat headlight or overhead spotlight + shadow mapping |
 | `tabs/_outlier_base.py` | `BaseOutlierTab` — shared machinery for the Outliers tabs (var list, two-panel preview, worker thread, iteration progress, live preview, limit lines, day/night colouring, Add/Copy Python). `supports_daynight` toggles the day/night box |
 | `tabs/outliers.py` / `tabs/outliers_localsd.py` | Hampel / Local SD outlier tabs (`dv.outliers.Hampel` / `LocalSD`) — `BaseOutlierTab` subclasses |
@@ -293,6 +294,18 @@ binary `.glb` through `trimesh`. **3D print (.stl)** writes a watertight solid w
 3-D is the optional **`gui3d`** extra (`pyvista` + `pyvistaqt` + `trimesh`, VTK-based) — lazy-imported like `gui`/`causal`,
 so a plain `gui` install never pulls in VTK; without it the tab shows an install notice
 (`widgets/pyvista_canvas.py::pyvista_available`) instead of failing. Install: `uv sync --extra gui --extra gui3d`.
+
+**3-D X/Y/Z coordinate surface (`tabs/surfacexyz.py`):** the coordinate sibling, opened from **Plot ▸ 3D surface
+(X/Y/Z)**. `SurfaceXYZTab` **subclasses** `Surface3DTab` and overrides only the data source — everything else (relief
+controls, camera presets, orbit/flyover, glTF/STL export, the whole render/mesh pipeline) is inherited. It renders an
+arbitrary Z over two chosen X and Y variables instead of the calendar grid: pick the three via an X/Y/Z `ColumnPicker`
+(`_build_top_controls`; drag a name from the list — the shared explorer list is made a drag source via the base's new
+`list_draggable` flag — onto a `DropComboBox` field), and the scattered points are gridded by the **library's**
+`dv.analysis.GridAggregator` (equal-width bins, Z aggregated per cell) in `_grid_data`, whose `df_agg_wide` (Y-index ×
+X-columns) feeds the shared `_render_surface`. Extra controls: **Bins (X/Y)** and **Z aggregator**. Empty bins stay empty —
+the tab sets `_drop_gap_risers = True` so `_staircase_cell_values` keeps a riser only between two measured cells (no walls
+drape to the base at a measured↔missing edge, unlike the dense date/time grid which keeps `_drop_gap_risers = False`).
+**Copy Python** emits `surface_xyz_to_code` (`core/plotting/codegen.py`, GridAggregator + a matplotlib 3-D surface).
 
 **Spectrogram explorer (`tabs/spectrogram.py`):** opened from **Analyze ▸ Spectrogram** (single-instance). Pick a
 variable → a spectrogram (short-time FFT) shows how the strength of its cycles changes over time, with a plain-language

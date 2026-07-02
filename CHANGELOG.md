@@ -284,8 +284,9 @@
   (computation + plot). As with every other tab, the GUI only *asks* the library for the snippet (GUI <-> library
   separation): new library codegen functions `rank_drivers_to_code` (`analysis/correlation.py`), `gapstats_to_code`
   (`analysis/gapfinder.py`), `spectrogram_to_code` (`analysis/harmonic.py`), `seasonal_trend_to_code`
-  (`analysis/seasonaltrend.py`, decomposition + anomaly views), `datetime_surface_to_code` (`core/plotting/codegen.py`, a
-  matplotlib 3-D surface so it runs without the GPU extra), and `feature_engineer_to_code` (`core/ml/feature_engineer.py`).
+  (`analysis/seasonaltrend.py`, decomposition + anomaly views), `datetime_surface_to_code` / `surface_xyz_to_code`
+  (`core/plotting/codegen.py`, matplotlib 3-D surfaces so they run without the GPU extra), and `feature_engineer_to_code`
+  (`core/ml/feature_engineer.py`).
   The `SingleVariableExplorerTab` base mounts the button automatically for any subclass that overrides `_python_code`.
 - **3D surface tab** (`Plot ▸ 3D surface`, single-instance, optional `gui3d` extra): the date×time-of-day grid as a
   rotatable PyVista relief. **Style** picks an extruded heatmap (default — stepped bars, each bar one uniform heatmap
@@ -302,6 +303,14 @@
   with a base plate. On load / new variable the view frames to the tight Isometric preset; a settings tweak stays put.
   Needs `gui3d` (`pyvista` + `pyvistaqt` + `trimesh`); without it the tab shows install instructions. **Copy Python** emits
   a matplotlib 3-D surface (`datetime_surface_to_code`) that runs without the extra.
+- **3D surface (X/Y/Z) tab** (`Plot ▸ 3D surface (X/Y/Z)`, optional `gui3d` extra): the coordinate-surface sibling of the
+  3D surface. Instead of a variable's calendar grid it renders an arbitrary **Z over two chosen X and Y variables** — drag
+  a variable from the list onto the **X**, **Y**, or **Z** field, and the scattered points are gridded onto a regular X-Y
+  mesh (`dv.analysis.GridAggregator`, equal-width bins) and shown as the same relief. Adds **Bins (X/Y)** and **Z
+  aggregator** (mean/median/max/min/sum) controls; empty bins render as genuine holes. It reuses the 3D surface tab's relief
+  controls, view presets, orbit/flyover, and glTF/STL export unchanged. **Copy Python** emits `surface_xyz_to_code`
+  (GridAggregator + a matplotlib 3-D surface). Enabled by making the shared single-variable explorer list an opt-in drag
+  source (`SingleVariableExplorerTab.list_draggable`).
 
 Library additions used by the GUI (all backward-compatible):
 
