@@ -60,6 +60,9 @@ class SingleVariableExplorerTab(DiiveTab):
     list_title: str | None = None
     #: Muted parenthetical hint next to ``list_title``.
     list_hint = "click to select"
+    #: Make the variable list a drag source (drag a name onto a drop target,
+    #: e.g. the X/Y/Z fields of the coordinate-surface tab). Off by default.
+    list_draggable = False
 
     # --- build ---------------------------------------------------------
     def build(self) -> QWidget:
@@ -83,7 +86,7 @@ class SingleVariableExplorerTab(DiiveTab):
         outer.addLayout(build_titlebar(self.title, *actions))
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.varpanel = VariablePanel()
+        self.varpanel = VariablePanel(draggable=self.list_draggable)
         self.varpanel.selected.connect(self._on_select)
         # Optional list header (the varpanel keeps its own fixed width, so the
         # wrapper column sizes to it); without a title the panel goes in bare.

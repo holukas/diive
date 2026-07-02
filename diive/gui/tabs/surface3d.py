@@ -233,6 +233,39 @@ class Surface3DTab(SingleVariableExplorerTab):
     #: Header above the variable list (matching the outlier / correction tabs).
     list_title = "Variable"
     list_hint = "click to render"
+    #: Parenthetical after the "Controls" header (overridden by the XYZ variant).
+    _controls_hint = "adjust the relief"
+    #: Extruded style: whether to drape risers to the base at a measured<->missing
+    #: edge. Off here (the date/time grid is dense, so draping reads as a shell);
+    #: the sparse X/Y/Z variant turns it on so empty bins stay truly empty.
+    _drop_gap_risers = False
+
+    # --- subclass hooks (shared controls/render live here; the X/Y/Z variant
+    # --- overrides only these) -----------------------------------------
+    def _build_top_controls(self, lay) -> None:
+        """Extra controls above the relief form. No-op for the date/time tab."""
+
+    def _add_data_rows(self, form) -> None:
+        """Data-prep rows in the relief form. Day-binning for the date/time tab."""
+        self.ybin = QSpinBox()
+        self.ybin.setRange(1, 90)
+        self.ybin.setValue(1)
+        self.ybin.setToolTip("Days combined per date cell — the block size, or "
+                             "the window width for the rolling aggregators "
+                             "(1 = full daily detail, no binning). Larger = "
+                             "broader, smoother relief.")
+        self.ybin.valueChanged.connect(self._rerender_view)
+        form.addRow("Y cell (days)", self.ybin)
+
+        self.ybin_agg = QComboBox()
+        self.ybin_agg.addItems(list(_AGGS) + list(_ROLLING_AGGS))
+        self.ybin_agg.setToolTip(
+            "How to combine the days per date cell. Block: mean/median broaden "
+            "and lower spikes, max keeps peaks tall with a wider base, min for "
+            "troughs. Rolling mean/median keep full daily resolution instead, "
+            "smoothing each day over a centred window (gaps preserved).")
+        self.ybin_agg.currentTextChanged.connect(self._rerender_view)
+        form.addRow("Cell aggregator", self.ybin_agg)
 
     def _init_state(self) -> None:
         # Variable whose surface the camera was last framed for; lets a settings
@@ -297,7 +330,10 @@ class Surface3DTab(SingleVariableExplorerTab):
         lay.setContentsMargins(10, 6, 10, 6)
         lay.setSpacing(8)
 
-        lay.addWidget(list_header("Controls", "adjust the relief"))
+        lay.addWidget(list_header("Controls", self._controls_hint))
+        # Subclass hook: extra controls above the relief form (e.g. the X/Y/Z
+        # picker in the coordinate-surface variant). No-op here.
+        self._build_top_controls(lay)
 
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 0)
@@ -348,25 +384,9 @@ class Surface3DTab(SingleVariableExplorerTab):
         self.ystretch.valueChanged.connect(self._rerender_view)
         form.addRow("Y stretch", self.ystretch)
 
-        self.ybin = QSpinBox()
-        self.ybin.setRange(1, 90)
-        self.ybin.setValue(1)
-        self.ybin.setToolTip("Days combined per date cell — the block size, or "
-                             "the window width for the rolling aggregators "
-                             "(1 = full daily detail, no binning). Larger = "
-                             "broader, smoother relief.")
-        self.ybin.valueChanged.connect(self._rerender_view)
-        form.addRow("Y cell (days)", self.ybin)
-
-        self.ybin_agg = QComboBox()
-        self.ybin_agg.addItems(list(_AGGS) + list(_ROLLING_AGGS))
-        self.ybin_agg.setToolTip(
-            "How to combine the days per date cell. Block: mean/median broaden "
-            "and lower spikes, max keeps peaks tall with a wider base, min for "
-            "troughs. Rolling mean/median keep full daily resolution instead, "
-            "smoothing each day over a centred window (gaps preserved).")
-        self.ybin_agg.currentTextChanged.connect(self._rerender_view)
-        form.addRow("Cell aggregator", self.ybin_agg)
+        # Subclass hook: data-prep controls that sit between Y stretch and Smooth
+        # terrain (this tab's day-binning; the X/Y/Z variant's grid resolution).
+        self._add_data_rows(form)
 
         self.smoothing = QSpinBox()
         self.smoothing.setRange(0, 2)
@@ -727,7 +747,7 @@ class Surface3DTab(SingleVariableExplorerTab):
         return verts, faces, uv
 
     @staticmethod
-    def _staircase_cell_values(height, z):
+    def _staircase_cell_values(height, z, drop_gap_risers=False):
         """Per-quad colour values for the extruded staircase shell (on screen).
 
         The doubled grid's quads are: cell tops (even row, even col), x-risers
@@ -736,15 +756,27 @@ class Surface3DTab(SingleVariableExplorerTab):
         the **taller** of its two cells -- the bar whose front face that riser
         is -- so a bar's walls match its top instead of showing a neighbour's
         colour. Corners stay NaN (dropped by the threshold; zero-area anyway).
-        Returns a ``(2D-1, 2T-1)`` array matching the structured-grid cell order.
+
+        With ``drop_gap_risers`` a riser is kept only when **both** its cells are
+        measured, so nothing drapes down to the base at a measured<->missing
+        edge: measured cells become flat tops joined by steps only between
+        measured neighbours, and missing bins stay truly empty (used by the
+        coordinate-surface variant, where most bins can be empty). Returns a
+        ``(2D-1, 2T-1)`` array matching the structured-grid cell order.
         """
         d, t = z.shape
+        finite = np.isfinite(z)
         vals = np.full((2 * d - 1, 2 * t - 1), np.nan)
         vals[0::2, 0::2] = z  # cell tops
-        vals[0::2, 1::2] = np.where(height[:, :-1] >= height[:, 1:],
-                                    z[:, :-1], z[:, 1:])  # x-riser -> taller
-        vals[1::2, 0::2] = np.where(height[:-1, :] >= height[1:, :],
-                                    z[:-1, :], z[1:, :])  # y-riser -> taller
+        x_riser = np.where(height[:, :-1] >= height[:, 1:],
+                           z[:, :-1], z[:, 1:])  # x-riser -> taller
+        y_riser = np.where(height[:-1, :] >= height[1:, :],
+                           z[:-1, :], z[1:, :])  # y-riser -> taller
+        if drop_gap_risers:  # only bridge two measured cells
+            x_riser = np.where(finite[:, :-1] & finite[:, 1:], x_riser, np.nan)
+            y_riser = np.where(finite[:-1, :] & finite[1:, :], y_riser, np.nan)
+        vals[0::2, 1::2] = x_riser
+        vals[1::2, 0::2] = y_riser
         return vals
 
     @staticmethod
@@ -865,31 +897,50 @@ class Surface3DTab(SingleVariableExplorerTab):
         return datetime_surface_to_code(self._target, cmap=self.cmap.currentText())
 
     # --- rendering -----------------------------------------------------
+    def _grid_data(self):
+        """Return ``(x_values, y_values, z_grid, frame_key, scalar_title)`` for
+        the current selection, or None if there's nothing to show.
+
+        Date/time variant: the variable's date x time-of-day grid, coarsened by
+        the day-binning controls (``x_values`` index the columns of ``z_grid``,
+        ``y_values`` the rows). The X/Y/Z variant overrides only this.
+        """
+        if self._target is None:
+            return None
+        grid = dv.plotting.datetime_surface_grid(self._df[self._target])
+        z, y_days = _bin_rows(grid.z, grid.y_days, self.ybin.value(),
+                              self.ybin_agg.currentText())
+        return grid.x_hours, y_days, z, self._target, self._target
+
     def _compute(self) -> None:
-        if self.canvas is None or self._target is None:
+        if self.canvas is None:
             return
+        data = self._grid_data()
+        if data is None:
+            self.canvas.clear()
+            self.canvas.render()
+            return
+        self._render_surface(*data)
+
+    def _render_surface(self, x_values, y_values, z, frame_key, title) -> None:
+        """Shared pipeline: normalise -> build mesh (extruded/smooth) -> render.
+
+        Used by both the date/time surface and the X/Y/Z coordinate surface;
+        everything variant-specific happens in ``_grid_data``.
+        """
         import pyvista as pv
 
-        grid_data = dv.plotting.datetime_surface_grid(self._df[self._target])
-        x_hours, y_days, z = grid_data.x_hours, grid_data.y_days, grid_data.z
-
-        # Coarsen the date axis (wider Y cells) to broaden sharp spikes.
-        z, y_days = _bin_rows(z, y_days, self.ybin.value(),
-                              self.ybin_agg.currentText())
-
-        # Stride the date rows if the grid is huge, to keep orbiting smooth.
+        # Stride huge grids so orbiting stays smooth.
         if z.shape[0] > _MAX_ROWS:
             step = int(np.ceil(z.shape[0] / _MAX_ROWS))
-            y_days = y_days[::step]
+            y_values = y_values[::step]
             z = z[::step, :]
 
-        # Normalise the base (x and y ranges differ wildly: hours 0-24 vs.
-        # thousands of days) so the surface is well-proportioned regardless of
-        # record length; exaggeration then sets the relief height. The date axis
-        # is stretched by the "Y stretch" control so the relief reads as a wide
-        # landscape.
-        xn = _unit(x_hours)
-        yn = _unit(y_days) * self.ystretch.value()
+        # Normalise the base (the two axes' ranges differ wildly) so the surface
+        # is well-proportioned regardless of scale; exaggeration sets the relief
+        # height. The long (date / Y) axis is widened by the "Y stretch" control.
+        xn = _unit(x_values)
+        yn = _unit(y_values) * self.ystretch.value()
 
         finite = np.isfinite(z)
         if not finite.any():
@@ -924,8 +975,8 @@ class Surface3DTab(SingleVariableExplorerTab):
             # matches its top.
             xx, yy, hh, _ = _extruded_grid(xn, yn, height, scalars)
             mesh = pv.StructuredGrid(xx, yy, hh)
-            mesh.cell_data["values"] = \
-                self._staircase_cell_values(height, scalars).ravel(order="F")
+            mesh.cell_data["values"] = self._staircase_cell_values(
+                height, scalars, self._drop_gap_risers).ravel(order="F")
             # Drop gap cells (NaN value) so the shell stays opaque.
             mesh = mesh.threshold([zmin, zmax], scalars="values", all_scalars=True)
             smooth_shading = self.smooth.isChecked()
@@ -952,7 +1003,7 @@ class Surface3DTab(SingleVariableExplorerTab):
             smooth_shading=smooth_shading,
             show_edges=self.edges.isChecked(),
             edge_color="#90A4AE",
-            scalar_bar_args={"title": self._target, "n_labels": 5},
+            scalar_bar_args={"title": title, "n_labels": 5},
         )
         if hide_nan:
             add_kwargs["nan_opacity"] = 0.0  # hide gap cells
@@ -968,13 +1019,13 @@ class Surface3DTab(SingleVariableExplorerTab):
         p = self.canvas.plotter
         p.clear()
         p.add_mesh(mesh, **add_kwargs)
-        p.show_axes()  # orientation marker (X=time of day, Y=date, Z=value)
+        p.show_axes()  # orientation marker (X / Y / Z axes)
         # Snap to the isometric framing (same tight fit as the Isometric button)
-        # only for a newly selected variable; a settings tweak re-renders in
-        # place so the user keeps their current view.
-        if self._target != self._framed_target:
+        # only when the data changes (new variable / new X-Y-Z); a settings tweak
+        # re-renders in place so the user keeps their current view.
+        if frame_key != self._framed_target:
             self.canvas.set_view(_VIEWS[0][1], viewup=_VIEWS[0][2], tight=True)
-            self._framed_target = self._target
+            self._framed_target = frame_key
         # Apply shadows AFTER framing so the shadow-map pass is set up against the
         # final camera/scene; applied earlier, the first render shows wrong
         # shadows until the user toggles them (which re-applies with the settled
