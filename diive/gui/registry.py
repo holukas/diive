@@ -77,6 +77,7 @@ from diive.gui.tabs.plotting import (
 from diive.gui.tabs.settings import SettingsTab
 from diive.gui.tabs.site import ProjectSettingsTab
 from diive.gui.tabs.surface3d import Surface3DTab
+from diive.gui.tabs.surfacexyz import SurfaceXYZTab
 from diive.gui.tabs.variable_selector import VariableSelectorTab
 
 #: Tab classes always shown in the main window, in display order.
@@ -133,6 +134,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Tree ring": lambda: PlottingTab(TREERING, "Tree ring"),
         "Waterfall": lambda: PlottingTab(WATERFALL, "Waterfall"),
         "3D surface": Surface3DTab,
+        "3D surface (X/Y/Z)": SurfaceXYZTab,
     },
     "Outliers": {
         "Stepwise screening": StepwiseScreeningTab,
