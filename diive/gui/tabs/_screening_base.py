@@ -20,10 +20,14 @@ inspector page (`_inspector_pages`), and the emitted columns (`_emit_frame`).
 Layout: the shared variable list on the left, a segmented inspector in the centre
 (Outliers / Corrections / Report — only the active page takes space; each of the
 first two carries its own Run button below its list), and on the right an action
-bar (limit-line toggle + Copy/Add) over a large, always-visible plot grid:
-original + outliers (optionally with the selected step's detection band), the
-cleaned (+ corrected) series, a date/time heatmap of the cleaned series, and the
-QCF flag over time plus its 0/1/2 distribution. Edits apply only when the
+bar (limit-line toggle + Copy/Add) over the preview. The preview is split into
+lazily-rendered sub-tabs — Series (original + removals with the optional
+detection band, and the cleaned/corrected series), Heatmap (date/time heatmap of
+the cleaned series), and QCF (flag heatmap + 0/1/2 distribution) — so only the
+visible page is drawn. That keeps the edit -> Run -> inspect loop fast on
+high-resolution data: the two expensive heatmaps are computed only when their
+page is opened (cached until the next run), and selecting a step or toggling the
+limit lines redraws only the light Series page. Edits apply only when the
 relevant Run button is clicked.
 
 The per-method parameter widgets and the cards are the shared
@@ -67,6 +71,7 @@ from diive.gui.widgets.stepwise_cards import (
     StepCard,
     StepEditorDialog,
 )
+from diive.gui.widgets.sub_tabs import SubTabs
 from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.variable_panel import VariablePanel
 from diive.preprocessing.corrections import apply_corrections
@@ -177,8 +182,25 @@ class ScreeningTabBase(DiiveTab):
             "#FFE69C; border-radius: 6px; padding: 6px 8px; }")
         rlayout.addWidget(self.pending_banner)
 
-        self.canvas = MplCanvas()
-        rlayout.addWidget(self.canvas, stretch=1)
+        # Preview split across lazily-rendered sub-tabs: only the visible page is
+        # drawn, so the interactive edit -> Run -> inspect loop pays for one light
+        # panel, not five. The two expensive date/time heatmaps live on their own
+        # pages and are computed only when opened (cached until the next run).
+        # See _refresh_preview / _render_page.
+        self.canvas_series = MplCanvas()
+        self.canvas_heat = MplCanvas()
+        self.canvas_qcf = MplCanvas()
+        # self.canvas aliases the Series page (the default, primary preview) so
+        # older callers / tests that reference `.canvas` keep working.
+        self.canvas = self.canvas_series
+        self._page_canvases = [self.canvas_series, self.canvas_heat, self.canvas_qcf]
+        self._page_dirty = [True, True, True]  # per-page: needs a redraw
+        self._preview_tabs = SubTabs()
+        self._preview_tabs.add_page("Series", self.canvas_series)
+        self._preview_tabs.add_page("Heatmap", self.canvas_heat)
+        self._preview_tabs.add_page("QCF", self.canvas_qcf)
+        self._preview_tabs.changed.connect(self._render_page)
+        rlayout.addWidget(self._preview_tabs, stretch=1)
 
         layout.addWidget(right, stretch=1)
         root_lay.addWidget(body, stretch=1)
@@ -380,7 +402,8 @@ class ScreeningTabBase(DiiveTab):
         self.limits_cb.setToolTip(
             "Overlay the selected step's upper/lower detection band on the "
             "original series (methods with a single envelope only).")
-        self.limits_cb.toggled.connect(lambda *_: self._draw_payload())
+        # The band overlay only affects the Series page.
+        self.limits_cb.toggled.connect(lambda *_: self._refresh_preview(pages=(0,)))
         bar.addWidget(self.limits_cb)
 
         bar.addStretch(1)
@@ -542,7 +565,9 @@ class ScreeningTabBase(DiiveTab):
         self._selected_step = -1 if i == self._selected_step else i
         for k, card in enumerate(self._step_cards):
             card.setSelected(k == self._selected_step)
-        self._draw_payload()
+        # The selected-step highlight only changes the Series page; leave the
+        # heatmaps untouched (they don't depend on the selection).
+        self._refresh_preview(pages=(0,))
 
     # --- data ---
     def on_data_loaded(self, df, created: set | None = None) -> None:
@@ -605,7 +630,9 @@ class ScreeningTabBase(DiiveTab):
         self._chain_dirty = bool(self._enabled_steps())
         self._corr_dirty = bool(self.corrections_panel.corrections())
         self.copy_btn.setEnabled(self._code_provider() is not None)
-        self._draw_raw(self._df[name])
+        # New variable: the run is cleared, so every page is stale (Series shows
+        # the raw series, the heatmaps show a placeholder until re-run).
+        self._refresh_preview()
         self._refresh_run_buttons()
         if self._chain_dirty or self._corr_dirty:
             self.status.setText(
@@ -641,7 +668,19 @@ class ScreeningTabBase(DiiveTab):
     def _recompute_corrections(self) -> None:
         """Apply the enabled corrections to the current base series, then refresh
         the result columns, the 'Add' button, the preview, and the copy button.
-        Synchronous — corrections are cheap and don't touch the outlier chain."""
+        Synchronous — corrections are cheap and don't touch the outlier chain.
+
+        Corrections only add the corrected overlay on the Series page (the
+        cleaned-series and QCF heatmaps are unchanged), so only that page is
+        refreshed."""
+        self._apply_corrections_state()
+        self._refresh_preview(pages=(0,))
+
+    def _apply_corrections_state(self) -> None:
+        """Recompute ``self._corrected`` and the result columns / buttons from the
+        current corrections, WITHOUT drawing — callers decide which preview pages
+        to refresh afterwards (a fresh run refreshes all; a correction edit only
+        the Series page)."""
         corrs = self.corrections_panel.corrections()
         base = self._base_series()
         applied = True
@@ -664,7 +703,6 @@ class ScreeningTabBase(DiiveTab):
                                 and not self._result_df.empty)
         self.copy_btn.setEnabled(self._code_provider() is not None)
         self._refresh_run_buttons()
-        self._draw_payload()
 
     def _run(self) -> None:
         if self._df is None or self._var is None:
@@ -674,15 +712,16 @@ class ScreeningTabBase(DiiveTab):
         self._run_id += 1
         run_id = self._run_id
         # Nothing to screen (no steps, or all toggled off): show the raw series.
-        # Corrections may still apply (on the raw series), so route through
-        # _recompute_corrections rather than drawing raw directly.
+        # Corrections may still apply (on the raw series). The payload is now
+        # None, so every page is stale (the heatmaps revert to a placeholder).
         if not self._enabled_steps():
             self._payload = None
             self._chain_dirty = False
             self.report_text.clear()
             self.report_copy_btn.setEnabled(False)
             self.qcf_label.setText("QCF: add a step to compute.")
-            self._recompute_corrections()
+            self._apply_corrections_state()
+            self._refresh_preview()
             return
         self.status.setText("Running chain…")
         self.add_btn.setEnabled(False)
@@ -766,9 +805,12 @@ class ScreeningTabBase(DiiveTab):
             f"Click a card to highlight just its removals.")
         self.report_text.setPlainText(payload.get("report", ""))
         self.report_copy_btn.setEnabled(bool(payload.get("report")))
-        # Applies corrections on the fresh QCF series, builds result columns,
-        # toggles the Add/Copy buttons, and draws the preview.
-        self._recompute_corrections()
+        # Fresh run: the cleaned series and QCF both changed, so every preview
+        # page is stale. Apply corrections on the fresh QCF series (Series
+        # overlay) without drawing, then refresh all pages — only the visible one
+        # renders now; the heatmaps render lazily when their page is opened.
+        self._apply_corrections_state()
+        self._refresh_preview()
 
     def _on_failed(self, data) -> None:
         run_id, msg = data
@@ -882,47 +924,62 @@ class ScreeningTabBase(DiiveTab):
             return None
         return self._payload.get("report") or None
 
-    # --- preview ---
-    def _draw_raw(self, series) -> None:
-        """Single panel with the original series (before any step runs), plus the
-        corrected series overlaid when corrections are active."""
-        ax = self.canvas.new_axes(1)[0]
-        ax.plot(series.index, series.to_numpy(), color=_C_RAW, lw=0.5, alpha=0.85,
-                label="original")
-        if self._corrected is not None:
-            ax.plot(self._corrected.index, self._corrected.to_numpy(),
-                    color=_C_CORRECTED, lw=0.7, alpha=0.9, label="corrected")
-            ax.legend(loc="best", fontsize=7, framealpha=0.9)
-            ax.set_title(f"{series.name} — original + corrected", fontsize=9)
-        else:
-            ax.set_title(f"{series.name} — original (add a step)", fontsize=9)
-        self.canvas.draw()
+    # --- preview (lazily-rendered sub-tabs) ---
+    def _refresh_preview(self, pages=None) -> None:
+        """Mark preview pages stale and render the visible one now; the others
+        render lazily when their sub-tab is opened (staying cached until the next
+        run). Pass ``pages`` (default: all) to limit what goes stale — selecting a
+        step or toggling limits touches only the Series page, so the two expensive
+        heatmaps are never recomputed for a mere highlight change."""
+        for p in (pages if pages is not None else (0, 1, 2)):
+            self._page_dirty[p] = True
+        self._render_page(self._preview_tabs.current_index())
 
-    def _draw_payload(self) -> None:
-        """The preview grid for the current run, honouring the selected step and
-        the limit-line toggle. Top: a short time series with removals + the
-        cleaned series. Bottom: cleaned heatmap, QCF heatmap, QCF distribution."""
-        if self._payload is None:
-            if self._var is not None and self._df is not None:
-                self._draw_raw(self._df[self._var])
+    def _render_page(self, idx: int) -> None:
+        """Render page *idx* if it is stale. Called on refresh (for the visible
+        page) and whenever the user opens a sub-tab (for a stale hidden page)."""
+        if not (0 <= idx < len(self._page_canvases)) or not self._page_dirty[idx]:
             return
+        canvas = self._page_canvases[idx]
+        if idx == 0:
+            self._draw_series(canvas)
+        elif idx == 1:
+            self._draw_heatmap(canvas)
+        else:
+            self._draw_qcf(canvas)
+        self._page_dirty[idx] = False
+
+    def _draw_series(self, canvas) -> None:
+        """Series page: original + removals (selected step's, else cumulative)
+        with the optional detection band, and the cleaned (+ corrected) series
+        below. Before any run it shows the raw series (+ corrected overlay)."""
+        if self._payload is None:
+            series = (self._df[self._var]
+                      if self._var is not None and self._df is not None else None)
+            if series is None:
+                canvas.show_message("Select a variable to screen.")
+                return
+            ax = canvas.new_axes(1)[0]
+            ax.plot(series.index, series.to_numpy(), color=_C_RAW, lw=0.5,
+                    alpha=0.85, label="original")
+            if self._corrected is not None:
+                ax.plot(self._corrected.index, self._corrected.to_numpy(),
+                        color=_C_CORRECTED, lw=0.7, alpha=0.9, label="corrected")
+                ax.legend(loc="best", fontsize=7, framealpha=0.9)
+                ax.set_title(f"{series.name} — original + corrected", fontsize=9)
+            else:
+                ax.set_title(f"{series.name} — original (add a step)", fontsize=9)
+            canvas.draw()
+            return
+
         det = self._payload["detector"]
         removed = self._payload["removed"]
         bounds = self._payload["bounds"]
-        qcf = self._payload["qcf"]
         orig = det.series_hires_orig
         cleaned = det.series_hires_cleaned
         sel = self._selected_step
 
-        self.canvas.reset_layout()
-        fig = self.canvas.fig
-        # Small time series up top (short rows), the three map/dist panels below.
-        gs = fig.add_gridspec(3, 3, height_ratios=[0.8, 0.8, 1.6])
-        ax_ts = fig.add_subplot(gs[0, :])
-        ax_clean = fig.add_subplot(gs[1, :], sharex=ax_ts)
-        ax_heat = fig.add_subplot(gs[2, 0])
-        ax_qcf_heat = fig.add_subplot(gs[2, 1])
-        ax_hist = fig.add_subplot(gs[2, 2])
+        ax_ts, ax_clean = canvas.new_axes(2, orientation="vertical", sharex=True)
 
         # 1) Original + removals (selected step's, else cumulative).
         ax_ts.plot(orig.index, orig.to_numpy(), color=_C_RAW, lw=0.5, alpha=0.8,
@@ -960,24 +1017,39 @@ class ScreeningTabBase(DiiveTab):
             ax_clean.set_title("cleaned + corrected", fontsize=9)
         else:
             ax_clean.set_title("cleaned (outliers removed)", fontsize=9)
+        canvas.draw()
 
-        # 3) Heatmap of the cleaned series.
+    def _draw_heatmap(self, canvas) -> None:
+        """Heatmap page: date/time heatmap of the cleaned series. This is the
+        expensive pivot — rendered only when this page is opened."""
+        if self._payload is None:
+            canvas.show_message("Run a chain to see the cleaned-series heatmap.")
+            return
+        cleaned = self._payload["detector"].series_hires_cleaned
+        ax = canvas.new_axes(1)[0]
         try:
             dv.plotting.HeatmapDateTime(cleaned).plot(
-                ax=ax_heat, fig=fig,
+                ax=ax, fig=canvas.fig,
                 format_style=dv.plotting.FormatStyle(
                     title="cleaned", axlabel_fontsize=8, ticks_fontsize=7),
                 cb_digits_after_comma="auto", cb_labelsize=7)
-            ax_heat.title.set_fontsize(9)
+            ax.title.set_fontsize(9)
         except Exception as err:
-            ax_heat.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",
-                         wrap=True, transform=ax_heat.transAxes)
+            ax.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",
+                    wrap=True, transform=ax.transAxes)
+        canvas.draw()
 
-        # 4) Heatmap of the QCF flag (when/where records were rejected).
-        flag = qcf.flagqcf
+    def _draw_qcf(self, canvas) -> None:
+        """QCF page: heatmap of the QCF flag (when/where records were rejected)
+        and the 0/1/2 distribution. Rendered only when this page is opened."""
+        if self._payload is None:
+            canvas.show_message("Run a chain to compute the QCF.")
+            return
+        flag = self._payload["qcf"].flagqcf
+        ax_qcf_heat, ax_hist = canvas.new_axes(2)
         try:
             dv.plotting.HeatmapDateTime(flag.rename("QCF")).plot(
-                ax=ax_qcf_heat, fig=fig, vmin=0, vmax=2,
+                ax=ax_qcf_heat, fig=canvas.fig, vmin=0, vmax=2,
                 format_style=dv.plotting.FormatStyle(
                     title="QCF (0/1/2)", axlabel_fontsize=8, ticks_fontsize=7),
                 cmap=_QCF_CMAP, cb_digits_after_comma=0, cb_labelsize=7)
@@ -986,15 +1058,13 @@ class ScreeningTabBase(DiiveTab):
             ax_qcf_heat.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center",
                              va="center", wrap=True, transform=ax_qcf_heat.transAxes)
 
-        # 5) QCF distribution.
         vc = flag.value_counts()
         levels = [0, 1, 2]
         ax_hist.bar(levels, [int(vc.get(lv, 0)) for lv in levels],
                     color=[_QCF_COLORS[lv] for lv in levels])
         ax_hist.set_xticks(levels)
         ax_hist.set_title("QCF distribution", fontsize=9)
-
-        self.canvas.draw()
+        canvas.draw()
 
     # --- state ---
     def save_state(self) -> dict:
