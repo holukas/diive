@@ -80,7 +80,7 @@ class DatabaseConnectionTab(DiiveTab):
             "Connect diive to an InfluxDB through a config "
             "directory. Credentials (url, org, token) are read from the "
             "'<dir>_secret' sibling folder — diive only remembers the directory "
-            "path, never the token. Use 'Test connection' to verify the server "
+            "path, never the token. Use 'Connect' to verify the server "
             "is reachable; the connection is then reused for explore / "
             "download / upload.")
         intro.setWordWrap(True)
@@ -110,7 +110,7 @@ class DatabaseConnectionTab(DiiveTab):
         form.addRow("Org", self.org_lbl)
         col.addWidget(box)
 
-        self.test_btn = QPushButton("Test connection")
+        self.test_btn = QPushButton("Connect")
         self.test_btn.clicked.connect(self._test)
         btn_row = QHBoxLayout()
         btn_row.setContentsMargins(0, 0, 0, 0)
