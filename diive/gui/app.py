@@ -415,6 +415,17 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(_act("&Export data as...", self._save_file))
         file_menu.addSeparator()
+        # Database I/O (InfluxDB) folded in from its own former top-level menu as
+        # a "Database ▸" submenu — it's just another data source/sink.
+        db_submenu = studio_menu(self)
+        for label in MENU_TABS.get("Database", {}):
+            act = QAction(menu_icon(label), label.replace("&", "&&"), self)
+            act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))
+            db_submenu.addAction(act)
+        db_action = file_menu.addMenu(db_submenu)
+        db_action.setText("&Database")
+        db_action.setIcon(menu_icon("Database"))
+        file_menu.addSeparator()
         file_menu.addAction(_act("E&xit", self.close, "Ctrl+Q"))
 
         def _menu_tab_act(label):
@@ -441,6 +452,19 @@ class MainWindow(QMainWindow):
         # Record subselection (rows kept on a condition variable) -- a sibling of
         # the date-range and variable subsets above.
         data_menu.addAction(_menu_tab_act("Select records by condition"))
+        # Events (time-stamped annotations over the data) folded in from their
+        # own former top-level menu: the Events tab, then a quick "add one" and a
+        # master toggle for showing them on plots.
+        data_menu.addSection("Events")
+        for label in MENU_TABS.get("Events", {}):
+            data_menu.addAction(_menu_tab_act(label))
+        data_menu.addAction(_act("Add e&vent...", self._add_event))
+        self._show_events_act = QAction(
+            menu_icon("Show events"), "Show e&vents on plots", self)
+        self._show_events_act.setCheckable(True)
+        self._show_events_act.setChecked(events.manager.visible)
+        self._show_events_act.toggled.connect(events.manager.set_visible)
+        data_menu.addAction(self._show_events_act)
 
         # Variables: create new columns (feature engineer, timestamp), a
         # separator, then manage existing ones (rename, metadata), then a
@@ -457,25 +481,34 @@ class MainWindow(QMainWindow):
         variables_menu.addSection("Calculate")
         variables_menu.addAction(_menu_tab_act("VPD (TA + RH)"))
 
-        # Events: the Events tab (full list/edit UI) first, then a quick "add
-        # one" + a master toggle for showing them on plots. Built manually so
-        # the tab entry sits above the actions.
-        events_menu = add_menu("&Events")
-        for label in MENU_TABS.get("Events", {}):
-            act = QAction(menu_icon(label), label.replace("&", "&&"), self)
-            act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))
-            events_menu.addAction(act)
-        events_menu.addSeparator()
-        events_menu.addAction(_act("Add e&vent...", self._add_event))
-        self._show_events_act = QAction(menu_icon("Show events"), "Show e&vents on plots", self)
-        self._show_events_act.setCheckable(True)
-        self._show_events_act.setChecked(events.manager.visible)
-        self._show_events_act.toggled.connect(events.manager.set_visible)
-        events_menu.addAction(self._show_events_act)
-
         for menu_name, group in MENU_TABS.items():
-            if menu_name in ("Data", "Variables", "Events"):
-                continue  # built manually above
+            if menu_name in ("Data", "Variables", "Events", "Database", "Corrections"):
+                # Built manually / folded elsewhere: Data & Variables have
+                # interleaved actions; Events folds into Data; Database folds into
+                # File; Corrections joins Outliers in the combined Cleaning menu.
+                continue
+            if menu_name == "Outliers":
+                # Combined "Cleaning" menu: the two per-variable data-cleaning
+                # families (outlier detection + corrections) under one top-level
+                # menu, split by section.
+                menu = add_menu("&Cleaning")
+                menu.addSection("Outliers")
+                for label in group:
+                    act = QAction(menu_icon(label), label.replace("&", "&&"), self)
+                    act.triggered.connect(
+                        lambda _checked, lab=label: self._open_menu_tab(lab))
+                    menu.addAction(act)
+                    # Set the stepwise screening (multi-method) apart from the
+                    # single-method outlier filters below it.
+                    if label == "Stepwise screening":
+                        menu.addSeparator()
+                menu.addSection("Corrections")
+                for label in MENU_TABS.get("Corrections", {}):
+                    act = QAction(menu_icon(label), label.replace("&", "&&"), self)
+                    act.triggered.connect(
+                        lambda _checked, lab=label: self._open_menu_tab(lab))
+                    menu.addAction(act)
+                continue
             menu = add_menu(f"&{menu_name}")
             for label in group:
                 # Set the 3-D surface (GPU/VTK) apart from the 2-D plot methods.
@@ -490,10 +523,6 @@ class MainWindow(QMainWindow):
                 act.triggered.connect(
                     lambda _checked, lab=label: self._open_menu_tab(lab))
                 menu.addAction(act)
-                # Set the stepwise screening (multi-method) apart from the
-                # single-method outlier filters below it.
-                if menu_name == "Outliers" and label == "Stepwise screening":
-                    menu.addSeparator()
                 # Set the full processing chain apart from the standalone tools.
                 if menu_name == "Flux" and label == "Flux processing chain":
                     menu.addSeparator()

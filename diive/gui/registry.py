@@ -112,8 +112,8 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "VPD (TA + RH)": VpdFromTaRhTab,
     },
     # Time-stamped event markers (annotations layered over the data, not column
-    # operations) — its own top-level menu. Built manually in MainWindow so the
-    # "Add event..." / "Show events on plots" actions sit above the tab entry.
+    # operations). Folded into the Data menu (under an "Events" section) in
+    # MainWindow, alongside the "Add event..." / "Show events on plots" actions.
     "Events": {
         "Events": EventsTab,
     },
@@ -136,6 +136,8 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "3D surface": Surface3DTab,
         "3D surface (X/Y/Z)": SurfaceXYZTab,
     },
+    # Outlier detection. Combined with Corrections into one top-level "Cleaning"
+    # menu in MainWindow._build_menus (the two per-variable cleaning families).
     "Outliers": {
         "Stepwise screening": StepwiseScreeningTab,
         "Absolute limits filter": AbsoluteLimitsTab,
@@ -161,8 +163,9 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Random uncertainty (PAS20)": RandomUncertaintyTab,
         "Joint uncertainty (PAS20)": JointUncertaintyTab,
     },
-    # Data corrections (dv.corrections). One tab per correction, all sharing
-    # BaseCorrectionTab (the RF/XGB shared-template approach).
+    # Data corrections (dv.corrections). Folded into the combined "Cleaning" menu
+    # alongside Outliers (see MainWindow._build_menus). One tab per correction,
+    # all sharing BaseCorrectionTab (the RF/XGB shared-template approach).
     "Corrections": {
         "Remove nighttime zero offset": NighttimeZeroOffsetTab,
         "Remove relative humidity offset": RelativeHumidityOffsetTab,
@@ -190,9 +193,8 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Appearance": SettingsTab,
         "Project settings": ProjectSettingsTab,
     },
-    # Database I/O (InfluxDB, optional 'db' group). Its own top-level menu,
-    # kept last (just before Help) — will grow Download/Upload entries alongside
-    # the connection editor.
+    # Database I/O (InfluxDB, optional 'db' group). Folded into the File menu as
+    # a "Database ▸" submenu in MainWindow (it's another data source/sink).
     "Database": {
         "Database connection": DatabaseConnectionTab,
         "Database explorer": DatabaseExplorerTab,

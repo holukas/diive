@@ -3135,16 +3135,31 @@ def test_studio_chrome_builds_frameless_with_header(app, monkeypatch, example_ye
         assert win.windowFlags() & Qt.WindowType.FramelessWindowHint
         assert _tabs(win) == ["Overview", "Log"]
         # The full menu tree lives as inline dropdown buttons in the header
-        # (File/Data/Variables/Events/Plot/Outliers/Flux/Corrections/
-        # Gap-filling/Analyze/Settings/Database/Help), each with a populated QMenu.
+        # (File/Data/Variables/Plot/Cleaning/Flux/Gap-filling/Analyze/Settings/
+        # Help), each with a populated QMenu. Events fold into Data and Database
+        # into File, so neither has its own top-level button; Outliers and
+        # Corrections are combined into the single "Cleaning" menu.
         from PySide6.QtWidgets import QToolButton
         menu_btns = win._header.findChildren(QToolButton, "headermenu")
-        assert len(menu_btns) == 13
+        assert len(menu_btns) == 10
         assert all(b.menu() is not None and b.menu().actions() for b in menu_btns)
-        # Open and Save live inside the File menu (no separate buttons).
-        file_items = [a.text() for a in menu_btns[0].menu().actions()]
+        # Outliers + Corrections combined into one "Cleaning" menu holding both
+        # an outlier tab and a correction tab.
+        cleaning = next(b.menu() for b in menu_btns
+                        if "CLEANING" in b.text().upper())
+        cleaning_items = [a.text() for a in cleaning.actions()]
+        assert any("Hampel" in t for t in cleaning_items)
+        assert any("nighttime zero offset" in t for t in cleaning_items)
+        # Open and Save live inside the File menu (no separate buttons); the
+        # Database submenu is folded in there too.
+        file_menu = menu_btns[0].menu()
+        file_items = [a.text() for a in file_menu.actions()]
         assert any("Open" in t for t in file_items)
         assert any("Save" in t for t in file_items)
+        assert any("Database" in t for t in file_items)
+        # Events fold into the Data menu.
+        data_items = [a.text() for a in menu_btns[1].menu().actions()]
+        assert any("Events" in t for t in data_items)
         win.close()
     finally:
         theme.manager.reset(silent=True)
