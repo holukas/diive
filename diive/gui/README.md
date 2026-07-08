@@ -5,8 +5,11 @@
 >
 > **User manual:** `MANUAL.md` is the source of truth. `build_manual.py` renders it
 > to the styled `MANUAL.html` that **Help ▸ User manual** opens (and the packaged
-> exe bundles). After editing `MANUAL.md`, regenerate the HTML — don't hand-edit it:
-> `uv run python -m diive.gui.build_manual`. (`build_gui.ps1` runs this automatically.)
+> exe bundles). `MANUAL.html` is git-ignored (`*.html`) — a generated artifact, never
+> hand-edited. **Help ▸ User manual** auto-rebuilds it from `MANUAL.md` on demand when
+> it's missing or stale (so running from source always opens fresh HTML, not the
+> GitHub Markdown fallback). For a manual/CI rebuild: `uv run python -m diive.gui.build_manual`.
+> (`build_gui.ps1` runs it so the packaged exe bundles a current HTML.)
 
 PySide6 desktop application for diive. Optional dependency — install and launch with:
 

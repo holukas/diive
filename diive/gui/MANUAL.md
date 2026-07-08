@@ -98,7 +98,7 @@ straight back into diive, GUI or library.
   **every** tab's list. Rename asks for a new name, and the variable keeps all its
   tags, notes, and history under the new name; delete drops it from the loaded
   dataset. Both are **non-destructive** to the source file, so reload or reopen to
-  restore. Full metadata editing lives in **Data ▸ Metadata explorer**.
+  restore. Full metadata editing lives in **Variables ▸ Metadata explorer**.
 - The list looks and behaves the same in every tab.
 
 ---
@@ -117,8 +117,16 @@ file, a date-range change, added features), which is handy for comparing while y
 change the data elsewhere. A pin marker appears on the tab; right-click → **Unpin**
 to let it follow the data again. Overview and Log are always live.
 
-The sections below are grouped by **menu**: each menu is a heading, and each of its
-entries is a sub-heading.
+The menu bar runs across the top of the window: **File**, **Data**, **Variables**,
+**Plot**, **Cleaning**, **Flux**, **Gap-filling**, **Analyze**, **Settings**, and
+**Help**. On a narrow window the menus that don't fit fold into a **More ⌄** dropdown
+(their labels are never shortened), and the centre title gives way first, so the menu
+buttons always stay readable.
+
+The sections below are grouped by feature area, and each says which menu it lives
+under. A few menus gather more than one area: **File ▸ Database** holds the InfluxDB
+tools, the **Data** menu holds the event markers, and **Cleaning** holds the outlier
+filters and the corrections together.
 
 ---
 
@@ -415,6 +423,9 @@ final sum. One variable at a time. Settings:
 
 ## Events
 
+*Found under the **Data** menu (Events section): the Events tab, an **Add
+event…** shortcut, and the **Show events on plots** toggle.*
+
 Mark **when something happened** at the site (fertilization, harvest, grazing, a
 management step, a sensor swap) and overlay those markers on the plots. Each event
 is stored as a `0/1` column (`EVENT_<name>`, where 1 means the event took place),
@@ -575,7 +586,18 @@ in the growing season. An explanation is shown above the plot.
 
 ---
 
-## Outliers
+## Cleaning
+
+The **Cleaning** menu gathers the two per-variable data-cleaning families in two
+sections: **Outliers** (spike and outlier detection, below) and **Corrections**
+(physical corrections, further down). Every one of these tabs works on a single
+variable, previews the result before you keep it, and never changes your original
+column — the cleaned or corrected values are added as a new column.
+
+**Outliers.** Each outlier tab flags suspect values with one detector and shows the
+result in a two-panel preview (the variable with detected outliers marked on top, the
+cleaned copy below). **Add cleaned + flag to dataset** keeps the result, and **Copy
+Python** copies the equivalent diive script.
 
 ### Hampel filter
 
@@ -759,8 +781,8 @@ is shown so the plots stay large:
   set-exact-to-missing). The **Measurement** dropdown (auto-detected from the
   variable name, e.g. *SW - shortwave radiation*) decides which corrections are
   physically meaningful and shows only those. The **Run corrections** button applies
-  them. (The same corrections are also available one-per-tab under the **Corrections**
-  menu, described below.)
+  them. (The same corrections are also available one-per-tab in the **Corrections**
+  section of the Cleaning menu, described below.)
 - **Report.** The per-step screening statistics (retained / rejected, day/night),
   with **Copy report**.
 
@@ -768,17 +790,14 @@ is shown so the plots stay large:
 flag, the QCF-filtered series, and (if any corrections ran) the corrected series.
 **Copy Python** copies a reproducible script for the whole chain.
 
----
-
-## Corrections
-
-The **Corrections** menu has one tab per correction; they all share the same layout.
-**Click a variable** in the **Target** list on the left, set the options in the
-middle, and the right side previews the **original** against the **corrected**
-series. **Run correction** applies it, **Add corrected to dataset** keeps the result
-(a new `{var}_…` column; your original is never changed), and **Copy Python** (top
-bar) copies a reproducible script. Each correction is its own tab, so any correction
-is available for any variable; the suggested use is just a hint.
+**Corrections.** The **Corrections** section of the **Cleaning** menu has one tab per
+correction; they all share the same layout. **Click a variable** in the **Target**
+list on the left, set the options in the middle, and the right side previews the
+**original** against the **corrected** series. **Run correction** applies it, **Add
+corrected to dataset** keeps the result (a new `{var}_…` column; your original is
+never changed), and **Copy Python** (top bar) copies a reproducible script. Each
+correction is its own tab, so any correction is available for any variable; the
+suggested use is just a hint.
 
 ### Remove nighttime zero offset
 
@@ -829,6 +848,10 @@ Set records that **exactly equal** any of the values you list (comma-separated, 
 
 ## Data
 
+The **Data** menu scopes the working dataset. It also holds **Select date range…**
+and **Reset to full range** (see [Focusing on a date range](#focusingonadaterange))
+and the **Events** section (see [Events](#events)).
+
 ### Select variables
 
 Pick a subset of variables to focus the **Overview** list on. Click a variable on
@@ -856,6 +879,14 @@ below). **Undo last** / **Reset** walk the chain back, and the condition may be 
 target itself (filter a variable by its own value). **Add selection to dataset**
 appends the result as a new `{target}_SEL` column (out-of-range records set to
 missing; the time index is preserved). **Copy Python** yields a runnable script.
+
+---
+
+## Variables
+
+The **Variables** menu creates and manages individual columns: build features, combine
+two variables, rename, inspect metadata, and calculate derived variables. It also holds
+**Add timestamp column…** (adds a plain timestamp column from the time index).
 
 ### Rename variables
 
@@ -943,6 +974,19 @@ date/time heatmaps side by side.
    method or the overlap option.
 5. Edit the **Name** (a default is suggested) and click **Add … to dataset** to
    append the new column. **Copy Python** yields a runnable script.
+
+### VPD (TA + RH)
+
+Calculate **vapour pressure deficit** (VPD, in kPa) from **air temperature** (°C) and
+**relative humidity** (%), found under the Variables menu's **Calculate** section. Set
+the two input columns in the **Air temperature (°C)** and **Relative humidity (%)**
+fields (auto-seeded by name; **drag** a variable from the list onto a field or pick it
+from the dropdown), then click **Calculate**. The input heatmaps refresh as you change
+a field; the result heatmap and the **Add** button wait for **Calculate**.
+
+Edit the **Name** (default `VPD_kPa`) and **Add … to dataset** to append the new
+column; **Copy Python** copies a runnable `dv.variables.calc_vpd_from_ta_rh` script.
+Inputs must be in the stated units (°C and %); diive does not check them.
 
 ---
 
@@ -1194,7 +1238,7 @@ uncertainty alongside its **random** and **scenario** components and the final
 Fill the gaps in one variable with an **XGBoost** model (gradient-boosted trees),
 trained on other variables you pick as predictors. This tab does gap-filling only:
 it has **no feature-engineering options**. If you want engineered predictors (lags,
-rolling means, and so on), build them first in **Data ▸ Feature engineering**, then
+rolling means, and so on), build them first in **Variables ▸ Feature engineering**, then
 select them here.
 
 The tab has two sub-tabs: **Model** (set up and run the gap-filling, see the
@@ -1324,11 +1368,11 @@ flag; **Copy Python** copies a reproducible script.
 
 ## Database
 
-Read measurement data straight from an **InfluxDB** time-series database, screen
-high-resolution meteo, resample it, and merge it into your dataset. These tabs
-need the optional `db` dependency group (see **Install & launch**); without it
-they show an install notice. The header shows a green **Connected** pill once a
-connection is live.
+*Found under **File ▸ Database**.* Read measurement data straight from an
+**InfluxDB** time-series database, screen high-resolution meteo, resample it, and
+merge it into your dataset. These tabs need the optional `db` dependency group (see
+**Install & launch**); without it they show an install notice. The header shows a
+green **Connected** pill once a connection is live.
 
 > **Timezone — important.** The database always stores timestamps in **UTC**, but
 > you normally work in your station's local time (e.g. **UTC+1**, CET). The
@@ -1368,7 +1412,7 @@ Browse what's in the database and pull data out.
 
 The **full screening experience of the Stepwise screening tab** (outlier-test
 cards, corrections, QCF, the live preview, Copy Python — see
-[Stepwise screening](#stepwise-screening)) applied to a high-resolution field from
+[Stepwise screening](#stepwisescreening)) applied to a high-resolution field from
 the database, **plus a Resample step**.
 
 - Receive a field from the explorer, screen it exactly as you would any variable
@@ -1441,7 +1485,9 @@ on) in colour. **Save…** writes the log to a text file; **Clear** empties it.
 - Your appearance settings, site details, window size and position, last-used
   filetype, variable tags and notes, and most-recent project are **remembered**
   between sessions.
-- The window opens **maximized** to make the most of your screen.
+- The window opens **filling your screen's work area** to make the most of it (the
+  taskbar stays visible). On a narrow window, menus that don't fit fold into a
+  **More ⌄** dropdown so their labels stay readable.
 - A short loading cue appears on a variable while its plot is being drawn.
 - Stuck, or something looks off? Check the **Log** tab for messages.
 

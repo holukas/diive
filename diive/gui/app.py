@@ -1410,8 +1410,12 @@ class MainWindow(QMainWindow):
     def _user_manual(self) -> None:
         """Open the styled HTML manual in the default browser.
 
-        Falls back to the GitHub-hosted Markdown source if the bundled HTML is
-        missing (e.g. a partial install)."""
+        ``MANUAL.html`` is a generated artifact (git ignores ``*.html``), so when
+        running from source it can be missing or stale relative to ``MANUAL.md``.
+        Regenerate it on demand from the Markdown source of truth before opening,
+        so the menu always lands on the styled HTML. Only fall back to the
+        GitHub-hosted Markdown when no source is available to render (e.g. a
+        partial install)."""
         import sys
 
         from PySide6.QtGui import QDesktopServices
@@ -1423,6 +1427,22 @@ class MainWindow(QMainWindow):
         meipass = getattr(sys, "_MEIPASS", None)
         if meipass:
             candidates.append(Path(meipass) / "diive" / "gui" / "MANUAL.html")
+
+        # Running from source: (re)build the HTML when it's missing or older than
+        # the Markdown. The renderer is dependency-free (stdlib only).
+        try:
+            from diive.gui import build_manual
+
+            md, html_out = build_manual.MD_PATH, build_manual.HTML_PATH
+            if md.is_file() and (
+                    not html_out.is_file()
+                    or html_out.stat().st_mtime < md.stat().st_mtime):
+                html_out.write_text(
+                    build_manual.build(md.read_text(encoding="utf-8")),
+                    encoding="utf-8")
+        except Exception:
+            pass  # fall through to a bundled HTML or the GitHub Markdown
+
         for html in candidates:
             if html.is_file():
                 QDesktopServices.openUrl(QUrl.fromLocalFile(str(html)))

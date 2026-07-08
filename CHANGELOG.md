@@ -45,7 +45,9 @@
 ### Desktop GUI (new)
 
 - **PySide6 desktop GUI** (`diive.gui`, optional `gui` extra; launch `diive-gui`). User manual `diive/gui/MANUAL.md`,
-  developer map `diive/gui/README.md`.
+  developer map `diive/gui/README.md`. **Help ▸ User manual** opens the styled `MANUAL.html`; that HTML is a generated
+  artifact (git-ignored) and is now rebuilt on demand from `MANUAL.md` whenever it is missing or stale, so running from
+  source always opens fresh HTML instead of the GitHub Markdown fallback.
 - Tabs: **Overview** (per-variable stats ribbon + multi-panel figure); per-method **Plot** tabs (heatmaps, time series,
   diel cycle, cumulative year, ridgeline, scatter XY, hexbin, histogram; multi-instance, each with a live settings
   panel); **Analyze** tabs **Gaps & coverage**, **Driver explorer**, **Compound extremes** (classify months/days into
