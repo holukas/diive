@@ -93,7 +93,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `widgets/variable_delegate.py` | `VariableDelegate` — paints row highlight + NEE/GPP/Reco pills |
 | `widgets/open_data_dialog.py` | `OpenDataDialog` — file + filetype picker with a parsed live preview |
 | `widgets/daterange_dialog.py` | `DateRangeDialog` — from/to picker (clamped to the data span) for date-range subselection |
-| `widgets/header_bar.py` | `StudioHeaderBar` — frameless Studio chrome header: wordmark + inline File/Data/… hover-dropdown menus + centred title |
+| `widgets/header_bar.py` | `StudioHeaderBar` — frameless Studio chrome header: wordmark + inline File/Data/… hover-dropdown menus + centred title. `_reflow` folds menus that don't fit into a "More ⌄" overflow (labels never elide) and hides the title first on narrow windows |
 | `widgets/frameless.py` | `FramelessResizeHelper` — edge/corner resize for the frameless Studio window |
 | `widgets/console_panel.py` | `ConsolePanel` — mirrors diive's Rich output in colour (used by the Log tab) |
 | `widgets/progress_bar.py` | `ProgressBar` — the shared progress-bar design (16 px, text on top, hidden until active) with `start_busy` (indeterminate) / `set_progress` (determinate 0–1000) / `finish`; colours from the app-wide `QProgressBar` stylesheet |

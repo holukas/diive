@@ -251,14 +251,15 @@ QToolTip {{
 #studioroot {{ background: transparent; }}
 StudioHeaderBar {{ background: transparent; }}
 
-/* Inline header menu buttons: flat text + chevron, soft rounded hover. */
-QToolButton#headermenu {{
+/* Inline header menu buttons: flat text + chevron, soft rounded hover. The
+   "More" overflow button (#headermore) shares the same look. */
+QToolButton#headermenu, QToolButton#headermore {{
     background: transparent; border: none; padding: 5px 10px; border-radius: 8px;
     color: {t['INK']};
 }}
-QToolButton#headermenu:hover {{ background: {t['HOVER_BG']}; }}
-QToolButton#headermenu:pressed {{ background: {t['HOVER_PRESSED']}; }}
-QToolButton#headermenu::menu-indicator {{ image: none; width: 0; }}
+QToolButton#headermenu:hover, QToolButton#headermore:hover {{ background: {t['HOVER_BG']}; }}
+QToolButton#headermenu:pressed, QToolButton#headermore:pressed {{ background: {t['HOVER_PRESSED']}; }}
+QToolButton#headermenu::menu-indicator, QToolButton#headermore::menu-indicator {{ image: none; width: 0; }}
 
 /* Dropdown popup: an elegant rounded white card (translucent window behind it). */
 QMenu#studiomenu {{

@@ -254,6 +254,8 @@
   deserialization). Tab rename is left-double-click only.
 - **Studio look** (minimal: near-white surfaces, pill tabs, frameless rounded window with an inline-dropdown header),
   edited live in **Appearance**. Tabs reorder, rename, close, and **pin** (freeze their dataset). App/taskbar icon added.
+  On a narrow window the centre title (diive + version + file count) now gives way first — it elides and finally hides —
+  so the menu buttons keep their full labels instead of collapsing to `F…`.
 - **Every menu tab can open more than once** — re-selecting a menu entry opens a new numbered instance (`Hampel filter
   1`, `Hampel filter 2`, ...), like the plot tabs already did. Only the app-wide singleton editors stay single-instance
   (Appearance, Project settings, Metadata explorer); re-selecting those focuses the open one.
