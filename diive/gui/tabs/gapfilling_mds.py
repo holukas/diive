@@ -26,7 +26,6 @@ import pandas as pd
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
@@ -35,7 +34,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QProgressBar,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -50,14 +48,16 @@ from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
 from diive.gapfilling.codegen import mds_gapfill_to_code
 from diive.gapfilling.mds import FluxMDS
 from diive.gui import theme
-from diive.gui.tabs._partitioning_base import _auto_pick
+from diive.variables import auto_pick_column
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mds_results import MdsResultsPanel
 from diive.gui.widgets.mpl_canvas import MplCanvas
+from diive.gui.widgets.plot_settings import _DropComboBox
 from diive.gui.widgets.sub_tabs import SubTabs
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel
+from diive.gui.widgets.progress_bar import ProgressBar
 from diive.gui.widgets.worker import WorkerRunner
 
 _C_MUTED = "#6B7780"
@@ -263,7 +263,6 @@ class MdsGapFillingTab(DiiveTab):
         body.setContentsMargins(10, 4, 10, 4)
         body.setSpacing(0)
         body.addWidget(self._build_inputs())
-        body.addWidget(self._build_settings())
         body.addWidget(self._build_results(), stretch=1)
         return page
 
@@ -278,8 +277,9 @@ class MdsGapFillingTab(DiiveTab):
 
         intro = QLabel(
             "Click a variable in 'Target (flux)' to set the gap-fill target. MDS "
-            "fills gaps from three meteorological drivers — pick the SWIN, TA and "
-            "VPD columns on the right.")
+            "fills gaps from three meteorological drivers — drag a variable from "
+            "'Available drivers' onto the SWIN, TA or VPD field, or pick it from "
+            "the dropdown.")
         intro.setWordWrap(True)
         intro.setStyleSheet(f"color: {_C_MUTED};")
         v.addWidget(intro)
@@ -292,7 +292,19 @@ class MdsGapFillingTab(DiiveTab):
         self.target_list.selected.connect(lambda name, _c: self._set_target(name))
         tcol.addWidget(self.target_list, stretch=1)
         row.addLayout(tcol)
-        row.addWidget(self._build_driver_box(), stretch=1)
+
+        # Second list: a draggable variable source to fuzzy-search the drivers and
+        # drag them onto the SWIN/TA/VPD fields (mirrors the RF/XGB feature list).
+        dcol = QVBoxLayout()
+        dcol.addWidget(self._list_header("Available drivers", "drag onto a field"))
+        self.driver_list = VariablePanel(draggable=True)
+        self.driver_list.list.setToolTip(
+            "Fuzzy-search drivers and drag one onto the SWIN, TA or VPD field.")
+        dcol.addWidget(self.driver_list, stretch=1)
+        row.addLayout(dcol)
+
+        # Drivers + similarity tolerances stacked together on the right.
+        row.addWidget(self._build_driver_settings_column(), stretch=1)
         v.addLayout(row, stretch=1)
 
         self.target_label = QLabel("Target: (none)")
@@ -300,13 +312,33 @@ class MdsGapFillingTab(DiiveTab):
         v.addWidget(self.target_label)
         return host
 
+    def _build_driver_settings_column(self) -> QWidget:
+        """The driver dropdowns with the similarity tolerances directly below them,
+        in a scroll area so they stay reachable on a short window."""
+        host = QWidget()
+        outer = QVBoxLayout(host)
+        outer.setContentsMargins(6, 0, 6, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        inner = QWidget()
+        v = QVBoxLayout(inner)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.addWidget(self._build_driver_box())
+        v.addWidget(self._build_tol_box())
+        v.addStretch(1)
+        scroll.setWidget(inner)
+        outer.addWidget(scroll, stretch=1)
+        return host
+
     def _build_driver_box(self) -> QWidget:
         box = QGroupBox("Meteorological drivers")
         form = QFormLayout(box)
-        self._combos: dict[str, QComboBox] = {}
+        self._combos: dict[str, _DropComboBox] = {}
         self._avail: dict[str, QLabel] = {}
         for spec in _DRIVERS:
-            combo = QComboBox()
+            # A drop target: drag a variable from 'Available drivers' onto it.
+            combo = _DropComboBox()
             combo.setToolTip(spec["tip"])
             combo.currentTextChanged.connect(self._refresh_availability)
             mark = QLabel("")
@@ -321,22 +353,6 @@ class MdsGapFillingTab(DiiveTab):
             self._combos[spec["key"]] = combo
             self._avail[spec["key"]] = mark
         return box
-
-    def _build_settings(self) -> QWidget:
-        host = QWidget()
-        host.setFixedWidth(360)
-        outer = QVBoxLayout(host)
-        outer.setContentsMargins(6, 6, 6, 6)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        inner = QWidget()
-        v = QVBoxLayout(inner)
-        v.addWidget(self._build_tol_box())
-        v.addStretch(1)
-        scroll.setWidget(inner)
-        outer.addWidget(scroll, stretch=1)
-        return host
 
     def _build_tol_box(self) -> QGroupBox:
         box = QGroupBox("Similarity tolerances")
@@ -367,6 +383,7 @@ class MdsGapFillingTab(DiiveTab):
             "Check if the VPD driver column is in kPa (default). Uncheck if it "
             "is in hPa - it is then converted to kPa internally so the kPa "
             "tolerance still applies.")
+        self.vpd_in_kpa.toggled.connect(self._update_status)  # refresh unit warning
         f.addRow(self.vpd_in_kpa)
         self.avg_min_n_vals = QSpinBox(); self.avg_min_n_vals.setRange(0, 1000)
         self.avg_min_n_vals.setValue(2)
@@ -395,10 +412,7 @@ class MdsGapFillingTab(DiiveTab):
         self.status.setStyleSheet("padding: 6px 10px; color: #444;")
         v.addWidget(self.status)
         # Progress over the MDS quality levels — hidden until a run starts.
-        self.progress = QProgressBar()
-        self.progress.setTextVisible(True)
-        self.progress.setFixedHeight(16)
-        self.progress.setVisible(False)
+        self.progress = ProgressBar()
         pwrap = QWidget()
         pl = QVBoxLayout(pwrap)
         pl.setContentsMargins(10, 0, 10, 4)
@@ -442,16 +456,25 @@ class MdsGapFillingTab(DiiveTab):
         self.target_list.set_variables(self._all_cols, self._created)
         if self._target not in self._all_cols:
             self._target = ""
+        self._refresh_driver_list()
         self._refresh_inputs()
         self.target_list.set_panels([self._target] if self._target else [])
         self._update_target_label()
         self._update_status()
+
+    def _refresh_driver_list(self) -> None:
+        """Drag-source list = all columns except the target (the target can't be
+        its own driver). Purely a search/drag helper; the combos stay the source
+        of truth, so clicks here are intentionally ignored."""
+        pool = [c for c in self._all_cols if c != self._target]
+        self.driver_list.set_variables(pool, self._created)
 
     def _set_target(self, name: str) -> None:
         if not name or name not in self._all_cols:
             return
         self._target = name
         self.target_list.set_panels([name])
+        self._refresh_driver_list()
         self._update_target_label()
         self._update_status()
 
@@ -474,7 +497,7 @@ class MdsGapFillingTab(DiiveTab):
                 guess = ""
                 for needle in spec["needles"]:  # try each naming alternative
                     # Prefer a gap-filled driver ('_f'); never pick a flag column.
-                    guess = _auto_pick(cols, needle, prefer="_F", avoid="FLAG")
+                    guess = auto_pick_column(cols, needle, prefer="_F", avoid="FLAG")
                     if guess:
                         break
                 if guess:
@@ -525,9 +548,27 @@ class MdsGapFillingTab(DiiveTab):
             self.status.setText(
                 f"Target: {self._target}. Pick valid columns for: {', '.join(missing)}.")
         else:
-            self.status.setText(
-                f"Target: {self._target} — drivers SWIN={drivers['swin']}, "
-                f"TA={drivers['ta']}, VPD={drivers['vpd']}. Run gap-filling.")
+            text = (f"Target: {self._target} — drivers SWIN={drivers['swin']}, "
+                    f"TA={drivers['ta']}, VPD={drivers['vpd']}. Run gap-filling.")
+            unit_warn = self._vpd_unit_warning(drivers["vpd"])
+            if unit_warn:
+                text += " " + unit_warn
+            self.status.setText(text)
+
+    def _vpd_unit_warning(self, vpd_col: str) -> str | None:
+        """Soft, non-blocking heuristic: if the chosen VPD column name suggests a
+        unit that disagrees with the 'VPD driver is in kPa' checkbox, warn — leaving
+        it wrong mis-scales the fills ~100x. Never blocks the run; the library does
+        not validate units (the caller owns them)."""
+        name = vpd_col.lower()
+        in_kpa = self.vpd_in_kpa.isChecked()
+        if "hpa" in name and in_kpa:
+            return ("WARNING: VPD column name contains 'hPa' but 'VPD driver is in "
+                    "kPa' is checked - untick it if the column is in hPa.")
+        if "kpa" in name and not in_kpa:
+            return ("WARNING: VPD column name contains 'kPa' but 'VPD driver is in "
+                    "kPa' is unchecked - tick it if the column is in kPa.")
+        return None
 
     # --- state ---------------------------------------------------------
     def _controls(self) -> dict:
@@ -588,9 +629,7 @@ class MdsGapFillingTab(DiiveTab):
         work = self._df[[target, swin, ta, vpd]].copy()
         self._set_running(True)
         # Indeterminate (busy) until the first quality level reports in.
-        self.progress.setRange(0, 0)
-        self.progress.setFormat("Preparing…")
-        self.progress.setVisible(True)
+        self.progress.start_busy("Preparing…")
         self.status.setText("Gap-filling… (MDS similarity matching — this can take a while)")
         self._runner.run(self._compute_payload, work, target, swin, ta, vpd, kwargs)
 
@@ -631,16 +670,15 @@ class MdsGapFillingTab(DiiveTab):
         """Update the progress bar as the MDS quality levels are worked (queued
         from the worker thread). ``permille`` (0-1000) carries the within-level
         progress, so the bar moves continuously through the slow early levels."""
-        self.progress.setRange(0, 1000)
-        self.progress.setValue(max(0, min(1000, permille)))
-        self.progress.setFormat(
+        self.progress.set_progress(
+            permille,
             f"Quality level {quality}  ·  {remaining:,} gaps remaining  ·  {permille / 10:.0f}%")
 
     # --- results -------------------------------------------------------
     def _on_done(self, payload) -> None:
         out, observed, gapfilled, model, target = payload
         self._set_running(False)
-        self.progress.setVisible(False)
+        self.progress.finish()
         self._result_df = out
         n_filled = int((out[str(gapfilled.name)].notna() & observed.isna()).sum())
         self.status.setText(
@@ -651,12 +689,9 @@ class MdsGapFillingTab(DiiveTab):
 
     def _on_failed(self, msg: str) -> None:
         self._set_running(False)
-        self.progress.setVisible(False)
+        self.progress.finish()
         self.status.setText(f"Failed: {msg}")
-        ax = self.canvas.new_axes(1)[0]
-        ax.text(0.5, 0.5, "Gap-filling failed", ha="center", va="center",
-                transform=ax.transAxes)
-        self.canvas.draw()
+        self.canvas.show_message("Gap-filling failed")
         self.results_panel.reset(f"Gap-filling failed: {msg}")
 
     def _plot(self, observed, gapfilled) -> None:

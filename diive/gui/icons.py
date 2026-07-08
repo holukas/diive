@@ -284,51 +284,318 @@ def _ln_info() -> QIcon:  # about
     return QIcon(pm)
 
 
+def _ln_hexbin() -> QIcon:  # hexbin density plot
+    pm, p = _line_canvas()
+    cx, cy = 8.0, 8.0
+    for r in (5.6, 2.8):
+        pts = []
+        for k in range(6):
+            a = math.pi / 6 + k * math.pi / 3   # flat-top hexagon
+            pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+        pts.append(pts[0])
+        p.drawPolyline(_poly(pts))
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_distribution() -> QIcon:  # shifted distribution (bell curve)
+    pm, p = _line_canvas()
+    p.drawLine(2, 13, 14, 13)                       # baseline
+    pts = [(x, 13 - 9.0 * math.exp(-((x - 8) ** 2) / 11.0))
+           for x in [2 + 0.5 * i for i in range(25)]]
+    p.drawPolyline(_poly(pts))
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_windrose() -> QIcon:  # wind rose / compass star
+    pm, p = _line_canvas()
+    cx, cy = 8.0, 8.0
+    for k in range(8):
+        a = -math.pi / 2 + k * math.pi / 4
+        r = 6.0 if k % 2 == 0 else 3.0              # alternating petal length
+        p.drawLine(cx, cy, cx + r * math.cos(a), cy + r * math.sin(a))
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_treering() -> QIcon:  # tree rings (concentric circles)
+    pm, p = _line_canvas()
+    for r in (2.0, 4.2, 6.4):
+        p.drawEllipse(QRectF(8 - r, 8 - r, 2 * r, 2 * r))
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_waterfall() -> QIcon:  # waterfall chart (stepped floating bars)
+    pm, p = _line_canvas()
+    bars = ((2.5, 9, 13), (5.6, 6, 9), (8.7, 6, 11), (11.8, 3, 11))
+    for x, top, bottom in bars:
+        p.drawRect(QRectF(x, top, 1.7, bottom - top))
+    p.setPen(_line_pen(0.9))
+    p.drawLine(4.2, 9, 5.6, 9)        # connectors bridging the steps
+    p.drawLine(7.3, 6, 8.7, 6)
+    p.drawLine(10.4, 11, 11.8, 11)
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_surface3d() -> QIcon:  # 3D surface mesh (isometric patch)
+    pm, p = _line_canvas()
+    # parallelogram corners (isometric tilt)
+    tl, tr, br, bl = (3, 6), (10, 3), (13, 10), (6, 13)
+    p.drawPolyline(_poly([tl, tr, br, bl, tl]))     # outline
+    for t in (1 / 3, 2 / 3):                         # mesh lines both directions
+        ax = (tl[0] + (bl[0] - tl[0]) * t, tl[1] + (bl[1] - tl[1]) * t)
+        bx = (tr[0] + (br[0] - tr[0]) * t, tr[1] + (br[1] - tr[1]) * t)
+        p.drawLine(ax[0], ax[1], bx[0], bx[1])
+        ay = (tl[0] + (tr[0] - tl[0]) * t, tl[1] + (tr[1] - tl[1]) * t)
+        by = (bl[0] + (br[0] - bl[0]) * t, bl[1] + (br[1] - bl[1]) * t)
+        p.drawLine(ay[0], ay[1], by[0], by[1])
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_ustar() -> QIcon:  # u* threshold: saturating flux + breakpoint line
+    pm, p = _line_canvas()
+    p.drawLine(2, 2, 2, 14)                                    # y-axis
+    p.drawLine(2, 14, 14, 14)                                  # x-axis
+    p.drawPolyline(_poly([(3, 12.5), (5.5, 9), (8, 5.5),
+                          (11, 5), (14, 5)]))                  # rise then plateau
+    p.drawLine(8, 3, 8, 14)                                    # threshold at the knee
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_lag() -> QIcon:  # time lag: a signal and its right-shifted copy
+    pm, p = _line_canvas()
+    top = [(x, 5.2 - 2.0 * math.sin(2 * math.pi * (x - 2) / 8)) for x in range(2, 12)]
+    bot = [(x + 3, 11.0 - 2.0 * math.sin(2 * math.pi * (x - 2) / 8)) for x in range(2, 12)]
+    p.drawPolyline(_poly(top))
+    p.drawPolyline(_poly(bot))
+    p.drawLine(5, 8, 8, 8)                                     # shift indicator
+    p.drawPolyline(_poly([(6, 7), (5, 8), (6, 9)]))           # left arrowhead
+    p.drawPolyline(_poly([(7, 7), (8, 8), (7, 9)]))           # right arrowhead
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_partition() -> QIcon:  # NEE -> GPP + RECO split (Y-fork)
+    pm, p = _line_canvas()
+    p.drawLine(2, 8, 7.5, 8)                                   # incoming net flux
+    p.drawLine(7.5, 8, 14, 4)                                  # upper branch
+    p.drawLine(7.5, 8, 14, 12)                                 # lower branch
+    p.drawEllipse(QRectF(6.8, 7.3, 1.4, 1.4))                  # fork node
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_uncertainty() -> QIcon:  # central estimate + error envelope band
+    pm, p = _line_canvas()
+    p.drawLine(2, 8, 14, 8)                                    # central estimate
+    p.drawPolyline(_poly([(2, 5.5), (5, 4.2), (8, 4), (11, 4.2), (14, 5.5)]))   # upper envelope
+    p.drawPolyline(_poly([(2, 10.5), (5, 11.8), (8, 12), (11, 11.8), (14, 10.5)]))  # lower envelope
+    p.drawLine(5, 4.7, 5, 11.3)                                # whisker
+    p.drawLine(11, 4.7, 11, 11.3)                              # whisker
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_outlier() -> QIcon:  # scatter with one flagged outlier
+    pm, p = _line_canvas()
+    for cx, cy in ((4, 11.5), (6.5, 10.5), (9, 11), (11.5, 10)):   # baseline cluster
+        p.drawEllipse(QRectF(cx - 1.3, cy - 1.3, 2.6, 2.6))
+    ox, oy = 8.5, 4.5                                              # flagged outlier
+    p.drawEllipse(QRectF(ox - 1.3, oy - 1.3, 2.6, 2.6))
+    p.drawLine(ox - 3.2, oy - 3.2, ox - 1.6, oy - 1.6)            # flag mark (X corners)
+    p.drawLine(ox + 3.2, oy - 3.2, ox + 1.6, oy - 1.6)
+    p.drawLine(ox - 3.2, oy + 3.2, ox - 1.6, oy + 1.6)
+    p.drawLine(ox + 3.2, oy + 3.2, ox + 1.6, oy + 1.6)
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_correction() -> QIcon:  # two slider rows with offset handles
+    pm, p = _line_canvas()
+    for y, hx in ((5.5, 9.5), (10.5, 5.5)):     # row y, handle center x
+        p.drawLine(2.5, y, 13.5, y)             # slider track
+        p.drawRect(QRectF(hx - 1.6, y - 2.0, 3.2, 4.0))   # handle
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_event() -> QIcon:  # flag-on-pole event marker
+    pm, p = _line_canvas()
+    p.drawLine(4, 2, 4, 14)                                   # staff
+    p.drawPolyline(_poly([(4, 3), (12.5, 5.5), (4, 8)]))      # pennant
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_database() -> QIcon:  # stacked-disk database cylinder
+    pm, p = _line_canvas()
+    p.drawEllipse(QRectF(3, 2.5, 10, 3.5))                    # top disk rim
+    p.drawLine(3, 4.25, 3, 11.75)                             # left side
+    p.drawLine(13, 4.25, 13, 11.75)                           # right side
+    p.drawArc(QRectF(3, 10, 10, 3.5), 180 * 16, 180 * 16)     # curved bottom
+    p.drawArc(QRectF(3, 6.25, 10, 3.5), 180 * 16, 180 * 16)   # mid stacked-disk arc
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_settings() -> QIcon:  # slider tracks for project settings
+    pm, p = _line_canvas()
+    for y, hx in ((4, 9.5), (8, 4.5), (12, 10.5)):
+        p.drawLine(2.5, y, 13.5, y)                           # track
+        p.drawRect(QRectF(hx - 1.3, y - 1.6, 2.6, 3.2))       # handle
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_profile() -> QIcon:  # tabular data-profile summary
+    pm, p = _line_canvas()
+    p.drawRoundedRect(QRectF(2, 2.5, 12, 11), 1.5, 1.5)
+    p.drawLine(2, 6, 14, 6)                                   # header rule
+    for y in (8.2, 10.2, 12.2):
+        p.drawLine(4, y, 7, y)                                # row label
+        p.drawLine(8.5, y, 12, y)                             # row value
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_extremes() -> QIcon:  # spikes breaching a threshold line
+    pm, p = _line_canvas()
+    p.drawLine(2, 6, 14, 6)                                   # threshold
+    p.drawPolyline(_poly([(2, 11), (4, 11), (5.5, 3), (7, 11),
+                          (9.5, 11), (11, 4), (12.5, 11), (14, 11)]))  # spikes
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_github() -> QIcon:  # git-branch fork for GitHub
+    pm, p = _line_canvas()
+    p.drawLine(4.5, 4.5, 4.5, 11.5)                           # trunk
+    p.drawPolyline(_poly([(4.5, 5.5), (11.5, 7.5), (11.5, 9.5)]))  # branch up to node
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(_line_ink())
+    for cx, cy in ((4.5, 4.0), (4.5, 12.0), (11.5, 6.5)):     # nodes
+        p.drawEllipse(QPointF(cx, cy), 1.5, 1.5)
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_issue() -> QIcon:  # circle-exclamation alert for issue report
+    pm, p = _line_canvas()
+    p.drawEllipse(QRectF(2.5, 2.5, 11, 11))
+    p.drawLine(8, 4.6, 8, 8.6)                                # stroke (above)
+    p.drawPoint(QPointF(8, 10.6))                             # dot (below)
+    p.end()
+    return QIcon(pm)
+
+
+def _ln_gapfill() -> QIcon:  # series with a dot-filled gap
+    pm, p = _line_canvas()
+    p.drawPolyline(_poly([(2, 10), (4, 6), (6, 8)]))          # left solid segment
+    p.drawPolyline(_poly([(10, 7), (12, 4), (14, 6)]))        # right solid segment
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(_line_ink())
+    for cx, cy in ((7, 8.2), (8, 7.7), (9, 7.2)):            # gap-fill dots
+        p.drawEllipse(QPointF(cx, cy), 0.85, 0.85)
+    p.end()
+    return QIcon(pm)
+
+
 def _ln_generic() -> QIcon:
     return _ln_chart()
 
 
 #: (keyword in lowercased label) -> icon factory. First match wins, in order.
 #: Thin-line monochrome glyphs (the only icon set; ink colour from gui/theme.py).
+#: ORDER IS LOAD-BEARING: several labels contain a more-general keyword as a
+#: substring, so the specific rule must precede the generic one. Notably
+#: "partition"/"lag"/"offset" must beat "time" (day/nighttime, "time lag",
+#: "nighttime zero offset"), "gap-filling" must beat "gap", "reset" must beat
+#: "set to" ("Reset to full range"), "screening" must beat "database" ("Meteo
+#: screening (database)"), and "removal" must beat "manual" ("Manual removal").
 _LINE_RULES = [
+    # Plot methods (specific shapes first).
     ("heatmap", _ln_grid),
+    ("hexbin", _ln_hexbin),
     ("ridge", _ln_wave),
     ("diel", _ln_wave),
-    ("cumulative", _ln_chart),
     ("scatter", _ln_scatter),
+    ("histogram", _ln_bars),
+    ("shifted distribution", _ln_distribution),
+    ("distribution", _ln_distribution),
+    ("wind rose", _ln_windrose),
+    ("tree ring", _ln_treering),
+    ("waterfall", _ln_waterfall),
+    ("surface", _ln_surface3d),
+    ("cumulative", _ln_chart),
+    # Screening & outlier filters.
     ("stepwise", _ln_steps),
     ("screening", _ln_steps),
-    ("hampel", _ln_scatter),
-    ("outlier", _ln_scatter),
-    ("histogram", _ln_bars),
+    ("hampel", _ln_outlier),
+    ("removal", _ln_outlier),       # "Manual removal" -- before "manual"
+    ("filter", _ln_outlier),
+    ("outlier", _ln_outlier),
+    # Flux tools (partition/ustar/uncertainty/lag before generic "time").
+    ("partition", _ln_partition),
+    ("ustar", _ln_ustar),
+    ("uncertainty", _ln_uncertainty),
+    ("time lag", _ln_lag),
+    ("lag", _ln_lag),
+    ("chain", _ln_wave),
+    ("flux", _ln_wave),
+    # Date-range reset (before corrections' "set to": "Reset to full range").
+    ("date range", _ln_calendar),
+    ("reset", _ln_reset),
+    # Corrections (offset before generic "time": "nighttime zero offset").
+    ("offset", _ln_correction),
+    ("set to", _ln_correction),
+    ("set exact", _ln_correction),
+    # Gap-filling before "gap" (gaps & coverage).
+    ("gap-filling", _ln_gapfill),
+    ("gap", _ln_grid),
+    ("coverage", _ln_grid),
+    # Timestamps / generic time series.
     ("timestamp", _ln_clock),
     ("time", _ln_chart),
     ("series", _ln_chart),
+    # Variable management.
     ("select variables", _ln_checklist),
     ("select records", _ln_funnel),
     ("metadata", _ln_props),
-    ("open project", _ln_project),
-    ("open", _ln_folder),
-    ("manual", _ln_book),
-    ("example", _ln_document),
-    ("export", _ln_export),
-    ("save", _ln_save),
-    ("exit", _ln_exit),
-    ("date range", _ln_calendar),
-    ("reset", _ln_reset),
-    ("gap", _ln_grid),
-    ("coverage", _ln_grid),
+    ("feature", _ln_gear),
+    ("combine", _ln_grid),
+    ("calculate", _ln_gear),        # derived-variable calculators (VPD, ...)
+    ("rename", _ln_tag),
+    ("profile", _ln_profile),
+    # Analysis.
     ("driver", _ln_chart),
     ("season", _ln_chart),
     ("anomal", _ln_chart),
     ("spectro", _ln_grid),
-    ("feature", _ln_gear),
-    ("combine", _ln_grid),
-    ("rename", _ln_tag),
-    ("chain", _ln_wave),
-    ("flux", _ln_wave),
+    ("extreme", _ln_extremes),
+    ("compound", _ln_extremes),
+    # Events.
+    ("event", _ln_event),
+    # File / settings / help.
+    ("open project", _ln_project),
+    ("open", _ln_folder),
+    ("user manual", _ln_book),
+    ("changelog", _ln_document),
+    ("example", _ln_document),
+    ("export", _ln_export),
+    ("save", _ln_save),
+    ("exit", _ln_exit),
     ("appearance", _ln_palette),
+    ("settings", _ln_settings),
+    ("github", _ln_github),
+    ("issue", _ln_issue),
+    ("report", _ln_issue),
     ("about", _ln_info),
+    ("database", _ln_database),
     ("overview", _ln_grid),
     ("log", _ln_document),
 ]
@@ -349,14 +616,54 @@ def pin_icon() -> QIcon:
     return QIcon(pm)
 
 
-def close_icon() -> QIcon:
-    """A small, clearly visible "×" for tab close buttons (ink-coloured)."""
+def close_icon(color: str | None = None) -> QIcon:
+    """A small, clearly visible "×" for tab/window close buttons.
+
+    ``color`` overrides the ink (e.g. white for a red close-button hover);
+    defaults to the theme ink."""
     pm, p = _canvas()
-    pen = QPen(_line_ink(), 1.7)
+    pen = QPen(QColor(color) if color else _line_ink(), 1.7)
     pen.setCapStyle(Qt.PenCapStyle.RoundCap)
     p.setPen(pen)
     p.drawLine(QPointF(4.5, 4.5), QPointF(11.5, 11.5))
     p.drawLine(QPointF(11.5, 4.5), QPointF(4.5, 11.5))
+    p.end()
+    return QIcon(pm)
+
+
+def minimize_icon(color: str | None = None) -> QIcon:
+    """A window-minimize glyph: a single horizontal bar near the bottom."""
+    pm, p = _canvas()
+    pen = QPen(QColor(color) if color else _line_ink(), 1.5)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    p.drawLine(QPointF(4.0, 10.5), QPointF(12.0, 10.5))
+    p.end()
+    return QIcon(pm)
+
+
+def maximize_icon(color: str | None = None) -> QIcon:
+    """A window-maximize glyph: a single rounded square outline."""
+    pm, p = _canvas()
+    pen = QPen(QColor(color) if color else _line_ink(), 1.4)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRoundedRect(QRectF(4.0, 4.0, 8.0, 8.0), 1.2, 1.2)
+    p.end()
+    return QIcon(pm)
+
+
+def restore_icon(color: str | None = None) -> QIcon:
+    """A window-restore glyph: two overlapping squares (the classic restore)."""
+    pm, p = _canvas()
+    pen = QPen(QColor(color) if color else _line_ink(), 1.3)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawPolyline(_poly([(6.2, 5.5), (6.2, 3.6), (12.4, 3.6),
+                          (12.4, 9.8), (10.5, 9.8)]))   # back square (open corner)
+    p.drawRect(QRectF(3.6, 6.2, 6.2, 6.2))              # front square
     p.end()
     return QIcon(pm)
 

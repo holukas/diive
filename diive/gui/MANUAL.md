@@ -14,6 +14,10 @@ pip install 'diive[gui]'     # or: uv sync --extra gui
 diive-gui
 ```
 
+For the optional **Database** tabs (read/write an InfluxDB), also install the
+`db` dependency group: `uv sync --group db` (or `pip install influxdb-client`).
+Without it the Database tabs show a short install notice instead of failing.
+
 A splash screen with a loading spinner appears while the app starts. diive then
 **reopens the project you had open last**. If you haven't saved one yet, the
 bundled example dataset (CH-DAV, 37 variables) loads automatically so you can try
@@ -94,7 +98,7 @@ straight back into diive, GUI or library.
   **every** tab's list. Rename asks for a new name, and the variable keeps all its
   tags, notes, and history under the new name; delete drops it from the loaded
   dataset. Both are **non-destructive** to the source file, so reload or reopen to
-  restore. Full metadata editing lives in **Data ▸ Metadata explorer**.
+  restore. Full metadata editing lives in **Variables ▸ Metadata explorer**.
 - The list looks and behaves the same in every tab.
 
 ---
@@ -113,8 +117,16 @@ file, a date-range change, added features), which is handy for comparing while y
 change the data elsewhere. A pin marker appears on the tab; right-click → **Unpin**
 to let it follow the data again. Overview and Log are always live.
 
-The sections below are grouped by **menu**: each menu is a heading, and each of its
-entries is a sub-heading.
+The menu bar runs across the top of the window: **File**, **Data**, **Variables**,
+**Plot**, **Cleaning**, **Flux**, **Gap-filling**, **Analyze**, **Settings**, and
+**Help**. On a narrow window the menus that don't fit fold into a **More ⌄** dropdown
+(their labels are never shortened), and the centre title gives way first, so the menu
+buttons always stay readable.
+
+The sections below are grouped by feature area, and each says which menu it lives
+under. A few menus gather more than one area: **File ▸ Database** holds the InfluxDB
+tools, the **Data** menu holds the event markers, and **Cleaning** holds the outlier
+filters and the corrections together.
 
 ---
 
@@ -309,14 +321,60 @@ labels and the usual display toggles (legend, title, axes).
 ### 3D surface
 
 The variable's date × time-of-day grid rendered as a rotatable, GPU-accelerated 3-D
-relief, the three-dimensional analogue of the date/time heatmap. The diel band,
-seasonal swings, and gaps become hills and valleys you can orbit. Controls:
-**Colormap**, **Vertical exaggeration** (height of the relief; 0 is flat), **Smooth
-shading**, **Show mesh** (overlay the grid lines), **Smooth terrain** (round the
-surface into rolling hills by subdividing the mesh; 0 is off), and **Reset view**.
-This needs the optional **`gui3d`** extra (PyVista/VTK); without it the tab shows
-install instructions instead of failing. **Copy Python** (top-right) copies a script
-that builds the same surface as a Matplotlib 3-D plot (so it runs without the extra).
+relief, the three-dimensional analogue of the date/time heatmap. **Style** picks the
+look: *Extruded heatmap* (the default) draws one flat bar per cell, like the 2-D heatmap
+raised into 3-D, so the grid reads as stepped bars — each bar (top and its step-risers)
+is one uniform heatmap colour; *Smooth surface* interpolates the grid into continuous
+hills and valleys you can orbit.
+
+**Relief controls:** **Colormap**; **Vertical exaggeration** (relief height; 0 is flat);
+**Opacity**; **Y stretch** (widens the date axis so the plot reads as a landscape rather
+than a thin ridge; up to 100); **Y cell (days)** with **Cell aggregator**. The
+aggregator has two families: the *block* options (mean, median, max, min) collapse every
+N days into one wider cell to tame single-day spikes, while *rolling mean* / *rolling
+median* keep full daily resolution and instead smooth each day over a centred window of N
+days (gaps are preserved either way). Also **Smooth terrain** (round the surface into
+rolling hills by subdividing the mesh; surface style only); **Shadows** with **Shadow
+length** (cast short shadows from an overhead spotlight for depth; off by default);
+**Smooth shading**; and **Show mesh** (overlay the grid lines).
+
+**View buttons** snap the camera to fixed angles and maximise the plot in the viewport:
+**Isometric** (the default lower-left 45° framing, also used on load), **Top**, **Front**,
+**Back**, **Left**, **Right**, plus two gently-tilted presentation views — **Front 20°**
+(straight-on from the front, 20° above horizontal) and **Side 20°**. **Orbit** slowly
+turns the scene with a gentle rise-and-fall sweep; **Flyover** glides over the relief
+along the date axis from the first record to the last and back; **Speed** sets the pace of
+both. Any animation stops as soon as you touch the camera or pick a view. Drag to rotate,
+Shift+drag to pan, Ctrl+drag to roll, scroll to zoom. Changing a setting re-renders in
+place and keeps your current view; picking a new variable re-frames to Isometric.
+
+**Export** (needs no internet): **VR (.glb)** writes the styled surface as a self-contained
+binary glTF with the colours baked into a texture (imports directly into PowerPoint via
+*Insert ▸ 3D Models*, Blender, and Meta Quest / WebXR viewers); **3D print (.stl)** writes
+a watertight solid with a base plate, ready to slice and print.
+
+This needs the optional **`gui3d`** extra (PyVista/VTK); without it the tab shows install
+instructions instead of failing. **Copy Python** (top-right) copies a script that builds
+the same surface as a Matplotlib 3-D plot (so it runs without the extra).
+
+### 3D surface (X/Y/Z)
+
+The coordinate-surface sibling of the 3D surface: instead of a variable's date ×
+time-of-day grid, it renders an arbitrary **Z over X and Y**. Pick three variables by
+**dragging** each from the list onto the **X**, **Y**, or **Z (height / colour)** field
+(clicking the list does nothing here — drag is how roles are assigned). The scattered
+points are gridded onto a regular X-Y mesh and shown as the same rotatable relief.
+
+Two extra controls set the gridding: **Bins (X/Y)** (how many equal-width bins to split
+each axis into) and **Z aggregator** (how the Z values falling in each cell are combined —
+mean, median, max, min, or sum). **Empty cells stay empty** — a bin with no data is a
+genuine hole in the surface, not a floor tile.
+
+Everything else matches the 3D surface tab: the same relief controls (style, colormap,
+exaggeration, opacity, Y stretch, smooth terrain, shadows, smooth shading, mesh), the same
+view presets and orbit/flyover animations, and the same **VR (.glb)** / **3D print (.stl)**
+exports. **Copy Python** copies a script that grids the data with
+`dv.analysis.GridAggregator` and draws the surface in Matplotlib (no 3-D extra needed).
 
 ### Wind rose
 
@@ -364,6 +422,9 @@ final sum. One variable at a time. Settings:
 ---
 
 ## Events
+
+*Found under the **Data** menu (Events section): the Events tab, an **Add
+event…** shortcut, and the **Show events on plots** toggle.*
 
 Mark **when something happened** at the site (fertilization, harvest, grazing, a
 management step, a sensor swap) and overlay those markers on the plots. Each event
@@ -525,7 +586,18 @@ in the growing season. An explanation is shown above the plot.
 
 ---
 
-## Outliers
+## Cleaning
+
+The **Cleaning** menu gathers the two per-variable data-cleaning families in two
+sections: **Outliers** (spike and outlier detection, below) and **Corrections**
+(physical corrections, further down). Every one of these tabs works on a single
+variable, previews the result before you keep it, and never changes your original
+column — the cleaned or corrected values are added as a new column.
+
+**Outliers.** Each outlier tab flags suspect values with one detector and shows the
+result in a two-panel preview (the variable with detected outliers marked on top, the
+cleaned copy below). **Add cleaned + flag to dataset** keeps the result, and **Copy
+Python** copies the equivalent diive script.
 
 ### Hampel filter
 
@@ -709,8 +781,8 @@ is shown so the plots stay large:
   set-exact-to-missing). The **Measurement** dropdown (auto-detected from the
   variable name, e.g. *SW - shortwave radiation*) decides which corrections are
   physically meaningful and shows only those. The **Run corrections** button applies
-  them. (The same corrections are also available one-per-tab under the **Corrections**
-  menu, described below.)
+  them. (The same corrections are also available one-per-tab in the **Corrections**
+  section of the Cleaning menu, described below.)
 - **Report.** The per-step screening statistics (retained / rejected, day/night),
   with **Copy report**.
 
@@ -718,17 +790,14 @@ is shown so the plots stay large:
 flag, the QCF-filtered series, and (if any corrections ran) the corrected series.
 **Copy Python** copies a reproducible script for the whole chain.
 
----
-
-## Corrections
-
-The **Corrections** menu has one tab per correction; they all share the same layout.
-**Click a variable** in the **Target** list on the left, set the options in the
-middle, and the right side previews the **original** against the **corrected**
-series. **Run correction** applies it, **Add corrected to dataset** keeps the result
-(a new `{var}_…` column; your original is never changed), and **Copy Python** (top
-bar) copies a reproducible script. Each correction is its own tab, so any correction
-is available for any variable; the suggested use is just a hint.
+**Corrections.** The **Corrections** section of the **Cleaning** menu has one tab per
+correction; they all share the same layout. **Click a variable** in the **Target**
+list on the left, set the options in the middle, and the right side previews the
+**original** against the **corrected** series. **Run correction** applies it, **Add
+corrected to dataset** keeps the result (a new `{var}_…` column; your original is
+never changed), and **Copy Python** (top bar) copies a reproducible script. Each
+correction is its own tab, so any correction is available for any variable; the
+suggested use is just a hint.
 
 ### Remove nighttime zero offset
 
@@ -779,6 +848,10 @@ Set records that **exactly equal** any of the values you list (comma-separated, 
 
 ## Data
 
+The **Data** menu scopes the working dataset. It also holds **Select date range…**
+and **Reset to full range** (see [Focusing on a date range](#focusingonadaterange))
+and the **Events** section (see [Events](#events)).
+
 ### Select variables
 
 Pick a subset of variables to focus the **Overview** list on. Click a variable on
@@ -806,6 +879,14 @@ below). **Undo last** / **Reset** walk the chain back, and the condition may be 
 target itself (filter a variable by its own value). **Add selection to dataset**
 appends the result as a new `{target}_SEL` column (out-of-range records set to
 missing; the time index is preserved). **Copy Python** yields a runnable script.
+
+---
+
+## Variables
+
+The **Variables** menu creates and manages individual columns: build features, combine
+two variables, rename, inspect metadata, and calculate derived variables. It also holds
+**Add timestamp column…** (adds a plain timestamp column from the time index).
 
 ### Rename variables
 
@@ -893,6 +974,19 @@ date/time heatmaps side by side.
    method or the overlap option.
 5. Edit the **Name** (a default is suggested) and click **Add … to dataset** to
    append the new column. **Copy Python** yields a runnable script.
+
+### VPD (TA + RH)
+
+Calculate **vapour pressure deficit** (VPD, in kPa) from **air temperature** (°C) and
+**relative humidity** (%), found under the Variables menu's **Calculate** section. Set
+the two input columns in the **Air temperature (°C)** and **Relative humidity (%)**
+fields (auto-seeded by name; **drag** a variable from the list onto a field or pick it
+from the dropdown), then click **Calculate**. The input heatmaps refresh as you change
+a field; the result heatmap and the **Add** button wait for **Calculate**.
+
+Edit the **Name** (default `VPD_kPa`) and **Add … to dataset** to append the new
+column; **Copy Python** copies a runnable `dv.variables.calc_vpd_from_ta_rh` script.
+Inputs must be in the stated units (°C and %); diive does not check them.
 
 ---
 
@@ -1144,7 +1238,7 @@ uncertainty alongside its **random** and **scenario** components and the final
 Fill the gaps in one variable with an **XGBoost** model (gradient-boosted trees),
 trained on other variables you pick as predictors. This tab does gap-filling only:
 it has **no feature-engineering options**. If you want engineered predictors (lags,
-rolling means, and so on), build them first in **Data ▸ Feature engineering**, then
+rolling means, and so on), build them first in **Variables ▸ Feature engineering**, then
 select them here.
 
 The tab has two sub-tabs: **Model** (set up and run the gap-filling, see the
@@ -1272,6 +1366,71 @@ flag; **Copy Python** copies a reproducible script.
 
 ---
 
+## Database
+
+*Found under **File ▸ Database**.* Read measurement data straight from an
+**InfluxDB** time-series database, screen high-resolution meteo, resample it, and
+merge it into your dataset. These tabs need the optional `db` dependency group (see
+**Install & launch**); without it they show an install notice. The header shows a
+green **Connected** pill once a connection is live.
+
+> **Timezone — important.** The database always stores timestamps in **UTC**, but
+> you normally work in your station's local time (e.g. **UTC+1**, CET). The
+> download converts UTC to a **UTC offset** you choose, and that offset **must
+> match your dataset's timezone** or the merged data land at the wrong time. The
+> offset defaults to your **project timezone** (Project settings), and the tabs
+> warn you if it doesn't match.
+
+### Database connection
+
+Point diive at an InfluxDB and test the connection.
+
+- **Config directory.** Pick the configuration folder (the connection's
+  `url` / `org` / `token` live in its `<dir>_secret` sibling). diive remembers the
+  **directory path only — never the token**.
+- **Test connection** verifies the server is reachable and fills in the resolved
+  URL / org. Once connected, the explorer and the screening tab can use it.
+
+### Database explorer
+
+Browse what's in the database and pull data out.
+
+- **Drill down** through the columns: **bucket → data version → measurements →
+  fields**. Selecting a field shows a **field overview** — every database tag it
+  carries (units, gain, offset, …) plus the **first and last record** timestamps.
+- **Download & plot.** Pick a **start / end** range and a **UTC offset** (see the
+  timezone note above; a line under the controls always tells you the active
+  timezone), then **Download & plot**. **Match dataset time range** sets the range
+  so the result lines up with your working dataset (accounting for the
+  end-of-period ↔ middle-of-period convention). High-resolution downloads run in
+  chunks with a **progress bar and a plot that fills in** as data arrive, and the
+  status reports **how long it took**.
+- **Send to Meteo screening →** hands the downloaded field (with its tags) to the
+  Meteo screening tab. A download is reused, not repeated, if you do both.
+
+### Meteo screening (database)
+
+The **full screening experience of the Stepwise screening tab** (outlier-test
+cards, corrections, QCF, the live preview, Copy Python — see
+[Stepwise screening](#stepwisescreening)) applied to a high-resolution field from
+the database, **plus a Resample step**.
+
+- Receive a field from the explorer, screen it exactly as you would any variable
+  (chain outlier tests, apply corrections, check the QCF).
+- **Resample** (extra inspector page). The target resolution **defaults to your
+  working dataset's resolution**, detected automatically; the info line shows the
+  source vs. target resolution and whether resampling is needed. **If the data are
+  already at the target resolution, no resampling is done** (so already-30MIN data
+  merge straight through).
+- **Add resampled to dataset** appends the screened, resampled column. Its
+  timestamps are converted to your dataset's **middle-of-period** convention so it
+  aligns on merge, it is **renamed with a suffix** if the name already exists, and
+  it is **refused with an explanation** if its time range doesn't overlap your
+  dataset. The new column's history records the database origin and **all its
+  tags** (and the timezone it was downloaded in).
+
+---
+
 ## Settings
 
 ### Project settings
@@ -1326,7 +1485,9 @@ on) in colour. **Save…** writes the log to a text file; **Clear** empties it.
 - Your appearance settings, site details, window size and position, last-used
   filetype, variable tags and notes, and most-recent project are **remembered**
   between sessions.
-- The window opens **maximized** to make the most of your screen.
+- The window opens **filling your screen's work area** to make the most of it (the
+  taskbar stays visible). On a narrow window, menus that don't fit fold into a
+  **More ⌄** dropdown so their labels stay readable.
 - A short loading cue appears on a variable while its plot is being drawn.
 - Stuck, or something looks off? Check the **Log** tab for messages.
 

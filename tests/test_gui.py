@@ -612,6 +612,58 @@ def test_gui_daterange_subselection(window):
     assert not window._reset_range_act.isEnabled()
 
 
+def test_add_dataset_extends_without_overwrite(window):
+    # "Add to current data" must EXTEND the record, not replace it: union the
+    # timestamps (append new periods), keep existing values on overlap (never
+    # overwrite), fill only new rows/gaps from the incoming file. Existing
+    # variables are extended (documented in metadata, NOT flagged NEW); only
+    # genuinely new columns get the NEW flag.
+    from diive.gui import metadata_store
+
+    step = pd.Timedelta("30min")
+    base_idx = pd.date_range("2021-01-01", periods=6, freq="30min",
+                             name="TIMESTAMP_END")
+    base = pd.DataFrame({"TA": [1., 2., 3., 4., 5., 6.],
+                         "RH": [10., 20., 30., 40., 50., 60.]}, index=base_idx)
+    window._set_data(base, source="base.parquet")
+    QApplication.processEvents()
+
+    # Incoming file: overlaps the last two timestamps (different values, must be
+    # ignored), adds three new timestamps for TA, and brings one brand-new column.
+    overlap = base_idx[-2:]
+    new_ts = pd.date_range(base_idx[-1] + step, periods=3, freq="30min")
+    new_idx = overlap.append(new_ts)
+    new_df = pd.DataFrame({"TA": [999.] * 5, "NEWVAR": [7., 8., 9., 10., 11.]},
+                          index=new_idx)
+    new_df.index.name = "TIMESTAMP_END"
+
+    window._add_dataset(new_df, "more.parquet")
+    QApplication.processEvents()
+    fd = window._full_data
+
+    # New timestamps appended; existing values on the overlap are preserved.
+    assert len(fd) == 9
+    assert list(fd["TA"].loc[overlap]) == [5., 6.]      # existing wins, not 999
+    assert list(fd["TA"].loc[new_ts]) == [999.] * 3     # new rows filled from file
+    # Brand-new column added, NaN where the old record had no data for it.
+    assert "NEWVAR" in fd.columns
+    assert pd.isna(fd["NEWVAR"].loc[base_idx[0]])
+    assert list(fd["NEWVAR"].loc[new_ts]) == [9., 10., 11.]
+
+    # NEW flag: only the genuinely new column, never the extended existing ones.
+    assert "NEWVAR" in window._created
+    assert "TA" not in window._created and "RH" not in window._created
+
+    # Metadata: the extended column records the extension; an untouched existing
+    # column does not; the new column gets an 'Imported from' baseline.
+    store = metadata_store.manager.store
+    assert any("Extended with data from" in p.operation
+               for p in store.peek("TA").provenance)
+    assert not any("Extended" in p.operation for p in store.peek("RH").provenance)
+    assert any("Imported from" in p.operation
+               for p in store.peek("NEWVAR").provenance)
+
+
 def test_daterange_dialog_clamps_and_orders(app):
     from diive.gui.widgets.daterange_dialog import DateRangeDialog
     start, end = pd.Timestamp("2020-01-01"), pd.Timestamp("2020-12-31 23:30")
@@ -1137,6 +1189,70 @@ def test_correction_tabs(app):
     miss._run()                                      # no values entered
     assert miss._result_df is None
     assert "value" in miss.status.text().lower()
+
+
+def test_derived_variable_vpd_tab(app):
+    # The derived-variable tabs (BaseDerivedVariableTab subclasses): one library
+    # formula from a few existing columns, previewed and emitted as a DERIVED
+    # column with a reproducible script. VPD is the first / reference subclass.
+    from diive.core.metadata import ATTRS_KEY
+    from diive.gui.tabs.derived_vpd import VpdFromTaRhTab
+
+    idx = pd.date_range("2024-06-01", periods=48 * 10, freq="30min",
+                        name="TIMESTAMP_END")
+    df = pd.DataFrame(
+        {"TA": 15.0 + 5.0 * pd.Series(range(len(idx)), index=idx).mod(48) / 48.0,
+         "RH": 60.0 + pd.Series(range(len(idx)), index=idx).mod(30).astype(float)},
+        index=idx)
+
+    tab = VpdFromTaRhTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    # Inputs auto-seed by name and preview immediately; but nothing is computed
+    # until Calculate is pressed (Add stays disabled, result panel empty).
+    assert tab.picker.picks() == {"ta": "TA", "rh": "RH"}
+    assert tab._out_name() == "VPD_kPa"
+    assert tab.varpanel.list.count() == 2               # the shared variable list
+    assert tab._result is None and not tab.add_btn.isEnabled()
+
+    tab._calculate()
+    QApplication.processEvents()
+    assert tab._result is not None and tab._result.name == "VPD_kPa"
+    # VPD matches the library function exactly (the tab only wires it up).
+    expected = dv.variables.calc_vpd_from_ta_rh(df, rh_col="RH", ta_col="TA")
+    pd.testing.assert_series_equal(
+        tab._result, expected.rename("VPD_kPa"), check_names=True)
+    assert tab.add_btn.isEnabled()
+
+    emitted = {}
+    tab.featuresCreated.connect(lambda d: emitted.update(df=d))
+    tab._add()
+    QApplication.processEvents()
+    assert list(emitted["df"].columns) == ["VPD_kPa"]
+    prov = emitted["df"].attrs[ATTRS_KEY]["VPD_kPa"]
+    assert prov["origin"] == "derived" and "vpd" in prov["tags"]
+
+    # Copy Python reproduces the calculation and compiles.
+    code = tab._python_code()
+    compile(code, "<gen>", "exec")
+    assert "calc_vpd_from_ta_rh" in code and "VPD_kPa" in code
+
+    # Dragging a variable onto a field is a plain-text drop onto a DropComboBox;
+    # simulate the effect (setCurrentText) — it stales the result until the next
+    # Calculate and refreshes that input's preview.
+    tab.picker.combos()["ta"].setCurrentText("RH")      # valid column, recomputes previews
+    QApplication.processEvents()
+    assert tab._result is None and not tab.add_btn.isEnabled()
+
+    # A pick that isn't a real column (e.g. a stale restored selection) makes
+    # Calculate + Copy Python no-ops.
+    combo = tab.picker.combos()["rh"]
+    combo.addItem("NOT_A_COLUMN")
+    combo.setCurrentText("NOT_A_COLUMN")
+    QApplication.processEvents()
+    tab._calculate()
+    assert tab._result is None and not tab.add_btn.isEnabled()
+    assert tab._python_code() is None
 
 
 def test_flux_chain_tab_level33_detection(app):
@@ -1978,21 +2094,23 @@ def test_hexbin_tab(window):
     fig = tab.canvas.fig
     assert fig.axes and fig.axes[0].collections  # hexbin polycollection drawn
     assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
-    # Role readout reflects the assignment.
-    assert tab.settings.x_role.text() == tab._xyz[0]
-    assert tab.settings.z_role.text() == tab._xyz[2]
+    # Role dropdowns reflect the assignment.
+    assert tab.settings._role_combos[0].currentText() == tab._xyz[0]
+    assert tab.settings._role_combos[2].currentText() == tab._xyz[2]
 
-    # Click cycling: clicking an assigned variable removes it; an incomplete
-    # selection shows the prompt instead of a plot.
+    # Roles come from the dropdowns; clicking the variable list is a no-op for
+    # role-picked plots (it must not disturb the assignment).
     x0 = tab._xyz[0]
     tab._on_selected(x0, False)
     QApplication.processEvents()
-    assert x0 not in tab._xyz and len(tab._xyz) == 2
-    assert any("X, Y, Z" in t.get_text() for a in tab.canvas.fig.axes for t in a.texts)
-    # Re-adding fills the freed slot again (back to three).
-    tab._on_selected(x0, False)
+    assert tab._xyz[0] == x0 and len(tab._xyz) == 3
+    # Reassigning a role via its dropdown updates the assignment.
+    combo = tab.settings._role_combos[0]
+    other = next(combo.itemText(i) for i in range(combo.count())
+                 if combo.itemText(i) and combo.itemText(i) not in tab._xyz)
+    combo.setCurrentText(other)
     QApplication.processEvents()
-    assert len(tab._xyz) == 3
+    assert tab._xyz[0] == other and len(tab._xyz) == 3
 
 
 def test_gap_dashboard_tab(window):
@@ -3017,15 +3135,31 @@ def test_studio_chrome_builds_frameless_with_header(app, monkeypatch, example_ye
         assert win.windowFlags() & Qt.WindowType.FramelessWindowHint
         assert _tabs(win) == ["Overview", "Log"]
         # The full menu tree lives as inline dropdown buttons in the header
-        # (File/Data/Plot/Outliers/Flux/Analyze/Settings/Help), each with a populated QMenu.
+        # (File/Data/Variables/Plot/Cleaning/Flux/Gap-filling/Analyze/Settings/
+        # Help), each with a populated QMenu. Events fold into Data and Database
+        # into File, so neither has its own top-level button; Outliers and
+        # Corrections are combined into the single "Cleaning" menu.
         from PySide6.QtWidgets import QToolButton
         menu_btns = win._header.findChildren(QToolButton, "headermenu")
-        assert len(menu_btns) == 8
+        assert len(menu_btns) == 10
         assert all(b.menu() is not None and b.menu().actions() for b in menu_btns)
-        # Open and Save live inside the File menu (no separate buttons).
-        file_items = [a.text() for a in menu_btns[0].menu().actions()]
+        # Outliers + Corrections combined into one "Cleaning" menu holding both
+        # an outlier tab and a correction tab.
+        cleaning = next(b.menu() for b in menu_btns
+                        if "CLEANING" in b.text().upper())
+        cleaning_items = [a.text() for a in cleaning.actions()]
+        assert any("Hampel" in t for t in cleaning_items)
+        assert any("nighttime zero offset" in t for t in cleaning_items)
+        # Open and Save live inside the File menu (no separate buttons); the
+        # Database submenu is folded in there too.
+        file_menu = menu_btns[0].menu()
+        file_items = [a.text() for a in file_menu.actions()]
         assert any("Open" in t for t in file_items)
         assert any("Save" in t for t in file_items)
+        assert any("Database" in t for t in file_items)
+        # Events fold into the Data menu.
+        data_items = [a.text() for a in menu_btns[1].menu().actions()]
+        assert any("Events" in t for t in data_items)
         win.close()
     finally:
         theme.manager.reset(silent=True)
@@ -3282,6 +3416,20 @@ def test_gapfilling_mds_tab(app, example_year):
     drivers = tab._driver_names()
     assert all(v in df.columns for v in drivers.values())
     assert "VPD" in drivers["vpd"].upper() and "TA" in drivers["ta"].upper()
+
+    # The driver combos are drag-drop targets, and the 'Available drivers' list is
+    # a draggable search source listing every column except the target.
+    from diive.gui.widgets.plot_settings import _DropComboBox
+    assert all(isinstance(c, _DropComboBox) for c in tab._combos.values())
+    assert all(c.acceptDrops() for c in tab._combos.values())
+    assert tab.driver_list.list._draggable
+    listed = set(tab.driver_list.names())
+    assert "NEE_CUT_REF_orig" not in listed
+    assert {"Rg_f", "Tair_f", "VPD_f"} <= listed
+    # Dropping a variable name (as a draggable list emits it) lands in the combo.
+    i = tab._combos["swin"].findText("Rg_f")
+    tab._combos["swin"].setCurrentIndex(i)
+    assert tab._driver_names()["swin"] == "Rg_f"
 
     # Reproducible snippet reflects the current target + drivers.
     code = tab._python_code()

@@ -22,8 +22,8 @@ eddy-covariance-correct preprocessing pass:
 - **Temporal prediction (Layer 2):** lagged importance (response timescale),
   scale-resolved importance (STL components and temporal aggregations), and
   regime-stratified importance.
-- **Causation (Layer 3, opt-in):** a deseasonalized Granger sanity check, with
-  PCMCI / CATE available behind the optional ``diive[causal]`` extra.
+- **Causation (Layer 3, opt-in):** a deseasonalized Granger sanity check.
+  (Granger is predictive, not causal evidence on its own.)
 
 The headline output is the convergence/divergence summary: where methods agree
 you can trust the attribution, and where they disagree is the scientific signal.
@@ -137,8 +137,7 @@ da.plot_scale_resolved(showplot=True)
 #
 # Granger is a cheap, caveated check — NOT causal evidence on its own. Inputs are
 # STL-deseasonalized first (shared seasonality is the classic spurious-Granger
-# trap). The real causal upgrade, PCMCI, lives behind the optional
-# ``diive[causal]`` extra: ``da.pcmci(tau_max=48)``.
+# trap).
 
 granger = da.granger()
 print(granger)

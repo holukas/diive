@@ -35,6 +35,7 @@ _COL_WIDTH = 480
 from diive.gui import site, theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.notes_wall import NotesWall
+from diive.gui.widgets.tab_chrome import build_titlebar
 
 
 class ProjectSettingsTab(DiiveTab):
@@ -45,7 +46,12 @@ class ProjectSettingsTab(DiiveTab):
 
     def build(self) -> QWidget:
         root = QWidget()
-        outer = QHBoxLayout(root)
+        root_lay = QVBoxLayout(root)
+        root_lay.setContentsMargins(0, 0, 0, 0)
+        root_lay.setSpacing(0)
+        root_lay.addLayout(build_titlebar(self.title))  # shared tab header
+        body = QWidget()
+        outer = QHBoxLayout(body)
         outer.setContentsMargins(24, 24, 24, 24)
 
         # A single, width-capped column anchored to the top-left (a trailing
@@ -147,6 +153,7 @@ class ProjectSettingsTab(DiiveTab):
         notes_col.addWidget(self.notes, stretch=1)
         outer.addLayout(notes_col, stretch=1)
 
+        root_lay.addWidget(body, stretch=1)
         self._load_from_manager()
         # Keep the form in sync if another part of the app updates the site.
         site.manager.changed.connect(self._load_from_manager)

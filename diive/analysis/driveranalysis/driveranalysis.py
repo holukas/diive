@@ -17,8 +17,6 @@ Hard rules honored here:
   - All train/test splits are time-aware (no shuffling) to avoid the leakage that
     diive recently fixed in its gap-fillers and OptimizeParamsTS.
   - Model scores are held-out (out-of-sample), never in-sample.
-  - Heavy causal libraries (tigramite, econml/causalml) are optional extras
-    (``diive[causal]``), lazy-imported only when their method is called.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -60,7 +58,7 @@ _RANDOM_COL = '.RANDOM'
 #   3. lagged/scale/strat fit ADDITIONAL throwaway models on transformed data
 #                         (lagged drivers, STL components, per-regime subsets)
 #                         -> Layer 2 (temporal). Each returns per-driver SHAP.
-#   4. granger/pcmci/cate optional Layer 3 (causation), opt-in + heavy deps.
+#   4. granger        optional Layer 3 (causation), opt-in (deseasonalized).
 #   5. _synthesize()      collapses every method's per-driver output into ONE
 #                         ternary relevance ({yes,weak,no}) + direction, then
 #                         compares them -> agreement + verdict (the headline).
@@ -132,8 +130,6 @@ class DriverAnalysisResult:
     rolling_importance: Optional[DataFrame] = None
     # --- causal layer ---
     granger: Optional[DataFrame] = None
-    pcmci: object = None
-    cate: object = None
     # --- synthesis ---
     convergence: Optional[DataFrame] = None
     stability: Optional[DataFrame] = None
@@ -406,9 +402,7 @@ class DriverAnalysis:
 
         Args:
             levels: Any of ``'static'``, ``'temporal'``, ``'causal'``. The causal
-                layer is opt-in (heavier deps, identification assumptions); only
-                Granger runs automatically within it, while PCMCI/CATE remain
-                explicit method calls.
+                layer is opt-in; it runs a deseasonalized Granger sanity check.
         """
         levels = tuple(levels)
         rule("DriverAnalysis", verbose=self.verbose)
@@ -435,8 +429,6 @@ class DriverAnalysis:
         if 'causal' in levels:
             info("Layer 3 (causation): Granger sanity check (deseasonalized)",
                  verbose=self.verbose)
-            # Only the cheap Granger check runs automatically; pcmci()/cate()
-            # stay explicit because of their heavy deps and assumptions.
             self.granger()
 
         # Collapse every method's output into the per-driver verdict table.
@@ -774,7 +766,7 @@ class DriverAnalysis:
             return imp, (model, X)  # X keeps .RANDOM (model was fitted with it)
         return imp, None
 
-    # ----------------------------------- Layer 3: causal (opt-in, gated deps)
+    # ----------------------------------------- Layer 3: causal (opt-in)
     def granger(self) -> DataFrame:
         """Bivariate Granger test per driver — a cheap, caveated sanity check.
 
@@ -806,62 +798,6 @@ class DriverAnalysis:
         out = DataFrame(rows).set_index('driver')
         self._result.granger = out
         return out
-
-    def pcmci(self, tau_max: int = 48, alpha: float = 0.05, **kw):
-        """PCMCI(+) causal discovery via tigramite (optional extra ``diive[causal]``).
-
-        Lagged, confounded, autocorrelation-aware discovery — the real upgrade
-        over bivariate Granger. Lazy-imported; raises a helpful error if tigramite
-        is not installed.
-        """
-        try:
-            from tigramite import data_processing as pp
-            from tigramite.pcmci import PCMCI
-            from tigramite.independence_tests.parcorr import ParCorr
-        except ImportError as e:
-            raise ImportError(
-                "pcmci() requires tigramite. Install the optional extra:\n"
-                "    pip install 'diive[causal]'   (or, with uv)   uv sync --extra causal"
-            ) from e
-
-        df = self.drivers_df.copy()
-        df[self.target.name] = self.target
-        df = df.dropna()
-        var_names = list(df.columns)
-        dataframe = pp.DataFrame(df.to_numpy(), var_names=var_names)
-        pcmci = PCMCI(dataframe=dataframe, cond_ind_test=ParCorr(), verbosity=0)
-        results = pcmci.run_pcmciplus(tau_max=tau_max, pc_alpha=alpha, **kw)
-        self._result.pcmci = {'results': results, 'var_names': var_names,
-                              'target': self.target.name, 'tau_max': tau_max}
-        self._merge_pcmci_into_convergence()
-        return self._result.pcmci
-
-    def cate(self, treatment: Series, adjust: list, **kw):
-        """Conditional Average Treatment Effect — only with an explicit treatment
-        definition and identification assumptions (manipulation experiments:
-        warming / drought / management). Never auto-run on continuous drivers.
-
-        Optional extra ``diive[causal]`` (econml). Lazy-imported.
-        """
-        try:
-            from econml.dml import CausalForestDML
-        except ImportError as e:
-            raise ImportError(
-                "cate() requires econml. Install the optional extra:\n"
-                "    pip install 'diive[causal]'   (or, with uv)   uv sync --extra causal"
-            ) from e
-        df = self.drivers_df[adjust].copy()
-        df['_t_'] = treatment.reindex(df.index)
-        df['_y_'] = self.target.reindex(df.index)
-        df = df.dropna()
-        est = CausalForestDML(random_state=self.random_state, **kw)
-        est.fit(Y=df['_y_'].to_numpy(), T=df['_t_'].to_numpy(),
-                X=df[adjust].to_numpy())
-        effect = est.effect(df[adjust].to_numpy())
-        self._result.cate = {'estimator': est, 'effect': effect,
-                             'mean_effect': float(np.mean(effect)),
-                             'adjust': adjust}
-        return self._result.cate
 
     # ------------------------------------------------------------- synthesis
     def _bootstrap_stability(self) -> Optional[DataFrame]:
@@ -898,7 +834,7 @@ class DriverAnalysis:
 
         This is the headline. One row per driver, assembling whatever each layer
         produced: SHAP + ALE (association), lag/scale/regime fields (temporal),
-        Granger/PCMCI/CATE (causal), plus bootstrap stability. The per-method
+        Granger (causal), plus bootstrap stability. The per-method
         relevances are then compared in _finalize_verdicts() to decide agreement
         and a final verdict. Methods that weren't run simply leave NaN — they
         don't count against a driver.
@@ -987,42 +923,11 @@ class DriverAnalysis:
         return 'seasonal'
 
     def _causal_fields(self, d: str) -> dict:
-        out = {'granger_p': np.nan, 'pcmci_link': np.nan, 'pcmci_lag': np.nan,
-               'pcmci_sign': None, 'cate': np.nan}
+        out = {'granger_p': np.nan}
         g = self._result.granger
         if g is not None and d in g.index:
             out['granger_p'] = float(g.loc[d, 'granger_p'])
         return out
-
-    def _merge_pcmci_into_convergence(self):
-        """Fold a post-hoc PCMCI run into an existing convergence table."""
-        if self._result.convergence is None or self._result.pcmci is None:
-            return
-        conv = self._result.convergence
-        info = self._result.pcmci
-        var_names = info['var_names']
-        graph = info['results'].get('graph')
-        t_idx = var_names.index(info['target'])
-        if graph is None:
-            return
-        # tigramite's graph is an array indexed [cause, effect, lag], where each
-        # cell is a link-type string. We look for a directed link from driver d
-        # into the target at ANY lag tau; the first one found gives pcmci_lag.
-        for d in self.driver_names:
-            if d not in var_names:
-                continue
-            j = var_names.index(d)
-            link = False
-            lag = np.nan
-            for tau in range(graph.shape[2]):
-                if graph[j, t_idx, tau] in ('-->', 'o->'):  # directed / partially-directed
-                    link = True
-                    lag = tau
-                    break
-            conv.loc[d, 'pcmci_link'] = link
-            conv.loc[d, 'pcmci_lag'] = lag
-        # Re-run synthesis so the new causal column changes the verdicts.
-        self._finalize_verdicts(conv)
 
     def _finalize_verdicts(self, conv: DataFrame):
         """Compute agreement, verdict, flags, votes per driver (in place).
@@ -1059,17 +964,6 @@ class DriverAnalysis:
                 gr = 'yes' if r['granger_p'] < self.granger_alpha else 'no'
                 votes.append(f"granger:{gr}")
                 relevances.append(gr)
-            # PCMCI: a causal link at any lag => relevant (and may carry a sign)
-            if pd.notna(r.get('pcmci_link')):
-                pr = 'yes' if bool(r['pcmci_link']) else 'no'
-                votes.append(f"pcmci:{pr}")
-                relevances.append(pr)
-                if r.get('pcmci_sign') in ('+', '-'):
-                    directions.append(r['pcmci_sign'])
-            # CATE: only ever recorded when a treatment effect was estimated
-            if pd.notna(r.get('cate')):
-                votes.append("cate:yes")
-                relevances.append('yes')
 
             # --- step 2: agreement over the methods that actually ran ---
             n_methods = len(relevances)
@@ -1094,11 +988,7 @@ class DriverAnalysis:
             # Important but flat response => correlation/interaction artifact.
             if r.get('shap_relevant') == 'yes' and r.get('ale_relevant') == 'no':
                 flags.append('shap_high_ale_flat')
-            # Bivariate temporal link that disappears under confounder control.
-            if (pd.notna(r.get('granger_p')) and r['granger_p'] < self.granger_alpha
-                    and pd.notna(r.get('pcmci_link')) and not bool(r['pcmci_link'])):
-                flags.append('granger_sig_pcmci_null')
-            # Direction reverses (across ALE/PCMCI signs, or across regimes).
+            # Direction reverses (across ALE signs, or across regimes).
             if dir_conflict:
                 flags.append('sign_flip_by_regime')
             if bool(r.get('regime_dependence')):
@@ -1134,15 +1024,11 @@ class DriverAnalysis:
         Order matters: the first matching rule wins, strongest disqualifiers
         first. The cascade reads top-to-bottom as "is it unreliable? -> not a
         driver at all? -> important-but-no-response (artifact)? -> only in some
-        regimes? -> confirmed causal? -> association only?".
+        regimes? -> association only?".
         """
         yes = sum(v == 'yes' for v in relevances)
         no = sum(v == 'no' for v in relevances)
         n = len(relevances)
-        # Did a causal method run, and did it confirm a link?
-        has_causal = pd.notna(r.get('pcmci_link')) or pd.notna(r.get('cate'))
-        causal_yes = (bool(r.get('pcmci_link')) if pd.notna(r.get('pcmci_link')) else False) \
-            or (pd.notna(r.get('cate')))
         shap_yes = r.get('shap_relevant') == 'yes'
         ale_shape = r.get('ale_direction') in ('+', '-', '∩', '∪')  # any real shape
         ale_flat = r.get('ale_relevant') == 'no'                    # no response
@@ -1160,18 +1046,11 @@ class DriverAnalysis:
         # 4. Relevance/direction changes across regimes -> only a driver in context.
         if bool(r.get('regime_dependence')):
             return 'context_dependent'
-        # 5. Important + real response + a causal method CONFIRMS it (and no
-        #    contradiction) -> the strongest verdict we can give.
-        if shap_yes and ale_shape and has_causal and causal_yes and agreement != 'diverge':
-            return 'robust_driver'
-        # 6. Important but a causal method ran and found NO link -> likely
-        #    confounded; association is real but do not call it causal.
-        if shap_yes and has_causal and not causal_yes:
-            return 'associational_only'
-        # 7. Important + real response, but no causal test was run.
+        # 5. Important + real response -> association is real, but never called
+        #    causal (SHAP/ALE/Granger are association/prediction, not causation).
         if shap_yes and ale_shape:
             return 'associational_only'
-        # 8. Anything left (contradictory or weak with no clear pattern).
+        # 6. Anything left (contradictory or weak with no clear pattern).
         if agreement == 'diverge':
             return 'inconclusive'
         return 'inconclusive'
@@ -1184,7 +1063,7 @@ class DriverAnalysis:
         causal (a Layer-3 method ran) > temporal (Layer-2 produced something) >
         association (only Layer-1 SHAP/ALE).
         """
-        if pd.notna(r.get('pcmci_link')) or pd.notna(r.get('cate')) or pd.notna(r.get('granger_p')):
+        if pd.notna(r.get('granger_p')):
             return 'causal'
         if pd.notna(r.get('dominant_lag')) or bool(r.get('scale_dependence')) \
                 or bool(r.get('regime_dependence')):
@@ -1215,8 +1094,8 @@ class DriverAnalysis:
                     'votes', 'agreement', 'verdict', 'flags']:
             table.add_column(col)
 
-        order = {'robust_driver': 0, 'context_dependent': 1, 'associational_only': 2,
-                 'spurious_correlate': 3, 'inconclusive': 4, 'not_a_driver': 5}
+        order = {'context_dependent': 0, 'associational_only': 1,
+                 'spurious_correlate': 2, 'inconclusive': 3, 'not_a_driver': 4}
         conv_sorted = conv.sort_values(
             by=['verdict', 'shap_rank'],
             key=lambda s: s.map(order) if s.name == 'verdict' else s)
@@ -1369,7 +1248,4 @@ class DriverAnalysis:
         if 'granger_p' in conv.columns and conv['granger_p'].notna().any():
             cols['granger'] = conv['granger_p'].apply(
                 lambda p: 'yes' if pd.notna(p) and p < self.granger_alpha else 'no')
-        if 'pcmci_link' in conv.columns and conv['pcmci_link'].notna().any():
-            cols['pcmci'] = conv['pcmci_link'].apply(
-                lambda x: 'yes' if x is True else ('no' if x is False else None))
         return DataFrame(cols)

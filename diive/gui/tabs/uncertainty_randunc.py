@@ -27,13 +27,9 @@ import pandas as pd
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
-    QFormLayout,
-    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QProgressBar,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -43,12 +39,13 @@ from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
 from diive.flux import RandomUncertaintyPAS20
 from diive.flux.lowres.codegen import randunc_to_code
 from diive.gui import theme
-from diive.gui.tabs._partitioning_base import _auto_pick
 from diive.gui.tabs.base import DiiveTab
-from diive.gui.tabs.overview import _MetricSlot, _chip, _stat_separator
+from diive.gui.tabs.overview import HeroBand
+from diive.gui.widgets.column_picker import ColumnPicker
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
+from diive.gui.widgets.progress_bar import ProgressBar
 from diive.gui.widgets.worker import WorkerRunner
 
 _C_FLUX = "#455A64"   # blue-grey 700 — the flux line
@@ -100,8 +97,6 @@ class RandomUncertaintyTab(DiiveTab):
         self._df: pd.DataFrame | None = None
         self._all_cols: list[str] = []
         self._result_df: pd.DataFrame | None = None  # column to emit on "Add"
-        self._combos: dict[str, QComboBox] = {}
-        self._avail: dict[str, QLabel] = {}
 
         self._sig = _Signals()
         #: Exposed bound signal the main window connects to (merges the columns).
@@ -146,24 +141,8 @@ class RandomUncertaintyTab(DiiveTab):
         outer.addWidget(intro)
 
         # Input columns.
-        cols_box = QGroupBox("Input columns")
-        cf = QFormLayout(cols_box)
-        for spec in _INPUTS:
-            combo = QComboBox()
-            combo.setToolTip(spec["tip"])
-            combo.currentTextChanged.connect(self._refresh_availability)
-            mark = QLabel("")
-            mark.setToolTip("Whether the chosen column is present in the dataset.")
-            cell = QWidget()
-            ch = QHBoxLayout(cell)
-            ch.setContentsMargins(0, 0, 0, 0)
-            ch.setSpacing(6)
-            ch.addWidget(combo, stretch=1)
-            ch.addWidget(mark)
-            cf.addRow(spec["label"], cell)
-            self._combos[spec["key"]] = combo
-            self._avail[spec["key"]] = mark
-        outer.addWidget(cols_box)
+        self.picker = ColumnPicker(_INPUTS, title="Input columns")
+        outer.addWidget(self.picker)
 
         # Options.
         opt_box = QGroupBox("Options")
@@ -195,10 +174,7 @@ class RandomUncertaintyTab(DiiveTab):
         self.status.setWordWrap(True)
         outer.addWidget(self.status)
 
-        self.progress = QProgressBar()
-        self.progress.setTextVisible(True)
-        self.progress.setFixedHeight(16)
-        self.progress.setVisible(False)
+        self.progress = ProgressBar()
         outer.addWidget(self.progress)
 
         self.add_btn = QPushButton("Add result to dataset")
@@ -223,34 +199,15 @@ class RandomUncertaintyTab(DiiveTab):
     def _build_hero(self) -> QWidget:
         """A slim band: the method chip on the left, a stats strip on the right
         (filled in after a run via :meth:`_hero_metrics`)."""
-        hero = QFrame()
-        hero.setStyleSheet("QFrame { background: #FAFAFA; border-radius: 8px; }")
-        h = QHBoxLayout(hero)
-        h.setContentsMargins(12, 8, 12, 8)
-        h.setSpacing(12)
-        h.addWidget(_chip(self.method_chip_label, self.method_chip_bg, self.method_chip_fg))
-        h.addStretch(1)
-        self._metrics_host = QWidget()
-        self._metrics_lay = QHBoxLayout(self._metrics_host)
-        self._metrics_lay.setContentsMargins(0, 0, 0, 0)
-        self._metrics_lay.setSpacing(12)
-        h.addWidget(self._metrics_host)
-        return hero
+        self._hero = HeroBand(self.method_chip_label, self.method_chip_bg,
+                              self.method_chip_fg)
+        return self._hero
 
     def _clear_hero(self) -> None:
-        while self._metrics_lay.count():
-            w = self._metrics_lay.takeAt(0).widget()
-            if w is not None:
-                w.deleteLater()
+        self._hero.clear()
 
     def _update_hero(self, metrics: list) -> None:
-        self._clear_hero()
-        for i, (name, value, tip) in enumerate(metrics):
-            if i > 0:
-                self._metrics_lay.addWidget(_stat_separator())
-            slot = _MetricSlot()
-            slot.update_metric(name, value, tip)
-            self._metrics_lay.addWidget(slot)
+        self._hero.set_metrics(metrics)
 
     def _hero_metrics(self, randunc) -> list:
         unc = randunc.randunc_series
@@ -272,42 +229,14 @@ class RandomUncertaintyTab(DiiveTab):
         self._result_df = None
         self.add_btn.setEnabled(False)
         self._clear_hero()
-        for spec in _INPUTS:
-            combo = self._combos[spec["key"]]
-            cur = combo.currentText()
-            combo.blockSignals(True)
-            combo.clear()
-            combo.addItems(self._all_cols)
-            if cur in self._all_cols:
-                combo.setCurrentText(cur)
-            else:
-                needles = spec["needle"]
-                if isinstance(needles, str):
-                    needles = [needles]
-                for needle in needles:
-                    guess = _auto_pick(self._all_cols, needle,
-                                       prefer=spec.get("prefer"), avoid=spec.get("avoid"))
-                    if guess:
-                        combo.setCurrentText(guess)
-                        break
-            combo.blockSignals(False)
-        self._refresh_availability()
-
-    def _refresh_availability(self, *_) -> None:
-        if self._df is None:
-            return
-        for key, combo in self._combos.items():
-            present = combo.currentText() in self._all_cols
-            mark = self._avail[key]
-            mark.setText("✓" if present else "✗")
-            mark.setStyleSheet(f"color: {'#2E7D32' if present else '#C62828'}; font-weight: bold;")
+        self.picker.seed(df.columns)
 
     def _picks(self) -> dict[str, str]:
-        return {k: c.currentText() for k, c in self._combos.items()}
+        return self.picker.picks()
 
     # --- state ---------------------------------------------------------
     def _controls(self) -> dict:
-        return {**self._combos, "vpd_in_kpa": self.vpd_in_kpa}
+        return {**self.picker.combos(), "vpd_in_kpa": self.vpd_in_kpa}
 
     def save_state(self) -> dict:
         from diive.gui.widgets.state_utils import save_controls
@@ -316,7 +245,7 @@ class RandomUncertaintyTab(DiiveTab):
     def restore_state(self, state: dict) -> None:
         from diive.gui.widgets.state_utils import restore_controls
         restore_controls(self._controls(), state.get("controls"))
-        self._refresh_availability()
+        self.picker.refresh_availability()
 
     # --- run -----------------------------------------------------------
     def _python_code(self) -> str | None:
@@ -349,9 +278,7 @@ class RandomUncertaintyTab(DiiveTab):
                          picks["vpd"], picks["swin"]]].copy()
         self._set_running(True)
         self._clear_hero()
-        self.progress.setRange(0, 0)  # busy until the first method reports in
-        self.progress.setFormat("Preparing…")
-        self.progress.setVisible(True)
+        self.progress.start_busy("Preparing…")  # busy until the first method reports in
         self.status.setText("Estimating random uncertainty… (per-record cascade — this can take a while)")
         self._runner.run(self._compute_payload, work, picks, self.vpd_in_kpa.isChecked())
 
@@ -381,15 +308,13 @@ class RandomUncertaintyTab(DiiveTab):
             self.add_btn.setEnabled(False)
 
     def _on_progress(self, permille: int, phase: int) -> None:
-        self.progress.setRange(0, 1000)
-        self.progress.setValue(max(0, min(1000, permille)))
-        self.progress.setFormat(f"Method {phase} of 4  ·  {permille / 10:.0f}%")
+        self.progress.set_progress(permille, f"Method {phase} of 4  ·  {permille / 10:.0f}%")
 
     # --- results -------------------------------------------------------
     def _on_done(self, payload) -> None:
         out, randunc = payload
         self._set_running(False)
-        self.progress.setVisible(False)
+        self.progress.finish()
         self._result_df = out
         randunc_col = out.columns[0]
         results = randunc.randunc_results
@@ -404,13 +329,10 @@ class RandomUncertaintyTab(DiiveTab):
 
     def _on_failed(self, msg: str) -> None:
         self._set_running(False)
-        self.progress.setVisible(False)
+        self.progress.finish()
         self._clear_hero()
         self.status.setText(f"Failed: {msg}")
-        ax = self.canvas.new_axes(1)[0]
-        ax.text(0.5, 0.5, "Uncertainty estimation failed", ha="center", va="center",
-                transform=ax.transAxes)
-        self.canvas.draw()
+        self.canvas.show_message("Uncertainty estimation failed")
 
     def _plot(self, randunc) -> None:
         """Three panels: the flux ± uncertainty band (daily means) spanning the

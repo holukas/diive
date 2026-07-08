@@ -42,7 +42,7 @@ from PySide6.QtWidgets import (
 
 import diive
 from diive.core.utils.console import info, success
-from diive.gui import config, events, metadata_store, site, theme
+from diive.gui import config, db, events, metadata_store, site, theme
 from diive.gui.registry import (
     MENU_TAB_CLASSES,
     MENU_TABS,
@@ -120,11 +120,12 @@ class _StudioTabBar(QTabBar):
 class _StudioRoot(QWidget):
     """Root container for the frameless Studio chrome.
 
-    Paints a rounded, soft-gradient backdrop over the window's translucent
-    background (giving the window its rounded corners + ambient frame).
+    Paints a soft-gradient backdrop filling the opaque frameless window. Square
+    corners (the window is not translucent — see MainWindow._build_studio_chrome
+    for why) so it fills its whole rect with no unpainted corners.
     """
 
-    _RADIUS = 14
+    _RADIUS = 0
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -242,6 +243,8 @@ class MainWindow(QMainWindow):
         metadata_store.manager.renameRequested.connect(self._rename_one_variable)
         # Variable-list "Delete…" (any tab) confirms and drops the column.
         metadata_store.manager.deleteRequested.connect(self._delete_variable)
+        # "Send to Meteo screening" (Database explorer) opens the screening tab.
+        db.manager.screeningRequested.connect(self._send_to_meteo_screening)
 
         # Keep each event's 0/1 flag column in sync with the event list, and the
         # menu toggle in sync with the visibility flag (which the Events tab also
@@ -270,7 +273,11 @@ class MainWindow(QMainWindow):
         from diive.gui.widgets.header_bar import StudioHeaderBar
 
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        # NOTE: deliberately NOT WA_TranslucentBackground. A translucent top-level
+        # is a Windows *layered* window, and an embedded VTK/OpenGL render window
+        # (the 3-D surface tab's canvas) cannot composite into a layered window —
+        # it paints nothing and the tab behind it shows through. The window is a
+        # plain opaque frameless rectangle (square corners).
         self._tabwidget.setObjectName("studiotabs")  # scopes the pill-tab QSS
         # Studio pills carry a small favicon-style glyph; give the always-on
         # tabs theirs now and flag later menu tabs to get one on open.
@@ -299,6 +306,10 @@ class MainWindow(QMainWindow):
             self._header.add_menu(name, m)
             return m
         self._build_menus(_add_menu)
+
+        # Reflect the database-connection state as a header pill.
+        db.manager.changed.connect(self._refresh_db_pill)
+        self._refresh_db_pill()
 
         rlay.addWidget(self._header)
         rlay.addWidget(self._tabwidget, 1)
@@ -373,6 +384,11 @@ class MainWindow(QMainWindow):
         if x != frame.x() or y != frame.y():
             self.move(x, y)
 
+    def _refresh_db_pill(self) -> None:
+        """Sync the header's database-connection pill with ``db.manager``."""
+        if self._header is not None:
+            self._header.set_db_status(db.manager.connected, db.manager.status_text())
+
     def _build_menus(self, add_menu) -> None:
         """Populate the menu tree, creating each top-level menu via `add_menu`.
 
@@ -399,6 +415,17 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(_act("&Export data as...", self._save_file))
         file_menu.addSeparator()
+        # Database I/O (InfluxDB) folded in from its own former top-level menu as
+        # a "Database ▸" submenu — it's just another data source/sink.
+        db_submenu = studio_menu(self)
+        for label in MENU_TABS.get("Database", {}):
+            act = QAction(menu_icon(label), label.replace("&", "&&"), self)
+            act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))
+            db_submenu.addAction(act)
+        db_action = file_menu.addMenu(db_submenu)
+        db_action.setText("&Database")
+        db_action.setIcon(menu_icon("Database"))
+        file_menu.addSeparator()
         file_menu.addAction(_act("E&xit", self.close, "Ctrl+Q"))
 
         def _menu_tab_act(label):
@@ -421,39 +448,67 @@ class MainWindow(QMainWindow):
         self._reset_subset_act = _act("Reset to all &variables", self._reset_var_subset)
         self._reset_subset_act.setEnabled(False)
         data_menu.addAction(self._reset_subset_act)
+        data_menu.addSeparator()
+        # Record subselection (rows kept on a condition variable) -- a sibling of
+        # the date-range and variable subsets above.
+        data_menu.addAction(_menu_tab_act("Select records by condition"))
+        # Events (time-stamped annotations over the data) folded in from their
+        # own former top-level menu: the Events tab, then a quick "add one" and a
+        # master toggle for showing them on plots.
+        data_menu.addSection("Events")
+        for label in MENU_TABS.get("Events", {}):
+            data_menu.addAction(_menu_tab_act(label))
+        data_menu.addAction(_act("Add e&vent...", self._add_event))
+        self._show_events_act = QAction(
+            menu_icon("Show events"), "Show e&vents on plots", self)
+        self._show_events_act.setCheckable(True)
+        self._show_events_act.setChecked(events.manager.visible)
+        self._show_events_act.toggled.connect(events.manager.set_visible)
+        data_menu.addAction(self._show_events_act)
 
-        # Variables: create new columns (feature engineer, timestamp, condition
-        # filter), a separator, then manage existing ones (rename, metadata).
-        # Built manually so the "Add timestamp column..." action interleaves with
-        # the create tabs.
+        # Variables: create new columns (feature engineer, timestamp), a
+        # separator, then manage existing ones (rename, metadata), then a
+        # "Calculate" section with the derived-variable calculators. Built
+        # manually so the "Add timestamp column..." action interleaves with the
+        # create tabs and the Calculate section sits at the end.
         variables_menu = add_menu("&Variables")
         variables_menu.addAction(_menu_tab_act("Feature engineering"))
         variables_menu.addAction(_menu_tab_act("Combine variables"))
         variables_menu.addAction(_act("Add timestamp co&lumn...", self._add_timestamp_column))
-        variables_menu.addAction(_menu_tab_act("Select records by condition"))
         variables_menu.addSeparator()
         variables_menu.addAction(_menu_tab_act("Rename variables"))
         variables_menu.addAction(_menu_tab_act("Metadata explorer"))
-
-        # Events: the Events tab (full list/edit UI) first, then a quick "add
-        # one" + a master toggle for showing them on plots. Built manually so
-        # the tab entry sits above the actions.
-        events_menu = add_menu("&Events")
-        for label in MENU_TABS.get("Events", {}):
-            act = QAction(menu_icon(label), label.replace("&", "&&"), self)
-            act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))
-            events_menu.addAction(act)
-        events_menu.addSeparator()
-        events_menu.addAction(_act("Add e&vent...", self._add_event))
-        self._show_events_act = QAction(menu_icon("Show events"), "Show e&vents on plots", self)
-        self._show_events_act.setCheckable(True)
-        self._show_events_act.setChecked(events.manager.visible)
-        self._show_events_act.toggled.connect(events.manager.set_visible)
-        events_menu.addAction(self._show_events_act)
+        variables_menu.addSection("Calculate")
+        variables_menu.addAction(_menu_tab_act("VPD (TA + RH)"))
 
         for menu_name, group in MENU_TABS.items():
-            if menu_name in ("Data", "Variables", "Events"):
-                continue  # built manually above
+            if menu_name in ("Data", "Variables", "Events", "Database", "Corrections"):
+                # Built manually / folded elsewhere: Data & Variables have
+                # interleaved actions; Events folds into Data; Database folds into
+                # File; Corrections joins Outliers in the combined Cleaning menu.
+                continue
+            if menu_name == "Outliers":
+                # Combined "Cleaning" menu: the two per-variable data-cleaning
+                # families (outlier detection + corrections) under one top-level
+                # menu, split by section.
+                menu = add_menu("&Cleaning")
+                menu.addSection("Outliers")
+                for label in group:
+                    act = QAction(menu_icon(label), label.replace("&", "&&"), self)
+                    act.triggered.connect(
+                        lambda _checked, lab=label: self._open_menu_tab(lab))
+                    menu.addAction(act)
+                    # Set the stepwise screening (multi-method) apart from the
+                    # single-method outlier filters below it.
+                    if label == "Stepwise screening":
+                        menu.addSeparator()
+                menu.addSection("Corrections")
+                for label in MENU_TABS.get("Corrections", {}):
+                    act = QAction(menu_icon(label), label.replace("&", "&&"), self)
+                    act.triggered.connect(
+                        lambda _checked, lab=label: self._open_menu_tab(lab))
+                    menu.addAction(act)
+                continue
             menu = add_menu(f"&{menu_name}")
             for label in group:
                 # Set the 3-D surface (GPU/VTK) apart from the 2-D plot methods.
@@ -468,10 +523,6 @@ class MainWindow(QMainWindow):
                 act.triggered.connect(
                     lambda _checked, lab=label: self._open_menu_tab(lab))
                 menu.addAction(act)
-                # Set the stepwise screening (multi-method) apart from the
-                # single-method outlier filters below it.
-                if menu_name == "Outliers" and label == "Stepwise screening":
-                    menu.addSeparator()
                 # Set the full processing chain apart from the standalone tools.
                 if menu_name == "Flux" and label == "Flux processing chain":
                     menu.addSeparator()
@@ -606,6 +657,15 @@ class MainWindow(QMainWindow):
         for tab in self._menu_tab_list:
             if getattr(tab, "_menu_label", None) == "Metadata explorer":
                 tab.select_variable(name)
+                break
+
+    def _send_to_meteo_screening(self, payload) -> None:
+        """Open (or focus) the Meteo screening tab and hand it the staged field."""
+        label = "Meteo screening (database)"
+        self._open_menu_tab(label)  # single-instance: focuses/opens
+        for tab in self._menu_tab_list:
+            if getattr(tab, "_menu_label", None) == label:
+                tab.load_staged(payload)
                 break
 
     def _open_menu_tab(self, label: str) -> None:
@@ -1084,33 +1144,62 @@ class MainWindow(QMainWindow):
             self._set_data(dlg.dataframe, source=dlg.source_name)
 
     def _add_dataset(self, new_df, source: str) -> None:
-        """Merge a second loaded dataset onto the current one (shared index).
+        """Merge another loaded dataset into the current one without overwriting.
 
-        Used for comparing datasets side by side (e.g. two processing runs of the
-        same site). Columns align on the timestamp index via `_add_features`. A
-        same-named column would overwrite the existing one, so collisions are
-        flagged first — the user is expected to load with a label to avoid them.
+        "Add to current data" *extends* the record rather than replacing it: the
+        timestamp indexes are unioned (so new time periods are appended) and the
+        two frames are combined so existing (non-null) values always win — the new
+        data only fills timestamps/gaps the current dataset doesn't already cover.
+        Nothing existing is overwritten.
+
+        Columns already present are *extended in place* (the extension is recorded
+        in their metadata, not flagged NEW); genuinely new columns are added and
+        flagged NEW. Loading with a label keeps a second run's columns separate
+        (all-new names) for side-by-side comparison; without one, same-named
+        variables are simply extended.
         """
-        collisions = [c for c in new_df.columns if c in self._full_data.columns]
-        if collisions:
-            preview = ", ".join(collisions[:5]) + ("..." if len(collisions) > 5 else "")
-            resp = QMessageBox.question(
-                self, "Variable name collision",
-                f"{len(collisions)} variable(s) already exist and would be "
-                f"overwritten:\n{preview}\n\nLoad again with a label (e.g. 'v2') "
-                f"to keep them separate.\n\nOverwrite anyway?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No)
-            if resp != QMessageBox.StandardButton.Yes:
-                return
-        # Seed an "original" provenance baseline for the merged-in columns, as a
-        # plain load does — `_add_features` only records provenance from attrs.
-        metadata_store.manager.store.record_original(
-            new_df.columns, operation=f"Imported from {source}",
-            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"))
-        self._add_features(new_df)
+        existing = self._full_data
+        new_cols = [str(c) for c in new_df.columns if str(c) not in existing.columns]
+        extended_cols = [str(c) for c in new_df.columns if str(c) in existing.columns]
+
+        # Union the timestamp index so new periods extend the record, then combine
+        # so existing values are preserved and the new data only fills new rows /
+        # gaps (combine_first: self wins). Keep the original column order (existing
+        # first, then the new ones) and the timestamp index name.
+        union_index = existing.index.union(new_df.index)
+        merged = existing.reindex(union_index).combine_first(new_df.reindex(union_index))
+        merged = merged[list(existing.columns) + new_cols]
+        merged.index.name = existing.index.name
+        n_new_rows = len(union_index) - len(existing.index)
+        self._full_data = merged
+
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+        store = metadata_store.manager.store
+        # New columns: seed an 'original' baseline (like a plain load) + flag NEW.
+        if new_cols:
+            store.record_original(
+                new_cols, operation=f"Imported from {source}", timestamp=ts)
+            self._created |= set(new_cols)
+            # Keep new columns visible under an active subset (mirrors _add_features).
+            if self._var_subset is not None:
+                self._var_subset += [c for c in new_cols if c not in self._var_subset]
+        # Extended columns: don't flag NEW — just document the extension in the
+        # variable's metadata (a provenance entry noting the source + added rows).
+        for col in extended_cols:
+            store.record_derived(
+                col, operation=f"Extended with data from {source}",
+                params={"new_rows": int(n_new_rows)}, timestamp=ts)
         metadata_store.manager.notify()
-        success(f"Added {len(new_df.columns)} variable(s) from {source}")
+        self._apply_range()
+
+        parts = []
+        if extended_cols:
+            parts.append(f"extended {len(extended_cols)} variable(s)")
+        if new_cols:
+            parts.append(f"added {len(new_cols)} new variable(s)")
+        if n_new_rows:
+            parts.append(f"+{n_new_rows:,} new timestamps")
+        success(f"Merged {source}: " + (", ".join(parts) if parts else "no changes"))
 
     def _save_file(self) -> None:
         """Export the current dataset as a diive-format parquet or CSV file."""
@@ -1321,8 +1410,12 @@ class MainWindow(QMainWindow):
     def _user_manual(self) -> None:
         """Open the styled HTML manual in the default browser.
 
-        Falls back to the GitHub-hosted Markdown source if the bundled HTML is
-        missing (e.g. a partial install)."""
+        ``MANUAL.html`` is a generated artifact (git ignores ``*.html``), so when
+        running from source it can be missing or stale relative to ``MANUAL.md``.
+        Regenerate it on demand from the Markdown source of truth before opening,
+        so the menu always lands on the styled HTML. Only fall back to the
+        GitHub-hosted Markdown when no source is available to render (e.g. a
+        partial install)."""
         import sys
 
         from PySide6.QtGui import QDesktopServices
@@ -1334,6 +1427,22 @@ class MainWindow(QMainWindow):
         meipass = getattr(sys, "_MEIPASS", None)
         if meipass:
             candidates.append(Path(meipass) / "diive" / "gui" / "MANUAL.html")
+
+        # Running from source: (re)build the HTML when it's missing or older than
+        # the Markdown. The renderer is dependency-free (stdlib only).
+        try:
+            from diive.gui import build_manual
+
+            md, html_out = build_manual.MD_PATH, build_manual.HTML_PATH
+            if md.is_file() and (
+                    not html_out.is_file()
+                    or html_out.stat().st_mtime < md.stat().st_mtime):
+                html_out.write_text(
+                    build_manual.build(md.read_text(encoding="utf-8")),
+                    encoding="utf-8")
+        except Exception:
+            pass  # fall through to a bundled HTML or the GitHub Markdown
+
         for html in candidates:
             if html.is_file():
                 QDesktopServices.openUrl(QUrl.fromLocalFile(str(html)))
@@ -1404,6 +1513,7 @@ class MainWindow(QMainWindow):
             "theme": theme.manager.as_dict(),
             "site": site.manager.as_dict(),
             "events": events.manager.as_dict(),
+            "database": db.manager.as_dict(),  # path only — never the token
             "geometry": bytes(self.saveGeometry().toBase64()).decode("ascii"),
             "last_filetype": odd._last_choice,
             "variable_metadata": self._saved_metadata,
@@ -1444,6 +1554,7 @@ def run() -> int:
     theme.manager.apply()
     site.manager.load_dict(cfg.get("site", {}))
     events.manager.load_dict(cfg.get("events", {}))
+    db.manager.load_dict(cfg.get("database", {}))
     from diive.gui.widgets import open_data_dialog as odd
     odd._last_choice = cfg.get("last_filetype")
 

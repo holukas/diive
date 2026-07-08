@@ -44,22 +44,11 @@ from diive.flux.lowres.ustar_mp_detection import UstarMovingPointDetection
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
+from diive.gui.tabs.overview import HeroBand
+from diive.gui.widgets.progress_bar import ProgressBar
 from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.worker import WorkerRunner
-
-
-def _auto_pick(cols: list[str], needle: str, *, prefer: str | None = None,
-               avoid: str | None = None) -> str:
-    """First column matching needle (optionally preferring/avoiding a substring)."""
-    up = [(c, c.upper()) for c in cols]
-    if prefer:
-        for c, u in up:
-            if needle in u and prefer in u and (avoid is None or avoid not in u):
-                return c
-    for c, u in up:
-        if needle in u and (avoid is None or avoid not in u):
-            return c
-    return ""
+from diive.variables import auto_pick_column
 
 
 class UstarDetectionTab(DiiveTab):
@@ -94,6 +83,12 @@ class UstarDetectionTab(DiiveTab):
         self.status.setStyleSheet("padding: 6px 10px; color: #444;")
         self.status.setWordWrap(True)
         rl.addWidget(self.status)
+        # Headline threshold(s), filled after a run — the one load-bearing number.
+        self.hero = HeroBand("USTAR", "#E3F2FD", "#1565C0")
+        rl.addWidget(self.hero)
+        # Busy bar while detection / the multi-year bootstrap runs.
+        self.progress = ProgressBar()
+        rl.addWidget(self.progress)
         hsplit = QSplitter(Qt.Orientation.Horizontal)
         hsplit.addWidget(self._build_table())
         self.canvas = MplCanvas()
@@ -204,16 +199,16 @@ class UstarDetectionTab(DiiveTab):
             if cur in cols:
                 combo.setCurrentText(cur)
         # Auto-pick sensible defaults (mirrors the detector's own auto-detect).
-        nee = _auto_pick(cols, "NEE", prefer="QCF") or _auto_pick(cols, "NEE")
+        nee = auto_pick_column(cols, "NEE", prefer="QCF") or auto_pick_column(cols, "NEE")
         if nee:
             self.nee_col.setCurrentText(nee)
-        ta = _auto_pick(cols, "TA_") or _auto_pick(cols, "TA")
+        ta = auto_pick_column(cols, "TA_") or auto_pick_column(cols, "TA")
         if ta:
             self.ta_col.setCurrentText(ta)
-        us = _auto_pick(cols, "USTAR")
+        us = auto_pick_column(cols, "USTAR")
         if us:
             self.ustar_col.setCurrentText(us)
-        sw = _auto_pick(cols, "SW_IN", avoid="POT")
+        sw = auto_pick_column(cols, "SW_IN", avoid="POT")
         if sw:
             self.swin_col.setCurrentText(sw)
 
@@ -279,6 +274,7 @@ class UstarDetectionTab(DiiveTab):
             boot_cfg = None
 
         self._set_running(True)
+        self.progress.start_busy("Running bootstrap…" if bootstrap else "Detecting…")
         self.status.setText("Running bootstrap…" if bootstrap else "Detecting…")
         self._runner.run(self._compute_payload, self._df, kwargs, boot_cfg)
 
@@ -307,6 +303,7 @@ class UstarDetectionTab(DiiveTab):
     # --- results -------------------------------------------------------
     def _on_done(self, payload) -> None:
         self._set_running(False)
+        self.progress.finish()
         mode, data = payload
         if mode == "single":
             self._show_single(*data)
@@ -315,11 +312,10 @@ class UstarDetectionTab(DiiveTab):
 
     def _on_failed(self, msg: str) -> None:
         self._set_running(False)
+        self.progress.finish()
+        self.hero.clear()
         self.status.setText(f"Failed: {msg}")
-        ax = self.canvas.new_axes(1)[0]
-        ax.text(0.5, 0.5, "Detection failed", ha="center", va="center",
-                transform=ax.transAxes)
-        self.canvas.draw()
+        self.canvas.show_message("Detection failed")
 
     def _set_running(self, on: bool) -> None:
         self.run_btn.setEnabled(not on)
@@ -350,6 +346,10 @@ class UstarDetectionTab(DiiveTab):
         self.status.setText(
             f"Seasonal detection complete. Annual threshold (max across seasons): "
             f"{ann_txt} m s⁻¹.")
+        self.hero.set_metrics([
+            ("ANNUAL u*", f"{ann_txt} m/s", "Annual threshold (max across seasons)"),
+            ("SEASONS", f"{len(res.index)}", "Number of seasons detected"),
+        ])
         self._plot_single(res, annual)
 
     def _show_bootstrap(self, annual: pd.DataFrame, cut: dict) -> None:
@@ -368,6 +368,12 @@ class UstarDetectionTab(DiiveTab):
             f"Bootstrap complete. Rows per year = VUT (variable, per-year, smoothed "
             f"over a 3-year window); last row = CUT (constant, pooled across years): "
             f"{cut_str}.")
+        mid = "p50" if "p50" in pcols else pcols[len(pcols) // 2]
+        cut_mid = f"{cut[mid]:.4f}" if np.isfinite(cut[mid]) else "—"
+        self.hero.set_metrics([
+            (f"CUT {mid}", f"{cut_mid} m/s", "Constant threshold pooled across years"),
+            ("YEARS", f"{len(annual.index)}", "Years with a per-year (VUT) threshold"),
+        ])
         self._plot_bootstrap(annual, cut)
 
     # --- plots (presentation only; the numbers are the library's) ------

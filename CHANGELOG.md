@@ -45,7 +45,9 @@
 ### Desktop GUI (new)
 
 - **PySide6 desktop GUI** (`diive.gui`, optional `gui` extra; launch `diive-gui`). User manual `diive/gui/MANUAL.md`,
-  developer map `diive/gui/README.md`.
+  developer map `diive/gui/README.md`. **Help ▸ User manual** opens the styled `MANUAL.html`; that HTML is a generated
+  artifact (git-ignored) and is now rebuilt on demand from `MANUAL.md` whenever it is missing or stale, so running from
+  source always opens fresh HTML instead of the GitHub Markdown fallback.
 - Tabs: **Overview** (per-variable stats ribbon + multi-panel figure); per-method **Plot** tabs (heatmaps, time series,
   diel cycle, cumulative year, ridgeline, scatter XY, hexbin, histogram; multi-instance, each with a live settings
   panel); **Analyze** tabs **Gaps & coverage**, **Driver explorer**, **Compound extremes** (classify months/days into
@@ -87,7 +89,11 @@
   **Combine variables** (drag a variable onto heatmap 1 and another onto heatmap 2, pick a method —
   multiply/add/subtract/divide, or fill the gaps of one with the other — and "keep overlapping only", preview the result
   in heatmap 3, then add it as a new column, with **Copy Python**; backed by the new `dv.variables.combine_variables` /
-  `combine_variables_to_code`);
+  `combine_variables_to_code`), **VPD (TA + RH)** (a new Variables ▸ **Calculate** section; vapor pressure deficit in
+  kPa from air temperature + relative humidity via `dv.variables.calc_vpd_from_ta_rh`; a draggable variable list, TA/RH input fields you drag a
+  variable onto or pick, a **Calculate** button, and TA / RH / VPD date/time-heatmap previews; emits `VPD_kPa` (DERIVED),
+  with **Copy Python** backed by the new `calc_vpd_from_ta_rh_to_code`; first of a reusable `BaseDerivedVariableTab`
+  family for single-formula derived variables);
   plus **Appearance**, **Project settings** (author, description, site details, and a **sticky-note wall** — all saved
   with the project), and **Log**.
 - **Plot tabs — refinements.** Every X/Y/Z role-picked plot type — **Scatter XY**, **Wind rose**, **Hexbin**, and
@@ -250,6 +256,8 @@
   deserialization). Tab rename is left-double-click only.
 - **Studio look** (minimal: near-white surfaces, pill tabs, frameless rounded window with an inline-dropdown header),
   edited live in **Appearance**. Tabs reorder, rename, close, and **pin** (freeze their dataset). App/taskbar icon added.
+  On a narrow window the centre title (diive + version + file count) now gives way first — it elides and finally hides —
+  so the menu buttons keep their full labels instead of collapsing to `F…`.
 - **Every menu tab can open more than once** — re-selecting a menu entry opens a new numbered instance (`Hampel filter
   1`, `Hampel filter 2`, ...), like the plot tabs already did. Only the app-wide singleton editors stay single-instance
   (Appearance, Project settings, Metadata explorer); re-selecting those focuses the open one.
@@ -280,9 +288,33 @@
   (computation + plot). As with every other tab, the GUI only *asks* the library for the snippet (GUI <-> library
   separation): new library codegen functions `rank_drivers_to_code` (`analysis/correlation.py`), `gapstats_to_code`
   (`analysis/gapfinder.py`), `spectrogram_to_code` (`analysis/harmonic.py`), `seasonal_trend_to_code`
-  (`analysis/seasonaltrend.py`, decomposition + anomaly views), `datetime_surface_to_code` (`core/plotting/codegen.py`, a
-  matplotlib 3-D surface so it runs without the GPU extra), and `feature_engineer_to_code` (`core/ml/feature_engineer.py`).
+  (`analysis/seasonaltrend.py`, decomposition + anomaly views), `datetime_surface_to_code` / `surface_xyz_to_code`
+  (`core/plotting/codegen.py`, matplotlib 3-D surfaces so they run without the GPU extra), and `feature_engineer_to_code`
+  (`core/ml/feature_engineer.py`).
   The `SingleVariableExplorerTab` base mounts the button automatically for any subclass that overrides `_python_code`.
+- **3D surface tab** (`Plot ▸ 3D surface`, single-instance, optional `gui3d` extra): the date×time-of-day grid as a
+  rotatable PyVista relief. **Style** picks an extruded heatmap (default — stepped bars, each bar one uniform heatmap
+  colour on its top and step-risers) or a smooth interpolated surface. **Y stretch** (up to 100) widens the date axis into
+  a landscape; **Y cell (days)** + **Cell aggregator** either block-aggregate several days into each cell (mean/median/max/
+  min, to widen the bars and tame single-day spikes) or, via `rolling mean`/`rolling median`, smooth each day over a
+  centred window while keeping full resolution (gaps preserved); plus **Vertical exaggeration**, **Opacity**, **Colormap**,
+  **Smooth terrain** (surface style only), **Smooth shading**, and **Show mesh**. An optional **Shadows** toggle casts
+  short shadows from an overhead spotlight, with an adjustable **Shadow length** (off by default; needs a GPU that supports
+  VTK shadow mapping). **View presets** (Isometric/Top/Front/Back/Left/Right and tilted Front 20°/Side 20°) snap the camera
+  and maximise the plot in the viewport; **Orbit** and **Flyover** are timer-driven cinematic camera moves sharing a
+  **Speed** control. **Export** writes the styled surface to open 3-D formats: **VR (.glb)** — a texture-baked binary glTF
+  for PowerPoint (*Insert ▸ 3D Models*), Blender, and Meta Quest / WebXR — and **3D print (.stl)** — a watertight solid
+  with a base plate. On load / new variable the view frames to the tight Isometric preset; a settings tweak stays put.
+  Needs `gui3d` (`pyvista` + `pyvistaqt` + `trimesh`); without it the tab shows install instructions. **Copy Python** emits
+  a matplotlib 3-D surface (`datetime_surface_to_code`) that runs without the extra.
+- **3D surface (X/Y/Z) tab** (`Plot ▸ 3D surface (X/Y/Z)`, optional `gui3d` extra): the coordinate-surface sibling of the
+  3D surface. Instead of a variable's calendar grid it renders an arbitrary **Z over two chosen X and Y variables** — drag
+  a variable from the list onto the **X**, **Y**, or **Z** field, and the scattered points are gridded onto a regular X-Y
+  mesh (`dv.analysis.GridAggregator`, equal-width bins) and shown as the same relief. Adds **Bins (X/Y)** and **Z
+  aggregator** (mean/median/max/min/sum) controls; empty bins render as genuine holes. It reuses the 3D surface tab's relief
+  controls, view presets, orbit/flyover, and glTF/STL export unchanged. **Copy Python** emits `surface_xyz_to_code`
+  (GridAggregator + a matplotlib 3-D surface). Enabled by making the shared single-variable explorer list an opt-in drag
+  source (`SingleVariableExplorerTab.list_draggable`).
 
 Library additions used by the GUI (all backward-compatible):
 
@@ -317,6 +349,25 @@ Library additions used by the GUI (all backward-compatible):
   `last_upper_bound` (the per-iteration detection band in data units; `None` for the increment method, which has no
   data-unit band) — matching `Hampel` / `LocalSD`. `zScore` also gains `thres_zscore_daytime` / `thres_zscore_nighttime`
   per-period overrides (default `None` → fall back to the global `thres_zscore`), per the day/night threshold convention.
+- **Database menu (InfluxDB I/O).** **Database connection** (point at a config directory, test it; the path is
+  remembered, never the token; a green *Connected* pill appears in the header) and **Database explorer** (drill
+  bucket → data version → measurement → field → a **field overview** of every tag plus the first/last record; **download
+  a field** for a date range and plot it, with a **UTC offset** that defaults to the project timezone, a **Match dataset
+  time range** button, a **progressive chunked download that fills the plot in** with a progress bar and an elapsed-time
+  report, and download caching so plotting and screening don't re-fetch). All over the new in-diive InfluxDB engine
+  (`diive.core.io.db`, optional `db` group); the Database tabs show an install notice when it's absent.
+- **Meteo screening (database) tab** — the **full Stepwise-screening experience plus resampling**, for a high-resolution
+  field handed over from the Database explorer. The Stepwise and database screening tabs now share **`ScreeningTabBase`**
+  (variable list + Outliers/Corrections/Report inspector + method-card chain + QCF + preview + save/restore); the
+  database variant adds a **Resample** page whose target **defaults to the working dataset's detected resolution** (and
+  is a **no-op when the data already match it**), then adds the screened, resampled column converted to the dataset's
+  **middle-of-period** timestamp so it aligns on merge — with a collision rename, an overlap guard, the InfluxDB origin
+  and all database tags recorded in the column's history, and a **download-vs-project-timezone mismatch warning** (the
+  database stores UTC; the offset must match your dataset's timezone).
+- **`resample_series_to_freq`** (`diive.core.times.resampling`) — generalises `resample_series_to_30MIN` to any target
+  resolution (`'30min'`, `'10min'`, `'1h'`, …); `resample_series_to_30MIN` now wraps it. Returns the series unchanged
+  when it is already at the requested resolution. `StepwiseMeteoScreeningDb.resample` honours arbitrary resolutions
+  (and a `FlagQCF` call there that had drifted from the current API is fixed).
 
 ### Flux Processing Chain
 
@@ -504,6 +555,16 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
   constructor docstring now states the expected unit of every input column.
 
 ### New Classes & Functions
+
+- **InfluxDB engine `InfluxIO`** (`diive.core.io.db.influx`) — diive's own InfluxDB v2 download / upload / delete /
+  schema-browsing engine, a clean in-house port of the former external `dbc-influxdb` package. diive no longer depends
+  on `dbc-influxdb`; the optional `db` dependency group now installs only `influxdb-client` (`uv sync --group db`),
+  imported lazily so the default `uv sync` never pulls it in. Improvements over the original: diive console output
+  (no `logging`), no `pytz` / `dateutil` dependency, and the data-version / units schema helpers
+  (`show_data_versions_in_bucket`, `show_units_in_field`, `data_version`-filtered `show_measurements_in_bucket` /
+  `show_fields_in_measurement`, public `test_connection`) that back the GUI Database explorer. The Textual TUI was not
+  ported (the desktop GUI's Database tabs replace it). GUI access is unchanged: the **Database connection** and
+  **Database explorer** tabs talk to it through the generic `InfluxDBBackend` adapter (`diive.core.io.db`).
 
 - **`CompoundExtremes`** (`dv.analysis`, `diive.analysis.compoundextremes`) — classify time periods (months or days)
   into compound-extreme categories from the standardized anomalies (z-scores) of two driver variables. The canonical
@@ -741,8 +802,8 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
 
 - **`DriverAnalysis` (EXPERIMENTAL)** — evidence-triangulation driver attribution for flux time series across three
   epistemic layers: association (SHAP vs a `.RANDOM` benchmark, ALE curves 1D/2D), temporal prediction (lagged,
-  scale-resolved, regime-stratified importance), and opt-in causal (`GrangerCausality`, plus PCMCI(+)/CATE behind the
-  `diive[causal]` extra). Time-aware splits, held-out scores, SHAP/ALE never presented as causal. Also exposes
+  scale-resolved, regime-stratified importance), and an opt-in causal layer (a deseasonalized `GrangerCausality`
+  sanity check). Time-aware splits, held-out scores, SHAP/ALE never presented as causal. Also exposes
   standalone `accumulated_local_effects` / `_2d` and `AleCurve`. **Provisional:** lives in
   `dv.analysis.experimental`, emits a one-time `ExperimentalWarning`; see `examples/analysis/analysis_driveranalysis.py`.
 - **`GapStats`** — extended gap analysis wrapping `GapFinder` via composition.  Adds monthly and annual

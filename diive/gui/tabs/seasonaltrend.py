@@ -235,10 +235,7 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
     def _render_decomposition(self) -> None:
         d = self._decomp
         if d is None:
-            ax = self.canvas.new_axes(1)[0]
-            ax.text(0.5, 0.5, self._decomp_error or "No decomposition",
-                    ha="center", va="center", wrap=True, transform=ax.transAxes)
-            self.canvas.draw()
+            self.canvas.show_message(self._decomp_error or "No decomposition")
             return
         axes = self.canvas.new_axes(4, orientation="vertical", sharex=True)
         panels = [
@@ -265,12 +262,10 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
         self.canvas.draw()
 
     def _render_anomalies(self) -> None:
-        ax = self.canvas.new_axes(1)[0]
         if self._yearly is None or self._yearly.empty:
-            ax.text(0.5, 0.5, "No yearly data", ha="center", va="center",
-                    transform=ax.transAxes)
-            self.canvas.draw()
+            self.canvas.show_message("No yearly data")
             return
+        ax = self.canvas.new_axes(1)[0]
         try:
             LongtermAnomaliesYear(
                 series=self._yearly,
@@ -280,8 +275,6 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
             ).plot(ax=ax, format_style=dv.plotting.FormatStyle(
                 title=f"{self._target} — yearly anomaly vs. "
                       f"{self.ref_start.value()}–{self.ref_end.value()} mean"))
+            self.canvas.draw()
         except Exception as err:
-            ax.clear()
-            ax.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",
-                    wrap=True, transform=ax.transAxes)
-        self.canvas.draw()
+            self.canvas.show_message(f"Cannot plot:\n{err}")

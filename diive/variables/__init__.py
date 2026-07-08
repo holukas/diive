@@ -35,11 +35,13 @@ from diive.variables.utilities import (
     add_impulse_noise,
     combine_variables,
     combine_variables_to_code,
+    calc_vpd_from_ta_rh_to_code,
 )
 
 # Classification
 from diive.variables.classification import (
     classify_variable,
+    auto_pick_column,
     VariableClass,
     CATEGORY_CARBON,
     CATEGORY_WATER,
@@ -68,8 +70,10 @@ __all__ = [
     'add_impulse_noise',
     'combine_variables',
     'combine_variables_to_code',
+    'calc_vpd_from_ta_rh_to_code',
     # classification
     'classify_variable',
+    'auto_pick_column',
     'VariableClass',
     'CATEGORY_CARBON',
     'CATEGORY_WATER',

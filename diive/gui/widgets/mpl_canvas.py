@@ -186,6 +186,19 @@ class MplCanvas(QWidget):
         grid = self.fig.subplots(1, n, squeeze=False, sharex=sharex, sharey=sharey)
         return list(grid[0])
 
+    def show_message(self, text: str) -> None:
+        """Clear the figure to a single blank axis and draw a centered message.
+
+        The shared empty/error state for result canvases: a failed compute or a
+        not-yet-run tab shows one centered line instead of stale panels. Replaces
+        the hand-rolled ``ax.text(0.5, 0.5, ..., transform=ax.transAxes)`` idiom.
+        Use only for the whole-canvas case; per-subpanel messages stay inline.
+        """
+        ax = self.new_axes(1)[0]
+        ax.axis("off")
+        ax.text(0.5, 0.5, text, ha="center", va="center", transform=ax.transAxes)
+        self.draw()
+
     def reset_history(self) -> None:
         """Reset the navigation toolbar's view history to the current view.
 

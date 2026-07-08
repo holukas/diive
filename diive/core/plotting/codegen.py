@@ -451,3 +451,38 @@ def datetime_surface_to_code(varname: str, *, cmap: str = "viridis",
         f"ax.set_title('3D surface - ' + {varname!r})\n"
         "plt.show()\n"
     )
+
+
+def surface_xyz_to_code(x: str, y: str, z: str, *, n_bins: int = 30,
+                        aggfunc: str = "mean", cmap: str = "viridis",
+                        df_name: str = "df") -> str:
+    """Reproduce the 3-D X/Y/Z coordinate surface.
+
+    The GUI renders it with PyVista (GPU); this snippet grids the scattered
+    points onto a regular X-Y mesh via :class:`~diive.analysis.GridAggregator`
+    (equal-width bins, ``aggfunc`` over Z per cell) and draws a matplotlib 3-D
+    surface so it runs anywhere without the optional 3-D extra.
+    """
+    return (
+        "import matplotlib.pyplot as plt\n"
+        "import numpy as np\n"
+        "import diive as dv\n"
+        "\n"
+        f"agg = dv.analysis.GridAggregator({df_name}[{x!r}], {df_name}[{y!r}], "
+        f"{df_name}[{z!r}],\n"
+        f"                                 binning_type='equal_width', "
+        f"n_bins={n_bins}, aggfunc={aggfunc!r})\n"
+        "wide = agg.df_agg_wide\n"
+        "xx, yy = np.meshgrid(wide.columns.astype(float), "
+        "wide.index.astype(float))\n"
+        "zz = np.ma.masked_invalid(wide.to_numpy(dtype=float))\n"
+        "\n"
+        "fig = plt.figure(figsize=(10, 7))\n"
+        "ax = fig.add_subplot(111, projection='3d')\n"
+        f"ax.plot_surface(xx, yy, zz, cmap={cmap!r})\n"
+        f"ax.set_xlabel({x!r})\n"
+        f"ax.set_ylabel({y!r})\n"
+        f"ax.set_zlabel({z!r})\n"
+        f"ax.set_title('3D surface - ' + {z!r})\n"
+        "plt.show()\n"
+    )

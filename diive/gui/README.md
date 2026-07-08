@@ -5,8 +5,11 @@
 >
 > **User manual:** `MANUAL.md` is the source of truth. `build_manual.py` renders it
 > to the styled `MANUAL.html` that **Help ▸ User manual** opens (and the packaged
-> exe bundles). After editing `MANUAL.md`, regenerate the HTML — don't hand-edit it:
-> `uv run python -m diive.gui.build_manual`. (`build_gui.ps1` runs this automatically.)
+> exe bundles). `MANUAL.html` is git-ignored (`*.html`) — a generated artifact, never
+> hand-edited. **Help ▸ User manual** auto-rebuilds it from `MANUAL.md` on demand when
+> it's missing or stale (so running from source always opens fresh HTML, not the
+> GitHub Markdown fallback). For a manual/CI rebuild: `uv run python -m diive.gui.build_manual`.
+> (`build_gui.ps1` runs it so the packaged exe bundles a current HTML.)
 
 PySide6 desktop application for diive. Optional dependency — install and launch with:
 
@@ -28,6 +31,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `metadata_store.py` | **App-wide variable metadata** — `MetadataManager` (`manager`): wraps the library `MetadataStore` (tags + provenance), emits `changed`; edited via `add_user_tag`/`toggle_user_tag`. Also relays variable-list right-click actions app-wide: `editRequested` / `renameRequested` / `deleteRequested` (+ `request_*`) |
 | `site.py` | **Project settings store** — `SiteManager` (`manager`): author, description, site coords/UTC offset, and the **notes wall** cards (`notes`); `as_dict`/`load_dict` so it travels with the project + GUI prefs |
 | `events.py` | **App-wide event store** — `EventManager` (`manager`): live `list[diive.events.Event]` + a `visible` toggle; `add`/`replace`/`remove`/`set_visible` emit `changed`; `as_dict`/`load_dict` so events travel with the project + GUI prefs |
+| `db.py` | **Database connection store** — `DbConnectionManager` (`manager`): holds the active `InfluxDBBackend` (`diive.core.io.db`) + the config-directory path (path persisted, never the token); `connect`/`disconnect`, `changed` (header pill + explorer refresh), and `screeningRequested` (the explorer → Meteo screening hand-off). The `db` group is optional; `influxdb_available()` reports if it's installed |
 | `tabs/events.py` | **Events** tab — reflowing board of category-accented event **cards** (`FlowLayout`) on a soft-grey board; per-card header has a **locate** button (`icons.locate_icon` → show on Overview), a **⋯ menu** (`icons.dots_icon` → edit / duplicate / shift), and a **trashcan** delete (`icons.trash_icon`); double-click also edits; **filter** field, **Group** (None/Category/Year) + **Density** (Comfortable/Compact) combos, **Add event…**, **Manage categories…**, master **Show events on plots** checkbox; edits `events.manager` (no domain logic) |
 | `widgets/combo.py` | `install_combo_popup_fix(app)` — one app-wide event filter that strips the native frame/shadow from **every** `QComboBox` popup (the black bars on the frameless translucent window) |
 | `widgets/menu.py` | `studio_menu(parent)` — a `QMenu` factory styled as a rounded white Studio card (frameless + no-shadow + translucent + `#studiomenu`); used for every context menu so none renders black |
@@ -40,10 +44,12 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `build_manual.py` | Renders `MANUAL.md` → `MANUAL.html` (the styled manual **Help ▸ User manual** opens). Dependency-free; run `python -m diive.gui.build_manual` after editing the Markdown. `MANUAL.html` is generated — don't hand-edit |
 | `registry.py` | `TAB_CLASSES` (always-on), `MENU_TABS` (menu-opened factories), `SINGLE_INSTANCE_TABS` |
 | `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df, created)` — the extension point |
-| `tabs/overview.py` | Overview tab (first/default): 3×6 panel figure (tall time series top, full-height date/time heatmap right, bottom strip of cumulative/diel/daily/histogram/waterfall; varname in the figure suptitle; datetime panels share an x-axis) + a compact borderless **metrics ribbon** (`_StatItem`, `dv.sstats` + `SSTATS_DESCRIPTIONS` tooltips); panels via `_PANELS`. Exposes `_StatCard` for the Gaps/Drivers/Seasonal tabs |
+| `tabs/overview.py` | Overview tab (first/default): 3×6 panel figure (tall time series top, full-height date/time heatmap right, bottom strip of cumulative/diel/daily/histogram/waterfall; varname in the figure suptitle; datetime panels share an x-axis) + a compact borderless **metrics ribbon** (`_StatItem`, `dv.sstats` + `SSTATS_DESCRIPTIONS` tooltips); panels via `_PANELS`. Exposes `_StatCard` for the Gaps/Drivers/Seasonal tabs, and `HeroBand` (slim method-chip + on-demand `(name, value, tooltip)` metric strip) — the shared hero used by the correction/outlier/uncertainty/select-records/partitioning/ustar/compound tabs (`set_metrics`/`clear`) |
 | `tabs/variable_selector.py` | **Select variables** tab — dual-list picker (available ↔ selected); `subsetSelected` → `MainWindow._apply_var_subset` (app-wide narrowing via `dv.keep_vars`). Opts into `_full_data` (`wants_full_data`) so it can always pick from every column |
 | `tabs/rename_variables.py` | **Rename variables** tab — add a prefix/suffix to all variables with a live old→new preview; double-click a row to rename one; `variablesRenamed` → `MainWindow._rename_variables` |
 | `tabs/combine_variables.py` | **Combine variables** tab — drag a variable onto **heatmap 1** and another onto **heatmap 2** (`_HeatmapSlot` drop targets), pick a method (multiply/add/subtract/divide, or fill a's gaps with b) + "keep overlapping only", and **heatmap 3** previews the result; **Add to dataset** emits `{name}` (DERIVED), **Copy Python** emits the `dv.variables.combine_variables_to_code` snippet. All maths is the library's `dv.variables.combine_variables`; the tab only collects operands/method, previews the three date/time heatmaps, and emits the column |
+| `tabs/_derived_variable_base.py` | `BaseDerivedVariableTab` — shared machinery for single-formula **derived-variable** tabs (the thermodynamic/radiation family). Three-column layout like the other result tabs: a draggable `VariablePanel` list (left), a **Settings** column (input fields as drop-target `ColumnPicker` combos with ✓/✗ markers — drag a variable from the list onto a field or pick it — an output name, and a **Calculate** button + **Add** button below the settings), and a preview column (right) that stacks one date/time heatmap per input plus one for the result. Input heatmaps refresh as soon as a field is set; the result is computed **only on Calculate** (nothing auto-runs). Subclasses set `inputs`/`default_name`/`out_unit`/`method_tags` and implement `_compute(df, picks)` (calls the library function) + `_code(picks, name)` (codegen). No worker/coords — these calculations are instant |
+| `tabs/derived_vpd.py` | **VPD (TA + RH)** tab (Variables ▸ **Calculate** section) — VPD (kPa) from air temperature + relative humidity via `dv.variables.calc_vpd_from_ta_rh`; a thin `BaseDerivedVariableTab` subclass (declares the two inputs + wires the library fn and `calc_vpd_from_ta_rh_to_code`). Previews TA / RH / VPD heatmaps; emits `VPD_kPa` (DERIVED) |
 | `tabs/site.py` | **Project settings** tab — author/description + site details form (→ `site.manager`) plus the **notes wall** (`widgets/notes_wall.py`) filling the empty space |
 | `tabs/plotting.py` | `PlottingTab(plot_type)` — one closable tab per plot method (opened from the Plot menu); var list + live settings panel + canvas |
 | `icons.py` | `menu_icon(label)` — tiny `QPainter`-drawn glyphs for **all** menu entries (folder/disk/calendar/gear/palette/… + plot shapes), keyword-matched |
@@ -63,8 +69,9 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `tabs/drivers.py` | Driver explorer — rank variables by correlation with a target (`rank_drivers`, optional lag scan); click a driver for its scatter |
 | `tabs/seasonaltrend.py` | Seasonal-trend & anomaly explorer — STL/classical/harmonic decomposition + yearly anomalies vs a reference period |
 | `tabs/spectrogram.py` | Spectrogram explorer — time-frequency map (`dv.analysis.spectrogram`) on calendar/cycles-per-day axes + an explanation |
-| `tabs/surface3d.py` | 3-D surface explorer — date×time-of-day relief rendered with PyVista (`dv.plotting.datetime_surface_grid` for the grid); optional `gui3d` extra, shows install notice if absent |
-| `widgets/pyvista_canvas.py` | `Pyvista3DCanvas` — embedded `pyvistaqt.QtInteractor` (GPU/VTK render window); lazy-imports VTK, `pyvista_available()` gate + `Missing3DDependency` |
+| `tabs/surface3d.py` | 3-D surface explorer — date×time-of-day relief rendered with PyVista (`dv.plotting.datetime_surface_grid` for the grid); extruded-heatmap (stepped bars, uniform per-cell colour, default) or smooth-surface style, Y-stretch (≤100) + day-binning/rolling smooth, view presets, cinematic orbit/flyover, glTF/STL export, optional cast shadows (off by default); optional `gui3d` extra, shows install notice if absent |
+| `tabs/surfacexyz.py` | 3-D **X/Y/Z** coordinate surface — subclasses `Surface3DTab`, reusing its controls/camera/animation/export; renders Z over two chosen X/Y variables (drag onto X/Y/Z fields) gridded by `dv.analysis.GridAggregator`; adds Bins/Z-aggregator controls; empty bins render as holes (`_drop_gap_risers`) |
+| `widgets/pyvista_canvas.py` | `Pyvista3DCanvas` — embedded `pyvistaqt.QtInteractor` (GPU/VTK render window); lazy-imports VTK, `pyvista_available()` gate + `Missing3DDependency`. `frame_default` = orthographic lower-left 45° framing; `apply_shadows` = flat headlight or overhead spotlight + shadow mapping |
 | `tabs/_outlier_base.py` | `BaseOutlierTab` — shared machinery for the Outliers tabs (var list, two-panel preview, worker thread, iteration progress, live preview, limit lines, day/night colouring, Add/Copy Python). `supports_daynight` toggles the day/night box |
 | `tabs/outliers.py` / `tabs/outliers_localsd.py` | Hampel / Local SD outlier tabs (`dv.outliers.Hampel` / `LocalSD`) — `BaseOutlierTab` subclasses |
 | `tabs/outliers_absolutelimits.py` | Absolute limits outlier tab (`dv.outliers.AbsoluteLimits`) — flag values outside a fixed min/max range (min/max drawn as the limit-line band); `BaseOutlierTab` subclass |
@@ -72,13 +79,16 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `tabs/outliers_lof.py` | Local Outlier Factor tab (`dv.outliers.LocalOutlierFactor`) — density-based detection; `BaseOutlierTab` subclass |
 | `tabs/outliers_trim.py` | Trim-low tab (`dv.outliers.TrimLow`) — symmetric positional trim; `supports_daynight = False`, opt-in `trim_daytime`/`trim_nighttime` rows, no detection band |
 | `tabs/outliers_manualremoval.py` | Manual removal tab (`dv.outliers.ManualRemoval`) — flag known timestamps/periods; `supports_daynight = False`, `supports_repeat = False`, no detection band |
-| `tabs/stepwise.py` | Stepwise screening tab (`dv.outliers.StepwiseOutlierDetection`) — chain multiple outlier methods with QCF aggregation, plus a **corrections** phase (`dv.corrections.apply_corrections` on the QCF-filtered series). Layout: shared variable list + a segmented inspector (Outliers / Corrections / Report, one `QStackedWidget` page shown at a time) + a large always-visible plot grid; a **measurement** dropdown gates applicable corrections; per-section **Run outliers** / **Run corrections** buttons apply edits (nothing auto-runs); runs invalidated only when the variable's data actually changes |
+| `tabs/_screening_base.py` | **`ScreeningTabBase`** — the full stepwise-screening machinery shared by the Stepwise and Meteo-database screening tabs: variable list + segmented inspector (Outliers / Corrections / Report, one `QStackedWidget` page at a time) + always-visible plot grid; the `StepwiseOutlierDetection` chain → `FlagQCF` worker + `dv.corrections.apply_corrections`; per-section Run buttons; preview; save/restore. Variants override three seams: the data source (it is `self._df`/`self._var`-centric, so a variant can feed a synthetic frame), `_inspector_pages` (extra page), and `_emit_frame` (emitted columns) |
+| `tabs/stepwise.py` | **Stepwise screening** tab — thin `ScreeningTabBase` subclass (no behaviour change): screens a working-dataset column; Add emits per-test flags + QCF + filtered + corrected series |
+| `tabs/meteo_screening.py` | **Meteo screening (database)** tab — `ScreeningTabBase` subclass that screens a high-res field handed over from the Database explorer, **plus resampling**. Feeds a synthetic frame from the staged `data_detailed`; adds a **Resample** inspector page (target defaults to the working dataset's detected resolution, no-op when already matching); `_emit_frame` resamples the screened (+corrected) series and converts END→MIDDLE so it aligns on merge, with a collision rename, overlap guard, and DB-origin + all-tags provenance; warns on a download-vs-project timezone mismatch |
+| `tabs/database.py` / `tabs/database_explorer.py` | **Database connection** + **Database explorer** tabs (over `diive.core.io.db`, `InfluxDBBackend`). Connection: pick a config directory (path remembered, never the token), test it (green header pill via `db.manager`). Explorer: drill bucket → data version → measurement → field → field overview (all tags + first/last record); download a field for a date range (UTC offset defaulting to the project timezone, **Match dataset time range**, progressive chunked download with a live-updating plot + `ProgressBar`, request caching) and plot it, or **Send to Meteo screening** via `db.manager.screeningRequested`. All queries on worker threads |
 | `tabs/_correction_base.py` | `BaseCorrectionTab` — **template** for the standalone Corrections tabs (XGBoost-style title bar + Copy Python, "Target (click to set target)" var list, "Settings" panel, method hero chip with a stats strip, original/corrected two-panel preview, worker thread, Add). Routes through the library `apply_corrections` / `corrections_to_code`; subclasses set `corr_key`/`method_suffix`/`method_chip_*`/`needs_coords` and implement `_add_method_rows`/`_current_kwargs`/`_validate`/`_method_controls`, and may override `_apply` (return `(corrected, extra)`), `_hero_metrics`, `_render_result`, `_status_text` for richer output. One tab per correction, so all corrections are independently available (measurement is a hint, not a lock) |
 | `tabs/corrections_nighttime_offset.py` / `tabs/corrections_relativehumidity_offset.py` | Offset-removal correction tabs (`dv.corrections.remove_nighttime_zero_offset` / `remove_relativehumidity_offset`) — `BaseCorrectionTab` subclasses. **Remove nighttime zero offset** (`NighttimeZeroOffsetTab`) is for variables that read zero at night (SW/PPFD); needs site coords, has a **Clamp negative values to zero** checkbox (`clamp_negatives`, default on), and overrides the hooks to show a **4-panel diagnostic preview** (original → daily offset → series−offset → final corrected) + a **below-zero stats hero** (records < 0 before/after, overall + nighttime, confirming the night no longer dips below zero), driven by the library's `nighttime_zero_offset_diagnostics`. The same `clamp_negatives` option is mirrored on the stepwise panel (`widgets/corrections_panel.py`) |
-| `tabs/corrections_setto_threshold.py` / `tabs/corrections_setto_value.py` / `tabs/corrections_set_missing.py` | Generic correction tabs (`dv.corrections.setto_threshold` max/min, `setto_value`, `set_exact_values_to_missing`) — `BaseCorrectionTab` subclasses; own top-level **Corrections** menu |
+| `tabs/corrections_setto_threshold.py` / `tabs/corrections_setto_value.py` / `tabs/corrections_set_missing.py` | Generic correction tabs (`dv.corrections.setto_threshold` max/min, `setto_value`, `set_exact_values_to_missing`) — `BaseCorrectionTab` subclasses; under the **Cleaning** menu's Corrections section |
 | `tabs/metadata_explorer.py` | Metadata explorer — per-variable origin badge, editable tag chips (favorite/add/remove, auto-coloured), a 50-word note, provenance timeline; reads `metadata_store.manager` |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
-| `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar (with a Save-DPI spinbox); attaches a `HoverAnnotator` |
+| `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar (with a Save-DPI spinbox); attaches a `HoverAnnotator`; `show_message(text)` paints the shared centered empty/error state (use instead of hand-rolled `ax.text(0.5,0.5,…)` for whole-canvas messages) |
 | `widgets/hover.py` | `HoverAnnotator` — value-under-cursor tooltip (line snap + heatmap cell) via blitting |
 | `widgets/variable_panel.py` | **`VariablePanel`** — the shared variable list (filter + pills) used by every tab; right-click menu (rename/delete/favorite/tags) routed via `metadata_store.manager`; `scroll_to(name)` / `clear_filter()` helpers |
 | `widgets/notes_wall.py` | `NotesWall` — sticky-note pinboard (draggable/resizable/recolourable cards, bold header + body); `state()`/`set_state()` serialise to plain dicts (stored in `site.manager.notes`) |
@@ -86,13 +96,16 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `widgets/variable_delegate.py` | `VariableDelegate` — paints row highlight + NEE/GPP/Reco pills |
 | `widgets/open_data_dialog.py` | `OpenDataDialog` — file + filetype picker with a parsed live preview |
 | `widgets/daterange_dialog.py` | `DateRangeDialog` — from/to picker (clamped to the data span) for date-range subselection |
-| `widgets/header_bar.py` | `StudioHeaderBar` — frameless Studio chrome header: wordmark + inline File/Data/… hover-dropdown menus + centred title |
+| `widgets/header_bar.py` | `StudioHeaderBar` — frameless Studio chrome header: wordmark + inline File/Data/… hover-dropdown menus + centred title. `_reflow` folds menus that don't fit into a "More ⌄" overflow (labels never elide) and hides the title first on narrow windows |
 | `widgets/frameless.py` | `FramelessResizeHelper` — edge/corner resize for the frameless Studio window |
 | `widgets/console_panel.py` | `ConsolePanel` — mirrors diive's Rich output in colour (used by the Log tab) |
+| `widgets/progress_bar.py` | `ProgressBar` — the shared progress-bar design (16 px, text on top, hidden until active) with `start_busy` (indeterminate) / `set_progress` (determinate 0–1000) / `finish`; colours from the app-wide `QProgressBar` stylesheet |
 | `widgets/stepwise_method_params.py` | One param widget per `StepwiseOutlierDetection.flag_*` method; produces a `{"method", "kwargs"}` step for the L3.2 / stepwise chains (the shape `level32_to_code` consumes) |
 | `widgets/stepwise_cards.py` | The stepwise chain's editable **method cards** (`StepCard` shows every setting + removed count + reorder ▲▼ / edit / delete; `AddStepCard`; `StepEditorDialog`) — display widgets around the `stepwise_method_params` registry |
 | `widgets/corrections_panel.py` | `CorrectionsPanel` — checkable correction rows filtered to the selected measurement (`dv.qaqc.corrections_for_measurement`), with inline descriptions; parses date-range / value text into the `{"key","kwargs"}` corrections `apply_corrections` consumes |
 | `widgets/copy_button.py` | Reusable **Copy Python** button — copies library-generated code to the clipboard (GUI never builds the script, only copies it) |
+| `widgets/column_picker.py` | `ColumnPicker` — spec-driven group of variable combos (each a `DropComboBox`, so a variable can be dragged from a list straight onto the field) with green ✓/red ✗ availability markers, auto-seeded by name (`dv.variables.auto_pick_column`); `seed(columns)`/`picks()`/`combos()`/`refresh_availability()`, `changed` signal. Shared by the partitioning, random-uncertainty and derived-variable input pickers (tabs with convention-driven dynamic seeding keep their own) |
+| `widgets/drop_combo.py` | `DropComboBox` — a non-editable `QComboBox` that also accepts a variable name **dropped** onto it as plain text (selects the matching item). Shared by the plot role pickers (`plot_settings.py`) and `ColumnPicker` |
 | `widgets/sub_tabs.py` | `SubTabs` — standardized in-tab sub-navigation (segmented pills over a `QStackedWidget`) for output-heavy tabs; `add_page`/`set_page`/`changed`, `add_corner_widget` (action buttons by the pills) + `add_corner_separator` (faded `_CornerSeparator` divider) |
 | `widgets/state_utils.py` | `save_controls`/`restore_controls` — serialize a tab's standard Qt controls by stable key for `save_state`/`restore_state` |
 
@@ -102,7 +115,7 @@ closable, unless listed in `SINGLE_INSTANCE_TABS` — reserved for the app-wide 
 settings, and Metadata explorer, which re-selecting focuses instead of duplicating. The main window is agnostic to
 concrete tabs.
 
-**Menu icons:** every menu entry (File/Data/Plot/Outliers/Flux/Analyze/Settings/Help) gets a small `QPainter`-drawn glyph via
+**Menu icons:** every menu entry (File/Data/Plot/Cleaning/Flux/Analyze/Settings/Help) gets a small `QPainter`-drawn glyph via
 `gui/icons.py::menu_icon(label)`, matched to the label by keyword (`&` mnemonics stripped first). `_build_menus` wraps
 each action with it. Add a menu entry → add a keyword rule in `icons._LINE_RULES` (the thin-line monochrome glyph table;
 unknown labels fall back to a chart glyph).
@@ -250,15 +263,52 @@ working. *(Building this surfaced and fixed a real library bug: `stl_decompose` 
 called `STL.fit(weights=…)`, which isn't supported — STL had been raising on all real data.)*
 
 **3-D surface explorer (`tabs/surface3d.py`):** opened from **Plot ▸ 3D surface** (single-instance). Pick a variable →
-its date×time-of-day grid is rendered as a smooth, GPU-accelerated, rotatable relief — the 3-D analogue of the date/time
-heatmap (diel band, seasonal swells, gaps become hills/valleys). The numeric grid is the **library's**
-`dv.plotting.datetime_surface_grid(series)` → `DateTimeSurface` (sanitize + pivot to a complete date×time matrix; pure
-domain logic, no rendering backend). The tab only builds a PyVista `StructuredGrid` from those arrays, normalises the
-base to a unit square (hours-vs-days ranges differ wildly) with an exaggeration-controlled relief height, colours by the
-real values (NaN gaps hidden via `nan_opacity=0`), and styles the scene (colormap, smooth shading, mesh edges). 3-D is the
-optional **`gui3d`** extra (`pyvista` + `pyvistaqt`, VTK-based) — lazy-imported like `gui`/`causal`, so a plain `gui`
-install never pulls in VTK; without it the tab shows an install notice (`widgets/pyvista_canvas.py::pyvista_available`)
-instead of failing. Install: `uv sync --extra gui --extra gui3d`.
+its date×time-of-day grid is rendered as a GPU-accelerated, rotatable relief — the 3-D analogue of the date/time heatmap.
+The numeric grid is the **library's** `dv.plotting.datetime_surface_grid(series)` → `DateTimeSurface` (sanitize + pivot to
+a complete date×time matrix; pure domain logic, no rendering backend). Everything else is presentation in the tab. Two
+**Style**s: an **extruded heatmap** (default) builds a doubled-coordinate "staircase" `StructuredGrid` (`_extruded_grid`)
+so each cell is a flat bar with step-risers between neighbours (open underneath — a draped heatmap, not solid bars on a
+base plane), coloured by **cell data** (`_staircase_cell_values`) so every top and riser is one flat heatmap colour with
+no gradient blending — a riser takes the *taller* neighbour's value so a bar's front matches its top; NaN cells are removed
+via `threshold`. The **smooth surface** style adds optional `subdivide` + `smooth_taubin` rounding. The base is normalised
+(hours-vs-days ranges differ wildly), the date axis widened by **Y stretch** (≤100), and rows optionally coarsened by day:
+`_bin_rows` block-aggregates every N days (NaN-aware mean/median/max/min) or, for the `rolling mean`/`rolling median`
+options, `_roll_rows` slides a centred N-day window keeping full resolution (gaps preserved). Relief height comes from the
+exaggeration control. Lighting is flat by default (true colours); an optional **Shadows** toggle (off by default) casts
+short shadows from an overhead spotlight via `enable_shadows`, with an adjustable length (`Pyvista3DCanvas.apply_shadows`).
+
+**Camera:** `set_view(vector, viewup, tight=)` frames a fixed direction; the preset buttons (Isometric/Top/Front/Back/
+Left/Right + tilted Front 20°/Side 20°, from `_VIEWS`) pass `tight=True` so `_fit_tight` maximises the plot in the viewport
+for that orientation, while `frame_default` (loose bounding-sphere fit) is used for framing that must survive rotation.
+Two timer-driven animations share one **Speed** knob: **Orbit** (`orbit_step`, turntable with a sine rise-and-fall sweep)
+and **Flyover** (`fly_to`, a low pass whose look-point sweeps the whole record, camera trailing in cross-section-width
+units so it starts close regardless of record length); either stops on any camera interaction (a VTK observer via
+`on_interaction_start`) or when a preset is picked. On load / new variable the tab frames to the tight Isometric view;
+a settings tweak re-renders in place and keeps the current view. Because a render during tab construction (before the GL
+window is realised) can mis-bake the shadow map, `Pyvista3DCanvas.on_first_show` re-renders once the widget is actually
+shown.
+
+**Export:** **VR (.glb)** builds a dedicated textured mesh (`_build_export_surface`) — per-cell boxes for the extruded
+style (`_extruded_box_geometry`, one texel per bar so every face is uniform) or a UV-mapped sheet for the smooth style —
+with the colormap baked into an **emissive** texture (viewers like PowerPoint ignore per-vertex colours and unlit-style
+emissive avoids their lighting washing the colours out; saturation is boosted via `_EXPORT_SATURATION`), exported to a true
+binary `.glb` through `trimesh`. **3D print (.stl)** writes a watertight solid with a base plate (`_printable_solid`).
+
+3-D is the optional **`gui3d`** extra (`pyvista` + `pyvistaqt` + `trimesh`, VTK-based) — lazy-imported like `gui`/`causal`,
+so a plain `gui` install never pulls in VTK; without it the tab shows an install notice
+(`widgets/pyvista_canvas.py::pyvista_available`) instead of failing. Install: `uv sync --extra gui --extra gui3d`.
+
+**3-D X/Y/Z coordinate surface (`tabs/surfacexyz.py`):** the coordinate sibling, opened from **Plot ▸ 3D surface
+(X/Y/Z)**. `SurfaceXYZTab` **subclasses** `Surface3DTab` and overrides only the data source — everything else (relief
+controls, camera presets, orbit/flyover, glTF/STL export, the whole render/mesh pipeline) is inherited. It renders an
+arbitrary Z over two chosen X and Y variables instead of the calendar grid: pick the three via an X/Y/Z `ColumnPicker`
+(`_build_top_controls`; drag a name from the list — the shared explorer list is made a drag source via the base's new
+`list_draggable` flag — onto a `DropComboBox` field), and the scattered points are gridded by the **library's**
+`dv.analysis.GridAggregator` (equal-width bins, Z aggregated per cell) in `_grid_data`, whose `df_agg_wide` (Y-index ×
+X-columns) feeds the shared `_render_surface`. Extra controls: **Bins (X/Y)** and **Z aggregator**. Empty bins stay empty —
+the tab sets `_drop_gap_risers = True` so `_staircase_cell_values` keeps a riser only between two measured cells (no walls
+drape to the base at a measured↔missing edge, unlike the dense date/time grid which keeps `_drop_gap_risers = False`).
+**Copy Python** emits `surface_xyz_to_code` (`core/plotting/codegen.py`, GridAggregator + a matplotlib 3-D surface).
 
 **Spectrogram explorer (`tabs/spectrogram.py`):** opened from **Analyze ▸ Spectrogram** (single-instance). Pick a
 variable → a spectrogram (short-time FFT) shows how the strength of its cycles changes over time, with a plain-language

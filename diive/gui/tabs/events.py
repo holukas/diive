@@ -46,6 +46,7 @@ from diive.gui.widgets.add_event_dialog import AddEventDialog
 from diive.gui.widgets.category_dialog import CategoryDialog
 from diive.gui.widgets.flow_layout import FlowLayout
 from diive.gui.widgets.menu import studio_menu
+from diive.gui.widgets.tab_chrome import build_titlebar
 
 #: Board behind the cards — a touch darker than the white cards so they pop.
 _BOARD_BG = "#ECECE8"
@@ -364,19 +365,17 @@ class EventsTab(DiiveTab):
     def build(self) -> QWidget:
         self._df = None
         root = QWidget()
-        root.setObjectName("eventsroot")
-        root.setStyleSheet(f"QWidget#eventsroot {{ background: {_BOARD_BG}; }}")
-        outer = QVBoxLayout(root)
+        root_lay = QVBoxLayout(root)
+        root_lay.setContentsMargins(0, 0, 0, 0)
+        root_lay.setSpacing(0)
+        root_lay.addLayout(build_titlebar(self.title))  # shared tab header
+
+        body = QWidget()
+        body.setObjectName("eventsroot")
+        body.setStyleSheet(f"QWidget#eventsroot {{ background: {_BOARD_BG}; }}")
+        outer = QVBoxLayout(body)
         outer.setContentsMargins(16, 14, 16, 14)
         outer.setSpacing(10)
-
-        title = QLabel(theme.manager.label_text("Events"))
-        tf = theme.manager.tracked_font(title.font())
-        tf.setBold(True)
-        tf.setPointSizeF(tf.pointSizeF() + 1.0)
-        title.setFont(tf)
-        title.setStyleSheet("background: transparent;")
-        outer.addWidget(title)
 
         intro = QLabel(
             "Mark when something happened — fertilization, harvest, grazing, a "
@@ -431,6 +430,7 @@ class EventsTab(DiiveTab):
         self.scroll.viewport().setStyleSheet("background: transparent;")
         outer.addWidget(self.scroll, 1)
 
+        root_lay.addWidget(body, stretch=1)
         events_store.manager.changed.connect(self._refresh)
         events_store.manager.categories_changed.connect(self._refresh)
         self._refresh()

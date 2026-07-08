@@ -30,7 +30,6 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
-    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -44,9 +43,9 @@ from diive.flux import JointUncertaintyPAS20
 from diive.flux.lowres.codegen import jointunc_to_code
 from diive.flux.lowres.uncertainty import JOINT_DIVISOR_1SIGMA, JOINT_DIVISOR_IQR
 from diive.gui import theme
-from diive.gui.tabs._partitioning_base import _auto_pick
+from diive.variables import auto_pick_column
 from diive.gui.tabs.base import DiiveTab
-from diive.gui.tabs.overview import _MetricSlot, _chip, _stat_separator
+from diive.gui.tabs.overview import HeroBand
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
@@ -214,34 +213,15 @@ class JointUncertaintyTab(DiiveTab):
         return right
 
     def _build_hero(self) -> QWidget:
-        hero = QFrame()
-        hero.setStyleSheet("QFrame { background: #FAFAFA; border-radius: 8px; }")
-        h = QHBoxLayout(hero)
-        h.setContentsMargins(12, 8, 12, 8)
-        h.setSpacing(12)
-        h.addWidget(_chip(self.method_chip_label, self.method_chip_bg, self.method_chip_fg))
-        h.addStretch(1)
-        self._metrics_host = QWidget()
-        self._metrics_lay = QHBoxLayout(self._metrics_host)
-        self._metrics_lay.setContentsMargins(0, 0, 0, 0)
-        self._metrics_lay.setSpacing(12)
-        h.addWidget(self._metrics_host)
-        return hero
+        self._hero = HeroBand(self.method_chip_label, self.method_chip_bg,
+                              self.method_chip_fg)
+        return self._hero
 
     def _clear_hero(self) -> None:
-        while self._metrics_lay.count():
-            w = self._metrics_lay.takeAt(0).widget()
-            if w is not None:
-                w.deleteLater()
+        self._hero.clear()
 
     def _update_hero(self, metrics: list) -> None:
-        self._clear_hero()
-        for i, (name, value, tip) in enumerate(metrics):
-            if i > 0:
-                self._metrics_lay.addWidget(_stat_separator())
-            slot = _MetricSlot()
-            slot.update_metric(name, value, tip)
-            self._metrics_lay.addWidget(slot)
+        self._hero.set_metrics(metrics)
 
     def _hero_metrics(self, jointunc) -> list:
         res = jointunc.jointunc_results
@@ -300,7 +280,7 @@ class JointUncertaintyTab(DiiveTab):
                 if isinstance(needles, str):
                     needles = [needles]
                 for needle in needles:
-                    guess = _auto_pick(self._all_cols, needle,
+                    guess = auto_pick_column(self._all_cols, needle,
                                        prefer=prefer, avoid=spec.get("avoid"))
                     if guess:
                         combo.setCurrentText(guess)
@@ -316,7 +296,7 @@ class JointUncertaintyTab(DiiveTab):
         _label, _div, lo_needle, hi_needle = _DIVISOR_PRESETS[self.divisor_combo.currentIndex()]
         prefer = self._scenario_prefer()
         for key, needle in (("lower", lo_needle), ("upper", hi_needle)):
-            guess = _auto_pick(self._all_cols, needle, prefer=prefer)
+            guess = auto_pick_column(self._all_cols, needle, prefer=prefer)
             if guess:
                 self._combos[key].setCurrentText(guess)
         self._refresh_availability()
@@ -420,10 +400,7 @@ class JointUncertaintyTab(DiiveTab):
         self._set_running(False)
         self._clear_hero()
         self.status.setText(f"Failed: {msg}")
-        ax = self.canvas.new_axes(1)[0]
-        ax.text(0.5, 0.5, "Joint-uncertainty estimation failed", ha="center",
-                va="center", transform=ax.transAxes)
-        self.canvas.draw()
+        self.canvas.show_message("Joint-uncertainty estimation failed")
 
     def _plot(self, jointunc) -> None:
         """Three panels: the flux ± joint-uncertainty band (daily means) spanning

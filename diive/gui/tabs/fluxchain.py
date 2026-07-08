@@ -58,6 +58,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -1422,6 +1423,10 @@ class FluxChainTab(DiiveTab):
                 "predictor columns in the Level 4.1 feature list.")
             return
         deepest = "4.1" if l41 else ("3.3" if l33 else ("3.2" if steps else "3.1"))
+        # Run-all rebuilds from scratch to `deepest`; any already-computed level
+        # beyond it is cascaded away. Confirm before discarding that real work.
+        if not self._confirm_discard(self._level_to_stage(deepest)):
+            return
         self._set_running(True)
         self.summary.setPlainText(f"Running Level 2 → Level {deepest}…")
         threading.Thread(
@@ -1450,6 +1455,8 @@ class FluxChainTab(DiiveTab):
         plan = self._level_plan(idx)
         if plan is None:
             return  # _level_plan set the explanatory message
+        if not self._confirm_discard(idx):
+            return  # user declined to discard downstream results
         self._set_running(True)
         self.summary.setPlainText(f"Running {_STAGES[idx][0]} — {_STAGES[idx][1]}…")
         threading.Thread(target=self._level_worker, args=(plan, self._data, self._df),
@@ -1667,6 +1674,33 @@ class FluxChainTab(DiiveTab):
     def _on_failed(self, msg: str) -> None:
         self._set_running(False)
         self.summary.setPlainText(f"Failed:\n{msg}")
+
+    @staticmethod
+    def _level_name(idx: int) -> str:
+        """Human level name for a stage index ('Input' / 'Level 3.2')."""
+        badge = _STAGES[idx][0]
+        return "Input" if idx == 0 else badge.replace("L", "Level ")
+
+    def _confirm_discard(self, target_idx: int) -> bool:
+        """Confirm a run that would discard already-computed downstream levels.
+
+        Returns True to proceed. A run reaching ``target_idx`` rebuilds that level
+        and cascades away every deeper level the library already computed; only
+        then (``self._reached > target_idx``) do we prompt, so the normal forward
+        path and first runs never ask. No-op (returns True) when nothing is lost.
+        """
+        if self._reached <= target_idx:
+            return True
+        discarded = [self._level_name(i) for i in range(target_idx + 1, self._reached + 1)]
+        names = " and ".join(discarded) if len(discarded) <= 2 else \
+            ", ".join(discarded[:-1]) + ", and " + discarded[-1]
+        answer = QMessageBox.question(
+            self.run_btn, "Discard downstream results",
+            f"Re-running {self._level_name(target_idx)} will discard the results of "
+            f"{names}. Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        return answer == QMessageBox.StandardButton.Yes
 
     # --- run-state + per-level button enablement ---
     def _set_running(self, on: bool) -> None:

@@ -13,6 +13,10 @@ from __future__ import annotations
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.combine_variables import CombineVariablesTab
 from diive.gui.tabs.compound_extremes import CompoundExtremesTab
+from diive.gui.tabs.derived_vpd import VpdFromTaRhTab
+from diive.gui.tabs.database import DatabaseConnectionTab
+from diive.gui.tabs.database_explorer import DatabaseExplorerTab
+from diive.gui.tabs.meteo_screening import MeteoScreeningTab
 from diive.gui.tabs.corrections_nighttime_offset import NighttimeZeroOffsetTab
 from diive.gui.tabs.corrections_relativehumidity_offset import RelativeHumidityOffsetTab
 from diive.gui.tabs.corrections_set_missing import SetExactToMissingTab
@@ -73,6 +77,7 @@ from diive.gui.tabs.plotting import (
 from diive.gui.tabs.settings import SettingsTab
 from diive.gui.tabs.site import ProjectSettingsTab
 from diive.gui.tabs.surface3d import Surface3DTab
+from diive.gui.tabs.surfacexyz import SurfaceXYZTab
 from diive.gui.tabs.variable_selector import VariableSelectorTab
 
 #: Tab classes always shown in the main window, in display order.
@@ -92,6 +97,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
     # MainWindow._build_menus. Not given its own top-level menu.
     "Data": {
         "Select variables": VariableSelectorTab,
+        "Select records by condition": SelectRecordsTab,
     },
     # Create & manage individual variables (columns). Built manually in
     # MainWindow so the "Add timestamp column..." action can sit between the
@@ -99,13 +105,15 @@ MENU_TABS: dict[str, dict[str, callable]] = {
     "Variables": {
         "Feature engineering": FeatureEngineerTab,
         "Combine variables": CombineVariablesTab,
-        "Select records by condition": SelectRecordsTab,
         "Rename variables": RenameVariablesTab,
         "Metadata explorer": MetadataExplorerTab,
+        # Derived-variable calculators, shown under a "Calculate" section at the
+        # end of the Variables menu (see MainWindow._build_menus).
+        "VPD (TA + RH)": VpdFromTaRhTab,
     },
     # Time-stamped event markers (annotations layered over the data, not column
-    # operations) — its own top-level menu. Built manually in MainWindow so the
-    # "Add event..." / "Show events on plots" actions sit above the tab entry.
+    # operations). Folded into the Data menu (under an "Events" section) in
+    # MainWindow, alongside the "Add event..." / "Show events on plots" actions.
     "Events": {
         "Events": EventsTab,
     },
@@ -126,7 +134,10 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Tree ring": lambda: PlottingTab(TREERING, "Tree ring"),
         "Waterfall": lambda: PlottingTab(WATERFALL, "Waterfall"),
         "3D surface": Surface3DTab,
+        "3D surface (X/Y/Z)": SurfaceXYZTab,
     },
+    # Outlier detection. Combined with Corrections into one top-level "Cleaning"
+    # menu in MainWindow._build_menus (the two per-variable cleaning families).
     "Outliers": {
         "Stepwise screening": StepwiseScreeningTab,
         "Absolute limits filter": AbsoluteLimitsTab,
@@ -152,8 +163,9 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Random uncertainty (PAS20)": RandomUncertaintyTab,
         "Joint uncertainty (PAS20)": JointUncertaintyTab,
     },
-    # Data corrections (dv.corrections). One tab per correction, all sharing
-    # BaseCorrectionTab (the RF/XGB shared-template approach).
+    # Data corrections (dv.corrections). Folded into the combined "Cleaning" menu
+    # alongside Outliers (see MainWindow._build_menus). One tab per correction,
+    # all sharing BaseCorrectionTab (the RF/XGB shared-template approach).
     "Corrections": {
         "Remove nighttime zero offset": NighttimeZeroOffsetTab,
         "Remove relative humidity offset": RelativeHumidityOffsetTab,
@@ -181,6 +193,13 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Appearance": SettingsTab,
         "Project settings": ProjectSettingsTab,
     },
+    # Database I/O (InfluxDB, optional 'db' group). Folded into the File menu as
+    # a "Database ▸" submenu in MainWindow (it's another data source/sink).
+    "Database": {
+        "Database connection": DatabaseConnectionTab,
+        "Database explorer": DatabaseExplorerTab,
+        "Meteo screening (database)": MeteoScreeningTab,
+    },
 }
 
 #: Flat label -> factory lookup (used to open a tab by its menu label).
@@ -190,9 +209,14 @@ MENU_TAB_CLASSES: dict[str, callable] = {
 
 #: Menu tabs that may exist only once (re-selecting focuses the existing one).
 #: Everything else opens a new, numbered instance each time ("Hampel filter 1",
-#: "Hampel filter 2", ...). Reserved for tabs that edit a single app-wide
-#: singleton, where a second copy would show conflicting state: Appearance
-#: (theme.manager) and Project settings (site.manager), plus Metadata explorer
-#: (the target of the "Edit metadata..." relay from every variable list).
+#: "Hampel filter 2", ...). Two kinds belong here: tabs that edit a single
+#: app-wide singleton, where a second copy would show conflicting state —
+#: Appearance (theme.manager) and Project settings (site.manager), plus Metadata
+#: explorer (the target of the "Edit metadata..." relay from every variable
+#: list), plus the Database tabs (the single app-wide InfluxDB handle); and the
+#: single-variable explorers (Driver explorer, Gaps & coverage, Spectrogram),
+#: where a duplicate would just re-do the same heavy compute on the same data.
 SINGLE_INSTANCE_TABS: set[str] = {
-    "Appearance", "Project settings", "Metadata explorer"}
+    "Appearance", "Project settings", "Metadata explorer",
+    "Database connection", "Database explorer", "Meteo screening (database)",
+    "Driver explorer", "Gaps & coverage", "Spectrogram"}

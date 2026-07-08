@@ -43,7 +43,7 @@ from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.overview import _StatCard
 from diive.gui.widgets.copy_button import CopyPythonButton
-from diive.gui.widgets.tab_chrome import build_titlebar
+from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
 
 
@@ -55,6 +55,14 @@ class SingleVariableExplorerTab(DiiveTab):
     #: Only consider numeric columns for the default selection (and reject a
     #: non-numeric ``default_var``).
     default_numeric_only = True
+    #: Optional bold header above the variable list (matching the outlier /
+    #: correction tabs). When None (default) the list has no header.
+    list_title: str | None = None
+    #: Muted parenthetical hint next to ``list_title``.
+    list_hint = "click to select"
+    #: Make the variable list a drag source (drag a name onto a drop target,
+    #: e.g. the X/Y/Z fields of the coordinate-surface tab). Off by default.
+    list_draggable = False
 
     # --- build ---------------------------------------------------------
     def build(self) -> QWidget:
@@ -78,9 +86,20 @@ class SingleVariableExplorerTab(DiiveTab):
         outer.addLayout(build_titlebar(self.title, *actions))
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.varpanel = VariablePanel()
+        self.varpanel = VariablePanel(draggable=self.list_draggable)
         self.varpanel.selected.connect(self._on_select)
-        splitter.addWidget(self.varpanel)
+        # Optional list header (the varpanel keeps its own fixed width, so the
+        # wrapper column sizes to it); without a title the panel goes in bare.
+        if self.list_title:
+            left = QWidget()
+            ll = QVBoxLayout(left)
+            ll.setContentsMargins(0, 0, 0, 0)
+            ll.setSpacing(6)
+            ll.addWidget(list_header(self.list_title, self.list_hint))
+            ll.addWidget(self.varpanel, stretch=1)
+            splitter.addWidget(left)
+        else:
+            splitter.addWidget(self.varpanel)
         splitter.addWidget(self._build_right())
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
