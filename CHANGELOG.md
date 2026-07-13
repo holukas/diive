@@ -797,6 +797,12 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
 
 - **Rich console migration** — `print()` replaced with structured helpers (`info`/`detail`/`warn`/`error`/
   `_console.print()`) across production modules. Examples and CLI entry points unchanged.
+- **Console renders correctly in Jupyter** — the shared console is now built environment-aware
+  (`diive/core/utils/console.py`). In a notebook it pins the Jupyter renderer and a wider (100-column) width so report
+  tables no longer wrap at 80 columns, and `rule()` draws its line in a neutral grey instead of the default bright green
+  (`#00ff00`), which was illegible on a white background. Terminal and GUI output are unchanged. New `refresh_console()`
+  re-detects the environment (Rich fixes `is_jupyter` at construction) for frontends where diive was imported before the
+  kernel was ready.
 
 ### Analysis
 
