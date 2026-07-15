@@ -18,7 +18,7 @@ See `CHANGELOG.md` for version history.
 
 ```bash
 uv sync                              # core + dev
-uv sync --all-extras --group db      # everything: GUI, 3D + InfluxDB (influxdb-client)
+uv sync --all-extras --all-groups    # everything: all extras (GUI, 3D) + all groups (InfluxDB, dev, build)
 uv run pytest tests/test_gapfilling.py -v
 uv run python script.py
 uv run pytest tests/ -v
@@ -40,7 +40,7 @@ uv add package_name
 | group | `db` | `influxdb-client` (backs diive's InfluxDB engine, `diive/core/io/db/influx`) | `uv sync --group db` |
 | group | `dev` | test/lint/notebook tooling (synced by default) | — |
 
-`db` is a **dependency group**, not an extra (personal/local InfluxDB workflow), so it needs `--group db`. Install all of the above with `uv sync --all-extras --group db`. The InfluxDB download/upload/delete engine lives in `diive/core/io/db/influx` (`InfluxIO`); `influxdb-client` is imported lazily, so the default `uv sync` never pulls it in.
+`db` is a **dependency group**, not an extra (personal/local InfluxDB workflow), so it needs `--group db`. Install all of the above at once with `uv sync --all-extras --all-groups`. The InfluxDB download/upload/delete engine lives in `diive/core/io/db/influx` (`InfluxIO`); `influxdb-client` is imported lazily, so the default `uv sync` never pulls it in.
 
 ## Project Structure
 

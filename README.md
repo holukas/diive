@@ -72,7 +72,7 @@ uv sync --extra gui                              # + PySide6 desktop GUI (diive-
 uv sync --extra gui --extra gui3d                # + 3-D surface view (PyVista/VTK)
 uv sync --group db                               # + InfluxDB I/O (influxdb-client)
 uv sync --extra gui --group build                # + standalone-app packaging (PyInstaller)
-uv sync --all-extras --group db                  # everything: all extras + InfluxDB
+uv sync --all-extras --all-groups                # everything: all extras + all groups
 ```
 
 | Option | Kind | Pulls in |
@@ -84,7 +84,8 @@ uv sync --all-extras --group db                  # everything: all extras + Infl
 | `--group build` | group | PyInstaller (build the standalone GUI; needs `gui`) |
 
 `dev` is synced by default; `db` and `build` are opt-in groups. Combine flags
-freely, e.g. `uv sync --extra gui --extra gui3d --group db --group build`.
+freely, e.g. `uv sync --extra gui --extra gui3d --group db --group build`, or use
+`uv sync --all-extras --all-groups` to pull in everything at once.
 
 ### Quick start
 
