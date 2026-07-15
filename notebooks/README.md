@@ -36,8 +36,19 @@ migrated to Python scripts — **use the Python examples above for learning and 
 - [FluxProcessingChain.ipynb](FluxProcessingChain.ipynb) — Post-processing of Level-1 fluxes: quality flag extension (
   L2), storage correction (L3.1), outlier removal (L3.2), USTAR threshold (L3.3), gap-filling (L4.1) with random forest
   and MDS
-- [StepwiseMeteoScreeningFromDatabase.ipynb](StepwiseMeteoScreeningFromDatabase.ipynb) — Quality screening of
-  meteorological data with direct database connection (InfluxDB example)
+
+### Database (InfluxDB)
+
+- [DatabaseInfluxStepwiseMeteoScreening.ipynb](DatabaseInfluxStepwiseMeteoScreening.ipynb) — Quality screening of
+  meteorological data with direct database connection: download, screen/correct on high-res data, resample, upload
+  (`StepwiseMeteoScreeningDb`, `InfluxIO`)
+- [DatabaseInfluxDownloadSpecificVars.ipynb](DatabaseInfluxDownloadSpecificVars.ipynb) — Download specific variables from
+  the InfluxDB database into a DataFrame, inspect, and optionally save to file (read-only, `InfluxIO`)
+- [DatabaseInfluxDownloadAllVarsOfMeasurements.ipynb](DatabaseInfluxDownloadAllVarsOfMeasurements.ipynb) — Download every
+  variable of one or more measurements at once (`FIELDS = None`), across one or several data versions (read-only,
+  `InfluxIO`)
+- [DatabaseInfluxDeleteData.ipynb](DatabaseInfluxDeleteData.ipynb) — Permanently delete variables or an entire data version
+  from the InfluxDB database (destructive; delete calls are commented out by default, `InfluxIO`)
 
 ### Data Formatting & File I/O
 
