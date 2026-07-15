@@ -150,6 +150,8 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py
 ```
 
+A handful of end-to-end Jupyter notebooks (flux processing chain, FLUXNET/EddyPro formatting, and the `DatabaseInflux*` InfluxDB workflows) live in [notebooks/](notebooks/README.md).
+
 ---
 
 ## Features
@@ -219,7 +221,7 @@ Flux detection limit from 20 Hz data, maximum covariance lag, pre-whitening boot
 
 ### I/O
 
-Load and save parquet files, read single or batch EddyPro output, detect and split irregular files, and format data for FLUXNET submission. See [examples/io/](examples/io/).
+Load and save parquet files, read single or batch EddyPro output, detect and split irregular files, and format data for FLUXNET submission. See [examples/io/](examples/io/). For reading and writing an InfluxDB time series database, diive ships an in-house engine (`InfluxIO`, `uv sync --group db`) with ready-to-run `DatabaseInflux*` Jupyter notebooks — download, meteo screening, and delete — in [notebooks/](notebooks/README.md).
 
 ### Desktop GUI (optional)
 

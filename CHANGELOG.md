@@ -863,6 +863,13 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
   `frequencies` / `times` / `power` / `power_db`. Complements `harmonic_analysis` / `periodogram` (which give a single
   static spectrum) by showing *when* each cycle is strong. Used by the harmonic example's spectrogram panel.
 - 21 Jupyter notebooks archived; content migrated to Sphinx Gallery examples.
+- **New InfluxDB database notebooks** (`notebooks/`, all prefixed `DatabaseInflux`, using diive's in-house `InfluxIO`
+  engine, `uv sync --group db`): `DatabaseInfluxDownloadSpecificVars` (download named variables),
+  `DatabaseInfluxDownloadAllVarsOfMeasurements` (download all fields of given measurements, `FIELDS=None`, across one or
+  more data versions), and `DatabaseInfluxDeleteData` (delete specific variables or a whole data version; delete calls
+  commented out by default for Run-All safety). The existing meteo-screening notebook was renamed
+  `StepwiseMeteoScreeningFromDatabase` -> `DatabaseInfluxStepwiseMeteoScreening` and its user settings consolidated into
+  a single cell.
 - Switched from poetry to `uv` for dependency management.
 
 ## v0.90.0 | 13 Jan 2026
