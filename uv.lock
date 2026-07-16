@@ -491,6 +491,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+db = [
+    { name = "influxdb-client" },
+]
 gui = [
     { name = "pyside6" },
 ]
@@ -505,7 +508,7 @@ build = [
     { name = "pyinstaller" },
 ]
 db = [
-    { name = "influxdb-client" },
+    { name = "diive", extra = ["db"] },
 ]
 dev = [
     { name = "autopep8" },
@@ -531,6 +534,7 @@ requires-dist = [
     { name = "category-encoders", specifier = ">=2.8.1,<3.0.0" },
     { name = "dtreeviz", specifier = ">=2.2.2,<3.0.0" },
     { name = "eli5", specifier = ">=0.14.0,<0.15.0" },
+    { name = "influxdb-client", marker = "extra == 'db'", specifier = ">=1.37.0" },
     { name = "jupyter-bokeh", specifier = ">=4.0.5,<5.0.0" },
     { name = "matplotlib", specifier = ">=3.10.0,<4.0.0" },
     { name = "numpy", specifier = ">=2.2.4,<3.0.0" },
@@ -555,11 +559,11 @@ requires-dist = [
     { name = "xgboost", specifier = ">=3.0.0,<4.0.0" },
     { name = "yellowbrick", specifier = ">=1.5,<2.0" },
 ]
-provides-extras = ["gui", "gui3d"]
+provides-extras = ["gui", "gui3d", "db"]
 
 [package.metadata.requires-dev]
 build = [{ name = "pyinstaller", specifier = ">=6.10" }]
-db = [{ name = "influxdb-client", specifier = ">=1.37.0" }]
+db = [{ name = "diive", extras = ["db"] }]
 dev = [
     { name = "autopep8", specifier = ">=2.3.2" },
     { name = "furo", specifier = ">=2025.12.19" },

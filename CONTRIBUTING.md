@@ -32,7 +32,7 @@ The optional pieces are split across two uv mechanisms, so `--all-extras` alone 
 |---|---|---|---|
 | extra | `gui` | PySide6 desktop GUI | `uv sync --extra gui` |
 | extra | `gui3d` | PyVista/VTK 3D surface tabs | `uv sync --extra gui3d` |
-| group | `db` | `influxdb-client` (InfluxDB engine) | `uv sync --group db` |
+| extra + group | `db` | `influxdb-client` (InfluxDB engine) | `uv sync --group db` |
 | group | `dev` | test/lint/docs/notebook tooling | synced by default |
 | group | `build` | PyInstaller (standalone GUI build) | `uv sync --group build` |
 

@@ -37,10 +37,10 @@ uv add package_name
 |---|---|---|---|
 | extra | `gui` | PySide6 desktop GUI | `uv sync --extra gui` |
 | extra | `gui3d` | PyVista/VTK 3D surface tab (+ `trimesh` for glTF/`.glb` export) | `uv sync --extra gui3d` |
-| group | `db` | `influxdb-client` (backs diive's InfluxDB engine, `diive/core/io/db/influx`) | `uv sync --group db` |
+| extra + group | `db` | `influxdb-client` (backs diive's InfluxDB engine, `diive/core/io/db/influx`) | `uv sync --group db` |
 | group | `dev` | test/lint/notebook tooling (synced by default) | — |
 
-`db` is a **dependency group**, not an extra (personal/local InfluxDB workflow), so it needs `--group db`. Install all of the above at once with `uv sync --all-extras --all-groups`. The InfluxDB download/upload/delete engine lives in `diive/core/io/db/influx` (`InfluxIO`); `influxdb-client` is imported lazily, so the default `uv sync` never pulls it in.
+`db` is **both** an extra and a dependency group, deliberately. Working *on* diive, use the group (`uv sync --group db`) — that is the documented opt-in and what the personal/local InfluxDB workflow expects. The extra exists for projects that *depend* on diive: a dependency group is local to the project declaring it and never reaches the published metadata, so a consumer — including one wiring diive up through a uv path/editable source — cannot request `--group db` and must ask for `diive[db]` instead. The group is defined as `db = ["diive[db]"]`, so the version pin lives only in the extra. Install all of the above at once with `uv sync --all-extras --all-groups`. The InfluxDB download/upload/delete engine lives in `diive/core/io/db/influx` (`InfluxIO`); `influxdb-client` is imported lazily, so the default `uv sync` never pulls it in.
 
 ## Project Structure
 

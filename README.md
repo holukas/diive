@@ -80,12 +80,18 @@ uv sync --all-extras --all-groups                # everything: all extras + all 
 | *(none)* | — | core library + `dev` group (tests, lint, docs) |
 | `--extra gui` | extra | PySide6 desktop GUI |
 | `--extra gui3d` | extra | PyVista/VTK 3-D surface tab (needs `gui`) |
-| `--group db` | group | `influxdb-client` (InfluxDB download/upload) |
+| `--group db` | group + extra | `influxdb-client` (InfluxDB download/upload) |
 | `--group build` | group | PyInstaller (build the standalone GUI; needs `gui`) |
 
 `dev` is synced by default; `db` and `build` are opt-in groups. Combine flags
 freely, e.g. `uv sync --extra gui --extra gui3d --group db --group build`, or use
 `uv sync --all-extras --all-groups` to pull in everything at once.
+
+`db` is also available as an **extra**, for depending on diive rather than
+working on it: `pip install 'diive[db]'`, or `"diive[db]"` in another project's
+dependencies. Groups are local to the project that declares them and are not
+published metadata, so a consuming project cannot reach `--group db` — not even
+with a uv path/editable source — and needs the extra instead.
 
 ### Quick start
 
