@@ -2,7 +2,7 @@
 
 Examples demonstrating statistical analysis, decomposition, and pattern detection for time series data.
 
-13 examples covering correlation, spectral analysis, gap detection, grid aggregation, decomposition, and compound-extreme detection.
+14 examples covering correlation, spectral analysis, gap detection, grid aggregation, decomposition, and compound-extreme detection.
 
 ## Examples by Method
 

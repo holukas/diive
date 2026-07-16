@@ -907,7 +907,14 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
 - New examples: `fluxprocessingchain_composable.py` (full L2->L4.1), `fluxprocessingchain_multiflux.py` (multi-flux
   loop), `qaqc_detect_timestamp_shifts.py`, `flux_lag_pwb.py`, `flux_lag_pwb_batch.py`, `plot_treering_temperature.py`,
   4 I/O examples, USTAR method comparison, `gapfill_swin.py` (SW_IN physics + XGBoost),
-  `analysis_gapstats.py` (gap distribution analysis). Total: 104 examples.
+  `analysis_gapstats.py` (gap distribution analysis). Total: 124 examples.
+- Corrected stale example counts in the hand-maintained docs, which had drifted behind the files on disk: the totals in
+  `examples/README.md` (122 -> 124, plus the `Example Coverage` table and its per-folder figures), `README.md` and
+  `OVERVIEW.md` (113 -> 124), `CLAUDE.md` (~100 -> 124), and `examples/analysis/README.md` (13 -> 14) now all match the
+  124 example files across the 10 domain folders.
+- `examples/CATALOG.md` completed: added the two examples that were on disk but uncatalogued, `feature_engineer.py`
+  (the 8-stage `FeatureEngineer` pipeline) and `analysis_keep_records_where.py` (conditional record selection). The
+  catalog now lists every example.
 - Updated `fluxprocessingchain_composable.py`: Step 5b gap analysis after L3.3 via `data.gap_stats()`;
   Step 12 replaced with `data.plot_gapfilled_heatmaps()` (all methods side-by-side); Step 13 replaced
   with `data.plot_cumulative_comparison()` (all methods on one axes).

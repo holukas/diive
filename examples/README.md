@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**122 examples across 10 organized folders by functional domain.**
+**124 examples across 10 organized folders by functional domain.**
 
 ## Structure
 
@@ -40,7 +40,7 @@ examples/
 │   ├── times_statistics.py
 │   ├── times_diel_cycles.py
 │   └── times_temporal_matrices.py
-├── analysis/              # Time series analysis (13 examples)
+├── analysis/              # Time series analysis (14 examples)
 │   ├── analysis_seasonaltrend.py
 │   ├── analysis_driveranalysis.py
 │   ├── analysis_gapfinder.py
@@ -148,7 +148,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs the headless-safe suite (107 scripts) in parallel with 8 workers, reporting execution time and any errors. Three examples are excluded from the runner: the two database-backed meteoscreening workflows and the interactive TUI demo.
+This runs the headless-safe suite (121 scripts) in parallel with 8 workers, reporting execution time and any errors. Three examples are excluded from the runner: the two database-backed meteoscreening workflows and the interactive TUI demo.
 
 ## Finding Examples
 
@@ -176,17 +176,17 @@ Browse by topic:
 
 | Domain | Files | Topics |
 |--------|-------|--------|
-| **Visualization** | 22 | Heatmaps, scatter, timeseries (+ interactive & range-tool), shifted distribution, histograms, ridgelines, cumulative, diurnal cycles, tree-ring spiral and radial line |
+| **Visualization** | 24 | Heatmaps, scatter, timeseries (+ interactive & range-tool), shifted distribution, histograms, ridgelines, cumulative, diurnal cycles, waterfall, wind rose, compound extremes, tree-ring spiral and radial line |
 | **Times** | 7 | Timestamp validation, frequency detection, diel cycles, temporal matrices |
-| **Analysis** | 12 | Correlation, daily correlation, driver attribution, decomposition, gap detection, gap statistics, spatial aggregation, harmonic analysis |
+| **Analysis** | 14 | Correlation, daily correlation, driver attribution, decomposition, gap detection, gap statistics, spatial aggregation, harmonic analysis, conditional record selection, compound extremes |
 | **Events** | 1 | Instant/period event markers, 0/1 flag columns, plot overlays, custom category palette |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
-| **Flux** | 20 | Time lag analysis, processing chain, HQ filtering, USTAR detection (3), self-heating (2), uncertainty, PWB batch detection (CLI + API), PWB detect-remove (apply CLI + TUI demo), high-res analysis |
+| **Flux** | 27 | Time lag analysis, processing chain (4), NEE partitioning into GPP/RECO (5), HQ filtering, USTAR detection (3), self-heating (2), uncertainty, PWB batch detection (CLI + API), PWB detect-remove (apply CLI + TUI demo), high-res analysis |
 | **Gapfilling** | 12 | Linear interpolation, Random Forest (4 variants), XGBoost (3 variants), MDS (2), SW_IN physics+XGBoost, comparison |
 | **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
 | **Preprocessing** | 21 | Corrections (7), outlier detection (9), QA/QC (5) |
-| **TOTAL** | **113** | |
+| **TOTAL** | **124** | |
 
 ## Running Options
 

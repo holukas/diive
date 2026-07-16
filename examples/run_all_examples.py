@@ -60,6 +60,7 @@ EXAMPLE_FILES = [
     'analysis/analysis_gridaggregator.py',
     'analysis/analysis_harmonic.py',
     'analysis/analysis_histogram_distribution.py',
+    'analysis/analysis_keep_records_where.py',
     'analysis/analysis_optimumrange.py',
     'analysis/analysis_quantiles.py',
     'analysis/analysis_seasonaltrend.py',

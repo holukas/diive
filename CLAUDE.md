@@ -60,7 +60,7 @@ diive/
 ├── analysis/                 # Time series analysis
 ├── variables/                # Feature engineering and calculations
 └── gui/                      # PySide6 desktop GUI (optional 'gui' extra)
-examples/                      # ~100 runnable examples
+examples/                      # 124 runnable examples
 tests/                        # Unit tests
 ```
 

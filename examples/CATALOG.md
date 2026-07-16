@@ -65,6 +65,7 @@ See: [visualization/README.md](visualization/README.md)
 | [**analysis_gridaggregator.py**](analysis/analysis_gridaggregator.py) | 2D grid aggregation with quantile, equal-width, and custom binning methods |
 | [**analysis_histogram_distribution.py**](analysis/analysis_histogram_distribution.py) | Histogram binning methods: fixed bins, unique values, fringe bin removal |
 | [**analysis_optimumrange.py**](analysis/analysis_optimumrange.py) | Find optimal value ranges, condition-based filtering |
+| [**analysis_keep_records_where.py**](analysis/analysis_keep_records_where.py) | `keep_records_where`: keep records of a target variable where a condition variable falls in a [lower, upper] range, non-destructive |
 | [**analysis_quantiles.py**](analysis/analysis_quantiles.py) | Percentile and quantile calculations, non-parametric statistics |
 | [**analysis_harmonic.py**](analysis/analysis_harmonic.py) | `harmonic_analysis` + `spectrogram`: diel/annual cycles, window effect, time-frequency map |
 | [**analysis_compound_extremes.py**](analysis/analysis_compound_extremes.py) | `CompoundExtremes` + `CompoundExtremesPlot`: classify months/days into none/air/soil/compound dry-hot extremes from VPD & SWC z-scores |
@@ -156,6 +157,7 @@ See: [preprocessing/outlier_detection/README.md](preprocessing/outlier_detection
 
 | Example | Description |
 |---------|-------------|
+| [**feature_engineer.py**](features/feature_engineer.py) | `FeatureEngineer` 8-stage pipeline: temporal encoding, lags, rolling stats, differencing, EMA, polynomial terms, STL decomposition, record numbering |
 | [**feature_sonic_temp_conversion.py**](features/feature_sonic_temp_conversion.py) | Air temperature from sonic temperature and water vapor (eddy covariance correction) |
 | [**feature_latent_heat.py**](features/feature_latent_heat.py) | Latent heat of vaporization from air temperature |
 | [**feature_evapotranspiration.py**](features/feature_evapotranspiration.py) | Evapotranspiration from latent heat flux |
