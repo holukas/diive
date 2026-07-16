@@ -764,7 +764,7 @@ class ScreeningTabBase(DiiveTab):
             # day/night breakdown in the screening report; skip if site unset.
             swinpot_col = None
             if configured:
-                qcf_input[_SWINPOT_COL] = dv.variables.potrad(
+                qcf_input[_SWINPOT_COL] = dv.variables.potrad_oneflux(
                     qcf_input.index, coords["site_lat"], coords["site_lon"],
                     coords["utc_offset"])
                 swinpot_col = _SWINPOT_COL

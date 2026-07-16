@@ -26,7 +26,7 @@ Examples demonstrating creation and engineering of variables for time series ana
 
 ### Radiation & Solar Geometry
 
-- **feature_potentialradiation.py** — Clear-sky radiation calculation
+- **feature_potentialradiation.py** — Potential radiation calculation (Stull, equation-of-time, ONEFlux/FLUXNET methods)
 - **feature_daynightflag.py** — Daytime/nighttime classification
 
 ### Time-Based Features

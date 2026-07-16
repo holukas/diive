@@ -438,7 +438,7 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
 
 def _example_longterm_xgbts():
     from diive.core.io.files import load_parquet
-    from diive.variables.radiation import potrad
+    from diive.variables.radiation import potrad_oneflux
 
     TARGET_COL = 'SW_IN_T1_47_1'
 
@@ -451,8 +451,8 @@ def _example_longterm_xgbts():
     locs = (df.index.year >= 2019)
     df = df[locs].copy()
     subset = df[['SW_IN_T1_47_1']].copy()
-    subset['SW_IN_POT'] = potrad(timestamp_index=subset.index, lat=SITE_LAT, lon=SITE_LON,
-                                 utc_offset=TIMEZONE_OFFSET_TO_UTC_HOURS)
+    subset['SW_IN_POT'] = potrad_oneflux(timestamp_index=subset.index, lat=SITE_LAT, lon=SITE_LON,
+                                          utc_offset=TIMEZONE_OFFSET_TO_UTC_HOURS)
     from diive.core.utils.console import console as _console
     _console.print(subset.to_string())
 

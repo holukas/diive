@@ -4,8 +4,10 @@ Potential Radiation Calculations
 ==========================
 
 Demonstrates calculating theoretical solar radiation at Earth's surface using
-different methods. Includes comparison of Stull vs. Equation of Time approaches
-and visualization of daily/seasonal radiation patterns.
+different methods: Stull (1988), Equation of Time, and the ONEFlux/FLUXNET
+faithful port that produces the SW_IN_POT column of FLUXNET/AmeriFlux/ICOS
+products. Includes a method comparison and visualization of daily/seasonal
+radiation patterns.
 
 Best for: Understanding solar geometry and radiation availability at a site.
 """
@@ -71,10 +73,40 @@ print(f"Maximum: {sw_in_pot_eot.max():.1f} W/m²")
 print(f"Mean: {sw_in_pot_eot.mean():.1f} W/m²")
 
 # %%
+# Potential Radiation - ONEFlux/FLUXNET Method
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# Calculate using the faithful ONEFlux port of ``get_rpot``, the routine that
+# produces the SW_IN_POT column of FLUXNET/AmeriFlux/ICOS products. Unlike the
+# two methods above, the result is the mean over each averaging period (here
+# 30 min, inferred from the timestamp index), not an instantaneous value.
+
+# Load example data
+df = dv.load_exampledata_parquet()
+
+# Filter to 2018
+f = df.index.year == 2018
+df = df[f].copy()
+
+# Calculate using the ONEFlux/FLUXNET method
+sw_in_pot_oneflux = dv.variables.potrad_oneflux(
+    timestamp_index=df.index,
+    lat=47.286417,  # Davos latitude
+    lon=7.733750,  # Davos longitude
+    utc_offset=1  # Central European Time
+)
+
+print("\nPotential Radiation - ONEFlux/FLUXNET Method")
+print("=" * 50)
+print(f"Period: {sw_in_pot_oneflux.index[0]} to {sw_in_pot_oneflux.index[-1]}")
+print(f"Maximum: {sw_in_pot_oneflux.max():.1f} W/m²")
+print(f"Mean: {sw_in_pot_oneflux.mean():.1f} W/m²")
+
+# %%
 # Comparison of Methods
 # ^^^^^^^^^^^^^^^^^^^^^
 #
-# Compare Stull method, Equation of Time (TOA), and Clear-sky surface approaches.
+# Compare Stull, Equation of Time (TOA and clear-sky), and ONEFlux/FLUXNET approaches.
 
 # Load example data
 df = dv.load_exampledata_parquet()
@@ -110,22 +142,41 @@ potrad_eot_clearsky = dv.variables.potrad_eot(
     use_atmospheric_transmission=True
 )
 
+# Method 4: ONEFlux/FLUXNET
+potrad_oneflux = dv.variables.potrad_oneflux(
+    timestamp_index=df.index,
+    lat=47.286417,
+    lon=7.733750,
+    utc_offset=1
+)
+
 print("\nComparison of Methods (July 2018)")
 print("=" * 50)
 print(f"Stull method max: {potrad_stull.max():.1f} W/m²")
 print(f"EoT (TOA) max: {potrad_eot_toa.max():.1f} W/m²")
 print(f"EoT (Clear-sky) max: {potrad_eot_clearsky.max():.1f} W/m²")
+print(f"ONEFlux/FLUXNET max: {potrad_oneflux.max():.1f} W/m²")
 print(f"\nMean difference (Stull - EoT TOA): {(potrad_stull - potrad_eot_toa).mean():.2f} W/m²")
 print(f"Mean difference (EoT TOA - Clear-sky): {(potrad_eot_toa - potrad_eot_clearsky).mean():.2f} W/m²")
+print(f"Mean difference (Stull - ONEFlux/FLUXNET): {(potrad_stull - potrad_oneflux).mean():.2f} W/m²")
+
+# Day/night classification (SW_IN_POT > 0) can disagree between methods because
+# the ONEFlux method includes the equation of time, shifting solar noon by up to
+# about a quarter of an hour relative to Stull's fixed clock time.
+daynight_stull = potrad_stull > 0
+daynight_oneflux = potrad_oneflux > 0
+pct_daynight_changed = (daynight_stull != daynight_oneflux).mean() * 100
+print(f"Day/night flag changed on {pct_daynight_changed:.2f}% of records (Stull vs ONEFlux/FLUXNET)")
 
 # Visualize comparison
-fig = plt.figure(facecolor='white', figsize=(16, 8), constrained_layout=True)
-gs = gridspec.GridSpec(2, 2, figure=fig, hspace=0.25, wspace=0.2)
+fig = plt.figure(facecolor='white', figsize=(16, 11), constrained_layout=True)
+gs = gridspec.GridSpec(3, 2, figure=fig, hspace=0.3, wspace=0.2)
 
 ax1 = fig.add_subplot(gs[0, 0])
 ax2 = fig.add_subplot(gs[0, 1])
 ax3 = fig.add_subplot(gs[1, 0])
 ax4 = fig.add_subplot(gs[1, 1])
+ax5 = fig.add_subplot(gs[2, :])
 
 # Plot 1: Stull method
 ax1.plot(potrad_stull.index, potrad_stull, color='#1565C0', linewidth=1.5)
@@ -152,17 +203,27 @@ ax3.set_xlabel('Date', fontsize=9)
 ax3.tick_params(labelsize=8)
 ax3.grid(True, alpha=0.3)
 
-# Plot 4: Comparison
-ax4.plot(potrad_stull.index, potrad_stull, color='#1565C0', linewidth=2, label='Stull', alpha=0.7)
-ax4.plot(potrad_eot_toa.index, potrad_eot_toa, color='#00BCD4', linewidth=2, label='EoT (TOA)', alpha=0.7)
-ax4.plot(potrad_eot_clearsky.index, potrad_eot_clearsky, color='#D32F2F', linewidth=2, label='EoT (Clear-sky)',
-         alpha=0.7)
-ax4.set_title('Method Comparison', fontsize=11, fontweight='bold')
+# Plot 4: ONEFlux/FLUXNET method
+ax4.plot(potrad_oneflux.index, potrad_oneflux, color='#43A047', linewidth=1.5)
+ax4.fill_between(potrad_oneflux.index, 0, potrad_oneflux, alpha=0.3, color='#43A047')
+ax4.set_title('ONEFlux/FLUXNET', fontsize=11, fontweight='bold')
 ax4.set_ylabel('Radiation (W/m²)', fontsize=9)
 ax4.set_xlabel('Date', fontsize=9)
 ax4.tick_params(labelsize=8)
-ax4.legend(loc='upper left', fontsize=9, frameon=True, title='Methods', title_fontsize=9)
 ax4.grid(True, alpha=0.3)
+
+# Plot 5: Comparison
+ax5.plot(potrad_stull.index, potrad_stull, color='#1565C0', linewidth=2, label='Stull', alpha=0.7)
+ax5.plot(potrad_eot_toa.index, potrad_eot_toa, color='#00BCD4', linewidth=2, label='EoT (TOA)', alpha=0.7)
+ax5.plot(potrad_eot_clearsky.index, potrad_eot_clearsky, color='#D32F2F', linewidth=2, label='EoT (Clear-sky)',
+         alpha=0.7)
+ax5.plot(potrad_oneflux.index, potrad_oneflux, color='#43A047', linewidth=2, label='ONEFlux/FLUXNET', alpha=0.7)
+ax5.set_title('Method Comparison', fontsize=11, fontweight='bold')
+ax5.set_ylabel('Radiation (W/m²)', fontsize=9)
+ax5.set_xlabel('Date', fontsize=9)
+ax5.tick_params(labelsize=8)
+ax5.legend(loc='upper left', fontsize=9, frameon=True, title='Methods', title_fontsize=9)
+ax5.grid(True, alpha=0.3)
 
 fig.show()
 

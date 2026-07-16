@@ -47,14 +47,17 @@ from matplotlib import cm
 from scipy.signal import correlate as sp_correlate
 
 from diive.core.times.resampling import diel_cycle
-from diive.variables.radiation import potrad
+from diive.variables.radiation import potrad_oneflux
 
 
 class DetectTimestampShifts:
     """Detect timestamp/clock errors by comparing measured vs potential radiation.
 
     Potential radiation is computed automatically when lat/lon are supplied and
-    col_pot is absent from the input DataFrame.
+    col_pot is absent from the input DataFrame, using the equation-of-time- and
+    eccentricity-corrected ``potrad_oneflux`` so that true solar noon (not a
+    fixed clock time) is the reference — otherwise the ~30-minute seasonal swing
+    of the equation of time would show up as a spurious seasonal shift.
 
     Parameters
     ----------
@@ -98,7 +101,7 @@ class DetectTimestampShifts:
         if col_pot not in self.df.columns:
             if lat is None or lon is None:
                 raise ValueError("lat and lon are required when col_pot is not in df")
-            self.df[col_pot] = potrad(
+            self.df[col_pot] = potrad_oneflux(
                 timestamp_index=self.df.index,
                 lat=lat,
                 lon=lon,

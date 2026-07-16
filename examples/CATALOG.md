@@ -162,7 +162,7 @@ See: [preprocessing/outlier_detection/README.md](preprocessing/outlier_detection
 | [**feature_daynightflag.py**](features/feature_daynightflag.py) | Daytime/nighttime classification from solar geometry |
 | [**feature_vpd.py**](features/feature_vpd.py) | Vapor Pressure Deficit calculation |
 | [**feature_air.py**](features/feature_air.py) | Air properties (density, resistance, heat capacity) |
-| [**feature_potentialradiation.py**](features/feature_potentialradiation.py) | Clear-sky radiation calculation |
+| [**feature_potentialradiation.py**](features/feature_potentialradiation.py) | Potential radiation calculation (Stull, equation-of-time, ONEFlux/FLUXNET methods) |
 | [**feature_laggedvariants.py**](features/feature_laggedvariants.py) | Lagged and shifted variable creation for modeling |
 | [**feature_timesince.py**](features/feature_timesince.py) | Time-since-event features |
 | [**feature_noise.py**](features/feature_noise.py) | Synthetic noise generation |
