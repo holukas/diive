@@ -21,7 +21,10 @@ if TYPE_CHECKING:
         FluxStorageCorrectionSinglePointEddyPro,
     )
     from diive.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
-    from diive.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
+    from diive.flux.lowres.ustarthreshold import (
+        FlagMultipleConstantUstarThresholds,
+        FlagMultipleVariableUstarThresholds,
+    )
     from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
     from diive.preprocessing.qaqc import FlagQCF
 
@@ -525,7 +528,9 @@ class LevelResults:
     filteredseries_level32_qcf: pd.Series | None = None
 
     # Level-3.3
-    level33: FlagMultipleConstantUstarThresholds | None = None
+    # Either class can land here: run_level33_constant_ustar stores the constant
+    # flagger, run_level33_variable_ustar (and the VUT detection path) the variable one.
+    level33: 'FlagMultipleConstantUstarThresholds | FlagMultipleVariableUstarThresholds | None' = None
     level33_qcf: dict[str, FlagQCF] = field(default_factory=dict)
     filteredseries_level33_qcf: dict[str, pd.Series] = field(default_factory=dict)
     filteredseries_level33_hq: dict[str, pd.Series] = field(default_factory=dict)

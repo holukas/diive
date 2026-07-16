@@ -653,6 +653,12 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
   `divisor` constants `JOINT_DIVISOR_1SIGMA=2.0` (NEE 16th/84th USTAR scenarios) and `JOINT_DIVISOR_IQR=1.349` (LE/H
   25th/75th). Cumulative propagation treats the independent random term as quadrature and the fully-correlated scenario
   term as the running spread of the cumulative scenario sums. Codegen `jointunc_to_code`.
+- **`FlagMultipleVariableUstarThresholds` is now public** — exported on `dv.flux` (and `diive.flux.lowres`), alongside
+  the `FlagMultipleConstantUstarThresholds` sibling that was already there. `run_level33_variable_ustar` hands the
+  instance back in `data.levels.level33`, so the type was reachable in practice but not importable: callers could not
+  `isinstance`-check or annotate against what they had been given. The `LevelResults.level33` annotation was corrected
+  to the union of both flagger classes — it named only the constant one, while the variable path has always stored the
+  variable one.
 - **`RidgeLinePlot.plot(fig=...)`** — optional `fig` parameter to render the stacked-density ridges into an existing
   figure (cleared first) instead of creating a new one, e.g. to embed in a GUI canvas. Backward-compatible.
 - **`TimeLagAnalysis.plot_gas(fig=...)`** — optional `fig` parameter to render the 4-panel time-lag figure into an
