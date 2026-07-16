@@ -74,11 +74,12 @@ project automatically the next time you launch it.
 
 ### Saving just the data
 
-**File ▸ Save data as parquet…** writes only the current dataset, including any
-features you engineered, as a **diive-format parquet** file: a single header row
-and a properly named timestamp index (`TIMESTAMP_MIDDLE`, `TIMESTAMP_END`, or
-`TIMESTAMP_START`; you're asked which if it isn't already set). These files load
-straight back into diive, GUI or library.
+**File ▸ Export data as…** writes only the current dataset, including any features
+you engineered, as either **parquet** or **CSV** — choose the format in the save
+dialog. Either way it gets a single header row and a properly named timestamp index
+(`TIMESTAMP_MIDDLE`, `TIMESTAMP_END`, or `TIMESTAMP_START`; you're asked which if it
+isn't already set). The **diive-format parquet** loads straight back into diive, GUI
+or library.
 
 ### The variable list (left side, every tab)
 
@@ -987,6 +988,28 @@ a field; the result heatmap and the **Add** button wait for **Calculate**.
 Edit the **Name** (default `VPD_kPa`) and **Add … to dataset** to append the new
 column; **Copy Python** copies a runnable `dv.variables.calc_vpd_from_ta_rh` script.
 Inputs must be in the stated units (°C and %); diive does not check them.
+
+### Potential radiation
+
+Calculate **potential shortwave-incoming radiation** (`SW_IN_POT`, in W m⁻²), also
+under the Variables menu's **Calculate** section. This one takes **no input columns** —
+potential radiation follows from the timestamps and the site's position alone — so
+there is no variable list to drag from. Set **Latitude**, **Longitude** and **UTC
+offset** under **Site coordinates**, then click **Calculate**.
+
+The coordinates are seeded from **Settings ▸ Project settings** and follow it as you
+edit there. With no site configured the tab refuses to calculate and says so. Every
+value it returns is a function of the coordinates, so an unconfigured site would hand
+back the curve for latitude 0, longitude 0 at UTC — which looks perfectly reasonable
+and is wrong for your site. Set the project's location first.
+
+The preview gives three views of the result: the **diel cycle per month** above the
+**full time series** on the left, and the date/time **heatmap** on the right.
+
+Edit the **Name** (default `SW_IN_POT`) and **Add … to dataset** to append the new
+column; **Copy Python** copies a runnable `dv.variables.potrad` script. Values are the
+mean over each averaging period, matching the `SW_IN_POT` column of FLUXNET/AmeriFlux/
+ICOS products. The UTC offset is local standard time; daylight saving is never applied.
 
 ---
 
