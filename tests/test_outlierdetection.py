@@ -116,26 +116,29 @@ class TestOutlierDetection(unittest.TestCase):
         frame = {'s_noise': s_noise, 'flag': flag}
         checkdf = pd.DataFrame.from_dict(frame)
 
+        # Counts encode the potrad_oneflux day/night split (ONEFlux/FLUXNET parity),
+        # which reclassifies 11 of these 1488 July records at the twilight edges:
+        # two records moved night -> day, so trim_nighttime no longer trims them.
         # Checks on bad data
         badmean = checkdf.loc[checkdf.flag == 2, 's_noise'].mean()
-        self.assertEqual(badmean, 19.90764864489646)
+        self.assertEqual(badmean, 19.914995180241654)
         baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
         self.assertEqual(baddata_stats.loc['max']['s_noise'], 338.9234661966423)
         self.assertEqual(baddata_stats.loc['min']['s_noise'], -12.230067031003944)
-        self.assertEqual(baddata_stats.loc['count']['flag'], 378)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 376)
         self.assertEqual(baddata_stats.loc['min']['flag'], 2)
         self.assertEqual(baddata_stats.loc['max']['flag'], 2)
-        self.assertEqual(baddata_stats.loc['count']['s_noise'], 378)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 376)
 
         # Checks on good data
         goodmean = checkdf.loc[checkdf.flag == 0, 's_noise'].mean()
-        self.assertEqual(goodmean, 17.82747404013876)
+        self.assertEqual(goodmean, 17.82873128107376)
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
         self.assertEqual(gooddata_stats.loc['max']['s_noise'], 338.3652327597214)
         self.assertEqual(gooddata_stats.loc['min']['s_noise'], -40.33549755756406)
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
-        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1110)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1112)
 
     def test_hampel_filter_daytime_nighttime(self):
         df = ed.load_exampledata_parquet()
@@ -448,6 +451,9 @@ class TestOutlierDetection(unittest.TestCase):
         good_nt = checkdf.loc[(checkdf['FLAG_NIGHTTIME'] == 1) & (checkdf['flag'] == 0)].copy()
         bad_nt = checkdf.loc[(checkdf['FLAG_NIGHTTIME'] == 1) & (checkdf['flag'] == 2)].copy()
 
+        # Counts encode the potrad_oneflux day/night split (ONEFlux/FLUXNET parity);
+        # records shift between the day and night sets at the twilight edges, so the
+        # four counts still total 1488 but are distributed differently than under potrad.
         # Checks on good data
         good_dt_stats = good_dt.describe()
         self.assertEqual(good_dt_stats.loc['max']['s_noise'], 31.87658379873561)
@@ -455,18 +461,18 @@ class TestOutlierDetection(unittest.TestCase):
         self.assertEqual(good_dt_stats.loc['count']['s_noise'], 766)
         good_nt_stats = good_nt.describe()
         self.assertEqual(good_nt_stats.loc['max']['s_noise'], 17.073)
-        self.assertEqual(good_nt_stats.loc['min']['s_noise'], 5.345)
-        self.assertEqual(good_nt_stats.loc['count']['s_noise'], 371)
+        self.assertEqual(good_nt_stats.loc['min']['s_noise'], 5.262)
+        self.assertEqual(good_nt_stats.loc['count']['s_noise'], 376)
 
         # Checks on bad data
         bad_dt_stats = bad_dt.describe()
         self.assertEqual(bad_dt_stats.loc['max']['s_noise'], 231.78475439289213)
         self.assertEqual(bad_dt_stats.loc['min']['s_noise'], -38.52634400343396)
-        self.assertEqual(bad_dt_stats.loc['count']['s_noise'], 165)
+        self.assertEqual(bad_dt_stats.loc['count']['s_noise'], 168)
         bad_nt_stats = bad_nt.describe()
         self.assertEqual(bad_nt_stats.loc['max']['s_noise'], 224.8390630344748)
         self.assertEqual(bad_nt_stats.loc['min']['s_noise'], -36.84146979488223)
-        self.assertEqual(bad_nt_stats.loc['count']['s_noise'], 186)
+        self.assertEqual(bad_nt_stats.loc['count']['s_noise'], 178)
 
     def test_localsd_with_constantsd(self):
         df = ed.load_exampledata_parquet()
