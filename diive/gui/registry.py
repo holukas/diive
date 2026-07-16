@@ -13,6 +13,7 @@ from __future__ import annotations
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.combine_variables import CombineVariablesTab
 from diive.gui.tabs.compound_extremes import CompoundExtremesTab
+from diive.gui.tabs.derived_potrad import PotradTab
 from diive.gui.tabs.derived_vpd import VpdFromTaRhTab
 from diive.gui.tabs.database import DatabaseConnectionTab
 from diive.gui.tabs.database_explorer import DatabaseExplorerTab
@@ -110,6 +111,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         # Derived-variable calculators, shown under a "Calculate" section at the
         # end of the Variables menu (see MainWindow._build_menus).
         "VPD (TA + RH)": VpdFromTaRhTab,
+        "Potential radiation": PotradTab,
     },
     # Time-stamped event markers (annotations layered over the data, not column
     # operations). Folded into the Data menu (under an "Events" section) in

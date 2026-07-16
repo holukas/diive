@@ -36,6 +36,7 @@ from diive.variables.utilities import (
     combine_variables,
     combine_variables_to_code,
     calc_vpd_from_ta_rh_to_code,
+    potrad_to_code,
 )
 
 # Classification
@@ -70,6 +71,7 @@ __all__ = [
     'combine_variables',
     'combine_variables_to_code',
     'calc_vpd_from_ta_rh_to_code',
+    'potrad_to_code',
     # classification
     'classify_variable',
     'auto_pick_column',

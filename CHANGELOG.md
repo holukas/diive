@@ -124,7 +124,13 @@
   kPa from air temperature + relative humidity via `dv.variables.calc_vpd_from_ta_rh`; a draggable variable list, TA/RH input fields you drag a
   variable onto or pick, a **Calculate** button, and TA / RH / VPD date/time-heatmap previews; emits `VPD_kPa` (DERIVED),
   with **Copy Python** backed by the new `calc_vpd_from_ta_rh_to_code`; first of a reusable `BaseDerivedVariableTab`
-  family for single-formula derived variables);
+  family for single-formula derived variables) and **Potential radiation** (same Variables ▸ **Calculate** section;
+  `SW_IN_POT` in W m-2 from the record's timestamps + the site location via `dv.variables.potrad`, the ONEFlux
+  `get_rpot` port behind FLUXNET's `SW_IN_POT`; it takes no input columns, so the variable list and input box give way
+  to a **Site coordinates** box seeded from *Project settings* — with an unconfigured site it refuses to run rather than
+  silently return the (0, 0)-at-UTC curve. The freed-up space carries three views of the result: the per-month **diel
+  cycles** above the **full time series** on the left, and the date/time **heatmap** on the right spanning both rows.
+  Emits `SW_IN_POT` (DERIVED), with **Copy Python** backed by the new `potrad_to_code`);
   plus **Appearance**, **Project settings** (author, description, site details, and a **sticky-note wall** — all saved
   with the project), and **Log**.
 - **Plot tabs — refinements.** Every X/Y/Z role-picked plot type — **Scatter XY**, **Wind rose**, **Hexbin**, and

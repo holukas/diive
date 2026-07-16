@@ -13,7 +13,9 @@ left, a **Settings** column in the middle (input fields you can drag a variable
 onto — or pick from the dropdown — plus an output name and a **Calculate**
 button), and a preview column on the right that stacks one date/time heatmap per
 input plus one for the result. Nothing is computed until **Calculate** is
-pressed; the input heatmaps update as soon as a field is set.
+pressed; the input heatmaps update as soon as a field is set. A formula needing
+no columns at all (potential radiation, from the timestamps + site coordinates)
+declares no inputs, which drops the variable list and the input box.
 
 A concrete tab subclasses :class:`BaseDerivedVariableTab` and supplies only the
 method-specific bits: which input columns it needs (:attr:`inputs`), how to call
@@ -49,9 +51,11 @@ from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel
 
 _C_MUTED = "#6B7780"
-#: Compact heatmap chrome, matching the Overview / Combine-variables panels.
-_TITLE_FONTSIZE = 10
-_FONT_SIZE = 9
+#: Compact panel chrome, matching the Overview / Combine-variables panels. Public
+#: so a subclass drawing its own preview (see :meth:`_plot_result`) sizes its
+#: panels the same way.
+TITLE_FONTSIZE = 10
+FONT_SIZE = 9
 
 
 class _HeatmapPanel(QFrame):
@@ -107,9 +111,9 @@ class _HeatmapPanel(QFrame):
             dv.plotting.HeatmapDateTime(series).plot(
                 ax=ax, fig=self.canvas.fig,
                 format_style=dv.plotting.FormatStyle(
-                    title_fontsize=_TITLE_FONTSIZE, axlabel_fontsize=_FONT_SIZE,
-                    ticks_fontsize=_FONT_SIZE),
-                cb_digits_after_comma="auto", cb_labelsize=_FONT_SIZE)
+                    title_fontsize=TITLE_FONTSIZE, axlabel_fontsize=FONT_SIZE,
+                    ticks_fontsize=FONT_SIZE),
+                cb_digits_after_comma="auto", cb_labelsize=FONT_SIZE)
         except Exception as err:  # non-datetime index, all-NaN, ...
             ax.clear()
             ax.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",
@@ -137,7 +141,9 @@ class BaseDerivedVariableTab(DiiveTab):
     #: Input columns the formula needs — :class:`ColumnPicker` specs (see that
     #: widget's docstring: keys ``key`` / ``label`` / ``needle`` / opt. ``tip``).
     #: Each input also gets its own preview heatmap; ``short`` (optional) titles
-    #: that heatmap (defaults to ``label``).
+    #: that heatmap (defaults to ``label``). May be empty for a formula that
+    #: needs no columns at all (only the timestamps + site coordinates), in which
+    #: case the variable list and the input box are hidden.
     inputs: list[dict] = []
     #: Suggested output name, seeded into the name field (user-editable).
     default_name = "derived"
@@ -172,13 +178,18 @@ class BaseDerivedVariableTab(DiiveTab):
         layout.setContentsMargins(10, 4, 10, 4)
 
         # Left: the shared variable list (draggable — drag onto an input field).
-        left = QVBoxLayout()
-        left.addWidget(list_header("Variable", "drag onto a field"))
-        self.varpanel = VariablePanel(draggable=True)
-        self.varpanel.list.setToolTip(
-            "Drag a variable onto an input field in the Settings column.")
-        left.addWidget(self.varpanel, stretch=1)
-        layout.addLayout(left)
+        # Omitted when the formula takes no columns at all (potential radiation is
+        # computed from the timestamps + site coordinates): there'd be nothing to
+        # drag it onto, and a list that does nothing reads as broken.
+        self.varpanel: VariablePanel | None = None
+        if self.inputs:
+            left = QVBoxLayout()
+            left.addWidget(list_header("Variable", "drag onto a field"))
+            self.varpanel = VariablePanel(draggable=True)
+            self.varpanel.list.setToolTip(
+                "Drag a variable onto an input field in the Settings column.")
+            left.addWidget(self.varpanel, stretch=1)
+            layout.addLayout(left)
 
         # Middle: settings (inputs + name + Calculate/Add).
         mid = self._build_settings()
@@ -220,8 +231,11 @@ class BaseDerivedVariableTab(DiiveTab):
         intro.setStyleSheet(f"color: {_C_MUTED};")
         v.addWidget(intro)
 
+        # Kept (empty) even with no inputs so picks()/combos() stay valid, but
+        # hidden — an empty box looks broken.
         self.picker = ColumnPicker(self.inputs, title="Input columns")
         self.picker.changed.connect(self._on_field_changed)
+        self.picker.setVisible(bool(self.inputs))
         v.addWidget(self.picker)
 
         name_row = QHBoxLayout()
@@ -261,7 +275,8 @@ class BaseDerivedVariableTab(DiiveTab):
         self._df = df
         self._result = None
         self.add_btn.setEnabled(False)
-        self.varpanel.set_variables(df.columns, created)
+        if self.varpanel is not None:
+            self.varpanel.set_variables(df.columns, created)
         self.picker.seed(df.columns)  # blocks its own signals; no _on_field_changed
         self._render_inputs()
         self._result_panel.set_header(self._out_name() or None)
@@ -299,7 +314,8 @@ class BaseDerivedVariableTab(DiiveTab):
             else:
                 panel.set_header(None)
                 panel.clear_plot()
-        self.varpanel.set_panels(chosen)
+        if self.varpanel is not None:
+            self.varpanel.set_panels(chosen)
 
     def _on_field_changed(self) -> None:
         """A field changed: refresh input previews and stale the result (the user
@@ -332,8 +348,16 @@ class BaseDerivedVariableTab(DiiveTab):
         self.status.setText(
             f"{n:,} values{unit}. Name it and add it to the dataset.")
         self._result_panel.set_header(name or None)
-        self._result_panel.plot_series(self._result)
+        self._plot_result(self._result)
         self.add_btn.setEnabled(n > 0 and bool(name))
+
+    def _plot_result(self, series: pd.Series) -> None:
+        """Render the result into the result panel (subclass hook).
+
+        The default is the single date/time heatmap every derived variable gets.
+        A subclass with the room to spare (no inputs, so no input panels) can
+        override this to draw a richer figure on ``_result_panel.canvas``."""
+        self._result_panel.plot_series(series)
 
     def _compute(self, df: pd.DataFrame, picks: dict[str, str]) -> pd.Series:
         """Call the library function and return the derived series (subclass hook)."""

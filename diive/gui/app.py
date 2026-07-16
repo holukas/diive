@@ -480,6 +480,7 @@ class MainWindow(QMainWindow):
         variables_menu.addAction(_menu_tab_act("Metadata explorer"))
         variables_menu.addSection("Calculate")
         variables_menu.addAction(_menu_tab_act("VPD (TA + RH)"))
+        variables_menu.addAction(_menu_tab_act("Potential radiation"))
 
         for menu_name, group in MENU_TABS.items():
             if menu_name in ("Data", "Variables", "Events", "Database", "Corrections"):
