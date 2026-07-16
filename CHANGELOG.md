@@ -618,8 +618,14 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
 
 - **InfluxDB engine `InfluxIO`** (`diive.core.io.db.influx`) — diive's own InfluxDB v2 download / upload / delete /
   schema-browsing engine, a clean in-house port of the former external `dbc-influxdb` package. diive no longer depends
-  on `dbc-influxdb`; the optional `db` dependency group now installs only `influxdb-client` (`uv sync --group db`),
-  imported lazily so the default `uv sync` never pulls it in. Improvements over the original: diive console output
+  on `dbc-influxdb`; the only optional requirement is now `influxdb-client`, imported lazily so the default `uv sync`
+  never pulls it in. It is reachable two ways: the `db` dependency group (`uv sync --group db`) when working *on*
+  diive, and the new `db` extra (`pip install 'diive[db]'`, or `"diive[db]"` in another project's dependencies) when
+  *depending* on diive. The extra is what makes the engine reachable downstream at all — a dependency group is local
+  to the project that declares it and never reaches the published metadata, so a consuming project cannot request
+  `--group db`, not even through a uv path/editable source. The group is defined as `db = ["diive[db]"]`, so it defers
+  to the extra and the version pin lives in one place; every documented `uv sync --group db` command still works.
+  Improvements over the original: diive console output
   (no `logging`), no `pytz` / `dateutil` dependency, and the data-version / units schema helpers
   (`show_data_versions_in_bucket`, `show_units_in_field`, `data_version`-filtered `show_measurements_in_bucket` /
   `show_fields_in_measurement`, public `test_connection`) that back the GUI Database explorer. The Textual TUI was not
