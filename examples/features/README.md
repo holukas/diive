@@ -26,7 +26,7 @@ Examples demonstrating creation and engineering of variables for time series ana
 
 ### Radiation & Solar Geometry
 
-- **feature_potentialradiation.py** — Clear-sky radiation calculation
+- **feature_potentialradiation.py** — Potential radiation (SW_IN_POT) from solar geometry, ONEFlux/FLUXNET parity
 - **feature_daynightflag.py** — Daytime/nighttime classification
 
 ### Time-Based Features
@@ -52,7 +52,7 @@ vpd = dv.variables.calc_vpd_from_ta_rh(df=df, ta_col='TA', rh_col='RH')
 ra = dv.variables.aerodynamic_resistance(u_ms=df['WS'], ustar_ms=df['USTAR'])
 rho_d = dv.variables.dry_air_density(rho_a=rho_a, rho_v=rho_v)
 
-# Potential (clear-sky) shortwave radiation
+# Potential shortwave radiation (SW_IN_POT), ONEFlux/FLUXNET parity
 sw_pot = dv.variables.potrad(timestamp_index=df.index, lat=47.5, lon=8.4, utc_offset=1)
 ```
 
@@ -107,7 +107,7 @@ uv run python examples/run_all_examples.py
 See `dv.variables` for the complete API including:
 
 - Air: density, resistance, heat capacity, viscosity
-- Radiation: potential radiation, clear-sky models
+- Radiation: potential radiation (SW_IN_POT), ONEFlux/FLUXNET parity
 - Conversions: temperature, energy, water units
 - Derived: VPD, relative humidity from dew point
 - Temporal: day/night flags, diel cycles

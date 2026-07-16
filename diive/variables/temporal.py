@@ -96,9 +96,9 @@ class DaytimeNighttimeFlag:
     def _calc_swin_pot(self):
         """Calculate potential radiation from latitude and longitude"""
         self.swinpot = potrad(timestamp_index=self.timestamp_index,
-                              lat=self.lat,
-                              lon=self.lon,
-                              utc_offset=self.utc_offset)
+                               lat=self.lat,
+                               lon=self.lon,
+                               utc_offset=self.utc_offset)
 
     def _calc_flags(self):
         self.daytime, self.nighttime = self._daytime_nighttime_flag_from_swinpot()

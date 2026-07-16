@@ -44,8 +44,8 @@ print(f"Rg_f    : {df['Rg_f'].min():.1f} to {df['Rg_f'].max():.1f} W/m2")
 # Construct DetectTimestampShifts
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # ``col_pot`` names the potential radiation column.  Because it is absent
-# from ``df``, the constructor computes it automatically using ``potrad``
-# with the supplied site coordinates.
+# from ``df``, the constructor computes it automatically using
+# ``potrad`` with the supplied site coordinates.
 
 dts = DetectTimestampShifts(
     df=df,
@@ -60,7 +60,11 @@ dts = DetectTimestampShifts(
 # Alternative: supply a pre-computed potential radiation column
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # If the potential radiation is already in the DataFrame, pass it directly.
-# No lat/lon required.
+# No lat/lon required.  ``potrad`` is what the constructor calls above, so this
+# gives the same result and only avoids recomputing the column.  A column from
+# elsewhere works too, as long as its solar noon follows the equation of time:
+# a reference that pins solar noon to a fixed clock time carries its own
+# ~15-minute seasonal swing into the detected shifts.
 
 from diive.variables.radiation import potrad
 

@@ -19,6 +19,12 @@ Verbosity constants (pass as ``verbose=`` to any helper):
 
 from rich.console import Console
 
+try:  # reuse Rich's own check so diive renders the way Rich decides to
+    from rich.console import _is_jupyter
+except ImportError:  # pragma: no cover - private API renamed/removed
+    def _is_jupyter() -> bool:
+        return False
+
 VERBOSE_SILENT = 0
 VERBOSE_ERROR = 1
 VERBOSE_PROGRESS = 2
@@ -75,7 +81,50 @@ class _TeeConsole(Console):
     # once again here).
 
 
-console = _TeeConsole(highlight=False)
+#: Width the shared console renders at inside Jupyter. Terminals auto-detect
+#: their width; Jupyter otherwise falls back to a fixed 80 columns, which wraps
+#: the wider report tables.
+_JUPYTER_CONSOLE_WIDTH = 100
+
+
+def _build_console() -> _TeeConsole:
+    """Build the shared console configured for the current environment.
+
+    Rich freezes ``is_jupyter`` at construction, so this is decided once for the
+    session (in a notebook, diive is imported in-kernel, so detection is
+    correct). In Jupyter, pin the Jupyter renderer and a wider width so the
+    report tables do not wrap at 80 columns; in a terminal, let Rich
+    auto-detect.
+    """
+    if _is_jupyter():
+        return _TeeConsole(highlight=False, force_jupyter=True,
+                           width=_JUPYTER_CONSOLE_WIDTH)
+    return _TeeConsole(highlight=False)
+
+
+console = _build_console()
+
+#: Rule line style. Rich's default rule renders bright green (#00ff00), which is
+#: illegible on a white notebook background; use a neutral grey in Jupyter and
+#: keep the terminal default (None) elsewhere.
+_rule_line_style: str | None = "grey50" if _is_jupyter() else None
+
+
+def refresh_console() -> None:
+    """Rebuild the shared console for the current environment, keeping mirrors.
+
+    ``is_jupyter`` is fixed when a Rich ``Console`` is built, so a diive import
+    that ran before the interactive frontend was ready would keep terminal
+    settings. Call this to re-detect. The structured helpers below always use
+    the current console; modules that imported ``console`` by name keep the
+    previous object.
+    """
+    global console, _rule_line_style
+    mirrors = list(getattr(console, "_mirrors", []))
+    console = _build_console()
+    _rule_line_style = "grey50" if _is_jupyter() else None
+    for mirror in mirrors:
+        console.add_mirror(mirror)
 
 
 def add_console_sink(mirror) -> None:
@@ -105,7 +154,10 @@ def rule(title: str = '', *, verbose: int | bool = VERBOSE_PROGRESS,
     """Print a horizontal rule with an optional centred title."""
     if _vlevel(verbose) >= min_level:
         styled = f"[bold blue]{title}[/bold blue]" if title else ""
-        console.rule(styled)
+        if _rule_line_style is not None:
+            console.rule(styled, style=_rule_line_style)
+        else:
+            console.rule(styled)
 
 
 def info(msg: str, *, verbose: int | bool = VERBOSE_PROGRESS,

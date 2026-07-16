@@ -13,6 +13,7 @@ from diive.flux.lowres.selfheating import ScopApplicator
 from diive.flux.lowres.timelag_analysis import TimeLagAnalysis
 from diive.flux.lowres.uncertainty import RandomUncertaintyPAS20
 from diive.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
+from diive.flux.lowres.ustarthreshold import FlagMultipleVariableUstarThresholds
 from diive.flux.lowres.ustar_mp_detection import UstarMovingPointDetection
 from diive.flux.lowres.ustar_vekuri_detection import UstarVekuriThresholdDetection
 from diive.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
@@ -24,6 +25,7 @@ __all__ = [
     'TimeLagAnalysis',
     'RandomUncertaintyPAS20',
     'FlagMultipleConstantUstarThresholds',
+    'FlagMultipleVariableUstarThresholds',
     'UstarMovingPointDetection',
     'UstarVekuriThresholdDetection',
     'UstarBootstrapThresholds',

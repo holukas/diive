@@ -54,7 +54,10 @@ class DetectTimestampShifts:
     """Detect timestamp/clock errors by comparing measured vs potential radiation.
 
     Potential radiation is computed automatically when lat/lon are supplied and
-    col_pot is absent from the input DataFrame.
+    col_pot is absent from the input DataFrame, using ``potrad``. Its equation-of-
+    time and eccentricity corrections make true solar noon (not a fixed clock
+    time) the reference — without them the ~30-minute seasonal swing of the
+    equation of time would show up as a spurious seasonal shift.
 
     Parameters
     ----------

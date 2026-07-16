@@ -88,14 +88,10 @@ def _stl_components(series: Series, period: int, robust: bool = True):
 
 
 def _mean_abs_shap(model, X: DataFrame) -> Series:
-    """Mean |SHAP| per feature for a fitted tree model.
-
-    Reuses the gap-filler's ``_build_tree_explainer`` so the XGBoost ``base_score``
-    parsing workaround applies here too.
-    """
+    """Mean |SHAP| per feature for a fitted tree model."""
     import numpy as _np
-    from diive.core.ml.common import MlRegressorGapFillingBase
-    explainer = MlRegressorGapFillingBase._build_tree_explainer(model)
+    import shap
+    explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(X)
     if isinstance(shap_values, list):
         shap_values = shap_values[0]

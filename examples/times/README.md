@@ -30,10 +30,10 @@ The `TimestampSanitizer` is a comprehensive utility for:
 
 **Clean raw flux data with timestamp issues:**
 ```python
-from diive import TimestampSanitizer
+import diive as dv
 
 # Handle common timestamp problems
-sanitizer = TimestampSanitizer(
+sanitizer = dv.times.TimestampSanitizer(
     data=df,
     output_middle_timestamp=True,          # Convert to mid-period timestamps
     validate_naming=True,                  # Check TIMESTAMP_END/START/MIDDLE convention
@@ -59,10 +59,10 @@ print(f"Frequency confidence: {status['frequency_confidence']:.0%}")
 
 **Validate timestamp consistency:**
 ```python
-from diive import TimestampSanitizer
+import diive as dv
 
 # Just validate without modifying
-sanitizer = TimestampSanitizer(
+sanitizer = dv.times.TimestampSanitizer(
     data=df,
     validate_naming=True,
     convert_to_datetime=True,
@@ -82,10 +82,10 @@ if status['frequency_confidence'] < 0.9:
 
 **Detect gaps and frequency:**
 ```python
-from diive import TimestampSanitizer
+import diive as dv
 
 # Focus on frequency detection
-sanitizer = TimestampSanitizer(
+sanitizer = dv.times.TimestampSanitizer(
     data=df,
     validate_naming=False,
     convert_to_datetime=True,
@@ -144,10 +144,11 @@ Detected frequency: 30min (confidence: 95%)
 status = sanitizer.get_status()
 
 # Row counts
-status['rows_input']                          # Input rows
-status['rows_removed']                        # Rows removed
+status['original_shape']                      # Input shape (rows, columns)
+status['final_shape']                         # Output shape (rows, columns)
+status['rows_removed']                        # Rows removed (NaT + duplicates)
 status['rows_added_by_regularization']        # Rows added for gaps
-status['rows_output']                         # Output rows
+status['net_rows']                            # Output rows minus input rows (can be negative)
 
 # Frequency detection
 status['inferred_frequency']                  # Detected frequency (e.g., '30min')
@@ -157,9 +158,9 @@ status['frequency_percent_matching']          # % intervals matching frequency
 status['frequency_alternatives']              # Other frequencies detected
 
 # Data quality
-status['n_nat']                               # NaT rows found
-status['n_duplicates']                        # Duplicate timestamps
-status['monotonicity_violations']             # Non-increasing timestamps
+status['rows_removed_nat']                    # Rows removed because of NaT
+status['rows_removed_duplicates']             # Duplicate timestamps removed
+status['timestamp_format']                    # TIMESTAMP_END, _START, or _MIDDLE
 ```
 
 ## Time Series Processing Pipeline
@@ -205,6 +206,8 @@ Quick statistical profiling: mean, median, SD, variance, percentiles (P01, P05, 
 ```bash
 # Individual examples
 uv run python examples/times/times_timestamp_sanitizer.py
+uv run python examples/times/times_keep_daterange.py
+uv run python examples/times/times_resample_daily.py
 uv run python examples/times/times_frequency_detection.py
 uv run python examples/times/times_diel_cycles.py
 uv run python examples/times/times_temporal_matrices.py

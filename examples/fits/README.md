@@ -12,53 +12,62 @@ Examples demonstrating curve fitting and regression for time series analysis and
 
 ## Use Cases
 
-**Fit polynomial to light-response relationship:**
+**Fit a polynomial to a driver-response relationship:**
 ```python
-from diive.fits import Fitter
+import diive as dv
 
-# Fit polynomial (e.g., CO2 uptake vs. light)
-fitter = Fitter(
-    x=df['PAR'],
-    y=df['GPP'],
-    fit_type='polynomial',
-    degree=2  # Quadratic fit
+# Fit a quadratic to binned data (e.g., CO2 uptake vs. light)
+bf = dv.analysis.BinFitterCP(
+    df=df,
+    xcol='PAR',                   # X variable (predictor)
+    ycol='GPP',                   # Y variable (response)
+    n_bins_x=10,                  # Divide X into 10 equal-width bins
+    bins_y_agg='mean',            # Aggregate Y per bin ('mean' or 'median')
+    fit_type='quadratic_offset'   # y = ax^2 + bx + c
 )
-coeffs = fitter.get_coefficients()
-curve = fitter.get_fitted_curve()
+bf.run()
+
+results = bf.get_results()
+print(results['fit_equation_str'])  # Fitted equation
+print(results['fit_params_opt'])    # Optimal parameters
+print(results['fit_r2'])            # R^2
 ```
 
-**Fit rectangular hyperbola (light saturation curve):**
+**Choose the fit type:**
 ```python
-from diive.fits import Fitter
+import diive as dv
 
-# Hyperbolic function: y = (a*x) / (b + x)
-fitter = Fitter(
-    x=df['PAR'],
-    y=df['GPP'],
-    fit_type='hyperbolic'
-)
+# Four fit types are available:
+#   'linear'            y = ax + b
+#   'quadratic_offset'  y = ax^2 + bx + c  (default)
+#   'quadratic'         y = ax^2 + bx
+#   'cubic'             y = ax^3 + bx^2 + cx + d
+bf = dv.analysis.BinFitterCP(df=df, xcol='Tair_f', ycol='VPD_f', fit_type='cubic')
+bf.run()
 ```
 
-**Fit temperature response curves:**
+**Inspect the fitted curve and its uncertainty:**
 ```python
-from diive.fits import Fitter
+import diive as dv
 
-# Lloyd-Taylor or exponential temperature response
-fitter = Fitter(
-    x=df['Temperature'],
-    y=df['Respiration'],
-    fit_type='exponential'
-)
-# y = a * exp(b * x)
+bf = dv.analysis.BinFitterCP(df=df, xcol='Tair_f', ycol='VPD_f', n_predictions=1000)
+bf.run()
+
+# fit_df holds the smooth curve plus the uncertainty bands:
+#   nom_lower_ci95 / nom_upper_ci95     95% confidence interval (mean fit)
+#   lower_predband / upper_predband     95% prediction interval (individual values)
+fit_df = bf.get_results()['fit_df']
+
+bf.showplot(show_unbinned_data=True, show_prediction_interval=True)
 ```
 
 ## Related Documentation
 
 See `dv.analysis` (e.g. `BinFitterCP`) for available fitting classes:
-- Polynomial fitting (linear, quadratic, cubic, etc.)
-- Custom function fitting
-- Parameter uncertainty estimation
-- Goodness-of-fit statistics
+- Polynomial fitting of binned data (linear, quadratic, cubic)
+- Binning and per-bin aggregation of the response variable
+- Confidence and prediction intervals
+- Goodness-of-fit statistics (R²)
 
 ## Running Examples
 
@@ -77,6 +86,5 @@ uv run python examples/run_all_examples.py
 
 - **Light-response curves** — CO2 uptake or fluorescence vs. PAR
 - **Temperature dependencies** — Respiration vs. temperature
-- **Saturation curves** — Enzyme kinetics, gas exchange responses
 - **Calibration curves** — Sensor response linearity
 - **Ecosystem response functions** — Evapotranspiration vs. VPD or radiation

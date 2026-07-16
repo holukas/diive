@@ -1015,9 +1015,9 @@ class UstarDetectionMPT:
         """Calculate potential radiation or get directly from data"""
         if self.lat and self.lon:
             swin_pot = potrad(timestamp_index=self.df.index,
-                              lat=self.lat,
-                              lon=self.lon,
-                              utc_offset=self.utc_offset)
+                               lat=self.lat,
+                               lon=self.lon,
+                               utc_offset=self.utc_offset)
             swin_pot_col = swin_pot.name
             self.df[swin_pot_col] = swin_pot
             return swin_pot_col

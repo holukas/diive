@@ -39,17 +39,26 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `widgets/category_dialog.py` | `CategoryDialog` — add / rename / recolour / remove event categories (edits `events.manager.categories`; seeded with `category1/2/3`, the last one can't be deleted) |
 | `widgets/add_event_dialog.py` | `AddEventDialog` — name/category, three timing modes (single date/time, from/to, start + duration) with calendar pickers + colour; `make_event()` returns a `diive.events.Event` |
 | `tabs/settings.py` | Appearance settings tab — live colour editing with a pill/highlight preview |
-| `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`); window starts maximized |
+| `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`); window opens filling the screen work area via `show_filling_workarea()` — **not** `showMaximized()`, which on a frameless window covers the taskbar and clips the active tab |
 | `splash.py` | Startup splash + **Help ▸ About** dialog (`QPainter`-drawn waves + wordmark/version/tagline/credits); `AUTHOR` + `SUPPORTERS` |
 | `build_manual.py` | Renders `MANUAL.md` → `MANUAL.html` (the styled manual **Help ▸ User manual** opens). Dependency-free; run `python -m diive.gui.build_manual` after editing the Markdown. `MANUAL.html` is generated — don't hand-edit |
 | `registry.py` | `TAB_CLASSES` (always-on), `MENU_TABS` (menu-opened factories), `SINGLE_INSTANCE_TABS` |
+| `_cli.py` | Backs the `diive-gui` console script declared in `pyproject.toml` |
 | `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df, created)` — the extension point |
+| `tabs/_explorer_base.py` | `SingleVariableExplorerTab` — template for the "pick one variable left, compute a view right" tabs (Driver explorer, Gaps & coverage, Seasonal trend, Spectrogram, 3D surface). Owns the split skeleton, `select → run_with_loading → _compute`, default-variable picking, opt-in stats strip / list header / draggable list. Subclasses override only `_build_right()` + `_compute()` |
+| `widgets/worker.py` | `WorkerRunner` — the shared background-thread runner (`done(object)` / `failed(str)` + an `is_running` guard). Takes the hand-rolled "spawn a daemon thread, marshal the result back" idiom out of every result-producing tab; the tab supplies a **pure** `_compute_payload` function |
+| `widgets/tab_chrome.py` | `build_titlebar(title, *trailing)` and `list_header(title, hint)` — the tab chrome that was copy-pasted across the correction / ML gap-filling / partitioning templates. Presentation only |
 | `tabs/overview.py` | Overview tab (first/default): 3×6 panel figure (tall time series top, full-height date/time heatmap right, bottom strip of cumulative/diel/daily/histogram/waterfall; varname in the figure suptitle; datetime panels share an x-axis) + a compact borderless **metrics ribbon** (`_StatItem`, `dv.sstats` + `SSTATS_DESCRIPTIONS` tooltips); panels via `_PANELS`. Exposes `_StatCard` for the Gaps/Drivers/Seasonal tabs, and `HeroBand` (slim method-chip + on-demand `(name, value, tooltip)` metric strip) — the shared hero used by the correction/outlier/uncertainty/select-records/partitioning/ustar/compound tabs (`set_metrics`/`clear`) |
 | `tabs/variable_selector.py` | **Select variables** tab — dual-list picker (available ↔ selected); `subsetSelected` → `MainWindow._apply_var_subset` (app-wide narrowing via `dv.keep_vars`). Opts into `_full_data` (`wants_full_data`) so it can always pick from every column |
 | `tabs/rename_variables.py` | **Rename variables** tab — add a prefix/suffix to all variables with a live old→new preview; double-click a row to rename one; `variablesRenamed` → `MainWindow._rename_variables` |
+| `tabs/select_records.py` | **Select records by condition** tab — build a filtered copy of a *target* variable by stacking keep/remove operations driven by a *condition* variable's `[lower, upper]` range (Undo/Reset). All range logic is `dv.keep_records_where`; emits `{target}_SEL` (DERIVED), **Copy Python** → `select_records_to_code` |
+| `widgets/dual_variable_picker.py` | `DualVariablePicker` — two side-by-side `VariablePanel`s; click a name to move it available↔selected (pick order kept). Used by **Select variables** and the XGBoost feature picker |
+| `widgets/feature_picker.py` | Searchable multi-select column picker — filter field + checkable list with a live selected-count and All / None buttons that act on the *filtered* set. Replaces ctrl-click multi-select |
+| `widgets/add_timestamp_dialog.py` | Dialog behind **Variables ▸ Add timestamp column…** — appends a timestamp **data column** derived from the index; the index itself is never touched |
 | `tabs/combine_variables.py` | **Combine variables** tab — drag a variable onto **heatmap 1** and another onto **heatmap 2** (`_HeatmapSlot` drop targets), pick a method (multiply/add/subtract/divide, or fill a's gaps with b) + "keep overlapping only", and **heatmap 3** previews the result; **Add to dataset** emits `{name}` (DERIVED), **Copy Python** emits the `dv.variables.combine_variables_to_code` snippet. All maths is the library's `dv.variables.combine_variables`; the tab only collects operands/method, previews the three date/time heatmaps, and emits the column |
-| `tabs/_derived_variable_base.py` | `BaseDerivedVariableTab` — shared machinery for single-formula **derived-variable** tabs (the thermodynamic/radiation family). Three-column layout like the other result tabs: a draggable `VariablePanel` list (left), a **Settings** column (input fields as drop-target `ColumnPicker` combos with ✓/✗ markers — drag a variable from the list onto a field or pick it — an output name, and a **Calculate** button + **Add** button below the settings), and a preview column (right) that stacks one date/time heatmap per input plus one for the result. Input heatmaps refresh as soon as a field is set; the result is computed **only on Calculate** (nothing auto-runs). Subclasses set `inputs`/`default_name`/`out_unit`/`method_tags` and implement `_compute(df, picks)` (calls the library function) + `_code(picks, name)` (codegen). No worker/coords — these calculations are instant |
+| `tabs/_derived_variable_base.py` | `BaseDerivedVariableTab` — shared machinery for single-formula **derived-variable** tabs (the thermodynamic/radiation family). Three-column layout like the other result tabs: a draggable `VariablePanel` list (left), a **Settings** column (input fields as drop-target `ColumnPicker` combos with ✓/✗ markers — drag a variable from the list onto a field or pick it — an output name, and a **Calculate** button + **Add** button below the settings), and a preview column (right) that stacks one date/time heatmap per input plus one for the result. Input heatmaps refresh as soon as a field is set; the result is computed **only on Calculate** (nothing auto-runs). Subclasses set `inputs`/`default_name`/`out_unit`/`method_tags` and implement `_compute(df, picks)` (calls the library function) + `_code(picks, name)` (codegen); `_add_extra_controls(layout)` adds any method-specific settings widgets. `inputs` may be **empty** for a formula needing no columns (only the timestamps + site coordinates) — the variable list (`self.varpanel is None`) and the input box are then hidden. `_plot_result(series)` renders the result (default: the single heatmap); a subclass with no input panels can override it to draw a richer figure on `_result_panel.canvas` (`TITLE_FONTSIZE`/`FONT_SIZE` are public so it matches the panel look). No worker — these calculations are instant |
 | `tabs/derived_vpd.py` | **VPD (TA + RH)** tab (Variables ▸ **Calculate** section) — VPD (kPa) from air temperature + relative humidity via `dv.variables.calc_vpd_from_ta_rh`; a thin `BaseDerivedVariableTab` subclass (declares the two inputs + wires the library fn and `calc_vpd_from_ta_rh_to_code`). Previews TA / RH / VPD heatmaps; emits `VPD_kPa` (DERIVED) |
+| `tabs/derived_potrad.py` | **Potential radiation** tab (Variables ▸ **Calculate** section) — `SW_IN_POT` (W m-2) from the record's timestamps + the site location via `dv.variables.potrad` (the ONEFlux `get_rpot` port behind FLUXNET's `SW_IN_POT`). A `BaseDerivedVariableTab` subclass with **no input columns** (`inputs = []`): the variable list and input box give way to a **Site coordinates** box seeded from `site.manager` (mirroring `_correction_base`). `_compute` refuses to run while `site.manager.configured` is False — every value is a function of the coordinates, so an unset site would silently return the plausible-looking (0, 0)-at-UTC curve. Overrides `_plot_result` to fill the space the missing input panels free up with a 2×2 gridspec: per-month **diel cycles** over the **full time series** on the left, the date/time **heatmap** on the right spanning both rows. Emits `SW_IN_POT` (DERIVED, no parent), **Copy Python** → `potrad_to_code` |
 | `tabs/site.py` | **Project settings** tab — author/description + site details form (→ `site.manager`) plus the **notes wall** (`widgets/notes_wall.py`) filling the empty space |
 | `tabs/plotting.py` | `PlottingTab(plot_type)` — one closable tab per plot method (opened from the Plot menu); var list + live settings panel + canvas |
 | `icons.py` | `menu_icon(label)` — tiny `QPainter`-drawn glyphs for **all** menu entries (folder/disk/calendar/gear/palette/… + plot shapes), keyword-matched |
@@ -64,7 +73,14 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `tabs/_ml_gapfilling_base.py` | `MlGapFillingTab` — **template** for the ML gap-filling tabs (Model/Results sub-tabs, three-list target/feature picker, performance hero, observed-vs-gap-filled heatmaps + SHAP table, Results dashboard, SHAP feature reduction, worker/emit flow). Subclasses set `title`/`method_name`/`method_chip_*` and implement `_model_class`/`_build_model_box`/`_method_kwargs`/`_method_controls`/`_codegen` |
 | `tabs/gapfilling.py` | XGBoost gap-filling tab (`dv.gapfilling.XGBoostTS` → `*_gfXG`) — `MlGapFillingTab` subclass; `Gap-filling ▸ XGBoost gap-filling`, own top-level **Gap-filling** menu |
 | `tabs/gapfilling_randomforest.py` | Random Forest gap-filling tab (`dv.gapfilling.RandomForestTS` → `*_gfRF`) — `MlGapFillingTab` subclass; `Gap-filling ▸ Random Forest gap-filling` |
+| `tabs/gapfilling_mds.py` | **MDS gap-filling** tab (`dv.gapfilling.FluxMDS`, Reichstein et al. 2005) — **not** an `MlGapFillingTab` subclass: MDS is not a trained regressor, so there is no held-out split, no SHAP and no feature reduction. Fixed three-driver picker (SWIN/TA/VPD); progress bar via `FluxMDS.run(progress_callback=)`; **Copy Python** → `mds_gapfill_to_code` |
+| `widgets/mds_results.py` | `MdsResultsPanel` — the MDS tab's **Results** page; a slimmed card dashboard tailored to `FluxMDS` (no held-out/SHAP/reduction cards). Quality breakdown comes from the library (`FluxMDS.quality_breakdown()` / `mds_quality_description()`) |
+| `tabs/uncertainty_randunc.py` | **Random uncertainty (PAS20)** tab (Flux) — hierarchical 4-method random measurement uncertainty (`dv.flux.RandomUncertaintyPAS20`, Pastorello et al. 2020 / ONEFlux port). Standalone `DiiveTab` (single output); the measured-vs-uncertainty scatter shows method-1 records only so fallbacks don't streak. Emits `{flux}_RANDUNC`; **Copy Python** → `randunc_to_code` |
+| `tabs/uncertainty_jointunc.py` | **Joint uncertainty (PAS20)** tab (Flux) — combines a `{flux}_RANDUNC` (run the Random uncertainty tab first) with the scenario-ensemble spread in quadrature (`dv.flux.JointUncertaintyPAS20`). Scenario combo picks the divisor. Emits `{base}_JOINTUNC`; **Copy Python** → `jointunc_to_code` |
+| `widgets/flux_pipeline_rail.py` | `PipelineRail` / `StageCard` — the flux chain's horizontal rail of selectable stage cards joined by chevrons (Input → L2 → L3.1 → L3.2 → L3.3 → L4.1). A navigation + status surface; GUI-only, no domain logic |
 | `widgets/gapfill_results.py` | `GapFillResultsPanel` — the ML gap-filler **Results** dashboard: card layout of the console-report tables (performance / configuration / feature-reduction with info-button equation + dashed-red threshold line + coloured verdicts / gap-fill quality) over a row of plots (predicted-vs-observed, SHAP, diel cycle, cumulative). Reads only library model attributes |
+| `tabs/profile.py` | **Data profile** tab (Analyze) — the "what did I just load?" overview: a strip of dataset-level facts (rows, variables, overall missing %, duplicate timestamps/rows, inferred frequency, time span, memory) over a sortable per-variable table |
+| `tabs/compound_extremes.py` | **Compound extremes** tab (Analyze) — classify months/days into compound-extreme categories from two drivers' z-scores (`dv.analysis.CompoundExtremes`) and render the quadrant scatter (`dv.plotting.CompoundExtremesPlot`). Synchronous; emits no columns; **Copy Python** → `compound_extremes_to_code` |
 | `tabs/gaps.py` | Gap & coverage dashboard — stat cards + clickable gap map (`GapStats` availability heatmap + gap timeline) + long-gap table |
 | `tabs/drivers.py` | Driver explorer — rank variables by correlation with a target (`rank_drivers`, optional lag scan); click a driver for its scatter |
 | `tabs/seasonaltrend.py` | Seasonal-trend & anomaly explorer — STL/classical/harmonic decomposition + yearly anomalies vs a reference period |
@@ -111,11 +127,13 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 
 **Adding a tab:** always-on tabs (Overview, Log) go in `TAB_CLASSES`. Menu-opened tabs go in `registry.MENU_TABS`
 (grouped by menu; values are factories) — they open as **new numbered instances** each time (Heatmap 1, 2, 3 ...), all
-closable, unless listed in `SINGLE_INSTANCE_TABS` — reserved for the app-wide singleton editors Appearance, Project
-settings, and Metadata explorer, which re-selecting focuses instead of duplicating. The main window is agnostic to
-concrete tabs.
+closable, unless listed in `SINGLE_INSTANCE_TABS`, which re-selecting focuses instead of duplicating. Nine tabs of two
+kinds are listed there: those editing one app-wide singleton, where a second copy would show conflicting state
+(Appearance, Project settings, Metadata explorer, and the three Database tabs), and the single-variable explorers
+(Driver explorer, Gaps & coverage, Spectrogram), where a duplicate would just re-run the same heavy compute. The main
+window is agnostic to concrete tabs.
 
-**Menu icons:** every menu entry (File/Data/Plot/Cleaning/Flux/Analyze/Settings/Help) gets a small `QPainter`-drawn glyph via
+**Menu icons:** every menu entry (File/Data/Variables/Plot/Cleaning/Flux/Gap-filling/Analyze/Settings/Help) gets a small `QPainter`-drawn glyph via
 `gui/icons.py::menu_icon(label)`, matched to the label by keyword (`&` mnemonics stripped first). `_build_menus` wraps
 each action with it. Add a menu entry → add a keyword rule in `icons._LINE_RULES` (the thin-line monochrome glyph table;
 unknown labels fall back to a chart glyph).
@@ -126,7 +144,7 @@ borderless panels, monochrome line icons, uppercase tracked labels, and a framel
 `STUDIO_TYPOGRAPHY`; `MainWindow` always builds the frameless shell (`_build_studio_chrome`).
 
 **Plot menu:** each method is its own closable tab, with a small drawn icon. The **Plot** menu lists methods (Heatmap
-date/time, Heatmap year/month, Heatmap x/y/z, Time series, Diel cycle, Cumulative year, Cumulative, Ridgeline, Scatter XY, Hexbin, Histogram, Shifted distribution, Wind rose); selecting one
+date/time, Heatmap year/month, Heatmap x/y/z, Time series, Diel cycle, Cumulative year, Cumulative, Ridgeline, Scatter XY, Hexbin, Histogram, Shifted distribution, Wind rose, Tree ring, Waterfall, 3D surface, 3D surface (X/Y/Z) — 17 in all); selecting one
 opens a new `PlottingTab(plot_type, title)` instance. Add a method via a factory in `registry.MENU_TABS["Plot"]` + a
 branch in `plotting._draw_one` (and matching controls in `plot_settings`). Ctrl+click adds comparison panels: heatmaps
 (both kinds, in `_HEATMAP_TYPES`) go side by side (shared x/y); time series and diel cycle stack top-to-bottom (shared
@@ -193,8 +211,10 @@ preview the first parsed rows before loading (parquet via `dv.load_parquet`, oth
 Selecting multiple files merges them (`MultiDataFileReader`, or `combine_first` for parquet). All reading is library
 work, the dialog only orchestrates it. `MainWindow` holds the current DataFrame and pushes it to every tab via
 `DiiveTab.on_data_loaded(df, created)`; tabs that present data override that hook to refresh. Example data auto-loads on
-startup. **File ▸ Save data as parquet…** writes a diive-format parquet (`to_diive_parquet_frame`: single-level columns
-+ valid `TIMESTAMP_*` index name) via `dv.save_parquet`.
+startup. **File ▸ Export data as…** (`_save_file`) writes parquet **or** CSV — the save-dialog filter picks the format,
+though an explicit `.csv`/`.parquet` extension the user types wins. Parquet goes through `to_diive_parquet_frame`
+(single-level columns + valid `TIMESTAMP_*` index name) via `dv.save_parquet`; CSV is a plain `to_csv` with the same
+timestamp-name guarantee.
 
 **Date-range subselection (`Data` menu):** non-destructive. `MainWindow` keeps the whole loaded record in `_full_data`;
 `_data` (pushed to every tab) is `_full_data` optionally narrowed to `_range=(start,end)` via `dv.times.keep_daterange`.
@@ -203,7 +223,7 @@ Reset to full range** clears the window. `_apply_range()` re-derives `_data`, re
 window, enables/disables the reset action, and re-pushes. Engineered features merge into `_full_data`, so they survive a
 reset (out-of-range rows align to NaN). All plots and processing then run on the narrowed `_data`; saving writes it too.
 
-**Flux processing chain (`tabs/fluxchain.py`):** opened from **Flux ▸ Flux processing chain** (single-instance). A
+**Flux processing chain (`tabs/fluxchain.py`):** opened from **Flux ▸ Flux processing chain**. A
 guided tab for the Swiss-FluxNet chain, covering **Input + L2 + L3.1 + L3.2 + L3.3 + L4.1**. It
 collects site/flux-column + which L2 quality tests to run, the L3.1 storage-correction options, an optional L3.2
 outlier-detection chain, optional L3.3 USTAR filtering, and L4.1 gap-filling, then on a worker thread calls the composable library
@@ -220,7 +240,7 @@ script-gen lives in the library (`flux/fluxprocessingchain/codegen.py`: `chain_t
 shape; the GUI only calls it. Needs real EddyPro-FLUXNET input (FC/USTAR/`*_TEST` columns) —
 `load_exampledata_parquet_lae_level1_30MIN`, not the default CH-DAV.
 
-**USTAR detection (`tabs/ustar_detection.py`):** opened from **Flux ▸ USTAR detection** (single-instance). Standalone
+**USTAR detection (`tabs/ustar_detection.py`):** opened from **Flux ▸ USTAR detection**. Standalone
 friction-velocity threshold detection independent of the chain. Pick NEE/TA/USTAR/SW_IN + stratification params (TA/USTAR
 classes, forward-mode-n) and run either a **single seasonal detection** (`UstarMovingPointDetection` → per-season +
 annual threshold table) or, with **Multi-year bootstrap** ticked, `UstarBootstrapThresholds` → **VUT** (variable,
@@ -250,8 +270,8 @@ drivers** button (the lag scan can be heavier). The table sorts numerically via 
 value, not the display string). Defaults to a continuous flux target (`NEE_CUT_REF_f`) so the ranking is informative on
 open. A natural next step: a "send top-N drivers to Feature engineering / gap-filling" handoff.
 
-**Seasonal-trend & anomaly explorer (`tabs/seasonaltrend.py`):** opened from **Analyze ▸ Seasonal trend & anomalies**
-(single-instance). Pick a variable → its daily-mean series is split into **trend / seasonal / residual** (four stacked
+**Seasonal-trend & anomaly explorer (`tabs/seasonaltrend.py`):** opened from **Analyze ▸ Seasonal trend & anomalies**.
+Pick a variable → its daily-mean series is split into **trend / seasonal / residual** (four stacked
 panels), and a second **view** shows each year's **anomaly** vs a reference period (red above / blue below). Everything is
 library-backed: `dv.times.resample_to_daily_agg` builds the daily series, `dv.analysis.SeasonalTrendDecomposition`
 (STL / classical / harmonic) decomposes it, `dv.plotting.LongtermAnomaliesYear` draws the anomaly bars. The tab only
@@ -262,7 +282,7 @@ On <2 years of data it shows a friendly message (annual decomposition needs two 
 working. *(Building this surfaced and fixed a real library bug: `stl_decompose` never passed `period` to statsmodels and
 called `STL.fit(weights=…)`, which isn't supported — STL had been raising on all real data.)*
 
-**3-D surface explorer (`tabs/surface3d.py`):** opened from **Plot ▸ 3D surface** (single-instance). Pick a variable →
+**3-D surface explorer (`tabs/surface3d.py`):** opened from **Plot ▸ 3D surface**. Pick a variable →
 its date×time-of-day grid is rendered as a GPU-accelerated, rotatable relief — the 3-D analogue of the date/time heatmap.
 The numeric grid is the **library's** `dv.plotting.datetime_surface_grid(series)` → `DateTimeSurface` (sanitize + pivot to
 a complete date×time matrix; pure domain logic, no rendering backend). Everything else is presentation in the tab. Two
@@ -319,7 +339,7 @@ a real timestamp through the non-NaN sample index so the time axis stays correct
 overlap / window function recompute on **Update**; the frequency-axis limit and colormap are live re-renders. The GUI
 does no signal processing — it only calls the library and arranges the output.
 
-**Feature engineering:** opened from **Data ▸ Feature engineering** (a menu-activated tab — `registry.MENU_TAB_CLASSES`
+**Feature engineering:** opened from **Variables ▸ Feature engineering** (a menu-activated tab — `registry.MENU_TAB_CLASSES`
 — not shown until selected, and closable; always-on tabs have their close button removed). It runs `FeatureEngineer`
 (library) on user-selected variables and emits the new columns via a `featuresCreated` signal; `MainWindow` merges them
 into the dataset, records them in a `created` set, and re-pushes. The plotting list tags created columns with a pink
@@ -389,7 +409,7 @@ everywhere — both route through `metadata_store.manager` (`request_rename`/`re
 `MainWindow._rename_one_variable` prompts + checks for collisions, then `_rename_variables` renames the column in
 `_full_data`, remaps the `created` set, and calls the library `MetadataStore.rename(mapping)` (which re-keys records and
 rewrites parent/provenance links so lineage survives). `_delete_variable` drops the column. Both are non-destructive to
-the source file and re-derive the active range so every tab refreshes. The **Rename variables** tab (Data menu) reuses
+the source file and re-derive the active range so every tab refreshes. The **Rename variables** tab (Variables menu) reuses
 this: bulk prefix/suffix emits `variablesRenamed`, and a row double-click calls `request_rename`.
 
 **Newly created variables surface in the Overview.** When columns are added (outlier/feature tabs → `featuresCreated` →

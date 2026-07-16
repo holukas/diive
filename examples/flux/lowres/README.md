@@ -17,7 +17,7 @@ Covers time lag detection, quality filtering, self-heating correction, uncertain
 - **flux_selfheating_production.py** — Complete production workflow: create scaling factors table from parallel measurements (20 classes, 100 bootstrap runs) and apply to long-term data
 
 ### Measurement Uncertainty & Turbulence
-- **flux_uncertainty.py** — Random uncertainty estimation using the Pilegaard et al. (2020) method
+- **flux_uncertainty.py** — Random uncertainty estimation using the PAS20 method (Pastorello et al. 2020)
 - **flux_ustar_mp_detection.py** — Moving Point (MP) friction velocity detection for nighttime turbulence thresholds (Papale et al. 2006)
 - **flux_ustar_vekuri_detection.py** — Simplified quantile-based friction velocity detection (Vekuri method)
 - **flux_ustar_method_comparison.py** — Compare ONEFlux and Vekuri USTAR detection approaches
@@ -47,10 +47,9 @@ uv run python examples/flux/lowres/flux_uncertainty.py
 - Hampel filter for identifying robust flux estimates
 - USTAR-based selection for stable atmospheric conditions
 
-**Uncertainty:** Random measurement uncertainty following Pilegaard et al. (2020) with PAS20 method
+**Uncertainty:** Random measurement uncertainty following the PAS20 method (Pastorello et al. 2020)
 
 ## Related Documentation
 
-- [Flux Processing Chain](../README.md) — Multi-level L2-L4.1 workflow
-- [High-Resolution Analysis](../hires/README.md) — 10 Hz eddy covariance processing
-- Source: `diive/pkgs/flux/lowres/`
+- [Flux Processing Chain](../README.md) — Multi-level L2-L4.2 workflow
+- Source: `diive/flux/lowres/`

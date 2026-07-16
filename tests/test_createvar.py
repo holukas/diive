@@ -5,6 +5,7 @@ import pandas as pd
 
 import diive as dv
 from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+from diive.configs.exampledata import load_exampledata_FLUXNET_FULLSET_HH_CSV_30MIN
 from diive.configs.exampledata import load_exampledata_parquet
 from diive.variables import air_temp_from_sonic_temp
 from diive.variables import TimeSince
@@ -81,12 +82,14 @@ class TestCreateVar(unittest.TestCase):
         swin_pot = dnf.get_swinpot()
         daytime_flag = dnf.get_daytime_flag()
         nighttime_flag = dnf.get_nighttime_flag()
-        self.assertAlmostEqual(results.sum().sum(), 52180821.63268461, places=3)
-        self.assertAlmostEqual(swin_pot.sum(), 52005525.63268461, places=3)
-        self.assertEqual(daytime_flag.sum(), 87592)
+        # Baselines encode potrad (ONEFlux/FLUXNET parity): solar constant 1376,
+        # Spencer 1971 declination/eccentricity, NOAA solar-noon shift, period mean.
+        self.assertAlmostEqual(results.sum().sum(), 52742196.78324184, places=3)
+        self.assertAlmostEqual(swin_pot.sum(), 52566900.78324184, places=3)
+        self.assertEqual(daytime_flag.sum(), 90888)
         self.assertEqual(daytime_flag.max(), 1)
         self.assertEqual(daytime_flag.min(), 0)
-        self.assertEqual(nighttime_flag.sum(), 87704)
+        self.assertEqual(nighttime_flag.sum(), 84408)
         self.assertEqual(nighttime_flag.max(), 1)
         self.assertEqual(nighttime_flag.min(), 0)
         self.assertEqual(daytime_flag[nighttime_flag == 0].min(), 1)
@@ -158,16 +161,112 @@ class TestCreateVar(unittest.TestCase):
         self.assertTrue(lv.iloc[2] < lv.iloc[1] < lv.iloc[0])
         self.assertTrue((lv > 2.4e6).all() and (lv < 2.55e6).all())
 
-    def test_potrad(self):
+    def test_potrad_fluxnet_parity(self):
+        # Ground truth: real SW_IN_POT column from a FLUXNET2015 FULLSET file (CH-Cha),
+        # produced by the actual ONEFlux/FLUXNET pipeline. TIMESTAMP is TIMESTAMP_MIDDLE
+        # after loading (diive convention).
         from diive.variables import potrad
-        # One summer day at 30-min resolution, mid-latitude.
-        idx = pd.date_range('2022-06-21 00:00', '2022-06-21 23:30', freq='30min', name='TIMESTAMP_END')
+        df, _ = load_exampledata_FLUXNET_FULLSET_HH_CSV_30MIN()
+        lat, lon, utc_offset = 47.210227, 8.410645, 1
+        truth = df['SW_IN_POT']
+        swin_pot = potrad(timestamp_index=df.index, lat=lat, lon=lon, utc_offset=utc_offset)
+        self.assertEqual(swin_pot.name, 'SW_IN_POT')
+        maxdiff = (swin_pot.to_numpy() - truth.to_numpy())
+        maxdiff = np.abs(maxdiff).max()
+        self.assertLess(maxdiff, 2)  # W m-2, real pipeline peak is ~480 W m-2
+
+    def test_potrad_physical_sanity(self):
+        from diive.variables import potrad
+        # Full year, mid-latitude northern site, correct MIDDLE timestamps for 30min data.
+        idx = pd.date_range('2022-01-01 00:15', '2022-12-31 23:45', freq='30min')
         swin_pot = potrad(timestamp_index=idx, lat=47.0, lon=8.0, utc_offset=1)
-        self.assertEqual(len(swin_pot), len(idx))
-        self.assertTrue((swin_pot >= 0).all())          # never negative
-        self.assertGreater(swin_pot.max(), 700)         # strong midday clear-sky radiation
-        # Deep night (around local midnight) is zero.
-        self.assertEqual(swin_pot.loc['2022-06-21 00:00':'2022-06-21 01:00'].max(), 0)
+        self.assertFalse(swin_pot.isna().any())
+        self.assertTrue((swin_pot >= 0).all())  # never negative
+        self.assertEqual(swin_pot[swin_pot.index.hour == 0].max(), 0)  # night is zero
+        # Annual peak of a northern-hemisphere site falls near the summer solstice (~doy 172).
+        peak_doy = swin_pot.idxmax().dayofyear
+        self.assertLess(abs(peak_doy - 172), 15)
+
+    def test_potrad_southern_hemisphere(self):
+        from diive.variables import potrad
+        idx = pd.date_range('2022-01-01 00:15', '2022-12-31 23:45', freq='30min')
+        north = potrad(timestamp_index=idx, lat=47.0, lon=8.0, utc_offset=1)
+        south = potrad(timestamp_index=idx, lat=-47.0, lon=8.0, utc_offset=1)
+        # Southern-hemisphere peak falls near the December solstice (~doy 355).
+        south_peak_doy = south.idxmax().dayofyear
+        self.assertLess(min(abs(south_peak_doy - 355), abs(south_peak_doy - 355 + 365)), 15)
+        # Earth-sun eccentricity: closest to the sun in January, so the southern peak
+        # (northern winter) is higher than the comparable northern peak (northern summer).
+        self.assertGreater(south.max(), north.max())
+
+    def test_potrad_resolutions(self):
+        from diive.variables import potrad
+        # Hourly
+        idx_hourly = pd.date_range('2022-06-20 00:30', '2022-06-22 23:30', freq='1h')
+        r_hourly = potrad(timestamp_index=idx_hourly, lat=47.0, lon=8.0, utc_offset=1)
+        self.assertEqual(len(r_hourly), len(idx_hourly))
+        self.assertFalse(r_hourly.isna().any())
+        # 30-min
+        idx_30min = pd.date_range('2022-06-20 00:15', '2022-06-22 23:45', freq='30min')
+        r_30min = potrad(timestamp_index=idx_30min, lat=47.0, lon=8.0, utc_offset=1)
+        self.assertEqual(len(r_30min), len(idx_30min))
+        self.assertFalse(r_30min.isna().any())
+        # Leap year (spans the Feb 29, 2008 leap day)
+        idx_leap = pd.date_range('2008-02-27 00:30', '2008-03-01 23:30', freq='1h')
+        r_leap = potrad(timestamp_index=idx_leap, lat=47.0, lon=8.0, utc_offset=1)
+        self.assertEqual(len(r_leap), len(idx_leap))
+        self.assertFalse(r_leap.isna().any())
+
+    def test_potrad_errors(self):
+        from diive.variables import potrad
+        # A single timestamp cannot yield an inferred averaging period.
+        idx_single = pd.date_range('2022-06-21 12:00', periods=1, freq='30min')
+        with self.assertRaises(ValueError):
+            potrad(timestamp_index=idx_single, lat=47.0, lon=8.0, utc_offset=1)
+
+    def test_potrad_odd_frequencies(self):
+        """Periods that do not tile the day, sub-minute records and windows
+        crossing New Year all resolve instead of raising."""
+        from diive.variables import potrad
+        for freq in ['7min', '13min', '30s']:
+            idx = pd.date_range('2022-06-21 00:00', '2022-06-21 23:59', freq=freq)
+            swinpot = potrad(timestamp_index=idx, lat=47.0, lon=8.0, utc_offset=1)
+            self.assertEqual(len(swinpot), len(idx))
+            self.assertFalse(swinpot.isna().any())
+            self.assertGreater(swinpot.max(), 1000)  # midsummer peak is resolved
+            self.assertGreaterEqual(swinpot.min(), 0)
+
+        # A window straddling the New Year boundary uses each side's own year.
+        idx_ny = pd.date_range('2022-12-31 20:00', '2023-01-01 04:00', freq='11min')
+        swinpot_ny = potrad(timestamp_index=idx_ny, lat=47.0, lon=8.0, utc_offset=1)
+        self.assertFalse(swinpot_ny.isna().any())
+
+        # An irregular index (a gap) is unaffected: the period is the median spacing.
+        idx_full = pd.date_range('2022-06-01 00:15', '2022-06-30 23:45', freq='30min')
+        idx_gappy = idx_full.delete(np.arange(100, 500))
+        gappy = potrad(timestamp_index=idx_gappy, lat=47.0, lon=8.0, utc_offset=1)
+        full = potrad(timestamp_index=idx_full, lat=47.0, lon=8.0, utc_offset=1)
+        np.testing.assert_allclose(gappy.to_numpy(), full.reindex(idx_gappy).to_numpy())
+
+    def test_potrad_odd_period_windows_march_uniformly(self):
+        """An odd averaging period puts window starts on half-minutes, which the
+        1-minute grid cannot represent. Rounding those halves to even (np.rint)
+        would make consecutive windows step 6, 8, 6, 8 ... minutes apart for a
+        7-minute period, so the curve climbs in alternating jumps instead of
+        evenly. Rounding half up keeps the march uniform."""
+        from diive.variables import potrad
+        # Sunrise ramp: the steepest part of the curve, where uneven window
+        # spacing shows up most strongly.
+        idx = pd.date_range('2018-06-21 04:00', '2018-06-21 09:00', freq='7min')
+        swinpot = potrad(timestamp_index=idx, lat=47.286417, lon=7.733750, utc_offset=1)
+
+        steps = np.diff(swinpot.to_numpy())
+        steep = steps[steps > 15]  # the roughly linear stretch of the ramp
+        self.assertGreater(len(steep), 20)  # guard: the ramp was actually found
+        # Consecutive steps up a near-linear ramp should be near-equal. Rounding
+        # halves to even gives ~0.32 here; rounding half up gives ~0.02.
+        unevenness = np.abs(np.diff(steep)).max() / np.median(steep)
+        self.assertLess(unevenness, 0.1)
 
 
 if __name__ == '__main__':

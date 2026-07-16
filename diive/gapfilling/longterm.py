@@ -452,7 +452,7 @@ def _example_longterm_xgbts():
     df = df[locs].copy()
     subset = df[['SW_IN_T1_47_1']].copy()
     subset['SW_IN_POT'] = potrad(timestamp_index=subset.index, lat=SITE_LAT, lon=SITE_LON,
-                                 utc_offset=TIMEZONE_OFFSET_TO_UTC_HOURS)
+                                  utc_offset=TIMEZONE_OFFSET_TO_UTC_HOURS)
     from diive.core.utils.console import console as _console
     _console.print(subset.to_string())
 

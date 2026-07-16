@@ -32,7 +32,7 @@ dependencies = [
     "scikit-optimize>=0.10.2,<0.11.0",
     "polars>=1.26.0,<2.0.0",
     "jupyter-bokeh>=4.0.5,<5.0.0",
-    "shap>=0.48.0,<1.0.0",
+    "shap>=0.50.0,<1.0.0",  # 0.50 parses XGBoost's bracketed base_score itself
     "rich>=15.0.0",
     "textual>=8.2.7",
 ]
@@ -55,6 +55,17 @@ gui3d = [
     # .glb is the single-file format PowerPoint / Meta Quest import most reliably.
     "trimesh>=4.0",
 ]
+# InfluxDB v2 support for diive's in-house engine (diive/core/io/db/influx).
+# Also exposed as the 'db' dependency group below, which is the documented way to
+# opt in when working *on* diive. It is an extra as well because a dependency
+# group is local to the project that declares it and never reaches the published
+# metadata: a downstream project depending on diive (including through a uv
+# path/editable source) cannot request a group, only an extra. So a consuming
+# project asks for 'diive[db]'. Install with: pip install 'diive[db]'  (or:
+# uv sync --extra db).
+db = [
+    "influxdb-client>=1.37.0",
+]
 
 [project.scripts]
 diive-tlag-pwb-batch = "diive.flux.hires.lag_pwb:_cli_main"
@@ -70,7 +81,8 @@ python-preference = "managed"
 # InfluxDB v2 support for diive's in-house engine (diive/core/io/db/influx).
 # Personal/local InfluxDB workflow, NOT part of the default sync — other
 # contributors use their own database setup. Opt in with: uv sync --group db
-db = ["influxdb-client>=1.37.0"]
+# Defers to the 'db' extra so the version pin lives in exactly one place.
+db = ["diive[db]"]
 dev = [
     "jupyterlab>=4.3.6,<5.0.0",
     "ipykernel>=7.2.0",

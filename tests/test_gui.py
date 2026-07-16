@@ -1255,6 +1255,78 @@ def test_derived_variable_vpd_tab(app):
     assert tab._python_code() is None
 
 
+def test_derived_variable_potrad_tab(app):
+    # The coords-only derived-variable tab: no input columns at all, so the base
+    # hides the variable list + input box and the site coordinates are the input.
+    from diive.core.metadata import ATTRS_KEY
+    from diive.gui.tabs.derived_potrad import PotradTab
+    from diive.gui import site
+
+    idx = pd.date_range("2024-06-01", periods=48 * 10, freq="30min",
+                        name="TIMESTAMP_MIDDLE")
+    df = pd.DataFrame({"TA": 15.0}, index=idx)
+
+    tab = PotradTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    assert tab.picker.picks() == {}                     # no input columns
+    assert tab.varpanel is None                         # no list to drag from
+    assert not tab.picker.isVisible()                   # empty box stays hidden
+    assert tab._out_name() == "SW_IN_POT"
+    assert tab._result is None and not tab.add_btn.isEnabled()
+
+    # Without configured coordinates the result would silently be the (0, 0) at
+    # UTC curve, so Calculate refuses instead of emitting it.
+    site.manager.configured = False
+    tab._calculate()
+    QApplication.processEvents()
+    assert tab._result is None and not tab.add_btn.isEnabled()
+    assert "coordinates" in tab.status.text().lower()
+
+    site.manager.update(author="t", description="", name="X", latitude=46.8,
+                        longitude=9.8559, elevation=500, utc_offset=1)
+    assert tab.lat.value() == pytest.approx(46.8)       # seeded from the site
+    tab._calculate()
+    QApplication.processEvents()
+    assert tab._result is not None and tab._result.name == "SW_IN_POT"
+    # Matches the library function exactly (the tab only wires it up).
+    expected = dv.variables.potrad(df.index, lat=46.8, lon=9.8559, utc_offset=1)
+    pd.testing.assert_series_equal(tab._result, expected, check_names=True)
+    assert tab.add_btn.isEnabled()
+
+    # With no input panels to share the space, the result gets three views: the
+    # per-month diel cycles over the full time series, and the heatmap on the
+    # right spanning both rows (plus the heatmap's colorbar axes).
+    fig = tab._result_panel.canvas.fig
+    titled = {ax.get_title(): ax.get_position() for ax in fig.axes if ax.get_title()}
+    assert set(titled) == {"Diel cycle per month", "Full time series",
+                           "SW_IN_POT (30min)"}
+    diel, ts, heat = (titled["Diel cycle per month"], titled["Full time series"],
+                      titled["SW_IN_POT (30min)"])
+    assert diel.y0 > ts.y1                     # diel cycles stacked above the series
+    assert heat.x0 > diel.x1 and heat.x0 > ts.x1   # heatmap is right of both
+    assert heat.y0 <= ts.y0 and heat.y1 >= diel.y1  # ... and spans both rows
+
+    emitted = {}
+    tab.featuresCreated.connect(lambda d: emitted.update(df=d))
+    tab._add()
+    QApplication.processEvents()
+    assert list(emitted["df"].columns) == ["SW_IN_POT"]
+    prov = emitted["df"].attrs[ATTRS_KEY]["SW_IN_POT"]
+    # No input columns, so the derived column has no parent to inherit from.
+    assert prov["origin"] == "derived" and prov["parent"] is None
+    assert "radiation" in prov["tags"]
+
+    # Copy Python reproduces the calculation and compiles.
+    code = tab._python_code()
+    compile(code, "<gen>", "exec")
+    assert "potrad" in code and "46.8" in code
+    # The library already names the result SW_IN_POT — no redundant rename.
+    assert "rename" not in code
+    tab.name_edit.setText("SW_IN_POT_calc")
+    assert "rename('SW_IN_POT_calc')" in tab._python_code()
+
+
 def test_flux_chain_tab_level33_detection(app):
     # L3.3 supports auto-detecting the USTAR threshold (moving point bootstrap)
     # as an alternative to constant thresholds. The detected CUT percentiles

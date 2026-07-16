@@ -31,23 +31,30 @@ See `dv.outliers` for available detection classes:
 - `LocalOutlierFactor` — Density-based detection
 - `TrimLow` — Symmetric trimmed-mean removal
 - `ManualRemoval` — Flag known problematic timestamps/periods
-- `StepwiseOutlierDetection` — Multi-stage orchestration
+
+`StepwiseOutlierDetection` (multi-stage orchestration) is not part of `dv.outliers`.
+Import it from `diive.preprocessing.outlier_detection`.
 
 ## Use Cases
 
 **Quick spike detection (Hampel filter):**
 ```python
-from diive.preprocessing.outlier_detection import Hampel
+import diive as dv
 
-# Fast, robust detection using Median Absolute Deviation
-detector = Hampel(
-    dfin=df,
-    col='NEE',
+# Detection using the Median Absolute Deviation in a rolling window
+detector = dv.outliers.Hampel(
+    series=df['NEE'],
     n_sigma=5.5,
-    win_size=48
+    window_length=48 * 13,  # window size in records, here 13 days of half-hourly data
+    separate_day_night=True,
+    lat=47.286417,
+    lon=7.733750,
+    utc_offset=1
 )
-flags = detector.flags_outliers  # 0=good, 2=outlier
-cleaned = df[detector.flags_outliers != 2]
+detector.calc(repeat=False)
+
+flag = detector.flag  # 0=good, 2=outlier
+cleaned = detector.filteredseries  # outliers set to NaN
 ```
 
 **Statistical thresholding (Z-score):**
@@ -67,15 +74,18 @@ detector.flag_outliers_zscore_test(
 
 **Absolute physical limits:**
 ```python
-from diive.preprocessing.outlier_detection import AbsoluteLimits
+import diive as dv
 
 # Enforce known physical bounds
-detector = AbsoluteLimits(
-    dfin=df,
-    col='RH',
-    min_val=0,
-    max_val=100
+detector = dv.outliers.AbsoluteLimits(
+    series=df['RH'],
+    minval=0,
+    maxval=100
 )
+detector.calc()
+
+flag = detector.flag  # 0=good, 2=outlier
+cleaned = detector.filteredseries
 ```
 
 **Multi-stage filtering (sequential chain):**
@@ -83,12 +93,13 @@ detector = AbsoluteLimits(
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 
 # Progressive filtering: aggressive first, then refine
-detector = StepwiseOutlierDetection(dfin=df, col='NEE', site_lat=46.8, site_lon=8.6)
+detector = StepwiseOutlierDetection(dfin=df, col='NEE', site_lat=46.8, site_lon=8.6, utc_offset=1)
 
-detector.flag_outliers_hampel_dtnt_test(n_sigma=5.5)
+detector.flag_outliers_hampel_test(n_sigma=5.5, separate_daytime_nighttime=True)
 detector.addflag()
 
-detector.flag_outliers_localsd_test(n_sd=[3.5, 3.5], winsize=[24, 24])
+# Day/night mode takes one value per period; a single value applies to all records
+detector.flag_outliers_localsd_test(n_sd=[3.5, 3.5], winsize=[24, 24], separate_daytime_nighttime=True)
 detector.addflag()
 
 detector.flag_outliers_zscore_test(thres_zscore=4)

@@ -50,7 +50,10 @@ source of truth, `MANUAL.html` is generated — don't hand-edit the HTML.
 Output:
 
 - `dist\diive-gui\` — the runnable app folder (`diive-gui.exe` + dependencies)
-- `dist\diive-gui-<version>-win64.zip` — share this; users unzip and run the exe
+- `dist\diive-gui-<version>+build.<stamp>-win64.zip` — share this; users unzip and
+  run the exe. `<stamp>` is the build timestamp (`yyyyMMdd.HHmmss`), so each build
+  of the same version gets its own name, e.g.
+  `diive-gui-0.91.0+build.20260716.101500-win64.zip`
 
 Useful flags: `.\packaging\build_gui.ps1 -Clean` (wipe `build\`/`dist\` first),
 `-NoZip` (skip the archive).

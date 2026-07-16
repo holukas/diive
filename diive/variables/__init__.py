@@ -9,7 +9,7 @@ Part of the diive library: https://github.com/holukas/diive
 """
 
 # Radiation
-from diive.variables.radiation import potrad, potrad_eot
+from diive.variables.radiation import potrad
 
 # Thermodynamic
 from diive.variables.thermodynamic import (
@@ -36,6 +36,7 @@ from diive.variables.utilities import (
     combine_variables,
     combine_variables_to_code,
     calc_vpd_from_ta_rh_to_code,
+    potrad_to_code,
 )
 
 # Classification
@@ -52,7 +53,6 @@ from diive.variables.classification import (
 __all__ = [
     # radiation
     'potrad',
-    'potrad_eot',
     # thermodynamic
     'aerodynamic_resistance',
     'dry_air_density',
@@ -71,6 +71,7 @@ __all__ = [
     'combine_variables',
     'combine_variables_to_code',
     'calc_vpd_from_ta_rh_to_code',
+    'potrad_to_code',
     # classification
     'classify_variable',
     'auto_pick_column',

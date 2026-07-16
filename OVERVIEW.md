@@ -90,7 +90,7 @@ Code lives in `diive/flux/hires/`. See the **High-Resolution EC Analysis** secti
 
 ### 5. Examples, notebooks, and tests
 
-- **`examples/`** — 113 runnable, API-only scripts in Sphinx-Gallery format (`# %%`
+- **`examples/`** — 124 runnable, API-only scripts in Sphinx-Gallery format (`# %%`
   cells, no file I/O). Run one with `uv run python examples/gapfilling/gapfill_randomforest.py`.
   Catalogued in `examples/CATALOG.md`. **Never run the whole suite** during development.
 - **`notebooks/`** — exploratory Jupyter notebooks.
@@ -109,7 +109,7 @@ that feed it.
 ```
 diive/        core library + gui/ + flux/hires/ CLIs   ← the engine and its surfaces
 packaging/    PyInstaller build for the Windows exe
-examples/     113 runnable API examples
+examples/     124 runnable API examples
 notebooks/    exploratory Jupyter notebooks
 tests/        unit + integration tests
 docs/         Sphinx documentation source

@@ -109,6 +109,32 @@ def combine_variables_to_code(
     return f"combined = dv.variables.combine_variables({', '.join(args)})\n"
 
 
+def potrad_to_code(
+        lat: float,
+        lon: float,
+        utc_offset: int,
+        name: str | None = None,
+) -> str:
+    """Render a :func:`~diive.variables.radiation.potrad` call as a runnable
+    snippet.
+
+    Assumes ``dv`` and a DataFrame ``df`` are already in scope. Returns the
+    snippet ending in a newline (the result is bound to ``swinpot``, in W m-2).
+
+    Args:
+        lat: Site latitude in decimal degrees (north positive).
+        lon: Site longitude in decimal degrees (east positive).
+        utc_offset: UTC offset (hours) of the timestamps, e.g. 1 for UTC+01:00.
+        name: Output series name, rendered as a trailing ``.rename()`` when it
+            differs from the library function's own name (``'SW_IN_POT'``).
+    """
+    code = (f"swinpot = dv.variables.potrad(df.index, lat={lat!r}, lon={lon!r}, "
+            f"utc_offset={utc_offset!r})\n")
+    if name and name != 'SW_IN_POT':
+        code += f"swinpot = swinpot.rename({name!r})\n"
+    return code
+
+
 def calc_vpd_from_ta_rh_to_code(
         ta_col: str,
         rh_col: str,

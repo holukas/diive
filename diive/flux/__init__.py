@@ -45,6 +45,7 @@ from diive.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
 from diive.flux.lowres.ustar_mp_detection import UstarMovingPointDetection
 from diive.flux.lowres.ustar_vekuri_detection import UstarVekuriThresholdDetection
 from diive.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
+from diive.flux.lowres.ustarthreshold import FlagMultipleVariableUstarThresholds
 from diive.flux.lowres.ustarthreshold import FlagSingleConstantUstarThreshold
 from diive.flux.lowres.ustarthreshold import UstarDetectionMPT
 from diive.flux.lowres.ustarthreshold import UstarThresholdConstantScenarios
@@ -85,6 +86,7 @@ __all__ = [
     'UstarMovingPointDetection',
     'UstarVekuriThresholdDetection',
     'FlagMultipleConstantUstarThresholds',
+    'FlagMultipleVariableUstarThresholds',
     'FlagSingleConstantUstarThreshold',
     'UstarDetectionMPT',
     'UstarThresholdConstantScenarios',

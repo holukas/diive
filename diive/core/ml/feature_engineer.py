@@ -463,7 +463,7 @@ class FeatureEngineer:
 
         # Add timestamp features
         if self.vectorize_timestamps:
-            expanded_df = vectorize_timestamps(df=expanded_df, txt="")
+            expanded_df = vectorize_timestamps(df=expanded_df, txt="", verbose=self.verbose)
             # Keep only sine/cosine variants, drop linear versions
             expanded_df = expanded_df.drop(
                 columns=['.HOUR', '.SEASON', '.MONTH', '.WEEK', '.DOY'],

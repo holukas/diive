@@ -17,46 +17,57 @@ Read, write, and manipulate data in various formats.
 
 ## Related Documentation
 
-See `diive.io.binary` for:
+Available at the top level as `dv.`, implemented in `diive.io.binary.extract`:
 - `get_encoded_value_from_int()` — Extract bits from a single integer
 - `get_encoded_value_series()` — Extract bits from a series of integers
+
+The bit subrange is given as `bit_start` (inclusive) and `bit_end` (exclusive), counted from
+the left of the zero-padded binary representation. `n_bits` is the total word width the value
+is padded to (default 8), not the number of bits extracted.
 
 ## Use Cases
 
 **Decode binary-encoded measurements:**
 ```python
-from diive.io.binary import get_encoded_value_from_int, get_encoded_value_series
+import diive as dv
 
 # Extract bits 5-7 from diagnostic codes
-diagnostic_code = 156  # Example 8-bit integer
-value = get_encoded_value_from_int(
-    value=diagnostic_code,
-    position=5,  # Start at bit 5
-    n_bits=3,   # Extract 3 bits
-    gain=1.0
+diagnostic_code = 156  # Example 8-bit integer, binary 10011100
+value = dv.get_encoded_value_from_int(
+    integer=diagnostic_code,
+    bit_start=5,  # First bit of the subrange (inclusive)
+    bit_end=8,    # End of the subrange (exclusive), so bits 5-7
+    gain=1,
+    base=2,
+    n_bits=8      # Word width the integer is padded to
 )
+# Result: bits '100' -> 4
 
 # Apply to series
-flags = get_encoded_value_series(
-    series=df['DIAG_BYTE'],
-    position=5,
-    n_bits=3,
-    gain=1.0
+flags = dv.get_encoded_value_series(
+    int_series=df['DIAG_BYTE'],
+    bit_start=5,
+    bit_end=8,
+    gain=1,
+    base=2,
+    n_bits=8
 )
 ```
 
 **Extract quality indicators:**
 ```python
-from diive.io.binary import get_encoded_value_series
+import diive as dv
 
-# AGC mean (often encoded in lower bits)
-agc = get_encoded_value_series(
-    series=df['AGC_ENCODED'],
-    position=0,    # Start at bit 0
-    n_bits=8,      # 8-bit value
-    gain=0.1       # Scale: each unit = 0.1%
+# AGC mean, encoded in bits 4-7 of the gas analyzer diagnostic value
+agc = dv.get_encoded_value_series(
+    int_series=df['GA_DIAG_VALUE'],
+    bit_start=4,
+    bit_end=8,
+    gain=6.25,  # Scale: each unit = 6.25%
+    base=2,
+    n_bits=8
 )
-# Result: AGC in percent (0-100)
+# Result: AGC in percent (0-100), e.g. 250 -> bits '1010' (10) -> 62.5
 ```
 
 ## Running Examples

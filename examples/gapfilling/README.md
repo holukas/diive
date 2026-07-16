@@ -56,25 +56,26 @@ Physics-constrained gap-filling for shortwave incoming radiation. Nighttime valu
 
 ### Comparison & Benchmarking
 
-- **gapfill_comparison.py** — Run all 4 methods on the same data, compare R², MAE, RMSE, and runtime
+- **gapfill_comparison.py** — Run MDS, Random Forest, and XGBoost on the same data, compare R², MAE, RMSE, and runtime
 
 ## When to Use Each Method
 
 **Linear interpolation:** Your gaps are small (a few hours or less) and you don't need high accuracy.
 
 ```python
-from diive.gapfilling import linear_interpolation
+import diive as dv
 
-filled = linear_interpolation(series=df['NEE'], limit=1)
+filled = dv.gapfilling.linear_interpolation(series=df['NEE'], limit=1)
 ```
 
 **Random Forest or XGBoost:** You have training data and want good accuracy without excessive tuning. Start with Random Forest for interpretability; switch to XGBoost if you need better accuracy on a specific dataset.
 
 ```python
-from diive.core.ml.feature_engineer import FeatureEngineer
-from diive.gapfilling import RandomForestTS
+import diive as dv
 
-engineer = FeatureEngineer(
+# Features are whatever columns `df` holds besides the target, plus everything
+# the engineer derives from them. There is no `features` argument on the model.
+engineer = dv.gapfilling.FeatureEngineer(
     target_col='NEE',
     features_lag=[-2, -1],
     features_rolling=[12, 24],
@@ -83,32 +84,38 @@ engineer = FeatureEngineer(
 )
 df_engineered = engineer.fit_transform(df)
 
-model = RandomForestTS(
+model = dv.gapfilling.RandomForestTS(
     input_df=df_engineered,
     target_col='NEE',
-    n_estimators=500,
-    features=['TA', 'VPD', 'SW_IN']
+    n_estimators=500
 )
-model.trainmodel()
+model.trainmodel()   # train on complete observations
+model.fillgaps()     # predict the missing values
 gapfilled = model.get_gapfilled_target()
 ```
+
+Keyword arguments other than `input_df`, `target_col`, `verbose`, `test_size` and
+`below_zero` are passed on to the underlying regressor (e.g. `n_estimators`,
+`random_state`, `n_jobs`).
 
 **MDS:** You have no training data, or you want to avoid potential overfitting from learned models.
 
 ```python
-from diive.gapfilling import FluxMDS
+import diive as dv
 
-mds = FluxMDS(
+# VPD is expected in kPa (`vpd_in_kpa=True` by default), SW_IN in W/m2, TA in degC.
+mds = dv.gapfilling.FluxMDS(
     df=df,
-    flux_col='NEE',
-    swin_col='SW_IN',
-    ta_col='TA',
-    vpd_col='VPD',
+    flux='NEE',
+    swin='SW_IN',
+    ta='TA',
+    vpd='VPD',
     swin_tol=[20, 50],
     ta_tol=2.5,
     vpd_tol=0.5
 )
-filled = mds.get_mds_filled()
+mds.run()
+filled = mds.get_gapfilled_target()
 ```
 
 ## Running Examples

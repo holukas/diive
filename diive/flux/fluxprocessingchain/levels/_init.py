@@ -166,7 +166,7 @@ def init_flux_data(
     new_cols_to_mirror: list[str] = []
     if swin_col is None:
         swinpot = potrad(timestamp_index=fpc_df.index,
-                         lat=site_lat, lon=site_lon, utc_offset=utc_offset)
+                          lat=site_lat, lon=site_lon, utc_offset=utc_offset)
         swinpot_col = str(swinpot.name)
         fpc_df[swinpot_col] = swinpot
         new_cols_to_mirror.append(swinpot_col)

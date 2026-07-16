@@ -22,8 +22,19 @@ cd diive
 2. **Install dependencies and development tools:**
 
 ```bash
-uv sync                    # Install all dependencies from pyproject.toml
+uv sync                              # Core dependencies + the 'dev' group (synced by default)
+uv sync --all-extras --all-groups    # Everything: 'gui'/'gui3d' extras + 'db'/'dev'/'build' groups
 ```
+
+The optional pieces are split across two uv mechanisms, so `--all-extras` alone is not "everything":
+
+| Kind | Name | Pulls in | Install |
+|---|---|---|---|
+| extra | `gui` | PySide6 desktop GUI | `uv sync --extra gui` |
+| extra | `gui3d` | PyVista/VTK 3D surface tabs | `uv sync --extra gui3d` |
+| extra + group | `db` | `influxdb-client` (InfluxDB engine) | `uv sync --group db` |
+| group | `dev` | test/lint/docs/notebook tooling | synced by default |
+| group | `build` | PyInstaller (standalone GUI build) | `uv sync --group build` |
 
 3. **Verify installation:**
 
@@ -33,23 +44,18 @@ uv run pytest tests/ -v
 
 All tests should pass.
 
-### Alternative Setup with conda (Legacy)
+### Alternative Setup with pip and venv
 
-If you prefer conda:
-
-```bash
-conda env create -f environment.yml
-conda activate diive
-pip install -e .[dev]
-pytest tests/ -v
-```
-
-Or with pip and venv:
+`uv` is the supported path. If you use pip instead, note that the development
+tooling lives in dependency groups (a PEP 735 feature), not in an extra, so
+`pip install -e .[dev]` does not exist. Install the package, then the test
+tooling by hand:
 
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -e .[dev]
+pip install -e .          # Add extras if needed, e.g. pip install -e '.[gui]'
+pip install pytest
 pytest tests/ -v
 ```
 
@@ -64,11 +70,11 @@ uv run pytest tests/ -v
 # Run specific test file
 uv run pytest tests/test_gapfilling.py -v
 
-# Run specific test
-uv run pytest tests/test_gapfilling.py::TestRandomForest -v
+# Run specific test class
+uv run pytest tests/test_gapfilling.py::TestGapFilling -v
 
-# Run with coverage
-uv run pytest tests/ --cov=diive --cov-report=html
+# Run a single test
+uv run pytest tests/test_gapfilling.py::TestGapFilling::test_gapfilling_randomforest -v
 ```
 
 Or directly with pytest (if environment is activated):
@@ -77,10 +83,15 @@ Or directly with pytest (if environment is activated):
 pytest tests/ -v
 ```
 
-**Expected times:**
-- Gap-filling tests: ~3-5 sec
-- Flux processing chain: ~20-25 sec
-- Full test suite: ~30-40 sec
+The GUI tests (`tests/test_gui.py`) run offscreen and skip themselves unless the
+`gui` extra is installed (`uv sync --extra gui`).
+
+Coverage reporting is not set up — `pytest-cov` is not a dependency of this
+project. Add it to your environment first if you want `--cov`.
+
+The suite runs real models on real data (gap-filling, the flux processing chain,
+the partitioning ports), so expect it to take minutes rather than seconds. Use
+`-k` or a single test file while iterating.
 
 ## Coding Standards
 
@@ -142,7 +153,8 @@ result = result + 1
 - Use PascalCase for classes
 - Use ALL_CAPS for constants
 - Type hints are encouraged
-- Black formatting (optional, but recommended)
+- The configured tooling is `ruff` (linting, `[tool.ruff]` in `pyproject.toml`) and
+  `autopep8` (formatting), both in the `dev` group: `uv run ruff check .`, `uv run autopep8 --diff <file>`
 
 ```python
 from typing import Optional
@@ -199,11 +211,23 @@ a monolithic class. To add an L4.1 gap-filling method:
 
 ### Adding an Outlier Detection Method
 
-1. Inherit from the appropriate base class (see `diive.outliers`)
-2. Implement required methods (`flag_outliers()`, `get_flagged_data()`)
-3. Add comprehensive docstring with parameters
-4. Create example in `examples/preprocessing/outlier_detection/`
-5. Add unit test in `tests/test_outlierdetection.py`
+Implementations live in `diive/preprocessing/outlier_detection/`; `diive.outliers`
+is only the public re-export namespace. See `hampel.py` for a worked example.
+
+1. Add a module in `diive/preprocessing/outlier_detection/` with a class that inherits
+   from `FlagBase` (`diive/core/base/flagbase.py`)
+2. Set a `flagid` class attribute (e.g. `flagid = 'OUTLIER_HAMPEL'`) and pass it to
+   `super().__init__(series=..., flagid=self.flagid, idstr=idstr)`
+3. Implement `_flagtests(iteration)`, returning `(ok, rejected, n_outliers)` as
+   `(DatetimeIndex, DatetimeIndex, int)`, and `calc(repeat=True, progress_callback=None)`,
+   which drives the iterations via `self.repeat(func=self.run_flagtests, ...)`. `run(**kwargs)`
+   delegates to `calc()`. Results are exposed by the base class through the `overall_flag`,
+   `filteredseries` and `flag` properties
+4. Add comprehensive docstring with parameters
+5. Re-export the class from `diive/preprocessing/outlier_detection/__init__.py` and
+   `diive/outliers/__init__.py`
+6. Create example in `examples/preprocessing/outlier_detection/`
+7. Add unit test in `tests/test_outlierdetection.py`
 
 ## Writing Tests
 
@@ -304,7 +328,7 @@ def example_advanced_usage():
 
 if __name__ == '__main__':
     model = example_basic_usage()
-    print(f"R² score: {model.r2_test_pred:.3f}")
+    print(f"R² score: {model.scores_traintest_['r2']:.3f}")
 ```
 
 ## Documentation
@@ -401,9 +425,6 @@ Normal variability (±5-10%). Use flexible assertions with `assertGreater/assert
 
 **Feature reduction too strict:**
 Reduce `shap_threshold_factor` in gap-filling config (default 0.5).
-
-**XGBoost scientific notation in base_score:**
-Already monkey-patched in `MlRegressorGapFillingBase`. No action needed.
 
 **Import errors in Sphinx autodoc:**
 Check that imports work: `python -c "from diive.module import Class"`

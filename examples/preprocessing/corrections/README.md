@@ -21,62 +21,72 @@ Examples demonstrating data corrections including sensor offset detection, bias 
 
 **Fix humidity oversaturation:**
 ```python
-from diive.preprocessing.corrections import OffsetRH
+import diive as dv
 
-# RH sensor drifts >100% due to aging/contamination
-corrector = OffsetRH(series=df['RH'], max_saturation=100.0)
-corrected = corrector.get_corrected()
+# RH sensor drifts >100% due to aging/contamination.
+# The daily mean excess is removed as offset, values are capped at 100%.
+corrected = dv.corrections.remove_relativehumidity_offset(series=df['RH'], showplot=True)
 ```
 
 **Remove nighttime radiation offset:**
 ```python
-from diive.preprocessing.corrections import OffsetRadiation
+import diive as dv
 
-# Radiation sensor reads non-zero at night (thermal offset)
-corrector = OffsetRadiation(
+# Radiation sensor reads non-zero at night (thermal offset).
+# Nighttime is derived from solar geometry, so the site location is needed.
+corrected = dv.corrections.remove_nighttime_zero_offset(
     series=df['SW_IN'],
-    swinpot_col=df['SW_IN_POT'],
-    site_lat=47.5, site_lon=8.4
+    lat=47.478333,
+    lon=8.364389,
+    utc_offset=1,
+    showplot=True
 )
-corrected = corrector.get_corrected()
 ```
 
 **Detect instrument offset:**
 ```python
-from diive.preprocessing.corrections import OffsetMeasurementReplicates
+import diive as dv
 
-# Two sensors show constant bias
-offset = OffsetMeasurementReplicates(
-    series1=df['TA_primary'],
-    series2=df['TA_reference']
+# Two sensors show constant bias, offset found by brute-force search
+offset_corrector = dv.corrections.MeasurementOffsetFromReplicate(
+    measurement=df['TA_primary'],
+    replicate=df['TA_reference'],
+    offset_start=-10,
+    offset_end=10,
+    offset_stepsize=0.1
 )
-bias = offset.get_offset()  # Constant difference
+offset = offset_corrector.get_offset()  # Detected offset, added to correct
+corrected = offset_corrector.get_corrected_measurement()
 ```
 
 **Mask known problems:**
 ```python
-from diive.preprocessing.corrections import SetToValue
+import numpy as np
+import diive as dv
 
-# Instrument malfunction 2024-01-15 to 2024-01-17
-corrector = SetToValue(
+# Instrument malfunction 2024-01-15 to 2024-01-17.
+# Each entry in *dates* is either a single timestamp or a [start, end] range.
+corrected = dv.corrections.setto_value(
     series=df['CO2'],
-    start_date='2024-01-15',
-    end_date='2024-01-17',
-    value=np.nan
+    dates=[['2024-01-15 00:00:00', '2024-01-17 00:00:00']],
+    value=np.nan,
+    verbose=1
 )
-corrected = corrector.get_corrected()
 ```
 
 ## Related Documentation
 
-See `dv.corrections` for available correction classes:
-- `OffsetRH` — Relative humidity saturation correction
-- `OffsetRadiation` — Nighttime radiation offset removal
-- `OffsetMeasurementReplicates` — Instrument bias detection
-- `OffsetWindDir` — Wind direction calibration
-- `SetExactValuesToMissing` — Replace sentinel values
-- `SetToValue` — Replace period with constant
-- `SetToThreshold` — Clip to min/max bounds
+See `dv.corrections` for available corrections:
+- `remove_relativehumidity_offset` — Relative humidity saturation correction
+- `remove_nighttime_zero_offset` — Nighttime radiation offset removal
+- `nighttime_zero_offset_diagnostics` — Diagnostics for the nighttime radiation offset
+- `NighttimeZeroOffsetResult` — Result container returned by the diagnostics
+- `MeasurementOffsetFromReplicate` — Instrument bias detection against a replicate
+- `WindDirOffset` — Wind direction calibration
+- `set_exact_values_to_missing` — Replace sentinel values
+- `setto_value` — Replace given timestamps or periods with a constant
+- `setto_threshold` — Clip to a min or max bound
+- `apply_corrections` — Apply a list of corrections to one series
 
 ## Running Examples
 
