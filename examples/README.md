@@ -160,14 +160,15 @@ Each category folder has a **README.md** with:
 
 Browse by topic:
 
-- **visualization/README.md** — 19 plot types (heatmaps, scatter, timeseries, tree-ring, etc.)
+- **visualization/README.md** — Heatmaps, scatter, timeseries, wind rose, tree-ring, and more
 - **times/README.md** — Timestamp validation and regularization
 - **analysis/README.md** — Correlation, decomposition, gap detection, spectral analysis
+- **events/README.md** — Marking and overlaying time-stamped events
 - **features/README.md** — Variable creation, unit conversions, derived properties
-- **fits/README.md** — Polynomial and custom curve fitting
-- **flux/README.md** — Multi-level flux processing (L2-L4.1), quality filtering, high-res analysis
+- **fits/README.md** — Binned curve fitting with confidence and prediction bands
+- **flux/README.md** — Multi-level flux processing (L2-L4.2), NEE partitioning, quality filtering, high-res analysis
 - **gapfilling/README.md** — Linear, Random Forest, XGBoost, MDS methods
-- **io/README.md** — Binary value extraction and encoding
+- **io/README.md** — Parquet file I/O, EddyPro CSV reading, binary value extraction
 - **preprocessing/corrections/README.md** — Offset corrections, value clipping
 - **preprocessing/outlier_detection/README.md** — 9 outlier detection methods
 - **preprocessing/qaqc/README.md** — Quality flags, EddyPro integration
@@ -192,7 +193,7 @@ Browse by topic:
 
 ```bash
 # Run one specific example
-uv run python examples/analysis/analysis_correlation.py
+uv run python examples/analysis/analysis_daily_correlation.py
 
 # Run all examples in parallel
 uv run python examples/run_all_examples.py

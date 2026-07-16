@@ -11,7 +11,7 @@ The example dataset is a **10-year record of eddy covariance measurements** from
 | **Site** | Davos, Switzerland (CH-DAV) |
 | **Ecosystem** | Mixed Alpine forest |
 | **Time Period** | 2013-01-01 to 2022-12-31 |
-| **Duration** | 10 years (3,651 days) |
+| **Duration** | 10 years (3,652 days) |
 | **Temporal Resolution** | 30 minutes |
 | **Total Records** | 175,296 half-hour measurements |
 | **Spatial Coverage** | Single-point eddy covariance tower |
@@ -41,7 +41,7 @@ print(df.columns)        # List of 37 variables
 | `NEE_CUT_REF_f` | µmol m⁻² s⁻¹ | Net Ecosystem Exchange (reference USTAR) — **gap-filled** | Complete (0% missing) |
 | `NEE_CUT_16_f` | µmol m⁻² s⁻¹ | NEE with conservative USTAR threshold (16th percentile) — gap-filled | Complete |
 | `NEE_CUT_84_f` | µmol m⁻² s⁻¹ | NEE with lenient USTAR threshold (84th percentile) — gap-filled | Complete |
-| `NEE_CUT_REF_orig` | µmol m⁻² s⁻¹ | Original measured NEE (reference) | ~67% (66.8% missing) |
+| `NEE_CUT_REF_orig` | µmol m⁻² s⁻¹ | Original measured NEE (reference) | ~33% (66.8% missing) |
 | `NEE_CUT_16_orig` | µmol m⁻² s⁻¹ | Original NEE (conservative USTAR) | ~40% (60.0% missing) |
 | `NEE_CUT_84_orig` | µmol m⁻² s⁻¹ | Original NEE (lenient USTAR) | ~23% (77.2% missing) |
 | `GPP_CUT_REF_f` | µmol m⁻² s⁻¹ | Gross Primary Productivity (gap-filled) | Complete |
@@ -53,7 +53,7 @@ print(df.columns)        # List of 37 variables
 | `Reco_CUT_REF` | µmol m⁻² s⁻¹ | Ecosystem respiration (reference) | Complete |
 | `Reco_CUT_16` | µmol m⁻² s⁻¹ | Respiration (conservative USTAR) | Complete |
 | `Reco_CUT_84` | µmol m⁻² s⁻¹ | Respiration (lenient USTAR) | Complete |
-| `Reco_DT_CUT_REF` | µmol m⁻² s⁻¹ | Respiration from nighttime NEE | Complete |
+| `Reco_DT_CUT_REF` | µmol m⁻² s⁻¹ | Respiration from daytime NEE (reference) | Complete |
 | `Reco_DT_CUT_16` | µmol m⁻² s⁻¹ | Respiration (conservative) | Complete |
 | `Reco_DT_CUT_84` | µmol m⁻² s⁻¹ | Respiration (lenient) | Complete |
 | `Reco_DT_CUT_REF_SD` | µmol m⁻² s⁻¹ | Standard deviation of respiration | Complete |

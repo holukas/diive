@@ -27,6 +27,7 @@ Examples demonstrating statistical analysis, decomposition, and pattern detectio
 - **analysis_histogram_distribution.py** — Distribution analysis via histograms and percentiles
 - **analysis_quantiles.py** — Percentile and quantile calculations
 - **analysis_optimumrange.py** — Find optimal ranges for ecosystem responses
+- **analysis_keep_records_where.py** — `dv.keep_records_where`: keep records of a target where a condition variable falls in a [lower, upper] range; non-destructive, with masking vs dropping, one-sided ranges, and inverted selection
 
 ### Data Characterization
 
@@ -39,9 +40,9 @@ Examples demonstrating statistical analysis, decomposition, and pattern detectio
 **Decompose seasonal trends:**
 
 ```python
-from diive.analysis import SeasonalTrendDecomposition
+import diive as dv
 
-std = SeasonalTrendDecomposition(series=df['NEE'], period=365)
+std = dv.analysis.SeasonalTrendDecomposition(series=df['NEE'], seasonal_period=365)
 trend = std.trend
 seasonal = std.seasonal
 ```
@@ -49,19 +50,20 @@ seasonal = std.seasonal
 **Find lagged correlations (e.g., radiation vs. photosynthesis):**
 
 ```python
-from diive.analysis import rank_drivers
+import diive as dv
 
 # Ranks every other column against the target and scans lags.
 # Columns: DRIVER, CORR, ABS_CORR, BEST_LAG, N (positive BEST_LAG = driver leads target).
-ranked = rank_drivers(df, target='GPP', max_lag=24)
+ranked = dv.analysis.rank_drivers(df, target='GPP', max_lag=24)
 ```
 
 **Daily correlation between two series:**
 
 ```python
-from diive.analysis import DailyCorrelation
+import diive as dv
 
-dc = DailyCorrelation(series1=df['PAR'], series2=df['GPP'])
+dc = dv.analysis.DailyCorrelation(s1=df['PAR'], s2=df['GPP'])
+correlations = dc.correlations
 ```
 
 ## Running Examples

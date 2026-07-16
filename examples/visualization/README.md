@@ -66,26 +66,33 @@ Examples demonstrating visualization and plotting functions for time series and 
 All plotting classes separate data preparation from presentation:
 
 **Phase 1: `__init__()`** takes data and computation parameters.  
-**Phase 2: `plot()`** handles styling, axes, titles, labels, and colors.
+**Phase 2: `plot()`** handles axes, colors, and rendering. Chrome (title, axis labels,
+units, fonts, grid, legend) is passed as a single `FormatStyle` via `format_style`.
 
 This lets you reuse the same data across multiple plots with different visual styles:
 
 ```python
-scatter = dv.plot_scatter_xy(x=df['A'], y=df['B'], z=df['C'], nbins=10)
-scatter.plot(ax=axes[0], title='View 1', cmap='viridis')
-scatter.plot(ax=axes[1], title='View 2', cmap='plasma')
+scatter = dv.plotting.ScatterXY(x=df['A'], y=df['B'], z=df['C'], nbins=10)
+scatter.plot(ax=axes[0], format_style=dv.plotting.FormatStyle(title='View 1'), cmap='viridis')
+scatter.plot(ax=axes[1], format_style=dv.plotting.FormatStyle(title='View 2'), cmap='plasma')
 ```
+
+Build a `FormatStyle` once and vary single fields with `.merged(**overrides)` to keep
+the same look across plots — see `plot_scatter_xy_colored.py`.
 
 ## Available Plot Classes
 
-See `diive.core.plotting` for the complete API:
+See `dv.plotting` for the complete API:
 
 - `HeatmapDateTime` — Datetime-aware heatmaps
 - `HeatmapXYZ` — Pre-aggregated 2D heatmaps
 - `HeatmapYearMonth` — Year-month aggregation
+- `DateTimeSurface` — Numeric grid of a series as date × time-of-day
 - `ScatterXY` — Customizable 2D/3D scatter
 - `Cumulative` — Cumulative sum plots
 - `CumulativeYear` — Yearly cumulative analysis
+- `WaterfallPlot` — Floating bars of sequential contributions to a running total
+- `LongtermAnomaliesYear` — Yearly anomalies against a reference period
 - `TimeSeries` — Line plots
 - `DielCycle` — Diurnal cycle plots
 - `HistogramPlot` — Distribution histograms
@@ -93,6 +100,9 @@ See `diive.core.plotting` for the complete API:
 - `RidgeLinePlot` — Ridge line plots
 - `ShiftedDistributionPlot` — Compare a variable's distribution between two periods
 - `TreeRingPlot` — Circular spiral: annual rings with color-coded values
+- `WindRosePlot` — A variable aggregated into wind-direction sectors as polar bars
+- `CompoundExtremesPlot` — Quadrant scatter of two standardized drivers by extreme category
+- `FormatStyle` — Chrome (title, labels, units, fonts, grid, legend) for any `plot()`
 
 ## Running Examples
 

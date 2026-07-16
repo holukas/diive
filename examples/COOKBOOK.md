@@ -85,7 +85,8 @@ print(f"Removed {(original.notna() & cleaned.isna()).sum()} outliers")
 Available methods on `StepwiseOutlierDetection`: `flag_outliers_hampel_test`,
 `flag_outliers_localsd_test`, `flag_outliers_zscore_test`,
 `flag_outliers_zscore_rolling_test`, `flag_outliers_lof_test`,
-`flag_outliers_absolutelimits_test`, `flag_outliers_increments_zcore_test`.
+`flag_outliers_abslim_test`, `flag_outliers_increments_zcore_test`,
+`flag_outliers_trim_low_test`.
 
 Full example: [preprocessing/outlier_detection/outlier_stepwise.py](preprocessing/outlier_detection/outlier_stepwise.py)
 
@@ -142,7 +143,8 @@ Full examples: [gapfilling/gapfill_randomforest.py](gapfilling/gapfill_randomfor
 
 ```python
 from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
-from diive.flux.fluxprocessingchain import FluxConfig, init_flux_data, run_chain
+from diive.flux.fluxprocessingchain import (
+    FluxConfig, add_driver, init_flux_data, run_chain)
 
 df = load_exampledata_parquet_lae_level1_30MIN()
 df = df.loc['2024-06':'2024-06']           # one month for speed
@@ -160,6 +162,12 @@ data = init_flux_data(
     daytime_accept_qcf_below=2,
     nighttime_accept_qcf_below=2,
 )
+
+# MDS needs VPD in kPa, but this dataset carries it in hPa. Convert, then
+# register it with add_driver so it lands in data.full_df, where L4.1 reads
+# from. Without this step FluxConfig raises: there is no VPD_kPa column.
+vpd_kpa = (df['VPD_T1_47_1_gfXG'] / 10.0).rename('VPD_kPa')
+data = add_driver(data, vpd_kpa)
 
 # One FluxConfig drives the whole L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1 chain.
 cfg = FluxConfig(
@@ -203,11 +211,7 @@ Other common plots:
 
 ```python
 # Year x month matrix (mean per cell)
-dv.plotting.HeatmapXYZ(
-    x=df.index.month,
-    y=df.index.year,
-    z=df['NEE_CUT_REF_f']
-).plot()
+dv.plotting.HeatmapYearMonth(series=df['NEE_CUT_REF_f'], agg='mean').plot()
 
 # Scatter
 dv.plotting.ScatterXY(x=df['Tair_f'], y=df['NEE_CUT_REF_f']).plot()
@@ -217,8 +221,15 @@ dv.plotting.DielCycle(series=df['NEE_CUT_REF_f']).plot()
 ```
 
 All plotting classes follow the two-phase pattern: pass data to `__init__`, call
-`.plot(ax=..., title=..., ...)` for styling. Calling `.plot()` a second time with a
-different `ax` reuses the same computed data.
+`.plot(ax=...)` to render. Chrome (title, axis labels, units, fonts, grid, legend)
+goes through `format_style=dv.plotting.FormatStyle(...)`, not through flat `plot()`
+keywords. Calling `.plot()` a second time with a different `ax` reuses the same
+computed data.
+
+```python
+hm = dv.plotting.HeatmapDateTime(series=df['NEE_CUT_REF_f'])
+hm.plot(ax=axes[0], format_style=dv.plotting.FormatStyle(title='Measured'))
+```
 
 Full examples: [visualization/plot_heatmap_datetime_basic.py](visualization/plot_heatmap_datetime_basic.py),
 [visualization/plot_scatter_xy_basic.py](visualization/plot_scatter_xy_basic.py),
