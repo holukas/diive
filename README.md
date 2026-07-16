@@ -38,7 +38,7 @@ Replace `version` and `year` with the values for your target release.
 
 ## Installation
 
-Requires **Python 3.12+**
+Requires **Python 3.12 or 3.13**
 
 ```bash
 pip install diive
@@ -171,10 +171,10 @@ Long-term variants support multi-year data with USTAR scenario options. See [exa
 
 ### Flux processing chain
 
-Post-processing from quality flags through gap-filling, covering Levels 2 to 4.1 following Swiss FluxNet standards. Two entry points:
+Post-processing from quality flags through gap-filling and NEE partitioning, covering Levels 2 to 4.2 following Swiss FluxNet standards. Two entry points:
 
-- **`run_chain(data, config)`** — single call drives the full pipeline (L2 → L3.1 → L3.2 → L3.3 → L4.1) from one `FluxConfig`. Intentionally simple: fixed defaults for per-detector / per-model knobs (Hampel sub-options, MDS tolerances, ML hyperparameters). Use this for the standard FLUXNET-style workflow.
-- **Composable per-level callables** (`run_level2`, `run_level31`, `make_level32_detector` + `run_level32`, `run_level33_constant_ustar` / `run_level33_variable_ustar` / `run_level33_ustar_detection` (CUT or VUT), `run_level41_mds` / `_rf` / `_xgb`) — full control. Every detector class, model hyperparameter, MDS tolerance, and diagnostic flag is reachable here and only here.
+- **`run_chain(data, config)`** — single call drives the full pipeline (L2 → L3.1 → L3.2 → L3.3 → L4.1 → L4.2) from one `FluxConfig`. Intentionally simple: fixed defaults for per-detector / per-model knobs (Hampel sub-options, MDS tolerances, ML hyperparameters). Use this for the standard FLUXNET-style workflow.
+- **Composable per-level callables** (`run_level2`, `run_level31`, `make_level32_detector` + `run_level32`, `run_level33_constant_ustar` / `run_level33_variable_ustar` / `run_level33_ustar_detection` (CUT or VUT), `run_level41_mds` / `_rf` / `_xgb`, `run_level42_nighttime_oneflux` / `_nighttime_reddyproc` / `_daytime_reddyproc` / `_daytime_oneflux`) — full control. Every detector class, model hyperparameter, MDS tolerance, and diagnostic flag is reachable here and only here.
 
 Need a computed driver (e.g. VPD in kPa) for L4.1? Use `add_driver(data, series)` to put it where L4.1 actually reads from. Call `data.gap_stats()` at any level for a monthly/annual breakdown with long-gap listing. `data.plot_gapfilled_heatmaps()` puts all gap-filling methods side by side; `data.plot_cumulative_comparison()` overlays their cumulative sums on one axes.
 
@@ -192,6 +192,8 @@ Split net ecosystem exchange (NEE) into gross primary production (GPP) and ecosy
 | `DaytimePartitioningOneFlux` / `partition_nee_daytime_oneflux` | `*_DT_OF` | Lasslop 2010, ONEFlux `flux_part_gl2010` port; incl. GPP standard error |
 
 Inputs are in physical units — air temperature in °C, VPD in kPa (`vpd_in_kpa=True`). For the day/night split the REddyProc ports take `lat` / `lon` / `utc_offset` (solar geometry) and the ONEFlux nighttime port takes `lat`; the ONEFlux daytime port needs no coordinates (it uses a measured-radiation threshold). Each class prints a Rich per-year summary report on `.run()` (or call `.report()`). See [examples/flux/partitioning/](examples/flux/partitioning/) — including `partitioning_comparison.py`, which runs all four side by side.
+
+All four also run inside the flux processing chain as **Level 4.2** — one partitioning per USTAR scenario, with the scenario label appended to each output column (`RECO_NT_OF_CUT_50`). Reach them via `FluxConfig(partition_*=...)` on `run_chain`, or the composable `run_level42_*` callables.
 
 ### Quality control and outlier detection
 
@@ -217,7 +219,7 @@ Flux detection limit from 20 Hz data, maximum covariance lag, pre-whitening boot
 
 ### Visualization
 
-19+ plot types including time series, cumulative, diel cycle, heatmaps (datetime and year-month), hexbin, histogram, ridgeline, scatter, tree-ring, and anomaly plots. Both Matplotlib and Plotly are supported. See [examples/visualization/](examples/visualization/).
+18 plot types including time series, cumulative, diel cycle, heatmaps (datetime, year-month and x/y/z), hexbin, histogram, ridgeline, scatter, wind rose, waterfall, compound extremes, 3-D datetime surface, tree-ring, and anomaly plots. All render with Matplotlib. `TimeSeries` additionally offers interactive Bokeh output via `plot_interactive()`, plus a linked range-tool overview via `plot_rangetool()`. See [examples/visualization/](examples/visualization/).
 
 ### I/O
 
@@ -225,7 +227,7 @@ Load and save parquet files, read single or batch EddyPro output, detect and spl
 
 ### Desktop GUI (optional)
 
-A PySide6 desktop app (`diive-gui`, install with the `gui` extra) for interactive exploration: an Overview tab (per-variable stats + multi-panel figure); per-method plot tabs (heatmaps, time series, diel cycle, cumulative, ridgeline, scatter, hexbin, histogram — opened from the Plot menu, multiple at once) plus a single-instance, GPU-accelerated 3-D surface relief (optional `gui3d` extra); Analyze tabs (gaps & coverage, driver explorer, seasonal-trend & anomalies, spectrogram); nine outlier-detection tabs (Hampel, Local SD, absolute limits, three z-score variants, local outlier factor, trim-low, manual removal) with live previews, plus a stepwise screening chain; Flux tabs — a guided processing chain, standalone u\* threshold detection, and four NEE→GPP+RECO partitioning tabs (nighttime / daytime × ONEFlux / REddyProc); and Data tools to select variables, select records by a condition variable's range, rename and tag variables, and engineer features. Every variable carries editable metadata (tags + full provenance history); the whole working state — data, metadata, project settings, sticky notes, and open tabs — saves to a portable `.diive` **project** folder. See the [GUI user manual](diive/gui/MANUAL.md).
+A PySide6 desktop app (`diive-gui`, install with the `gui` extra) for interactive exploration: an Overview tab (per-variable stats + multi-panel figure); 17 per-method plot tabs (heatmaps, time series, diel cycle, cumulative, ridgeline, scatter, hexbin, histogram, wind rose, waterfall, tree ring — opened from the Plot menu, multiple at once), two of them GPU-accelerated 3-D surface reliefs (optional `gui3d` extra); Analyze tabs (data profile, gaps & coverage, driver explorer, compound extremes, seasonal-trend & anomalies, spectrogram); nine outlier-detection tabs (Hampel, Local SD, absolute limits, three z-score variants, local outlier factor, trim-low, manual removal) with live previews, plus a stepwise screening chain; six correction tabs (nighttime zero offset, RH offset, set to min/max threshold, set to value, set exact values to missing); three gap-filling tabs (XGBoost, Random Forest, MDS); Flux tabs — a guided processing chain, standalone u\* threshold detection, time-lag analysis, four NEE→GPP+RECO partitioning tabs (nighttime / daytime × ONEFlux / REddyProc), and random / joint uncertainty (PAS20); and Data and Variables tools to select variables, select records by a condition variable's range, combine two variables, calculate derived variables (VPD, potential radiation), rename and tag variables, and engineer features. Every variable carries editable metadata (tags + full provenance history); the whole working state — data, metadata, project settings, sticky notes, and open tabs — saves to a portable `.diive` **project** folder. See the [GUI user manual](diive/gui/MANUAL.md).
 
 ---
 
