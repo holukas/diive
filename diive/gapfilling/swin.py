@@ -468,7 +468,8 @@ class SWINGapFillerXGBoost:
             verbose=self.verbose,
         )
         if n_complete < 20:
-            warn(f"Only {n_complete} complete daytime records available for XGBoost training.")
+            warn(f"Only {n_complete} complete daytime records available for XGBoost training.",
+                 verbose=self.verbose)
 
         model = XGBoostTS(
             input_df=daytime_df,

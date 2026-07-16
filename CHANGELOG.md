@@ -547,6 +547,9 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
   '<function _patched_float ...>' as a data type`), taking down every XGBoost gap-fill. Raising the floor to 0.50 lets
   `_build_tree_explainer` and its lock be deleted outright; `shap.TreeExplainer` is now called directly in
   `_shap_importance` and `driveranalysis._mean_abs_shap`. Environments pinned to shap 0.48/0.49 must upgrade.
+- **Gap-filling `verbose=0` is now actually silent** — XGBoost's per-round eval history (its own stdout, ~100 lines) is
+  gated to `VERBOSE_DEBUG` via `fit(verbose=)` while `eval_set` is kept for early stopping; the incomplete-features
+  warnings and `vectorize_timestamps` chatter now honour the caller's verbosity instead of their own defaults.
 - **`GapFillingResult` dataclass + `.results` property** — all gap-filling classes expose `.results` after `.run()`,
   bundling `gapfilled`, `flag`, `scores`, `feature_importances`, `model`, and related fields. Importable as
   `dv.gapfilling.GapFillingResult`.

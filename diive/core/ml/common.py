@@ -18,6 +18,7 @@ import diive.core.dfun.frames as fr
 from diive.core.ml.results import GapFillingResult
 from diive.core.times.times import vectorize_timestamps
 from diive.core.utils.console import (
+    VERBOSE_DEBUG,
     VERBOSE_PROGRESS,
     console as _console,
     detail,
@@ -173,8 +174,10 @@ class MlRegressorGapFillingBase:
         not_complete = not_complete[not_complete].index.tolist()
         if len(not_complete) > 0:
             warn(f"Some features are incomplete (<{n_vals_index} values): "
-                 + ", ".join(f"{nc} ({fstats[nc]['count'].astype(int)})" for nc in not_complete))
-            warn("Not all target values can be predicted based on the full model.")
+                 + ", ".join(f"{nc} ({fstats[nc]['count'].astype(int)})" for nc in not_complete),
+                 verbose=self.verbose)
+            warn("Not all target values can be predicted based on the full model.",
+                 verbose=self.verbose)
 
         # Train/test split for the held-out generalization estimate.
         #
@@ -392,13 +395,19 @@ class MlRegressorGapFillingBase:
         if isinstance(model, RandomForestRegressor):
             model.fit(X=X_train, y=y_train)
         elif isinstance(model, XGBRegressor):
+            # XGBoost prints the per-round eval history itself, straight to stdout,
+            # so no diive console gate can see it. eval_set stays: early stopping
+            # monitors it. Only the reporting is silenced.
+            eval_verbose = self.verbose >= VERBOSE_DEBUG
             if getattr(model, 'early_stopping_rounds', None) and X_test is X_train:
                 X_tr, X_val, y_tr, y_val = train_test_split(
                     X_train, y_train, test_size=0.1,
                     random_state=self._random_state, shuffle=True)
-                model.fit(X=X_tr, y=y_tr, eval_set=[(X_tr, y_tr), (X_val, y_val)])
+                model.fit(X=X_tr, y=y_tr, eval_set=[(X_tr, y_tr), (X_val, y_val)],
+                          verbose=eval_verbose)
             else:
-                model.fit(X=X_train, y=y_train, eval_set=[(X_train, y_train), (X_test, y_test)])
+                model.fit(X=X_train, y=y_train, eval_set=[(X_train, y_train), (X_test, y_test)],
+                          verbose=eval_verbose)
         return model
 
     def run(self, **kwargs):
@@ -1162,7 +1171,8 @@ class MlRegressorGapFillingBase:
     def _predict_fallback(self, series: pd.Series):
         """Fill data gaps using timestamp features only, fallback for still existing gaps"""
         gf_fallback_df = pd.DataFrame(series)
-        gf_fallback_df = vectorize_timestamps(df=gf_fallback_df, txt="(ONLY FALLBACK)")
+        gf_fallback_df = vectorize_timestamps(df=gf_fallback_df, txt="(ONLY FALLBACK)",
+                                              verbose=self.verbose)
 
         # Build model for target predictions *from timestamp*
         y_fallback, X_fallback, _, _ = \
