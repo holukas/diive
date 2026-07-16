@@ -345,6 +345,62 @@ class TestGapFilling(unittest.TestCase):
         self.assertTrue((pot[fallback] >= 0.001).all())       # ... in daytime ...
         self.assertEqual(int(g.results.gapfilled.isna().sum()), 0)  # ... and still complete
 
+    def test_swin_gapfiller_skip_message_tracks_daytime_gaps(self):
+        """The 'XGBoost step skipped' log must track daytime gaps, not short-gap interpolation."""
+        import pandas as pd
+        from diive.core.utils.console import add_console_sink, remove_console_sink
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad
+
+        class _Recorder:
+            """Console sink that records everything the library prints."""
+
+            def __init__(self):
+                self.msgs = []
+
+            def print(self, *args, **kwargs):
+                self.msgs.append(' '.join(str(a) for a in args))
+
+            def log(self, *args, **kwargs):
+                pass
+
+            def text(self):
+                return '\n'.join(self.msgs)
+
+        def _run(series):
+            # verbose=1 gates the messages under test. interpolate_short_gaps stays at
+            # its default (None) — the setting the messages used to be wired to.
+            rec = _Recorder()
+            add_console_sink(rec)
+            try:
+                g = SWINGapFillerXGBoost(series=series, lat=lat, lon=lon, utc_offset=utc,
+                                         random_state=42, verbose=1).run()
+            finally:
+                remove_console_sink(rec)
+            return g, rec.text()
+
+        lat, lon, utc = 47.0, 8.0, 1
+        idx = pd.date_range('2022-06-01', '2022-06-30 23:30', freq='30min', name='TIMESTAMP_END')
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        rng = np.random.RandomState(0)
+        swin = (pot * (0.7 + 0.3 * rng.rand(len(idx)))).clip(lower=0)
+        swin.name = 'SW_IN'
+        night = pot < 0.001
+
+        # Daytime gaps present: the model runs, so the log must not claim it was skipped.
+        with_daytime_gaps = swin.copy()
+        with_daytime_gaps[(rng.rand(len(idx)) < 0.3) & ~night] = np.nan
+        g, out = _run(with_daytime_gaps)
+        self.assertIsNotNone(g.results.model)          # the model really ran ...
+        self.assertNotIn('XGBoost step skipped', out)  # ... so the log must agree
+
+        # Nighttime-only gaps: no daytime gap exists, so here the message is correct.
+        night_gaps_only = swin.copy()
+        night_gaps_only[(rng.rand(len(idx)) < 0.3) & night] = np.nan
+        g, out = _run(night_gaps_only)
+        self.assertIsNone(g.results.model)             # no daytime gap -> no model
+        self.assertIn('XGBoost step skipped', out)
+
     def test_gapfilling_randomforest(self):
         """Fill gaps using random forest"""
         df = ed.load_exampledata_parquet()

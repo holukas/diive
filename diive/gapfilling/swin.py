@@ -421,6 +421,11 @@ class SWINGapFillerXGBoost:
             # Overwrite daytime rows with the model's gapfilled output.
             # gapfilled preserves observed values and fills only gaps.
             filled.loc[daytime_results.gapfilled.index] = daytime_results.gapfilled
+        else:
+            if self.verbose >= 1:
+                info("No daytime gaps found — XGBoost step skipped.")
+            if self.reduce_features and self.verbose >= 1:
+                info("reduce_features=True has no effect when there are no daytime gaps.")
 
         # Interpolation wins over the model on the gaps it covers, so it is applied
         # last. The model has no access to the target's own neighbours (the feature
@@ -429,11 +434,6 @@ class SWINGapFillerXGBoost:
         if interpolated is not None:
             interp_locs = interpolated.notna()
             filled.loc[interp_locs] = interpolated[interp_locs]
-        else:
-            if self.verbose >= 1:
-                info("No daytime gaps found — XGBoost step skipped.")
-            if self.reduce_features and self.verbose >= 1:
-                info("reduce_features=True has no effect when there are no daytime gaps.")
 
         # Make sure the published gap-filled series carries the public name,
         # not the XGBoost-internal '_gfXG' suffix that XGBoostTS attaches.
