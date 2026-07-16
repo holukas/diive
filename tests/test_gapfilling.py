@@ -539,6 +539,33 @@ class TestGapFilling(unittest.TestCase):
         self.assertLess(scores['mae'], 3.0)
         self.assertGreater(len(gapfilled), 0)
 
+    def test_shap_treeexplainer_xgboost(self):
+        """shap must parse XGBoost's base_score unaided.
+
+        XGBoost serializes base_score as e.g. '[-3.18E0]'. shap <= 0.49 chokes on
+        the brackets and diive carried a monkey-patch for it; shap >= 0.50 parses
+        it natively, which is why the pin has that floor. This fails if the floor
+        is ever lowered again.
+        """
+        import shap
+        from xgboost import XGBRegressor
+
+        rng = np.random.default_rng(42)
+        X = rng.random((200, 3))
+        y = X[:, 0] * 3 + rng.random(200)
+        model = XGBRegressor(n_estimators=10, random_state=42).fit(X, y)
+
+        shap_values = shap.TreeExplainer(model).shap_values(X)
+
+        self.assertEqual(shap_values.shape, X.shape)
+        self.assertTrue(np.isfinite(shap_values).all())
+
+        # y depends only on X[:, 0], so that feature must dominate. Flexible bounds
+        # because SHAP values fluctuate between runs.
+        importances = np.abs(shap_values).mean(axis=0)
+        self.assertGreater(importances[0], importances[1])
+        self.assertGreater(importances[0], importances[2])
+
 
 if __name__ == '__main__':
     unittest.main()

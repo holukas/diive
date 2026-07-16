@@ -32,7 +32,7 @@ dependencies = [
     "scikit-optimize>=0.10.2,<0.11.0",
     "polars>=1.26.0,<2.0.0",
     "jupyter-bokeh>=4.0.5,<5.0.0",
-    "shap>=0.48.0,<1.0.0",
+    "shap>=0.50.0,<1.0.0",  # 0.50 parses XGBoost's bracketed base_score itself
     "rich>=15.0.0",
     "textual>=8.2.7",
 ]

@@ -540,6 +540,13 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
 - **Nighttime threshold standardised to 20 W/m²** — default `nighttime_threshold` changed from 50 to 20 W/m²
   throughout diive (`DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot`, `FlagQCF`, outlier detection
   common helpers, USTAR threshold detection).
+- **shap floor raised to `>=0.50.0`; XGBoost `base_score` monkey-patch removed** — XGBoost serializes `base_score` as a
+  bracketed string (`'[-3.18E0]'`), which shap `<=0.49` could not parse, so `MlRegressorGapFillingBase` patched a
+  bracket-stripping `float` into shap's module namespace. shap `>=0.50` parses it natively, and shap `>=0.52` reads
+  `base_score` via `np.asarray(..., dtype=float)` — where the patch was *fatal* (`TypeError: Cannot interpret
+  '<function _patched_float ...>' as a data type`), taking down every XGBoost gap-fill. Raising the floor to 0.50 lets
+  `_build_tree_explainer` and its lock be deleted outright; `shap.TreeExplainer` is now called directly in
+  `_shap_importance` and `driveranalysis._mean_abs_shap`. Environments pinned to shap 0.48/0.49 must upgrade.
 - **`GapFillingResult` dataclass + `.results` property** — all gap-filling classes expose `.results` after `.run()`,
   bundling `gapfilled`, `flag`, `scores`, `feature_importances`, `model`, and related fields. Importable as
   `dv.gapfilling.GapFillingResult`.

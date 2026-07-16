@@ -78,7 +78,7 @@ tests/                        # Unit tests
 | `dv.analysis.experimental` | **(provisional)** `DriverAnalysis`, `DriverAnalysisResult`, `AleCurve`, `Ale2DResult`, `accumulated_local_effects`, `accumulated_local_effects_2d`, `ExperimentalWarning` |
 | `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `ShiftedDistributionPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot`, `DateTimeSurface` (+ `datetime_surface_grid`), `WaterfallPlot`, `CompoundExtremesPlot`, `WindRosePlot`, `FormatStyle` — see **Plotting** below |
 | `dv.times` | `TimestampSanitizer`, `DetectFrequency`, `keep_daterange`, `insert_timestamp`, `format_timestamp`, `validate_timestamp_column_name`, `resample_to_daily_agg`, `resample_to_monthly_agg_matrix`, `timestamp_infer_freq_*` |
-| `dv.variables` | `DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot`, `TimeSince`, `potrad`, `potrad_eot`, `calc_vpd_from_ta_rh` (+ codegen `calc_vpd_from_ta_rh_to_code`), `aerodynamic_resistance`, `dry_air_density`, `et_from_le`, `latent_heat_of_vaporization`, `air_temp_from_sonic_temp`, `lagged_variants`, `classify_variable`, `combine_variables` (+ codegen `combine_variables_to_code`), noise helpers |
+| `dv.variables` | `DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot`, `TimeSince`, `potrad`, `potrad_eot`, `potrad_oneflux`, `calc_vpd_from_ta_rh` (+ codegen `calc_vpd_from_ta_rh_to_code`), `aerodynamic_resistance`, `dry_air_density`, `et_from_le`, `latent_heat_of_vaporization`, `air_temp_from_sonic_temp`, `lagged_variants`, `classify_variable`, `combine_variables` (+ codegen `combine_variables_to_code`), noise helpers |
 | `dv.corrections` | `MeasurementOffsetFromReplicate`, `WindDirOffset`, `remove_nighttime_zero_offset` (corr key stays `'radiation_zero_offset'`; `clamp_negatives=True` default), `nighttime_zero_offset_diagnostics`, `NighttimeZeroOffsetResult`, `remove_relativehumidity_offset`, `set_exact_values_to_missing`, `setto_threshold`, `setto_value`, `apply_corrections` |
 | `dv.qaqc` | `FlagQCF`, `StepwiseMeteoScreeningDb`, `MEASUREMENTS`/`Measurement`, `CORRECTIONS`/`CorrectionSpec`, `corrections_for_measurement(code)`, `detect_measurement(varname)`, `measurement_label`, `correction_spec` |
 
@@ -109,6 +109,10 @@ All four wire into the chain as **Level 4.2** (`run_level42_nighttime_oneflux` /
 1. Lag features  2. Rolling stats  3. Differencing (1st/2nd order)  4. EMA  5. Polynomial  6. STL decomposition  7. Timestamps  8. Record number
 
 `FeatureEngineer` class, fed into gap-filling models. Naming `.{col}_TYPE{detail}` (e.g. `.Tair_f_POL2`). `FeatureEngineer(target_col='_target_', ...)` — `target_col` is a required placeholder; any string not in the feature list works.
+
+### Potential Radiation (`dv.variables`)
+
+Three implementations, increasing fidelity: `potrad` (Stull 1988; solar const 1361; no equation of time, no eccentricity correction — solar noon pinned to a fixed clock time, so up to 79 W/m2 / RMSE 20 off the ONEFlux reference over a year), `potrad_eot` (adds equation of time + eccentricity), `potrad_oneflux` (faithful ONEFlux `get_rpot` port; solar const 1376; Spencer 1971 declination/eccentricity; NOAA solar-noon shift; returns a **period mean**, not an instantaneous value — FLUXNET parity, RMSE 0.53 W/m2 vs real FLUXNET2015 `SW_IN_POT`). `potrad_oneflux` now backs `DaytimeNighttimeFlag`, the flux chain's `SW_IN_POT`, USTAR threshold detection, `SWINGapFillerXGBoost`, long-term gap-filling, `DetectTimestampShifts`, and meteo screening — day/night flags shift on ~2.3% of half-hours vs `potrad`. The REddyProc partitioning ports (`nighttime_reddyproc.py`/`daytime_reddyproc.py`) and ONEFlux nighttime partitioning's `sunrise_sunset` deliberately keep their own potential-radiation/day-night routines, for parity with their own reference implementations.
 
 ### Gap-Filling Methods
 
@@ -439,7 +443,6 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 | Issue | Workaround |
 |---|---|
 | SHAP importance fluctuates ±5-10% | Flexible ranges in tests (`assertGreater/Less`) |
-| XGBoost base_score in scientific notation | Monkey-patched in `MlRegressorGapFillingBase` |
 | Feature reduction too strict | Reduce `shap_threshold_factor` (default 0.5) |
 | Unicode on Windows (arrow chars) | Use ASCII (>, ->) in examples |
 | Textual `App` has internal `_running`/`_workers` | Don't name your App attr `_running` (use `_busy`); Textual sets `_running=True` on mount |
