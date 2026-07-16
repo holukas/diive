@@ -216,10 +216,10 @@ class TestGapFilling(unittest.TestCase):
         """SW_IN gap-filling with the physical nighttime constraint."""
         import pandas as pd
         from diive.gapfilling.swin import SWINGapFillerXGBoost
-        from diive.variables import potrad_oneflux
+        from diive.variables import potrad
         lat, lon, utc = 47.0, 8.0, 1
         idx = pd.date_range('2022-06-01', '2022-06-30 23:30', freq='30min', name='TIMESTAMP_END')
-        pot = potrad_oneflux(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
         rng = np.random.RandomState(0)
         swin = (pot * (0.7 + 0.3 * rng.rand(len(idx)))).clip(lower=0)  # cloudy modulation
         swin.name = 'SW_IN'
@@ -269,7 +269,7 @@ class TestGapFilling(unittest.TestCase):
         import pandas as pd
         from diive.configs.exampledata import load_exampledata_parquet
         from diive.gapfilling.swin import SWINGapFillerXGBoost
-        from diive.variables import potrad_oneflux
+        from diive.variables import potrad
         lat, lon, utc = 46.8153, 9.8559, 1  # CH-DAV
 
         # Real data: the sky state must be autocorrelated for interpolation to have
@@ -277,7 +277,7 @@ class TestGapFilling(unittest.TestCase):
         df = load_exampledata_parquet().loc['2020-06-01':'2020-06-30'].copy()
         truth = df['Rg_f'].copy()
         truth.name = 'SW_IN'
-        pot = potrad_oneflux(timestamp_index=truth.index, lat=lat, lon=lon, utc_offset=utc)
+        pot = potrad(timestamp_index=truth.index, lat=lat, lon=lon, utc_offset=utc)
 
         rng = np.random.RandomState(0)
         gappy = truth.copy()
@@ -318,10 +318,10 @@ class TestGapFilling(unittest.TestCase):
         """A context-driver gap must surface as flag 2, not hide inside flag 1."""
         import pandas as pd
         from diive.gapfilling.swin import SWINGapFillerXGBoost
-        from diive.variables import potrad_oneflux
+        from diive.variables import potrad
         lat, lon, utc = 47.0, 8.0, 1
         idx = pd.date_range('2022-06-01', '2022-06-30 23:30', freq='30min', name='TIMESTAMP_END')
-        pot = potrad_oneflux(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
         rng = np.random.RandomState(0)
         swin = (pot * (0.7 + 0.3 * rng.rand(len(idx)))).clip(lower=0)
         swin.name = 'SW_IN'

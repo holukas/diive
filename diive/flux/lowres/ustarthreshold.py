@@ -21,7 +21,7 @@ from diive.core.times.times import insert_season
 from diive.core.utils.console import info, detail, warn
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.variables import daytime_nighttime_flag_from_swinpot
-from diive.variables.radiation import potrad_oneflux
+from diive.variables.radiation import potrad
 
 
 class FlagMultipleConstantUstarThresholds:
@@ -1014,10 +1014,10 @@ class UstarDetectionMPT:
     def _calc_swin_pot(self):
         """Calculate potential radiation or get directly from data"""
         if self.lat and self.lon:
-            swin_pot = potrad_oneflux(timestamp_index=self.df.index,
-                                       lat=self.lat,
-                                       lon=self.lon,
-                                       utc_offset=self.utc_offset)
+            swin_pot = potrad(timestamp_index=self.df.index,
+                               lat=self.lat,
+                               lon=self.lon,
+                               utc_offset=self.utc_offset)
             swin_pot_col = swin_pot.name
             self.df[swin_pot_col] = swin_pot
             return swin_pot_col

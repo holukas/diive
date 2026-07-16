@@ -9,7 +9,7 @@ Part of the diive library: https://github.com/holukas/diive
 """
 
 # Radiation
-from diive.variables.radiation import potrad, potrad_eot, potrad_oneflux
+from diive.variables.radiation import potrad
 
 # Thermodynamic
 from diive.variables.thermodynamic import (
@@ -52,8 +52,6 @@ from diive.variables.classification import (
 __all__ = [
     # radiation
     'potrad',
-    'potrad_eot',
-    'potrad_oneflux',
     # thermodynamic
     'aerodynamic_resistance',
     'dry_air_density',

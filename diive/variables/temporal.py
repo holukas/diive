@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 from pandas import Series, DataFrame, DatetimeIndex
 
-from diive.variables.radiation import potrad_oneflux
+from diive.variables.radiation import potrad
 from diive.core.utils.console import detail
 
 
@@ -95,10 +95,10 @@ class DaytimeNighttimeFlag:
 
     def _calc_swin_pot(self):
         """Calculate potential radiation from latitude and longitude"""
-        self.swinpot = potrad_oneflux(timestamp_index=self.timestamp_index,
-                                       lat=self.lat,
-                                       lon=self.lon,
-                                       utc_offset=self.utc_offset)
+        self.swinpot = potrad(timestamp_index=self.timestamp_index,
+                               lat=self.lat,
+                               lon=self.lon,
+                               utc_offset=self.utc_offset)
 
     def _calc_flags(self):
         self.daytime, self.nighttime = self._daytime_nighttime_flag_from_swinpot()

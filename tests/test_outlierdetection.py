@@ -116,9 +116,9 @@ class TestOutlierDetection(unittest.TestCase):
         frame = {'s_noise': s_noise, 'flag': flag}
         checkdf = pd.DataFrame.from_dict(frame)
 
-        # Counts encode the potrad_oneflux day/night split (ONEFlux/FLUXNET parity),
-        # which reclassifies 11 of these 1488 July records at the twilight edges:
-        # two records moved night -> day, so trim_nighttime no longer trims them.
+        # Counts encode the potrad day/night split (ONEFlux/FLUXNET parity), which
+        # classifies these 1488 July records; the twilight edges decide a handful of
+        # them, and two land on the day side, so trim_nighttime does not trim them.
         # Checks on bad data
         badmean = checkdf.loc[checkdf.flag == 2, 's_noise'].mean()
         self.assertEqual(badmean, 19.914995180241654)
@@ -451,9 +451,9 @@ class TestOutlierDetection(unittest.TestCase):
         good_nt = checkdf.loc[(checkdf['FLAG_NIGHTTIME'] == 1) & (checkdf['flag'] == 0)].copy()
         bad_nt = checkdf.loc[(checkdf['FLAG_NIGHTTIME'] == 1) & (checkdf['flag'] == 2)].copy()
 
-        # Counts encode the potrad_oneflux day/night split (ONEFlux/FLUXNET parity);
-        # records shift between the day and night sets at the twilight edges, so the
-        # four counts still total 1488 but are distributed differently than under potrad.
+        # Counts encode the potrad day/night split (ONEFlux/FLUXNET parity); the
+        # twilight edges decide which set a record lands in, and the four counts
+        # total 1488.
         # Checks on good data
         good_dt_stats = good_dt.describe()
         self.assertEqual(good_dt_stats.loc['max']['s_noise'], 31.87658379873561)

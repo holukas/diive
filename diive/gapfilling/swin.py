@@ -17,7 +17,7 @@ from diive.core.ml.feature_engineer import FeatureEngineer
 from diive.core.ml.results import GapFillingResult
 from diive.core.utils.console import console as _console, detail, info, rule, success, warn
 from diive.gapfilling.xgboost_ts import XGBoostTS
-from diive.variables.radiation import potrad_oneflux
+from diive.variables.radiation import potrad
 
 
 class SWINGapFillerXGBoost:
@@ -379,7 +379,7 @@ class SWINGapFillerXGBoost:
 
         # Potential radiation drives the daytime/nighttime split and is the
         # primary feature for daytime prediction.
-        swinpot = potrad_oneflux(
+        swinpot = potrad(
             timestamp_index=working_series.index,
             lat=self.lat,
             lon=self.lon,

@@ -41,19 +41,37 @@
   window, `2014` = SWIN-only at 14 days, `3001` = diurnal at 1 day, so both the ONEFlux driver method and the window are
   recoverable; the faithful ONEFlux 1/2/3 quality is kept alongside in `.PREDICTIONS_QUALITY`. `avg_min_n_vals` default
   changed 5 -> 2. Code that compared the flag to the old 1-60 levels must update. See *Gap-Filling*.
-- **`SW_IN_POT` / day-night classification changed.** `DaytimeNighttimeFlag`, the flux processing chain, USTAR
-  threshold detection, `SWINGapFillerXGBoost`, long-term gap-filling, `DetectTimestampShifts` and meteo screening now
-  compute potential radiation with the new `potrad_oneflux` (ONEFlux/FLUXNET-parity port) instead of `potrad` (Stull
-  1988). `potrad` has no equation of time and no earth-sun eccentricity correction, so its `SW_IN_POT` deviates from
-  the ONEFlux reference by up to 79 W/m2 (RMSE 20 W/m2 over a year), and the day/night flag it drives changes on
-  ~2% of half-hours (~400/year). This
-  cascades into everything that reads the day/night flag or `SW_IN_POT` downstream -- USTAR filtering, gap-filling,
-  NEE partitioning -- so results will differ slightly from earlier diive versions. It also reaches **every day/night-
-  capable outlier method** (`LocalSD`, `Hampel`, `AbsoluteLimits`, `LocalOutlierFactor`, the zScore variants,
-  `TrimLow`), which derive their split from `DaytimeNighttimeFlag` via `create_daytime_nighttime_flags`: records at
-  the twilight edges move between the day and night sets, so which records a detector flags can change. `potrad` and
-  `potrad_eot` are unchanged and still available directly; the REddyProc partitioning ports keep their own
-  `potential_radiation` for REddyProc parity. See *New Classes & Functions*.
+- **`potrad` now runs a different algorithm and silently returns different numbers; `potrad_eot` removed.**
+  `diive.variables.radiation` had three potential-radiation functions and now has one. The old `potrad` (Stull 1988)
+  and `potrad_eot` were both removed, and the name `potrad` was reused for the faithful port of ONEFlux's `get_rpot`
+  (`oneflux_steps/common/common.c`), the routine that produces the `SW_IN_POT` column of FLUXNET/AmeriFlux/ICOS
+  products. **The signature is unchanged, so existing `potrad()` calls keep running and return different values with
+  no error and no warning.** The port uses solar constant 1376 W/m2 instead of 1361; adds Spencer (1971) declination
+  and earth-sun-distance eccentricity (a +/-3.4% annual amplitude cycle the old `potrad` did not represent); takes
+  true solar noon from the NOAA solar-position algorithm (equation of time) instead of a fixed clock time; and returns
+  the mean over each averaging period, computed from 1-minute steps, rather than an instantaneous value. To quantify
+  the move, over a full year against the ONEFlux reference the old `potrad` had RMSE 20.0 W/m2 (max 79.3): individual
+  half-hours shift by up to ~79 W/m2, the annual sum rises ~1.1%, and day/night classification (`SW_IN_POT > 0`)
+  changes on 2.27% of half-hours (~400/year). Re-check any stored `SW_IN_POT`, day/night flag or downstream result
+  carried over from an earlier diive version. `potrad_eot` has no drop-in replacement -- it was the
+  equation-of-time variant of the old algorithm (RMSE 10.1 W/m2 against the same reference), and its
+  `use_atmospheric_transmission` Beer-Lambert clear-sky option is gone with it. The new `potrad` was validated against
+  the real FLUXNET2015 `SW_IN_POT` in the bundled CH-Cha example file (99 half-hours): max |diff| 1.15 W/m2 (0.24% of
+  peak), RMSE 0.53, with the residual consistent with site-coordinate precision in a legacy-pipeline file rather than
+  an algorithm difference.
+- **`SW_IN_POT` / day-night classification changed.** Following from the `potrad` change above,
+  `DaytimeNighttimeFlag`, the flux processing chain, USTAR threshold detection, `SWINGapFillerXGBoost`, long-term
+  gap-filling, `DetectTimestampShifts` and meteo screening all compute potential radiation with the ONEFlux-parity
+  algorithm now. This cascades into everything that reads the day/night flag or `SW_IN_POT` downstream -- USTAR
+  filtering, gap-filling, NEE partitioning -- so results will differ slightly from earlier diive versions. It also
+  reaches **every day/night-capable outlier method** (`LocalSD`, `Hampel`, `AbsoluteLimits`, `LocalOutlierFactor`, the
+  zScore variants, `TrimLow`), which derive their split from `DaytimeNighttimeFlag` via
+  `create_daytime_nighttime_flags`: records at the twilight edges move between the day and night sets, so which
+  records a detector flags can change. Side effect: `DetectTimestampShifts` previously inherited a spurious +/-15 min
+  seasonal artifact from the old `potrad`'s missing equation of time (with a perfect clock it reported monthly medians
+  from -14.3 to +15.7 min); that artifact is gone. The REddyProc partitioning ports and ONEFlux nighttime
+  partitioning's `sunrise_sunset` keep their own potential-radiation/day-night routines on purpose, for parity with
+  their respective references.
 
 ### Desktop GUI (new)
 
@@ -633,24 +651,6 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
   figure (cleared first) instead of creating a new one, e.g. to embed in a GUI canvas. Backward-compatible.
 - **`TimeLagAnalysis.plot_gas(fig=...)`** — optional `fig` parameter to render the 4-panel time-lag figure into an
   existing figure (cleared first) instead of a new pyplot one, e.g. to embed in the GUI canvas. Backward-compatible.
-- **`potrad_oneflux`** (`dv.variables`, `diive.variables.radiation`) — new potential-radiation function, a faithful
-  port of ONEFlux's `get_rpot` (`oneflux_steps/common/common.c`), the routine that produces the `SW_IN_POT` column of
-  FLUXNET/AmeriFlux/ICOS products. Same signature as `potrad`. It differs from `potrad` (Stull 1988) in four ways:
-  solar constant 1376 W/m2 instead of 1361; Spencer (1971) declination and earth-sun-distance eccentricity (a +/-3.4%
-  annual amplitude cycle `potrad` does not represent); true solar noon from the NOAA solar-position algorithm
-  (equation of time) instead of a fixed clock time; and the returned value is the mean over each averaging period,
-  computed from 1-minute steps, rather than an instantaneous value. Validated against the real FLUXNET2015
-  `SW_IN_POT` in the bundled CH-Cha example file (99 half-hours): max |diff| 1.15 W/m2 (0.24% of peak), RMSE 0.53,
-  with the residual consistent with site-coordinate precision in a legacy-pipeline file rather than an algorithm
-  difference; `potrad` is off by up to 23.9 W/m2 on the same records, `potrad_eot` by 7.5. Over a full year against
-  the ONEFlux reference, `potrad` RMSE is 20.0 W/m2 (max 79.3), `potrad_eot` 10.1, the REddyProc partitioning port's
-  own `potential_radiation` 5.8. Day/night classification (`SW_IN_POT > 0`) changes on 2.27% of half-hours (~400/year)
-  versus `potrad`. Now backs `DaytimeNighttimeFlag`, the flux processing chain's `SW_IN_POT`, USTAR threshold
-  detection, `SWINGapFillerXGBoost`, long-term gap-filling, `DetectTimestampShifts` and meteo screening — see
-  **Breaking Changes**. The REddyProc partitioning ports and ONEFlux nighttime partitioning's `sunrise_sunset` keep
-  their own potential-radiation/day-night routines on purpose, for parity with their respective references. Side
-  effect: `DetectTimestampShifts` previously inherited a spurious +/-15 min seasonal artifact from `potrad`'s missing
-  equation of time (with a perfect clock it reported monthly medians from -14.3 to +15.7 min); that artifact is gone.
 - **`DetectTimestampShifts`** — detects clock errors by comparing measured vs. potential shortwave radiation. Three
   detection methods (`fft_phase_shift`, `crosscorr`, `noon_shift`) with five plot methods.
 - **`PreWhiteningBootstrap`** — Vitale et al. (2024) PWB time-lag detection for low-magnitude fluxes (CH4, N2O),
@@ -911,6 +911,8 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
 - Updated `fluxprocessingchain_composable.py`: Step 5b gap analysis after L3.3 via `data.gap_stats()`;
   Step 12 replaced with `data.plot_gapfilled_heatmaps()` (all methods side-by-side); Step 13 replaced
   with `data.plot_cumulative_comparison()` (all methods on one axes).
+- Rewrote `feature_potentialradiation.py`: it compared the three potential-radiation functions against each other, and
+  now demonstrates the single remaining `potrad` (ONEFlux/FLUXNET-parity port) on its own.
 - Rewrote `analysis_harmonic.py` to use `dv.analysis.harmonic_analysis` (it previously called scipy directly): diel
   harmonics of NEE, annual harmonics of air temperature, the window-function effect, and a time-frequency spectrogram.
 - **New `dv.analysis.spectrogram`** — short-time Fourier transform (time-frequency map) of a series; returns

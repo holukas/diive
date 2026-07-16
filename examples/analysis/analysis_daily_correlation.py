@@ -56,7 +56,9 @@ print(f"  Rg_f (observed radiation): {rg_series.min():.1f} to {rg_series.max():.
 print(f"  Tair_f (air temperature): {ta_series.min():.1f} to {ta_series.max():.1f} C")
 print(f"  NEE_CUT_REF_f (CO2 flux): {nee_series.min():.2f} to {nee_series.max():.2f} umol m-2 s-1")
 
-# Calculate potential solar radiation (clear-sky reference)
+# Calculate potential solar radiation (clear-sky reference).
+# StepwiseMeteoScreeningDb.analysis_potential_radiation_correlation runs the same
+# quality check against the same reference.
 sw_pot = potrad(
     timestamp_index=rg_series.index,
     lat=47.286417,   # Site latitude

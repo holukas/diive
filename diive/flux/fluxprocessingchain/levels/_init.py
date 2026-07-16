@@ -14,7 +14,7 @@ from pandas import DataFrame
 
 from diive.core.utils.console import detail, info, rule
 from diive.variables import daytime_nighttime_flag_from_swinpot
-from diive.variables.radiation import potrad_oneflux
+from diive.variables.radiation import potrad
 from diive.flux.fluxprocessingchain.container import FluxLevelData, FluxMeta
 from diive.flux.lowres.common import detect_fluxbasevar
 
@@ -70,13 +70,13 @@ def init_flux_data(
             column in ``df`` (W m-2) to use as the source for day / night
             flag derivation. When ``None`` (default), the chain computes
             potential shortwave radiation from ``site_lat`` / ``site_lon`` /
-            ``utc_offset`` via :func:`~diive.variables.radiation.potrad_oneflux` and
+            ``utc_offset`` via :func:`~diive.variables.radiation.potrad` and
             writes it under the name ``SW_IN_POT`` — this is the
             recommended choice because potential radiation is cloud- and
             sensor-independent and gives reliable diurnal classification
             even under heavy cloud cover. Override this only when you have
             a deliberate reason (e.g. high-latitude topographic shadowing
-            that ``potrad_oneflux`` cannot resolve, or a pre-validated site-specific
+            that ``potrad`` cannot resolve, or a pre-validated site-specific
             day / night source). The supplied column is then used directly
             (no copy renamed to ``SW_IN_POT``) — ``data.meta.swinpot_col``
             stores whichever column name actually drives the flags.
@@ -160,13 +160,13 @@ def init_flux_data(
     # radiation from lat/lon/UTC offset (cloud- and sensor-independent). If
     # the user supplied a measured ``swin_col`` we use that directly — they
     # have a deliberate reason (e.g. topographic shadowing not captured by
-    # potrad_oneflux). Either way the chain writes ``DAYTIME`` / ``NIGHTTIME`` flags
+    # potrad). Either way the chain writes ``DAYTIME`` / ``NIGHTTIME`` flags
     # derived from this source; ``meta.swinpot_col`` records whichever
     # column actually drives them.
     new_cols_to_mirror: list[str] = []
     if swin_col is None:
-        swinpot = potrad_oneflux(timestamp_index=fpc_df.index,
-                                  lat=site_lat, lon=site_lon, utc_offset=utc_offset)
+        swinpot = potrad(timestamp_index=fpc_df.index,
+                          lat=site_lat, lon=site_lon, utc_offset=utc_offset)
         swinpot_col = str(swinpot.name)
         fpc_df[swinpot_col] = swinpot
         new_cols_to_mirror.append(swinpot_col)

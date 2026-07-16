@@ -26,7 +26,7 @@ from diive.core.times.resampling import resample_series_to_freq
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import detect_freq_groups
 from diive.analysis import daily_correlation
-from diive.variables.radiation import potrad_oneflux
+from diive.variables.radiation import potrad
 from diive.preprocessing.corrections import remove_nighttime_zero_offset, remove_relativehumidity_offset
 from diive.preprocessing.corrections import set_exact_values_to_missing, setto_threshold, setto_value
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
@@ -614,7 +614,7 @@ class StepwiseMeteoScreeningDb:
         for field in self.fields:
             series = self.series_hires_cleaned[field]
             # Calculate potential radiation SW_IN_POT
-            swinpot = potrad_oneflux(timestamp_index=series.index,
+            swinpot = potrad(timestamp_index=series.index,
                              lat=self.site_lat,
                              lon=self.site_lon,
                              utc_offset=utc_offset)

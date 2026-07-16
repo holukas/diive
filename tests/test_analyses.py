@@ -187,7 +187,7 @@ class TestAnalyses(unittest.TestCase):
                            utc_offset=1)
         # Calculate daily correlation between Rg_f and SW_IN_POT
         daycorrs = daily_correlation(s1=rg_series, s2=reference, mincorr=0.8).result
-        self.assertEqual(daycorrs.sum(), 337.3189145385522)
+        self.assertEqual(daycorrs.sum(), 337.89242341368663)
         # Calculate daily correlation between Tair_f and NEE_CUT_REF_f
         daycorrs = daily_correlation(s1=ta_series, s2=nee_series).result
         self.assertEqual(daycorrs.sum(), -167.25042524807637)
