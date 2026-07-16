@@ -536,7 +536,20 @@ nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared
   zero (no solar radiation after sunset); daytime gaps are filled with XGBoost trained on daytime data only. Requires
   only lat/lon/UTC offset — no meteorological driver variables needed by default. Optional `context_df` for TA/VPD
   drivers; optional `correct_nighttime_offset` to remove sensor thermal bias first. Flag encoding: 0=observed,
-  1=XGBoost fill, 2=nighttime set to zero.
+  1=XGBoost fill, 2=fallback fill (a driver was missing, so only timestamps were available), 3=nighttime set to zero.
+  0/1/2 carry their usual `GapFillingResult` meaning; 3 is specific to this class, the only gap-filler with a physics
+  branch.
+- **`SWINGapFillerXGBoost(interpolate_short_gaps=N)`** — fills daytime gaps of up to `N` records by interpolating the
+  clearness index (`SW_IN / SW_IN_POT`) rather than the model, emitting flag `4`. Interpolating W/m² directly fights the
+  diurnal ramp, so the geometry is divided out first and multiplied back in; interpolation runs per calendar day and
+  therefore never bridges a night. The model cannot see the target's own neighbours (`FeatureEngineer` excludes the
+  target from every feature), which is precisely the information a short gap turns on. `2` (1 h on 30-min data) is the
+  recommended limit: on a realistic CH-DAV record with 15% scattered gaps it cuts daytime gap RMSE by **38%**
+  (125 -> 77), against 29% (125 -> 88) at `1`, and nothing above `2` helps since scattered gaps are almost all 1-2
+  records long. Interpolation still beats the model on gaps up to ~8 h
+  (189 vs 219 W/m²) but collapses once a gap outlasts the observations bracketing it (1 day: 337 vs 172). Default `None`
+  keeps the previous model-only behaviour. Training is unaffected: the model still fits observations only, and the
+  interpolation is applied afterwards.
 - **Nighttime threshold standardised to 20 W/m²** — default `nighttime_threshold` changed from 50 to 20 W/m²
   throughout diive (`DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot`, `FlagQCF`, outlier detection
   common helpers, USTAR threshold detection).

@@ -216,17 +216,20 @@ class TestGapFilling(unittest.TestCase):
         """SW_IN gap-filling with the physical nighttime constraint."""
         import pandas as pd
         from diive.gapfilling.swin import SWINGapFillerXGBoost
-        from diive.variables import potrad
+        from diive.variables import potrad_oneflux
         lat, lon, utc = 47.0, 8.0, 1
         idx = pd.date_range('2022-06-01', '2022-06-30 23:30', freq='30min', name='TIMESTAMP_END')
-        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        pot = potrad_oneflux(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
         rng = np.random.RandomState(0)
         swin = (pot * (0.7 + 0.3 * rng.rand(len(idx)))).clip(lower=0)  # cloudy modulation
         swin.name = 'SW_IN'
         swin_gappy = swin.copy()
         swin_gappy[rng.rand(len(idx)) < 0.3] = np.nan  # punch ~30% gaps
 
-        g = SWINGapFillerXGBoost(series=swin_gappy, lat=lat, lon=lon, utc_offset=utc, verbose=0)
+        # Seed both the train/test split and the regressor: without random_state
+        # the split is redrawn every run and the scores below drift.
+        g = SWINGapFillerXGBoost(series=swin_gappy, lat=lat, lon=lon, utc_offset=utc,
+                                 random_state=42, verbose=0)
         g.run()
         gf = g.results.gapfilled
         self.assertEqual(int(gf.isna().sum()), 0)   # complete after gap-filling
@@ -234,6 +237,113 @@ class TestGapFilling(unittest.TestCase):
         # Nighttime (SW_IN_POT below threshold) is forced to ~0 by physics.
         night = pot < 0.001
         self.assertLess(float(gf[night].abs().max()), 1.0)
+
+        # The checks above are satisfied by the physics wrapper alone and pass
+        # even if the daytime model is broken. Score XGBoost against the known
+        # synthetic truth at the daytime gaps it is actually responsible for.
+        gaps = swin_gappy.isna()
+        daytime_gaps = gaps & (pot >= 0.001)
+        truth = swin[daytime_gaps]
+        pred = gf[daytime_gaps]
+        # Cloudiness here is IID uniform noise, so nothing can beat "mean
+        # cloudiness x potential radiation" and r2 cannot exceed ~0.957. Seeded
+        # r2 is ~0.926, so 0.90 catches a real regression without being brittle.
+        ss_res = float(((truth - pred) ** 2).sum())
+        ss_tot = float(((truth - truth.mean()) ** 2).sum())
+        self.assertGreater(1 - ss_res / ss_tot, 0.90)
+        # Mean cloudiness is unbiased, so the fill must not systematically over-
+        # or under-estimate daytime radiation (seeded: ~1.7%).
+        self.assertLess(abs(float(pred.mean() - truth.mean())) / float(truth.mean()), 0.03)
+
+        # Flags 0/1/2 keep their library-wide meaning (observed / model /
+        # fallback); 3 is the nighttime physics branch. Without context_df every
+        # feature derives from the timestamp alone, so a complete feature row
+        # always exists and no daytime gap can reach the fallback.
+        flag = g.results.flag
+        self.assertTrue((flag[swin_gappy.notna()] == 0).all())
+        self.assertTrue((flag[daytime_gaps] == 1).all())
+        self.assertTrue((flag[gaps & (pot < 0.001)] == 3).all())
+
+    def test_swin_gapfiller_interpolate_short_gaps(self):
+        """Short-gap interpolation must beat the model, and never bridge a night."""
+        import pandas as pd
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad_oneflux
+        lat, lon, utc = 46.8153, 9.8559, 1  # CH-DAV
+
+        # Real data: the sky state must be autocorrelated for interpolation to have
+        # anything to exploit. Synthetic IID cloud noise would rig this against it.
+        df = load_exampledata_parquet().loc['2020-06-01':'2020-06-30'].copy()
+        truth = df['Rg_f'].copy()
+        truth.name = 'SW_IN'
+        pot = potrad_oneflux(timestamp_index=truth.index, lat=lat, lon=lon, utc_offset=utc)
+
+        rng = np.random.RandomState(0)
+        gappy = truth.copy()
+        gappy[rng.rand(len(truth)) < 0.15] = np.nan  # scattered short gaps
+
+        common = dict(series=gappy, lat=lat, lon=lon, utc_offset=utc,
+                      random_state=42, verbose=0)
+        model_only = SWINGapFillerXGBoost(**common).run().results
+        with_interp = SWINGapFillerXGBoost(interpolate_short_gaps=16, **common).run().results
+
+        flag = with_interp.flag
+        interp_locs = flag == 4
+        self.assertGreater(int(interp_locs.sum()), 0)
+
+        # Interpolation must only touch daytime gaps.
+        self.assertTrue(gappy[interp_locs].isna().all())
+        self.assertTrue((pot[interp_locs] >= SWINGapFillerXGBoost.KT_MIN_SWINPOT).all())
+
+        # It must never bridge a night: every interpolated record needs an observed
+        # daytime value on both sides within its own calendar day.
+        day_obs = gappy.notna() & (pot >= SWINGapFillerXGBoost.KT_MIN_SWINPOT)
+        for ts in flag[interp_locs].index:
+            same_day = day_obs[day_obs.index.normalize() == ts.normalize()]
+            self.assertTrue((same_day.index < ts).any() and (same_day.index > ts).any())
+
+        # The point of the feature: better than the model on the gaps it takes over.
+        def rmse(pred):
+            d = truth[interp_locs] - pred[interp_locs]
+            return float(np.sqrt((d ** 2).mean()))
+
+        self.assertLess(rmse(with_interp.gapfilled), rmse(model_only.gapfilled))
+        self.assertEqual(int(with_interp.gapfilled.isna().sum()), 0)
+        # Observed records stay untouched.
+        obs = gappy.notna()
+        self.assertTrue(np.allclose(with_interp.gapfilled[obs], truth[obs]))
+
+    def test_swin_gapfiller_fallback_flag(self):
+        """A context-driver gap must surface as flag 2, not hide inside flag 1."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad_oneflux
+        lat, lon, utc = 47.0, 8.0, 1
+        idx = pd.date_range('2022-06-01', '2022-06-30 23:30', freq='30min', name='TIMESTAMP_END')
+        pot = potrad_oneflux(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        rng = np.random.RandomState(0)
+        swin = (pot * (0.7 + 0.3 * rng.rand(len(idx)))).clip(lower=0)
+        swin.name = 'SW_IN'
+        swin_gappy = swin.copy()
+        swin_gappy[rng.rand(len(idx)) < 0.3] = np.nan
+
+        # A driver gap overlapping daytime target gaps leaves those records without
+        # a complete feature row, so they can only be filled from timestamps.
+        ta = pd.Series(15 + 10 * np.sin(np.arange(len(idx)) * 2 * np.pi / 48),
+                       index=idx, name='TA')
+        ta.iloc[500:560] = np.nan
+
+        g = SWINGapFillerXGBoost(series=swin_gappy, lat=lat, lon=lon, utc_offset=utc,
+                                 context_df=ta.to_frame(), random_state=42, verbose=0)
+        g.run()
+
+        flag = g.results.flag
+        fallback = flag == 2
+        self.assertGreater(int(fallback.sum()), 0)      # the branch is reachable ...
+        self.assertTrue(swin_gappy[fallback].isna().all())    # ... only at gaps ...
+        self.assertTrue((pot[fallback] >= 0.001).all())       # ... in daytime ...
+        self.assertEqual(int(g.results.gapfilled.isna().sum()), 0)  # ... and still complete
 
     def test_gapfilling_randomforest(self):
         """Fill gaps using random forest"""
