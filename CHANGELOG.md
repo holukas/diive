@@ -4,954 +4,632 @@
 
 ## v0.91.0 | XX May 2026
 
-**Major release: composable flux chain, 10 domain namespaces, new EC analysis tools.**
+**Major release: desktop GUI, composable flux chain, 10 domain namespaces, four NEE partitioning ports.**
 
 ### Breaking Changes
 
-- **Public API: 10 domain namespaces** — flat 145-export namespace replaced with `dv.outliers`, `dv.gapfilling`,
+Two changes alter results silently, with no error and no warning. Read these first.
+
+- **`potrad` runs a different algorithm and returns different numbers; `potrad_eot` removed.** The old `potrad` (Stull
+  1988) and `potrad_eot` are gone, and the name `potrad` now holds a faithful port of ONEFlux's `get_rpot`, the routine
+  behind the `SW_IN_POT` column of FLUXNET/AmeriFlux/ICOS products. **The signature is unchanged, so existing calls keep
+  running and silently return different values.** It uses solar constant 1376 W/m2 instead of 1361, adds Spencer (1971)
+  declination and earth-sun-distance eccentricity (a +/-3.4% annual cycle the old code did not represent), takes true
+  solar noon from the NOAA equation of time instead of a fixed clock time, and returns the mean over each averaging
+  period computed from 1-minute steps instead of an instantaneous value. Over a full year against the ONEFlux reference,
+  the old `potrad` had RMSE 20.0 W/m2 (max 79.3): individual half-hours shift by up to ~79 W/m2, the annual sum rises
+  ~1.1%, and day/night classification (`SW_IN_POT > 0`) changes on 2.27% of half-hours (~400/year). Re-check any stored
+  `SW_IN_POT`, day/night flag, or downstream result carried over from an earlier version. `potrad_eot` has no drop-in
+  replacement, and its `use_atmospheric_transmission` Beer-Lambert clear-sky option is gone with it. The new `potrad`
+  was validated against the real FLUXNET2015 `SW_IN_POT` in the bundled CH-Cha file (99 half-hours): max |diff| 1.15
+  W/m2 (0.24% of peak), RMSE 0.53.
+- **`SW_IN_POT` and day/night classification changed** as a consequence. `DaytimeNighttimeFlag`, the flux processing
+  chain, USTAR threshold detection, `SWINGapFillerXGBoost`, long-term gap-filling, `DetectTimestampShifts`, and meteo
+  screening now all compute potential radiation with the ONEFlux-parity algorithm, so everything reading `SW_IN_POT` or
+  the day/night flag downstream (USTAR filtering, gap-filling, NEE partitioning) shifts slightly. It also reaches every
+  day/night-capable outlier method (`LocalSD`, `Hampel`, `AbsoluteLimits`, `LocalOutlierFactor`, the zScore variants,
+  `TrimLow`), which derive their split from `DaytimeNighttimeFlag`: twilight-edge records move between the day and night
+  sets, so which records a detector flags can change. Side effect: `DetectTimestampShifts` no longer inherits the old
+  `potrad`'s spurious +/-15 min seasonal artifact (with a perfect clock it had reported monthly medians from -14.3 to
+  +15.7 min). The REddyProc partitioning ports and ONEFlux nighttime partitioning's `sunrise_sunset` keep their own
+  potential-radiation routines on purpose, for parity with their references.
+
+The rest raise or are visible at import:
+
+- **Public API: 10 domain namespaces.** The flat 145-export namespace is replaced by `dv.outliers`, `dv.gapfilling`,
   `dv.flux`, `dv.analysis`, `dv.plotting`, `dv.times`, `dv.variables`, `dv.corrections`, `dv.qaqc`, `dv.events`. All old
   flat names removed. Update all imports.
-- **Gap-filling: feature parameters moved to `FeatureEngineer`** — `RandomForestTS` / `XGBoostTS` no longer accept
-  `features_*` parameters; pass a pre-built `FeatureEngineer` instance instead.
-- **`zScore` unified** — `zScoreDaytimeNighttime` removed; use `zScore(separate_daytime_nighttime=True)`.
-- **Plotting aliases use `plot_` prefix** — old unprefixed names removed.
+- **Plotting: chrome is `FormatStyle`-only.** The flat chrome keywords on every `plot()` are removed: `title`, `xlabel`,
+  `ylabel`, `zlabel` (axes), `xunits`, `yunits`, `series_units`, `txt_ylabel_units`, `axlabels_fontsize`,
+  `ticks_labelsize`, `legend_n_col`, `legend_loc`, `fig_title`, `title_fontsize`, and the `show_grid` / `showgrid` /
+  `show_legend` toggles. Pass `format_style=dv.plotting.FormatStyle(...)` instead, and `.merged(**overrides)` to vary one
+  field off a shared style. Data-rendering args (`color`, `cmap`, `marker`, `vmin`/`vmax`, `fill`) and colorbar args
+  (`cb_*`, and the colorbar-label `zlabel` on the heatmaps and `HexbinPlot`) stay direct `plot()` keywords.
+- **Gap-filling: feature parameters moved to `FeatureEngineer`.** `RandomForestTS` / `XGBoostTS` no longer accept
+  `features_*`; pass a pre-built `FeatureEngineer` instead.
+- **MDS gap-fill flag semantics changed.** `FluxMDS`'s `FLAG_*_gfMDS_ISFILLED` drops the old granular 1-60 quality
+  levels for `method * 1000 + time_window` (0 = measured): `1014` is the all-drivers method at a 14-day window, `2014`
+  SWIN-only at 14 days, `3001` diurnal at 1 day, so both the driver method and the window are recoverable. The faithful
+  ONEFlux 1/2/3 quality is kept in `.PREDICTIONS_QUALITY`. `avg_min_n_vals` default changed 5 -> 2. Code comparing the
+  flag to the old levels must update.
+- **`remove_radiation_zero_offset` renamed to `remove_nighttime_zero_offset`.** The correction suits any variable that
+  should read zero at night (SW/PPFD), so the name no longer says "radiation"; it is not for LW.
+  `StepwiseMeteoScreeningDb.correction_remove_radiation_zero_offset` is likewise
+  `correction_remove_nighttime_zero_offset`. New `clamp_negatives=True` makes the post-offset negative-to-zero clamp
+  explicit and optional, and new `nighttime_zero_offset_diagnostics` / `NighttimeZeroOffsetResult` expose every
+  intermediate series plus below-zero stats. The persisted correction key (`'radiation_zero_offset'`) is unchanged, so
+  saved projects still load.
+- **PWB time-lag detection: `var_tsonic` / `col_tsonic` now required.** `PreWhiteningBootstrap` and `PwbBatchDetection`
+  always run the full 4-combination RFlux v3.2.0 logic; the 2-combination (cw/wc) fallback is gone. Pass a
+  sonic-temperature column. Result keys `tlag_opt_s`, `corr_est`, `cv5pct`, `cv1pct` are removed; `corr_pw`
+  (un-smoothed PW peak correlation) and `cov_pwb` (raw cross-covariance at the selected lag) are added.
+- **`zScore` unified.** `zScoreDaytimeNighttime` removed; use `zScore(separate_daytime_nighttime=True)`.
+- **`DailyCorrelation` is now a class.** The function-based API is removed.
+- **Plotting aliases use the `plot_` prefix.** Old unprefixed names removed.
 - **`HeatmapXYZ` requires pre-aggregated input.**
-- **`DailyCorrelation` is now a class** — old function-based API removed.
-- **PWB time-lag detection: `var_tsonic` / `col_tsonic` now required.** `PreWhiteningBootstrap` and
-  `PwbBatchDetection` always run the full 4-combination RFlux v3.2.0 logic; the 2-combination (cw/wc) fallback was
-  removed. Pass a sonic-temperature column. Result keys `tlag_opt_s`, `corr_est`, `cv5pct`, `cv1pct` were removed;
-  `corr_pw` (un-smoothed PW peak correlation) and `cov_pwb` (raw cross-covariance at the selected lag) added.
-- **Plotting: chrome is `FormatStyle`-only.** The flat chrome keyword arguments on the plotting classes' `plot()`
-  methods were removed — `title`, `xlabel`, `ylabel`, `zlabel` (axes), `xunits`, `yunits`, `series_units`,
-  `txt_ylabel_units`, `axlabels_fontsize`, `ticks_labelsize`, `legend_n_col`, `legend_loc`, `fig_title`,
-  `title_fontsize`, and the `show_grid`/`showgrid`/`show_legend` toggles that duplicated the style. Pass them via
-  `format_style=dv.plotting.FormatStyle(...)` instead (use `.merged(**overrides)` to vary one field off a shared
-  style). Data-rendering args (`color`, `cmap`, `marker`, `vmin`/`vmax`, `fill`, ...) and colorbar args (`cb_*`, and
-  the colorbar-label `zlabel` on the heatmaps/`HexbinPlot`) remain direct `plot()` keywords. See the
-  `dv.plotting.FormatStyle` entry under *Refactoring*.
-- **`remove_radiation_zero_offset` renamed to `remove_nighttime_zero_offset`** — the correction is general-purpose (any
-  variable that should read zero at night, e.g. SW/PPFD; not radiation-specific, and not for LW), so the name no longer
-  says "radiation". The `StepwiseMeteoScreeningDb.correction_remove_radiation_zero_offset` method is likewise
-  `correction_remove_nighttime_zero_offset`. A new `clamp_negatives=True` argument makes the post-offset
-  negative-to-zero clamp explicit and optional. New `nighttime_zero_offset_diagnostics` / `NighttimeZeroOffsetResult`
-  expose every intermediate series + below-zero stats. The persisted correction-key value (`'radiation_zero_offset'`) is
-  unchanged, so saved projects still load.
-- **MDS gap-fill flag semantics changed** — `FluxMDS`'s `FLAG_*_gfMDS_ISFILLED` no longer carries the old granular 1-60
-  quality levels. It is now `method * 1000 + time_window` (0 = measured), e.g. `1014` = all-drivers method at a 14-day
-  window, `2014` = SWIN-only at 14 days, `3001` = diurnal at 1 day, so both the ONEFlux driver method and the window are
-  recoverable; the faithful ONEFlux 1/2/3 quality is kept alongside in `.PREDICTIONS_QUALITY`. `avg_min_n_vals` default
-  changed 5 -> 2. Code that compared the flag to the old 1-60 levels must update. See *Gap-Filling*.
-- **`potrad` now runs a different algorithm and silently returns different numbers; `potrad_eot` removed.**
-  `diive.variables.radiation` had three potential-radiation functions and now has one. The old `potrad` (Stull 1988)
-  and `potrad_eot` were both removed, and the name `potrad` was reused for the faithful port of ONEFlux's `get_rpot`
-  (`oneflux_steps/common/common.c`), the routine that produces the `SW_IN_POT` column of FLUXNET/AmeriFlux/ICOS
-  products. **The signature is unchanged, so existing `potrad()` calls keep running and return different values with
-  no error and no warning.** The port uses solar constant 1376 W/m2 instead of 1361; adds Spencer (1971) declination
-  and earth-sun-distance eccentricity (a +/-3.4% annual amplitude cycle the old `potrad` did not represent); takes
-  true solar noon from the NOAA solar-position algorithm (equation of time) instead of a fixed clock time; and returns
-  the mean over each averaging period, computed from 1-minute steps, rather than an instantaneous value. To quantify
-  the move, over a full year against the ONEFlux reference the old `potrad` had RMSE 20.0 W/m2 (max 79.3): individual
-  half-hours shift by up to ~79 W/m2, the annual sum rises ~1.1%, and day/night classification (`SW_IN_POT > 0`)
-  changes on 2.27% of half-hours (~400/year). Re-check any stored `SW_IN_POT`, day/night flag or downstream result
-  carried over from an earlier diive version. `potrad_eot` has no drop-in replacement -- it was the
-  equation-of-time variant of the old algorithm (RMSE 10.1 W/m2 against the same reference), and its
-  `use_atmospheric_transmission` Beer-Lambert clear-sky option is gone with it. The new `potrad` was validated against
-  the real FLUXNET2015 `SW_IN_POT` in the bundled CH-Cha example file (99 half-hours): max |diff| 1.15 W/m2 (0.24% of
-  peak), RMSE 0.53, with the residual consistent with site-coordinate precision in a legacy-pipeline file rather than
-  an algorithm difference.
-- **`SW_IN_POT` / day-night classification changed.** Following from the `potrad` change above,
-  `DaytimeNighttimeFlag`, the flux processing chain, USTAR threshold detection, `SWINGapFillerXGBoost`, long-term
-  gap-filling, `DetectTimestampShifts` and meteo screening all compute potential radiation with the ONEFlux-parity
-  algorithm now. This cascades into everything that reads the day/night flag or `SW_IN_POT` downstream -- USTAR
-  filtering, gap-filling, NEE partitioning -- so results will differ slightly from earlier diive versions. It also
-  reaches **every day/night-capable outlier method** (`LocalSD`, `Hampel`, `AbsoluteLimits`, `LocalOutlierFactor`, the
-  zScore variants, `TrimLow`), which derive their split from `DaytimeNighttimeFlag` via
-  `create_daytime_nighttime_flags`: records at the twilight edges move between the day and night sets, so which
-  records a detector flags can change. Side effect: `DetectTimestampShifts` previously inherited a spurious +/-15 min
-  seasonal artifact from the old `potrad`'s missing equation of time (with a perfect clock it reported monthly medians
-  from -14.3 to +15.7 min); that artifact is gone. The REddyProc partitioning ports and ONEFlux nighttime
-  partitioning's `sunrise_sunset` keep their own potential-radiation/day-night routines on purpose, for parity with
-  their respective references.
+- **`make_level32_detector` returns `(data, sod)`.**
+- **Flux chain renames.** `level41_methods()` keys `'long_term_random_forest'` / `'long_term_xgboost'` become `'rf'` /
+  `'xgb'` (canonical order `mds`/`rf`/`xgb`); `nighttimetime_accept_qcf_below` becomes `nighttime_accept_qcf_below`;
+  `gapfill_storage_term` now defaults to True; the energy-flux set widens to `G`, `SH`, `SLE`, `FH2O`.
 
 ### Desktop GUI (new)
 
-- **PySide6 desktop GUI** (`diive.gui`, optional `gui` extra; launch `diive-gui`). User manual `diive/gui/MANUAL.md`,
-  developer map `diive/gui/README.md`. **Help ▸ User manual** opens the styled `MANUAL.html`; that HTML is a generated
-  artifact (git-ignored) and is now rebuilt on demand from `MANUAL.md` whenever it is missing or stale, so running from
-  source always opens fresh HTML instead of the GitHub Markdown fallback.
-- Tabs: **Overview** (per-variable stats ribbon + multi-panel figure); per-method **Plot** tabs (heatmaps, time series,
-  diel cycle, cumulative year, ridgeline, scatter XY, hexbin, histogram; multi-instance, each with a live settings
-  panel); **Analyze** tabs **Gaps & coverage**, **Driver explorer**, **Compound extremes** (classify months/days into
-  none/air/soil/compound dry-hot extremes from two drivers' z-scores + quadrant scatter, Wang et al. Fig. 2),
-  **Seasonal-trend & anomalies**, **Spectrogram**;
-  **Flux processing chain** (Input + L2 + L3.1 storage correction + L3.2 outlier-detection chain + L3.3 constant-USTAR
-  filtering + L4.1 gap-filling — rf / xgb / mds, additive across methods, one gap-fill per USTAR scenario, with a
-  cumulative / heatmap method comparison; a shared Random seed makes rf/xgb reproducible, plus per-method
-  hyperparameters (RF/XGB trees/depth/learning-rate, MDS tolerances) and SHAP feature reduction; composable per-level
-  path with per-level run buttons, a pipeline-rail layout, a per-level QCF screening report, per-test input-column
-  pickers + the eight VM97 sub-tests at L2, and a USTAR/storage/driver column picker on the other levels;
-  **Copy Python**). **Level 3.3** now offers two modes: pre-known **constant thresholds** or **moving-point
-  detection** (Papale 2006) — a multi-year bootstrap (`run_level33_ustar_detection`) that estimates the threshold from
-  nighttime respiration and applies the CUT percentiles (CUT_16/50/84) as USTAR scenarios; **Copy Python** renders the
-  detection call. **Flux ▸ USTAR detection** (new standalone tab) runs the same `UstarMovingPointDetection` directly:
-  pick NEE/TA/USTAR/SW_IN, get per-season + annual thresholds, or tick **Multi-year bootstrap** for per-year
-  p16/p50/p84 + a pooled CUT, shown as a table and a diagnostic plot; **Time lag analysis** (EC concentration↔wind lag
-  distribution per gas, peak/range/EddyPro window, `dv.flux.TimeLagAnalysis`); **NEE partitioning** — four tabs, one
-  per faithful port (**Nighttime (ONEFlux)** `*_NT_OF`, **Nighttime (REddyProc)** `*_NT_RP`, **Daytime (REddyProc)**
-  `*_DT_RP`, **Daytime (ONEFlux)** `*_DT_OF`), each with auto-seeded input-column pickers (✓/✗ availability marker),
-  site coordinates (seeded from Project settings), an optional VPD-in-kPa toggle for the daytime methods, a worker-thread
-  run, a daily-mean GPP/RECO + cumulative preview, and **Add results to dataset** (emits the GPP/RECO/parameter columns
-  with DERIVED provenance); **Outliers** tabs **Absolute limits
-  filter**, **Hampel filter**, **Local SD
-  filter**, **Z-score filter**, **Z-score (rolling) filter**, **Z-score (increments) filter**, **Local Outlier
-  Factor filter**, **Trim-low filter**, and **Manual removal** (each keeps the
-  original + a cleaned copy + the flag, with a live two-panel preview and **Copy Python**), plus **Stepwise screening**
-  (chain several outlier tests on one variable, inspect what each step removes, and compute the overall QCF separately —
-  then add the flags + QCF + filtered series to the dataset). The Stepwise screening tab now also has a **corrections
-  phase** (applied to the QCF-filtered series, mirroring the meteo-screening notebook): a **measurement** dropdown
-  (e.g. *TA - air temperature*, auto-detected from the variable name) gates which corrections are physically meaningful
-  — nighttime zero-offset for SW/PPFD, RH offset for RH, plus the generic set-to-min/max, set-to-value and
-  set-exact-to-missing — emitting a corrected column and extending the **Copy Python** script. Its layout is a
-  segmented inspector (Outliers / Corrections / Report) beside an always-large plot stage, with edits applied only on a
-  **Run** button. Data menu **Select
-  variables**, **Select records by condition** (build stacked keep/remove operations that filter a target by another
-  variable's range, with a live preview, undo/reset, and an emitted `{target}_SEL` column), **Rename variables** (add a
-  prefix/suffix to all variables, or one at a time, with a live preview), **Metadata explorer**, **Feature engineering**,
-  **Combine variables** (drag a variable onto heatmap 1 and another onto heatmap 2, pick a method —
-  multiply/add/subtract/divide, or fill the gaps of one with the other — and "keep overlapping only", preview the result
-  in heatmap 3, then add it as a new column, with **Copy Python**; backed by the new `dv.variables.combine_variables` /
-  `combine_variables_to_code`), **VPD (TA + RH)** (a new Variables ▸ **Calculate** section; vapor pressure deficit in
-  kPa from air temperature + relative humidity via `dv.variables.calc_vpd_from_ta_rh`; a draggable variable list, TA/RH input fields you drag a
-  variable onto or pick, a **Calculate** button, and TA / RH / VPD date/time-heatmap previews; emits `VPD_kPa` (DERIVED),
-  with **Copy Python** backed by the new `calc_vpd_from_ta_rh_to_code`; first of a reusable `BaseDerivedVariableTab`
-  family for single-formula derived variables) and **Potential radiation** (same Variables ▸ **Calculate** section;
-  `SW_IN_POT` in W m-2 from the record's timestamps + the site location via `dv.variables.potrad`, the ONEFlux
-  `get_rpot` port behind FLUXNET's `SW_IN_POT`; it takes no input columns, so the variable list and input box give way
-  to a **Site coordinates** box seeded from *Project settings* — with an unconfigured site it refuses to run rather than
-  silently return the (0, 0)-at-UTC curve. The freed-up space carries three views of the result: the per-month **diel
-  cycles** above the **full time series** on the left, and the date/time **heatmap** on the right spanning both rows.
-  Emits `SW_IN_POT` (DERIVED), with **Copy Python** backed by the new `potrad_to_code`);
-  plus **Appearance**, **Project settings** (author, description, site details, and a **sticky-note wall** — all saved
-  with the project), and **Log**.
-- **Plot tabs — refinements.** Every X/Y/Z role-picked plot type — **Scatter XY**, **Wind rose**, **Hexbin**, and
-  **Heatmap x/y/z** — now assigns variables to roles via dropdowns (X/Y/Colour, value/wind-direction/colour, X/Y/Z) —
-  pick one from the complete list or **drag** it from the variable list onto a field — instead of clicking the list in
-  order. Scatter and Wind rose keep the colour role optional; Hexbin and Heatmap x/y/z require all three. Scatter gained a point hover showing
-  x/y(/z), and the wind-rose per-sector table moved to the **right** of the plot. **Every** plot tab now carries a
-  title-bar **Copy Python** button that emits a runnable snippet for the current plot — backed by a new library codegen
-  module (`core/plotting/codegen.py`) with one `*_to_code` per plot class (heatmap date/time + year/month, time series,
-  diel cycle, cumulative year, histogram, ridgeline, hexbin, wind rose; scatter keeps `scatter_to_code`). **Diel cycle** gained an
-  **Aggregation** dropdown (mean/median/min/max/p25/p75), an **Uncertainty band** dropdown (±SD/±SE/IQR/Min–Max/None),
-  a **Curves** dropdown (per-month vs overall), per-month **colour schemes**, and **markers**; stacking several
-  variables (Ctrl+click) gives each its own settings sub-tab and draws **one** shared, auto-column legend. The
-  **Update plot** button moved to its own left-aligned row below the tab header, is **disabled until something
-  changes**, and now applies on click only (no live re-render). The year/month heatmap hover labels cells as
-  `Month`/`Year` instead of a clock time. Fixes: the ridgeline **overlap** slider now takes effect on the embedded
-  figure; flipping a heatmap's **orientation** no longer leaves an empty plot (the kept pan/zoom is dropped when it
-  falls off the new data); the **grid** toggle works (single source in *Format*); a scatter can colour points by one of
-  its own X/Y variables without erroring; and the window is sized to the screen **work area** so the bottom of a tab is
-  never clipped behind the taskbar.
-- **Plot menu — five new plot tabs.** **Heatmap x/y/z** (`HeatmapXYZ`) — a heatmap of a Z value over a grid of two
-  driver variables: the raw data are binned with `GridAggregator` (quantile or equal-width bins, number of bins,
-  aggregation) and each X/Y cell is coloured by the aggregated Z; X/Y/Z are role-picked (dropdowns / drag).
-  **Shifted distribution** (`ShiftedDistributionPlot`) — compares a variable's distribution between a reference period
-  and a comparison period. **Tree ring** (`TreeRingPlot`) — one variable drawn as concentric annual rings on a polar
-  plot, filled (colour mesh) or line style. **Cumulative** (`Cumulative`) — a running cumulative total across the whole
-  record (distinct from **Cumulative year**, which resets each calendar year), with stacked multi-variable panels.
-  **Waterfall** (`WaterfallPlot`) — the cumulative budget as a waterfall of per-period contributions. Each has a
-  title-bar **Copy Python** button.
-- **Fix: Tree ring Copy Python** now includes `cb_labelsize` (colorbar font size) so the emitted snippet matches the
-  rendered plot.
-- **Flux ▸ Random uncertainty (PAS20)** (new tab, `tabs/uncertainty_randunc.py`) — estimate the random measurement
-  uncertainty of a flux with the hierarchical 4-method PAS20 cascade (`dv.flux.RandomUncertaintyPAS20`, ONEFlux port).
-  Auto-seeded pickers for the measured + gap-filled flux and the three similarity drivers (TA, VPD, SW_IN) with ✓/✗
-  availability markers and a VPD-in-kPa toggle; a worker-thread run with a **progress bar over the four methods**
-  (new optional `RandomUncertaintyPAS20.run(progress_callback=...)`); a three-panel preview — a flux ± uncertainty
-  band and the cumulative-uncertainty bounds, plus a measured-flux vs random-uncertainty scatter (method-1 / direct-SD
-  records only — the Hollinger & Richardson 2005 flux-magnitude scaling; the median-fallback methods 2-4 are excluded so
-  their repeated values don't paint as horizontal streaks); **Add result to dataset** emits the single `{flux}_RANDUNC` column with DERIVED provenance; and a
-  **Copy Python** button (new `randunc_to_code` codegen) for a reproducible script. Laid out like the data-correction
-  tabs — a fixed-width **Settings** column (header -> description -> inputs/options -> Run -> status -> Add) beside a
-  method **hero** band (mean / median / records / cumulative ±σ) over the preview, with Copy Python in the title bar.
-- **Flux ▸ Joint uncertainty (PAS20)** (new tab, `tabs/uncertainty_jointunc.py`) — combine the per-record random
-  uncertainty with the flux-filtering scenario-ensemble percentile spread in quadrature, the faithful ONEFlux
-  `compute_join` (new `dv.flux.JointUncertaintyPAS20` / `joint_uncertainty_pas20`): `JOINTUNC = √(RANDUNC² +
-  ((upper − lower)/divisor)²)`. A **Scenario percentiles** selector picks the convention — NEE USTAR scenarios (16th/84th
-  ÷ 2) or energy-flux LE/H (25th/75th ÷ IQR 1.349) — and seeds the scenario pickers biased to the random-uncertainty
-  column's flux. Three-panel preview: flux ± joint band, random-vs-scenario component decomposition, and the cumulative
-  joint bounds (random part propagated in quadrature, the fully-correlated scenario part as the running spread of the
-  cumulative scenario sums). **Add** emits `{base}_JOINTUNC` (DERIVED); **Copy Python** via the new `jointunc_to_code`.
-- **Corrections menu** — the high-resolution data corrections, now also as **standalone tabs, one per correction**, on a
-  reusable **`BaseCorrectionTab` template** (`tabs/_correction_base.py`; the RF/XGB shared-template approach): **Remove
-  nighttime zero offset**, **Remove relative humidity offset**, **Set to max / min threshold**, **Set to value**, **Set
-  exact values to missing**. Each picks a target variable, previews original vs corrected, and emits a `{var}_…` column
-  with **Copy Python**; all route through the library `apply_corrections` / `corrections_to_code`. Because each correction
-  is its own tab, any correction is available for any variable (the measurement is a hint, not a lock). The **Remove
-  nighttime zero offset** tab is the rich one: a **Clamp negative values to zero** option, a **4-panel diagnostic
-  preview** (original → daily offset → series−offset → final corrected), and a **below-zero stats hero** (records < 0
-  before/after, overall + nighttime), driven by the new `dv.corrections.nighttime_zero_offset_diagnostics`.
-- **Gap-filling ▸ XGBoost gap-filling** + **Random Forest gap-filling** tabs (`tabs/gapfilling.py` /
-  `tabs/gapfilling_randomforest.py`, single-instance, new top-level **Gap-filling** menu) on a reusable
-  **`MlGapFillingTab` template** (`tabs/_ml_gapfilling_base.py`): the whole layout/flow is a template every ML gap-filler
-  shares, so each method is a ~140-line subclass overriding only the method hooks (`_model_class`, `_build_model_box`,
-  `_method_kwargs`, `_method_controls`, `_codegen`, and a few labels). Random Forest exposes the sklearn-RF
-  hyperparameters (n_estimators, max_depth, min_samples_split, min_samples_leaf, max_features, ...) and emits `*_gfRF`;
-  XGBoost emits `*_gfXG`. The tabs split into **Model**
-  and **Results** sub-tabs (new `SubTabs` widget — segmented pills over a `QStackedWidget`, with the **Copy Python**
-  button in the title bar and **Run / Add** mounted as sub-tab corner widgets past a slim faded divider).
-  *Model* uses three variable lists — set the **target** in the *Target* list (far left), then move features between
-  *Available features* and *Selected features* by clicking — configure the model hyperparameters + optional SHAP
-  feature reduction (every field has a tooltip), and shows the observed-vs-gap-filled date/time heatmaps under a
-  **performance hero band** (held-out R² / RMSE / MAE / MAPE / MAXE + gaps filled + **fallback-fill** count + feature
-  count) beside a narrow **SHAP feature-importance table**. *Results* is a new scrollable **card dashboard**
-  (`widgets/gapfill_results.py::GapFillResultsPanel`) surfacing the library's console report natively — a top row of
-  tables (**Model performance** held-out-vs-in-sample scores, **Configuration**, **Feature reduction** with an info-button
-  threshold equation + a dashed-red keep/drop line + green-kept/grey-dropped/amber-benchmark rows, **Gap-fill quality**)
-  over a row of plots (predicted-vs-observed, SHAP importance, diel cycle, cumulative). Runs on a worker thread; the model
-  is trained on the selected feature columns directly (no feature-engineering settings). A **Copy Python** button copies a
-  runnable script; **Add results to dataset** emits the gap-filled + ISFILLED flag columns with DERIVED provenance and
-  keeps the Results dashboard intact. All computation is library work (`XGBoostTS` / `RandomForestTS`).
-- **Gap-filling ▸ MDS gap-filling** tab (`tabs/gapfilling_mds.py`, single-instance) — Marginal Distribution Sampling
-  (`dv.gapfilling.FluxMDS`, Reichstein et al. 2005). MDS is not an ML regressor, so this tab is not an `MlGapFillingTab`
-  subclass; it reuses the same shared chrome (`tab_chrome` title bar + list header, `WorkerRunner`, `SubTabs`) but offers
-  a target (flux) list, a **fixed three-driver picker** (SWIN / TA / VPD, auto-seeded by name with availability markers,
-  prefers gap-filled `_f`, skips `FLAG_*`) and similarity tolerances (`swin_tol`, `ta_tol`, `vpd_tol`, `avg_min_n_vals`) —
-  no feature list, no SHAP, no held-out test (MDS has none). Its **Results** page is a slimmed dashboard
-  (`widgets/mds_results.py::MdsResultsPanel`): Configuration + in-sample scores + a **per-quality-level breakdown** table,
-  a **quality-level bar plot** (records per level, grey observed + blue gradient for looser tiers), a
-  predicted-vs-observed scatter, the cumulative sum, and a **full-width quality time series** (the gap-filled series with
-  each point coloured + markered by its quality level, mean ± SD whiskers). A **progress bar** tracks the run across the
-  MDS quality levels and the **Log tab** streams a per-level line (`Quality N (…): filled X gaps, Y remaining`). **Add
-  results to dataset** emits `*_gfMDS` + `FLAG_*_gfMDS_ISFILLED` with DERIVED provenance; **Copy Python** renders a
-  `FluxMDS(...).run()` script (`mds_gapfill_to_code`). New library helpers keep the domain knowledge out of the GUI:
-  `FluxMDS.run(progress_callback=)` (per-quality-level progress + per-level `info` logging at the caller's verbosity),
-  `FluxMDS.plot_quality_timeseries(ax=)` (the embeddable colour/marker-by-quality time series, also the top panel of the
-  standalone `showplot`), `FluxMDS.quality_breakdown()` (per-level `level`/`count`/`pct`/`description` DataFrame) and
-  module-level `mds_quality_description()` — the last two also backing the console report's Quality Distribution table.
-  - **Long-term (per-year) mode** — both ML gap-filling tabs now offer a **Long-term mode** checkbox that, instead of one
-    model for the whole record, builds one model per calendar year from that year plus its two closest neighbours
-    (`LongTermGapFillingXGBoostTS` / `LongTermGapFillingRandomForestTS`). The checkbox is **selectable only when the record
-    spans more than three years** (≥ 4 distinct years), with a hint showing the detected span. In long-term mode the hero
-    band shows the per-year held-out scores **averaged across years**, the Model-page SHAP table shows mean importance
-    across years, and the **Results** dashboard switches to a long-term view: a **Performance per year** table (one row per
-    year + an across-year **Average** row), a **Year pools** table (which years trained each year's model), a
-    **Feature importance per year** table (feature × year + a mean column), plus per-year-R² / cumulative / diel /
-    mean-importance plots. **Copy Python** renders the long-term `.run(reduce_features=…)` flow. New library support:
-    `LongTermGapFillingBase.run()`, `get_gapfilled_target()`, `get_flag()`, `scores_overall_` /
-    `scores_traintest_overall_`, and a `shap_threshold_factor` arg on `reduce_features_across_years()`.
-- **Gap-filling: `plot_feature_importances` on the ML base class** — `MlRegressorGapFillingBase` (so `RandomForestTS` /
-  `XGBoostTS` and variants) gained a two-phase SHAP feature-importance bar plot: `plot_feature_importances(ax=None,
-  traintest=False, max_features=None, …)`. `ax=None` builds a standalone figure; passing an `ax` draws into it (embeddable
-  in a GUI canvas or multi-panel figure). Replaces the standalone, non-embeddable `plot_feature_importance` helper for new
-  code.
-- **Gap-filling codegen** — new `diive.gapfilling.codegen.ml_gapfill_to_code(class_name, gapfilled_suffix, ...)` renders a
-  runnable `<class>(...).run()` snippet from a target + feature list + kwargs (shared by every ML gap-filler);
-  `xgboost_gapfill_to_code(...)` / `randomforest_gapfill_to_code(...)` are thin wrappers. The GUI's **Copy Python** uses it.
-- **Gap-filling: rich console report** — `MlRegressorGapFillingBase` (all ML gap-fillers) now prints a coloured,
-  blank-line-separated report at `verbose>=2` with phase banners (start → feature reduction → training → gap-filling →
-  complete): a Configuration `Table` (regressor + all hyperparameters), data/split summary, **held-out test** and
-  **in-sample** scores `Table`s (R²/RMSE/MAE/MedAE/MAPE/MAXE/MSE), feature-importance `Table`s (test + final model), a
-  feature-reduction `Table` (per-feature SHAP vs the random benchmark + accepted/rejected verdict), and a gap-fill flag
-  summary (observed / full-model / fallback + coverage). Step-chatter moved to DEBUG(3) so `verbose=2` is the clean
-  report. The GUI runs gap-filling at `verbose=2`, streaming it into the colour-rendering **Log tab**.
-- **Fix: `_TeeConsole` forwarded `rule()` twice** to mirror consoles (e.g. the GUI Log tab) — Rich's `rule` renders via
-  `self.print` (already forwarded), so the extra `rule` override double-printed every horizontal rule. Removed.
-- **Shared two-list selector** (`widgets/dual_variable_picker.py`, `DualVariablePicker`): the click-to-add / click-to-remove
-  available↔selected logic, built on two `VariablePanel`s, is now one reusable widget used by both **Data ▸ Select
-  variables** and the gap-filling feature picker (and available to future two-list selections).
-- **Analyze ▸ Data profile** tab: a whole-dataset profiling overview — dataset-level facts (records, variables, overall
-  missing %, duplicate timestamps/rows, inferred frequency, time span, memory) above a sortable per-variable table
-  (dtype, count, missing count/%, number of gaps, unique values, zeros, constant flag, mean/SD/min/median/max), with a
-  variable filter and missing-% colour tint. Backed by the new library functions
-  `dv.analysis.profile_dataframe` / `dv.analysis.dataframe_overview` / `dv.analysis.count_gaps`. The table fills its
-  width *proportionally* (columns snug to content, leftover shared mostly to the Variable column so the numbers stay
-  compact and no column balloons; scales down to fit when too wide) with zebra rows and a clean header.
-- **Projects** (`File ▸ Save project` / `Open project`): save the full working state to a self-contained
-  ``<name>.diive`` folder — the dataset (`data.parquet`), the complete per-variable metadata (tags, notes,
-  origin/provenance), project settings (author, description, site details), and the active date range, marked by a
-  `__diive__` file. Opening one restores
-  everything. Library: `diive.core.io.project` (`save_project`, `load_project`, `is_project`, `DiiveProject`); the GUI
-  adds a name+location dialog and Ctrl+S = save the open project. A project restores the **complete session**: the open
-  tabs (order, titles, pins) each with its selected variable(s) and settings, the Overview's selection/subset, and the
-  previously-active tab. On launch the app reopens the last project (else the example data). The startup splash shows an
-  animated loading spinner.
-- **Per-variable metadata** (tags + provenance): every variable carries an origin (original/modified/derived), parent
-  link, and an operation history; operations (outlier filters, feature engineering) auto-record provenance, and the user
-  can add tags / mark favorites. Surfaced via a star + tag-count indicator and a rich hover tooltip on the variable list,
-  and the **Data ▸ Metadata explorer** tab (origin badge, editable tag chips, a free-text note capped at 50 words, and a
-  provenance timeline). Favorites pin to the top of every variable list; user tags get an auto-assigned (stable) colour.
-  User tags + notes persist across sessions **namespaced by dataset** (the same column name in two datasets keeps
-  separate tags); provenance regenerates per session (each file variable's history starts with its import).
-- Shared variable list across tabs (fuzzy filter + colour pills); tinted editable fields; settings tooltips from
-  library docstrings; plots apply on an "Update plot" button. Date-range subselection (Data menu) and Save-as-parquet
-  (File menu). Startup splash + Help ▸ About. Preferences persist.
-- **Rename / delete any variable** from its right-click menu in every tab (non-destructive; renamed variables keep their
-  tags, notes, and history). Provenance history is now **cumulative** — a derived column inherits its parent's full
-  history (`FC → FC_LOCALSD → FC_LOCALSD_HAMPEL` shows all steps). Adding columns (outlier/feature tabs) **jumps the
-  Overview to the new variable** (clears the filter, scrolls, selects and plots it); an active variable subset is kept
-  across deletes/renames. Older `.diive` projects with a stale metadata layout open gracefully (tolerant
-  deserialization). Tab rename is left-double-click only.
-- **Studio look** (minimal: near-white surfaces, pill tabs, frameless rounded window with an inline-dropdown header),
-  edited live in **Appearance**. Tabs reorder, rename, close, and **pin** (freeze their dataset). App/taskbar icon added.
-  On a narrow window the centre title (diive + version + file count) now gives way first — it elides and finally hides —
-  so the menu buttons keep their full labels instead of collapsing to `F…`.
-- **Every menu tab can open more than once** — re-selecting a menu entry opens a new numbered instance (`Hampel filter
-  1`, `Hampel filter 2`, ...), like the plot tabs already did. Only the app-wide singleton editors stay single-instance
-  (Appearance, Project settings, Metadata explorer); re-selecting those focuses the open one.
-- **Standalone Windows build** for sharing the GUI without a Python/uv install: a PyInstaller one-folder spec under
-  `packaging/` (`build_gui.ps1` → `dist/diive-gui/` + a zip). Users unzip and run `diive-gui.exe`. See
-  `packaging/README.md`. Opt-in `build` dependency group (`uv sync --extra gui --group build`).
+A PySide6 desktop app: `pip install 'diive[gui]'`, launch `diive-gui`. User manual `diive/gui/MANUAL.md` (opened by
+**Help > User manual**, rebuilt from the Markdown when stale), developer map `diive/gui/README.md`. Every tab runs
+library code and offers **Copy Python**, which copies a runnable script reproducing what you see. Optional `gui3d` extra
+(`pyvista`, `pyvistaqt`, `trimesh`) adds the 3-D tabs; optional `db` group adds the Database tabs.
 
-- **Events** (`Data ▸ Add event…` and `Data ▸ Events`): mark when something happened — a single date/time, a from/to
-  range, or a start + duration (fertilization, harvest, grazing, management steps). Each event is stored as a **0/1 data
-  column** (`EVENT_<name>`; 1 = the event took place) that saves with the project and shows in every variable list, and
-  is drawn on the Overview's time-series panels (a line for an instant, a shaded band for a period) and as a band on the
-  date/time heatmap. A single **Show events on plots** toggle (in the Events tab and the Data menu) turns the overlays on
-  or off. Events persist in preferences and projects. The **Events** tab shows them as a reflowing board of
-  **category-coloured cards** (sorted by date), each with a span bar, relative-time hint, and per-card actions:
-  show-on-Overview (zooms the linked panels onto the event), edit, duplicate, shift, and delete; the board can be
-  filtered, grouped (by category or year), and shown compact or comfortable. **Manage categories…** edits a category
-  palette (seeded with `category1/2/3`; rename / recolour / delete, last one kept) whose colours flow to both the cards
-  and the plot overlays.
+- **Overview**: per-variable stats ribbon over a multi-panel figure with linked zoom.
+- **Plot** (17 types, multi-instance): heatmap date/time, heatmap year/month, heatmap x/y/z, time series, diel cycle,
+  cumulative, cumulative year, ridgeline, scatter XY, hexbin, histogram, shifted distribution, wind rose, tree ring,
+  waterfall, 3D surface, 3D surface (X/Y/Z). Scatter, wind rose, hexbin, and heatmap x/y/z assign X/Y/Z by dropdown or
+  by dragging a variable onto the field. Diel cycle gained aggregation (mean/median/min/max/p25/p75), an uncertainty
+  band (SD/SE/IQR/min-max/none), per-month curves, colour schemes, and markers. Plots apply on an **Update plot** button,
+  disabled until something changes.
+- **Cleaning**: nine outlier tabs (absolute limits, Hampel, local SD, three z-score variants, local outlier factor,
+  trim-low, manual removal), each with a live two-panel preview; five correction tabs (nighttime zero offset, RH offset,
+  set to min/max threshold, set to value, set exact values to missing), each available for any variable; and **Stepwise
+  screening**, which chains several tests on one variable, applies corrections to the QCF-filtered series, and computes
+  the overall QCF.
+- **Gap-filling**: XGBoost (`*_gfXG`), Random Forest (`*_gfRF`), and MDS (`*_gfMDS`). The ML tabs split into Model and
+  Results pages: pick a target and features, set hyperparameters and optional SHAP feature reduction, and read a
+  performance hero band (held-out R2/RMSE/MAE/MAPE/MAXE, gaps filled, fallback fills) over heatmaps, a SHAP table, and a
+  card dashboard of the console report. A **Long-term mode** checkbox (records spanning 4+ distinct years) builds one
+  model per year from that year plus its two closest neighbours, with per-year performance, year pools, and per-year
+  importance. MDS has no held-out split or SHAP, so its Results page shows a per-quality-level breakdown instead.
+- **Flux**: a guided **processing chain** (Input, L2, L3.1, L3.2, L3.3, L4.1) on the composable per-level path, with
+  per-level run buttons, a QCF screening report, and per-test input-column pickers at L2; L3.3 takes constant thresholds
+  or runs moving-point detection (CUT or VUT). Standalone **USTAR detection**, **Time lag analysis**, four **NEE
+  partitioning** tabs (one per port), and **Random** / **Joint uncertainty (PAS20)**.
+- **Analyze**: data profile, gaps & coverage, driver explorer, compound extremes, seasonal-trend & anomalies,
+  spectrogram.
+- **Data and Variables**: select variables, select records by condition, combine variables, calculate derived variables
+  (VPD from TA+RH, potential radiation), rename variables, metadata explorer, feature engineering, events.
+- **3D surface** and **3D surface (X/Y/Z)** (`gui3d`): the date-by-time-of-day grid, or an arbitrary Z over two chosen
+  X/Y variables, as a rotatable PyVista relief. Extruded-heatmap or smooth style, view presets, orbit and flyover camera
+  moves, optional cast shadows, and export to `.glb` (PowerPoint, Blender, Quest/WebXR) or watertight `.stl` for 3-D
+  printing.
+- **Database** (`db` group): connect to InfluxDB (the path is remembered, never the token), drill
+  bucket > data version > measurement > field, download a field for a date range with a progressive chunked plot, and
+  hand it to **Meteo screening (database)**, which adds resampling to the stepwise screening flow and converts to the
+  dataset's middle-of-period timestamp so it aligns on merge.
+- **Projects**: `File > Save project` writes a self-contained `<name>.diive` folder (dataset, per-variable metadata,
+  project settings, active date range). Opening one restores the full session: open tabs with their variables and
+  settings, the Overview selection, and the active tab. The app reopens the last project on launch.
+- **Per-variable metadata**: every variable carries an origin (original/modified/derived), a parent link, and an
+  operation history that outlier filters and feature engineering record automatically. Add tags, mark favorites, and
+  write a note (capped at 50 words). Derived columns inherit the parent's full history. Tags and notes persist across
+  sessions namespaced by dataset.
+- **Events**: mark when something happened (fertilization, harvest, grazing) as an instant, a range, or a start plus
+  duration. Each event becomes an `EVENT_<name>` 0/1 column and draws on the Overview panels and heatmap. Category
+  colours are editable and flow to both the cards and the overlays.
+- **Standalone Windows build**: a PyInstaller one-folder spec under `packaging/` (`build_gui.ps1` produces
+  `dist/diive-gui/` and a zip) so users can run `diive-gui.exe` without Python. Opt-in `build` group.
 
-- **Tab-chrome harmonization** — every tab now wears the same `tab_chrome.build_titlebar` header instead of a hand-rolled
-  one. The single-variable explorer tabs (**Driver explorer**, **Gaps & coverage**, **Seasonal-trend & anomalies**,
-  **Spectrogram**, **3D surface**) gain a title bar via their shared `SingleVariableExplorerTab` base; the **Feature
-  engineering**, **Rename variables**, **Metadata explorer**, and **Data profile** tabs gain one too; and the **Flux
-  processing chain** and **USTAR detection** tabs drop their duplicated title rows for the helper. The Feature engineering tab's column captions
-  reuse the shared `tab_chrome.list_header`. Presentation-only; no behaviour change.
-- **Copy Python on the explorer + feature tabs** — the five single-variable explorer tabs above plus **Feature
-  engineering** each gain a **Copy Python** button that copies a runnable diive script reproducing the current view
-  (computation + plot). As with every other tab, the GUI only *asks* the library for the snippet (GUI <-> library
-  separation): new library codegen functions `rank_drivers_to_code` (`analysis/correlation.py`), `gapstats_to_code`
-  (`analysis/gapfinder.py`), `spectrogram_to_code` (`analysis/harmonic.py`), `seasonal_trend_to_code`
-  (`analysis/seasonaltrend.py`, decomposition + anomaly views), `datetime_surface_to_code` / `surface_xyz_to_code`
-  (`core/plotting/codegen.py`, matplotlib 3-D surfaces so they run without the GPU extra), and `feature_engineer_to_code`
-  (`core/ml/feature_engineer.py`).
-  The `SingleVariableExplorerTab` base mounts the button automatically for any subclass that overrides `_python_code`.
-- **3D surface tab** (`Plot ▸ 3D surface`, single-instance, optional `gui3d` extra): the date×time-of-day grid as a
-  rotatable PyVista relief. **Style** picks an extruded heatmap (default — stepped bars, each bar one uniform heatmap
-  colour on its top and step-risers) or a smooth interpolated surface. **Y stretch** (up to 100) widens the date axis into
-  a landscape; **Y cell (days)** + **Cell aggregator** either block-aggregate several days into each cell (mean/median/max/
-  min, to widen the bars and tame single-day spikes) or, via `rolling mean`/`rolling median`, smooth each day over a
-  centred window while keeping full resolution (gaps preserved); plus **Vertical exaggeration**, **Opacity**, **Colormap**,
-  **Smooth terrain** (surface style only), **Smooth shading**, and **Show mesh**. An optional **Shadows** toggle casts
-  short shadows from an overhead spotlight, with an adjustable **Shadow length** (off by default; needs a GPU that supports
-  VTK shadow mapping). **View presets** (Isometric/Top/Front/Back/Left/Right and tilted Front 20°/Side 20°) snap the camera
-  and maximise the plot in the viewport; **Orbit** and **Flyover** are timer-driven cinematic camera moves sharing a
-  **Speed** control. **Export** writes the styled surface to open 3-D formats: **VR (.glb)** — a texture-baked binary glTF
-  for PowerPoint (*Insert ▸ 3D Models*), Blender, and Meta Quest / WebXR — and **3D print (.stl)** — a watertight solid
-  with a base plate. On load / new variable the view frames to the tight Isometric preset; a settings tweak stays put.
-  Needs `gui3d` (`pyvista` + `pyvistaqt` + `trimesh`); without it the tab shows install instructions. **Copy Python** emits
-  a matplotlib 3-D surface (`datetime_surface_to_code`) that runs without the extra.
-- **3D surface (X/Y/Z) tab** (`Plot ▸ 3D surface (X/Y/Z)`, optional `gui3d` extra): the coordinate-surface sibling of the
-  3D surface. Instead of a variable's calendar grid it renders an arbitrary **Z over two chosen X and Y variables** — drag
-  a variable from the list onto the **X**, **Y**, or **Z** field, and the scattered points are gridded onto a regular X-Y
-  mesh (`dv.analysis.GridAggregator`, equal-width bins) and shown as the same relief. Adds **Bins (X/Y)** and **Z
-  aggregator** (mean/median/max/min/sum) controls; empty bins render as genuine holes. It reuses the 3D surface tab's relief
-  controls, view presets, orbit/flyover, and glTF/STL export unchanged. **Copy Python** emits `surface_xyz_to_code`
-  (GridAggregator + a matplotlib 3-D surface). Enabled by making the shared single-variable explorer list an opt-in drag
-  source (`SingleVariableExplorerTab.list_draggable`).
+Library additions backing the GUI (all backward-compatible):
 
-Library additions used by the GUI (all backward-compatible):
-
-- `dv.events` (`Event`, `event_to_flag`, `overlay_events`, `make_event_flag_name`, `CATEGORY_COLORS`): time-stamped
-  event markers. `Event` is an instant (no end) or a period; `event_to_flag(event, index)` builds the 0/1 yes/no column;
-  `overlay_events(ax, events, axis='x'|'y')` draws lines/spans onto an existing datetime axes (x) or the heatmap (y).
-  `Event.resolved_color(i, colors=)` and `overlay_events(..., colors=)` take an optional `{category: hex}` override map.
-  Default `CATEGORY_COLORS` keys are now generic placeholders (`category1`, `category2`, …) since an event can mean
-  anything; example `examples/events/events_event.py`.
+- `dv.events`: `Event` (instant or period), `event_to_flag(event, index)` for the 0/1 column, `overlay_events(ax,
+  events, axis='x'|'y')` for line/span overlays, plus `make_event_flag_name` and `CATEGORY_COLORS` (generic
+  `category1`, `category2`, ... placeholders, since an event can mean anything). `Event.resolved_color(i, colors=)` and
+  `overlay_events(..., colors=)` take a `{category: hex}` override map.
+- `dv.analysis.rank_drivers(df, target, method=, max_lag=)`: rank variables by correlation with a target, with an
+  optional lead/lag scan. Returns `[DRIVER, CORR, ABS_CORR, BEST_LAG, N]`.
+- `dv.analysis.profile_dataframe` / `dataframe_overview` / `count_gaps`: whole-dataset profiling.
+- `dv.variables.combine_variables` (multiply/add/subtract/divide, or fill one's gaps with another) and
+  `dv.variables.calc_vpd_from_ta_rh`, with `*_to_code` codegen for both.
+- `dv.keep_vars(data, variables)`: non-destructive column subset, the column analogue of `keep_daterange`.
+- `dv.variables.classify_variable(name)`: kind and category from FLUXNET names (NEE/FC/GPP/Reco/LE/ET/Rg/SW_IN/PPFD/
+  PAR/LW/TA/VPD/SWC; carbon/water/radiation/meteo/soil). A bare `PPFD` column now matches.
 - `save_parquet(..., enforce_diive_format=True, timestamp_name=...)` and `dv.to_diive_format(...)`: coerce to diive
-  parquet format (one header row + valid `TIMESTAMP_*` index).
-- `dv.analysis.rank_drivers(df, target, method=, max_lag=)`: rank variables by correlation with a target (optional
-  lead/lag scan). Returns `[DRIVER, CORR, ABS_CORR, BEST_LAG, N]`.
-- `GapFinder.gap_at()` / `GapStats.gap_at()`: gap containing or nearest to a timestamp. `GapStats` panel plotters use
-  `ax.figure.colorbar` so they embed in a supplied figure.
-- Plot params: `ScatterXY.plot` `markersize`/`alpha`/`vmin`/`vmax`; `TimeSeries.plot` `markersize` (+ honours `title`
-  on a supplied ax); `DielCycle.plot` `legend_loc`/`linewidth`; `Cumulative.plot` `fill`;
-  `HeatmapDateTime` `cb_digits_after_comma='auto'`.
-- `dv.variables.classify_variable(name)`: kind + category from FLUXNET names
-  (NEE/FC/GPP/Reco/LE/ET/Rg/SW_IN/PPFD/PAR/LW/TA/VPD/SWC; carbon/water/radiation/meteo/soil). `PPFD` now matches a bare
-  column.
-- `dv.keep_vars(data, variables)`: non-destructive column subset (column analogue of `keep_daterange`).
+  parquet format (one header row, valid `TIMESTAMP_*` index).
+- `diive.core.io.project` (`save_project`, `load_project`, `is_project`, `DiiveProject`): the `.diive` project format.
 - `diive.core.metadata` (`VariableMetadata`, `ProvenanceEntry`, `MetadataStore`, `provenance_attr`, `ATTRS_KEY`):
-  headless per-variable tag + provenance model. Operations attach a `df.attrs[ATTRS_KEY]` payload describing new columns;
-  consumers record origin/parent/operation/tags. Used by the GUI's metadata explorer. `record_derived` inherits the
-  parent's provenance chain (cumulative history); `MetadataStore.rename(mapping)` re-keys records and rewrites
-  parent/provenance links; `from_dict`/`load_dict` tolerate older layouts (aliased/missing name, list-form tags, bad
-  entries skipped).
+  headless per-variable tag and provenance model. Operations attach a `df.attrs[ATTRS_KEY]` payload describing new
+  columns. `record_derived` inherits the parent's chain, `MetadataStore.rename(mapping)` re-keys records and rewrites
+  links, and `from_dict` / `load_dict` tolerate older layouts.
+- `GapFinder.gap_at()` / `GapStats.gap_at()`: the gap containing or nearest to a timestamp. `GapStats` panel plotters
+  use `ax.figure.colorbar` so they embed in a supplied figure.
+- Plot params: `ScatterXY.plot` `markersize`/`alpha`/`vmin`/`vmax`; `TimeSeries.plot` `markersize` (and it honours
+  `title` on a supplied ax); `DielCycle.plot` `legend_loc`/`linewidth`; `Cumulative.plot` `fill`; `HeatmapDateTime`
+  `cb_digits_after_comma='auto'`.
+- Outlier detectors expose the preview interface: `zScore`, `zScoreRolling`, and `zScoreIncrements` accept a
+  `progress_callback` in `.run()` / `.calc()` and expose `last_lower_bound` / `last_upper_bound` (the per-iteration
+  band in data units, `None` for the increment method, which has no such band), matching `Hampel` / `LocalSD`. `zScore`
+  gains `thres_zscore_daytime` / `thres_zscore_nighttime` overrides (default `None`, falling back to `thres_zscore`).
+- `FluxMDS.run(progress_callback=)`, `FluxMDS.plot_quality_timeseries(ax=)`, `FluxMDS.quality_breakdown()`, and
+  `mds_quality_description()`.
+- `RandomUncertaintyPAS20.run(progress_callback=)`.
+- `resample_series_to_freq` (`diive.core.times.resampling`): generalises `resample_series_to_30MIN` to any target
+  resolution (`'30min'`, `'10min'`, `'1h'`), which now wraps it. Returns the series unchanged when it already matches.
+  `StepwiseMeteoScreeningDb.resample` honours arbitrary resolutions, and a `FlagQCF` call there that had drifted from
+  the current API is fixed.
 - `SSTATS_DESCRIPTIONS` (`diive.core.dfun.stats`): one-line description per `sstats` metric.
-- Outlier detectors expose the GUI-preview interface: `zScore`, `zScoreRolling`, and `zScoreIncrements` now accept a
-  `progress_callback` in `.run()`/`.calc()` (per-iteration progress + live preview) and expose `last_lower_bound` /
-  `last_upper_bound` (the per-iteration detection band in data units; `None` for the increment method, which has no
-  data-unit band) — matching `Hampel` / `LocalSD`. `zScore` also gains `thres_zscore_daytime` / `thres_zscore_nighttime`
-  per-period overrides (default `None` → fall back to the global `thres_zscore`), per the day/night threshold convention.
-- **Database menu (InfluxDB I/O).** **Database connection** (point at a config directory, test it; the path is
-  remembered, never the token; a green *Connected* pill appears in the header) and **Database explorer** (drill
-  bucket → data version → measurement → field → a **field overview** of every tag plus the first/last record; **download
-  a field** for a date range and plot it, with a **UTC offset** that defaults to the project timezone, a **Match dataset
-  time range** button, a **progressive chunked download that fills the plot in** with a progress bar and an elapsed-time
-  report, and download caching so plotting and screening don't re-fetch). All over the new in-diive InfluxDB engine
-  (`diive.core.io.db`, optional `db` group); the Database tabs show an install notice when it's absent.
-- **Meteo screening (database) tab** — the **full Stepwise-screening experience plus resampling**, for a high-resolution
-  field handed over from the Database explorer. The Stepwise and database screening tabs now share **`ScreeningTabBase`**
-  (variable list + Outliers/Corrections/Report inspector + method-card chain + QCF + preview + save/restore); the
-  database variant adds a **Resample** page whose target **defaults to the working dataset's detected resolution** (and
-  is a **no-op when the data already match it**), then adds the screened, resampled column converted to the dataset's
-  **middle-of-period** timestamp so it aligns on merge — with a collision rename, an overlap guard, the InfluxDB origin
-  and all database tags recorded in the column's history, and a **download-vs-project-timezone mismatch warning** (the
-  database stores UTC; the offset must match your dataset's timezone).
-- **`resample_series_to_freq`** (`diive.core.times.resampling`) — generalises `resample_series_to_30MIN` to any target
-  resolution (`'30min'`, `'10min'`, `'1h'`, …); `resample_series_to_30MIN` now wraps it. Returns the series unchanged
-  when it is already at the requested resolution. `StepwiseMeteoScreeningDb.resample` honours arbitrary resolutions
-  (and a `FlagQCF` call there that had drifted from the current API is fixed).
+- Codegen, so the GUI asks the library for every snippet it copies: `core/plotting/codegen.py` (one `*_to_code` per plot
+  class; scatter keeps `scatter_to_code`), `ml_gapfill_to_code` / `xgboost_gapfill_to_code` /
+  `randomforest_gapfill_to_code` / `mds_gapfill_to_code`, `randunc_to_code`, `jointunc_to_code`, `rank_drivers_to_code`,
+  `gapstats_to_code`, `spectrogram_to_code`, `seasonal_trend_to_code`, `datetime_surface_to_code`,
+  `surface_xyz_to_code`, `feature_engineer_to_code`, `select_records_to_code`, `potrad_to_code`, and
+  `corrections_to_code` alongside `apply_corrections`, which the correction tabs route through.
+- `RidgeLinePlot.plot(fig=...)` and `TimeLagAnalysis.plot_gas(fig=...)`: render into an existing figure (cleared first)
+  instead of a new one, for embedding.
 
 ### Flux Processing Chain
 
-- **Composable architecture.** The monolithic `FluxProcessingChain` (2387 lines) is replaced with typed containers
+- **Composable architecture.** The monolithic `FluxProcessingChain` (2387 lines) is replaced by typed containers
   (`FluxLevelData`, `FluxMeta`, `LevelResults`) and one pure callable per level. The old class stays as a thin
-  orchestrator (unchanged API); `finalize_level2/31/33()` now no-op with a `DeprecationWarning`. Package docstring
-  explains each level's kwarg shape and when to use `run_chain` vs the composable API.
-- **`run_chain(data, FluxConfig)`** single-call driver for the standard L2 → L3.1 → L3.2 (Hampel) → L3.3 → L4.1
-  pipeline, running only the enabled gap-fillers. Only `fluxcol` is unconditionally required; the rest are validated
-  contextually with one cumulative error, and all referenced driver/feature columns are checked upfront.
-- `run_chain` defaults: four universal L2 tests (`DEFAULT_LEVEL2_TEST_SETTINGS`; opt-in signal-strength via
-  `signal_strength_col`), Hampel L3.2 (Papale 2006 spike convention; `outlier_*` fields become optional overrides),
-  a richer ML `FeatureEngineer` (symmetric ±2-lag window + differencing), and SHAP feature reduction on
-  (`gapfill_reduce_features`). New `run_chain` example.
+  orchestrator with an unchanged API; `finalize_level2/31/33()` no-op with a `DeprecationWarning`.
+- **`run_chain(data, FluxConfig)`** drives the standard L2 > L3.1 > L3.2 (Hampel) > L3.3 > L4.1 pipeline in one call,
+  running only the enabled gap-fillers. Only `fluxcol` is unconditionally required; the rest is validated contextually
+  with one cumulative error, and all referenced driver/feature columns are checked upfront. Defaults: four universal L2
+  tests (`DEFAULT_LEVEL2_TEST_SETTINGS`, opt-in signal strength via `signal_strength_col`), Hampel L3.2 (Papale 2006
+  spike convention, so `outlier_*` become optional overrides), a richer ML `FeatureEngineer` (symmetric +/-2-lag window
+  plus differencing), and SHAP feature reduction via `gapfill_reduce_features`.
+- **Level 4.2: NEE partitioning in the chain.** The four ports are wired in as `run_level42_nighttime_oneflux` /
+  `_nighttime_reddyproc` / `_daytime_reddyproc` / `_daytime_oneflux`, mirroring the four L4.1 gap-fillers. Each runs one
+  partitioning per USTAR scenario and merges its outputs into `fpc_df` with the scenario label appended. Meteo drivers
+  resolve from `data.full_df`, coordinates from `data.meta`. The nighttime variants read gap-filled NEE from a
+  selectable L4.1 method (`gapfill_method='mds'` default); the daytime variants use measured NEE only. Reachable on
+  `run_chain` via `FluxConfig.partition_*`, with `level42_to_code`, a `partitioned_cols()` lookup, a `summary()` section,
+  and `levels.level42_*`.
 - **Bootstrap USTAR detection** via `FluxConfig.ustar_detection_mode='bootstrap'` (ONEFlux moving-point, Papale 2006);
-  fitted thresholds on `data.levels.ustar_detection`. `ustar_thresholds` optional (constant mode only).
-- **L3.2 mandatory before L3.3** (`run_level33_*` raise otherwise). **Re-runs cascade**: re-running a level drops its
-  own columns and clears downstream state (tracked in `FluxLevelData.added_columns`; `levels/_rerun.py`); L4.1 and L4.2
-  are per-method/per-variant and additive (a cascade from any earlier level clears both).
-- **Level 4.2 — NEE partitioning in the chain.** The four faithful partitioning ports (see the NEE Partitioning section
-  below) are wired in as composable callables `run_level42_nighttime_oneflux` / `run_level42_nighttime_reddyproc` /
-  `run_level42_daytime_reddyproc` / `run_level42_daytime_oneflux` (mirroring the four L4.1 gap-fillers): each runs one
-  partitioning per USTAR scenario and merges its `*_NT_OF` / `*_NT_RP` / `*_DT_RP` / `*_DT_OF` outputs into `fpc_df`
-  with the scenario label appended. Meteo driver columns resolve from `data.full_df`; `lat`/`lon`/`utc_offset` from
-  `data.meta`. The **nighttime** variants read their gap-filled NEE from a selectable L4.1 method
-  (`gapfill_method='mds'` default); the **daytime** variants use measured NEE only. Available on `run_chain` via the
-  `FluxConfig.partition_*` fields, with codegen (`level42_to_code`), a `partitioned_cols()` lookup, a `summary()`
-  section, and `levels.level42_*` instance access. Common per-scenario plumbing shared with L4.1 via
-  `levels/_shared.py`. Example `examples/flux/fluxprocessingchain/fluxprocessingchain_partitioning.py`.
-- **L3.1 now produces a proper QCF** (`level31_qcf` via `finalize_level`), symmetric with the other levels. The storage
-  `FLAG_..._ISFILLED` column stays informational (no `_TEST` suffix, excluded from QCF).
-- Composable parity: `strgcol` override (`run_level31`), day/night `swin_col` override (`init_flux_data`),
-  `make_level41_engineer(...)` factory, `make_level32_detector` returns `(data, sod)` (breaking).
-  `add_driver(data, series)` puts a Series into `data.full_df` (where L4.1 reads).
-- `run_level33_constant_ustar`: `threshold_labels` optional (positional `CUT_0…`; pass explicit labels for percentiles).
-- Helpers: `gapfilled_cols()`, `summary()`, `filteredseries_level33_hq`; feature engineering hoisted outside the USTAR
-  loop (up to 3× faster); input validation across the composable callables.
-- Renames/fixes (breaking): `level41_methods()` keys `'long_term_random_forest'`/`'long_term_xgboost'` → `'rf'`/`'xgb'`
-  (canonical order `mds`/`rf`/`xgb`); `nighttimetime_accept_qcf_below` → `nighttime_accept_qcf_below`;
-  `gapfill_storage_term` default → True; energy-flux set widened (`_ENERGY_FLUX_VARS`: `G`, `SH`, `SLE`, `FH2O`).
+  fitted thresholds land on `data.levels.ustar_detection`. `ustar_thresholds` is optional (constant mode only).
+- **L3.2 is mandatory before L3.3** (`run_level33_*` raise otherwise). **Re-runs cascade**: re-running a level drops its
+  own columns and clears downstream state (tracked in `FluxLevelData.added_columns`). L4.1 and L4.2 are per-method and
+  additive, and a cascade from any earlier level clears both.
+- **L3.1 now produces a proper QCF** (`level31_qcf`), symmetric with the other levels. Its storage `FLAG_..._ISFILLED`
+  column stays informational, with no `_TEST` suffix, excluded from QCF.
+- Composable parity: `strgcol` override on `run_level31`, day/night `swin_col` override on `init_flux_data`, a
+  `make_level41_engineer(...)` factory, and `add_driver(data, series)` to put a Series into `data.full_df` where L4.1
+  reads. `run_level33_constant_ustar`: `threshold_labels` optional (positional `CUT_0...`; pass explicit labels for
+  percentiles).
+- Helpers `gapfilled_cols()`, `summary()`, `filteredseries_level33_hq`. Feature engineering hoisted outside the USTAR
+  loop, up to 3x faster. Input validation across the composable callables.
 
 ### NEE Partitioning (new)
 
-Faithful, vectorized ports of four reference partitioning routines: two of the Reichstein et al. (2005) **nighttime**
-method (ONEFlux and REddyProc) and two of the Lasslop et al. (2010) **daytime** method (REddyProc and ONEFlux). They
-differ in window geometry, day/night split, fitting and units, so they do not produce identical numbers; output columns carry a
-variant token after the `_NT` (nighttime) / `_DT` (daytime) suffix — `_OF` (ONEFlux) and `_RP` (REddyProc) — so all can
-coexist in one dataframe. All four expose a `.report()` method (also printed automatically by `.run()`) rendering a Rich
-per-year summary table — RECO/GPP fill counts and means, temperature sensitivity E0, with outlier-robust (ONEFlux
-nighttime) and GPP-standard-error (ONEFlux daytime) footnotes — via the shared `diive.flux.partitioning._report`. The
-`verbose` argument now follows the diive level scheme (0 silent, 1 warnings, 2 progress + report, 3 debug) with default
-**2**, so progress lines and the report are shown by default.
+Faithful, vectorized ports of four reference routines: two of the Reichstein et al. (2005) **nighttime** method
+(ONEFlux and REddyProc) and two of the Lasslop et al. (2010) **daytime** method (REddyProc and ONEFlux). They differ in
+window geometry, day/night split, fitting, and units, so they do not produce identical numbers. Output columns carry a
+variant token after the `_NT` / `_DT` suffix, `_OF` (ONEFlux) or `_RP` (REddyProc), so all four coexist in one
+dataframe. Each exposes `.report()` (also printed by `.run()`) rendering a Rich per-year table of RECO/GPP fill counts
+and means and the temperature sensitivity E0. `verbose` follows the diive scheme (0 silent, 1 warnings, 2 progress plus
+report, 3 debug), default 2.
 
-- **Nighttime partitioning ONEFlux** (`dv.flux.NighttimePartitioningOneFlux` /
-  `dv.flux.partition_nee_nighttime_oneflux`, module `diive.flux.partitioning`). Splits NEE into GPP and RECO with the
-  nighttime method of Reichstein et al. (2005) — a faithful, fully vectorized Python port of the ONEFlux
-  `oneflux.partition.nighttime` reference: Lloyd & Taylor (1994) respiration model, full-year + windowed (5-day step /
-  14-day window) parameter optimization with 10% residual trimming, best-E0 selection, the ONEFlux E0 quality gate (a
-  year with no well-constrained short-term E0 is left unpartitioned), E0-fixed Rref re-analysis (4-day step / 8-day
-  window, ordinary + outlier-robust) and linear interpolation. Processes each calendar year independently; outputs
-  `RECO_NT_OF`/`RECO_NT_OF_ROB`, `GPP_NT_OF`/`GPP_NT_OF_ROB`, `RREF_NT_OF`, `E0_NT_OF`, `NEE_NIGHT_OF` (renamed from the
-  earlier suffix-less columns to the `_OF` token). Fast (~0.35 s for 10 years of 30-min data); step-by-step validated
-  against the ONEFlux reference, and sanity-checked against the (independent, ReddyProc-derived)
-  `Reco_CUT_REF`/`GPP_CUT_REF` columns (correlations 0.97 / 0.99 on CH-DAV). Helpers `lloyd_taylor` and `sunrise_sunset`
-  exported. Example `examples/flux/partitioning/partitioning_nighttime_oneflux.py`; tests `tests/test_partitioning.py`.
-
-- **Nighttime partitioning REddyProc** (`dv.flux.NighttimePartitioningReddyProc` /
-  `dv.flux.partition_nee_nighttime_reddyproc`, module `diive.flux.partitioning`). A second, independent port of the same
-  Reichstein et al. (2005) method, faithful to REddyProc's `sMRFluxPartition`: potential-radiation day/night split (exact
-  solar geometry from latitude, longitude and UTC offset), Lloyd-Taylor fit in Kelvin (`TRef`=288.15 K, `T0`=227.13 K),
-  short-term E0 regression (centered 15-day windows / 5-day steps, fit → 5/95 % signed-residual trim → refit, +/-1 SD
-  validity in [30, 350] K, mean of the 3 lowest-SD estimates), E0-fixed Rref as a through-origin slope (centered 7-day
-  windows / 4-day steps) with linear interpolation. Partitions the **whole record at once** with a single E0 (as in
-  REddyProc); no outlier-robust variant. Signature adds `lon` and `utc_offset`. Outputs `RECO_NT_RP`, `GPP_NT_RP`,
-  `RREF_NT_RP`, `E0_NT_RP`, `NEE_NIGHT_RP`. Validated 1:1 against the ReddyProc-derived `Reco_CUT_REF` / `GPP_CUT_REF_f`
-  columns on CH-DAV (2013–2022): RECO r = 0.997, GPP r = 0.9996, annual RECO sums within ~1–2 %. Helpers
-  `lloyd_taylor_kelvin` and `potential_radiation` exported. The short-term E0 and Rref window loops use binary-search
-  slicing of the monotonic day index (instead of a full-length boolean mask per window) and hoist the constant
-  Lloyd-Taylor exponent base out of the optimizer, ~5x faster on 10 years of 30-min data with bit-identical output.
-  Example `examples/flux/partitioning/partitioning_nighttime_reddyproc.py`; tests `tests/test_partitioning_reddyproc.py`.
-
-- **Partitioning comparison example** — `examples/flux/partitioning/partitioning_comparison.py` runs all four diive
-  ports (ONEFlux nighttime `_NT_OF`, REddyProc nighttime `_NT_RP`, REddyProc daytime `_DT_RP`, ONEFlux daytime `_DT_OF`)
-  on identical inputs and
-  compares them against each other and the bundled references for each method (daily-mean + cumulative panels for RECO and
-  GPP), showing how the reference implementation and the nighttime-temperature vs daytime-light approach affect the
-  partitioning.
-
-- **Daytime partitioning REddyProc** (`dv.flux.DaytimePartitioningReddyProc` /
-  `dv.flux.partition_nee_daytime_reddyproc`, module `diive.flux.partitioning`). A faithful Python port of REddyProc's
-  `partitionNEEGL` (Lasslop et al. 2010 light-response-curve method): potential-radiation day/night split (`Rg`>4 W m-2 +
-  sun above horizon), a per-window nighttime `E0` (centered 12-day windows / 4-day reference grid / 2-day step, R's
-  Gauss-Newton `nls` bounded to [50, 400] K with successive 24/48-day window extension) smoothed across time with a
-  Gaussian process (`mlegp`) and an E0-fixed Rref regression, then a per-window rectangular-hyperbola LRC fit (`k`,
-  `beta`, `alpha`, `RRef`; centered 4-day windows / 2-day step) by penalized least squares with Lasslop priors and
-  NEE-uncertainty weighting (R's BFGS `optim`, three starts, the bounds refit cascade and Hessian-based parameter
-  checks), and distance-weighted interpolation of RECO and GPP to every record. To reach REddyProc fidelity the port
-  re-implements R's `nls` Gauss-Newton, `optim` BFGS (`vmmin`) + central-difference gradient/Hessian, and the `mlegp`
-  Gaussian-process smoother. Because the method is a stack of three nested optimizers with data-dependent branches,
-  bit-for-bit parity is not attainable across languages, but each stage matches REddyProc closely: the day/night split
-  and flux interpolation are exact (~1e-13), window acceptance/rejection matches exactly, the LRC per-window parameters
-  match to ~1e-6 for the large majority of windows, and the GP-smoothed E0 to ~0.03 K. **End-to-end the port reproduces
-  a fresh REddyProc run on identical inputs to RECO r = 0.9992, GPP r = 0.9999** (mean abs. diff ~0.01–0.016 µmol m-2 s-1
-  on CH-DAV 2017). Signature: `nee` (measured), `ta`/`vpd`/`sw_in` (gap-filled drivers), `lat`/`lon`/`utc_offset`,
-  optional `nee_sd` (else REddyProc's `max(0.7, 0.2·|NEE|)` fallback), `vpd_in_kpa=True` (diive kPa → REddyProc hPa).
-  Outputs `RECO_DT_RP`, `GPP_DT_RP` and the fitted LRC parameters `K_DT_RP`, `BETA_DT_RP`, `ALPHA_DT_RP`, `RREF_DT_RP`,
-  `E0_DT_RP` (reported at each window's central record). Against the bundled `Reco_DT_CUT_REF` / `GPP_DT_CUT_REF` columns
-  (GPP r ≈ 0.96; RECO r ≈ 0.70 with a small stable bias) the gap is reference provenance — those columns used the
-  measured NEE uncertainty (not shipped), bootstrap uncertainty, the full multi-year record and a different USTAR
-  scenario — not an algorithmic difference. Bootstrap-based uncertainty (`*_SD`, CUT_16/84) is not yet emitted.
-  Example `examples/flux/partitioning/partitioning_daytime_reddyproc.py`; tests
-  `tests/test_partitioning_daytime_reddyproc.py`.
-
-- **Daytime partitioning ONEFlux** (`dv.flux.DaytimePartitioningOneFlux` /
-  `dv.flux.partition_nee_daytime_oneflux`, module `diive.flux.partitioning`). A faithful Python port of ONEFlux's
-  `flux_part_gl2010` (Lasslop et al. 2010 light-response-curve method as implemented in the FLUXNET2015 pipeline).
-  Per calendar year: an internal Reichstein-style marginal-distribution look-up gap-fill of NEE yields the per-record
-  uncertainty used to weight the fits; then for each 4-day window (2-day step, indexed by day-of-year) the nighttime
-  `E0` (Lloyd & Taylor) is fitted on the surrounding ~12-day nighttime data and held fixed while a daytime LRC is fitted
-  from three `beta` starts, choosing the lowest-RMSE fit through a five-model cascade (`HLRC_LloydVPD` → `HLRC_Lloyd` →
-  `HLRC_Lloyd_afix` / `HLRC_LloydVPD_afix` → `LloydT_E0fix`) with ONEFlux's parameter checks; RECO and GPP are then
-  distance-weighted-interpolated to every record and the GPP standard error propagated from the fit covariance via the
-  Jacobian. The fits use the same penalized least squares solved with the same SciPy `leastsq` (step-bound
-  `factor=0.25`) as ONEFlux. **The day/night split for fitting is ONEFlux's measured-radiation threshold (`Rg`>4 day,
-  `Rg`≤4 night); the method does not use latitude / solar geometry** (unlike the nighttime port). Signature is the
-  faithful measured+filled driver set: `nee`/`ta`/`sw_in` (measured) + `ta_f`/`sw_in_f`/`vpd` (gap-filled),
-  `vpd_in_kpa=True` (diive kPa → ONEFlux hPa). Working arrays are stored as float32 to match ONEFlux's `FLOAT_PREC`
-  (necessary for parity). Outputs `RECO_DT_OF`, `GPP_DT_OF`, `SE_GPP_DT_OF` and the fitted LRC parameters `ALPHA_DT_OF`,
-  `BETA_DT_OF`, `K_DT_OF`, `RREF_DT_OF`, `E0_DT_OF` (reported at each window's central record). **Validated stage-by-stage
-  against a native ONEFlux run on identical CH-DAV 2017 arrays: the NEE uncertainty is exact (~1e-7), 136/137 windows
-  match, and end-to-end RECO r = 0.999, GPP r = 0.9999** (mean abs. diff ~0.016 / 0.008 µmol m-2 s-1); the residual is
-  ill-conditioned light-saturated windows (flat-likelihood `beta`). Against the bundled `Reco_DT_CUT_REF` /
-  `GPP_DT_CUT_REF` columns (GPP r ≈ 0.97; RECO r ≈ 0.79) the gap is reference provenance (those are REddyProc-derived) —
-  not an algorithmic difference. Bootstrap percentile uncertainty is not yet emitted. Example
-  `examples/flux/partitioning/partitioning_daytime_oneflux.py`; tests `tests/test_partitioning_daytime_oneflux.py`.
-
-  The variants will plug into the flux processing chain and GUI later.
+- **`NighttimePartitioningOneFlux`** / `partition_nee_nighttime_oneflux` (`*_NT_OF`). Port of ONEFlux
+  `oneflux.partition.nighttime`: Lloyd & Taylor (1994) respiration, full-year plus windowed (5-day step, 14-day window)
+  optimization with 10% residual trimming, best-E0 selection, the ONEFlux E0 quality gate (a year with no
+  well-constrained short-term E0 is left unpartitioned), E0-fixed Rref re-analysis (4-day step, 8-day window, ordinary
+  and outlier-robust), and linear interpolation. Runs per calendar year. Outputs `RECO_NT_OF`/`RECO_NT_OF_ROB`,
+  `GPP_NT_OF`/`GPP_NT_OF_ROB`, `RREF_NT_OF`, `E0_NT_OF`, `NEE_NIGHT_OF`. ~0.35 s for 10 years of 30-min data. Validated
+  step-by-step against the reference, and against the independent `Reco_CUT_REF`/`GPP_CUT_REF` columns (r = 0.97 / 0.99
+  on CH-DAV). Exports helpers `lloyd_taylor` and `sunrise_sunset`.
+- **`NighttimePartitioningReddyProc`** / `partition_nee_nighttime_reddyproc` (`*_NT_RP`). An independent port of the
+  same method, faithful to REddyProc's `sMRFluxPartition`: potential-radiation day/night split from exact solar
+  geometry, Lloyd-Taylor fit in Kelvin (`TRef` 288.15 K, `T0` 227.13 K), short-term E0 regression (centered 15-day
+  windows, 5-day steps, fit then 5/95% signed-residual trim then refit, +/-1 SD validity in [30, 350] K, mean of the 3
+  lowest-SD estimates), and E0-fixed Rref as a through-origin slope (centered 7-day windows, 4-day steps) with linear
+  interpolation. Partitions the **whole record at once with a single E0**, as REddyProc does; no robust variant. The
+  signature adds `lon` and `utc_offset`. Outputs `RECO_NT_RP`, `GPP_NT_RP`, `RREF_NT_RP`, `E0_NT_RP`, `NEE_NIGHT_RP`.
+  Validated 1:1 against `Reco_CUT_REF` / `GPP_CUT_REF_f` on CH-DAV (2013-2022): RECO r = 0.997, GPP r = 0.9996, annual
+  RECO sums within ~1-2%. Exports `lloyd_taylor_kelvin` and `potential_radiation`. The E0 and Rref window loops use
+  binary-search slicing of the monotonic day index and hoist the constant Lloyd-Taylor exponent base out of the
+  optimizer: ~5x faster on 10 years of 30-min data, bit-identical output.
+- **`DaytimePartitioningReddyProc`** / `partition_nee_daytime_reddyproc` (`*_DT_RP`). Port of REddyProc's
+  `partitionNEEGL`: potential-radiation day/night split (`Rg` > 4 W m-2 and sun above horizon), a per-window nighttime
+  E0 (centered 12-day windows, 4-day reference grid, 2-day step, R's Gauss-Newton `nls` bounded to [50, 400] K with
+  successive 24/48-day window extension) smoothed with a Gaussian process (`mlegp`) and an E0-fixed Rref regression,
+  then a per-window rectangular-hyperbola LRC fit (`k`, `beta`, `alpha`, `RRef`; centered 4-day windows, 2-day step) by
+  penalized least squares with Lasslop priors and NEE-uncertainty weighting (R's BFGS `optim`, three starts, bounds
+  refit cascade, Hessian-based checks), and distance-weighted interpolation to every record. Reaching this fidelity
+  meant re-implementing R's `nls` Gauss-Newton, `optim` BFGS (`vmmin`) with central-difference gradient/Hessian, and the
+  `mlegp` smoother. The method stacks three nested optimizers with data-dependent branches, so bit-for-bit parity across
+  languages is not attainable, but each stage matches closely: day/night split and interpolation exact (~1e-13), window
+  acceptance/rejection exact, LRC per-window parameters ~1e-6 for the large majority of windows, GP-smoothed E0 ~0.03 K.
+  **End-to-end it reproduces a fresh REddyProc run to RECO r = 0.9992, GPP r = 0.9999** (mean abs. diff ~0.01-0.016
+  umol m-2 s-1, CH-DAV 2017). Signature: `nee` (measured), `ta`/`vpd`/`sw_in` (gap-filled), `lat`/`lon`/`utc_offset`,
+  optional `nee_sd` (else REddyProc's `max(0.7, 0.2*|NEE|)` fallback), `vpd_in_kpa=True`. Outputs `RECO_DT_RP`,
+  `GPP_DT_RP`, and the fitted `K_DT_RP`, `BETA_DT_RP`, `ALPHA_DT_RP`, `RREF_DT_RP`, `E0_DT_RP` at each window's central
+  record. Against the bundled `Reco_DT_CUT_REF` / `GPP_DT_CUT_REF` (GPP r ~ 0.96, RECO r ~ 0.70 with a small stable
+  bias) the gap is reference provenance, not algorithm: those columns used the measured NEE uncertainty (not shipped),
+  bootstrap uncertainty, the full multi-year record, and a different USTAR scenario. Bootstrap uncertainty (`*_SD`,
+  CUT_16/84) is not yet emitted.
+- **`DaytimePartitioningOneFlux`** / `partition_nee_daytime_oneflux` (`*_DT_OF`). Port of ONEFlux's
+  `flux_part_gl2010` as implemented in the FLUXNET2015 pipeline. Per calendar year: an internal Reichstein-style
+  marginal-distribution gap-fill of NEE yields the per-record uncertainty weighting the fits; then for each 4-day window
+  (2-day step, indexed by day-of-year) the nighttime E0 is fitted on the surrounding ~12-day nighttime data and held
+  fixed while a daytime LRC is fitted from three `beta` starts, taking the lowest-RMSE fit through a five-model cascade
+  (`HLRC_LloydVPD`, `HLRC_Lloyd`, `HLRC_Lloyd_afix` / `HLRC_LloydVPD_afix`, `LloydT_E0fix`) with ONEFlux's parameter
+  checks. RECO and GPP are distance-weighted-interpolated to every record and the GPP standard error propagated from the
+  fit covariance via the Jacobian, using the same penalized least squares and the same SciPy `leastsq` (step-bound
+  `factor=0.25`) as ONEFlux. **The day/night split for fitting is ONEFlux's measured-radiation threshold (`Rg` > 4 day,
+  `Rg` <= 4 night); the method does not use latitude or solar geometry**, unlike the nighttime port. Signature is the
+  faithful measured-plus-filled driver set: `nee`/`ta`/`sw_in` (measured) and `ta_f`/`sw_in_f`/`vpd` (gap-filled),
+  `vpd_in_kpa=True`. Working arrays are float32 to match ONEFlux's `FLOAT_PREC`, which parity requires. Outputs
+  `RECO_DT_OF`, `GPP_DT_OF`, `SE_GPP_DT_OF`, and `ALPHA_DT_OF`, `BETA_DT_OF`, `K_DT_OF`, `RREF_DT_OF`, `E0_DT_OF`.
+  **Validated stage-by-stage against a native ONEFlux run on identical CH-DAV 2017 arrays: NEE uncertainty exact
+  (~1e-7), 136/137 windows match, end-to-end RECO r = 0.999, GPP r = 0.9999** (mean abs. diff ~0.016 / 0.008
+  umol m-2 s-1); the residual is ill-conditioned light-saturated windows with a flat-likelihood `beta`. ~22 s/year.
+  Bootstrap percentile uncertainty is not yet emitted.
+- **Comparison example** `examples/flux/partitioning/partitioning_comparison.py` runs all four on identical inputs and
+  compares them against each other and the bundled references (daily-mean and cumulative panels for RECO and GPP).
 
 ### Gap-Filling
 
-- **MDS gap-filling is now a faithful ONEFlux port** — `FluxMDS` re-implements the
-  ONEFlux marginal-distribution-sampling cascade (Reichstein 2005 / Vekuri 2023) instead of the previous discrete-window
-  formulation: the **6-stage expanding-window cascade** (all-drivers 14/28 d -> SWIN-only 14 d -> diurnal 1/3/5 d ->
-  all-drivers 42-154 d -> SWIN-only 28-154 d -> diurnal 7-427 d, first stage to reach the sample threshold wins), a
-  **>=2-sample acceptance rule** (`avg_min_n_vals` default changed 5 -> 2), the **N-1 (sample) standard deviation**, and
-  the **+/-1 h diurnal band**. The cascade lives in a new shared module
-  `diive.gapfilling.similarity` (`mds_gapfill_cascade`, `meteo_similar_mask`, `mds_quality_from`, `mds_granular_flag`)
-  used by both the gap-filler and the daytime-partitioning NEE-uncertainty step, so there is one implementation of the
-  similarity scan. New `sym_mean` option (Vekuri 2023 symmetric mean, off by default). The previous private
-  `_FluxMDS` reference class was removed (the optimized/reference split is gone). Validated against native ONEFlux (CH-DAV): fill values
-  r ~ 0.9997-0.99997, quality flags 99.95-99.97% exact (residual = ONEFlux's float32 tolerance-boundary quantization).
-- **`SWINGapFillerXGBoost`** — physics-aware gap-filler for shortwave incoming radiation. Nighttime gaps are set to
-  zero (no solar radiation after sunset); daytime gaps are filled with XGBoost trained on daytime data only. Requires
-  only lat/lon/UTC offset — no meteorological driver variables needed by default. Optional `context_df` for TA/VPD
-  drivers; optional `correct_nighttime_offset` to remove sensor thermal bias first. Flag encoding: 0=observed,
-  1=XGBoost fill, 2=fallback fill (a driver was missing, so only timestamps were available), 3=nighttime set to zero.
-  0/1/2 carry their usual `GapFillingResult` meaning; 3 is specific to this class, the only gap-filler with a physics
-  branch.
-- **`SWINGapFillerXGBoost(interpolate_short_gaps=N)`** — fills daytime gaps of up to `N` records by interpolating the
-  clearness index (`SW_IN / SW_IN_POT`) rather than the model, emitting flag `4`. Interpolating W/m² directly fights the
-  diurnal ramp, so the geometry is divided out first and multiplied back in; interpolation runs per calendar day and
-  therefore never bridges a night. The model cannot see the target's own neighbours (`FeatureEngineer` excludes the
-  target from every feature), which is precisely the information a short gap turns on. `2` (1 h on 30-min data) is the
-  recommended limit: on a realistic CH-DAV record with 15% scattered gaps it cuts daytime gap RMSE by **38%**
-  (125 -> 77), against 29% (125 -> 88) at `1`, and nothing above `2` helps since scattered gaps are almost all 1-2
-  records long. Interpolation still beats the model on gaps up to ~8 h
-  (189 vs 219 W/m²) but collapses once a gap outlasts the observations bracketing it (1 day: 337 vs 172). Default `None`
-  keeps the previous model-only behaviour. Training is unaffected: the model still fits observations only, and the
-  interpolation is applied afterwards.
-- **Nighttime threshold standardised to 20 W/m²** — default `nighttime_threshold` changed from 50 to 20 W/m²
-  throughout diive (`DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot`, `FlagQCF`, outlier detection
-  common helpers, USTAR threshold detection).
-- **shap floor raised to `>=0.50.0`; XGBoost `base_score` monkey-patch removed** — XGBoost serializes `base_score` as a
-  bracketed string (`'[-3.18E0]'`), which shap `<=0.49` could not parse, so `MlRegressorGapFillingBase` patched a
-  bracket-stripping `float` into shap's module namespace. shap `>=0.50` parses it natively, and shap `>=0.52` reads
-  `base_score` via `np.asarray(..., dtype=float)` — where the patch was *fatal* (`TypeError: Cannot interpret
-  '<function _patched_float ...>' as a data type`), taking down every XGBoost gap-fill. Raising the floor to 0.50 lets
-  `_build_tree_explainer` and its lock be deleted outright; `shap.TreeExplainer` is now called directly in
-  `_shap_importance` and `driveranalysis._mean_abs_shap`. Environments pinned to shap 0.48/0.49 must upgrade.
-- **Gap-filling `verbose=0` is now actually silent** — XGBoost's per-round eval history (its own stdout, ~100 lines) is
-  gated to `VERBOSE_DEBUG` via `fit(verbose=)` while `eval_set` is kept for early stopping; the incomplete-features
-  warnings and `vectorize_timestamps` chatter now honour the caller's verbosity instead of their own defaults.
-- **`GapFillingResult` dataclass + `.results` property** — all gap-filling classes expose `.results` after `.run()`,
-  bundling `gapfilled`, `flag`, `scores`, `feature_importances`, `model`, and related fields. Importable as
-  `dv.gapfilling.GapFillingResult`.
-- **`.run()` / `.result` unified across class families** — `FlagBase`, `MlRegressorGapFillingBase`, `FluxMDS`,
-  `DailyCorrelation`, `StratifiedAnalysis`, `BinFitterCP` all share the same two-step API. Enables
-  `series = dv.outliers.Hampel(s, n_sigma=5).run().result`.
-- **`below_zero` param** — controls handling of below-zero predictions: `None` (keep) or `'zero'` (clip to 0).
-  Available in `RandomForestTS`, `XGBoostTS`, and longterm variants.
-- **`OptimizeParamsRFTS` -> `OptimizeParamsTS`** — generalized hyperparameter optimization for any sklearn-compatible
-  regressor.
-- **SHAP-based feature reduction** — replaced permutation importance with SHAP values.
-- **`FluxMDS` 4x speedup** — vectorization and in-place updates; results bit-identical to previous implementation.
-- **`FluxMDS` SWIN tolerance now ONEFlux-faithful** — the shortwave-radiation similarity tolerance is the *target*
-  record's own SWIN clamped into `[swin_tol_min, swin_tol_max]` (continuous, grows with radiation between 20 and
-  50 W m-2), matching the ONEFlux `common.c` gap-filler. Previously diive used a binary 20/50 split keyed off the
-  *candidate* record. Gap-fill values and quality-level distributions shift slightly; total coverage is unchanged.
-- **Random uncertainty (`RandomUncertaintyPAS20`) aligned to the ONEFlux C reference** — methods 1 and 2 now follow
-  `oneflux_steps/nee_proc/src/randunc.c`: method 1 uses the clamped SWIN tolerance, strict `<` matching and requires
-  more than 5 similar values; method 2 uses a fixed ±14-day window with no time-of-day restriction, drawing only from
-  method-1 results, and fixes a sign bug in the ±20% flux-similarity range for negative fluxes. Methods 3 and 4 are
-  retained as documented diive extensions (ONEFlux leaves some records undefined). The shared meteorological-similarity
-  primitives now live in `diive.gapfilling.similarity` (`swin_tolerance`, `window_mean_sd_count`, tolerance constants),
-  used by both MDS gap-filling and random-uncertainty estimation. New `vpd_in_kpa=True` argument: VPD is taken in kPa
-  (diive convention, matching the MDS gap-filler) and converted to hPa internally for the faithful 5-hPa similarity
-  tolerance, so VPD units are now consistent across the ONEFlux ports (pass `vpd_in_kpa=False` for an hPa column). The
-  constructor docstring now states the expected unit of every input column.
+- **MDS is now a faithful ONEFlux port.** `FluxMDS` re-implements the marginal-distribution-sampling cascade
+  (Reichstein 2005 / Vekuri 2023) instead of the previous discrete-window formulation: the 6-stage expanding-window
+  cascade (all-drivers 14/28 d, SWIN-only 14 d, diurnal 1/3/5 d, all-drivers 42-154 d, SWIN-only 28-154 d, diurnal
+  7-427 d, first stage to reach the sample threshold wins), a >=2-sample acceptance rule (`avg_min_n_vals` default 5 ->
+  2), the N-1 sample standard deviation, and the +/-1 h diurnal band. The cascade lives in the shared
+  `diive.gapfilling.similarity` (`mds_gapfill_cascade`, `meteo_similar_mask`, `mds_quality_from`, `mds_granular_flag`),
+  used by both the gap-filler and the daytime-partitioning uncertainty step, so there is one implementation of the
+  similarity scan. New `sym_mean` option (Vekuri 2023 symmetric mean, off by default). The private `_FluxMDS` reference
+  class is gone. Validated against native ONEFlux on CH-DAV: fill values r ~ 0.9997-0.99997, quality flags 99.95-99.97%
+  exact, the residual being ONEFlux's float32 tolerance-boundary quantization.
+- **`FluxMDS` SWIN tolerance is now ONEFlux-faithful.** The tolerance is the *target* record's own SWIN clamped into
+  `[swin_tol_min, swin_tol_max]`, growing continuously with radiation between 20 and 50 W m-2, matching ONEFlux
+  `common.c`. diive previously used a binary 20/50 split keyed off the *candidate* record. Fill values and quality
+  distributions shift slightly; total coverage is unchanged.
+- **`FluxMDS` 4x faster** through vectorization and in-place updates, bit-identical to the previous implementation.
+- **`SWINGapFillerXGBoost`**: physics-aware gap-filler for shortwave incoming radiation. Nighttime gaps are set to zero,
+  daytime gaps filled with XGBoost trained on daytime data only. Needs only lat/lon/UTC offset, no meteorological
+  drivers, with an optional `context_df` for TA/VPD and an optional `correct_nighttime_offset` to remove sensor thermal
+  bias first. Flags: 0 observed, 1 XGBoost, 2 fallback (a driver was missing, so only timestamps were available), 3
+  nighttime zero. 0/1/2 keep their usual `GapFillingResult` meaning; 3 is specific to this class.
+- **`SWINGapFillerXGBoost(interpolate_short_gaps=N)`** fills daytime gaps of up to `N` records by interpolating the
+  clearness index (`SW_IN / SW_IN_POT`) rather than the model, flagged `4`. Interpolating W/m2 directly fights the
+  diurnal ramp, so the geometry is divided out and multiplied back in; interpolation runs per calendar day and so never
+  bridges a night. The model cannot see the target's own neighbours (`FeatureEngineer` excludes the target from every
+  feature), which is exactly the information a short gap turns on. `2` (1 h on 30-min data) is the recommended limit: on
+  a CH-DAV record with 15% scattered gaps it cuts daytime gap RMSE by **38%** (125 -> 77), against 29% (125 -> 88) at
+  `1`; nothing above `2` helps, since scattered gaps are almost all 1-2 records long. Interpolation still beats the
+  model up to ~8 h gaps (189 vs 219 W/m2) but collapses once a gap outlasts the observations bracketing it (1 day: 337
+  vs 172). Default `None` keeps model-only behaviour. Training is unaffected.
+- **Nighttime threshold standardised to 20 W/m2** (was 50) throughout diive: `DaytimeNighttimeFlag`,
+  `daytime_nighttime_flag_from_swinpot`, `FlagQCF`, the outlier-detection common helpers, and USTAR threshold detection.
+- **shap floor raised to `>=0.50.0`; the XGBoost `base_score` monkey-patch is removed.** XGBoost serializes
+  `base_score` as a bracketed string (`'[-3.18E0]'`), which shap `<=0.49` could not parse, so
+  `MlRegressorGapFillingBase` patched a bracket-stripping `float` into shap's namespace. shap `>=0.50` parses it
+  natively, and shap `>=0.52` reads `base_score` via `np.asarray(..., dtype=float)`, where the patch was *fatal*
+  (`TypeError: Cannot interpret '<function _patched_float ...>' as a data type`), taking down every XGBoost gap-fill.
+  `_build_tree_explainer` and its lock are deleted outright; `shap.TreeExplainer` is called directly. Environments
+  pinned to shap 0.48/0.49 must upgrade.
+- **`verbose=0` is now actually silent.** XGBoost's per-round eval history (~100 lines of its own stdout) is gated to
+  `VERBOSE_DEBUG` via `fit(verbose=)` while `eval_set` is kept for early stopping, and the incomplete-features warnings
+  and `vectorize_timestamps` chatter honour the caller's verbosity.
+- **Rich console report.** `MlRegressorGapFillingBase` (so every ML gap-filler) prints a coloured report at `verbose>=2`
+  with phase banners: a Configuration table (regressor plus all hyperparameters), data/split summary, held-out and
+  in-sample score tables (R2/RMSE/MAE/MedAE/MAPE/MAXE/MSE), feature-importance tables, a feature-reduction table (SHAP
+  vs the random benchmark with an accept/reject verdict), and a gap-fill flag summary. Step-chatter moved to DEBUG(3).
+- **`GapFillingResult` dataclass and `.results` property.** Every gap-filling class exposes `.results` after `.run()`,
+  bundling `gapfilled`, `flag`, `scores`, `feature_importances`, `model`. Importable as `dv.gapfilling.GapFillingResult`.
+- **`.run()` / `.result` unified** across `FlagBase`, `MlRegressorGapFillingBase`, `FluxMDS`, `DailyCorrelation`,
+  `StratifiedAnalysis`, `BinFitterCP`, enabling `dv.outliers.Hampel(s, n_sigma=5).run().result`.
+- **`plot_feature_importances(ax=None, traintest=False, max_features=None, ...)`** on `MlRegressorGapFillingBase`: a
+  two-phase SHAP bar plot. `ax=None` builds a standalone figure, passing an `ax` draws into it. Replaces the
+  non-embeddable `plot_feature_importance` for new code.
+- **Long-term gap-filling support** for `LongTermGapFillingRandomForestTS` / `LongTermGapFillingXGBoostTS`, which build
+  one model per calendar year from that year plus its two closest neighbours: `LongTermGapFillingBase.run()`,
+  `get_gapfilled_target()`, `get_flag()`, `scores_overall_` / `scores_traintest_overall_`, and `shap_threshold_factor`
+  on `reduce_features_across_years()`.
+- **`below_zero`** controls below-zero predictions: `None` keeps them, `'zero'` clips. In `RandomForestTS`, `XGBoostTS`,
+  and the longterm variants.
+- **`OptimizeParamsRFTS` is now `OptimizeParamsTS`**, generalized to any sklearn-compatible regressor.
+- **SHAP-based feature reduction** replaces permutation importance.
+- **Random uncertainty (`RandomUncertaintyPAS20`) aligned to the ONEFlux C reference** (`randunc.c`). Method 1 uses the
+  clamped SWIN tolerance, strict `<` matching, and requires more than 5 similar values; method 2 uses a fixed +/-14-day
+  window with no time-of-day restriction, draws only from method-1 results, and fixes a sign bug in the +/-20%
+  flux-similarity range for negative fluxes. Methods 3 and 4 are kept as documented diive extensions, since ONEFlux
+  leaves some records undefined. The shared similarity primitives (`swin_tolerance`, `window_mean_sd_count`, tolerance
+  constants) live in `diive.gapfilling.similarity`. New `vpd_in_kpa=True`: VPD is taken in kPa (matching the MDS
+  gap-filler) and converted to hPa internally for the faithful 5-hPa tolerance, so units are consistent across the
+  ONEFlux ports. The constructor docstring states the expected unit of every input.
 
 ### New Classes & Functions
 
-- **InfluxDB engine `InfluxIO`** (`diive.core.io.db.influx`) — diive's own InfluxDB v2 download / upload / delete /
-  schema-browsing engine, a clean in-house port of the former external `dbc-influxdb` package. diive no longer depends
-  on `dbc-influxdb`; the only optional requirement is now `influxdb-client`, imported lazily so the default `uv sync`
-  never pulls it in. It is reachable two ways: the `db` dependency group (`uv sync --group db`) when working *on*
-  diive, and the new `db` extra (`pip install 'diive[db]'`, or `"diive[db]"` in another project's dependencies) when
-  *depending* on diive. The extra is what makes the engine reachable downstream at all — a dependency group is local
-  to the project that declares it and never reaches the published metadata, so a consuming project cannot request
-  `--group db`, not even through a uv path/editable source. The group is defined as `db = ["diive[db]"]`, so it defers
-  to the extra and the version pin lives in one place; every documented `uv sync --group db` command still works.
-  Improvements over the original: diive console output
-  (no `logging`), no `pytz` / `dateutil` dependency, and the data-version / units schema helpers
-  (`show_data_versions_in_bucket`, `show_units_in_field`, `data_version`-filtered `show_measurements_in_bucket` /
-  `show_fields_in_measurement`, public `test_connection`) that back the GUI Database explorer. The Textual TUI was not
-  ported (the desktop GUI's Database tabs replace it). GUI access is unchanged: the **Database connection** and
-  **Database explorer** tabs talk to it through the generic `InfluxDBBackend` adapter (`diive.core.io.db`).
-
-- **`CompoundExtremes`** (`dv.analysis`, `diive.analysis.compoundextremes`) — classify time periods (months or days)
-  into compound-extreme categories from the standardized anomalies (z-scores) of two driver variables. The canonical
-  use is compound dry-hot detection (after Wang et al., Fig. 2): a period is an *atmospheric* dryness extreme when VPD
-  is anomalously high, a *soil* dryness extreme when soil water content is anomalously low, and a *compound* extreme
-  when both occur. Each variable has a configurable extreme direction (`high`/`low`) and threshold; periods are
-  aggregated to monthly/daily resolution and standardized either deseasonalized (`standardize_by='season'` — per
-  calendar month / day-of-year, the default) or over the whole record (`'record'`). Exposes `.results` (per-period
-  z-scores, extreme flags, category code + human label), `.counts`, and `.labels`. Companion plot **`CompoundExtremesPlot`**
-  (`dv.plotting`, `diive.core.plotting.compoundextremes`) — the quadrant scatter of the two z-scores, coloured/marked by
-  category with dashed threshold lines and per-point period annotations; build it directly from a fitted analysis via
-  `CompoundExtremesPlot.from_compound_extremes(ce)`. Two-phase design. Example `analysis_compound_extremes.py`.
-- **`WindRosePlot`** (`dv.plotting`, `diive.core.plotting.windrose`) — radial (polar bar) plot that aggregates any
-  variable into wind-direction sectors. Bins wind direction (degrees, meteorological convention) into `n_sectors`
-  North-centred compass sectors (4/8/16 get compass labels, others degree labels) and reduces the paired variable per
-  sector by a chosen aggregation (`mean`/`median`/`min`/`max`/`sum`/`std`/`count`). Two-phase design: data + aggregation
-  in `__init__`, styling in `plot()` (value-mapped colormap + colorbar, North-up clockwise layout, bars anchored at the
-  zero line so negative aggregates like CO2 uptake hang inward of the zero circle). An optional `z`/`z_agg` second
-  variable colours the bars by its own per-sector aggregate (bar length stays the main variable; the colour aggregate is
-  added as a `Z` results column). Exposes the full per-sector statistics as a tidy `.results` DataFrame and a Rich
-  `report()` table (auto-printed with `verbose=True`). Example `plot_windrose_basic.py`. Also wired into the **GUI**
-  Plot menu as a role-picked (value + wind direction, optional colour) polar plotting tab.
-- **`JointUncertaintyPAS20` / `joint_uncertainty_pas20`** (`dv.flux`, `diive.flux.lowres.uncertainty`) — faithful
-  ONEFlux `compute_join` port: per-record joint uncertainty `√(RANDUNC² + ((scenario_upper − scenario_lower)/divisor)²)`
-  combining the random measurement uncertainty with the flux-filtering scenario-ensemble percentile spread.
-  `divisor` constants `JOINT_DIVISOR_1SIGMA=2.0` (NEE 16th/84th USTAR scenarios) and `JOINT_DIVISOR_IQR=1.349` (LE/H
-  25th/75th). Cumulative propagation treats the independent random term as quadrature and the fully-correlated scenario
-  term as the running spread of the cumulative scenario sums. Codegen `jointunc_to_code`.
-- **`FlagMultipleVariableUstarThresholds` is now public** — exported on `dv.flux` (and `diive.flux.lowres`), alongside
-  the `FlagMultipleConstantUstarThresholds` sibling that was already there. `run_level33_variable_ustar` hands the
-  instance back in `data.levels.level33`, so the type was reachable in practice but not importable: callers could not
-  `isinstance`-check or annotate against what they had been given. The `LevelResults.level33` annotation was corrected
-  to the union of both flagger classes — it named only the constant one, while the variable path has always stored the
-  variable one.
-- **`RidgeLinePlot.plot(fig=...)`** — optional `fig` parameter to render the stacked-density ridges into an existing
-  figure (cleared first) instead of creating a new one, e.g. to embed in a GUI canvas. Backward-compatible.
-- **`TimeLagAnalysis.plot_gas(fig=...)`** — optional `fig` parameter to render the 4-panel time-lag figure into an
-  existing figure (cleared first) instead of a new pyplot one, e.g. to embed in the GUI canvas. Backward-compatible.
-- **`DetectTimestampShifts`** — detects clock errors by comparing measured vs. potential shortwave radiation. Three
-  detection methods (`fft_phase_shift`, `crosscorr`, `noon_shift`) with five plot methods.
-- **`PreWhiteningBootstrap`** — Vitale et al. (2024) PWB time-lag detection for low-magnitude fluxes (CH4, N2O),
-  aligned with RFlux v3.2.0 numerics; threaded `random_state` for reproducibility.
-- **`PwbBatchDetection`** — parallel batch PWB across many files (crash-safe checkpoints, deterministic per-file
-  seeding, `strict` mode); CLI `diive-tlag-pwb-batch`. Optional `--file-date-format` parses a timestamp from filenames.
-- **`diive-tlag-pwb-detect-remove` now writes a TUI-loadable settings YAML** (`detect_remove_tui_settings.yaml`) into the
-  run's output folder, so a CLI run can be reopened/edited in the detect+remove TUI (Load button or drag-drop) to inspect
-  or reproduce it — the same file the TUI itself drops. New `write_run_settings_yaml` in `detect_and_remove_tlag_tui.py`
-  mirrors the TUI's field schema (per-gas search windows reconstructed into the `Win s` field); the CLI lazy-imports it,
-  so a headless install without the `gui`/textual extra simply skips the file (best-effort, never blocks a run).
-- **`run_settings.txt` is now self-documenting** — the per-run settings dump written by `PerFilePipeline` gives each
-  setting a one-line explanation (not just the value), and the output-folder `README.txt` documents every output file
-  and folder, including the new `detect_remove_tui_settings.yaml` (listed only when present).
-- **`TlagApplier`** — apply PWB-detected lags from a `tlag_results.csv` to raw files (shift each scalar by
-  `round(tlag_s·hz)` rows), preserving header and column order; handles arbitrary text formats; parallel; CLI
-  `diive-tlag-apply-batch`. Example: `examples/flux/hires/flux_apply_tlag_cli.py`.
-- **`PerFilePipeline`** / `process_one_file` (`diive.flux.hires.detect_and_remove_tlag`; CLI
-  `diive-tlag-pwb-detect-remove`) — two-phase per-chunk PWB pipeline. Each raw file is split into fixed-length chunks;
-  phase 1 rotates each chunk in memory and runs PWB, PWBOPT picks the best lag per chunk across the sequence, phase 2
-  shifts each scalar by that lag and writes one file per chunk. Parallel per chunk (`ProcessPoolExecutor`),
-  crash-safe checkpoints, cooperative cancel (`run(cancel_event=...)`), output numbered `1_lag_detection/` +
-  `2_lag_removed/` with a summary CSV mirroring `tlag_results.csv`. Downstream flux software must disable EC time-lag
-  maximization.
-- **`DetectRemoveTUI`** (`diive.flux.hires.detect_and_remove_tlag_tui`; CLI `diive-tlag-pwb-detect-remove-tui`,
-  `--demo`) — Textual front-end for the pipeline: settings form + live per-worker progress, full CLI-option coverage
-  with tooltips, a **Check** preflight, **Stop**, column pickers, and persisted settings. Requires `textual` (runtime
-  dep; `tui` extra also provided).
-- **Per-gas time-lag search windows.** `PreWhiteningBootstrap` adds optional `lws`/`uws` (asymmetric search window in
-  seconds); the peak search is restricted to `[lws, uws]` while the CCF is still computed symmetrically over
-  `±lag_max` (unset = unchanged, full-window behaviour). A positive-only window (e.g. `[0, 5]`) keeps only physical
-  tube-delay lags (closed-path delay > 0, as Vitale et al. 2024 advise for the constrained methods); a long-inlet gas
-  (H2O) can use a wider window than the dry gases in the same run — which matters because EddyPro applies one lag
-  setting to all gases downstream. `PerFilePipeline` / `process_one_file` take `lws`/`uws` (global) and `per_gas_lag`
-  (`{label: {lag_max_s, block_length_s, lws, uws}}`); the CLI accepts `--scalar "H2O:h2o@lag=30;uws=25"` plus
-  `--lws`/`--uws`; the TUI has a dedicated **Win s** field that auto-fills `LABEL:[lower,upper]` per selected gas
-  (seeded from **Lag max s**, ⟳ to re-seed) — the Scalars field now selects gases only. New helper
-  `window_to_lag_params(lws, uws)`: per gas `lag_max = max(|lws|, |uws|)` and block `= max(20 s, 2·half)` (the paper's
-  20 s floor, growing for wide windows so the block still contains a long lag). The block-length consistency warning
-  now fires only when a block is *shorter* than `2·lag_max` (the risky case), not on a longer-than-coupling block.
-- PWB tooling refinements: near-instant file scan (size-based row estimate, no full read); run settings + folder
-  README + summary data-dictionary written up front; responsive TUI layout; reloadable settings YAML dropped in the
-  output folder; 30-min output chunks snapped to the wall-clock grid; clearer "applied lag" summary panel; structural
-  (not fatal) handling of output-name collisions; input line endings preserved (`--lineterm auto`).
-- **`reynolds_decomposition()`** — standalone `x' = x - mean(x)`; exported as `dv.flux.reynolds_decomposition`.
-- **`WindDoubleRotation`** (renamed from `WindRotation2D`) — scalar `c` removed; Reynolds decomposition is now a
-  separate explicit step. Rotation angles use `atan2` (fixes `ZeroDivisionError` and wrong-quadrant results when
-  `u_mean <= 0`).
-- **`UstarMovingPointDetection`** — ONEFlux moving-point USTAR detection (Papale et al. 2006). Constants match the
+- **InfluxDB engine `InfluxIO`** (`diive.core.io.db.influx`): diive's own InfluxDB v2 download / upload / delete /
+  schema-browsing engine, an in-house port of the external `dbc-influxdb` package. diive no longer depends on
+  `dbc-influxdb`; the only optional requirement is `influxdb-client`, imported lazily so the default `uv sync` never
+  pulls it in. Reachable two ways: the `db` dependency group (`uv sync --group db`) when working *on* diive, and the new
+  `db` extra (`pip install 'diive[db]'`) when *depending* on diive. The extra is what makes the engine reachable
+  downstream at all, since a dependency group is local to the project declaring it and never reaches published metadata,
+  so a consuming project cannot request `--group db` even through a uv path/editable source. The group is defined as
+  `db = ["diive[db]"]`, so the version pin lives in one place and every documented `uv sync --group db` still works.
+  Improvements over the original: diive console output instead of `logging`, no `pytz` / `dateutil` dependency, and
+  schema helpers (`show_data_versions_in_bucket`, `show_units_in_field`, `data_version`-filtered
+  `show_measurements_in_bucket` / `show_fields_in_measurement`, public `test_connection`). The Textual TUI was not
+  ported; the GUI's Database tabs replace it.
+- **`CompoundExtremes`** (`dv.analysis`): classify months or days into compound-extreme categories from the z-scores of
+  two drivers. The canonical use is compound dry-hot detection (after Wang et al., Fig. 2): a period is an *atmospheric*
+  dryness extreme when VPD is anomalously high, a *soil* dryness extreme when soil water content is anomalously low, and
+  a *compound* extreme when both occur. Each variable has a configurable direction (`high`/`low`) and threshold; periods
+  standardize either deseasonalized (`standardize_by='season'`, per calendar month or day-of-year, the default) or over
+  the whole record (`'record'`). Exposes `.results`, `.counts`, `.labels`. Companion **`CompoundExtremesPlot`**
+  (`dv.plotting`) draws the quadrant scatter, built from a fitted analysis via
+  `CompoundExtremesPlot.from_compound_extremes(ce)`.
+- **`WindRosePlot`** (`dv.plotting`): radial plot aggregating any variable into wind-direction sectors. Bins direction
+  (meteorological convention) into `n_sectors` North-centred compass sectors (4/8/16 get compass labels, others degree
+  labels) and reduces the paired variable per sector by `mean`/`median`/`min`/`max`/`sum`/`std`/`count`. Two-phase.
+  Bars anchor at the zero line, so negative aggregates like CO2 uptake hang inward of the zero circle. An optional
+  `z`/`z_agg` second variable colours the bars by its own per-sector aggregate. Exposes `.results` and a Rich
+  `report()`.
+- **`JointUncertaintyPAS20`** / `joint_uncertainty_pas20` (`dv.flux`): faithful ONEFlux `compute_join` port. Per-record
+  `√(RANDUNC² + ((scenario_upper − scenario_lower)/divisor)²)`, combining random measurement uncertainty with the
+  scenario-ensemble percentile spread. `JOINT_DIVISOR_1SIGMA=2.0` (NEE 16th/84th USTAR scenarios) and
+  `JOINT_DIVISOR_IQR=1.349` (LE/H 25th/75th). Cumulative propagation treats the independent random term as quadrature
+  and the fully-correlated scenario term as the running spread of the cumulative scenario sums.
+- **`FlagMultipleVariableUstarThresholds` is now public** on `dv.flux` and `diive.flux.lowres`, alongside the
+  `FlagMultipleConstantUstarThresholds` sibling. `run_level33_variable_ustar` hands the instance back in
+  `data.levels.level33`, so the type was reachable in practice but not importable: callers could not `isinstance`-check
+  or annotate against what they had been given. The `LevelResults.level33` annotation is corrected to the union of both
+  flagger classes; it named only the constant one, while the variable path always stored the variable one.
+- **`DetectTimestampShifts`**: detect clock errors by comparing measured against potential shortwave radiation. Three
+  detection methods (`fft_phase_shift`, `crosscorr`, `noon_shift`), five plot methods.
+- **`UstarMovingPointDetection`**: ONEFlux moving-point USTAR detection (Papale et al. 2006). Constants match the
   ONEFlux `ustar_mp` source (correlation cutoff 0.5, first-class gate 0.2, 7 TA / 20 USTAR classes, forward window 10).
-  New `forward_mode_n` parameter selects the forward-mode order; default `2` (Fw2) matches the ONEFlux and REddyProc
-  defaults — pass `forward_mode_n=1` for the looser Fw1, which never yields a higher threshold.
-- **`UstarVekuriThresholdDetection`** — quantile-based USTAR detection; simpler alternative to the ONEFlux moving-point
-  method.
-- **`UstarBootstrapThresholds`** — multi-year bootstrap wrapper for any USTAR detection method; returns per-year
+  New `forward_mode_n` selects the forward-mode order; default `2` (Fw2) matches the ONEFlux and REddyProc defaults.
+  Pass `forward_mode_n=1` for the looser Fw1, which never yields a higher threshold.
+- **`UstarVekuriThresholdDetection`**: quantile-based USTAR detection, a simpler alternative to moving-point.
+- **`UstarBootstrapThresholds`**: multi-year bootstrap wrapper for any USTAR detection method; returns per-year
   p16/p50/p84 thresholds.
-- **`GrangerCausality`** — predictive causality test between time series with lag identification.
-- **`WaterfallPlot`** — financial-style waterfall chart of sequential contributions to a running total, e.g. daily
-  CO2 uptake/release building up a seasonal or annual flux budget. Aggregates the input series to one bar per period
-  internally (default daily sum); bars are colored by sign via `uptake_is_negative` (NEE convention by default).
-  Example: `examples/visualization/plot_waterfall.py`.
-- **`TreeRingPlot`** — circular spiral plot displaying annual time series as concentric color-coded rings.
-- **`FeatureEngineer`** — standalone 8-stage feature engineering pipeline (lag, rolling, diff, EMA, poly, STL,
-  timestamps, record number); pre-engineer once and reuse across models.
-- **`TimeSeries.plot_rangetool()`** — interactive Bokeh plot with a linked RangeTool overview for navigating long
-  series (detail panel + draggable full-series selector). `TimeSeries` also keeps gaps visible by default
-  (`drop_gaps=False`), adopts the Material Design palette, and `plot()` gained `linewidth`/`alpha`/`marker` and
-  returns the axes. Example: `examples/visualization/plot_timeseries_rangetool.py`.
-- **`keep_records_where`** (top-level `dv.keep_records_where`, `diive.core.dfun.frames`) — select records of one
-  variable (the *target*) based on the value of another (the *condition*): keep the target where the condition falls
-  within `[lower, upper]`. A non-destructive row-on-a-condition subselection (the conditional analogue of `keep_vars`
-  / `times.keep_daterange`); either bound may be open, `inclusive` controls boundary inclusion, `invert=True` keeps the
-  records *outside* the range (removes the in-range ones), and `set_to_nan=True` (default) masks out-of-range records to
-  NaN to preserve the time index (else drops them). Companion codegen `select_records_to_code` renders a chain of
-  keep/remove selections as a runnable script. Wired into the **GUI** as the Data-menu *Select records by condition* tab.
-  Example: `examples/analysis/analysis_keep_records_where.py`.
+- **`GrangerCausality`**: predictive causality test between time series with lag identification.
+- **`dv.analysis.spectrogram`**: short-time Fourier transform of a series, returning `frequencies` / `times` / `power` /
+  `power_db`. Complements `harmonic_analysis` / `periodogram`, which give a single static spectrum, by showing *when*
+  each cycle is strong.
+- **`keep_records_where`** (`dv.keep_records_where`): keep records of a *target* variable where a *condition* variable
+  falls within `[lower, upper]`, the conditional analogue of `keep_vars` / `times.keep_daterange`. Either bound may be
+  open, `inclusive` controls boundary inclusion, `invert=True` keeps the records outside the range, and
+  `set_to_nan=True` (default) masks out-of-range records to NaN to preserve the time index rather than dropping them.
+  Companion `select_records_to_code`.
+- **`WaterfallPlot`**: waterfall chart of sequential contributions to a running total, e.g. daily CO2 uptake/release
+  building an annual flux budget. Aggregates to one bar per period internally (default daily sum); bars coloured by sign
+  via `uptake_is_negative` (NEE convention by default).
+- **`TreeRingPlot`**: annual time series as concentric colour-coded rings on a polar plot.
+- **`FeatureEngineer`**: standalone 8-stage pipeline (lag, rolling, diff, EMA, poly, STL, timestamps, record number);
+  engineer once and reuse across models.
+- **`TimeSeries.plot_rangetool()`**: interactive Bokeh plot with a linked RangeTool overview (detail panel plus
+  draggable full-series selector). `TimeSeries` now keeps gaps visible by default (`drop_gaps=False`), adopts the
+  Material Design palette, and `plot()` gained `linewidth`/`alpha`/`marker` and returns the axes.
+- **`reynolds_decomposition()`**: standalone `x' = x - mean(x)`, exported as `dv.flux.reynolds_decomposition`.
+- **`WindDoubleRotation`** (renamed from `WindRotation2D`): scalar `c` removed, since Reynolds decomposition is now a
+  separate explicit step. Rotation angles use `atan2`, fixing `ZeroDivisionError` and wrong-quadrant results when
+  `u_mean <= 0`.
+- **`PreWhiteningBootstrap`**: Vitale et al. (2024) PWB time-lag detection for low-magnitude fluxes (CH4, N2O), aligned
+  with RFlux v3.2.0 numerics; threaded `random_state` for reproducibility.
+- **`PwbBatchDetection`**: parallel batch PWB across many files (crash-safe checkpoints, deterministic per-file seeding,
+  `strict` mode); CLI `diive-tlag-pwb-batch`. Optional `--file-date-format` parses a timestamp from filenames.
+- **`TlagApplier`**: apply PWB-detected lags from a `tlag_results.csv` to raw files (shift each scalar by
+  `round(tlag_s*hz)` rows), preserving header and column order; handles arbitrary text formats; parallel; CLI
+  `diive-tlag-apply-batch`.
+- **`PerFilePipeline`** / `process_one_file` (CLI `diive-tlag-pwb-detect-remove`): two-phase per-chunk PWB pipeline.
+  Each raw file splits into fixed-length chunks; phase 1 rotates each chunk in memory and runs PWB, PWBOPT picks the
+  best lag per chunk across the sequence, phase 2 shifts each scalar by that lag and writes one file per chunk. Parallel
+  per chunk, crash-safe checkpoints, cooperative cancel (`run(cancel_event=...)`), output numbered `1_lag_detection/`
+  and `2_lag_removed/` with a summary CSV. **Downstream flux software must disable EC time-lag maximization.**
+- **`DetectRemoveTUI`** (CLI `diive-tlag-pwb-detect-remove-tui`, `--demo`): Textual front-end for the pipeline, with a
+  settings form, live per-worker progress, full CLI-option coverage with tooltips, a **Check** preflight, **Stop**,
+  column pickers, and persisted settings. Requires `textual`.
+- **Per-gas time-lag search windows.** `PreWhiteningBootstrap` takes optional `lws`/`uws` (asymmetric window in
+  seconds): the peak search is restricted to `[lws, uws]` while the CCF is still computed symmetrically over
+  `±lag_max` (unset = unchanged). A positive-only window (e.g. `[0, 5]`) keeps only physical tube-delay lags (closed-path
+  delay > 0, as Vitale et al. 2024 advise for the constrained methods), and a long-inlet gas like H2O can use a wider
+  window than the dry gases in the same run, which matters because EddyPro applies one lag setting to all gases
+  downstream. `PerFilePipeline` / `process_one_file` take global `lws`/`uws` plus `per_gas_lag`
+  (`{label: {lag_max_s, block_length_s, lws, uws}}`); the CLI accepts `--scalar "H2O:h2o@lag=30;uws=25"` plus
+  `--lws`/`--uws`; the TUI has a **Win s** field auto-filling `LABEL:[lower,upper]` per selected gas (seeded from **Lag
+  max s**), so the Scalars field selects gases only. New `window_to_lag_params(lws, uws)`: per gas
+  `lag_max = max(|lws|, |uws|)` and block `= max(20 s, 2*half)`, the paper's 20 s floor growing for wide windows so the
+  block still contains a long lag. The block-length warning now fires only when a block is *shorter* than `2*lag_max`.
+- **`diive-tlag-pwb-detect-remove` writes a TUI-loadable settings YAML** (`detect_remove_tui_settings.yaml`) into the
+  run's output folder, so a CLI run can be reopened in the TUI to inspect or reproduce it. The CLI lazy-imports the
+  writer, so a headless install without textual skips the file rather than failing.
+- **`run_settings.txt` is self-documenting**: the per-run settings dump gives each setting a one-line explanation, and
+  the output-folder `README.txt` documents every output file and folder.
+- PWB tooling: near-instant file scan (size-based row estimate, no full read); run settings, folder README, and summary
+  data-dictionary written up front; responsive TUI layout; 30-min output chunks snapped to the wall-clock grid; clearer
+  applied-lag summary panel; structural handling of output-name collisions; input line endings preserved
+  (`--lineterm auto`).
 
 ### Refactoring
 
-- **`GapFinder`** — single-pass vectorized detection; `limit` -> `max_length`; new `min_length`; `GAP_DURATION` always
-  present; `get_results()` removed.
-- **`DailyCorrelation`** — vectorized; NaN days no longer leak into groups; IQR anomaly score centred on median.
-- **`FindOptimumRange`** — threshold applied to full curve range; new `prominence_threshold` parameter; Material Design
-  colors.
-- **`LocalOutlierFactor`** — `LocalOutlierFactorAllData` and `LocalOutlierFactorDaytimeNighttime` merged into single
-  class with `separate_daytime_nighttime` parameter.
-- **`Hampel`** — `HampelDaytimeNighttime` renamed to `Hampel`; `n_sigma_dt`/`n_sigma_nt` short-form aliases added.
-- **Plotting two-phase design** — `HeatmapBase`, `HeatmapDateTime`, `HeatmapYearMonth`, `HeatmapXYZ`, `HexbinPlot`
-  refactored to separate data (`__init__`) from styling (`plot()`).
-- **Shared plot formatting — `dv.plotting.FormatStyle`.** A single reusable description of a plot's chrome (title,
-  axis labels + units, font sizes/weights, text/spine/tick/grid colours, grid, legend, zero line) that every plotting
-  class's `plot()` now accepts via `format_style=`. All `None` fields resolve to one set of defaults in
-  `LightTheme` (new `FONTSIZE_TITLE`/`FONTSIZE_AXLABEL`/`FONTSIZE_TICKS`/`COLOR_TEXT`/`COLOR_CHROME`/`COLOR_FACE`
-  block), so a bare `FormatStyle()` is the diive house style and changing those constants restyles every plot at once.
-  Applied across all 15 classes (`TimeSeries`, `DielCycle`, `Cumulative`, `CumulativeYear`, `ScatterXY`,
-  `WaterfallPlot`, `HistogramPlot`, `ShiftedDistributionPlot`, the four heatmaps, `HexbinPlot`, plus partial coverage
-  for the multi-axes `RidgeLinePlot` and polar `TreeRingPlot`). See **Breaking Changes** — the old flat chrome
-  keywords were removed; chrome is set only via `format_style=`. The desktop GUI exposes a single shared **Format**
-  control section (title / labels / units / font sizes / grid / legend) on *every* plot type, replacing the
-  per-plot-type label/font controls.
+- **Shared plot formatting: `dv.plotting.FormatStyle`.** One reusable description of a plot's chrome (title, axis labels
+  and units, font sizes and weights, text/spine/tick/grid colours, grid, legend, zero line) that every `plot()` accepts
+  via `format_style=`. All `None` fields resolve to one set of defaults in `LightTheme` (new
+  `FONTSIZE_TITLE`/`FONTSIZE_AXLABEL`/`FONTSIZE_TICKS`/`COLOR_TEXT`/`COLOR_CHROME`/`COLOR_FACE`), so a bare
+  `FormatStyle()` is the diive house style and changing those constants restyles every plot at once. Applied across all
+  15 classes, with partial coverage for the multi-axes `RidgeLinePlot` and polar `TreeRingPlot`. See **Breaking
+  Changes**.
+- **Plotting two-phase design**: `HeatmapBase`, `HeatmapDateTime`, `HeatmapYearMonth`, `HeatmapXYZ`, `HexbinPlot` now
+  separate data (`__init__`) from styling (`plot()`).
+- **`GapFinder`**: single-pass vectorized detection; `limit` becomes `max_length`; new `min_length`; `GAP_DURATION`
+  always present; `get_results()` removed.
+- **`DailyCorrelation`**: vectorized; NaN days no longer leak into groups; IQR anomaly score centred on median.
+- **`FindOptimumRange`**: threshold applied to the full curve range; new `prominence_threshold`; Material Design colors.
+- **`LocalOutlierFactor`**: `LocalOutlierFactorAllData` and `LocalOutlierFactorDaytimeNighttime` merged into one class
+  with `separate_daytime_nighttime`.
+- **`Hampel`**: `HampelDaytimeNighttime` renamed to `Hampel`; `n_sigma_dt`/`n_sigma_nt` aliases added.
 
 ### Fixes
 
-- **`RandomUncertaintyPAS20`: cumulative uncertainty no longer poisoned by a single NaN.** The cumulative random-
-  uncertainty propagation built an object-dtype `ufloat` running sum, so one missing per-record flux or uncertainty
-  turned every *later* `UNC_CUMULATIVE` value into NaN (while the cumulative flux, a float cumsum, kept skipping NaN —
-  an inconsistency). It now computes the quadrature directly as `sqrt((randunc**2).cumsum())` with pandas skipna
-  semantics, so a missing record contributes nothing instead of nullifying the tail; the `FLUX+/-UNC` ufloat column is
-  rebuilt from the two cumulative Series (O(n) instead of the old O(n²) ufloat cumsum). Results on complete data are
-  unchanged.
-- **`RandomUncertaintyPAS20`: ~35x faster (vectorised the 4-method hot loops).** The per-record loops rebuilt a pandas
-  DataFrame slice (`df_between_two_dates` + `between_time`) and used scalar `.loc` access on every iteration, and
-  method 4 re-sorted the whole frame inside the loop. They now pull each column into numpy once and locate each record's
-  time window by position via `searchsorted` on the sorted timestamps (`between_time`'s wrap-around ±1 h band reproduced
-  on the window's time-of-day), method 3 sorts by flux once so its ±20% band is a contiguous slice, and method 4's sort
-  is hoisted out of the loop. One full year of half-hourly data drops from ~18 s to ~0.5 s; output is **bit-identical**
-  (verified column-by-column on a full year, max abs diff 0.0). No public API change.
-- **PWB time-lag: edge-pinned detections are rejected at the source.** A chunk with no real W-scalar coupling produces
-  a flat, noisy pre-whitened CCF whose `argmax` is pushed to the search-window edge (the `na.locf` edge-fill makes every
+- **`Hampel` ignored `n_sigma` in day/night mode.** `n_sigma_daytime` / `n_sigma_nighttime` defaulted to the literal
+  `5.5` instead of `None`, so the fall-back logic was dead and the threshold was hard-wired to 5.5 whenever
+  `separate_day_night=True`: passing `n_sigma` alone had no effect. Defaults are now `None`, as the docstring already
+  claimed. **Behaviour change:** `Hampel(..., n_sigma=X, separate_day_night=True)` without explicit per-period sigmas
+  now flags a different number of outliers. Passing nothing still yields 5.5.
+- **PWB time-lag: edge-pinned detections are rejected at the source.** A chunk with no real W-scalar coupling produces a
+  flat, noisy pre-whitened CCF whose `argmax` is pushed to the search-window edge (the `na.locf` edge-fill makes every
   position a candidate). Every bootstrap replicate then agrees on that edge, so the detection comes back pinned at the
-  window boundary with an HDI range of **0.0** — which falsely passed the S1 reliability test (`hdi < hdi_thresh`) and
-  was accepted as the most reliable possible detection. These spurious edge lags appeared directly as `±lag_max`
-  outliers and, worse, poisoned the leading/trailing gap-fill: `fill_tlag_gaps` backfills leading NaNs from the first
-  valid value, so a single boundary artefact could stamp the edge lag across an entire leading block of
-  genuinely-unreliable chunks. A lag at the window edge is **always** a failed detection — the true peak lies at or
-  beyond the limit, so it is undetermined, not measured (EddyPro likewise discards boundary lags). `PreWhiteningBootstrap`
-  now rejects it at detection time: the new `is_edge_pinned` property is True when the bootstrap mode lag sits on the
-  search-window boundary, and then `tlag_s` + the HDI report `NaN` and `is_reliable` is `False`, so the lag never enters
-  PWBOPT or gets applied. The edge is each gas's **own** window (`lws`/`uws`), not the global `±lag_max_s`. The raw mode
-  position stays on `tlag_records` for diagnostics (the per-chunk plot still shows where it landed). Genuine interior
-  HDI=0 detections (a sharp, high-SNR peak where every replicate agrees — the common, *good* case) are untouched.
-- **`UstarMovingPointDetection` rewritten for ONEFlux parity and speed.** Validated line-by-line against the reference
-  C source (`oneflux_steps/ustar_mp/src/ustar.c`) and re-implemented on numpy arrays (~8x faster per `detect()`, and
-  the per-iteration object construction + `DataFrame.copy()` in bootstrap loops is gone). **Behaviour changes toward
-  ONEFlux:** (1) default season grouping is now calendar quarters `[[1,2,3],[4,5,6],[7,8,9],[10,11,12]]` (the actual
-  `default_seasons_group` in `main.c`), not DJF; (2) TA/USTAR class boundaries are tie-aware — equal values are never
-  split across adjacent classes (matches the C boundary-extension loop), so quantized USTAR data is binned exactly as
-  ONEFlux does; (3) season month assignment applies the end-of-period timestamp shift (a record at day-1 00:00 belongs
-  to the previous month); (4) the "one big season" fallback is implemented (when every season has < `100*7` samples,
-  all night data is pooled); (5) `bootstrap()` now also returns an `Annual` row (the distribution of the
-  max-across-seasons threshold actually used for filtering) and resamples the full record before night-filtering, as
-  the C does. Defaults still reproduce the ONEFlux default run: forward-mode-2 only, percentile check off.
-- **`UstarBootstrapThresholds`: explicit VUT / CUT terminology.** Added `get_vut_thresholds()` (the per-year table,
-  alongside the existing `get_cut_threshold()` constant threshold) and documented the ONEFlux VUT (variable, per-year)
-  vs CUT (constant, pooled-across-years) distinction. The docstrings + GUI now state clearly that diive's VUT is
-  **smoothed over a 3-year window** (each year pooled with its two neighbours) rather than the strict ONEFlux
-  single-year VUT — a deliberate trade for a more stable per-year threshold; CUT matches ONEFlux directly. The
-  standalone USTAR detection tab labels its rows VUT (per-year) and CUT (constant).
-- **Flux chain L3.3: VUT filtering.** `run_level33_ustar_detection` gained a `mode=` argument
-  (`'cut'` or `'vut'`): CUT applies the constant pooled threshold per percentile (`CUT_16/50/84`), VUT a per-year
-  threshold per percentile (`VUT_16/50/84`, each year filtered by its own value). CUT and VUT are mutually exclusive
-  filtering strategies — one is applied before gap-filling, with the percentiles as the uncertainty scenarios within it.
-  New library callable `run_level33_variable_ustar` (and flag class `FlagMultipleVariableUstarThresholds`) apply
-  time-varying per-record USTAR thresholds — a constant threshold is just a constant Series, so CUT and VUT share one
-  code path. The flux-chain GUI L3.3 detect mode exposes an **Apply** selector (CUT / VUT); **Copy Python** renders the
-  chosen `mode`. Per-year thresholds with no detected value fall back to the CUT value for that percentile.
-- **`Hampel` honoured `n_sigma` in day/night mode.** `n_sigma_daytime` / `n_sigma_nighttime` defaulted to the literal
-  `5.5` instead of `None`, so the "fall back to `n_sigma`" logic was dead and the threshold was hard-wired to 5.5
-  whenever `separate_day_night=True` — passing `n_sigma` alone had no effect on the result. Defaults are now `None`
-  (as the docstring already stated). **Behaviour change:** code that ran `Hampel(..., n_sigma=X, separate_day_night=True)`
-  without explicit `n_sigma_daytime`/`n_sigma_nighttime` will now flag a different number of outliers (it previously used
-  5.5). Passing nothing still yields 5.5; passing explicit per-period sigmas is unchanged.
-- **`ManualRemoval` date matching is now day-inclusive and validates input.** A date-only spec (e.g. `'2006-05-01'`)
-  or the end of a `[start, end]` range previously matched only the `00:00:00` record, because the boolean `>=`/`<=`
-  masks parsed a bare date to midnight — the docstring's "whole day, inclusive" promise was wrong. It now uses pandas
-  partial-string `.loc[start:end]` slicing, so a bare date spans the whole day and ranges are closed on both ends.
-  Malformed `remove_dates` entries (non-string/non-list, or a range that isn't exactly two elements) now raise instead
-  of being silently ignored. `calc()`/`run()` also accept `repeat`/`progress_callback` for parity with the other
-  detectors (`repeat` is accepted-but-ignored — manual removal is index-based and would never converge), and missing
-  records stay unflagged in the per-iteration flag (consistent with the other detectors). **Behaviour change:** code
-  passing date-only specs now removes the whole day rather than just midnight.
-- **`TrimLow` day/night split is now optional, and it no longer opens a duplicate plot.** Day/night screening is
-  opt-in: with `trim_daytime=trim_nighttime=False` (the default) the whole series is trimmed against one distribution and
-  **no location parameters are needed** — `lat`/`lon`/`utc_offset` now default to `None` and are validated only when a
-  split is requested (previously they were mandatory and both flags `False` raised). The constructor signature was
-  reordered to `TrimLow(series, lower_limit, trim_daytime, trim_nighttime, lat, lon, utc_offset, …)` with `lower_limit`
-  as the primary parameter (keyword callers unaffected). The GUI gains a **Trim-low filter** tab (trim-all by default;
-  coordinates enable only when a day/night box is ticked). Separately: with `showplot=True` in single-mode the default
-  before/after figure was drawn twice; it is now drawn once and carries the mode-aware title (previously discarded).
-  `calc()`/`run()` accept `repeat`/`progress_callback` (default single-pass) for parity with the other detectors.
-  `FlagBase.defaultplot` gained an optional `title=` override (backward-compatible). Docstrings corrected (argument order,
-  the `__init__` "Returns" note, and the missing-data flag value — `overall_flag` assigns `0`, not `NaN`, to
-  originally-missing records).
+  boundary with an HDI range of **0.0**, which falsely passed the S1 reliability test (`hdi < hdi_thresh`) and was
+  accepted as the most reliable possible detection. These spurious lags appeared as `±lag_max` outliers and poisoned the
+  leading/trailing gap-fill: `fill_tlag_gaps` backfills leading NaNs from the first valid value, so one boundary
+  artefact could stamp the edge lag across a whole leading block of unreliable chunks. A lag at the window edge is
+  always a failed detection, since the true peak lies at or beyond the limit (EddyPro likewise discards boundary lags).
+  The new `is_edge_pinned` property is True when the bootstrap mode lag sits on the search-window boundary, and then
+  `tlag_s` and the HDI report `NaN` and `is_reliable` is `False`, so the lag never enters PWBOPT or gets applied. The
+  edge is each gas's **own** window (`lws`/`uws`), not the global `±lag_max_s`. The raw mode position stays on
+  `tlag_records` for diagnostics. Genuine interior HDI=0 detections (a sharp, high-SNR peak where every replicate
+  agrees, the common and good case) are untouched.
+- **`RandomUncertaintyPAS20`: cumulative uncertainty no longer poisoned by a single NaN.** The propagation built an
+  object-dtype `ufloat` running sum, so one missing per-record flux or uncertainty turned every *later*
+  `UNC_CUMULATIVE` value into NaN, while the cumulative flux (a float cumsum) kept skipping NaN. It now computes the
+  quadrature directly as `sqrt((randunc**2).cumsum())` with pandas skipna semantics, so a missing record contributes
+  nothing instead of nullifying the tail. The `FLUX+/-UNC` ufloat column is rebuilt from the two cumulative Series, O(n)
+  instead of the old O(n²) ufloat cumsum. Results on complete data are unchanged.
+- **`RandomUncertaintyPAS20`: ~35x faster.** The per-record loops rebuilt a pandas DataFrame slice
+  (`df_between_two_dates` plus `between_time`) and used scalar `.loc` access every iteration, and method 4 re-sorted the
+  whole frame inside the loop. They now pull each column into numpy once and locate each record's window by position via
+  `searchsorted` on the sorted timestamps (reproducing `between_time`'s wrap-around ±1 h band), method 3 sorts by flux
+  once so its ±20% band is a contiguous slice, and method 4's sort is hoisted out. One year of half-hourly data drops
+  from ~18 s to ~0.5 s, output **bit-identical** (max abs diff 0.0). No public API change.
+- **`UstarMovingPointDetection` rewritten for ONEFlux parity and speed.** Validated line-by-line against the reference C
+  source (`ustar.c`) and re-implemented on numpy arrays: ~8x faster per `detect()`, and the per-iteration object
+  construction plus `DataFrame.copy()` in bootstrap loops is gone. **Behaviour changes toward ONEFlux:** default season
+  grouping is now calendar quarters (the actual `default_seasons_group` in `main.c`), not DJF; TA/USTAR class boundaries
+  are tie-aware, so equal values are never split across adjacent classes and quantized USTAR data bins exactly as
+  ONEFlux does; season month assignment applies the end-of-period timestamp shift, so a record at day-1 00:00 belongs to
+  the previous month; the "one big season" fallback is implemented (when every season has < `100*7` samples, all night
+  data pools); and `bootstrap()` returns an `Annual` row (the distribution of the max-across-seasons threshold actually
+  used for filtering) and resamples the full record before night-filtering, as the C does. Defaults still reproduce the
+  ONEFlux default run.
+- **`UstarBootstrapThresholds`: explicit VUT / CUT terminology.** Added `get_vut_thresholds()` (the per-year table)
+  alongside the existing `get_cut_threshold()`, and documented the ONEFlux VUT (variable, per-year) vs CUT (constant,
+  pooled) distinction. diive's VUT is **smoothed over a 3-year window** (each year pooled with its two neighbours)
+  rather than the strict ONEFlux single-year VUT, a deliberate trade for a more stable per-year threshold; CUT matches
+  ONEFlux directly.
+- **Flux chain L3.3: VUT filtering.** `run_level33_ustar_detection` gained `mode=` (`'cut'` or `'vut'`): CUT applies the
+  constant pooled threshold per percentile (`CUT_16/50/84`), VUT a per-year threshold per percentile (`VUT_16/50/84`).
+  CUT and VUT are mutually exclusive strategies, applied before gap-filling with the percentiles as the uncertainty
+  scenarios within them. New `run_level33_variable_ustar` and `FlagMultipleVariableUstarThresholds` apply time-varying
+  per-record thresholds, and since a constant threshold is just a constant Series, CUT and VUT share one code path.
+  Per-year thresholds with no detected value fall back to that percentile's CUT value.
+- **`ManualRemoval` date matching is now day-inclusive and validates input.** A date-only spec (`'2006-05-01'`) or the
+  end of a `[start, end]` range previously matched only the `00:00:00` record, because the boolean `>=`/`<=` masks
+  parsed a bare date to midnight, so the docstring's "whole day, inclusive" promise was wrong. It now uses pandas
+  partial-string `.loc[start:end]` slicing. Malformed `remove_dates` entries (non-string/non-list, or a range that isn't
+  exactly two elements) now raise instead of being silently ignored. `calc()`/`run()` accept `repeat`/`progress_callback`
+  for parity (`repeat` is accepted but ignored, since manual removal is index-based and would never converge), and
+  missing records stay unflagged in the per-iteration flag. **Behaviour change:** date-only specs now remove the whole
+  day rather than just midnight.
+- **`TrimLow` day/night split is now optional, and it no longer opens a duplicate plot.** With
+  `trim_daytime=trim_nighttime=False` (the default) the whole series is trimmed against one distribution and **no
+  location parameters are needed**: `lat`/`lon`/`utc_offset` default to `None` and are validated only when a split is
+  requested (previously they were mandatory and both flags `False` raised). The signature is reordered to
+  `TrimLow(series, lower_limit, trim_daytime, trim_nighttime, lat, lon, utc_offset, ...)` with `lower_limit` primary;
+  keyword callers are unaffected. Separately, `showplot=True` in single-mode drew the before/after figure twice; it now
+  draws once and carries the mode-aware title. `calc()`/`run()` accept `repeat`/`progress_callback`.
+  `FlagBase.defaultplot` gained an optional `title=` override. Docstrings corrected (argument order, the `__init__`
+  "Returns" note, and the missing-data flag value: `overall_flag` assigns `0`, not `NaN`, to originally-missing
+  records).
 - **`SeasonalTrendDecomposition(method='stl')` now works on real data.** The STL wrapper never passed `period` to
-  statsmodels and called the unsupported `STL.fit(weights=…)`, so STL always raised. Classical/harmonic were unaffected.
-- **`HeatmapYearMonth` no longer raises `AttributeError`** (it called the non-existent top-level
-  `dv.resample_to_monthly_agg_matrix`; now imports from `dv.times`).
-- **`import diive` no longer forces the matplotlib `Agg` backend** (the PWB tool's module-level `matplotlib.use('Agg')`
-  leaked through and disabled interactive windows; now applied only where plots are rendered).
+  statsmodels and called the unsupported `STL.fit(weights=...)`, so STL always raised. Classical and harmonic were
+  unaffected.
+- **`_TeeConsole` forwarded `rule()` twice** to mirror consoles such as the GUI Log tab. Rich's `rule` renders via
+  `self.print`, which was already forwarded, so the extra override double-printed every horizontal rule.
+- **`HeatmapYearMonth` no longer raises `AttributeError`**: it called the non-existent top-level
+  `dv.resample_to_monthly_agg_matrix` and now imports from `dv.times`.
+- **`import diive` no longer forces the matplotlib `Agg` backend.** The PWB tool's module-level `matplotlib.use('Agg')`
+  leaked through and disabled interactive windows; it is now applied only where plots are rendered.
+- **Tree ring Copy Python** now includes `cb_labelsize`, so the emitted snippet matches the rendered plot.
 - XGBoost/SHAP on Python 3.13 (`ast.literal_eval` monkey-patch); pandas 3.0.3 compatibility (`iterrows`/`inplace`/
-  `.values`); `LocalOutlierFactor` `contamination='auto'`; `linear_interpolation` to current `GapFinder` API;
+  `.values`); `LocalOutlierFactor` `contamination='auto'`; `linear_interpolation` to the current `GapFinder` API;
   `data.filteredseries` reset after `run_level33_constant_ustar()`; `calc_vpd_from_ta_rh` export; `SortingBinsMethod`
   alias; 7 misrouted `__init__` exports.
-- `PerFilePipeline`: PWBOPT carry-forward ordered by time (not filename); chunk-filename collisions raised upfront.
+- `PerFilePipeline`: PWBOPT carry-forward ordered by time, not filename; chunk-filename collisions raised upfront.
 - All 63 active tests pass.
 
 ### Console Output
 
-- **Rich console migration** — `print()` replaced with structured helpers (`info`/`detail`/`warn`/`error`/
+- **Rich console migration**: `print()` replaced with structured helpers (`info`/`detail`/`warn`/`error`/
   `_console.print()`) across production modules. Examples and CLI entry points unchanged.
-- **Console renders correctly in Jupyter** — the shared console is now built environment-aware
-  (`diive/core/utils/console.py`). In a notebook it pins the Jupyter renderer and a wider (100-column) width so report
-  tables no longer wrap at 80 columns, and `rule()` draws its line in a neutral grey instead of the default bright green
-  (`#00ff00`), which was illegible on a white background. Terminal and GUI output are unchanged. New `refresh_console()`
-  re-detects the environment (Rich fixes `is_jupyter` at construction) for frontends where diive was imported before the
-  kernel was ready.
+- **Console renders correctly in Jupyter.** The shared console is built environment-aware
+  (`diive/core/utils/console.py`). In a notebook it pins the Jupyter renderer and a wider 100-column width, so report
+  tables no longer wrap at 80 columns, and `rule()` draws in neutral grey instead of the default bright green
+  (`#00ff00`), illegible on white. Terminal and GUI output are unchanged. New `refresh_console()` re-detects the
+  environment (Rich fixes `is_jupyter` at construction) for frontends where diive was imported before the kernel was
+  ready.
 
 ### Analysis
 
-- **`DriverAnalysis` (EXPERIMENTAL)** — evidence-triangulation driver attribution for flux time series across three
+- **`DriverAnalysis` (EXPERIMENTAL)**: evidence-triangulation driver attribution for flux time series across three
   epistemic layers: association (SHAP vs a `.RANDOM` benchmark, ALE curves 1D/2D), temporal prediction (lagged,
-  scale-resolved, regime-stratified importance), and an opt-in causal layer (a deseasonalized `GrangerCausality`
-  sanity check). Time-aware splits, held-out scores, SHAP/ALE never presented as causal. Also exposes
-  standalone `accumulated_local_effects` / `_2d` and `AleCurve`. **Provisional:** lives in
-  `dv.analysis.experimental`, emits a one-time `ExperimentalWarning`; see `examples/analysis/analysis_driveranalysis.py`.
-- **`GapStats`** — extended gap analysis wrapping `GapFinder` via composition.  Adds monthly and annual
-  breakdowns, explicit long-gap listing, a Rich console report (`.report()`), and a four-panel figure
-  (availability heatmap, gap-spike timeline, monthly polar chart, gap-length histogram).  Available as
-  `dv.analysis.GapStats`.
-- **`FluxLevelData.gap_stats(level='L33')`** — on-demand gap analysis for any processed level.  Returns a
-  `dict[str, GapStats]` keyed by USTAR scenario (single-entry for L2/L31/L32, one per scenario for L33).
-  Not baked into any level function — call it any time after the relevant level has run.
-- **`FluxLevelData.plot_cumulative_comparison()`** — overlay cumulative sums of all gap-filling methods (RF,
-  XGBoost, MDS) for a given USTAR scenario on a single axes.  Optional measured-only dashed reference line.
-  Works with any subset of methods; only methods that have been run appear.
-- **`FluxLevelData.plot_gapfilled_heatmaps()`** — side-by-side `HeatmapDateTime` panels: measured flux
-  (before gap-filling) in the leftmost panel, one panel per gap-filling method.  All panels share a common
-  colour scale (2nd–98th percentile across all series).  When `ustar_scenario=None`, one figure is produced
-  per USTAR scenario.
-- **GUI-embeddable flux comparison plots** — `plot_cumulative_comparison(ax=, fig=)` and
-  `plot_gapfilled_heatmaps(fig=)` gained two-phase `ax=`/`fig=` parameters (like `RidgeLinePlot.plot(fig=...)`)
-  so they render into a caller-supplied axes/figure (e.g. the GUI flux-chain canvas) instead of always owning a
-  new one; the heatmaps form requires a single resolved USTAR scenario when `fig=` is given.  Headless
-  `showplot=False` behaviour is unchanged.
-- **`level41_to_code`** — reproducible-script renderer for the composable chain through Level 4.1 gap-filling
-  (always renders L2 → L3.3 first, then one `run_level41_*` per selected method; rf/xgb share one
-  `make_level41_engineer`).  Joins `chain_to_code` / `level2_to_code` … `level33_to_code`.
-- **`dv.flux.level2_test_inputs(fluxcol, fluxbasevar)` + `VM97_SUBTESTS`** — Level-2 quality-test introspection:
-  the EddyPro-FLUXNET input column(s) each test reads (templated on the flux column / base variable, mirroring the
-  `flag_*_eddypro_test` reads), and the eight VM97 raw-data screening sub-tests as `(key, label, kind)`. Lets a caller
-  show which variables a test depends on and check availability upfront (used by the GUI flux-chain L2 page).
-- **Per-test input-column override for Level 2** — each `run_level2` test config dict accepts an optional `'col'`
-  key (`'expect_nr_col'` / `'basevar_nr_col'` for the two-column completeness test) to read a differently-named
-  EddyPro column; threaded down through `FluxQualityFlagsEddyPro` to the `flag_*_eddypro_test` functions (new optional
-  `flagcol` / `scfcol` / `vm97col` / `aoacol` / `nshwcol` / `expect_nr_col` / `basevar_nr_col` params, default
-  `None` → the standard templated name, fully backward-compatible).
+  scale-resolved, regime-stratified importance), and an opt-in causal layer (a deseasonalized `GrangerCausality` sanity
+  check). Time-aware splits, held-out scores, and SHAP/ALE never presented as causal. Also exposes standalone
+  `accumulated_local_effects` / `_2d` and `AleCurve`. **Provisional:** lives in `dv.analysis.experimental` and emits a
+  one-time `ExperimentalWarning`.
+- **`GapStats`**: extended gap analysis wrapping `GapFinder` by composition. Adds monthly and annual breakdowns,
+  explicit long-gap listing, a Rich `.report()`, and a four-panel figure (availability heatmap, gap-spike timeline,
+  monthly polar chart, gap-length histogram).
+- **`FluxLevelData.gap_stats(level='L33')`**: on-demand gap analysis for any processed level. Returns a
+  `dict[str, GapStats]` keyed by USTAR scenario (single-entry for L2/L31/L32, one per scenario for L33). Not baked into
+  any level function; call it any time after that level has run.
+- **`FluxLevelData.plot_cumulative_comparison()`**: overlay the cumulative sums of all gap-filling methods for a USTAR
+  scenario on one axes, with an optional measured-only dashed reference. Only methods that have run appear.
+- **`FluxLevelData.plot_gapfilled_heatmaps()`**: side-by-side `HeatmapDateTime` panels, measured flux leftmost then one
+  per gap-filling method, sharing a colour scale (2nd to 98th percentile across all series). With `ustar_scenario=None`
+  it produces one figure per scenario.
+- Both comparison plots gained two-phase `ax=` / `fig=` parameters so they render into a caller-supplied axes or figure
+  instead of always owning a new one; the heatmaps form requires a single resolved USTAR scenario when `fig=` is given.
+  Headless `showplot=False` behaviour is unchanged.
+- **`dv.flux.level2_test_inputs(fluxcol, fluxbasevar)` and `VM97_SUBTESTS`**: Level-2 quality-test introspection. Gives
+  the EddyPro-FLUXNET input column(s) each test reads, templated on the flux column and base variable, plus the eight
+  VM97 raw-data screening sub-tests as `(key, label, kind)`, so a caller can show which variables a test depends on and
+  check availability upfront.
+- **Per-test input-column override for Level 2**: each `run_level2` test config dict accepts an optional `'col'` key
+  (`'expect_nr_col'` / `'basevar_nr_col'` for the two-column completeness test) to read a differently-named EddyPro
+  column, threaded down through `FluxQualityFlagsEddyPro` to the `flag_*_eddypro_test` functions (new optional
+  `flagcol` / `scfcol` / `vm97col` / `aoacol` / `nshwcol` / `expect_nr_col` / `basevar_nr_col`, default `None` for the
+  standard templated name, fully backward-compatible).
+- **`level41_to_code`**: reproducible-script renderer for the composable chain through Level 4.1. Always renders L2 to
+  L3.3 first, then one `run_level41_*` per selected method (rf/xgb share one `make_level41_engineer`). Joins
+  `chain_to_code` / `level2_to_code` through `level33_to_code`.
 
 ### Examples & Documentation
 
-- New example + test for **Level 2 in isolation**: `fluxprocessingchain_level2.py` runs `run_level2` standalone on a
-  real EddyPro FLUXNET output file (Level-0), covering `level2_test_inputs`, the QCF-filtered vs. high-quality (QCF=0)
-  series, and the accept-threshold effect; `TestFluxProcessingChainLevel2` in `tests/test_fluxprocessingchain.py` mirrors
-  it (QCF/flag outputs, pure-function contract, skipped-test handling, config-validation errors, threshold monotonicity).
-- New examples: `fluxprocessingchain_composable.py` (full L2->L4.1), `fluxprocessingchain_multiflux.py` (multi-flux
-  loop), `qaqc_detect_timestamp_shifts.py`, `flux_lag_pwb.py`, `flux_lag_pwb_batch.py`, `plot_treering_temperature.py`,
-  4 I/O examples, USTAR method comparison, `gapfill_swin.py` (SW_IN physics + XGBoost),
-  `analysis_gapstats.py` (gap distribution analysis). Total: 124 examples.
-- Corrected stale example counts in the hand-maintained docs, which had drifted behind the files on disk: the totals in
-  `examples/README.md` (122 -> 124, plus the `Example Coverage` table and its per-folder figures), `README.md` and
-  `OVERVIEW.md` (113 -> 124), `CLAUDE.md` (~100 -> 124), and `examples/analysis/README.md` (13 -> 14) now all match the
-  124 example files across the 10 domain folders.
-- `examples/CATALOG.md` completed: added the two examples that were on disk but uncatalogued, `feature_engineer.py`
-  (the 8-stage `FeatureEngineer` pipeline) and `analysis_keep_records_where.py` (conditional record selection). The
-  catalog now lists every example.
-- Updated `fluxprocessingchain_composable.py`: Step 5b gap analysis after L3.3 via `data.gap_stats()`;
-  Step 12 replaced with `data.plot_gapfilled_heatmaps()` (all methods side-by-side); Step 13 replaced
-  with `data.plot_cumulative_comparison()` (all methods on one axes).
-- Rewrote `feature_potentialradiation.py`: it compared the three potential-radiation functions against each other, and
-  now demonstrates the single remaining `potrad` (ONEFlux/FLUXNET-parity port) on its own.
-- Rewrote `analysis_harmonic.py` to use `dv.analysis.harmonic_analysis` (it previously called scipy directly): diel
+- **124 examples** across 10 domain folders. New: `fluxprocessingchain_level2.py` (L2 standalone on a real EddyPro
+  FLUXNET Level-0 file, covering `level2_test_inputs`, QCF-filtered vs high-quality QCF=0 series, and the
+  accept-threshold effect, mirrored by `TestFluxProcessingChainLevel2`), `fluxprocessingchain_composable.py` (full L2 to
+  L4.1), `fluxprocessingchain_multiflux.py`, `fluxprocessingchain_partitioning.py`, five partitioning examples including
+  `partitioning_comparison.py`, `qaqc_detect_timestamp_shifts.py`, `flux_lag_pwb.py`, `flux_lag_pwb_batch.py`,
+  `flux_apply_tlag_cli.py`, `plot_treering_temperature.py`, `plot_waterfall.py`, `plot_windrose_basic.py`,
+  `plot_timeseries_rangetool.py`, `analysis_compound_extremes.py`, `analysis_keep_records_where.py`,
+  `analysis_gapstats.py`, `analysis_driveranalysis.py`, `events_event.py`, `gapfill_swin.py`, four I/O examples, and a
+  USTAR method comparison.
+- `feature_potentialradiation.py` rewritten: it compared the three potential-radiation functions against each other and
+  now demonstrates the single remaining `potrad`.
+- `analysis_harmonic.py` rewritten to use `dv.analysis.harmonic_analysis` instead of calling scipy directly: diel
   harmonics of NEE, annual harmonics of air temperature, the window-function effect, and a time-frequency spectrogram.
-- **New `dv.analysis.spectrogram`** — short-time Fourier transform (time-frequency map) of a series; returns
-  `frequencies` / `times` / `power` / `power_db`. Complements `harmonic_analysis` / `periodogram` (which give a single
-  static spectrum) by showing *when* each cycle is strong. Used by the harmonic example's spectrogram panel.
+- `fluxprocessingchain_composable.py` updated: gap analysis after L3.3 via `data.gap_stats()`, and the final steps
+  replaced with `data.plot_gapfilled_heatmaps()` and `data.plot_cumulative_comparison()`.
+- Corrected stale example counts that had drifted behind the files on disk, in `examples/README.md` (122 to 124, plus
+  the coverage table), `README.md` and `OVERVIEW.md` (113 to 124), `CLAUDE.md` (~100 to 124), and
+  `examples/analysis/README.md` (13 to 14). `examples/CATALOG.md` now lists every example.
+- **New InfluxDB notebooks** (`notebooks/`, prefixed `DatabaseInflux`, using `InfluxIO`, `uv sync --group db`):
+  `DatabaseInfluxDownloadSpecificVars`, `DatabaseInfluxDownloadAllVarsOfMeasurements` (all fields of given measurements,
+  `FIELDS=None`, across one or more data versions), and `DatabaseInfluxDeleteData` (delete calls commented out by
+  default for Run-All safety). The meteo-screening notebook was renamed `StepwiseMeteoScreeningFromDatabase` to
+  `DatabaseInfluxStepwiseMeteoScreening` and its settings consolidated into one cell.
 - 21 Jupyter notebooks archived; content migrated to Sphinx Gallery examples.
-- **New InfluxDB database notebooks** (`notebooks/`, all prefixed `DatabaseInflux`, using diive's in-house `InfluxIO`
-  engine, `uv sync --group db`): `DatabaseInfluxDownloadSpecificVars` (download named variables),
-  `DatabaseInfluxDownloadAllVarsOfMeasurements` (download all fields of given measurements, `FIELDS=None`, across one or
-  more data versions), and `DatabaseInfluxDeleteData` (delete specific variables or a whole data version; delete calls
-  commented out by default for Run-All safety). The existing meteo-screening notebook was renamed
-  `StepwiseMeteoScreeningFromDatabase` -> `DatabaseInfluxStepwiseMeteoScreening` and its user settings consolidated into
-  a single cell.
 - Switched from poetry to `uv` for dependency management.
+</content>
 
 ## v0.90.0 | 13 Jan 2026
 
