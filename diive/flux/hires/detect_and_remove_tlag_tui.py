@@ -52,7 +52,6 @@ Launch::
 
     uv run diive-tlag-pwb-detect-remove-tui --demo     # preview, no data
     uv run diive-tlag-pwb-detect-remove-tui            # real run (fill form)
-    uv run python examples/flux/hires/flux_detect_remove_tui_demo.py
 
 Part of the diive library: https://github.com/holukas/diive
 """

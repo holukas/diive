@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**124 examples across 10 organized folders by functional domain.**
+**121 examples across 10 organized folders by functional domain.**
 
 ## Structure
 
@@ -59,7 +59,7 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (27 examples)
+├── flux/                  # Eddy covariance flux processing (26 examples)
 │   ├── fluxprocessingchain/
 │   │   ├── fluxprocessingchain_level2.py
 │   │   ├── fluxprocessingchain_runchain.py
@@ -81,7 +81,7 @@ examples/
 │   │   ├── flux_ustar_mp_detection.py
 │   │   ├── flux_ustar_vekuri_detection.py
 │   │   └── flux_ustar_method_comparison.py
-│   └── hires/             # High-resolution analysis (9 examples)
+│   └── hires/             # High-resolution analysis (8 examples)
 │       ├── flux_fluxdetectionlimit.py
 │       ├── flux_lag.py
 │       ├── flux_lag_pwb.py
@@ -89,7 +89,6 @@ examples/
 │       ├── flux_lag_pwb_batch.py
 │       ├── flux_lag_pwb_batch_cli.py
 │       ├── flux_apply_tlag_cli.py
-│       ├── flux_detect_remove_tui_demo.py
 │       └── flux_windrotation.py
 ├── gapfilling/            # Gap-filling methods (12 examples)
 │   ├── gapfill_interpolate_generous.py
@@ -110,7 +109,7 @@ examples/
 │   ├── io_read_multiple_files_with_multidatafilereader.py
 │   ├── io_read_single_file_with_readfiletype.py
 │   └── io_extract.py
-└── preprocessing/         # Data quality & corrections (21 examples)
+└── preprocessing/         # Data quality & corrections (19 examples)
     ├── corrections/       # Offset & bias corrections (7 examples)
     │   ├── correction_relativehumidity_offset.py
     │   ├── correction_radiation_offset.py
@@ -125,12 +124,10 @@ examples/
     │   ├── outlier_localsd.py
     │   ├── outlier_lof.py
     │   └── ...
-    └── qaqc/              # Quality flags & EddyPro QC (5 examples)
+    └── qaqc/              # Quality flags & EddyPro QC (3 examples)
         ├── qc_overall_flag.py
         ├── qc_eddypro_flags.py
-        ├── qaqc_detect_timestamp_shifts.py
-        ├── meteoscreening_complete_workflow.py
-        └── meteoscreening_stepwise_workflow.py
+        └── qaqc_detect_timestamp_shifts.py
 ```
 
 ## Quick Start
@@ -183,11 +180,11 @@ Browse by topic:
 | **Events** | 1 | Instant/period event markers, 0/1 flag columns, plot overlays, custom category palette |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
-| **Flux** | 27 | Time lag analysis, processing chain (4), NEE partitioning into GPP/RECO (5), HQ filtering, USTAR detection (3), self-heating (2), uncertainty, PWB batch detection (CLI + API), PWB detect-remove (apply CLI + TUI demo), high-res analysis |
+| **Flux** | 26 | Time lag analysis, processing chain (4), NEE partitioning into GPP/RECO (5), HQ filtering, USTAR detection (3), self-heating (2), uncertainty, PWB batch detection (CLI + API), PWB detect-remove (apply CLI), high-res analysis |
 | **Gapfilling** | 12 | Linear interpolation, Random Forest (4 variants), XGBoost (3 variants), MDS (2), SW_IN physics+XGBoost, comparison |
 | **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
-| **Preprocessing** | 21 | Corrections (7), outlier detection (9), QA/QC (5) |
-| **TOTAL** | **124** | |
+| **Preprocessing** | 19 | Corrections (7), outlier detection (9), QA/QC (3) |
+| **TOTAL** | **121** | |
 
 ## Running Options
 

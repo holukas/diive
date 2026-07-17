@@ -228,8 +228,10 @@ class TestGapFilling(unittest.TestCase):
 
         # Seed both the train/test split and the regressor: without random_state
         # the split is redrawn every run and the scores below drift.
+        # interpolate_short_gaps=None pins the model-only path this test asserts
+        # (every daytime gap flag 1, not flag 4), independent of the class default.
         g = SWINGapFillerXGBoost(series=swin_gappy, lat=lat, lon=lon, utc_offset=utc,
-                                 random_state=42, verbose=0)
+                                 interpolate_short_gaps=None, random_state=42, verbose=0)
         g.run()
         gf = g.results.gapfilled
         self.assertEqual(int(gf.isna().sum()), 0)   # complete after gap-filling
@@ -283,9 +285,14 @@ class TestGapFilling(unittest.TestCase):
         gappy = truth.copy()
         gappy[rng.rand(len(truth)) < 0.15] = np.nan  # scattered short gaps
 
+        # correct_nighttime_offset=False keeps observed records equal to truth (the
+        # default correction subtracts a nonzero nighttime bias from the whole
+        # series, shifting observed values too — checked at the end of this test).
         common = dict(series=gappy, lat=lat, lon=lon, utc_offset=utc,
-                      random_state=42, verbose=0)
-        model_only = SWINGapFillerXGBoost(**common).run().results
+                      correct_nighttime_offset=False, random_state=42, verbose=0)
+        # interpolate_short_gaps=None pins the baseline as genuinely model-only,
+        # independent of the class default.
+        model_only = SWINGapFillerXGBoost(interpolate_short_gaps=None, **common).run().results
         with_interp = SWINGapFillerXGBoost(interpolate_short_gaps=16, **common).run().results
 
         flag = with_interp.flag
@@ -423,9 +430,12 @@ class TestGapFilling(unittest.TestCase):
         day_pos = np.flatnonzero(daytime.to_numpy())
         ppfd.iloc[day_pos[20::30]] = np.nan  # ~1 isolated gap/day, none at the series start
 
+        # interpolate_short_gaps=None pins the model/fallback split this test asserts,
+        # independent of the class default; otherwise these single-record daytime gaps
+        # could be interpolated to flag 4 instead of surfacing as fallback (flag 2).
         common = dict(series=swin_gappy, lat=lat, lon=lon, utc_offset=utc,
-                      context_df=ppfd.to_frame(), random_state=42, verbose=0,
-                      n_estimators=10)
+                      context_df=ppfd.to_frame(), interpolate_short_gaps=None,
+                      random_state=42, verbose=0, n_estimators=10)
         flag = SWINGapFillerXGBoost(**common).run().results.flag
 
         driver_missing = ppfd.isna()

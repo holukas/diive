@@ -16,6 +16,8 @@ SWINGapFillerXGBoost docstring.
 Part of the diive library: https://github.com/holukas/diive
 """
 
+from time import perf_counter
+
 import pandas as pd
 from pandas import DataFrame, Series
 
@@ -61,7 +63,9 @@ class SWINGapFillerXGBoost:
           available.
         - *interpolate_short_gaps* for gaps of an hour or two, which uses the target's
           own neighbours — information the model never sees, since the feature engineer
-          excludes the target from every feature.
+          excludes the target from every feature. It is off by default: it helps under
+          the ceiling but overwrites better model fills once a strong *context_df*
+          sensor is present, so enable it only in the no-context case.
 
     Args:
         series: SW_IN time series to gap-fill (W m-2). NaN values are gaps.
@@ -81,6 +85,14 @@ class SWINGapFillerXGBoost:
             be in W m-2 or gap-free: the model learns the relationship from whatever
             overlap exists, and records where it is missing simply fall back to the
             climatology the default configuration would have produced anyway.
+
+            Preference order for a context_df radiation source, best first: a
+            co-located second sensor (pyranometer or PPFD) that sees the same sky;
+            a nearby station's radiation if the site is climatically similar; and,
+            where no local or neighbouring sensor exists, satellite or reanalysis
+            SW_IN such as ERA5-Land. All wire in the same way through context_df;
+            each carries synoptic sky state the timestamp cannot, so even a coarse
+            reanalysis product beats the timestamp-only climatology.
         nighttime_threshold: Potential-radiation cutoff (W m-2). Records with
             ``SW_IN_POT < nighttime_threshold`` are classified as nighttime; records
             with ``SW_IN_POT >= nighttime_threshold`` are daytime. Default: 0.001,
@@ -92,21 +104,31 @@ class SWINGapFillerXGBoost:
             (often negative) values at night by subtracting the daily mean nighttime
             value as an offset from the whole series, then setting nighttime to zero.
             The corrected series is used for all subsequent gap-filling steps and is
-            stored in gapfilling_df as '{target_col}_offset_corrected'. Default: False.
+            stored in gapfilling_df as '{target_col}_offset_corrected'. Default: True.
+            On an already quality-controlled series this is close to a no-op; on a raw
+            pyranometer record it removes the thermal-offset bias. Set to False if the
+            input is already offset-corrected.
         interpolate_short_gaps: Maximum gap length, in records, to fill by
             interpolating the clearness index (SW_IN / SW_IN_POT) instead of the
-            model. Interpolation never bridges a night. None (default) disables it,
-            leaving every daytime gap to XGBoost.
+            model. Interpolation never bridges a night. Default: None (disabled),
+            leaving every daytime gap to XGBoost. Set to an integer to enable it.
 
-            Worth enabling: the model cannot see the target's own neighbours, since
-            the feature engineer excludes the target from every feature, so a short
-            gap is exactly the case it is blind to. ``2`` (1 h on 30-min data) is the
-            recommended limit. Measured on CH-DAV 30-min data with 15% scattered gaps,
-            daytime gap RMSE against a model-only fill: 125 -> 88 at ``1``, 125 -> 77
-            at ``2``, and no further gain above that — a scattered-gap record holds
-            almost no longer runs. Raising the limit has little upside: interpolation
-            still wins on gaps as long as 8 h (189 vs 219 W m-2) but collapses once a
-            gap outlasts the observations bracketing it (1 day: 337 vs 172).
+            Worth enabling when the model is climatology-bound (no context_df): the
+            model cannot see the target's own neighbours — the feature engineer
+            excludes the target from every feature — so a short gap is exactly the case
+            it is blind to. ``2`` (1 h on 30-min data) is the recommended limit.
+            Measured on CH-DAV 30-min data with 15% scattered gaps, daytime gap RMSE
+            against a model-only fill: 125 -> 88 at ``1``, 125 -> 77 at ``2``, and no
+            further gain above that — a scattered-gap record holds almost no longer
+            runs. Raising the limit has little upside: interpolation still wins on gaps
+            as long as 8 h (189 vs 219 W m-2) but collapses once a gap outlasts the
+            observations bracketing it (1 day: 337 vs 172).
+
+            One caveat, and the reason it is off by default: interpolation overwrites
+            the model on the gaps it covers. That is a gain under the ceiling, but a
+            strong, near-complete second radiation sensor in context_df resolves short
+            gaps better than clearness-index interpolation does, so enabling it there
+            *raises* RMSE (CH-DAV: context-only 13.5 vs context+interp 66 W m-2).
         reduce_features: Apply SHAP-based feature reduction after initial training.
             Removes features whose importance is at or below the random-noise baseline.
             Increases training time but can improve generalisation. Default: False.
@@ -193,7 +215,7 @@ class SWINGapFillerXGBoost:
                  utc_offset: int,
                  context_df: DataFrame = None,
                  nighttime_threshold: float = 0.001,
-                 correct_nighttime_offset: bool = False,
+                 correct_nighttime_offset: bool = True,
                  interpolate_short_gaps: int = None,
                  reduce_features: bool = False,
                  features_lag: list = None,
@@ -403,13 +425,37 @@ class SWINGapFillerXGBoost:
         else:
             _console.print("  No XGBoost scores — no daytime gaps to fill.")
 
+    def _step(self, label: str) -> float:
+        """Emit a numbered progress header at verbose>=1 and return a start time.
+
+        Pair with :meth:`_step_done` so a long-running stage shows both what it is
+        doing (printed immediately, before the blocking call) and how long it took.
+        """
+        self._step_no += 1
+        if self.verbose >= 1:
+            # No square brackets: Rich would parse "[step N]" as a markup tag.
+            info(f"Step {self._step_no}: {label} ...")
+        return perf_counter()
+
+    def _step_done(self, t0: float, msg: str = "") -> None:
+        """Print the elapsed time for the step started at ``t0`` (verbose>=1)."""
+        if self.verbose >= 1:
+            extra = f" ({msg})" if msg else ""
+            _console.print(f"    [dim]completed in {perf_counter() - t0:.1f}s{extra}[/dim]")
+
     def run(self) -> 'SWINGapFillerXGBoost':
         """Execute gap-filling: optional offset correction, nighttime zeros, daytime XGBoost.
+
+        Progress: at ``verbose>=1`` each stage prints a numbered header before it
+        starts and its elapsed time when it finishes, so a long XGBoost/SHAP step is
+        visible while it runs rather than a silent pause. Set ``verbose=0`` to silence.
 
         Returns:
             self — for method chaining.
         """
         target_col = self.target_col
+        self._step_no = 0
+        run_t0 = perf_counter()
 
         if self.verbose >= 1:
             rule(f"SW_IN Gap-Filling ({target_col})")
@@ -427,8 +473,7 @@ class SWINGapFillerXGBoost:
             from diive.preprocessing.corrections.offsetcorrection import (
                 remove_nighttime_zero_offset,
             )
-            if self.verbose >= 1:
-                info("Applying nighttime offset correction ...")
+            t0 = self._step("Correcting nighttime sensor offset")
             series_corrected = remove_nighttime_zero_offset(
                 series=self.series.copy(),  # copy to prevent mutation of self.series.name
                 lat=self.lat,
@@ -436,12 +481,14 @@ class SWINGapFillerXGBoost:
                 utc_offset=self.utc_offset,
                 showplot=False,
             )
+            self._step_done(t0)
 
         # The working series is the corrected one (if requested) or the original.
         working_series = series_corrected if series_corrected is not None else self.series.copy()
 
         # Potential radiation drives the daytime/nighttime split and is the
         # primary feature for daytime prediction.
+        t0 = self._step("Computing potential radiation and day/night split")
         swinpot = potrad(
             timestamp_index=working_series.index,
             lat=self.lat,
@@ -453,24 +500,28 @@ class SWINGapFillerXGBoost:
         gaps = original_gaps
         nighttime_gaps = gaps & ~daytime_mask
         daytime_gaps = gaps & daytime_mask
+        self._step_done(
+            t0, f"{int(daytime_mask.sum())} daytime / {int((~daytime_mask).sum())} nighttime records")
 
         if self.verbose >= 1:
-            info(f"Records: {daytime_mask.sum()} daytime | {(~daytime_mask).sum()} nighttime")
-            info(f"Gaps: {daytime_gaps.sum()} daytime | {nighttime_gaps.sum()} nighttime")
+            info(f"Gaps to fill: {int(daytime_gaps.sum())} daytime, "
+                 f"{int(nighttime_gaps.sum())} nighttime")
 
         # Nighttime: zero is the physically correct value (no solar radiation).
+        t0 = self._step("Filling nighttime gaps with 0 W/m2 (no incoming solar radiation)")
         filled = working_series.copy()
         filled.loc[nighttime_gaps] = 0.0
+        self._step_done(t0, f"{int(nighttime_gaps.sum())} records set to 0")
 
         # Short daytime gaps: interpolate the clearness index. Computed here but
         # deliberately NOT written into `filled` yet — the model must train on
         # observations only, never on this interpolation.
         interpolated = None
         if self.interpolate_short_gaps:
+            t0 = self._step(
+                f"Interpolating short daytime gaps (<= {self.interpolate_short_gaps} records)")
             interpolated = self._interpolate_short_gaps(working_series, swinpot)
-            if self.verbose >= 1:
-                info(f"Interpolated {int(interpolated.notna().sum())} short daytime "
-                     f"gap records (<= {self.interpolate_short_gaps} records).")
+            self._step_done(t0, f"{int(interpolated.notna().sum())} records interpolated")
 
         # Daytime: XGBoost trained on observed daytime values.
         daytime_results = None
@@ -542,7 +593,8 @@ class SWINGapFillerXGBoost:
 
         if self.verbose >= 1:
             total_filled = (flag > 0).sum()
-            success(f"Done — {total_filled} records filled ({gaps.sum()} gaps total)")
+            success(f"Done in {perf_counter() - run_t0:.1f}s - {total_filled} records "
+                    f"filled ({gaps.sum()} gaps total)")
 
         return self
 
@@ -615,6 +667,7 @@ class SWINGapFillerXGBoost:
         # function of the timestamp, so its derived variants are the same function
         # again and measure identically to leaving them out. Only measured context
         # drivers carry sky state worth smoothing.
+        t0 = self._step("Engineering features")
         engineer = FeatureEngineer(
             target_col=target_col,
             features_lag=self.features_lag,
@@ -628,11 +681,8 @@ class SWINGapFillerXGBoost:
             verbose=self.verbose,
         )
         full_features_df = engineer.fit_transform(input_df)
-        detail(
-            f"FeatureEngineer produced {full_features_df.shape[1] - 1} feature columns "
-            f"over {len(full_features_df)} rows.",
-            verbose=self.verbose,
-        )
+        self._step_done(
+            t0, f"{full_features_df.shape[1] - 1} features over {len(full_features_df)} rows")
 
         # Subset to daytime rows only.
         daytime_df = full_features_df.loc[daytime_mask].copy()
@@ -653,12 +703,21 @@ class SWINGapFillerXGBoost:
             **self.kwargs,
         )
 
+        # Training includes the SHAP importance computation, which is the slowest
+        # part of the whole workflow — call it out so the wait is expected.
+        t0 = self._step(f"Training XGBoost on {n_complete} daytime records "
+                        f"(incl. SHAP importances, the slowest step)")
         model.trainmodel(showplot_scores=False, showplot_importance=False)
+        self._step_done(t0)
 
         if self.reduce_features:
+            t0 = self._step("Reducing features (SHAP vs random benchmark) and retraining")
             model.reduce_features()
             model.trainmodel(showplot_scores=False, showplot_importance=False)
+            self._step_done(t0)
 
+        t0 = self._step("Filling daytime gaps")
         model.fillgaps(showplot_scores=False, showplot_importance=False)
+        self._step_done(t0)
 
         return model.results

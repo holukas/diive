@@ -81,13 +81,17 @@ The rest raise or fail at import:
   gaps modelled by XGBoost on SW_IN_POT + timestamp features; needs only lat/lon/UTC offset). With no context drivers
   every feature is a deterministic function of the timestamp, so the model reproduces a climatology and cannot recover
   a gap's sky state; passing a second radiation measurement (a pyranometer or PPFD sensor) through `context_df` is what
-  breaks that ceiling. Its `interpolate_short_gaps=2` option cuts daytime gap RMSE by 38% on scattered gaps. Two
-  defaults changed late in the dev cycle and shift results for anyone tracking `indev`: **lag features are now off by
-  default** (`features_lag=[]`) because a lag of a gappy context driver is NaN whenever a neighbour is missing, which
-  demotes otherwise-fillable records to the timestamp-only fallback; and **SW_IN_POT is now excluded from the rolling
-  and EMA stages**, since rolling/EMA variants of a deterministic timestamp curve measure identically to leaving them
-  out. A new `add_record_number=True` adds a continuous record number as cheap insurance against sensor drift on long
-  raw records (neutral on clean data). Also `FeatureEngineer` as a standalone 8-stage pipeline, `GapFillingResult` +
+  breaks that ceiling. An opt-in `interpolate_short_gaps=2` (~1 h on 30-min data) cuts daytime gap RMSE by 38% on
+  scattered gaps under the ceiling, but is off by default because it overwrites better model fills when a strong
+  context sensor is present (CH-DAV context-only 13.5 vs context+interp 66 W m-2). Defaults tuned late in the dev
+  cycle, which shift results for anyone tracking `indev`: **nighttime offset correction is on by default**
+  (`correct_nighttime_offset=True`), near a no-op on a quality-controlled series but removing the thermal-offset bias
+  on a raw pyranometer record; **lag features are off by default** (`features_lag=[]`) because a lag of a gappy
+  context driver is NaN whenever a neighbour is missing, which demotes otherwise-fillable records to the timestamp-only
+  fallback; and **SW_IN_POT is excluded from the rolling and EMA stages**, since rolling/EMA variants of a
+  deterministic timestamp curve measure identically to leaving them out. A new `add_record_number=True` adds a
+  continuous record number as cheap insurance against sensor drift on long raw records (neutral on clean data). Also
+  `FeatureEngineer` as a standalone 8-stage pipeline, `GapFillingResult` +
   a `.results` property on every gap-filler, `plot_feature_importances()` on the ML base class, and a Rich console
   report at `verbose>=2`.
 - **Analysis**: `CompoundExtremes` (+ `CompoundExtremesPlot`), `GapStats`, `GrangerCausality`,

@@ -12,7 +12,8 @@ complete, physically consistent time series.
 
 This example works through the one thing that matters most for SW_IN
 gap-filling accuracy: the climatology ceiling, and the second radiation
-measurement that breaks it.
+measurement that breaks it. It then sweeps a set of configurations and
+scores each one on withheld daytime-gap RMSE computed at runtime.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -47,8 +48,21 @@ Part of the diive library: https://github.com/holukas/diive
 # What breaks the ceiling is a *second radiation measurement* passed through
 # ``context_df`` -- a co-located pyranometer, a PPFD sensor, or a nearby
 # station. Unlike air temperature or VPD it measures the sky state directly,
-# which is exactly what the timestamp cannot supply. This example compares
-# the two configurations head to head.
+# which is exactly what the timestamp cannot supply.
+#
+# Choosing a context_df source
+# ----------------------------
+#
+# Preference order for a context_df radiation source, best first: a
+# co-located second sensor (pyranometer or PPFD) that sees the same sky; a
+# nearby station's radiation if the site is climatically similar; and, where
+# no local or neighbouring sensor exists, satellite or reanalysis SW_IN such
+# as ERA5-Land. All carry synoptic sky state the timestamp cannot, so even a
+# coarse reanalysis product beats the timestamp-only climatology.
+#
+# The rest of the example runs a sweep of configurations and scores every
+# one on withheld daytime-gap RMSE, so the numbers below come from the run,
+# not from the text.
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -62,13 +76,24 @@ import diive as dv
 # The example dataset carries both ``Rg_f`` (the shortwave incoming
 # radiation we gap-fill) and ``PPFD`` (photosynthetic photon flux density),
 # a second, independent radiation sensor at the same site. PPFD is the
-# ``context_df`` we will feed the model.
+# ``context_df`` we will feed the model. In 2020 it is nearly gap-free.
 
 SITE_LAT = 47.286417  # CH-DAV Davos, Switzerland
 SITE_LON = 7.733750
 SITE_UTC_OFFSET = 1
 TARGET_COL = 'Rg_f'      # Shortwave incoming radiation (W/m2)
 CONTEXT_COL = 'PPFD'     # Second radiation sensor, drives the sky state
+
+# Shared XGBoost hyperparameters so every config is comparable.
+XGB_KWARGS = dict(
+    n_estimators=200,
+    max_depth=6,
+    learning_rate=0.05,
+    subsample=0.8,
+    colsample_bytree=0.8,
+    random_state=42,
+    n_jobs=-1,
+)
 
 df_orig = dv.load_exampledata_parquet()
 df = df_orig.copy()
@@ -88,6 +113,21 @@ df.loc[gap_idx, TARGET_COL] = np.nan
 print(f"Data loaded: {len(df)} records")
 print(f"Missing values in {TARGET_COL}: {df[TARGET_COL].isnull().sum()} "
       f"({100 * df[TARGET_COL].isnull().mean():.1f}%)")
+print(f"Missing values in {CONTEXT_COL} (clean context): "
+      f"{df[CONTEXT_COL].isnull().sum()}")
+
+# A deliberately gappy version of the context sensor: punch ~40% additional
+# random gaps into PPFD to mimic a second sensor that is itself incomplete.
+rng_ctx = np.random.default_rng(seed=1)
+ppfd_gappy = df[CONTEXT_COL].copy()
+ctx_observed = ppfd_gappy.dropna().index
+ctx_gap_idx = rng_ctx.choice(ctx_observed, size=int(0.40 * len(ctx_observed)),
+                             replace=False)
+ppfd_gappy.loc[ctx_gap_idx] = np.nan
+df_ctx_gappy = ppfd_gappy.to_frame()
+print(f"Missing values in {CONTEXT_COL} (gappy context): "
+      f"{df_ctx_gappy[CONTEXT_COL].isnull().sum()} "
+      f"({100 * df_ctx_gappy[CONTEXT_COL].isnull().mean():.1f}%)")
 
 
 # %%
@@ -108,129 +148,152 @@ def daytime_gap_rmse(result):
 
 
 # %%
-# Run 1: default configuration (the climatology ceiling)
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-#
-# No ``context_df``. The model has only SW_IN_POT and timestamp features, so
-# it fills every daytime gap with the expected clear-vs-cloudy-averaged value
-# for that time of day and year. Note the default ``nighttime_threshold`` is
-# 0.001 W/m2 (matching ``remove_nighttime_zero_offset``), not 20.
-
-gf_default = dv.gapfilling.SWINGapFillerXGBoost(
-    series=df[TARGET_COL],
-    lat=SITE_LAT,
-    lon=SITE_LON,
-    utc_offset=SITE_UTC_OFFSET,
-    verbose=1,
-    # XGBoost hyperparameters
-    n_estimators=200,
-    max_depth=6,
-    learning_rate=0.05,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    random_state=42,
-    n_jobs=-1,
-)
-gf_default.run()
-
-rmse_default, n_gaps = daytime_gap_rmse(gf_default.results)
-print(f"\nDefault (no context): daytime-gap RMSE = {rmse_default:.1f} W/m2 "
-      f"over {n_gaps} records")
-
-
-# %%
-# Run 2: still no context, but interpolate short gaps
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-#
-# The model never sees the target's own neighbours -- the feature engineer
-# excludes the target from every feature -- so a short gap is exactly the
-# case a timestamp-only model is blind to. ``interpolate_short_gaps=2``
-# (1 h on 30-min data) fills gaps of one or two records by interpolating the
-# clearness index (SW_IN / SW_IN_POT), which does use those neighbours. It
-# never bridges a night. This is the lever that helps while you are still
-# under the climatology ceiling.
-
-gf_interp = dv.gapfilling.SWINGapFillerXGBoost(
-    series=df[TARGET_COL],
-    lat=SITE_LAT,
-    lon=SITE_LON,
-    utc_offset=SITE_UTC_OFFSET,
-    interpolate_short_gaps=2,
-    verbose=1,
-    n_estimators=200,
-    max_depth=6,
-    learning_rate=0.05,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    random_state=42,
-    n_jobs=-1,
-)
-gf_interp.run()
-
-rmse_interp, _ = daytime_gap_rmse(gf_interp.results)
-print(f"\nNo context + short-gap interpolation: daytime-gap RMSE = "
-      f"{rmse_interp:.1f} W/m2 over {n_gaps} records")
-
-
-# %%
-# Run 3: a second radiation sensor (breaking the ceiling)
+# A helper that builds, runs and scores one configuration
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# The only change from Run 1 is ``context_df=df[[CONTEXT_COL]]``. PPFD tracks
-# the same sky the pyranometer sees, so where a gap was cloudy PPFD is low and
-# the model follows it down instead of averaging over the climatology. This is
-# a different, larger lever than interpolation: it removes the ceiling itself
-# rather than patching short gaps under it.
-#
-# The context sensor does not need to be in W/m2 or gap-free: the model learns
-# the relationship from whatever overlap exists, and records where it is
-# missing fall back to the climatology fill. Here PPFD is nearly complete, so
-# the model resolves short gaps well on its own -- with a strong, near-complete
-# second sensor, ``interpolate_short_gaps`` adds little and can even replace a
-# good model fill with a worse interpolation. Interpolation earns its keep
-# under the ceiling (Run 2) or when the context sensor is itself gappy.
+# Every config shares ``XGB_KWARGS`` and the site coordinates, so only the
+# knobs under test differ. The helper returns the daytime-gap RMSE, the
+# held-out R2, the number of features the daytime model used, and the raw
+# results object for later inspection.
 
-gf_context = dv.gapfilling.SWINGapFillerXGBoost(
-    series=df[TARGET_COL],
-    lat=SITE_LAT,
-    lon=SITE_LON,
-    utc_offset=SITE_UTC_OFFSET,
-    context_df=df[[CONTEXT_COL]],
-    verbose=1,
-    n_estimators=200,
-    max_depth=6,
-    learning_rate=0.05,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    random_state=42,
-    n_jobs=-1,
-)
-gf_context.run()
-
-rmse_context, _ = daytime_gap_rmse(gf_context.results)
-print(f"\nWith PPFD context:    daytime-gap RMSE = {rmse_context:.1f} W/m2 "
-      f"over {n_gaps} records")
-print(f"Improvement from the second sensor vs. the default: "
-      f"{100 * (1 - rmse_context / rmse_default):.0f}%")
+def run_config(label, **kwargs):
+    """Build, run and score one SWINGapFillerXGBoost configuration."""
+    gf = dv.gapfilling.SWINGapFillerXGBoost(
+        series=df[TARGET_COL],
+        lat=SITE_LAT,
+        lon=SITE_LON,
+        utc_offset=SITE_UTC_OFFSET,
+        verbose=1,
+        **kwargs,
+        **XGB_KWARGS,
+    )
+    gf.run()
+    r = gf.results
+    rmse, n_gaps = daytime_gap_rmse(r)
+    r2 = r.scores_traintest.get('r2', float('nan')) if r.scores_traintest else float('nan')
+    # Number of features the daytime model actually used. feature_importances
+    # has one row per feature; accepted_features is only populated when SHAP
+    # reduction runs.
+    if r.feature_importances is not None:
+        n_features = int(len(r.feature_importances))
+    elif r.accepted_features is not None:
+        n_features = int(len(r.accepted_features))
+    else:
+        n_features = 0
+    print(f"[{label}] daytime-gap RMSE = {rmse:.1f} W/m2, "
+          f"held-out R2 = {r2:.3f}, features = {n_features}, "
+          f"scored over {n_gaps} records")
+    return dict(label=label, rmse=rmse, r2=r2, n_features=n_features,
+                results=r)
 
 
 # %%
-# Formatted report
+# The sweep
+# ^^^^^^^^^
+#
+# Seven configurations, grouped in three families:
+#
+# * no context (the climatology ceiling, plus two variations that cannot lift
+#   it: short-gap interpolation and SHAP feature reduction);
+# * a clean, near-complete second sensor (breaks the ceiling; interpolation
+#   now hurts because it overwrites good model fills on short gaps);
+# * a gappy second sensor (still helps, but some records fall back; here
+#   interpolation earns its keep again on the short gaps the context missed).
+#
+# Each ``run_config`` call fits its own XGBoost model, so the block runs
+# several fits and takes a couple of minutes.
+
+runs = []
+
+# Family 1: no context -- everything is a function of the timestamp.
+runs.append(run_config(
+    "1 no context (ceiling)"))
+runs.append(run_config(
+    "2 no context + interp=2",
+    interpolate_short_gaps=2))
+runs.append(run_config(
+    "3 no context + reduce_features",
+    reduce_features=True))
+
+# Family 2: a clean, near-complete second radiation sensor.
+runs.append(run_config(
+    "4 clean PPFD context",
+    context_df=df[[CONTEXT_COL]]))
+runs.append(run_config(
+    "5 clean PPFD context + interp=2",
+    context_df=df[[CONTEXT_COL]],
+    interpolate_short_gaps=2))
+
+# Family 3: a gappy second sensor (~40% extra gaps punched into PPFD).
+runs.append(run_config(
+    "6 gappy PPFD context",
+    context_df=df_ctx_gappy))
+runs.append(run_config(
+    "7 gappy PPFD context + interp=2",
+    context_df=df_ctx_gappy,
+    interpolate_short_gaps=2))
+
+
+# %%
+# Comparison table
 # ^^^^^^^^^^^^^^^^^
 #
-# ``report()`` prints parameters, data & performance, the flag distribution,
-# and the daytime XGBoost scores. The flag distribution separates model fills
-# (1) from fallback fills (2), where the context sensor was missing.
+# All numbers come from this run: withheld daytime-gap RMSE (lower is
+# better), the daytime model's held-out R2, and the feature count.
 
-gf_context.report()
+print("\n" + "=" * 68)
+print("SWINGapFillerXGBoost configuration sweep")
+print("=" * 68)
+header = f"{'config':<34}{'RMSE W/m2':>11}{'held-R2':>9}{'n_feat':>8}"
+print(header)
+print("-" * 68)
+for run in runs:
+    print(f"{run['label']:<34}{run['rmse']:>11.1f}"
+          f"{run['r2']:>9.3f}{run['n_features']:>8d}")
+print("-" * 68)
+
+rmse_ceiling = runs[0]['rmse']
+rmse_context = runs[3]['rmse']
+print(f"Second sensor vs. ceiling: "
+      f"{100 * (1 - rmse_context / rmse_ceiling):.0f}% lower RMSE")
 
 
 # %%
-# Inspect results programmatically
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Interpretation
+# ^^^^^^^^^^^^^^
+#
+# Reading the table:
+#
+# * The second radiation sensor is the biggest lever by far. Configs 4-7 sit
+#   well below the no-context configs 1-3: PPFD carries the cloudy-vs-clear
+#   sky state that no timestamp feature can.
+# * Short-gap interpolation helps only when the model is climatology-bound
+#   (config 2 vs 1) or when the context sensor is gappy (config 7 vs 6). With
+#   a strong, near-complete context sensor it *hurts* (config 5 vs 4), because
+#   clearness-index interpolation overwrites model fills that were already
+#   better on those short gaps. This is why ``interpolate_short_gaps`` is off
+#   by default.
+# * ``reduce_features`` (config 3) is near-neutral: dropping low-SHAP features
+#   does not raise the ceiling, it only trims the feature list.
+# * Offset correction is on throughout and is near-neutral for this target.
+#
+# In short: get a second radiation measurement into ``context_df``; only reach
+# for interpolation when you are still under the ceiling or your context
+# sensor has holes.
 
-r = gf_context.results
-print(f"\nResult columns: {list(r.gapfilling_df.columns)}")
+
+# %%
+# Inspect the reference "ceiling broken" configuration
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# The clean-context run (config 4) is the reference result once the ceiling is
+# broken. Its results object carries the gap-filled series, the day/night flag,
+# the held-out scores and the SHAP importances. (For the full formatted console
+# report, call ``.report()`` on the gap-filler instance itself.)
+
+r = runs[3]['results']  # config 4, clean PPFD context
+print(f"\nReference configuration: {runs[3]['label']}")
+print(f"Result columns: {list(r.gapfilling_df.columns)}")
 
 if r.scores_traintest:
     print(f"\nDaytime model performance (train/test split, held-out):")
@@ -240,7 +303,7 @@ if r.scores_traintest:
 
 
 # %%
-# SHAP feature importances
+# SHAP feature importances (clean context)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # With the context sensor available, PPFD and its rolling/EMA variants carry
@@ -249,13 +312,21 @@ if r.scores_traintest:
 
 if r.feature_importances is not None:
     fi = r.feature_importances.copy()
-    print(f"\nTop 10 features by SHAP importance (daytime model, with context):")
+    print(f"\nTop 10 features by SHAP importance (daytime model, clean context):")
     print(fi.head(10).to_string())
 
 
 # %%
 # Visualize: observed vs gap-filled heatmaps
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# Three panels: the observed record with gaps, the no-context fill (still on
+# the ceiling), and the clean-context fill (ceiling broken).
+
+rmse_default = runs[0]['rmse']
+rmse_ctx = runs[3]['rmse']
+gapfilled_default = runs[0]['results'].gapfilled
+gapfilled_context = runs[3]['results'].gapfilled
 
 fig, axes = plt.subplots(1, 3, figsize=(20, 5),
                          gridspec_kw={'wspace': 0.2},
@@ -265,14 +336,14 @@ dv.plotting.HeatmapDateTime(series=df[TARGET_COL]).plot(
     ax=axes[0], zlabel=r'$\mathrm{W\ m^{-2}}$')
 axes[0].set_title('Observed SW_IN\n(with gaps)', fontsize=11, fontweight='bold')
 
-dv.plotting.HeatmapDateTime(series=gf_default.results.gapfilled).plot(
+dv.plotting.HeatmapDateTime(series=gapfilled_default).plot(
     ax=axes[1], zlabel=r'$\mathrm{W\ m^{-2}}$')
 axes[1].set_title(f'Gap-filled, no context\nRMSE {rmse_default:.0f} W/m2',
                   fontsize=11, fontweight='bold')
 
-dv.plotting.HeatmapDateTime(series=gf_context.results.gapfilled).plot(
+dv.plotting.HeatmapDateTime(series=gapfilled_context).plot(
     ax=axes[2], zlabel=r'$\mathrm{W\ m^{-2}}$')
-axes[2].set_title(f'Gap-filled, PPFD context\nRMSE {rmse_context:.0f} W/m2',
+axes[2].set_title(f'Gap-filled, PPFD context\nRMSE {rmse_ctx:.0f} W/m2',
                   fontsize=11, fontweight='bold')
 
 fig.suptitle('SW_IN Gap-Filling: the second radiation sensor breaks the '
