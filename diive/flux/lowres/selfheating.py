@@ -93,7 +93,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize_scalar
 
-from diive.core.utils.console import console as _console, info, detail, warn
+from diive.core.utils.console import console as _console, info, detail, vspace, warn
 from diive.variables import dry_air_density, aerodynamic_resistance
 from diive.variables import DaytimeNighttimeFlag
 from diive.preprocessing.outlier_detection.hampel import HampelDaytimeNighttime
@@ -1058,7 +1058,7 @@ class ScopOptimizer:
         def print_sep(char='-', length=75):
             _console.print(char * length)
 
-        _console.print("\n")
+        vspace("\n")
         print_sep('=', 75)
         _console.print(f"{'SCALING FACTOR OPTIMIZATION REPORT':^75}")
         print_sep('=', 75)
@@ -1082,7 +1082,7 @@ class ScopOptimizer:
 
             _console.print(f"{period:<15} | {median_sf:>10.3f} | {mean_iqr:>22.3f} | {mean_n:>8.0f}")
 
-        _console.print("\n")
+        vspace("\n")
 
         # --- 2. DETAILED BIN REPORT ---
         _console.print(f"{'2. DETAILED BIN BREAKDOWN':<40}")
@@ -1118,10 +1118,10 @@ class ScopOptimizer:
                                 f"{subset.loc[idx, 'SF_MEDIAN']:>16.3f} | "
                                 f"{ci_str:^16} | "
                                 f"{subset.loc[idx, 'SOS_MEDIAN']:>10.2f}")
-            _console.print("")  # Spacer between day/night
+            vspace()  # Spacer between day/night
 
         print_sep('=', 75)
-        _console.print("\n")
+        vspace("\n")
 
     def get(self) -> pd.DataFrame:
         """Return the fitted scaling-factors DataFrame."""
@@ -1432,7 +1432,7 @@ class ScopApplicator:
             _console.print(char * length)
 
         # ================= REPORT =================
-        _console.print("\n")
+        vspace("\n")
         print_sep('=', 75)
         _console.print(f"{'FLUX CORRECTION REPORT':^75}")
         print_sep('=', 75)
@@ -1452,7 +1452,7 @@ class ScopApplicator:
 
         _console.print(f"\n   Median Scaling Factor (Day)     : {mean_sf_day:.3f}")
         _console.print(f"   Median Scaling Factor (Night)   : {mean_sf_night:.3f}")
-        _console.print("\n")
+        vspace("\n")
 
         # SECTION B: BUDGET IMPACT
         _console.print(f"{'2. CORRECTION IMPACT (Budget)':<40} {'(Units: Sum)':>34}")
@@ -1468,7 +1468,7 @@ class ScopApplicator:
             rmse = np.sqrt((resid ** 2).mean())
             slope, _ = np.polyfit(df_active[cp_col].fillna(0), df_active[col_corr].fillna(0), 1)
 
-            _console.print("\n")
+            vspace("\n")
             _console.print(f"{'3. ACCURACY vs REFERENCE':<40}")
             print_sep('.', 75)
             _console.print(f"   Reference Sum                   : {sum_ref:>15,.0f}")
@@ -1477,7 +1477,7 @@ class ScopApplicator:
             _console.print(f"   Slope (m)                       : {slope:>15.3f}")
 
         print_sep('=', 75)
-        _console.print("\n")
+        vspace("\n")
 
     def plot_dashboard(self, flux_closedpath: Optional[pd.Series] = None):
         """

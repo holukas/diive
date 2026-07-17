@@ -193,3 +193,17 @@ def detail(msg: str, *, verbose: int | bool = VERBOSE_PROGRESS,
     """Print a dim detail line (only at VERBOSE_DEBUG level by default)."""
     if _vlevel(verbose) >= min_level:
         console.print(f"  [dim]{msg}[/dim]")
+
+
+def vspace(text: str = "", *, verbose: int | bool = VERBOSE_PROGRESS,
+           min_level: int = VERBOSE_PROGRESS) -> None:
+    """Print a blank separator line in a terminal / GUI log, nothing in Jupyter.
+
+    A blank line cleanly separates report phases in a terminal, but in Jupyter
+    every ``console.print`` is a separate display block with its own margin, so
+    an empty print becomes a full empty block of dead vertical space. Suppress
+    it there to keep notebook output dense. ``text`` lets a caller reproduce a
+    wider terminal gap (e.g. ``"\\n"``); it is still dropped in Jupyter.
+    """
+    if _vlevel(verbose) >= min_level and not _is_jupyter():
+        console.print(text)

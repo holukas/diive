@@ -25,6 +25,7 @@ from diive.core.utils.console import (
     info,
     rule,
     success,
+    vspace,
     warn,
 )
 from diive.gapfilling.scores import prediction_scores
@@ -148,7 +149,7 @@ class MlRegressorGapFillingBase:
         self._method_tag = {'_gfRF': 'RF', '_gfXG': 'XGB'}.get(self.gfsuffix, 'ML')
 
         if self.verbose >= VERBOSE_PROGRESS:
-            _console.print("")
+            vspace(verbose=self.verbose)
             rule(f"[bold]GAP-FILLING START — {self.target_col} · {self._method_tag} "
                  f"({self.regressor.__name__})[/bold]", verbose=self.verbose)
 
@@ -415,8 +416,7 @@ class MlRegressorGapFillingBase:
         self.trainmodel(**kwargs)
         self.fillgaps(**kwargs)
         self._section(f"GAP-FILLING COMPLETE — {self.target_col}")
-        if self.verbose >= VERBOSE_PROGRESS:
-            _console.print("")
+        vspace(verbose=self.verbose)
         return self
 
     @property
@@ -529,7 +529,7 @@ class MlRegressorGapFillingBase:
         method tag (RF / XGB) is appended so each banner names the gap-filler."""
         if self.verbose < VERBOSE_PROGRESS:
             return
-        _console.print("")
+        vspace(verbose=self.verbose)
         rule(f"{title} · {self._method_tag}", verbose=self.verbose)
 
     def _log_config(self) -> None:
@@ -768,7 +768,8 @@ class MlRegressorGapFillingBase:
 
     def fillgaps(self,
                  showplot_scores: bool = True,
-                 showplot_importance: bool = True):
+                 showplot_importance: bool = True,
+                 progress_callback=None):
         """
         Gap-fill data with previously built model
 
@@ -778,9 +779,16 @@ class MlRegressorGapFillingBase:
         y = target
         X = features
 
+        Args:
+            progress_callback: Optional ``callable(fraction: float)`` invoked as the
+                full-record SHAP importance computation advances (0.0 -> 1.0). This is
+                the slowest part on large records; a caller can use it to drive a
+                progress bar. When None (default) the SHAP call runs in one shot,
+                exactly as before — no behaviour or numeric change for existing callers.
         """
         self._section(f"GAP-FILLING — {self.target_col}")
-        self._fillgaps_fullmodel(showplot_scores, showplot_importance)
+        self._fillgaps_fullmodel(showplot_scores, showplot_importance,
+                                 progress_callback=progress_callback)
         self._fillgaps_fallback()
         self._fillgaps_combinepredictions()
         self._log_gapfill_summary()
@@ -945,16 +953,40 @@ class MlRegressorGapFillingBase:
                 f"- R2:    {scores_tt['r2']}\n"
             )
 
-    def _shap_importance(self, model, X, X_names) -> DataFrame:
+    def _shap_importance(self, model, X, X_names, progress_callback=None) -> DataFrame:
         """
         Calculate SHAP-based feature importance.
 
         Uses TreeExplainer for tree-based models (XGBoost, RandomForest).
         Returns mean absolute SHAP values as feature importance.
+
+        Args:
+            progress_callback: Optional ``callable(fraction: float)``. When given, the
+                per-row SHAP values are computed in row chunks and the callback is
+                invoked after each (0.0 -> 1.0). TreeExplainer values are independent
+                per row (tree_path_dependent), so the chunked-then-concatenated result
+                is identical to a single call. When None, the original single call is
+                used unchanged.
         """
 
         explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(X)
+        if progress_callback is None:
+            shap_values = explainer.shap_values(X)
+        else:
+            n = len(X)
+            n_chunks = min(20, max(1, n // 5000))
+            if n_chunks <= 1:
+                shap_values = explainer.shap_values(X)
+                progress_callback(1.0)
+            else:
+                bounds = np.linspace(0, n, n_chunks + 1, dtype=int)
+                parts = []
+                for i in range(n_chunks):
+                    parts.append(explainer.shap_values(X[bounds[i]:bounds[i + 1]]))
+                    progress_callback((i + 1) / n_chunks)
+                # Per-row independence makes this identical to one shap_values(X) call.
+                shap_values = (parts[0] if len(parts) == 1
+                               else np.concatenate(parts, axis=0))
 
         # Handle case where shap_values is a list (for some model types)
         if isinstance(shap_values, list):
@@ -1016,7 +1048,7 @@ class MlRegressorGapFillingBase:
                    verbose=self.verbose)
         return predictions
 
-    def _fillgaps_fullmodel(self, showplot_scores, showplot_importance):
+    def _fillgaps_fullmodel(self, showplot_scores, showplot_importance, progress_callback=None):
         """Apply model to fill missing targets for records where all features are available
         (high-quality gap-filling)"""
 
@@ -1041,7 +1073,7 @@ class MlRegressorGapFillingBase:
         # Calculate SHAP-based feature importance and store in dataframe
         detail("Calculating SHAP feature importances ...", verbose=self.verbose)
         self._feature_importances = self._shap_importance(
-            model=self._model, X=X, X_names=X_names)
+            model=self._model, X=X, X_names=X_names, progress_callback=progress_callback)
 
         if showplot_importance:
             info("Plotting feature importances (SHAP) ...", verbose=self.verbose)
