@@ -7,6 +7,12 @@ Uses potential radiation to partition daytime and nighttime:
 nighttime gaps are set to zero (physically correct),
 daytime gaps are filled with XGBoost trained on daytime data only.
 
+With no context drivers every feature is a deterministic function of the
+timestamp, so the daytime model reproduces a climatology and cannot know
+whether a gap was overcast or clear. A second radiation measurement is the
+one routinely available input that breaks that ceiling; see the
+SWINGapFillerXGBoost docstring.
+
 Part of the diive library: https://github.com/holukas/diive
 """
 
@@ -33,18 +39,48 @@ class SWINGapFillerXGBoost:
     SW_IN variability — and is the single most important predictor.
 
     Feature engineering is applied to the full time series before subsetting to daytime,
-    so lag and rolling features correctly span day/night boundaries.
+    so rolling features correctly span day/night boundaries.
+
+    What the default configuration can and cannot do:
+        With no *context_df*, every feature is a deterministic function of the
+        timestamp — SW_IN_POT, the timestamp features and the record number are all
+        fixed once the time is known. The model therefore reproduces a climatology, the
+        expected SW_IN for that time of day and year, and has no way to know whether a
+        given gap was overcast or clear. That is the accuracy ceiling, and no further
+        feature derived from the timestamp can raise it: on CH-DAV 30-min data,
+        SW_IN_POT plus timestamps (15 features) scores the same daytime-gap RMSE as
+        the same set expanded with rolling and EMA variants of SW_IN_POT (29 features)
+        — 138 W m-2 either way.
+
+        Two things do raise it, and both are worth more than any feature tuning:
+
+        - A second radiation measurement passed through *context_df* — a co-located
+          pyranometer, a PPFD sensor, or a nearby station. It is the only routinely
+          available source of sky-state information. On CH-DAV, adding PPFD moved
+          daytime-gap RMSE from 138 to 26 W m-2 wherever that second sensor was
+          available.
+        - *interpolate_short_gaps* for gaps of an hour or two, which uses the target's
+          own neighbours — information the model never sees, since the feature engineer
+          excludes the target from every feature.
 
     Args:
         series: SW_IN time series to gap-fill (W m-2). NaN values are gaps.
         lat: Site latitude in degrees North (-90 to 90).
         lon: Site longitude in degrees East (-180 to 180).
         utc_offset: UTC offset of the timestamp index, e.g. 1 for UTC+01:00.
-        context_df: Optional DataFrame of additional driver variables (e.g. TA, VPD).
-            Must share the same DatetimeIndex as *series*. When provided, these columns
-            are included in feature engineering alongside SW_IN_POT. Column names must
-            not collide with the target column name or with ``'SW_IN_POT'``. Default:
-            None (only SW_IN_POT and timestamp features are used).
+        context_df: Optional DataFrame of additional driver variables. Must share the
+            same DatetimeIndex as *series*. When provided, these columns are included
+            in feature engineering alongside SW_IN_POT. Column names must not collide
+            with the target column name or with ``'SW_IN_POT'``. Default: None (only
+            SW_IN_POT and timestamp features are used).
+
+            The most valuable thing to put here by far is a **second radiation
+            measurement** — a co-located pyranometer, a PPFD sensor, or a nearby
+            station. Unlike TA or VPD it measures the sky state directly, which is
+            exactly what the timestamp cannot supply (see above). It does not need to
+            be in W m-2 or gap-free: the model learns the relationship from whatever
+            overlap exists, and records where it is missing simply fall back to the
+            climatology the default configuration would have produced anyway.
         nighttime_threshold: Potential-radiation cutoff (W m-2). Records with
             ``SW_IN_POT < nighttime_threshold`` are classified as nighttime; records
             with ``SW_IN_POT >= nighttime_threshold`` are daytime. Default: 0.001,
@@ -75,15 +111,36 @@ class SWINGapFillerXGBoost:
             Removes features whose importance is at or below the random-noise baseline.
             Increases training time but can improve generalisation. Default: False.
         features_lag: ``[min_lag, max_lag]`` range for lag features of non-target
-            columns (i.e. SW_IN_POT and any context drivers). Default: ``[-2, 2]``,
-            which on 30-min data creates lags of -1h, -30min, +30min, +1h.
+            columns (i.e. SW_IN_POT and any context drivers). Default: None, meaning
+            no lag features. That default is deliberate.
+
+            Lag features are a bad trade here. The model predicts only records where
+            every feature is present and sends the rest to a timestamp-only fallback,
+            so a lag converts "this record's neighbour is missing" into "this record
+            cannot be filled properly". On a context driver with gaps that is
+            expensive: on CH-DAV with a PPFD reference, ``[-2, 2]`` pushed 1157 of
+            2556 otherwise-fillable records to the fallback and raised their RMSE from
+            26 to 97 W m-2, on top of costing 20% of the training rows. On SW_IN_POT
+            lags are harmless — it never has gaps — but useless, being the same
+            function of the timestamp as SW_IN_POT itself. Set this explicitly only
+            for a gap-free driver where lags earn their keep.
         features_rolling: Window sizes (in records) for rolling statistics. Default:
             ``[4, 8, 24, 48]`` — on 30-min data: 2h, 4h, 12h, 24h windows. Adjust to
-            match your sampling frequency.
+            match your sampling frequency. Applies to context drivers only; SW_IN_POT
+            is excluded, because rolling variants of a deterministic curve carry
+            nothing beyond its raw value and the timestamp features. With no
+            *context_df* this parameter therefore has no effect.
         features_rolling_stats: Extra rolling statistics beyond the default mean+std.
             Default: ``['median']``.
         features_ema: EMA spans (in records). Default: ``[6, 24]`` — short and
-            day-scale memory on 30-min data.
+            day-scale memory on 30-min data. Context drivers only, like
+            *features_rolling*.
+        add_record_number: Add a continuous record number (1, 2, 3, ...) as a feature,
+            letting the model isolate periods — a sensor swap, progressive soiling, a
+            calibration change. Safe for gap-filling, which only interpolates within
+            the record, so the trees never have to extrapolate it. Default: True.
+            Measured neutral on CH-DAV's quality-controlled Rg_f, which has no drift
+            to find; it is cheap insurance on long raw records.
         verbose: Verbosity level: 0=silent, 1=progress, 2+=detailed. Default: 0.
         **kwargs: XGBoost hyperparameters forwarded to XGBRegressor (n_estimators,
             max_depth, learning_rate, subsample, colsample_bytree, random_state, etc.).
@@ -143,6 +200,7 @@ class SWINGapFillerXGBoost:
                  features_rolling: list = None,
                  features_rolling_stats: list = None,
                  features_ema: list = None,
+                 add_record_number: bool = True,
                  verbose: int = 0,
                  **kwargs):
         """Construct the gap-filler. See the class docstring for the full parameter list."""
@@ -185,12 +243,14 @@ class SWINGapFillerXGBoost:
         self.reduce_features = reduce_features
 
         # Feature-engineering windows (configurable; defaults assume 30-min data).
-        self.features_lag = [-2, 2] if features_lag is None else features_lag
+        # Lags default to off — see the features_lag docstring for the measurements.
+        self.features_lag = [] if features_lag is None else features_lag
         self.features_rolling = [4, 8, 24, 48] if features_rolling is None else features_rolling
         self.features_rolling_stats = (
             ['median'] if features_rolling_stats is None else features_rolling_stats
         )
         self.features_ema = [6, 24] if features_ema is None else features_ema
+        self.add_record_number = add_record_number
 
         self.verbose = verbose
         self.kwargs = kwargs
@@ -275,9 +335,12 @@ class SWINGapFillerXGBoost:
             f"  Correct nighttime offset   {self.correct_nighttime_offset}\n"
             f"  Reduce features (SHAP)     {self.reduce_features}\n"
             f"  features_lag               {self.features_lag}\n"
-            f"  features_rolling           {self.features_rolling}\n"
+            f"  features_rolling           {self.features_rolling}  (context drivers only)\n"
             f"  features_rolling_stats     {self.features_rolling_stats}\n"
-            f"  features_ema               {self.features_ema}"
+            f"  features_ema               {self.features_ema}  (context drivers only)\n"
+            f"  add_record_number          {self.add_record_number}\n"
+            f"  context drivers            "
+            f"{list(self.context_df.columns) if self.context_df is not None else 'none'}"
         )
 
         rule("Data & Performance", min_level=2)
@@ -525,9 +588,9 @@ class SWINGapFillerXGBoost:
         """Build feature matrix and run XGBoost on the daytime subset."""
 
         # Assemble input: target + SW_IN_POT + optional context drivers.
-        # Using the nighttime-zero-filled series for rolling/lag features
-        # is intentional: it gives physically correct context (zero at night)
-        # for features that span the day/night boundary.
+        # Using the nighttime-zero-filled series is intentional: it gives physically
+        # correct context (zero at night) for features that span the day/night
+        # boundary.
         input_df = pd.DataFrame({target_col: series, self.SWINPOT_COL: swinpot})
         if self.context_df is not None:
             if not self.context_df.index.equals(series.index):
@@ -545,15 +608,23 @@ class SWINGapFillerXGBoost:
             for col in self.context_df.columns:
                 input_df[col] = self.context_df[col]
 
-        # Feature engineering on the FULL index so lag/rolling windows are
-        # correct at the dawn/dusk boundaries when we later subset to daytime.
+        # Feature engineering on the FULL index so rolling windows are correct at the
+        # dawn/dusk boundaries when we later subset to daytime.
+        #
+        # SW_IN_POT is excluded from the rolling and EMA stages: it is a deterministic
+        # function of the timestamp, so its derived variants are the same function
+        # again and measure identically to leaving them out. Only measured context
+        # drivers carry sky state worth smoothing.
         engineer = FeatureEngineer(
             target_col=target_col,
             features_lag=self.features_lag,
             features_rolling=self.features_rolling,
             features_rolling_stats=self.features_rolling_stats,
+            features_rolling_exclude_cols=[self.SWINPOT_COL],
             features_ema=self.features_ema,
+            features_ema_exclude_cols=[self.SWINPOT_COL],
             vectorize_timestamps=True,
+            add_continuous_record_number=self.add_record_number,
             verbose=self.verbose,
         )
         full_features_df = engineer.fit_transform(input_df)

@@ -401,6 +401,134 @@ class TestGapFilling(unittest.TestCase):
         self.assertIsNone(g.results.model)             # no daytime gap -> no model
         self.assertIn('XGBoost step skipped', out)
 
+    def test_swin_gapfiller_context_driver_gaps_stay_local(self):
+        """A missing driver value must disqualify its own record only, never its neighbours."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad
+        lat, lon, utc = 47.0, 8.0, 1
+        idx = pd.date_range('2022-06-01', '2022-06-30 23:30', freq='30min', name='TIMESTAMP_END')
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        rng = np.random.RandomState(0)
+        swin = (pot * (0.7 + 0.3 * rng.rand(len(idx)))).clip(lower=0)
+        swin.name = 'SW_IN'
+        swin_gappy = swin.copy()
+        swin_gappy[rng.rand(len(idx)) < 0.3] = np.nan
+
+        # A second radiation sensor — the input this class is built around. Its own
+        # gaps are isolated single daytime records, so every neighbour still has a
+        # driver value of its own and only the gap record itself is unfillable.
+        ppfd = (swin * 2.1).rename('PPFD')
+        daytime = pot >= 0.001
+        day_pos = np.flatnonzero(daytime.to_numpy())
+        ppfd.iloc[day_pos[20::30]] = np.nan  # ~1 isolated gap/day, none at the series start
+
+        common = dict(series=swin_gappy, lat=lat, lon=lon, utc_offset=utc,
+                      context_df=ppfd.to_frame(), random_state=42, verbose=0,
+                      n_estimators=10)
+        flag = SWINGapFillerXGBoost(**common).run().results.flag
+
+        driver_missing = ppfd.isna()
+        fallback = flag == 2
+        self.assertGreater(int(fallback.sum()), 0)   # the branch is reachable ...
+        # ... but only where the driver is missing at that very timestamp. This is
+        # the regression: a record holding a perfectly good driver value must not be
+        # demoted to the timestamp-only fallback because a NEIGHBOUR has a gap.
+        self.assertTrue(driver_missing[fallback].all())
+        # Conversely, a daytime gap with no driver value has nothing else to fall
+        # back on, so it must be flagged 2 rather than silently pass as flag 1.
+        gaps = swin_gappy.isna()
+        self.assertTrue((flag[gaps & daytime & driver_missing] == 2).all())
+
+        # Proof the data above is diagnostic: the old default features_lag=[-2, 2]
+        # smears every driver gap into a 5-record hole in the feature matrix, so
+        # records with their own driver value present do end up on the fallback.
+        with_lags = SWINGapFillerXGBoost(features_lag=[-2, 2], **common).run().results.flag
+        lag_fallback = with_lags == 2
+        self.assertGreater(int((lag_fallback & ~driver_missing).sum()), 0)
+        self.assertGreater(int(lag_fallback.sum()), int(fallback.sum()))
+
+    def test_swin_gapfiller_default_feature_set(self):
+        """Without context drivers the defaults give SW_IN_POT + timestamps + record number."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad
+        lat, lon, utc = 47.0, 8.0, 1
+        idx = pd.date_range('2022-06-01', '2022-06-30 23:30', freq='30min', name='TIMESTAMP_END')
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        rng = np.random.RandomState(0)
+        swin = (pot * (0.7 + 0.3 * rng.rand(len(idx)))).clip(lower=0)
+        swin.name = 'SW_IN'
+        swin[rng.rand(len(idx)) < 0.3] = np.nan
+
+        g = SWINGapFillerXGBoost(series=swin, lat=lat, lon=lon, utc_offset=utc,
+                                 random_state=42, verbose=0, n_estimators=10).run()
+
+        # feature_importances is indexed by the feature names the model was given.
+        features = set(g.results.feature_importances.index)
+        self.assertEqual(features, {
+            'SW_IN_POT', '.RECORDNUMBER',
+            '.DOY_SIN', '.DOY_COS', '.HOUR_SIN', '.HOUR_COS',
+            '.SEASON_SIN', '.SEASON_COS', '.WEEK_SIN', '.WEEK_COS',
+            '.MONTH_SIN', '.MONTH_COS',
+            '.YEAR', '.YEARDOY', '.YEARWEEK', '.YEARMONTH',
+        })
+
+    def test_swin_gapfiller_add_record_number(self):
+        """add_record_number=False drops .RECORDNUMBER and touches nothing else."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad
+        lat, lon, utc = 47.0, 8.0, 1
+        idx = pd.date_range('2022-06-01', '2022-06-30 23:30', freq='30min', name='TIMESTAMP_END')
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        rng = np.random.RandomState(0)
+        swin = (pot * (0.7 + 0.3 * rng.rand(len(idx)))).clip(lower=0)
+        swin.name = 'SW_IN'
+        swin[rng.rand(len(idx)) < 0.3] = np.nan
+
+        common = dict(series=swin, lat=lat, lon=lon, utc_offset=utc,
+                      random_state=42, verbose=0, n_estimators=10)
+        on = set(SWINGapFillerXGBoost(**common).run().results.feature_importances.index)
+        off = set(SWINGapFillerXGBoost(add_record_number=False,
+                                       **common).run().results.feature_importances.index)
+
+        self.assertIn('.RECORDNUMBER', on)
+        self.assertEqual(on - off, {'.RECORDNUMBER'})
+
+    def test_swin_gapfiller_rolling_ema_skip_swinpot(self):
+        """Rolling and EMA features are for context drivers; SW_IN_POT is excluded."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad
+        lat, lon, utc = 47.0, 8.0, 1
+        idx = pd.date_range('2022-06-01', '2022-06-30 23:30', freq='30min', name='TIMESTAMP_END')
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        rng = np.random.RandomState(0)
+        swin = (pot * (0.7 + 0.3 * rng.rand(len(idx)))).clip(lower=0)
+        swin.name = 'SW_IN'
+        swin[rng.rand(len(idx)) < 0.3] = np.nan
+        ta = pd.Series(15 + 10 * np.sin(np.arange(len(idx)) * 2 * np.pi / 48),
+                       index=idx, name='TA')
+
+        g = SWINGapFillerXGBoost(series=swin, lat=lat, lon=lon, utc_offset=utc,
+                                 context_df=ta.to_frame(), random_state=42, verbose=0,
+                                 n_estimators=10).run()
+        features = set(g.results.feature_importances.index)
+
+        # The context driver measures sky state, so smoothing it is worth features.
+        for f in ['.TA_MEAN4', '.TA_SD4', '.TA_ROLLMEDIAN4', '.TA_MEAN48', '.TA_EMA6', '.TA_EMA24']:
+            self.assertIn(f, features)
+
+        # SW_IN_POT is a deterministic function of the timestamp, so its rolling and
+        # EMA variants are that same function again — cost without information.
+        self.assertEqual(sorted(f for f in features if f.startswith('.SW_IN_POT')), [])
+        self.assertIn('SW_IN_POT', features)  # ... the raw curve is still the top driver
+
+        # No lag features by default: a lag is NaN whenever a neighbour is missing,
+        # which is what pushes otherwise-fillable records onto the fallback.
+        self.assertEqual(sorted(f for f in features if f.startswith(('.TA-', '.TA+'))), [])
+
     def test_gapfilling_randomforest(self):
         """Fill gaps using random forest"""
         df = ed.load_exampledata_parquet()
