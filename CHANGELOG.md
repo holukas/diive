@@ -78,9 +78,18 @@ The rest raise or fail at import:
 - **Uncertainty**: `JointUncertaintyPAS20` / `joint_uncertainty_pas20`, the ONEFlux `compute_join` port combining random
   uncertainty with scenario spread in quadrature.
 - **Gap-filling**: `SWINGapFillerXGBoost`, physics-aware for shortwave radiation (nighttime gaps set to zero, daytime
-  gaps modelled; needs only lat/lon/UTC offset). Its `interpolate_short_gaps=2` option cuts daytime gap RMSE by 38% on
-  scattered gaps. Also `FeatureEngineer` as a standalone 8-stage pipeline, `GapFillingResult` + a `.results` property on
-  every gap-filler, `plot_feature_importances()` on the ML base class, and a Rich console report at `verbose>=2`.
+  gaps modelled by XGBoost on SW_IN_POT + timestamp features; needs only lat/lon/UTC offset). With no context drivers
+  every feature is a deterministic function of the timestamp, so the model reproduces a climatology and cannot recover
+  a gap's sky state; passing a second radiation measurement (a pyranometer or PPFD sensor) through `context_df` is what
+  breaks that ceiling. Its `interpolate_short_gaps=2` option cuts daytime gap RMSE by 38% on scattered gaps. Two
+  defaults changed late in the dev cycle and shift results for anyone tracking `indev`: **lag features are now off by
+  default** (`features_lag=[]`) because a lag of a gappy context driver is NaN whenever a neighbour is missing, which
+  demotes otherwise-fillable records to the timestamp-only fallback; and **SW_IN_POT is now excluded from the rolling
+  and EMA stages**, since rolling/EMA variants of a deterministic timestamp curve measure identically to leaving them
+  out. A new `add_record_number=True` adds a continuous record number as cheap insurance against sensor drift on long
+  raw records (neutral on clean data). Also `FeatureEngineer` as a standalone 8-stage pipeline, `GapFillingResult` +
+  a `.results` property on every gap-filler, `plot_feature_importances()` on the ML base class, and a Rich console
+  report at `verbose>=2`.
 - **Analysis**: `CompoundExtremes` (+ `CompoundExtremesPlot`), `GapStats`, `GrangerCausality`,
   `SeasonalTrendDecomposition`, `DetectTimestampShifts`, `spectrogram`, `harmonic_analysis`, `rank_drivers`,
   `profile_dataframe`, `keep_records_where`, `keep_vars`. `DriverAnalysis` ships **provisionally** in

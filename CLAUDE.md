@@ -120,11 +120,13 @@ One implementation: `potrad(timestamp_index, lat, lon, utc_offset)`, a faithful 
 |---|---|---|---|
 | Random Forest | Yes | 8-stage engineered | Interpretable, robust |
 | XGBoost | Yes | 8-stage engineered | Non-linear, efficient |
-| SWINGapFillerXGBoost | Yes | SW_IN_POT + timestamps (+ opt. TA/VPD) | SW_IN w/ nighttime constraint; `nighttime_threshold=0.001` matches `remove_nighttime_zero_offset` |
+| SWINGapFillerXGBoost | Yes | SW_IN_POT + timestamps (+ opt. `context_df` drivers) | SW_IN w/ nighttime constraint; `nighttime_threshold=0.001` matches `remove_nighttime_zero_offset`. **Climatology ceiling** (below); lags off by default, SW_IN_POT excluded from rolling/EMA |
 | MDS | No | Meteorological similarity | Faithful ONEFlux port; no overfitting |
 | Linear Interp. | No | None | Small gaps only |
 
 **MDS faithful ONEFlux port** (`FluxMDS`, `diive/gapfilling/mds.py`): the cascade lives once in `diive/gapfilling/similarity.py::mds_gapfill_cascade` (6-stage expanding-window, ported from `uncert_via_gapFill`, fills r≈0.9997 vs native ONEFlux), plus `meteo_similar_mask`, `mds_quality_from`, `mds_granular_flag`. The **same cascade** backs daytime-partitioning NEE uncertainty (`daytime_oneflux._uncert_via_gapfill`), so it is **dtype-preserving**: float32 caller gets f4 boundary behaviour, float64 (MDS) full precision. `avg_min_n_vals` default 2 (uncertainty path uses 10); SD is N-1; `sym_mean` is the optional Vekuri (2023) variant. Public flag `FLAG_*_gfMDS_ISFILLED` is **granular** `method*1000 + time_window` (0=measured; method 1/2/3 = ALL/SWIN/MDC); faithful 1/2/3 quality kept in `.PREDICTIONS_QUALITY`. `FluxMDS` and `RandomUncertaintyPAS20` both take **`vpd_in_kpa=True`** (converted to hPa internally for the 5-hPa/0.5-kPa tolerance — pass `False` for hPa). For these ports, required units are **stated in docstrings, not validated** — don't add unit-guessing warnings or EddyPro-specific hints to the library (caller owns units).
+
+**[SWIN climatology ceiling — expect this question]** `SWINGapFillerXGBoost` with no `context_df` feeds the daytime model only features that are deterministic functions of the timestamp (SW_IN_POT, timestamp features, record number), so it can only reproduce a climatology — the expected SW_IN for that time-of-day/year — and **cannot recover whether a gap was cloudy or clear**. No timestamp-derived feature (lag/rolling/EMA of SW_IN_POT) raises this ceiling; measuring proves it (CH-DAV: 15 features vs 29 features both ~138 W/m2 daytime-gap RMSE). Two things do break it: (a) a **second radiation measurement** (pyranometer/PPFD/nearby station) via `context_df` — directly carries sky state, worth ~5x everything else (CH-DAV 138 -> 26); (b) `interpolate_short_gaps` for 1-2h gaps, which uses the target's own neighbours (the model never sees them — the feature engineer excludes the target). This is why `features_lag` defaults to `[]` (a lag of a gappy context driver demotes fillable records to the flag-2 timestamp-only fallback) and SW_IN_POT is excluded from rolling/EMA. Full detail in the class docstring; worked example `examples/gapfilling/gapfill_swin.py`.
 
 **Results:** all gap-filling classes expose `.results` (after `.run()`) → `GapFillingResult`: `gapfilled` (Series), `flag` (0=observed, 1=gap-filled, 2=fallback), `scores['r2']`, `feature_importances` (SHAP, ML only), `model` (ML only). Legacy `.result` (raw DataFrame) still available.
 
@@ -468,4 +470,4 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 
 ---
 
-**Last Updated:** 2026-07-16 | **Version:** v0.91.0 | **Package Manager:** `uv`
+**Last Updated:** 2026-07-17 | **Version:** v0.91.0 | **Package Manager:** `uv`

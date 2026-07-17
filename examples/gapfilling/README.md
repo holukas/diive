@@ -52,7 +52,7 @@ No training. Fills gaps by finding similar conditions elsewhere in your data.
 
 Physics-constrained gap-filling for shortwave incoming radiation. Nighttime values are always set to zero; daytime gaps are filled with XGBoost trained on potential radiation and timestamp features. Only lat/lon/UTC offset required — no meteorological driver variables needed by default.
 
-- **gapfill_swin.py** — SW_IN gap-filling with nighttime offset correction: physics sets nighttime to zero, XGBoost fills daytime gaps using SW_IN_POT and timestamp features only
+- **gapfill_swin.py** — SW_IN gap-filling: physics sets nighttime to zero, XGBoost fills daytime gaps. Works through the climatology ceiling of a timestamp-only model and how a second radiation sensor (PPFD) passed via `context_df` breaks it
 
 ### Comparison & Benchmarking
 
