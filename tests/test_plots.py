@@ -255,6 +255,30 @@ class TestPlots(unittest.TestCase):
         self.assertIsNotNone(ax.get_legend())
         plt.close(fig)
 
+    def test_quickplot_keeps_same_named_series(self):
+        """A list of same-named series must give one panel each, not one panel total.
+
+        Correction routines pass several stages of one variable (raw, corrected),
+        which share the variable name. Keying them by name dropped all but the last
+        and left the survivor labelled with the dropped series' name.
+        """
+        import numpy as np
+        import pandas as pd
+        from diive.core.plotting.plotfuncs import quickplot
+        idx = pd.date_range("2020-01-01", periods=3, freq="30min")
+        a = pd.Series([1.0, 2.0, 3.0], index=idx, name="X")
+        b = pd.Series([4.0, 5.0, 6.0], index=idx, name="X")
+        c = pd.Series([7.0, 8.0, 9.0], index=idx, name="Y")
+
+        quickplot([a, b, c], subplots=True, showplot=False, title="dup")
+        fig = plt.gcf()
+        self.assertEqual(len(fig.axes), 3)
+        # Every series keeps its own data, in the order it was passed.
+        drawn = [ax.lines[0].get_ydata() for ax in fig.axes]
+        for expected, actual in zip([a, b, c], drawn):
+            np.testing.assert_allclose(actual, expected.values)
+        plt.close(fig)
+
 
 if __name__ == '__main__':
     unittest.main()

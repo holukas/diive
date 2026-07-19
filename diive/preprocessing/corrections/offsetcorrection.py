@@ -332,11 +332,16 @@ def remove_nighttime_zero_offset(series: Series,
                                     clamp_negatives=clamp_negatives)
 
     if showplot:
-        quickplot([result.input, result.corrected_by_offset,
-                   result.corrected, result.offset],
+        # Named per stage: the raw and the final series otherwise share the variable
+        # name, which makes the panels ambiguous about which stage they show.
+        varname = result.input.name
+        quickplot([result.input.rename(f"{varname} (measured)"),
+                   result.corrected_by_offset.rename("after offset subtraction"),
+                   result.corrected.rename("after nighttime zeroing + clamping"),
+                   result.offset.rename("daily offset")],
                   subplots=True,
                   showplot=showplot,
-                  title=f"Removing nighttime zero-offset from {result.input.name}")
+                  title=f"Removing nighttime zero-offset from {varname}")
 
     return result.corrected
 

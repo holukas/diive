@@ -418,10 +418,20 @@ def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: 
     if isinstance(data, Series):
         data = pd.DataFrame(data)
     elif isinstance(data, list):
-        data_cols = {}
+        # Disambiguate duplicate names instead of keying a dict by them: callers
+        # routinely pass several stages of the same variable (raw and corrected,
+        # say), which share a name, and a dict silently kept only the last one —
+        # dropping a panel and labelling the survivor with the dropped series' name.
+        named, seen = [], {}
         for series in data:
-            data_cols[series.name] = series
-        data = pd.concat(data_cols, axis=1)
+            name = str(series.name)
+            if name in seen:
+                seen[name] += 1
+                name = f"{name} ({seen[name]})"
+            else:
+                seen[name] = 1
+            named.append(series.rename(name))
+        data = pd.concat(named, axis=1)
 
     fig = plt.figure(figsize=(16, 9))
 

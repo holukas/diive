@@ -114,7 +114,11 @@ The rest raise or fail at import:
   dropped anything — the only view that includes the `.RANDOM` benchmark column the keep threshold is derived from —
   `GapFillingResult` +
   a `.results` property on every gap-filler, `plot_feature_importances()` on the ML base class, and a Rich console
-  report at `verbose>=2`.
+  report at `verbose>=2`. **Fixed:** `quickplot` keyed a list of series by name, so same-named series silently
+  collapsed to one panel and the survivor was labelled with a dropped series' name — visible in
+  `remove_nighttime_zero_offset(showplot=True)`, which passes the raw and the corrected series (both carrying the
+  variable's name) and therefore lost the measured panel while labelling the corrected one as the measurement.
+  Duplicates are now suffixed, and that caller names each stage explicitly.
 - **Analysis**: `CompoundExtremes` (+ `CompoundExtremesPlot`), `GapStats`, `GrangerCausality`,
   `SeasonalTrendDecomposition`, `DetectTimestampShifts`, `spectrogram`, `harmonic_analysis`, `rank_drivers`,
   `profile_dataframe`, `keep_records_where`, `keep_vars`. `DriverAnalysis` ships **provisionally** in
