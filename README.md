@@ -62,7 +62,7 @@ outliers, gap-fill, run the flux chain, visualize.
 | Namespace | Covers | Examples |
 |---|---|---|
 | `dv.plotting` | 18 plot types: time series, heatmaps, diel cycle, cumulative, ridgeline, scatter, hexbin, wind rose, tree ring, 3-D surface, ... | [visualization/](examples/visualization/README.md) |
-| `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `FluxMDS`, linear interpolation, long-term variants, `FeatureEngineer` | [gapfilling/](examples/gapfilling/README.md) |
+| `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, linear interpolation, long-term variants, `FeatureEngineer` | [gapfilling/](examples/gapfilling/README.md) |
 | `dv.flux` | Flux processing chain (L2–L4.2), NEE partitioning, USTAR filtering, uncertainty, high-resolution EC | [flux/](examples/flux/README.md) |
 | `dv.outliers` | Nine detection methods (Hampel, z-score variants, local SD, LOF, absolute limits, ...) | [outlier_detection/](examples/preprocessing/outlier_detection/README.md) |
 | `dv.corrections` | Offset corrections (measurement, radiation, humidity, wind direction), thresholds, missing values | [corrections/](examples/preprocessing/corrections/README.md) |
