@@ -67,11 +67,12 @@ class SWINGapFillerXGBoost:
           available source of sky-state information. On CH-DAV, adding PPFD moved
           daytime-gap RMSE from 138 to 26 W m-2 wherever that second sensor was
           available.
-        - *interpolate_short_gaps* for gaps of an hour or two, which uses the target's
-          own neighbours — information the model never sees, since the feature engineer
-          excludes the target from every feature. It is off by default: it helps under
-          the ceiling but overwrites better model fills once a strong *context_df*
-          sensor is present, so enable it only in the no-context case.
+        - *interpolate_short_gaps* for gaps of a couple of records, which uses the
+          target's own neighbours — information the model never sees, since the feature
+          engineer excludes the target from every feature. It defaults to ``'auto'``,
+          which switches it on only when no *context_df* is given: it helps under the
+          ceiling but overwrites better model fills once a strong context sensor is
+          present.
 
     Args:
         series: SW_IN time series to gap-fill (W m-2). NaN values are gaps.
