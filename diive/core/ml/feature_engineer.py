@@ -472,7 +472,7 @@ class FeatureEngineer:
 
         # Add continuous record number
         if self.add_continuous_record_number:
-            expanded_df = fr.add_continuous_record_number(df=expanded_df)
+            expanded_df = fr.add_continuous_record_number(df=expanded_df, verbose=self.verbose)
 
         # Sanitize timestamp
         if self.sanitize_timestamp:
