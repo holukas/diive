@@ -266,6 +266,36 @@ class TestGapFilling(unittest.TestCase):
         self.assertTrue((flag[daytime_gaps] == 1).all())
         self.assertTrue((flag[gaps & (pot < 0.001)] == 3).all())
 
+        # daytime_model_ exposes the model that did the filling, so a caller can
+        # validate against data it never saw. Reconstructing the held-out score from
+        # its test set must reproduce scores_traintest — that is what proves the
+        # exposed test set is the one the model was actually scored on.
+        dtm = g.daytime_model_
+        self.assertIsNotNone(dtm)
+        test_df = dtm.traintest_details_['test_df']
+        y = test_df[dtm.target_col].values
+        p = dtm.model_.predict(test_df.drop(columns=dtm.target_col))
+        rmse = float(np.sqrt(((p - y) ** 2).mean()))
+        self.assertAlmostEqual(rmse, g.results.scores_traintest['rmse'], places=4)
+
+    def test_swin_gapfiller_daytime_model_absent_without_gaps(self):
+        """No daytime gaps means no daytime model, and daytime_model_ says so."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad
+        lat, lon, utc = 47.0, 8.0, 1
+        idx = pd.date_range('2022-06-01', '2022-06-10 23:30', freq='30min', name='TIMESTAMP_END')
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        swin = (pot * 0.8).clip(lower=0)
+        swin.name = 'SW_IN'
+
+        g = SWINGapFillerXGBoost(series=swin, lat=lat, lon=lon, utc_offset=utc, verbose=0)
+        # Accessing it before run() is a caller error, not a silent None.
+        with self.assertRaises(RuntimeError):
+            _ = g.daytime_model_
+        g.run()
+        self.assertIsNone(g.daytime_model_)
+
     def test_swin_gapfiller_interpolate_short_gaps(self):
         """Short-gap interpolation must beat the model, and never bridge a night."""
         import pandas as pd

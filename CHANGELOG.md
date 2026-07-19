@@ -119,6 +119,10 @@ The rest raise or fail at import:
   `remove_nighttime_zero_offset(showplot=True)`, which passes the raw and the corrected series (both carrying the
   variable's name) and therefore lost the measured panel while labelling the corrected one as the measurement.
   Duplicates are now suffixed, and that caller names each stage explicitly.
+  `SWINGapFillerXGBoost` also exposes the model that did the filling as **`daytime_model_`**
+  (`None` when there were no daytime gaps): its `traintest_details_` carries the held-out test set, so the fill can be
+  validated against data the model never saw — which the results object alone does not allow, since `gapfilled` equals
+  the measurement wherever the flag is 0.
 - **Analysis**: `CompoundExtremes` (+ `CompoundExtremesPlot`), `GapStats`, `GrangerCausality`,
   `SeasonalTrendDecomposition`, `DetectTimestampShifts`, `spectrogram`, `harmonic_analysis`, `rank_drivers`,
   `profile_dataframe`, `keep_records_where`, `keep_vars`. `DriverAnalysis` ships **provisionally** in

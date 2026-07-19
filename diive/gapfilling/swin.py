@@ -211,6 +211,11 @@ class SWINGapFillerXGBoost:
     Attributes:
         results: GapFillingResult populated after run(). Contains gapfilled series,
             flags, scores, SHAP importances, and the trained XGBoost model.
+        daytime_model_: The XGBoostTS instance that filled the daytime gaps, kept so the
+            fill can be inspected after the fact — most usefully via its
+            ``traintest_details_``, which holds the held-out test set and makes a real
+            predicted-vs-measured validation plot possible. None when there were no
+            daytime gaps, since the model is then never built.
 
     Result flags:
         0 = observed (any period)
@@ -397,6 +402,7 @@ class SWINGapFillerXGBoost:
         self.kwargs = {**self._XGB_DEFAULTS, **kwargs}
 
         self._results = None
+        self._daytime_model = None
 
     @staticmethod
     def _resolve_target_col(series: Series) -> str:
@@ -422,6 +428,19 @@ class SWINGapFillerXGBoost:
         if self._results is None:
             raise RuntimeError("Call .run() before accessing .results")
         return self._results
+
+    @property
+    def daytime_model_(self) -> XGBoostTS | None:
+        """The XGBoostTS that filled the daytime gaps (None if there were none).
+
+        Exposed so a caller can validate the fill against data the model never saw:
+        ``daytime_model_.traintest_details_`` carries the held-out test set, which is
+        what a predicted-vs-measured plot needs. The results themselves stay on
+        :attr:`results` — this is the model, not a second copy of the output.
+        """
+        if self._results is None:
+            raise RuntimeError("Call .run() before accessing .daytime_model_")
+        return self._daytime_model
 
     def report(self):
         """Formatted post-run summary: parameters, data & performance, flags, scores."""
@@ -884,4 +903,5 @@ class SWINGapFillerXGBoost:
         if self.verbose >= 1:
             info(f"Step {self._step_no}: {label} ({perf_counter() - t0:.1f}s)")
 
+        self._daytime_model = model
         return model.results
