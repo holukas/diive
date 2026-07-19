@@ -7,6 +7,12 @@ Uses potential radiation to partition daytime and nighttime:
 nighttime gaps are set to zero (physically correct),
 daytime gaps are filled with XGBoost trained on daytime data only.
 
+SW_IN gets its own class rather than a call to XGBoostTS because for this
+variable correction and gap-filling are the same operation. The nighttime
+zero-offset correction sets every nighttime record to zero, which fills the
+nighttime gaps as a side effect, so it has to run inside the gap-filler and
+before the model, not as a separate preprocessing step.
+
 With no context drivers every feature is a deterministic function of the
 timestamp, so the daytime model reproduces a climatology and cannot know
 whether a gap was overcast or clear. A second radiation measurement is the
@@ -48,6 +54,18 @@ class SWINGapFillerXGBoost:
 
     Feature engineering is applied to the full time series before subsetting to daytime,
     so rolling features correctly span day/night boundaries.
+
+    Why a dedicated class instead of XGBoostTS with SW_IN_POT as a driver:
+        SW_IN needs corrections that no other gap-filling target needs, and one of
+        them — the nighttime zero-offset correction (*correct_nighttime_offset*) —
+        does part of the gap-filling itself. It subtracts the daily mean nighttime
+        reading as an offset and then sets every nighttime record to exactly zero,
+        which fills the nighttime gaps whether or not they were gaps to begin with.
+        Correction and fill are therefore one operation for this variable and have
+        to happen in one place, in this order, before the model ever sees the
+        daytime subset. That ordering, plus the SW_IN_POT day/night split it shares
+        with the correction (see *nighttime_threshold*), is what this class exists
+        to own.
 
     What the default configuration can and cannot do:
         With no *context_df*, every feature is a deterministic function of the

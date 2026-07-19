@@ -30,6 +30,12 @@ Part of the diive library: https://github.com/holukas/diive
 # radiation (``SW_IN_POT``, from lat/lon) to split the record into daytime and
 # nighttime, sets nighttime gaps to zero, and fills daytime gaps with XGBoost.
 #
+# SW_IN has its own class rather than a plain ``XGBoostTS`` call because it also
+# needs corrections, and one of them doubles as a gap-fill: the nighttime
+# zero-offset correction (on by default) sets every nighttime record to exactly
+# zero, which fills the nighttime gaps in passing. Correcting and filling are one
+# operation here, so they live in one place and run in a fixed order.
+#
 # With no context drivers, every feature the model sees is a deterministic
 # function of the timestamp: SW_IN_POT, the timestamp features and the record
 # number are all fixed once the time is known. The model can therefore only
