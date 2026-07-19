@@ -376,7 +376,8 @@ class TestGapFilling(unittest.TestCase):
 
         def _run(series):
             # verbose=1 gates the messages under test. interpolate_short_gaps stays at
-            # its default (None) — the setting the messages used to be wired to.
+            # its default ('auto', so enabled here — no context_df) — the setting the
+            # messages used to be wrongly wired to.
             rec = _Recorder()
             add_console_sink(rec)
             try:
@@ -453,7 +454,8 @@ class TestGapFilling(unittest.TestCase):
         # Proof the data above is diagnostic: the old default features_lag=[-2, 2]
         # smears every driver gap into a 5-record hole in the feature matrix, so
         # records with their own driver value present do end up on the fallback.
-        with_lags = SWINGapFillerXGBoost(features_lag=[-2, 2], **common).run().results.flag
+        with_lags = SWINGapFillerXGBoost(feature_kwargs={'features_lag': [-2, 2]},
+                                         **common).run().results.flag
         lag_fallback = with_lags == 2
         self.assertGreater(int((lag_fallback & ~driver_missing).sum()), 0)
         self.assertGreater(int(lag_fallback.sum()), int(fallback.sum()))
@@ -500,11 +502,35 @@ class TestGapFilling(unittest.TestCase):
         common = dict(series=swin, lat=lat, lon=lon, utc_offset=utc,
                       random_state=42, verbose=0, n_estimators=10)
         on = set(SWINGapFillerXGBoost(**common).run().results.feature_importances.index)
-        off = set(SWINGapFillerXGBoost(add_record_number=False,
-                                       **common).run().results.feature_importances.index)
+        off = set(SWINGapFillerXGBoost(
+            feature_kwargs={'add_continuous_record_number': False},
+            **common).run().results.feature_importances.index)
 
         self.assertIn('.RECORDNUMBER', on)
         self.assertEqual(on - off, {'.RECORDNUMBER'})
+
+    def test_swin_gapfiller_interpolate_auto_follows_context(self):
+        """'auto' enables short-gap interpolation only when there is no context driver."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+
+        idx = pd.date_range('2022-06-01', periods=2000, freq='30min', name='TIMESTAMP_END')
+        swin = pd.Series(np.linspace(0, 500, len(idx)), index=idx, name='SW_IN')
+        ctx = pd.DataFrame({'PPFD': np.linspace(0, 900, len(idx))}, index=idx)
+        common = dict(series=swin, lat=47.0, lon=8.0, utc_offset=1)
+
+        # No context: the model is climatology-bound, so interpolation earns its keep.
+        self.assertEqual(SWINGapFillerXGBoost(**common).interpolate_short_gaps, 2)
+        # Context present: the driver resolves short gaps better than interpolation.
+        self.assertIsNone(
+            SWINGapFillerXGBoost(context_df=ctx, **common).interpolate_short_gaps)
+        # Explicit settings always win over 'auto'.
+        self.assertEqual(
+            SWINGapFillerXGBoost(interpolate_short_gaps=5, **common).interpolate_short_gaps, 5)
+        self.assertIsNone(
+            SWINGapFillerXGBoost(interpolate_short_gaps=None, **common).interpolate_short_gaps)
+        with self.assertRaises(ValueError):
+            SWINGapFillerXGBoost(interpolate_short_gaps=0, **common)
 
     def test_swin_gapfiller_rolling_ema_skip_swinpot(self):
         """Rolling and EMA features are for context drivers; SW_IN_POT is excluded."""

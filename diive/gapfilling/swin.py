@@ -16,6 +16,8 @@ SWINGapFillerXGBoost docstring.
 Part of the diive library: https://github.com/holukas/diive
 """
 
+import inspect
+from contextlib import contextmanager
 from time import perf_counter
 
 import pandas as pd
@@ -23,6 +25,10 @@ from pandas import DataFrame, Series
 
 from diive.core.ml.feature_engineer import FeatureEngineer
 from diive.core.ml.results import GapFillingResult
+
+# Read off the real signature so this stays correct as FeatureEngineer grows.
+_FEATURE_ENGINEER_PARAMS = frozenset(
+    inspect.signature(FeatureEngineer.__init__).parameters) - {'self'}
 from diive.core.utils.console import console as _console, detail, info, rule, success, warn
 from diive.gapfilling.xgboost_ts import XGBoostTS
 from diive.variables.radiation import potrad
@@ -110,8 +116,12 @@ class SWINGapFillerXGBoost:
             input is already offset-corrected.
         interpolate_short_gaps: Maximum gap length, in records, to fill by
             interpolating the clearness index (SW_IN / SW_IN_POT) instead of the
-            model. Interpolation never bridges a night. Default: None (disabled),
-            leaving every daytime gap to XGBoost. Set to an integer to enable it.
+            model. Interpolation never bridges a night.
+
+            Default: ``'auto'`` — enabled at a 2-record limit when *context_df* is
+            None, disabled when a context driver is given, which is the branch that
+            measured better in each case (see below). Pass an integer for an explicit
+            record limit, or None to disable it outright.
 
             Worth enabling when the model is climatology-bound (no context_df): the
             model cannot see the target's own neighbours — the feature engineer
@@ -124,48 +134,57 @@ class SWINGapFillerXGBoost:
             as long as 8 h (189 vs 219 W m-2) but collapses once a gap outlasts the
             observations bracketing it (1 day: 337 vs 172).
 
-            One caveat, and the reason it is off by default: interpolation overwrites
-            the model on the gaps it covers. That is a gain under the ceiling, but a
-            strong, near-complete second radiation sensor in context_df resolves short
-            gaps better than clearness-index interpolation does, so enabling it there
-            *raises* RMSE (CH-DAV: context-only 13.5 vs context+interp 66 W m-2).
+            And the reason ``'auto'`` turns it off once a context driver is present:
+            interpolation overwrites the model on the gaps it covers. That is a gain
+            under the ceiling, but a strong, near-complete second radiation sensor in
+            context_df resolves short gaps better than clearness-index interpolation
+            does, so enabling it there *raises* RMSE (CH-DAV: context-only 13.5 vs
+            context+interp 66 W m-2). Note that ``'auto'`` keys off whether context_df
+            was passed at all, not off how good or complete that driver is — with a
+            weak or very gappy context sensor, an explicit integer may beat it.
         reduce_features: Apply SHAP-based feature reduction after initial training.
             Removes features whose importance is at or below the random-noise baseline.
             Increases training time but can improve generalisation. Default: False.
-        features_lag: ``[min_lag, max_lag]`` range for lag features of non-target
-            columns (i.e. SW_IN_POT and any context drivers). Default: None, meaning
-            no lag features. That default is deliberate.
+        feature_kwargs: FeatureEngineer arguments, overriding the SW_IN defaults in
+            ``_FE_DEFAULTS`` (see that constant for the values and the reasoning).
+            Every FeatureEngineer parameter is reachable this way, including the
+            diff, polynomial and STL stages, which are off by default. ``target_col``
+            and ``verbose`` are set by this class and rejected here. Window sizes are
+            in records and assume 30-min data — scale them to your frequency.
 
-            Lag features are a bad trade here. The model predicts only records where
-            every feature is present and sends the rest to a timestamp-only fallback,
-            so a lag converts "this record's neighbour is missing" into "this record
-            cannot be filled properly". On a context driver with gaps that is
-            expensive: on CH-DAV with a PPFD reference, ``[-2, 2]`` pushed 1157 of
-            2556 otherwise-fillable records to the fallback and raised their RMSE from
-            26 to 97 W m-2, on top of costing 20% of the training rows. On SW_IN_POT
-            lags are harmless — it never has gaps — but useless, being the same
-            function of the timestamp as SW_IN_POT itself. Set this explicitly only
-            for a gap-free driver where lags earn their keep.
-        features_rolling: Window sizes (in records) for rolling statistics. Default:
-            ``[4, 8, 24, 48]`` — on 30-min data: 2h, 4h, 12h, 24h windows. Adjust to
-            match your sampling frequency. Applies to context drivers only; SW_IN_POT
-            is excluded, because rolling variants of a deterministic curve carry
-            nothing beyond its raw value and the timestamp features. With no
-            *context_df* this parameter therefore has no effect.
-        features_rolling_stats: Extra rolling statistics beyond the default mean+std.
-            Default: ``['median']``.
-        features_ema: EMA spans (in records). Default: ``[6, 24]`` — short and
-            day-scale memory on 30-min data. Context drivers only, like
-            *features_rolling*.
-        add_record_number: Add a continuous record number (1, 2, 3, ...) as a feature,
-            letting the model isolate periods — a sensor swap, progressive soiling, a
-            calibration change. Safe for gap-filling, which only interpolates within
-            the record, so the trees never have to extrapolate it. Default: True.
-            Measured neutral on CH-DAV's quality-controlled Rg_f, which has no drift
-            to find; it is cheap insurance on long raw records.
+            Three of the defaults are worth understanding before overriding them:
+
+            ``features_lag=[]``. Lag features are a bad trade here. The model
+            predicts only records where every feature is present and sends the rest
+            to a timestamp-only fallback, so a lag converts "this record's neighbour
+            is missing" into "this record cannot be filled properly". On CH-DAV with
+            a PPFD reference, ``[-2, 2]`` pushed 1157 of 2556 otherwise-fillable
+            records to the fallback and raised their RMSE from 26 to 97 W m-2, on top
+            of costing 20% of the training rows. On SW_IN_POT lags are harmless (it
+            never has gaps) but useless, being the same function of the timestamp.
+            Set them only for a gap-free driver where they earn their keep.
+
+            ``features_rolling``/``features_ema`` exclude SW_IN_POT. Rolling and EMA
+            variants of a deterministic timestamp curve carry nothing beyond its raw
+            value and the timestamp features. Both stages therefore act on context
+            drivers only, and with no *context_df* they have no effect at all.
+
+            ``add_continuous_record_number=True``. Lets the model isolate periods —
+            a sensor swap, progressive soiling, a calibration change. Safe for
+            gap-filling, which only interpolates within the record, so the trees
+            never extrapolate it. Measured neutral on CH-DAV's quality-controlled
+            Rg_f, which has no drift to find; cheap insurance on long raw records.
+
+            Example::
+
+                feature_kwargs={'features_rolling': [2, 4, 12],  # 15-min data
+                                'features_diff': [1]}            # enable diff stage
         verbose: Verbosity level: 0=silent, 1=progress, 2+=detailed. Default: 0.
         **kwargs: XGBoost hyperparameters forwarded to XGBRegressor (n_estimators,
-            max_depth, learning_rate, subsample, colsample_bytree, random_state, etc.).
+            max_depth, learning_rate, subsample, colsample_bytree, random_state, etc.),
+            overriding the SW_IN defaults in ``_XGB_DEFAULTS``: n_estimators=3000,
+            max_depth=6, early_stopping_rounds=20. If you raise n_estimators, keep
+            early stopping on — see the note at ``_XGB_DEFAULTS`` for why.
 
     Methods:
         run(): Execute the full gap-filling workflow. Returns self for chaining.
@@ -208,6 +227,61 @@ class SWINGapFillerXGBoost:
     FLAG_NIGHTTIME_ZERO = 3
     FLAG_INTERPOLATED = 4
 
+    # XGBoost defaults for SW_IN, overridable through **kwargs.
+    #
+    # depth 6 with a large tree budget and early stopping beats a small fixed
+    # budget by a wide margin on daytime-gap RMSE (CH-DAV, 10 years, 20% gaps:
+    # 133 -> 110 W/m2 with no context, 25 -> 23 with a PPFD context sensor).
+    #
+    # early_stopping_rounds is NOT optional here. Without it all 3000 trees are
+    # built, which barely improves RMSE (110.1 -> 110.6) but makes the SHAP pass
+    # 3-7x slower, since TreeSHAP cost is linear in tree count. 20 rounds lands
+    # at ~600-1000 trees and captures the full accuracy of the 3000-tree model.
+    # random_state is pinned so a gap-fill is reproducible: without it XGBoost
+    # seeds itself and every run returns different fills, scores and SHAP
+    # importances. Pass random_state=None explicitly to opt back out.
+    _XGB_DEFAULTS = {
+        'n_estimators': 3000,
+        'max_depth': 6,
+        'early_stopping_rounds': 20,
+        'random_state': 42,
+    }
+
+    # SHAP over the whole record is the slowest step once trees number in the
+    # hundreds. Mean |SHAP| converges well before that: at 10k rows the feature
+    # ranking was identical to the full record (Kendall tau 1.000, importances
+    # within 2%). Raise or set to None for importances over every row.
+    _SHAP_MAX_ROWS = 10_000
+
+    # Gap length that interpolate_short_gaps='auto' fills, in records.
+    _INTERP_AUTO_RECORDS = 2
+
+    # FeatureEngineer defaults for SW_IN, overridable through feature_kwargs.
+    # Window sizes are record counts and assume 30-min data (2h, 4h, 12h, 24h
+    # rolling; 3h and 12h EMA); scale them yourself for another frequency.
+    #
+    # Two of these are load-bearing rather than merely tuned:
+    #   - features_lag is empty because the model only predicts rows where every
+    #     feature is present. A lag turns "my neighbour is missing" into "I cannot
+    #     be filled", demoting records to the timestamp-only fallback.
+    #   - SW_IN_POT is excluded from the rolling and EMA stages: rolling variants
+    #     of a deterministic timestamp curve carry nothing its raw value and the
+    #     timestamp features do not already have.
+    # The diff, polynomial and STL stages stay off; reach them via feature_kwargs.
+    _FE_DEFAULTS = {
+        'features_lag': [],
+        'features_rolling': [4, 8, 24, 48],
+        'features_rolling_stats': ['median'],
+        'features_rolling_exclude_cols': [SWINPOT_COL],
+        'features_ema': [6, 24],
+        'features_ema_exclude_cols': [SWINPOT_COL],
+        'vectorize_timestamps': True,
+        'add_continuous_record_number': True,
+    }
+
+    # Set by this class per run, so a caller cannot pass them through feature_kwargs.
+    _FE_RESERVED = ('target_col', 'verbose')
+
     def __init__(self,
                  series: Series,
                  lat: float,
@@ -216,13 +290,9 @@ class SWINGapFillerXGBoost:
                  context_df: DataFrame = None,
                  nighttime_threshold: float = 0.001,
                  correct_nighttime_offset: bool = True,
-                 interpolate_short_gaps: int = None,
+                 interpolate_short_gaps: int | str | None = 'auto',
                  reduce_features: bool = False,
-                 features_lag: list = None,
-                 features_rolling: list = None,
-                 features_rolling_stats: list = None,
-                 features_ema: list = None,
-                 add_record_number: bool = True,
+                 feature_kwargs: dict = None,
                  verbose: int = 0,
                  **kwargs):
         """Construct the gap-filler. See the class docstring for the full parameter list."""
@@ -231,6 +301,7 @@ class SWINGapFillerXGBoost:
         if series.notna().sum() == 0:
             raise ValueError("series has no observed values — cannot train a model.")
 
+        self.verbose = verbose
         self.series = series.copy()
         self.target_col = self._resolve_target_col(self.series)
 
@@ -256,26 +327,55 @@ class SWINGapFillerXGBoost:
 
         self.nighttime_threshold = nighttime_threshold
         self.correct_nighttime_offset = correct_nighttime_offset
-        if interpolate_short_gaps is not None and interpolate_short_gaps < 1:
+        if (interpolate_short_gaps is not None
+                and interpolate_short_gaps != 'auto'
+                and interpolate_short_gaps < 1):
             raise ValueError(
-                f"interpolate_short_gaps must be >= 1 record or None, "
+                f"interpolate_short_gaps must be >= 1 record, None or 'auto', "
                 f"got {interpolate_short_gaps}."
             )
-        self.interpolate_short_gaps = interpolate_short_gaps
+        self._interpolate_short_gaps_arg = interpolate_short_gaps
         self.reduce_features = reduce_features
 
-        # Feature-engineering windows (configurable; defaults assume 30-min data).
-        # Lags default to off — see the features_lag docstring for the measurements.
-        self.features_lag = [] if features_lag is None else features_lag
-        self.features_rolling = [4, 8, 24, 48] if features_rolling is None else features_rolling
-        self.features_rolling_stats = (
-            ['median'] if features_rolling_stats is None else features_rolling_stats
-        )
-        self.features_ema = [6, 24] if features_ema is None else features_ema
-        self.add_record_number = add_record_number
+        # Feature engineering: same merge pattern as the XGBoost kwargs below.
+        # Reject the two the class sets itself rather than let them collide as an
+        # opaque "multiple values for keyword argument" TypeError at call time.
+        feature_kwargs = feature_kwargs or {}
+        clashes = sorted(set(feature_kwargs) & set(self._FE_RESERVED))
+        if clashes:
+            raise ValueError(
+                f"feature_kwargs may not set {clashes}: this class sets "
+                f"{list(self._FE_RESERVED)} itself. Pass the rest of the "
+                f"FeatureEngineer arguments instead."
+            )
+        merged_fe = {**self._FE_DEFAULTS, **feature_kwargs}
+        # Copy list values so one instance cannot mutate the shared class defaults.
+        self.feature_kwargs = {k: (list(v) if isinstance(v, list) else v)
+                               for k, v in merged_fe.items()}
 
-        self.verbose = verbose
-        self.kwargs = kwargs
+        # A FeatureEngineer argument passed at the top level would otherwise land in
+        # **kwargs and go to XGBRegressor, which ignores unknown parameters with only
+        # a warning — a silently ineffective setting. Point the caller at the dict.
+        misplaced = sorted(set(kwargs) & _FEATURE_ENGINEER_PARAMS)
+        if misplaced:
+            raise TypeError(
+                f"{misplaced} are FeatureEngineer arguments and must be passed in "
+                f"feature_kwargs, not as top-level keywords (top-level keywords go "
+                f"to XGBRegressor). Use feature_kwargs={{{misplaced[0]!r}: ...}}."
+            )
+
+        # 'auto' picks the branch that measured better for the data at hand: short-gap
+        # interpolation beats a climatology-bound model on the gaps it covers, but
+        # loses to a real context sensor, which resolves those same gaps better.
+        if self._interpolate_short_gaps_arg == 'auto':
+            self.interpolate_short_gaps = (
+                None if self.context_df is not None
+                else self._INTERP_AUTO_RECORDS
+            )
+        else:
+            self.interpolate_short_gaps = self._interpolate_short_gaps_arg
+
+        self.kwargs = {**self._XGB_DEFAULTS, **kwargs}
 
         self._results = None
 
@@ -356,14 +456,24 @@ class SWINGapFillerXGBoost:
             f"(SW_IN_POT < threshold -> night)\n"
             f"  Correct nighttime offset   {self.correct_nighttime_offset}\n"
             f"  Reduce features (SHAP)     {self.reduce_features}\n"
-            f"  features_lag               {self.features_lag}\n"
-            f"  features_rolling           {self.features_rolling}  (context drivers only)\n"
-            f"  features_rolling_stats     {self.features_rolling_stats}\n"
-            f"  features_ema               {self.features_ema}  (context drivers only)\n"
-            f"  add_record_number          {self.add_record_number}\n"
             f"  context drivers            "
             f"{list(self.context_df.columns) if self.context_df is not None else 'none'}"
         )
+
+        # Both parameter blocks are echoed in full, so a report shows exactly what
+        # ran — including the defaults the caller never touched.
+        rule("Feature engineering", min_level=2)
+        _console.print("\n".join(
+            f"  {key:<26} {value}"
+            + ("  (context drivers only)" if key in ('features_rolling', 'features_ema')
+               else "")
+            for key, value in self.feature_kwargs.items()
+        ))
+
+        rule("XGBoost", min_level=2)
+        _console.print("\n".join(
+            f"  {key:<26} {value}" for key, value in self.kwargs.items()
+        ))
 
         rule("Data & Performance", min_level=2)
         _console.print(
@@ -425,30 +535,47 @@ class SWINGapFillerXGBoost:
         else:
             _console.print("  No XGBoost scores — no daytime gaps to fill.")
 
-    def _step(self, label: str) -> float:
-        """Emit a numbered progress header at verbose>=1 and return a start time.
+    @property
+    def _live_ok(self) -> bool:
+        """True when the console can render a live spinner/bar (terminal or Jupyter).
 
-        Pair with :meth:`_step_done` so a long-running stage shows both what it is
-        doing (printed immediately, before the blocking call) and how long it took.
+        In a piped/redirected run neither is true, so we fall back to plain lines.
+        """
+        return bool(getattr(_console, "is_jupyter", False)
+                    or getattr(_console, "is_terminal", False))
+
+    @contextmanager
+    def _stage(self, label: str, *, spinner: bool = True):
+        """Run one numbered progress stage: time it and print a single result line.
+
+        At verbose==1 a transient spinner shows the stage is running (so a long step
+        is not a silent pause) and then vanishes, leaving one dense result line per
+        stage. At verbose>=2 it prints a start header instead, so the sub-component
+        detail that level emits has room. Yields a dict whose ``'msg'`` the caller may
+        set to append a short summary to the result line.
         """
         self._step_no += 1
+        holder = {"msg": ""}
+        t0 = perf_counter()
+        if self.verbose == 1 and spinner and self._live_ok:
+            with _console.status(f"Step {self._step_no}: {label} ...", spinner="dots"):
+                yield holder
+        else:
+            if self.verbose >= 2:
+                info(f"Step {self._step_no}: {label} ...")
+            yield holder
         if self.verbose >= 1:
-            # No square brackets: Rich would parse "[step N]" as a markup tag.
-            info(f"Step {self._step_no}: {label} ...")
-        return perf_counter()
-
-    def _step_done(self, t0: float, msg: str = "") -> None:
-        """Print the elapsed time for the step started at ``t0`` (verbose>=1)."""
-        if self.verbose >= 1:
-            extra = f" ({msg})" if msg else ""
-            _console.print(f"    [dim]completed in {perf_counter() - t0:.1f}s{extra}[/dim]")
+            extra = f", {holder['msg']}" if holder['msg'] else ""
+            info(f"Step {self._step_no}: {label} ({perf_counter() - t0:.1f}s{extra})")
 
     def run(self) -> 'SWINGapFillerXGBoost':
         """Execute gap-filling: optional offset correction, nighttime zeros, daytime XGBoost.
 
-        Progress: at ``verbose>=1`` each stage prints a numbered header before it
-        starts and its elapsed time when it finishes, so a long XGBoost/SHAP step is
-        visible while it runs rather than a silent pause. Set ``verbose=0`` to silence.
+        Progress: at ``verbose>=1`` each stage prints one dense result line with its
+        elapsed time; on an interactive terminal or in Jupyter a transient spinner
+        (and, for the SHAP fill, a progress bar) shows the current stage while it runs,
+        so a long step is not a silent pause. Sub-component chatter is suppressed at
+        this level and shown only at ``verbose>=2``. Set ``verbose=0`` to silence.
 
         Returns:
             self — for method chaining.
@@ -473,55 +600,54 @@ class SWINGapFillerXGBoost:
             from diive.preprocessing.corrections.offsetcorrection import (
                 remove_nighttime_zero_offset,
             )
-            t0 = self._step("Correcting nighttime sensor offset")
-            series_corrected = remove_nighttime_zero_offset(
-                series=self.series.copy(),  # copy to prevent mutation of self.series.name
-                lat=self.lat,
-                lon=self.lon,
-                utc_offset=self.utc_offset,
-                showplot=False,
-            )
-            self._step_done(t0)
+            with self._stage("Correcting nighttime sensor offset"):
+                series_corrected = remove_nighttime_zero_offset(
+                    series=self.series.copy(),  # copy to prevent mutation of self.series.name
+                    lat=self.lat,
+                    lon=self.lon,
+                    utc_offset=self.utc_offset,
+                    showplot=False,
+                )
 
         # The working series is the corrected one (if requested) or the original.
         working_series = series_corrected if series_corrected is not None else self.series.copy()
 
         # Potential radiation drives the daytime/nighttime split and is the
         # primary feature for daytime prediction.
-        t0 = self._step("Computing potential radiation and day/night split")
-        swinpot = potrad(
-            timestamp_index=working_series.index,
-            lat=self.lat,
-            lon=self.lon,
-            utc_offset=self.utc_offset,
-        )
-        daytime_mask = swinpot >= self.nighttime_threshold
+        with self._stage("Computing potential radiation and day/night split") as st:
+            swinpot = potrad(
+                timestamp_index=working_series.index,
+                lat=self.lat,
+                lon=self.lon,
+                utc_offset=self.utc_offset,
+            )
+            daytime_mask = swinpot >= self.nighttime_threshold
 
-        gaps = original_gaps
-        nighttime_gaps = gaps & ~daytime_mask
-        daytime_gaps = gaps & daytime_mask
-        self._step_done(
-            t0, f"{int(daytime_mask.sum())} daytime / {int((~daytime_mask).sum())} nighttime records")
+            gaps = original_gaps
+            nighttime_gaps = gaps & ~daytime_mask
+            daytime_gaps = gaps & daytime_mask
+            st["msg"] = (f"{int(daytime_mask.sum())} daytime / "
+                         f"{int((~daytime_mask).sum())} nighttime records")
 
         if self.verbose >= 1:
             info(f"Gaps to fill: {int(daytime_gaps.sum())} daytime, "
                  f"{int(nighttime_gaps.sum())} nighttime")
 
         # Nighttime: zero is the physically correct value (no solar radiation).
-        t0 = self._step("Filling nighttime gaps with 0 W/m2 (no incoming solar radiation)")
-        filled = working_series.copy()
-        filled.loc[nighttime_gaps] = 0.0
-        self._step_done(t0, f"{int(nighttime_gaps.sum())} records set to 0")
+        with self._stage("Filling nighttime gaps with 0 W/m2 (no incoming solar radiation)") as st:
+            filled = working_series.copy()
+            filled.loc[nighttime_gaps] = 0.0
+            st["msg"] = f"{int(nighttime_gaps.sum())} records set to 0"
 
         # Short daytime gaps: interpolate the clearness index. Computed here but
         # deliberately NOT written into `filled` yet — the model must train on
         # observations only, never on this interpolation.
         interpolated = None
         if self.interpolate_short_gaps:
-            t0 = self._step(
-                f"Interpolating short daytime gaps (<= {self.interpolate_short_gaps} records)")
-            interpolated = self._interpolate_short_gaps(working_series, swinpot)
-            self._step_done(t0, f"{int(interpolated.notna().sum())} records interpolated")
+            with self._stage(f"Interpolating short daytime gaps "
+                             f"(<= {self.interpolate_short_gaps} records)") as st:
+                interpolated = self._interpolate_short_gaps(working_series, swinpot)
+                st["msg"] = f"{int(interpolated.notna().sum())} records interpolated"
 
         # Daytime: XGBoost trained on observed daytime values.
         daytime_results = None
@@ -585,6 +711,9 @@ class SWINGapFillerXGBoost:
             feature_importances=daytime_results.feature_importances if daytime_results else None,
             feature_importances_traintest=(
                 daytime_results.feature_importances_traintest if daytime_results else None
+            ),
+            feature_importances_reduction=(
+                daytime_results.feature_importances_reduction if daytime_results else None
             ),
             model=daytime_results.model if daytime_results else None,
             accepted_features=daytime_results.accepted_features if daytime_results else None,
@@ -667,22 +796,20 @@ class SWINGapFillerXGBoost:
         # function of the timestamp, so its derived variants are the same function
         # again and measure identically to leaving them out. Only measured context
         # drivers carry sky state worth smoothing.
-        t0 = self._step("Engineering features")
-        engineer = FeatureEngineer(
-            target_col=target_col,
-            features_lag=self.features_lag,
-            features_rolling=self.features_rolling,
-            features_rolling_stats=self.features_rolling_stats,
-            features_rolling_exclude_cols=[self.SWINPOT_COL],
-            features_ema=self.features_ema,
-            features_ema_exclude_cols=[self.SWINPOT_COL],
-            vectorize_timestamps=True,
-            add_continuous_record_number=self.add_record_number,
-            verbose=self.verbose,
-        )
-        full_features_df = engineer.fit_transform(input_df)
-        self._step_done(
-            t0, f"{full_features_df.shape[1] - 1} features over {len(full_features_df)} rows")
+        # Sub-components get a quieter verbosity than swin's own progress layer:
+        # at swin verbose==1 their internal line dumps (engineered-column lists,
+        # per-model reports) are suppressed so only the numbered stage lines show;
+        # at swin verbose>=2 they stream their full detail.
+        sub_v = self.verbose if self.verbose >= 2 else 0
+
+        with self._stage("Engineering features") as st:
+            engineer = FeatureEngineer(
+                target_col=target_col,
+                verbose=sub_v,
+                **self.feature_kwargs,
+            )
+            full_features_df = engineer.fit_transform(input_df)
+            st["msg"] = f"{full_features_df.shape[1] - 1} features over {len(full_features_df)} rows"
 
         # Subset to daytime rows only.
         daytime_df = full_features_df.loc[daytime_mask].copy()
@@ -698,26 +825,44 @@ class SWINGapFillerXGBoost:
         model = XGBoostTS(
             input_df=daytime_df,
             target_col=target_col,
-            verbose=self.verbose,
+            verbose=sub_v,
             below_zero='zero',
+            shap_max_rows=self._SHAP_MAX_ROWS,
             **self.kwargs,
         )
 
-        # Training includes the SHAP importance computation, which is the slowest
-        # part of the whole workflow — call it out so the wait is expected.
-        t0 = self._step(f"Training XGBoost on {n_complete} daytime records "
-                        f"(incl. SHAP importances, the slowest step)")
-        model.trainmodel(showplot_scores=False, showplot_importance=False)
-        self._step_done(t0)
+        with self._stage(f"Training XGBoost on {n_complete} daytime records "
+                         f"(incl. SHAP importances)"):
+            model.trainmodel(showplot_scores=False, showplot_importance=False)
 
         if self.reduce_features:
-            t0 = self._step("Reducing features (SHAP vs random benchmark) and retraining")
-            model.reduce_features()
-            model.trainmodel(showplot_scores=False, showplot_importance=False)
-            self._step_done(t0)
+            with self._stage("Reducing features (SHAP vs random benchmark) and retraining"):
+                model.reduce_features()
+                model.trainmodel(showplot_scores=False, showplot_importance=False)
 
-        t0 = self._step("Filling daytime gaps")
-        model.fillgaps(showplot_scores=False, showplot_importance=False)
-        self._step_done(t0)
+        # Filling gaps: the SHAP importance over the whole record is the slowest
+        # step, so drive a progress bar off fillgaps' progress_callback when the
+        # console can render one; otherwise fall back to a plain timed line.
+        self._step_no += 1
+        t0 = perf_counter()
+        label = "Filling daytime gaps (SHAP importances over full record)"
+        if self.verbose == 1 and self._live_ok:
+            from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
+            with Progress(
+                TextColumn(f"  Step {self._step_no}: {label}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                console=_console,
+                transient=True,
+            ) as prog:
+                task = prog.add_task("fill", total=1.0)
+                model.fillgaps(showplot_scores=False, showplot_importance=False,
+                               progress_callback=lambda f: prog.update(task, completed=f))
+        else:
+            if self.verbose >= 2:
+                info(f"Step {self._step_no}: {label} ...")
+            model.fillgaps(showplot_scores=False, showplot_importance=False)
+        if self.verbose >= 1:
+            info(f"Step {self._step_no}: {label} ({perf_counter() - t0:.1f}s)")
 
         return model.results
