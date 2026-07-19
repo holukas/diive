@@ -81,17 +81,38 @@ The rest raise or fail at import:
   gaps modelled by XGBoost on SW_IN_POT + timestamp features; needs only lat/lon/UTC offset). With no context drivers
   every feature is a deterministic function of the timestamp, so the model reproduces a climatology and cannot recover
   a gap's sky state; passing a second radiation measurement (a pyranometer or PPFD sensor) through `context_df` is what
-  breaks that ceiling. An opt-in `interpolate_short_gaps=2` (~1 h on 30-min data) cuts daytime gap RMSE by 38% on
-  scattered gaps under the ceiling, but is off by default because it overwrites better model fills when a strong
-  context sensor is present (CH-DAV context-only 13.5 vs context+interp 66 W m-2). Defaults tuned late in the dev
+  breaks that ceiling. **The class is designed to need nothing but `series` + `lat`/`lon`/`utc_offset`**, so the
+  remaining settings adapt themselves. `interpolate_short_gaps` defaults to `'auto'`: clearness-index interpolation is
+  enabled at a 2-record limit when there is no `context_df` and disabled when there is, which is the better branch in
+  each direction (CH-DAV, 1 year, 15% scattered gaps: no-context 100.6 -> 75.2 W m-2 with it on, but PPFD-context
+  12.6 -> 66.0 if forced on). Defaults tuned late in the dev
   cycle, which shift results for anyone tracking `indev`: **nighttime offset correction is on by default**
   (`correct_nighttime_offset=True`), near a no-op on a quality-controlled series but removing the thermal-offset bias
   on a raw pyranometer record; **lag features are off by default** (`features_lag=[]`) because a lag of a gappy
   context driver is NaN whenever a neighbour is missing, which demotes otherwise-fillable records to the timestamp-only
   fallback; and **SW_IN_POT is excluded from the rolling and EMA stages**, since rolling/EMA variants of a
-  deterministic timestamp curve measure identically to leaving them out. A new `add_record_number=True` adds a
-  continuous record number as cheap insurance against sensor drift on long raw records (neutral on clean data). Also
-  `FeatureEngineer` as a standalone 8-stage pipeline, `GapFillingResult` +
+  deterministic timestamp curve measure identically to leaving them out. A continuous record number is added by
+  default (`add_continuous_record_number=True`) as cheap insurance against sensor drift on long raw records (neutral
+  on clean data). Feature-engineering settings are configured the same way as the XGBoost ones: a **`feature_kwargs`
+  dict** overriding the SW_IN defaults in `_FE_DEFAULTS`, replacing the individual `features_lag` /
+  `features_rolling` / `features_rolling_stats` / `features_ema` / `add_record_number` parameters. This reaches
+  *every* `FeatureEngineer` argument, including the diff, polynomial and STL stages that the old signature could not
+  express. Passing a `FeatureEngineer` argument as a top-level keyword now raises `TypeError` pointing at
+  `feature_kwargs` — previously it would have been swallowed into `**kwargs` and silently ignored by XGBRegressor.
+  XGBoost defaults are now set for SW_IN rather than inherited from XGBoost: **`n_estimators=3000`, `max_depth=6`,
+  `early_stopping_rounds=20`**, all overridable through `**kwargs`. The large tree budget with early stopping cuts
+  daytime-gap RMSE by 17% with no context driver (CH-DAV, 10 years, 20% gaps: 132 -> 109 W m-2) and 5% with a PPFD
+  context sensor (23.2 -> 21.9), stopping at ~600-1200 trees. Early stopping is not optional at this budget: building
+  all 3000 trees barely improves RMSE but makes the SHAP pass several times slower, since TreeSHAP cost is linear in
+  tree count. To keep that affordable, SHAP importances are now computed on a capped 10k-row subsample
+  (new `shap_max_rows` on `MlRegressorGapFillingBase` / `XGBoostTS`, `None` = every row and the default everywhere
+  else). Mean |SHAP| converges well before the full record — on a 10-year half-hourly record the subsample reproduced
+  the feature ranking exactly (Kendall tau 1.000) with importances within 2%. Predictions and scores are unaffected;
+  only the reported importances (and, if enabled, `reduce_features` selection) read the subsample. Also
+  `FeatureEngineer` as a standalone 8-stage pipeline, a new
+  `GapFillingResult.feature_importances_reduction` carrying the SHAP table as it stood *before* feature reduction
+  dropped anything — the only view that includes the `.RANDOM` benchmark column the keep threshold is derived from —
+  `GapFillingResult` +
   a `.results` property on every gap-filler, `plot_feature_importances()` on the ML base class, and a Rich console
   report at `verbose>=2`.
 - **Analysis**: `CompoundExtremes` (+ `CompoundExtremesPlot`), `GapStats`, `GrangerCausality`,
