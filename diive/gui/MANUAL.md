@@ -994,11 +994,14 @@ Inputs must be in the stated units (°C and %); diive does not check them.
 Calculate **potential shortwave-incoming radiation** (`SW_IN_POT`, in W m⁻²), also
 under the Variables menu's **Calculate** section. This one takes **no input columns** —
 potential radiation follows from the timestamps and the site's position alone — so
-there is no variable list to drag from. Set **Latitude**, **Longitude** and **UTC
-offset** under **Site coordinates**, then click **Calculate**.
+there is no variable list to drag from. Check the **Site coordinates** box, then click
+**Calculate**.
 
-The coordinates are seeded from **Settings ▸ Project settings** and follow it as you
-edit there. With no site configured the tab refuses to calculate and says so. Every
+**Latitude**, **Longitude** and **UTC offset** are shown read-only: they mirror
+**Settings ▸ Project settings** and update as you edit them there. To change them, go
+to Project settings — the coordinates have one home, so an edited copy here could
+silently produce a curve for a different site than the rest of the project runs on.
+With no site configured the tab refuses to calculate and says so. Every
 value it returns is a function of the coordinates, so an unconfigured site would hand
 back the curve for latitude 0, longitude 0 at UTC — which looks perfectly reasonable
 and is wrong for your site. Set the project's location first.
