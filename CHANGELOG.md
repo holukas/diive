@@ -177,6 +177,17 @@ The rest raise or fail at import:
   validated only when a split is requested.
 - **`SeasonalTrendDecomposition(method='stl')` always raised**: the wrapper never passed `period` and called an
   unsupported `STL.fit(weights=...)`.
+- **`Hampel` rejected the signal instead of the outliers wherever the local MAD was zero.** A window in which more than
+  half the records are identical has a MAD of exactly `0`; the code substituted `1e-6` to dodge the division, which
+  collapses the detection band to zero width and flags every value that differs from the local median at all. On a
+  soil-moisture record whose 10MIN era had been upsampled to 1MIN (runs of ten identical values) this rejected **19.4%
+  of that era — 97 085 records — at any `n_sigma`**: raising it from 8 to 100 changed the count by 1%. Such records are
+  now left unflagged, with the count reported, since a window with no scale cannot judge anything. **Results change**
+  for any series with flat or quantized stretches; a real spike surrounded by normal variability is unaffected.
+- **`Hampel(use_differencing=True)` differenced across gaps.** Missing records are dropped before the double
+  difference is taken, so the two records flanking every gap were compared with a partner hours or days away and looked
+  like spikes. Differences that span more than 1.5x the nominal record spacing are now excluded from the test.
+  **Results change** on gappy series.
 - **`StepwiseMeteoScreeningDb` raised on input with more than one time resolution**, i.e. on any variable whose logger
   changed sampling rate partway through the record. `_harmonize_timeresolution` built the upsampling frequency as
   `f'{targetfreq}S'` from the float seconds returned by `detect_freq_groups`, giving pandas the invalid alias
