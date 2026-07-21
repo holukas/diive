@@ -679,3 +679,35 @@ class TestOutlierDetection(unittest.TestCase):
         gooddata_nt_stats = gooddata_nt.describe()
         self.assertGreaterEqual(gooddata_nt_stats.loc['min']['s_noise'], nighttime_minmax[0])
         self.assertLessEqual(gooddata_nt_stats.loc['max']['s_noise'], nighttime_minmax[1])
+
+
+class TestVerboseStatistics(unittest.TestCase):
+    """verbose=True must print the per-iteration statistics the docstrings promise.
+    They go through detail(), which prints from VERBOSE_DEBUG, while verbose=True
+    maps to VERBOSE_PROGRESS - so the statistics used to be unreachable."""
+
+    def _series(self):
+        idx = pd.date_range('2020-05-01', periods=500, freq='1min', name='TIMESTAMP_MIDDLE')
+        rng = np.random.default_rng(3)
+        s = pd.Series(20 + rng.normal(0, 0.05, len(idx)), index=idx, name='SWC')
+        s.iloc[250] = 40.0
+        return s
+
+    def _run(self, verbose):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from diive.preprocessing.outlier_detection.hampel import Hampel
+
+        buf = StringIO()
+        with redirect_stdout(buf):
+            ham = Hampel(series=self._series(), lat=47.478333, lon=8.364389, utc_offset=1,
+                         window_length=60, n_sigma=8, use_differencing=True,
+                         separate_day_night=False, showplot=False, verbose=verbose)
+            ham.calc(repeat=False)
+        return buf.getvalue()
+
+    def test_verbose_true_prints_outlier_counts(self):
+        self.assertIn('Outliers', self._run(verbose=True))
+
+    def test_verbose_false_stays_quiet(self):
+        self.assertNotIn('Outliers', self._run(verbose=False))

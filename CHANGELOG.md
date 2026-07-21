@@ -188,6 +188,11 @@ The rest raise or fail at import:
   difference is taken, so the two records flanking every gap were compared with a partner hours or days away and looked
   like spikes. Differences that span more than 1.5x the nominal record spacing are now excluded from the test.
   **Results change** on gappy series.
+- **`verbose=True` printed no statistics** in `Hampel`, `zScore`, `LocalSD`, `LocalOutlierFactor` and `AbsoluteLimits`.
+  Their per-iteration "Total found outliers" lines go through `detail()`, which only prints from `VERBOSE_DEBUG` (3),
+  while the documented `verbose=True` maps to `VERBOSE_PROGRESS` (2) - so the one number the caller asked for was the
+  one number never shown, visible only in the preview figure's title. Those lines are now pinned to
+  `VERBOSE_PROGRESS`. Output only.
 - **`StepwiseMeteoScreeningDb` raised on input with more than one time resolution**, i.e. on any variable whose logger
   changed sampling rate partway through the record. `_harmonize_timeresolution` built the upsampling frequency as
   `f'{targetfreq}S'` from the float seconds returned by `detect_freq_groups`, giving pandas the invalid alias

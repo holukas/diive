@@ -23,7 +23,7 @@ from pandas import Series, DatetimeIndex
 
 import diive.core.funcs.funcs as funcs
 from diive.core.base.flagbase import FlagBase
-from diive.core.utils.console import detail
+from diive.core.utils.console import VERBOSE_PROGRESS, detail
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
 
@@ -184,7 +184,7 @@ class zScore(FlagBase):
         n_outliers = len(rejected)
 
         if self.verbose:
-            detail(f"ITERATION#{iteration}: Total found outliers: {len(rejected)} values", verbose=self.verbose)
+            detail(f"ITERATION#{iteration}: Total found outliers: {len(rejected)} values", verbose=self.verbose, min_level=VERBOSE_PROGRESS)
 
         return ok, rejected, n_outliers
 
@@ -238,7 +238,7 @@ class zScore(FlagBase):
             detail(f"ITERATION#{iteration}: Total found outliers: "
                    f"{n_outliers} (daytime+nighttime), "
                    f"{len(_rejected_dt)} (daytime), "
-                   f"{len(_rejected_nt)} (nighttime)", verbose=self.verbose)
+                   f"{len(_rejected_nt)} (nighttime)", verbose=self.verbose, min_level=VERBOSE_PROGRESS)
 
         return ok, rejected, n_outliers
 
@@ -343,6 +343,6 @@ class zScoreRolling(FlagBase):
         n_outliers = len(rejected)
 
         if self.verbose:
-            detail(f"ITERATION#{iteration}: Total found outliers: {len(rejected)} values", verbose=self.verbose)
+            detail(f"ITERATION#{iteration}: Total found outliers: {len(rejected)} values", verbose=self.verbose, min_level=VERBOSE_PROGRESS)
 
         return ok, rejected, n_outliers
