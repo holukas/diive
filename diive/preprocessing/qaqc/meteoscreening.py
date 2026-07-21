@@ -718,7 +718,7 @@ class StepwiseMeteoScreeningDb:
 
         This also converts the timestamp to TIMESTAMP_MIDDLE.
         """
-        offset = to_offset(pd.Timedelta(f'{targetfreq}s'))
+        offset = to_offset(pd.Timedelta(seconds=targetfreq))
         data_detailed = data_detailed.asfreq(offset.freqstr)
         data_detailed = TimestampSanitizer(data=data_detailed).get()
         return data_detailed
@@ -752,10 +752,12 @@ class StepwiseMeteoScreeningDb:
             # Add missing timestamp indexes at start of data
             start = groupdf.index[0] - pd.Timedelta(seconds=freq)
 
-            # Create hires timestamp index between start and end dates
+            # Create hires timestamp index between start and end dates.
+            # The frequencies come from detect_freq_groups and are floats (seconds),
+            # so they are passed as a Timedelta rather than built into a string.
             hires_ix = pd.date_range(start=start,
                                      end=groupdf.index[-1],
-                                     freq=f'{targetfreq}S')
+                                     freq=pd.Timedelta(seconds=targetfreq))
 
             # If target freq is e.g. 60S (1MIN) and current freq is 600S (10MIN)
             # then the 600S records are valid for ten 60S records, whereby
@@ -765,7 +767,7 @@ class StepwiseMeteoScreeningDb:
 
             # The timestamp is TIMESTAMP_END, therefore 'backfill'
             cur_upsampleddf = groupdf.reindex(hires_ix)
-            cur_upsampleddf = cur_upsampleddf.fillna(method='backfill', limit=limit)
+            cur_upsampleddf = cur_upsampleddf.bfill(limit=limit)
 
             # Delete first timestamp index, outside limit
             cur_upsampleddf = cur_upsampleddf.iloc[1:].copy()

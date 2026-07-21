@@ -177,6 +177,12 @@ The rest raise or fail at import:
   validated only when a split is requested.
 - **`SeasonalTrendDecomposition(method='stl')` always raised**: the wrapper never passed `period` and called an
   unsupported `STL.fit(weights=...)`.
+- **`StepwiseMeteoScreeningDb` raised on input with more than one time resolution**, i.e. on any variable whose logger
+  changed sampling rate partway through the record. `_harmonize_timeresolution` built the upsampling frequency as
+  `f'{targetfreq}S'` from the float seconds returned by `detect_freq_groups`, giving pandas the invalid alias
+  `'60.0S'`, and then back-filled with the `fillna(method=...)` removed in pandas 3. Frequencies are now passed as
+  `Timedelta`. Single-resolution input never reached either line, which is why this survived the pandas 3 migration
+  untested; `tests/test_meteoscreening.py` now covers both paths.
 - **`HeatmapYearMonth` raised `AttributeError`** from a wrong import path.
 - **`import diive` forced the matplotlib `Agg` backend**, disabling interactive windows.
 - **`_TeeConsole` double-printed every `rule()`** to mirror consoles such as the GUI Log tab.
