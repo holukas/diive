@@ -169,9 +169,10 @@ def default_format(ax,
     # Spines
     format_spines(ax=ax, color=color, lw=spines_lw)
 
-    # Set x-label
-    ax.set_xlabel(ax_xlabel_txt, color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
-                  fontweight=ax_labels_fontweight)
+    # Set x-label. The "no label" default for these parameters is False, which
+    # matplotlib renders literally as the string "False" - pass an empty label.
+    ax.set_xlabel(ax_xlabel_txt if ax_xlabel_txt else '', color=ax_labels_fontcolor,
+                  fontsize=ax_labels_fontsize, fontweight=ax_labels_fontweight)
 
     # Set y-label
     if ax_ylabel_txt and txt_ylabel_units:
@@ -179,7 +180,7 @@ def default_format(ax,
     elif ax_ylabel_txt and not txt_ylabel_units:
         _ax_ylabel_txt = f"{ax_ylabel_txt}"
     else:
-        _ax_ylabel_txt = ax_ylabel_txt
+        _ax_ylabel_txt = ''
     ax.set_ylabel(_ax_ylabel_txt, color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
                   fontweight=ax_labels_fontweight)
 

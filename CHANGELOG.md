@@ -193,6 +193,9 @@ The rest raise or fail at import:
   while the documented `verbose=True` maps to `VERBOSE_PROGRESS` (2) - so the one number the caller asked for was the
   one number never shown, visible only in the preview figure's title. Those lines are now pinned to
   `VERBOSE_PROGRESS`. Output only.
+- **`default_format` wrote the string "False" into axis labels.** Its "no label" default is `False`, which was passed
+  straight to `ax.set_xlabel()` / `ax.set_ylabel()` and rendered literally on every plot that relied on the defaults,
+  including the outlier detection preview plots.
 - **`StepwiseMeteoScreeningDb` raised on input with more than one time resolution**, i.e. on any variable whose logger
   changed sampling rate partway through the record. `_harmonize_timeresolution` built the upsampling frequency as
   `f'{targetfreq}S'` from the float seconds returned by `detect_freq_groups`, giving pandas the invalid alias

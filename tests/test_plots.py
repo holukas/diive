@@ -282,3 +282,24 @@ class TestPlots(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestDefaultFormatLabels(unittest.TestCase):
+    """default_format used to write the string 'False' into the axis labels,
+    because False is its 'no label' default and was passed straight to matplotlib."""
+
+    def test_no_label_means_empty_label(self):
+        from diive.core.plotting.plotfuncs import default_format
+        fig, ax = plt.subplots()
+        default_format(ax=ax)
+        self.assertEqual(ax.get_xlabel(), '')
+        self.assertEqual(ax.get_ylabel(), '')
+        plt.close(fig)
+
+    def test_labels_still_work_when_given(self):
+        from diive.core.plotting.plotfuncs import default_format
+        fig, ax = plt.subplots()
+        default_format(ax=ax, ax_xlabel_txt='time', ax_ylabel_txt='SWC', txt_ylabel_units='[%]')
+        self.assertEqual(ax.get_xlabel(), 'time')
+        self.assertEqual(ax.get_ylabel(), 'SWC  [%]')
+        plt.close(fig)
