@@ -394,6 +394,35 @@ class TestAnalyses(unittest.TestCase):
         with self.assertRaises(ValueError):
             CompoundExtremes(var1=vpd.rename('X'), var2=swc.rename('X'))
 
+    def test_sstats_degenerate_input(self):
+        """sstats must not raise on series with no valid values.
+
+        An all-NaN series is ordinary (a variable with no data in the selected
+        period). It used to raise ZeroDivisionError, and an empty series raised
+        IndexError.
+        """
+        import numpy as np
+        import pandas as pd
+        from diive.core.dfun.stats import sstats
+
+        idx = pd.date_range('2024-01-01', periods=10, freq='30min', name='TIMESTAMP_MIDDLE')
+
+        empty = sstats(pd.Series([], dtype=float, name='X', index=pd.DatetimeIndex([])))
+        self.assertEqual(empty.loc['NOV', 'X'], 0)
+        self.assertTrue(pd.isna(empty.loc['STARTDATE', 'X']))
+        self.assertTrue(pd.isna(empty.loc['OUTLIER_PERC', 'X']))
+
+        allnan = sstats(pd.Series([np.nan] * 10, name='X', index=idx))
+        self.assertEqual(allnan.loc['NOV', 'X'], 0)
+        self.assertTrue(pd.isna(allnan.loc['OUTLIER_PERC', 'X']))
+        # The index still has records, so the date range stays reportable.
+        self.assertFalse(pd.isna(allnan.loc['STARTDATE', 'X']))
+
+        # A populated series is unaffected.
+        normal = sstats(pd.Series(np.arange(10, dtype=float), name='X', index=idx))
+        self.assertEqual(normal.loc['NOV', 'X'], 10)
+        self.assertEqual(normal.loc['OUTLIER_PERC', 'X'], 0.0)
+
 
 if __name__ == '__main__':
     unittest.main()

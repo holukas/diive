@@ -45,17 +45,23 @@ def q95(x):
 
 
 def series_start(series: pd.Series, dtformat: str = "%Y-%m-%d %H:%M"):
-    """Return start datetime of series"""
+    """Return start datetime of series, or NaT if it has no records"""
+    if series.index.empty:
+        return pd.NaT
     return series.index[0].strftime(dtformat)
 
 
 def series_end(series: pd.Series, dtformat: str = "%Y-%m-%d %H:%M"):
-    """Return end datetime of series"""
+    """Return end datetime of series, or NaT if it has no records"""
+    if series.index.empty:
+        return pd.NaT
     return series.index[-1].strftime(dtformat)
 
 
 def series_duration(series: pd.Series):
-    """Return duration of series"""
+    """Return duration of series, or NaT if it has no records"""
+    if series.index.empty:
+        return pd.NaT
     return series.index[-1] - series.index[0]
 
 
@@ -213,8 +219,15 @@ def outlier_count(s: Series, threshold: float = 3, method: str = 'zscore') -> in
 
 
 def outlier_percentage(s: Series, threshold: float = 3, method: str = 'zscore') -> float:
-    """Outlier count as percentage of total values."""
-    return (outlier_count(s, threshold, method) / len(s.dropna())) * 100
+    """Outlier count as percentage of total values, or NaN if there are none.
+
+    A series with no valid values is ordinary here (a variable with no data in
+    the selected period), so it must not raise on the empty denominator.
+    """
+    n_valid = len(s.dropna())
+    if n_valid == 0:
+        return float('nan')
+    return (outlier_count(s, threshold, method) / n_valid) * 100
 
 
 def cumulative_sum(s: Series) -> float:
