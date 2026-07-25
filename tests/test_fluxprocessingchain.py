@@ -82,7 +82,7 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         data31, sod = make_level32_detector(data31)
         sod.flag_outliers_abslim_test(
             separate_day_night=True,
-            daytime_minmax=[-50, 50], nighttime_minmax=[-50, 50],
+            minval_daytime=-50, maxval_daytime=50, minval_nighttime=-50, maxval_nighttime=50,
             showplot=False, verbose=False,
         )
         sod.addflag()

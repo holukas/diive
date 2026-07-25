@@ -66,8 +66,8 @@ series_dn = pd.Series(data_dn, index=tidx_dn, name='flux')
 
 al_dtnt = dv.outliers.AbsoluteLimitsDaytimeNighttime(
     series=series_dn,
-    daytime_minmax=[6.2, 74.9],   # Wider range for daytime
-    nighttime_minmax=[29.5, 47.4],  # Narrower range for nighttime
+    minval_daytime=6.2, maxval_daytime=74.9,   # Wider range for daytime
+    minval_nighttime=29.5, maxval_nighttime=47.4,  # Narrower range for nighttime
     idstr='dtnt',
     lat=47.286417,
     lon=7.733750,

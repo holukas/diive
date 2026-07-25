@@ -65,8 +65,10 @@ class AbsoluteLimits(FlagBase):
                  minval: float = None,
                  maxval: float = None,
                  separate_day_night: bool = False,
-                 daytime_minmax: list[float, float] = None,
-                 nighttime_minmax: list[float, float] = None,
+                 minval_daytime: float = None,
+                 maxval_daytime: float = None,
+                 minval_nighttime: float = None,
+                 maxval_nighttime: float = None,
                  lat: float = None,
                  lon: float = None,
                  utc_offset: int = None,
@@ -85,10 +87,14 @@ class AbsoluteLimits(FlagBase):
                 separate_day_night=False.
             separate_day_night: If True, use separate day/night thresholds;
                 if False, use global thresholds. Default False.
-            daytime_minmax: [min, max] acceptable range during daytime (day/night mode).
-                Required if separate_day_night=True.
-            nighttime_minmax: [min, max] acceptable range during nighttime (day/night mode).
-                Required if separate_day_night=True.
+            minval_daytime: Override ``minval`` for daytime records only. If None,
+                uses ``minval``. Setting it turns ``separate_day_night`` on.
+            maxval_daytime: Override ``maxval`` for daytime records only. If None,
+                uses ``maxval``. Setting it turns ``separate_day_night`` on.
+            minval_nighttime: Override ``minval`` for nighttime records only. If
+                None, uses ``minval``. Setting it turns ``separate_day_night`` on.
+            maxval_nighttime: Override ``maxval`` for nighttime records only. If
+                None, uses ``maxval``. Setting it turns ``separate_day_night`` on.
             lat: Latitude of location as float (required for day/night mode).
                 Example: 46.583056
             lon: Longitude of location as float (required for day/night mode).
@@ -102,13 +108,22 @@ class AbsoluteLimits(FlagBase):
         reject_legacy_params(legacy, 'AbsoluteLimits')
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
 
-        # Auto-detect separate_day_night if day/night params are provided
-        if daytime_minmax is not None or nighttime_minmax is not None:
+        # Setting any per-period limit turns the split on, so correct usage works
+        # whether or not the caller also passes separate_day_night.
+        _overrides = (minval_daytime, maxval_daytime, minval_nighttime, maxval_nighttime)
+        if any(v is not None for v in _overrides):
             separate_day_night = True
 
         self.separate_day_night = separate_day_night
         self.showplot = showplot
         self.verbose = verbose
+
+        # Per-period limits default to None and fall back to the global limits,
+        # so minval/maxval alone apply to both periods.
+        self.minval_daytime = minval_daytime if minval_daytime is not None else minval
+        self.maxval_daytime = maxval_daytime if maxval_daytime is not None else maxval
+        self.minval_nighttime = minval_nighttime if minval_nighttime is not None else minval
+        self.maxval_nighttime = maxval_nighttime if maxval_nighttime is not None else maxval
 
         # Per-iteration detection band in data units (set by _flagtests); exposed
         # for visualisation. For absolute limits the band is the fixed min/max, so
@@ -118,20 +133,24 @@ class AbsoluteLimits(FlagBase):
         self.is_daytime = None  # global mode; day/night branch overrides below
 
         if separate_day_night:
-            # Day/night mode
-            if daytime_minmax is None or nighttime_minmax is None:
+            # Day/night mode. Each period needs a resolved pair, which is either
+            # its own override or the global limit it fell back to above.
+            _missing = [n for n, v in (('minval_daytime', self.minval_daytime),
+                                       ('maxval_daytime', self.maxval_daytime),
+                                       ('minval_nighttime', self.minval_nighttime),
+                                       ('maxval_nighttime', self.maxval_nighttime))
+                        if v is None]
+            if _missing:
                 raise ValueError(
-                    "daytime_minmax and nighttime_minmax are required when "
-                    "separate_day_night=True"
+                    f"no limit for {', '.join(_missing)} when separate_day_night=True. "
+                    f"Set minval and maxval to cover both periods, or give the "
+                    f"per-period limits explicitly."
                 )
             if lat is None or lon is None or utc_offset is None:
                 raise ValueError(
                     "lat, lon, and utc_offset are required for daytime/nighttime "
                     "detection (separate_day_night=True)"
                 )
-
-            self.daytime_minmax = daytime_minmax
-            self.nighttime_minmax = nighttime_minmax
 
             # Detect daytime and nighttime
             self.flag_daytime, flag_nighttime, self.is_daytime, self.is_nighttime = (
@@ -211,16 +230,16 @@ class AbsoluteLimits(FlagBase):
 
         # Run for daytime (dt)
         _s_dt = s[self.is_daytime].copy()  # Daytime data
-        _ok_dt = (_s_dt >= self.daytime_minmax[0]) & (_s_dt <= self.daytime_minmax[1])
+        _ok_dt = (_s_dt >= self.minval_daytime) & (_s_dt <= self.maxval_daytime)
         _ok_dt = _ok_dt[_ok_dt].index
-        _rejected_dt = (_s_dt < self.daytime_minmax[0]) | (_s_dt > self.daytime_minmax[1])
+        _rejected_dt = (_s_dt < self.minval_daytime) | (_s_dt > self.maxval_daytime)
         _rejected_dt = _rejected_dt[_rejected_dt].index
 
         # Run for nighttime (nt)
         _s_nt = s[self.is_nighttime].copy()  # Nighttime data
-        _ok_nt = (_s_nt >= self.nighttime_minmax[0]) & (_s_nt <= self.nighttime_minmax[1])
+        _ok_nt = (_s_nt >= self.minval_nighttime) & (_s_nt <= self.maxval_nighttime)
         _ok_nt = _ok_nt[_ok_nt].index
-        _rejected_nt = (_s_nt < self.nighttime_minmax[0]) | (_s_nt > self.nighttime_minmax[1])
+        _rejected_nt = (_s_nt < self.minval_nighttime) | (_s_nt > self.maxval_nighttime)
         _rejected_nt = _rejected_nt[_rejected_nt].index
 
         # Collect daytime and nighttime flags in one overall flag
@@ -235,11 +254,11 @@ class AbsoluteLimits(FlagBase):
         # limits, nighttime records the nighttime limits (combined over the union
         # index for day/night-coloured visualisation).
         self.last_lower_bound = pd.concat([
-            pd.Series(self.daytime_minmax[0], index=_s_dt.index),
-            pd.Series(self.nighttime_minmax[0], index=_s_nt.index)]).sort_index()
+            pd.Series(self.minval_daytime, index=_s_dt.index),
+            pd.Series(self.minval_nighttime, index=_s_nt.index)]).sort_index()
         self.last_upper_bound = pd.concat([
-            pd.Series(self.daytime_minmax[1], index=_s_dt.index),
-            pd.Series(self.nighttime_minmax[1], index=_s_nt.index)]).sort_index()
+            pd.Series(self.maxval_daytime, index=_s_dt.index),
+            pd.Series(self.maxval_nighttime, index=_s_nt.index)]).sort_index()
 
         ok = (flag == 0)
         ok = ok[ok].index
@@ -264,7 +283,8 @@ def AbsoluteLimitsDaytimeNighttime(*args, separate_day_night: bool = True, **kwa
 
     A wrapper function rather than a subclass because ``ConsoleOutputDecorator``
     replaces the decorated class with a function, which cannot be subclassed.
-    Pass ``daytime_minmax`` / ``nighttime_minmax`` for the per-period limits,
-    plus ``lat`` / ``lon`` / ``utc_offset``.
+    Pass ``minval`` / ``maxval`` to cover both periods, and the
+    ``*_daytime`` / ``*_nighttime`` overrides to differ, plus ``lat`` /
+    ``lon`` / ``utc_offset``.
     """
     return AbsoluteLimits(*args, separate_day_night=separate_day_night, **kwargs)

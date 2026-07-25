@@ -479,23 +479,26 @@ class StepwiseMeteoScreeningDb:
 
     def flag_outliers_abslim_test(self, minval: float = None, maxval: float = None,
                                   separate_day_night: bool = False,
-                                  daytime_minmax: list = None, nighttime_minmax: list = None,
+                                  minval_daytime: float = None, maxval_daytime: float = None,
+                                  minval_nighttime: float = None, maxval_nighttime: float = None,
                                   showplot: bool = False, verbose: bool = False):
         """Identify outliers based on absolute limits (global or separate day/night).
 
         Parameters
         ----------
         minval : float, optional
-            Minimum acceptable value (global mode). Required if separate_day_night=False.
+            Minimum acceptable value. Applies to both periods unless overridden.
         maxval : float, optional
-            Maximum acceptable value (global mode). Required if separate_day_night=False.
+            Maximum acceptable value. Applies to both periods unless overridden.
         separate_day_night : bool, default False
             If False, apply single threshold globally across all records.
             If True, apply separate thresholds for daytime and nighttime data.
-        daytime_minmax : [min, max], optional
-            Acceptable range during daytime (required if separate_day_night=True).
-        nighttime_minmax : [min, max], optional
-            Acceptable range during nighttime (required if separate_day_night=True).
+        minval_daytime, maxval_daytime : float, optional
+            Override minval/maxval for daytime records. Setting either turns
+            separate_day_night on.
+        minval_nighttime, maxval_nighttime : float, optional
+            Override minval/maxval for nighttime records. Setting either turns
+            separate_day_night on.
         showplot : bool, default False
             If True, display visualization of flagged outliers
         verbose : bool, default False
@@ -505,8 +508,10 @@ class StepwiseMeteoScreeningDb:
             self.outlier_detection[field].flag_outliers_abslim_test(minval=minval,
                                                                     maxval=maxval,
                                                                     separate_day_night=separate_day_night,
-                                                                    daytime_minmax=daytime_minmax,
-                                                                    nighttime_minmax=nighttime_minmax,
+                                                                    minval_daytime=minval_daytime,
+                                                                    maxval_daytime=maxval_daytime,
+                                                                    minval_nighttime=minval_nighttime,
+                                                                    maxval_nighttime=maxval_nighttime,
                                                                     showplot=showplot,
                                                                     verbose=verbose)
 

@@ -49,8 +49,10 @@ print(f"  Range: {s_noise.min():.2f} to {s_noise.max():.2f}°C")
 lsd_dtnt = dv.outliers.LocalSD(
     series=s_noise,
     separate_day_night=True,
-    n_sd=[3, 2],
-    winsize=[48 * 2, 48 * 1],  # 2-day daytime window, 1-day nighttime
+    n_sd_daytime=3,
+    n_sd_nighttime=2,
+    winsize_daytime=48 * 2,  # 2-day daytime window
+    winsize_nighttime=48 * 1,  # 1-day nighttime window
     constant_sd=False,
     lat=46.0,
     lon=11.0,

@@ -13,6 +13,12 @@ from diive.variables import DaytimeNighttimeFlag
 # the outlier detectors. Old name -> new name.
 _RENAMED_DAYNIGHT_PARAMS = {
     'separate_daytime_nighttime': 'separate_day_night',
+    # AbsoluteLimits: one [min, max] pair per period became two overrides each.
+    'daytime_minmax': 'minval_daytime / maxval_daytime',
+    'nighttime_minmax': 'minval_nighttime / maxval_nighttime',
+    # Hampel carried two names for each of its two thresholds.
+    'n_sigma_dt': 'n_sigma_daytime',
+    'n_sigma_nt': 'n_sigma_nighttime',
 }
 
 

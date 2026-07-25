@@ -372,37 +372,48 @@ class StepwiseOutlierDetection:
 
     def flag_outliers_abslim_test(self, minval: float = None, maxval: float = None,
                                   separate_day_night: bool = False,
-                                  daytime_minmax: list[float, float] = None,
-                                  nighttime_minmax: list[float, float] = None,
+                                  minval_daytime: float = None,
+                                  maxval_daytime: float = None,
+                                  minval_nighttime: float = None,
+                                  maxval_nighttime: float = None,
                                   showplot: bool = False, verbose: bool = False):
         """Identify outliers based on absolute limits.
 
         Parameters
         ----------
         minval : float, optional
-            Minimum acceptable value (global mode). Required if separate_day_night=False.
+            Minimum acceptable value. Applies to both periods unless overridden.
         maxval : float, optional
-            Maximum acceptable value (global mode). Required if separate_day_night=False.
+            Maximum acceptable value. Applies to both periods unless overridden.
         separate_day_night : bool, default False
             If True, use separate day/night thresholds; if False, use global thresholds.
-        daytime_minmax : [min, max], optional
-            Acceptable range during daytime (required if separate_day_night=True).
-        nighttime_minmax : [min, max], optional
-            Acceptable range during nighttime (required if separate_day_night=True).
+        minval_daytime, maxval_daytime : float, optional
+            Override minval/maxval for daytime records. Setting either turns
+            separate_day_night on.
+        minval_nighttime, maxval_nighttime : float, optional
+            Override minval/maxval for nighttime records. Setting either turns
+            separate_day_night on.
         showplot : bool, default False
             If True, display visualization of flagged outliers
         verbose : bool, default False
             If True, print flagging statistics
         """
         series_cleaned = self._series_hires_cleaned.copy()
+        # Any per-period override turns the split on inside AbsoluteLimits, so the
+        # coords below must follow the same rule or they would be withheld.
+        separate_day_night = separate_day_night or any(
+            v is not None for v in (minval_daytime, maxval_daytime,
+                                    minval_nighttime, maxval_nighttime))
         # For setting absolute limits no iteration is necessary, therefore always repeat=False
         flagtest = AbsoluteLimits(
             series=series_cleaned,
             minval=minval,
             maxval=maxval,
             separate_day_night=separate_day_night,
-            daytime_minmax=daytime_minmax,
-            nighttime_minmax=nighttime_minmax,
+            minval_daytime=minval_daytime,
+            maxval_daytime=maxval_daytime,
+            minval_nighttime=minval_nighttime,
+            maxval_nighttime=maxval_nighttime,
             lat=self.site_lat if separate_day_night else None,
             lon=self.site_lon if separate_day_night else None,
             utc_offset=self.utc_offset if separate_day_night else None,

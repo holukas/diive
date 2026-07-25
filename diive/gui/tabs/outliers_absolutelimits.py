@@ -109,8 +109,8 @@ class AbsoluteLimitsTab(BaseOutlierTab):
         if self.daynight_cb.isChecked():
             return dict(
                 separate_day_night=True,
-                daytime_minmax=[self.dt_min.value(), self.dt_max.value()],
-                nighttime_minmax=[self.nt_min.value(), self.nt_max.value()],
+                minval_daytime=self.dt_min.value(), maxval_daytime=self.dt_max.value(),
+                minval_nighttime=self.nt_min.value(), maxval_nighttime=self.nt_max.value(),
                 lat=self.lat.value(), lon=self.lon.value(), utc_offset=self.utc.value(),
             )
         return dict(minval=self.minval.value(), maxval=self.maxval.value())

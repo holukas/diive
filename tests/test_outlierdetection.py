@@ -157,8 +157,8 @@ class TestOutlierDetection(unittest.TestCase):
 
         ham = HampelDaytimeNighttime(
             series=s_noise,
-            n_sigma_dt=5.5,
-            n_sigma_nt=5.5,
+            n_sigma_daytime=5.5,
+            n_sigma_nighttime=5.5,
             window_length=48 * 3,
             use_differencing=False,
             separate_day_night=True,
@@ -207,8 +207,8 @@ class TestOutlierDetection(unittest.TestCase):
 
         ham = HampelDaytimeNighttime(
             series=s_noise,
-            n_sigma_dt=100,
-            n_sigma_nt=100,
+            n_sigma_daytime=100,
+            n_sigma_nighttime=100,
             window_length=48,
             use_differencing=True,
             separate_day_night=True,
@@ -257,8 +257,8 @@ class TestOutlierDetection(unittest.TestCase):
 
         ham = HampelDaytimeNighttime(
             series=s_noise,
-            n_sigma_dt=5.5,
-            n_sigma_nt=5.5,
+            n_sigma_daytime=5.5,
+            n_sigma_nighttime=5.5,
             window_length=48,
             use_differencing=False,
             separate_day_night=False,
@@ -429,8 +429,10 @@ class TestOutlierDetection(unittest.TestCase):
         lsd = LocalSD(
             series=s_noise,
             separate_day_night=True,
-            n_sd=[3, 2],
-            winsize=[48 * 2, 48 * 1],
+            n_sd_daytime=3,
+            n_sd_nighttime=2,
+            winsize_daytime=48 * 2,
+            winsize_nighttime=48 * 1,
             constant_sd=False,
             lat=46.0,
             lon=11.0,
@@ -643,8 +645,10 @@ class TestOutlierDetection(unittest.TestCase):
             lat=46.815333,
             lon=9.855972,
             utc_offset=1,
-            daytime_minmax=daytime_minmax,
-            nighttime_minmax=nighttime_minmax
+            minval_daytime=daytime_minmax[0],
+            maxval_daytime=daytime_minmax[1],
+            minval_nighttime=nighttime_minmax[0],
+            maxval_nighttime=nighttime_minmax[1],
         )
         al.calc(repeat=False)
         flag = al.get_flag()
@@ -748,15 +752,29 @@ class TestDaytimeNighttimeNames(unittest.TestCase):
         self.assertNotEqual(n_flagged(LocalOutlierFactorDaytimeNighttime),
                             n_flagged(LocalOutlierFactorAllData))
 
-    def test_absolutelimits_daytime_nighttime_rejects_whole_series_limits(self):
+    def test_absolutelimits_daytime_nighttime_applies_per_period_limits(self):
         s = self._diel_series(periods=48 * 10)
-        # minval/maxval are whole-series limits; this used to silently apply
-        # them under a name promising a day/night split.
-        with self.assertRaises(ValueError):
-            AbsoluteLimitsDaytimeNighttime(series=s.copy(), minval=-5, maxval=25, **self.COORDS)
 
-        # Per-period limits are the intended usage and still work.
-        al = AbsoluteLimitsDaytimeNighttime(series=s.copy(), daytime_minmax=[4.0, 25.0],
-                                            nighttime_minmax=[-5.0, 10.0], **self.COORDS)
+        # Per-period overrides are the intended usage.
+        al = AbsoluteLimitsDaytimeNighttime(series=s.copy(),
+                                            minval_daytime=4.0, maxval_daytime=25.0,
+                                            minval_nighttime=-5.0, maxval_nighttime=10.0,
+                                            **self.COORDS)
         al.calc(repeat=False)
         self.assertGreater(int((al.overall_flag == 2).sum()), 0)
+
+        # minval/maxval alone cover both periods, per the shared day/night
+        # convention. AbsoluteLimits is pointwise, so equal limits on both sides
+        # must give exactly the same flags as not separating at all.
+        split = AbsoluteLimitsDaytimeNighttime(series=s.copy(), minval=-5, maxval=25, **self.COORDS)
+        split.calc(repeat=False)
+        whole = AbsoluteLimits(series=s.copy(), minval=-5, maxval=25, separate_day_night=False)
+        whole.calc(repeat=False)
+        self.assertEqual(int((split.overall_flag == 2).sum()),
+                         int((whole.overall_flag == 2).sum()))
+
+        # The removed pair name reports its replacement.
+        with self.assertRaises(TypeError) as ctx:
+            AbsoluteLimitsDaytimeNighttime(series=s.copy(), daytime_minmax=[4.0, 25.0],
+                                           nighttime_minmax=[-5.0, 10.0], **self.COORDS)
+        self.assertIn('minval_daytime', str(ctx.exception))

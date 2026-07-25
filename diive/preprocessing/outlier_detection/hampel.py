@@ -32,7 +32,7 @@ from pandas import DatetimeIndex, Series
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import VERBOSE_PROGRESS, detail, warn
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
+from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags, reject_legacy_params
 
 
 @ConsoleOutputDecorator()
@@ -64,14 +64,13 @@ class Hampel(FlagBase):
                  n_sigma: float = 5.5,
                  n_sigma_daytime: float = None,
                  n_sigma_nighttime: float = None,
-                 n_sigma_dt: float = None,
-                 n_sigma_nt: float = None,
                  k: float = 1.4826,
                  use_differencing: bool = True,
                  separate_day_night: bool = True,
                  idstr: str = None,
                  showplot: bool = False,
-                 verbose: bool = False):
+                 verbose: bool = False,
+                 **legacy):
         """
         Initialize Hampel filter for outlier detection.
 
@@ -130,22 +129,16 @@ class Hampel(FlagBase):
 
         """
 
+        reject_legacy_params(legacy, 'Hampel')
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = showplot
         self.verbose = verbose
         self.window_length = window_length
         self.n_sigma = n_sigma
-        # n_sigma_dt / n_sigma_nt are deprecated short-form aliases for
-        # n_sigma_daytime / n_sigma_nighttime. They still take precedence when set.
-        if n_sigma_dt is not None or n_sigma_nt is not None:
-            import warnings
-            warnings.warn("Hampel: `n_sigma_dt`/`n_sigma_nt` are deprecated; use "
-                          "`n_sigma_daytime`/`n_sigma_nighttime` instead.",
-                          DeprecationWarning, stacklevel=2)
-        _n_sigma_daytime = n_sigma_dt if n_sigma_dt is not None else n_sigma_daytime
-        _n_sigma_nighttime = n_sigma_nt if n_sigma_nt is not None else n_sigma_nighttime
-        self.n_sigma_daytime = _n_sigma_daytime if _n_sigma_daytime is not None else n_sigma
-        self.n_sigma_nighttime = _n_sigma_nighttime if _n_sigma_nighttime is not None else n_sigma
+        # Per-period overrides default to None and fall back to the global value,
+        # so changing n_sigma alone still affects both periods.
+        self.n_sigma_daytime = n_sigma_daytime if n_sigma_daytime is not None else n_sigma
+        self.n_sigma_nighttime = n_sigma_nighttime if n_sigma_nighttime is not None else n_sigma
         self.k = k
         self.use_differencing = use_differencing
         self.separate_day_night = separate_day_night

@@ -113,8 +113,10 @@ class LocalSDOutlierTab(BaseOutlierTab):
         constant_sd = self.constant_cb.isChecked()
         if self.daynight_cb.isChecked():
             return dict(
-                n_sd=[self.n_sd_dt.value(), self.n_sd_nt.value()],
-                winsize=[self.winsize_dt.value(), self.winsize_nt.value()],
+                n_sd_daytime=self.n_sd_dt.value(),
+                n_sd_nighttime=self.n_sd_nt.value(),
+                winsize_daytime=self.winsize_dt.value(),
+                winsize_nighttime=self.winsize_nt.value(),
                 constant_sd=constant_sd,
                 separate_day_night=True,
                 lat=self.lat.value(), lon=self.lon.value(), utc_offset=self.utc.value(),
