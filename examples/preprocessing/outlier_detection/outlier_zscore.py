@@ -53,7 +53,7 @@ print(f"  Data retained: {(flag_global != 2).sum()}")
 
 detector_dtnt = dv.outliers.zScore(
     series=series,
-    separate_daytime_nighttime=True,
+    separate_day_night=True,
     lat=47.286417,
     lon=7.733750,
     utc_offset=1,

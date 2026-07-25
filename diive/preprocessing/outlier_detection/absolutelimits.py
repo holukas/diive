@@ -27,7 +27,7 @@ from pandas import Series, DatetimeIndex
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import VERBOSE_PROGRESS, detail
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
+from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags, reject_legacy_params
 
 
 @ConsoleOutputDecorator()
@@ -36,10 +36,10 @@ class AbsoluteLimits(FlagBase):
 
     Identifies values outside specified acceptable range(s). Can operate in two modes:
 
-    1. **Global Mode (separate_daytime_nighttime=False):**
+    1. **Global Mode (separate_day_night=False):**
        Single threshold range applied to all data. Fast, simple validation.
 
-    2. **Daytime/Nighttime Mode (separate_daytime_nighttime=True):**
+    2. **Daytime/Nighttime Mode (separate_day_night=True):**
        Separate threshold ranges for daytime and nighttime periods. Useful when
        data characteristics vary significantly between day and night conditions.
 
@@ -64,7 +64,7 @@ class AbsoluteLimits(FlagBase):
                  series: Series,
                  minval: float = None,
                  maxval: float = None,
-                 separate_daytime_nighttime: bool = False,
+                 separate_day_night: bool = False,
                  daytime_minmax: list[float, float] = None,
                  nighttime_minmax: list[float, float] = None,
                  lat: float = None,
@@ -72,22 +72,23 @@ class AbsoluteLimits(FlagBase):
                  utc_offset: int = None,
                  idstr: str = None,
                  showplot: bool = False,
-                 verbose: bool = False):
+                 verbose: bool = False,
+                 **legacy):
         """
         Initialize absolute limits outlier detector.
 
         Args:
             series: Time series in which outliers are identified.
             minval: Minimum acceptable value (global mode). Required if
-                separate_daytime_nighttime=False.
+                separate_day_night=False.
             maxval: Maximum acceptable value (global mode). Required if
-                separate_daytime_nighttime=False.
-            separate_daytime_nighttime: If True, use separate day/night thresholds;
+                separate_day_night=False.
+            separate_day_night: If True, use separate day/night thresholds;
                 if False, use global thresholds. Default False.
             daytime_minmax: [min, max] acceptable range during daytime (day/night mode).
-                Required if separate_daytime_nighttime=True.
+                Required if separate_day_night=True.
             nighttime_minmax: [min, max] acceptable range during nighttime (day/night mode).
-                Required if separate_daytime_nighttime=True.
+                Required if separate_day_night=True.
             lat: Latitude of location as float (required for day/night mode).
                 Example: 46.583056
             lon: Longitude of location as float (required for day/night mode).
@@ -98,13 +99,14 @@ class AbsoluteLimits(FlagBase):
             showplot: Show plot with removed data points.
             verbose: More text output to console if True.
         """
+        reject_legacy_params(legacy, 'AbsoluteLimits')
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
 
-        # Auto-detect separate_daytime_nighttime if day/night params are provided
+        # Auto-detect separate_day_night if day/night params are provided
         if daytime_minmax is not None or nighttime_minmax is not None:
-            separate_daytime_nighttime = True
+            separate_day_night = True
 
-        self.separate_daytime_nighttime = separate_daytime_nighttime
+        self.separate_day_night = separate_day_night
         self.showplot = showplot
         self.verbose = verbose
 
@@ -115,17 +117,17 @@ class AbsoluteLimits(FlagBase):
         self.last_lower_bound = None
         self.is_daytime = None  # global mode; day/night branch overrides below
 
-        if separate_daytime_nighttime:
+        if separate_day_night:
             # Day/night mode
             if daytime_minmax is None or nighttime_minmax is None:
                 raise ValueError(
                     "daytime_minmax and nighttime_minmax are required when "
-                    "separate_daytime_nighttime=True"
+                    "separate_day_night=True"
                 )
             if lat is None or lon is None or utc_offset is None:
                 raise ValueError(
                     "lat, lon, and utc_offset are required for daytime/nighttime "
-                    "detection (separate_daytime_nighttime=True)"
+                    "detection (separate_day_night=True)"
                 )
 
             self.daytime_minmax = daytime_minmax
@@ -142,7 +144,7 @@ class AbsoluteLimits(FlagBase):
             # Global mode
             if minval is None or maxval is None:
                 raise ValueError(
-                    "minval and maxval are required when separate_daytime_nighttime=False"
+                    "minval and maxval are required when separate_day_night=False"
                 )
 
             self.minval = minval
@@ -158,7 +160,7 @@ class AbsoluteLimits(FlagBase):
                 filteredseries)`` invoked after each iteration (e.g. to drive a
                 progress bar / live-update the cleaned series).
         """
-        if self.separate_daytime_nighttime:
+        if self.separate_day_night:
             self._overall_flag, n_iterations = self.repeat(
                 self.run_flagtests, repeat=repeat, progress_callback=progress_callback)
             if self.showplot:
@@ -180,7 +182,7 @@ class AbsoluteLimits(FlagBase):
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
 
-        if self.separate_daytime_nighttime:
+        if self.separate_day_night:
             return self._flagtests_daytime_nighttime(iteration)
         else:
             return self._flagtests_global(iteration)
@@ -252,11 +254,11 @@ class AbsoluteLimits(FlagBase):
         return ok, rejected, n_outliers
 
 
-def AbsoluteLimitsDaytimeNighttime(*args, separate_daytime_nighttime: bool = True, **kwargs):
+def AbsoluteLimitsDaytimeNighttime(*args, separate_day_night: bool = True, **kwargs):
     """``AbsoluteLimits`` with daytime/nighttime separation on by default.
 
     This used to be a plain alias for ``AbsoluteLimits``, whose
-    ``separate_daytime_nighttime`` defaults to False. Picking this name for
+    ``separate_day_night`` defaults to False. Picking this name for
     what it says therefore applied one set of limits to the whole series,
     with no error or warning.
 
@@ -265,4 +267,4 @@ def AbsoluteLimitsDaytimeNighttime(*args, separate_daytime_nighttime: bool = Tru
     Pass ``daytime_minmax`` / ``nighttime_minmax`` for the per-period limits,
     plus ``lat`` / ``lon`` / ``utc_offset``.
     """
-    return AbsoluteLimits(*args, separate_daytime_nighttime=separate_daytime_nighttime, **kwargs)
+    return AbsoluteLimits(*args, separate_day_night=separate_day_night, **kwargs)

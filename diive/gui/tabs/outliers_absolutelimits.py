@@ -108,7 +108,7 @@ class AbsoluteLimitsTab(BaseOutlierTab):
     def _current_kwargs(self) -> dict:
         if self.daynight_cb.isChecked():
             return dict(
-                separate_daytime_nighttime=True,
+                separate_day_night=True,
                 daytime_minmax=[self.dt_min.value(), self.dt_max.value()],
                 nighttime_minmax=[self.nt_min.value(), self.nt_max.value()],
                 lat=self.lat.value(), lon=self.lon.value(), utc_offset=self.utc.value(),

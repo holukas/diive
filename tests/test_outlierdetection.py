@@ -349,7 +349,7 @@ class TestOutlierDetection(unittest.TestCase):
 
         zdn = zScore(
             series=s_noise,
-            separate_daytime_nighttime=True,
+            separate_day_night=True,
             lat=47.286417,
             lon=7.733750,
             utc_offset=1,
@@ -428,7 +428,7 @@ class TestOutlierDetection(unittest.TestCase):
                                     seed=42)  # Add impulse noise (spikes)
         lsd = LocalSD(
             series=s_noise,
-            separate_daytime_nighttime=True,
+            separate_day_night=True,
             n_sd=[3, 2],
             winsize=[48 * 2, 48 * 1],
             constant_sd=False,

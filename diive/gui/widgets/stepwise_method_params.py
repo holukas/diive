@@ -11,7 +11,7 @@ GUI-only: these are widgets, labels, and tooltips. The method *names* and their
 parameter *meanings* are the library's (`StepwiseOutlierDetection`); detection
 itself runs in the library. The day/night split needs no coordinates here — the
 detector is built with the site coordinates, so a step only carries
-``separate_daytime_nighttime`` (plus per-period thresholds where the method has
+``separate_day_night`` (plus per-period thresholds where the method has
 them).
 
 Add a method = add a ``_StepParams`` subclass and list it in ``STEP_METHODS``.
@@ -137,7 +137,7 @@ class HampelParams(_StepParams):
     def kwargs(self) -> dict:
         kw = dict(window_length=self.window.value(), n_sigma=self.n_sigma.value(),
                   use_differencing=self.diff_cb.isChecked(),
-                  separate_daytime_nighttime=self.dn_cb.isChecked(),
+                  separate_day_night=self.dn_cb.isChecked(),
                   **self._repeat_kwargs())
         if self.dn_cb.isChecked():
             kw.update(n_sigma_daytime=self.n_sigma_dt.value(),
@@ -150,7 +150,7 @@ class HampelParams(_StepParams):
         self.diff_cb.setChecked(bool(kwargs.get("use_differencing", True)))
         # Set the toggle first (it seeds the per-period spins from the global
         # value), then overwrite with the saved per-period thresholds.
-        self.dn_cb.setChecked(bool(kwargs.get("separate_daytime_nighttime", False)))
+        self.dn_cb.setChecked(bool(kwargs.get("separate_day_night", False)))
         if kwargs.get("n_sigma_daytime") is not None:
             self.n_sigma_dt.setValue(float(kwargs["n_sigma_daytime"]))
         if kwargs.get("n_sigma_nighttime") is not None:
@@ -201,12 +201,12 @@ class LocalSDParams(_StepParams):
             n_sd = self.n_sd.value()
             winsize = win
         return dict(n_sd=n_sd, winsize=winsize, constant_sd=self.constant_cb.isChecked(),
-                    separate_daytime_nighttime=self.dn_cb.isChecked(),
+                    separate_day_night=self.dn_cb.isChecked(),
                     **self._repeat_kwargs())
 
     def load(self, kwargs: dict) -> None:
         self.constant_cb.setChecked(bool(kwargs.get("constant_sd", False)))
-        dn = bool(kwargs.get("separate_daytime_nighttime", False))
+        dn = bool(kwargs.get("separate_day_night", False))
         self.dn_cb.setChecked(dn)
         n_sd = kwargs.get("n_sd", self.n_sd.value())
         win = kwargs.get("winsize", 0)
@@ -239,12 +239,12 @@ class ZScoreParams(_StepParams):
 
     def kwargs(self) -> dict:
         return dict(thres_zscore=self.thres.value(),
-                    separate_daytime_nighttime=self.dn_cb.isChecked(),
+                    separate_day_night=self.dn_cb.isChecked(),
                     **self._repeat_kwargs())
 
     def load(self, kwargs: dict) -> None:
         self.thres.setValue(float(kwargs.get("thres_zscore", self.thres.value())))
-        self.dn_cb.setChecked(bool(kwargs.get("separate_daytime_nighttime", False)))
+        self.dn_cb.setChecked(bool(kwargs.get("separate_day_night", False)))
         self.repeat_cb.setChecked(bool(kwargs.get("repeat", True)))
 
 
@@ -312,7 +312,7 @@ class LOFParams(_StepParams):
             n_neighbors=self.n_neighbors.value() or None,
             contamination=(self.contamination.value() if self.contamination.value() > 0
                            else None),
-            separate_daytime_nighttime=self.dn_cb.isChecked(),
+            separate_day_night=self.dn_cb.isChecked(),
             **self._repeat_kwargs())
 
     def load(self, kwargs: dict) -> None:
@@ -320,7 +320,7 @@ class LOFParams(_StepParams):
         self.n_neighbors.setValue(int(nn) if nn else 0)
         cont = kwargs.get("contamination")
         self.contamination.setValue(float(cont) if cont else 0.0)
-        self.dn_cb.setChecked(bool(kwargs.get("separate_daytime_nighttime", False)))
+        self.dn_cb.setChecked(bool(kwargs.get("separate_day_night", False)))
         self.repeat_cb.setChecked(bool(kwargs.get("repeat", True)))
 
 

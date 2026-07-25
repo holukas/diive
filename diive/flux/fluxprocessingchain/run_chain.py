@@ -83,7 +83,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     single Hampel filter that ships its own sensible defaults
     (``window_length=48*13`` records = 13 days at 30-min sampling,
     Papale 2006; ``n_sigma_daytime=n_sigma_nighttime=5.5``;
-    ``use_differencing=True``; ``separate_daytime_nighttime=True``;
+    ``use_differencing=True``; ``separate_day_night=True``;
     ``repeat=True``). The optional ``config.outlier_window_length`` /
     ``outlier_sigma_daytime`` / ``outlier_sigma_nighttime`` fields are
     *overrides* — set them only when you want to deviate from the defaults;
@@ -418,7 +418,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     # Only forward the kwargs the user explicitly overrode on FluxConfig —
     # the Hampel filter ships sensible defaults of its own (window_length=
     # 48*13 records = 13 days at 30-min sampling, n_sigma_daytime/nighttime
-    # =5.5, use_differencing=True, separate_daytime_nighttime=True,
+    # =5.5, use_differencing=True, separate_day_night=True,
     # repeat=True), and the run_chain contract is that this is the simple
     # path: don't pass parameters that would just duplicate the underlying
     # defaults.

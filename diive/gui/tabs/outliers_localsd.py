@@ -116,7 +116,7 @@ class LocalSDOutlierTab(BaseOutlierTab):
                 n_sd=[self.n_sd_dt.value(), self.n_sd_nt.value()],
                 winsize=[self.winsize_dt.value(), self.winsize_nt.value()],
                 constant_sd=constant_sd,
-                separate_daytime_nighttime=True,
+                separate_day_night=True,
                 lat=self.lat.value(), lon=self.lon.value(), utc_offset=self.utc.value(),
             )
         return dict(

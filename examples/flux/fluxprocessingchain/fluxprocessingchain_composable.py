@@ -155,7 +155,7 @@ sod.flag_outliers_hampel_test(
     n_sigma_daytime=5.5,
     n_sigma_nighttime=5.5,
     use_differencing=True,  # more sensitive to isolated spikes
-    separate_daytime_nighttime=True,
+    separate_day_night=True,
     showplot=False,
     verbose=True,
     repeat=True,

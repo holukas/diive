@@ -48,7 +48,7 @@ print(f"  Range: {s_noise.min():.2f} to {s_noise.max():.2f}°C")
 
 lsd_dtnt = dv.outliers.LocalSD(
     series=s_noise,
-    separate_daytime_nighttime=True,
+    separate_day_night=True,
     n_sd=[3, 2],
     winsize=[48 * 2, 48 * 1],  # 2-day daytime window, 1-day nighttime
     constant_sd=False,
@@ -184,7 +184,7 @@ for winsize in window_sizes:
 # - **n_sd:** 2.0-2.5 for general use, 2.5-3.5 for sensitive data
 # - **winsize:** 1-2 days for fine detail, 5-10 days for smoothing
 # - **constant_sd:** Use global SD for stationary data, rolling SD for non-stationary
-# - **separate_daytime_nighttime:** Use for data with strong diurnal cycles
+# - **separate_day_night:** Use for data with strong diurnal cycles
 
 print("\nParameter Selection Guide:")
 print("  Sensitive: n_sd=2.0, winsize=48 (1-day)")

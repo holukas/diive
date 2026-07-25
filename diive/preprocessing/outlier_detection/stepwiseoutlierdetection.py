@@ -173,12 +173,12 @@ class StepwiseOutlierDetection:
         self._record_last(flagtest)
 
     def flag_outliers_localsd_test(self, n_sd: float | list = 7, winsize: int | list = None, showplot: bool = False,
-                                   constant_sd: bool = False, separate_daytime_nighttime: bool = False,
+                                   constant_sd: bool = False, separate_day_night: bool = False,
                                    verbose: bool = False, repeat: bool = True):
         """Identify outliers based on standard deviation in a rolling window"""
         series_cleaned = self._series_hires_cleaned.copy()
         flagtest = LocalSD(series=series_cleaned, idstr=self.idstr, n_sd=n_sd, winsize=winsize,
-                           separate_daytime_nighttime=separate_daytime_nighttime, lat=self.site_lat, lon=self.site_lon,
+                           separate_day_night=separate_day_night, lat=self.site_lat, lon=self.site_lon,
                            utc_offset=self.utc_offset, constant_sd=constant_sd, showplot=showplot, verbose=verbose)
         flagtest.calc(repeat=repeat)
         self._record_last(flagtest)
@@ -207,7 +207,7 @@ class StepwiseOutlierDetection:
     def flag_outliers_hampel_test(self, window_length: int = 48 * 13, n_sigma: float = 5.5,
                                   n_sigma_daytime: float = None, n_sigma_nighttime: float = None,
                                   k: float = 1.4826, use_differencing: bool = True,
-                                  separate_daytime_nighttime: bool = True, showplot: bool = False,
+                                  separate_day_night: bool = True, showplot: bool = False,
                                   verbose: bool = False, repeat: bool = True):
         """Identify outliers in a sliding window based on the Hampel filter (global or separate day/night).
 
@@ -221,14 +221,14 @@ class StepwiseOutlierDetection:
         n_sigma : float, default 5.5
             Threshold multiplier for global mode (number of MADs above median)
         n_sigma_daytime : float, optional
-            Threshold for daytime data (when separate_daytime_nighttime=True)
+            Threshold for daytime data (when separate_day_night=True)
         n_sigma_nighttime : float, optional
-            Threshold for nighttime data (when separate_daytime_nighttime=True)
+            Threshold for nighttime data (when separate_day_night=True)
         k : float, default 1.4826
             Scaling factor for MAD (median absolute deviation)
         use_differencing : bool, default True
             If True, apply Hampel filter to differenced series (rate of change)
-        separate_daytime_nighttime : bool, default False
+        separate_day_night : bool, default False
             If False, apply single threshold globally across all records.
             If True, apply separate thresholds for daytime and nighttime data.
         showplot : bool, default False
@@ -241,10 +241,10 @@ class StepwiseOutlierDetection:
         series_cleaned = self._series_hires_cleaned.copy()
         flagtest = Hampel(
             series=series_cleaned, idstr=self.idstr,
-            lat=self.site_lat if separate_daytime_nighttime else None,
-            lon=self.site_lon if separate_daytime_nighttime else None,
-            utc_offset=self.utc_offset if separate_daytime_nighttime else None,
-            use_differencing=use_differencing, separate_day_night=separate_daytime_nighttime,
+            lat=self.site_lat if separate_day_night else None,
+            lon=self.site_lon if separate_day_night else None,
+            utc_offset=self.utc_offset if separate_day_night else None,
+            use_differencing=use_differencing, separate_day_night=separate_day_night,
             window_length=window_length, n_sigma=n_sigma, n_sigma_daytime=n_sigma_daytime,
             n_sigma_nighttime=n_sigma_nighttime,
             k=k, showplot=showplot, verbose=verbose)
@@ -253,7 +253,7 @@ class StepwiseOutlierDetection:
 
     def flag_outliers_zscore_test(self,
                                   thres_zscore: float = 4,
-                                  separate_daytime_nighttime: bool = False,
+                                  separate_day_night: bool = False,
                                   lat: float = None,
                                   lon: float = None,
                                   utc_offset: int = None,
@@ -273,16 +273,16 @@ class StepwiseOutlierDetection:
         ----------
         thres_zscore : float, default 4
             Z-score threshold for flagging. Typical range: 2.5-5.
-        separate_daytime_nighttime : bool, default False
+        separate_day_night : bool, default False
             If False, apply single threshold across all records (global mode).
             If True, apply separate thresholds to daytime and nighttime records.
             Requires lat, lon, utc_offset when True.
         lat : float, default None
-            Site latitude in decimal degrees. Required when separate_daytime_nighttime=True.
+            Site latitude in decimal degrees. Required when separate_day_night=True.
         lon : float, default None
-            Site longitude in decimal degrees. Required when separate_daytime_nighttime=True.
+            Site longitude in decimal degrees. Required when separate_day_night=True.
         utc_offset : int, default None
-            UTC offset in hours. Required when separate_daytime_nighttime=True.
+            UTC offset in hours. Required when separate_day_night=True.
         showplot : bool, default False
             If True, display outlier visualization.
         plottitle : str, default None
@@ -304,7 +304,7 @@ class StepwiseOutlierDetection:
         flagtest = zScore(
             series=series_cleaned,
             thres_zscore=thres_zscore,
-            separate_daytime_nighttime=separate_daytime_nighttime,
+            separate_day_night=separate_day_night,
             lat=lat,
             lon=lon,
             utc_offset=utc_offset,
@@ -327,7 +327,7 @@ class StepwiseOutlierDetection:
         self._record_last(flagtest)
 
     def flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = None,
-                               separate_daytime_nighttime: bool = False,
+                               separate_day_night: bool = False,
                                showplot: bool = False, verbose: bool = False, repeat: bool = True, n_jobs: int = 1):
         """Local outlier factor detection (global or separate day/night).
 
@@ -340,7 +340,7 @@ class StepwiseOutlierDetection:
             Number of neighbors for LOF calculation; auto-calculated if None (1/200 of non-NaN records).
         contamination : float or 'auto', default None
             Expected fraction of outliers (float 0-1) or 'auto' for automatic detection.
-        separate_daytime_nighttime : bool, default False
+        separate_day_night : bool, default False
             If False, apply single LOF globally across all records.
             If True, apply separate LOF detection for daytime and nighttime data.
         showplot : bool, default False
@@ -358,20 +358,20 @@ class StepwiseOutlierDetection:
         # Contamination is set automatically unless float is given
         contamination = contamination if isinstance(contamination, float) else 'auto'
 
-        lat = self.site_lat if separate_daytime_nighttime else None
-        lon = self.site_lon if separate_daytime_nighttime else None
-        utc_offset = self.utc_offset if separate_daytime_nighttime else None
+        lat = self.site_lat if separate_day_night else None
+        lon = self.site_lon if separate_day_night else None
+        utc_offset = self.utc_offset if separate_day_night else None
 
         flagtest = LocalOutlierFactor(series=series_cleaned, lat=lat, lon=lon, utc_offset=utc_offset,
                                       idstr=self.idstr,
                                       n_neighbors=n_neighbors, contamination=contamination,
-                                      separate_daytime_nighttime=separate_daytime_nighttime,
+                                      separate_day_night=separate_day_night,
                                       showplot=showplot, verbose=verbose, n_jobs=n_jobs)
         flagtest.calc(repeat=repeat)
         self._record_last(flagtest)
 
     def flag_outliers_abslim_test(self, minval: float = None, maxval: float = None,
-                                  separate_daytime_nighttime: bool = False,
+                                  separate_day_night: bool = False,
                                   daytime_minmax: list[float, float] = None,
                                   nighttime_minmax: list[float, float] = None,
                                   showplot: bool = False, verbose: bool = False):
@@ -380,15 +380,15 @@ class StepwiseOutlierDetection:
         Parameters
         ----------
         minval : float, optional
-            Minimum acceptable value (global mode). Required if separate_daytime_nighttime=False.
+            Minimum acceptable value (global mode). Required if separate_day_night=False.
         maxval : float, optional
-            Maximum acceptable value (global mode). Required if separate_daytime_nighttime=False.
-        separate_daytime_nighttime : bool, default False
+            Maximum acceptable value (global mode). Required if separate_day_night=False.
+        separate_day_night : bool, default False
             If True, use separate day/night thresholds; if False, use global thresholds.
         daytime_minmax : [min, max], optional
-            Acceptable range during daytime (required if separate_daytime_nighttime=True).
+            Acceptable range during daytime (required if separate_day_night=True).
         nighttime_minmax : [min, max], optional
-            Acceptable range during nighttime (required if separate_daytime_nighttime=True).
+            Acceptable range during nighttime (required if separate_day_night=True).
         showplot : bool, default False
             If True, display visualization of flagged outliers
         verbose : bool, default False
@@ -400,12 +400,12 @@ class StepwiseOutlierDetection:
             series=series_cleaned,
             minval=minval,
             maxval=maxval,
-            separate_daytime_nighttime=separate_daytime_nighttime,
+            separate_day_night=separate_day_night,
             daytime_minmax=daytime_minmax,
             nighttime_minmax=nighttime_minmax,
-            lat=self.site_lat if separate_daytime_nighttime else None,
-            lon=self.site_lon if separate_daytime_nighttime else None,
-            utc_offset=self.utc_offset if separate_daytime_nighttime else None,
+            lat=self.site_lat if separate_day_night else None,
+            lon=self.site_lon if separate_day_night else None,
+            utc_offset=self.utc_offset if separate_day_night else None,
             idstr=self.idstr,
             showplot=showplot,
             verbose=verbose

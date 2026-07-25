@@ -76,7 +76,7 @@ class ZScoreOutlierTab(BaseOutlierTab):
     def _current_kwargs(self) -> dict:
         kwargs = dict(thres_zscore=self.thres.value())
         if self.daynight_cb.isChecked():
-            kwargs.update(separate_daytime_nighttime=True,
+            kwargs.update(separate_day_night=True,
                           lat=self.lat.value(), lon=self.lon.value(),
                           utc_offset=self.utc.value(),
                           thres_zscore_daytime=self.thres_dt.value(),

@@ -73,7 +73,7 @@ detector.flag_outliers_hampel_test(
     n_sigma_daytime=4.5,
     n_sigma_nighttime=4.5,
     use_differencing=True,
-    separate_daytime_nighttime=True,
+    separate_day_night=True,
     showplot=False,
     verbose=False,
     repeat=True
@@ -86,7 +86,7 @@ print("\n2. LocalSD (local standard deviation)...")
 detector.flag_outliers_localsd_test(
     n_sd=[3.5, 3.5],
     winsize=[24, 24],
-    separate_daytime_nighttime=True,
+    separate_day_night=True,
     showplot=False,
     constant_sd=False,
     verbose=False,
@@ -122,7 +122,7 @@ detector.addflag()
 print("\n5. Z-score day/night separation...")
 detector.flag_outliers_zscore_test(
     thres_zscore=4,
-    separate_daytime_nighttime=True,
+    separate_day_night=True,
     lat=detector.site_lat,
     lon=detector.site_lon,
     utc_offset=detector.utc_offset,

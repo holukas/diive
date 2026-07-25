@@ -112,7 +112,7 @@ class LocalOutlierFactorTab(BaseOutlierTab):
         # reused within each day/night subset (no per-period thresholds).
         if self.daynight_cb.isChecked():
             kwargs.update(
-                separate_daytime_nighttime=True,
+                separate_day_night=True,
                 lat=self.lat.value(), lon=self.lon.value(), utc_offset=self.utc.value(),
             )
         return kwargs

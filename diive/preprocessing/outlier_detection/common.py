@@ -9,6 +9,34 @@ Part of the diive library: https://github.com/holukas/diive
 
 from diive.variables import DaytimeNighttimeFlag
 
+# Parameter names that changed when the day/night settings were unified across
+# the outlier detectors. Old name -> new name.
+_RENAMED_DAYNIGHT_PARAMS = {
+    'separate_daytime_nighttime': 'separate_day_night',
+}
+
+
+def reject_legacy_params(unexpected: dict, detector: str, renamed: dict = None) -> None:
+    """Raise for any leftover keyword argument, naming its replacement if it has one.
+
+    Detectors accept ``**kwargs`` purely so a pre-unification call can be
+    answered with a message that says what to change, instead of Python's bare
+    "unexpected keyword argument". Names outside the rename table are still
+    rejected, so a typo cannot pass silently through ``**kwargs``.
+    """
+    if not unexpected:
+        return
+    table = dict(_RENAMED_DAYNIGHT_PARAMS)
+    if renamed:
+        table.update(renamed)
+    name = next(iter(unexpected))
+    if name in table:
+        raise TypeError(
+            f"{detector}: '{name}' was renamed to '{table[name]}' when the day/night "
+            f"settings were unified across the outlier detectors. Pass '{table[name]}' instead."
+        )
+    raise TypeError(f"{detector}.__init__() got an unexpected keyword argument '{name}'")
+
 
 def create_daytime_nighttime_flags(timestamp_index, lat, lon, utc_offset):
     # Detect daytime and nighttime
