@@ -106,3 +106,20 @@ build = [
 
 [tool.ruff]
 cache-dir = ".ruff_cache"
+# Set explicitly: the 88 default does not match this codebase (p99 line is 100
+# chars) and would have `ruff format` rewrite 290 of 303 files.
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+# E4/E7/E9/F are ruff's defaults; B (bugbear) is added for the bug-shaped rules.
+select = ["E4", "E7", "E9", "F", "B"]
+ignore = [
+    "F541",  # f-string without placeholders: cosmetic only
+    "B905",  # zip() without strict=: worth its own sweep, not a blocker
+    "B007",  # unused loop control variable: usually a deliberate throwaway
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Qt widget setup is written one-line-per-widget on purpose (setRange(); setValue()).
+"diive/gui/**" = ["E702"]
