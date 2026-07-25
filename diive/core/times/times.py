@@ -470,11 +470,14 @@ class DetectFrequency:
 
         else:
             raise RuntimeError(
-                "Could not detect timestamp frequency using any method. This typically "
-                "means your timestamps are highly irregular or have too many gaps. "
-                "To fix: (1) verify data quality (check for irregular gaps/duplicates), "
-                "(2) try regularize=True to fill gaps automatically, or "
-                "(3) skip frequency detection with nominal_freq=None."
+                "Could not detect timestamp frequency with any method (pandas "
+                "inferred_freq, most-frequent timedelta, start/end chunks). The "
+                "timestamps are too irregular: no single spacing occurs often "
+                "enough to identify. To fix, make the index regular before "
+                "calling, e.g. resample or reindex it onto the intended "
+                "frequency. Detection cannot be skipped: TimestampSanitizer's "
+                "nominal_freq only validates an already-detected frequency, and "
+                "regularize runs after detection, so neither bypasses this."
             )
 
     def get(self) -> str:
