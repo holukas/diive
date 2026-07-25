@@ -28,7 +28,7 @@ from diive.core.utils.console import (
     vspace,
     warn,
 )
-from diive.gapfilling.scores import prediction_scores
+from diive.core.ml.scores import prediction_scores
 
 pd.set_option('display.max_rows', 50)
 pd.set_option('display.max_columns', 12)

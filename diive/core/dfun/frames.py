@@ -17,7 +17,6 @@ from diive.core.funcs.funcs import find_duplicates_in_list
 from diive.core.times.times import current_time_microseconds_str
 # from diive.core.times.times import timedelta_to_string
 from diive.core.utils.console import VERBOSE_PROGRESS, info
-from diive.gapfilling.interpolate import linear_interpolation
 
 pd.set_option('display.width', 1500)
 pd.set_option('display.max_columns', 30)
@@ -263,6 +262,10 @@ def aggregated_as_hires(aggregate_series: Series,
 
     Example: half-hourly timestamp for daily maximum temperature
     """
+    # Imported here, not at module level: gapfilling pulls in sklearn/xgboost/shap,
+    # and this leaf module is imported by low-level code that must not depend on them.
+    from diive.gapfilling.interpolate import linear_interpolation
+
     # Aggregate series
     lowres_df = pd.DataFrame(aggregate_series.resample(to_freq).agg(to_agg))
     # lowres_df = lowres_df.rolling(window=5, center=True).mean()  # Testing
