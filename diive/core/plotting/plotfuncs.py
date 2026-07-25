@@ -71,7 +71,7 @@ def make_patch_spines_invisible(ax):
     """Keep the frame on but hide the axes background patch and all spines."""
     ax.set_frame_on(True)
     ax.patch.set_visible(False)
-    for sp in ax.spines.to_numpy()():
+    for sp in ax.spines.values():
         sp.set_visible(False)
 
 
