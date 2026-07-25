@@ -297,6 +297,22 @@ class LocalOutlierFactor(FlagBase):
         return ok, rejected, n_outliers
 
 
-# Backward compatibility aliases
+# LocalOutlierFactor runs on the whole series by default, which is what this
+# name says, so a plain alias is accurate here.
 LocalOutlierFactorAllData = LocalOutlierFactor
-LocalOutlierFactorDaytimeNighttime = LocalOutlierFactor
+
+
+def LocalOutlierFactorDaytimeNighttime(*args, separate_daytime_nighttime: bool = True, **kwargs):
+    """``LocalOutlierFactor`` with daytime/nighttime separation on by default.
+
+    This used to be a plain alias for ``LocalOutlierFactor``, whose
+    ``separate_daytime_nighttime`` defaults to False. Picking this name for
+    what it says therefore gave whole-series detection, with no error or
+    warning -- and made this name identical to ``LocalOutlierFactorAllData``,
+    which means the opposite.
+
+    A wrapper function rather than a subclass because ``ConsoleOutputDecorator``
+    replaces the decorated class with a function, which cannot be subclassed.
+    Separating requires ``lat`` / ``lon`` / ``utc_offset``.
+    """
+    return LocalOutlierFactor(*args, separate_daytime_nighttime=separate_daytime_nighttime, **kwargs)

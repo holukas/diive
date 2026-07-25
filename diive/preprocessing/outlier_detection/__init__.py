@@ -11,11 +11,16 @@ Part of the diive library: https://github.com/holukas/diive
 
 from diive.preprocessing.outlier_detection.absolutelimits import (
     AbsoluteLimits,
+    AbsoluteLimitsDaytimeNighttime,
 )
 from diive.preprocessing.outlier_detection.hampel import Hampel
 from diive.preprocessing.outlier_detection.incremental import zScoreIncrements
 from diive.preprocessing.outlier_detection.localsd import LocalSD
-from diive.preprocessing.outlier_detection.lof import LocalOutlierFactor
+from diive.preprocessing.outlier_detection.lof import (
+    LocalOutlierFactor,
+    LocalOutlierFactorAllData,
+    LocalOutlierFactorDaytimeNighttime,
+)
 from diive.preprocessing.outlier_detection.manualremoval import ManualRemoval
 from diive.preprocessing.outlier_detection.stepwiseoutlierdetection import StepwiseOutlierDetection
 from diive.preprocessing.outlier_detection.trim import TrimLow
@@ -24,16 +29,15 @@ from diive.preprocessing.outlier_detection.zscore import (
     zScoreRolling,
 )
 
-# Aliases for compatibility
-AbsoluteLimitsDaytimeNighttime = AbsoluteLimits
+# Aliases for compatibility. The *DaytimeNighttime names that needed a changed
+# default are defined next to their base class, not aliased here.
+# Hampel already defaults to separate_day_night=True, so its alias is accurate.
 HampelDaytimeNighttime = Hampel
 hampel = Hampel
 hampel_daytime_nighttime = Hampel
 absolute_limits_daytime_nighttime = AbsoluteLimitsDaytimeNighttime
 zscore_increments = zScoreIncrements
 zscore = zScore
-LocalOutlierFactorAllData = LocalOutlierFactor
-LocalOutlierFactorDaytimeNighttime = LocalOutlierFactor
 zscore_rolling = zScoreRolling
 
 __all__ = [

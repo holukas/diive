@@ -711,3 +711,52 @@ class TestVerboseStatistics(unittest.TestCase):
 
     def test_verbose_false_stays_quiet(self):
         self.assertNotIn('Outliers', self._run(verbose=False))
+
+
+class TestDaytimeNighttimeNames(unittest.TestCase):
+    """The *DaytimeNighttime names must do what they say.
+
+    They used to be plain aliases for their base class, so
+    LocalOutlierFactorDaytimeNighttime was the same object as
+    LocalOutlierFactorAllData -- two names meaning opposite things -- and
+    both ran on the whole series.
+    """
+
+    @staticmethod
+    def _diel_series(periods: int = 48 * 120):
+        idx = pd.date_range('2024-06-01', periods=periods, freq='30min')
+        hours = idx.hour + idx.minute / 60
+        rng = np.random.default_rng(0)
+        return pd.Series(12 * np.sin((hours - 6) / 24 * 2 * np.pi) + 8
+                         + rng.normal(0, 1.5, periods), index=idx, name='TA')
+
+    COORDS = dict(lat=46.815333, lon=9.855972, utc_offset=1)
+
+    def test_lof_daytime_nighttime_is_not_alldata(self):
+        from diive.preprocessing.outlier_detection import (
+            LocalOutlierFactorAllData, LocalOutlierFactorDaytimeNighttime)
+        self.assertIsNot(LocalOutlierFactorDaytimeNighttime, LocalOutlierFactorAllData)
+
+        s = self._diel_series()
+
+        def n_flagged(cls):
+            d = cls(series=s.copy(), n_neighbors=20, contamination=0.01, **self.COORDS)
+            d.calc(repeat=False)
+            return int((d.overall_flag == 2).sum())
+
+        # Separating changes the neighbourhoods, so the two must disagree.
+        self.assertNotEqual(n_flagged(LocalOutlierFactorDaytimeNighttime),
+                            n_flagged(LocalOutlierFactorAllData))
+
+    def test_absolutelimits_daytime_nighttime_rejects_whole_series_limits(self):
+        s = self._diel_series(periods=48 * 10)
+        # minval/maxval are whole-series limits; this used to silently apply
+        # them under a name promising a day/night split.
+        with self.assertRaises(ValueError):
+            AbsoluteLimitsDaytimeNighttime(series=s.copy(), minval=-5, maxval=25, **self.COORDS)
+
+        # Per-period limits are the intended usage and still work.
+        al = AbsoluteLimitsDaytimeNighttime(series=s.copy(), daytime_minmax=[4.0, 25.0],
+                                            nighttime_minmax=[-5.0, 10.0], **self.COORDS)
+        al.calc(repeat=False)
+        self.assertGreater(int((al.overall_flag == 2).sum()), 0)

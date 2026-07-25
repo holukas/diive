@@ -250,3 +250,19 @@ class AbsoluteLimits(FlagBase):
             detail(f"Total found outliers: {n_outliers} values (daytime+nighttime)", verbose=self.verbose, min_level=VERBOSE_PROGRESS)
 
         return ok, rejected, n_outliers
+
+
+def AbsoluteLimitsDaytimeNighttime(*args, separate_daytime_nighttime: bool = True, **kwargs):
+    """``AbsoluteLimits`` with daytime/nighttime separation on by default.
+
+    This used to be a plain alias for ``AbsoluteLimits``, whose
+    ``separate_daytime_nighttime`` defaults to False. Picking this name for
+    what it says therefore applied one set of limits to the whole series,
+    with no error or warning.
+
+    A wrapper function rather than a subclass because ``ConsoleOutputDecorator``
+    replaces the decorated class with a function, which cannot be subclassed.
+    Pass ``daytime_minmax`` / ``nighttime_minmax`` for the per-period limits,
+    plus ``lat`` / ``lon`` / ``utc_offset``.
+    """
+    return AbsoluteLimits(*args, separate_daytime_nighttime=separate_daytime_nighttime, **kwargs)
