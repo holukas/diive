@@ -372,5 +372,57 @@ class TestPwbPerGasWindow(unittest.TestCase):
         self.assertGreater(h2o_pg, 11.0)
 
 
+class TestWindRotationInvariants(unittest.TestCase):
+    """Properties of the double rotation that the mean-based test cannot see.
+
+    Checking only that mean(v2) and mean(w2) are ~0 leaves a sign error or a
+    swapped trig term free to pass, because several wrong rotations still
+    zero those means.
+    """
+
+    @staticmethod
+    def _tilted_wind(n: int = 500):
+        import numpy as np
+        rng = np.random.default_rng(0)
+        return (pd.Series(3.0 + rng.normal(0, 0.5, n), name='u'),
+                pd.Series(1.0 + rng.normal(0, 0.5, n), name='v'),
+                pd.Series(0.4 + rng.normal(0, 0.2, n), name='w'))
+
+    def test_rotation_preserves_wind_speed(self):
+        import numpy as np
+        from diive.flux import WindDoubleRotation
+        u, v, w = self._tilted_wind()
+        wr = WindDoubleRotation(u=u, v=v, w=w)
+        # Both rotations are orthogonal, so the 3D speed of every single sample
+        # is unchanged. This is what pins the trig down.
+        before = u ** 2 + v ** 2 + w ** 2
+        after = wr.u2 ** 2 + wr.v2 ** 2 + wr.w2 ** 2
+        self.assertTrue(np.allclose(before.to_numpy(), after.to_numpy()))
+
+    def test_already_aligned_wind_is_untouched(self):
+        import numpy as np
+        from diive.flux import WindDoubleRotation
+        # Mean wind exactly along +x, no crosswind, no tilt -> nothing to rotate.
+        u = pd.Series([5.0, 6.0, 4.0, 5.5], name='u')
+        zero = pd.Series([0.0] * 4, name='z')
+        wr = WindDoubleRotation(u=u, v=zero, w=zero)
+        self.assertAlmostEqual(wr.theta, 0.0, places=12)
+        self.assertAlmostEqual(wr.phi, 0.0, places=12)
+        self.assertTrue(np.allclose(wr.u2.to_numpy(), u.to_numpy()))
+        self.assertTrue(np.allclose(wr.v2.to_numpy(), 0.0))
+        self.assertTrue(np.allclose(wr.w2.to_numpy(), 0.0))
+
+    def test_rotation_angle_for_crosswind_only(self):
+        import math
+        from diive.flux import WindDoubleRotation
+        # Mean wind purely along +y: the first rotation must turn by +pi/2, and
+        # the rotated streamwise component must carry the full wind speed.
+        zero = pd.Series([0.0] * 10, name='z')
+        v = pd.Series([4.0] * 10, name='v')
+        wr = WindDoubleRotation(u=zero, v=v, w=zero)
+        self.assertAlmostEqual(wr.theta, math.pi / 2, places=12)
+        self.assertAlmostEqual(float(wr.u2.mean()), 4.0, places=12)
+
+
 if __name__ == '__main__':
     unittest.main()
