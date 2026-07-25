@@ -1,2 +1,29 @@
 # Reclassify `.ipynb` files as Python:
 *.ipynb linguist-language=Python
+
+# Line endings
+# ------------
+# Every tracked text file is already stored as LF (verified with
+# `git ls-files --eol`: no blob has i/crlf), so these rules add no
+# renormalization diff. They state that explicitly instead of leaving it to each
+# developer's core.autocrlf, and eol=lf checks files out as LF on Windows too,
+# which is what stops the "LF will be replaced by CRLF" warning on every commit.
+* text=auto eol=lf
+
+# Binary formats. Git's heuristic already detects all of these, but naming them
+# means a truncated or unusual file can never be mistaken for text and mangled.
+*.png     binary
+*.ico     binary
+*.zip     binary
+*.gz      binary
+*.parquet binary
+*.pickle  binary
+*.pdf     binary
+*.glb     binary
+*.stl     binary
+*.xlsx    binary
+
+# Windows-only scripts are safest with CRLF.
+*.bat     text eol=crlf
+*.cmd     text eol=crlf
+*.ps1     text eol=crlf
