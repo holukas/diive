@@ -462,5 +462,55 @@ class TestMaxCovarianceLagDetection(unittest.TestCase):
         self.assertLessEqual(found, 10)
 
 
+class TestApplyTlagHelpers(unittest.TestCase):
+    """Filename-key extraction decides which lag is applied to which raw file."""
+
+    def test_extract_key_variants(self):
+        from diive.flux.hires.apply_tlag import _extract_key
+        name = 'site_20240115_1130_raw.csv'
+        # No pattern: the whole filename is the key.
+        self.assertEqual(_extract_key(None, name), name)
+        # No capture group: the whole match is the key.
+        self.assertEqual(_extract_key(r'\d{8}', name), '20240115')
+        # Several groups: all non-None groups concatenated, so a date and a time
+        # part can be combined into one key.
+        self.assertEqual(_extract_key(r'(\d{8})_(\d{4})', name), '202401151130')
+        # No match: None, which the caller reads as "no raw file for this period".
+        self.assertIsNone(_extract_key(r'ZZZ(\d+)', name))
+
+    def test_build_filename_map_rejects_key_collision(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from diive.flux.hires.apply_tlag import _build_filename_map
+        with TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / 'site_20240115_1130.csv').write_text('x', encoding='utf-8')
+            (d / 'site_20240115_1200.csv').write_text('x', encoding='utf-8')
+
+            # Date + time is unique.
+            unique = _build_filename_map(d, r'(\d{8})_(\d{4})')
+            self.assertEqual(sorted(unique), ['202401151130', '202401151200'])
+
+            # Date alone collides. Silently keeping one would apply the wrong
+            # file's lag and drop the other, so it must raise and name both.
+            with self.assertRaises(ValueError) as ctx:
+                _build_filename_map(d, r'\d{8}')
+            msg = str(ctx.exception)
+            self.assertIn('site_20240115_1130.csv', msg)
+            self.assertIn('site_20240115_1200.csv', msg)
+
+    def test_build_filename_map_skips_non_matching_files(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from diive.flux.hires.apply_tlag import _build_filename_map
+        with TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / 'site_20240115_1130.csv').write_text('x', encoding='utf-8')
+            (d / 'notes.txt').write_text('x', encoding='utf-8')
+            (d / 'sub').mkdir()  # directories are not files, must be ignored
+            result = _build_filename_map(d, r'(\d{8})_(\d{4})')
+            self.assertEqual(list(result), ['202401151130'])
+
+
 if __name__ == '__main__':
     unittest.main()
