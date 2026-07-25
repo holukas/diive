@@ -407,14 +407,12 @@ def lagged_variants(df: DataFrame,
 
     exclude_cols = [] if not exclude_cols else exclude_cols
 
-    if len(df.columns) == 1:
-        if df.columns[0] in exclude_cols:
-            raise Exception(f"(!) No lagged variants can be created "
-                            f"because there is only one single column in the dataframe "
-                            f"({df.columns[0]}) and the same column is also defined in "
-                            f"the exclude list (exclude_cols={exclude_cols}). "
-                            f"This means there are no data left to lag.")
-        return df
+    if len(df.columns) == 1 and df.columns[0] in exclude_cols:
+        raise Exception(f"(!) No lagged variants can be created "
+                        f"because there is only one single column in the dataframe "
+                        f"({df.columns[0]}) and the same column is also defined in "
+                        f"the exclude list (exclude_cols={exclude_cols}). "
+                        f"This means there are no data left to lag.")
 
     if not isinstance(lag, list):
         raise Exception(f"(!) Error in lag={lag}: No lagged variables can be created "
@@ -430,6 +428,10 @@ def lagged_variants(df: DataFrame,
         if not isinstance(_lag, int):
             raise TypeError(f"(!) Error in lag={lag}: No lagged variables can be created "
                             f"because {_lag} is not an integer.")
+
+    # Work on a copy: the loop below assigns the lagged columns into df, which
+    # would otherwise add them to the caller's dataframe as a side effect.
+    df = df.copy()
 
     _included = []
     _excluded = []
