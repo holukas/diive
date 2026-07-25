@@ -15,7 +15,7 @@ from pandas import DataFrame
 from diive.core.dfun.stats import sstats  # Time series stats
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-from diive.core.utils.console import console as _console, detail, info, rule, warn
+from diive.core.utils.console import detail, info, rule, warn
 
 
 class FluxStorageCorrectionSinglePointEddyPro:

@@ -323,7 +323,6 @@ class HeatmapXYZ(HeatmapBase):
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
         """
-        from diive.core.plotting.styles import LightTheme as theme
 
         # Use theme defaults if not provided
         if cb_labelsize is None:

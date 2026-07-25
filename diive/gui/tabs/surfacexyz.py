@@ -19,7 +19,6 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-import numpy as np
 from PySide6.QtWidgets import QComboBox, QSpinBox
 
 import diive as dv

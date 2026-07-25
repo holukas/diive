@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 
 from rich.console import Console
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QFileDialog,

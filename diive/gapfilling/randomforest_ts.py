@@ -16,7 +16,6 @@ import pandas as pd
 from pandas import DataFrame, Series
 from sklearn.ensemble import RandomForestRegressor  # Import the model we are using
 
-import diive.core.dfun.frames as fr
 from diive.core.ml.common import MlRegressorGapFillingBase
 from diive.core.ml.optimization import OptimizeParamsTS
 

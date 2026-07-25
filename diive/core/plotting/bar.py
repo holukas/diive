@@ -10,7 +10,6 @@ import pandas as pd
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
-import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.styles.format import FormatStyle
 
 

@@ -15,7 +15,7 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import pandas as pd
-from PySide6.QtCore import QDateTime, Qt
+from PySide6.QtCore import QDateTime
 from PySide6.QtWidgets import (
     QDateTimeEdit,
     QDialog,

@@ -18,7 +18,7 @@ from xgboost import XGBRegressor
 from diive.core.ml.common import MlRegressorGapFillingBase
 from diive.core.plotting.styles.LightTheme import colorwheel_48
 from diive.core.times.neighbors import neighboring_years
-from diive.core.utils.console import detail, info, rule
+from diive.core.utils.console import detail, info
 
 
 class LongTermGapFillingBase:

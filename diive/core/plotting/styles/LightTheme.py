@@ -9,7 +9,11 @@ LIGHT THEME
 
 """
 
-from diive.core.plotting.styles._material_design_colors import *
+from diive.core.plotting.styles._material_design_colors import (
+    amber, black, blue, bluegray, brown, cyan, deeporange, deeppurple, gray,
+    green, indigo, lightblue, lightgreen, lime, orange, pink, purple, red,
+    teal, white, yellow,
+)
 
 # Specific colors
 COLOR_GPP = '#39a7b3'  # nice blue

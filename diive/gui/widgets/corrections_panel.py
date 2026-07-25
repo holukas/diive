@@ -18,7 +18,7 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,
@@ -30,13 +30,11 @@ from PySide6.QtWidgets import (
 )
 
 from diive.qaqc import (
-    CORRECTIONS,
     correction_spec,
     corrections_for_measurement,
 )
 from diive.preprocessing.qaqc.measurements import (
     CORR_RADIATION_ZERO_OFFSET,
-    CORR_RELATIVEHUMIDITY_OFFSET,
     CORR_SETTO_MAX,
     CORR_SETTO_MIN,
     CORR_SETTO_VALUE,

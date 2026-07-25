@@ -1085,10 +1085,6 @@ class FluxLevelData:
                 units='umol m-2 s-1',
             )
         """
-        import numpy as np
-        import matplotlib.pyplot as plt
-        import matplotlib.gridspec as gridspec
-        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 
         cols = self.gapfilled_cols()
         if not cols:

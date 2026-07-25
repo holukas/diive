@@ -32,7 +32,7 @@ from pandas import DataFrame, Series
 from diive.analysis.driveranalysis.ale import (
     AleCurve, Ale2DResult, accumulated_local_effects, accumulated_local_effects_2d,
 )
-from diive.core.utils.console import info, warn, success, rule, detail, error
+from diive.core.utils.console import info, warn, success, rule, detail
 
 # Material Design palette (CLAUDE.md plotting conventions).
 _MD = {
@@ -1112,7 +1112,6 @@ class DriverAnalysis:
 
     def plot_importance(self, ax=None, title: str = None, showplot: bool = False):
         """Horizontal SHAP importance bars, colored by relevance vs ``.RANDOM``."""
-        import matplotlib.pyplot as plt
         shap_df = self._result.shap_importance
         if shap_df is None:
             self.shap()
@@ -1194,7 +1193,6 @@ class DriverAnalysis:
         Green = relevant, grey = weak, red = not relevant; direction glyphs (+/-)
         annotate signed methods. Divergence across a row is the scientific signal.
         """
-        import matplotlib.pyplot as plt
         from matplotlib.colors import ListedColormap, BoundaryNorm
         conv = self._result.convergence
         if conv is None:

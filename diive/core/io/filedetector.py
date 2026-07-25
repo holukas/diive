@@ -1,6 +1,5 @@
 """Detect and group data files by name pattern."""
 import datetime as dt
-import os
 import sys
 import time
 from pathlib import Path
@@ -168,7 +167,6 @@ def read_segments_file(filepath):
 
     """
     # parse = lambda x: dt.datetime.strptime(x, '%Y%m%d%H%M%S')
-    import time
     start_time = time.time()
     found_lags_df = pd.read_csv(filepath,
                                 skiprows=None,

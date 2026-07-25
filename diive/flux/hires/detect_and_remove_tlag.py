@@ -199,7 +199,7 @@ import os
 import queue as _queue_mod
 import re
 import warnings
-from concurrent.futures import CancelledError, ProcessPoolExecutor, as_completed
+from concurrent.futures import CancelledError, ProcessPoolExecutor
 from datetime import datetime, timedelta
 from multiprocessing import Manager
 from pathlib import Path
@@ -211,7 +211,7 @@ warnings.filterwarnings('ignore', category=RuntimeWarning, module='runpy')
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from pandas import DataFrame, Series  # noqa: E402
+from pandas import DataFrame  # noqa: E402
 
 from diive.flux.hires.lag_pwb import (  # noqa: E402
     _DEFAULT_NA_VALUES,

@@ -10,8 +10,8 @@ Part of the diive library: https://github.com/holukas/diive
 
 import numpy as np
 import pandas as pd
-from scipy import signal, fft as scipy_fft
-from typing import Dict, Tuple, Optional, List
+from scipy import signal
+from typing import Dict, List
 
 from diive.core.utils.console import detail
 
@@ -429,7 +429,7 @@ def multi_scale_harmonics(
                 'total_power': total_period_power,
                 'strength': min(strength, 1.0)
             })
-        except Exception as e:
+        except Exception:
             # Skip periods that fail
             continue
 

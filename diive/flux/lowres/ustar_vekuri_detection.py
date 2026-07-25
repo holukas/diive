@@ -9,8 +9,7 @@ Part of the diive library: https://github.com/holukas/diive
 
 import numpy as np
 import pandas as pd
-from typing import Dict, Tuple, Optional, List
-import warnings
+from typing import Dict, Optional, List
 
 from diive.core.utils.console import info, detail, warn
 

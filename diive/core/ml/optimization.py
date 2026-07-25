@@ -13,8 +13,6 @@ regressor interface.
 import pandas as pd
 from pandas import DataFrame
 from sklearn.model_selection import train_test_split, TimeSeriesSplit, GridSearchCV
-from itertools import product
-from joblib import Parallel, delayed
 
 import diive.core.dfun.frames as fr
 from diive.core.utils.console import console as _console, info, rule, success, error

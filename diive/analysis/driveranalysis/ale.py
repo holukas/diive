@@ -18,7 +18,7 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -102,7 +102,6 @@ class AleCurve:
             showplot: Call ``fig.show()`` when a new figure was created.
             **style: Passed through to ``ax.plot``.
         """
-        import matplotlib.pyplot as plt
         created = False
         if ax is None:
             from diive.core.plotting import plotfuncs as pf

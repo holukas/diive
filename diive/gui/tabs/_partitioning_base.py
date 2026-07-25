@@ -21,7 +21,6 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (
@@ -29,7 +28,6 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
-    QHBoxLayout,
     QLabel,
     QPushButton,
     QSpinBox,

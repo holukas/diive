@@ -12,9 +12,9 @@ All functions preserve NaN locations and handle quality weighting.
 import numpy as np
 import pandas as pd
 import warnings
-from typing import Dict, Tuple, Optional, List
+from typing import Dict, Optional, List
 from statsmodels.tsa.seasonal import STL, seasonal_decompose
-from scipy import signal, fft as scipy_fft
+from scipy import signal
 
 from diive.core.utils.console import detail
 

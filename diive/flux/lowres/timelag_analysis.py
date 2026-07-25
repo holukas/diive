@@ -40,10 +40,8 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 import numpy as np
-import pandas as pd
 import warnings
 
-from diive.core.io.files import load_parquet
 from diive.core.plotting.plotfuncs import default_format
 from diive.core.utils.console import info, warn
 from diive.analysis.histogram import Histogram

@@ -10,7 +10,6 @@ quadrants. Visualizes the output of
 Part of the diive library: https://github.com/holukas/diive
 """
 
-import matplotlib.pyplot as plt
 import pandas as pd
 from pandas import Series
 

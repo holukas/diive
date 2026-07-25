@@ -12,7 +12,6 @@ Part of the diive library: https://github.com/holukas/diive
 import warnings
 
 import numpy as np
-import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from matplotlib.transforms import blended_transform_factory
 from sklearn.neighbors import KernelDensity

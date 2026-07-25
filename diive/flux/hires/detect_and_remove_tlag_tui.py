@@ -86,7 +86,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.css.query import NoMatches
-from textual.validation import Function, Integer, Number
+from textual.validation import Function
 from textual.widgets import (Button, Footer, Input, Label, OptionList,
                              ProgressBar, RichLog, Static, Switch)
 from textual.widgets.option_list import Option

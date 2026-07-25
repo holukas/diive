@@ -743,7 +743,7 @@ class ScopPhysics:
                 ax = axes[i]
                 col_name = var.get('col')
                 if col_name is None:
-                    ax.axis('off');
+                    ax.axis('off')
                     continue
 
                 # --- SPECIAL HANDLING FOR BUR08 SURFACES (PANEL 3) ---

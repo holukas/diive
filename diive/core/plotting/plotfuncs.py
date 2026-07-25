@@ -7,19 +7,16 @@ and tick formatting, legends, grids, zero lines and a quick exploratory plot.
 
 Part of the diive library: https://github.com/holukas/diive
 """
-import copy
 import time
 from pathlib import Path
 from typing import Literal
 
 import matplotlib.gridspec as gridspec
-import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt, _pylab_helpers, dates as mdates
 from pandas import DataFrame, Series
 
 import diive.core.plotting.styles.LightTheme as theme
-from diive.core.plotting.styles.LightTheme import *
 from diive.core.times.times import current_datetime
 from diive.core.utils.console import info
 
@@ -335,7 +332,7 @@ def wheel_markers_7():
 def add_ax_title_inside(txt, ax):
     """Place a title *txt* inside the axes at the top-left corner."""
     text = ax.text(0.01, 0.97, f"{txt}",
-                   size=FONTSIZE_HEADER_AXIS, color=FONTCOLOR_HEADER_AXIS,
+                   size=theme.FONTSIZE_HEADER_AXIS, color=theme.FONTCOLOR_HEADER_AXIS,
                    backgroundcolor='none', transform=ax.transAxes, alpha=1,
                    horizontalalignment='left', verticalalignment='top', zorder=99)
     return text
@@ -352,7 +349,7 @@ def add_zeroline_y(data: Series or DataFrame, ax):
         _min = data.min()
         _max = data.max()
     if (_min < 0) & (_max > 0):
-        ax.axhline(0, lw=LINEWIDTH_ZERO, color=COLOR_LINE_ZERO, zorder=98)
+        ax.axhline(0, lw=theme.LINEWIDTH_ZERO, color=theme.COLOR_LINE_ZERO, zorder=98)
 
 
 def remove_line(line):
@@ -412,7 +409,7 @@ def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: 
             # For other rows, use same x-axis scaling as for first row
             axes[a] = fig.add_subplot(gs[a, 0], sharex=axes[0])
 
-    colors = colors_12(400)
+    colors = theme.colors_12(400)
     for ix, col in enumerate(data.columns):
         ax = axes[ix] if subplots else axes[0]
         mean = data[col].mean()

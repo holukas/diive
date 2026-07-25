@@ -10,7 +10,6 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-import numpy as np
 from pandas import DataFrame
 
 from diive.core.utils.console import console as _console, rule
