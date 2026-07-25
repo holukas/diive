@@ -49,6 +49,25 @@ def _no_test_submodules(name):
 # (build_gui.ps1 does this automatically).
 datas += collect_data_files("diive", includes=["configs/**/*", "gui/MANUAL.html", "gui/_build_info.txt"])
 
+# diive/__init__.py and diive/io/__init__.py import these on first attribute
+# access (PEP 562) to keep `import diive` fast. PyInstaller's static analysis
+# cannot follow a __getattr__, and the GUI reaches most of them attribute-style
+# (dv.plotting.*, dv.outliers.*), so pin them explicitly.
+hiddenimports += [
+    "diive.analysis",
+    "diive.corrections",
+    "diive.events",
+    "diive.flux",
+    "diive.gapfilling",
+    "diive.io.binary",
+    "diive.io.formats",
+    "diive.outliers",
+    "diive.plotting",
+    "diive.qaqc",
+    "diive.times",
+    "diive.variables",
+]
+
 # --- heavy / dynamically-imported third-party packages -------------------
 # These use lazy/plugin-style imports or ship compiled binaries & data that
 # PyInstaller's static analysis misses. collect_all grabs submodules + data +
