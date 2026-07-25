@@ -64,13 +64,17 @@ examples/                      # 121 runnable examples
 tests/                        # Unit tests
 ```
 
+**[CRITICAL] Keep `diive/__init__.py` lazy.** The ten domain namespaces (and `diive.io`'s `binary` / `formats`) resolve on first attribute access via a module-level `__getattr__` (PEP 562). Adding a plain `from diive import <namespace>` back to either file re-imports sklearn/xgboost/shap/statsmodels on `import diive` and costs ~1.4 s (2.35 s -> 0.96 s was the win). New namespaces go in `_LAZY_SUBMODULES` plus the `TYPE_CHECKING` block, **and** in `packaging/diive_gui.spec`'s `hiddenimports` — PyInstaller cannot follow a `__getattr__`, and the GUI reaches most namespaces attribute-style (`dv.plotting.*`).
+
+**[CRITICAL] `core/` must not import from `gapfilling/`, `flux/` or `preprocessing/`.** Those packages' `__init__` files pull in the ML stack, so one such import drags it into every low-level consumer — and it caused a real cycle (`core.ml.common` -> `gapfilling.scores` -> `gapfilling/__init__` -> `randomforest_ts` -> back), which stayed hidden only because `diive/__init__` imported `gapfilling` first. `prediction_scores` now lives in `core/ml/scores.py` for this reason. Where a single leaf function is genuinely needed, import it inside the function (see `aggregated_as_hires` in `core/dfun/frames.py`).
+
 ## Public API Overview
 
 `import diive as dv` exposes 10 domain namespaces. Authoritative per-symbol detail lives in the code docstrings — this table is a discovery index, not a spec.
 
 | Namespace | Contents |
 |---|---|
-| `dv.outliers` | `AbsoluteLimits`, `Hampel`, `LocalSD`, `LocalOutlierFactor`, `zScore`, `zScoreRolling`, `zScoreIncrements`, `TrimLow`, `ManualRemoval`, + daytime/nighttime variants |
+| `dv.outliers` | `AbsoluteLimits`, `Hampel`, `LocalSD`, `LocalOutlierFactor`, `zScore`, `zScoreRolling`, `zScoreIncrements`, `TrimLow`, `ManualRemoval`, + `*DaytimeNighttime` / `*AllData` names (see the day/night convention below — some are wrappers, some plain aliases) |
 | `dv.events` | `Event` (instant or period marker; `resolved_color(i, colors=)`), `event_to_flag` (→ 0/1 column on an index), `overlay_events` (`axis='x'` value-vs-time / `axis='y'` heatmap; `colors=` override map), `make_event_flag_name`, `CATEGORY_COLORS` |
 | `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`, `FeatureEngineer`, `GapFillingResult`, `prediction_scores`, `linear_interpolation` |
 | `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `process_one_file`, `FluxDetectionLimit`, ustar classes, plus **NEE→GPP+RECO partitioning** and **uncertainty** — see the two sub-sections below |
@@ -344,10 +348,19 @@ Three CLIs (console scripts), all requiring **wind-rotation-corrected** W for de
 - **Full pipeline:** `dv.qaqc.StepwiseMeteoScreeningDb()` — corrections → outlier detection → quality flags
 - **Timestamp shift:** three methods comparing measured vs theoretical radiation (requires clear days)
 
-**[CONVENTION] Day/night threshold parameters.** Outlier methods supporting `separate_day_night` follow one rule — **all new day/night-capable methods MUST match it:**
+**[CONVENTION] Day/night threshold parameters.** Every day/night-capable outlier method follows one shape — **new ones MUST match it:**
 
-1. **A single global knob (`n_sigma`, `threshold`, …) is the source of truth.** Per-period overrides (`n_sigma_daytime`/`n_sigma_nighttime`) **default to `None`, never a literal**, and fall back to the global value: `self.x_daytime = x_daytime if x_daytime is not None else x`. Defaulting to a literal (the old `Hampel` bug: `n_sigma_daytime=5.5`) silently shadows the global knob. Verify that changing the global value alone changes the result.
-2. **`separate_day_night` only changes results when day and night thresholds differ.** With equal thresholds it's mathematically identical to no separation. So a GUI exposing the feature should expose *per-period* thresholds (seeded from the global value, then independently editable), not just the toggle. The Hampel tab (`gui/tabs/outliers.py`) is the reference: separate sigma fields + red/blue day/night markers + a day/night count in the status line.
+1. **The switch is always `separate_day_night`.** No other spelling. Defaults are per-method: `Hampel` is `True`, everything else `False`.
+2. **A single global knob (`n_sigma`, `thres_zscore`, `n_sd`, `minval`/`maxval`, …) is the source of truth**, and applies to *both* periods. Per-period overrides are named `{knob}_daytime` / `{knob}_nighttime`, **default to `None`, never a literal**, and fall back to the global: `self.x_daytime = x_daytime if x_daytime is not None else x`. Defaulting to a literal (the old `Hampel` bug: `n_sigma_daytime=5.5`) silently shadows the global knob. Verify that changing the global value alone changes the result. No lists (`n_sd=[day, night]`), no packed pairs (`daytime_minmax=[min, max]`) — those were removed in v0.91.0.
+3. **Separation is NOT a no-op when day and night thresholds are equal** — except for `AbsoluteLimits`. Whether it changes anything depends on where the method's statistic comes from:
+   - *Pointwise* (`AbsoluteLimits`): each record is compared against a fixed limit, so equal limits give flag-for-flag identical results to no separation. Only here.
+   - *Subset-derived* (`zScore`, `LocalSD`, `LocalOutlierFactor`, `Hampel`): the mean/SD, rolling window or k-neighbourhood is computed **within each period**, so splitting changes the statistic itself. Measured on one series with identical thresholds both sides: `zScore` 5 -> 10 flagged, `LocalSD` 4 -> 10, `LOF` 29 -> 30. Do not tell users the toggle is inert without per-period values.
+4. **A GUI exposing the feature should expose *per-period* thresholds** (seeded from the global value, then independently editable), not just the toggle. The Hampel tab (`gui/tabs/outliers.py`) is the reference: separate sigma fields + red/blue day/night markers + a day/night count in the status line.
+5. **A removed parameter name must say what replaced it.** Detectors take `**legacy` and call `reject_legacy_params` (`outlier_detection/common.py`), which maps an old name to its replacement and still raises the normal unexpected-keyword error for anything else, so a typo cannot pass silently through `**kwargs`. A rename that keeps the *name* and only changes the accepted *type* needs its own guard — see `_reject_list_params` in `localsd.py`.
+
+**Deliberate exceptions.** `TrimLow` keeps `trim_daytime` / `trim_nighttime`: those select *which period to trim*, not different thresholds. `LocalOutlierFactor` has the switch but no per-period knobs, because none existed and inventing `contamination_daytime` would be speculative.
+
+**The `*DaytimeNighttime` names are not all the same kind of thing.** `AbsoluteLimitsDaytimeNighttime` and `LocalOutlierFactorDaytimeNighttime` are wrappers that default the switch on (wrappers, not subclasses — `@ConsoleOutputDecorator()` replaces the decorated class with a function, so `isinstance` raises and subclassing is impossible). `HampelDaytimeNighttime` and `LocalOutlierFactorAllData` are plain aliases whose names already match their base class default.
 
 ## Coding Standards
 
@@ -474,4 +487,4 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 
 ---
 
-**Last Updated:** 2026-07-19 | **Version:** v0.91.0 | **Package Manager:** `uv`
+**Last Updated:** 2026-07-25 | **Version:** v0.91.0 | **Package Manager:** `uv`

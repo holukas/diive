@@ -37,7 +37,23 @@ The rest raise or fail at import:
   `clamp_negatives=True`. Saved projects still load.
 - **PWB time-lag: `var_tsonic` / `col_tsonic` are required** and the 2-combination fallback is gone. Result keys
   `tlag_opt_s`, `corr_est`, `cv5pct`, `cv1pct` removed; `corr_pw` and `cov_pwb` added.
-- **`zScore` unified**: use `zScore(separate_daytime_nighttime=True)`. `zScoreDaytimeNighttime` removed.
+- **`zScore` unified**: use `zScore(separate_day_night=True)`. `zScoreDaytimeNighttime` removed.
+- **One way to set day/night thresholds across every outlier detector.** The switch is `separate_day_night`
+  everywhere (`separate_daytime_nighttime` is gone), and per-period values are always a global value plus optional
+  `*_daytime` / `*_nighttime` overrides that fall back to it:
+    - `LocalSD`: `n_sd` and `winsize` no longer accept a `[day, night]` list. Use `n_sd_daytime`, `n_sd_nighttime`,
+      `winsize_daytime`, `winsize_nighttime`.
+    - `AbsoluteLimits`: `daytime_minmax` / `nighttime_minmax` are replaced by `minval_daytime`, `maxval_daytime`,
+      `minval_nighttime`, `maxval_nighttime`. `minval` / `maxval` alone now cover both periods instead of raising.
+    - `Hampel`: the duplicate `n_sigma_dt` / `n_sigma_nt` pair is removed; use `n_sigma_daytime` /
+      `n_sigma_nighttime`.
+  Defaults are unchanged, so results do not move. Every removed name raises a message naming its replacement, so a
+  stale call fails immediately rather than running with a silently ignored argument.
+- **`AbsoluteLimitsDaytimeNighttime` and `LocalOutlierFactorDaytimeNighttime` now separate day from night.** Both were
+  aliases for their base class and inherited its off-by-default switch, so they ran whole-series detection under a name
+  promising otherwise; `LocalOutlierFactorDaytimeNighttime` was the same object as `LocalOutlierFactorAllData`. Code
+  that relied on the old behaviour will see different flags. `LocalOutlierFactorAllData` and `HampelDaytimeNighttime`
+  are unaffected: both names already matched what their base class did.
 - **`DailyCorrelation` is now a class**; the function API is removed.
 - **`HeatmapXYZ` requires pre-aggregated input.**
 - **Plotting aliases use the `plot_` prefix**; old unprefixed names removed.
@@ -140,6 +156,15 @@ The rest raise or fail at import:
 
 ### Improved
 
+- **`import diive` dropped from 2.35 s to 0.96 s.** The ten domain namespaces and `diive.io`'s submodules now load on
+  first attribute access (PEP 562), so a script that only reads a parquet file no longer pays for sklearn, xgboost,
+  shap and statsmodels. `dv.gapfilling`, `from diive import flux` and every documented import path behave as before;
+  IDEs and type checkers still see the real modules. Most of the saving came from `diive.io`: `formats.fluxnet`
+  imports `ManualRemoval`, which pulled in the whole preprocessing tree down to bokeh.
+- **`core.ml` no longer depends on the `gapfilling` package.** `prediction_scores` moved to `diive.core.ml.scores`;
+  `diive.gapfilling.scores` re-exports it, and `dv.gapfilling.prediction_scores` is unchanged. Importing
+  `diive.core.ml.common` on its own previously raised `ImportError` from a circular import that only stayed hidden
+  because `diive/__init__` happened to import `gapfilling` first.
 - **MDS is now a faithful ONEFlux port**: the 6-stage expanding-window cascade, `>=2`-sample acceptance, N-1 standard
   deviation, and the ONEFlux SWIN tolerance. Fill values r ~ 0.9997 to 0.99997 against native ONEFlux. Shared with
   random uncertainty via `diive.gapfilling.similarity`, so there is one similarity scan. Also 4x faster,
@@ -167,6 +192,19 @@ The rest raise or fail at import:
 
 - **`Hampel` ignored `n_sigma` in day/night mode**: the per-period defaults were the literal `5.5` instead of `None`, so
   the fall-back was dead. **Results change** for callers who passed `n_sigma` alone with `separate_day_night=True`.
+- **`lagged_variants` silently produced no lags for a single-column dataframe**, returning it unchanged with no warning.
+  The same column lags correctly when it is one of two, so the guard was treating "only one column" as "nothing to lag".
+  It now raises only when that column is also in `exclude_cols`. It also no longer adds its columns to the caller's
+  dataframe as a side effect, and neither does `add_continuous_record_number`.
+- **`sstats` raised on a series with no valid values**: `ZeroDivisionError` for an all-NaN series, `IndexError` for an
+  empty one, although a variable with no data in the selected period is ordinary. `series_start` / `series_end` /
+  `series_duration` return `NaT` on an empty index and `outlier_percentage` returns `NaN` when nothing is valid. An
+  all-NaN series keeps its real start and end, since only the values are missing.
+- **`DetectFrequency`'s failure message recommended three fixes, none of which worked.** `regularize` and `nominal_freq`
+  belong to `TimestampSanitizer`, already default to the suggested values, and cannot skip detection: it runs before
+  regularization, and `nominal_freq` only gates a later validation step.
+- **Dead code removed**: `diive/logger.py` (unreferenced, and broken since its PyQt5 import was commented out) and
+  `plotfuncs.remove_prev_lines` (unreferenced, and assigning to `ax.collections` has raised since matplotlib 3.7).
 - **PWB accepted edge-pinned time lags**: a lag at the search-window boundary reported HDI 0.0 and so passed the
   reliability test as maximally reliable, then poisoned the gap-fill. It is now rejected at detection
   (`is_edge_pinned`).
