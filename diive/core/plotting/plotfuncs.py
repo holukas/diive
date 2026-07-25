@@ -94,46 +94,6 @@ def hide_xaxis_yaxis(ax):
     y_axis.set_visible(False)
 
 
-def remove_prev_lines(ax):
-    """Remove all overlay lines (markers, limit lines) above the main line-0 plot."""
-    # Every time the slider multiplier is changed to a new value,
-    # the marker that shows the outlier values are drawn.
-    # In case there is already a marker in the plot, it needs to be
-    # removed first, then the new markers are drawn.
-    # Since the main plot of the time series is line 0, the marker
-    # and the limit lines are lines > 0. Therefore, here we try
-    # to remove all lines > 0. If there is a marker and aux lines,
-    # then all are removed. If there are none, in the current plot,
-    # nothing is removed. Line 0 is the main plot and is never removed.
-    # Since the index of lines changes after a removal, 3 times line 1
-    # is removed.
-
-    num_lines = len(ax.lines)
-    for l in range(num_lines):
-        try:
-            ax.lines[1].remove()
-        except:
-            pass
-
-    # Remove all collections in axis, e.g. .broken_barh
-    ax.collections = []
-
-    # Remove all texts in axis
-    ax.texts = []  ## this is so much simpler I cannot believe it
-
-    # num_lines = len(ax.lines)
-    # for l in range(num_lines):
-    #     try:
-    #         ax.lines[1].remove()
-    #     except:
-    #         pass
-
-    # for ix, t in enumerate(ax.texts):
-    #     ax.texts[ix].remove()
-
-    return ax
-
-
 # def remove_all_twin_ax_lines(twin_ax):
 #     for ix, line in enumerate(twin_ax.lines):
 #         try:
