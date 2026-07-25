@@ -547,6 +547,7 @@ def add_continuous_record_number(df: DataFrame, verbose: int = VERBOSE_PROGRESS)
     """Add continuous record number as new column"""
     newcol = '.RECORDNUMBER'
     data = range(1, len(df) + 1)
+    df = df.copy()  # Do not add the column to the caller's dataframe as a side effect.
     df[newcol] = data
     info(f"Added new column {newcol} with record numbers from {df[newcol].iloc[0]} "
          f"to {df[newcol].iloc[-1]}.", verbose=verbose)
