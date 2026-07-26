@@ -311,6 +311,148 @@ The rest raise or fail at import:
   archived, their content migrated to examples.
 - Switched from poetry to `uv` for dependency management.
 
+### Fixed (timestamp-shift detection)
+
+- **`DetectTimestampShifts.crosscorr()` now recovers a clock offset.** It returned 0 for a planted 60-minute shift and
+  -54 for a 120-minute one, on noise-free synthetic radiation — while a brute-force Pearson scan over the same day
+  found the true lag at r = 1.0000, so the signal was there and the method was losing it. Two causes: the daytime mask
+  (`sun_up`, derived from *potential* radiation) clipped both series before correlating and truncated the shifted
+  measured curve, and the FFT cross-correlation was not normalised per lag by the overlap count, so lags with less
+  overlap scored lower and `argmax` was pulled toward zero. The search window is now padded by `max_shift_min` on each
+  side and the lag scan is a direct Pearson correlation — which is what the docstring always promised. **Results
+  change**: on CH-DAV 2022 the method now reports -5.0 min against the FFT method's -5.9 min (they used to disagree by
+  ~6 min, with crosscorr stuck near 0), and a perfect match now scores r = 1.000 instead of 0.913 — the latter mattered
+  because `plot_crosscorr_results` filters at `min_corr=0.97` by default and was hiding good days. One year takes
+  0.78 s (was 0.31 s for the wrong answer). `max_shift_min` and the reported shift are now converted through the
+  upsampled step, so a non-default `upsample_freq` no longer silently reinterprets minutes as samples.
+
+### Fixed (naming)
+
+- **A falsy `idstr` no longer leaks the text "None" into column names.** `validate_id_string` returned `None`
+  unchanged for a falsy input, and callers interpolate the result straight into names, so omitting the optional
+  argument produced `FLAGNone_FC_QCF` / `FCNone_QCF` from `FlagQCF` — and the same latent bug sat in
+  `eddyproflags` (`FLAGNone_FC_SIGNAL_STRENGTH_TEST`), `storage_correction` and `quality_flags`. It now normalises to
+  `''`, giving `FLAG_FC_QCF` / `FC_QCF` / `FC_QCF0`. Callers that branch on `if idstr:` (`FlagBase`, the USTAR
+  flaggers) are unaffected, since an empty string is falsy too. **No shipped code path changes**: every production
+  call site passes an explicit idstr (`L2`, `L3.1`, `STEPWISE`, `METSCR`), so only direct library calls that omit the
+  documented-optional argument see different names.
+
+### Fixed (console output)
+
+- **Console reports no longer crash on a redirected Windows stdout.** `FlagQCF.report_qcf_flags()` printed U+2550
+  box-drawing rules, so `python ... | head` or `> log.txt` raised `UnicodeEncodeError: 'charmap' codec can't encode
+  character` — Python falls back to cp1252 whenever stdout is a pipe, while a terminal and pytest are both UTF-8, which
+  is why it went unnoticed. CLAUDE.md already required console strings to be cp1252-safe. Fixed in the three places
+  that actually print: `qcf.py` (box-drawing -> `= - |`), `gapfilling/interpolate.py` (`≥` -> `>=`, including the
+  `ValueError` message, which reaches stderr the same way), and `flux/hires/detect_and_remove_tlag.py` (the argparse
+  description printed by `--help`, an `out()` progress line, and Greek letters in a `console.log` line).
+- **New `tests/test_console.py::TestConsoleStringsAreCp1252Safe`** walks the library's printed string literals — those
+  passed to the console helpers, `_console.print/log/rule`, builtin `print`, and `raise` — and fails on any character
+  cp1252 cannot encode. Its blind spots are documented in the test: strings assembled into a variable before printing
+  are not seen, and `diive/gui/` (Qt) and the Textual TUI are excluded because neither writes to plain stdout.
+  Docstrings and comments are deliberately ignored.
+
+### Fixed (corrections)
+
+- **Three corrections no longer rename the caller's Series.** `setto_threshold`, `set_exact_values_to_missing` and
+  `remove_relativehumidity_offset` did `series.name = "input_data"` on the parameter itself, so the object the caller
+  still held came back named `"input_data"`. The returned series was always named correctly, and `apply_corrections`
+  copies before it dispatches, so the GUI and the meteo-screening path were unaffected — a direct library call was
+  not. Each now binds a renamed copy (`work = series.rename("input_data")`), the pattern `_nighttime_zero_offset`
+  already used. `setto_threshold` validates its `type` argument *after* the old rename, so a rejected call left the
+  caller's series renamed too; that is fixed with it. Values, index and output names are unchanged. One visible side
+  effect: the console line `Variable: input_data` now names the real variable, as do the `showplot` titles.
+
+### Unittests
+
+- **New `tests/test_codegen.py` covers the `*_to_code` script generators.** 47 of the 55 had no test, and the 8 that
+  did were either the six flux-chain ones in `tests/test_flux_codegen.py` or reached only incidentally by
+  `tests/test_gui.py` — `core/plotting/codegen.py` read 94% covered while nothing asserted anything about it. Each
+  generator is now checked three ways: the snippet compiles, it contains the call it claims to reproduce, and every
+  keyword it passes to a `dv.*` callable is accepted by that callable's signature. The third check is the one that
+  matters — a renamed library parameter leaves a snippet that still compiles but raises `TypeError` when a user runs
+  it, which compiling alone cannot see. `**legacy` is deliberately not treated as a wildcard: `reject_legacy_params`
+  raises on unknown names, so the named parameters are the real accepted set, and without that carve-out the check
+  skipped every outlier-detector constructor. A completeness test fails if a new `*_to_code` function lands without a
+  test. 67 tests, ~3 s, no GUI or data required.
+- **`TestPlotClasses` in `tests/test_plots.py` covers the plot classes that no non-GUI test reached.** The file tested
+  five classes; `HeatmapDateTime` (used by 16 of the 122 examples), `HeatmapYearMonth`, `Cumulative`,
+  `CumulativeYear`, `RidgeLinePlot`, `TreeRingPlot`, `ShiftedDistributionPlot`, `WaterfallPlot`,
+  `LongtermAnomaliesYear` and `datetime_surface_grid` were executed only incidentally by `tests/test_gui.py`. The
+  fixture is a deterministic synthetic three-year hourly series, so aggregates are exact expected values: the
+  `Cumulative` curve must end at the series sum, the waterfall budget must close on the total, and mean/max/ranks
+  aggregation must give genuinely different meshes. `RidgeLinePlot`'s test pins the documented gotcha that `hspace`
+  has to reach the gridspec at creation. Without any GUI-test contribution these modules now run 80-100% covered
+  (`surface_grid.py` 100%, `heatmap_datetime.py` 91%, `ridgeline.py` 91%, `cumulative.py` 87%, `treering.py` 80%).
+- **`tests/test_corrections.py` grew from 2 tests to 26**, covering all ten public symbols of `dv.corrections`. The
+  `diive/corrections/__init__.py` namespace module was at 0% — no test imported it, so its `__all__` was unverified
+  and a dropped re-export would have kept the suite green; it is now 100%, as is the `apply_corrections` dispatch
+  table (previously reached only by `tests/test_gui.py`), with `offsetcorrection.py` at 98% and `setto.py` at 94%.
+  Each dispatch key is compared against calling the underlying function directly rather than merely running, every
+  `CorrectionSpec` key in `dv.qaqc.CORRECTIONS` is asserted dispatchable, and the nighttime offset is injected at a
+  known constant so the detected daily offset is an exact expected value.
+- **The `dv.qaqc` measurement registry and `dv.variables` classification are tested.** Both read as well-covered
+  (98% and 97%) while being verified by nothing — every covered line came from `tests/test_gui.py`, which drove them
+  without asserting on the answers. `tests/test_qaqc.py` went from 3 tests to 14, `tests/test_createvar.py` from 21 to
+  41; `measurements.py` and `classification.py` are now at 100% from real tests. The assertions cover the two
+  documented traps — `SWC` must beat `SW` in `detect_measurement`, and `FC` must not swallow `FCH4` in
+  `classify_variable` — plus cross-checks that every code `detect_measurement` returns exists in `MEASUREMENTS` and
+  every key `corrections_for_measurement` returns exists in `CORRECTIONS`. `combine_variables`, `auto_pick_column`
+  and `daytime_nighttime_flag_from_swinpot` are covered too.
+- **`tests/test_imports.py` now verifies the whole public namespace surface** — 515 subtests covering every symbol of
+  all ten namespaces. Nothing checked these lists before, so a symbol dropped from a re-export would have vanished
+  from the public API with the suite still green. The test is driven off `_LAZY_SUBMODULES` rather than a hard-coded
+  list, and additionally enforces the four-place namespace registration CLAUDE.md documents: `_LAZY_SUBMODULES`, the
+  `TYPE_CHECKING` block, `diive.__all__`, and `packaging/diive_gui.spec`'s `hiddenimports`. The last one otherwise
+  fails **only in the frozen GUI build**, since PyInstaller cannot follow a PEP 562 `__getattr__` — an unlisted
+  namespace passes every test and every dev run, then is missing from the packaged app.
+- **The non-GUI test suite runs in half the time** (402 s -> 199 s). One `setUpClass` in
+  `tests/test_driveranalysis.py` cost 220 s — 55% of the whole non-GUI suite — by running `DriverAnalysis` at static
+  + temporal levels over a 4-month fixture. Row count is what costs: every temporal stage ends in a TreeSHAP pass
+  over the full matrix and more rows also deepen the forest, so 2x the data costs 7.5x the time, while the lag span
+  is nearly free. The fixture is now 2 months (matching the static class) with the lag range unchanged: setup 220 s
+  -> 27.6 s. Ten convergence/verdict branches that `months=4` happened to reach are no longer covered; no test
+  asserted on them, and they are noted in `COVERAGE_GAPS.md` as needing deliberate tests.
+- **`GapFillingResult` and `prediction_scores` are tested.** `GapFillingResult` is the documented return type of
+  `.results` on every gap-filler; `core/ml/results.py` read 100% covered while every one of its lines came from
+  `tests/test_gui.py`, and `core/ml/scores.py` had no test at all. Both are now at 100% from real tests. The ML
+  contract is pinned (no NaN in `gapfilled`, `flag` in {0,1,2}, observed records never overwritten, all seven metrics
+  in `scores` and `scores_traintest`, `model`/`feature_importances` populated), as is the reduction-field behaviour
+  and the MDS variant where the regressor-only fields stay `None`. `prediction_scores` is checked for argument order:
+  `r2` and `mape` are asymmetric in (true, predicted), so a swapped internal call changes them while the other five
+  metrics do not — verified by mutation.
+
+- **The flux-chain re-run cascade is tested.** Re-running a level invalidates that level and every later one; without
+  it a second `run_level2` would concat duplicate column labels into `fpc_df`, leaving ambiguous lookups and stale
+  flags for `FlagQCF`. The behaviour was documented but untested, its coverage arriving only from the GUI driving
+  levels repeatedly — `levels/_rerun.py` goes from 87% incidental to 98% from real tests. Covered: the cascade and
+  its column-drop, container purity across a re-run, the `filteredseries` fallback to the newest surviving level,
+  clearing of the additive L4.1/L4.2 state, and `drop_columns_for_key` keeping gap-filling methods independent.
+  Mutation-tested by neutering `cascade_reset`.
+- **`stl_decompose` has regression tests for the two bugs fixed in it** (`core/times/decomposition_utils.py`, now 84%
+  on that function). The wrapper never passed `seasonal` through as statsmodels' `period`, so the caller's cycle
+  length was ignored, and it called `STL.fit(weights=...)`, which statsmodels does not accept. Both are pinned by
+  restoring the original bug in the source and confirming the test fails: a known 24-step cycle must come back with
+  lag-24 autocorrelation above 0.99 (correct period gives 0.9999, a wrong one 0.005, with a control test proving the
+  assertion is not vacuous), and a `weights=` call must not raise. Additive reconstruction, trend-window
+  normalisation, argument validation and the short-series warning are covered too.
+- **`FlagQCF` goes from 53% to 95%** (`preprocessing/qaqc/qcf.py`). The existing tests covered aggregation, the
+  filtered series and the OVERALL screening report; the whole `swinpot_col` day/night path, all three console reports
+  and both plot methods had none. Added: the `> 3 soft flags` boundary the old tests jumped over (exactly 3 must
+  still be QCF 1), the day/night acceptance thresholds (a stricter daytime threshold promotes marginal daytime
+  records while nighttime survives), the DAYTIME/NIGHTTIME split in the screening report, the three reports via a
+  console sink, both plot methods, and the `KeyError` validation. Mutation-tested by breaking three QCF rules in
+  turn. Two bugs found while writing these are recorded in `COVERAGE_GAPS.md`: the reports crash on a cp1252 stdout,
+  and omitting the optional `idstr` yields column names containing a literal "None".
+- **New `tests/test_timestamp_shifts.py` takes `DetectTimestampShifts` from 0% to 92%** — the largest library file no
+  test executed at all (281 statements), despite having a worked example. The tests plant a known clock offset in
+  noise-free synthetic radiation and check each of the three methods recovers it, which validates the algorithms
+  rather than their plumbing — and immediately exposed that `crosscorr` cannot (see Known issues). Construction
+  (auto-computed vs supplied potential radiation, coordinate validation), the clearness filters, all five plot
+  methods and the timedelta formatter are covered too.
+- **`pytest-cov` added to the `dev` group**, giving the first line-coverage baseline: 57% library, 68% GUI, 62%
+  combined. Gaps are catalogued in `COVERAGE_GAPS.md`.
+
 ## v0.90.0 | 13 Jan 2026
 
 **Feature Highlights and Logic Changes**
