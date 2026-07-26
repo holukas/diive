@@ -97,6 +97,7 @@ dev = [
     "sphinx-autodoc-typehints>=3.10.2",
     "sphinx-basic-ng>=1.0.0b2",
     "sphinx-gallery>=0.21.0",
+    "pytest-cov>=7.1.0",
 ]
 # Standalone-app packaging for the desktop GUI (one-folder Windows build).
 # Opt in with: uv sync --extra gui --group build, then: .\packaging\build_gui.ps1
