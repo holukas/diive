@@ -258,7 +258,7 @@ def _regr_e0_from_short_term(nee_night: np.ndarray, ta: np.ndarray,
     valid_all = ~np.isnan(nee_night) & ~np.isnan(ta)
     ta_k_all = ta + 273.15
     los, his = _window_slices(day_counter, E0_WINDOW_HALF, E0_STEP)
-    for lo, hi in zip(los, his):
+    for lo, hi in zip(los, his, strict=True):
         m = valid_all[lo:hi]
         if int(m.sum()) <= E0_MIN_ENTRIES:
             continue
@@ -307,7 +307,7 @@ def _regr_rref(nee_night: np.ndarray, ta: np.ndarray, day_counter: np.ndarray,
     valid_all = ~np.isnan(nee_night) & ~np.isnan(ta)
     ta_k_all = ta + 273.15
     los, his = _window_slices(day_counter, RREF_WINDOW_HALF, RREF_STEP)
-    for lo, hi in zip(los, his):
+    for lo, hi in zip(los, his, strict=True):
         m = valid_all[lo:hi]
         if int(m.sum()) <= RREF_MIN_ENTRIES:
             continue

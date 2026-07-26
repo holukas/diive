@@ -776,7 +776,7 @@ def _partition_one_year(nee, ta, sw_in, ta_f, sw_in_f, vpd, julday, hr, nperday,
     out['SE_GPP_DT_OF'] = np.where(se_gpp > NAN, se_gpp, np.nan)
 
     # report fitted parameters at their source central records (like ONEFlux)
-    for r, p in zip(ind_ok, params_ok):
+    for r, p in zip(ind_ok, params_ok, strict=False):
         i2, i0, i1 = int(r[2]), int(r[0]), int(r[1])
         if 0 <= i2 < n:
             out['RREF_DT_OF'][i2] = p[3]

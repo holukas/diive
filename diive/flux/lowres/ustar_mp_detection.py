@@ -441,7 +441,7 @@ class UstarMovingPointDetection:
             return [th] * self.seasons_count
 
         thresholds: List[float] = []
-        for months, c in zip(self.season_groups, season_counts):
+        for months, c in zip(self.season_groups, season_counts, strict=False):
             if c < min_per_season:
                 thresholds.append(np.nan)
                 continue

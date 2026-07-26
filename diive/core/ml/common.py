@@ -1349,7 +1349,7 @@ def plot_feature_importance(feature_importances: pd.DataFrame):
     ax.tick_params(axis='x', labelsize=10)
 
     # Add value labels on bars
-    for i, (imp, err) in enumerate(zip(importances, errors)):
+    for i, (imp, err) in enumerate(zip(importances, errors, strict=False)):
         ax.text(imp + err * 0.5, i, f'{imp:.3f}', va='center', fontsize=9.5,
                 color=COLOR_TEXT, fontweight='500')
 

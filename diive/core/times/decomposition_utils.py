@@ -518,7 +518,7 @@ def detect_seasonality(
             msg += f", secondary periods: {secondary_periods}"
         detail(msg, verbose=verbose)
 
-    all_periods = list(zip(periods, powers_by_period))
+    all_periods = list(zip(periods, powers_by_period, strict=False))
     all_periods.sort(key=lambda x: -x[1])
 
     return {

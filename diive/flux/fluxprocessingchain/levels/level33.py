@@ -531,7 +531,7 @@ def run_level33_ustar_detection(
         year_of = index.year
         vut = boot.get_vut_thresholds()
         threshold_series: dict = {}
-        for p, cut_val in zip(percentiles, cut_thresholds):
+        for p, cut_val in zip(percentiles, cut_thresholds, strict=False):
             col = f'p{p}'
             per_year = {int(y): (vut.loc[y, col] if (y in vut.index
                         and np.isfinite(vut.loc[y, col])) else cut_val)

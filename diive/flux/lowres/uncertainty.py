@@ -267,7 +267,7 @@ class RandomUncertaintyPAS20:
         # running ufloat cumsum.
         subset_cumu[fluxunc] = [
             ufloat(n if pd.notna(n) else np.nan, s if pd.notna(s) else np.nan)
-            for n, s in zip(subset_cumu[self.fluxgapfilledcol], subset_cumu[unc_cum])]
+            for n, s in zip(subset_cumu[self.fluxgapfilledcol], subset_cumu[unc_cum], strict=False)]
 
         # Calculate upper and lower cumulative flux bounds (+/- 1 sigma)
         subset_cumu[flux_upper] = subset_cumu[self.fluxgapfilledcol].add(subset_cumu[unc_cum])

@@ -304,7 +304,7 @@ class OptimizeParamsTS:
         numeric_param_cols_temp = []
         numeric_param_names_temp = []
 
-        for param_col, param_name in zip(param_cols, param_names):
+        for param_col, param_name in zip(param_cols, param_names, strict=False):
             param_vals = cv_results[param_col].values.copy()
             unique_vals = cv_results[param_col].unique()
 
@@ -366,7 +366,7 @@ class OptimizeParamsTS:
         numeric_param_cols = []
         numeric_param_names = []
 
-        for param_col, param_name in zip(param_cols, param_names):
+        for param_col, param_name in zip(param_cols, param_names, strict=False):
             param_vals = cv_results[param_col].values.copy()
 
             # Try pure numeric conversion first
@@ -408,13 +408,13 @@ class OptimizeParamsTS:
         ax.set_title('Parameter Importance Analysis', fontweight='bold')
         ax.grid(axis='x', alpha=0.3)
 
-        for i, (bar, val) in enumerate(zip(bars, sorted_importances)):
+        for i, (bar, val) in enumerate(zip(bars, sorted_importances, strict=True)):
             ax.text(val, bar.get_y() + bar.get_height()/2, f'{val:.3f}',
                    va='center', ha='left', fontsize=9, fontweight='bold')
 
         # 3+. Parameter Slices for numeric parameters (dynamic grid layout)
         # Use pre-filtered parameters from first pass (already excludes single-value params)
-        for idx, (param_col, param_name) in enumerate(zip(numeric_param_cols_temp, numeric_param_names_temp)):
+        for idx, (param_col, param_name) in enumerate(zip(numeric_param_cols_temp, numeric_param_names_temp, strict=False)):
             # Map to subplot position: first slice starts at row 1, 2 columns
             ax_row = 1 + idx // 2
             ax_col = idx % 2
@@ -523,7 +523,7 @@ class OptimizeParamsTS:
         dimensions = []
         data_normalized = []
 
-        for param_col, param_name in zip(param_cols, param_names):
+        for param_col, param_name in zip(param_cols, param_names, strict=False):
             vals = cv_results[param_col].values.copy()
 
             # Skip categorical parameters for parallel coordinates
@@ -555,7 +555,7 @@ class OptimizeParamsTS:
         colors_norm = (test_scores - test_scores.min()) / (test_scores.max() - test_scores.min() + 1e-10)
         colormap = plt.cm.RdYlBu  # Red (low) -> Yellow (medium) -> Blue (high)
 
-        for i, (row_data, color_val) in enumerate(zip(zip(*data_normalized), colors_norm)):
+        for i, (row_data, color_val) in enumerate(zip(zip(*data_normalized, strict=False), colors_norm, strict=False)):
             color = colormap(color_val)
             ax.plot(range(num_dims), row_data, color=color, alpha=0.3, linewidth=1)
 

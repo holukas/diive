@@ -222,7 +222,7 @@ class HexbinPlot(HeatmapBase):
 
         # Place text at each hexagon center
         if len(centers) > 0:
-            for center, val in zip(centers, array):
+            for center, val in zip(centers, array, strict=False):
                 if not np.isnan(val):  # Skip NaN values
                     x_center, y_center = center
                     val_str = f"{val:.{self.show_values_n_dec_places}f}"

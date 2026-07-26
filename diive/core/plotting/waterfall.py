@@ -155,7 +155,7 @@ class WaterfallPlot:
         # Connectors run from each bar's running total to the next bar's start.
         if show_connectors and len(self.cumulative) > 1:
             for x0, x1, y in zip(self.cumulative.index[:-1], self.cumulative.index[1:],
-                                 self.cumulative.values[:-1]):
+                                 self.cumulative.values[:-1], strict=True):
                 self.ax.plot([x0, x1], [y, y], color=theme.COLOR_LINE_ZERO,
                              lw=theme.LINEWIDTH_SPINES, alpha=0.4, zorder=9)
 

@@ -218,7 +218,7 @@ def plot_seasonal_strength_by_period(
     bars = ax.bar(range(len(strengths)), strengths, color=color, alpha=0.7, edgecolor='black')
 
     # Add value labels on bars
-    for i, (bar, strength) in enumerate(zip(bars, strengths)):
+    for i, (bar, strength) in enumerate(zip(bars, strengths, strict=True)):
         height = bar.get_height()
         ax.text(bar.get_x() + bar.get_width() / 2., height,
                f'{strength:.3f}',
@@ -292,7 +292,7 @@ def plot_harmonics(
     ax.set_title(title or f'Top {top_n} Fourier Harmonics')
 
     # Add value labels on bars
-    for i, (bar, amp) in enumerate(zip(bars, amplitudes)):
+    for i, (bar, amp) in enumerate(zip(bars, amplitudes, strict=False)):
         height = bar.get_height()
         ax.text(bar.get_x() + bar.get_width() / 2., height,
                f'{amp:.3f}',

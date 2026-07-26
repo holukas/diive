@@ -1193,7 +1193,7 @@ class FluxChainTab(DiiveTab):
                 self.l2_vm97_checks[k].setChecked(bool(val))
         # Restore per-test column picks (combos seeded by restore_controls' fluxcol).
         for k, picks in (state.get("l2_cols") or {}).items():
-            for combo, pick in zip(self.l2_cols.get(k, []), picks):
+            for combo, pick in zip(self.l2_cols.get(k, []), picks, strict=False):
                 if pick and combo.findText(pick) >= 0:
                     combo.setCurrentText(pick)
         # Rebuild the L3.2 chain (a list of {method, kwargs} steps).

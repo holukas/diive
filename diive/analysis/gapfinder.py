@@ -986,7 +986,7 @@ class GapStats:
         ax.grid(True, alpha=0.25)
 
         # Percentage labels above each bar
-        for angle, pct in zip(theta, pcts):
+        for angle, pct in zip(theta, pcts, strict=False):
             if pct >= max_pct * 0.05:
                 ax.text(angle, pct + max_pct * 0.08,
                         f'{pct:.0f}%',
@@ -1033,7 +1033,7 @@ class GapStats:
         ax.set_ylim(0, max(max(pcts) * 1.2, 5.0))
         ax.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.4, zorder=0)
 
-        for bar, ng in zip(bars, n_gaps):
+        for bar, ng in zip(bars, n_gaps, strict=False):
             if ng > 0:
                 ax.text(
                     bar.get_x() + bar.get_width() / 2,

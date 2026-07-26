@@ -679,7 +679,7 @@ class PlottingTab(DiiveTab):
         # `explicit` records which dims the user pinned, so the preserved zoom
         # below doesn't override an explicit limit.
         explicit: list[tuple[bool, bool]] = []
-        for i, (ax, name) in enumerate(zip(axes, self._panels)):
+        for i, (ax, name) in enumerate(zip(axes, self._panels, strict=False)):
             if self._panel_settings.get(name) is not None:
                 self.settings.apply_state(self._panel_settings[name])
             self._draw_one(ax, name, i)

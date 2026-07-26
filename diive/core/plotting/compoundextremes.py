@@ -204,7 +204,7 @@ class CompoundExtremesPlot:
                        marker=st['marker'], alpha=alpha, edgecolors=edgecolor,
                        label=st['label'], zorder=3)
             if annotate and key in annotate_categories:
-                for xv, yv, lab in zip(sub['_x'], sub['_y'], sub['_label']):
+                for xv, yv, lab in zip(sub['_x'], sub['_y'], sub['_label'], strict=False):
                     if lab:
                         ax.annotate(lab, (xv, yv), textcoords='offset points',
                                     xytext=annotate_offset, fontsize=annotate_fontsize,

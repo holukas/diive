@@ -771,7 +771,7 @@ def _partition_daytime(nee, sd_nee, ta, vpd, rg, doy, hour, lat, lon,
     out['GPP_DT_RP'] = gpp
 
     # report LRC parameters at the central record of each window (like REddyProc)
-    for c, p in zip(central_list, params_list):
+    for c, p in zip(central_list, params_list, strict=False):
         idx = c - 1
         if 0 <= idx < n:
             out['K_DT_RP'][idx] = p[0]

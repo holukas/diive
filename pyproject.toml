@@ -116,7 +116,6 @@ target-version = "py312"
 select = ["E4", "E7", "E9", "F", "B"]
 ignore = [
     "F541",  # f-string without placeholders: cosmetic only
-    "B905",  # zip() without strict=: worth its own sweep, not a blocker
     "B007",  # unused loop control variable: usually a deliberate throwaway
 ]
 

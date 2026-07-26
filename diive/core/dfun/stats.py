@@ -296,7 +296,7 @@ def approximate_entropy(s: Series, m: int = 2, r: float = None) -> float:
         r = 0.2 * s_clean.std()
 
     def _maxdist(x_i, x_j):
-        return max([abs(ua - va) for ua, va in zip(x_i, x_j)])
+        return max([abs(ua - va) for ua, va in zip(x_i, x_j, strict=True)])
 
     def _phi(m):
         x = [[s_clean[j] for j in range(i, i + m - 1 + 1)] for i in range(N - m + 1)]

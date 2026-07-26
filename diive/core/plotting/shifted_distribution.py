@@ -206,7 +206,7 @@ class ShiftedDistributionPlot:
         # Zone labels: text annotations just above the top spine, in data-x / axes-y coords
         trans = blended_transform_factory(self.ax.transData, self.ax.transAxes)
         label_positions = [(zone_edges[i] + zone_edges[i + 1]) / 2 for i in range(5)]
-        for pos, label, color in zip(label_positions, zone_labels, zone_colors):
+        for pos, label, color in zip(label_positions, zone_labels, zone_colors, strict=False):
             self.ax.text(
                 pos, 1.01, label,
                 transform=trans, color=color, fontsize=11, fontweight='bold',

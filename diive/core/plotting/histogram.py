@@ -191,7 +191,7 @@ class HistogramPlot:
                 axx_ticks_pos.append(val)
             self.axx.set_xticks(axx_ticks_pos)
             if show_zscore_values:
-                axx_zscores = [f"{z}\n{v:.01f}" for z, v in zip(axx_zscores, axx_ticks_pos)]
+                axx_zscores = [f"{z}\n{v:.01f}" for z, v in zip(axx_zscores, axx_ticks_pos, strict=False)]
                 self.axx.set_xticklabels(axx_zscores)
             else:
                 self.axx.set_xticklabels(axx_zscores)

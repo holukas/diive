@@ -301,7 +301,7 @@ class LongTermGapFillingBase:
         # kudos: https://stackoverflow.com/questions/57923198/way-to-change-only-the-width-of-marker-in-scatterplot-but-not-height
         width = 2
         height = 1
-        verts = list(zip([-width, width, width, -width], [-height, -height, height, height]))
+        verts = list(zip([-width, width, width, -width], [-height, -height, height, height], strict=False))
         colors = colorwheel_48()
         figheight = 6 if len(self.feature_ranks_per_year) <= 30 else 8
         fig, ax = plt.subplots(figsize=(20, figheight),

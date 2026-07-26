@@ -686,7 +686,7 @@ class PlotSettingsPanel(QScrollArea):
         form.addRow(hint)
         labels = ("X (driver)", "Y (driver)", "Z (flux)")
         for label, combo in zip(labels, self._build_role_combos(
-                labels, none_ok=(False, False, False))):
+                labels, none_ok=(False, False, False)), strict=False):
             form.addRow(label, combo)
         self._col.addWidget(roles)
 
@@ -762,7 +762,7 @@ class PlotSettingsPanel(QScrollArea):
         form.addRow(hint)
         labels = ("X (driver)", "Y (driver)", "Z (value)")
         for label, combo in zip(labels, self._build_role_combos(
-                labels, none_ok=(False, False, False))):
+                labels, none_ok=(False, False, False)), strict=False):
             form.addRow(label, combo)
         self._col.addWidget(roles)
 
@@ -879,7 +879,7 @@ class PlotSettingsPanel(QScrollArea):
         re-emitting ``xyz_changed``. No-op for plot types without role combos."""
         if getattr(self, "_role_combos", None) is None:
             return
-        for combo, name, none_ok in zip(self._role_combos, (x, y, z), self._role_none_ok):
+        for combo, name, none_ok in zip(self._role_combos, (x, y, z), self._role_none_ok, strict=False):
             combo.blockSignals(True)
             i = combo.findText(name) if name else -1
             combo.setCurrentIndex(i if i >= 0 else (0 if none_ok else combo.currentIndex()))
@@ -891,7 +891,7 @@ class PlotSettingsPanel(QScrollArea):
         if getattr(self, "_role_combos", None) is None:
             return
         names = [str(n) for n in names]
-        for combo, none_ok in zip(self._role_combos, self._role_none_ok):
+        for combo, none_ok in zip(self._role_combos, self._role_none_ok, strict=False):
             cur = combo.currentText()
             combo.blockSignals(True)
             combo.clear()
@@ -1576,7 +1576,7 @@ class PlotSettingsPanel(QScrollArea):
     def apply_state(self, values) -> None:
         """Re-apply a snapshot from :meth:`state` onto the controls."""
         from diive.gui.widgets.state_utils import set_widget_value
-        for w, v in zip(self._state_widgets(), values or []):
+        for w, v in zip(self._state_widgets(), values or [], strict=False):
             set_widget_value(w, v)
 
     def values(self) -> dict:
