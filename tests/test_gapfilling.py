@@ -89,6 +89,22 @@ class TestGapFilling(unittest.TestCase):
         self.assertEqual(counts[1028], 99)     # method 1, 28 d
         self.assertEqual(counts[2014], 156)    # method 2 (SWIN only), 14 d
 
+        # `.results` returns the same GapFillingResult type as the ML fillers,
+        # but MDS is not a regressor: it has no held-out split, no SHAP and no
+        # model object, so those fields stay None. Asserted on the run above
+        # rather than in a second MDS run, which is not cheap.
+        from diive.core.ml.results import GapFillingResult
+        res = mds.results
+        self.assertIsInstance(res, GapFillingResult)
+        self.assertEqual(int(res.gapfilled.isna().sum()), 0)
+        self.assertIn('r2', res.scores)
+        for ml_only in ('scores_traintest', 'feature_importances',
+                        'feature_importances_traintest',
+                        'feature_importances_reduction', 'model',
+                        'accepted_features', 'rejected_features'):
+            with self.subTest(field=ml_only):
+                self.assertIsNone(getattr(res, ml_only))
+
     def test_gapfilling_longterm_randomforest(self):
         from diive.configs.exampledata import load_exampledata_parquet
         from diive.gapfilling.longterm import LongTermGapFillingRandomForestTS
@@ -925,6 +941,186 @@ class TestGapFilling(unittest.TestCase):
         importances = np.abs(shap_values).mean(axis=0)
         self.assertGreater(importances[0], importances[1])
         self.assertGreater(importances[0], importances[2])
+
+
+class TestPredictionScores(unittest.TestCase):
+    """`dv.gapfilling.prediction_scores` — the metric dict every gap-filler reports."""
+
+    METRICS = ('mae', 'medae', 'mse', 'rmse', 'mape', 'maxe', 'r2')
+
+    def test_returns_all_seven_metrics(self):
+        from diive.core.ml.scores import prediction_scores
+        scores = prediction_scores(predictions=np.array([1.0, 2.0]),
+                                   targets=np.array([1.1, 2.1]))
+        self.assertEqual(set(scores), set(self.METRICS))
+
+    def test_perfect_prediction(self):
+        from diive.core.ml.scores import prediction_scores
+        values = np.array([1.0, 5.0, -3.0, 7.5])
+        scores = prediction_scores(predictions=values, targets=values)
+        for metric in ('mae', 'medae', 'mse', 'rmse', 'mape', 'maxe'):
+            with self.subTest(metric=metric):
+                self.assertAlmostEqual(scores[metric], 0.0, places=12)
+        self.assertAlmostEqual(scores['r2'], 1.0, places=12)
+
+    def test_known_values(self):
+        from diive.core.ml.scores import prediction_scores
+        # Errors are -0.5, +0.2, -0.6, +0.1 -> hand-checkable.
+        predictions = np.array([1.0, 2.0, 3.0, 4.0])
+        targets = np.array([1.5, 1.8, 3.6, 3.9])
+        scores = prediction_scores(predictions=predictions, targets=targets)
+        self.assertAlmostEqual(scores['mae'], 0.35, places=10)
+        self.assertAlmostEqual(scores['mse'], 0.165, places=10)
+        self.assertAlmostEqual(scores['rmse'], float(np.sqrt(0.165)), places=10)
+        self.assertAlmostEqual(scores['maxe'], 0.6, places=10)
+        self.assertAlmostEqual(scores['medae'], 0.35, places=10)
+
+    def test_argument_order_is_honoured(self):
+        # r2 and mape are asymmetric in (true, predicted): swapping the two
+        # changes them. This pins that `targets` really is treated as the truth
+        # inside, which a symmetric-only check (mae/rmse) could never catch.
+        from diive.core.ml.scores import prediction_scores
+        predictions = np.array([1.0, 2.0, 3.0, 4.0])
+        targets = np.array([1.5, 1.8, 3.6, 3.9])
+        forward = prediction_scores(predictions=predictions, targets=targets)
+        swapped = prediction_scores(predictions=targets, targets=predictions)
+        self.assertAlmostEqual(forward['r2'], 0.853333, places=6)
+        self.assertAlmostEqual(forward['mape'], 0.159188, places=6)
+        self.assertNotAlmostEqual(forward['r2'], swapped['r2'], places=6)
+        self.assertNotAlmostEqual(forward['mape'], swapped['mape'], places=6)
+        # The symmetric metrics are unaffected either way.
+        for metric in ('mae', 'mse', 'rmse', 'maxe', 'medae'):
+            with self.subTest(metric=metric):
+                self.assertAlmostEqual(forward[metric], swapped[metric], places=12)
+
+    def test_worse_predictions_score_worse(self):
+        from diive.core.ml.scores import prediction_scores
+        targets = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        good = prediction_scores(predictions=targets + 0.1, targets=targets)
+        bad = prediction_scores(predictions=targets + 2.0, targets=targets)
+        self.assertGreater(good['r2'], bad['r2'])
+        self.assertLess(good['rmse'], bad['rmse'])
+
+
+class TestGapFillingResult(unittest.TestCase):
+    """The `.results` contract shared by every gap-filler.
+
+    `GapFillingResult` is the documented return type of `.results`, and no
+    non-GUI test constructed or inspected one.
+    """
+
+    @staticmethod
+    def _frame(n: int = 600, gap: slice = slice(100, 160)):
+        """Small frame with a known gap; the target is a clean function of TA/SW_IN."""
+        import pandas as pd
+        idx = pd.date_range('2021-01-01', periods=n, freq='30min',
+                            name='TIMESTAMP_MIDDLE')
+        rng = np.random.RandomState(0)
+        ta = 15 + 8 * np.sin(2 * np.pi * np.arange(n) / 48) + rng.randn(n)
+        sw = np.clip(500 * np.sin(2 * np.pi * ((np.arange(n) % 48) - 12) / 48), 0, None)
+        target = -0.02 * sw - 0.08 * ta + rng.randn(n) * 0.5
+        df = pd.DataFrame({'NEE': target, 'TA': ta, 'SW_IN': sw}, index=idx)
+        df.iloc[gap, df.columns.get_loc('NEE')] = np.nan
+        return df
+
+    @staticmethod
+    def _fitted(df, **kwargs):
+        """A tiny fitted RandomForestTS.
+
+        showplot_* default to True on trainmodel/fillgaps, which blocks on a
+        real backend -- always pass them False from a test.
+        """
+        model = RandomForestTS(input_df=df, target_col='NEE', verbose=0,
+                               n_estimators=3, min_samples_leaf=5,
+                               random_state=42, n_jobs=1, **kwargs)
+        model.run(showplot_scores=False, showplot_importance=False)
+        return model
+
+    def test_dataclass_defaults(self):
+        import pandas as pd
+        from diive.core.ml.results import GapFillingResult
+        # Only four fields are required; every other output is optional so the
+        # non-ML fillers (MDS) can return the same type.
+        result = GapFillingResult(gapfilled=pd.Series([1.0]), flag=pd.Series([0]),
+                                  scores={'r2': 1.0}, gapfilling_df=pd.DataFrame())
+        for optional in ('scores_traintest', 'feature_importances',
+                         'feature_importances_traintest',
+                         'feature_importances_reduction', 'model',
+                         'accepted_features', 'rejected_features'):
+            with self.subTest(field=optional):
+                self.assertIsNone(getattr(result, optional))
+
+    def test_results_before_run_raises(self):
+        df = self._frame()
+        model = RandomForestTS(input_df=df, target_col='NEE', verbose=0,
+                               n_estimators=3, random_state=42, n_jobs=1)
+        with self.assertRaises(Exception):
+            _ = model.results
+
+    def test_gapfilled_and_flag(self):
+        from diive.core.ml.results import GapFillingResult
+        df = self._frame()
+        result = self._fitted(df).results
+
+        self.assertIsInstance(result, GapFillingResult)
+        # Gap-filling leaves no gaps, and keeps the input index.
+        self.assertEqual(int(result.gapfilled.isna().sum()), 0)
+        self.assertTrue(result.gapfilled.index.equals(df.index))
+        # 0 = observed, 1 = gap-filled, 2 = fallback.
+        self.assertTrue(set(result.flag.dropna().unique()) <= {0, 1, 2})
+        # Both states are present: 60 records were blanked, the rest observed.
+        self.assertEqual(int((result.flag == 1).sum()), 60)
+        self.assertEqual(int((result.flag == 0).sum()), len(df) - 60)
+        # Observed records must come back untouched -- filling must not overwrite
+        # measured data.
+        observed = result.flag == 0
+        np.testing.assert_allclose(result.gapfilled[observed].to_numpy(),
+                                   df['NEE'][observed].to_numpy())
+
+    def test_scores_are_present_for_ml(self):
+        result = self._fitted(self._frame()).results
+        metrics = {'mae', 'medae', 'mse', 'rmse', 'mape', 'maxe', 'r2'}
+        self.assertEqual(set(result.scores), metrics)
+        # scores_traintest is the held-out estimate; ML fillers always have it.
+        self.assertIsNotNone(result.scores_traintest)
+        self.assertEqual(set(result.scores_traintest), metrics)
+
+    def test_model_and_importances_present_for_ml(self):
+        from pandas import DataFrame
+        from sklearn.ensemble import RandomForestRegressor
+        result = self._fitted(self._frame()).results
+        self.assertIsInstance(result.model, RandomForestRegressor)
+        self.assertIsInstance(result.feature_importances, DataFrame)
+        self.assertEqual(list(result.feature_importances.columns),
+                         ['SHAP_IMPORTANCE', 'SHAP_SD'])
+
+    def test_reduction_fields_are_none_unless_reduction_ran(self):
+        result = self._fitted(self._frame()).results
+        self.assertIsNone(result.feature_importances_reduction)
+        self.assertIsNone(result.accepted_features)
+        self.assertIsNone(result.rejected_features)
+
+    def test_reduction_fields_populated_when_reduction_ran(self):
+        from pandas import DataFrame
+        df = self._frame()
+        model = RandomForestTS(input_df=df, target_col='NEE', verbose=0,
+                               n_estimators=3, min_samples_leaf=5,
+                               random_state=42, n_jobs=1)
+        model.reduce_features(shap_threshold_factor=0.5)
+        model.run(showplot_scores=False, showplot_importance=False)
+        result = model.results
+        # The reduction view is the only one carrying the .RANDOM benchmark the
+        # threshold is derived from.
+        self.assertIsInstance(result.feature_importances_reduction, DataFrame)
+        self.assertIn('.RANDOM', result.feature_importances_reduction.index)
+        self.assertIsNotNone(result.accepted_features)
+
+    def test_legacy_result_is_the_gapfilling_frame(self):
+        from pandas import DataFrame
+        model = self._fitted(self._frame())
+        # `.result` (singular) predates `.results` and stays available.
+        self.assertIsInstance(model.result, DataFrame)
+        self.assertTrue(model.result.equals(model.results.gapfilling_df))
 
 
 if __name__ == '__main__':
