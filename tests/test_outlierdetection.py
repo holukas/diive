@@ -778,3 +778,52 @@ class TestDaytimeNighttimeNames(unittest.TestCase):
             AbsoluteLimitsDaytimeNighttime(series=s.copy(), daytime_minmax=[4.0, 25.0],
                                            nighttime_minmax=[-5.0, 10.0], **self.COORDS)
         self.assertIn('minval_daytime', str(ctx.exception))
+
+
+class TestRenamedParamsRejected(unittest.TestCase):
+    """Removed parameter names must name their replacement.
+
+    Detectors take **legacy purely so a pre-unification call gets a useful
+    message. If that regressed, the old name would land in **kwargs and be
+    ignored, silently running with the wrong settings.
+    """
+
+    @staticmethod
+    def _series(n: int = 200):
+        idx = pd.date_range('2024-06-01', periods=n, freq='30min')
+        return pd.Series(np.arange(float(n)), index=idx, name='TA')
+
+    COORDS = dict(lat=46.8, lon=9.8, utc_offset=1)
+
+    def test_old_switch_name_names_its_replacement(self):
+        from diive.preprocessing.outlier_detection import LocalSD, LocalOutlierFactor
+        for cls, extra in ((zScore, {}), (LocalSD, {}), (LocalOutlierFactor, {}),
+                           (AbsoluteLimits, dict(minval=0, maxval=1))):
+            with self.subTest(cls=getattr(cls, '__name__', str(cls))):
+                with self.assertRaises(TypeError) as ctx:
+                    cls(series=self._series(), separate_daytime_nighttime=True,
+                        **self.COORDS, **extra)
+                msg = str(ctx.exception)
+                self.assertIn('separate_daytime_nighttime', msg)
+                self.assertIn('separate_day_night', msg)
+
+    def test_old_hampel_short_names_rejected(self):
+        with self.assertRaises(TypeError) as ctx:
+            HampelDaytimeNighttime(series=self._series(), n_sigma_dt=5, **self.COORDS)
+        self.assertIn('n_sigma_daytime', str(ctx.exception))
+
+    def test_localsd_rejects_the_old_list_form(self):
+        from diive.preprocessing.outlier_detection import LocalSD
+        # n_sd kept its name and only stopped accepting a list, so no name-based
+        # check can catch this; it needs its own type guard.
+        with self.assertRaises(TypeError) as ctx:
+            LocalSD(series=self._series(), n_sd=[4, 7], separate_day_night=True, **self.COORDS)
+        msg = str(ctx.exception)
+        self.assertIn('n_sd_daytime', msg)
+        self.assertIn('n_sd_nighttime', msg)
+
+    def test_a_plain_typo_still_raises_normally(self):
+        # **legacy must not become a silent catch-all for misspellings.
+        with self.assertRaises(TypeError) as ctx:
+            zScore(series=self._series(), thres_zscoer=4)
+        self.assertIn('unexpected keyword argument', str(ctx.exception))

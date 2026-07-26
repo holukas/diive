@@ -271,3 +271,35 @@ class TestCreateVar(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestLaggedVariantsSingleColumn(unittest.TestCase):
+    """A one-column dataframe used to come back with no lags and no warning."""
+
+    @staticmethod
+    def _df(cols):
+        idx = pd.date_range('2024-01-01', periods=10, freq='30min', name='TIMESTAMP_MIDDLE')
+        return pd.DataFrame({c: np.arange(10.0) for c in cols}, index=idx)
+
+    def test_single_column_is_lagged(self):
+        from diive.variables import lagged_variants
+        out = lagged_variants(df=self._df(['TA']), lag=[-2, 1], verbose=0)
+        self.assertEqual(list(out.columns), ['TA', '.TA-2', '.TA-1', '.TA+1'])
+
+    def test_single_column_matches_the_same_column_among_others(self):
+        from diive.variables import lagged_variants
+        # Excluding the second column leaves exactly one column to lag, which is
+        # the case that always worked. A lone column must behave identically.
+        alone = lagged_variants(df=self._df(['TA']), lag=[-2, 1], verbose=0)
+        among = lagged_variants(df=self._df(['TA', 'X']), lag=[-2, 1],
+                                exclude_cols=['X'], verbose=0)
+        lagcols = ['.TA-2', '.TA-1', '.TA+1']
+        self.assertEqual([c for c in among.columns if c.startswith('.')], lagcols)
+        for c in lagcols:
+            self.assertTrue(alone[c].equals(among[c]), f'{c} differs')
+
+    def test_single_excluded_column_still_raises(self):
+        from diive.variables import lagged_variants
+        # Nothing left to lag: this is the case the guard was written for.
+        with self.assertRaises(Exception):
+            lagged_variants(df=self._df(['TA']), lag=[-2, 1], exclude_cols=['TA'], verbose=0)

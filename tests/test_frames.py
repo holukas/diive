@@ -80,3 +80,36 @@ class TestKeepRecordsWhere(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestNoCallerMutation(unittest.TestCase):
+    """Helpers that return a dataframe must not also modify the one passed in.
+
+    Both of these added their column to the caller's dataframe and returned
+    that same object, so they looked pure but were not.
+    """
+
+    @staticmethod
+    def _df():
+        idx = pd.date_range('2024-01-01', periods=10, freq='30min', name='TIMESTAMP_MIDDLE')
+        return pd.DataFrame({'TA': np.arange(10.0), 'SW_IN': np.arange(10.0)}, index=idx)
+
+    def test_add_continuous_record_number_leaves_caller_alone(self):
+        from diive.core.dfun.frames import add_continuous_record_number
+        df = self._df()
+        before = list(df.columns)
+        out = add_continuous_record_number(df=df, verbose=0)
+        self.assertEqual(list(df.columns), before)
+        self.assertIsNot(out, df)
+        self.assertIn('.RECORDNUMBER', out.columns)
+        self.assertEqual(out['.RECORDNUMBER'].iloc[0], 1)
+        self.assertEqual(out['.RECORDNUMBER'].iloc[-1], len(df))
+
+    def test_lagged_variants_leaves_caller_alone(self):
+        from diive.variables import lagged_variants
+        df = self._df()
+        before = list(df.columns)
+        out = lagged_variants(df=df, lag=[-1, 1], verbose=0)
+        self.assertEqual(list(df.columns), before)
+        self.assertIsNot(out, df)
+        self.assertIn('.TA-1', out.columns)
