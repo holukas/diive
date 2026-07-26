@@ -282,6 +282,14 @@ The rest raise or fail at import:
   `linear_interpolation` on the current `GapFinder` API; `data.filteredseries` reset after
   `run_level33_constant_ustar()`; `calc_vpd_from_ta_rh` export; `SortingBinsMethod` alias; 7 misrouted `__init__`
   exports; PWBOPT carry-forward ordered by time; chunk-filename collisions raised upfront.
+- **Whitespace-separated raw files could not be read at all.** All four `read_csv` calls that honour a `--sep` flag
+  (`apply_tlag._apply_tlag_file_worker`, `detect_and_remove_tlag._read_raw_file` and the two chunk readers in
+  `detect_one_chunk` / `remove_one_chunk`) passed the C-parser option `low_memory=False` alongside `engine='python'`,
+  which pandas rejects, so every file raised `ValueError: The 'low_memory' option is not supported with the 'python'
+  engine`. This is the *default* separator of `diive-tlag-apply-batch` — the EddyPro rotated files the module is written
+  around — and `--sep "\s+"` in `diive-tlag-pwb-detect-remove`. Both capture exceptions per file, so a run reported an
+  all-error summary and wrote nothing rather than failing outright. Engine selection now lives in one place
+  (`lag_pwb._read_engine_kwargs`).
 - All 63 active tests pass.
 
 ### Documentation

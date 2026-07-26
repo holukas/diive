@@ -132,7 +132,12 @@ Examples:
 - With ``--start-time-regex "(\\d{8})_(\\d{4})"`` extracting the file's
   starting timestamp ``YYYYMMDD_HHMM``, the template
   ``"CH-CHA_{starttime}{suffix}"`` produces
-  ``CH-CHA_20210722-1100.csv``, ``CH-CHA_20210722-1130.csv``, ...
+  ``CH-CHA_202107221100.csv``, ``CH-CHA_202107221130.csv``, ...
+  Note the format spec that goes with it: the regex's capture groups are
+  **concatenated** before parsing, so this pair needs
+  ``--start-time-format "%Y%m%d%H%M"`` (no separator). The default
+  ``"%Y%m%d-%H%M"`` fits a filename whose timestamp already carries the
+  hyphen, e.g. ``--start-time-regex "(\\d{8}-\\d{4})"``.
 
 Outputs in ``--output-dir`` (subfolders numbered by pipeline phase; the root
 itself holds only those two folders plus ``log.txt``):
@@ -215,6 +220,7 @@ from pandas import DataFrame  # noqa: E402
 
 from diive.flux.hires.lag_pwb import (  # noqa: E402
     _DEFAULT_NA_VALUES,
+    _read_engine_kwargs,
     PreWhiteningBootstrap,
     PwbBatchDetection,
 )
@@ -268,8 +274,7 @@ def _read_raw_file(
         header=None,
         sep=sep,
         na_values=na_values,
-        low_memory=False,
-        engine='python' if sep == _WHITESPACE_SEP else 'c',
+        **_read_engine_kwargs(sep),
     )
     if df.shape[1] != len(header_cols):
         raise ValueError(
@@ -1156,8 +1161,7 @@ def detect_one_chunk(
                 header=None,
                 sep=sep,
                 na_values=na_values,
-                low_memory=False,
-                engine='python' if sep == _WHITESPACE_SEP else 'c',
+                **_read_engine_kwargs(sep),
             )
         except pd.errors.EmptyDataError:
             # Chunk starts at/after EOF: a phantom chunk from the padded
@@ -1379,8 +1383,7 @@ def remove_one_chunk(
             header=None,
             sep=sep,
             na_values=na_values,
-            low_memory=False,
-            engine='python' if sep == _WHITESPACE_SEP else 'c',
+            **_read_engine_kwargs(sep),
         )
         if df_chunk.shape[1] != len(header_cols):
             raise ValueError(

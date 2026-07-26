@@ -182,7 +182,7 @@ from pandas import DataFrame
 
 # Same NA strings as the PWB worker, so the round-trip preserves EddyPro
 # semantics. Importing keeps the two modules in lockstep.
-from diive.flux.hires.lag_pwb import _DEFAULT_NA_VALUES
+from diive.flux.hires.lag_pwb import _DEFAULT_NA_VALUES, _read_engine_kwargs
 
 # Sentinel used in the CLI parser and class default for "whitespace separator".
 # pandas understands the regex ``r'\s+'`` for reading; for writing we fall back
@@ -286,8 +286,7 @@ def _apply_tlag_file_worker(args: tuple) -> dict:
             header=None,
             sep=sep,
             na_values=na_values,
-            low_memory=False,
-            engine='python' if sep == _WHITESPACE_SEP else 'c',
+            **_read_engine_kwargs(sep),
         )
         if df.shape[1] != len(header_cols):
             raise ValueError(

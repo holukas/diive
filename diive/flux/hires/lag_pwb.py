@@ -234,6 +234,23 @@ from diive.core.utils.console import warn
 # Default NA strings matching EddyPro rotated-file conventions
 _DEFAULT_NA_VALUES = ['-9999', '-9999.0', '-9999.0000000000000']
 
+# Sentinel for "separate fields on any whitespace run"; pandas reads it as the
+# regex it is. Kept here so the reading modules stay in lockstep.
+_WHITESPACE_SEP = r'\s+'
+
+
+def _read_engine_kwargs(sep: str) -> dict:
+    """pandas engine selection for one separator.
+
+    A regex separator needs the python parser. ``low_memory`` is a C-parser
+    option and pandas *raises* when it is passed alongside the python engine,
+    so it can only be sent with the C parser.
+    """
+    if sep == _WHITESPACE_SEP:
+        return {'engine': 'python'}
+    return {'engine': 'c', 'low_memory': False}
+
+
 # Smoothing widths for the full-data PW CCF diagnostic panels (older R convention).
 _SMOOTH_WIDTH_CCF = 13
 _SMOOTH_WIDTH_CCOV = 3
