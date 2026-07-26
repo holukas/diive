@@ -124,7 +124,7 @@ def plot_decomposition(
             ax4.set_ylabel('ACF')
             ax4.set_title('Residual Autocorrelation')
         except Exception as e:
-            warnings.warn(f"Could not plot ACF: {str(e)}")
+            warnings.warn(f"Could not plot ACF: {str(e)}", stacklevel=2)
             # Fallback to residual plot
             ax4.plot(residual.index, residual.to_numpy(), color=color_scheme['residual'],
                     linewidth=0.8, marker='o', markersize=2)

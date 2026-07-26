@@ -69,7 +69,7 @@ def stl_decompose(
         warnings.warn(
             f"Series length ({len(series)}) < 2 * seasonal ({2 * seasonal}). "
             "STL may produce unreliable results.",
-            UserWarning
+            UserWarning, stacklevel=2
         )
 
     if seasonal < 2:
@@ -462,7 +462,7 @@ def detect_seasonality(
         warnings.warn(
             f"Series very short ({len(series_clean)} values). "
             "Seasonality detection unreliable.",
-            UserWarning
+            UserWarning, stacklevel=2
         )
 
     # Periodogram
