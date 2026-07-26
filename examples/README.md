@@ -59,7 +59,7 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (26 examples)
+├── flux/                  # Eddy covariance flux processing (27 examples)
 │   ├── fluxprocessingchain/
 │   │   ├── fluxprocessingchain_level2.py
 │   │   ├── fluxprocessingchain_runchain.py
@@ -81,13 +81,14 @@ examples/
 │   │   ├── flux_ustar_mp_detection.py
 │   │   ├── flux_ustar_vekuri_detection.py
 │   │   └── flux_ustar_method_comparison.py
-│   └── hires/             # High-resolution analysis (8 examples)
+│   └── hires/             # High-resolution analysis (9 examples)
 │       ├── flux_fluxdetectionlimit.py
 │       ├── flux_lag.py
 │       ├── flux_lag_pwb.py
 │       ├── flux_lag_pwbopt.py
 │       ├── flux_lag_pwb_batch.py
 │       ├── flux_lag_pwb_batch_cli.py
+│       ├── flux_detect_remove_tlag.py
 │       ├── flux_apply_tlag_cli.py
 │       └── flux_windrotation.py
 ├── gapfilling/            # Gap-filling methods (12 examples)

@@ -99,7 +99,7 @@ guided processing chain, per-variable metadata with full provenance, and portabl
 |---|---|
 | [OVERVIEW.md](OVERVIEW.md) | How the pieces fit together: library, GUI, CLI, docs, packaging |
 | [examples/COOKBOOK.md](examples/COOKBOOK.md) | Six minimal workflows — the place to start |
-| [examples/CATALOG.md](examples/CATALOG.md) | All 124 examples, indexed by use case |
+| [examples/CATALOG.md](examples/CATALOG.md) | All 122 examples, indexed by use case |
 | [examples/EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md) | The bundled 37-variable dataset |
 | [diive/gui/MANUAL.md](diive/gui/MANUAL.md) | Desktop GUI user manual |
 | [diive/gui/README.md](diive/gui/README.md) | GUI architecture, for developers |

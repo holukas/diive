@@ -86,8 +86,29 @@ pytest tests/ -v
 The GUI tests (`tests/test_gui.py`) run offscreen and skip themselves unless the
 `gui` extra is installed (`uv sync --extra gui`).
 
-Coverage reporting is not set up — `pytest-cov` is not a dependency of this
-project. Add it to your environment first if you want `--cov`.
+`pytest-cov` is in the `dev` group, so coverage works out of the box:
+
+```bash
+# Coverage for the whole package
+uv run pytest tests/ --cov=diive --cov-report=term-missing
+
+# Record which test covered which line (then filter by test in the HTML report)
+uv run pytest tests/ --cov=diive --cov-context=test --cov-report=html
+```
+
+Note that `tests/test_gui.py` drives a lot of library code on its way through
+the widgets, so it inflates the library figure. To see what the library tests
+cover on their own, deselect it:
+
+```bash
+uv run pytest tests/ --ignore=tests/test_gui.py --cov=diive --cov-report=term-missing
+```
+
+Omitting `diive/gui` from the *report* is not the same thing — it hides those
+lines but still counts the coverage `test_gui.py` contributes elsewhere.
+
+[COVERAGE_GAPS.md](COVERAGE_GAPS.md) tracks what is still uncovered and why —
+worth a look before writing new tests, so you pick something that matters.
 
 The suite runs real models on real data (gap-filling, the flux processing chain,
 the partitioning ports), so expect it to take minutes rather than seconds. Use
