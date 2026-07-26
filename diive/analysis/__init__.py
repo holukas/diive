@@ -10,10 +10,6 @@ Part of the diive library: https://github.com/holukas/diive
 from diive.analysis.compoundextremes import CompoundExtremes
 from diive.analysis.correlation import DailyCorrelation, rank_drivers
 from diive.analysis.granger import GrangerCausality
-
-# Alias for backward compatibility
-daily_correlation = DailyCorrelation
-
 from diive.analysis.decoupling import StratifiedAnalysis
 # DriverAnalysis is EXPERIMENTAL and deliberately NOT exported at this level.
 # Reach it via the `experimental` subnamespace: dv.analysis.experimental.DriverAnalysis
@@ -27,6 +23,10 @@ from diive.analysis.profile import count_gaps, dataframe_overview, profile_dataf
 from diive.analysis.quantiles import percentiles101
 from diive.analysis.seasonaltrend import SeasonalTrendDecomposition
 from diive.fits.fitter import BinFitterCP
+
+# Alias for backward compatibility. Kept below the imports: sitting between them
+# made every later import an E402.
+daily_correlation = DailyCorrelation
 
 __all__ = [
     'BinFitterCP',
