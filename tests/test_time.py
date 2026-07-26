@@ -205,5 +205,126 @@ class TestTime(unittest.TestCase):
                                regularize=True, verbose=False).get()
 
 
+class TestStlDecompose(unittest.TestCase):
+    """Regression tests for `core/times/decomposition_utils.py::stl_decompose`.
+
+    Two real bugs were fixed here and neither had a test: the wrapper never
+    passed `period` through to statsmodels' STL (so the cycle length the caller
+    asked for was ignored), and it called `STL.fit(weights=...)`, which
+    statsmodels does not accept, so any `weights=` call raised.
+    """
+
+    PERIOD = 24
+    CYCLES = 20
+
+    @classmethod
+    def setUpClass(cls):
+        import numpy as np
+        n = cls.PERIOD * cls.CYCLES
+        idx = pd.date_range('2021-01-01', periods=n, freq='h', name='TIMESTAMP')
+        t = np.arange(n)
+        # A clean 24-step cycle on a linear trend: the seasonal component the
+        # decomposition should recover is known exactly (amplitude 20).
+        cls.series = pd.Series(
+            10 * np.sin(2 * np.pi * t / cls.PERIOD)
+            + 0.02 * t
+            + np.random.RandomState(0).randn(n) * 0.3,
+            index=idx, name='X')
+
+    @staticmethod
+    def _decompose(series, **kwargs):
+        import warnings
+        from diive.core.times.decomposition_utils import stl_decompose
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            return stl_decompose(series, **kwargs)
+
+    @staticmethod
+    def _lag_autocorr(values, lag):
+        import numpy as np
+        return float(np.corrcoef(values[:-lag], values[lag:])[0, 1])
+
+    def test_period_is_actually_used(self):
+        """The regression: `seasonal` must reach statsmodels as `period`.
+
+        With the period honoured, the recovered seasonal component repeats
+        exactly every PERIOD steps. When it was dropped, the component tracked
+        whatever statsmodels defaulted to instead — which this separates
+        cleanly (0.9999 vs 0.005 lag-PERIOD autocorrelation).
+        """
+        result = self._decompose(self.series, seasonal=self.PERIOD,
+                                 trend=self.PERIOD * 2 + 1)
+        seasonal = result['seasonal'].to_numpy()
+        self.assertGreater(self._lag_autocorr(seasonal, self.PERIOD), 0.99)
+        # And it recovers the true amplitude of 20 (10 * sin, peak to trough).
+        self.assertAlmostEqual(float(seasonal.max() - seasonal.min()), 20.0, delta=1.5)
+
+    def test_a_wrong_period_does_not_recover_the_cycle(self):
+        # The control for the test above: asking for the wrong cycle length must
+        # give a visibly different answer, or the assertion above proves nothing.
+        result = self._decompose(self.series, seasonal=7, trend=15)
+        seasonal = result['seasonal'].to_numpy()
+        self.assertLess(abs(self._lag_autocorr(seasonal, self.PERIOD)), 0.5)
+
+    def test_weights_are_accepted(self):
+        """The other regression: `STL.fit(weights=...)` is unsupported.
+
+        statsmodels' STL takes no observation weights — `robust=` handles
+        outlier down-weighting internally — so passing them used to raise. They
+        are accepted and echoed back instead.
+        """
+        import numpy as np
+        weights = np.linspace(0.0, 1.0, len(self.series))
+        result = self._decompose(self.series, seasonal=self.PERIOD,
+                                 trend=self.PERIOD * 2 + 1, weights=weights)
+        np.testing.assert_allclose(result['weights'], weights)
+        self.assertEqual(int(result['seasonal'].isna().sum()), 0)
+
+    def test_weights_length_is_validated(self):
+        import numpy as np
+        with self.assertRaises(ValueError):
+            self._decompose(self.series, seasonal=self.PERIOD,
+                            trend=self.PERIOD * 2 + 1, weights=np.ones(5))
+
+    def test_components_are_additive_and_keep_the_index(self):
+        result = self._decompose(self.series, seasonal=self.PERIOD,
+                                 trend=self.PERIOD * 2 + 1)
+        for key in ('seasonal', 'trend', 'residual'):
+            with self.subTest(component=key):
+                self.assertTrue(result[key].index.equals(self.series.index))
+        # STL is additive: the three components must sum back to the input.
+        # (The function swaps in an integer index internally, then restores the
+        # original — this catches that restoration going wrong.)
+        recomposed = result['seasonal'] + result['trend'] + result['residual']
+        pd.testing.assert_series_equal(recomposed, self.series, check_names=False,
+                                       atol=1e-9)
+
+    def test_trend_window_is_normalised(self):
+        # statsmodels requires an odd trend window strictly greater than the
+        # period; the wrapper fixes up both rather than passing them through to
+        # a raise.
+        for label, trend in (('even', self.PERIOD * 2), ('below period', 5)):
+            with self.subTest(trend=label):
+                result = self._decompose(self.series, seasonal=self.PERIOD, trend=trend)
+                self.assertEqual(int(result['trend'].isna().sum()), 0)
+
+    def test_invalid_arguments_raise(self):
+        for label, kwargs in (('seasonal < 2', dict(seasonal=1)),
+                              ('trend < 3', dict(seasonal=24, trend=2))):
+            with self.subTest(case=label):
+                with self.assertRaises(ValueError):
+                    self._decompose(self.series, **kwargs)
+
+    def test_short_series_warns(self):
+        import warnings
+        from diive.core.times.decomposition_utils import stl_decompose
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            stl_decompose(self.series.head(30), seasonal=self.PERIOD,
+                          trend=self.PERIOD * 2 + 1)
+        self.assertTrue(any(issubclass(w.category, UserWarning) for w in caught),
+                        'a series shorter than 2 * seasonal should warn')
+
+
 if __name__ == '__main__':
     unittest.main()
