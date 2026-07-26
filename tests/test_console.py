@@ -108,5 +108,105 @@ class TestJupyterRuleIsLegible(unittest.TestCase):
         self.assertNotIn("#00ff00", rule_html.lower())
 
 
+class TestConsoleStringsAreCp1252Safe(unittest.TestCase):
+    """Printed strings must survive a Windows cp1252 stdout.
+
+    Python falls back to the locale encoding (cp1252 on a default Windows
+    install) whenever stdout is a pipe or a redirect, so a printed character
+    outside that range raises `UnicodeEncodeError` and kills the run. This
+    happened for real: `FlagQCF.report_qcf_flags()` printed U+2550 box-drawing
+    rules and crashed under `python ... | head` or `> log.txt`, while passing in
+    a terminal and under pytest (both UTF-8).
+
+    Scope and blind spots -- this check is a floor, not a guarantee:
+
+    * It inspects string *literals* passed to the console helpers, to
+      `_console.print/log/rule`, to builtin `print`, and to `raise`. A string
+      assembled into a variable first and printed later is NOT seen.
+    * `diive/gui/` is excluded: Qt renders Unicode natively and never touches
+      stdout.
+    * The Textual TUI (`detect_and_remove_tlag_tui.py`) is excluded: it paints
+      its own screen buffer rather than writing to stdout.
+    * Docstrings and comments are ignored on purpose -- they are never printed
+      by the library itself.
+    """
+
+    #: Console helpers from diive.core.utils.console, plus builtin print and the
+    #: `out()` wrapper in the hires CLI (which forwards to console.print).
+    EMITTER_NAMES = frozenset({
+        'print', 'info', 'detail', 'warn', 'error', 'success', 'rule', 'vspace',
+        'out',
+    })
+    #: Methods on a Rich console object.
+    EMITTER_METHODS = frozenset({'print', 'log', 'rule'})
+    #: Files whose output never reaches a plain stdout stream.
+    EXCLUDED = ('gui', 'detect_and_remove_tlag_tui.py')
+
+    @staticmethod
+    def _offending_chars(text):
+        bad = []
+        for char in text:
+            try:
+                char.encode('cp1252')
+            except UnicodeEncodeError:
+                bad.append(char)
+        return bad
+
+    @classmethod
+    def _is_emitter(cls, call):
+        import ast
+        func = call.func
+        if isinstance(func, ast.Name):
+            return func.id in cls.EMITTER_NAMES
+        if isinstance(func, ast.Attribute):
+            return func.attr in cls.EMITTER_METHODS
+        return False
+
+    def _scan(self):
+        """Yield (path, lineno, literal, bad_chars) for every offending literal."""
+        import ast
+        import pathlib
+        repo = pathlib.Path(__file__).resolve().parent.parent
+        for path in sorted((repo / 'diive').rglob('*.py')):
+            rel = path.relative_to(repo).as_posix()
+            if any(part in rel for part in self.EXCLUDED):
+                continue
+            try:
+                tree = ast.parse(path.read_text(encoding='utf-8'))
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                emitting = (isinstance(node, ast.Call) and self._is_emitter(node))
+                raising = isinstance(node, ast.Raise)
+                if not (emitting or raising):
+                    continue
+                for sub in ast.walk(node):
+                    if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                        bad = self._offending_chars(sub.value)
+                        if bad:
+                            yield rel, sub.lineno, sub.value, bad
+
+    def test_no_printed_literal_breaks_cp1252(self):
+        offenders = list(self._scan())
+        if offenders:
+            report = '\n'.join(
+                f"  {rel}:{line}  {''.join(sorted(set(bad)))}  "
+                f"(U+{'/U+'.join(f'{ord(c):04X}' for c in sorted(set(bad)))})"
+                for rel, line, _text, bad in offenders)
+            self.fail(
+                f"{len(offenders)} printed string literal(s) contain characters "
+                f"cp1252 cannot encode, so they crash on a redirected Windows "
+                f"stdout. Use ASCII equivalents (= - | -> <= ~):\n{report}")
+
+    def test_the_scanner_would_notice_a_bad_character(self):
+        # Guard against the check silently passing because the scan is broken.
+        self.assertEqual(self._offending_chars('plain ascii'), [])
+        self.assertEqual(self._offending_chars('rule ═'), ['═'])
+        self.assertEqual(self._offending_chars('arrow →'), ['→'])
+        # Characters cp1252 *does* cover must not be flagged (e.g. the degree
+        # sign, which the hires CLI prints legitimately).
+        self.assertEqual(self._offending_chars('angle 12.5°'), [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -70,7 +70,7 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
     if series.empty:
         raise ValueError("Input series cannot be empty")
     if limit < 1:
-        raise ValueError(f"Gap size limit must be ≥ 1, got {limit}")
+        raise ValueError(f"Gap size limit must be >= 1, got {limit}")
     if not isinstance(series.index, pd.DatetimeIndex):
         raise ValueError("Series must have a DatetimeIndex")
 
@@ -142,7 +142,7 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
             _console.print(f"  {'Missing values':<35} {n_missing_input:>9,d}  ({pct_missing_input:>6.2f}%)")
             _console.print(f"\n{'Gap Analysis (limit={limit})':-^80}")
             _console.print(f"  {'Total gaps detected':<35} {n_gaps_total:>9,d}  (separate regions)")
-            _console.print(f"  {'Gaps ≤ '+str(limit)+' record(s)':<35} {n_gaps_filled:>9,d}  (eligible for filling)")
+            _console.print(f"  {'Gaps <= '+str(limit)+' record(s)':<35} {n_gaps_filled:>9,d}  (eligible for filling)")
             _console.print(f"  {'Gaps > '+str(limit)+' record(s)':<35} {n_gaps_skipped:>9,d}  (exceed limit)")
             _console.print(f"  {'Values to interpolate':<35} {n_records_filled:>9,d}  (in fillable gaps)")
             _console.print(f"  {'Values skipped':<35} {n_records_skipped:>9,d}  (in too-large gaps)")
@@ -182,7 +182,7 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
 
         _console.print(f"\n{'Gap Analysis (limit={limit})':-^80}")
         _console.print(f"  {'Total gaps detected':<35} {n_gaps_total:>9,d}  (separate regions)")
-        _console.print(f"  {'Gaps ≤ '+str(limit)+' record(s)':<35} {n_gaps_filled:>9,d}  (eligible for filling)")
+        _console.print(f"  {'Gaps <= '+str(limit)+' record(s)':<35} {n_gaps_filled:>9,d}  (eligible for filling)")
         _console.print(f"  {'Gaps > '+str(limit)+' record(s)':<35} {n_gaps_skipped:>9,d}  (exceed limit)")
         _console.print(f"  {'Values to interpolate':<35} {n_records_filled:>9,d}  (in fillable gaps)")
         _console.print(f"  {'Values skipped':<35} {n_records_skipped:>9,d}  (in too-large gaps)")

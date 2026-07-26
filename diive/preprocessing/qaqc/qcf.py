@@ -293,9 +293,9 @@ class FlagQCF:
 
         Shows which tests are raising flags and their impact.
         """
-        _console.print(f"\n\n{'═' * 100}")
+        _console.print(f"\n\n{'=' * 100}")
         _console.print(f"  INDIVIDUAL TEST FLAG STATISTICS: {self.series_name}")
-        _console.print(f"{'═' * 100}")
+        _console.print(f"{'=' * 100}")
 
         flagcols = identify_flagcols(df=self.flags, seriescol=self.series_name)
 
@@ -309,14 +309,14 @@ class FlagQCF:
         _console.print(f"\n  Total test flags: {len(test_flagcols)}")
 
         # === REPORT 1: FLAGS WITH MISSING VALUES ===
-        _console.print(f"\n\n  ┌─ REPORT 1A: ALL RECORDS (INCLUDING MISSING VALUES)")
-        _console.print(f"  │")
+        _console.print(f"\n\n  +- REPORT 1A: ALL RECORDS (INCLUDING MISSING VALUES)")
+        _console.print(f"  |")
         for col in test_flagcols:
             self._flagstats_dt_nt(col=col, df=self.flags)
 
         # === REPORT 2: FLAGS FOR AVAILABLE RECORDS ===
-        _console.print(f"\n  ┌─ REPORT 1B: AVAILABLE RECORDS ONLY (EXCLUDING MISSING VALUES)")
-        _console.print(f"  │")
+        _console.print(f"\n  +- REPORT 1B: AVAILABLE RECORDS ONLY (EXCLUDING MISSING VALUES)")
+        _console.print(f"  |")
         _df = self.flags.copy()
         ix_missing_vals = _df[self.series_name].isnull()
         _df = _df[~ix_missing_vals].copy()
@@ -324,28 +324,28 @@ class FlagQCF:
             self._flagstats_dt_nt(col=col, df=_df)
 
         # === SUMMARY ===
-        _console.print(f"\n{'═' * 100}\n")
+        _console.print(f"\n{'=' * 100}\n")
 
     def _flagstats_dt_nt(self, col: str, df: DataFrame):
         """Print flag statistics overall, daytime, and nighttime (if available)."""
         # Extract test name from column
         test_name = col.replace('FLAG_', '').replace('_TEST', '')
-        _console.print(f"\n  ├─ {test_name}")
-        _console.print(f"  │  {'Period':<15} │ {'Pass (0)':<15} │ {'Warn (1)':<15} │ {'Fail (2)':<15} │ {'Missing':<12}")
-        _console.print(f"  │  {'-' * 85}")
+        _console.print(f"\n  +- {test_name}")
+        _console.print(f"  |  {'Period':<15} | {'Pass (0)':<15} | {'Warn (1)':<15} | {'Fail (2)':<15} | {'Missing':<12}")
+        _console.print(f"  |  {'-' * 85}")
 
         flag = df[col]
-        self._flagstats(flag=flag, prefix="OVERALL", indent="  │  ")
+        self._flagstats(flag=flag, prefix="OVERALL", indent="  |  ")
 
         if isinstance(self.daytime, Series):
             flag = df[col].loc[self.daytime == 1]
             if len(flag) > 0:
-                self._flagstats(flag=flag, prefix="DAYTIME", indent="  │  ")
+                self._flagstats(flag=flag, prefix="DAYTIME", indent="  |  ")
 
         if isinstance(self.nighttime, Series):
             flag = df[col].loc[self.nighttime == 1]
             if len(flag) > 0:
-                self._flagstats(flag=flag, prefix="NIGHTTIME", indent="  │  ")
+                self._flagstats(flag=flag, prefix="NIGHTTIME", indent="  |  ")
 
     def report_qcf_evolution(self):
         """Print how QCF evolves as tests are applied sequentially.
@@ -558,7 +558,7 @@ class FlagQCF:
         fail_str = f"{n_fail:>5} ({perc_fail:>5.1f}%)"
         miss_str = f"{flagmissing:>4} ({perc_miss:>5.1f}%)"
 
-        _console.print(f"{indent}{prefix:<15} │ {pass_str:<15} │ {warn_str:<15} │ {fail_str:<15} │ {miss_str:<12}")
+        _console.print(f"{indent}{prefix:<15} | {pass_str:<15} | {warn_str:<15} | {fail_str:<15} | {miss_str:<12}")
 
     def report_qcf_series(self):
         """Print comprehensive summary statistics for quality-controlled series.

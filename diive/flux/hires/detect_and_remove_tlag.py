@@ -2735,8 +2735,8 @@ def _build_parser():
     p = argparse.ArgumentParser(
         prog='python -m diive.flux.hires.detect_and_remove_tlag',
         description=(
-            'Per-file PWB pipeline: read raw → rotate wind (in memory) → '
-            'detect time lag → remove lag from the unrotated raw data → '
+            'Per-file PWB pipeline: read raw -> rotate wind (in memory) -> '
+            'detect time lag -> remove lag from the unrotated raw data -> '
             'write. Alias: uv run diive-tlag-pwb-detect-remove'
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -3024,7 +3024,7 @@ def _cli_main():
         f'[dim]block[/dim] {args.block_length} s')
     out(f'[dim]chunk :[/dim]  {args.chunk_seconds:g} s  '
         f'[dim](min-chunk[/dim] {args.min_chunk_seconds:g} s[dim])[/dim]  '
-        f'[dim]≈{chunks_per_file}/file → {total_chunks_est} total[/dim]  '
+        f'[dim]~{chunks_per_file}/file -> {total_chunks_est} total[/dim]  '
         f'[dim]template[/dim] {args.chunk_name_template!r}')
     if args.start_time_regex:
         out(f'[dim]time  :[/dim]  regex {args.start_time_regex!r}  '
@@ -3161,8 +3161,8 @@ def _cli_main():
                     theta = row.get('theta_deg', float('nan'))
                     phi = row.get('phi_deg', float('nan'))
                     if theta == theta and phi == phi:
-                        parts += (f'  [dim]θ={theta:+.1f}° '
-                                  f'φ={phi:+.1f}°[/dim]')
+                        parts += (f'  [dim]theta={theta:+.1f}° '
+                                  f'phi={phi:+.1f}°[/dim]')
                 console.log(f'[dim]{period_short}[/dim]  {parts}')
                 _logline(f'{period_short}  {parts}')
                 overall.update(overall_id, completed=done)
