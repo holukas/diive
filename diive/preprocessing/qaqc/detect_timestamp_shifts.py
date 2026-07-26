@@ -44,7 +44,6 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib import cm
-from scipy.signal import correlate as sp_correlate
 
 from diive.core.times.resampling import diel_cycle
 from diive.variables.radiation import potrad
@@ -249,37 +248,61 @@ class DetectTimestampShifts:
                     .fillna(0)
                 )
 
-                # Restrict to daytime to avoid correlating noise against noise at night
+                # Work on a daytime window PADDED by the search range. Clipping to
+                # the sun-up window itself (as this once did) truncates the
+                # shifted measured curve at both ends, so the lag information the
+                # search is looking for is gone before the search starts: a
+                # planted 60-min offset came back as 0.
                 sun_up = ts_pot_hr > 10
-                ts_pot_hr = ts_pot_hr[sun_up]
-                ts_meas_hr = ts_meas_hr[sun_up]
-
-                if len(ts_pot_hr) == 0:
+                if int(sun_up.sum()) < 5:
                     continue
 
-                pot_arr = ts_pot_hr.to_numpy()
-                meas_arr = ts_meas_hr.to_numpy()
+                step_min = (highres_idx[1] - highres_idx[0]).total_seconds() / 60
+                pad = pd.Timedelta(minutes=max_shift_min)
+                sun_index = ts_pot_hr.index[sun_up]
+                window = ((ts_pot_hr.index >= sun_index[0] - pad)
+                          & (ts_pot_hr.index <= sun_index[-1] + pad))
 
-                # Zero-mean arrays so the cross-correlation is proportional to Pearson r
-                pot_zm = pot_arr - pot_arr.mean()
-                meas_zm = meas_arr - meas_arr.mean()
+                pot_arr = ts_pot_hr[window].to_numpy()
+                meas_arr = ts_meas_hr[window].to_numpy()
+                if len(pot_arr) == 0:
+                    continue
 
-                # correlate(a, b) at lag L = sum a[n] * b[n-L]; peaks when shifting
-                # meas by L aligns it with pot, matching the original sign convention
-                corr_full = sp_correlate(pot_zm, meas_zm, mode='full')
-                lags_full = np.arange(-(len(meas_zm) - 1), len(pot_zm))
+                # Direct Pearson scan over candidate lags -- what the docstring
+                # promises. The FFT cross-correlation this replaces was not
+                # normalised per lag by the overlap count, so lags with less
+                # overlap scored lower and argmax was biased toward zero.
+                # `max_shift_min` is a duration, so convert it to samples rather
+                # than assuming one sample == one minute (only true when
+                # upsample_freq is '1min').
+                max_lag = int(round(max_shift_min / step_min))
+                best_corr, best_lag = -np.inf, 0
+                for lag in range(-max_lag, max_lag + 1):
+                    # lag < 0 compares pot[t] with meas[t + |lag|]: measured
+                    # peaking later gives a negative shift, the class-wide
+                    # convention (positive = measured earlier).
+                    a = pot_arr[max(0, lag):len(pot_arr) + min(0, lag)]
+                    b = meas_arr[max(0, -lag):len(meas_arr) + min(0, -lag)]
+                    if len(a) < 10:
+                        continue
+                    # Pearson r by hand rather than np.corrcoef: the same number
+                    # without building a 2x2 matrix per lag, which matters over
+                    # a few hundred lags per day for a full year.
+                    am = a - a.mean()
+                    bm = b - b.mean()
+                    denom = np.sqrt(float(am @ am) * float(bm @ bm))
+                    if denom == 0:
+                        continue
+                    corr = float(am @ bm) / denom
+                    if corr > best_corr:
+                        best_corr, best_lag = corr, lag
 
-                mask = (lags_full >= -max_shift_min) & (lags_full <= max_shift_min)
-                lags_win = lags_full[mask]
-                corr_win = corr_full[mask]
+                if not np.isfinite(best_corr):
+                    results[date] = {'shift_minutes': np.nan, 'max_corr': np.nan}
+                    continue
 
-                best_idx = int(np.argmax(corr_win))
-                best_lag = int(lags_win[best_idx])
-
-                denom = np.std(pot_zm) * np.std(meas_zm) * len(pot_zm)
-                best_corr = float(corr_win[best_idx] / denom) if denom > 0 else 0.0
-
-                results[date] = {'shift_minutes': best_lag, 'max_corr': best_corr}
+                results[date] = {'shift_minutes': best_lag * step_min,
+                                 'max_corr': best_corr}
 
             except (ValueError, TypeError):
                 results[date] = {'shift_minutes': np.nan, 'max_corr': np.nan}
