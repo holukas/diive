@@ -37,14 +37,17 @@ def set_exact_values_to_missing(series: Series,
         See `examples/preprocessing/corrections/correction_set_exact_values_to_missing.py`
     """
     outname = series.name
-    series.name = "input_data"
+    # Renamed copy, not an in-place rename: the label is only needed so the
+    # quickplot panels distinguish input from output, and renaming the parameter
+    # would leave the caller's own series called "input_data".
+    work = series.rename("input_data")
 
     # Create empty flag
-    flag = pd.Series(index=series.index, data=np.nan)
+    flag = pd.Series(index=work.index, data=np.nan)
 
     # Create flag that indicates where records match one of the values
     for val in values:
-        locs = series == val
+        locs = work == val
         flag[locs] = 1
 
     # Set flag to zero for all other records
@@ -52,7 +55,7 @@ def set_exact_values_to_missing(series: Series,
 
     # Apply flag: set records to missing
     setto_missing_ix = flag == 1
-    series_corr = series.copy()
+    series_corr = work.copy()
     series_corr.loc[setto_missing_ix] = np.nan
     series_corr = series_corr.rename(outname)
 
@@ -63,7 +66,7 @@ def set_exact_values_to_missing(series: Series,
     n_vals = int(flag.sum())
 
     info(f"Correction: set exact values to missing")
-    info(f"  Variable: {series.name}")
+    info(f"  Variable: {outname}")
     info(f"  Number of records set to missing: {n_vals}")
 
     if verbose > 0:
@@ -71,8 +74,8 @@ def set_exact_values_to_missing(series: Series,
 
     # Plot
     if showplot:
-        quickplot([series, series_corr], subplots=True, showplot=showplot,
-                  title=f"Set exact values in {series.name} to missing values")
+        quickplot([work, series_corr], subplots=True, showplot=showplot,
+                  title=f"Set exact values in {outname} to missing values")
 
     return series_corr
 
@@ -139,18 +142,21 @@ def setto_threshold(series: Series,
         See `examples/preprocessing/corrections/correction_setto_threshold.py`
     """
     outname = series.name
-    series.name = "input_data"
+    # Renamed copy, not an in-place rename: the label is only needed so the
+    # quickplot panels distinguish input from output, and renaming the parameter
+    # would leave the caller's own series called "input_data".
+    work = series.rename("input_data")
 
     # Create empty flag
-    flag = pd.Series(index=series.index, data=np.nan)
+    flag = pd.Series(index=work.index, data=np.nan)
 
     # Detect values over threshold
     if type == 'max':
-        over_thres_ix = series > threshold
-        range_ok_ix = series <= threshold
+        over_thres_ix = work > threshold
+        range_ok_ix = work <= threshold
     elif type == 'min':
-        over_thres_ix = series < threshold
-        range_ok_ix = series >= threshold
+        over_thres_ix = work < threshold
+        range_ok_ix = work >= threshold
     else:
         raise ValueError(f"type must be 'min' or 'max', got {type!r}.")
 
@@ -158,7 +164,7 @@ def setto_threshold(series: Series,
     flag.loc[range_ok_ix] = 0
 
     info(f"QA/QC set to threshold value")
-    info(f"  Variable: {series.name}")
+    info(f"  Variable: {outname}")
     if type == 'max':
         info(f"  Accepted: {range_ok_ix.sum()} values below max threshold of {threshold}")
         info(f"  Corrected: {over_thres_ix.sum()} values above max threshold of {threshold} were set to {threshold}")
@@ -167,13 +173,13 @@ def setto_threshold(series: Series,
         info(f"  Corrected: {over_thres_ix.sum()} values below min threshold of {threshold} were set to {threshold}")
 
     corrected_ix = flag == 1
-    series_corr = series.copy()
+    series_corr = work.copy()
     series_corr.loc[corrected_ix] = threshold
     series_corr = series_corr.rename(outname)
 
     # Plot
     if showplot:
-        quickplot([series, series_corr], subplots=True, showplot=showplot,
-                  title=f"Set {series.name} to {type} threshold {threshold}")
+        quickplot([work, series_corr], subplots=True, showplot=showplot,
+                  title=f"Set {outname} to {type} threshold {threshold}")
 
     return series_corr

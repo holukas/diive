@@ -146,10 +146,14 @@ def remove_relativehumidity_offset(series: Series,
 
     # print(f"Removing RH offset from {series.name} ...")
     outname = series.name
-    series.name = "input_data"
+    # Renamed copy, not an in-place rename: the label is only needed so the
+    # quickplot panels distinguish input from output, and renaming the parameter
+    # would leave the caller's own series called "input_data". Same pattern as
+    # _nighttime_zero_offset below.
+    work = series.rename("input_data")
 
     # Detect series data that exceeds 100% relative humidity
-    _series_exceeds = series.loc[series > 100]
+    _series_exceeds = work.loc[work > 100]
     _series_exceeds = _series_exceeds.rename("input_data_exceeds_100")
     exceeds_ix = _series_exceeds.index
 
@@ -157,7 +161,7 @@ def remove_relativehumidity_offset(series: Series,
     _daily_mean_above_100 = frames.aggregated_as_hires(aggregate_series=_series_exceeds,
                                                        to_freq='D',
                                                        to_agg='mean',
-                                                       hires_timestamp=series.index,
+                                                       hires_timestamp=work.index,
                                                        interpolate_missing_vals=True)
 
     # Calculate and gap-fill offset values
@@ -174,7 +178,7 @@ def remove_relativehumidity_offset(series: Series,
     #       (RH must not be larger than 100% but 130% were measured)
     #       130 - (+30) = 100
     # Corrected RH is most likely not *exactly* 100%, but closer to it.
-    _series_corr = series.sub(_offset)
+    _series_corr = work.sub(_offset)
 
     # Set maximum to 100
     series_corr_max100 = _series_corr.copy()
@@ -184,7 +188,7 @@ def remove_relativehumidity_offset(series: Series,
 
     # Plot
     if showplot:
-        quickplot([series, _series_exceeds,
+        quickplot([work, _series_exceeds,
                    _daily_mean_above_100, _offset, _series_corr, series_corr_max100],
                   subplots=True,
                   showplot=showplot, hline=100,
