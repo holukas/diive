@@ -178,9 +178,12 @@ The rest raise or fail at import:
   drifting from the index. No stored content changed: no blob had CRLF.
 - **`flux/hires` gained its first tests beyond the PWB window feature**: wind-rotation geometry (per-sample speed is
   preserved by the double rotation, which the mean-based test cannot check), `MaxCovariance` recovering an injected lag
-  with the documented sign, and `apply_tlag`'s filename-key mapping including its collision guard. The three large
-  modules (`detect_and_remove_tlag`, `lag_pwb`, the TUI) remain uncovered; they need file fixtures rather than
-  pure-function assertions.
+  with the documented sign, and `apply_tlag`'s filename-key mapping including its collision guard. A second pass covered
+  the parts that decide or rewrite data: PWBOPT S1/S2/S3 selection with its HDI pre-filter and gap-fill, the
+  `_pwbopt_final_lags` wiring from chunk detections to the applied lag, wall-clock chunk-grid alignment and chunk
+  naming, the raw-file read/write round-trip (line terminators, missing-value sentinel, whitespace separator), and the
+  time-lag shift itself — sign, rounding, sentinel and skip paths. Every new assertion was mutation-tested.
+  `PwbBatchDetection.run` and the TUI still need file fixtures rather than pure-function assertions.
 - **MDS is now a faithful ONEFlux port**: the 6-stage expanding-window cascade, `>=2`-sample acceptance, N-1 standard
   deviation, and the ONEFlux SWIN tolerance. Fill values r ~ 0.9997 to 0.99997 against native ONEFlux. Shared with
   random uncertainty via `diive.gapfilling.similarity`, so there is one similarity scan. Also 4x faster,
