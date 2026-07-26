@@ -16,6 +16,9 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 
 if TYPE_CHECKING:
+    # Type-checking only: gap_stats() imports GapStats inside the function so
+    # this module does not pull diive.analysis in at runtime.
+    from diive.analysis.gapfinder import GapStats
     from diive.flux.lowres.quality_flags import FluxQualityFlagsEddyPro
     from diive.flux.lowres.storage_correction import (
         FluxStorageCorrectionSinglePointEddyPro,

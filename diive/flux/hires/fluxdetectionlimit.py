@@ -371,7 +371,7 @@ class FluxDetectionLimit:
         cov_df, props_peak_auto = maxcov_obj.get()
 
         # Max covariance
-        foundlag = cov_df.loc[cov_df['flag_peak_max_cov_abs'] == True]
+        foundlag = cov_df.loc[cov_df['flag_peak_max_cov_abs']]
 
         # Location of max abs covariance
         cov_max_ix = foundlag.index[0]
