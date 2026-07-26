@@ -140,7 +140,14 @@ class TestDriverAnalysisTemporal(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        target, drivers = _synthetic(months=4)
+        # months=2 (same as the static class), NOT more: the temporal level costs
+        # superlinearly in row count, because every stage ends in a TreeSHAP pass
+        # over the full matrix and a bigger sample also deepens the forest
+        # (min_samples_leaf=3). Measured on this fixture: 2 months 27 s, 4 months
+        # 207 s -- 2x the data for 7.5x the time. The lag span is nearly free by
+        # comparison (-6..0 vs -2..0 differs by 2 s), so it stays wide enough to
+        # exercise lagged_variants and the (driver, lag) attribution.
+        target, drivers = _synthetic(months=2)
         cls.da = DriverAnalysis(target=target, drivers=drivers, model=_fast_rf(),
                                 lags=list(range(-6, 1)), verbose=0
                                 ).run(levels=('static', 'temporal'))
