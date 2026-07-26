@@ -123,7 +123,8 @@ def adjust_color_lightness(color, amount=0.5):
     import colorsys
     try:
         c = mc.cnames[color]
-    except:
+    except KeyError:
+        # Not a named colour (e.g. already a hex string); use it as given.
         c = color
     c = colorsys.rgb_to_hls(*mc.to_rgb(c))
     return colorsys.hls_to_rgb(c[0], max(0, min(1, amount * c[1])), c[2])

@@ -217,7 +217,7 @@ class HexbinPlot(HeatmapBase):
                         centers.append(center)
 
                 centers = np.array(centers) if centers else np.array([])
-            except:
+            except Exception:
                 return  # If extraction fails, don't display values
 
         # Place text at each hexagon center
