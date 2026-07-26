@@ -280,10 +280,6 @@ class TestPlots(unittest.TestCase):
         plt.close(fig)
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 class TestDefaultFormatLabels(unittest.TestCase):
     """default_format used to write the string 'False' into the axis labels,
     because False is its 'no label' default and was passed straight to matplotlib."""
@@ -353,3 +349,249 @@ class TestPlotfuncsHelpers(unittest.TestCase):
                 results[label] = out
         # All four describe the same red, so they must lighten identically.
         self.assertEqual(len(set(results.values())), 1)
+
+
+def _synthetic_series(years: int = 3, name: str = "TA", start: str = "2019-01-01"):
+    """Deterministic hourly series with an annual and a diel cycle.
+
+    No randomness, so every aggregate below is an exact expected value rather
+    than a tolerance. Hourly (not 30-min) keeps three years at ~26k points, which
+    is enough for the year/month/diel groupings while staying fast.
+    """
+    import numpy as np
+    import pandas as pd
+    n = years * 365 * 24
+    idx = pd.date_range(start, periods=n, freq="1h", name="TIMESTAMP_MIDDLE")
+    t = np.arange(n)
+    values = (10.0
+              + 10.0 * np.sin(2 * np.pi * t / (24 * 365))   # annual cycle
+              + 5.0 * np.sin(2 * np.pi * t / 24))           # diel cycle
+    return pd.Series(values, index=idx, name=name)
+
+
+class TestPlotClasses(unittest.TestCase):
+    """The plot classes that no non-GUI test reached.
+
+    `tests/test_plots.py` covered five classes (Histogram, ScatterXY, TimeSeries,
+    WindRose, CompoundExtremes). Everything below was executed only incidentally
+    by `tests/test_gui.py` -- `HeatmapDateTime` most conspicuously, since 16 of
+    the 122 examples use it. Assertions target each class's actual contract
+    (cumulative totals, panel counts, aggregation differences), not just "the
+    call did not raise".
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.series = _synthetic_series()
+
+    # --- heatmaps ---
+
+    def test_heatmap_datetime_orientation_swaps_the_axes(self):
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        expected = {"vertical": ("Time (hours)", "Date"),
+                    "horizontal": ("Date", "Time (hours)")}
+        for orientation, (xlabel, ylabel) in expected.items():
+            with self.subTest(orientation=orientation):
+                fig, ax = plt.subplots()
+                HeatmapDateTime(self.series, ax_orientation=orientation).plot(ax=ax, fig=fig)
+                self.assertEqual(ax.get_xlabel(), xlabel)
+                self.assertEqual(ax.get_ylabel(), ylabel)
+                self.assertEqual(len(ax.collections), 1)  # one QuadMesh
+                plt.close(fig)
+
+    def test_heatmap_datetime_show_values_annotates_cells(self):
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        short = self.series.head(24 * 5)
+        fig, ax = plt.subplots()
+        HeatmapDateTime(short).plot(ax=ax, fig=fig)
+        without = len(ax.texts)
+        plt.close(fig)
+        fig, ax = plt.subplots()
+        HeatmapDateTime(short).plot(ax=ax, fig=fig, show_values=True)
+        self.assertGreater(len(ax.texts), without)
+        plt.close(fig)
+
+    def test_heatmap_yearmonth_aggregation_changes_the_values(self):
+        # HeatmapYearMonth shares heatmap_datetime's module with HeatmapDateTime.
+        from diive.core.plotting.heatmap_datetime import HeatmapYearMonth
+
+        def mesh_values(**kwargs):
+            fig, ax = plt.subplots()
+            HeatmapYearMonth(self.series, **kwargs).plot(ax=ax, fig=fig)
+            arr = ax.collections[0].get_array().copy()
+            plt.close(fig)
+            return arr
+
+        import numpy as np
+        means, maxima = mesh_values(agg="mean"), mesh_values(agg="max")
+        # Whole 12-month rows covering at least the three years present (the
+        # mesh carries a trailing row of edges, so this is not exactly 3 x 12).
+        self.assertEqual(means.size % 12, 0)
+        self.assertGreaterEqual(means.size, 3 * 12)
+        # The same cells aggregated differently: max must top mean somewhere.
+        self.assertTrue(np.nanmax(maxima) > np.nanmax(means))
+        # ranks= replaces the values with their rank, so the scale changes.
+        ranks = mesh_values(agg="mean", ranks=True)
+        self.assertFalse(np.allclose(np.asarray(means, dtype=float),
+                                     np.asarray(ranks, dtype=float),
+                                     equal_nan=True))
+
+    # --- cumulative / waterfall ---
+
+    def test_cumulative_ends_at_the_series_sum(self):
+        # The defining contract of a running total.
+        from diive.core.plotting.cumulative import Cumulative
+        fig, ax = plt.subplots()
+        Cumulative(self.series.to_frame(), units="units").plot(ax=ax, showplot=False)
+        self.assertAlmostEqual(float(ax.lines[0].get_ydata()[-1]),
+                               float(self.series.sum()), places=3)
+        plt.close(fig)
+
+    def test_cumulative_year_draws_one_line_per_year(self):
+        from diive.core.plotting.cumulative import CumulativeYear
+        fig, ax = plt.subplots()
+        CumulativeYear(self.series, series_units="units").plot(ax=ax, showplot=False)
+        labels = [line.get_label() for line in ax.lines]
+        self.assertEqual(len(labels), 3)
+        for year in (2019, 2020, 2021):
+            self.assertTrue(any(str(year) in lbl for lbl in labels), labels)
+        plt.close(fig)
+
+    def test_waterfall_bar_per_period_and_total_matches(self):
+        from diive.core.plotting.waterfall import WaterfallPlot
+        monthly = self.series.resample("ME").sum()
+        fig, ax = plt.subplots()
+        WaterfallPlot(self.series, resample="ME", agg="sum").plot(ax=ax, showplot=False)
+        self.assertEqual(len(ax.patches), len(monthly))
+        # The running budget closes on the series total.
+        tops = [p.get_y() + p.get_height() for p in ax.patches]
+        bottoms = [p.get_y() for p in ax.patches]
+        final = tops[-1] if abs(tops[-1]) > abs(bottoms[-1]) else bottoms[-1]
+        self.assertAlmostEqual(final, float(monthly.sum()), places=3)
+        plt.close(fig)
+
+    def test_waterfall_colours_split_by_sign(self):
+        import numpy as np
+        import pandas as pd
+        from diive.core.plotting.waterfall import WaterfallPlot
+        # Alternating monthly totals so both directions are present.
+        idx = pd.date_range("2021-01-01", periods=24 * 300, freq="1h")
+        values = np.where((idx.month % 2) == 0, 1.0, -1.0)
+        series = pd.Series(values, index=idx, name="NEE")
+        fig, ax = plt.subplots()
+        WaterfallPlot(series, resample="ME", agg="sum").plot(
+            ax=ax, showplot=False, color_uptake="#111111", color_release="#EEEEEE")
+        colors = {p.get_facecolor()[:3] for p in ax.patches}
+        self.assertEqual(len(colors), 2, "both uptake and release colours expected")
+        plt.close(fig)
+
+    # --- distributions ---
+
+    def test_ridgeline_one_panel_per_group(self):
+        from diive.core.plotting.ridgeline import RidgeLinePlot
+        fig = plt.figure()
+        RidgeLinePlot(self.series).plot(fig=fig, how="monthly", showplot=False)
+        self.assertEqual(len(fig.axes), 12)
+        plt.close(fig)
+
+    def test_ridgeline_hspace_is_set_on_the_gridspec(self):
+        # Documented gotcha: the overlap must be set at gridspec creation -- a
+        # later gs.update(hspace=) is a silent no-op for an embedded figure.
+        from diive.core.plotting.ridgeline import RidgeLinePlot
+        fig = plt.figure()
+        RidgeLinePlot(self.series).plot(fig=fig, how="monthly", hspace=-0.7,
+                                        showplot=False)
+        gridspec = fig.axes[0].get_subplotspec().get_gridspec()
+        self.assertAlmostEqual(gridspec.hspace, -0.7)
+        plt.close(fig)
+
+    def test_shifted_distribution_labels_both_periods(self):
+        from diive.core.plotting.shifted_distribution import ShiftedDistributionPlot
+        fig, ax = plt.subplots()
+        ShiftedDistributionPlot(self.series,
+                                ref_period=("2019-01-01", "2019-12-31"),
+                                comp_period=("2021-01-01", "2021-12-31")).plot(ax=ax)
+        labels = [t.get_text() for t in ax.get_legend().get_texts()]
+        self.assertTrue(any("2019-01-01" in lbl for lbl in labels), labels)
+        self.assertTrue(any("2021-01-01" in lbl for lbl in labels), labels)
+        plt.close(fig)
+
+    def test_shifted_distribution_periods_select_different_data(self):
+        from diive.core.plotting.shifted_distribution import ShiftedDistributionPlot
+        import numpy as np
+        plot = ShiftedDistributionPlot(self.series,
+                                       ref_period=("2019-01-01", "2019-06-30"),
+                                       comp_period=("2019-07-01", "2019-12-31"))
+        # First half vs second half of the annual cycle -> different means.
+        self.assertFalse(np.isclose(plot._ref_data.mean(), plot._comp_data.mean()))
+
+    # --- polar ---
+
+    def test_treering_filled_and_line_use_different_renderers(self):
+        from diive.core.plotting.treering import TreeRingPlot
+        from matplotlib.projections.polar import PolarAxes
+        frame = self.series.to_frame()
+
+        fig, ax = plt.subplots(subplot_kw={"projection": "polar"})
+        TreeRingPlot(df=frame, value_col="TA").plot(ax=ax)
+        self.assertIsInstance(ax, PolarAxes)
+        filled_collections = len(ax.collections)
+        plt.close(fig)
+
+        fig, ax = plt.subplots(subplot_kw={"projection": "polar"})
+        TreeRingPlot(df=frame, value_col="TA").plot_line(ax=ax)
+        # plot_line draws one trace per year instead of a single colour mesh.
+        self.assertNotEqual(len(ax.collections), filled_collections)
+        plt.close(fig)
+
+    # --- yearly anomalies ---
+
+    def test_longterm_anomalies_are_relative_to_the_reference_mean(self):
+        import pandas as pd
+        from diive.core.plotting.bar import LongtermAnomaliesYear
+        # This class takes one value per year, indexed by integer year.
+        yearly = pd.Series([1.0, 3.0, 2.0, 5.0, 0.0],
+                           index=[2016, 2017, 2018, 2019, 2020], name="TA")
+        plot = LongtermAnomaliesYear(series=yearly, reference_start_year=2016,
+                                     reference_end_year=2018)
+        # Reference mean over 2016-2018 is 2.0, so 2018 sits exactly on it.
+        anomalies = plot.anomalies_df
+        self.assertAlmostEqual(float(anomalies["reference_mean"].iloc[-1]), 2.0)
+        self.assertAlmostEqual(float(anomalies.loc[2018, "anomaly"]), 0.0)
+        self.assertAlmostEqual(float(anomalies.loc[2019, "anomaly"]), 3.0)
+        self.assertAlmostEqual(float(anomalies.loc[2020, "anomaly"]), -2.0)
+        # Above and below are split into two series so they can be coloured
+        # differently, and each year appears in exactly one of them.
+        above, below = anomalies["anomaly_above"], anomalies["anomaly_below"]
+        self.assertEqual(int((above.notna() & below.notna()).sum()), 0)
+        fig, ax = plt.subplots()
+        plot.plot(ax=ax)
+        # One bar per year in each of the two series.
+        self.assertEqual(len(ax.patches), 2 * len(yearly))
+        plt.close(fig)
+
+    # --- 3D surface grid (library path, no gui3d extra needed) ---
+
+    def test_datetime_surface_grid_shape_and_axes(self):
+        from diive.core.plotting.surface_grid import datetime_surface_grid
+        import numpy as np
+        grid = datetime_surface_grid(self.series)
+        self.assertEqual(grid.z.shape, (len(grid.y_days), len(grid.x_hours)))
+        self.assertEqual(len(grid.x_hours), 24)          # hourly data
+        self.assertEqual(len(grid.y_days), 3 * 365)
+        self.assertEqual(grid.name, "TA")
+        np.testing.assert_allclose(grid.x_hours[0], 0.0)
+        self.assertLess(grid.x_hours[-1], 24.0)
+
+    def test_datetime_surface_grid_keeps_gaps_as_nan(self):
+        from diive.core.plotting.surface_grid import datetime_surface_grid
+        import numpy as np
+        gappy = self.series.copy()
+        gappy.iloc[:24] = np.nan  # blank the first whole day
+        grid = datetime_surface_grid(gappy)
+        self.assertTrue(np.all(np.isnan(grid.z[0])))
+        self.assertFalse(np.all(np.isnan(grid.z[1])))
+
+
+if __name__ == '__main__':
+    unittest.main()
