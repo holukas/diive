@@ -303,3 +303,53 @@ class TestDefaultFormatLabels(unittest.TestCase):
         self.assertEqual(ax.get_xlabel(), 'time')
         self.assertEqual(ax.get_ylabel(), 'SWC  [%]')
         plt.close(fig)
+
+
+class TestPlotfuncsHelpers(unittest.TestCase):
+    """Helpers with no coverage, which is how a live crash went unnoticed.
+
+    make_patch_spines_invisible called ax.spines.to_numpy()() and raised
+    AttributeError on every call. Both of its call sites are real
+    (heatmap_base's black-and-white render, make_secondary_yaxis), but
+    neither is exercised by another test.
+    """
+
+    def test_make_patch_spines_invisible(self):
+        from diive.core.plotting.plotfuncs import make_patch_spines_invisible
+        fig, ax = plt.subplots()
+        make_patch_spines_invisible(ax)
+        self.assertFalse(ax.patch.get_visible())
+        self.assertTrue(ax.get_frame_on())
+        self.assertEqual([sp.get_visible() for sp in ax.spines.values()], [False] * 4)
+        plt.close(fig)
+
+    def test_make_secondary_yaxis_uses_the_same_helper(self):
+        from diive.core.plotting.plotfuncs import make_secondary_yaxis
+        fig, ax = plt.subplots()
+        twin = make_secondary_yaxis(ax)  # raised before the spines fix
+        self.assertIsNotNone(twin)
+        plt.close(fig)
+
+    def test_adjust_color_lightness_accepts_every_colour_form(self):
+        import numpy as np
+        from diive.core.plotting.styles.LightTheme import adjust_color_lightness
+        # The name lookup raises for anything that is not a named colour, and
+        # callers pass three different forms. A hex string raises KeyError; an
+        # RGBA tuple or numpy array is not hashable at all and raises TypeError.
+        # RidgeLinePlot passes colormap output, i.e. the array form, so all
+        # three have to fall through to "use the value as given".
+        forms = {
+            'named': 'red',
+            'hex': '#ff0000',
+            'rgba tuple': (1.0, 0.0, 0.0, 1.0),
+            'numpy array': np.array([1.0, 0.0, 0.0, 1.0]),
+        }
+        results = {}
+        for label, value in forms.items():
+            with self.subTest(form=label):
+                out = adjust_color_lightness(value, 0.5)
+                self.assertEqual(len(out), 3)
+                self.assertTrue(all(0.0 <= v <= 1.0 for v in out))
+                results[label] = out
+        # All four describe the same red, so they must lighten identically.
+        self.assertEqual(len(set(results.values())), 1)

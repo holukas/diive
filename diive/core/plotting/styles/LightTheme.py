@@ -123,8 +123,11 @@ def adjust_color_lightness(color, amount=0.5):
     import colorsys
     try:
         c = mc.cnames[color]
-    except KeyError:
-        # Not a named colour (e.g. already a hex string); use it as given.
+    except (KeyError, TypeError):
+        # KeyError: not a named colour (e.g. a hex string).
+        # TypeError: not hashable at all, e.g. an RGB(A) tuple or numpy array,
+        # which callers do pass -- RidgeLinePlot colours come straight from a
+        # colormap. Both are handled the same way: use the value as given.
         c = color
     c = colorsys.rgb_to_hls(*mc.to_rgb(c))
     return colorsys.hls_to_rgb(c[0], max(0, min(1, amount * c[1])), c[2])
