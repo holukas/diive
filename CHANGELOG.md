@@ -165,6 +165,22 @@ The rest raise or fail at import:
   `diive.gapfilling.scores` re-exports it, and `dv.gapfilling.prediction_scores` is unchanged. Importing
   `diive.core.ml.common` on its own previously raised `ImportError` from a circular import that only stayed hidden
   because `diive/__init__` happened to import `gapfilling` first.
+- **Ruff is configured and enforced**, replacing a config that set only a cache path. `line-length` is now explicit
+  (the 88 default would have had `ruff format` rewrite 290 of 303 files), bugbear rules are on, and `gui/`'s
+  one-line-per-widget Qt style is exempted rather than fought. Findings went 411 -> 93, and every remaining one is
+  style or judgment: deliberate lazy imports in the hires/TUI modules, leftover locals, and the Qt setup lines.
+- **Every `zip()` states its length handling.** Most are `strict=False`, which is accurate: in the plotting loops the
+  artist collection is built from the sequence being zipped, so a mismatch cannot occur. Seven are `strict=True` where
+  both sides are provably equal and a future edit should fail loudly. Three stay `strict=False` because truncation is
+  intended (seeding X/Y/Z from fewer than three numeric columns, restoring saved GUI state that predates a widget, and
+  a `.get(key, [])` default).
+- **Line endings are pinned** in `.gitattributes` (`* text=auto eol=lf` plus the binary formats), so working trees stop
+  drifting from the index. No stored content changed: no blob had CRLF.
+- **`flux/hires` gained its first tests beyond the PWB window feature**: wind-rotation geometry (per-sample speed is
+  preserved by the double rotation, which the mean-based test cannot check), `MaxCovariance` recovering an injected lag
+  with the documented sign, and `apply_tlag`'s filename-key mapping including its collision guard. The three large
+  modules (`detect_and_remove_tlag`, `lag_pwb`, the TUI) remain uncovered; they need file fixtures rather than
+  pure-function assertions.
 - **MDS is now a faithful ONEFlux port**: the 6-stage expanding-window cascade, `>=2`-sample acceptance, N-1 standard
   deviation, and the ONEFlux SWIN tolerance. Fill values r ~ 0.9997 to 0.99997 against native ONEFlux. Shared with
   random uncertainty via `diive.gapfilling.similarity`, so there is one similarity scan. Also 4x faster,
@@ -192,6 +208,22 @@ The rest raise or fail at import:
 
 - **`Hampel` ignored `n_sigma` in day/night mode**: the per-period defaults were the literal `5.5` instead of `None`, so
   the fall-back was dead. **Results change** for callers who passed `n_sigma` alone with `separate_day_night=True`.
+- **`make_patch_spines_invisible` raised `AttributeError` on every call**, so the heatmap black-and-white render and
+  `make_secondary_yaxis`'s twin axis both failed. `ax.spines.values()` had been rewritten to `ax.spines.to_numpy()()` by
+  the global `.values` -> `.to_numpy()` replace during the pandas 3.0 upgrade. The rest of the codebase was swept for the
+  same damage; this was the only instance.
+- **Every ridgeline plot failed with `unhashable type: 'numpy.ndarray'`.** `adjust_color_lightness` looked a colour up in
+  `matplotlib.colors.cnames`, which raises `TypeError` (not `KeyError`) for an RGBA tuple or numpy array, and
+  `RidgeLinePlot` passes colours straight from a colormap. It now accepts named, hex, tuple and array colours alike.
+- **Warnings blamed the library instead of the caller.** Three `warnings.warn` calls had no `stacklevel`, so a complaint
+  about the caller's series being too short was reported at `decomposition_utils.py` rather than at the line that passed
+  the data.
+- **Re-raised exceptions discarded the original traceback.** Eight handlers interpolated the caught exception into a new
+  message and dropped it; an STL or Granger failure inside statsmodels surfaced as a wrapped string with nothing pointing
+  at where it broke. All now chain with `raise ... from e`.
+- **Two bare `except:` handlers** also swallowed `KeyboardInterrupt` and `SystemExit`; both are narrowed.
+- **`FluxLevelData.gap_stats` had an undefined annotation** (`dict[str, 'GapStats']` with `GapStats` never imported), so
+  `typing.get_type_hints()` and Sphinx autodoc failed on it.
 - **`lagged_variants` silently produced no lags for a single-column dataframe**, returning it unchanged with no warning.
   The same column lags correctly when it is one of two, so the guard was treating "only one column" as "nothing to lag".
   It now raises only when that column is also in `exclude_cols`. It also no longer adds its columns to the caller's
