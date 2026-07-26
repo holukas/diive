@@ -297,7 +297,14 @@ The rest raise or fail at import:
 
 ### Documentation
 
-- **124 examples** across 10 domain folders (Sphinx Gallery format), with new coverage for the flux chain (L2 standalone,
+- **New example `flux/hires/flux_detect_remove_tlag.py`** for `PerFilePipeline` / `diive-tlag-pwb-detect-remove`, the
+  last hires entry point without one: two synthetic 1-hour files split into wall-clock-aligned 30-min chunks, rotated
+  and PWB-detected per chunk, then written with the PWBOPT lag removed and named by each chunk's own start time. Also
+  shows per-gas search windows recovering a 12 s H2O delay that lies outside the default ±10 s window. Writing it turned
+  up a wrong pairing in the module docstring: `--start-time-regex "(\d{8})_(\d{4})"` was documented with
+  `--start-time-format "%Y%m%d-%H%M"`, but capture groups are concatenated before parsing, so the hyphen never appears
+  and every run raised. Corrected, with the rule spelled out.
+- **122 examples** across 10 domain folders (Sphinx Gallery format), with new coverage for the flux chain (L2 standalone,
   composable, multi-flux, partitioning), all four partitioning ports plus a comparison, USTAR methods, PWB time-lag,
   SW_IN gap-filling, compound extremes, gap stats, events, and I/O. `examples/CATALOG.md` now lists every one.
 - **New InfluxDB notebooks** (`notebooks/DatabaseInflux*`) for download, meteo screening, and delete. 21 older notebooks

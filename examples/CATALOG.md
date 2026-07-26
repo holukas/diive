@@ -216,6 +216,7 @@ See: [features/README.md](features/README.md)
 | [**flux_lag_pwb_batch.py**](flux/hires/flux_lag_pwb_batch.py) | PwbBatchDetection API demo: parallel PWB across many EddyPro files with live Rich progress display, PWBOPT post-processing (standard + pre-filtered), and batch summary figures |
 | [**flux_lag_pwb_batch_cli.py**](flux/hires/flux_lag_pwb_batch_cli.py) | CLI demo: drive PwbBatchDetection from the command line via `python -m diive.flux.hires.lag_pwb`; shows all available flags |
 | [**flux_apply_tlag_cli.py**](flux/hires/flux_apply_tlag_cli.py) | `TlagApplier` CLI demo (`diive-tlag-apply-batch`): apply PWBOPT-detected lags from a `tlag_results.csv` to raw EC files, shifting each scalar by `round(tlag_s · hz)` rows |
+| [**flux_detect_remove_tlag.py**](flux/hires/flux_detect_remove_tlag.py) | `PerFilePipeline` (`diive-tlag-pwb-detect-remove`): split long raw files into wall-clock-aligned 30-min chunks, rotate + detect per chunk, then remove the PWBOPT lag and write one file per chunk; per-gas search windows for a long-inlet gas |
 | [**flux_windrotation.py**](flux/hires/flux_windrotation.py) | Wind rotation and coordinate transformation |
 | [**flux_fluxdetectionlimit.py**](flux/hires/flux_fluxdetectionlimit.py) | Flux detection limit and measurement sensitivity |
 

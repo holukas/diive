@@ -138,6 +138,7 @@ EXAMPLE_FILES = [
     'flux/hires/flux_lag_pwb_batch.py',
     'flux/hires/flux_lag_pwb_batch_cli.py',
     'flux/hires/flux_apply_tlag_cli.py',
+    'flux/hires/flux_detect_remove_tlag.py',
     'flux/hires/flux_windrotation.py',
     # Gap-filling
     'gapfilling/gapfill_interpolate_generous.py',

@@ -197,6 +197,10 @@ This module exposes:
   sequence on a single file. Useful from
   Python without the CLI.
 
+Example
+-------
+See ``examples/flux/hires/flux_detect_remove_tlag.py`` for a complete example.
+
 Part of the diive library: https://github.com/holukas/diive
 """
 
@@ -1712,7 +1716,8 @@ class PerFilePipeline:
     multi-chunk file still saturates every core.
 
     See the module docstring for the full workflow rationale and the CLI
-    flag reference. After ``.run()``, ``.summary`` returns a DataFrame with
+    flag reference, and ``examples/flux/hires/flux_detect_remove_tlag.py``
+    for a complete example. After ``.run()``, ``.summary`` returns a DataFrame with
     one row per (file, chunk): rotation angles, detected lag per gas, the
     PWBOPT columns, applied records (= the removed PWBOPT lag), reliability
     flags, and error messages.
