@@ -394,7 +394,7 @@ def _chunk_filename(
                     f"{input_path.name!r}, but parsing with "
                     f"--start-time-format {start_time_format!r} failed: {e}. "
                     f"Check that the format spec matches the captured text."
-                )
+                ) from e
             t_chunk = _chunk_start_time(t0, chunk_index, chunk_seconds)
             fields['starttime'] = t_chunk.strftime(start_time_format)
 
@@ -404,7 +404,7 @@ def _chunk_filename(
         raise ValueError(
             f"--chunk-name-template {name_template!r} uses placeholder {e}; "
             f"available: {sorted(fields.keys())}"
-        )
+        ) from e
 
 
 def _parse_file_start_time(
@@ -637,10 +637,10 @@ def parse_scalar_spec(token: str) -> tuple[str, str, dict]:
                 f"allowed: lag, block, lws, uws")
         try:
             overrides[canon] = float(val.strip())
-        except ValueError:
+        except ValueError as e:
             raise ValueError(
                 f"per-gas option {key.strip()!r} needs a number, got "
-                f"{val.strip()!r} in {token!r}")
+                f"{val.strip()!r} in {token!r}") from e
     return label, col, overrides
 
 

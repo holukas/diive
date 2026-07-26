@@ -1851,7 +1851,7 @@ class DetectRemoveTUI(App):
             try:
                 per_gas_lag[label] = window_to_lag_params(lo, hi)
             except ValueError as e:
-                raise ValueError(f'window for {label}: {e}')
+                raise ValueError(f'window for {label}: {e}') from e
         in_dir, out_dir = g('input_dir'), g('output_dir')
         if not in_dir or not out_dir:
             raise ValueError('input dir and output dir are required')
@@ -1873,7 +1873,7 @@ class DetectRemoveTUI(App):
         try:
             op.mkdir(parents=True, exist_ok=True)
         except OSError as e:
-            raise ValueError(f'Output dir is not a valid path: {out_dir} ({e})')
+            raise ValueError(f'Output dir is not a valid path: {out_dir} ({e})') from e
         workers = int(g('workers') or 0)
         # Chunk naming: only pass a start-time regex when given. The pipeline
         # raises a clear error if the template uses {starttime} without one.

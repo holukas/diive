@@ -154,7 +154,7 @@ def stl_decompose(
         }
 
     except Exception as e:
-        raise RuntimeError(f"STL decomposition failed: {str(e)}")
+        raise RuntimeError(f"STL decomposition failed: {str(e)}") from e
 
 
 def classical_decompose(
@@ -208,7 +208,7 @@ def classical_decompose(
         }
 
     except Exception as e:
-        raise RuntimeError(f"Classical decomposition failed: {str(e)}")
+        raise RuntimeError(f"Classical decomposition failed: {str(e)}") from e
 
 
 def harmonic_decompose(

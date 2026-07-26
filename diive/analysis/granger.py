@@ -72,7 +72,7 @@ class GrangerCausality:
                 self.max_lag,
             )
         except Exception as e:
-            raise ValueError(f"Granger causality test failed: {e}")
+            raise ValueError(f"Granger causality test failed: {e}") from e
 
     def p_values(self) -> DataFrame:
         """
