@@ -209,6 +209,14 @@ The rest raise or fail at import:
 
 ### Fixed
 
+- **`InfluxIO.delete(measurements=True)` deleted nothing and reported success.** Expanding `True` went through
+  `schema.measurements()` without a `start` argument, so InfluxDB applied its 30-day default and returned no
+  measurements for any bucket whose newest record is older than that. The delete loop then never ran, while the summary
+  line — built from the *inputs*, not from what was deleted — still announced that all measurements had been wiped. The
+  lookup now covers the full history and is scoped to `data_version`, an empty result raises instead of passing
+  silently, and the summary names the measurements actually targeted. `schema.fieldKeys()` in `fields_in_bucket` had the
+  same missing `start`, so `show_fields_in_bucket` under-reported for older buckets (the GUI Database explorer's
+  measurement list too).
 - **`Hampel` ignored `n_sigma` in day/night mode**: the per-period defaults were the literal `5.5` instead of `None`, so
   the fall-back was dead. **Results change** for callers who passed `n_sigma` alone with `separate_day_night=True`.
 - **`make_patch_spines_invisible` raised `AttributeError` on every call**, so the heatmap black-and-white render and

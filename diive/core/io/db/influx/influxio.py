@@ -377,7 +377,10 @@ class InfluxIO:
             bucket: name of bucket in database
             measurements: list or True
                 If list, list of measurements in database, e.g. ['TA', 'SW']
-                If True, all *fields* in all *measurements* will be deleted
+                If True, all *fields* in all *measurements* will be deleted.
+                The measurement list is then looked up in the database, restricted
+                to *data_version*; a ValueError is raised if that lookup finds
+                nothing, so a delete can never report success without acting.
             fields: list or True
                 If list, list of fields (variable names) to delete
                 If True, all data in *fields* in *measurements* will be deleted.
@@ -431,8 +434,17 @@ class InfluxIO:
         # Check if measurements is boolean and True
         measurements_all = False
         if measurements and isinstance(measurements, bool):
-            measurements = self.show_measurements_in_bucket(bucket=bucket, verbose=False)
+            # Scoped to *data_version*: measurements holding no data of this
+            # version have nothing to delete anyway, and the version-filtered
+            # query looks at the full history instead of the schema default.
+            measurements = self.show_measurements_in_bucket(bucket=bucket, data_version=data_version,
+                                                            verbose=False)
             measurements_all = True
+            if not measurements:
+                raise ValueError(
+                    f"No measurements found for data_version '{data_version}' in bucket "
+                    f"'{bucket}'. Nothing was deleted. Check the bucket and data version "
+                    f"names, e.g. with show_data_versions_in_bucket(bucket='{bucket}').")
 
         # Run database query
         with get_client(self.conf_db) as client:
@@ -456,8 +468,10 @@ class InfluxIO:
                                          f'AND data_version="{data_version}"')
                         delete_api.delete(predicate=predicate_str, **kwargs)
 
+        # Report the measurements actually targeted, not the requested `True`,
+        # so a delete that hit nothing cannot read like a successful wipe.
         if measurements_all:
-            measurements_str = "ALL"
+            measurements_str = f"ALL ({len(measurements)}) {measurements}"
         elif isinstance(measurements, list):
             measurements_str = measurements
         else:

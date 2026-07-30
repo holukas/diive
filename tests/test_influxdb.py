@@ -65,6 +65,20 @@ class TestInfluxFluxQL(unittest.TestCase):
         self.assertIn('measurement: "TA"', q)
         self.assertIn("start: -9999d", q)
 
+    def test_measurements_in_bucket_query(self):
+        # Without an explicit start the schema functions look back only 30d,
+        # which hides buckets whose newest record is older than that.
+        q = " ".join(fluxql.measurements_in_bucket("b").split())
+        self.assertIn("schema.measurements(", q)
+        self.assertIn('bucket: "b"', q)
+        self.assertIn("start: -9999d", q)
+
+    def test_fields_in_bucket_query(self):
+        q = " ".join(fluxql.fields_in_bucket("b").split())
+        self.assertIn("schema.fieldKeys(", q)
+        self.assertIn('bucket: "b"', q)
+        self.assertIn("start: -9999d", q)
+
 
 class TestInfluxTimeHelpers(unittest.TestCase):
     """Timezone / ISO conversion helpers (no database needed)."""
