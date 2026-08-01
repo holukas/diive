@@ -77,7 +77,7 @@ tests/                        # Unit tests
 | `dv.outliers` | `AbsoluteLimits`, `Hampel`, `LocalSD`, `LocalOutlierFactor`, `zScore`, `zScoreRolling`, `zScoreIncrements`, `TrimLow`, `ManualRemoval`, + `*DaytimeNighttime` / `*AllData` names (see the day/night convention below — some are wrappers, some plain aliases) |
 | `dv.events` | `Event` (instant or period marker; `resolved_color(i, colors=)`), `event_to_flag` (→ 0/1 column on an index), `overlay_events` (`axis='x'` value-vs-time / `axis='y'` heatmap; `colors=` override map), `make_event_flag_name`, `CATEGORY_COLORS` |
 | `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`, `FeatureEngineer`, `GapFillingResult`, `prediction_scores`, `linear_interpolation` |
-| `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `process_one_file`, `FluxDetectionLimit`, ustar classes, plus **NEE→GPP+RECO partitioning** and **uncertainty** — see the two sub-sections below |
+| `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `WindDoubleRotation`, `reynolds_decomposition`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `process_one_file`, ustar classes, plus **NEE→GPP+RECO partitioning** and **uncertainty** — see the two sub-sections below |
 | `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `CompoundExtremes`, `harmonic_analysis`, `spectrogram`, `percentiles101`, `rank_drivers`, `profile_dataframe`, `dataframe_overview`, `count_gaps` |
 | `dv.analysis.experimental` | **(provisional)** `DriverAnalysis`, `DriverAnalysisResult`, `AleCurve`, `Ale2DResult`, `accumulated_local_effects`, `accumulated_local_effects_2d`, `ExperimentalWarning` |
 | `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `ShiftedDistributionPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot`, `DateTimeSurface` (+ `datetime_surface_grid`), `WaterfallPlot`, `CompoundExtremesPlot`, `WindRosePlot`, `FormatStyle` — see **Plotting** below |
@@ -319,7 +319,7 @@ c_prime = dv.flux.reynolds_decomposition(df['CO2'])
 flux = (w_prime * c_prime).mean()
 ```
 
-**Classes:** `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `FluxDetectionLimit`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `process_one_file`.
+**Classes:** `WindDoubleRotation`, `reynolds_decomposition`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `process_one_file`.
 
 ### Time-lag detection & removal (PWB)
 

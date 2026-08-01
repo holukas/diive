@@ -171,7 +171,6 @@ session touched adjacent work on without closing — its four functions take pre
 | 205 | `io/formats/fluxnet.py` | — |
 | 167 | `io/formats/meteo.py` | — |
 | 149 | `core/plotting/seasonaltrend.py` | yes (`LongtermAnomaliesYear`) |
-| 132 | `core/io/filedetector.py` | — |
 | 49 | `core/utils/vargroups.py` | — |
 | 40 | `core/plotting/_fitplot.py` | yes (via `Fitter`) |
 | 16 | `core/dfun/regression.py` | — |
@@ -702,7 +701,7 @@ Coverage cannot speak to this tier; it stays grep-derived. Each is a documented 
 | `DetectTimestampShifts` | **0 %** (281 stmts) |
 | `LongtermAnomaliesYear` | **0 %** (`core/plotting/seasonaltrend.py`, 149 stmts) |
 | `Fitter` | `core/plotting/_fitplot.py` **0 %**; `core/dfun/fits.py` low |
-| `MultiDataFileReader`, `ReadFileType`, `search_files` | `core/io/filereader.py` partial, 82 of 290 covered lines GUI-only; `filedetector.py` **0 %** |
+| `MultiDataFileReader`, `ReadFileType`, `search_files` | `core/io/filereader.py` partial, 82 of 290 covered lines GUI-only |
 | `UstarVekuriThresholdDetection` | 19 of 193 stmts, all GUI-only |
 | `TimeLagAnalysis` | 23 of 211 stmts, all GUI-only |
 | `FindOptimumRange` | 27 of 222 stmts, all GUI-only |
