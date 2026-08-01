@@ -30,11 +30,9 @@ dependencies = [
     "numpy>=2.2.4,<3.0.0",
     "category-encoders>=2.8.1,<3.0.0",
     "scikit-optimize>=0.10.2,<0.11.0",
-    "polars>=1.26.0,<2.0.0",
     "jupyter-bokeh>=4.0.5,<5.0.0",
     "shap>=0.50.0,<1.0.0",  # 0.50 parses XGBoost's bracketed base_score itself
     "rich>=15.0.0",
-    "textual>=8.2.7",
 ]
 
 [project.optional-dependencies]
@@ -68,10 +66,6 @@ db = [
 ]
 
 [project.scripts]
-diive-tlag-pwb-batch = "diive.flux.hires.lag_pwb:_cli_main"
-diive-tlag-apply-batch = "diive.flux.hires.apply_tlag:_cli_main"
-diive-tlag-pwb-detect-remove = "diive.flux.hires.detect_and_remove_tlag:_cli_main"
-diive-tlag-pwb-detect-remove-tui = "diive.flux.hires.detect_and_remove_tlag_tui:_tui_main"
 diive-gui = "diive.gui._cli:_gui_main"
 
 [tool.uv]
