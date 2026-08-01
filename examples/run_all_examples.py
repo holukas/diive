@@ -131,15 +131,6 @@ EXAMPLE_FILES = [
     'flux/lowres/flux_ustar_vekuri_detection.py',
     'flux/lowres/flux_ustar_method_comparison.py',
     # Flux - High-resolution analysis
-    'flux/hires/flux_fluxdetectionlimit.py',
-    'flux/hires/flux_lag.py',
-    'flux/hires/flux_lag_pwb.py',
-    'flux/hires/flux_lag_pwbopt.py',
-    'flux/hires/flux_lag_pwb_batch.py',
-    'flux/hires/flux_lag_pwb_batch_cli.py',
-    'flux/hires/flux_apply_tlag_cli.py',
-    'flux/hires/flux_detect_remove_tlag.py',
-    'flux/hires/flux_windrotation.py',
     # Gap-filling
     'gapfilling/gapfill_interpolate_generous.py',
     'gapfilling/gapfill_interpolate_conservative.py',

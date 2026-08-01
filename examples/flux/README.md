@@ -6,7 +6,6 @@ Examples demonstrating flux processing, quality control, and high-resolution ana
 
 **Directory abbreviations** used throughout flux processing examples:
 - **`lowres/`** — Low-resolution (e.g., 30-minute) flux data processing. Typically averaged or aggregated time series.
-- **`hires/`** — High-resolution (e.g., 10 Hz or 20 Hz) raw sonic and gas analyzer data. Pre-averaging analysis before flux averaging.
 
 ## Contents
 
@@ -35,21 +34,11 @@ Examples demonstrating flux processing, quality control, and high-resolution ana
 - **lowres/flux_ustar_method_comparison.py** — Side-by-side comparison of ONEFlux and Vekuri USTAR approaches
 
 ### High-Resolution (10 Hz) Flux Analysis
-- **hires/flux_lag.py** — Time lag detection using MaxCovariance covariance analysis
-- **hires/flux_lag_pwb.py** — PWB time lag detection: pre-whitening with block-bootstrap (Vitale et al. 2024), single averaging period, high-flux vs. low-flux comparison; demonstrates the 4-combination logic via `var_tsonic`
-- **hires/flux_lag_pwbopt.py** — PWBOPT batch pipeline: multi-period PWB detection with S1/S2/S3 selection and standard vs. pre-filtered strategy comparison
-- **hires/flux_lag_pwb_batch.py** — `PwbBatchDetection` Python API demo: distributes PWB detection across CPU cores with `ProcessPoolExecutor`, shows live Rich progress (growing results table + progress bar), applies PWBOPT post-processing (standard and pre-filtered strategies), and generates batch summary figures (3-panel per scalar + scatter/KDE via `PwboptLagPlot`)
-- **hires/flux_lag_pwb_batch_cli.py** — CLI demo: generates synthetic EddyPro files and invokes `python -m diive.flux.hires.lag_pwb` as a subprocess; shows all available CLI flags
-- **hires/flux_apply_tlag_cli.py** — `TlagApplier` CLI demo (`diive-tlag-apply-batch`): applies PWBOPT-detected lags from a `tlag_results.csv` to raw EC files, shifting each scalar by `round(tlag_s · hz)` rows; format-agnostic, with `--period-key-regex` / `--file-key-regex` bridging rotated-vs-raw filenames
-- **hires/flux_detect_remove_tlag.py** — `PerFilePipeline` (`diive-tlag-pwb-detect-remove`): the two-phase per-chunk pipeline. Splits long raw files into wall-clock-aligned 30-min chunks, rotates and runs PWB on each in memory, then removes the PWBOPT-optimised lag and writes one file per chunk, named by its own start time. Shows per-gas search windows, so a long-inlet gas (H2O) can use a wider window than the dry gases in the same run
-- **hires/flux_windrotation.py** — Double rotation tilt correction (`WindDoubleRotation`) followed by Reynolds decomposition (`reynolds_decomposition`) to extract turbulent fluctuations and compute eddy covariance fluxes
-- **hires/flux_fluxdetectionlimit.py** — Flux detection limit and measurement sensitivity
 
 ## Related Documentation
 
 Available classes and functions in `dv.flux`:
 - **TimeLagAnalysis** — Time lag detection and visualization for gas concentrations
-- **MaxCovariance** — Time lag detection via cross-covariance maximisation
 - **PreWhiteningBootstrap** — PWB time lag detection (Vitale et al. 2024): pre-whitening + block-bootstrap, robust for low-magnitude fluxes (CH4, N2O). Provide `var_tsonic` to enable the full 4-combination RFlux v3.2.0 logic (strongly recommended for trace gases). **Requires wind-rotation-corrected input** (double rotation or planar-fit; e.g. EddyPro "Advanced" rotated output) — a non-zero mean W biases the cross-correlation.
 - **PwbBatchDetection** — Parallel batch wrapper around `PreWhiteningBootstrap`. **Requires wind-rotation-corrected input** (same requirement as above).: distributes many EddyPro averaging-period files across CPU cores, collects results into a single DataFrame, writes a checkpoint CSV after every completed file (crash-safe), applies PWBOPT S1/S2/S3 selection and optional HDI pre-filter, and produces batch summary figures. Also callable as a CLI module: `python -m diive.flux.hires.lag_pwb --help` (alias: `diive-tlag-pwb-batch`).
 - **TlagApplier** — Applies already-detected lags to raw EC files: reads a `tlag_results.csv` (from `PwbBatchDetection`) and shifts each scalar column backward by `round(tlag_s · hz)` rows, writing a parallel directory of lag-corrected files with the original header and column order preserved. Default lag column is `{prefix}_tlag_final_pf_s` (pre-filtered, gap-filled PWBOPT). Format-agnostic (`--sep` / `--skiprows` / `--extra-rows`); when detection ran on rotated files but the lag must be removed from differently-named raw files, `--period-key-regex` / `--file-key-regex` extract a common key per period. CLI: `diive-tlag-apply-batch`.
@@ -137,16 +126,6 @@ c_prime = dv.flux.reynolds_decomposition(df['CO2'])
 flux = (w_prime * c_prime).mean()
 
 # Time lag detection via cross-covariance maximisation
-mc = dv.flux.MaxCovariance(
-    df=df,
-    var_reference='w',
-    var_lagged='CO2',
-    lgs_winsize_from=-100,
-    lgs_winsize_to=0,
-    shift_stepsize=1,
-    segment_name='CO2 lag'
-)
-mc.run()
 ```
 
 ## Running Examples
@@ -172,13 +151,6 @@ uv run python examples/flux/lowres/flux_ustar_vekuri_detection.py
 uv run python examples/flux/lowres/flux_ustar_method_comparison.py
 
 # High-resolution (10 Hz) analysis
-uv run python examples/flux/hires/flux_lag.py
-uv run python examples/flux/hires/flux_lag_pwb.py
-uv run python examples/flux/hires/flux_lag_pwbopt.py
-uv run python examples/flux/hires/flux_lag_pwb_batch.py
-uv run python examples/flux/hires/flux_lag_pwb_batch_cli.py
-uv run python examples/flux/hires/flux_windrotation.py
-uv run python examples/flux/hires/flux_fluxdetectionlimit.py
 
 # PWB batch detection via CLI alias (real EddyPro files)
 # diive-tlag-pwb-batch is a console-script shortcut for
