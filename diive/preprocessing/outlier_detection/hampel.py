@@ -18,7 +18,7 @@ Both modes support:
 Quality flags:
   - flag=0: Value within acceptable range (valid)
   - flag=2: Value detected as outlier (removed)
-  - NaN: Original missing data preserved
+  - NaN: Record missing in the input, so no test could be performed
 
 See examples/preprocessing/outlier_detection/hampel.py for working examples.
 

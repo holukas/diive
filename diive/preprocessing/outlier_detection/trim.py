@@ -42,8 +42,9 @@ When NOT to use:
     overlap and the trim degenerates toward rejecting the whole subset.
 
 Quality flags (overall_flag):
-  - flag=0: Value within acceptable range (valid); also assigned to originally-missing records
+  - flag=0: Value within acceptable range (valid)
   - flag=2: Value detected as outlier (removed)
+  - NaN: Record missing in the input, so no test could be performed
 
 The filtered series (.filteredseries) preserves the original NaNs and, in addition, sets
 rejected values to NaN.

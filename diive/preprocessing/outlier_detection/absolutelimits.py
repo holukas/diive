@@ -13,7 +13,7 @@ against fixed minimum and maximum thresholds.
 Both modes use the quality flag system:
   - flag=0: Value within acceptable range (valid)
   - flag=2: Value outside acceptable range (outlier, removed)
-  - NaN: Original missing data preserved
+  - NaN: Record missing in the input, so no test could be performed
 
 See examples/preprocessing/outlier_detection/absolutelimits.py for working examples.
 
@@ -52,7 +52,7 @@ class AbsoluteLimits(FlagBase):
     **Quality Flags:**
     - 0: Value within acceptable range (valid)
     - 2: Value outside acceptable range (outlier, removed)
-    - NaN: Original missing data
+    - NaN: Record missing in the input, so no test could be performed
 
     Example:
         See `examples/preprocessing/outlier_detection/absolutelimits.py` for complete examples.

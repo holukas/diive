@@ -21,7 +21,7 @@ number of standard deviations. Two modes are available:
 Quality flags:
   - flag=0: Value within acceptable range (valid)
   - flag=2: Value detected as outlier (removed)
-  - NaN: Original missing data preserved
+  - NaN: Record missing in the input, so no test could be performed
 
 See examples/preprocessing/outlier_detection/localsd.py for working examples.
 
