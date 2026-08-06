@@ -71,9 +71,9 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | L38 | Corrected flux becomes NaN wherever the correction term is missing — deletes real measurements | `flux/lowres/selfheating.py:1225` |
 | L40 | Unrecognised `correction_method_base` returns an empty result instead of raising | `flux/lowres/selfheating.py:270` |
 | L45 | `ScopOptimizer` silently drops classes with <10 rows; neighbouring regime's SF is substituted | `flux/lowres/selfheating.py:904` |
-| L42 | `analyze_highest_quality_flux` counts missing records as valid — 1519 of 3000 reported as "99.5%" | `flux/lowres/hqflux.py:251` |
-| L7 | **Outlier flags are never NaN** — missing records come out flagged 0 ("valid"). Root cause of L30 and L42 | `core/base/flagbase.py:182` |
-| L30 | NaN u\* or NaN per-record threshold → flagged 0 (accepted); low-turbulence data passes | `flux/lowres/ustarthreshold.py:142` |
+| ~~L42~~ | ~~`analyze_highest_quality_flux` counts missing records as valid~~ (done 2026-08-07) — 1519 of 3000 reported as "99.5%" | `flux/lowres/hqflux.py:251` |
+| ~~L7~~ | ~~**Outlier flags are never NaN**~~ (done 2026-08-07) — was the root cause of L30 and L42 | `core/base/flagbase.py:182` |
+| L30 | NaN u\* or NaN per-record threshold → flagged 0 (accepted). **Half-fixed by L7** (missing *flux* now NaN); missing *u\** still flagged 0 | `flux/lowres/ustarthreshold.py:142` |
 | L29 | A failing bootstrap window is completely silent — blanket `except` + a `detail()` that never prints | `flux/lowres/ustar_bootstrap.py:39` |
 | L26 | `_class_bounds` can emit `end < start` → NaN class mean → up to 11 candidate classes skipped | `flux/lowres/ustar_mp_detection.py:285` |
 | L32 | `UstarDetectionMPT` is exported but never stores its results; `run()` only *prints* the threshold | `flux/lowres/ustarthreshold.py:561` |
@@ -316,7 +316,16 @@ so the numeric impact is small — but it isn't what's documented.
 
 ## Library — contract / documentation mismatches
 
-### [ ] L7. Outlier flags never contain NaN — missing records come out flagged 0 ("valid")
+### [x] L7. Outlier flags never contain NaN — missing records come out flagged 0 ("valid")
+
+> **Fixed 2026-08-07.** `FlagBase` gained a `nan_flag_at_missing` class attribute (default True);
+> `repeat()` now masks `overall_flag` to NaN wherever the input record is missing. `MissingValues`
+> sets it False — missing records are that detector's subject, so the mask would have erased its
+> entire output. The seven wrong docstring claims were rewritten, `trim.py`'s (correct for the *old*
+> behaviour, so newly wrong) was updated, and the outlier codegen comment now reads
+> `# 0 = ok, 2 = outlier, NaN = input missing`. `FlagQCF` output is bit-identical before and after
+> (verified), so the flux chain is unaffected. Resolves **L42**; see **L30** for what it does *not*
+> resolve.
 
 `diive/core/base/flagbase.py:182`
 
@@ -774,7 +783,20 @@ with no error; `run_level33_ustar_detection` then misdiagnoses it as "insufficie
 records". (The sequential branch uses `detail`, the parallel branch at `:288` uses `info` — so the
 two report differently.)
 
-**[ ] L30. NaN USTAR or NaN per-record threshold is flagged 0 (accepted), not rejected**
+**[ ] L30. NaN USTAR or NaN per-record threshold is flagged 0 (accepted), not rejected** — *half-fixed*
+
+> **Partially addressed 2026-08-07 by the L7 fix.** `FlagBase` now masks the flag to NaN where the
+> *flux* is missing, so that half is covered. The half that matters here is **not**: a record with a
+> present flux but a NaN `ustar` (or a NaN per-record threshold) is still flagged 0 — verified:
+>
+> ```
+>                      NEE  USTAR  flag
+> 2023-01-01 01:00:00  3.0    NaN   0.0     <- turbulence unknown, still "accepted"
+> 2023-01-01 02:00:00  NaN   0.50   NaN     <- flux missing, now correctly NaN
+> ```
+>
+> Closing this needs the u\* flaggers to mask on `ustar.notna()` (and on the threshold Series) too,
+> or to validate the threshold Series for NaN as their docstring already claims they require.
 `ustarthreshold.py:142` — same root cause as **L7**: neither comparison matches, the record lands in
 neither index, and `FlagBase.repeat`'s all-NaN row sums to 0. `FlagMultipleVariableUstarThresholds`
 documents that the threshold Series "must … contain no NaN" but never validates it, so a
@@ -898,7 +920,12 @@ Diurnal Variation (MDV)", `stats()` prints "-> Imputed (RF + MDV)" (`:311`) and 
 nothing. The name mismatch also means `physics.fct_unsc_gf` and `results_df['FCT_UNSC_gfRF']` carry
 different `.name`s.
 
-**[ ] L42. `analyze_highest_quality_flux` counts missing records as valid**
+**[x] L42. `analyze_highest_quality_flux` counts missing records as valid**
+
+> **Fixed 2026-08-07** as a consequence of L7 (the flag is now NaN at missing records, so
+> `(flag == 0).sum()` counts only records that were actually tested), plus an explicit
+> `n_measured` in the summary and rates expressed *per measured record* rather than per
+> potential record — an unmeasured record was never a candidate for being an outlier.
 `hqflux.py:251` — `n_valid = (flag == 0).sum()`, and per **L7** Hampel flags never-measured records
 as 0. A run with 1519 of 3000 records containing data reports `Valid records: 2986 (99.5%)`. The
 same numbers are returned in the public `summary` dict.
