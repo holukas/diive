@@ -125,22 +125,18 @@ class TestConsoleStringsAreCp1252Safe(unittest.TestCase):
       assembled into a variable first and printed later is NOT seen.
     * `diive/gui/` is excluded: Qt renders Unicode natively and never touches
       stdout.
-    * The Textual TUI (`detect_and_remove_tlag_tui.py`) is excluded: it paints
-      its own screen buffer rather than writing to stdout.
     * Docstrings and comments are ignored on purpose -- they are never printed
       by the library itself.
     """
 
-    #: Console helpers from diive.core.utils.console, plus builtin print and the
-    #: `out()` wrapper in the hires CLI (which forwards to console.print).
+    #: Console helpers from diive.core.utils.console, plus builtin print.
     EMITTER_NAMES = frozenset({
         'print', 'info', 'detail', 'warn', 'error', 'success', 'rule', 'vspace',
-        'out',
     })
     #: Methods on a Rich console object.
     EMITTER_METHODS = frozenset({'print', 'log', 'rule'})
     #: Files whose output never reaches a plain stdout stream.
-    EXCLUDED = ('gui', 'detect_and_remove_tlag_tui.py')
+    EXCLUDED = ('gui',)
 
     @staticmethod
     def _offending_chars(text):
@@ -204,7 +200,7 @@ class TestConsoleStringsAreCp1252Safe(unittest.TestCase):
         self.assertEqual(self._offending_chars('rule ═'), ['═'])
         self.assertEqual(self._offending_chars('arrow →'), ['→'])
         # Characters cp1252 *does* cover must not be flagged (e.g. the degree
-        # sign, which the hires CLI prints legitimately).
+        # sign, which the library prints legitimately).
         self.assertEqual(self._offending_chars('angle 12.5°'), [])
 
 

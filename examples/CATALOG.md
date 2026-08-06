@@ -206,11 +206,6 @@ See: [features/README.md](features/README.md)
 | [**flux_ustar_vekuri_detection.py**](flux/lowres/flux_ustar_vekuri_detection.py) | Simplified quantile-based USTAR detection (Vekuri method) |
 | [**flux_ustar_method_comparison.py**](flux/lowres/flux_ustar_method_comparison.py) | Compare ONEFlux and Vekuri USTAR detection methods |
 
-### High-Resolution (10 Hz) Analysis
-
-| Example | Description |
-|---------|-------------|
-
 See: [flux/README.md](flux/README.md)
 
 ---

@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**122 examples across 10 organized folders by functional domain.**
+**113 examples across 10 organized folders by functional domain.**
 
 ## Structure
 
@@ -59,7 +59,7 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (27 examples)
+├── flux/                  # Eddy covariance flux processing (18 examples)
 │   ├── fluxprocessingchain/
 │   │   ├── fluxprocessingchain_level2.py
 │   │   ├── fluxprocessingchain_runchain.py
@@ -136,7 +136,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs the headless-safe suite (122 scripts) in parallel with 8 workers, reporting execution time and any errors. Every example in `examples/` is registered; the database-backed meteoscreening workflows and the interactive TUI demo that used to be excluded no longer exist as example scripts.
+This runs the headless-safe suite (113 scripts) in parallel with 8 workers, reporting execution time and any errors. Every example in `examples/` is registered; the database-backed meteoscreening workflows and the interactive TUI demo that used to be excluded no longer exist as example scripts.
 
 ## Finding Examples
 
@@ -154,7 +154,7 @@ Browse by topic:
 - **events/README.md** — Marking and overlaying time-stamped events
 - **features/README.md** — Variable creation, unit conversions, derived properties
 - **fits/README.md** — Binned curve fitting with confidence and prediction bands
-- **flux/README.md** — Multi-level flux processing (L2-L4.2), NEE partitioning, quality filtering, high-res analysis
+- **flux/README.md** — Multi-level flux processing (L2-L4.2), NEE partitioning, quality filtering, USTAR detection
 - **gapfilling/README.md** — Linear, Random Forest, XGBoost, MDS methods
 - **io/README.md** — Parquet file I/O, EddyPro CSV reading, binary value extraction
 - **preprocessing/corrections/README.md** — Offset corrections, value clipping
@@ -171,11 +171,11 @@ Browse by topic:
 | **Events** | 1 | Instant/period event markers, 0/1 flag columns, plot overlays, custom category palette |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
-| **Flux** | 27 | Time lag analysis, processing chain (4), NEE partitioning into GPP/RECO (5), HQ filtering, USTAR detection (3), self-heating (2), uncertainty, PWB batch detection (CLI + API), PWB detect-and-remove (per-chunk pipeline + apply CLI), high-res analysis |
+| **Flux** | 18 | Time lag analysis, processing chain (4), NEE partitioning into GPP/RECO (5), HQ filtering, USTAR detection (3), self-heating (2), uncertainty |
 | **Gapfilling** | 12 | Linear interpolation (2), Random Forest (4 variants), XGBoost (2 variants), MDS (2), SW_IN physics+XGBoost, comparison |
 | **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
 | **Preprocessing** | 19 | Corrections (7), outlier detection (9), QA/QC (3) |
-| **TOTAL** | **122** | |
+| **TOTAL** | **113** | |
 
 ## Running Options
 

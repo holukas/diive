@@ -2,6 +2,10 @@
 
 Survey date: 2026-07-26 · diive v0.91.0 · branch `indev`
 
+> **Since this survey:** `flux/hires` moved to [dyco](https://github.com/holukas/dyco), taking
+> ~10 000 LOC and `tests/test_echires.py`'s 74 tests with it. Its entries are removed below; the
+> measured percentages and the 460-test run still include it and were not recomputed.
+
 Working document. Goal state: every important public function has at least one example and one test.
 
 ## How this was measured
@@ -66,7 +70,7 @@ Still fully GUI-dependent (≥25 statements, every covered line from `test_gui.p
 
 The whole plotting cluster is gone from that list. Largest remaining GUI-only line counts:
 `flux/fluxprocessingchain/container.py` (235 of 269 covered lines), `analysis/gapfinder.py` (124),
-`flux/hires/lag_pwb.py` (114), `flux/lowres/ustarthreshold.py` (92).
+`flux/lowres/ustarthreshold.py` (92).
 
 ### Runtime — investigated, no regression
 
@@ -167,7 +171,6 @@ session touched adjacent work on without closing — its four functions take pre
 | Stmts | File | Example? |
 |---|---|---|
 | ~~281~~ | ~~`preprocessing/qaqc/detect_timestamp_shifts.py`~~ — **now 92 %** | yes |
-| 242 | `core/io/filesplitter.py` | — |
 | 205 | `io/formats/fluxnet.py` | — |
 | 167 | `io/formats/meteo.py` | — |
 | 149 | `core/plotting/seasonaltrend.py` | yes (`LongtermAnomaliesYear`) |
@@ -671,7 +674,6 @@ direct test of the dispatch table, not just the individual correction functions.
 | `dv.events.CATEGORY_COLORS` | no test, no example |
 | `dv.load_parquet_many` | no test, no example, despite a documented `progress_callback` |
 | `UstarDetectionMPT`, `UstarThresholdConstantScenarios`, `FlagSingleConstantUstarThreshold` | `flux/lowres/ustarthreshold.py` **29 %**, 92 of 126 covered lines GUI-only |
-| `flux/hires`: `process_one_file` | no test, no example |
 
 ---
 
@@ -689,7 +691,6 @@ Coverage cannot speak to this tier; it stays grep-derived. Each is a documented 
 | `keep_vars`, `to_diive_format`, `transform_yearmonth_matrix_to_longform` | top-level |
 | `HampelDaytimeNighttime`, `LocalOutlierFactorAllData`, `LocalOutlierFactorDaytimeNighttime` | The day/night alias-vs-wrapper names CLAUDE.md flags as easy to confuse — an example showing the difference would pay for itself |
 | `make_event_flag_name` | `dv.events` |
-| `PerFilePipeline`, `DetectRemoveTUI` | hires (deliberate — see Tier 5) |
 | `InfluxIO`, `save_project`, `load_project`, `MetadataStore`, `add_console_sink` | infrastructure; example may not be warranted |
 
 ---
@@ -708,8 +709,6 @@ Coverage cannot speak to this tier; it stays grep-derived. Each is a documented 
 | `harmonic_analysis` + `reconstruct_harmonics`, `periodogram`, `fft_decompose`, `multi_scale_harmonics` | 6 of 7 symbols in `analysis/harmonic.py` untested |
 | `GrangerCausality` | 10 of 53 stmts, all GUI-only |
 | `ManualRemoval` | 33 of 37 stmts, all GUI-only |
-| `TlagApplier` | `flux/hires/apply_tlag.py` |
-| `PwbBatchDetection`, `PwboptLagPlot` | `flux/hires/lag_pwb.py`, 77 of 211 covered lines GUI-only |
 | `DailyCorrelation`, `StratifiedAnalysis` | `analysis/correlation.py`, `analysis/decoupling.py` |
 | `get_encoded_value_from_int`, `get_encoded_value_series` | top-level |
 | `add_driver` | `flux/fluxprocessingchain/container.py` — 235 of 269 covered lines GUI-only |
@@ -759,22 +758,8 @@ Public symbols never named in a non-GUI test:
 | `core/plotting/plotfuncs.py` | 24/29 | `format_ticks`, `format_spines`, `hide_xaxis_yaxis`, … (mostly cosmetic) |
 | `core/dfun/frames.py` | 17/20 | `keep_vars`, `trim_frame`, `detect_new_columns`, `aggregated_as_hires`, `rename_cols`, … |
 | `core/io/files.py` | 9/10 | `to_diive_format`, `save_parquet`, `load_parquet_many`, `unzip_file`, … |
-| `core/io/filedetector.py` | 8/9 | module is at 0 % |
 | `core/ml/common.py` | 3/4 | the three diagnostic plot functions |
 | `preprocessing/outlier_detection/lof.py` | 2/4 | `lof`, `suggest_lof_params` |
-
----
-
-## Tier 6 — Known and deliberately deferred: `flux/hires`
-
-Already recorded in project memory (`hires-test-coverage-gap`). Listed for completeness.
-
-| LOC | Module | Coverage note |
-|---|---|---|
-| 2 653 | `flux/hires/detect_and_remove_tlag.py` | 236 of 1 071 covered lines GUI-only; `process_one_file`, `detect_one_chunk`, `remove_one_chunk` untested |
-| 1 647 | `flux/hires/detect_and_remove_tlag_tui.py` | `PathInput`, `InfoScreen`, `ColumnPickerScreen`, `LoadScreen`, `format_win_ranges` untested |
-
-Neither module is referenced by any example. Blocker unchanged: real file fixtures, not mocks.
 
 ---
 

@@ -14,11 +14,13 @@ _**`diive` is currently being prepared for the v1.0 release.**_
 [ETH Grassland Sciences group](https://gl.ethz.ch/) for [Swiss FluxNet](https://www.swissfluxnet.ethz.ch/): eddy
 covariance flux processing, gap-filling, quality control, and the plots that go with them.
 
-There are three ways to use it, and you can pick whichever fits:
+There are two ways to use it, and you can pick whichever fits:
 
 - a **library** — `import diive as dv`, ten domain namespaces
 - a **desktop GUI** — `diive-gui`, for interactive work without writing code
-- **command-line tools** — batch time-lag detection for high-resolution eddy covariance data
+
+`diive` works on averaged (e.g. 30-minute) data. For raw high-frequency (10/20 Hz) eddy covariance data — wind
+rotation, flux detection limit, time-lag detection and removal — see [dyco](https://github.com/holukas/dyco).
 
 [Project overview](OVERVIEW.md) | [Examples](examples/README.md) | [GUI manual](diive/gui/MANUAL.md) |
 [CHANGELOG](CHANGELOG.md) | [Releases](https://github.com/holukas/diive/releases)
@@ -63,7 +65,7 @@ outliers, gap-fill, run the flux chain, visualize.
 |---|---|---|
 | `dv.plotting` | 18 plot types: time series, heatmaps, diel cycle, cumulative, ridgeline, scatter, hexbin, wind rose, tree ring, 3-D surface, ... | [visualization/](examples/visualization/README.md) |
 | `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, linear interpolation, long-term variants, `FeatureEngineer` | [gapfilling/](examples/gapfilling/README.md) |
-| `dv.flux` | Flux processing chain (L2–L4.2), NEE partitioning, USTAR filtering, uncertainty, high-resolution EC | [flux/](examples/flux/README.md) |
+| `dv.flux` | Flux processing chain (L2–L4.2), NEE partitioning, USTAR filtering, uncertainty | [flux/](examples/flux/README.md) |
 | `dv.outliers` | Nine detection methods (Hampel, z-score variants, local SD, LOF, absolute limits, ...) | [outlier_detection/](examples/preprocessing/outlier_detection/README.md) |
 | `dv.corrections` | Offset corrections (measurement, radiation, humidity, wind direction), thresholds, missing values | [corrections/](examples/preprocessing/corrections/README.md) |
 | `dv.qaqc` | `FlagQCF` quality flags, EddyPro flag handling, meteo screening | [qaqc/](examples/preprocessing/qaqc/README.md) |
@@ -97,9 +99,9 @@ guided processing chain, per-variable metadata with full provenance, and portabl
 
 | Where | What |
 |---|---|
-| [OVERVIEW.md](OVERVIEW.md) | How the pieces fit together: library, GUI, CLI, docs, packaging |
+| [OVERVIEW.md](OVERVIEW.md) | How the pieces fit together: library, GUI, docs, packaging |
 | [examples/COOKBOOK.md](examples/COOKBOOK.md) | Six minimal workflows — the place to start |
-| [examples/CATALOG.md](examples/CATALOG.md) | All 122 examples, indexed by use case |
+| [examples/CATALOG.md](examples/CATALOG.md) | All 113 examples, indexed by use case |
 | [examples/EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md) | The bundled 37-variable dataset |
 | [diive/gui/MANUAL.md](diive/gui/MANUAL.md) | Desktop GUI user manual |
 | [diive/gui/README.md](diive/gui/README.md) | GUI architecture, for developers |

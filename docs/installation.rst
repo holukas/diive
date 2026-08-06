@@ -90,7 +90,7 @@ Key Dependencies
 
 DIIVE depends on:
 
-- **Data processing:** pandas, numpy, polars
+- **Data processing:** pandas, numpy, pyarrow
 - **Machine learning:** scikit-learn, xgboost, prophet
 - **Visualization:** matplotlib, seaborn, bokeh
 - **Statistical analysis:** scipy, statsmodels, scikit-optimize

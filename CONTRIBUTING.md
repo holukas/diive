@@ -300,7 +300,7 @@ examples/
 ├── visualization/      # Plotting examples
 ├── features/           # Feature engineering / variable creation
 ├── analysis/           # Time series analysis
-├── flux/               # Flux-specific analysis (incl. hires/ high-res EC)
+├── flux/               # Flux-specific analysis
 ├── events/             # Event markers
 ├── fits/               # Curve fitting
 ├── io/                 # File I/O

@@ -371,7 +371,6 @@ Examples are organized in ``examples/``:
    ├── analyses/           # Time series analysis
    ├── corrections/        # Data corrections
    ├── flux/               # Flux-specific analysis
-   ├── echires/            # High-resolution EC data
    └── ...
 
 To add an example:

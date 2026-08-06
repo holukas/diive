@@ -245,6 +245,5 @@ Full examples: [visualization/plot_heatmap_datetime_basic.py](visualization/plot
 | Complete example listing | [README.md](README.md) |
 | Gap-filling method comparison | [gapfilling/gapfill_comparison.py](gapfilling/gapfill_comparison.py) |
 | Outlier detection method comparison | [preprocessing/outlier_detection/outlier_stepwise.py](preprocessing/outlier_detection/outlier_stepwise.py) |
-| High-resolution (10 Hz) analysis | [flux/hires/flux_windrotation.py](flux/hires/flux_windrotation.py) |
 | Detect timestamp clock errors | [preprocessing/qaqc/qaqc_detect_timestamp_shifts.py](preprocessing/qaqc/qaqc_detect_timestamp_shifts.py) |
 | Optimize gap-filling hyperparameters | [gapfilling/gapfill_optimize_randomforest.py](gapfilling/gapfill_optimize_randomforest.py) |

@@ -52,7 +52,7 @@ diive/
 ├── core/io/                  # File I/O
 ├── core/metadata/            # Per-variable tag + provenance model (GUI-backing)
 ├── gapfilling/               # Gap-filling (RF, XGBoost, MDS)
-├── flux/                     # Flux processing (lowres, hires, chain)
+├── flux/                     # Flux processing (lowres, chain, partitioning)
 ├── preprocessing/            # Wrapper for domain-based preprocessing modules
 ├── corrections/              # Offset/gain removal, value corrections
 ├── outliers/                 # 10+ outlier detection methods
@@ -60,7 +60,7 @@ diive/
 ├── analysis/                 # Time series analysis
 ├── variables/                # Feature engineering and calculations
 └── gui/                      # PySide6 desktop GUI (optional 'gui' extra)
-examples/                      # 122 runnable examples
+examples/                      # 113 runnable examples
 tests/                        # Unit tests
 ```
 
@@ -77,7 +77,7 @@ tests/                        # Unit tests
 | `dv.outliers` | `AbsoluteLimits`, `Hampel`, `LocalSD`, `LocalOutlierFactor`, `zScore`, `zScoreRolling`, `zScoreIncrements`, `TrimLow`, `ManualRemoval`, + `*DaytimeNighttime` / `*AllData` names (see the day/night convention below — some are wrappers, some plain aliases) |
 | `dv.events` | `Event` (instant or period marker; `resolved_color(i, colors=)`), `event_to_flag` (→ 0/1 column on an index), `overlay_events` (`axis='x'` value-vs-time / `axis='y'` heatmap; `colors=` override map), `make_event_flag_name`, `CATEGORY_COLORS` |
 | `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`, `FeatureEngineer`, `GapFillingResult`, `prediction_scores`, `linear_interpolation` |
-| `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `WindDoubleRotation`, `reynolds_decomposition`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `process_one_file`, ustar classes, plus **NEE→GPP+RECO partitioning** and **uncertainty** — see the two sub-sections below |
+| `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `TimeLagAnalysis`, ustar classes, plus **NEE→GPP+RECO partitioning** and **uncertainty** — see the two sub-sections below |
 | `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `CompoundExtremes`, `harmonic_analysis`, `spectrogram`, `percentiles101`, `rank_drivers`, `profile_dataframe`, `dataframe_overview`, `count_gaps` |
 | `dv.analysis.experimental` | **(provisional)** `DriverAnalysis`, `DriverAnalysisResult`, `AleCurve`, `Ale2DResult`, `accumulated_local_effects`, `accumulated_local_effects_2d`, `ExperimentalWarning` |
 | `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `ShiftedDistributionPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot`, `DateTimeSurface` (+ `datetime_surface_grid`), `WaterfallPlot`, `CompoundExtremesPlot`, `WindRosePlot`, `FormatStyle` — see **Plotting** below |
@@ -308,36 +308,13 @@ Each tab is a `DiiveTab`; full widget detail lives in the code. Tab signals live
 - **A widget with its own stylesheet detaches its tooltips from the app-wide `QToolTip` rule** — append `theme.manager.tooltip_qss()`. The appended string must be **all-selector QSS** — `setStyleSheet("color:x;background:y;" + tooltip_qss())` silently drops the `QToolTip` block; wrap bare props in a selector first: `setStyleSheet("QLabel { color:x; background:y; }" + tooltip_qss())`. (Reference: Overview stat items, event cards.) For tables, put no `color:` on `::item` so per-item `setForeground` paints.
 - **Window must fit the screen work area.** Startup uses `show_filling_workarea()` (sized to `availableGeometry`), NOT `showMaximized()` — a frameless maximize covers the taskbar and clips the active tab's bottom. It also lowers the window minimum size: the Overview's height-for-width `_HeroBand` reports a tall single-column *minimum* (its min-width height) that otherwise forces the window taller than the screen. Restored geometry is also pulled back on-screen via `_clamp_to_screen`.
 
-## High-Resolution EC Analysis (hires)
+## High-Frequency Raw Data (moved out)
 
-Tools for 10/20 Hz data. Workflow: `raw 20 Hz → WindDoubleRotation → reynolds_decomposition → flux`
-
-```python
-wr = dv.flux.WindDoubleRotation(u=df['u'], v=df['v'], w=df['w'])
-w_prime = dv.flux.reynolds_decomposition(wr.w2)   # rotated w2, not raw w
-c_prime = dv.flux.reynolds_decomposition(df['CO2'])
-flux = (w_prime * c_prime).mean()
-```
-
-**Classes:** `WindDoubleRotation`, `reynolds_decomposition`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `process_one_file`.
-
-### Time-lag detection & removal (PWB)
-
-Three CLIs (console scripts), all requiring **wind-rotation-corrected** W for detection:
-
-| CLI | Class | Does |
-|---|---|---|
-| `diive-tlag-pwb-batch` | `PwbBatchDetection` | Detect lags across many averaging-period files → `tlag_results.csv` (+ PWBOPT S1/S2/S3) |
-| `diive-tlag-apply-batch` | `TlagApplier` | Apply lags from a `tlag_results.csv` (shift scalars by `round(tlag_s·hz)`) |
-| `diive-tlag-pwb-detect-remove` | `PerFilePipeline` | Two-phase per-chunk detect+remove in one run |
-| `diive-tlag-pwb-detect-remove-tui` | `DetectRemoveTUI` | Textual TUI wrapping `PerFilePipeline`; `--demo` previews without data |
-
-`diive-tlag-pwb-detect-remove` ([detect_and_remove_tlag.py](diive/flux/hires/detect_and_remove_tlag.py)) splits each long raw file into fixed-length chunks (`--chunk-seconds`, default 30 min): phase 1 rotates each chunk in memory + runs PWB per scalar (no write); PWBOPT picks the best lag per chunk; phase 2 shifts each scalar by it (`--lag-column-template`, default `{prefix}_tlag_final_pf_s` — what `TlagApplier` removes, NOT raw `tlag_s`) and writes one file per chunk. Parameterized in seconds × `--hz`. Output: `1_lag_detection/` + `2_lag_removed/` + `log.txt`. **Downstream flux processing must run with EC time-lag maximization disabled.**
-
-- Per-chunk filenames from `--chunk-name-template` ({stem}/{suffix}/{index}/{starttime}); `{starttime}` needs `--start-time-regex` + `--start-time-format`. Terminator `--lineterm auto` (reproduces input CRLF/LF; headers normalised — never mixed).
-- `PerFilePipeline.run(cancel_event=threading.Event())` is cooperative-cancellable; `pipeline.cancelled` reports it. `run()` writes summary CSV + overview plots (TUI/CLI/Python all get them).
-- **TUI** (`DetectRemoveTUI`, `--demo`): full option coverage + tooltips; Check preflight; Stop; Open output folder; ▾ column picker; overwrite guard; live validation; spinner rows; lag-removal phase shown as **"align"** (paper's term), not "remove".
-- **Per-gas time-lag search windows.** `PreWhiteningBootstrap` takes optional `lws`/`uws` (seconds): the bootstrap peak search (and diagnostic `tlag_pw`) is restricted to `[lws, uws]` while the CCF is still computed symmetrically over `±lag_max`. `None`/`None` = full-window (byte-identical). Positive-only `[0,5]` keeps physical tube-delay lags; a long-inlet gas (H2O) can run a wider window than dry gases in one run (EddyPro applies one uniform lag downstream). Threading: `PerFilePipeline`/`process_one_file`/`detect_one_chunk` take global `lws`/`uws` + `per_gas_lag` (`{label: {lag_max_s, block_length_s, lws, uws}}`), resolved per gas by `_resolve_gas_lag`; CLI `--scalar "H2O:h2o@lag=30;uws=25"` (`parse_scalar_spec`) + `--lws`/`--uws`. Library helper **`window_to_lag_params(lws, uws, min_block_s=20.0)`**: per gas `lag_max_s = max(|lws|,|uws|)`, `block_length_s = max(20s, 2·half)` (paper's 20s floor, growing for wide windows). The block-length warning fires only when a block is **shorter** than `2·lag_max`, not for the intentional floor. **TUI:** Scalars field = gases only (`LABEL:column`); a Win s field carries `LABEL:[lower,upper]` (`parse_win_ranges`/`format_win_ranges`, `Input.Changed` on `#scalars` → `_sync_win_field`), seeded `[-LagMax,+LagMax]`, ⟳ re-seed. **Lag max s is only the seed** — once a gas has a window its half-width is `lag_max`. Keep the expected lag mid-window (boundary detection = unreliable, paper's discard rule). Tests: `tests/test_echires.py::TestPwbPerGasWindow`.
+Raw 10/20 Hz tooling — wind rotation, Reynolds decomposition, flux detection limit, and the
+PWB time-lag detection/removal toolchain with its CLIs — is no longer part of diive. It lives in
+[dyco](https://github.com/holukas/dyco). diive starts at averaged (e.g. 30-min) flux data;
+`dv.flux.TimeLagAnalysis` reads EddyPro's `*_TLAG_ACTUAL` columns and is a lowres tool, not a
+raw-data one.
 
 ## Outlier Detection & QC
 
@@ -464,8 +441,6 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 | SHAP importance fluctuates ±5-10% | Flexible ranges in tests (`assertGreater/Less`) |
 | Feature reduction too strict | Reduce `shap_threshold_factor` (default 0.5) |
 | Unicode on Windows (arrow chars) | Use ASCII (>, ->) in examples |
-| Textual `App` has internal `_running`/`_workers` | Don't name your App attr `_running` (use `_busy`); Textual sets `_running=True` on mount |
-| Textual `@work` not starting from a non-handler context | Dispatch via `threading.Thread(target=…, daemon=True)`; `call_from_thread` delivers UI updates |
 
 ## Common Workflows
 

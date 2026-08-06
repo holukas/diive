@@ -22,6 +22,13 @@ Two of these change results silently, with no error and no warning:
 
 The rest raise or fail at import:
 
+- **Raw high-frequency tooling moved to [dyco](https://github.com/holukas/dyco).** `WindDoubleRotation`,
+  `reynolds_decomposition`, `MaxCovariance`, `FluxDetectionLimit` and the PWB time-lag classes
+  (`PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `DetectRemoveTUI`) are gone from
+  `dv.flux`. The four `diive-tlag-*` console scripts are now `dyco-pwb-batch`, `dyco-apply-batch`,
+  `dyco-detect-remove` and `dyco-detect-remove-tui`, leaving `diive-gui` as the only script diive installs. diive
+  starts at averaged (e.g. 30-minute) data now. `TimeLagAnalysis` stays: it reads EddyPro's `*_TLAG_ACTUAL` columns,
+  not raw data. `textual` and `polars` went with the move.
 - **10 domain namespaces** replace the flat namespace: `dv.outliers`, `dv.gapfilling`, `dv.flux`, `dv.analysis`,
   `dv.plotting`, `dv.times`, `dv.variables`, `dv.corrections`, `dv.qaqc`, `dv.events`. Update all imports.
 - **Plot chrome is `FormatStyle`-only.** Every flat chrome keyword (`title`, `xlabel`, `ylabel`, `series_units`,
@@ -35,8 +42,6 @@ The rest raise or fail at import:
 - **`remove_radiation_zero_offset` renamed to `remove_nighttime_zero_offset`** (and the matching
   `StepwiseMeteoScreeningDb` method), since it suits any variable that reads zero at night. New optional
   `clamp_negatives=True`. Saved projects still load.
-- **PWB time-lag: `var_tsonic` / `col_tsonic` are required** and the 2-combination fallback is gone. Result keys
-  `tlag_opt_s`, `corr_est`, `cv5pct`, `cv1pct` removed; `corr_pw` and `cov_pwb` added.
 - **`zScore` unified**: use `zScore(separate_day_night=True)`. `zScoreDaytimeNighttime` removed.
 - **One way to set day/night thresholds across every outlier detector.** The switch is `separate_day_night`
   everywhere (`separate_daytime_nighttime` is gone), and per-period values are always a global value plus optional
@@ -85,10 +90,6 @@ The rest raise or fail at import:
 - **InfluxDB engine `InfluxIO`** (`diive.core.io.db`, `pip install 'diive[db]'` or `uv sync --group db`): in-house
   download / upload / delete / schema browsing, replacing the external `dbc-influxdb` dependency. `influxdb-client` is
   imported lazily.
-- **EC time-lag toolchain**: `PreWhiteningBootstrap` (Vitale 2024, with optional per-gas search windows via
-  `lws`/`uws`), `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, and `DetectRemoveTUI`, exposed as four CLIs
-  (`diive-tlag-pwb-batch`, `diive-tlag-apply-batch`, `diive-tlag-pwb-detect-remove`, `-tui`). Downstream flux software
-  must disable time-lag maximization.
 - **USTAR detection**: `UstarMovingPointDetection` (ONEFlux moving-point, Papale 2006),
   `UstarVekuriThresholdDetection` (quantile-based), `UstarBootstrapThresholds` (per-year p16/p50/p84).
 - **Uncertainty**: `JointUncertaintyPAS20` / `joint_uncertainty_pas20`, the ONEFlux `compute_join` port combining random
@@ -151,8 +152,7 @@ The rest raise or fail at import:
   headless tag + provenance model, and save/load of a full working state.
 - **Codegen**: `*_to_code` renderers across plotting, gap-filling, outliers, corrections, partitioning, uncertainty and
   the flux chain, so any call can be emitted as a runnable script. This is what the GUI's Copy Python uses.
-- **`reynolds_decomposition()`**, and `resample_series_to_freq` (generalises `resample_series_to_30MIN` to any
-  resolution).
+- **`resample_series_to_freq`**, which generalises `resample_series_to_30MIN` to any resolution.
 
 ### Improved
 
@@ -168,7 +168,7 @@ The rest raise or fail at import:
 - **Ruff is configured and enforced**, replacing a config that set only a cache path. `line-length` is now explicit
   (the 88 default would have had `ruff format` rewrite 290 of 303 files), bugbear rules are on, and `gui/`'s
   one-line-per-widget Qt style is exempted rather than fought. Findings went 411 -> 93, and every remaining one is
-  style or judgment: deliberate lazy imports in the hires/TUI modules, leftover locals, and the Qt setup lines.
+  style or judgment: deliberate lazy imports, leftover locals, and the Qt setup lines.
 - **Every `zip()` states its length handling.** Most are `strict=False`, which is accurate: in the plotting loops the
   artist collection is built from the sequence being zipped, so a mismatch cannot occur. Seven are `strict=True` where
   both sides are provably equal and a future edit should fail loudly. Three stay `strict=False` because truncation is
@@ -176,14 +176,6 @@ The rest raise or fail at import:
   a `.get(key, [])` default).
 - **Line endings are pinned** in `.gitattributes` (`* text=auto eol=lf` plus the binary formats), so working trees stop
   drifting from the index. No stored content changed: no blob had CRLF.
-- **`flux/hires` gained its first tests beyond the PWB window feature**: wind-rotation geometry (per-sample speed is
-  preserved by the double rotation, which the mean-based test cannot check), `MaxCovariance` recovering an injected lag
-  with the documented sign, and `apply_tlag`'s filename-key mapping including its collision guard. A second pass covered
-  the parts that decide or rewrite data: PWBOPT S1/S2/S3 selection with its HDI pre-filter and gap-fill, the
-  `_pwbopt_final_lags` wiring from chunk detections to the applied lag, wall-clock chunk-grid alignment and chunk
-  naming, the raw-file read/write round-trip (line terminators, missing-value sentinel, whitespace separator), and the
-  time-lag shift itself — sign, rounding, sentinel and skip paths. Every new assertion was mutation-tested.
-  `PwbBatchDetection.run` and the TUI still need file fixtures rather than pure-function assertions.
 - **MDS is now a faithful ONEFlux port**: the 6-stage expanding-window cascade, `>=2`-sample acceptance, N-1 standard
   deviation, and the ONEFlux SWIN tolerance. Fill values r ~ 0.9997 to 0.99997 against native ONEFlux. Shared with
   random uncertainty via `diive.gapfilling.similarity`, so there is one similarity scan. Also 4x faster,
@@ -248,9 +240,6 @@ The rest raise or fail at import:
   regularization, and `nominal_freq` only gates a later validation step.
 - **Dead code removed**: `diive/logger.py` (unreferenced, and broken since its PyQt5 import was commented out) and
   `plotfuncs.remove_prev_lines` (unreferenced, and assigning to `ax.collections` has raised since matplotlib 3.7).
-- **PWB accepted edge-pinned time lags**: a lag at the search-window boundary reported HDI 0.0 and so passed the
-  reliability test as maximally reliable, then poisoned the gap-fill. It is now rejected at detection
-  (`is_edge_pinned`).
 - **`RandomUncertaintyPAS20` cumulative uncertainty was poisoned by a single NaN**, turning every later value NaN.
 - **`ManualRemoval` date matching was not day-inclusive**: a date-only spec matched only the `00:00:00` record.
   **Results change**: it now removes the whole day. Malformed `remove_dates` entries raise instead of being ignored.
@@ -292,29 +281,13 @@ The rest raise or fail at import:
 - XGBoost/SHAP on Python 3.13; pandas 3.0.3 compatibility; `LocalOutlierFactor` `contamination='auto'`;
   `linear_interpolation` on the current `GapFinder` API; `data.filteredseries` reset after
   `run_level33_constant_ustar()`; `calc_vpd_from_ta_rh` export; `SortingBinsMethod` alias; 7 misrouted `__init__`
-  exports; PWBOPT carry-forward ordered by time; chunk-filename collisions raised upfront.
-- **Whitespace-separated raw files could not be read at all.** All four `read_csv` calls that honour a `--sep` flag
-  (`apply_tlag._apply_tlag_file_worker`, `detect_and_remove_tlag._read_raw_file` and the two chunk readers in
-  `detect_one_chunk` / `remove_one_chunk`) passed the C-parser option `low_memory=False` alongside `engine='python'`,
-  which pandas rejects, so every file raised `ValueError: The 'low_memory' option is not supported with the 'python'
-  engine`. This is the *default* separator of `diive-tlag-apply-batch` — the EddyPro rotated files the module is written
-  around — and `--sep "\s+"` in `diive-tlag-pwb-detect-remove`. Both capture exceptions per file, so a run reported an
-  all-error summary and wrote nothing rather than failing outright. Engine selection now lives in one place
-  (`lag_pwb._read_engine_kwargs`).
-- All 63 active tests pass.
+  exports.
 
 ### Documentation
 
-- **New example `flux/hires/flux_detect_remove_tlag.py`** for `PerFilePipeline` / `diive-tlag-pwb-detect-remove`, the
-  last hires entry point without one: two synthetic 1-hour files split into wall-clock-aligned 30-min chunks, rotated
-  and PWB-detected per chunk, then written with the PWBOPT lag removed and named by each chunk's own start time. Also
-  shows per-gas search windows recovering a 12 s H2O delay that lies outside the default ±10 s window. Writing it turned
-  up a wrong pairing in the module docstring: `--start-time-regex "(\d{8})_(\d{4})"` was documented with
-  `--start-time-format "%Y%m%d-%H%M"`, but capture groups are concatenated before parsing, so the hyphen never appears
-  and every run raised. Corrected, with the rule spelled out.
-- **122 examples** across 10 domain folders (Sphinx Gallery format), with new coverage for the flux chain (L2 standalone,
-  composable, multi-flux, partitioning), all four partitioning ports plus a comparison, USTAR methods, PWB time-lag,
-  SW_IN gap-filling, compound extremes, gap stats, events, and I/O. `examples/CATALOG.md` now lists every one.
+- **113 examples** across 10 domain folders (Sphinx Gallery format), with new coverage for the flux chain (L2 standalone,
+  composable, multi-flux, partitioning), all four partitioning ports plus a comparison, USTAR methods, SW_IN
+  gap-filling, compound extremes, gap stats, events, and I/O. `examples/CATALOG.md` now lists every one.
 - **New InfluxDB notebooks** (`notebooks/DatabaseInflux*`) for download, meteo screening, and delete. 21 older notebooks
   archived, their content migrated to examples.
 - Switched from poetry to `uv` for dependency management.
@@ -350,14 +323,13 @@ The rest raise or fail at import:
 - **Console reports no longer crash on a redirected Windows stdout.** `FlagQCF.report_qcf_flags()` printed U+2550
   box-drawing rules, so `python ... | head` or `> log.txt` raised `UnicodeEncodeError: 'charmap' codec can't encode
   character` — Python falls back to cp1252 whenever stdout is a pipe, while a terminal and pytest are both UTF-8, which
-  is why it went unnoticed. CLAUDE.md already required console strings to be cp1252-safe. Fixed in the three places
-  that actually print: `qcf.py` (box-drawing -> `= - |`), `gapfilling/interpolate.py` (`≥` -> `>=`, including the
-  `ValueError` message, which reaches stderr the same way), and `flux/hires/detect_and_remove_tlag.py` (the argparse
-  description printed by `--help`, an `out()` progress line, and Greek letters in a `console.log` line).
+  is why it went unnoticed. CLAUDE.md already required console strings to be cp1252-safe. Fixed in the two places that
+  actually print: `qcf.py` (box-drawing -> `= - |`) and `gapfilling/interpolate.py` (`≥` -> `>=`, including the
+  `ValueError` message, which reaches stderr the same way).
 - **New `tests/test_console.py::TestConsoleStringsAreCp1252Safe`** walks the library's printed string literals — those
   passed to the console helpers, `_console.print/log/rule`, builtin `print`, and `raise` — and fails on any character
   cp1252 cannot encode. Its blind spots are documented in the test: strings assembled into a variable before printing
-  are not seen, and `diive/gui/` (Qt) and the Textual TUI are excluded because neither writes to plain stdout.
+  are not seen, and `diive/gui/` (Qt) is excluded because it never writes to plain stdout.
   Docstrings and comments are deliberately ignored.
 
 ### Fixed (corrections)
@@ -384,7 +356,7 @@ The rest raise or fail at import:
   skipped every outlier-detector constructor. A completeness test fails if a new `*_to_code` function lands without a
   test. 67 tests, ~3 s, no GUI or data required.
 - **`TestPlotClasses` in `tests/test_plots.py` covers the plot classes that no non-GUI test reached.** The file tested
-  five classes; `HeatmapDateTime` (used by 16 of the 122 examples), `HeatmapYearMonth`, `Cumulative`,
+  five classes; `HeatmapDateTime` (used by 16 of the 113 examples), `HeatmapYearMonth`, `Cumulative`,
   `CumulativeYear`, `RidgeLinePlot`, `TreeRingPlot`, `ShiftedDistributionPlot`, `WaterfallPlot`,
   `LongtermAnomaliesYear` and `datetime_surface_grid` were executed only incidentally by `tests/test_gui.py`. The
   fixture is a deterministic synthetic three-year hourly series, so aggregates are exact expected values: the
@@ -460,6 +432,8 @@ The rest raise or fail at import:
   methods and the timedelta formatter are covered too.
 - **`pytest-cov` added to the `dev` group**, giving the first line-coverage baseline: 57% library, 68% GUI, 62%
   combined. Gaps are catalogued in `COVERAGE_GAPS.md`.
+- **`tests/test_echires.py` left with the code it tested** and runs in dyco as `tests/test_pwb.py`. The suite goes from
+  727 to 653 tests, which is exactly that file's 74. Nothing was lost.
 
 ## v0.90.0 | 13 Jan 2026
 
