@@ -87,7 +87,6 @@ print("=" * 80)
 tic = time.time()
 
 physics_calib = ScopPhysics(
-    flux_type="CO2",
     ta=df_calibration["TA_T1_47_1_gfXG_IRGA72"].copy(),
     gas_density=df_calibration["CO2_MOLAR_DENSITY_IRGA75"].copy() * 1000,
     rho_a=df_calibration["AIR_DENSITY_IRGA72"].copy(),
@@ -127,7 +126,6 @@ print("Creating scaling factors table from parallel measurements...")
 tic = time.time()
 
 optimizer = ScopOptimizer(
-    flux_type="CO2",
     fct_unsc=results_physics_calib["FCT_UNSC_gfRF"],
     class_var=df_calibration["USTAR_IRGA72"].copy(),
     n_classes=20,                                         # Production: 20 classes
@@ -167,7 +165,6 @@ print("=" * 80)
 tic = time.time()
 
 applicator_calib = ScopApplicator(
-    flux_type="CO2",
     fct_unsc=results_physics_calib["FCT_UNSC_gfRF"],
     scaling_factors_df=scaling_factors_df,
     flux_openpath=df_calibration["NEE_L3.1_L3.2_QCF_IRGA75"].copy(),
@@ -266,7 +263,6 @@ print("=" * 80)
 tic = time.time()
 
 physics_longterm = ScopPhysics(
-    flux_type="CO2",
     ta=df_longterm["TA_T1_47_1_gfXG_IRGA72"].copy(),
     gas_density=df_longterm["CO2_MOLAR_DENSITY_IRGA75"].copy() * 1000,
     rho_a=df_longterm["AIR_DENSITY_IRGA72"].copy(),
@@ -305,7 +301,6 @@ print("Correcting long-term fluxes using pre-computed lookup table...")
 tic = time.time()
 
 applicator_longterm = ScopApplicator(
-    flux_type="CO2",
     fct_unsc=results_physics_longterm["FCT_UNSC_gfRF"],
     scaling_factors_df=scaling_factors_df,                   # Reuse table from calibration
     flux_openpath=df_longterm["NEE_L3.1_L3.2_QCF_IRGA75"].copy(),
@@ -396,7 +391,6 @@ for daytime_flag, label in [(1.0, "DAYTIME"), (0.0, "NIGHTTIME")]:
 #     sf_table = pd.read_csv("scaling_factors_table.csv")
 #
 #     applicator = ScopApplicator(
-#         flux_type="CO2",
 #         fct_unsc=fct_unsc_future,
 #         scaling_factors_df=sf_table,
 #         flux_openpath=flux_future,

@@ -50,7 +50,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 
 | ID | Finding | Where |
 |---|---|---|
-| L37 | **The H2O/LE self-heating path must be removed** — no self-heating correction for LE exists in EC science | `flux/lowres/selfheating.py` |
+| ~~L37~~ | ~~**The H2O/LE self-heating path must be removed**~~ (done 2026-08-07) — no self-heating correction for LE exists in EC science | `flux/lowres/selfheating.py` |
 | L28 | USTAR bootstrap bypasses the 3000-record minimum `detect()` enforces — emits a threshold from data it refuses | `flux/lowres/ustar_mp_detection.py:561` |
 | L14 | `combine_variables(keep_overlap_only=False)`: subtract/divide return the **negation / reciprocal** of one-sided records | `variables/utilities.py:73` |
 | L54 | `DriverAnalysis(deseasonalize=True)` fabricates target values by interpolation — into its own chronological hold-out | `analysis/driveranalysis/driveranalysis.py:80` |
@@ -824,8 +824,16 @@ frame. XGBoost reports `Filling 0 missing records`, `fct_unsc_gf` comes back ide
 `.dropna()` removed, the same setup fills all 740 gaps. Secondary effect: the lag/rolling features
 built afterwards span the removed rows, so they reach across arbitrary time jumps.
 
-**[ ] L37. The whole H2O / LE self-heating path should not exist — remove it, do not fix it**
+**[x] L37. The whole H2O / LE self-heating path should not exist — remove it, do not fix it**
 `selfheating.py` (see the removal scope below)
+
+> **Removed 2026-08-07.** `flux_type` / `FluxType`, `_calc_latent_heat_vaporization_j_umol` and the
+> `self.lv` attribute, both `latent_heat_vaporization` parameters, the dead `_fct_for_opt` block, the
+> `Lv` column and its unit conversion, and the `'LE' if …` prefix are all gone; `col_flux_corr` is
+> now always `NEE_OP_CORR`. The `flux_type="CO2"` argument was dropped from all 9 example call sites
+> (it had exactly one legal value left). Verified by a three-stage smoke test: `ScopOptimizer`
+> recovers a planted scaling factor of 1.500 exactly on the CO2 path — the same input returned
+> 0.0666 through the H2O branch, confirming the removed path was the broken one.
 
 **Scientific verdict (project owner, 2026-08-07): there is no self-heating correction for LE. Whether
 a Burba-type correction applies to the latent heat flux is an unresolved question in eddy covariance,

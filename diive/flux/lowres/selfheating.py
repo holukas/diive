@@ -14,7 +14,8 @@ thermal plume around the sampling volume. Since the OP-IRGA measures molar densi
 artificially lowers the measured CO2 concentration, resulting in a systematic, non-biological uptake
 (negative flux) bias, especially prevalent during high solar radiation and low wind conditions.
 
-The correction can be applied to CO2 fluxes (NEE, µmol m-2 s-1) and optionally to H2O fluxes (LE, W m-2).
+The correction applies to CO2 fluxes (NEE, µmol m-2 s-1) only. Whether a self-heating correction
+applies to the latent heat flux (LE) is unresolved in eddy covariance, so none is offered here.
 
 The method first calculates an unscaled flux correction term (FCT_UNSC) based on boundary-layer
 dynamics and instrument-specific thermal properties (e.g., sensible heat flux S or instrument
@@ -74,7 +75,6 @@ Abbreviations:
         fct_unsc_gf ... gap-filled unscaled flux correction term (flux units)
         fct ... flux correction term (flux units)
         sf ... scaling factor (unitless)
-        lv ... latent heat of vaporization (J µmol-1), in this units can be used for LE
 
     Other:
         OP ... open-path
@@ -102,8 +102,6 @@ pd.set_option('display.width', 2000)
 pd.set_option('display.max_columns', 14)
 pd.set_option('display.max_rows', 30)
 
-FluxType = Literal["CO2", "H2O"]
-
 
 @dataclass(frozen=True)
 class ColumnConfig:
@@ -121,7 +119,6 @@ class ColumnConfig:
     dry_air_density: str = 'DRY_AIR_DENSITY'
     t_instr_surface: str = 'TS'
 
-    # Dynamic base names (will be prefixed/suffixed based on flux type)
     flux_corr_suffix: str = '_OP_CORR'
     fct_unsc: str = 'FCT_UNSC'
     fct_unsc_gf: str = 'FCT_UNSC_gfRF'
@@ -169,7 +166,6 @@ class ScopPhysics:
     """
 
     def __init__(self,
-                 flux_type: FluxType,
                  ta: pd.Series,
                  gas_density: pd.Series,
                  rho_a: pd.Series,
@@ -183,7 +179,6 @@ class ScopPhysics:
                  remove_outliers_method: Literal["fast", "separate"] = "fast"):
         """
         Args:
-            flux_type: "CO2" or "H2O"
             ta: series, air temperature (°C)
             gas_density: series, molar density of the gas (µmol m-3)
             rho_a: series, air density (kg m-3)
@@ -197,7 +192,6 @@ class ScopPhysics:
             remove_outliers_method: str, method to remove outliers from the data
                 Used for removing outliers in 'ra' and 'fct_unsc'.
         """
-        self.flux_type = flux_type
         self.ta = ta
         self.gas_density = gas_density
         self.rho_a = rho_a
@@ -226,9 +220,6 @@ class ScopPhysics:
 
         # Calculate thermal conductivity of air (required for BUR08) (k_air) (W m-1 K-1)
         self.k_air = self._calc_air_thermal_conductivity(ta=self.ta)
-
-        # Calculate latent heat of vaporization (required for LE only) (J µmol-1)
-        self.lv = self._calc_latent_heat_vaporization_j_umol(ta=self.ta)
 
         # Calculated in .run()
         self.ts = pd.Series(name=self.cols.t_instr_surface)  # Bulk instrument surface temperature (BUR06, JAR09)
@@ -260,7 +251,6 @@ class ScopPhysics:
             self.swin_pot.name: self.swin_pot,
             self.k_air.name: self.k_air,
             self.daytime.name: self.daytime,
-            self.lv.name: self.lv
         }
         return pd.DataFrame.from_dict(frame)
 
@@ -294,7 +284,7 @@ class ScopPhysics:
         and Correction Magnitude.
         """
         _console.print(f"\n{'=' * 65}")
-        _console.print(f"SCOP PHYSICS DIAGNOSTICS ({self.flux_type})")
+        _console.print("SCOP PHYSICS DIAGNOSTICS (CO2)")
         _console.print(f"{'=' * 65}")
 
         # --- 1. DATA COVERAGE (Hybrid RF + MDV) ---
@@ -454,31 +444,6 @@ class ScopPhysics:
         k_air = 0.02425 + (0.00007 * ta)
         k_air.name = "AIR_THERMAL_CONDUCTIVITY"
         return k_air
-
-    import pandas as pd
-
-    @staticmethod
-    def _calc_latent_heat_vaporization_j_umol(ta: pd.Series) -> pd.Series:
-        """
-        Calculates Latent Heat of Vaporization in [J µmol-1].
-
-        Needed for the correction of the latent heat flux LE.
-
-        Formula derivation:
-        1. Lv [J/kg]  = (2.501 - 0.00237 * Ta) * 10^6
-        2. Mw [kg/mol] = 0.018015
-        3. Lv [J/µmol] = Lv [J/kg] * Mw * 10^-6
-
-        (The 10^6 and 10^-6 cancel out).
-        """
-        # Molar mass of water (kg/mol)
-        MW_WATER = 0.01801528
-
-        # Calculate directly in J / µmol
-        lv_j_umol = (2.501 - 0.00237 * ta) * MW_WATER
-        lv_j_umol.name = "LATENT_HEAT_VAPORIZATION_J_UMOL"
-
-        return lv_j_umol
 
     def _remove_outliers(self, series: pd.Series):
         ham = HampelDaytimeNighttime(
@@ -788,7 +753,7 @@ class ScopPhysics:
 
                 if series.min() < 0 < series.max(): ax.axhline(0, lw=1, color='k')
 
-            fig.suptitle(f"Physics Drivers ({self.flux_type})", fontsize=16, fontweight='bold', y=1.02)
+            fig.suptitle("Physics Drivers (CO2)", fontsize=16, fontweight='bold', y=1.02)
             plt.show()
 
 
@@ -803,9 +768,6 @@ class ScopOptimizer:
     nighttime conditions.
 
     Core Functionality:
-    * **Unit Synchronization**: Automatically converts unscaled correction terms
-      to match flux units (e.g., converting molar density shifts to Watts for
-      H2O fluxes).
     * **Circular Block Bootstrapping**: Preserves temporal auto-correlation in
       eddy covariance data by resampling contiguous blocks of time-series indices
       during optimization.
@@ -830,39 +792,19 @@ class ScopOptimizer:
     """
 
     def __init__(self,
-                 flux_type: FluxType,
                  class_var: pd.Series,
                  n_classes: int,
                  fct_unsc: pd.Series,
                  daytime: pd.Series,
                  n_bootstrap_runs: int,
                  flux_openpath: pd.Series,
-                 flux_closedpath: pd.Series,
-                 latent_heat_vaporization: Optional[pd.Series] = None):
-        """
-                Args:
-                    flux_type: "CO2" or "H2O"
-                    latent_heat_vaporization: Series in [J / µmol].
-                                              Required if flux_type="H2O" to convert
-                                              correction term to Watts.
-                """
-
-        self.flux_type = flux_type
+                 flux_closedpath: pd.Series):
         self.n_classes = n_classes
         self.n_bootstrap = n_bootstrap_runs
         self.cols = ColumnConfig()
 
-        # UNIT MATCHING
-        # fct_unsc is always [µmol m-2 s-1]
-        # If H2O, fluxes (LE) are in [W m-2]. Must convert FCT to W.
-        if self.flux_type == "H2O":
-            if latent_heat_vaporization is None:
-                raise ValueError("latent_heat_vaporization required for H2O flux optimization")
-            # [µmol m-2 s-1] * [J / µmol] = [J m-2 s-1] = [W m-2]
-            _fct_for_opt = fct_unsc * latent_heat_vaporization
-        else:
-            # CO2: [µmol m-2 s-1] matches [µmol m-2 s-1]. No change.
-            _fct_for_opt = fct_unsc
+        # Units match without conversion: fct_unsc and the CO2 fluxes are both
+        # in [µmol m-2 s-1].
 
         # Combine inputs into a single DataFrame for easier grouping
         self.df = pd.DataFrame({
@@ -1063,7 +1005,7 @@ class ScopOptimizer:
         _console.print(f"{'SCALING FACTOR OPTIMIZATION REPORT':^75}")
         print_sep('=', 75)
 
-        _console.print(f"Flux Type      : {self.flux_type}")
+        _console.print("Flux Type      : CO2")
         _console.print(f"Bootstrap Runs : {self.n_bootstrap}")
         _console.print(f"Total Bins     : {len(df)}")
         print_sep('-', 75)
@@ -1150,7 +1092,7 @@ class ScopApplicator:
       and diel cycles.
 
     Key Outputs:
-    * **Final Corrected Flux**: The corrected NEE (CO2) or LE (H2O) series.
+    * **Final Corrected Flux**: The corrected NEE (CO2) series.
     * **FCT**: The final applied correction term in physical units.
 
     See Also:
@@ -1163,41 +1105,24 @@ class ScopApplicator:
     """
 
     def __init__(self,
-                 flux_type: FluxType,
                  fct_unsc: pd.Series,
                  scaling_factors_df: pd.DataFrame,
                  flux_openpath: pd.Series,
                  classvar: pd.Series,
-                 daytime: pd.Series,
-                 latent_heat_vaporization: Optional[pd.Series] = None):
-        """
-        Args:
-            flux_type: "CO2" or "H2O"
-            latent_heat_vaporization: Series of Lambda (J/mmol or J/kg depending on inputs).
-                                      Required ONLY if flux_type="H2O" and fluxes are in W m-2
-                                      but correction is in molar units.
-        """
-        self.flux_type = flux_type
+                 daytime: pd.Series):
         self.fct_unsc = fct_unsc.copy()
         self.scaling_factors_df = scaling_factors_df.copy()
         self.flux_openpath = flux_openpath.copy()
         self.classvar = classvar.copy()
         self.daytime = daytime.copy()
-        self.latent_heat_vaporization = latent_heat_vaporization
 
         self.cols = ColumnConfig()
 
-        # Determine output column name
-        prefix = 'LE' if self.flux_type == 'H2O' else 'NEE'
-        self.col_flux_corr = f"{prefix}{self.cols.flux_corr_suffix}"
+        self.col_flux_corr = f"NEE{self.cols.flux_corr_suffix}"
 
         frame = {self.fct_unsc.name: self.fct_unsc, self.flux_openpath.name: self.flux_openpath,
                  self.classvar.name: self.classvar, self.daytime.name: self.daytime}
         self.df = pd.DataFrame(frame, index=self.flux_openpath.index)
-
-        # Add Lv if needed for H2O conversion
-        if self.latent_heat_vaporization is not None:
-            self.df['Lv'] = self.latent_heat_vaporization
 
     def get_results(self) -> pd.DataFrame:
         """Return the corrected results DataFrame."""
@@ -1211,15 +1136,7 @@ class ScopApplicator:
 
         # Calculate final flux correction term
         # Corrected OP = uncorrected OP + (FCT_unscaled * ScalingFactor)
-        fct_molar = self.df[self.cols.fct_unsc_gf] * self.df[self.cols.sf]
-
-        # Apply unit conversion if H2O (Watts)
-        if self.flux_type == "H2O" and 'Lv' in self.df.columns:
-            # [µmol m-2 s-1] * [J / µmol] = [J m-2 s-1] = [W m-2]
-            self.df[self.cols.fct] = fct_molar * self.df['Lv']
-        else:
-            # CO2 (or H2O if already molar)
-            self.df[self.cols.fct] = fct_molar
+        self.df[self.cols.fct] = self.df[self.cols.fct_unsc_gf] * self.df[self.cols.sf]
 
         # Apply correction
         self.df[self.col_flux_corr] = self.df[self.flux_openpath.name] + self.df[self.cols.fct]
@@ -1436,7 +1353,7 @@ class ScopApplicator:
         print_sep('=', 75)
         _console.print(f"{'FLUX CORRECTION REPORT':^75}")
         print_sep('=', 75)
-        _console.print(f"Flux Type      : {self.flux_type}")
+        _console.print("Flux Type      : CO2")
         _console.print(f"Total Records  : {n_total:,}")
         print_sep('-', 75)
 

@@ -53,7 +53,6 @@ print("=" * 80)
 tic = time.time()
 
 physics = ScopPhysics(
-    flux_type="CO2",
     ta=df["TA_T1_47_1_gfXG_IRGA72"].copy(),
     gas_density=df["CO2_MOLAR_DENSITY_IRGA75"].copy() * 1000,  # Convert to umol m-3
     rho_a=df["AIR_DENSITY_IRGA72"].copy(),
@@ -89,7 +88,6 @@ print("=" * 80)
 tic = time.time()
 
 optimizer = ScopOptimizer(
-    flux_type="CO2",
     fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
     class_var=df["USTAR_IRGA72"].copy(),
     n_classes=5,
@@ -121,7 +119,6 @@ print("=" * 80)
 tic = time.time()
 
 applicator = ScopApplicator(
-    flux_type="CO2",
     fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
     scaling_factors_df=scaling_factors_df,
     flux_openpath=df["NEE_L3.1_L3.2_QCF_IRGA75"].copy(),
