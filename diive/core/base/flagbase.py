@@ -21,6 +21,14 @@ from diive.core.times.times import DetectFrequency
 class FlagBase:
     """Base class for flag/outlier detectors: holds the series and exposes the flag and filtered result."""
 
+    #: Give records that are missing in the input a NaN flag instead of 0.
+    #: A flag records a test *result*, and no test can be performed where there
+    #: is no value, so 0 ("tested, passed") would be a claim the detector has not
+    #: earned — and it silently inflates any `(flag == 0).count()` a consumer does.
+    #: Subclasses whose test subject *is* the missing records (MissingValues) set
+    #: this False, otherwise their own output would be masked away.
+    nan_flag_at_missing: bool = True
+
     def __init__(self, series: Series, flagid: str, idstr: str = None, verbose: bool = True):
         """Store the series and flag identifiers; ensure the index has a frequency."""
         self.series = series
@@ -42,7 +50,11 @@ class FlagBase:
 
     @property
     def overall_flag(self) -> Series:
-        """Overall flag, calculated from individual flags from multiple iterations."""
+        """Overall flag, calculated from individual flags from multiple iterations.
+
+        0 = tested and accepted, 2 = rejected as an outlier, NaN = not testable
+        because the record is missing in the input (see `nan_flag_at_missing`).
+        """
         if not isinstance(self._overall_flag, Series):
             raise Exception('No overall flag available.')
         return self._overall_flag
@@ -180,6 +192,11 @@ class FlagBase:
 
         # Calculate the sum of all flags that show 2, for each data row
         overall_flag = iteration_flags_df[iteration_flags_df == 2].sum(axis=1)
+        # An all-NaN row sums to 0, so records that were never testable (missing
+        # in the input) would otherwise be indistinguishable from records that
+        # were tested and passed. See `nan_flag_at_missing`.
+        if self.nan_flag_at_missing:
+            overall_flag = overall_flag.where(self.series.notna())
         overall_flag.name = self.generate_flagname()
 
         n_iterations = len(iteration_flags_df.columns)
