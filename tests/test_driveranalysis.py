@@ -201,6 +201,33 @@ class TestDeseasonalizeKeepsGaps(unittest.TestCase):
         self.assertEqual(len(y), len(target) - 200)
 
 
+class TestPerSubmodelNoiseFloor(unittest.TestCase):
+    """Layer-2 relevance is judged against the floor of the fit that produced it."""
+
+    def test_regime_relevance_uses_each_regimes_own_floor(self):
+        target, drivers = _synthetic(months=1)
+        da = DriverAnalysis(target=target, drivers=drivers, model=_fast_rf(), verbose=0)
+        # Two regimes with different noise scales; in each, TA clears its own
+        # model's floor, so its relevance does not actually differ across them.
+        da._random_baseline = 1.0
+        da._result.stratified = pd.DataFrame({'day': {'TA': 3.0}, 'night': {'TA': 0.6}})
+        da._stratified_baselines = {'day': 2.0, 'night': 0.4}
+        fields = da._temporal_fields('TA', freq_min=30.0)
+        self.assertFalse(fields['regime_dependence'])
+        # Against the headline model's floor alone the same two numbers read
+        # yes / weak, i.e. a regime dependence that is an artefact of comparing
+        # subset importances to a floor fitted on the whole record.
+        self.assertEqual(da._relevance(3.0, 1.0), 'yes')
+        self.assertEqual(da._relevance(0.6, 1.0), 'weak')
+
+    def test_stratified_records_a_floor_per_regime(self):
+        target, drivers = _synthetic(months=1)
+        da = DriverAnalysis(target=target, drivers=drivers, model=_fast_rf(), verbose=0)
+        st = da.stratified(by='daynight')
+        self.assertEqual(set(da._stratified_baselines), set(st.columns))
+        self.assertTrue(all(v > 0 for v in da._stratified_baselines.values()))
+
+
 class TestDriverAnalysisValidation(unittest.TestCase):
 
     def test_target_must_be_named(self):
