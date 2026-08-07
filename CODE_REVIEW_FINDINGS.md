@@ -135,6 +135,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 
 | ID | Finding | Where |
 |---|---|---|
+| L75 | 25 `detail()` debug lines cannot print at any verbosity — bare `detail()` outranks its own min_level | `core/utils/console.py:191` |
 | L36 | Self-heating gap-fill drops every gap before filling — fills nothing, blames "insufficient drivers" | `flux/lowres/selfheating.py:390` |
 | L38 | Corrected flux becomes NaN wherever the correction term is missing — deletes real measurements | `flux/lowres/selfheating.py:1225` |
 | L40 | Unrecognised `correction_method_base` returns an empty result instead of raising | `flux/lowres/selfheating.py:270` |
@@ -142,9 +143,9 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L42~~ | ~~`analyze_highest_quality_flux` counts missing records as valid~~ (done 2026-08-07) — 1519 of 3000 reported as "99.5%" | `flux/lowres/hqflux.py:251` |
 | ~~L7~~ | ~~**Outlier flags are never NaN**~~ (done 2026-08-07) — was the root cause of L30 and L42 | `core/base/flagbase.py:182` |
 | ~~L30~~ | ~~NaN u\* or NaN per-record threshold → flagged 0 (accepted)~~ (done 2026-08-07) — completes the L7 half-fix | `flux/lowres/ustarthreshold.py:142` |
-| L29 | A failing bootstrap window is completely silent. **Mostly fixed with L28** — the reason now reaches the user at `warn` level; the stray `detail()` at `:232` still cannot print | `flux/lowres/ustar_bootstrap.py:39` |
-| L26 | `_class_bounds` can emit `end < start` → NaN class mean → up to 11 candidate classes skipped | `flux/lowres/ustar_mp_detection.py:285` |
-| L32 | `UstarDetectionMPT` is exported but never stores its results; `run()` only *prints* the threshold | `flux/lowres/ustarthreshold.py:561` |
+| ~~L29~~ | ~~A failing bootstrap window is completely silent~~ (done 2026-08-07, with L28) | `flux/lowres/ustar_bootstrap.py:39` |
+| ~~L26~~ | ~~`_class_bounds` can emit `end < start` → NaN class mean → up to 11 candidate classes skipped~~ (done 2026-08-07) | `flux/lowres/ustar_mp_detection.py:285` |
+| ~~L32~~ | ~~`UstarDetectionMPT` is exported but never stores its results~~ (done 2026-08-07) — class removed | `flux/lowres/ustarthreshold.py:561` |
 | ~~L34~~ | ~~`annual_thresholds_` holds the sentinel `10.0` on failure — a plausible threshold that filters everything~~ (done 2026-08-07) | `flux/lowres/ustar_mp_detection.py:520` |
 | ~~L47~~ | ~~STL returns an all-NaN decomposition from a **single** NaN; `seasonality_strength` reads 0.0~~ (done 2026-08-07) | `core/times/decomposition_utils.py:133` |
 | ~~L50~~ | ~~`quality_weighted_decompose` ignores the weights entirely; `summary()` prints "Quality-weighted: True"~~ (done 2026-08-07) — fake path removed | `core/times/decomposition_utils.py:100` |
@@ -876,7 +877,20 @@ time-lag, the `analysis` package + decomposition utilities, and `core/plotting` 
 
 ### USTAR detection (`flux/lowres/ustar*.py`, `storage_correction.py`)
 
-**[ ] L26. `_class_bounds` can emit a class with `end < start`, giving a NaN class mean**
+**[x] L26. `_class_bounds` can emit a class with `end < start`, giving a NaN class mean**
+
+> **Fixed 2026-08-07 against the C source.** Two deviations, not one. (1) The tie-extension loop
+> was missing C's `if ( ustar_class_start == ustar_class_end )` branch (`ustar.c:713`), which
+> adopts the next value and keeps walking when a tie run has overshot this class's nominal end;
+> without it the class comes out inverted. (2) Inverted classes still arise in C, and there the
+> mean is **0.0** — its accumulation loop `for (y = start; y <= end; y++)` simply never runs —
+> whereas diive's cumulative-sum shortcut returned a *plausible* value (0.215 where C has 0.0)
+> because the negative count and negative numerator cancel; only the exactly-zero-width case
+> gave the NaN reported here. `_class_means` now treats `end < start` as empty, like `start < 0`.
+> Verified against a line-by-line transcription of the C loop over five tie patterns (heavy
+> 2-decimal ties, one long run, all-equal, no ties, 1-decimal): bounds identical, means identical
+> to the C accumulation loop. On CH-LAE the thresholds do not move (0.5198 / 0.3259 / 0.5499 /
+> 0.4964), matching this entry's own finding that no final threshold flipped.
 `ustar_mp_detection.py:285` — the tie-extension loop advances `class_end` past tied values, but the
 next iteration recomputes `class_end` without checking it is still `>= class_start`. A run of equal
 u* values longer than one class width yields `(class_start, class_start-1)`; `_class_means` then
@@ -918,7 +932,16 @@ the class docstring advertises. `UstarBootstrapThresholds` takes that fast path,
 `run_level33_ustar_detection` emits a threshold from a record `detect()` refuses (1000 records:
 `detect()` raises, `bootstrap()` returns 0.419).
 
-**[~] L29. A failing bootstrap window is completely silent** — *mostly fixed*
+**[x] L29. A failing bootstrap window is completely silent**
+
+> **Closed 2026-08-07.** The remaining half was the unreachable `detail()`, and the root cause
+> is general: `detail()` defaults to `verbose=VERBOSE_PROGRESS` (2) while its own `min_level` is
+> `VERBOSE_DEBUG` (3), so a bare `detail(...)` can never print at any setting — and wrapping it
+> in `if self.verbose >= 2:` (the house convention) hides that rather than fixing it. The
+> bootstrap call now passes `verbose=self.verbose`, as do five more in the u\* files
+> (`ustar_mp_detection.py` x3, `ustar_vekuri_detection.py` x3) that had the same defect. Verified:
+> the per-season lines now print at `verbose=3`, where they never printed before. **A sweep found
+> 25 more across the library — filed as L75.**
 
 > **Mostly fixed 2026-08-07 alongside L28** (see there): the blanket `except` now carries the
 > reason out and both execution branches report it at `warn` level, so an empty window no
@@ -982,7 +1005,16 @@ public class.
 label-indexed Series, removed in pandas 3 (the project pins 3.0+). `KeyError: 0`. Plotting is the
 only purpose of this class.
 
-**[ ] L32. `UstarDetectionMPT` is publicly exported but half of it references attributes that never exist**
+**[x] L32. `UstarDetectionMPT` is publicly exported but half of it references attributes that never exist**
+
+> **Removed 2026-08-07** (653 lines), with its `dv.flux` export. Nothing in the library, GUI,
+> tests or examples used it, and `UstarMovingPointDetection` is the faithful ONEFlux port of the
+> same algorithm, wired into the chain, the bootstrap wrapper and the GUI. Keeping a second,
+> half-broken implementation that only *prints* its threshold invited someone to use it. A static
+> pass confirmed the diagnosis before deletion: `set_yearly_thresholds`, `collect_year_results`
+> and `collect_yearly_thresholds` between them read 11 attributes that are never assigned
+> anywhere in the class. The removal made `info`, `warn`, `insert_season` and `potrad` unused in
+> the module; those imports went with it.
 `ustarthreshold.py:561` — it is in `diive/flux/__init__.py.__all__`. `set_yearly_thresholds`,
 `collect_year_results` and `collect_yearly_thresholds` reference ten attributes that are never
 assigned anywhere in the file; `collect_yearly_thresholds` also reads `yearly_thresholds_df` before
@@ -1009,6 +1041,35 @@ documented `bootstrap_stats_` attribute is never assigned (`:432`) — always an
 `THRESHOLD_NOT_FOUND` back to NaN. The attribute is documented in the class Attributes section with
 no mention of the sentinel, so reading it directly after a failed detection yields 10.0 m/s — a
 plausible-looking threshold that would filter out every record.
+
+**[ ] L75. 25 `detail()` calls across the library can never print**
+⚠ **[found 2026-08-07 while closing L29]**
+
+`detail()` (`core/utils/console.py:191`) defaults to `verbose=VERBOSE_PROGRESS` (2) but its own
+`min_level` is `VERBOSE_DEBUG` (3), so **a bare `detail(msg)` prints at no verbosity setting at
+all**. The house convention in CLAUDE.md — "when using `if self.verbose >= N:` guards, call
+helpers WITHOUT `verbose=` inside the block" — is what produces the defect: the guard reads as if
+it controls visibility, and the call silently refuses. Every one of these is a debug line the
+author believed they had written:
+
+| File | Lines |
+|---|---|
+| `flux/lowres/storage_correction.py` | 222, 223, 224, 225, 251, 276, 336 |
+| `preprocessing/qaqc/meteoscreening.py` | 678, 866, 870 |
+| `flux/lowres/selfheating.py` | 895, 1252, 1263 |
+| `preprocessing/corrections/offsetcorrection.py` | 103, 470 |
+| `core/io/files.py` | 169, 267 |
+| `flux/fluxprocessingchain/levels/` | `level41.py:190`, `_init.py:198`, `_qcf.py:69` |
+| `preprocessing/corrections/setto.py` | 73 |
+| `preprocessing/outlier_detection/manualremoval.py` | 149 |
+| `preprocessing/qaqc/eddyproflags.py` | 503 |
+| `preprocessing/qaqc/qcf.py` | 239 |
+| `core/io/db/base.py` | 47 |
+
+The seven in the u\* files were fixed with L29; these are the rest. Two ways to close it: pass
+`verbose=` at every call site, or give `detail()` a default that can actually fire. The second is
+one line but changes what every existing call does, so it needs a deliberate decision — and the
+CLAUDE.md convention should be corrected either way, since following it is what causes this.
 
 **[ ] L35. USTAR docstring examples import from the wrong namespace**
 `ustar_bootstrap.py:133`, `ustar_vekuri_detection.py:80` — `dv.UstarBootstrapThresholds`,
