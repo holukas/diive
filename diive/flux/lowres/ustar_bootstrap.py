@@ -14,7 +14,7 @@ import pandas as pd
 from joblib import Parallel, delayed
 from typing import Dict, List, Optional, Tuple
 
-from diive.core.utils.console import info, detail
+from diive.core.utils.console import info, detail, warn
 
 
 def _bootstrap_window_worker(
@@ -36,11 +36,16 @@ def _bootstrap_window_worker(
             detector = detector_class(df_window, verbose=0, **detector_kwargs)
             samples = [float(s) for s in detector.bootstrap_annual_samples(n_iter)
                        if s is not None and not np.isnan(s)]
-        except Exception:
-            samples = []
-        return year, samples
+        except Exception as err:
+            # Carry the reason out rather than swallowing it: an empty sample list
+            # is indistinguishable between "too few records", "a mistyped column
+            # name" and "the detection genuinely found nothing", and the caller
+            # reports NaN thresholds either way.
+            return year, [], f"{type(err).__name__}: {err}"
+        return year, samples, None
 
     samples = []
+    last_err = None
     for _ in range(n_iter):
         df_boot = df_window.sample(n=len(df_window), replace=True)
         try:
@@ -50,9 +55,10 @@ def _bootstrap_window_worker(
             threshold = annual.get('threshold')
             if threshold is not None and not np.isnan(threshold):
                 samples.append(float(threshold))
-        except Exception:
+        except Exception as err:
+            last_err = f"{type(err).__name__}: {err}"
             continue
-    return year, samples
+    return year, samples, (last_err if not samples else None)
 
 
 class UstarBootstrapThresholds:
@@ -255,17 +261,20 @@ class UstarBootstrapThresholds:
                     win_str = '/'.join(str(y) for y in windows[year])
                     info(f"  {year} [window: {win_str}] ({len(df_window)} records)...")
 
-                _, samples = _bootstrap_window_worker(
+                _, samples, err = _bootstrap_window_worker(
                     year, df_window, self.detector_class, self.detector_kwargs, self.n_iter
                 )
                 self._raw_samples_[year] = samples
 
-                if self.verbose >= 1:
-                    if samples:
+                if samples:
+                    if self.verbose >= 1:
                         p50 = float(np.percentile(samples, 50))
-                        detail(f"    p50={p50:.4f} m/s ({len(samples)}/{self.n_iter} ok)")
-                    else:
-                        detail(f"    no valid thresholds")
+                        info(f"    p50={p50:.4f} m/s ({len(samples)}/{self.n_iter} ok)")
+                else:
+                    # A window that yields nothing becomes a NaN threshold, so say
+                    # so at ERROR level (always visible) with the reason attached.
+                    warn(f"  {year}: no valid thresholds"
+                         + (f" - {err}" if err else " (detection found none)"))
 
         else:
             # Parallel execution via joblib/loky (Windows-safe, no __main__ guard needed)
@@ -279,13 +288,16 @@ class UstarBootstrapThresholds:
                 for year in self.years_
             )
 
-            for year, samples in results:
+            for year, samples, err in results:
                 self._raw_samples_[year] = samples
-                if self.verbose >= 1:
-                    win_str = '/'.join(str(y) for y in windows[year])
-                    n_ok = len(samples)
-                    p50 = float(np.percentile(samples, 50)) if samples else float('nan')
-                    info(f"  {year} [window: {win_str}]  p50={p50:.4f} m/s ({n_ok}/{self.n_iter} ok)")
+                win_str = '/'.join(str(y) for y in windows[year])
+                if not samples:
+                    warn(f"  {year} [window: {win_str}]: no valid thresholds"
+                         + (f" - {err}" if err else " (detection found none)"))
+                elif self.verbose >= 1:
+                    p50 = float(np.percentile(samples, 50))
+                    info(f"  {year} [window: {win_str}]  p50={p50:.4f} m/s "
+                         f"({len(samples)}/{self.n_iter} ok)")
 
         # Compute per-year percentiles
         rows = []

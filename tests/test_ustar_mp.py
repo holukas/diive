@@ -276,3 +276,46 @@ class TestRecordMinimumIsEnforcedEverywhere(unittest.TestCase):
         self._detector(n).detect()
         self._detector(n).bootstrap(n_iter=3)
         self._detector(n).bootstrap_annual_samples(n_iter=3)
+
+
+class TestBootstrapReportsWhyAWindowFailed(unittest.TestCase):
+    """An empty window becomes a NaN threshold, so the reason must reach the user.
+
+    The wrapper catches every exception from the worker; without carrying the
+    reason out, 'too few records', 'mistyped column name' and 'detection found
+    nothing' are indistinguishable, and all three surface as bare NaNs.
+    """
+
+    @staticmethod
+    def _two_short_years():
+        import pandas as pd
+        frames = []
+        for y in (2020, 2021):
+            ix = pd.date_range(f'{y}-01-01', periods=800, freq='30min',
+                               name='TIMESTAMP_MIDDLE')
+            rng = np.random.RandomState(y)
+            hr = ix.hour + ix.minute / 60
+            sw = np.clip(500 * np.sin(2 * np.pi * (hr - 6) / 24), 0, None)
+            frames.append(pd.DataFrame(
+                {'NEE': rng.randn(800), 'TA': 10 + 5 * rng.randn(800),
+                 'USTAR': np.abs(rng.randn(800)) * 0.5, 'SW_IN': sw}, index=ix))
+        return pd.concat(frames)
+
+    def test_the_worker_returns_the_reason(self):
+        from diive.flux.lowres.ustar_bootstrap import _bootstrap_window_worker
+        df = self._two_short_years()
+        year, samples, err = _bootstrap_window_worker(
+            2020, df, UstarMovingPointDetection,
+            dict(nee_col='NEE', ta_col='TA', ustar_col='USTAR', swin_col='SW_IN'), 3)
+        self.assertEqual(samples, [])
+        self.assertIsNotNone(err, "an empty window must carry its reason")
+        self.assertIn('Insufficient', err)
+
+    def test_a_typo_is_not_mistaken_for_missing_data(self):
+        from diive.flux.lowres.ustar_bootstrap import _bootstrap_window_worker
+        df = self._two_short_years()
+        _year, samples, err = _bootstrap_window_worker(
+            2020, df, UstarMovingPointDetection,
+            dict(nee_col='TYPO', ta_col='TA', ustar_col='USTAR', swin_col='SW_IN'), 3)
+        self.assertEqual(samples, [])
+        self.assertNotIn('Insufficient', err)
