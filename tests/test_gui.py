@@ -3537,3 +3537,46 @@ def test_gapfilling_mds_tab(app, example_year):
     tab2.restore_state(state)
     assert tab2._target == "NEE_CUT_REF_orig"
     assert tab2.vpd_tol.value() == 0.8
+
+
+def test_partitioning_tabs_refuse_to_run_without_site_coords(app, example_year):
+    # The lat/lon/UTC spin boxes default to 0/0/0 and _seed_site leaves them there
+    # when the site is unset, so an unguarded run would partition at (0, 0) on UTC
+    # and return plausible-looking GPP/RECO. Every coordinate-consuming tab must
+    # refuse, the way the outlier and correction tabs already do.
+    from diive.gui import site
+    from diive.gui.tabs.partitioning_daytime_oneflux import DaytimePartitioningOneFluxTab
+    from diive.gui.tabs.partitioning_daytime_reddyproc import DaytimePartitioningReddyProcTab
+    from diive.gui.tabs.partitioning_nighttime_oneflux import NighttimePartitioningOneFluxTab
+    from diive.gui.tabs.partitioning_nighttime_reddyproc import NighttimePartitioningReddyProcTab
+
+    # Set the flag directly (as the meteo-screening test above does): load_dict({})
+    # early-returns on an empty dict, so it would silently leave a site configured
+    # by an earlier test in place.
+    saved = site.manager.configured
+    try:
+        site.manager.configured = False
+        assert not site.manager.configured
+
+        needs = (NighttimePartitioningOneFluxTab, NighttimePartitioningReddyProcTab,
+                 DaytimePartitioningReddyProcTab)
+        for cls in needs:
+            tab = cls()
+            tab.widget()
+            tab.on_data_loaded(example_year)
+            assert tab.needs_coords, f"{cls.__name__} should declare a coordinate need"
+            tab._run()
+            QApplication.processEvents()
+            assert not tab._runner.is_running, f"{cls.__name__} started a run"
+            assert "Project settings" in tab.status.text()
+            # The snippet would otherwise carry lat=0.0, lon=0.0.
+            assert tab._python_code() is None
+
+        # Daytime ONEFlux splits on measured Rg, not solar geometry: no coords, no guard.
+        tab = DaytimePartitioningOneFluxTab()
+        tab.widget()
+        tab.on_data_loaded(example_year)
+        assert not tab.needs_coords
+        assert not tab._coords_missing()
+    finally:
+        site.manager.configured = saved
