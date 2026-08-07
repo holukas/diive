@@ -127,3 +127,51 @@ class TestGridAggregator(unittest.TestCase):
                 binning_type="invalid_type",
                 n_bins=3
             )
+
+
+class TestEmptyBinsArePreserved(unittest.TestCase):
+    """A bin nothing fell into must survive as an empty (NaN) cell.
+
+    The pivot only emits occupied bins. Consumers that draw the grid (the x/y/z
+    heatmap, the 3-D surface) treat consecutive labels as adjacent cells, so a
+    dropped bin lets the cell beside it widen silently across the gap — painting
+    a region that holds no measurements.
+    """
+
+    def _bimodal(self, n_bins):
+        rng = np.random.RandomState(0)
+        # X is bimodal: 0-10 and 95-100, with nothing in between.
+        x = pd.Series(np.concatenate([rng.uniform(0, 10, 500),
+                                      rng.uniform(95, 100, 500)]), name='X')
+        y = pd.Series(rng.uniform(0, 10, 1000), name='Y')
+        z = pd.Series(rng.randn(1000), name='Z')
+        return GridAggregator(x=x, y=y, z=z, binning_type='equal_width', n_bins=n_bins)
+
+    def test_equal_width_keeps_the_empty_middle(self):
+        ga = self._bimodal(n_bins=30)
+        wide = ga.df_agg_wide
+        self.assertEqual(wide.shape, (30, 30), "every requested bin must be present")
+        occupied = ~wide.isna().all(axis=0)
+        self.assertEqual(int(occupied.sum()), 5, "only the two clusters hold data")
+        self.assertGreater(int((~occupied).sum()), 0, "the gap must remain as empty cells")
+
+    def test_equal_width_bins_are_evenly_spaced(self):
+        # The whole point: consumers space cells by their labels, so the labels
+        # must march uniformly rather than jump across a dropped bin.
+        widths = np.diff(self._bimodal(n_bins=30).df_agg_wide.columns.to_numpy())
+        self.assertTrue(np.allclose(widths, widths[0], atol=1e-3))
+
+    def test_the_data_itself_is_unchanged(self):
+        ga = self._bimodal(n_bins=30)
+        # Restoring empty bins must not add, drop or move any aggregated value.
+        self.assertEqual(int(ga.df_agg_wide.notna().to_numpy().sum()), 150)
+
+    def test_quantile_bins_emptied_by_min_n_vals_are_kept(self):
+        # min_n_vals_per_bin can empty a bin of any type, not just equal-width.
+        rng = np.random.RandomState(0)
+        x = pd.Series(rng.uniform(0, 10, 400), name='X')
+        y = pd.Series(rng.uniform(0, 10, 400), name='Y')
+        z = pd.Series(rng.randn(400), name='Z')
+        ga = GridAggregator(x=x, y=y, z=z, binning_type='quantiles', n_bins=10,
+                            min_n_vals_per_bin=5)
+        self.assertEqual(ga.df_agg_wide.shape, (10, 10))

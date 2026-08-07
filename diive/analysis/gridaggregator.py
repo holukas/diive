@@ -128,6 +128,14 @@ class GridAggregator:
         self._df_agg_wide = None
         self._df_agg_long = None
 
+        #: Every bin label the binning defined, per source column — including the
+        #: ones no record fell into. The pivot below only produces occupied bins,
+        #: and consumers that draw the grid (the x/y/z heatmap, the 3-D surface)
+        #: treat consecutive labels as adjacent cells: drop an empty bin and the
+        #: cell beside it silently widens to cover the gap. Reindexing onto this
+        #: keeps an empty bin an empty (NaN) cell.
+        self._expected_labels: dict = {}
+
         # Perform binning and aggregation immediately upon initialization
         self._bin_and_aggregate()
 
@@ -298,6 +306,8 @@ class GridAggregator:
             # Generate labels as percentiles (0, 10, 20... 90 for 10 bins)
             labels = [float(i * (100 / actual_n_bins)) for i in range(actual_n_bins)]
 
+            self._expected_labels[series.name] = list(labels)
+
             # Apply qcut with the determined labels
             binned_series = pd.qcut(series, q=self.n_bins, labels=labels,
                                     duplicates='drop', retbins=False)  # retbins=False as we already have bins
@@ -342,6 +352,14 @@ class GridAggregator:
             # Use the lower bound of each interval as the label
             binned_series_numeric_labels = binned_series.apply(lambda x: x.left if pd.notna(x) else np.nan)
 
+            # Remember every bin the cut defined, not just the occupied ones, so
+            # _transform_and_pivot can restore the empty ones (see _expected_labels).
+            # Read them off the categories, NOT off `bins`: pd.cut rounds the
+            # interval edges it labels with (precision=3), so the retbins edges
+            # are near-misses that would match nothing on reindex.
+            self._expected_labels[series.name] = [
+                float(iv.left) for iv in binned_series.cat.categories]
+
             return binned_series_numeric_labels.astype(float)
 
         except Exception as e:
@@ -369,6 +387,7 @@ class GridAggregator:
             # Custom bins are already validated in __init__
             # Create labels based on the lower bound of each bin
             labels = [float(bins[i]) for i in range(len(bins) - 1)]
+            self._expected_labels[series.name] = list(labels)
 
             # Use pd.cut with custom bins
             # Ensure custom bins cover the data range to avoid NaNs, though NaNs are handled if they appear.
@@ -425,13 +444,20 @@ class GridAggregator:
                                            values=self.z_col_name,  # Values to aggregate
                                            aggfunc=self.aggfunc)
 
-        # If binning_type is 'custom', reindex to ensure all custom bins are present
-        if self.binning_type == 'custom':
-            expected_x_labels = [float(self.custom_x_bins[i]) for i in range(len(self.custom_x_bins) - 1)]
-            expected_y_labels = [float(self.custom_y_bins[i]) for i in range(len(self.custom_y_bins) - 1)]
-
-            # Reindex the wide DataFrame, filling missing bins with NaN
-            self._df_agg_wide = self._df_agg_wide.reindex(index=expected_y_labels, columns=expected_x_labels)
+        # Restore the bins nothing fell into, for EVERY binning type. pivot_table
+        # emits only occupied bins, and min_n_vals_per_bin can empty one of any
+        # type; a consumer that draws the grid then treats the survivors as
+        # adjacent and stretches a cell across the gap. This used to run for
+        # 'custom' only, so an equal-width grid over a bimodal variable rendered
+        # its empty middle as solid data.
+        expected_x = self._expected_labels.get(self.x_col_name)
+        expected_y = self._expected_labels.get(self.y_col_name)
+        if expected_x is not None or expected_y is not None:
+            self._df_agg_wide = self._df_agg_wide.reindex(
+                index=expected_y if expected_y is not None else self._df_agg_wide.index,
+                columns=expected_x if expected_x is not None else self._df_agg_wide.columns)
+            self._df_agg_wide.index.name = self.y_bin_col_name
+            self._df_agg_wide.columns.name = self.x_bin_col_name
 
         if pd.api.types.is_numeric_dtype(self._df_agg_wide.index):
             self._df_agg_wide = self._df_agg_wide.sort_index(axis=0)
