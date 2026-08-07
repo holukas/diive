@@ -2,6 +2,23 @@
 *.parquet
 *.html
 
+# ...except the example data the package ships. Every file below is loaded by a
+# diive.configs.exampledata function and is needed by the tests, the examples and
+# the packaged GUI. Without these exceptions the rule above hides them from `git
+# add` without a word: that is how all six of the non-CH-DAV files went missing
+# (they only ever existed in a working directory, never in a commit), taking 23
+# tests and 8 examples down with them once that copy was gone.
+# ADDING NEW EXAMPLE DATA? Add a line here, or it will not be committed.
+# Scratch data that should stay local belongs in /diive/configs/exampledata/local.
+!diive/configs/exampledata/exampledata_PARQUET_CH-CHA_FP2025.3_subset_30MIN.parquet
+!diive/configs/exampledata/exampledata_PARQUET_CH-DAV_FP2022.5_2013-2022_ID20230206154316_30MIN.parquet
+!diive/configs/exampledata/exampledata_PARQUET_CH-HON_2025_LEVEL-0_TLAG-VARS_IRGA75_SUBSET.parquet
+!diive/configs/exampledata/exampledata_PARQUET_CH-LAE_22.4_FLUXES_LEVEL-1_IRGA72+METEO7_2024_SUBSET.parquet
+!diive/configs/exampledata/exampledata_PARQUET_CH-LAE_FP2025.X_22_IRGA75+IRGA72_FPC_NEE-QCF11-L3.2_2016-2017.parquet
+!diive/configs/exampledata/exampledata_PARQUET_CH-LAE_METEO_RH_1MIN.parquet
+!diive/configs/exampledata/exampledata_PARQUET_CH-LAE_METEO_SW_IN_1MIN.parquet
+!diive/configs/exampledata/exampledata_PARQUET_winddirection_degrees_CH-FRU_2005-2022.parquet
+
 # Build identifier stamped in by packaging/build_gui.ps1 (packaged builds only)
 diive/gui/_build_info.txt
 
