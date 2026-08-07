@@ -42,13 +42,16 @@ far and each needs an entry saying what silently changes for existing code:
 | `a327a4ee` `fix!: flag missing records as NaN, not 0` | `overall_flag` is NaN at missing records; any `(flag == 0).count()` changes |
 | `876bec12` `feat!: combine variables only where both are available` | `keep_overlap_only` gone from `combine_variables` and its codegen |
 | `57b8b845` `refactor!: remove the dead harmonic functions` | `reconstruct_harmonics`, `periodogram`, `fft_decompose`, `multi_scale_harmonics` removed |
+| L50's fix | `quality_weighted_decompose` removed; `weights` gone from `stl_decompose`; `quality` / `quality_weighted` gone from `SeasonalTrendDecomposition`. None of it ever weighted anything |
 
 The non-breaking fixes are user-visible too and change numbers people may have already published —
 in particular **L48/L49** (FFT amplitudes were ~54% of truth, and one bin off), **L61/L63** (cells
 drawn over regions holding no data), **L42** (hqflux reported missing records as valid),
 **L54/L55** (`DriverAnalysis` — every number it reports moves, though it is experimental) and
 **L51/L52** (`StratifiedAnalysis` now analyses the records and keeps the z bins it used to drop,
-so both the curves and the bin count in an existing figure change). The
+so both the curves and the bin count in an existing figure change) and **L47/L73** (STL returns
+components instead of NaN for any gappy series, and `harmonic_decompose` picks different
+components — which also shifts anything built on `features_stl`). The
 v0.91.0 entry already opens with *"Two of these change results silently, with no error and no
 warning"*; this round needs the same treatment.
 
@@ -140,9 +143,9 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | L26 | `_class_bounds` can emit `end < start` → NaN class mean → up to 11 candidate classes skipped | `flux/lowres/ustar_mp_detection.py:285` |
 | L32 | `UstarDetectionMPT` is exported but never stores its results; `run()` only *prints* the threshold | `flux/lowres/ustarthreshold.py:561` |
 | L34 | `annual_thresholds_` holds the sentinel `10.0` on failure — a plausible threshold that filters everything | `flux/lowres/ustar_mp_detection.py:520` |
-| L47 | STL returns an all-NaN decomposition from a **single** NaN; `seasonality_strength` reads 0.0 | `core/times/decomposition_utils.py:133` |
-| L50 | `quality_weighted_decompose` ignores the weights entirely; `summary()` prints "Quality-weighted: True" | `core/times/decomposition_utils.py:100` |
-| L58 | `detect_seasonality` fabricates `primary_period=365` when the periodogram yields nothing | `core/times/decomposition_utils.py:490` |
+| ~~L47~~ | ~~STL returns an all-NaN decomposition from a **single** NaN; `seasonality_strength` reads 0.0~~ (done 2026-08-07) | `core/times/decomposition_utils.py:133` |
+| ~~L50~~ | ~~`quality_weighted_decompose` ignores the weights entirely; `summary()` prints "Quality-weighted: True"~~ (done 2026-08-07) — fake path removed | `core/times/decomposition_utils.py:100` |
+| ~~L58~~ | ~~`detect_seasonality` fabricates `primary_period=365` when the periodogram yields nothing~~ (done 2026-08-07) | `core/times/decomposition_utils.py:490` |
 | ~~L51~~ | ~~`StratifiedAnalysis` drops z-bins whose rounded label collides — 19 of 120 lost, no warning~~ (done 2026-08-07) | `analysis/decoupling.py:213` |
 | L53 | `CompoundExtremes` returns zero classified periods for a single year, silently | `analysis/compoundextremes.py:168` |
 | ~~L59~~ | ~~`multi_scale_harmonics` swallows every exception~~ (done 2026-08-07) — function deleted as dead code | `analysis/harmonic.py:432` |
@@ -154,7 +157,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | L66 | `datetime_surface_grid` omits the `TIMESTAMP_START` conversion — 3-D surface offset half a period from the heatmap | `core/plotting/surface_grid.py:68` |
 | L67 | 3-D export buttons write the **previous** variable's relief after a render that produced nothing | `gui/tabs/surface3d.py:945` |
 | G4 | `restore_controls` silently keeps the current combo value when the saved entry is gone — can flip the joint-uncertainty divisor | `gui/widgets/state_utils.py:51` |
-| L73 | `harmonic_decompose` picks the top-N bins by power, so a windowed strong component's leakage outranks a genuine weaker one — the same component is returned twice | `core/times/decomposition_utils.py:275` |
+| ~~L73~~ | ~~`harmonic_decompose` picks the top-N bins by power, so a windowed strong component's leakage outranks a genuine weaker one — the same component is returned twice~~ (done 2026-08-07) | `core/times/decomposition_utils.py:275` |
 
 ## S3 — Crash on legitimate input (14)
 
@@ -1093,7 +1096,15 @@ offset at typical humidity). Settling this needs the Burba 2008 source equation.
 
 ### `analysis` package and decomposition utilities
 
-**[ ] L47. STL silently returns an all-NaN decomposition when the input contains a single NaN** ⚠ **[verified independently]**
+**[x] L47. STL silently returns an all-NaN decomposition when the input contains a single NaN** ⚠ **[verified independently]**
+
+> **Fixed 2026-08-07.** `stl_decompose` now fits on a linearly interpolated copy
+> (`limit_direction='both'`, so leading and trailing gaps are covered too — one of them is
+> enough to poison the fit) and masks the gaps back out of all three components. A gap in the
+> input is a gap in the output; no interpolated value is ever returned. The count is reported:
+> an `info` line and `n_interpolated` in the result dict. An all-NaN series now raises instead
+> of returning NaN components. Verified: one gap in 1460 gave `trend non-NaN: 0` before, 1459
+> after, and the components still sum back to the measured records. Same pattern as the L54 fix.
 `core/times/decomposition_utils.py:133` — `statsmodels.STL` has no NaN handling and propagates
 rather than raising. One missing day in 1460 gives `trend non-NaN: 0 of 1460`, `seasonality_strength
 = 0.0`, and `summary()` prints `nan ± nan` happily. This contradicts four separate docstring claims
@@ -1137,7 +1148,15 @@ reconstruction is 54% of the signal, and `residual = original − reconstructed`
 missing 46% rather than by reconstruction error. `fft_decompose` reports 1.62 for a true 3.0;
 with `window='boxcar'` it returns exactly 3.0 and a residual of 1.8e-14.
 
-**[ ] L50. `quality_weighted_decompose` and `stl_decompose(weights=...)` ignore the weights entirely**
+**[x] L50. `quality_weighted_decompose` and `stl_decompose(weights=...)` ignore the weights entirely**
+
+> **Resolved 2026-08-07 by removing the fake path** (user's call, offered against keeping the
+> API honest or inventing a threshold rule). statsmodels' STL takes no observation weights and
+> there is no way to inject them, so the feature could not be delivered — and nothing in the
+> library, GUI, tests or examples used it. Gone: `weights` from `stl_decompose`,
+> `quality_weighted_decompose` entirely, and `quality` / `quality_weighted` from
+> `SeasonalTrendDecomposition` along with the "Quality-weighted:" summary line. `robust=` is
+> the real outlier knob and stays. **Breaking change** — needs a changelog entry.
 `decomposition_utils.py:100` — `weights_norm` is computed and never used, the STL fit takes no
 weights, and `:152` returns the *raw* weights rather than the normalised ones. The docstrings
 promise "High-quality observations influence the fit more"; `SeasonalTrendDecomposition.summary()`
@@ -1245,7 +1264,13 @@ the two functions disagree.
 `(period-1)//2` edges where the trend is NaN by design, even though the seasonal component is fully
 defined there (30 NaN in the output, 0 in the seasonal input).
 
-**[ ] L58. `detect_seasonality` fabricates a period of 365 when the periodogram yields nothing**
+**[x] L58. `detect_seasonality` fabricates a period of 365 when the periodogram yields nothing**
+
+> **Fixed 2026-08-07.** The fallback is gone: with no candidate period in `[2, max_period]`
+> the function raises `ValueError` naming the range, the number of valid values, and the way
+> out (pass `seasonal_period` explicitly). A failed detection can no longer be mistaken for a
+> successful one, and `_get_seasonal_period` no longer decomposes a 5-point series at period
+> 365. The "no peaks -> use max power" branch is untouched; that one is a real answer.
 `decomposition_utils.py:490` — with no frequency bin in `[2, max_period]` it returns
 `primary_period=365`, `secondary_periods=[7, 30]` and `strength=0.0`, with no warning.
 `SeasonalTrendDecomposition._get_seasonal_period` (`seasonaltrend.py:342`) calls it whenever
@@ -1473,7 +1498,22 @@ Still not reviewed even after round 3: `windrose.py`, `hexbin.py`, `histogram.py
 
 ---
 
-**[ ] L73. `harmonic_decompose` returns the same component twice under a window**
+**[x] L73. `harmonic_decompose` returns the same component twice under a window**
+
+> **Fixed 2026-08-07.** Selection is now over the spectral *peaks* (`find_peaks`, ranked by
+> power) rather than the strongest bins, so a leakage shoulder — which sits on the flank of
+> its peak, not on a local maximum — can no longer be returned as a component. The two-component
+> repro now yields `[(50, 3.0), (25, 1.0)]` under boxcar, hamming, hann and blackman alike.
+> Fewer than `n_harmonics` components come back when the spectrum holds fewer peaks; a
+> monotonic spectrum falls back to the old behaviour.
+>
+> **Knock-on:** the reconstruction is built from N distinct components instead of N bins, so it
+> carries slightly less of the signal's energy (a component's leakage skirt no longer adds bins).
+> Where that reconstruction is used as a *feature* it is marginally weaker:
+> `test_gapfilling_stl_features_xgboost` (3 trees, harmonic STL features) moved mae 2.79 -> 3.01,
+> r2 0.53 -> 0.47, and its `mae < 3.0` bound was widened to 3.5 with that noted at the assertion.
+> Distinct components are what the function documents; reconstruction fidelity is a separate
+> knob (it would take reconstructing each component from its whole peak, not just the peak bin).
 `core/times/decomposition_utils.py:275`
 
 Found while fixing L49 — not a regression from it. `top_idx = np.argsort(-powers)[:n_harmonics]`

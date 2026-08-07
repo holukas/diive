@@ -333,17 +333,17 @@ normalisation (statsmodels needs an odd window strictly greater than the period;
 up both instead of passing them through to a raise), argument validation, and the short-series
 warning.
 
-**The module is still low overall** (28 % from this file alone) because `stl_decompose` is one of
-six functions in it and the other five have no test at all:
+**The module is still low overall** because `stl_decompose` was one of six functions in it and
+the others were untested. Two of them since have tests of their own (2026-08-07, findings L47 /
+L58 / L73), and `quality_weighted_decompose` was deleted with L50 — it never weighted anything:
 
 | Function | Covered |
 |---|---|
-| `stl_decompose` | **84 %** |
+| `stl_decompose` | **84 %** (plus the gap tests from L47) |
+| `harmonic_decompose` | covered by the L49 / L73 tests |
+| `detect_seasonality` | covered by the L58 tests |
 | `classical_decompose` | 8 % |
-| `quality_weighted_decompose` | 7 % |
 | `reconstruct_from_components` | 6 % |
-| `harmonic_decompose` | 3 % |
-| `detect_seasonality` | 2 % |
 
 ## Tier 1g — Flux-chain re-run cascade — **DONE** (2026-07-26)
 
