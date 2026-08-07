@@ -240,7 +240,7 @@ class UstarVekuriThresholdDetection:
 
             if len(df_season) < 50:
                 if self.verbose >= 2:
-                    detail(f"    Insufficient data: {len(df_season)} samples")
+                    detail(f"    Insufficient data: {len(df_season)} samples", verbose=self.verbose)
                 thresholds_list.append([np.nan])
                 continue
 
@@ -248,7 +248,7 @@ class UstarVekuriThresholdDetection:
             thresholds_list.append([threshold])
 
             if self.verbose >= 2 and not np.isnan(threshold):
-                detail(f"    Threshold: {threshold:.4f} m/s")
+                detail(f"    Threshold: {threshold:.4f} m/s", verbose=self.verbose)
 
         # Store results
         self.results_ = pd.DataFrame(
@@ -367,7 +367,7 @@ class UstarVekuriThresholdDetection:
 
         for boot_idx in range(n_iter):
             if self.verbose >= 2 and boot_idx % 10 == 0:
-                detail(f"  Iteration {boot_idx + 1}/{n_iter}")
+                detail(f"  Iteration {boot_idx + 1}/{n_iter}", verbose=self.verbose)
 
             df_boot = self.df.sample(n=len(self.df), replace=True)
 

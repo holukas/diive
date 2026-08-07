@@ -542,9 +542,9 @@ class UstarMovingPointDetection:
         if self.verbose >= 2:
             for i, t in enumerate(thresholds_list):
                 if np.isfinite(t):
-                    detail(f"  Season {i + 1}: {t:.4f} m/s")
+                    detail(f"  Season {i + 1}: {t:.4f} m/s", verbose=self.verbose)
                 else:
-                    detail(f"  Season {i + 1}: not found")
+                    detail(f"  Season {i + 1}: not found", verbose=self.verbose)
 
         self.results_ = pd.DataFrame(
             {'threshold': thresholds_list},
@@ -580,7 +580,7 @@ class UstarMovingPointDetection:
 
         for boot_idx in range(n_iter):
             if self.verbose >= 2 and boot_idx % 10 == 0:
-                detail(f"  Iteration {boot_idx + 1}/{n_iter}")
+                detail(f"  Iteration {boot_idx + 1}/{n_iter}", verbose=self.verbose)
 
             idx = rng.integers(0, n_total, n_total)
             sel = night[idx]

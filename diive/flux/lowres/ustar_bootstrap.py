@@ -228,9 +228,13 @@ class UstarBootstrapThresholds:
         # only a handful of windows costs more (process startup + DataFrame pickling) than it
         # saves. Run sequentially below this point regardless of the requested n_jobs.
         if n_workers > 1 and len(self.years_) <= 3:
-            if self.verbose >= 1:
-                detail(f"  {len(self.years_)} window(s): running sequentially "
-                       f"(too few to amortize process-pool overhead)")
+            # `verbose=` is required, not decoration: detail() defaults to
+            # verbose=VERBOSE_PROGRESS (2) while its own min_level is
+            # VERBOSE_DEBUG (3), so a bare detail() can never print at any
+            # setting - the `verbose >= 1` guard around it was hiding that.
+            detail(f"  {len(self.years_)} window(s): running sequentially "
+                   f"(too few to amortize process-pool overhead)",
+                   verbose=self.verbose)
             n_workers = 1
 
         if self.verbose >= 1:
