@@ -58,8 +58,8 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | L48 | `harmonic_analysis` reads the wrong FFT bin — a true amplitude of 3.0 is reported as **0.0** | `analysis/harmonic.py:89` |
 | L49 | Windowed FFT amplitudes never corrected for coherent gain — every amplitude ~54% of truth | `analysis/harmonic.py:70` |
 | L52 | `StratifiedAnalysis` listwise-drops on **every** column — 20 000 rows → 100, silently | `analysis/decoupling.py:68` |
-| L61 | `HeatmapYearMonth` mis-places cells when months are non-contiguous — Feb painted across Mar–Sep | `core/plotting/heatmap_datetime.py:395` |
-| L63 | Empty X/Y/Z bins dropped, then rendered as measured cells — 90% of the X range coloured from no data | `analysis/gridaggregator.py:429` |
+| ~~L61~~ | ~~`HeatmapYearMonth` mis-places cells when months are non-contiguous~~ (done 2026-08-07) | `core/plotting/heatmap_datetime.py:395` |
+| ~~L63~~ | ~~Empty X/Y/Z bins dropped, then rendered as measured cells~~ (done 2026-08-07) — fixed in `GridAggregator`, so `HeatmapXYZ` benefits too | `analysis/gridaggregator.py:429` |
 | ~~L2~~ | ~~`WindDirOffset` ignores `hist_n_bins`~~ (done 2026-08-07) — also pinned the bins to the full circle | `preprocessing/corrections/offsetcorrection.py:476` |
 | ~~G1~~ | ~~Partitioning tabs run at **(0, 0) UTC** when the project site is unconfigured~~ (done 2026-08-07) — 3 of the 4 ports | `gui/tabs/_partitioning_base.py:300` |
 
@@ -1121,7 +1121,13 @@ verbose message.
 
 ### `core/plotting`, InfluxDB layer, 3-D surface tabs
 
-**[ ] L61. `HeatmapYearMonth` draws month cells at the wrong positions when months are not contiguous** ⚠ **[verified independently]**
+**[x] L61. `HeatmapYearMonth` draws month cells at the wrong positions when months are not contiguous** ⚠ **[verified independently]**
+
+> **Fixed 2026-08-07.** `_prepare_data` reindexes the matrix onto the complete year x month
+> lattice (months 1-12, years min..max) before `_set_bounds` turns the labels into pcolormesh
+> boundaries. The Nov-Feb repro now gives 12 cells each exactly one month wide against 12
+> ticks, with the unobserved months NaN. Covered by `TestHeatmapYearMonthLattice`;
+> mutation-checked (3 of its 4 tests fail with the reindex removed).
 `core/plotting/heatmap_datetime.py:395` (`_set_bounds`) and `:527` (ticks) — `_set_bounds` uses the
 surviving month labels directly as `pcolormesh` **boundaries** and appends only `last+1`, so a
 record that skips months draws each cell all the way to the next surviving label. Reproduced on
@@ -1144,7 +1150,23 @@ and stored (`heatmap_base.py:304`), but only `HeatmapYearMonth` reads it (`:537`
 is identical with `True` and `False`. The GUI exposes the same checkbox for both heatmap types and
 `heatmap_datetime_to_code` emits it into copied snippets, so the control silently does nothing.
 
-**[ ] L63. Missing equal-width bins are dropped, so empty regions of an X/Y/Z surface render as measured cells**
+**[x] L63. Missing equal-width bins are dropped, so empty regions of an X/Y/Z surface render as measured cells**
+
+> **Fixed 2026-08-07 in `GridAggregator`**, so the x/y/z heatmap and the 3-D surface are both
+> covered. Each binning method now records every label it defined (not just the occupied
+> ones) and `_transform_and_pivot` reindexes onto that for **all** binning types — the
+> reindex previously ran for `'custom'` only, yet `min_n_vals_per_bin` can empty a bin of any
+> type. The bimodal repro now returns the full 30x30 grid with the void preserved as 25 empty
+> columns and evenly spaced labels, and the 150 aggregated values unchanged.
+>
+> One trap worth recording: the expected labels must be read off the *categories* of the
+> `pd.cut` result, not off its `retbins` edges. `pd.cut` rounds the edges it labels with
+> (`precision=3`), so `retbins` gives near-misses (`0.046955` vs the label `0.047`) that match
+> nothing on reindex — which silently blanks the entire grid. Caught by the repro, not by the
+> tests, which is why the first attempt looked plausible.
+>
+> Covered by `TestEmptyBinsArePreserved`; mutation-checked (2 of its 4 tests fail when the
+> reindex is restricted to `'custom'` again).
 `gui/tabs/surfacexyz.py:129`, root cause `analysis/gridaggregator.py:429` — `_transform_and_pivot`
 reindexes onto the full bin lattice only for `binning_type == 'custom'`; for `equal_width` (what the
 tab uses) `pivot_table` emits only occurring labels and `dropna=True` removes all-NaN bins.
