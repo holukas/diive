@@ -431,3 +431,81 @@ class TestApplyCorrections(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestWindDirOffsetCircularBinning(unittest.TestCase):
+    """WindDirOffset compares direction histograms bin by bin, so the bins must
+    mean the same thing in both — over the full circle, where 360 deg == 0 deg."""
+
+    N_PER_YEAR = 3000
+    PLANTED_OFFSET = 40  # degrees the second year is rotated by
+
+    def _winddir(self, centre: float) -> pd.Series:
+        """Two years of directions drawn from one asymmetric distribution; the
+        second year is the first rotated by PLANTED_OFFSET (wrapped)."""
+        rng = np.random.RandomState(42)
+        base = rng.normal(loc=centre, scale=30.0, size=self.N_PER_YEAR) % 360
+        ix = pd.DatetimeIndex(
+            list(pd.date_range('2020-01-01', periods=self.N_PER_YEAR, freq='1h'))
+            + list(pd.date_range('2021-01-01', periods=self.N_PER_YEAR, freq='1h')),
+            name='TIMESTAMP_MIDDLE')
+        vals = np.concatenate([base, (base + self.PLANTED_OFFSET) % 360])
+        return pd.Series(vals, index=ix, name='WD')
+
+    def _detect(self, winddir, n_bins):
+        from diive.preprocessing.corrections import WindDirOffset
+        wds = WindDirOffset(winddir=winddir, offset_start=-60, offset_end=60,
+                            hist_ref_years=[2020], hist_n_bins=n_bins)
+        off = wds.get_yearly_offsets().set_index('YEAR')['OFFSET']
+        return wds, off
+
+    def test_coarse_bins_still_recover_the_planted_offset(self):
+        # The per-year histogram used to be hardcoded to 360 bins while the
+        # reference used hist_n_bins, so with any other bin count the two COUNTS
+        # series had different lengths and .corr() silently aligned them on the
+        # RangeIndex and correlated the overlap only.
+        winddir = self._winddir(centre=90.0)
+        for n_bins in (36, 72, 360):
+            with self.subTest(n_bins=n_bins):
+                wds, off = self._detect(winddir, n_bins)
+                self.assertEqual(len(wds.ref_results), n_bins,
+                                 "reference histogram must honour hist_n_bins")
+                self.assertEqual(off[2020], 0)
+                self.assertEqual(off[2021], -self.PLANTED_OFFSET)
+
+    def test_offset_across_north_is_recovered(self):
+        # Directions centred near 350 deg: the planted rotation carries a large
+        # share of them past 360 and back onto 0, so recovering it exercises the
+        # wrap rather than a plain shift.
+        winddir = self._winddir(centre=350.0)
+        crossed = ((winddir.loc[winddir.index.year == 2021] < self.PLANTED_OFFSET).sum())
+        self.assertGreater(crossed, 0, "test data must actually cross north")
+        _wds, off = self._detect(winddir, n_bins=360)
+        self.assertEqual(off[2021], -self.PLANTED_OFFSET)
+
+    def test_corrected_directions_stay_on_the_circle(self):
+        winddir = self._winddir(centre=350.0)
+        wds, _off = self._detect(winddir, n_bins=360)
+        corrected = wds.get_corrected_wind_directions()
+        self.assertGreaterEqual(corrected.min(), 0)
+        self.assertLess(corrected.max(), 360, "360 deg is 0 deg; it must not appear")
+
+    def test_wrapping_handles_any_magnitude(self):
+        from diive.preprocessing.corrections import WindDirOffset
+        s = pd.Series([0.0, 360.0, 370.0, -10.0, 720.0, -370.0, np.nan])
+        wrapped = WindDirOffset._correct_degrees(s)
+        expected = [0.0, 0.0, 10.0, 350.0, 0.0, 350.0]
+        self.assertEqual(wrapped.dropna().tolist(), expected)
+
+    def test_histogram_spans_the_full_circle(self):
+        # Bin edges are fixed, not data-derived: a series covering only one
+        # quadrant must still produce hist_n_bins bins over 0-360, otherwise
+        # bin i would mean a different direction in each histogram.
+        from diive.preprocessing.corrections import WindDirOffset
+        winddir = self._winddir(centre=90.0)
+        wds, _ = self._detect(winddir, n_bins=36)
+        narrow = pd.Series(np.linspace(10, 80, 500))
+        counts = wds._wind_histogram(narrow)
+        self.assertEqual(len(counts), 36)
+        self.assertEqual(counts.sum(), 500)
+        self.assertEqual(counts[20:].sum(), 0, "no counts above 200 deg expected")
