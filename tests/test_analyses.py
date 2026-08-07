@@ -510,3 +510,42 @@ class TestDeadHarmonicFunctionsAreGone(unittest.TestCase):
         import diive as dv
         self.assertTrue(callable(dv.analysis.harmonic_analysis))
         self.assertTrue(callable(dv.analysis.spectrogram))
+
+
+class TestStratifiedAnalysisKeepsItsData(unittest.TestCase):
+    """Records and z bins must only be lost for reasons the caller can see."""
+
+    @staticmethod
+    def _frame(n=2000, seed=0):
+        import numpy as np
+        import pandas as pd
+        rng = np.random.RandomState(seed)
+        idx = pd.date_range('2020-01-01', periods=n, freq='30min')
+        return pd.DataFrame({'z': rng.uniform(0, 30, n),
+                             'x': rng.uniform(0, 800, n),
+                             'y': rng.uniform(0, 2, n)}, index=idx)
+
+    def test_gaps_in_other_columns_do_not_remove_records(self):
+        # The documented input is "a dataframe with variables", so a working
+        # dataframe is the obvious thing to pass. Listwise deletion across all of
+        # its columns used to cut thousands of rows down to a handful.
+        import numpy as np
+        from diive.analysis.decoupling import StratifiedAnalysis
+        df = self._frame()
+        df['unrelated'] = np.nan
+        df.iloc[:50, df.columns.get_loc('unrelated')] = 1.0
+        sa = StratifiedAnalysis(df=df, zvar='z', xvar='x', yvar='y',
+                                n_bins_z=4, n_bins_x=3)
+        self.assertEqual(sa.n_records_used, len(df))
+        self.assertEqual(len(sa.df), len(df))
+
+    def test_gaps_in_the_analysis_variables_are_dropped_and_counted(self):
+        import numpy as np
+        from diive.analysis.decoupling import StratifiedAnalysis
+        df = self._frame()
+        df.iloc[:120, df.columns.get_loc('y')] = np.nan
+        sa = StratifiedAnalysis(df=df, zvar='z', xvar='x', yvar='y',
+                                n_bins_z=4, n_bins_x=3)
+        self.assertEqual(sa.n_records_input, len(df))
+        self.assertEqual(sa.n_records_used, len(df) - 120)
+
