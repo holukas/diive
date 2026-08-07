@@ -167,16 +167,31 @@ class StratifiedAnalysis:
         # end_time = time.time()
         # print(f"Time elapsed: {end_time - start_time}")
 
+    def _z_bin_labels(self, grouped) -> dict:
+        """One display label per z bin, at the coarsest precision that keeps them unique.
+
+        The label is both the key of ``binaggs`` and the plot legend entry, so two
+        bins whose aggregate rounds to the same string would silently overwrite each
+        other. Adjacent quantile bins collide easily: at the permitted maximum of 120
+        z bins the spacing is below the two-decimal rounding resolution.
+        """
+        values = {g: g_df[self.zvar].agg(self.agg) for g, g_df in grouped}
+        for decimals in range(2, 10):
+            labels = {g: f"{round(v, decimals)}" for g, v in values.items()}
+            if len(set(labels.values())) == len(labels):
+                return labels
+        # Bins that agree to nine decimals: keep both, disambiguated by position.
+        return {g: f"{round(v, 9)} ({i})" for i, (g, v) in enumerate(values.items(), 1)}
+
     def calcbins(self):
         """Compute the stratified bin aggregates (with counts and 16th/84th percentile errors) into ``binaggs``."""
         # counter = 0
         grouped = self.df.groupby(by=self.z_group_col, observed=True, as_index=True, sort=True, group_keys=True)
+        labels = self._z_bin_labels(grouped)
         for g, g_df in grouped:
             g_df = g_df.set_index(self.z_group_col)
 
-            label_zvar = g_df[self.zvar].agg(self.agg)
-            label_zvar = label_zvar.round(decimals=2)
-            label_zvar = f"{label_zvar}"
+            label_zvar = labels[g]
 
             group, bins = pd.qcut(g_df[self.xvar], q=self.n_bins_x, retbins=True, precision=9, duplicates='drop')
             g_df[self.x_group_col] = group

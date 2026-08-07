@@ -549,3 +549,21 @@ class TestStratifiedAnalysisKeepsItsData(unittest.TestCase):
         self.assertEqual(sa.n_records_input, len(df))
         self.assertEqual(sa.n_records_used, len(df) - 120)
 
+
+    def test_z_bins_whose_labels_round_alike_are_kept_apart(self):
+        # z spans 0.1, so at 60 quantile bins the medians are ~0.0017 apart -- far
+        # below the two-decimal label. Colliding labels used to overwrite each
+        # other in `binaggs`, and the plot blamed the loss on "not generated".
+        import numpy as np
+        import pandas as pd
+        from diive.analysis.decoupling import StratifiedAnalysis
+        rng = np.random.RandomState(1)
+        n = 6000
+        df = pd.DataFrame({'z': np.linspace(0, 0.1, n),
+                           'x': rng.uniform(0, 800, n),
+                           'y': rng.uniform(0, 2, n)},
+                          index=pd.date_range('2020-01-01', periods=n, freq='30min'))
+        sa = StratifiedAnalysis(df=df, zvar='z', xvar='x', yvar='y',
+                                n_bins_z=60, n_bins_x=3).run()
+        self.assertEqual(len(sa.binaggs), 60)
+        self.assertEqual(len(set(sa.binaggs.keys())), 60)
