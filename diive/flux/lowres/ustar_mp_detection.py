@@ -294,10 +294,23 @@ class UstarMovingPointDetection:
             if class_end >= N:
                 class_end = N - 1
             value = vals_sorted[class_end]
-            # extend boundary forward across tied values
-            class_end += 1
-            while class_end < N and vals_sorted[class_end] == value:
+            # Extend the boundary forward across tied values, mirroring the C loop
+            # `while ( ++ustar_class_end < total ) { ... }`. The `class_start ==
+            # class_end` branch is load-bearing and was missing: when the previous
+            # class's tie extension ran past this class's nominal end, `class_end`
+            # restarts *behind* `class_start`, and without adopting the next value
+            # and carrying on, the class comes out as (start, start-1) - an inverted
+            # window whose mean is 0/0 = NaN. `_forward_mode` then skips every
+            # candidate whose look-ahead window touches that NaN.
+            while True:
                 class_end += 1
+                if class_end >= N:
+                    break
+                if vals_sorted[class_end] != value:
+                    if class_start == class_end:
+                        value = vals_sorted[class_end]
+                        continue
+                    break
             bounds[i, 0] = class_start
             bounds[i, 1] = class_end - 1
 
@@ -318,8 +331,16 @@ class UstarMovingPointDetection:
         for k in range(len(bounds)):
             s = bounds[k, 0]
             e = bounds[k, 1]
-            if s < 0:
-                continue  # leave 0.0 (matches C reset value for empty classes)
+            if s < 0 or e < s:
+                # Leave 0.0, which is what C computes for both: its accumulation
+                # loop `for (y = start; y <= end; y++)` never runs, so the sum
+                # stays at the reset value. An inverted window (end < start) is a
+                # real C outcome when a tie run overshoots the next class, and the
+                # cumulative-sum shortcut used below does *not* reproduce it: with
+                # a negative count the two negatives cancel and it returns a
+                # plausible-looking class mean (0.215 where C has 0.0), or 0/0 =
+                # NaN when the count is exactly zero.
+                continue
             means[k] = (cs[e + 1] - cs[s]) / (e - s + 1)
         return means
 
