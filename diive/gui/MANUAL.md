@@ -966,13 +966,16 @@ date/time heatmaps side by side.
      heatmap 1 (a) and heatmap 2 (b).
    - **Fill gaps of a with b** — keep heatmap 1 and fill only its gaps with the
      matching values from heatmap 2.
-3. **Keep overlapping data points only** (arithmetic methods): when ticked, a
-   result is kept only where *both* variables have a value; when unticked, a
-   missing value is treated as the operation's identity (0 for add/subtract, 1 for
-   multiply/divide) so one-sided records survive. (It is disabled for *Fill gaps*,
-   which is always a union.)
+3. The arithmetic methods keep a result **only where both variables have a
+   value** — combining two variables is defined only where both were measured, so
+   a record present in just one of them is dropped. The status line reports what
+   that costs, split by which variable was missing, e.g. *"250 record(s) dropped
+   where only one variable was available (100 only NEE, 150 only RECO)"*. A large
+   one-sided count usually means the two variables cover different periods rather
+   than that the data are bad. If you want "take b where a is missing", that is
+   what **Fill gaps of a with b** does — and it says so.
 4. **Heatmap 3** previews the combined result and updates live as you change the
-   method or the overlap option.
+   method.
 5. Edit the **Name** (a default is suggested) and click **Add … to dataset** to
    append the new column. **Copy Python** yields a runnable script.
 
