@@ -459,6 +459,11 @@ def detect_seasonality(
             - 'frequencies': np.ndarray, frequency bins
             - 'strength': float (0–1), seasonality strength (seasonal var / total var)
 
+    Raises:
+        ValueError: If no candidate period falls in [2, max_period] — typically a
+            series too short for the range asked for. Detection reports nothing
+            rather than a default period.
+
     Notes:
         - Period range: 2 to min(max_period, len(series) // 2)
         - Strength estimate: variance of seasonal component divided by total variance
@@ -498,29 +503,32 @@ def detect_seasonality(
                 powers_by_period.append(power[i])
 
     if not periods:
-        # Fallback if no valid periods found
-        primary_period = 365
-        secondary_periods = [7, 30]
-        strength = 0.0
-    else:
-        # Find peaks (local maxima in power)
-        peaks, _ = signal.find_peaks(powers_by_period)
-        if len(peaks) > 0:
-            peak_powers = [(periods[p], powers_by_period[p]) for p in peaks]
-            peak_powers.sort(key=lambda x: -x[1])  # Sort by power descending
-            primary_period = peak_powers[0][0]
-            secondary_periods = [p for p, _ in peak_powers[1:top_n]]
-        else:
-            # No peaks, use max power
-            max_idx = np.argmax(powers_by_period)
-            primary_period = periods[max_idx]
-            secondary_periods = []
+        # There is nothing to report. Returning a plausible-looking 365 / [7, 30] /
+        # 0.0 here made a failed detection indistinguishable from a real result,
+        # and the caller then decomposed at a period the data cannot support.
+        raise ValueError(
+            f"No candidate period found in [2, {max_period}] for a series of "
+            f"{n} valid values. Pass the period explicitly (`seasonal_period`) "
+            f"instead of relying on detection.")
 
-        # Estimate seasonality strength
-        # Simple estimate: variance in seasonal range vs total variance
-        seasonal_power = np.sum([powers_by_period[i] for i in peaks]) if peaks.size > 0 else 0
-        total_power = np.sum(powers_by_period)
-        strength = float(seasonal_power / total_power) if total_power > 0 else 0.0
+    # Find peaks (local maxima in power)
+    peaks, _ = signal.find_peaks(powers_by_period)
+    if len(peaks) > 0:
+        peak_powers = [(periods[p], powers_by_period[p]) for p in peaks]
+        peak_powers.sort(key=lambda x: -x[1])  # Sort by power descending
+        primary_period = peak_powers[0][0]
+        secondary_periods = [p for p, _ in peak_powers[1:top_n]]
+    else:
+        # No peaks, use max power
+        max_idx = np.argmax(powers_by_period)
+        primary_period = periods[max_idx]
+        secondary_periods = []
+
+    # Estimate seasonality strength
+    # Simple estimate: variance in seasonal range vs total variance
+    seasonal_power = np.sum([powers_by_period[i] for i in peaks]) if peaks.size > 0 else 0
+    total_power = np.sum(powers_by_period)
+    strength = float(seasonal_power / total_power) if total_power > 0 else 0.0
 
     if verbose:
         msg = f"Seasonality detection: primary_period={primary_period}, strength={strength:.3f}"

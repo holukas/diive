@@ -328,3 +328,25 @@ class TestStlDecompose(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestSeasonalityDetectionDoesNotInvent(unittest.TestCase):
+    """A failed detection must not look like a successful one."""
+
+    def test_no_candidate_period_raises_instead_of_returning_365(self):
+        # It used to return primary_period=365, secondary [7, 30], strength 0.0 -
+        # a plausible-looking result - and the caller then decomposed a 5-point
+        # series at period 365.
+        from diive.core.times.decomposition_utils import detect_seasonality
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            with self.assertRaises(ValueError):
+                detect_seasonality(pd.Series([1.0, 2.0, 3.0, 4.0, 5.0]))
+
+    def test_a_real_cycle_is_still_detected(self):
+        import numpy as np
+        from diive.core.times.decomposition_utils import detect_seasonality
+        t = np.arange(1000)
+        res = detect_seasonality(pd.Series(np.sin(2 * np.pi * t / 50)))
+        self.assertAlmostEqual(res['primary_period'], 50, delta=1)
