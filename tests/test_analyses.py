@@ -426,3 +426,23 @@ class TestAnalyses(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestDeadHarmonicFunctionsAreGone(unittest.TestCase):
+    """Removed: no caller in the library, the GUI, the tests or the examples.
+
+    The GUI spectrogram tab calls `dv.analysis.spectrogram`, which goes straight
+    to `scipy.signal.spectrogram` - it never used any of these.
+    """
+
+    def test_they_are_not_importable(self):
+        import diive.analysis.harmonic as h
+        for name in ('reconstruct_harmonics', 'periodogram', 'fft_decompose',
+                     'multi_scale_harmonics'):
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(h, name))
+
+    def test_the_live_ones_remain(self):
+        import diive as dv
+        self.assertTrue(callable(dv.analysis.harmonic_analysis))
+        self.assertTrue(callable(dv.analysis.spectrogram))
