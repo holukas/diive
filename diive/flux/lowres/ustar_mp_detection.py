@@ -456,7 +456,16 @@ class UstarMovingPointDetection:
         return float(np.max(valid)) if valid else np.nan
 
     def _night_valid_arrays(self):
-        """Extract night+valid (NEE, TA, USTAR, month) numpy arrays plus the valid count."""
+        """Extract night+valid (NEE, TA, USTAR, month) numpy arrays plus the valid count.
+
+        Also enforces the record minimum. This is the one point every public entry
+        goes through — ``detect()``, ``bootstrap()`` and ``bootstrap_annual_samples()``
+        — so the check belongs here rather than in ``detect()`` alone: the bootstrap
+        paths used to skip it, and they are the ones ``UstarBootstrapThresholds`` and
+        the flux chain's L3.3 detection actually call. A record too short for
+        ``detect()`` therefore still produced a confident threshold through the chain,
+        and that threshold decides which nighttime fluxes are discarded.
+        """
         nee = self.df[self.nee_col].to_numpy(dtype='float64')
         ta = self.df[self.ta_col].to_numpy(dtype='float64')
         ustar = self.df[self.ustar_col].to_numpy(dtype='float64')
@@ -464,6 +473,17 @@ class UstarMovingPointDetection:
 
         valid = np.isfinite(nee) & np.isfinite(ta) & np.isfinite(ustar) & np.isfinite(swin)
         night = valid & (swin < self.NIGHT_THRESHOLD)
+
+        if len(self.df) < self.MIN_SAMPLES_PERIOD:
+            raise ValueError(
+                f"Insufficient data: {len(self.df)} records, need at least {self.MIN_SAMPLES_PERIOD}"
+            )
+        n_valid = int(valid.sum())
+        if n_valid < self.MIN_SAMPLES_PERIOD:
+            raise ValueError(
+                f"Insufficient valid data: {n_valid} records, need at least {self.MIN_SAMPLES_PERIOD}"
+            )
+
         return nee, ta, ustar, self._month, valid, night
 
     # ------------------------------------------------------------------ public
@@ -484,18 +504,9 @@ class UstarMovingPointDetection:
                  f"{len(self.df)} records, {self.seasons_count} seasons, "
                  f"{self.ta_classes_count} TA classes, {self.ustar_classes_count} USTAR classes")
 
-        if len(self.df) < self.MIN_SAMPLES_PERIOD:
-            raise ValueError(
-                f"Insufficient data: {len(self.df)} records, need at least {self.MIN_SAMPLES_PERIOD}"
-            )
-
+        # The record minimum is enforced by _night_valid_arrays, so every entry
+        # point shares it (see there).
         nee, ta, ustar, month, valid, night = self._night_valid_arrays()
-
-        n_valid = int(valid.sum())
-        if n_valid < self.MIN_SAMPLES_PERIOD:
-            raise ValueError(
-                f"Insufficient valid data: {n_valid} records, need at least {self.MIN_SAMPLES_PERIOD}"
-            )
 
         nee_n = nee[night]
         ta_n = ta[night]

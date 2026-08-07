@@ -233,3 +233,46 @@ class TestUstarBootstrapVutCut(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRecordMinimumIsEnforcedEverywhere(unittest.TestCase):
+    """The record minimum must gate every entry point, not just detect().
+
+    The u* threshold decides which nighttime fluxes are discarded, so a threshold
+    from a record the detector itself considers too short is worse than none. The
+    bootstrap paths used to skip the check — and they are the ones
+    UstarBootstrapThresholds and the flux chain's L3.3 detection actually call.
+    """
+
+    @staticmethod
+    def _synthetic(n):
+        import pandas as pd
+        ix = pd.date_range('2023-01-01', periods=n, freq='30min',
+                           name='TIMESTAMP_MIDDLE')
+        rng = np.random.RandomState(0)
+        hr = ix.hour + ix.minute / 60
+        sw = np.clip(500 * np.sin(2 * np.pi * (hr - 6) / 24), 0, None)
+        return pd.DataFrame({'NEE': rng.randn(n), 'TA': 10 + 5 * rng.randn(n),
+                             'USTAR': np.abs(rng.randn(n)) * 0.5, 'SW_IN': sw},
+                            index=ix)
+
+    def _detector(self, n):
+        return UstarMovingPointDetection(
+            df=self._synthetic(n), nee_col='NEE', ta_col='TA',
+            ustar_col='USTAR', swin_col='SW_IN', verbose=0)
+
+    def test_every_entry_point_refuses_a_short_record(self):
+        n = UstarMovingPointDetection.MIN_SAMPLES_PERIOD // 3
+        for name in ('detect', 'bootstrap', 'bootstrap_annual_samples'):
+            with self.subTest(entry=name):
+                det = self._detector(n)
+                with self.assertRaises(ValueError) as ctx:
+                    getattr(det, name)() if name == 'detect' else \
+                        getattr(det, name)(n_iter=3)
+                self.assertIn('Insufficient', str(ctx.exception))
+
+    def test_a_sufficient_record_still_runs_everywhere(self):
+        n = UstarMovingPointDetection.MIN_SAMPLES_PERIOD * 2
+        self._detector(n).detect()
+        self._detector(n).bootstrap(n_iter=3)
+        self._detector(n).bootstrap_annual_samples(n_iter=3)
