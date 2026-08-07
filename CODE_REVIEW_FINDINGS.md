@@ -51,7 +51,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ID | Finding | Where |
 |---|---|---|
 | ~~L37~~ | ~~**The H2O/LE self-heating path must be removed**~~ (done 2026-08-07) — no self-heating correction for LE exists in EC science | `flux/lowres/selfheating.py` |
-| L28 | USTAR bootstrap bypasses the 3000-record minimum `detect()` enforces — emits a threshold from data it refuses | `flux/lowres/ustar_mp_detection.py:561` |
+| ~~L28~~ | ~~USTAR bootstrap bypasses the 3000-record minimum `detect()` enforces~~ (done 2026-08-07) | `flux/lowres/ustar_mp_detection.py:561` |
 | ~~L14~~ | ~~`combine_variables(keep_overlap_only=False)`: subtract/divide return the **negation / reciprocal**~~ (done 2026-08-07) — option removed | `variables/utilities.py:73` |
 | L54 | `DriverAnalysis(deseasonalize=True)` fabricates target values by interpolation — into its own chronological hold-out | `analysis/driveranalysis/driveranalysis.py:80` |
 | L55 | Per-regime relevance judged against the *global* model's `.RANDOM` floor — decides the headline verdict | `analysis/driveranalysis/driveranalysis.py:760` |
@@ -74,7 +74,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L42~~ | ~~`analyze_highest_quality_flux` counts missing records as valid~~ (done 2026-08-07) — 1519 of 3000 reported as "99.5%" | `flux/lowres/hqflux.py:251` |
 | ~~L7~~ | ~~**Outlier flags are never NaN**~~ (done 2026-08-07) — was the root cause of L30 and L42 | `core/base/flagbase.py:182` |
 | L30 | NaN u\* or NaN per-record threshold → flagged 0 (accepted). **Half-fixed by L7** (missing *flux* now NaN); missing *u\** still flagged 0 | `flux/lowres/ustarthreshold.py:142` |
-| L29 | A failing bootstrap window is completely silent — blanket `except` + a `detail()` that never prints | `flux/lowres/ustar_bootstrap.py:39` |
+| L29 | A failing bootstrap window is completely silent. **Mostly fixed with L28** — the reason now reaches the user at `warn` level; the stray `detail()` at `:232` still cannot print | `flux/lowres/ustar_bootstrap.py:39` |
 | L26 | `_class_bounds` can emit `end < start` → NaN class mean → up to 11 candidate classes skipped | `flux/lowres/ustar_mp_detection.py:285` |
 | L32 | `UstarDetectionMPT` is exported but never stores its results; `run()` only *prints* the threshold | `flux/lowres/ustarthreshold.py:561` |
 | L34 | `annual_thresholds_` holds the sentinel `10.0` on failure — a plausible threshold that filters everything | `flux/lowres/ustar_mp_detection.py:520` |
@@ -814,14 +814,40 @@ available (e.g. H, LE)", and `run_level31`'s docstring repeats it, but `_detect_
 unconditionally in `__init__` and `storage_correction()` opens with `self.df[[fluxcol, strgcol]]`.
 Following the documented advice crashes: `KeyError: "['SLE_SINGLE'] not in index"`.
 
-**[ ] L28. The 3000-record minimum is enforced in `detect()` but bypassed by every bootstrap path**
+**[x] L28. The 3000-record minimum is enforced in `detect()` but bypassed by every bootstrap path**
+
+> **Fixed 2026-08-07.** The check moved into `_night_valid_arrays()`, the one point every
+> public entry goes through, so `detect()`, `bootstrap()` and `bootstrap_annual_samples()`
+> now share it. Verified: at 1000 records all three refuse with the same message; at 6000 all
+> three run.
+>
+> **This dragged in most of L29.** With the minimum enforced, `UstarBootstrapThresholds`'s
+> blanket `except` turned the refusal into a silent all-NaN result — trading a confident wrong
+> number for an undiagnosable one, which is not a fix. The worker now returns
+> `(year, samples, reason)` and both the sequential and parallel branches report an empty
+> window at `warn` level (always visible) with the reason attached:
+>
+> ```
+> !   2020: no valid thresholds - ValueError: Insufficient data: 1600 records, need at least 3000
+> ```
+>
+> Covered by `TestRecordMinimumIsEnforcedEverywhere` and
+> `TestBootstrapReportsWhyAWindowFailed` (which also checks a mistyped column name is not
+> reported as missing data). Mutation-checked: 4 tests fail with the shared check removed.
 `ustar_mp_detection.py:561`, `:596` — `bootstrap_annual_samples()` / `bootstrap()` call
 `_night_valid_arrays()` and `_compute_seasonal()` directly, skipping the `MIN_SAMPLES_PERIOD` gate
 the class docstring advertises. `UstarBootstrapThresholds` takes that fast path, so
 `run_level33_ustar_detection` emits a threshold from a record `detect()` refuses (1000 records:
 `detect()` raises, `bootstrap()` returns 0.419).
 
-**[ ] L29. A failing bootstrap window is completely silent**
+**[~] L29. A failing bootstrap window is completely silent** — *mostly fixed*
+
+> **Mostly fixed 2026-08-07 alongside L28** (see there): the blanket `except` now carries the
+> reason out and both execution branches report it at `warn` level, so an empty window no
+> longer looks like a quiet NaN. **Still open:** the `detail()` at `ustar_bootstrap.py:232`
+> ("running sequentially") is still called without `verbose=`, so it cannot print at any
+> setting — the sequential and parallel branches therefore still announce themselves
+> differently.
 `ustar_bootstrap.py:39`, `:264` — the fast path wraps detector construction *and* all iterations in
 `except Exception: samples = []`, and the only signal is `detail(...)` called without `verbose=`, so
 it never prints at any level. A typo'd column name gives `CUT (pooled): p16=nan p50=nan p84=nan`
