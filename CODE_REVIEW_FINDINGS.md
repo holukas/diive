@@ -45,8 +45,10 @@ far and each needs an entry saying what silently changes for existing code:
 
 The non-breaking fixes are user-visible too and change numbers people may have already published —
 in particular **L48/L49** (FFT amplitudes were ~54% of truth, and one bin off), **L61/L63** (cells
-drawn over regions holding no data), **L42** (hqflux reported missing records as valid) and
-**L54/L55** (`DriverAnalysis` — every number it reports moves, though it is experimental). The
+drawn over regions holding no data), **L42** (hqflux reported missing records as valid),
+**L54/L55** (`DriverAnalysis` — every number it reports moves, though it is experimental) and
+**L51/L52** (`StratifiedAnalysis` now analyses the records and keeps the z bins it used to drop,
+so both the curves and the bin count in an existing figure change). The
 v0.91.0 entry already opens with *"Two of these change results silently, with no error and no
 warning"*; this round needs the same treatment.
 
@@ -117,7 +119,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L55~~ | ~~Per-regime relevance judged against the *global* model's `.RANDOM` floor~~ (done 2026-08-07) | `analysis/driveranalysis/driveranalysis.py:760` |
 | ~~L48~~ | ~~`harmonic_analysis` reads the wrong FFT bin~~ (done 2026-08-07) | `analysis/harmonic.py:89` |
 | ~~L49~~ | ~~Windowed FFT amplitudes never corrected for coherent gain~~ (done 2026-08-07) | `analysis/harmonic.py:70` |
-| L52 | `StratifiedAnalysis` listwise-drops on **every** column — 20 000 rows → 100, silently | `analysis/decoupling.py:68` |
+| ~~L52~~ | ~~`StratifiedAnalysis` listwise-drops on **every** column — 20 000 rows → 100, silently~~ (done 2026-08-07) | `analysis/decoupling.py:68` |
 | ~~L61~~ | ~~`HeatmapYearMonth` mis-places cells when months are non-contiguous~~ (done 2026-08-07) | `core/plotting/heatmap_datetime.py:395` |
 | ~~L63~~ | ~~Empty X/Y/Z bins dropped, then rendered as measured cells~~ (done 2026-08-07) — fixed in `GridAggregator`, so `HeatmapXYZ` benefits too | `analysis/gridaggregator.py:429` |
 | ~~L2~~ | ~~`WindDirOffset` ignores `hist_n_bins`~~ (done 2026-08-07) — also pinned the bins to the full circle | `preprocessing/corrections/offsetcorrection.py:476` |
@@ -141,7 +143,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | L47 | STL returns an all-NaN decomposition from a **single** NaN; `seasonality_strength` reads 0.0 | `core/times/decomposition_utils.py:133` |
 | L50 | `quality_weighted_decompose` ignores the weights entirely; `summary()` prints "Quality-weighted: True" | `core/times/decomposition_utils.py:100` |
 | L58 | `detect_seasonality` fabricates `primary_period=365` when the periodogram yields nothing | `core/times/decomposition_utils.py:490` |
-| L51 | `StratifiedAnalysis` drops z-bins whose rounded label collides — 19 of 120 lost, no warning | `analysis/decoupling.py:213` |
+| ~~L51~~ | ~~`StratifiedAnalysis` drops z-bins whose rounded label collides — 19 of 120 lost, no warning~~ (done 2026-08-07) | `analysis/decoupling.py:213` |
 | L53 | `CompoundExtremes` returns zero classified periods for a single year, silently | `analysis/compoundextremes.py:168` |
 | ~~L59~~ | ~~`multi_scale_harmonics` swallows every exception~~ (done 2026-08-07) — function deleted as dead code | `analysis/harmonic.py:432` |
 | L19 | `features_stl=True` can produce nothing — any single NaN skips a column, logged only at DEBUG | `core/ml/feature_engineer.py:726` |
@@ -1142,7 +1144,14 @@ promise "High-quality observations influence the fit more"; `SeasonalTrendDecomp
 prints `Quality-weighted: True` for a run in which no weighting happened. With 100 records corrupted
 by +40 and flagged quality 0, weighted and unweighted output are byte-identical.
 
-**[ ] L51. `StratifiedAnalysis` silently discards z-bins whose rounded label collides**
+**[x] L51. `StratifiedAnalysis` silently discards z-bins whose rounded label collides**
+
+> **Fixed 2026-08-07.** The label is now built once for all bins by `_z_bin_labels`, which
+> widens the rounding (2 decimals, then 3, …) until every label is distinct, and falls back to
+> a positional suffix for bins that agree to nine decimals. Verified on 60 quantile bins over a
+> z range of 0.1, where the medians sit ~0.0017 apart: 60 bins in, 60 stored (before: 11).
+> The legend keeps reading in real units — the extra decimals appear only when they are needed
+> to tell two bins apart.
 `analysis/decoupling.py:213` — per-bin results are keyed by `f"{median:.2f}"`, so two adjacent
 quantile bins that round to the same 2 decimals overwrite each other. 120 z-groups iterated → 101
 stored, **19 silently lost**, with no warning (the existing `warn` covers only x-bin failures) and a
@@ -1150,7 +1159,14 @@ plot legend that blames "not generated" classes. Guaranteed with `conversion='pe
 `n_bins_z` (the permitted range reaches 120, where bin spacing 1/120 is below the rounding
 resolution).
 
-**[ ] L52. `StratifiedAnalysis` listwise-drops rows on *every* column of the input frame**
+**[x] L52. `StratifiedAnalysis` listwise-drops rows on *every* column of the input frame**
+
+> **Fixed 2026-08-07.** The three analysis variables are extracted *before* the `dropna`, so
+> only gaps in `zvar`/`xvar`/`yvar` remove a record. What is kept is no longer silent: the
+> constructor stores `n_records_input` / `n_records_used` and prints how many records were
+> dropped and which three variables decided it. The on-plot count text is therefore about the
+> data rather than about an unrelated column. The narrower frame also keeps `conversion` from
+> z-scoring columns nobody asked about.
 `analysis/decoupling.py:68` — `df.copy().dropna()` drops any row with a NaN anywhere in `df`, not
 just in `zvar`/`xvar`/`yvar`. The documented input is "df: Dataframe with variables", so passing the
 working dataframe — the obvious call — silently reduces the analysis: 20 000 rows → **100** with one
