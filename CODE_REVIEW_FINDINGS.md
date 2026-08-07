@@ -61,7 +61,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | L61 | `HeatmapYearMonth` mis-places cells when months are non-contiguous — Feb painted across Mar–Sep | `core/plotting/heatmap_datetime.py:395` |
 | L63 | Empty X/Y/Z bins dropped, then rendered as measured cells — 90% of the X range coloured from no data | `analysis/gridaggregator.py:429` |
 | L2 | `WindDirOffset` ignores `hist_n_bins`, correlating mismatched-length histograms on their RangeIndex | `preprocessing/corrections/offsetcorrection.py:476` |
-| G1 | Partitioning tabs run at **(0, 0) UTC** when the project site is unconfigured — all four ports | `gui/tabs/_partitioning_base.py:300` |
+| ~~G1~~ | ~~Partitioning tabs run at **(0, 0) UTC** when the project site is unconfigured~~ (done 2026-08-07) — 3 of the 4 ports | `gui/tabs/_partitioning_base.py:300` |
 
 ## S2 — Silently does nothing / silently loses data (25)
 
@@ -406,7 +406,19 @@ Same effective outcome as "ok", but the asymmetry is easy to misread.
 
 ## GUI — real bugs
 
-### [ ] G1. Partitioning tabs run with (0, 0) at UTC when the project site is unconfigured
+### [x] G1. Partitioning tabs run with (0, 0) at UTC when the project site is unconfigured
+
+> **Fixed 2026-08-07.** `BasePartitioningTab` gained a `needs_coords` property and a
+> `_coords_missing()` guard, called from both `_run()` and `_python_code()` (the snippet would
+> otherwise carry `lat=0.0, lon=0.0`). Message and behaviour mirror the existing guards in
+> `_outlier_base.py:426` and `_correction_base.py:342`.
+>
+> **Correction to the original finding: it affected 3 of the 4 tabs, not all four.**
+> `DaytimePartitioningOneFluxTab` declares no `needs_lat/lon/utc` because ONEFlux's daytime
+> split is measured-`Rg` ≤ 4 / > 4 with no solar geometry — it never reads a coordinate.
+> Regression test `test_partitioning_tabs_refuse_to_run_without_site_coords` covers all four
+> (three must refuse, one must not) and was mutation-checked: with the guard removed it fails
+> with `NighttimePartitioningOneFluxTab started a run`.
 
 `diive/gui/tabs/_partitioning_base.py:227-236` and `:300-336`
 
