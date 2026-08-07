@@ -175,6 +175,32 @@ class TestDriverAnalysisTemporal(unittest.TestCase):
         self.assertEqual(self.da.results.levels_run, ['static', 'temporal'])
 
 
+class TestDeseasonalizeKeepsGaps(unittest.TestCase):
+    """STL deseasonalization must not invent values for missing records."""
+
+    def test_stl_components_mask_the_input_gaps(self):
+        from diive.analysis.driveranalysis.driveranalysis import _stl_components
+        target, _ = _synthetic(months=1)
+        target.iloc[200:400] = np.nan
+        trend, seasonal, resid = _stl_components(target, period=48)
+        for comp in (trend, seasonal, resid):
+            # The gap stays a gap ...
+            self.assertEqual(int(comp.iloc[200:400].notna().sum()), 0)
+            # ... and every measured record is still decomposed.
+            self.assertEqual(int(comp.drop(comp.index[200:400]).isna().sum()), 0)
+
+    def test_deseasonalize_does_not_add_rows_to_the_model_matrix(self):
+        # Interpolated values reaching the matrix would be scored as if they
+        # were measurements -- including in the chronological hold-out.
+        target, drivers = _synthetic(months=1)
+        target.iloc[200:400] = np.nan
+        da = DriverAnalysis(target=target, drivers=drivers, model=_fast_rf(),
+                            deseasonalize=True, verbose=0)
+        self.assertEqual(int(da.target.isna().sum()), 200)
+        _X, y = da._build_matrix(da.drivers_df, da.target)
+        self.assertEqual(len(y), len(target) - 200)
+
+
 class TestDriverAnalysisValidation(unittest.TestCase):
 
     def test_target_must_be_named(self):

@@ -75,6 +75,12 @@ def _stl_components(series: Series, period: int, robust: bool = True):
     which statsmodels cannot do for sub-daily (e.g. 30-min) eddy-covariance data.
     Passing ``period`` explicitly (records per seasonal cycle — a daily cycle by
     default) makes STL reliable here.
+
+    Gaps are interpolated *only* so STL can run (statsmodels has no NaN handling)
+    and are masked back out of all three components before returning: a gap in
+    the input is a gap in the output. Letting the interpolated values escape
+    would feed fabricated observations to every downstream model — including the
+    chronological hold-out that scores it.
     """
     from statsmodels.tsa.seasonal import STL
     s = series.interpolate(limit_direction='both').dropna()
@@ -82,9 +88,14 @@ def _stl_components(series: Series, period: int, robust: bool = True):
         raise ValueError(f"series too short ({len(s)}) for STL period {period}")
     res = STL(s.to_numpy(), period=period, robust=robust).fit()
     idx = s.index
-    return (pd.Series(res.trend, index=idx, name=series.name),
-            pd.Series(res.seasonal, index=idx, name=series.name),
-            pd.Series(res.resid, index=idx, name=series.name))
+    was_gap = series.reindex(idx).isna().to_numpy()
+
+    def _component(values) -> Series:
+        out = pd.Series(values, index=idx, name=series.name)
+        out[was_gap] = np.nan
+        return out
+
+    return _component(res.trend), _component(res.seasonal), _component(res.resid)
 
 
 def _mean_abs_shap(model, X: DataFrame) -> Series:
@@ -164,7 +175,8 @@ class DriverAnalysis:
         lags: Lags in records to test per driver for :meth:`lagged_importance`,
             e.g. ``list(range(-48, 1))``. ``None`` disables the lagged analysis.
         deseasonalize: STL-deseasonalize target and drivers up front (recommended
-            before causal methods).
+            before causal methods). Gaps survive the decomposition as gaps, so
+            deseasonalizing never adds rows to the modeling matrix.
         test_size: Held-out fraction for out-of-sample scoring.
         time_aware_split: Use a chronological holdout (no shuffling). Leave True.
         n_bootstrap: ``>0`` enables bootstrap stability of SHAP rankings.
