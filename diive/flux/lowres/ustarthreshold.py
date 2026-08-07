@@ -139,15 +139,24 @@ class FlagSingleConstantUstarThreshold(FlagBase):
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
 
-        ok = (self.ustar >= self.threshold)
-        ok = ok[ok].index
-        rejected = (self.ustar < self.threshold)
-        rejected = rejected[rejected].index
+        # USTAR filtering is a positive test: a record is kept only where the
+        # measured turbulence can be shown to reach the threshold. A record whose
+        # USTAR is missing therefore fails it. Testing `ustar < threshold` for the
+        # rejected set instead left those records in neither list, so their flag
+        # summed to 0 - accepted, silently, with turbulence unknown. Flagging them
+        # NaN ("not testable") would not help: FlagQCF sums only 1s and 2s, so a
+        # NaN flag is accepted downstream just the same.
+        passes = (self.ustar >= self.threshold)
+        passes = passes.fillna(False).astype(bool)
+        ok = passes[passes].index
+        rejected = passes[~passes].index
         n_outliers = len(rejected)
 
         if self.verbose:
             thr_repr = "variable (per-record)" if isinstance(self.threshold, Series) else self.threshold
-            detail(f"Total found outliers for USTAR threshold {self._idstr} {thr_repr}: {len(rejected)} values",
+            n_no_ustar = int(self.ustar.isna().sum())
+            detail(f"Total found outliers for USTAR threshold {self._idstr} {thr_repr}: {len(rejected)} values"
+                   + (f" (of which {n_no_ustar} have no USTAR measurement)" if n_no_ustar else ""),
                    verbose=self.verbose)
 
         return ok, rejected, n_outliers
@@ -202,10 +211,21 @@ class FlagMultipleVariableUstarThresholds:
         """Compute one USTAR flag per scenario from its per-record threshold and append them."""
         for label, thr in self.threshold_series.items():
             idstr = f"{self.idstr}_{label}" if self.idstr else f"{label}"
+            thr = thr.reindex(self.results.index)  # per-record threshold
+            # Reindexing a threshold Series that does not cover the whole record
+            # fills the rest with NaN, and a record with no threshold cannot pass
+            # the test - it would be rejected wholesale without saying why. The
+            # docstring already requires a gap-free Series; enforce it.
+            n_missing = int(thr.isna().sum())
+            if n_missing:
+                raise ValueError(
+                    f"Threshold series '{label}' has no threshold for {n_missing} of "
+                    f"{len(thr)} records. Provide a threshold for every record "
+                    f"(e.g. fall back to the pooled CUT value for years without one).")
             ust = FlagSingleConstantUstarThreshold(
                 series=self.results[self.series.name],
                 ustar=self.results[self.ustar.name],
-                threshold=thr.reindex(self.results.index),  # per-record threshold
+                threshold=thr,
                 idstr=idstr,
                 showplot=self.showplot,
                 verbose=self.verbose,
