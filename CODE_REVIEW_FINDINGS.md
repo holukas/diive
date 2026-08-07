@@ -60,7 +60,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | L52 | `StratifiedAnalysis` listwise-drops on **every** column — 20 000 rows → 100, silently | `analysis/decoupling.py:68` |
 | L61 | `HeatmapYearMonth` mis-places cells when months are non-contiguous — Feb painted across Mar–Sep | `core/plotting/heatmap_datetime.py:395` |
 | L63 | Empty X/Y/Z bins dropped, then rendered as measured cells — 90% of the X range coloured from no data | `analysis/gridaggregator.py:429` |
-| L2 | `WindDirOffset` ignores `hist_n_bins`, correlating mismatched-length histograms on their RangeIndex | `preprocessing/corrections/offsetcorrection.py:476` |
+| ~~L2~~ | ~~`WindDirOffset` ignores `hist_n_bins`~~ (done 2026-08-07) — also pinned the bins to the full circle | `preprocessing/corrections/offsetcorrection.py:476` |
 | ~~G1~~ | ~~Partitioning tabs run at **(0, 0) UTC** when the project site is unconfigured~~ (done 2026-08-07) — 3 of the 4 ports | `gui/tabs/_partitioning_base.py:300` |
 
 ## S2 — Silently does nothing / silently loses data (25)
@@ -198,7 +198,23 @@ to the median-diff branch.
 
 ---
 
-### [ ] L2. `WindDirOffset` silently ignores its `hist_n_bins` argument
+### [x] L2. `WindDirOffset` silently ignores its `hist_n_bins` argument
+
+> **Fixed 2026-08-07.** Both histograms now go through one `_wind_histogram()` helper that
+> honours `hist_n_bins`. The follow-on question raised in this entry — that `np.histogram`
+> derives its edges from each subset's own range, so bin *i* was not the same direction in
+> two histograms — is fixed at the same time: the edges are pinned to
+> `linspace(0, 360, hist_n_bins + 1)`. Correlating bin-by-bin is only meaningful once they
+> mean the same thing, so the two are really one fix.
+>
+> `_correct_degrees` now wraps with `% 360` instead of a single add/subtract: it handles any
+> offset magnitude (the old form only covered one wrap) and maps an exact 360 to 0, keeping
+> the domain the half-open [0, 360) a compass actually has.
+>
+> Covered by `TestWindDirOffsetCircularBinning` (coarse-bin recovery at 36/72/360 bins, an
+> offset planted across north, output stays on the circle, wrap magnitudes, full-circle bin
+> span). Mutation-checked: reinstating the hardcoded 360 fails 2 of them. The pre-existing
+> `test_winddiroffset` still passes with its exact values unchanged.
 
 `diive/preprocessing/corrections/offsetcorrection.py:476` vs `:495`
 
