@@ -595,3 +595,62 @@ class TestPlotClasses(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestHeatmapYearMonthLattice(unittest.TestCase):
+    """Cells must sit on a complete year x month lattice.
+
+    `_set_bounds` hands the surviving labels to pcolormesh as cell *boundaries*,
+    so a month nothing fell into is not drawn empty — its neighbour stretches
+    across the gap while the axis keeps its regular 1..12 ticks, putting one
+    month's colour under another month's label.
+    """
+
+    @staticmethod
+    def _winter_campaign():
+        import numpy as np
+        import pandas as pd
+        # Nov 2019 - Feb 2020: months 3..10 never occur.
+        ix = pd.date_range('2019-11-01', '2020-02-28 23:30', freq='30min',
+                           name='TIMESTAMP_MIDDLE')
+        return pd.Series(np.arange(len(ix), dtype=float), index=ix, name='X')
+
+    def _plot(self):
+        import matplotlib.pyplot as plt
+        from diive.core.plotting.heatmap_datetime import HeatmapYearMonth
+        h = HeatmapYearMonth(series=self._winter_campaign())
+        fig, ax = plt.subplots()
+        h.plot(ax=ax)
+        plt.close(fig)
+        return h, ax
+
+    def test_every_month_gets_a_cell(self):
+        h, _ax = self._plot()
+        self.assertEqual(h.z.shape[1], 12, "all 12 months must be present")
+        self.assertEqual(len(h.x), 13, "12 cells need 13 boundaries")
+
+    def test_no_cell_spans_more_than_one_month(self):
+        import numpy as np
+        h, _ax = self._plot()
+        widths = np.diff(h.x)
+        self.assertTrue((widths == 1).all(),
+                        f"every cell must be one month wide, got {sorted(set(widths))}")
+
+    def test_unobserved_months_are_empty_not_borrowed(self):
+        import numpy as np
+        h, _ax = self._plot()
+        # Months 3..9 (0-based columns 2..8) have no data in either year. October
+        # is deliberately excluded: the heatmap converts to TIMESTAMP_START, which
+        # moves the first record of 2019-11-01 00:00 back to 2019-10-31 23:45.
+        self.assertTrue(np.isnan(h.z[:, 2:9]).all())
+        # ...and each observed month kept a value in at least one year (the
+        # campaign spans Nov-Dec of 2019 and Jan-Feb of 2020, so no single month
+        # is filled in both).
+        observed = h.z[:, [0, 1, 10, 11]]
+        self.assertTrue(np.isfinite(observed).any(axis=0).all())
+
+    def test_cells_and_ticks_agree(self):
+        h, ax = self._plot()
+        # 12 labelled ticks over 12 cells; before the fix there were 12 ticks
+        # over 5 cells, so a tick pointed at the wrong month's colour.
+        self.assertEqual(len(ax.get_xticks()), h.z.shape[1])

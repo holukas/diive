@@ -382,6 +382,18 @@ class HeatmapYearMonth(HeatmapBase):
         # Bring data into shape
         self.plotdf = resample_to_monthly_agg_matrix(series=self.series, agg=self.agg, ranks=self.ranks)
 
+        # Complete the year x month lattice. The matrix holds only the (year,
+        # month) pairs that occur, but `_set_bounds` below hands the surviving
+        # labels to pcolormesh as cell *boundaries* — so a month nothing fell
+        # into is not drawn empty, its neighbour simply stretches across the gap
+        # while the axis keeps its regular 1..12 ticks. A record covering
+        # Nov-Feb drew February's colour from month 2 to month 11.
+        self.plotdf = self.plotdf.reindex(
+            index=pd.Index(range(int(self.plotdf.index.min()),
+                                 int(self.plotdf.index.max()) + 1),
+                           name=self.plotdf.index.name),
+            columns=pd.Index(range(1, 13), name=self.plotdf.columns.name))
+
         # Transpose in case of horizontal, to have months as index, years as columns
         if self.ax_orientation == "horizontal":
             self.plotdf = self.plotdf.transpose()
