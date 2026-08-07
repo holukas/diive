@@ -52,7 +52,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 |---|---|---|
 | ~~L37~~ | ~~**The H2O/LE self-heating path must be removed**~~ (done 2026-08-07) — no self-heating correction for LE exists in EC science | `flux/lowres/selfheating.py` |
 | L28 | USTAR bootstrap bypasses the 3000-record minimum `detect()` enforces — emits a threshold from data it refuses | `flux/lowres/ustar_mp_detection.py:561` |
-| L14 | `combine_variables(keep_overlap_only=False)`: subtract/divide return the **negation / reciprocal** of one-sided records | `variables/utilities.py:73` |
+| ~~L14~~ | ~~`combine_variables(keep_overlap_only=False)`: subtract/divide return the **negation / reciprocal**~~ (done 2026-08-07) — option removed | `variables/utilities.py:73` |
 | L54 | `DriverAnalysis(deseasonalize=True)` fabricates target values by interpolation — into its own chronological hold-out | `analysis/driveranalysis/driveranalysis.py:80` |
 | L55 | Per-regime relevance judged against the *global* model's `.RANDOM` floor — decides the headline verdict | `analysis/driveranalysis/driveranalysis.py:760` |
 | L48 | `harmonic_analysis` reads the wrong FFT bin — a true amplitude of 3.0 is reported as **0.0** | `analysis/harmonic.py:89` |
@@ -559,7 +559,25 @@ result is correct; the intermediate state is wasted work and briefly wrong.
 
 ## Round 2 — library: real bugs
 
-### [ ] L14. `combine_variables(keep_overlap_only=False)`: subtract/divide return the negation / reciprocal, not the surviving record
+### [x] L14. `combine_variables(keep_overlap_only=False)`: subtract/divide return the negation / reciprocal, not the surviving record
+
+> **Fixed 2026-08-07 by removing the option, not by repairing it** (project owner's call).
+> Combining two variables is defined only where both were measured; arithmetic is now always
+> overlap-only. The sign flip was a symptom — even for the commutative methods a one-sided
+> `A + B` returns `B`, which is not a sum but `B` wearing a sum's label. Substituting a value
+> for a gap is a *gap-filling* decision, and `method='fillgaps'` already states it plainly,
+> so no capability was lost.
+>
+> Because the fix costs records, the GUI now reports what it costs: *"750 values. 250
+> record(s) dropped where only one variable was available (100 only NEE, 150 only RECO)."*
+> — the split matters, since a large one-sided count usually means the two variables cover
+> different periods rather than that the data are bad. `fillgaps` reports instead how many
+> gaps it filled.
+>
+> Removed from the library signature, the codegen, the GUI checkbox, its state key and its
+> provenance params; `CLAUDE.md`'s tab description updated. The old test pinned the buggy
+> values (`sub == [-9.0, 2.0, -30.0, -36.0]`) and was replaced by one asserting NaN at every
+> one-sided record, plus a GUI test for the loss reporting.
 
 `diive/variables/utilities.py:73`
 
