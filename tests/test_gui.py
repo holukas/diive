@@ -3580,3 +3580,47 @@ def test_partitioning_tabs_refuse_to_run_without_site_coords(app, example_year):
         assert not tab._coords_missing()
     finally:
         site.manager.configured = saved
+
+
+def test_combine_variables_tab_reports_records_lost_to_one_sided_gaps(app):
+    # An arithmetic combination is defined only where BOTH variables were
+    # measured, so records present in exactly one are lost. Only the result is
+    # plotted, so the count has to be stated outright.
+    import numpy as np
+    import pandas as pd
+    from diive.gui.tabs.combine_variables import CombineVariablesTab
+
+    ix = pd.date_range("2023-01-01", periods=1000, freq="30min",
+                       name="TIMESTAMP_MIDDLE")
+    rng = np.random.RandomState(0)
+    a = pd.Series(rng.randn(1000), index=ix, name="NEE"); a.iloc[:150] = np.nan
+    b = pd.Series(rng.randn(1000), index=ix, name="RECO"); b.iloc[900:] = np.nan
+    df = pd.DataFrame({"NEE": a, "RECO": b})
+
+    tab = CombineVariablesTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    # The identity-fill option is gone: a combination is always overlap-only.
+    assert not hasattr(tab, "overlap_cb")
+
+    tab._vars[1], tab._vars[2] = "NEE", "RECO"
+    tab.method.setCurrentIndex(tab.method.findData("subtract"))
+    tab._recombine()
+    QApplication.processEvents()
+
+    # 150 NEE-only gaps + 100 RECO-only gaps -> 750 of 1000 records survive.
+    assert int(tab._combined.notna().sum()) == 750
+    status = tab.status.text()
+    assert "750 values" in status
+    assert "250 record(s) dropped" in status
+    assert "100 only NEE" in status and "150 only RECO" in status
+
+    # Gap-filling spans the union, so it loses nothing and says so instead.
+    tab.method.setCurrentIndex(tab.method.findData("fillgaps"))
+    tab._recombine()
+    QApplication.processEvents()
+    assert int(tab._combined.notna().sum()) == 1000
+    assert "nothing dropped" in tab.status.text()
+
+    # The emitted snippet no longer carries the removed argument.
+    assert "keep_overlap_only" not in (tab._python_code() or "")

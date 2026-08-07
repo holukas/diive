@@ -273,16 +273,6 @@ class CombineVariablesTab(DiiveTab):
         self.method.currentIndexChanged.connect(self._recombine)
         row.addWidget(self.method)
 
-        self.overlap_cb = QCheckBox("Keep overlapping data points only")
-        self.overlap_cb.setChecked(True)
-        self.overlap_cb.setToolTip(
-            "Checked: keep a result only where BOTH variables have a value. "
-            "Unchecked: a missing value is treated as the operation's identity "
-            "(0 for add/subtract, 1 for multiply/divide), so one-sided records "
-            "survive.")
-        self.overlap_cb.toggled.connect(self._recombine)
-        row.addWidget(self.overlap_cb)
-
         row.addWidget(QLabel("Name:"))
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText("new variable name")
@@ -334,8 +324,6 @@ class CombineVariablesTab(DiiveTab):
         """Recompute and preview the combined variable when both sources are set."""
         v1, v2 = self._vars[1], self._vars[2]
         method = self.method.currentData()
-        # "Keep overlapping only" is meaningless for gap-filling (always a union).
-        self.overlap_cb.setEnabled(method != "fillgaps")
         if self._df is None or not v1 or not v2:
             self._combined = None
             self.slot3.clear_plot()
@@ -346,12 +334,10 @@ class CombineVariablesTab(DiiveTab):
                 self.status.setText("Assign a variable to both heatmap 1 and 2.")
             return
 
-        keep_overlap = self.overlap_cb.isChecked()
         self._refresh_auto_name(v1, v2, method)
         try:
             combined = dv.variables.combine_variables(
-                self._df[v1], self._df[v2], method=method,
-                keep_overlap_only=keep_overlap, name=self._out_name())
+                self._df[v1], self._df[v2], method=method, name=self._out_name())
         except Exception as err:
             self._combined = None
             self.add_btn.setEnabled(False)
@@ -364,9 +350,32 @@ class CombineVariablesTab(DiiveTab):
         n = int(combined.notna().sum())
         phrase = {k: p for k, _label, p in _METHODS}[method].format(a=v1, b=v2)
         self.status.setText(
-            f"{phrase} -> {n:,} values. Name it and add it to the dataset.")
+            f"{phrase} -> {n:,} values. {self._coverage_text(v1, v2, method)} "
+            f"Name it and add it to the dataset.")
         self.add_btn.setEnabled(n > 0 and bool(self._out_name()))
         self._update_add_label()
+
+    def _coverage_text(self, v1: str, v2: str, method: str) -> str:
+        """How many records the combination costs, and why.
+
+        An arithmetic combination is defined only where BOTH variables were
+        measured, so records available in exactly one of them are lost. That is
+        easy to miss when only the result is plotted, so it is stated outright —
+        with the split, since a large one-sided count usually means the two
+        variables cover different periods rather than that the data are bad.
+        """
+        a, b = self._df[v1].notna(), self._df[v2].notna()
+        n_only1 = int((a & ~b).sum())
+        n_only2 = int((~a & b).sum())
+        lost = n_only1 + n_only2
+        if method == "fillgaps":
+            # Gap-filling spans the union: series2 supplies exactly the records
+            # series1 lacks, so nothing is lost by the combination itself.
+            return f"{n_only2:,} of {v1}'s gaps filled from {v2}; nothing dropped."
+        if lost == 0:
+            return "No records lost — both variables cover the same timestamps."
+        return (f"{lost:,} record(s) dropped where only one variable was available "
+                f"({n_only1:,} only {v1}, {n_only2:,} only {v2}).")
 
     def _refresh_auto_name(self, v1: str, v2: str, method: str) -> None:
         """Update the suggested name, unless the user typed their own."""
@@ -405,7 +414,6 @@ class CombineVariablesTab(DiiveTab):
             return None
         return dv.variables.combine_variables_to_code(
             str(v1), str(v2), method=self.method.currentData(),
-            keep_overlap_only=self.overlap_cb.isChecked(),
             name=self._out_name() or None)
 
     # --- emit ----------------------------------------------------------
@@ -420,8 +428,7 @@ class CombineVariablesTab(DiiveTab):
             name: provenance_attr(
                 origin=DERIVED, parent=str(self._vars[1]), operation=self.title,
                 params={"other": str(self._vars[2]),
-                        "method": self.method.currentData(),
-                        "keep_overlap_only": self.overlap_cb.isChecked()},
+                        "method": self.method.currentData()},
                 tags=["combined"]),
         }
         self.featuresCreated.emit(result)
@@ -432,14 +439,12 @@ class CombineVariablesTab(DiiveTab):
     def save_state(self) -> dict:
         return {"var1": self._vars[1], "var2": self._vars[2],
                 "method": self.method.currentData(),
-                "keep_overlap": self.overlap_cb.isChecked(),
                 "name": self.name_edit.text()}
 
     def restore_state(self, state: dict) -> None:
         idx = self.method.findData(state.get("method"))
         if idx >= 0:
             self.method.setCurrentIndex(idx)
-        self.overlap_cb.setChecked(bool(state.get("keep_overlap", True)))
         for slot_no, key in ((1, "var1"), (2, "var2")):
             var = state.get(key)
             if var and self._df is not None and var in self._df.columns:

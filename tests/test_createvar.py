@@ -434,16 +434,26 @@ class TestCombineVariables(unittest.TestCase):
                 out = combine_variables(self.a, self.b, method=method)
                 np.testing.assert_allclose(out.to_numpy(), values)
 
-    def test_keep_overlap_only_false_uses_the_operation_identity(self):
+    def test_a_one_sided_record_is_always_nan(self):
         from diive.variables import combine_variables
-        # A missing operand becomes the identity, so a one-sided record survives:
-        # 0 for add/subtract, 1 for multiply/divide.
-        add = combine_variables(self.a, self.b, method='add', keep_overlap_only=False)
-        np.testing.assert_allclose(add.to_numpy(), [11.0, 2.0, 30.0, 44.0])
-        mul = combine_variables(self.a, self.b, method='multiply', keep_overlap_only=False)
-        np.testing.assert_allclose(mul.to_numpy(), [10.0, 2.0, 30.0, 160.0])
-        sub = combine_variables(self.a, self.b, method='subtract', keep_overlap_only=False)
-        np.testing.assert_allclose(sub.to_numpy(), [-9.0, 2.0, -30.0, -36.0])
+        # There is no option to substitute the operation's identity for a missing
+        # operand. It used to exist and read as "keep the one-sided record", but
+        # it returned -B for subtract and 1/B for divide: a plausible number with
+        # the wrong sign. A combination is defined only where both were measured.
+        for method in ('add', 'subtract', 'multiply', 'divide'):
+            with self.subTest(method=method):
+                out = combine_variables(self.a, self.b, method=method)
+                one_sided = self.a.notna() ^ self.b.notna()
+                self.assertTrue(one_sided.any(), "fixture must have one-sided records")
+                self.assertTrue(out[one_sided].isna().all())
+                # ...and the overlap is untouched.
+                both = self.a.notna() & self.b.notna()
+                self.assertTrue(out[both].notna().all())
+
+    def test_the_identity_fill_option_is_gone(self):
+        from diive.variables import combine_variables
+        with self.assertRaises(TypeError):
+            combine_variables(self.a, self.b, method='subtract', keep_overlap_only=False)
 
     def test_fillgaps_keeps_series1_and_fills_only_its_gaps(self):
         from diive.variables import combine_variables
@@ -451,19 +461,20 @@ class TestCombineVariables(unittest.TestCase):
         # Position 2 is A's gap -> takes B's 30.0; every other record keeps A.
         np.testing.assert_allclose(out.to_numpy(), [1.0, 2.0, 30.0, 4.0])
 
-    def test_fillgaps_ignores_keep_overlap_only(self):
+    def test_fillgaps_is_the_way_to_span_the_union(self):
         from diive.variables import combine_variables
-        # Filling gaps is a union by definition, so the flag must not change it.
-        a = combine_variables(self.a, self.b, method='fillgaps', keep_overlap_only=True)
-        b = combine_variables(self.a, self.b, method='fillgaps', keep_overlap_only=False)
-        pd.testing.assert_series_equal(a, b)
+        # The arithmetic methods are overlap-only; "take B where A is missing" has
+        # its own method, which says so plainly and still spans the union.
+        out = combine_variables(self.a, self.b, method='fillgaps')
+        covered = self.a.notna() | self.b.notna()
+        self.assertTrue(out[covered].notna().all())
 
     def test_result_index_is_the_union(self):
         from diive.variables import combine_variables
         later = pd.Series([5.0], name='B',
                           index=pd.date_range('2021-01-02', periods=1, freq='30min',
                                               name='TIMESTAMP_MIDDLE'))
-        out = combine_variables(self.a, later, method='add', keep_overlap_only=False)
+        out = combine_variables(self.a, later, method='add')
         self.assertEqual(len(out), len(self.a) + 1)
 
     def test_default_and_custom_names(self):

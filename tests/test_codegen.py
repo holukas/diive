@@ -547,9 +547,9 @@ class TestVariablesCodegen(CodegenTestCase):
     def test_combine_variables(self):
         from diive.variables.utilities import combine_variables_to_code
         self.check(combine_variables_to_code("TA_1", "TA_2", method="add",
-                                             keep_overlap_only=False, name="TA_SUM"),
+                                             name="TA_SUM"),
                    "dv.variables.combine_variables(", "method='add'",
-                   "keep_overlap_only=False")
+                   "name='TA_SUM'")
 
     def test_combine_variables_default_method(self):
         from diive.variables.utilities import combine_variables_to_code
