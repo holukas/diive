@@ -39,6 +39,16 @@ class FlagMultipleConstantUstarThresholds:
     NOT to energy fluxes (H sensible heat, LE latent heat) because advective
     fluxes don't proportionally affect energy balance at night.
 
+    Deliberate deviation from ONEFlux:
+    ONEFlux also discards the first record *above* the threshold that follows a
+    period below it, to drop the CO2 that accumulated under the canopy and is
+    flushed past the sensor in one burst (Pastorello et al. 2020, Sci Data 7:225;
+    ``nee_proc/src/dataset.c``). diive keeps that record. The ONEFlux rule is the
+    stricter one and defensible; diive favours data availability here and leaves
+    the trade-off to the user, who can drop those records afterwards if the burst
+    matters for their analysis. Everything else about the comparison follows
+    ONEFlux, including rejecting a record whose USTAR is missing.
+
     Args:
         series: pandas Series containing flux data
         ustar: pandas Series containing USTAR (friction velocity) data
@@ -109,10 +119,18 @@ class FlagSingleConstantUstarThreshold(FlagBase):
                  verbose: bool = False):
         """Flag records below a single constant USTAR threshold.
 
+        A record is kept only where ``ustar >= threshold`` can be shown, so a record
+        with no USTAR measurement is rejected (as in ONEFlux, where a missing USTAR
+        is ``INVALID_VALUE`` and therefore below every threshold). diive deliberately
+        does *not* apply ONEFlux's follow-up rule that also discards the first record
+        above the threshold after a period below it — see
+        :class:`FlagMultipleConstantUstarThresholds` for why.
+
         Args:
             series: Flux series to flag.
             ustar: Friction velocity (USTAR) series aligned to *series*.
-            threshold: Records with ``ustar < threshold`` are flagged as rejected.
+            threshold: Records with ``ustar < threshold``, or with no USTAR at all,
+                are flagged as rejected.
             idstr: Optional identifier string appended to the flag column name.
             showplot: If True, show the default rejected-values plot.
             verbose: If True, print detection statistics.
@@ -174,7 +192,10 @@ class FlagMultipleVariableUstarThresholds:
     express CUT scenarios when CUT and VUT are applied together.
 
     The element-wise comparison ``ustar >= threshold`` is identical to the constant case;
-    only the threshold is broadcast per record rather than as a single value.
+    only the threshold is broadcast per record rather than as a single value. That includes
+    the deliberate deviation from ONEFlux described in
+    :class:`FlagMultipleConstantUstarThresholds`: the first record above the threshold after
+    a period below it is kept, not discarded.
 
     Args:
         series: flux data (pandas Series).

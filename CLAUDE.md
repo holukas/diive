@@ -216,6 +216,7 @@ Key `data.levels` fields: `level2`, `level2_qcf`, `level31`, `level31_qcf`, `lev
 
 - MDS requires exact units: W/m² (radiation), °C (temp), **kPa (VPD)** — stated in docstrings, not validated (caller's responsibility).
 - USTAR filtering applies ONLY to CO2/CH4/N2O; for H/LE use `thresholds=[0], threshold_labels=['CUT_NONE']`. `run_level33_constant_ustar` raises on a non-zero threshold for an energy-flux basevar (`H2O`, `T_SONIC`, lowercase variants).
+- **[DELIBERATE DEVIATION from ONEFlux — do not "fix"]** u\* filtering is `ustar >= threshold` and nothing more. ONEFlux additionally discards the first record *above* the threshold following a period below it (the flushed sub-canopy CO2 burst; Pastorello 2020, `nee_proc/src/dataset.c`). **diive keeps that record**, favouring data availability, and leaves the trade-off to the user. Recorded as L74 in `CODE_REVIEW_FINDINGS.md` and in the `FlagMultipleConstantUstarThresholds` docstring. What diive *does* follow: a record whose u\* is missing is rejected, exactly as ONEFlux does (missing u\* is `INVALID_VALUE` = -9999, below every threshold).
 - L3.2 and L3.3 require L3.1; L3.3 also requires L3.2 (`run_level33_*` raises if `level32_qcf` is None). For H/LE call `run_level31(data, set_storage_to_zero=True)`. `run_chain` runs L3.2 unconditionally; to skip it use the composable API.
 - L4.1 features and MDS driver columns must exist in `data.full_df`, not `fpc_df`. Use `add_driver()`.
 - `init_flux_data` raises if `df` already contains `SW_IN_POT`/`DAYTIME`/`NIGHTTIME` (reserved).

@@ -113,7 +113,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | L46 | Does Burba 2008 intend BUR08 to drop the WPL dilution factor BUR06/JAR09 applies? ~1% systematic offset between methods | `flux/lowres/selfheating.py:614` |
 | L72 | Is InfluxDB v2's *delete* range stop-exclusive? If so the pre-upload delete leaves the last record and duplicates survive | `core/io/db/influx/influxio.py:122` |
 
-## S1 — Silently wrong scientific output (13)
+## S1 — Silently wrong scientific output (12 + 1 by design)
 
 | ID | Finding | Where |
 |---|---|---|
@@ -124,7 +124,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L55~~ | ~~Per-regime relevance judged against the *global* model's `.RANDOM` floor~~ (done 2026-08-07) | `analysis/driveranalysis/driveranalysis.py:760` |
 | ~~L48~~ | ~~`harmonic_analysis` reads the wrong FFT bin~~ (done 2026-08-07) | `analysis/harmonic.py:89` |
 | ~~L49~~ | ~~Windowed FFT amplitudes never corrected for coherent gain~~ (done 2026-08-07) | `analysis/harmonic.py:70` |
-| L74 | u\* filtering keeps the first high-turbulence record after a low-turbulence period — ONEFlux and Pastorello 2020 both discard it | `flux/lowres/ustarthreshold.py:139` |
+| ~~L74~~ | ~~u\* filtering keeps the first high-turbulence record after a low-turbulence period~~ (by design 2026-08-07) — diive favours data availability; documented as a deviation | `flux/lowres/ustarthreshold.py:139` |
 | ~~L52~~ | ~~`StratifiedAnalysis` listwise-drops on **every** column — 20 000 rows → 100, silently~~ (done 2026-08-07) | `analysis/decoupling.py:68` |
 | ~~L61~~ | ~~`HeatmapYearMonth` mis-places cells when months are non-contiguous~~ (done 2026-08-07) | `core/plotting/heatmap_datetime.py:395` |
 | ~~L63~~ | ~~Empty X/Y/Z bins dropped, then rendered as measured cells~~ (done 2026-08-07) — fixed in `GridAggregator`, so `HeatmapXYZ` benefits too | `analysis/gridaggregator.py:429` |
@@ -1015,8 +1015,16 @@ plausible-looking threshold that would filter out every record.
 `dv.UstarMovingPointDetection`, `dv.UstarVekuriThresholdDetection` all live on `dv.flux`; the
 snippets raise `AttributeError` as written.
 
-**[ ] L74. u\* filtering keeps the first high-turbulence record after a low-turbulence period**
+**[-] L74. u\* filtering keeps the first high-turbulence record after a low-turbulence period**
 ⚠ **[found 2026-08-07 while cross-checking L30 against ONEFlux and Pastorello 2020]**
+
+> **Won't fix — deliberate deviation, decided 2026-08-07.** ONEFlux is the stricter of the two
+> and its reasoning is sound, but diive favours data availability here: the record is kept, and
+> a user who cares about the flush burst can drop those records themselves. Documented as an
+> explicit deviation in `FlagMultipleConstantUstarThresholds` (with the reason and the
+> reference), and pointed at from `FlagSingleConstantUstarThreshold` and
+> `FlagMultipleVariableUstarThresholds`, so it cannot be mistaken for an oversight and
+> "corrected" later. Everything else in the u\* comparison follows ONEFlux, including L30.
 
 `ustarthreshold.py:139` (`FlagSingleConstantUstarThreshold._flagtests`) — the flag is a pure
 element-wise `ustar >= threshold`. FLUXNET/ONEFlux discards **one more** record than that: the
