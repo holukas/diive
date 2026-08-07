@@ -55,8 +55,8 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L14~~ | ~~`combine_variables(keep_overlap_only=False)`: subtract/divide return the **negation / reciprocal**~~ (done 2026-08-07) — option removed | `variables/utilities.py:73` |
 | L54 | `DriverAnalysis(deseasonalize=True)` fabricates target values by interpolation — into its own chronological hold-out | `analysis/driveranalysis/driveranalysis.py:80` |
 | L55 | Per-regime relevance judged against the *global* model's `.RANDOM` floor — decides the headline verdict | `analysis/driveranalysis/driveranalysis.py:760` |
-| L48 | `harmonic_analysis` reads the wrong FFT bin — a true amplitude of 3.0 is reported as **0.0** | `analysis/harmonic.py:89` |
-| L49 | Windowed FFT amplitudes never corrected for coherent gain — every amplitude ~54% of truth | `analysis/harmonic.py:70` |
+| ~~L48~~ | ~~`harmonic_analysis` reads the wrong FFT bin~~ (done 2026-08-07) | `analysis/harmonic.py:89` |
+| ~~L49~~ | ~~Windowed FFT amplitudes never corrected for coherent gain~~ (done 2026-08-07) | `analysis/harmonic.py:70` |
 | L52 | `StratifiedAnalysis` listwise-drops on **every** column — 20 000 rows → 100, silently | `analysis/decoupling.py:68` |
 | ~~L61~~ | ~~`HeatmapYearMonth` mis-places cells when months are non-contiguous~~ (done 2026-08-07) | `core/plotting/heatmap_datetime.py:395` |
 | ~~L63~~ | ~~Empty X/Y/Z bins dropped, then rendered as measured cells~~ (done 2026-08-07) — fixed in `GridAggregator`, so `HeatmapXYZ` benefits too | `analysis/gridaggregator.py:429` |
@@ -83,7 +83,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | L58 | `detect_seasonality` fabricates `primary_period=365` when the periodogram yields nothing | `core/times/decomposition_utils.py:490` |
 | L51 | `StratifiedAnalysis` drops z-bins whose rounded label collides — 19 of 120 lost, no warning | `analysis/decoupling.py:213` |
 | L53 | `CompoundExtremes` returns zero classified periods for a single year, silently | `analysis/compoundextremes.py:168` |
-| L59 | `multi_scale_harmonics` swallows every exception; the `scipy.signal.hamming` fallback is dead | `analysis/harmonic.py:432` |
+| ~~L59~~ | ~~`multi_scale_harmonics` swallows every exception~~ (done 2026-08-07) — function deleted as dead code | `analysis/harmonic.py:432` |
 | L19 | `features_stl=True` can produce nothing — any single NaN skips a column, logged only at DEBUG | `core/ml/feature_engineer.py:726` |
 | L16 | SWIN short-gap interpolation never fires near dawn/dusk — the night's NaN run inflates the gap length | `gapfilling/swin.py:794` |
 | L4 | `keep_records_where`: an "open" bound is not open when `inclusive != 'both'` — drops the extreme record | `core/dfun/frames.py:110` |
@@ -92,6 +92,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | L66 | `datetime_surface_grid` omits the `TIMESTAMP_START` conversion — 3-D surface offset half a period from the heatmap | `core/plotting/surface_grid.py:68` |
 | L67 | 3-D export buttons write the **previous** variable's relief after a render that produced nothing | `gui/tabs/surface3d.py:945` |
 | G4 | `restore_controls` silently keeps the current combo value when the saved entry is gone — can flip the joint-uncertainty divisor | `gui/widgets/state_utils.py:51` |
+| L73 | `harmonic_decompose` picks the top-N bins by power, so a windowed strong component's leakage outranks a genuine weaker one — the same component is returned twice | `core/times/decomposition_utils.py:275` |
 
 ## S3 — Crash on legitimate input (14)
 
@@ -104,7 +105,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | L43 | Default fringe-bin trimming empties the time-lag histogram; the `IndexError` escapes the batch helpers | `flux/lowres/timelag_analysis.py:148` |
 | L31 | `UstarThresholdConstantScenarios.calc(showplot=True)` crashes on pandas 3 | `flux/lowres/ustarthreshold.py:337` |
 | L33 | `UstarVekuriThresholdDetection.summary()` crashes on its own guard before `detect()` | `flux/lowres/ustar_vekuri_detection.py:187` |
-| L56 | `harmonic_decompose` returns `frequencies` one element longer than the arrays it pairs with | `core/times/decomposition_utils.py:307` |
+| ~~L56~~ | ~~`harmonic_decompose` returns `frequencies` one element longer~~ (done 2026-08-07) | `core/times/decomposition_utils.py:307` |
 | L65 | `RidgeLinePlot` cannot plot any series containing a gap | `core/plotting/ridgeline.py:196` |
 | L69 | `Cumulative.plot` raises on an all-NaN column | `core/plotting/cumulative.py:327` |
 | L68 | `datetime_surface_grid` destroys a variable literally named `DATE` or `TIME` | `core/plotting/surface_grid.py:71` |
@@ -1040,7 +1041,13 @@ edge cases: … all-NaN sections", and the module header). It reaches `SeasonalT
 data, so the default path for a real series yields a silent no-result. (The `classical` method at
 least raises.)
 
-**[ ] L48. `harmonic_analysis` reads the amplitude/phase from the wrong FFT bin (off by one)** ⚠ **[verified independently]**
+**[x] L48. `harmonic_analysis` reads the amplitude/phase from the wrong FFT bin (off by one)** ⚠ **[verified independently]**
+
+> **Fixed 2026-08-07, together with L49.** Not originally in scope, but the two are entangled
+> in this function: correcting the amplitude scale while still reading the neighbouring bin
+> leaves it returning 0.0, so the L49 fix would have been unobservable here. The full-rfft bin
+> number is now converted to the DC-stripped index (`bin_full - 1`), and `actual_frequency`
+> reports the bin actually read.
 `analysis/harmonic.py:89` — `idx = int(np.round(target_freq * n))` is an index into the *full* rfft
 array, but it indexes `amplitudes`/`phases`/`power`, which were built as `fft_vals[1:]` (DC
 removed). Every harmonic is read one bin high. Confirmed on a pure cosine of amplitude 3.0 sitting
@@ -1055,7 +1062,12 @@ full-rfft amplitude at bin 21: 0.0
 The top-level `'amplitudes'` array in the same result dict *is* correctly aligned, so the harmonics
 list and the spectrum disagree with each other.
 
-**[ ] L49. Windowed FFT amplitudes are never corrected for the window's coherent gain**
+**[x] L49. Windowed FFT amplitudes are never corrected for the window's coherent gain**
+
+> **Fixed 2026-08-07.** `harmonic_analysis` and `harmonic_decompose` now divide by the
+> window's coherent gain (its mean), so a reported amplitude is the signal's rather than the
+> windowed signal's. Verified: a 3.0 cosine returns 3.0 under boxcar, hamming, hann and
+> blackman. `fft_decompose`, the third site, was deleted as dead code.
 `analysis/harmonic.py:70`, `decomposition_utils.py:266` — `harmonic_analysis`, `fft_decompose` and
 `harmonic_decompose` all apply a window (default `'hamming'`, mean ≈ 0.54) and then report
 `2*|rfft(x)|/n` without dividing by the window mean. Every amplitude is ~0.54× the truth, the
@@ -1111,7 +1123,10 @@ and it decides the headline verdict, since `regime_dependence` is the sole trigg
 seasons (`regime_dependence=False`); against each model's own floor it is weak/weak/yes/yes
 (`regime_dependence=True`).
 
-**[ ] L56. `harmonic_decompose` returns `frequencies` one element longer than the arrays it pairs with**
+**[x] L56. `harmonic_decompose` returns `frequencies` one element longer than the arrays it pairs with**
+
+> **Fixed 2026-08-07.** `frequencies` now drops the DC bin, so it pairs element-wise with
+> `amplitudes`/`phases`/`spectrum` as documented; the docstring states the pairing explicitly.
 `decomposition_utils.py:307` — `frequencies` is the full `rfftfreq(n)` (`n//2+1`) while
 `amplitudes`/`phases`/`spectrum` exclude DC (`n//2`). The docstring presents them as a matched set,
 so `plot(frequencies, amplitudes)` raises. `harmonic_analysis` prepends a zero to fix exactly this —
@@ -1130,7 +1145,17 @@ defined there (30 NaN in the output, 0 in the seasonal input).
 `seasonal_period` is not supplied, so a short series is decomposed at period 365 with no signal that
 detection failed (`n=5 -> 365, [7, 30], 0.0`).
 
-**[ ] L59. `multi_scale_harmonics` swallows every exception and returns an empty result**
+**[x] L59. `multi_scale_harmonics` swallows every exception and returns an empty result**
+
+> **Resolved 2026-08-07 by deleting the function.** It had no caller anywhere — library, GUI,
+> tests or examples — and was not in `dv.analysis.__all__`. Removed along with
+> `reconstruct_harmonics`, `periodogram` and `fft_decompose` for the same reason. The dead
+> `signal.hamming` fallback went with them; the two surviving functions now let
+> `signal.get_window` raise on a bad window name instead of masking it.
+>
+> Checked before removing: the GUI spectrogram tab calls only `dv.analysis.spectrogram`, which
+> goes straight to `scipy.signal.spectrogram`. The only internal edge was
+> `multi_scale_harmonics` -> `harmonic_analysis`, i.e. dead calling live.
 `analysis/harmonic.py:432` — a bare `except Exception: continue` drops any failed period silently.
 Related: the `signal.hamming` fallback at `:68` / `:330` is dead on scipy ≥ 1.13 (the attribute no
 longer exists), so a bad `window` name raises `AttributeError` instead of falling back, every period
@@ -1338,3 +1363,25 @@ Round 3 additions (checked by the parallel reviewers, no defect found):
 
 Still not reviewed even after round 3: `windrose.py`, `hexbin.py`, `histogram.py`, `waterfall.py`,
 `shifted_distribution.py`, `timeseries.py`, `bar.py` in `core/plotting`, and `gui/icons.py`.
+
+---
+
+**[ ] L73. `harmonic_decompose` returns the same component twice under a window**
+`core/times/decomposition_utils.py:275`
+
+Found while fixing L49 — not a regression from it. `top_idx = np.argsort(-powers)[:n_harmonics]`
+takes the strongest N bins, but a window spreads a tone across several bins, so the leakage
+shoulder of a strong component can outrank a genuine weaker one. A two-component signal
+(amplitude 3.0 at period 50, 1.0 at period 25) with the default hamming window:
+
+```
+boxcar   picked (period, amplitude): [(50, 3.0), (25, 1.0)]     <- both components
+hamming  picked (period, amplitude): [(53, 1.278), (50, 3.0)]   <- period 50 twice
+```
+
+The amplitudes are now correct (L49); the *selection* is not. The reconstruction therefore
+double-counts one component and misses the other, and `residual` absorbs the difference.
+Reachable from the GUI Seasonal-trend tab's "Harmonic" option.
+
+Fixing it means peak-picking with mainlobe exclusion (skip bins adjacent to one already
+taken) rather than a plain top-N — a design change, so it is recorded rather than done.
