@@ -22,6 +22,62 @@ Status column: `[ ]` open · `[x]` fixed · `[-]` won't fix / by design (add a n
 
 ---
 
+# Before this work is called done
+
+Fixing the findings is not the whole job. These are deliberately **not** done per-fix — batching
+them once the backlog settles avoids rewriting the same entries repeatedly — but they must happen
+before a release, and several are already stale today.
+
+### [ ] CHANGELOG.md
+
+Nothing in this effort has been written up yet. **Four breaking changes** have landed on `indev` so
+far and each needs an entry saying what silently changes for existing code:
+
+| Commit | Breaks |
+|---|---|
+| `45614fb3` `feat!: remove the H2O self-heating path` | `flux_type` gone from `ScopPhysics` / `ScopOptimizer` / `ScopApplicator`; LE correction no longer offered at all |
+| `a327a4ee` `fix!: flag missing records as NaN, not 0` | `overall_flag` is NaN at missing records; any `(flag == 0).count()` changes |
+| `876bec12` `feat!: combine variables only where both are available` | `keep_overlap_only` gone from `combine_variables` and its codegen |
+| `57b8b845` `refactor!: remove the dead harmonic functions` | `reconstruct_harmonics`, `periodogram`, `fft_decompose`, `multi_scale_harmonics` removed |
+
+The non-breaking fixes are user-visible too and change numbers people may have already published —
+in particular **L48/L49** (FFT amplitudes were ~54% of truth, and one bin off), **L61/L63** (cells
+drawn over regions holding no data) and **L42** (hqflux reported missing records as valid). The
+v0.91.0 entry already opens with *"Two of these change results silently, with no error and no
+warning"*; this round needs the same treatment.
+
+### [~] `diive/gui/MANUAL.md`
+
+The *"Keep overlapping data points only"* checkbox description (line 969) was stale from
+`876bec12` and has been **fixed 2026-08-07** — replaced with the overlap-only rule plus the new
+record-loss reporting, and `MANUAL.html` regenerated via `diive/gui/build_manual.py`. Fixed
+immediately rather than batched because it was left behind by a change in this same effort.
+
+**Still to do:** sweep the rest of the manual for the other removals before release — the H2O
+self-heating path and the outlier flag semantics both have user-facing descriptions that may
+still describe the old behaviour.
+
+### [ ] `CLAUDE.md`
+
+Updated piecemeal so far (the combine-variables tab description, `1c392e66`). Re-read the sections
+covering every changed area once the backlog settles: the outlier day/night conventions (flag
+semantics), `dv.analysis` and `dv.plotting` namespace tables, and the self-heating notes.
+
+### [ ] `docs/`
+
+`docs/auto_examples/` is **generated** by sphinx-gallery from `examples/`, so it regenerates on the
+next build — no hand-editing. It is currently stale (`selfheating.py`/`.ipynb`/`.rst` still pass
+`flux_type=FLUX_TYPE`). Just remember to rebuild, and check the API pages no longer list the four
+deleted harmonic functions.
+
+### [ ] Examples
+
+`examples/analysis/analysis_harmonic.py` is the only caller of `harmonic_analysis`, and it was
+written against the buggy amplitudes — its narrative text about the window's effect may now say the
+opposite of what the code produces. Re-read it against the corrected behaviour.
+
+---
+
 # Triage index — all 81 findings by severity
 
 The detailed entries below stay grouped by review round and module. This index is the **fix order**.
