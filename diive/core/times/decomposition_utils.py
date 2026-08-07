@@ -253,7 +253,10 @@ def harmonic_decompose(
     Notes:
         - NaN values are removed before FFT (series shortened)
         - Window function reduces spectral leakage
-        - Top n_harmonics selected by power (largest amplitude first)
+        - The n_harmonics strongest spectral *peaks* are selected, not the strongest
+          bins, so a windowed component's leakage cannot be returned as a component
+          of its own. Fewer than n_harmonics are returned when the spectrum holds
+          fewer peaks.
     """
     # Remove NaN
     valid_idx = series.notna()
@@ -279,8 +282,18 @@ def harmonic_decompose(
     amplitudes = 2 * np.abs(fft_vals[1:]) / coherent_gain  # one-sided, DC excluded
     powers = amplitudes ** 2
 
-    # Find top harmonics by power
-    top_idx = np.argsort(-powers)[:n_harmonics]
+    # Find top harmonics among the spectral *peaks*. Taking the strongest bins
+    # instead returns one component several times: a window spreads a tone over
+    # neighbouring bins, and the leakage shoulder of a strong component outranks a
+    # genuine weaker one (hamming, two components at periods 50 and 25: picked 53
+    # and 50, i.e. period 50 twice, and missed 25 entirely). A leakage shoulder
+    # sits on the flank of its peak, so it is not a local maximum.
+    peak_idx, _ = signal.find_peaks(powers)
+    if peak_idx.size:
+        top_idx = peak_idx[np.argsort(-powers[peak_idx])][:n_harmonics]
+    else:
+        # Monotonic spectrum (very short series): fall back to the strongest bins.
+        top_idx = np.argsort(-powers)[:n_harmonics]
     top_idx_sorted = np.sort(top_idx)  # Sort by frequency for reconstruction
 
     harmonics = []

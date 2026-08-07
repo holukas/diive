@@ -910,9 +910,15 @@ class TestGapFilling(unittest.TestCase):
         scores = xgbts.scores_
         gapfilled = xgbts.get_gapfilled_target()
 
-        # Verify results are reasonable
+        # Verify results are reasonable. The bound was 3.0, tuned to a harmonic
+        # reconstruction built from the strongest FFT *bins*; since L73 it is built
+        # from the strongest *peaks*, so a component's leakage skirt no longer
+        # contributes extra bins and the reconstruction carries slightly less of the
+        # signal's energy (this 3-tree model: mae 2.79 -> 3.01, r2 0.53 -> 0.47).
+        # Distinct components are what the decomposition documents; a marginally
+        # weaker reconstruction feature is the price.
         self.assertGreater(scores['mae'], 0.5)
-        self.assertLess(scores['mae'], 3.0)
+        self.assertLess(scores['mae'], 3.5)
         self.assertGreater(len(gapfilled), 0)
 
     def test_shap_treeexplainer_xgboost(self):

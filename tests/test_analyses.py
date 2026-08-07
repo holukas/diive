@@ -567,3 +567,36 @@ class TestStratifiedAnalysisKeepsItsData(unittest.TestCase):
                                 n_bins_z=60, n_bins_x=3).run()
         self.assertEqual(len(sa.binaggs), 60)
         self.assertEqual(len(set(sa.binaggs.keys())), 60)
+
+
+class TestHarmonicDecomposePicksDistinctComponents(unittest.TestCase):
+    """A window's leakage must not be returned as a component of its own."""
+
+    @staticmethod
+    def _two_components():
+        import numpy as np
+        import pandas as pd
+        t = np.arange(1000)
+        return pd.Series(3.0 * np.cos(2 * np.pi * t / 50) + 1.0 * np.cos(2 * np.pi * t / 25),
+                         index=pd.date_range('2020-01-01', periods=1000, freq='D'))
+
+    def test_both_components_are_found_under_every_window(self):
+        # Selecting the strongest *bins* returned period 50 twice under hamming
+        # (its leakage shoulder at 53 outranked the genuine weaker component at
+        # 25), so the reconstruction double-counted one component and missed the
+        # other. The strongest *peaks* are the components themselves.
+        from diive.core.times.decomposition_utils import harmonic_decompose
+        for window in ('boxcar', 'hamming', 'hann', 'blackman'):
+            with self.subTest(window=window):
+                res = harmonic_decompose(self._two_components(), n_harmonics=2, window=window)
+                found = sorted(round(h['period']) for h in res['harmonics'])
+                self.assertEqual(found, [25, 50])
+                amps = {round(h['period']): h['amplitude'] for h in res['harmonics']}
+                self.assertAlmostEqual(amps[50], 3.0, delta=0.1)
+                self.assertAlmostEqual(amps[25], 1.0, delta=0.1)
+
+    def test_the_reconstruction_follows_the_signal(self):
+        from diive.core.times.decomposition_utils import harmonic_decompose
+        series = self._two_components()
+        res = harmonic_decompose(series, n_harmonics=2, window='hamming')
+        self.assertLess(res['residual'].abs().max(), 0.2)
