@@ -6,7 +6,7 @@ Supports multiple decomposition methods:
 - Classical (moving average): Simple, fast, assumes stationarity
 - Harmonic (Fourier): Frequency-domain analysis, periodic signals
 
-All functions preserve NaN locations and handle quality weighting.
+All functions preserve NaN locations.
 """
 
 import numpy as np
@@ -16,7 +16,7 @@ from typing import Dict, Optional, List
 from statsmodels.tsa.seasonal import STL, seasonal_decompose
 from scipy import signal
 
-from diive.core.utils.console import detail
+from diive.core.utils.console import detail, info
 
 
 def stl_decompose(
@@ -28,7 +28,6 @@ def stl_decompose(
     trend_deg: int = 1,
     seasonal_jump: int = 1,
     trend_jump: int = 1,
-    weights: Optional[np.ndarray] = None,
     verbose: bool = False
 ) -> Dict[str, pd.Series]:
     """
@@ -36,6 +35,10 @@ def stl_decompose(
 
     Robust decomposition for non-stationary time series with gaps.
     Uses iterative Loess smoothing to separate seasonal, trend, and residual components.
+
+    Gaps are linearly interpolated for the fit (statsmodels' STL cannot fit around
+    them) and masked back out of the result, so the returned components are NaN
+    wherever the input was.
 
     Args:
         series (pd.Series): Input time series (may contain NaN).
@@ -46,8 +49,6 @@ def stl_decompose(
         trend_deg (int): Loess polynomial degree for trend component (0, 1). Default 1.
         seasonal_jump (int): Jump size for seasonal fitting (speed optimization). Default 1.
         trend_jump (int): Jump size for trend fitting (speed optimization). Default 1.
-        weights (np.ndarray, optional): Quality weights (0–1) for each observation.
-                                        Higher = more influential. If None, all equal weight.
         verbose (bool): Print decomposition details. Default False.
 
     Returns:
@@ -55,14 +56,19 @@ def stl_decompose(
             - 'seasonal': pd.Series, seasonal component
             - 'trend': pd.Series, trend component
             - 'residual': pd.Series, residual (noise + anomalies)
-            - 'weights': np.ndarray, weights used in fitting
+            - 'n_interpolated': int, records interpolated for the fit and masked
+              back out of the components
             - 'iterations': int, number of inner loop iterations
+
+    Raises:
+        ValueError: If the series is all-NaN, or seasonal < 2, or trend < 3.
 
     Notes:
         - Preserves original series index and NaN locations
-        - Handles edge cases: short series, all-NaN sections, single period
         - seasonal must be >= 2
         - trend must be >= 3
+        - Observation weights are not supported: statsmodels' STL takes none. Its
+          `robust` flag down-weights outliers internally.
     """
     # Input validation
     if len(series) < 2 * seasonal:
@@ -89,21 +95,17 @@ def stl_decompose(
         trend = trend if trend % 2 == 1 else trend + 1
     stl_seasonal_smoother = 7
 
-    # Handle weights
-    if weights is not None:
-        if len(weights) != len(series):
-            raise ValueError(f"weights length ({len(weights)}) != series length ({len(series)})")
-        weights = np.asarray(weights, dtype=float)
-    else:
-        weights = np.ones(len(series), dtype=float)
-
-    # Standardize weight range to [0.1, 1.0] for numerical stability
-    # (STL's robust fitting expects non-zero weights)
-    if weights.max() > weights.min():
-        weights_norm = 0.1 + 0.9 * (weights - weights.min()) / (weights.max() - weights.min())
-    else:
-        # All weights equal, normalize to 1.0
-        weights_norm = np.ones_like(weights)
+    # statsmodels' STL has no NaN handling: it propagates rather than raising, so
+    # a single missing value used to make all three components all-NaN. Fit on a
+    # linearly interpolated copy, then mask the gaps back out below - a gap in the
+    # input is a gap in the output, and no interpolated value is ever returned.
+    gaps = series.isna()
+    n_gaps = int(gaps.sum())
+    if n_gaps == len(series):
+        raise ValueError("Series contains no valid values.")
+    if n_gaps:
+        info(f"Interpolating {n_gaps} of {len(series)} records to fit STL "
+             f"(gaps are restored in the returned components).")
 
     try:
         # STL works better with integer-indexed series; convert DatetimeIndex to numeric if needed
@@ -111,6 +113,10 @@ def stl_decompose(
         if isinstance(series_for_stl.index, pd.DatetimeIndex):
             # Create new index starting from 0
             series_for_stl.index = np.arange(len(series_for_stl))
+        if n_gaps:
+            # limit_direction='both' also covers leading/trailing gaps, which plain
+            # interpolation leaves in place - one of them is enough to poison the fit.
+            series_for_stl = series_for_stl.interpolate(method='linear', limit_direction='both')
 
         # Build STL kwargs with available parameters
         stl_kwargs = {
@@ -132,8 +138,7 @@ def stl_decompose(
 
         stl_result = STL(series_for_stl, **stl_kwargs)
         # statsmodels STL.fit() takes no observation weights; its `robust` flag
-        # handles outlier down-weighting internally. (Quality-weighted fitting is
-        # provided separately via quality_weighted_decompose.)
+        # handles outlier down-weighting internally.
         decomp = stl_result.fit()
 
         # Restore original index to decomposition results
@@ -141,15 +146,21 @@ def stl_decompose(
         decomp.trend.index = series.index
         decomp.resid.index = series.index
 
+        seasonal, trend_comp, residual = decomp.seasonal, decomp.trend, decomp.resid
+        if n_gaps:
+            seasonal = seasonal.where(~gaps)
+            trend_comp = trend_comp.where(~gaps)
+            residual = residual.where(~gaps)
+
         if verbose:
             detail(f"STL decomposition: period={period}, seasonal={stl_seasonal_smoother}, "
                    f"trend={trend}, robust={robust}, iterations={decomp.nobs}", verbose=verbose)
 
         return {
-            'seasonal': decomp.seasonal,
-            'trend': decomp.trend,
-            'residual': decomp.resid,
-            'weights': weights,
+            'seasonal': seasonal,
+            'trend': trend_comp,
+            'residual': residual,
+            'n_interpolated': n_gaps,
             'iterations': decomp.nobs if hasattr(decomp, 'nobs') else None
         }
 
@@ -336,54 +347,6 @@ def harmonic_decompose(
         'reconstructed': reconstructed_series,
         'residual': series[valid_idx] - reconstructed_series
     }
-
-
-def quality_weighted_decompose(
-    series: pd.Series,
-    quality: pd.Series,
-    method: str = 'stl',
-    **kwargs
-) -> Dict[str, pd.Series]:
-    """
-    Decomposition with quality weighting.
-
-    Incorporates quality flags during decomposition (not pre-filtering).
-    High-quality observations influence the fit more; low-quality values
-    are preserved in output with lower influence on trend/seasonal.
-
-    Args:
-        series (pd.Series): Input time series.
-        quality (pd.Series): Quality flags (0–1), higher = better.
-                            Same index as series.
-        method (str): Decomposition method ('stl', 'classical', 'harmonic'). Default 'stl'.
-        **kwargs: Additional arguments passed to method function.
-
-    Returns:
-        Same structure as method-specific function, with 'quality_weights' added.
-
-    Notes:
-        - Quality values outside [0, 1] are clipped
-        - All-zero quality creates uniform weights
-        - Harmonic decomposition: quality used for ranking, not fitting
-    """
-    # Validate quality
-    if len(quality) != len(series):
-        raise ValueError(f"quality length ({len(quality)}) != series length ({len(series)})")
-
-    quality_vals = quality.to_numpy().astype(float)
-    quality_vals = np.clip(quality_vals, 0, 1)
-
-    if method == 'stl':
-        result = stl_decompose(series, weights=quality_vals, **kwargs)
-    elif method == 'classical':
-        result = classical_decompose(series, **kwargs)
-    elif method == 'harmonic':
-        result = harmonic_decompose(series, **kwargs)
-    else:
-        raise ValueError(f"Unknown method: {method}")
-
-    result['quality_weights'] = quality_vals
-    return result
 
 
 def reconstruct_from_components(

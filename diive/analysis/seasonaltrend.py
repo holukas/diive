@@ -3,7 +3,7 @@ ANALYSIS: SEASONAL-TREND DECOMPOSITION
 =======================================
 
 Decompose time series into trend, seasonal, and residual components.
-Supports STL, classical, and harmonic methods with quality-weighted fitting.
+Supports STL, classical, and harmonic methods.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -15,8 +15,7 @@ import pandas as pd
 from diive.core.utils.console import info
 from diive.core.times.decomposition_utils import (
     stl_decompose, classical_decompose, harmonic_decompose,
-    quality_weighted_decompose, reconstruct_from_components,
-    detect_seasonality
+    reconstruct_from_components, detect_seasonality
 )
 
 
@@ -41,13 +40,11 @@ class SeasonalTrendDecomposition:
     def __init__(
             self,
             series: pd.Series,
-            quality: Optional[pd.Series] = None,
             timestamp: Optional[pd.DatetimeIndex] = None,
             method: str = 'stl',
             seasonal_period: Optional[int] = None,
             trend_window: Optional[int] = None,
             robust: bool = True,
-            quality_weighted: bool = True,
             seasonal_deg: int = 1,
             trend_deg: int = 1,
             seasonal_jump: int = 1,
@@ -61,9 +58,6 @@ class SeasonalTrendDecomposition:
 
         Args:
             series (pd.Series): Time series to decompose (may contain NaN).
-            quality (pd.Series, optional): Quality flags (0–1) for each value.
-                                          None = all equal weight (1.0).
-                                          Same index as series.
             timestamp (pd.DatetimeIndex, optional): DateTime index. Inferred from series.index if None.
             method (str): Decomposition method:
                          'stl' (default) — Seasonal-Trend Loess (robust, gap-tolerant)
@@ -76,8 +70,6 @@ class SeasonalTrendDecomposition:
                                          Default: 2 * seasonal_period
             robust (bool): Use robust fitting (less sensitive to outliers). Default True.
                           Only applies to STL method.
-            quality_weighted (bool): Incorporate quality flags during decomposition.
-                                    Default True.
             seasonal_deg (int): Loess polynomial degree for seasonal (0 or 1). Default 1.
             trend_deg (int): Loess polynomial degree for trend (0 or 1). Default 1.
             seasonal_jump (int): STL seasonal jump size (speed optimization). Default 1.
@@ -102,13 +94,11 @@ class SeasonalTrendDecomposition:
             raise ValueError(f"method must be 'stl', 'classical', or 'harmonic', got '{method}'")
 
         self.series = series
-        self.quality = quality
         self.timestamp = timestamp if timestamp is not None else series.index
         self.method = method
         self.seasonal_period = seasonal_period
         self.trend_window = trend_window
         self.robust = robust
-        self.quality_weighted = quality_weighted and (quality is not None)
         self.seasonal_deg = seasonal_deg
         self.trend_deg = trend_deg
         self.seasonal_jump = seasonal_jump
@@ -125,7 +115,7 @@ class SeasonalTrendDecomposition:
 
         if self.verbose:
             info(f"SeasonalTrendDecomposition initialized: method={method}, "
-                 f"quality_weighted={self.quality_weighted}, verbose={verbose}", verbose=self.verbose)
+                 f"verbose={verbose}", verbose=self.verbose)
 
     @property
     def seasonal(self) -> pd.Series:
@@ -248,7 +238,6 @@ class SeasonalTrendDecomposition:
             "=" * 60,
             f"Method: {self.method.upper()}",
             f"Seasonal period: {period} observations",
-            f"Quality-weighted: {self.quality_weighted}",
             f"Series length: {len(self.series)} ({self.series.notna().sum()} valid)",
             "",
             f"Seasonality strength: {self.seasonality_strength:.3f}",
@@ -293,12 +282,7 @@ class SeasonalTrendDecomposition:
                 'verbose': self.verbose
             }
 
-            if self.quality_weighted and self.quality is not None:
-                self._decomposition = quality_weighted_decompose(
-                    self.series, self.quality, method='stl', **kwargs
-                )
-            else:
-                self._decomposition = stl_decompose(self.series, **kwargs)
+            self._decomposition = stl_decompose(self.series, **kwargs)
 
         elif self.method == 'classical':
             kwargs = {
@@ -378,8 +362,7 @@ class SeasonalTrendDecomposition:
         period = self.seasonal_period or 'auto'
         return (
             f"SeasonalTrendDecomposition("
-            f"method='{self.method}', period={period}, "
-            f"quality_weighted={self.quality_weighted})"
+            f"method='{self.method}', period={period})"
         )
 
     def __str__(self) -> str:

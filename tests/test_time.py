@@ -266,25 +266,25 @@ class TestStlDecompose(unittest.TestCase):
         seasonal = result['seasonal'].to_numpy()
         self.assertLess(abs(self._lag_autocorr(seasonal, self.PERIOD)), 0.5)
 
-    def test_weights_are_accepted(self):
-        """The other regression: `STL.fit(weights=...)` is unsupported.
+    def test_weights_are_no_longer_offered(self):
+        """statsmodels' STL takes no observation weights, so neither does diive.
 
-        statsmodels' STL takes no observation weights — `robust=` handles
-        outlier down-weighting internally — so passing them used to raise. They
-        are accepted and echoed back instead.
+        They used to be accepted, normalised and then dropped on the floor, while
+        `quality_weighted_decompose` and `SeasonalTrendDecomposition.summary()`
+        reported that weighting had happened. `robust=` is the real knob.
         """
         import numpy as np
-        weights = np.linspace(0.0, 1.0, len(self.series))
-        result = self._decompose(self.series, seasonal=self.PERIOD,
-                                 trend=self.PERIOD * 2 + 1, weights=weights)
-        np.testing.assert_allclose(result['weights'], weights)
-        self.assertEqual(int(result['seasonal'].isna().sum()), 0)
-
-    def test_weights_length_is_validated(self):
-        import numpy as np
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             self._decompose(self.series, seasonal=self.PERIOD,
-                            trend=self.PERIOD * 2 + 1, weights=np.ones(5))
+                            trend=self.PERIOD * 2 + 1,
+                            weights=np.linspace(0.0, 1.0, len(self.series)))
+
+    def test_the_quality_weighting_wrapper_is_gone(self):
+        import diive.core.times.decomposition_utils as utils
+        from diive.analysis.seasonaltrend import SeasonalTrendDecomposition
+        self.assertFalse(hasattr(utils, 'quality_weighted_decompose'))
+        std = SeasonalTrendDecomposition(self.series, seasonal_period=self.PERIOD)
+        self.assertNotIn('Quality-weighted', std.summary())
 
     def test_components_are_additive_and_keep_the_index(self):
         result = self._decompose(self.series, seasonal=self.PERIOD,
@@ -328,6 +328,74 @@ class TestStlDecompose(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestStlSurvivesGaps(unittest.TestCase):
+    """A gap must not empty the whole decomposition.
+
+    statsmodels' STL has no NaN handling: it propagates rather than raising, so
+    one missing value used to give three all-NaN components, `seasonality_strength
+    = 0.0` and a `summary()` full of `nan +/- nan` - while four docstrings promised
+    gap tolerance. Gaps are the normal state of EC data.
+    """
+
+    PERIOD = 24
+    CYCLES = 20
+
+    @classmethod
+    def setUpClass(cls):
+        import numpy as np
+        n = cls.PERIOD * cls.CYCLES
+        idx = pd.date_range('2021-01-01', periods=n, freq='h', name='TIMESTAMP')
+        t = np.arange(n)
+        cls.series = pd.Series(10 * np.sin(2 * np.pi * t / cls.PERIOD) + 0.02 * t,
+                               index=idx, name='X')
+
+    def _decompose(self, series):
+        import warnings
+        from diive.core.times.decomposition_utils import stl_decompose
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            return stl_decompose(series, seasonal=self.PERIOD, trend=self.PERIOD * 2 + 1)
+
+    def test_a_single_gap_costs_a_single_record(self):
+        import numpy as np
+        gappy = self.series.copy()
+        gappy.iloc[100] = np.nan
+        result = self._decompose(gappy)
+        self.assertEqual(result['n_interpolated'], 1)
+        for key in ('seasonal', 'trend', 'residual'):
+            with self.subTest(component=key):
+                self.assertEqual(int(result[key].notna().sum()), len(gappy) - 1)
+                # The interpolated value is for the fit only - it is not returned.
+                self.assertTrue(pd.isna(result[key].iloc[100]))
+
+    def test_leading_and_trailing_gaps_are_covered_too(self):
+        # Plain interpolation leaves the edges untouched, and one NaN reaching
+        # statsmodels is enough to poison every component.
+        import numpy as np
+        gappy = self.series.copy()
+        gappy.iloc[:3] = np.nan
+        gappy.iloc[-2:] = np.nan
+        result = self._decompose(gappy)
+        self.assertEqual(result['n_interpolated'], 5)
+        self.assertEqual(int(result['trend'].notna().sum()), len(gappy) - 5)
+
+    def test_the_components_still_reconstruct_the_measured_records(self):
+        import numpy as np
+        gappy = self.series.copy()
+        gappy.iloc[50:60] = np.nan
+        result = self._decompose(gappy)
+        recomposed = result['seasonal'] + result['trend'] + result['residual']
+        measured = gappy.notna()
+        pd.testing.assert_series_equal(recomposed[measured], gappy[measured],
+                                       check_names=False, atol=1e-9)
+
+    def test_an_all_nan_series_says_so(self):
+        import numpy as np
+        allnan = pd.Series(np.nan, index=self.series.index)
+        with self.assertRaises(ValueError):
+            self._decompose(allnan)
 
 
 class TestSeasonalityDetectionDoesNotInvent(unittest.TestCase):
