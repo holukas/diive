@@ -62,10 +62,7 @@ def harmonic_analysis(
         raise ValueError(f"Series must have >= 4 valid values, got {len(series_clean)}")
 
     # Apply window
-    try:
-        window_func = signal.get_window(window, len(series_clean))
-    except ValueError:
-        window_func = signal.hamming(len(series_clean))
+    window_func = signal.get_window(window, len(series_clean))
 
     series_windowed = series_clean * window_func
 
@@ -73,7 +70,12 @@ def harmonic_analysis(
     n = len(series_windowed)
     frequencies = np.fft.rfftfreq(n)
     fft_vals = np.fft.rfft(series_windowed) / n
-    amplitudes = 2 * np.abs(fft_vals[1:])  # Double for one-sided spectrum, exclude DC
+    # Divide by the window's coherent gain (its mean). A window scales the signal
+    # down - the default hamming has a mean of ~0.54 - so without this every
+    # reported amplitude is that fraction of the true one, and a reconstruction
+    # built from them is short by the rest.
+    coherent_gain = float(np.mean(window_func))
+    amplitudes = 2 * np.abs(fft_vals[1:]) / coherent_gain  # one-sided, DC excluded
     phases = np.angle(fft_vals[1:])
     power = amplitudes ** 2
 
@@ -86,12 +88,17 @@ def harmonic_analysis(
         target_freq = h_num * fundamental_freq
         # Find closest FFT bin
         if target_freq < frequencies[-1]:
-            idx = int(np.round(target_freq * n))
-            if idx < len(amplitudes):
+            # `bin_full` indexes the full rfft output; amplitudes/phases/power
+            # have DC stripped, so they are one shorter and need bin_full - 1.
+            # Reading them at `bin_full` returned the neighbouring bin: a pure
+            # cosine sitting exactly on its bin came back with amplitude 0.
+            bin_full = int(np.round(target_freq * n))
+            idx = bin_full - 1
+            if 0 <= idx < len(amplitudes):
                 harmonics.append({
                     'harmonic_number': h_num,
                     'target_frequency': target_freq,
-                    'actual_frequency': frequencies[idx + 1],  # +1 for DC exclusion
+                    'actual_frequency': frequencies[bin_full],
                     'amplitude': amplitudes[idx],
                     'phase': phases[idx],
                     'power': power[idx]

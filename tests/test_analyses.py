@@ -428,6 +428,70 @@ if __name__ == '__main__':
     unittest.main()
 
 
+class TestHarmonicAmplitudesAreTrueAmplitudes(unittest.TestCase):
+    """A reported amplitude must be the signal's, not the windowed signal's.
+
+    Both `harmonic_analysis` and `harmonic_decompose` multiply by a window before
+    the FFT. A window scales the signal down (hamming's mean is ~0.54), so without
+    dividing by that coherent gain every amplitude is a fraction of the truth and
+    a reconstruction built from them is short by the rest.
+    """
+
+    AMPLITUDE = 3.0
+    PERIOD = 50
+    N = 1000
+
+    def _cosine(self):
+        import numpy as np
+        import pandas as pd
+        t = np.arange(self.N)
+        return pd.Series(self.AMPLITUDE * np.cos(2 * np.pi * t / self.PERIOD),
+                         index=pd.date_range('2020-01-01', periods=self.N, freq='D'))
+
+    def test_harmonic_analysis_recovers_the_amplitude_for_any_window(self):
+        from diive.analysis.harmonic import harmonic_analysis
+        for window in ('boxcar', 'hamming', 'hann', 'blackman'):
+            with self.subTest(window=window):
+                h = harmonic_analysis(self._cosine(), period=self.PERIOD,
+                                      n_harmonics=1, window=window)['harmonics'][0]
+                self.assertAlmostEqual(h['amplitude'], self.AMPLITUDE, places=6)
+
+    def test_harmonic_analysis_reads_the_bin_it_reports(self):
+        # The harmonic used to be read one bin high: amplitudes/phases/power have
+        # DC stripped, but they were indexed with the full-rfft bin number. A tone
+        # sitting exactly on its bin came back with amplitude 0.
+        from diive.analysis.harmonic import harmonic_analysis
+        h = harmonic_analysis(self._cosine(), period=self.PERIOD, n_harmonics=1,
+                              window='boxcar')['harmonics'][0]
+        self.assertAlmostEqual(h['actual_frequency'], h['target_frequency'], places=9)
+
+    def test_harmonic_decompose_recovers_the_amplitude(self):
+        from diive.core.times.decomposition_utils import harmonic_decompose
+        for window in ('boxcar', 'hamming'):
+            with self.subTest(window=window):
+                res = harmonic_decompose(self._cosine(), n_harmonics=1, window=window)
+                self.assertAlmostEqual(res['harmonics'][0]['amplitude'],
+                                       self.AMPLITUDE, places=6)
+
+    def test_harmonic_decompose_arrays_pair_element_wise(self):
+        # 'frequencies' used to be the full rfftfreq output, one longer than the
+        # arrays it is documented to pair with, so plotting one against the other
+        # raised.
+        from diive.core.times.decomposition_utils import harmonic_decompose
+        res = harmonic_decompose(self._cosine(), n_harmonics=2)
+        lengths = {k: len(res[k]) for k in
+                   ('frequencies', 'amplitudes', 'phases', 'spectrum')}
+        self.assertEqual(len(set(lengths.values())), 1, lengths)
+
+    def test_reconstruction_is_not_short_by_the_window(self):
+        from diive.core.times.decomposition_utils import harmonic_decompose
+        res = harmonic_decompose(self._cosine(), n_harmonics=1, window='boxcar')
+        self.assertAlmostEqual(float(res['reconstructed'].max()),
+                               self.AMPLITUDE, places=3)
+        # The residual is reconstruction error, not the amplitude the window ate.
+        self.assertLess(float(res['residual'].std()), 0.01 * self.AMPLITUDE)
+
+
 class TestDeadHarmonicFunctionsAreGone(unittest.TestCase):
     """Removed: no caller in the library, the GUI, the tests or the examples.
 

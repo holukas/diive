@@ -238,12 +238,17 @@ def harmonic_decompose(
                 - 'phase': float, phase in radians
                 - 'period': float, period in observations
                 - 'frequency': float, normalized frequency (0–1)
-            - 'frequencies': np.ndarray, frequency bins
-            - 'amplitudes': np.ndarray, amplitude at each frequency
+            - 'frequencies': np.ndarray, frequency bins (DC excluded)
+            - 'amplitudes': np.ndarray, amplitude at each frequency, corrected for
+              the window's coherent gain so it is the amplitude of the signal, not
+              of the windowed signal
             - 'phases': np.ndarray, phase at each frequency
             - 'spectrum': np.ndarray, power spectral density
             - 'reconstructed': pd.Series, signal reconstructed from top harmonics
             - 'residual': pd.Series, reconstruction error
+
+        ``frequencies``, ``amplitudes``, ``phases`` and ``spectrum`` are the same
+        length and pair element-wise.
 
     Notes:
         - NaN values are removed before FFT (series shortened)
@@ -258,10 +263,7 @@ def harmonic_decompose(
         raise ValueError(f"Series must have >= 4 valid values, got {len(series_clean)}")
 
     # Apply window
-    try:
-        window_func = signal.get_window(window, len(series_clean))
-    except ValueError:
-        window_func = signal.hamming(len(series_clean))
+    window_func = signal.get_window(window, len(series_clean))
 
     series_windowed = series_clean * window_func
 
@@ -269,7 +271,12 @@ def harmonic_decompose(
     n = len(series_windowed)
     frequencies = np.fft.rfftfreq(n)
     fft_vals = np.fft.rfft(series_windowed) / n
-    amplitudes = 2 * np.abs(fft_vals[1:])  # Exclude DC component, double for one-sided spectrum
+    # Divide by the window's coherent gain (its mean). A window scales the signal
+    # down - the default hamming has a mean of ~0.54 - so without this the
+    # reconstruction comes out at that fraction of the signal and the "residual"
+    # is dominated by the missing rest rather than by reconstruction error.
+    coherent_gain = float(np.mean(window_func))
+    amplitudes = 2 * np.abs(fft_vals[1:]) / coherent_gain  # one-sided, DC excluded
     powers = amplitudes ** 2
 
     # Find top harmonics by power
@@ -306,7 +313,10 @@ def harmonic_decompose(
 
     return {
         'harmonics': harmonics,
-        'frequencies': frequencies,
+        # Drop the DC bin so 'frequencies' pairs element-wise with the arrays
+        # beside it. It used to be the full rfftfreq output, one longer than
+        # amplitudes/phases/spectrum, so plotting one against the other raised.
+        'frequencies': frequencies[1:],
         'amplitudes': amplitudes,
         'phases': np.angle(fft_vals[1:]),
         'spectrum': powers,
