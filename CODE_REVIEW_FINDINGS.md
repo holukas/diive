@@ -49,9 +49,11 @@ in particular **L48/L49** (FFT amplitudes were ~54% of truth, and one bin off), 
 drawn over regions holding no data), **L42** (hqflux reported missing records as valid),
 **L54/L55** (`DriverAnalysis` — every number it reports moves, though it is experimental) and
 **L51/L52** (`StratifiedAnalysis` now analyses the records and keeps the z bins it used to drop,
-so both the curves and the bin count in an existing figure change) and **L47/L73** (STL returns
+so both the curves and the bin count in an existing figure change), **L47/L73** (STL returns
 components instead of NaN for any gappy series, and `harmonic_decompose` picks different
-components — which also shifts anything built on `features_stl`). The
+components — which also shifts anything built on `features_stl`) and **L30** (a record whose u\*
+is missing is now rejected rather than accepted, so u\*-filtered fluxes lose those records — how
+many depends entirely on how gappy the site's u\* is). The
 v0.91.0 entry already opens with *"Two of these change results silently, with no error and no
 warning"*; this round needs the same treatment.
 
@@ -138,11 +140,11 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | L45 | `ScopOptimizer` silently drops classes with <10 rows; neighbouring regime's SF is substituted | `flux/lowres/selfheating.py:904` |
 | ~~L42~~ | ~~`analyze_highest_quality_flux` counts missing records as valid~~ (done 2026-08-07) — 1519 of 3000 reported as "99.5%" | `flux/lowres/hqflux.py:251` |
 | ~~L7~~ | ~~**Outlier flags are never NaN**~~ (done 2026-08-07) — was the root cause of L30 and L42 | `core/base/flagbase.py:182` |
-| L30 | NaN u\* or NaN per-record threshold → flagged 0 (accepted). **Half-fixed by L7** (missing *flux* now NaN); missing *u\** still flagged 0 | `flux/lowres/ustarthreshold.py:142` |
+| ~~L30~~ | ~~NaN u\* or NaN per-record threshold → flagged 0 (accepted)~~ (done 2026-08-07) — completes the L7 half-fix | `flux/lowres/ustarthreshold.py:142` |
 | L29 | A failing bootstrap window is completely silent. **Mostly fixed with L28** — the reason now reaches the user at `warn` level; the stray `detail()` at `:232` still cannot print | `flux/lowres/ustar_bootstrap.py:39` |
 | L26 | `_class_bounds` can emit `end < start` → NaN class mean → up to 11 candidate classes skipped | `flux/lowres/ustar_mp_detection.py:285` |
 | L32 | `UstarDetectionMPT` is exported but never stores its results; `run()` only *prints* the threshold | `flux/lowres/ustarthreshold.py:561` |
-| L34 | `annual_thresholds_` holds the sentinel `10.0` on failure — a plausible threshold that filters everything | `flux/lowres/ustar_mp_detection.py:520` |
+| ~~L34~~ | ~~`annual_thresholds_` holds the sentinel `10.0` on failure — a plausible threshold that filters everything~~ (done 2026-08-07) | `flux/lowres/ustar_mp_detection.py:520` |
 | ~~L47~~ | ~~STL returns an all-NaN decomposition from a **single** NaN; `seasonality_strength` reads 0.0~~ (done 2026-08-07) | `core/times/decomposition_utils.py:133` |
 | ~~L50~~ | ~~`quality_weighted_decompose` ignores the weights entirely; `summary()` prints "Quality-weighted: True"~~ (done 2026-08-07) — fake path removed | `core/times/decomposition_utils.py:100` |
 | ~~L58~~ | ~~`detect_seasonality` fabricates `primary_period=365` when the periodogram yields nothing~~ (done 2026-08-07) | `core/times/decomposition_utils.py:490` |
@@ -930,7 +932,19 @@ with no error; `run_level33_ustar_detection` then misdiagnoses it as "insufficie
 records". (The sequential branch uses `detail`, the parallel branch at `:288` uses `info` — so the
 two report differently.)
 
-**[ ] L30. NaN USTAR or NaN per-record threshold is flagged 0 (accepted), not rejected** — *half-fixed*
+**[x] L30. NaN USTAR or NaN per-record threshold is flagged 0 (accepted), not rejected**
+
+> **Fixed 2026-08-07.** u\* filtering is a *positive* test: a record is kept only where the
+> measured turbulence can be shown to reach the threshold, so a record with no USTAR fails it.
+> `_flagtests` now derives the rejected set as the complement of the passing set
+> (`rejected = ~(ustar >= threshold)`) instead of testing `ustar < threshold`, which matched
+> neither way against NaN. Masking the flag to NaN instead would **not** have worked:
+> `FlagQCF._calculate_flagsums` sums only 1s and 2s, so a NaN flag is accepted downstream just
+> the same. The NaN *threshold* half is now a validation error rather than a silent
+> mass-rejection: `FlagMultipleVariableUstarThresholds.calc` raises if the reindexed threshold
+> Series does not cover every record, which is what its docstring already required. Verified on
+> a 6-record frame: flux present + USTAR missing now flags 2 (was 0); flux missing still flags
+> NaN (L7); a threshold Series with two holes raises naming the scenario.
 
 > **Partially addressed 2026-08-07 by the L7 fix.** `FlagBase` now masks the flag to NaN where the
 > *flux* is missing, so that half is covered. The half that matters here is **not**: a record with a
@@ -970,7 +984,15 @@ docstring. `bts_results_df` is not reset in `run()`, so a second run mixes both 
 `AttributeError`. `UstarMovingPointDetection` gets this right with `pd.DataFrame()`. Also, the
 documented `bootstrap_stats_` attribute is never assigned (`:432`) — always an `AttributeError`.
 
-**[ ] L34. `annual_thresholds_` holds the sentinel `10.0` when detection fails**
+**[x] L34. `annual_thresholds_` holds the sentinel `10.0` when detection fails**
+
+> **Fixed 2026-08-07.** `detect()` stores the aggregate as it comes out of `_aggregate_annual`
+> — NaN when no season yielded a threshold — so the attribute and `get_annual_thresholds()`
+> now agree, and the accessor's sentinel-to-NaN conversion is gone with them. The sentinel
+> stays where it belongs, inside the ONEFlux port's own comparisons. Verified on a synthetic
+> record with constant USTAR (nothing detectable): all four seasons NaN, `annual_thresholds_`
+> NaN, was 10.0. All consumers (`ustar_bootstrap`, the GUI detection tab, the examples) read
+> through the accessor, so none of them saw the sentinel.
 `ustar_mp_detection.py:520` — only the `get_annual_thresholds()` accessor converts
 `THRESHOLD_NOT_FOUND` back to NaN. The attribute is documented in the class Attributes section with
 no mention of the sentinel, so reading it directly after a failed detection yields 10.0 m/s — a
