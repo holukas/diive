@@ -1131,3 +1131,66 @@ class TestGapFillingResult(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestStlFeaturesOnGappyColumns(unittest.TestCase):
+    """A gappy driver must still get STL features - or say why not.
+
+    `_stl_features` used to skip any column holding a single NaN, and said so only
+    at DEBUG level. Real flux drivers essentially always have gaps, so asking for
+    STL features at the default verbosity produced none of them, silently. The skip
+    existed because `stl_decompose` could not fit around a gap (L47); it can now.
+    """
+
+    TARGET = 'NEE_CUT_REF_orig'
+    GAPPY = 'TA_GAPPY'
+
+    @classmethod
+    def setUpClass(cls):
+        import numpy as np
+        from diive.configs.exampledata import load_exampledata_parquet
+        df = load_exampledata_parquet().loc['2021', [cls.TARGET, 'Tair_f', 'Rg_f']].copy()
+        df[cls.GAPPY] = df['Tair_f']
+        df.iloc[100:400, df.columns.get_loc(cls.GAPPY)] = np.nan
+        cls.df = df
+
+    def _engineer(self, method):
+        import warnings
+        from diive.core.ml.feature_engineer import FeatureEngineer
+        engineer = FeatureEngineer(
+            target_col=self.TARGET, features_lag=None, features_rolling=None,
+            features_rolling_stats=None, features_diff=None, features_ema=None,
+            features_poly_degree=None, features_stl=True, features_stl_method=method,
+            features_stl_seasonal_period=48, features_stl_components=['trend'],
+            vectorize_timestamps=False, add_continuous_record_number=False,
+            sanitize_timestamp=False)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            return engineer.fit_transform(self.df)
+
+    def test_a_gappy_column_gets_its_stl_features(self):
+        for method in ('stl', 'harmonic'):
+            with self.subTest(method=method):
+                out = self._engineer(method)
+                self.assertIn(f'.{self.GAPPY}_STL_TREND', out.columns)
+
+    def test_the_features_cost_no_records_the_column_had_not_lost_already(self):
+        # The components are NaN exactly where the source column is. Were they NaN
+        # anywhere else, those records would drop out of the model matrix - the
+        # feature would cost more than it is worth.
+        for method in ('stl', 'harmonic'):
+            with self.subTest(method=method):
+                out = self._engineer(method)
+                feature = out[f'.{self.GAPPY}_STL_TREND']
+                source = out[self.GAPPY]
+                self.assertEqual(int((source.notna() & feature.isna()).sum()), 0)
+
+    def test_classical_cannot_and_says_so(self):
+        # statsmodels' classical decomposition genuinely cannot handle gaps. The
+        # column is skipped - but visibly, and only that column.
+        from diive.core.utils.console import console
+        with console.capture() as captured:
+            out = self._engineer('classical')
+        self.assertNotIn(f'.{self.GAPPY}_STL_TREND', out.columns)
+        self.assertIn('.Tair_f_STL_TREND', out.columns)
+        self.assertIn(self.GAPPY, captured.get())

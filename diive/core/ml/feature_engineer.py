@@ -209,6 +209,10 @@ class FeatureEngineer:
                   - 'harmonic': FFT-based, no series length constraints, very fast
                 Effect: 'stl' recommended for flux data (has gaps, strong seasonality).
                     'harmonic' for very long series or when speed critical.
+                Gaps: 'stl' and 'harmonic' decompose a gappy column and return
+                    components that are NaN at its gaps (the same records the column
+                    itself already loses); 'classical' cannot, and skips the column
+                    with a warning.
 
             features_stl_seasonal_period (int): Seasonal period in timesteps.
                 Default: None (auto-detect via periodogram if features_stl=True)
@@ -721,13 +725,8 @@ class FeatureEngineer:
                 warn(f"No valid STL components specified. Valid options: {valid_components}", verbose=self.verbose)
             return df
 
+        skipped = []
         for col in feature_cols:
-            # Check if column is complete (no gaps)
-            if df[col].isna().sum() > 0:
-                if self.verbose:
-                    detail(f"Skipping STL decomposition for {col} (contains {df[col].isna().sum()} gaps)", verbose=self.verbose)
-                continue
-
             try:
                 # Apply STL decomposition
                 decomp = SeasonalTrendDecomposition(
@@ -752,9 +751,18 @@ class FeatureEngineer:
                     newcols += stl_df.columns.tolist()
 
             except Exception as e:
-                if self.verbose:
-                    warn(f"STL decomposition failed for {col}: {str(e)}", verbose=self.verbose)
+                # Always visible: with the old blanket skip of any gappy column, a
+                # user asking for STL features at default verbosity got none of them
+                # and no indication - and real flux drivers essentially always have
+                # gaps. A column that cannot be decomposed has to say so.
+                skipped.append(col)
+                warn(f"STL decomposition failed for {col}, no STL features added "
+                     f"for this column: {str(e)}")
                 continue
+
+        if skipped and len(skipped) == len(feature_cols):
+            warn(f"No STL features were added: decomposition failed for all "
+                 f"{len(feature_cols)} columns (method='{self.features_stl_method}').")
 
         if self.verbose and newcols:
             detail(f"Added STL features (method={self.features_stl_method}, "

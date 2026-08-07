@@ -149,7 +149,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L51~~ | ~~`StratifiedAnalysis` drops z-bins whose rounded label collides — 19 of 120 lost, no warning~~ (done 2026-08-07) | `analysis/decoupling.py:213` |
 | L53 | `CompoundExtremes` returns zero classified periods for a single year, silently | `analysis/compoundextremes.py:168` |
 | ~~L59~~ | ~~`multi_scale_harmonics` swallows every exception~~ (done 2026-08-07) — function deleted as dead code | `analysis/harmonic.py:432` |
-| L19 | `features_stl=True` can produce nothing — any single NaN skips a column, logged only at DEBUG | `core/ml/feature_engineer.py:726` |
+| ~~L19~~ | ~~`features_stl=True` can produce nothing — any single NaN skips a column, logged only at DEBUG~~ (done 2026-08-07) | `core/ml/feature_engineer.py:726` |
 | L16 | SWIN short-gap interpolation never fires near dawn/dusk — the night's NaN run inflates the gap length | `gapfilling/swin.py:794` |
 | L4 | `keep_records_where`: an "open" bound is not open when `inclusive != 'both'` — drops the extreme record | `core/dfun/frames.py:110` |
 | L17 | `MetadataStore.rename` silently drops a record on a name collision | `core/metadata/__init__.py:325` |
@@ -765,7 +765,16 @@ rolling stages only. Inconsistent, and it grows the feature count quadratically 
 (`:455`) while every other stage gets `df[self.original_input_features]`. The `.`-prefix filter
 inside `_polynomial_features` neutralises the difference, so this is a readability wart, not a bug.)
 
-### [ ] L19. `features_stl=True` can silently produce nothing
+### [x] L19. `features_stl=True` can silently produce nothing
+
+> **Fixed 2026-08-07, after L47.** The blanket skip is gone: it existed because `stl_decompose`
+> could not fit around a gap, which L47 settled. A gappy driver now gets its STL features, and
+> those components are NaN in exactly the records the column itself already loses — measured on
+> a 300-gap driver, zero records lost beyond the source, so the feature costs nothing in model
+> rows. `'classical'` genuinely cannot decompose gaps (statsmodels raises); that column alone is
+> skipped, and the message is now a `warn()` rather than a DEBUG line, plus a summary warning
+> when *no* column could be decomposed. Verified: 4 STL columns instead of 3 under `'stl'` and
+> `'harmonic'`, 3 under `'classical'` with the reason printed.
 
 `diive/core/ml/feature_engineer.py:726` — `_stl_features` skips any column containing a single NaN,
 and only says so via `detail()` (DEBUG level, verbose ≥ 3). Real flux drivers essentially always
