@@ -1,15 +1,18 @@
 # Code Review Findings
 
 Review dates: 2026-08-06 (round 1: core numerics + GUI) · 2026-08-07 (round 2: the modules round 1
-left out) · diive v0.91.0 · branch `indev` (at `af022000`)
+left out; round 3: everything both left out) · diive v0.91.0 · branch `indev` (at `af022000`)
 
-Working document. Read-only review — **no code was changed**. Findings are ordered by severity
-within each section; each carries a file:line anchor and, where marked **[reproduced]**, a runnable
-repro that was actually executed during the review.
+Working document. The review itself changed no code; fixes land as separate commits and each one
+is recorded in place, in the entry it closes. Findings are ordered by severity within each section;
+each carries a file:line anchor and, where marked **[reproduced]**, a runnable repro that was
+actually executed during the review.
 
 Scope reviewed: the library's numerical/scientific code (`core/`, `preprocessing/`, `gapfilling/`,
 `flux/`, `variables/`, `analysis/`, `core/io/`, `core/metadata/`) and the desktop GUI
-(`diive/gui/`). **Still not reviewed in depth:** `flux/lowres/selfheating.py`,
+(`diive/gui/`). **Left out by rounds 1–2, and since covered by round 3** (see *Round 3* below;
+what is still unreviewed after it is listed at the end of *Reviewed and found sound*):
+`flux/lowres/selfheating.py`,
 `flux/lowres/ustar_mp_detection.py` / `ustarthreshold.py` / `ustar_bootstrap.py` /
 `ustar_vekuri_detection.py`, `flux/lowres/timelag_analysis.py`, `analysis/driveranalysis/`,
 `analysis/harmonic.py` / `granger.py` / `decoupling.py`, most of `core/plotting/`,
@@ -42,7 +45,8 @@ far and each needs an entry saying what silently changes for existing code:
 
 The non-breaking fixes are user-visible too and change numbers people may have already published —
 in particular **L48/L49** (FFT amplitudes were ~54% of truth, and one bin off), **L61/L63** (cells
-drawn over regions holding no data) and **L42** (hqflux reported missing records as valid). The
+drawn over regions holding no data), **L42** (hqflux reported missing records as valid) and
+**L54/L55** (`DriverAnalysis` — every number it reports moves, though it is experimental). The
 v0.91.0 entry already opens with *"Two of these change results silently, with no error and no
 warning"*; this round needs the same treatment.
 
@@ -109,8 +113,8 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L37~~ | ~~**The H2O/LE self-heating path must be removed**~~ (done 2026-08-07) — no self-heating correction for LE exists in EC science | `flux/lowres/selfheating.py` |
 | ~~L28~~ | ~~USTAR bootstrap bypasses the 3000-record minimum `detect()` enforces~~ (done 2026-08-07) | `flux/lowres/ustar_mp_detection.py:561` |
 | ~~L14~~ | ~~`combine_variables(keep_overlap_only=False)`: subtract/divide return the **negation / reciprocal**~~ (done 2026-08-07) — option removed | `variables/utilities.py:73` |
-| L54 | `DriverAnalysis(deseasonalize=True)` fabricates target values by interpolation — into its own chronological hold-out | `analysis/driveranalysis/driveranalysis.py:80` |
-| L55 | Per-regime relevance judged against the *global* model's `.RANDOM` floor — decides the headline verdict | `analysis/driveranalysis/driveranalysis.py:760` |
+| ~~L54~~ | ~~`DriverAnalysis(deseasonalize=True)` fabricates target values by interpolation~~ (done 2026-08-07) | `analysis/driveranalysis/driveranalysis.py:80` |
+| ~~L55~~ | ~~Per-regime relevance judged against the *global* model's `.RANDOM` floor~~ (done 2026-08-07) | `analysis/driveranalysis/driveranalysis.py:760` |
 | ~~L48~~ | ~~`harmonic_analysis` reads the wrong FFT bin~~ (done 2026-08-07) | `analysis/harmonic.py:89` |
 | ~~L49~~ | ~~Windowed FFT amplitudes never corrected for coherent gain~~ (done 2026-08-07) | `analysis/harmonic.py:70` |
 | L52 | `StratifiedAnalysis` listwise-drops on **every** column — 20 000 rows → 100, silently | `analysis/decoupling.py:68` |
@@ -1160,7 +1164,22 @@ member, so `transform('std')` (ddof=1) is NaN and every row is dropped. `results
 `counts` all zeros, with no warning — indistinguishable from "no extremes occurred". `season` is
 documented as "the default and the standard choice" and the GUI exposes it.
 
-**[ ] L54. `DriverAnalysis(deseasonalize=True)` silently linear-interpolates every gap**
+**[x] L54. `DriverAnalysis(deseasonalize=True)` silently linear-interpolates every gap**
+
+> **Fixed 2026-08-07.** `_stl_components` still interpolates — statsmodels' STL has no NaN
+> handling, so there is no way to fit without it — but the interpolated positions are masked
+> back to NaN in all three components before they leave the function. A gap in the input is a
+> gap in the output, so `_build_matrix.dropna()` removes those rows again and no fabricated
+> record reaches a model or the chronological hold-out. That covers all three call sites at
+> once (`_apply_deseasonalize`, `scale_resolved`'s STL components, `granger`), which is why
+> the fix went into the helper rather than into `_apply_deseasonalize`.
+>
+> On the example CH-DAV month used by `analysis_driveranalysis.py` (1488 records, 579 measured
+> after QCF filtering), `deseasonalize=True` and `deseasonalize=False` now both build a
+> 579-row matrix. Covered by `TestDeseasonalizeKeepsGaps`; mutation-checked (both tests fail
+> with the mask removed). `granger()` is unaffected in shape — `GrangerCausality` drops NaN
+> itself — it just no longer tests interpolated values.
+
 `analysis/driveranalysis/driveranalysis.py:80` — `_stl_components` opens with
 `series.interpolate(limit_direction='both')`, and the interpolated values survive into
 `trend + resid`; `_apply_deseasonalize`'s `reindex` (`:288`) is a no-op because the index is already
@@ -1169,7 +1188,23 @@ model with fabricated target values — including the chronological hold-out tha
 A 4-day gap (200 NaN) comes back with 0 NaN. `granger()` (`:774`) shares the path. The constructor
 documents `deseasonalize` only as "STL-deseasonalize target and drivers up front".
 
-**[ ] L55. Per-regime and per-scale relevance is judged against the *global* model's `.RANDOM` floor**
+**[x] L55. Per-regime and per-scale relevance is judged against the *global* model's `.RANDOM` floor**
+
+> **Fixed 2026-08-07.** `_fit_importance` now returns `(importance, random_baseline, extras)`
+> instead of discarding the baseline; `scale_resolved` and `stratified` keep it per column
+> (`_scale_baselines` / `_stratified_baselines`), and `_temporal_fields` judges each column
+> against the floor of the fit that produced it via the new `_relevances_vs_own_floor`. A
+> column with no recorded floor still falls back to the headline model's.
+>
+> The per-submodel floors are not a detail: on the CH-DAV example month they span
+> `stl_trend 0.013 … daily 0.392` against a global `0.246`, so individual labels do move —
+> SW_IN at `stl_trend` reads `no` against the global floor and `yes` against its own. The two
+> day/night floors happened to land within 1% of each other on that dataset, so no regime
+> verdict changed there; the reviewer's four-season repro is the case where it does.
+>
+> Covered by `TestPerSubmodelNoiseFloor`; mutation-checked (the relevance test fails when the
+> lookup is replaced by the global floor).
+
 `analysis/driveranalysis/driveranalysis.py:760` — `_fit_importance` discards the `random_val`
 `_shap_per_driver` returns (`imp, _ = ...`), and `_temporal_fields` (`:896`, `:902`) compares each
 throwaway model's importances against `self._random_baseline` from the headline model. Each submodel
