@@ -113,7 +113,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | L46 | Does Burba 2008 intend BUR08 to drop the WPL dilution factor BUR06/JAR09 applies? ~1% systematic offset between methods | `flux/lowres/selfheating.py:614` |
 | L72 | Is InfluxDB v2's *delete* range stop-exclusive? If so the pre-upload delete leaves the last record and duplicates survive | `core/io/db/influx/influxio.py:122` |
 
-## S1 — Silently wrong scientific output (12)
+## S1 — Silently wrong scientific output (13)
 
 | ID | Finding | Where |
 |---|---|---|
@@ -124,6 +124,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L55~~ | ~~Per-regime relevance judged against the *global* model's `.RANDOM` floor~~ (done 2026-08-07) | `analysis/driveranalysis/driveranalysis.py:760` |
 | ~~L48~~ | ~~`harmonic_analysis` reads the wrong FFT bin~~ (done 2026-08-07) | `analysis/harmonic.py:89` |
 | ~~L49~~ | ~~Windowed FFT amplitudes never corrected for coherent gain~~ (done 2026-08-07) | `analysis/harmonic.py:70` |
+| L74 | u\* filtering keeps the first high-turbulence record after a low-turbulence period — ONEFlux and Pastorello 2020 both discard it | `flux/lowres/ustarthreshold.py:139` |
 | ~~L52~~ | ~~`StratifiedAnalysis` listwise-drops on **every** column — 20 000 rows → 100, silently~~ (done 2026-08-07) | `analysis/decoupling.py:68` |
 | ~~L61~~ | ~~`HeatmapYearMonth` mis-places cells when months are non-contiguous~~ (done 2026-08-07) | `core/plotting/heatmap_datetime.py:395` |
 | ~~L63~~ | ~~Empty X/Y/Z bins dropped, then rendered as measured cells~~ (done 2026-08-07) — fixed in `GridAggregator`, so `HeatmapXYZ` benefits too | `analysis/gridaggregator.py:429` |
@@ -945,6 +946,17 @@ two report differently.)
 > Series does not cover every record, which is what its docstring already required. Verified on
 > a 6-record frame: flux present + USTAR missing now flags 2 (was 0); flux missing still flags
 > NaN (L7); a threshold Series with two holes raises naming the scenario.
+>
+> **Confirmed against ONEFlux** (`nee_proc/src/dataset.c:4555` VUT, `:4840` CUT): the reference
+> filter is `if (USTAR_VALUE < threshold) NEE = INVALID_VALUE`, and a missing USTAR *is*
+> `INVALID_VALUE` (= `-9999`, `common.h:159`), which is below every threshold — so ONEFlux
+> rejects exactly these records. diive accepting them was a real deviation, not a judgement call.
+>
+> **Scope note on the threshold-Series guard:** it protects a hand-built Series passed through
+> the composable API. The in-chain VUT path never hits it — `run_level33_ustar_detection`
+> (`levels/level33.py:536`) expands the per-*year* VUT table to per-record values and already
+> falls back to the pooled CUT threshold for a year with none, so its Series spans the record
+> by construction.
 
 > **Partially addressed 2026-08-07 by the L7 fix.** `FlagBase` now masks the flag to NaN where the
 > *flux* is missing, so that half is covered. The half that matters here is **not**: a record with a
@@ -1002,6 +1014,40 @@ plausible-looking threshold that would filter out every record.
 `ustar_bootstrap.py:133`, `ustar_vekuri_detection.py:80` — `dv.UstarBootstrapThresholds`,
 `dv.UstarMovingPointDetection`, `dv.UstarVekuriThresholdDetection` all live on `dv.flux`; the
 snippets raise `AttributeError` as written.
+
+**[ ] L74. u\* filtering keeps the first high-turbulence record after a low-turbulence period**
+⚠ **[found 2026-08-07 while cross-checking L30 against ONEFlux and Pastorello 2020]**
+
+`ustarthreshold.py:139` (`FlagSingleConstantUstarThreshold._flagtests`) — the flag is a pure
+element-wise `ustar >= threshold`. FLUXNET/ONEFlux discards **one more** record than that: the
+first half-hour *above* the threshold that follows a period below it. ONEFlux does it in both
+filter branches, `nee_proc/src/dataset.c:4571` (VUT) and `:4859` (CUT):
+
+```c
+/* filter out also the first value after a low turbulence period (even if just one hh) */
+if ( row < rows_count-1 ) {
+    if ( !IS_INVALID_VALUE(datasets[dataset].rows[index+row+1].value[NEE_VALUE]) ) {
+        datasets[dataset].rows[index+row+1].value[NEE_VALUE] = INVALID_VALUE;
+```
+
+and Pastorello et al. 2020 (Sci Data 7:225, *The FLUXNET2015 dataset…*) states the reason:
+"removing also the first half-hour with high turbulence after a period of low turbulence to
+avoid false emission pulses due to CO2 accumulated under the canopy."
+
+So diive keeps precisely the records that carry the flushed sub-canopy CO2 burst, which biases
+nighttime NEE (and therefore RECO, and the partitioned GPP) — in the one direction the rule
+exists to prevent. It affects every u\* scenario, CUT and VUT, and both flagger classes.
+
+ONEFlux also grades the removal in its NEE flags (1 = first record removed for low u\*, 2 = a
+subsequent one, 3 = the high-u\* record removed at the end of the period); diive's flag is 0/2
+only, so a fix has to decide whether to reproduce that granularity or just reject.
+
+Everything else in the port was checked against the same reference and matches: the constants
+(`ustar_mp/src/types.h` — 3000 / 160 / 100 / 0.5 / 0.2 / 1.0 / window 10 / night SW_IN 10),
+`median_ustar_threshold` (`ustar.c:214`, excludes both INVALID and NOT_FOUND, even/odd median)
+against `_detect_season`, and `forward_mode` (`ustar.c`, percentile check disabled) against
+`_forward_mode` — same loop bounds, same `meanws(i+1+y, window)`, same
+`fx_mean[i+y] >= mean*THRESHOLD_CHECK` plateau test, same `ustar_mean[i]` return.
 
 ---
 
