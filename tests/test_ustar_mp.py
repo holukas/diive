@@ -319,3 +319,109 @@ class TestBootstrapReportsWhyAWindowFailed(unittest.TestCase):
             dict(nee_col='TYPO', ta_col='TA', ustar_col='USTAR', swin_col='SW_IN'), 3)
         self.assertEqual(samples, [])
         self.assertNotIn('Insufficient', err)
+
+
+class TestFailedDetectionReportsNoThreshold(unittest.TestCase):
+    """A failed detection must not leave a usable-looking threshold behind.
+
+    `THRESHOLD_NOT_FOUND` is 10.0 m/s - a plausible-looking u* threshold that would
+    filter out every record. It was stored in the documented `annual_thresholds_`
+    attribute and converted back to NaN only inside `get_annual_thresholds()`, so
+    reading the attribute directly after a failed detection was a trap.
+    """
+
+    @staticmethod
+    def _undetectable():
+        # Enough records to clear the minimum, but USTAR never varies, so no TA
+        # class yields a threshold and every season comes back empty.
+        import pandas as pd
+        n = UstarMovingPointDetection.MIN_SAMPLES_PERIOD * 2
+        ix = pd.date_range('2020-01-01 00:30', periods=n, freq='30min',
+                           name='TIMESTAMP_MIDDLE')
+        rng = np.random.RandomState(0)
+        return pd.DataFrame({'NEE': rng.normal(0, 5, n), 'TA': rng.normal(10, 5, n),
+                             'USTAR': 0.5, 'SW_IN': 0.0}, index=ix)
+
+    def test_the_attribute_and_the_accessor_agree_on_nan(self):
+        det = UstarMovingPointDetection(df=self._undetectable(), nee_col='NEE', ta_col='TA',
+                                        ustar_col='USTAR', swin_col='SW_IN', verbose=0)
+        seasonal = det.detect()['threshold']
+        self.assertTrue(seasonal.isna().all(), 'this fixture must fail detection')
+        stored = det.annual_thresholds_['threshold']
+        self.assertTrue(np.isnan(stored))
+        self.assertNotEqual(stored, UstarMovingPointDetection.THRESHOLD_NOT_FOUND)
+        self.assertTrue(np.isnan(det.get_annual_thresholds()['threshold']))
+
+    def test_a_real_threshold_still_arrives_intact(self):
+        import pandas as pd
+        n = UstarMovingPointDetection.MIN_SAMPLES_PERIOD * 2
+        ix = pd.date_range('2020-01-01 00:30', periods=n, freq='30min',
+                           name='TIMESTAMP_MIDDLE')
+        rng = np.random.RandomState(0)
+        df = pd.DataFrame({'NEE': rng.normal(0, 5, n), 'TA': rng.normal(10, 5, n),
+                           'USTAR': rng.uniform(0, 1, n), 'SW_IN': 0.0}, index=ix)
+        det = UstarMovingPointDetection(df=df, nee_col='NEE', ta_col='TA',
+                                        ustar_col='USTAR', swin_col='SW_IN', verbose=0)
+        det.detect()
+        stored = det.annual_thresholds_['threshold']
+        self.assertTrue(np.isfinite(stored))
+        self.assertEqual(stored, det.get_annual_thresholds()['threshold'])
+
+
+class TestUstarFlagNeedsAMeasuredUstar(unittest.TestCase):
+    """A record with no USTAR cannot be shown to be turbulent, so it cannot pass.
+
+    Both comparisons are False against NaN, so such a record used to land in
+    neither the accepted nor the rejected set and its flag summed to 0 - accepted,
+    with turbulence unknown. Flagging it NaN would not help either: FlagQCF sums
+    only 1s and 2s, so a NaN flag survives downstream just the same.
+    """
+
+    @staticmethod
+    def _frame():
+        import pandas as pd
+        ix = pd.date_range('2023-01-01 00:30', periods=6, freq='h',
+                           name='TIMESTAMP_MIDDLE')
+        nee = pd.Series([3.0, np.nan, 4.0, 5.0, 6.0, 7.0], index=ix, name='NEE')
+        ustar = pd.Series([np.nan, 0.5, 0.1, 0.9, np.nan, 0.4], index=ix, name='USTAR')
+        return nee, ustar
+
+    def test_a_missing_ustar_is_rejected_not_accepted(self):
+        from diive.flux.lowres.ustarthreshold import FlagSingleConstantUstarThreshold
+        nee, ustar = self._frame()
+        flag = FlagSingleConstantUstarThreshold(series=nee, ustar=ustar, threshold=0.3).run().get_flag()
+        self.assertEqual(flag.iloc[0], 2)   # flux present, USTAR unknown
+        self.assertEqual(flag.iloc[4], 2)   # same
+        self.assertEqual(flag.iloc[2], 2)   # measured USTAR below the threshold
+        self.assertEqual(flag.iloc[3], 0)   # measured USTAR above it
+        self.assertEqual(flag.iloc[5], 0)
+        # A missing flux stays "not testable" (NaN), which is a separate question.
+        self.assertTrue(np.isnan(flag.iloc[1]))
+
+    def test_a_threshold_series_with_holes_is_refused(self):
+        # Reindexing a threshold Series that does not span the record fills the
+        # rest with NaN, which would reject those records without saying why.
+        import pandas as pd
+        from diive.flux.lowres.ustarthreshold import FlagMultipleVariableUstarThresholds
+        nee, ustar = self._frame()
+        thr = pd.Series(0.3, index=nee.index)
+        thr.iloc[-2:] = np.nan
+        flagger = FlagMultipleVariableUstarThresholds(
+            series=nee, ustar=ustar, threshold_series={'VUT_50': thr},
+            showplot=False, verbose=False)
+        with self.assertRaises(ValueError) as ctx:
+            flagger.calc()
+        self.assertIn('VUT_50', str(ctx.exception))
+
+    def test_a_complete_threshold_series_still_works(self):
+        import pandas as pd
+        from diive.flux.lowres.ustarthreshold import FlagMultipleVariableUstarThresholds
+        nee, ustar = self._frame()
+        thr = pd.Series(0.3, index=nee.index)
+        flagger = FlagMultipleVariableUstarThresholds(
+            series=nee, ustar=ustar, threshold_series={'VUT_50': thr},
+            showplot=False, verbose=False)
+        flagger.calc()
+        flagcol = [c for c in flagger.results.columns if c.startswith('FLAG_')][0]
+        self.assertEqual(flagger.results[flagcol].tolist()[3], 0)
+        self.assertEqual(flagger.results[flagcol].tolist()[0], 2)

@@ -88,8 +88,11 @@ class UstarMovingPointDetection:
     results_ : pd.DataFrame
         Detected thresholds with column: 'threshold'
         Index contains season labels (Season 1, 2, 3, 4)
+        NaN for a season whose threshold could not be detected
     annual_thresholds_ : dict
-        Annual threshold with key: 'threshold' (maximum across seasons)
+        Annual threshold with key: 'threshold' (maximum across seasons),
+        NaN if no season yielded a threshold. Same value as
+        ``get_annual_thresholds()`` returns.
 
     Examples
     --------
@@ -527,10 +530,12 @@ class UstarMovingPointDetection:
             index=[f'Season {i + 1}' for i in range(self.seasons_count)],
         )
 
+        # NaN, not THRESHOLD_NOT_FOUND: the sentinel is 10.0 m/s, a plausible-looking
+        # threshold that would filter out every record. It used to be stored here and
+        # converted back to NaN only by get_annual_thresholds(), so reading the
+        # documented attribute directly after a failed detection was a trap.
         annual = self._aggregate_annual(thresholds_list)
-        self.annual_thresholds_ = {
-            'threshold': annual if np.isfinite(annual) else self.THRESHOLD_NOT_FOUND,
-        }
+        self.annual_thresholds_ = {'threshold': annual}
 
         if self.verbose >= 1:
             if np.isfinite(annual):
@@ -697,10 +702,7 @@ class UstarMovingPointDetection:
         """
         if not self.annual_thresholds_:
             raise RuntimeError("Detection not yet performed. Call detect() first.")
-        result = self.annual_thresholds_.copy()
-        if result.get('threshold') == self.THRESHOLD_NOT_FOUND:
-            result['threshold'] = np.nan
-        return result
+        return self.annual_thresholds_.copy()
 
     def __repr__(self) -> str:
         """String representation."""
