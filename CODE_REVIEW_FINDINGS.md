@@ -135,11 +135,11 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 
 | ID | Finding | Where |
 |---|---|---|
-| L75 | 25 `detail()` debug lines cannot print at any verbosity — bare `detail()` outranks its own min_level | `core/utils/console.py:191` |
-| L36 | Self-heating gap-fill drops every gap before filling — fills nothing, blames "insufficient drivers" | `flux/lowres/selfheating.py:390` |
-| L38 | Corrected flux becomes NaN wherever the correction term is missing — deletes real measurements | `flux/lowres/selfheating.py:1225` |
-| L40 | Unrecognised `correction_method_base` returns an empty result instead of raising | `flux/lowres/selfheating.py:270` |
-| L45 | `ScopOptimizer` silently drops classes with <10 rows; neighbouring regime's SF is substituted | `flux/lowres/selfheating.py:904` |
+| ~~L75~~ | ~~25 `detail()` debug lines cannot print at any verbosity~~ (done 2026-08-07) — module default is now settable | `core/utils/console.py:191` |
+| ~~L36~~ | ~~Self-heating gap-fill drops every gap before filling~~ (done 2026-08-07) | `flux/lowres/selfheating.py:390` |
+| ~~L38~~ | ~~Corrected flux becomes NaN wherever the correction term is missing~~ (done 2026-08-07) — carried through + flagged | `flux/lowres/selfheating.py:1225` |
+| ~~L40~~ | ~~Unrecognised `correction_method_base` returns an empty result instead of raising~~ (done 2026-08-07) | `flux/lowres/selfheating.py:270` |
+| ~~L45~~ | ~~`ScopOptimizer` silently drops classes with <10 rows~~ (done 2026-08-07) | `flux/lowres/selfheating.py:904` |
 | ~~L42~~ | ~~`analyze_highest_quality_flux` counts missing records as valid~~ (done 2026-08-07) — 1519 of 3000 reported as "99.5%" | `flux/lowres/hqflux.py:251` |
 | ~~L7~~ | ~~**Outlier flags are never NaN**~~ (done 2026-08-07) — was the root cause of L30 and L42 | `core/base/flagbase.py:182` |
 | ~~L30~~ | ~~NaN u\* or NaN per-record threshold → flagged 0 (accepted)~~ (done 2026-08-07) — completes the L7 half-fix | `flux/lowres/ustarthreshold.py:142` |
@@ -1064,7 +1064,17 @@ documented `bootstrap_stats_` attribute is never assigned (`:432`) — always an
 no mention of the sentinel, so reading it directly after a failed detection yields 10.0 m/s — a
 plausible-looking threshold that would filter out every record.
 
-**[ ] L75. 25 `detail()` calls across the library can never print**
+**[x] L75. 25 `detail()` calls across the library can never print**
+
+> **Fixed 2026-08-07.** Threading `verbose=` through was not available: **24 of the 25 sites have
+> no verbosity source at all** — no `self.verbose`, no `verbose` parameter — so closing it that
+> way would have meant adding a parameter to 20+ public functions. Instead the helpers now
+> default to `verbose=None`, meaning "use the module default", and that default is settable:
+> `dv.set_verbosity(dv.VERBOSE_DEBUG)` / `get_verbosity()` (exported at top level). Behaviour at
+> the default (PROGRESS) is unchanged — `detail()` still stays quiet, `info()` still prints — but
+> the 25 lines are now *reachable*, which they were not at any setting before. An explicit
+> `verbose=` at the call site still wins. The CLAUDE.md convention that produced the defect
+> ("call helpers WITHOUT `verbose=` inside a guard") is corrected in the same commit.
 ⚠ **[found 2026-08-07 while closing L29]**
 
 `detail()` (`core/utils/console.py:191`) defaults to `verbose=VERBOSE_PROGRESS` (2) but its own
@@ -1144,7 +1154,13 @@ against `_detect_season`, and `forward_mode` (`ustar.c`, percentile check disabl
 
 ### Self-heating and time lag (`flux/lowres/selfheating.py`, `timelag_analysis.py`, `hqflux.py`)
 
-**[ ] L36. `_gapfill()` drops every gap before gap-filling — the gap-fill is a no-op** ⚠ **[verified independently]**
+**[x] L36. `_gapfill()` drops every gap before gap-filling — the gap-fill is a no-op** ⚠ **[verified independently]**
+
+> **Fixed 2026-08-07.** The `dropna()` now names the *driver* columns
+> (`dropna(subset=drivers)`), so a record missing only the target — which is what a gap *is* —
+> stays in the frame for XGBoost to fill. Measured on CH-LAE 2016-06..08: gaps after gap-filling
+> 497 -> 0 (before: 497 in, 497 out). This also fixes the secondary effect noted here, since the
+> lag/rolling features are no longer built across removed rows.
 `selfheating.py:390` — `pd.DataFrame.from_dict(frame).dropna()` uses `how='any'` over all columns
 *including the target* `FCT_UNSC`, so exactly the rows to be filled are deleted from the training
 frame. XGBoost reports `Filling 0 missing records`, `fct_unsc_gf` comes back identical to
@@ -1201,7 +1217,13 @@ claim to retract.
 Also worth recording while this module is open: **`selfheating.py` has no test coverage whatsoever**,
 which is the common context for L36, L38, L39, L40, L41 and L45 below.
 
-**[ ] L38. Corrected flux silently becomes NaN wherever the correction term is missing**
+**[x] L38. Corrected flux silently becomes NaN wherever the correction term is missing**
+
+> **Fixed 2026-08-07.** A record with a measured flux but no correction term is now carried
+> through *uncorrected* instead of being deleted (`flux + FCT.fillna(0)`), and the new
+> informational flag `FLAG_NEE_OP_CORR_ISCORRECTED` says which is which: 1 = corrected,
+> 0 = carried through, NaN = no measured flux. `run()` warns with the count. Consistent with how
+> diive treats this trade-off elsewhere (see L74): keep the measurement, state what happened.
 `selfheating.py:1225` — `flux_corr = flux_openpath + FCT` propagates NaN, so a record with a valid
 open-path flux but no correction term drops out of the deliverable rather than being carried through
 uncorrected or flagged. Combined with L36 this deletes real measurements: 200 of 1000 records lost
@@ -1214,7 +1236,10 @@ series under `fct_unsc.name`. Passing what `ScopPhysics.run(gapfill=False)` prod
 into `merge_asof` while the right-hand table always names that column `DAYTIME`, so a day/night flag
 named anything else raises before any correction happens.
 
-**[ ] L40. An unrecognised `correction_method_base` returns an empty result instead of raising**
+**[x] L40. An unrecognised `correction_method_base` returns an empty result instead of raising**
+
+> **Fixed 2026-08-07.** The `if/elif` chain has an `else` that raises `ValueError` naming the
+> three valid options.
 `selfheating.py:270` — the `if/elif/elif` chain has no `else`, so a typo leaves `fct_unsc` as the
 empty placeholder from `__init__`. `run()` completes without warning and every consumer sees an
 empty correction.
@@ -1249,7 +1274,14 @@ docstrings' "Failed analyses … print warnings but do not raise exceptions".
 `[0.5, 1.5]`; (c) `histogram_startbin`/`histogram_endbin` are documented as bin *indices* but are
 compared against `BIN_START_INCL` (`:410`), i.e. they are lag values in **seconds**.
 
-**[ ] L45. `ScopOptimizer` silently drops classes with fewer than 10 valid rows**
+**[x] L45. `ScopOptimizer` silently drops classes with fewer than 10 valid rows**
+
+> **Fixed 2026-08-07.** The threshold is now the named constant `MIN_ROWS_PER_CLASS`, skipped
+> classes are collected in `skipped_classes` (daytime, class, complete records, total records)
+> and reported by `run()` at `warn` level, spelling out that their records will take a
+> neighbouring class's factor. Verified on a fixture whose top quartile keeps 3 of 100 complete
+> records: `1 of 4 classes had fewer than 10 complete records ...  daytime=1 class=3: 3 complete
+> of 100 records`.
 `selfheating.py:904` — `if len(valid_bin) < 10: continue` emits nothing. `_assign_scaling_factors`
 then resolves those records via `merge_asof(direction='backward')` to a neighbouring regime's SF,
 and `stats()` prints no target bin count, so a missing bin is invisible.
