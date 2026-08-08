@@ -265,6 +265,13 @@ class ScopPhysics:
             self.fct_unsc = self._flux_correction_term_unscaled_jar09_bur06(ts=self.ts)
         elif correction_method_base == "BUR08":
             self.fct_unsc, self.S = self._flux_correction_term_unscaled_bur08()
+        else:
+            # Without this the chain just falls through, leaving fct_unsc as the
+            # empty placeholder from __init__: run() completes without a word and
+            # every consumer downstream sees an empty correction.
+            raise ValueError(
+                f"Unknown correction_method_base '{correction_method_base}'. "
+                f"Expected one of: 'JAR09', 'BUR06', 'BUR08'.")
 
         self.fct_unsc.name = self.cols.fct_unsc
 
@@ -377,7 +384,15 @@ class ScopPhysics:
             self.u.name: self.u,
             self.ustar.name: self.ustar
         }
-        df_input = pd.DataFrame.from_dict(frame).dropna()
+        # Drop rows missing a *driver*, never rows missing the target: the records
+        # with no FCT_UNSC are precisely the gaps to be filled. A blanket dropna()
+        # deleted them from the frame, so XGBoost reported "Filling 0 missing
+        # records", returned the input unchanged, and the message below blamed
+        # "insufficient drivers". It also made the lag/rolling features span the
+        # removed rows, reaching across arbitrary time jumps.
+        df_input = pd.DataFrame.from_dict(frame)
+        drivers = [c for c in df_input.columns if c != self.cols.fct_unsc]
+        df_input = df_input.dropna(subset=drivers)
 
         # Engineer features: temporal lags + rolling stats for diurnal/synoptic patterns
         engineer = FeatureEngineer(
@@ -803,6 +818,11 @@ class ScopOptimizer:
         correction workflow using ScopPhysics, ScopOptimizer, and ScopApplicator classes.
     """
 
+    # A class with fewer complete records than this is not fitted; its records
+    # fall back to a neighbouring class's scaling factor (reported by `run()`
+    # and listed in `skipped_classes`).
+    MIN_ROWS_PER_CLASS = 10
+
     def __init__(self,
                  class_var: pd.Series,
                  n_classes: int,
@@ -828,6 +848,7 @@ class ScopOptimizer:
         })
 
         self.scaling_factors_df = pd.DataFrame()
+        self.skipped_classes = []
 
     def run(self) -> pd.DataFrame:
         """
@@ -835,6 +856,7 @@ class ScopOptimizer:
         Uses list accumulation for speed instead of DataFrame.loc assignment.
         """
         results = []
+        skipped = []
 
         # Group by daytime
         for daytime, day_group in self.df.groupby(self.cols.daytime):
@@ -855,7 +877,12 @@ class ScopOptimizer:
                 # Drop NaNs upfront for this bin
                 # (We only need rows where all vars are present)
                 valid_bin = bin_group.dropna()
-                if len(valid_bin) < 10:
+                if len(valid_bin) < self.MIN_ROWS_PER_CLASS:
+                    # Say so: a skipped class gets no scaling factor of its own, and
+                    # _assign_scaling_factors then resolves its records to a
+                    # neighbouring regime's factor via merge_asof(direction=
+                    # 'backward'). Silently, that reads as a class that was fitted.
+                    skipped.append((daytime, bin_id, len(valid_bin), len(bin_group)))
                     continue
 
                 # Prepare numpy arrays (for speed)
@@ -905,6 +932,14 @@ class ScopOptimizer:
                 })
 
                 detail(f"Finished group {bin_id} (Daytime {daytime}): Median SF = {np.median(factors):.3f}")
+
+        if skipped:
+            warn(f"{len(skipped)} of {len(skipped) + len(results)} classes had fewer than "
+                 f"{self.MIN_ROWS_PER_CLASS} complete records and got no scaling factor of "
+                 f"their own; their records take a neighbouring class's factor:")
+            for daytime, bin_id, n_valid, n_total in skipped:
+                warn(f"  daytime={daytime} class={bin_id}: {n_valid} complete of {n_total} records")
+        self.skipped_classes = skipped
 
         # Create dataframe
         self.scaling_factors_df = pd.DataFrame(results)
@@ -1131,6 +1166,9 @@ class ScopApplicator:
         self.cols = ColumnConfig()
 
         self.col_flux_corr = f"NEE{self.cols.flux_corr_suffix}"
+        # Informational flag (not consumed by FlagQCF): 1 = correction applied,
+        # 0 = measured flux carried through uncorrected, NaN = no measured flux.
+        self.col_flux_corr_flag = f"FLAG_{self.col_flux_corr}_ISCORRECTED"
 
         frame = {self.fct_unsc.name: self.fct_unsc, self.flux_openpath.name: self.flux_openpath,
                  self.classvar.name: self.classvar, self.daytime.name: self.daytime}
@@ -1150,8 +1188,20 @@ class ScopApplicator:
         # Corrected OP = uncorrected OP + (FCT_unscaled * ScalingFactor)
         self.df[self.cols.fct] = self.df[self.cols.fct_unsc_gf] * self.df[self.cols.sf]
 
-        # Apply correction
-        self.df[self.col_flux_corr] = self.df[self.flux_openpath.name] + self.df[self.cols.fct]
+        # Apply correction. A record with a measured flux but no correction term is
+        # carried through *uncorrected* rather than deleted: `flux + NaN` used to
+        # propagate, so a missing correction silently removed a real measurement
+        # from the deliverable. The flag says which is which, so nobody has to
+        # guess whether a value was corrected.
+        applied = self.df[self.cols.fct].notna()
+        self.df[self.col_flux_corr] = self.df[self.flux_openpath.name] + self.df[self.cols.fct].fillna(0)
+        self.df[self.col_flux_corr_flag] = applied.astype(int).where(
+            self.df[self.flux_openpath.name].notna())
+
+        n_carried = int((self.df[self.flux_openpath.name].notna() & ~applied).sum())
+        if n_carried:
+            warn(f"{n_carried} records have a measured flux but no correction term; they are "
+                 f"carried through uncorrected and flagged 0 in '{self.col_flux_corr_flag}'.")
         # self.df[self.cols.fct] = self.df[self.cols.fct_unsc_gf] * self.df[self.cols.sf]
         # self.df[self.cols.flux_corr_suffix] = self.df[self.flux_openpath.name] + self.df[self.cols.fct]
 
