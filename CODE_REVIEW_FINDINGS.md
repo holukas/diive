@@ -109,7 +109,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 
 | ID | Finding | Where |
 |---|---|---|
-| L5 | Does ONEFlux's `uncert_via_gapFill` clip or trim window indices? Decides whether MDS edge-weighting is faithful or a bias affecting every MDS fill, `RandomUncertaintyPAS20` and daytime-partitioning uncertainty | `gapfilling/similarity.py:240` |
+| ~~L5~~ | ~~Does ONEFlux clip or trim window indices?~~ **Answered 2026-08-07: it trims** — diive clipped, so edge fills were biased. Fixed | `gapfilling/similarity.py:240` |
 | L46 | Does Burba 2008 intend BUR08 to drop the WPL dilution factor BUR06/JAR09 applies? ~1% systematic offset between methods | `flux/lowres/selfheating.py:614` |
 | L72 | Is InfluxDB v2's *delete* range stop-exclusive? If so the pre-upload delete leaves the last record and duplicates survive | `core/io/db/influx/influxio.py:122` |
 
@@ -355,7 +355,29 @@ Suggested fix: use `-np.inf` / `np.inf` for the unset side instead of the observ
 
 ## Library — worth confirming against the reference implementation
 
-### [ ] L5. MDS cascade clips window positions instead of trimming them — edge records counted many times
+### [x] L5. MDS cascade clips window positions instead of trimming them — edge records counted many times
+
+> **Answered and fixed 2026-08-07 against the ONEFlux source.** ONEFlux **trims**, never clips.
+> For methods 1 and 2 it narrows the bounds before looping (`common.c:2525-2533`:
+> `if (window_start < 0) window_start = 0;` / `if (window_end > end_window) window_end =
+> end_window;`, then `for (window_current = window_start; window_current < window_end; ...)`),
+> and the diurnal method skips out-of-range positions outright (`:2630`:
+> `if (((window_current+y) < 0) || (window_current+y) >= end_window) continue;`). Either way a
+> real record enters a fill **at most once**, so diive's `np.clip` was a bias, not fidelity.
+> `window_idx` now returns only in-range positions. Measured on the 40-day synthetic record from
+> this entry:
+>
+> ```
+>                   before (clip)              after (trim)
+> gap at idx 2      fill -3.3071  sd 0.5381  count 453    fill -4.0003  sd 0.6638  count 120
+> gap in middle     fill -5.2940  sd 0.7179  count 271    unchanged
+> gap near end      fill -6.5064  sd 0.5293  count 490    fill -6.5465  sd 0.9359  count 157
+> ```
+>
+> Note the SD as much as the mean: duplicates carry no spread, so the reported uncertainty at the
+> edges was understated by nearly half. Interior fills are bit-identical, which is why the
+> "~5e-7 vs native ONEFlux" validation never caught it. Covered by three tests in
+> `test_uncertainty.py`; mutation-checked.
 
 `diive/gapfilling/similarity.py:240-248`
 

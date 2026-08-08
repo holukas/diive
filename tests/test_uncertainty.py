@@ -143,3 +143,58 @@ def test_joint_cumulative_components():
         cum['UNC_CUMULATIVE'].to_numpy(),
         np.sqrt(exp_random ** 2 + exp_scen ** 2).to_numpy(),
         rtol=1e-9, atol=1e-9, equal_nan=True)
+
+
+
+# --- MDS window: trimmed, not clipped -----------------------------------------
+# The window positions used to be clipped into range (`np.clip(w, 0, n-1)`), so
+# near the start of a record every out-of-range offset collapsed onto record 0
+# and that one value entered the mean, the SD and the count hundreds of times.
+# ONEFlux narrows the window bounds instead (`common.c:2525-2533`) and its
+# diurnal method skips out-of-range positions outright (`:2630`).
+
+_NPERDAY = 48
+
+
+def _mds_synthetic():
+    """40-day half-hourly record with a plausible diurnal + seasonal signal."""
+    n = 40 * _NPERDAY
+    t = np.arange(n)
+    hr = (t % _NPERDAY) / 2.0
+    swin = np.clip(600 * np.sin(2 * np.pi * (hr - 6) / 24), 0, None)
+    ta = 10 + 8 * np.sin(2 * np.pi * (t / _NPERDAY) / 365) + 3 * np.sin(2 * np.pi * (hr - 9) / 24)
+    vpd = np.clip(0.05 * swin + 0.3 * ta, 0, None)
+    series = 0.02 * swin - 0.5 * ta + np.random.RandomState(0).normal(0, 0.5, n)
+    return n, hr, swin, ta, vpd, series
+
+
+def _mds_fill(gap_position):
+    from diive.gapfilling.similarity import mds_gapfill_cascade
+    n, hr, swin, ta, vpd, series = _mds_synthetic()
+    tofill = series.copy()
+    tofill[gap_position] = np.nan
+    return n, mds_gapfill_cascade(tofill, swin, ta, vpd, hr, _NPERDAY)
+
+
+def test_mds_count_never_exceeds_the_records_in_range():
+    # A gap at position 2 reported 453 contributing records from a window that
+    # cannot hold that many - they were duplicates of record 0.
+    for pos in (2, 960, 40 * _NPERDAY - 3):
+        n, res = _mds_fill(pos)
+        half = res['time_window'][pos] * _NPERDAY / 2.0
+        # Distinct positions the window can reach once it is trimmed to the record.
+        in_range = min(n, int(pos + half)) - max(0, int(pos - half))
+        assert int(res['count'][pos]) <= in_range, f"position {pos}"
+
+
+def test_mds_edge_gap_does_not_reuse_the_edge_value():
+    # Duplicates carry no spread, so clipping also collapsed the SD.
+    _, res = _mds_fill(2)
+    assert res['sd'][2] > 0.55
+
+
+def test_mds_interior_gap_is_unaffected():
+    # Interior windows never left the record, so nothing there may move.
+    _, res = _mds_fill(960)
+    assert np.isfinite(res['filled'][960])
+    assert int(res['count'][960]) == 271
