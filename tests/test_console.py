@@ -206,3 +206,58 @@ class TestConsoleStringsAreCp1252Safe(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestModuleVerbosityMakesBareCallsReachable(unittest.TestCase):
+    """A helper call that passes no `verbose=` must still be reachable.
+
+    `detail()` defaulted to VERBOSE_PROGRESS (2) while its own min_level is
+    VERBOSE_DEBUG (3), so a bare `detail(msg)` could not print at any setting.
+    24 of the 25 sites that hit this have no verbosity parameter and no
+    `self.verbose` to thread, so the default itself had to become settable.
+    """
+
+    def setUp(self):
+        from diive.core.utils.console import get_verbosity
+        self._saved = get_verbosity()
+
+    def tearDown(self):
+        from diive.core.utils.console import set_verbosity
+        set_verbosity(self._saved)
+
+    def test_a_bare_detail_prints_once_debug_is_switched_on(self):
+        from diive.core.utils.console import console, detail, set_verbosity, VERBOSE_DEBUG
+        set_verbosity(VERBOSE_DEBUG)
+        with console.capture() as cap:
+            detail("a bare debug line")
+        self.assertIn("a bare debug line", cap.get())
+
+    def test_the_default_is_unchanged_so_debug_stays_quiet(self):
+        from diive.core.utils.console import console, detail, info, set_verbosity, VERBOSE_PROGRESS
+        set_verbosity(VERBOSE_PROGRESS)
+        with console.capture() as cap:
+            detail("must stay hidden")
+            info("must appear")
+        out = cap.get()
+        self.assertNotIn("must stay hidden", out)
+        self.assertIn("must appear", out)
+
+    def test_an_explicit_verbose_still_wins_over_the_module_default(self):
+        from diive.core.utils.console import console, info, set_verbosity, VERBOSE_DEBUG, VERBOSE_SILENT
+        set_verbosity(VERBOSE_DEBUG)
+        with console.capture() as cap:
+            info("silenced by the call", verbose=VERBOSE_SILENT)
+        self.assertNotIn("silenced by the call", cap.get())
+
+    def test_silent_switches_everything_off(self):
+        from diive.core.utils.console import console, info, warn, set_verbosity, VERBOSE_SILENT
+        set_verbosity(VERBOSE_SILENT)
+        with console.capture() as cap:
+            info("no")
+            warn("also no")
+        self.assertEqual(cap.get().strip(), "")
+
+    def test_it_is_exported_at_top_level(self):
+        import diive as dv
+        self.assertTrue(callable(dv.set_verbosity))
+        self.assertTrue(callable(dv.get_verbosity))

@@ -364,7 +364,9 @@ from diive.core.utils.console import console as _console, info, detail, warn, su
 | `detail(msg)` | DEBUG (3) | Inner-loop details |
 | `_console.print(msg)` | None | User-facing formatted reports |
 
-Levels: `VERBOSE_SILENT=0`, `VERBOSE_ERROR=1`, `VERBOSE_PROGRESS=2` (default), `VERBOSE_DEBUG=3`. All helpers accept `verbose=`. When using `if self.verbose >= N:` guards, call helpers WITHOUT `verbose=` inside the block. **Do NOT:** use `print()`, create separate `Console` instances, use `logging` for general output, mix `print()` and Rich in one file.
+Levels: `VERBOSE_SILENT=0`, `VERBOSE_ERROR=1`, `VERBOSE_PROGRESS=2` (default), `VERBOSE_DEBUG=3`. All helpers accept `verbose=`; omitting it uses the module default, settable with `dv.set_verbosity(level)` / read with `dv.get_verbosity()`.
+
+**[CRITICAL] Always pass `verbose=` when the caller has one.** A bare `detail(msg)` resolves to the module default (PROGRESS), which is *below* `detail`'s own `min_level` (DEBUG), so it prints only after `set_verbosity(VERBOSE_DEBUG)`. The old advice — "when using `if self.verbose >= N:` guards, call helpers WITHOUT `verbose=` inside the block" — is what produced 25 debug lines that could never print at any setting (L29/L75): the guard reads as if it controls visibility while the call silently refuses. Inside such a guard, still pass `verbose=self.verbose`. **Do NOT:** use `print()`, create separate `Console` instances, use `logging` for general output, mix `print()` and Rich in one file.
 
 ### Examples (Sphinx Gallery format)
 

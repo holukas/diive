@@ -23,6 +23,8 @@ from diive.core.io.files import load_parquet
 from diive.core.io.files import load_parquet_many
 from diive.core.io.files import save_parquet
 from diive.core.io.files import to_diive_format
+from diive.core.utils.console import get_verbosity
+from diive.core.utils.console import set_verbosity
 from diive.io.binary.extract import get_encoded_value_from_int
 from diive.io.binary.extract import get_encoded_value_series
 
@@ -104,6 +106,8 @@ __all__ = [
     'load_parquet_many',
     'save_parquet',
     'to_diive_format',
+    'set_verbosity',
+    'get_verbosity',
     'get_encoded_value_from_int',
     'get_encoded_value_series',
 ]
