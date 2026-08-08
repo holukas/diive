@@ -576,7 +576,19 @@ class ScopPhysics:
         # Calculate unscaled flux correction term
         # self.gas_density is in [µmol m-3]
         # Result fct_unsc is in [µmol m-2 s-1]
-        fct_unsc = (S / (self.rho_a * self.c_p)) * (self.gas_density / (self.ta + 273.15))
+        #
+        # The (1 + 1.6077 rho_v/rho_d) factor is part of the correction, not an
+        # extra applied only by BUR06/JAR09: in Burba et al. (2008) the surface
+        # heat fluxes are *added to the ambient sensible heat flux* (their Method
+        # 4, S = rho*Cp*w'T'a + Sbot + Stop + 0.15*Sspar) and the total S enters
+        # the WPL equation (1), where the sensible-heat term carries that factor.
+        # Their poster gives the already-WPL-corrected form used here verbatim:
+        #   Fc_new = Fct + (Sbot + Stop + Sspar)/(rho*Cp) * (qc/Ta) * (1 + 1.6077 rho_v/rho_d)
+        # Omitting it made the choice of correction_method_base silently change
+        # two things at once - the surface-temperature model and whether the
+        # dilution factor applied at all (~1% at typical humidity).
+        h2o_dilution = 1 + 1.6077 * (self.rho_v / self.rho_d)
+        fct_unsc = (S / (self.rho_a * self.c_p)) * (self.gas_density / (self.ta + 273.15)) * h2o_dilution
 
         # print(f"Ts (BUR08), mean = {fct_unsc.mean():.2f}")
         return fct_unsc, S

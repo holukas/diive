@@ -110,7 +110,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ID | Finding | Where |
 |---|---|---|
 | ~~L5~~ | ~~Does ONEFlux clip or trim window indices?~~ **Answered 2026-08-07: it trims** — diive clipped, so edge fills were biased. Fixed | `gapfilling/similarity.py:240` |
-| L46 | Does Burba 2008 intend BUR08 to drop the WPL dilution factor BUR06/JAR09 applies? ~1% systematic offset between methods | `flux/lowres/selfheating.py:614` |
+| ~~L46~~ | ~~Does Burba 2008 intend BUR08 to drop the WPL dilution factor?~~ **Answered 2026-08-07: no, it applies to every method.** Fixed | `flux/lowres/selfheating.py:614` |
 | L72 | Is InfluxDB v2's *delete* range stop-exclusive? If so the pre-upload delete leaves the last record and duplicates survive | `core/io/db/influx/influxio.py:122` |
 
 ## S1 — Silently wrong scientific output (12 + 1 by design)
@@ -1254,7 +1254,27 @@ compared against `BIN_START_INCL` (`:410`), i.e. they are lag values in **second
 then resolves those records via `merge_asof(direction='backward')` to a neighbouring regime's SF,
 and `stats()` prints no target bin count, so a missing bin is invisible.
 
-**[ ] L46. BUR08 omits the water-vapour dilution factor that BUR06/JAR09 applies — needs confirmation**
+**[x] L46. BUR08 omits the water-vapour dilution factor that BUR06/JAR09 applies**
+
+> **Answered and fixed 2026-08-07 from the source papers** (supplied by the user:
+> Burba et al. 2008, *Glob Change Biol* 14:1854-1876, and the LI-7500 poster
+> *Additional Heat Flux Term in the WPL Correction for the Open-path Gas Analyzer*).
+> The factor belongs to **every** method. In the paper the instrument-surface fluxes are
+> *added to the ambient sensible heat flux* — Method 4, `S = rho*Cp*w'T'a + Sbot + Stop +
+> 0.15*Sspar` — and that total `S` enters WPL equation (1), whose sensible-heat term carries
+> `(1 + 1.6077 rho_v/rho_d)`. The poster states the already-WPL-corrected form diive implements,
+> verbatim and with the factor:
+>
+> ```
+> Fc_new = Fct + (Sbot + Stop + Sspar)/(rho*Cp) * (qc/Ta) * (1 + 1.6077 rho_v/rho_d)
+> ```
+>
+> So BUR08 was missing it, and `correction_method_base` silently changed two things at once.
+> Measured on CH-LAE 2016-2017: BUR08 mean correction term 0.528266 -> 0.534392 (+1.16 %),
+> median 0.585076 -> 0.592756 (+1.31 %) — the ~1 % this entry predicted. One record fewer
+> (24947 -> 24946): a record with no humidity cannot carry the factor, exactly as for the other
+> two methods. Covered by `tests/test_selfheating.py`, which pins that all three methods scale
+> with humidity by the same factor; mutation-checked.
 `selfheating.py:614` vs `:639` — `_flux_correction_term_unscaled_bur08` lacks the
 `1 + 1.6077*(rho_v/rho_d)` factor its sibling applies, so switching `correction_method_base` changes
 both the surface-temperature model and whether the WPL-style factor is applied (~1% systematic
