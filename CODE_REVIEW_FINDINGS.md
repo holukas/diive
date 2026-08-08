@@ -151,6 +151,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L50~~ | ~~`quality_weighted_decompose` ignores the weights entirely; `summary()` prints "Quality-weighted: True"~~ (done 2026-08-07) — fake path removed | `core/times/decomposition_utils.py:100` |
 | ~~L58~~ | ~~`detect_seasonality` fabricates `primary_period=365` when the periodogram yields nothing~~ (done 2026-08-07) | `core/times/decomposition_utils.py:490` |
 | ~~L51~~ | ~~`StratifiedAnalysis` drops z-bins whose rounded label collides — 19 of 120 lost, no warning~~ (done 2026-08-07) | `analysis/decoupling.py:213` |
+| L76 | BUR06 uses a canopy `ra` (`u/u*^2`) where Burba 2006 specifies a per-element one (`7.4*sqrt(d/U)`, ~6x apart) and drops the retained fraction `fr`; the fitted SF absorbs both | `flux/lowres/selfheating.py:471` |
 | L53 | `CompoundExtremes` returns zero classified periods for a single year, silently | `analysis/compoundextremes.py:168` |
 | ~~L59~~ | ~~`multi_scale_harmonics` swallows every exception~~ (done 2026-08-07) — function deleted as dead code | `analysis/harmonic.py:432` |
 | ~~L19~~ | ~~`features_stl=True` can produce nothing — any single NaN skips a column, logged only at DEBUG~~ (done 2026-08-07) | `core/ml/feature_engineer.py:726` |
@@ -1243,6 +1244,40 @@ named anything else raises before any correction happens.
 `selfheating.py:270` — the `if/elif/elif` chain has no `else`, so a typo leaves `fct_unsc` as the
 empty placeholder from `__init__`. `run()` completes without warning and every consumer sees an
 empty correction.
+
+**[ ] L76. BUR06 uses a canopy aerodynamic resistance where Burba 2006 specifies a per-element one, and drops the retained fraction `fr`**
+⚠ **[found 2026-08-07 while reading Burba et al. 2006 alongside 2008]**
+
+`selfheating.py:471` / `:584` — Burba et al. (2006), *Correcting apparent off-season CO2 uptake…*
+(AMS 2006), Eq. (8)/(9), gives the correction for already-WPL-corrected data as
+
+```
+Fc_new = Fc + fr * (Ts - Ta) / (ra * (Ta + 273.15)) * qc * (1 + 1.6077 rho_v/rho_d)
+```
+
+with **two** things diive does not have:
+
+1. **`ra` is a per-element instrument resistance**, `ra = 7.4 * sqrt(d/U)` (Eqs. 10-11), with
+   `d = 0.133 m` for the can and `0.042 m` for the ball — the resistance of the boundary layer on
+   the instrument body. diive passes `ra = u/u*^2`
+   (`variables/thermodynamic.py:19`), the canopy-scale momentum-transfer resistance. On CH-LAE
+   these differ by a factor of ~6 (median 11.46 vs 1.87 s m-1).
+2. **`fr`, the fraction of instrument heat retained in the optical path** (= H_P/H_I, estimated as
+   the summed thermal boundary-layer thicknesses of can and ball over the 0.128 m pathlength).
+   2006 introduces it because "the wind will remove much of the warmed air from the optical path,
+   carrying away most of H without affecting the measurements". diive has no `fr`.
+
+Neither is fatal in diive's pipeline, because `ScopOptimizer` **fits** a scaling factor (bounded
+0-50) against a closed-path reference, and that fitted factor absorbs both the resistance
+mis-scaling and the missing `fr`. But it means BUR06/JAR09 as implemented are *semi-empirical*:
+the physics term sets the shape, the fitted SF sets the magnitude. That should be stated, because
+the class docstrings present them as the published formulations, and because a user who runs
+`ScopPhysics` **without** the optimizer gets a correction term whose absolute scale is not the
+paper's.
+
+Not to be confused with L46 (the dilution factor), which is settled: 2006 Eq. (8), 2008 Eq. (1)
+and the LI-7500 poster all carry `(1 + 1.6077 rho_v/rho_d)`, and 2006 even quantifies it as
+"typically very small, on the order of 0.5-2%" — diive measured +1.16 % on CH-LAE.
 
 **[ ] L41. `ScopPhysics` documents an RF + MDV gap-fill that does not exist**
 `selfheating.py:152` — the class docstring promises "a hybrid approach using Random Forest and Mean
