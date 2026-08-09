@@ -600,3 +600,53 @@ class TestHarmonicDecomposePicksDistinctComponents(unittest.TestCase):
         series = self._two_components()
         res = harmonic_decompose(series, n_harmonics=2, window='hamming')
         self.assertLess(res['residual'].abs().max(), 0.2)
+
+
+class TestCompoundExtremesSaysWhenItCannotClassify(unittest.TestCase):
+    """An empty result must not read like "no extremes occurred".
+
+    With the documented defaults (agg='monthly', standardize_by='season') a single
+    year gives every calendar-month group one member, so std (ddof=1) is NaN, every
+    period is dropped, and `results` came back empty with `counts` all zeros - the
+    same output as a record that genuinely holds no extremes.
+    """
+
+    @staticmethod
+    def _data(years):
+        from diive.configs.exampledata import load_exampledata_parquet
+        df = load_exampledata_parquet()
+        sub = df.loc[years]
+        return sub['Tair_f'].copy(), sub['VPD_f'].copy()
+
+    def test_a_single_year_raises_and_names_the_way_out(self):
+        from diive.analysis.compoundextremes import CompoundExtremes
+        ta, vpd = self._data('2018')
+        with self.assertRaises(ValueError) as ctx:
+            CompoundExtremes(var1=ta, var2=vpd)  # standardize_by='season' by default
+        msg = str(ctx.exception)
+        self.assertIn('two years', msg)
+        self.assertIn("standardize_by='record'", msg)
+
+    def test_the_named_way_out_works_on_the_same_data(self):
+        from diive.analysis.compoundextremes import CompoundExtremes
+        ta, vpd = self._data('2018')
+        ce = CompoundExtremes(var1=ta, var2=vpd, standardize_by='record')
+        self.assertEqual(len(ce.results), 12)
+        self.assertEqual(int(ce.counts.sum()), 12)
+
+    def test_enough_years_still_classify_normally(self):
+        from diive.analysis.compoundextremes import CompoundExtremes
+        ta, vpd = self._data(slice('2018', '2022'))
+        ce = CompoundExtremes(var1=ta, var2=vpd)
+        self.assertEqual(len(ce.results), 60)  # 5 years x 12 months
+
+    def test_partial_losses_are_reported_but_do_not_raise(self):
+        # 13 months: January has two members, the other months one, so 11 periods
+        # drop out and 2 survive. That must be said, not swallowed.
+        from diive.core.utils.console import console
+        from diive.analysis.compoundextremes import CompoundExtremes
+        ta, vpd = self._data(slice('2018-01-01', '2019-01-31'))
+        with console.capture() as cap:
+            ce = CompoundExtremes(var1=ta, var2=vpd)
+        self.assertEqual(len(ce.results), 2)
+        self.assertIn('could not be classified', cap.get())
