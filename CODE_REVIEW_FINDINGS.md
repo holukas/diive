@@ -152,7 +152,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L58~~ | ~~`detect_seasonality` fabricates `primary_period=365` when the periodogram yields nothing~~ (done 2026-08-07) | `core/times/decomposition_utils.py:490` |
 | ~~L51~~ | ~~`StratifiedAnalysis` drops z-bins whose rounded label collides — 19 of 120 lost, no warning~~ (done 2026-08-07) | `analysis/decoupling.py:213` |
 | L76 | BUR06 uses a canopy `ra` (`u/u*^2`) where Burba 2006 specifies a per-element one (`7.4*sqrt(d/U)`, ~6x apart) and drops the retained fraction `fr`; the fitted SF absorbs both | `flux/lowres/selfheating.py:471` |
-| L53 | `CompoundExtremes` returns zero classified periods for a single year, silently | `analysis/compoundextremes.py:168` |
+| ~~L53~~ | ~~`CompoundExtremes` returns zero classified periods for a single year, silently~~ (done 2026-08-07) | `analysis/compoundextremes.py:168` |
 | ~~L59~~ | ~~`multi_scale_harmonics` swallows every exception~~ (done 2026-08-07) — function deleted as dead code | `analysis/harmonic.py:432` |
 | ~~L19~~ | ~~`features_stl=True` can produce nothing — any single NaN skips a column, logged only at DEBUG~~ (done 2026-08-07) | `core/ml/feature_engineer.py:726` |
 | L16 | SWIN short-gap interpolation never fires near dawn/dusk — the night's NaN run inflates the gap length | `gapfilling/swin.py:794` |
@@ -1447,7 +1447,18 @@ working dataframe — the obvious call — silently reduces the analysis: 20 000
 unrelated gappy column present. The on-plot count text reports the survivor count as if it were the
 data.
 
-**[ ] L53. `CompoundExtremes` returns zero classified periods for a single year, silently**
+**[x] L53. `CompoundExtremes` returns zero classified periods for a single year, silently**
+
+> **Fixed 2026-08-07.** An empty classification now raises instead of being returned as a result
+> that is indistinguishable from "no extremes occurred", and the message names the cause and the
+> way out: seasonal standardization compares each calendar month against the same month in other
+> years, so it needs at least two years — the error reports how many the record actually spans
+> and points at `standardize_by='record'`. A *partial* loss no longer passes unmentioned either:
+> the count of unclassifiable periods is reported at `warn` level and the rest are still
+> returned. Verified on CH-DAV: one year raises, the same year with `standardize_by='record'`
+> classifies all 12 months, five years classify all 60, and a 13-month slice keeps 2 periods
+> while warning about the 11 it dropped. The GUI tab already wraps construction in try/except,
+> so the message lands in its status line.
 `analysis/compoundextremes.py:168` — with the documented defaults (`agg='monthly'`,
 `standardize_by='season'`) the z-score groups by calendar month; one year gives each group a single
 member, so `transform('std')` (ddof=1) is NaN and every row is dropped. `results` is empty and
