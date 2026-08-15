@@ -1142,6 +1142,13 @@ class ScopApplicator:
     * **Final Corrected Flux**: The corrected NEE (CO2) series.
     * **FCT**: The final applied correction term in physical units.
 
+    Column names:
+        The names of the `fct_unsc` and `daytime` input series are not part of the
+        contract — both are renamed to the class's own column names (`ColumnConfig`)
+        on input, so a correction term straight from `ScopPhysics` is accepted whether
+        or not it was gap-filled. The `flux_openpath` and `classvar` names *are* kept
+        and appear in the results dataframe.
+
     See Also:
         ScopPhysics : Calculate unscaled flux correction term.
         ScopOptimizer : Determine scaling factors from parallel IRGA measurements.
@@ -1157,13 +1164,35 @@ class ScopApplicator:
                  flux_openpath: pd.Series,
                  classvar: pd.Series,
                  daytime: pd.Series):
-        self.fct_unsc = fct_unsc.copy()
+        """
+        Args:
+            fct_unsc: series, unscaled flux correction term (flux units), as produced by
+                `ScopPhysics` — either `.fct_unsc` (ungapfilled) or `.fct_unsc_gf`.
+                Its name is ignored; it is renamed to `ColumnConfig.fct_unsc_gf` internally.
+            scaling_factors_df: dataframe of fitted scaling factors from `ScopOptimizer.get()`,
+                carrying the columns 'DAYTIME', 'GROUP_CLASSVAR', 'GROUP_CLASSVAR_MIN' and
+                'SF_MEDIAN'.
+            flux_openpath: series, uncorrected open-path flux (µmol m-2 s-1). Its name is
+                kept and appears in the results dataframe.
+            classvar: series, environmental class variable the scaling factors were binned
+                by (e.g. USTAR). Its name is kept and appears in the results dataframe and
+                in the reports.
+            daytime: series, day/night flag (daytime=1, nighttime=0). Its name is ignored;
+                it is renamed to `ColumnConfig.daytime` internally.
+        """
+        self.cols = ColumnConfig()
+
+        # The applicator works in its own column names throughout: run(), stats() and the
+        # dashboard all read self.cols.fct_unsc_gf and self.cols.daytime. Renaming the two
+        # inputs here is what makes any legally named series acceptable — ScopPhysics
+        # produces 'FCT_UNSC' without gap-filling and 'FCT_UNSC_gfXG' with it, and a
+        # day/night flag may carry any name; all three used to raise KeyError, one in run()
+        # and one in the merge_asof of _assign_scaling_factors().
+        self.fct_unsc = fct_unsc.copy().rename(self.cols.fct_unsc_gf)
         self.scaling_factors_df = scaling_factors_df.copy()
         self.flux_openpath = flux_openpath.copy()
         self.classvar = classvar.copy()
-        self.daytime = daytime.copy()
-
-        self.cols = ColumnConfig()
+        self.daytime = daytime.copy().rename(self.cols.daytime)
 
         self.col_flux_corr = f"NEE{self.cols.flux_corr_suffix}"
         # Informational flag (not consumed by FlagQCF): 1 = correction applied,

@@ -167,5 +167,55 @@ class TestMeasuredFluxSurvivesAMissingCorrection(unittest.TestCase):
         self.assertTrue((flag[~carried & flag.notna()] == 1).all())
 
 
+class TestApplicatorAcceptsAnyInputSeriesName(unittest.TestCase):
+    """The applicator used to demand two exact, undocumented series names.
+
+    `run()` looked up the hardcoded 'FCT_UNSC_gfRF' although __init__ stored the
+    correction term under `fct_unsc.name`, and the `merge_asof` keyed on
+    `daytime.name` while the scaling-factors table always names that column
+    'DAYTIME'. So `ScopPhysics.run(gapfill=False)` output ('FCT_UNSC'), the
+    gap-filled series ('FCT_UNSC_gfXG') and any day/night flag not called
+    'DAYTIME' each raised KeyError before a single record was corrected.
+    """
+
+    def _inputs(self):
+        n = 96
+        idx = pd.date_range('2023-06-01 00:15', periods=n, freq='30min')
+        rng = np.random.RandomState(0)
+        return dict(
+            fct_unsc=pd.Series(rng.normal(1.0, 0.1, n), index=idx),
+            flux_openpath=pd.Series(rng.normal(-5, 1, n), index=idx, name='NEE'),
+            classvar=pd.Series(0.4, index=idx, name='USTAR'),
+            daytime=pd.Series(np.tile([1] * 24 + [0] * 24, n // 48), index=idx),
+            scaling_factors_df=pd.DataFrame(
+                {'DAYTIME': [0, 1], 'GROUP_CLASSVAR': [0, 0],
+                 'GROUP_CLASSVAR_MIN': [0.0, 0.0], 'GROUP_CLASSVAR_MAX': [1.0, 1.0],
+                 'SF_MEDIAN': [2.0, 2.0]}))
+
+    def _corrected(self, fct_name, daytime_name):
+        from diive.flux.lowres.selfheating import ScopApplicator
+        args = self._inputs()
+        args['fct_unsc'] = args['fct_unsc'].rename(fct_name)
+        args['daytime'] = args['daytime'].rename(daytime_name)
+        app = ScopApplicator(**args)
+        app.run()
+        return app.df[app.col_flux_corr]
+
+    def test_the_correction_term_may_carry_any_name(self):
+        # 'FCT_UNSC' = ScopPhysics.run(gapfill=False), 'FCT_UNSC_gfXG' = .fct_unsc_gf,
+        # 'FCT_UNSC_gfRF' = the results-dataframe column used by the examples.
+        reference = self._corrected('FCT_UNSC_gfRF', 'DAYTIME')
+        self.assertGreater(int(reference.notna().sum()), 0)
+        for name in ('FCT_UNSC', 'FCT_UNSC_gfXG'):
+            with self.subTest(fct_unsc=name):
+                np.testing.assert_allclose(self._corrected(name, 'DAYTIME').to_numpy(),
+                                           reference.to_numpy())
+
+    def test_the_daytime_flag_may_carry_any_name(self):
+        reference = self._corrected('FCT_UNSC_gfRF', 'DAYTIME')
+        np.testing.assert_allclose(self._corrected('FCT_UNSC_gfRF', 'DAYTIME_FLAG').to_numpy(),
+                                   reference.to_numpy())
+
+
 if __name__ == '__main__':
     unittest.main()
