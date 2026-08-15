@@ -121,6 +121,8 @@ class ColumnConfig:
 
     flux_corr_suffix: str = '_OP_CORR'
     fct_unsc: str = 'FCT_UNSC'
+    # Legacy name: the gap-fill is XGBoost, not Random Forest. Kept because renaming
+    # it would break every script and example indexing results_df['FCT_UNSC_gfRF'].
     fct_unsc_gf: str = 'FCT_UNSC_gfRF'
     fct: str = 'FCT'
     sf: str = 'SF'
@@ -146,13 +148,19 @@ class ScopPhysics:
       velocity to model heat transfer efficiency.
     * **Thermal Conductivity**: Computes temperature-dependent air thermal conductivity
       required for sensible heat flux modeling.
-    * **Gap-Filling**: Employs a hybrid approach using Random Forest and Mean Diurnal
-      Variation (MDV) to ensure a continuous record of the correction term.
+    * **Gap-Filling**: Fills gaps in the correction term with XGBoost on engineered
+      features (lags, rolling windows, timestamp features) to ensure a continuous
+      record. There is no Mean Diurnal Variation (MDV) stage here; MDV is used by
+      `ScopApplicator` for the scaling factor.
     * **Outlier Detection**: Uses Hampel filtering to remove physical artifacts from
       aerodynamic resistance and unscaled flux terms.
 
     Key Outputs:
     * **FCT_UNSC**: The unscaled flux correction term in µmol m-2 s-1.
+    * **FCT_UNSC_gfRF**: The gap-filled unscaled flux correction term. The `_gfRF`
+      suffix is a legacy name kept for backwards compatibility, the gap-fill is
+      XGBoost. The `.fct_unsc_gf` attribute carries the same data but is named
+      `FCT_UNSC_gfXG` after the method that produced it.
     * **S**: Modeled sensible heat flux from instrument surfaces (W m-2).
     * **TS**: Estimated instrument surface temperature (°C).
 
@@ -287,14 +295,14 @@ class ScopPhysics:
     def stats(self):
         """
         Prints a diagnostic summary of the physics calculation.
-        Focuses on Data Coverage (Hybrid Gap-Filling), Instrument Heating,
+        Focuses on Data Coverage (Gap-Filling), Instrument Heating,
         and Correction Magnitude.
         """
         _console.print(f"\n{'=' * 65}")
         _console.print("SCOP PHYSICS DIAGNOSTICS (CO2)")
         _console.print(f"{'=' * 65}")
 
-        # --- 1. DATA COVERAGE (Hybrid RF + MDV) ---
+        # --- 1. DATA COVERAGE (XGBoost gap-filling) ---
         n_total = len(self.ta)
         n_raw = self.fct_unsc.count()
         n_final = self.fct_unsc_gf.count()
@@ -305,7 +313,7 @@ class ScopPhysics:
         _console.print(f"   Total Timestamps       : {n_total:,}")
         _console.print(f"   Raw Physics Calculated : {n_raw:,}  ({n_raw / n_total:>6.1%})")
         _console.print(f"   Final Gap-Filled (GF)  : {n_final:,}  ({n_final / n_total:>6.1%})")
-        _console.print(f"   -> Imputed (RF + MDV)  : {n_filled:,}  ({n_filled / n_total:>6.1%})")
+        _console.print(f"   -> Gap-filled (XGBoost): {n_filled:,}  ({n_filled / n_total:>6.1%})")
 
         # --- 2. HEATING EFFECT (Delta T) ---
         # The core physical assumption is that Ts > Ta due to radiation.
