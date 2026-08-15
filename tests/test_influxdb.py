@@ -111,6 +111,14 @@ class TestInfluxTimeHelpers(unittest.TestCase):
         out = convert_ts_to_timezone(timezone_offset_to_utc_hours=5.5, timestamp_index=s)
         self.assertEqual(int(out.iloc[0].utcoffset().total_seconds()), 5 * 3600 + 30 * 60)
 
+    def test_convert_ts_to_timezone_accepts_datetimeindex(self):
+        # A DatetimeIndex has no .dt accessor; it used to raise AttributeError
+        # although the docstring and the parameter name promise index support.
+        idx = pd.to_datetime(["2022-01-01 00:00:00", "2022-01-01 01:00:00"], utc=True)
+        out = convert_ts_to_timezone(timezone_offset_to_utc_hours=1, timestamp_index=idx)
+        self.assertEqual(out[0].hour, 1)
+        self.assertEqual(int(out[0].utcoffset().total_seconds()), 3600)
+
 
 class TestInfluxConfig(unittest.TestCase):
     """YAML config reading against a self-contained temp config directory."""
