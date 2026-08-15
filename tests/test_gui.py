@@ -2984,6 +2984,70 @@ def test_absolutelimits_outlier_tab_keeps_original_cleaned_flag(window):
     assert set(window._data[flag].dropna().unique()) <= {0, 2}
 
 
+def test_outlier_tab_discards_result_when_dataset_changed_midrun(window):
+    """Detection runs off-thread, so the dataset can change before it finishes.
+    The completion slot must then adopt nothing instead of indexing the new frame
+    with the old variable (KeyError) or drawing a re-indexed series against this
+    run's flag/cleaned arrays."""
+    window._open_menu_tab("Absolute limits filter")
+    tab = window._menu_tab_list[-1]
+    var = "Tair_f"
+    tab._select(var)
+    series = window._data[var]
+    lo, hi = float(series.quantile(0.01)), float(series.quantile(0.99))
+    # Compute the result the worker thread would deliver, then change the dataset
+    # underneath the tab before handing it over — the mid-run race, deterministically.
+    payload = tab._compute_payload(series, dict(minval=lo, maxval=hi), True)
+
+    # Drain the per-iteration progress events the synchronous compute queued; in
+    # the app the event loop does that while the worker thread runs.
+    QApplication.processEvents()
+
+    # (a) the target is gone (renamed, deleted, or absent from a new dataset).
+    tab.on_data_loaded(window._data.drop(columns=[var]))
+    tab._on_done(payload)  # must not raise
+    QApplication.processEvents()
+    assert tab._result_df is None
+    assert not tab.add_btn.isEnabled()
+    assert tab.run_btn.isEnabled()             # the tab stays usable
+    assert "discarded" in tab.status.text()
+
+    # (b) the target is still there but the record was narrowed (date-range
+    # subselection): the result belongs to the full record, so adopting it would
+    # draw — and let "Add" merge — columns that no longer line up with the frame.
+    tab.on_data_loaded(window._data.iloc[:len(window._data) // 2])
+    tab._on_done(payload)
+    QApplication.processEvents()
+    assert tab._result_df is None
+    assert not tab.add_btn.isEnabled()
+    assert "discarded" in tab.status.text()
+    # Nothing was stored, so the limit-lines toggle has nothing to re-render.
+    tab.limits_cb.setChecked(True)  # what ticking "Show limit lines" does
+    QApplication.processEvents()
+    assert tab._last_payload is None
+
+    # The unchanged dataset is still accepted (the guard is not a blanket refusal).
+    tab.on_data_loaded(window._data)
+    tab._select(var)
+    tab._on_done(payload)
+    QApplication.processEvents()
+    assert tab._result_df is not None
+    assert tab.add_btn.isEnabled()
+
+    # The stored result goes stale the same way once it is accepted: extending the
+    # record ("Add to current" appends new periods) leaves this run's flag shorter
+    # than the frame, so re-rendering it would index with an unalignable mask.
+    assert tab._last_payload is not None
+    idx = window._data.index
+    extended = window._data.reindex(idx.union(
+        pd.date_range(idx[-1], periods=3, freq=idx[-1] - idx[-2])))
+    tab.on_data_loaded(extended)
+    # Called directly, not via the checkbox: an exception raised inside a slot Qt
+    # invokes is swallowed by the signal machinery, so the toggle would look fine.
+    tab._rerender_last()  # what toggling "Show limit lines" triggers
+    QApplication.processEvents()
+
+
 def test_trimlow_outlier_tab_keeps_original_cleaned_flag(window):
     window._open_menu_tab("Trim-low filter")
     tab = window._menu_tab_list[-1]

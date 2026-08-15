@@ -491,6 +491,9 @@ class BaseOutlierTab(DiiveTab):
             "var": series.name, "cleaned": cleaned, "flag": flag,
             "result": result, "n_outliers": int((flag == 2).sum()),
             "is_daytime": is_daytime,
+            # Index the run was started on; _on_done compares it against the
+            # dataset it finds to detect a change that happened meanwhile.
+            "index": series.index,
         }
 
     def _worker(self, series, kwargs: dict, repeat: bool,
@@ -660,6 +663,18 @@ class BaseOutlierTab(DiiveTab):
     def _on_done(self, payload: dict) -> None:
         self.run_btn.setEnabled(True)
         self.progress.finish()
+        # Detection runs off-thread, so the dataset can change before it finishes
+        # (a variable renamed or deleted, the date range narrowed, another dataset
+        # loaded). The result then belongs to a frame that no longer exists:
+        # indexing the new frame with the old name raises, and a re-indexed frame
+        # would be drawn against this run's flag/cleaned arrays. Adopt nothing.
+        var = payload["var"]
+        if (self._df is None or var not in self._df.columns
+                or not self._df.index.equals(payload["index"])):
+            self.status.setText(
+                f"The dataset changed while detecting outliers in '{var}', so the "
+                f"result no longer matches it and was discarded. Detect again.")
+            return
         self._result_df = payload["result"]
         self._last_payload = payload  # for re-render when the limit toggle changes
         self._update_hero(payload)
@@ -686,11 +701,12 @@ class BaseOutlierTab(DiiveTab):
 
     def _rerender_last(self) -> None:
         """Re-draw the last completed run when the limit-lines toggle changes.
-        Ignored while a run is in progress (the live view already reflects it) or
-        before any run."""
+        Ignored while a run is in progress (the live view already reflects it),
+        before any run, or once the dataset changed under the stored result."""
         p = self._last_payload
         if (p is None or not self.run_btn.isEnabled()
-                or self._df is None or p["var"] not in self._df.columns):
+                or self._df is None or p["var"] not in self._df.columns
+                or not self._df.index.equals(p["index"])):
             return
         self._draw(self._df[p["var"]], flag=p["flag"], cleaned=p["cleaned"],
                    n_outliers=p["n_outliers"], is_daytime=p["is_daytime"],
