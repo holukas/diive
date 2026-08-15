@@ -201,8 +201,15 @@ class EventManager(QObject):
         }
 
     def load_dict(self, data: dict) -> None:
-        """Restore from :meth:`as_dict` output; malformed entries are skipped."""
+        """Restore from :meth:`as_dict` output; malformed entries are skipped.
+
+        Empty input clears the events. A load replaces state, so opening a project
+        that has none must not leave the previous project's events standing — this
+        used to return early and keep them.
+        """
         if not data:
+            self.events = []
+            self.changed.emit()
             return
         self.visible = bool(data.get("visible", self.visible))
         cats = data.get("categories")

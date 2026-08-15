@@ -3055,6 +3055,37 @@ def test_project_save_and_open(window, tmp_path, monkeypatch):
     assert var in [str(c) for c in window._data.columns]
 
 
+def test_event_manager_load_dict_clears_on_empty(app):
+    """L93: loading empty event data must clear, not keep the previous events.
+
+    `load_dict` returned early on a falsy dict, so opening a project with no events
+    left the previous project's events standing. Both callers pass `{}` when there is
+    nothing saved (`project.extras.get("events") or {}` on project open), so the
+    project path was the one that leaked.
+    """
+    from diive.gui import events as _events
+    from diive.events import Event
+
+    mgr = _events.manager
+    mgr.load_dict({})                                  # start from a known state
+    mgr.add(Event("Stale", "2021-01-05"))
+    assert len(mgr.events) == 1
+
+    seen = []
+    mgr.changed.connect(lambda: seen.append(len(mgr.events)))
+    try:
+        mgr.load_dict({})                              # a project carrying no events
+        assert mgr.events == [], "an empty load must clear the previous events"
+        assert seen == [0], "and must announce the change, like the non-empty path"
+
+        # A non-empty load still restores, so the guard is not a blanket wipe.
+        mgr.load_dict({"events": [Event("Fresh", "2021-02-05").to_dict()]})
+        assert [e.name for e in mgr.events] == ["Fresh"]
+    finally:
+        mgr.changed.disconnect()
+        mgr.load_dict({})
+
+
 def test_project_load_does_not_materialise_previous_events(window, tmp_path, monkeypatch):
     """Opening a project must build *its* event columns on the incoming data, once.
     Loading the project's events only after `_set_data` meant the outgoing
