@@ -3,7 +3,8 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from diive.core.dfun.frames import keep_records_where, transform_yearmonth_matrix_to_longform
+from diive.core.dfun.frames import (keep_records_where, sort_multiindex_columns_names,
+                                    transform_yearmonth_matrix_to_longform)
 
 
 class TestKeepRecordsWhere(unittest.TestCase):
@@ -185,3 +186,72 @@ class TestYearMonthMatrixToLongform(unittest.TestCase):
         out = transform_yearmonth_matrix_to_longform(matrixdf=matrixdf, z_var_name='TA')
         self._assert_matches_matrix(out, matrixdf)
         self.assertAlmostEqual(out.sum(), matrixdf.sum().sum(), places=9)
+
+    def test_noncontiguous_months(self):
+        """A matrix that skips months must convert, not raise.
+
+        The month columns are used to build a monthly timestamp, so with months
+        missing the timestamps skipped, `pd.infer_freq` returned None and the 'MS'
+        check rejected the matrix. Reachable from the documented producer: a
+        seasonal record yields exactly such a matrix. The docstring's own example
+        (months 1-3 across three years) hit the same path.
+        """
+        from diive.core.times.resampling import resample_to_monthly_agg_matrix
+        # Seasonal record: June-August of 2018, 2019, 2020, daily values.
+        idx = pd.DatetimeIndex([ts for ts in pd.date_range('2018-01-01', '2020-12-31', freq='D')
+                                if ts.month in (6, 7, 8)], name='TIMESTAMP_MIDDLE')
+        series = pd.Series(np.arange(len(idx), dtype=float), index=idx, name='TA')
+        matrixdf = resample_to_monthly_agg_matrix(series=series, agg='mean')
+        self.assertEqual(list(matrixdf.columns), [6, 7, 8])  # non-contiguous
+
+        out = transform_yearmonth_matrix_to_longform(matrixdf=matrixdf, z_var_name='TA')
+        # Gap-free monthly series across the full span, months outside the season NaN.
+        self.assertEqual(out.index.freqstr, 'MS')
+        self.assertEqual(len(out), 36)
+        self.assertEqual(out.index[0], pd.Timestamp('2018-01-01'))
+        self.assertEqual(out.index[-1], pd.Timestamp('2020-12-01'))
+        self.assertEqual(out.notna().sum(), matrixdf.size)
+        self.assertTrue(np.isnan(out.loc['2018-01-01']))
+        self.assertEqual(out.loc['2018-06-01'], matrixdf.loc[2018, 6])
+        self.assertEqual(out.loc['2020-08-01'], matrixdf.loc[2020, 8])
+        self.assertAlmostEqual(out.sum(), matrixdf.sum().sum(), places=9)
+
+    def test_noncontiguous_months_docstring_example(self):
+        matrixdf = pd.DataFrame([[2.0, 9.0, 5.0], [10.0, 1.0, 19.0], [8.0, 22.0, 13.0]],
+                                index=[1997, 1998, 1999], columns=[1, 2, 3])
+        out = transform_yearmonth_matrix_to_longform(matrixdf=matrixdf)
+        self.assertEqual(out.index.freqstr, 'MS')
+        self.assertEqual(len(out), 36)
+        self.assertEqual(out.loc['1997-01-01'], 2.0)
+        self.assertEqual(out.loc['1999-03-01'], 13.0)
+        self.assertAlmostEqual(out.sum(), matrixdf.sum().sum(), places=9)
+
+
+class TestSortMultiindexColumnsNames(unittest.TestCase):
+    """Columns moved to the top must keep their sorted order, not end up reversed."""
+
+    @staticmethod
+    def _df(varnames):
+        cols = pd.MultiIndex.from_tuples([(v, 'units') for v in varnames])
+        return pd.DataFrame(np.zeros((2, len(varnames))), columns=cols)
+
+    @staticmethod
+    def _varnames(df):
+        return [col[0] for col in df.columns]
+
+    def test_dot_vars_ascending_at_top(self):
+        # Only caller (MultiDataFileReader) passes priority_vars=None, so this is
+        # the block that is actually exercised.
+        df = self._df(['b', '.c', 'a', '.a', '.b'])
+        out = sort_multiindex_columns_names(df=df, priority_vars=None)
+        self.assertEqual(self._varnames(out), ['.a', '.b', '.c', 'a', 'b'])
+
+    def test_priority_vars_ascending_below_dot_vars(self):
+        df = self._df(['b', 'x', '.a', 'y', 'a'])
+        out = sort_multiindex_columns_names(df=df, priority_vars=['x', 'y'])
+        self.assertEqual(self._varnames(out), ['.a', 'x', 'y', 'a', 'b'])
+
+    def test_no_columns_lost(self):
+        varnames = ['b', '.c', 'a', '.a', 'x']
+        out = sort_multiindex_columns_names(df=self._df(varnames), priority_vars=['x'])
+        self.assertEqual(sorted(self._varnames(out)), sorted(varnames))

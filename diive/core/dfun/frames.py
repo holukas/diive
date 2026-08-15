@@ -508,15 +508,16 @@ def sort_multiindex_columns_names(df, priority_vars):
 
     cols_list.sort(key=custom_sort)
 
+    # Both blocks below move columns to the top of the list. Collecting them in a
+    # second list keeps them in sorted order; moving them one by one while iterating
+    # the same list reversed them (each move puts the next one above its predecessor).
     if priority_vars:
-        for ix, col in enumerate(cols_list):
-            if col[0] in priority_vars:
-                cols_list.insert(0, cols_list.pop(ix))  # removes from old location ix, puts to top of list
+        cols_list = ([col for col in cols_list if col[0] in priority_vars]
+                     + [col for col in cols_list if col[0] not in priority_vars])
 
     # Custom vars are marked w/ a dot ('.') at beginning
-    for ix, col in enumerate(cols_list):
-        if col[0].startswith('.'):
-            cols_list.insert(0, cols_list.pop(ix))
+    cols_list = ([col for col in cols_list if col[0].startswith('.')]
+                 + [col for col in cols_list if not col[0].startswith('.')])
 
     df = df[cols_list]  # assign new (sorted) column order
 
@@ -629,6 +630,8 @@ def transform_yearmonth_matrix_to_longform(matrixdf: pd.DataFrame, z_var_name: s
 
     Returns:
         pandas Series with a datetime index ('YYYY-MM-01' format, monthly start frequency 'MS') and values from the input matrix.
+        The index is gap-free, covering every month from January of the first year to December of the last year. Months not
+        present in the matrix (e.g. a seasonal record covering June-August only) are returned as NaN.
 
     """
 
@@ -636,6 +639,16 @@ def transform_yearmonth_matrix_to_longform(matrixdf: pd.DataFrame, z_var_name: s
     # make melt/reset_index fall back to pandas' own 'variable'/'index'. Pin the names
     # so the helper columns can be addressed and dropped below.
     matrixdf = matrixdf.rename_axis(index='YEAR', columns='MONTH')
+
+    # Complete the year x month lattice. The matrix holds only the (year, month) pairs
+    # that occur, but the long form built below is a monthly time series: with months
+    # missing (a seasonal record, e.g. Jun-Aug) the timestamps skip, `pd.infer_freq`
+    # returns None and the 'MS' check further down rejected the matrix. Months nothing
+    # fell into become NaN records instead. Same reindex as `HeatmapYearMonth`, which
+    # shares the producer `resample_to_monthly_agg_matrix`.
+    matrixdf = matrixdf.reindex(
+        index=pd.Index(range(int(matrixdf.index.min()), int(matrixdf.index.max()) + 1), name='YEAR'),
+        columns=pd.Index(range(1, 13), name='MONTH'))
 
     cols = matrixdf.columns.name
     long_form_df = pd.melt(matrixdf, var_name=matrixdf.columns.name, value_name=z_var_name, ignore_index=False)
