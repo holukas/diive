@@ -367,6 +367,73 @@ class TestGapFilling(unittest.TestCase):
         obs = gappy.notna()
         self.assertTrue(np.allclose(with_interp.gapfilled[obs], truth[obs]))
 
+    def test_swin_gapfiller_short_gap_interpolation_at_day_edges(self):
+        """Short-gap interpolation near dawn/dusk: anchored gaps in, unanchored out."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad
+
+        def above_floor(pot, day):
+            """Positions of the above-floor (clearness-index-valid) records of one day."""
+            above = (pot >= SWINGapFillerXGBoost.KT_MIN_SWINPOT).to_numpy()
+            sel = np.flatnonzero(pot.index.normalize() == pd.Timestamp(day))
+            return [i for i in sel if above[i]]
+
+        lat, lon, utc = 46.8153, 9.8559, 1  # CH-DAV
+        idx = pd.date_range('2022-06-01', '2022-06-06 23:30', freq='30min',
+                            name='TIMESTAMP_END')
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        swin = (pot * (0.7 + 0.05 * np.sin(np.arange(len(idx)) / 40))).clip(lower=0)
+        swin.name = 'SW_IN'
+
+        d3 = above_floor(pot, '2022-06-03')
+        d4 = above_floor(pot, '2022-06-04')
+        d5 = above_floor(pot, '2022-06-05')
+        # Four identical 2-record daytime gaps, differing only in where they sit.
+        dawn = d3[1:3]        # right after the day's first above-floor record
+        midday = d3[len(d3) // 2:len(d3) // 2 + 2]
+        edge_dawn = d4[0:2]   # ON the day's first above-floor record
+        edge_dusk = d5[-2:]   # ON the day's last above-floor record
+
+        gappy = swin.copy()
+        for pos in (dawn, midday, edge_dawn, edge_dusk):
+            gappy.iloc[pos] = np.nan
+
+        common = dict(lat=lat, lon=lon, utc_offset=utc, correct_nighttime_offset=False,
+                      interpolate_short_gaps=2, random_state=42, n_estimators=10,
+                      verbose=0)
+        flag = SWINGapFillerXGBoost(series=gappy, **common).run().results.flag
+
+        # A gap adjacent to the day's first above-floor record still has an observed
+        # record on each side within its day, so the record limit must be measured
+        # over that gap alone — not merged into the neighbouring night, whose NaN run
+        # in clearness-index space is hundreds of records long.
+        self.assertTrue((flag.iloc[dawn] == 4).all())
+        self.assertTrue((flag.iloc[midday] == 4).all())
+        # A gap ON the day's first/last above-floor record has no anchor on its dark
+        # side, so interpolation must decline it and leave it to the model.
+        self.assertTrue((flag.iloc[edge_dawn] == 1).all())
+        self.assertTrue((flag.iloc[edge_dusk] == 1).all())
+
+        # The gap-length count is also what keeps interpolation from reaching across
+        # a dark band that falls INSIDE a calendar day, which happens when solar noon
+        # is near calendar midnight (a site near the date line, or a wrong
+        # utc_offset). Per-day interpolation alone would happily anchor across it.
+        lat2, lon2, utc2 = 47.0, 0.0, 11
+        pot2 = potrad(timestamp_index=idx, lat=lat2, lon=lon2, utc_offset=utc2)
+        swin2 = (pot2 * 0.7).clip(lower=0)
+        swin2.name = 'SW_IN'
+        dom = above_floor(pot2, '2022-06-03')
+        split = next(k for k in range(1, len(dom)) if dom[k] != dom[k - 1] + 1)
+        across = dom[split:split + 2]  # first records after the day's dark band
+        gappy2 = swin2.copy()
+        gappy2.iloc[across] = np.nan
+        flag2 = SWINGapFillerXGBoost(series=gappy2, lat=lat2, lon=lon2, utc_offset=utc2,
+                                     correct_nighttime_offset=False,
+                                     interpolate_short_gaps=2, random_state=42,
+                                     n_estimators=10, verbose=0).run().results.flag
+        self.assertTrue((flag2.iloc[across] != 4).all())
+
     def test_swin_gapfiller_fallback_flag(self):
         """A context-driver gap must surface as flag 2, not hide inside flag 1."""
         import pandas as pd

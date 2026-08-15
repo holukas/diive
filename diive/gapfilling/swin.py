@@ -778,9 +778,16 @@ class SWINGapFillerXGBoost:
         day boundary, and the sky state on the far side of one is not recoverable
         from the near side.
 
+        A gap is filled only where an observed record with SW_IN_POT above
+        ``KT_MIN_SWINPOT`` exists on both sides of it within the same calendar day.
+        A gap touching the first or last such record of a day therefore has no
+        anchor on one side and is left to the model, however short it is — there is
+        nothing on the dark side to interpolate from.
+
         Returns:
             Series carrying interpolated values at accepted gaps, NaN everywhere
-            else — including gaps that were too long or could not be anchored.
+            else — including gaps that were too long, and gaps at a day's first or
+            last above-floor record, which cannot be anchored.
         """
         limit = self.interpolate_short_gaps
         kt = series / swinpot.where(swinpot >= self.KT_MIN_SWINPOT)
@@ -791,6 +798,17 @@ class SWINGapFillerXGBoost:
 
         # Accept whole gaps only. pandas' interpolate(limit=) fills the first `limit`
         # records of a longer gap and leaves a ragged tail, so select runs explicitly.
+        #
+        # Run lengths are counted over the whole series, not over above-floor records
+        # only. That reads as if a gap next to dawn or dusk would be merged into the
+        # neighbouring night's NaN run and rejected for being hundreds of records
+        # long, but it cannot be: acceptance also needs interp.notna(), i.e. an
+        # anchor on both sides inside the same calendar day, and everything between
+        # two anchors is above-floor and within that day — so both counts agree
+        # wherever a gap is acceptable at all. Counting over above-floor records
+        # instead would drop the one guard that stops a gap beside a dark band from
+        # being bridged when that band falls inside a calendar day (solar noon near
+        # calendar midnight, e.g. a site near the date line or a wrong utc_offset).
         missing = kt.isna()
         run_length = missing.groupby((~missing).cumsum()).transform('sum')
 
