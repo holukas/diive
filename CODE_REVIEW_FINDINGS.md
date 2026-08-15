@@ -213,9 +213,9 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~G6~~ | ~~`WorkerRunner` clears `is_running` before emitting — re-entry window~~ (done 2026-08-15) | `gui/widgets/worker.py:73` |
 | ~~L78~~ | ~~`percent_matching`/`confidence` parsed back out of a `'{:.0f}%'` string, so 99.9% reports as 100.0~~ (done 2026-08-15) | `core/times/times.py` |
 | L83 | `histogram_startbin`/`endbin` are seconds but named as bin indices (rename is breaking) | `flux/lowres/timelag_analysis.py` |
-| L84 | `ignore_fringe_bins` still described as "bin indices" in `__init__` (they are counts) | `flux/lowres/timelag_analysis.py` |
-| L88 | `detect_seasonality`'s `'strength'` is a peak-power ratio, documented as a variance ratio | `core/times/decomposition_utils.py` |
-| L91 | `hexbin.py` accepts, documents and forwards `show_less_xticklabels`, and nothing applies it | `core/plotting/hexbin.py:272` |
+| ~~L84~~ | ~~`ignore_fringe_bins` still described as "bin indices" in `__init__` (they are counts)~~ (done 2026-08-15) | `flux/lowres/timelag_analysis.py` |
+| ~~L88~~ | ~~`detect_seasonality`'s `'strength'` is a peak-power ratio, documented as a variance ratio~~ (done 2026-08-15) | `core/times/decomposition_utils.py` |
+| ~~L91~~ | ~~`hexbin.py` accepts, documents and forwards `show_less_xticklabels`, and nothing applies it~~ (done 2026-08-15) | `core/plotting/hexbin.py:272` |
 | L95 | `ScopPhysics.fct_unsc_gf` is `'FCT_UNSC_gfRF'` though the fill is XGBoost; rename is breaking | `flux/lowres/selfheating.py` |
 
 ## S5 — Cosmetic / dead / latent (23)
@@ -240,10 +240,10 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L82~~ | ~~Exceptions in Qt-invoked slots are swallowed — GUI tests driving via signals may be weaker than they look~~ (done 2026-08-15) — the guard uncovered a real leaked-slot bug 44 tests were passing over | `tests/test_gui.py` (methodology) |
 | L85 | No doctest runner anywhere — docstring examples are never executed (L35 had been broken twice over) | `tests/` (methodology) |
 | L98 | `run_all_examples.py` forces no matplotlib backend, so the 16 examples ending in `plt.show()` block forever waiting for a window — the suite cannot run unattended | `examples/run_all_examples.py` |
-| L89 | `-9999` at position 6 still reads as a passing flag | `preprocessing/qaqc/eddyproflags.py` |
+| ~~L89~~ | ~~`-9999` at position 6 still reads as a passing flag~~ (done 2026-08-15) — **two** holes, not one: `-1` at position 1 read as a soft warning | `preprocessing/qaqc/eddyproflags.py` |
 | L90 | `docs/auto_examples/flux/uncertainty.*` stale generated copies | `docs/auto_examples/` |
-| L93 | `EventManager.load_dict({})` early-returns without clearing, so previous events survive | `gui/events.py` |
-| L94 | `crosscorr`'s `len(pot_arr) == 0` branch is unreachable dead code | `preprocessing/qaqc/detect_timestamp_shifts.py` |
+| ~~L93~~ | ~~`EventManager.load_dict({})` early-returns without clearing, so previous events survive~~ (done 2026-08-15) | `gui/events.py` |
+| ~~L94~~ | ~~`crosscorr`'s `len(pot_arr) == 0` branch is unreachable dead code~~ (annotated, kept 2026-08-15) | `preprocessing/qaqc/detect_timestamp_shifts.py` |
 | ~~L96~~ | ~~`ScatterXY` uses `plt.colorbar` instead of `ax.figure.colorbar`~~ (done 2026-08-15) — also `DetectTimestampShifts.plot_radiation_fingerprint` | `core/plotting/scatter.py:169` |
 
 ## Cross-cutting observations
@@ -2252,7 +2252,12 @@ correct `run_id` pattern to copy**. Found while fixing G5.
 `flux/lowres/timelag_analysis.py` — L44 corrected the types and docstrings, but the parameter *names*
 still say "bin". Renaming is a public-API change, deferred.
 
-**[ ] L84. `ignore_fringe_bins` described as "bin indices" in `__init__`**
+**[x] L84. `ignore_fringe_bins` described as "bin indices" in `__init__`**
+
+> **Fixed 2026-08-15.** Doc-only. The `__init__` entry now says the values are
+> [leading, trailing] *counts* of bins to drop, not indices, states the real default
+> (`None`, meaning `[5, 10]`), and mentions that trimming is skipped with a warning when it
+> would empty the histogram (L43).
 `flux/lowres/timelag_analysis.py` — `Histogram` treats `[i, j]` as *counts* of leading/trailing bins to
 drop. L44 fixed the class docstring; the same loose wording survives in `__init__`.
 
@@ -2262,11 +2267,30 @@ drop. L44 fixed the class docstring; the same loose wording survives in `__init_
 been broken twice over** (wrong namespace *and* a column that does not exist in the example data) and
 nothing caught it. A doctest or example-execution pass would have.
 
-**[ ] L88. `detect_seasonality`'s `'strength'` is mis-documented**
+**[x] L88. `detect_seasonality`'s `'strength'` is mis-documented**
+
+> **Fixed 2026-08-15.** Doc-only; the code is a legitimate measure, the description was of a
+> different one. It is the share of periodogram power in the detected peaks,
+> `sum(power at peaks) / sum(power over all periods)` — a power ratio, not the variance ratio the
+> docstring claimed. The docstring now also says it is **not** the same quantity as
+> `seasonality_strength` in `analysis/seasonaltrend.py`, which works on the decomposed
+> components; having two differently-defined "strength" numbers is the trap L60 already hit.
 `core/times/decomposition_utils.py` — documented as "seasonal var / total var", actually a
 peak-power / total-power ratio. Same species as L60(a), not named in that entry. Found while fixing L60.
 
-**[ ] L89. `-9999` at position 6 yields flag 0**
+**[x] L89. `-9999` at position 6 yields flag 0**
+
+> **Fixed 2026-08-15.** Negative codes are now treated as missing, like NaN. Reproduced first,
+> and it was **two** holes rather than the one this entry names: `-9999` at position 6 read as
+> `0.0` ("tested and good"), and `-1` at position 1 read as `1.0` (a soft warning). The cause is
+> that the digit is taken from the string form, where the minus sign shifts every position —
+> `-9999` becomes `'-9999.0'`, whose character 6 is `'0'`.
+>
+> Deliberately still not touching the float->string round-trip itself, as L25 decided: one
+> `where(flag >= 0)` fixes the reachable defect without changing how valid codes are parsed.
+> Covered by `test_negative_code_is_not_testable`, which checks both positions via subTest and
+> asserts a real flag at the same position is still read, so the guard is not a blanket veto.
+> Mutation-checked: both subtests fail with the guard removed.
 `preprocessing/qaqc/eddyproflags.py` — L25 fixed the scalar-`0` case narrowly and deliberately did not
 touch the float->string round-trip; a junk `-9999` value still reads as a passing flag at some positions.
 
@@ -2274,15 +2298,38 @@ touch the float->string round-trip; a junk `-9999` value still reads as a passin
 Generated copies still describe method 2 as "±5 days" and method 4 as "5 nearest fluxes" — both wrong,
 the latter now doubly so after L6. Belongs to the `docs/` sweep in *Before this work is called done*.
 
-**[ ] L91. `hexbin.py` also accepts `show_less_xticklabels` and never applies it**
+**[x] L91. `hexbin.py` also accepts `show_less_xticklabels` and never applies it**
+
+> **Fixed 2026-08-15.** The same hide block `HeatmapDateTime` uses (L62), placed after
+> `format()`, which is what sets the tick labels. `HeatmapBase` only *stores* the flag — every
+> subclass has to apply it, which is why this went missing in one of the three.
+> Covered by `TestHexbinShowLessXticklabels`: one test that the thinned labels equal every second
+> original label, one that the flag off changes nothing. Mutation-checked: both fail with the
+> block removed, the second showing the two label lists identical.
 `core/plotting/hexbin.py:272` — accepts, documents and forwards it, and nothing applies it. L62's exact
 defect in a second file. Found while fixing L62.
 
-**[ ] L93. `EventManager.load_dict({})` does not clear**
+**[x] L93. `EventManager.load_dict({})` does not clear**
+
+> **Fixed 2026-08-15.** An empty load now clears the events and emits `changed`, matching the
+> non-empty path. A load replaces state, so opening a project with no events must not leave the
+> previous project's standing. Both callers pass `{}` when nothing is saved, and the project-open
+> path (`project.extras.get("events") or {}`) is the one that leaked; the startup path is a no-op
+> because events are already empty there.
+> Covered by `test_event_manager_load_dict_clears_on_empty`, which also asserts a non-empty load
+> still restores, so the change is not a blanket wipe. Mutation-checked:
+> `AssertionError: an empty load must clear the previous events`.
 `gui/events.py` — early-returns on an empty dict, so opening a project with no events keeps the previous
 session's events. Adjacent to G9. Found while fixing G9.
 
-**[ ] L94. `crosscorr`'s `len(pot_arr) == 0` branch is unreachable**
+**[-] L94. `crosscorr`'s `len(pot_arr) == 0` branch is unreachable**
+
+> **Closed 2026-08-15 as annotate-don't-delete.** The branch is unreachable as analysed, and L21
+> already made it consistent with the other early-outs (a NaN row, not an omitted date). Deleting
+> a defensive guard buys nothing and would turn a wrong-but-safe path into a crash if the
+> reachability analysis is off, so it stays with a comment recording why. CLAUDE.md's rule is to
+> mention dead code rather than remove it; this entry was that mention, and the comment carries it
+> to where a reader will see it.
 `preprocessing/qaqc/detect_timestamp_shifts.py` — `window` always spans at least the sun-up rows, which
 the preceding check guarantees non-empty. L21 made it consistent anyway; it is dead code.
 
