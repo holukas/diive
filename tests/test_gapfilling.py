@@ -199,6 +199,39 @@ class TestGapFilling(unittest.TestCase):
         self.assertEqual(series_gapfilled.isnull().sum(), 7856)
         self.assertEqual(series.isnull().sum(), 11412)
 
+    def test_linear_interpolation_verbose_reports_the_limit(self):
+        """The verbose gap-analysis header must show the limit, not the literal.
+
+        The header used to sit in a plain (non-f) inner literal, so `{limit}` was
+        never interpolated and the report read `Gap Analysis (limit={limit})`.
+        Both the normal and the nothing-to-fill code path print this header.
+        """
+        import re
+        import pandas as pd
+        from diive.core.utils.console import console
+        from diive.gapfilling.interpolate import linear_interpolation
+
+        idx = pd.date_range('2022-06-01', periods=20, freq='30min', name='TIMESTAMP_END')
+        series = pd.Series(np.arange(20.0), index=idx, name='TA')
+        series.iloc[[5, 6]] = np.nan  # a 2-record gap
+
+        def _report(limit):
+            # Rich wraps the padded header at the console width, so compare on
+            # whitespace-normalised text.
+            with console.capture() as captured:
+                linear_interpolation(series=series, limit=limit, verbose=True)
+            return re.sub(r'\s+', ' ', captured.get())
+
+        # Normal path: the gap is within the limit, so it gets filled.
+        out = _report(3)
+        self.assertIn('Gap Analysis (limit=3)', out)
+        self.assertNotIn('limit={limit}', out)
+
+        # Nothing-to-fill path: same header, printed before the early return.
+        out = _report(1)
+        self.assertIn('Gap Analysis (limit=1)', out)
+        self.assertNotIn('limit={limit}', out)
+
     def test_observed_preserved_when_feature_missing(self):
         """Observed targets must never be overwritten/mis-flagged when a feature
         is missing at that row (driver gap not aligned with the target gap)."""
@@ -1261,3 +1294,44 @@ class TestStlFeaturesOnGappyColumns(unittest.TestCase):
         self.assertNotIn(f'.{self.GAPPY}_STL_TREND', out.columns)
         self.assertIn('.Tair_f_STL_TREND', out.columns)
         self.assertIn(self.GAPPY, captured.get())
+
+
+class TestEngineeredColumnsAreNotReEngineered(unittest.TestCase):
+    """No stage takes an already-engineered ('.'-prefixed) column as a source.
+
+    The rolling stages used to have no such filter while differencing, EMA,
+    polynomial and STL did, so running the engineer on a frame that already held
+    engineered columns - what the GUI's feature-engineering tab produces, since
+    its output is merged into the dataset - emitted names outside the
+    `.{col}_TYPE{detail}` convention (`..TA_POL2_MEAN4`) from the rolling stages
+    only, and grew the feature count quadratically across repeat runs.
+    """
+
+    def _frame(self):
+        import pandas as pd
+        idx = pd.date_range('2022-06-01', periods=200, freq='30min', name='TIMESTAMP_END')
+        rng = np.random.RandomState(0)
+        return pd.DataFrame({'NEE': rng.normal(size=200), 'TA': rng.normal(size=200)}, index=idx)
+
+    def _engineer(self):
+        from diive.core.ml.feature_engineer import FeatureEngineer
+        return FeatureEngineer(
+            target_col='NEE', features_rolling=[4], features_rolling_stats=['median'],
+            features_diff=[1], features_ema=[6], features_poly_degree=2)
+
+    def test_a_second_run_adds_nothing(self):
+        engineer = self._engineer()
+        first = engineer.fit_transform(self._frame())
+        second = engineer.fit_transform(first)
+        added = [c for c in second.columns if c not in first.columns]
+        self.assertEqual(added, [])
+        self.assertEqual([c for c in second.columns if c.startswith('..')], [])
+
+    def test_the_feature_set_of_a_plain_frame_is_unchanged(self):
+        # The filter only ever drops '.'-prefixed sources, so a raw driver frame -
+        # every library path (flux chain L4.1, SWIN, driver analysis) - keeps
+        # exactly the features it had. Guards against the filter over-reaching.
+        out = self._engineer().fit_transform(self._frame())
+        self.assertEqual(
+            sorted(c for c in out.columns if c.startswith('.')),
+            ['.TA_DIFF1', '.TA_EMA6', '.TA_MEAN4', '.TA_POL2', '.TA_ROLLMEDIAN4', '.TA_SD4'])

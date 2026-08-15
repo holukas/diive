@@ -94,7 +94,9 @@ class FeatureEngineer:
         The FeatureEngineer creates temporal and statistical features from time series data.
         Set unused parameters to None/False to skip those stages. All features use naming
         convention: `.{col}_{STAGE}_{detail}` (e.g., `.Tair_f-1` for lag, `.Tair_f_MEAN12`
-        for rolling mean with window 12).
+        for rolling mean with window 12). Columns already carrying that `.` prefix in the
+        input are never used as sources by the per-column stages, so running the engineer
+        on its own output adds nothing rather than engineering the engineered columns.
 
         === STAGE 1: LAG FEATURES (Temporal Context) ===
         Args:
@@ -579,7 +581,11 @@ class FeatureEngineer:
     def _rolling_features(self, df: pd.DataFrame, windows: list, exclude_cols: list = None) -> pd.DataFrame:
         """Add rolling mean and std of feature columns at multiple window sizes."""
         exclude = [self.target_col] + (exclude_cols or [])
-        feature_cols = [c for c in df.columns if c not in exclude]
+        # Already-engineered ('.'-prefixed) columns are not sources, same as in the
+        # differencing, EMA, polynomial and STL stages: rolling them would emit names
+        # outside the '.{col}_TYPE{detail}' convention ('..TA_POL2_MEAN12') and grow
+        # the feature count quadratically when the engineer runs on its own output.
+        feature_cols = [c for c in df.columns if c not in exclude and not str(c).startswith('.')]
         newcols = []
 
         for w in windows:
@@ -601,7 +607,7 @@ class FeatureEngineer:
                                     exclude_cols: list = None) -> pd.DataFrame:
         """Add advanced rolling statistics (median, min, max, percentiles)."""
         exclude = [self.target_col] + (exclude_cols or [])
-        feature_cols = [c for c in df.columns if c not in exclude]
+        feature_cols = [c for c in df.columns if c not in exclude and not str(c).startswith('.')]
         newcols = []
 
         stat_name_map = {
@@ -640,7 +646,7 @@ class FeatureEngineer:
             return df
 
         exclude = [self.target_col] + (self.features_diff_exclude_cols or [])
-        feature_cols = [c for c in df.columns if c not in exclude and not c.startswith('.')]
+        feature_cols = [c for c in df.columns if c not in exclude and not str(c).startswith('.')]
         newcols = []
 
         for order in self.features_diff:
@@ -664,7 +670,7 @@ class FeatureEngineer:
             return df
 
         exclude = [self.target_col] + (self.features_ema_exclude_cols or [])
-        feature_cols = [c for c in df.columns if c not in exclude and not c.startswith('.')]
+        feature_cols = [c for c in df.columns if c not in exclude and not str(c).startswith('.')]
         newcols = []
 
         for span in self.features_ema:
@@ -686,7 +692,7 @@ class FeatureEngineer:
             return df
 
         exclude = [self.target_col] + (self.features_poly_exclude_cols or [])
-        feature_cols = [c for c in df.columns if c not in exclude and not c.startswith('.')]
+        feature_cols = [c for c in df.columns if c not in exclude and not str(c).startswith('.')]
         newcols = []
 
         for degree in range(2, self.features_poly_degree + 1):
@@ -708,7 +714,7 @@ class FeatureEngineer:
         from diive.analysis.seasonaltrend import SeasonalTrendDecomposition
 
         exclude = [self.target_col] + (self.features_stl_exclude_cols or [])
-        feature_cols = [c for c in df.columns if c not in exclude and not c.startswith('.')]
+        feature_cols = [c for c in df.columns if c not in exclude and not str(c).startswith('.')]
         newcols = []
 
         # Determine which components to extract
