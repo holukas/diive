@@ -33,7 +33,7 @@ before a release, and several are already stale today.
 
 ### [ ] CHANGELOG.md
 
-Nothing in this effort has been written up yet. **Four breaking changes** have landed on `indev` so
+Nothing in this effort has been written up yet. **Five breaking changes** have landed on `indev` so
 far and each needs an entry saying what silently changes for existing code:
 
 | Commit | Breaks |
@@ -89,7 +89,7 @@ opposite of what the code produces. Re-read it against the corrected behaviour.
 
 ---
 
-# Triage index — all 81 findings by severity
+# Triage index — all 85 findings by severity
 
 The detailed entries below stay grouped by review round and module. This index is the **fix order**.
 
@@ -131,7 +131,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L2~~ | ~~`WindDirOffset` ignores `hist_n_bins`~~ (done 2026-08-07) — also pinned the bins to the full circle | `preprocessing/corrections/offsetcorrection.py:476` |
 | ~~G1~~ | ~~Partitioning tabs run at **(0, 0) UTC** when the project site is unconfigured~~ (done 2026-08-07) — 3 of the 4 ports | `gui/tabs/_partitioning_base.py:300` |
 
-## S2 — Silently does nothing / silently loses data (25)
+## S2 — Silently does nothing / silently loses data (28)
 
 | ID | Finding | Where |
 |---|---|---|
@@ -155,13 +155,13 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L53~~ | ~~`CompoundExtremes` returns zero classified periods for a single year, silently~~ (done 2026-08-07) | `analysis/compoundextremes.py:168` |
 | ~~L59~~ | ~~`multi_scale_harmonics` swallows every exception~~ (done 2026-08-07) — function deleted as dead code | `analysis/harmonic.py:432` |
 | ~~L19~~ | ~~`features_stl=True` can produce nothing — any single NaN skips a column, logged only at DEBUG~~ (done 2026-08-07) | `core/ml/feature_engineer.py:726` |
-| L16 | SWIN short-gap interpolation never fires near dawn/dusk — the night's NaN run inflates the gap length | `gapfilling/swin.py:794` |
-| L4 | `keep_records_where`: an "open" bound is not open when `inclusive != 'both'` — drops the extreme record | `core/dfun/frames.py:110` |
-| L17 | `MetadataStore.rename` silently drops a record on a name collision | `core/metadata/__init__.py:325` |
-| L64 | glTF `.glb` export bakes the texture **mirrored** along the date axis | `gui/tabs/surface3d.py:744` |
-| L66 | `datetime_surface_grid` omits the `TIMESTAMP_START` conversion — 3-D surface offset half a period from the heatmap | `core/plotting/surface_grid.py:68` |
-| L67 | 3-D export buttons write the **previous** variable's relief after a render that produced nothing | `gui/tabs/surface3d.py:945` |
-| G4 | `restore_controls` silently keeps the current combo value when the saved entry is gone — can flip the joint-uncertainty divisor | `gui/widgets/state_utils.py:51` |
+| ~~L16~~ | ~~SWIN short-gap interpolation never fires near dawn/dusk — the night's NaN run inflates the gap length~~ **(not a bug 2026-08-15)** — the run length is redundant where the mask can accept and load-bearing where it isn't; documented + tested instead | `gapfilling/swin.py:794` |
+| ~~L4~~ | ~~`keep_records_where`: an "open" bound is not open when `inclusive != 'both'` — drops the extreme record~~ (done 2026-08-15) | `core/dfun/frames.py:110` |
+| ~~L17~~ | ~~`MetadataStore.rename` silently drops a record on a name collision~~ (done 2026-08-15) | `core/metadata/__init__.py:325` |
+| ~~L64~~ | ~~glTF `.glb` export bakes the texture **mirrored** along the date axis~~ (done 2026-08-15) | `gui/tabs/surface3d.py:744` |
+| ~~L66~~ | ~~`datetime_surface_grid` omits the `TIMESTAMP_START` conversion — 3-D surface offset half a period from the heatmap~~ (done 2026-08-15) | `core/plotting/surface_grid.py:68` |
+| ~~L67~~ | ~~3-D export buttons write the **previous** variable's relief after a render that produced nothing~~ (done 2026-08-15) | `gui/tabs/surface3d.py:945` |
+| ~~G4~~ | ~~`restore_controls` silently keeps the current combo value when the saved entry is gone — can flip the joint-uncertainty divisor~~ (done 2026-08-15) | `gui/widgets/state_utils.py:51` |
 | ~~L73~~ | ~~`harmonic_decompose` picks the top-N bins by power, so a windowed strong component's leakage outranks a genuine weaker one — the same component is returned twice~~ (done 2026-08-07) | `core/times/decomposition_utils.py:275` |
 
 ## S3 — Crash on legitimate input (14)
@@ -327,7 +327,21 @@ empty result so a 1-record input reaches the intended `RuntimeError`.
 
 ---
 
-### [ ] L4. `keep_records_where`: an "open" bound is not open when `inclusive != 'both'`
+### [x] L4. `keep_records_where`: an "open" bound is not open when `inclusive != 'both'`
+
+> **Fixed 2026-08-15.** An unset bound now substitutes `-np.inf` / `np.inf` instead of the
+> condition's observed `min()` / `max()`, so the open side stays open for every `inclusive` value.
+>
+> Neither sibling needed a change, both checked: `select_records_to_code` omits `lower`/`upper`
+> when they are `None`, so generated code inherits the fix; the GUI's own `min()`/`max()`
+> substitution (`select_records.py:541`) only sizes the shaded preview band — an infinite span
+> would wreck the y-limits — while the mask itself comes from this function, so the preview
+> markers and the result now agree.
+>
+> Covered by `TestKeepRecordsWhere::test_open_bound_stays_open_for_all_inclusive` (open-lower and
+> open-upper across all four `inclusive` values, via `subTest`). Mutation-checked: reinstating the
+> `cond.min()`/`cond.max()` lines fails exactly the four exclusive-on-the-open-side combinations
+> (`open lower` + `neither`/`right`, `open upper` + `neither`/`left`).
 
 `diive/core/dfun/frames.py:110-112`
 
@@ -593,7 +607,25 @@ so every mutation rebinds, matching the drop path.
 
 ## GUI — lower severity
 
-### [ ] G4. `restore_controls` silently keeps the current value when a saved combo entry is gone
+### [x] G4. `restore_controls` silently keeps the current value when a saved combo entry is gone
+
+> **Fixed 2026-08-15.** `restore_controls` now returns the list of keys it could not apply, and
+> `set_widget_value` returns `bool` (`False` only when a non-editable `QComboBox` has no matching
+> item). The change is purely additive — every existing caller ignores the return value and
+> behaves exactly as before — so no tab was forced to change.
+>
+> Wiring was deliberately partial, targeting the tabs where a silent fallback changes a *number*:
+> joint uncertainty (the `JOINT_DIVISOR_IQR` 1.349 → `JOINT_DIVISOR_1SIGMA` 2.0 case this entry
+> names), random uncertainty, and all four partitioning tabs via `_partitioning_base`. Left
+> unwired: fluxchain, features, select_records, compound_extremes, the ML/MDS gap-fillers, the
+> outlier/correction/derived bases, ustar_detection, seasonaltrend, spectrogram, timelag and the
+> two 3-D surface tabs. Message wording lives in `unrestored_message()` in the GUI, per the
+> separation rule.
+>
+> Covered by `test_restore_controls_reports_missing_combo_entry`, which asserts the reported key
+> set, the labelled status text, **and** that the divisor really did fall back — the reason the
+> warning matters. Mutation-checked: restoring the silent branch gives
+> `AssertionError: assert set() == {'divisor_combo', 'randunc'}`.
 
 `diive/gui/widgets/state_utils.py:51-57`
 
@@ -727,7 +759,39 @@ soft flag". Decide which, but they cannot both stand.
 
 ---
 
-### [ ] L16. SWIN short-gap interpolation silently never fires near dawn/dusk
+### [-] L16. SWIN short-gap interpolation silently never fires near dawn/dusk
+
+> **Not a bug — closed 2026-08-15 after re-examination; the behaviour is now documented and
+> regression-tested.** The diagnosis in this entry is wrong, and acting on it would have
+> introduced a bug.
+>
+> Acceptance also requires `interp.notna()`, and `interp` is computed **per calendar day with
+> `limit_area='inside'`**. A record can therefore only be accepted if a kt-valid record exists
+> before *and* after it within the same day, which bounds its whole-series kt-NaN run to those
+> anchors; since the above-floor band is contiguous within a day, the whole-series run length
+> **equals** the daytime-only run length on exactly the records the mask can accept. Measured, not
+> just argued: 0 differences across all 239 possible 2-record gap positions and 800 randomised
+> multi-gap scenarios (4 densities, limits 1/2/4/16).
+>
+> What the repro above actually placed was a gap **on** the day's first two above-floor records.
+> Its run length is indeed 20 rather than 2, but `interp` is NaN there either way — there is no
+> earlier observation that day to interpolate from. A dawn gap one record later *is* interpolated
+> today (flag 4, verified). The docstring's existing "could not be anchored" was already the
+> correct explanation.
+>
+> The proposed fix would also break a documented promise. When the above-floor band splits *inside*
+> one calendar day (solar noon near calendar midnight — a site near the date line, or a wrong
+> `utc_offset`), per-day interpolation happily anchors across that dark band and the whole-series
+> run length is the only thing refusing it. So the count is load-bearing exactly where it is not
+> redundant.
+>
+> Recorded where it can be seen: a WHY comment at the run-length lines, and a docstring paragraph
+> stating that a gap touching a day's first/last above-floor record goes to the model however short
+> it is. Covered by `test_swin_gapfiller_short_gap_interpolation_at_day_edges` — four identical
+> 2-record gaps (dawn-adjacent, midday, on the day's first, on its last) asserting flags 4/4/1/1,
+> plus the split-band night-bridging guard. Mutation-checked in the reverse direction: applying the
+> proposed change leaves the dawn/midday/edge assertions passing (confirming the no-op) and fails
+> the night-bridging guard.
 
 `diive/gapfilling/swin.py:794-799`
 
@@ -760,7 +824,24 @@ the edge behaviour.
 
 ## Round 2 — library: contract / documentation mismatches
 
-### [ ] L17. `MetadataStore.rename` silently drops an entry on a name collision
+### [x] L17. `MetadataStore.rename` silently drops an entry on a name collision
+
+> **Fixed 2026-08-15.** `MetadataStore.rename` now raises `ValueError` on a collision, checked
+> before any mutation so a rejected rename leaves the store untouched.
+>
+> Collision is judged on the **result**, not the input: it builds the post-rename name of every
+> stored entry (renamed or not) and raises if any appears twice. So `{A: B}` with `B` already
+> stored raises, and so does `{A: C, B: C}`, while a simultaneous swap `{A: B, B: A}` and a
+> whole-set prefix rename produce distinct results and still work — both are real workflows and
+> both are asserted.
+>
+> `MainWindow._rename_variables` (`gui/app.py`) validates its mapping the same way against
+> `_full_data.columns` (the frame can hold columns the store does not) and aborts with a warning
+> instead of handing the frame duplicate labels.
+>
+> Covered by `test_rename_collision_raises`, `test_rename_swap_is_allowed`,
+> `test_rename_bulk_prefix_is_allowed`. Mutation-checked: deleting the guard gives
+> `AssertionError: ValueError not raised`.
 
 `diive/core/metadata/__init__.py:325`
 
@@ -1625,7 +1706,20 @@ midpoint of its neighbour — filling the gap with real data. Bimodal X (500 poi
 width. This also defeats `_drop_gap_risers = True` (`surfacexyz.py:44`, commented "keep them truly
 empty") because those bins are never NaN cells. `HeatmapXYZ` has the same exposure.
 
-**[ ] L64. glTF / `.glb` export bakes the texture mirrored along the date axis**
+**[x] L64. glTF / `.glb` export bakes the texture mirrored along the date axis**
+
+> **Fixed 2026-08-15.** The UV row coordinate is flipped (`1.0 - v`) in both export paths
+> (`_smooth_export_arrays`, `_extruded_export_arrays`), matching glTF/trimesh's lower-left texture
+> origin; `u` untouched.
+>
+> Covered by `test_surface3d_export_texture_rows_not_mirrored`, which samples through the real
+> `trimesh.visual.uv_to_color` on a monotone 4×2 grid (one texel per cell) and asserts vertex row
+> `i` samples texel row `i` for both styles, plus a guard that the reversed mapping is wrong.
+> Mutation-checked per path: reverting either gives exactly reversed row colours
+> (`[255, 255, 170, …]` where `[0, 0, 85, …]` is required). Confirmed end-to-end through
+> `_build_export_surface`: early dates now bake blue, late dates red.
+
+
 `gui/tabs/surface3d.py:744` and `:817` — UV rows are assigned `v = i/(d-1)` (top-left texture
 origin) but trimesh/glTF use a **lower**-left origin, so vertex row `i` samples texel row `d-1-i`.
 Geometry is right, colours are flipped: an exported annual NEE surface paints the winter ridge with
@@ -1640,7 +1734,30 @@ sampled row colours came back exactly reversed. Both the smooth and extruded pat
 plotting tab `.dropna()` first (`codegen.py:248`), so the library's public API is strictly worse
 than the GUI's.
 
-**[ ] L66. `datetime_surface_grid` does not force `TIMESTAMP_START`, so the 3-D surface is offset from the 2-D heatmap**
+**[x] L66. `datetime_surface_grid` does not force `TIMESTAMP_START`, so the 3-D surface is offset from the 2-D heatmap**
+
+> **Fixed 2026-08-15.** `datetime_surface_grid` now converts to `TIMESTAMP_START`, mirroring
+> `HeatmapBase._setup_timestamp` (same `index.name` guard, same `insert_timestamp(convention='start',
+> set_as_index=True)`). Converting — rather than correcting the docstring — is right because
+> `_setup_timestamp` runs `TimestampSanitizer` with exactly the arguments this function already
+> used; the missing conversion was the *only* divergence, and the surface is documented as the
+> heatmap's 3-D analogue.
+>
+> Covered by `test_datetime_surface_grid_axes_match_the_heatmap`, asserting the grid's hours, dates
+> and z all equal `HeatmapDateTime`'s for the same series (its x/y are pcolormesh boundaries, hence
+> the dropped trailing bound). Verified independently outside the suite: hours `[0.5 1.5 2.5 3.5]`
+> for both, dates and z equal.
+>
+> **Two pre-existing assertions in `test_datetime_surface_grid_shape_and_axes` moved with the fix**
+> because they encoded the offset: `x_hours[0]` 0.0 → 0.5 and `len(y_days)` `3*365` → `3*365 + 1`.
+> Both follow from the shift being *earlier*: the fixture's MIDDLE stamps sit at `:00`, so START is
+> `:30` of the previous hour — the sorted hour list starts at 0.5 (23.5 sorts last) and the first
+> record moves onto the preceding date, adding one leading row. The heatmap has always had that row.
+>
+> `surface3d.py` needed no change (it consumes the grid generically) and was owned by another
+> change at the time; L68, in the same function, is untouched and still open.
+
+
 `core/plotting/surface_grid.py:68` — the docstring claims "the same preparation the 2-D heatmap
 uses", but `HeatmapBase._setup_timestamp` additionally converts to `TIMESTAMP_START` via
 `insert_timestamp` (`heatmap_base.py:145`) while this only calls
@@ -1648,7 +1765,21 @@ uses", but `HeatmapBase._setup_timestamp` additionally converts to `TIMESTAMP_ST
 Since MIDDLE is diive's working convention, the surface's time-of-day axis sits half a period later
 than the heatmap's for the same data (`heatmap hours [0, 0.5, 1.0]` vs `surface [0.25, 0.75, 1.25]`).
 
-**[ ] L67. 3-D export buttons write a stale surface after a render that produced nothing**
+**[x] L67. 3-D export buttons write a stale surface after a render that produced nothing**
+
+> **Fixed 2026-08-15.** A new `_clear_grid_state()` helper clears the stashed
+> `_grid_xn/_yn/_height/_z/_style` and is called from both early returns — `_compute`'s
+> `data is None` branch and `_render_surface`'s `not finite.any()` branch — so the export handlers'
+> `_grid_height is None` guard actually holds.
+>
+> Covered by `test_surface3d_export_state_cleared_when_render_shows_nothing`, exercising both
+> branches and both classes (`Surface3DTab` with an all-NaN variable after a good one, and the
+> `SurfaceXYZTab` subclass with a Z role that is not a real column). Mutation-checked per branch:
+> reverting either leaves the previous variable's grid stashed (`shape=(21, 48)`, and the 30×30
+> XYZ grid). The test stubs `Pyvista3DCanvas` because VTK cannot create a GL context under
+> `QT_QPA_PLATFORM=offscreen`; mesh construction is pure CPU, so the pipeline still runs.
+
+
 `gui/tabs/surface3d.py:945`, `:915` — `_render_surface` returns at `if not finite.any():` *before*
 assigning `_grid_xn/_yn/_height/_z/_style` (`:963`), and `_compute` returns early when
 `_grid_data()` is None; neither clears the previous grid. The export handlers guard only on
