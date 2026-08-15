@@ -270,6 +270,12 @@ class DetectTimestampShifts:
 
                 pot_arr = ts_pot_hr[window].to_numpy()
                 meas_arr = ts_meas_hr[window].to_numpy()
+                # Believed unreachable: `window` spans sun_index[0]-pad to
+                # sun_index[-1]+pad and the check above guarantees sun_index is
+                # non-empty, so the window always holds at least the sun-up rows.
+                # Kept as a guard rather than deleted, and made consistent with the
+                # other early-outs (a NaN row, not an omitted date) in case an
+                # index/frequency combination does empty it.
                 if len(pot_arr) == 0:
                     results[date] = {'shift_minutes': np.nan, 'max_corr': np.nan}
                     continue
