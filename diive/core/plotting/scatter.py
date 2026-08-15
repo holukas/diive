@@ -166,7 +166,7 @@ class ScatterXY:
                                  vmax=vmax,
                                  label=self.yname)
             if show_colorbar:
-                cbar = plt.colorbar(scatter, ax=ax)
+                cbar = ax.figure.colorbar(scatter, ax=ax)
                 cbar.set_label(zlabel if zlabel else self.zname, fontsize=12)
         else:
             ax.scatter(x=self.xy_df[self._xc],

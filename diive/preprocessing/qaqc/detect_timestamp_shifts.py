@@ -669,8 +669,8 @@ class DetectTimestampShifts:
         ax.set_title(f'Radiation Fingerprint - {year}')
         ax.set_xlabel('Time of Day')
         ax.set_ylabel('Day of Year')
-        plt.colorbar(im, ax=ax, label='W/m2')
-        plt.tight_layout()
+        fig.colorbar(im, ax=ax, label='W/m2')
+        fig.tight_layout()
         return fig, ax
 
     # ------------------------------------------------------------------
