@@ -151,6 +151,35 @@ class TestMetadataStore(unittest.TestCase):
         store.drop("X")
         self.assertNotIn("X", store)
 
+    def test_rename_collision_raises(self):
+        store = MetadataStore()
+        store.record_original(["A", "B"])
+        store.add_user_tag("B", FAVORITE)
+        with self.assertRaises(ValueError):
+            store.rename({"A": "B"})
+        # Nothing was renamed, so B still exists with its own metadata.
+        self.assertIn("A", store)
+        self.assertIn(FAVORITE, store.get("B").tags)
+
+    def test_rename_swap_is_allowed(self):
+        store = MetadataStore()
+        store.record_original(["A", "B"])
+        store.add_user_tag("A", FAVORITE)
+        store.rename({"A": "B", "B": "A"})
+        self.assertIn(FAVORITE, store.get("B").tags)
+        self.assertNotIn(FAVORITE, store.get("A").tags)
+
+    def test_rename_bulk_prefix_is_allowed(self):
+        store = MetadataStore()
+        store.record_original(["A", "B"])
+        store.record_derived("B_HAMPEL", parent="B", operation="Hampel")
+        names = ["A", "B", "B_HAMPEL"]
+        store.rename({n: f"P_{n}" for n in names})
+        for n in names:
+            self.assertNotIn(n, store)
+            self.assertIn(f"P_{n}", store)
+        self.assertEqual(store.get("P_B_HAMPEL").parents, ["P_B"])
+
     def test_from_attrs(self):
         store = MetadataStore()
         store.record_original(["NEE"])

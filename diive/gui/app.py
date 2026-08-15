@@ -1100,6 +1100,17 @@ class MainWindow(QMainWindow):
         mapping = {o: n for o, n in mapping.items() if o in self._full_data.columns}
         if not mapping:
             return
+        # Guard the bulk path the way `_rename_one_variable` guards the single
+        # one: a colliding mapping would give the frame duplicate column labels
+        # and make the library store reject the rename.
+        renamed = [mapping.get(c, c) for c in self._full_data.columns]
+        clashes = sorted({c for c in renamed if renamed.count(c) > 1})
+        if clashes:
+            QMessageBox.warning(
+                self, "Rename variables",
+                "The rename would produce duplicate variable names:\n\n"
+                f"{', '.join(clashes)}")
+            return
         self._full_data = self._full_data.rename(columns=mapping)
         self._created = {mapping.get(c, c) for c in self._created}
         if self._var_subset is not None:  # keep renamed vars in the active subset

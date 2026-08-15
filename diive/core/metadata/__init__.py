@@ -312,10 +312,24 @@ class MetadataStore:
         per-provenance ``parent``) so the renamed variables still point at each
         other. Entries not in ``mapping`` keep their names but still get their
         parent references remapped (a child of a renamed variable stays linked).
+
+        Raises:
+            ValueError: if the rename would give two stored variables the same
+                name, which would silently discard one of them. Only the
+                *result* has to be unique, so a simultaneous swap
+                (``{'A': 'B', 'B': 'A'}``) and a whole-set prefix/suffix rename
+                are both fine.
         """
         mapping = {str(o): str(n) for o, n in mapping.items() if str(o) != str(n)}
         if not mapping:
             return
+        renamed = [mapping.get(name, name) for name in self._items]
+        clashes = sorted({n for n in renamed if renamed.count(n) > 1})
+        if clashes:
+            raise ValueError(
+                f"rename would merge two variables into one: {', '.join(clashes)} "
+                f"(their metadata, provenance and tags would be lost). Rename or "
+                f"drop the existing variable first.")
         for md in self._items.values():
             md.name = mapping.get(md.name, md.name)
             md.parents = [mapping.get(p, p) for p in md.parents]
