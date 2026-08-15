@@ -578,10 +578,32 @@ class TestPlotClasses(unittest.TestCase):
         grid = datetime_surface_grid(self.series)
         self.assertEqual(grid.z.shape, (len(grid.y_days), len(grid.x_hours)))
         self.assertEqual(len(grid.x_hours), 24)          # hourly data
-        self.assertEqual(len(grid.y_days), 3 * 365)
+        # The MIDDLE index is converted to TIMESTAMP_START (as the heatmap does),
+        # which shifts every record half a period back and so adds one leading
+        # date row holding a single record.
+        self.assertEqual(len(grid.y_days), 3 * 365 + 1)
         self.assertEqual(grid.name, "TA")
-        np.testing.assert_allclose(grid.x_hours[0], 0.0)
+        np.testing.assert_allclose(grid.x_hours[0], 0.5)
         self.assertLess(grid.x_hours[-1], 24.0)
+
+    def test_datetime_surface_grid_axes_match_the_heatmap(self):
+        """Surface and heatmap must place the same data on the same axes.
+
+        The 3-D surface is the 3-D analogue of `HeatmapDateTime`, so both must
+        run the same timestamp preparation. Sanitizing without converting to
+        TIMESTAMP_START put the surface's time-of-day axis half a period later
+        than the heatmap's for a (MIDDLE-convention) diive series.
+        """
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        from diive.core.plotting.surface_grid import datetime_surface_grid
+        import numpy as np
+        grid = datetime_surface_grid(self.series)
+        hm = HeatmapDateTime(self.series, ax_orientation="vertical")
+        # The heatmap's x/y are pcolormesh *boundaries*: one entry longer than
+        # the data, so drop the trailing bound before comparing.
+        np.testing.assert_allclose(grid.x_hours, hm.x[:-1])
+        np.testing.assert_array_equal(grid.dates, hm.y[:-1])
+        np.testing.assert_allclose(grid.z, hm.z, equal_nan=True)
 
     def test_datetime_surface_grid_keeps_gaps_as_nan(self):
         from diive.core.plotting.surface_grid import datetime_surface_grid

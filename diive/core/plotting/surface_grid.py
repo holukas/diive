@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 from pandas import Series
 
-from diive.core.times.times import TimestampSanitizer
+from diive.core.times.times import TimestampSanitizer, insert_timestamp
 
 
 @dataclass
@@ -51,9 +51,12 @@ def datetime_surface_grid(series: Series) -> DateTimeSurface:
 
     The index is sanitized (sorted, de-duplicated, regularised to a complete
     frequency grid) so the pivot forms a full rectangle — every date row has
-    the same set of time-of-day columns, with NaN for missing records. This is
-    the same preparation the 2-D heatmap uses, exposed as plain arrays for 3-D
-    rendering.
+    the same set of time-of-day columns, with NaN for missing records. It is
+    then converted to the ``TIMESTAMP_START`` convention. This is the same
+    preparation the 2-D heatmap uses
+    (:meth:`~diive.core.plotting.heatmap_base.HeatmapBase._setup_timestamp`),
+    exposed as plain arrays for 3-D rendering: the surface and the heatmap of
+    the same series therefore share cell for cell.
 
     Args:
         series: Pandas Series with a diive-convention datetime index
@@ -66,6 +69,13 @@ def datetime_surface_grid(series: Series) -> DateTimeSurface:
     series = series.copy()
     series.name = series.name if series.name else "data"
     series = TimestampSanitizer(data=series, output_middle_timestamp=False).get()
+
+    # Same as the 2-D heatmap: force TIMESTAMP_START so the time-of-day axis of
+    # the surface lines up with the heatmap's instead of sitting half a period
+    # later for the (MIDDLE) diive working convention.
+    if series.index.name != 'TIMESTAMP_START':
+        _series_df = insert_timestamp(data=series, convention='start', set_as_index=True)
+        series = _series_df[series.name].copy()
 
     df = pd.DataFrame(series)
     df["DATE"] = df.index.date
