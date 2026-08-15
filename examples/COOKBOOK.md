@@ -72,8 +72,8 @@ detector.flag_outliers_hampel_test(window_length=7 * 48, n_sigma_daytime=4.5,
                                    n_sigma_nighttime=4.5, showplot=False, verbose=False)
 detector.addflag()
 
-detector.flag_outliers_localsd_test(n_sd=[3.5, 3.5], winsize=[24, 24],
-                                    separate_daytime_nighttime=True,
+detector.flag_outliers_localsd_test(n_sd=3.5, winsize=24,
+                                    separate_day_night=True,
                                     showplot=False, verbose=False)
 detector.addflag()
 

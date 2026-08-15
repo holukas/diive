@@ -53,7 +53,7 @@ detector = dv.outliers.Hampel(
 )
 detector.calc(repeat=False)
 
-flag = detector.flag  # 0=good, 2=outlier
+flag = detector.flag  # 0=tested and accepted, 2=outlier, NaN=not testable (missing value)
 cleaned = detector.filteredseries  # outliers set to NaN
 ```
 
@@ -68,7 +68,7 @@ detector.flag_outliers_zscore_test(thres_zscore=4)
 # Day/night separated z-score
 detector.flag_outliers_zscore_test(
     thres_zscore=4,
-    separate_daytime_nighttime=True
+    separate_day_night=True
 )
 ```
 
@@ -84,7 +84,7 @@ detector = dv.outliers.AbsoluteLimits(
 )
 detector.calc()
 
-flag = detector.flag  # 0=good, 2=outlier
+flag = detector.flag  # 0=tested and accepted, 2=outlier, NaN=not testable (missing value)
 cleaned = detector.filteredseries
 ```
 
@@ -95,11 +95,12 @@ from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 # Progressive filtering: aggressive first, then refine
 detector = StepwiseOutlierDetection(dfin=df, col='NEE', site_lat=46.8, site_lon=8.6, utc_offset=1)
 
-detector.flag_outliers_hampel_test(n_sigma=5.5, separate_daytime_nighttime=True)
+detector.flag_outliers_hampel_test(n_sigma=5.5, separate_day_night=True)
 detector.addflag()
 
-# Day/night mode takes one value per period; a single value applies to all records
-detector.flag_outliers_localsd_test(n_sd=[3.5, 3.5], winsize=[24, 24], separate_daytime_nighttime=True)
+# The global knob applies to both periods; override one with n_sd_daytime /
+# n_sd_nighttime (and winsize_daytime / winsize_nighttime) if they should differ
+detector.flag_outliers_localsd_test(n_sd=3.5, winsize=24, separate_day_night=True)
 detector.addflag()
 
 detector.flag_outliers_zscore_test(thres_zscore=4)
