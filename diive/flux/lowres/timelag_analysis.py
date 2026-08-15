@@ -381,7 +381,9 @@ class TimeLagAnalysis:
         Raises
         ------
         ValueError
-            If column '{gas}_TLAG_ACTUAL' not found in input dataframe.
+            If column '{gas}_TLAG_ACTUAL' not found in input dataframe, or if
+            the lag values hold fewer than two distinct values, i.e. not even
+            one histogram bin can be formed.
 
         Notes
         -----
@@ -397,14 +399,31 @@ class TimeLagAnalysis:
 
         series = self.tlag_actual[gascol].copy()
 
+        # Fringe trimming removes a fixed number of bins from each end, but
+        # method='uniques' only yields (n_unique - 1) bins, so for a lag column
+        # with few distinct values the default [5, 10] would trim the histogram
+        # away completely and leave no peak bin. Keep all bins in that case,
+        # and say so: the peak may then sit on a fringe accumulation.
+        n_uniques = int(series.dropna().nunique())
+        n_bins = max(n_uniques - 1, 0)
+        ignore_fringe_bins = self.ignore_fringe_bins
+        if ignore_fringe_bins and sum(ignore_fringe_bins[:2]) >= n_bins:
+            warn(f"{gascol}: ignore_fringe_bins={ignore_fringe_bins} would remove all "
+                 f"{n_bins} histogram bin(s) ({n_uniques} distinct lag values); keeping "
+                 f"all bins, fringe accumulations are therefore included.")
+            ignore_fringe_bins = None
+
         # Create histogram using Histogram class
         hist = Histogram(
             series=series,
             method='uniques',
-            ignore_fringe_bins=self.ignore_fringe_bins
+            ignore_fringe_bins=ignore_fringe_bins
         )
         results = hist.results
         peakbins = hist.peakbins
+        if not peakbins:
+            raise ValueError(f"No histogram bins for {gascol}: found {n_uniques} distinct "
+                             f"lag value(s), at least 2 are needed to form a bin")
 
         # Filter histogram bins to display range
         locs = ((results['BIN_START_INCL'] >= self.histogram_startbin) &
