@@ -46,6 +46,11 @@ def _extract_and_convert_flag_from_multidigit(df: DataFrame, column_name: str,
     """
     flag = df[column_name].copy()
     flag = flag.apply(pd.to_numeric, errors='coerce').astype(float)
+    # A negative code is not a valid EddyPro flag, and the digit is read out of the
+    # string form, where the minus sign shifts every position: -9999 becomes
+    # '-9999.0', whose character 6 is '0', i.e. a junk sentinel read as "good".
+    # Treat negatives as missing, like NaN below.
+    flag = flag.where(flag >= 0)
     flag = flag.fillna(899999999)  # 9 = missing flag (use multi-digit value to ensure proper string extraction)
     flag = flag.replace(0, 800000000)  # 0 = no flag raised (use multi-digit value, see above)
     flag = flag.astype(str)

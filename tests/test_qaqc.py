@@ -365,6 +365,29 @@ class TestEddyProFlags(unittest.TestCase):
             df=df, flux='FC', setflag_timeperiod={2: [[1, '2022-06-01', '2022-06-02']]})
         self.assertEqual(list(promoted), [0.0, 2.0, 2.0])
 
+    def test_negative_code_is_not_testable(self):
+        """L89: a negative code is not a valid EddyPro flag and must not read as one.
+
+        The digit is taken from the string form, where a minus sign shifts every
+        position: -9999 becomes '-9999.0', whose character 6 is '0' -- a junk
+        sentinel arriving as "tested and good". At position 1 the same value read
+        as '9' (missing) by luck, while -1 read as a soft warning.
+        """
+        import numpy as np
+        import pandas as pd
+        from diive.preprocessing.qaqc.eddyproflags import (
+            _extract_and_convert_flag_from_multidigit as extract)
+        df = pd.DataFrame({'C': [800000000, -9999, -1, 811111111, np.nan]})
+        for position in (1, 6):
+            with self.subTest(position=position):
+                out = extract(df, 'C', position, is_hard_flag=False)
+                self.assertEqual(out.iloc[0], 0.0)          # valid all-pass code
+                self.assertTrue(np.isnan(out.iloc[1]))      # -9999 -> not testable
+                self.assertTrue(np.isnan(out.iloc[2]))      # -1    -> not testable
+                self.assertTrue(np.isnan(out.iloc[4]))      # NaN stays NaN
+        # A real flag at that position is still read, so the guard is not a blanket veto.
+        self.assertEqual(extract(df, 'C', 1, is_hard_flag=False).iloc[3], 1.0)
+
     def test_scalar_zero_code_is_flag_zero(self):
         # Finding L25: a raw code of 0 (no flag raised) must extract as flag 0.
         # It used to become NaN, because the float->string round-trip made it
