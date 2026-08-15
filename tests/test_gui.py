@@ -12,6 +12,10 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+import sys
+import threading
+import traceback
+
 import pandas as pd
 import pytest
 
@@ -21,6 +25,51 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 import diive as dv
+
+
+@pytest.fixture(autouse=True)
+def slot_exceptions():
+    """Fail the test if a Qt-invoked slot raised.
+
+    PySide6 cannot let a Python exception cross back into the C++ signal
+    emitter, so it hands the traceback to ``sys.excepthook`` and lets the
+    emitting call return normally. Measured on PySide6 6.11.1, that applies to
+    every way a test drives a widget: ``setChecked``, ``setCurrentIndex``,
+    ``setValue``, ``setText``, ``click`` and a direct ``emit``. Without this
+    hook a test can toggle a control whose handler crashes, see no exception,
+    and pass -- the assertion after the trigger only proves the *previous*
+    render is still on the canvas.
+
+    Worker threads are covered too (``threading.excepthook``): a crash in a
+    ``WorkerRunner`` payload otherwise only prints.
+
+    A test that provokes a slot exception on purpose can request this fixture
+    and drain the list it yields.
+    """
+    captured = []
+
+    def _hook(etype, value, tb):
+        captured.append("".join(traceback.format_exception(etype, value, tb)))
+
+    def _thread_hook(args):
+        if args.exc_type is SystemExit:
+            return
+        captured.append(
+            f"in thread {getattr(args.thread, 'name', '?')!r}:\n"
+            + "".join(traceback.format_exception(
+                args.exc_type, args.exc_value, args.exc_traceback)))
+
+    prev_hook, prev_thread_hook = sys.excepthook, threading.excepthook
+    sys.excepthook, threading.excepthook = _hook, _thread_hook
+    try:
+        yield captured
+    finally:
+        sys.excepthook, threading.excepthook = prev_hook, prev_thread_hook
+    if captured:
+        pytest.fail(
+            f"{len(captured)} exception(s) raised inside a Qt slot or worker "
+            "thread and swallowed by PySide6:\n\n" + "\n".join(captured),
+            pytrace=False)
 
 
 @pytest.fixture(scope="module")
@@ -77,6 +126,18 @@ def _tabs(win):
     return [tw.tabText(i) for i in range(tw.count())]
 
 
+def _axes_replaced(canvas, previous):
+    """True when a real re-render happened since `previous` was captured.
+
+    `MplCanvas.new_axes` clears the whole figure, so every Axes from the earlier
+    render is gone afterwards. Needed because a crashed render leaves the *old*
+    figure on screen, and a "no error text on the canvas" check cannot tell that
+    apart from a successful redraw. Pass the Axes objects themselves (not their
+    ids) so a recycled address cannot fake a match.
+    """
+    return all(ax not in canvas.fig.axes for ax in previous)
+
+
 def test_default_tabs(window):
     assert _tabs(window) == ["Overview", "Log"]
 
@@ -100,6 +161,47 @@ def test_variable_panel_shared_and_filter(window):
     visible = [overview.varpanel.list.item(i)
                for i in range(n) if not overview.varpanel.list.item(i).isHidden()]
     assert visible and all("GPP" in it.data(Qt.ItemDataRole.UserRole) for it in visible)
+
+
+def test_variable_panel_metadata_slot_dies_with_the_panel(app, slot_exceptions):
+    """A destroyed VariablePanel must stop reacting to the app-wide metadata store.
+
+    Regression: this connection used to be a lambda. `metadata_store.manager` is a
+    process-wide singleton, and Qt severs a connection only when it can see the
+    receiver die -- which it can for a bound method of a QObject, but never for a
+    lambda. So every closed tab left a dangling slot on the singleton, and the next
+    metadata edit anywhere in the app raised "Internal C++ object (QLineEdit)
+    already deleted" once per dead panel. PySide6 swallows those, which is why it
+    went unnoticed; the whole GUI suite reported 168 of them.
+    """
+    import gc
+
+    import shiboken6
+    from PySide6.QtWidgets import QVBoxLayout, QWidget
+
+    from diive.gui import metadata_store
+    from diive.gui.widgets.variable_panel import VariablePanel
+
+    host = QWidget()
+    layout = QVBoxLayout(host)
+    panel = VariablePanel()
+    layout.addWidget(panel)
+    panel.set_variables(["A", "B"])
+    QApplication.processEvents()
+
+    # Force the C++ destruction that closing a tab performs. `deleteLater` is not
+    # enough here: a live Python reference keeps the wrapper's C++ side alive.
+    shiboken6.delete(host)
+    del host, layout
+    gc.collect()
+    QApplication.processEvents()
+    assert not shiboken6.isValid(panel)
+
+    metadata_store.manager.changed.emit()
+    QApplication.processEvents()
+    # The autouse guard fails the test on a swallowed slot exception anyway; this
+    # states the expectation instead of leaving it implied by the absence of one.
+    assert slot_exceptions == []
 
 
 def test_pill_classification():
@@ -279,8 +381,16 @@ def test_plot_settings_live_render(window):
     ym.settings.agg.setCurrentText("sum")
     ym.settings.ranks.setChecked(True)
     ym.settings.orientation.setCurrentText("horizontal")
+    prev_axes = list(ym.canvas.fig.axes)
     ym.update_btn.click()
     QApplication.processEvents()
+    # The button really re-rendered: the old Axes are gone and a mesh is back.
+    # (Without this, a crashed render leaves the first figure standing and the
+    # "no error text" check below passes on it.)
+    assert _axes_replaced(ym.canvas, prev_axes)
+    assert any(c.__class__.__name__ == "QuadMesh"
+               for a in ym.canvas.fig.axes for c in a.collections)
+    assert ym.settings.values()["agg"] == "sum"
     assert not _fallback(ym)
 
 
@@ -2115,6 +2225,9 @@ def test_scatter_tab(window):
     assert len(tab._xyz) == 2
     tab.update_btn.click()
     QApplication.processEvents()
+    # Proof the click re-rendered rather than leaving the colour scatter up: the
+    # colorbar axes is gone (2 axes -> 1).
+    assert len(tab.canvas.fig.axes) == 1
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
     # Marker size / opacity reach the scatter collection.
@@ -2161,6 +2274,10 @@ def test_scatter_tab(window):
     tab.update_btn.click()
     QApplication.processEvents()
     assert tab.update_btn.isEnabled() is False
+    # `_render` disables the button as its FIRST statement, so the line above
+    # holds even if the render then crashed. The new marker size on the drawn
+    # collection is what actually proves the click rendered.
+    assert abs(tab.canvas.fig.axes[0].collections[0].get_sizes()[0] - 55) < 1e-6
 
 
 def test_cumulative_year_tab(window):
@@ -2180,8 +2297,14 @@ def test_cumulative_year_tab(window):
     assert "2021" in items  # the example data's year is offered
     tab.settings.cy_show_reference.setChecked(True)
     tab.settings.cy_highlight.setCurrentText("2021")
+    prev_axes = list(tab.canvas.fig.axes)
+    n_lines_before = len(prev_axes[0].lines)
     tab.update_btn.click()  # params apply on the button, not on edit
     QApplication.processEvents()
+    # `values()` only reads the widgets back, so it cannot tell a redraw from a
+    # crashed one -- the rebuilt Axes and the extra reference line can.
+    assert _axes_replaced(tab.canvas, prev_axes)
+    assert len(tab.canvas.fig.axes[0].lines) > n_lines_before  # reference curve added
     assert tab.settings.values()["highlight_year"] == 2021
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
@@ -2345,6 +2468,7 @@ def test_seasonal_trend_tab(app):
     assert tab._target == "Tair_f"
     assert tab._decomp is not None
     assert tab._decomp["strength"] > 0.4
+    strength_stl = tab._decomp["strength"]
     fig = tab.canvas.fig
     assert len(fig.axes) == 4
     assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
@@ -2364,6 +2488,11 @@ def test_seasonal_trend_tab(app):
     for _ in range(60):
         QApplication.processEvents()
     assert tab._decomp is not None
+    # A crashed re-render would leave the one-panel anomaly chart up and keep the
+    # STL result in `_decomp`, so check the four panels are back and the Classical
+    # decomposition really replaced the STL one.
+    assert len(tab.canvas.fig.axes) == 4
+    assert tab._decomp["strength"] != strength_stl
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
 
@@ -2377,8 +2506,16 @@ def test_seasonal_trend_short_data_graceful(window):
     assert tab._decomp is None
     msgs = [t.get_text() for a in tab.canvas.fig.axes for t in a.texts]
     assert any("2 years" in m for m in msgs)
+    prev_axes = list(tab.canvas.fig.axes)
     tab.view.setCurrentText("Yearly anomalies")
     QApplication.processEvents()
+    # "the anomaly view still works" has to be shown, not inferred from silence:
+    # a crashed view switch leaves the "needs 2 years" message on the canvas, and
+    # that message contains no "Cannot plot" either.
+    assert _axes_replaced(tab.canvas, prev_axes)
+    msgs = [t.get_text() for a in tab.canvas.fig.axes for t in a.texts]
+    assert not any("2 years" in m for m in msgs)  # decomposition message gone
+    assert tab.canvas.fig.axes[0].patches  # anomaly bars drawn
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
 
@@ -3752,8 +3889,12 @@ def test_joint_uncertainty_tab(app, example_year):
     assert any("decomposition" in t.lower() for t in titles)
 
     # Switching the percentile convention re-picks scenarios + the divisor.
+    from diive.flux.lowres.uncertainty import JOINT_DIVISOR_IQR
     tab.divisor_combo.setCurrentIndex(1)
-    assert tab._divisor() != 2.0
+    # `_divisor()` only reads the combo back, so it says nothing about the
+    # re-pick handler having run; the moved scenario pick does.
+    assert tab._divisor() == JOINT_DIVISOR_IQR
+    assert tab._picks()["lower"] != "NEE_CUT_16_f"  # 25th-percentile needle re-picked
 
 
 def test_restore_controls_reports_missing_combo_entry(app, example_year):
