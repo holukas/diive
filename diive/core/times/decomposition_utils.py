@@ -444,7 +444,11 @@ def detect_seasonality(
             - 'all_periods': list of (period, power) tuples, ranked
             - 'spectral_density': np.ndarray, power spectrum
             - 'frequencies': np.ndarray, frequency bins
-            - 'strength': float (0–1), seasonality strength (seasonal var / total var)
+            - 'strength': float (0–1), the share of periodogram power sitting in the
+              detected peaks: sum(power at peaks) / sum(power over all periods). This
+              is a power ratio, not a variance ratio — it does not measure the same
+              thing as `seasonality_strength` in `analysis/seasonaltrend.py`, which
+              works on the decomposed components.
 
     Raises:
         ValueError: If no candidate period falls in [2, max_period] — typically a

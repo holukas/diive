@@ -124,9 +124,10 @@ class TimeLagAnalysis:
             and a datetime index. Expected to contain columns matching pattern
             '*_TLAG_ACTUAL' for analysis.
         ignore_fringe_bins : list, optional
-            Fringe bin indices to exclude from histogram computation. Fringe bins
-            tend to accumulate non-physical lag values and should be excluded.
-            Default: [5, 10]
+            How many bins to drop from each end of the histogram, as
+            [leading, trailing] counts — not bin indices. The outermost bins tend to
+            accumulate non-physical lag values. Default: None, which means [5, 10].
+            Trimming is skipped, with a warning, if it would remove every bin.
         lag_window_min : float
             Lower bound of physically acceptable lag range in seconds. Used for
             reference line visualization (typically ~0.10s). Default: 0.10
