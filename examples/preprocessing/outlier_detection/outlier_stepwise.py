@@ -84,8 +84,8 @@ detector.addflag()
 # 2. LocalSD
 print("\n2. LocalSD (local standard deviation)...")
 detector.flag_outliers_localsd_test(
-    n_sd=[3.5, 3.5],
-    winsize=[24, 24],
+    n_sd=3.5,
+    winsize=24,
     separate_day_night=True,
     showplot=False,
     constant_sd=False,
