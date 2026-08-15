@@ -107,8 +107,10 @@ def keep_records_where(data: DataFrame,
         raise ValueError("At least one of 'lower' / 'upper' must be given.")
 
     cond = data[condition_var]
-    eff_lower = cond.min() if lower is None else lower
-    eff_upper = cond.max() if upper is None else upper
+    # Infinity, not the observed min/max: an exclusive 'inclusive' would drop the
+    # extreme record and the unset side would not be open.
+    eff_lower = -np.inf if lower is None else lower
+    eff_upper = np.inf if upper is None else upper
     mask = cond.between(eff_lower, eff_upper, inclusive=inclusive)
     if invert:
         mask = ~mask  # NaN condition -> between is False -> ~ -> kept (not removed)

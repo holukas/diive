@@ -64,6 +64,33 @@ class TestKeepRecordsWhere(unittest.TestCase):
         # Boundaries 12 and 15 excluded -> nothing in between
         self.assertEqual(len(out), 0)
 
+    def test_open_bound_stays_open_for_all_inclusive(self):
+        # An unset bound is open regardless of 'inclusive'. Substituting the
+        # observed min/max instead of infinity made an exclusive setting drop the
+        # extreme record of the open side.
+        df = pd.DataFrame({'NEE': [1.0, 2.0, 3.0, 4.0, 5.0],
+                           'TA': [10.0, 20.0, 30.0, 40.0, 50.0]})
+        # Open below: TA=10 must survive in every case.
+        expected_open_lower = {'both': [1.0, 2.0, 3.0, 4.0],
+                               'neither': [1.0, 2.0, 3.0],
+                               'left': [1.0, 2.0, 3.0],
+                               'right': [1.0, 2.0, 3.0, 4.0]}
+        for inclusive, expected in expected_open_lower.items():
+            with self.subTest(bound='open lower', inclusive=inclusive):
+                out = keep_records_where(df, target='NEE', condition_var='TA',
+                                         upper=40, inclusive=inclusive, set_to_nan=False)
+                self.assertEqual(out.tolist(), expected)
+        # Open above: TA=50 must survive in every case.
+        expected_open_upper = {'both': [2.0, 3.0, 4.0, 5.0],
+                               'neither': [3.0, 4.0, 5.0],
+                               'left': [2.0, 3.0, 4.0, 5.0],
+                               'right': [3.0, 4.0, 5.0]}
+        for inclusive, expected in expected_open_upper.items():
+            with self.subTest(bound='open upper', inclusive=inclusive):
+                out = keep_records_where(df, target='NEE', condition_var='TA',
+                                         lower=20, inclusive=inclusive, set_to_nan=False)
+                self.assertEqual(out.tolist(), expected)
+
     def test_missing_column_raises(self):
         with self.assertRaises(ValueError):
             keep_records_where(self.df, target='NEE', condition_var='NOPE', lower=0)
