@@ -387,6 +387,11 @@ def lagged_variants(df: DataFrame,
         respective time resolution must be present. Otherwise shifting variables by x records
         might lead to undesirable results.
 
+        Shifting moves records beyond the start or end of the record, which leaves gaps at the
+        series edges. Those gaps are filled with the nearest value, but only for source columns
+        that contained no missing values to begin with: for a gappy source, filling the edges
+        cannot be told apart from filling its genuine gaps, so the edges stay missing.
+
     Example:
         See `examples/createvar/laggedvariants.py` for complete examples.
 
@@ -466,6 +471,7 @@ def lagged_variants(df: DataFrame,
     if verbose:
         detail(f"Added lagged variants for: {_included} (lags between {lag[0]} and {lag[1]} "
                f"with stepsize {stepsize}), no lagged variants for: {_excluded}. "
-               f"Shifting the time series created gaps which were then filled with the nearest value.",
+               f"Shifting the time series created gaps at the edges of the record, which were "
+               f"filled with the nearest value for variables without missing values.",
                verbose=verbose)
     return df

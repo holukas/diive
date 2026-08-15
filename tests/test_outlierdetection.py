@@ -550,6 +550,24 @@ class TestOutlierDetection(unittest.TestCase):
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1444)
 
+    def test_localsd_values_exactly_on_the_limit_are_ok(self):
+        # `ok` used strict comparisons while `rejected` did too, so a value
+        # sitting exactly on a limit was in neither set. A constant series is
+        # the float-exact case: sd = 0 puts both limits right on the data, so
+        # every single record hit it and none was reported as ok.
+        s = pd.Series(data=5.0, name='CONSTANT',
+                      index=pd.date_range('2022-06-01', periods=96, freq='30min'))
+        lsd = LocalSD(series=s, n_sd=4, winsize=10, showplot=False, verbose=False)
+        ok, rejected, n_outliers, upper, lower = lsd._identify_outliers(
+            s=s, winsize=10, n_sd=4, iteration=1)
+        # The limits really are on the data, i.e. this is the boundary case.
+        self.assertEqual(float(upper.iloc[10]), 5.0)
+        self.assertEqual(float(lower.iloc[10]), 5.0)
+        # ok and rejected must partition the series, no record in neither.
+        self.assertEqual(len(rejected), 0)
+        self.assertEqual(n_outliers, 0)
+        self.assertEqual(len(ok), len(s))
+
     def test_zscore_increments(self):
         df = ed.load_exampledata_parquet()
         s = df['Tair_f'].copy()

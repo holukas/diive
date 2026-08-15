@@ -276,7 +276,11 @@ class LocalSD(FlagBase):
             sd = s.rolling(window=winsize, center=True, min_periods=3).std()
         upper_limit = rmedian + (sd * n_sd)
         lower_limit = rmedian - (sd * n_sd)
-        ok = (s < upper_limit) & (s > lower_limit)
+        # Inclusive limits, so `ok` is the exact complement of `rejected` (which
+        # rejects strictly outside). With strict limits on both sides a value
+        # sitting exactly on a limit was in neither set, e.g. every record of a
+        # constant series, where sd = 0 puts both limits on the data.
+        ok = (s <= upper_limit) & (s >= lower_limit)
         ok = ok[ok].index
         rejected = (s > upper_limit) | (s < lower_limit)
         rejected = rejected[rejected].index

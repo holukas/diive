@@ -219,6 +219,59 @@ class TestCrosscorr(unittest.TestCase):
                                delta=4.0)
 
 
+class TestCrosscorrReportsEveryDay(unittest.TestCase):
+    """Unusable days must carry a NaN row, not be dropped from the result.
+
+    Three early-outs used to `continue` without writing anything while the
+    others wrote NaN, so the frame had missing rows for some days and NaN rows
+    for others. `fft_phase_shift` writes one row per day, and a caller aligning
+    either result to a full date index gets holes where it expects NaN.
+    """
+
+    @staticmethod
+    def _detector(pot_per_day: list):
+        """Detector over consecutive days, each day given as 48 potential values."""
+        frames = []
+        start = pd.Timestamp('2022-06-01')
+        for day, values in enumerate(pot_per_day):
+            idx = pd.date_range(start + pd.Timedelta(days=day), periods=48, freq='30min')
+            pot = np.asarray(values, dtype=float)
+            frames.append(pd.DataFrame({'SW_IN': pot * 0.8, 'SW_IN_POT': pot}, index=idx))
+        df = pd.concat(frames)
+        df.index.name = 'TIMESTAMP_MIDDLE'
+        return DetectTimestampShifts(df=df, col_meas='SW_IN', col_pot='SW_IN_POT',
+                                     lat=LAT, lon=LON, utc_offset=UTC_OFFSET)
+
+    def test_a_day_with_too_few_sunlit_records_is_nan_not_missing(self):
+        # Three records of 60 W/m2: the daily sum clears the 100 minimum and
+        # clearness is 0.8, so the day reaches the `(pot > 0).sum() < 5` check.
+        few = np.zeros(48)
+        few[20:23] = 60.0
+        result = self._detector([few]).crosscorr()
+        self.assertEqual(len(result), 1)
+        self.assertEqual(list(result.columns), ['shift_minutes', 'max_corr'])
+        self.assertTrue(result.iloc[0].isna().all())
+
+    def test_a_day_that_never_gets_sunlit_is_nan_not_missing(self):
+        # 8 W/m2 all day: 48 positive records and a sum of 384, but nothing
+        # exceeds the 10 W/m2 sun-up threshold after upsampling.
+        result = self._detector([np.full(48, 8.0)]).crosscorr()
+        self.assertEqual(len(result), 1)
+        self.assertTrue(result.iloc[0].isna().all())
+
+    def test_every_day_gets_a_row_regardless_of_why_it_failed(self):
+        few = np.zeros(48)
+        few[20:23] = 60.0
+        detector = self._detector([np.zeros(48),  # too little potential radiation
+                                   few,  # too few sunlit records
+                                   np.full(48, 8.0)])  # never above the sun-up threshold
+        result = detector.crosscorr()
+        self.assertEqual(len(result), 3)
+        self.assertTrue(result.isna().all().all())
+        expected = pd.date_range('2022-06-01', periods=3, freq='D')
+        self.assertListEqual(list(result.index), list(expected))
+
+
 class TestMethodsAgree(unittest.TestCase):
 
     def test_fft_and_noon_shift_agree_on_the_same_data(self):

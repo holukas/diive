@@ -210,7 +210,10 @@ class DetectTimestampShifts:
         Returns
         -------
         pd.DataFrame
-            Indexed by date.  Columns: shift_minutes, max_corr.
+            Indexed by date, one row per day.  Columns: shift_minutes, max_corr.
+            Days that yield no estimate (too little potential radiation, too
+            cloudy, too few usable records) carry NaN rather than being omitted,
+            so the result can be aligned to a full date index.
         """
         df = self.df
         results = {}
@@ -231,6 +234,7 @@ class DetectTimestampShifts:
                 highres_idx = pd.date_range(group.index[0], group.index[-1], freq=upsample_freq)
 
                 if (group[self.col_pot] > 0).sum() < 5:
+                    results[date] = {'shift_minutes': np.nan, 'max_corr': np.nan}
                     continue
 
                 # pchip for potential: sun moves smoothly, cubic interpolation is safe
@@ -255,6 +259,7 @@ class DetectTimestampShifts:
                 # planted 60-min offset came back as 0.
                 sun_up = ts_pot_hr > 10
                 if int(sun_up.sum()) < 5:
+                    results[date] = {'shift_minutes': np.nan, 'max_corr': np.nan}
                     continue
 
                 step_min = (highres_idx[1] - highres_idx[0]).total_seconds() / 60
@@ -266,6 +271,7 @@ class DetectTimestampShifts:
                 pot_arr = ts_pot_hr[window].to_numpy()
                 meas_arr = ts_meas_hr[window].to_numpy()
                 if len(pot_arr) == 0:
+                    results[date] = {'shift_minutes': np.nan, 'max_corr': np.nan}
                     continue
 
                 # Direct Pearson scan over candidate lags -- what the docstring
