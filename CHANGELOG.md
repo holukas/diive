@@ -68,6 +68,10 @@ The rest raise or fail at import:
   `FH2O`.
 - **`FluxProcessingChain` is superseded** by `run_chain` plus the composable per-level callables. It still works, but
   `finalize_level2/31/33()` no-op with a `DeprecationWarning`.
+- **The code-review round removes more public API** (`flux_type`, `keep_overlap_only`, the STL quality-weighting
+  surface, four dead harmonic functions, `UstarDetectionMPT`) **and makes outlier flags NaN at missing records.** It
+  also changes results in more than twenty other places with no error and no warning. All of it is under *Fixed (code
+  review)* below.
 
 ### Added
 
@@ -342,6 +346,384 @@ The rest raise or fail at import:
   already used. `setto_threshold` validates its `type` argument *after* the old rename, so a rejected call left the
   caller's series renamed too; that is fixed with it. Values, index and output names are unchanged. One visible side
   effect: the console line `Variable: input_data` now names the real variable, as do the `showplot` titles.
+
+### Fixed (code review)
+
+A read-only review of the library and the GUI, in three rounds, recorded 105 findings ranked so that a silently wrong
+number sits above a crash: a traceback blocks you, a plausible wrong number gets published. 87 are fixed and 2 are
+closed as by design. The fixes landed as separate commits, each naming the findings it closes, and every closed entry
+in `CODE_REVIEW_FINDINGS.md` carries what was changed, why that direction was chosen (code or docstring), and how it
+was verified. **Removed API comes first below, then the fixes that change numbers with no error and no warning**, since
+those are the ones to check existing results against.
+
+#### Removed or renamed API
+
+- **`flux_type` is gone from `ScopPhysics`, `ScopOptimizer` and `ScopApplicator`, and the self-heating correction is no
+  longer offered for LE at all.** Whether a Burba-type correction applies to the latent heat flux is unresolved in eddy
+  covariance, so diive must not offer one. The removed branch never worked either: it computed its µmol to W conversion
+  and then discarded it, so the fitted scaling factor absorbed Lv and `ScopApplicator` multiplied by Lv a second time. A
+  planted factor of 1.500 came back as 0.0666 through the H2O path, and comes back exactly on the CO2 path. Drop the
+  argument from existing calls; it had one legal value left, and all 9 example call sites passed it.
+- **Outlier flags are NaN where the input record is missing, not 0.** A flag records a test result, and no test can run
+  where there is no value, but `FlagBase.repeat` summed an all-NaN row to `0`, so every never-measured record read as
+  "tested, passed". Any code reading `overall_flag` directly, or counting `(flag == 0)`, changes. `MissingValues` keeps
+  0/2, since missing records are that detector's subject, via the new `nan_flag_at_missing` class attribute. `FlagQCF`
+  output is bit-identical (NaN and 0 both contribute nothing to the flag sums), so the flux processing chain is
+  unaffected. Seven docstring claims across five modules had promised this behaviour all along and were rewritten to
+  describe the flag as it is; preserving missing data is `.filteredseries`'s job, not the flag's.
+- **`keep_overlap_only` is gone from `combine_variables` and `combine_variables_to_code`.** The arithmetic methods are
+  now always overlap-only, NaN wherever either input is missing. The option substituted the operation's identity for a
+  missing operand, which returned `-B` for `subtract` and `1/B` for `divide` when the left operand was the missing one,
+  so `NEE - RECO` silently yielded `-RECO` wherever NEE was missing. Even for `add` and `multiply` a one-sided result is
+  just the other variable wearing a sum's label. Substituting a value for a gap is a gap-filling decision, which
+  `method='fillgaps'` already states plainly, so nothing is lost. The GUI tab reports how many records the overlap rule
+  costs, split by which variable was missing, since a large one-sided count usually means the two variables cover
+  different periods.
+- **`quality_weighted_decompose` is removed, `weights` is gone from `stl_decompose`, and `quality` /
+  `quality_weighted` are gone from `SeasonalTrendDecomposition`** along with the "Quality-weighted: True" summary line.
+  None of it ever weighted anything: statsmodels' STL accepts no observation weights, the computed weights were dropped
+  before the fit, and weighted and unweighted output were byte-identical. Nothing in the library, GUI, tests or examples
+  used it. `robust=` is the real outlier knob and stays.
+- **Four dead harmonic functions removed** (182 lines): `reconstruct_harmonics`, `periodogram`, `fft_decompose`,
+  `multi_scale_harmonics`. None had a caller anywhere and none was in `dv.analysis.__all__`. `harmonic_analysis` and
+  `spectrogram` are unaffected and stay exported.
+- **`UstarDetectionMPT` removed** (653 lines) with its `dv.flux` export. `UstarMovingPointDetection` is the faithful
+  ONEFlux port of the same algorithm and is what the chain, the bootstrap wrapper and the GUI use. The removed class
+  read 11 attributes that were never assigned anywhere in it, and `run()` never called its own collectors, so its
+  threshold was only ever printed, never stored.
+- Two smaller removals: the `'iterations'` key is gone from `stl_decompose`'s result dict (it returned
+  `DecomposeResult.nobs`, a shape tuple, where a count was documented, and statsmodels exposes no iteration count to
+  report honestly), and the unread `UstarVekuriThresholdDetection.bootstrap_results_` attribute is gone.
+
+#### Results change, with no error and no warning
+
+- **The MDS similarity window is trimmed at the ends of a record, not clipped.** ONEFlux narrows the window bounds and
+  its diurnal method skips out-of-range positions, so a real record enters a fill at most once; diive folded every
+  out-of-range offset onto record 0 or n-1 and counted the edge value hundreds of times in the mean, the SD and the
+  count. The cascade's largest window reaches 427 days on each side, so the bias reached more than a year into each end
+  of a record. Interior fills are bit-identical, which is why the ~5e-7 agreement with a native ONEFlux run never
+  caught it. On a 40-day synthetic record a gap at index 2 moved from count 453 / fill -3.3071 / SD 0.5381 to
+  count 120 / fill -4.0003 / SD 0.6638:
+  duplicates carry no spread, so the reported uncertainty near the edges was understated by nearly half. Affects
+  `FluxMDS`, `RandomUncertaintyPAS20` and the daytime-partitioning NEE uncertainty, which share the kernel.
+- **u\* filtering now rejects a record whose u\* is missing.** The rejected set was `ustar < threshold`, and neither
+  comparison matches NaN, so those records landed in neither set and their flag summed to 0: accepted, with turbulence
+  unknown. ONEFlux rejects exactly these records (a missing u\* is `INVALID_VALUE` = -9999, below every threshold), so
+  diive accepting them was a deviation rather than a choice. **u\*-filtered fluxes therefore lose those records, and how
+  many depends entirely on how gappy the site's u\* record is.** A per-record threshold Series that does not cover every
+  record now raises, which is what its docstring already required, instead of quietly rejecting the uncovered records;
+  the in-chain VUT path builds a full-coverage series, so only a hand-built one can trip it.
+- **Windowed FFT amplitudes are corrected for the window's coherent gain, and `harmonic_analysis` reads the bin it
+  means to.** Both functions applied a window (hamming by default, mean ~0.54) and reported `2*|rfft(x)|/n` without
+  dividing by the window mean, so every amplitude was about 54% of the truth and a reconstruction built from them was
+  short by the rest, with the shortfall landing in `residual`. `harmonic_analysis` additionally indexed DC-stripped
+  arrays with the full-rfft bin number, so a tone sitting exactly on its bin came back with amplitude 0, and its
+  harmonics list disagreed with the spectrum in the same result dict. A 3.0 cosine now returns 3.0 under boxcar,
+  hamming, hann and blackman.
+- **`harmonic_decompose` selects spectral peaks instead of the strongest bins**, so a windowed component's leakage
+  shoulder can no longer be returned as a second component. Two components (period 50 at amplitude 3, period 25 at
+  amplitude 1) previously came back as period 50 twice, with the residual absorbing the component that was missed.
+  Knock-on: the reconstruction is built from N distinct components rather than N bins, so it carries slightly less of
+  the signal's energy, and **anything built on `features_stl` with the harmonic method shifts**. Used as a gap-filling
+  feature it is marginally weaker: `test_gapfilling_stl_features_xgboost` moved mae 2.79 to 3.01 and r2 0.53 to 0.47,
+  and its bound was widened. Fewer than `n_harmonics` components come back when the spectrum holds fewer peaks.
+- **STL survives a gap.** statsmodels' STL has no NaN handling and propagates rather than raising, so one missing value
+  in 1460 returned three all-NaN components, `seasonality_strength` 0.0 and a `summary()` of "nan ± nan", on the default
+  path for real EC data, and against four docstring claims of gap tolerance. It now fits on a linearly interpolated copy
+  (`limit_direction='both'`, since one leftover edge NaN is enough to poison the fit) and masks the gaps back out of all
+  three components, so a gap in is a gap out and no interpolated value is ever returned. The count is reported as
+  `n_interpolated`; an all-NaN series raises. **A gappy series that used to decompose to nothing now returns
+  components**, which reaches `SeasonalTrendDecomposition` and, through the next item, gap-filling features.
+- **`FeatureEngineer(features_stl=True)` gives gappy drivers their STL features.** The blanket skip of any column
+  holding a single NaN existed only because STL could not fit around a gap, and it announced itself through `detail()`
+  at DEBUG level, so asking for STL features at default verbosity produced none of them and no visible sign. Measured on
+  a driver with 300 gaps, the components are NaN exactly where the source column is, so the feature costs no model rows.
+  `'classical'` genuinely cannot decompose gaps; that column alone is skipped, now with a warning, plus a summary
+  warning when no column could be decomposed at all.
+- **`DriverAnalysis` (experimental): every number it reports moves.** `deseasonalize=True` interpolated every gap so
+  statsmodels' STL could run and then returned the interpolated values as part of the decomposition, so fabricated
+  target records entered every model matrix, including the chronological hold-out the class scores itself on: a 4-day
+  gap came back with 0 NaN. The interpolation stays, since STL cannot fit without it, but is masked back out in the
+  helper, which covers `_apply_deseasonalize`, `scale_resolved` and `granger` at once. Separately, per-scale and
+  per-regime relevance was judged against the headline model's injected `.RANDOM` floor instead of each submodel's own,
+  although each submodel is fitted on a different subset with its own noise scale. On the CH-DAV example month the
+  per-scale floors span 0.013 to 0.392 against a global 0.246, so individual labels move, and since `regime_dependence`
+  is the only trigger for `verdict='context_dependent'`, the headline verdict can flip with them.
+- **`StratifiedAnalysis` analyses the records it used to drop and keeps the z bins it used to lose**, so both the curves
+  and the bin count in an existing figure change. `dropna()` ran over every column of the input frame, so passing a
+  working dataframe, which is the obvious call, cut 20 000 rows to 100 through one unrelated gappy column, and the
+  on-plot count reported the survivors as if they were the data; `zvar` / `xvar` / `yvar` are extracted first now, and
+  `n_records_input` / `n_records_used` say what was dropped. Per-bin results were also keyed by the bin aggregate
+  rounded to 2 decimals, so adjacent quantile bins that rounded alike overwrote each other: 60 bins over a z range of
+  0.1 stored 11 of them, with the legend blaming classes that were "not generated". Labels are now widened until they
+  are distinct, so the legend still reads in real units.
+- **Cells are no longer drawn over regions that hold no data.** `HeatmapYearMonth` handed the months that occurred to
+  `pcolormesh` as cell boundaries while keeping regular 1..12 ticks, so a November to February record drew February
+  across the region labelled March to September. `GridAggregator` reindexed onto the full bin lattice for
+  `binning_type='custom'` only, although `min_n_vals_per_bin` can empty a bin of any type, so a bimodal variable over 30
+  equal-width bins collapsed to 5 columns and its empty middle rendered as solid data (which also defeated the X/Y/Z
+  surface's `_drop_gap_risers`). Fixed in `GridAggregator`, so `HeatmapXYZ` and the 3-D X/Y/Z surface both benefit, and
+  its wide output now carries every bin the binning defined.
+- **`WindDirOffset` honours `hist_n_bins`, and its bins span the full circle.** The per-year histogram was hardcoded to
+  360 bins while the reference histogram used `hist_n_bins`, so any other setting left the two `COUNTS` series with
+  different lengths and `Series.corr()` aligned them on the RangeIndex: the best offset was picked by correlating a
+  truncated, mismatched bin set. The edges are now pinned to `linspace(0, 360, hist_n_bins + 1)` rather than derived
+  from each subset's own range, since correlating bin by bin only means something once bin *i* covers the same
+  directions in both. The wrap is `% 360`, which handles any offset magnitude and maps an exact 360 to 0.
+- **BUR08 applies the water-vapour dilution factor** `(1 + 1.6077 rho_v/rho_d)` that BUR06 and JAR09 already applied,
+  settled from Burba et al. 2008 and the LI-7500 poster, which give the already-WPL-corrected form diive implements with
+  the factor present. `correction_method_base` had been changing two things at once: the surface-temperature model, and
+  whether the factor applied at all. On CH-LAE 2016-2017 the BUR08 correction term rises 1.16% in the mean and 1.31% in
+  the median, with one record fewer, since a record without humidity cannot carry the factor.
+- **The self-heating gap-fill actually fills gaps, and stops deleting measurements.** `_gapfill()` dropped rows with a
+  NaN in any column including the target, which is exactly the rows to be filled, so XGBoost reported "Filling 0 missing
+  records" and the console blamed insufficient drivers (CH-LAE June to August 2016: 497 gaps in, 497 out, now 0). A
+  record with a measured flux but no correction term was deleted by `flux + NaN`; it is carried through uncorrected
+  instead, with a new informational `FLAG_NEE_OP_CORR_ISCORRECTED` (1 corrected, 0 carried through, NaN no measured
+  flux) and a warning giving the count. An unrecognised `correction_method_base` raises instead of leaving the
+  correction empty and completing without a word, and classes with fewer than `MIN_ROWS_PER_CLASS` complete records are
+  reported rather than silently taking a neighbouring class's scaling factor.
+- **The 3000-record minimum applies to every u\* detection entry point.** `detect()` enforced it while `bootstrap()` and
+  `bootstrap_annual_samples()` reached the internals directly, and those are the paths `UstarBootstrapThresholds` and
+  the chain's L3.3 detection actually call: at 1000 records `detect()` raised and `bootstrap()` returned 0.4197. The
+  check moved into the one point every public entry passes through. A window that finds nothing now reports why at
+  `warn` level, where "too few records", "mistyped column name" and "detection genuinely found nothing" had been
+  indistinguishable from each other and from bare NaN thresholds. `annual_thresholds_` holds NaN after a failed
+  detection instead of the `THRESHOLD_NOT_FOUND` sentinel 10.0, a plausible-looking threshold that would filter out
+  every record. Class binning now follows the C tie-extension branch diive was missing and treats an inverted class as
+  empty, the way the C accumulation loop does; on CH-LAE no final threshold moves, so that one corrects an intermediate
+  value.
+- **Random uncertainty method 4 averages 10 neighbours, not 9.** The slice took 5 below the target and only 4 above,
+  skewed toward lower fluxes, against a documented 10. It affects only records that fall through to method 4: about
+  0.01% on CH-DAV, 2 of 21 000 on the shipped example. Methods 1 and 2, the ONEFlux port, are untouched.
+- **A joint-uncertainty cumulative record with incomplete scenario inputs is NaN** rather than a wrong number. The
+  random term was masked to available flux and the scenario term was not, so a record carrying only one percentile moved
+  one cumsum and not the other, and with a narrow band the running spread could come out negative. Both documented
+  cumulative conventions are preserved.
+- **`detect_seasonality` raises instead of fabricating a result.** With no candidate period in `[2, max_period]` it
+  returned `primary_period=365`, `secondary_periods=[7, 30]` and `strength=0.0`, so a failed detection was
+  indistinguishable from a real answer, and `SeasonalTrendDecomposition._get_seasonal_period` calls it whenever
+  `seasonal_period` is not supplied: a 5-point series was decomposed at period 365. The message names the range, the
+  number of valid values and the way out. The "no peaks, use max power" branch stays; that one is a real answer.
+- **`CompoundExtremes` raises when nothing can be classified.** With the documented defaults (`agg='monthly'`,
+  `standardize_by='season'`) a single year gives every calendar-month group one member, so the ddof=1 standard deviation
+  is NaN, every period drops out, and the empty result was the same output a record genuinely holding no extremes would
+  give. The message names the cause, how many years the record spans, and `standardize_by='record'`. A partial loss
+  warns with the count instead of passing unmentioned: on CH-DAV a 13-month slice keeps 2 periods and warns about the 11
+  it dropped.
+- **`analyze_highest_quality_flux` counts only measured records.** It reported 1519 of 3000 records as "Valid records:
+  2986 (99.5%)", in the console and in the public `summary` dict alike. The flag change above fixes the count; the rates
+  were wrong independently, since they used the potential-record count as the denominator although a record with no
+  value was never a candidate for being an outlier. Both rates are per measured record now, with `measured_records`
+  reported alongside.
+- **Frequency detection counts intervals, not rows.** The modal-delta count was divided by `len(df)`, so
+  `DetectFrequency.percent_matching` and `TimestampSanitizer.get_status()['frequency_percent_matching']` came out one
+  interval short (99.0 for a perfectly regular 100-record index) and a clean 2-record series was rejected as too
+  irregular. Both values were additionally recovered by parsing them back out of a `'{:.0f}% occurrence'` string, so a
+  genuine 99.9% read as an indistinguishable 100.0; the exact fraction is carried internally now, and the public tuple
+  and its display string are unchanged. The detected frequency itself does not move for normal-length data: identical on
+  all four bundled datasets, and a 3000-trial randomised sweep found one arithmetically constrained change, even *n*
+  where the top delta occurs exactly *n*/2 times, which is a genuine majority of intervals that the old denominator
+  rejected outright. So the change only adds detections. A 1-record index now reaches the informative `RuntimeError`
+  instead of a bare `KeyError`.
+- **An unset bound in `keep_records_where` is open for every `inclusive` value.** It substituted the condition's
+  observed `min()` / `max()`, so `inclusive='neither'`, `'left'` or `'right'` excluded the extreme record although the
+  docstring promised that side was open; `-inf` / `+inf` are used now. Reachable straight from the GUI's Select records
+  by condition tab, whose shaded preview and result now agree, and `select_records_to_code` inherits the fix because it
+  omits an unset bound.
+- **The 3-D date/time surface sits on the heatmap's time axis.** `datetime_surface_grid` sanitized the index but never
+  converted it to `TIMESTAMP_START` as `HeatmapBase._setup_timestamp` does, so under diive's MIDDLE working convention
+  the surface's time-of-day axis sat half a period from the heatmap's for the same data, against the function's own
+  claim to use "the same preparation the 2-D heatmap uses". Two assertions in
+  `test_datetime_surface_grid_shape_and_axes` encoded the offset and moved with the fix.
+- **A variable named `DATE` or `TIME` is no longer destroyed by the pivot helpers.** In `datetime_surface_grid` this
+  raised a `TypeError`; in `HeatmapDateTime` it did not, because without `dtype=float` the array stays object dtype, so
+  the heatmap silently painted the timestamps and produced a plausible-looking wrong figure. Both pivot through an
+  internal value key now.
+- **The glTF `.glb` export no longer mirrors its texture along the date axis.** glTF and trimesh sample from a
+  lower-left texture origin, so vertex row *i* sampled texel row *d-1-i*: the geometry was right while an exported
+  annual NEE surface painted the winter ridge with the summer colours. Both export paths, smooth and extruded, were
+  affected.
+- **`transform_yearmonth_matrix_to_longform` accepts a matrix with months missing**, which its own producer emits for a
+  seasonal record and its own docstring example shows. Note that it now always returns a full-year span, so a partial
+  year that happened to be contiguous is padded to 12 months with NaN.
+- **`crosscorr` writes a NaN row for three early-outs that used to omit the date entirely**, so a caller aligning the
+  result to a full date index no longer finds holes where it expects NaN, and an all-omitted result still carries the
+  `max_corr` column its plotter looks for.
+
+#### Crashes on documented input
+
+- `Hampel` on any non-fixed frequency (monthly `MS`, yearly `YS`, business-day, weekly). `index.freq.nanos` raises for
+  those offsets, and the median-of-diffs branch beside it already handled them. pandas 3 offers no non-raising fixedness
+  test, so the attempt is the test. The fixed-frequency path is unchanged code, so no existing number moves.
+- `run_level31(set_storage_to_zero=True)` without a storage column, which is the exact case the flag documents for H and
+  LE: `KeyError: "['SLE_SINGLE'] not in index"`. The correction, the report and the plot all cope with no storage term
+  now; the real storage paths are untouched.
+- `ScopApplicator` with any legal input series name. It read incoming series through hardcoded canonical names, so what
+  `ScopPhysics.run(gapfill=False)` produces (`FCT_UNSC`), `physics.fct_unsc_gf` (`FCT_UNSC_gfXG`) and a day/night flag
+  named anything but `DAYTIME` all raised `KeyError`. Both names are normalised at the boundary, which is where the
+  class's own `ColumnConfig` convention was meant to apply.
+- `TimeLagAnalysis` on a gas with few distinct lag values. The default fringe trimming (`[5, 10]`) removed every bin of
+  a `n_unique - 1` bin histogram and `peakbins[0]` raised a bare `IndexError` that escaped `analyze_all_gases` and
+  `plot_all_gases` despite their documented warn-and-continue. Trimming is skipped for that gas with a warning, since
+  trimming anyway would return a peak from a partly-trimmed histogram, turning a crash into a quietly wrong number. A
+  `histogram_startbin` / `histogram_endbin` range that excludes every lag emptied `results` the same way through
+  different parameters.
+- `UstarThresholdConstantScenarios.calc(showplot=True)` on pandas 3, at two sites rather than the one the finding named:
+  `counts.div(counts[0])` indexes a label-keyed Series positionally. Display only, so no threshold moves.
+- `UstarVekuriThresholdDetection.summary()` before `detect()`, where `results_` was initialised as a dict, so the guard
+  that exists to print "run detect() first" raised `AttributeError` on `.empty`. It now behaves like the sibling ONEFlux
+  port rather than raising. The documented `bootstrap_stats_` attribute was never assigned; `bootstrap()` assigns it.
+- `RidgeLinePlot` on any series containing a gap, since NaN went straight into `KernelDensity.fit`. Dropped once in
+  `__init__`, so a group left with no valid values simply gets no ridge, and an all-NaN series raises with a message
+  saying why. The GUI path worked only because its codegen and tab dropped NaN first, so the public API was strictly
+  worse than the GUI's.
+- `Cumulative.plot` and `CumulativeYear.plot` on an all-NaN column, normal for a scenario column that was never filled:
+  the legend label indexed `dropna().iloc[-1]`. Such a column is labelled "no data" and its end marker skipped, so the
+  legend keeps one entry per column.
+- `transform_yearmonth_matrix_to_longform` on any matrix not produced by `resample_to_monthly_agg_matrix`: unnamed axes
+  gave `KeyError: None`, any other naming `KeyError: "['YEAR', 'MONTH'] not found in axis"`. The axis names are pinned
+  on a copy, leaving the caller's frame alone.
+- `MultiDataFileReader` when every input file is empty or the file list is empty, which reached
+  `sort_multiindex_columns_names(df=None)` and an `AttributeError`. It raises with two messages, naming either "no files
+  given" or "all files empty" and quoting the first path so a bad glob is visible. Returning an empty frame was rejected
+  as the fix: it has no timestamp index and would arrive in the GUI as an inexplicably blank dataset.
+- `harmonic_decompose` returned `frequencies` one element longer than the arrays it is documented to pair with, so
+  `plot(frequencies, amplitudes)` raised.
+
+#### Reporting, contracts and dead code
+
+- **`detail()` output was unreachable at every verbosity setting.** It defaulted to `verbose=VERBOSE_PROGRESS` (2) while
+  its own `min_level` is `VERBOSE_DEBUG` (3), so a bare `detail(msg)` printed at no setting at all, and 25 debug lines
+  across the library were lines their authors believed they had written. Passing `verbose=` at each site was not
+  available, since 24 of the 25 have no `self.verbose` and no `verbose` parameter, so the helpers now default to
+  `verbose=None`, meaning "use the module default", and that default is settable: **new `dv.set_verbosity(level)` and
+  `dv.get_verbosity()`, exported at top level.** Behaviour at the default is unchanged (`detail` quiet, `info` printing)
+  and an explicit `verbose=` still wins. The CLAUDE.md convention that produced the defect, calling helpers without
+  `verbose=` inside a `if self.verbose >= N:` guard, is corrected.
+- **Three quality-flag contracts corrected.** `flag_ssitc_eddypro_test` documented a conversion it does not perform, but
+  the code is right: EddyPro SSITC is already 0/1/2, so the conversion is the identity and promoting 1 to 2 would reject
+  records FLUXNET treats as usable, which is what `setflag_timeperiod` exists for. The docstring was fixed instead.
+  `FlagQCF`'s documented "NaN if no flag available" branch is genuinely unreachable and should stay so, since a NaN QCF
+  would pass both of `_calculate_series_qcf`'s filters; it is documented as never-NaN with a test to keep it that way.
+  A scalar `0` flag code no longer becomes NaN through a `'0.0'[1]` round-trip, which is a reporting fix, not a
+  screening change, since flag sums count only 1 and 2.
+- `ScopPhysics` documented "a hybrid approach using Random Forest and Mean Diurnal Variation" and printed "-> Imputed
+  (RF + MDV)"; the gap-fill is XGBoost with no MDV stage, and MDV lives in `ScopApplicator`, which the docstring now
+  points at. The results column keeps its legacy `FCT_UNSC_gfRF` name, which two examples, the generated docs and the
+  tests all index, so the `.name` mismatch is documented rather than renamed.
+- `TimeLagAnalysis`'s class docstring stated three parameter facts the code contradicts: `ignore_fringe_bins` defaults
+  to `[5, 10]` and counts leading and trailing bins rather than naming indices, `zoom_margin` defaults to `[0.5, 1.5]`,
+  and `histogram_startbin` / `histogram_endbin` are lag values in seconds, hence floats. The misleading parameter names
+  are left alone, since renaming them is breaking.
+- `reconstruct_from_components` masked every reconstruction with the trend's NaN regardless of `components_to_use`, so a
+  seasonal-only reconstruction from a classical decomposition lost the trend's edge records (30 of 400 at period 31) and
+  disagreed with `detrend()` on the same request. The mask was redundant where the trend was included, since gaps
+  propagate through the arithmetic anyway. `seasonality_strength`'s docstring described a formula the code does not
+  compute; it computes the Wang/Hyndman variant.
+- `show_less_xticklabels` is applied by `HeatmapDateTime`, which accepted, documented and forwarded it while only
+  `HeatmapYearMonth` read it. The GUI exposes it from a shared checkbox and codegen emits it into copied snippets, so
+  removing it was not an option.
+- `GridAggregator` keys its working frame by internal `_x` / `_y` / `_z` names, the pattern `ScatterXY` already uses, so
+  two roles sharing a Series name no longer collide: a z sharing the x name replaced x and the plot carried z's range on
+  the x axis, and x and y sharing a name raised "Grouper not 1-dimensional". Public naming is unchanged.
+- The `FeatureEngineer` rolling stages no longer re-engineer their own output. They were the only per-column stages
+  without a dot-prefix filter, so feeding the engineer a frame that already contains engineered columns, which the GUI's
+  Feature engineering tab makes easy, produced names like `..TA_POL2_MEAN4`. No library path changes: the rolling stages
+  receive `df[original_input_features]` and no caller passes an engineered column, so no model's features, SHAP values or
+  `reduce_features` selection move.
+- `MetadataStore.rename` raises on a collision instead of collapsing two entries and losing the loser's metadata,
+  provenance and tags. The collision is judged on the resulting names, so a swap `{A: B, B: A}` and a whole-set prefix
+  rename still work, and it is checked before any mutation, so a rejected rename leaves the store untouched.
+  `MainWindow._rename_variables` validates its mapping the same way rather than handing the frame duplicate column
+  labels.
+- Smaller ones: `LocalSD` no longer leaves a value sitting exactly on the limit in neither `ok` nor `rejected` (no flag
+  count moves, since `rejected` is untouched); `vectorize_timestamps` returns `.SEASON` as a plain integer instead of a
+  nullable `Int64`, which had been forcing an object-dtype array into every ML fit (RF and XGBoost predictions are
+  bit-identical, only the hidden conversion is gone); `lagged_variants`' closing message no longer claims the edge fill
+  is unconditional, since it is correctly skipped for a gappy source, where an edge fill cannot be told apart from
+  inventing driver values; `sort_multiindex_columns_names` no longer reverses the columns it moves;
+  `gapfilling/interpolate.py`'s verbose header no longer prints a literal `{limit}`, and its dead `_calculate_gap_sizes`
+  is gone; `convert_ts_to_timezone` accepts the `DatetimeIndex` its docstring promises; `MultiDataFileReader.metadata_df`
+  tests its own frame rather than the data frame; and the USTAR docstring examples import from `dv.flux` and run.
+
+#### Desktop GUI
+
+- **The NEE partitioning tabs refuse to run without site coordinates.** The lat/lon/UTC spin boxes default to 0/0/0 and
+  `_seed_site` left them there when the project site is unset, so a run partitioned at (0, 0) on UTC and returned
+  plausible-looking GPP and RECO. The guard covers `_python_code` too, which would otherwise emit a runnable snippet
+  carrying `lat=0.0, lon=0.0`. It applies to three of the four tabs: Daytime ONEFlux splits on measured Rg, not solar
+  geometry, so it reads no coordinate.
+- **An outlier tab discards a result whose dataset changed mid-run.** Detection runs on a background thread, so creating
+  a feature, narrowing the date range or deleting a variable during a run left `_on_done` indexing the new frame with
+  the old variable: `KeyError` when the column was gone, and no exception at all when the range had merely changed, in
+  which case the mismatched result was adopted silently. The run's index travels in the payload, so the worker still
+  writes no tab state. `_rerender_last` is tightened the same way; its existing guard covered only the missing-column
+  half.
+- **A saved control that could not be restored is reported.** `restore_controls` kept the widget's current value when a
+  saved combo entry was gone, so reopening a project whose columns or preset labels were renamed left a tab pointing at
+  a different input with no indication. The worst case is numeric: the joint-uncertainty divisor falls back from
+  `JOINT_DIVISOR_IQR` (1.349) to `JOINT_DIVISOR_1SIGMA` (2.0). The unrestored keys are surfaced in the tabs where the
+  fallback changes a number (random and joint uncertainty, and the four partitioning tabs). The return value is purely
+  additive, so callers that ignore it behave as before.
+- **Pinned tabs are frozen.** `_add_features` and `_sync_event_columns` wrote columns in place, so a pinned tab holding
+  the same frame object saw them anyway, while column drops rebind and did not leak, making the freeze inconsistent in
+  both directions.
+- **`WorkerRunner` clears `is_running` on the GUI thread**, just before emitting `done` / `failed`, so a caller using it
+  as a re-entry guard can no longer start a second run whose result interleaves with the first. `_screening_base` hand
+  rolls its own thread and needed its own guard: it had been starting an unbounded number of CPU-heavy chains on rapid
+  chain edits. `_outlier_base._compute_payload` no longer writes tab state from the worker thread; the daytime mask
+  travels with the progress signal.
+- **The 3-D export buttons no longer write the previous variable's relief** under the current variable's filename after
+  a render that produced nothing, either an all-NaN variable or a Z role that is not a real column. The rolling cell
+  aggregator uses an *n*-row window for even *n*, as its docstring and its tooltip both say.
+- `save_config` catches `TypeError` and `ValueError` as well as `OSError`, which is what `json.dumps` raises, so one
+  unserializable value no longer costs the whole file. Project load no longer syncs the outgoing session's `EVENT_*`
+  columns onto the incoming frame before replacing them.
+- **A test fixture now fails a test when Qt swallows a slot exception.** PySide6 routes an exception raised inside a slot
+  it invokes to `sys.excepthook` and returns normally, so a test that drives behaviour through a signal and then only
+  checks that nothing broke passes even when the slot crashed. The fixture immediately exposed a real defect:
+  `VariablePanel` connected a lambda to the process-wide `metadata_store.manager.changed` signal, which Qt cannot sever
+  when the receiver dies, so every closed tab left a dead slot firing. 44 tests were passing over 168 swallowed
+  `RuntimeError`s from that one line, and in the running GUI it raised and swallowed one per closed tab on every
+  metadata edit. Seven tests whose only evidence was a stale figure standing after a failed render now assert concrete
+  post-conditions.
+
+#### Bundled example data
+
+- **Six of the eight example parquet files had never been committed.** A `*.parquet` ignore rule added in January 2025
+  meant `git add` silently skipped them, so only a working-directory copy existed: the documented
+  `load_exampledata_parquet_lae*` loaders raised `FileNotFoundError` for anyone installing diive, 8 examples did not
+  run, and once that local copy went, 23 tests failed or errored (the whole GUI flux chain tab, all of
+  `test_ustar_mp.py`, the L2 custom columns). Recovered from the v0.91.0 GUI build, which had frozen a copy at packaging
+  time. Every file now carries an explicit exception to the ignore rule so it cannot hide them again. 33.6 MB total, of
+  which 15.4 MB was already tracked.
+
+#### One deviation from ONEFlux, kept on purpose
+
+- **u\* filtering is `ustar >= threshold` and nothing more.** ONEFlux, and Pastorello et al. 2020, additionally discard
+  the first half-hour above the threshold following a period below it, to avoid the false emission pulse from CO2 that
+  accumulated under the canopy and flushes past in one burst. diive keeps that record, favouring data availability, and
+  leaves the trade-off to the user, who can drop those records. It is documented in
+  `FlagMultipleConstantUstarThresholds` with the reason and the reference, and pointed at from the single and variable
+  flaggers, so it cannot be mistaken for an oversight. Everything else in the comparison follows ONEFlux, including the
+  missing-u\* rejection above.
+
+#### Still open
+
+16 findings are open, each with a repro or a source citation in `CODE_REVIEW_FINDINGS.md`. The three that can move a
+number: `UstarVekuriThresholdDetection.bootstrap()` calls `df.sample` with no `random_state`, so its percentiles differ
+from run to run (one season's p50 moved 0.1634 to 0.1488 across two runs) and those thresholds feed u\* filtering;
+`classical_decompose` passes `extrapolate=` where the parameter is `extrapolate_trend`, so it always raises internally,
+always falls into the no-extrapolation fallback, and its trend edges are unconditionally NaN; and
+`ScreeningTabBase._select` does not bump `_run_id`, so switching the selected variable mid-run can adopt the previous
+variable's chain result. Two need an external source: whether InfluxDB v2's delete range excludes `stop`, in which case
+the pre-upload delete leaves the last record and duplicates survive, and BUR06/JAR09's aerodynamic resistance, where
+diive passes the canopy momentum resistance `u/u*^2` in place of Burba 2006's per-element `7.4*sqrt(d/U)` (about 6x
+apart on CH-LAE) and has no equivalent of `fr`, the fraction of instrument heat retained in the optical path. Neither
+resistance issue is fatal in the pipeline, because `ScopOptimizer` fits a scaling factor against a closed-path
+reference and absorbs both, but it makes those two methods semi-empirical rather than the published formulation, which
+matters for anyone running `ScopPhysics` without the optimizer.
 
 ### Unittests
 
