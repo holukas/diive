@@ -68,8 +68,10 @@ class UstarVekuriThresholdDetection:
     results_ : pd.DataFrame
         Detected thresholds with column: 'threshold'
         Index contains season labels (Season 1, 2, 3, 4)
+        Empty until detect() has run.
     bootstrap_stats_ : pd.DataFrame
         Bootstrap statistics including mean, std, percentiles
+        Empty until bootstrap() has run.
 
     Examples
     --------
@@ -184,7 +186,10 @@ class UstarVekuriThresholdDetection:
                 raise ValueError("DataFrame must have datetime index or TIMESTAMP column")
 
         self.df['month'] = self.df.index.month
-        self.results_ = {}
+        # Results storage; empty frames until detect() / bootstrap() fill them, so
+        # summary() can report "not run yet" instead of failing in its own guard.
+        self.results_ = pd.DataFrame()
+        self.bootstrap_stats_ = pd.DataFrame()
         self.bootstrap_results_ = {}
 
     @staticmethod
@@ -355,7 +360,8 @@ class UstarVekuriThresholdDetection:
         Returns
         -------
         pd.DataFrame
-            Bootstrap statistics (mean, std, percentiles)
+            Bootstrap statistics (mean, std, percentiles), also stored in
+            *bootstrap_stats_*
         """
         if n_iter is None:
             n_iter = self.bootstrapping_times
@@ -396,7 +402,8 @@ class UstarVekuriThresholdDetection:
                     warn(f"Bootstrap {boot_idx} failed")
                 continue
 
-        return self._compute_bootstrap_statistics(boot_results)
+        self.bootstrap_stats_ = self._compute_bootstrap_statistics(boot_results)
+        return self.bootstrap_stats_
 
     def _compute_bootstrap_statistics(self, boot_results: Dict) -> pd.DataFrame:
         """Compute statistics from bootstrap results."""
@@ -428,7 +435,11 @@ class UstarVekuriThresholdDetection:
         )
 
     def summary(self) -> str:
-        """Return formatted summary of detection results."""
+        """Return formatted summary of detection results.
+
+        Before detect() has run there is nothing to summarize; a note saying so
+        is returned instead of raising.
+        """
         if self.results_.empty:
             return "No detection results. Run detect() first."
 

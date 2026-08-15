@@ -9,7 +9,10 @@ that diverges from the C algorithm will break it.
 
 import unittest
 
+import matplotlib
 import numpy as np
+
+matplotlib.use("Agg")  # no plot windows during tests
 
 from diive.configs.exampledata import load_exampledata_parquet_lae
 from diive.flux.lowres.ustar_mp_detection import UstarMovingPointDetection
@@ -425,3 +428,55 @@ class TestUstarFlagNeedsAMeasuredUstar(unittest.TestCase):
         flagcol = [c for c in flagger.results.columns if c.startswith('FLAG_')][0]
         self.assertEqual(flagger.results[flagcol].tolist()[3], 0)
         self.assertEqual(flagger.results[flagcol].tolist()[0], 2)
+
+
+class TestScenarioPlotCountsAreAddressedPositionally(unittest.TestCase):
+    """The bar annotations index a label-indexed count Series.
+
+    `describe().loc['count']` is indexed by column name, so a positional lookup
+    on it raises KeyError on pandas 3. Plotting is this class's only purpose.
+    """
+
+    def test_the_scenario_plot_annotates_every_bar(self):
+        import matplotlib.pyplot as plt
+        import pandas as pd
+        from diive.flux.lowres.ustarthreshold import UstarThresholdConstantScenarios
+        ix = pd.date_range('2023-06-01 00:30', periods=480, freq='30min',
+                           name='TIMESTAMP_MIDDLE')
+        rng = np.random.RandomState(0)
+        nee = pd.Series(rng.normal(0, 3, len(ix)), index=ix, name='NEE')
+        ustar = pd.Series(rng.uniform(0, 0.8, len(ix)), index=ix, name='USTAR')
+        swinpot = pd.Series(np.where((ix.hour >= 8) & (ix.hour <= 18), 500.0, 0.0),
+                            index=ix, name='SW_IN_POT')
+        scenarios = UstarThresholdConstantScenarios(series=nee, ustar=ustar, swinpot=swinpot)
+        try:
+            scenarios.calc(ustarthresholds=[0.1, 0.2], showplot=True)
+            texts = [t.get_text() for t in plt.gcf().axes[0].texts]
+        finally:
+            plt.close('all')
+        # One count + one percentage per bar: unfiltered series + two thresholds.
+        self.assertEqual(len(texts), 6)
+        # The unfiltered column is the reference, so its bar reads 100%.
+        self.assertIn('100%', texts)
+
+
+class TestVekuriSummaryBeforeDetect(unittest.TestCase):
+    """summary() reports that detection has not run; it must not fail in that guard.
+
+    `results_` starts as an empty DataFrame (as in UstarMovingPointDetection), so
+    `.empty` answers the question instead of raising AttributeError on a dict.
+    """
+
+    def test_summary_says_detect_first(self):
+        import pandas as pd
+        from diive.flux.lowres.ustar_vekuri_detection import UstarVekuriThresholdDetection
+        ix = pd.date_range('2023-01-01 00:30', periods=480, freq='30min',
+                           name='TIMESTAMP_MIDDLE')
+        rng = np.random.RandomState(0)
+        df = pd.DataFrame({'NEE': rng.normal(0, 3, len(ix)), 'TA': rng.normal(10, 5, len(ix)),
+                           'USTAR': rng.uniform(0, 0.8, len(ix)), 'SW_IN': 0.0}, index=ix)
+        det = UstarVekuriThresholdDetection(df=df, nee_col='NEE', ta_col='TA',
+                                            ustar_col='USTAR', swin_col='SW_IN', verbose=0)
+        self.assertIn('detect()', det.summary())
+        # Documented attribute, so it must exist before bootstrap() too.
+        self.assertTrue(det.bootstrap_stats_.empty)

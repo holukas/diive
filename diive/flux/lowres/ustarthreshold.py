@@ -373,7 +373,9 @@ class UstarThresholdConstantScenarios:
         fig.show()
 
     def _bartxt(self, ax, counts, bar):
-        counts_perc = counts.div(counts[0]).multiply(100)
+        # counts is label-indexed (column names), so both lookups must be positional:
+        # the first column is the unfiltered series, i.e. 100% of available values.
+        counts_perc = counts.div(counts.iloc[0]).multiply(100)
         for ix, rect in enumerate(bar):
             height = rect.get_height()
             # Number of values
@@ -381,7 +383,7 @@ class UstarThresholdConstantScenarios:
                     f'{height:.0f}', size=16, ha='center', va='bottom')
             # Percentage
             ax.text(rect.get_x() + rect.get_width() / 2.0, height / 2,
-                    f'{counts_perc[ix]:.0f}%', size=20, ha='center', va='bottom')
+                    f'{counts_perc.iloc[ix]:.0f}%', size=20, ha='center', va='bottom')
 
         # _bottom = np.nan  # Needed for stacking multiple bars on top of each other
         #
