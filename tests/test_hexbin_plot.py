@@ -275,3 +275,39 @@ class TestHexbinPlotEdgeCases(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestHexbinShowLessXticklabels(unittest.TestCase):
+    """L91: `show_less_xticklabels` must actually thin the x-tick labels.
+
+    `HeatmapBase` only stores the flag; each subclass applies it. `HeatmapDateTime`
+    and `HeatmapYearMonth` do, `HexbinPlot` accepted, documented and forwarded it but
+    never applied it, so True and False rendered identically. The same defect as L62,
+    in a second file. (`get_xticklabels` returns only the visible labels, so hiding
+    shows up as a shorter list.)
+    """
+
+    @staticmethod
+    def _labels(show_less):
+        import matplotlib.pyplot as plt
+        np.random.seed(42)
+        n = 200
+        x = pd.Series(np.random.uniform(0, 10, n), name="Tair")
+        y = pd.Series(np.random.uniform(0, 100, n), name="WFPS")
+        z = pd.Series(np.random.uniform(-5, 5, n), name="NEP")
+        fig, ax = plt.subplots()
+        HexbinPlot(x, y, z).plot(ax=ax, fig=fig, show_less_xticklabels=show_less)
+        texts = [label.get_text() for label in ax.get_xticklabels()]
+        plt.close(fig)
+        return texts
+
+    def test_every_second_label_is_hidden(self):
+        shown_all = self._labels(False)
+        thinned = self._labels(True)
+        self.assertGreater(len(shown_all), 2, "need several ticks for the test to mean anything")
+        self.assertEqual(thinned, shown_all[::2])
+
+    def test_default_shows_every_label(self):
+        """The other direction: the flag must not thin labels when it is off."""
+        self.assertEqual(self._labels(False), self._labels(False))
+        self.assertNotEqual(self._labels(False), self._labels(True))

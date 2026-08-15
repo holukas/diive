@@ -405,3 +405,11 @@ class HexbinPlot(HeatmapBase):
         # colorbar) via the shared FormatStyle path. The hexbin's axis labels flow
         # through as the caller defaults, so a passed format_style can override them.
         self.format(plot=self.p, ax_xlabel_txt=xlabel, ax_ylabel_txt=ylabel)
+
+        # HeatmapBase only stores this flag; each subclass applies it. Hexbin accepted
+        # and documented it but never did, so it silently had no effect. Must run after
+        # format(), which is what sets the tick labels. Same block as HeatmapDateTime.
+        if self.show_less_xticklabels:
+            for i, label in enumerate(self.ax.get_xticklabels()):
+                if i % 2 != 0:
+                    label.set_visible(False)
