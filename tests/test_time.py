@@ -100,6 +100,24 @@ class TestTime(unittest.TestCase):
         self.assertIn(".HOUR_SIN", result_df.columns)
         self.assertIn(".HOUR_COS", result_df.columns)
 
+    def test_vectorize_timestamps_season_is_not_nullable(self):
+        """.SEASON must not be a nullable extension dtype.
+
+        A single Int64 column turns the whole frame's .to_numpy() into object
+        dtype, which every ML fit downstream (e.g. the fallback model, which
+        feeds vectorize_timestamps output straight into the regressor) then has
+        to convert back to float.
+        """
+        idx = pd.date_range('2022-01-01 00:30', periods=48 * 400, freq='30min')
+        df = pd.DataFrame({'x': 1.0}, index=idx)
+        result_df = vectorize_timestamps(df, verbose=0)
+
+        self.assertEqual(result_df['.SEASON'].dtype, 'float64')
+        self.assertNotEqual(result_df.to_numpy().dtype, object)
+        # Values are unchanged: all four seasons, and matching the month map.
+        self.assertEqual(sorted(result_df['.SEASON'].unique()), [1.0, 2.0, 3.0, 4.0])
+        self.assertEqual(result_df.loc['2022-07-01 00:30', '.SEASON'], 2.0)
+
     def test_detect_freq(self):
         df, metadata_df = ed.load_exampledata_DIIVE_CSV_30MIN()
         f = DetectFrequency(index=df.index, verbose=True)
@@ -136,6 +154,27 @@ class TestTime(unittest.TestCase):
         self.assertEqual(f.get(), '30min')
         self.assertEqual(f.percent_matching, 75.0)
         self.assertEqual(f.confidence, 0.75)
+
+    def test_detect_freq_percent_matching_not_rounded(self):
+        """The match rate must keep its decimals.
+
+        It used to be parsed back out of the '{:.0f}% occurrence' display string,
+        so 999 of 1000 matching intervals reported 100.0 and was indistinguishable
+        from a perfectly regular record.
+        """
+        from diive.core.times.times import timestamp_infer_freq_from_timedelta
+
+        base = pd.date_range('2022-01-01 00:30', periods=1000, freq='30min')
+        idx = pd.DatetimeIndex(list(base) + [base[-1] + pd.Timedelta('60min')])
+        f = DetectFrequency(index=idx)
+        self.assertEqual(f.get(), '30min')
+        self.assertEqual(f.detection_method, 'timedelta')
+        self.assertAlmostEqual(f.percent_matching, 99.9, places=6)
+        self.assertAlmostEqual(f.confidence, 0.999, places=6)
+        self.assertNotEqual(f.percent_matching, 100.0)
+
+        # The public function keeps returning its rounded display string.
+        self.assertEqual(timestamp_infer_freq_from_timedelta(idx), ('30min', '100% occurrence'))
 
     def test_detect_freq_two_records(self):
         """Two regular timestamps define one interval, which is enough.
