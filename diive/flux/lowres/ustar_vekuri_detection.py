@@ -110,9 +110,15 @@ class UstarVekuriThresholdDetection:
         n_ustar_classes: int = 20,
         season_groups: Optional[List[List[int]]] = None,
         bootstrapping_times: int = 100,
+        random_state: Optional[int] = 42,
         verbose: int = 0,
     ):
-        """Set up Vekuri USTAR threshold detection. See the class docstring."""
+        """Set up Vekuri USTAR threshold detection. See the class docstring.
+
+        ``random_state`` seeds the bootstrap resampling so a threshold is
+        reproducible; pass None for a different draw on every call. It was
+        previously unseeded, so the percentiles moved between runs.
+        """
         if df is None or df.empty:
             raise ValueError("Input DataFrame cannot be None or empty")
 
@@ -169,6 +175,7 @@ class UstarVekuriThresholdDetection:
         self.n_temperature_classes = n_temperature_classes
         self.n_ustar_classes = n_ustar_classes
         self.bootstrapping_times = bootstrapping_times
+        self.random_state = random_state
         self.verbose = verbose
 
         if season_groups is None:
@@ -372,7 +379,10 @@ class UstarVekuriThresholdDetection:
             if self.verbose >= 2 and boot_idx % 10 == 0:
                 detail(f"  Iteration {boot_idx + 1}/{n_iter}", verbose=self.verbose)
 
-            df_boot = self.df.sample(n=len(self.df), replace=True)
+            # Offset by the iteration so the draws differ from each other while the
+            # whole run stays reproducible; unseeded, the percentiles moved between runs.
+            seed = None if self.random_state is None else self.random_state + boot_idx
+            df_boot = self.df.sample(n=len(self.df), replace=True, random_state=seed)
 
             try:
                 detector_boot = UstarVekuriThresholdDetection(

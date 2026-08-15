@@ -460,6 +460,47 @@ class TestScenarioPlotCountsAreAddressedPositionally(unittest.TestCase):
         self.assertIn('100%', texts)
 
 
+class TestVekuriBootstrapIsReproducible(unittest.TestCase):
+    """L86: bootstrap() resampled with no random_state, so its percentiles moved.
+
+    These thresholds feed u* filtering and therefore the whole flux chain, while the
+    rf/xgb seeds are pinned precisely because output drifts without them. `random_state`
+    (default 42) seeds the draws, offset per iteration so they still differ from each
+    other; pass None for the old non-deterministic behaviour.
+    """
+
+    @staticmethod
+    def _df(seed=0, n=2880):
+        import pandas as pd
+        ix = pd.date_range('2023-01-01 00:30', periods=n, freq='30min',
+                           name='TIMESTAMP_MIDDLE')
+        rng = np.random.RandomState(seed)
+        ustar = rng.uniform(0, 0.9, n)
+        # A real u*-dependent NEE, so a threshold is actually findable.
+        nee = np.where(ustar < 0.25, -1.0 - 4.0 * ustar, -2.0) + rng.normal(0, 0.3, n)
+        return pd.DataFrame({'NEE': nee, 'TA': rng.normal(10, 6, n),
+                             'USTAR': ustar, 'SW_IN': 0.0}, index=ix)
+
+    def _run(self, **kwargs):
+        from diive.flux.lowres.ustar_vekuri_detection import UstarVekuriThresholdDetection
+        det = UstarVekuriThresholdDetection(df=self._df(), nee_col='NEE', ta_col='TA',
+                                            ustar_col='USTAR', swin_col='SW_IN',
+                                            verbose=0, **kwargs)
+        det.detect()
+        return det.bootstrap(n_iter=6)
+
+    def test_two_runs_with_the_same_seed_agree(self):
+        import pandas as pd
+        a, b = self._run(), self._run()
+        pd.testing.assert_frame_equal(a, b)
+
+    def test_a_different_seed_gives_a_different_draw(self):
+        """Guards the other direction: the seed must actually reach `sample`."""
+        a = self._run(random_state=42)
+        b = self._run(random_state=7)
+        self.assertFalse(a.equals(b))
+
+
 class TestVekuriSummaryBeforeDetect(unittest.TestCase):
     """summary() reports that detection has not run; it must not fail in that guard.
 
