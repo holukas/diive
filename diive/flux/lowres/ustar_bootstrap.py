@@ -136,9 +136,9 @@ class UstarBootstrapThresholds:
     --------
     >>> import diive as dv
     >>> df = dv.load_exampledata_parquet_lae()
-    >>> boot = dv.UstarBootstrapThresholds(
+    >>> boot = dv.flux.UstarBootstrapThresholds(
     ...     df,
-    ...     detector_class=dv.UstarMovingPointDetection,
+    ...     detector_class=dv.flux.UstarMovingPointDetection,
     ...     n_iter=100,
     ...     percentiles=(16, 50, 84),
     ... )

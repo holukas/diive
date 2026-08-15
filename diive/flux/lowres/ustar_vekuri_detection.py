@@ -77,9 +77,7 @@ class UstarVekuriThresholdDetection:
     --------
     >>> import diive as dv
     >>> df = dv.load_exampledata_parquet_lae()
-    >>> # Filter to nighttime
-    >>> df_night = df[df['SW_IN'] < 10].copy()
-    >>> detector = dv.UstarVekuriThresholdDetection(df_night)
+    >>> detector = dv.flux.UstarVekuriThresholdDetection(df)
     >>> thresholds = detector.detect()
     >>> print(detector.summary())
     >>> stats = detector.bootstrap()
@@ -190,7 +188,6 @@ class UstarVekuriThresholdDetection:
         # summary() can report "not run yet" instead of failing in its own guard.
         self.results_ = pd.DataFrame()
         self.bootstrap_stats_ = pd.DataFrame()
-        self.bootstrap_results_ = {}
 
     @staticmethod
     def _find_column(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
