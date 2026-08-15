@@ -614,6 +614,63 @@ class TestPlotClasses(unittest.TestCase):
         self.assertTrue(np.all(np.isnan(grid.z[0])))
         self.assertFalse(np.all(np.isnan(grid.z[1])))
 
+    # --- crash-on-legitimate-input regressions ---
+
+    def test_ridgeline_plots_a_series_that_contains_gaps(self):
+        """L65: the KDE rejects NaN, so a gappy series must be cleaned by the class.
+
+        Every real time series has gaps. The GUI path only worked because it
+        called `.dropna()` first, which made the library API strictly worse.
+        """
+        import numpy as np
+        from diive.core.plotting.ridgeline import RidgeLinePlot
+        gappy = self.series.copy()
+        gappy.iloc[::7] = np.nan  # gaps scattered across every group
+        gappy.loc[gappy.index.month == 7] = np.nan  # one group with nothing left
+        fig = plt.figure()
+        RidgeLinePlot(gappy).plot(fig=fig, how="monthly", showplot=False)
+        # Eleven ridges: July dropped out entirely instead of raising.
+        self.assertEqual(len(fig.axes), 11)
+        labels = [t.get_text() for ax in fig.axes for t in ax.texts]
+        self.assertNotIn("7", labels)
+        plt.close(fig)
+        # A series with nothing left at all says so rather than failing inside sklearn.
+        with self.assertRaises(ValueError) as ctx:
+            RidgeLinePlot(self.series * np.nan)
+        self.assertIn("no valid", str(ctx.exception))
+
+    def test_cumulative_labels_an_all_nan_column_instead_of_raising(self):
+        """L69: an unfilled scenario column is all-NaN, and had no legend total to index."""
+        import numpy as np
+        from diive.core.plotting.cumulative import Cumulative
+        frame = self.series.to_frame()
+        frame["SCENARIO_UNFILLED"] = np.nan
+        fig, ax = plt.subplots()
+        Cumulative(frame, units="units").plot(ax=ax, showplot=False)
+        labels = [line.get_label() for line in ax.lines]
+        # One line per column, and the empty one is labelled as such.
+        self.assertTrue(any(lbl.startswith("TA: ") for lbl in labels), labels)
+        self.assertIn("SCENARIO_UNFILLED: no data", labels)
+        # No end-point marker/annotation was invented for the empty column.
+        self.assertNotIn("nan", " ".join(t.get_text() for t in ax.texts))
+        plt.close(fig)
+
+    def test_datetime_surface_grid_keeps_a_variable_named_date(self):
+        """L68: the DATE/TIME helper columns used to overwrite a same-named variable."""
+        import numpy as np
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        from diive.core.plotting.surface_grid import datetime_surface_grid
+        expected = datetime_surface_grid(self.series).z
+        for name in ("DATE", "TIME"):
+            with self.subTest(name=name):
+                renamed = self.series.rename(name)
+                grid = datetime_surface_grid(renamed)
+                self.assertEqual(grid.name, name)
+                np.testing.assert_allclose(grid.z, expected, equal_nan=True)
+                # The heatmap builds the same DATE/TIME columns the same way.
+                hm = HeatmapDateTime(renamed, ax_orientation="vertical")
+                np.testing.assert_allclose(hm.z, expected, equal_nan=True)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -18,7 +18,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-import pandas as pd
 from pandas import Series
 
 from diive.core.times.times import TimestampSanitizer, insert_timestamp
@@ -77,11 +76,14 @@ def datetime_surface_grid(series: Series) -> DateTimeSurface:
         _series_df = insert_timestamp(data=series, convention='start', set_as_index=True)
         series = _series_df[series.name].copy()
 
-    df = pd.DataFrame(series)
+    # Pivot through an internal value key, not the series name: a series actually
+    # named DATE or TIME would otherwise be overwritten by the helper columns below,
+    # and the grid would silently hold the timestamp parts instead of the data.
+    df = series.rename("_values").to_frame()
     df["DATE"] = df.index.date
     df["TIME"] = df.index.time
     df = df.reset_index(drop=True)
-    grid = df.pivot(index="DATE", columns="TIME", values=series.name)
+    grid = df.pivot(index="DATE", columns="TIME", values="_values")
 
     times = grid.columns.to_numpy()
     x_hours = np.array(

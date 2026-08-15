@@ -92,15 +92,18 @@ class HeatmapDateTime(HeatmapBase):
         self.series = self._setup_timestamp(series=self.series)
 
         # Data for plotting
-        self.plotdf = pd.DataFrame(self.series)
+        # Pivot through an internal value key, not the series name: a series actually
+        # named DATE or TIME would otherwise be overwritten by the helper columns below,
+        # and the heatmap would silently show the timestamp parts instead of the data.
+        self.plotdf = self.series.rename('_values').to_frame()
         self.plotdf['DATE'] = self.plotdf.index.date
         self.plotdf['TIME'] = self.plotdf.index.time
         self.plotdf = self.plotdf.reset_index(drop=True, inplace=False)
 
         if self.ax_orientation == "vertical":
-            self.plotdf = self.plotdf.pivot(index='DATE', columns='TIME', values=self.series.name)
+            self.plotdf = self.plotdf.pivot(index='DATE', columns='TIME', values='_values')
         elif self.ax_orientation == "horizontal":
-            self.plotdf = self.plotdf.pivot(index='TIME', columns='DATE', values=self.series.name)
+            self.plotdf = self.plotdf.pivot(index='TIME', columns='DATE', values='_values')
 
         # Extend
         self.x, self.y, self.z = self._set_bounds()
