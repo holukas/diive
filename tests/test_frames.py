@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from diive.core.dfun.frames import keep_records_where
+from diive.core.dfun.frames import keep_records_where, transform_yearmonth_matrix_to_longform
 
 
 class TestKeepRecordsWhere(unittest.TestCase):
@@ -140,3 +140,48 @@ class TestNoCallerMutation(unittest.TestCase):
         self.assertEqual(list(df.columns), before)
         self.assertIsNot(out, df)
         self.assertIn('.TA-1', out.columns)
+
+
+class TestYearMonthMatrixToLongform(unittest.TestCase):
+    """Any year-index/month-column matrix must convert, not only the YEAR/MONTH one."""
+
+    @staticmethod
+    def _matrix():
+        # Documented input: years as index, months as columns.
+        return pd.DataFrame(np.arange(24.0).reshape(2, 12),
+                            index=[1997, 1998], columns=range(1, 13))
+
+    def _assert_matches_matrix(self, series, matrixdf):
+        first = f'{matrixdf.index[0]}-{matrixdf.columns[0]:02d}-01'
+        last = f'{matrixdf.index[-1]}-{matrixdf.columns[-1]:02d}-01'
+        self.assertEqual(len(series), matrixdf.size)
+        self.assertEqual(series.index.freqstr, 'MS')
+        self.assertEqual(series.loc[first], matrixdf.iloc[0, 0])
+        self.assertEqual(series.loc[last], matrixdf.iloc[-1, -1])
+
+    def test_unnamed_axes(self):
+        matrixdf = self._matrix()
+        out = transform_yearmonth_matrix_to_longform(matrixdf=matrixdf, z_var_name='TA')
+        self.assertEqual(out.name, 'TA')
+        self._assert_matches_matrix(out, matrixdf)
+
+    def test_other_axis_names(self):
+        matrixdf = self._matrix().rename_axis(index='year', columns='month')
+        out = transform_yearmonth_matrix_to_longform(matrixdf=matrixdf)
+        self.assertEqual(out.name, 'VALUE')
+        self._assert_matches_matrix(out, matrixdf)
+
+    def test_axis_names_not_changed_for_caller(self):
+        matrixdf = self._matrix().rename_axis(index='year', columns='month')
+        transform_yearmonth_matrix_to_longform(matrixdf=matrixdf)
+        self.assertEqual(matrixdf.index.name, 'year')
+        self.assertEqual(matrixdf.columns.name, 'month')
+
+    def test_roundtrip_from_resample_to_monthly_agg_matrix(self):
+        from diive.core.times.resampling import resample_to_monthly_agg_matrix
+        idx = pd.date_range('2020-01-01', '2021-12-31', freq='D', name='TIMESTAMP_MIDDLE')
+        series = pd.Series(np.arange(len(idx), dtype=float), index=idx, name='TA')
+        matrixdf = resample_to_monthly_agg_matrix(series=series, agg='mean')
+        out = transform_yearmonth_matrix_to_longform(matrixdf=matrixdf, z_var_name='TA')
+        self._assert_matches_matrix(out, matrixdf)
+        self.assertAlmostEqual(out.sum(), matrixdf.sum().sum(), places=9)

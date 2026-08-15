@@ -624,12 +624,18 @@ def transform_yearmonth_matrix_to_longform(matrixdf: pd.DataFrame, z_var_name: s
 
     Args:
         matrixdf: pandas DataFrame with years as index and months as columns.
+            The axis names are irrelevant, unnamed axes are accepted.
         z_var_name: (Optional) Name of the resulting pandas Series. Defaults to 'VALUE'.
 
     Returns:
         pandas Series with a datetime index ('YYYY-MM-01' format, monthly start frequency 'MS') and values from the input matrix.
 
     """
+
+    # Only *resample_to_monthly_agg_matrix* names the axes YEAR/MONTH, and unnamed axes
+    # make melt/reset_index fall back to pandas' own 'variable'/'index'. Pin the names
+    # so the helper columns can be addressed and dropped below.
+    matrixdf = matrixdf.rename_axis(index='YEAR', columns='MONTH')
 
     cols = matrixdf.columns.name
     long_form_df = pd.melt(matrixdf, var_name=matrixdf.columns.name, value_name=z_var_name, ignore_index=False)
