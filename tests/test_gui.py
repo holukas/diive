@@ -3473,6 +3473,43 @@ def test_joint_uncertainty_tab(app, example_year):
     assert tab._divisor() != 2.0
 
 
+def test_restore_controls_reports_missing_combo_entry(app, example_year):
+    # A saved combo entry that no longer exists must be reported as unrestored,
+    # not silently replaced by whatever the combo happens to show. For the
+    # joint-uncertainty divisor that fallback would change the published number
+    # (IQR 1.349 -> 1-sigma 2.0).
+    from PySide6.QtWidgets import QApplication
+    from diive.flux.lowres.uncertainty import JOINT_DIVISOR_1SIGMA
+    from diive.gui.tabs.uncertainty_jointunc import JointUncertaintyTab
+    from diive.gui.widgets.state_utils import restore_controls
+    df = dv.times.keep_daterange(example_year, "2021-03-01", "2021-03-31 23:30").copy()
+    df["NEE_CUT_REF_RANDUNC"] = 1.5
+    tab = JointUncertaintyTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab.divisor_combo.setCurrentIndex(1)
+    state = tab.save_state()
+    # Stand in for a project saved before a column rename / a preset relabel:
+    # neither saved entry is among the combo's items any more.
+    state["controls"]["randunc"] = "NEE_RENAMED_RANDUNC"
+    state["controls"]["divisor_combo"] = "Energy flux LE/H (old label)"
+
+    tab2 = JointUncertaintyTab()
+    tab2.widget()
+    tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    QApplication.processEvents()
+
+    # restore_controls reports exactly the keys it could not apply.
+    assert set(restore_controls(tab2._controls(), state["controls"])) == {
+        "randunc", "divisor_combo"}
+    # The tab names them (labels, not raw keys) in its status line.
+    txt = tab2.status.text()
+    assert "Random uncertainty" in txt and "Scenario percentiles" in txt
+    # The divisor did fall back to the 1-sigma preset — hence the warning.
+    assert tab2._divisor() == JOINT_DIVISOR_1SIGMA
+
+
 def test_gapfilling_mds_tab(app, example_year):
     # The MDS tab builds, auto-seeds the three drivers, runs synchronously and
     # emits the *_gfMDS + flag columns; the slimmed Results panel populates.
