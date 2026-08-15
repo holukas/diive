@@ -91,5 +91,39 @@ class TestGapSpanningDifferences(unittest.TestCase):
         self.assertNotEqual(edge_after, 2)
 
 
+class TestNonFixedFrequencyIndex(unittest.TestCase):
+    """A monthly or yearly index carries a non-fixed frequency offset, which has no
+    constant duration: reading its length in nanoseconds raises. The step must come
+    from the timestamps instead, otherwise the whole detector goes down on data that
+    the class documents no restriction against."""
+
+    @staticmethod
+    def _monthly():
+        rng = np.random.default_rng(3)
+        idx = pd.date_range('2000-01-01', periods=120, freq='MS', name='TIMESTAMP_MIDDLE')
+        s = pd.Series(10 + rng.normal(0, 0.5, len(idx)), index=idx, name='x')
+        s.iloc[60] = 40.0  # unmistakable spike
+        return s
+
+    def test_monthly_index_runs_and_finds_the_spike(self):
+        s = self._monthly()
+        ham = _hampel(s, window_length=12)
+        ham.calc(repeat=False)
+        flag = ham.get_flag()
+        self.assertEqual(flag.iloc[60], 2)
+        # The regular monthly spacing must not be mistaken for gaps, which would
+        # leave every record untestable.
+        self.assertFalse(ham._untestable.iloc[1:-1].any())
+
+    def test_yearly_index_runs(self):
+        rng = np.random.default_rng(5)
+        idx = pd.date_range('2000-01-01', periods=40, freq='YS', name='TIMESTAMP_MIDDLE')
+        s = pd.Series(10 + rng.normal(0, 0.5, len(idx)), index=idx, name='x')
+        s.iloc[20] = 40.0
+        ham = _hampel(s, window_length=8)
+        ham.calc(repeat=False)
+        self.assertEqual(ham.get_flag().iloc[20], 2)
+
+
 if __name__ == '__main__':
     unittest.main()

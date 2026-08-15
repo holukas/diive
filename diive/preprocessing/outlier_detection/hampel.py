@@ -225,9 +225,16 @@ class Hampel(FlagBase):
         if not isinstance(index, DatetimeIndex) or len(index) < 3:
             return pd.Series(False, index=index)
 
+        # A non-fixed offset (month/year start, business day, week) has no constant
+        # duration and raises on `.nanos`; even `hasattr` propagates that error, so
+        # the attempt itself is the test. The timestamps then supply the typical step.
+        step = None
         if index.freq is not None:
-            step = pd.Timedelta(index.freq.nanos, unit='ns')
-        else:
+            try:
+                step = pd.Timedelta(index.freq.nanos, unit='ns')
+            except ValueError:
+                step = None
+        if step is None:
             step = pd.Series(index).diff().median()
         if pd.isna(step) or step <= pd.Timedelta(0):
             return pd.Series(False, index=index)
