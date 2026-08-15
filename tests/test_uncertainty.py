@@ -145,6 +145,76 @@ def test_joint_cumulative_components():
         rtol=1e-9, atol=1e-9, equal_nan=True)
 
 
+def test_joint_cumulative_scenario_masked_to_available_flux():
+    # The two cumulative scenario sums must skip the same records. Unmasked,
+    # skipna cumsum let each percentile accumulate over its own record set: a
+    # record with only one percentile (or with no flux to contribute to the
+    # cumulative flux the band brackets) shifted one sum and not the other, and
+    # the "spread" could even turn negative.
+    idx = pd.date_range('2020-06-01 00:30', periods=5, freq='30min')
+    df = pd.DataFrame(
+        {'NEE_f': [1.0, 1.0, np.nan, 1.0, 1.0],  # record 2: no flux
+         'NEE_16': [2.0, 2.0, 2.0, 2.0, 2.0],
+         'NEE_84': [3.0, np.nan, 3.0, 3.0, 3.0],  # record 1: upper missing
+         'NEE_RANDUNC': [0.0, 0.0, 0.0, 0.0, 0.0]},
+        index=idx)
+    ju = dv.flux.JointUncertaintyPAS20(
+        df, 'NEE_RANDUNC', 'NEE_16', 'NEE_84',
+        fluxgapfilledcol='NEE_f', divisor=2.0)
+    ju.run()
+    scen = ju.jointunc_results_cumulatives['UNC_SCENARIO_CUMULATIVE']
+
+    # Records 1 and 2 contribute to neither sum, so they are undefined (as the
+    # random term and the cumulative flux already are at such records) and the
+    # spread grows by (3-2)/2 per contributing record without poisoning the tail.
+    # Unmasked this read [0.5, nan, 0.0, 0.5, 1.0]: record 2 entered both sums
+    # while its flux did not, and record 1 entered only the lower sum, so the
+    # spread came out too small from there on (with a narrower percentile band it
+    # turns negative).
+    np.testing.assert_allclose(scen.to_numpy(), [0.5, np.nan, np.nan, 1.0, 1.5],
+                               rtol=1e-12, atol=1e-12, equal_nan=True)
+    assert int(scen.isna().sum()) == 2
+    # A spread is never negative and, with both percentiles ordered, never shrinks.
+    assert (scen.dropna() >= 0).all()
+    assert (scen.dropna().diff().dropna() >= -1e-12).all()
+
+
+# --- Random uncertainty method 4: symmetric neighbour window -------------------
+# Method 4 (diive extension, not ONEFlux) takes the median uncertainty of the
+# fluxes closest in magnitude. The neighbour slice used an exclusive stop of
+# `cur_ix + 5`, which reached only 4 records above the current flux against 5
+# below, biasing the median toward the lower fluxes.
+
+def _method4_case():
+    """21 records on an ascending flux ladder; only the middle one needs method 4.
+
+    Uncertainty is 1.0 below the middle record and 100.0 above it, so a window
+    that is short one record above returns a visibly different median.
+    """
+    n = 21
+    idx = pd.date_range('2020-06-01 00:30', periods=n, freq='30min')
+    df = pd.DataFrame({'NEE': np.nan,
+                       'NEE_f': np.arange(n, dtype=float),
+                       'TA': 10.0, 'VPD': 0.5, 'SW_IN': 100.0}, index=idx)
+    ru = dv.flux.RandomUncertaintyPAS20(df, 'NEE', 'NEE_f', 'TA', 'VPD', 'SW_IN')
+    ru._randunc_results['WINDOW_N_VALS_METHOD4'] = np.nan
+    randunc = np.concatenate([np.full(10, 1.0), [np.nan], np.full(10, 100.0)])
+    ru._randunc_results[ru.randunccol] = randunc
+    return ru
+
+
+def test_method4_neighbour_window_is_symmetric():
+    ru = _method4_case()
+    ru._method4()
+    res = ru.randunc_results
+
+    # 5 records below (1.0) and 5 above (100.0) -> median of ten values.
+    assert res['WINDOW_N_VALS_METHOD4'].iloc[10] == 10
+    assert res[ru.randunccol].iloc[10] == 50.5
+    # Records that already had an uncertainty are untouched.
+    assert res[ru.randunccol].iloc[9] == 1.0
+    assert res[ru.randunccol].iloc[11] == 100.0
+
 
 # --- MDS window: trimmed, not clipped -----------------------------------------
 # The window positions used to be clipped into range (`np.clip(w, 0, n-1)`), so
