@@ -323,6 +323,69 @@ class TestFlagQCFValidation(unittest.TestCase):
                 FlagQCF(df=df, target_col='FC', swinpot_col='NOT_A_COLUMN')
 
 
+class TestFlagQCFNeverNaN(unittest.TestCase):
+    """QCF is always 0/1/2, never NaN (finding L8).
+
+    The flag sums treat a NaN test flag as 0, so a record whose every test flag
+    is NaN lands at QCF=0 ("nothing flagged it"), not at NaN. The NaN in
+    `_calculate_flag_qcf` is only the column initialisation.
+    """
+
+    def test_all_nan_test_flags_give_qcf_zero(self):
+        from diive.qaqc import FlagQCF
+        rows = [
+            [np.nan] * 5,  # no flag available at all -> 0, not NaN
+            [np.nan, np.nan, 0, np.nan, np.nan],  # one test passed -> 0
+            [np.nan, 1, np.nan, np.nan, np.nan],  # one soft flag   -> 1
+            [np.nan, np.nan, 2, np.nan, np.nan],  # one hard flag   -> 2
+        ]
+        qcf = FlagQCF(df=_flag_frame(4, rows), target_col='FC')
+        qcf.calculate(daytime_accept_qcf_below=2, nighttime_accept_qcf_below=2)
+        flag = qcf.get()[qcf.flagqcfcol]
+        self.assertFalse(flag.isna().any(), "QCF must never be NaN")
+        self.assertEqual(list(flag.astype(int)), [0, 0, 1, 2])
+
+
+class TestEddyProFlags(unittest.TestCase):
+    """Conversion of EddyPro output flags to DIIVE format (0/1/2)."""
+
+    def _idx(self, n: int):
+        return pd.date_range('2022-06-01', periods=n, freq='30min', name='TIMESTAMP_END')
+
+    def test_ssitc_values_are_passed_through(self):
+        # Finding L15: SSITC is deliberately NOT thresholded -- EddyPro's 0/1/2
+        # already is the DIIVE scale, so intermediate quality 1 stays a soft flag.
+        from diive.preprocessing.qaqc.eddyproflags import flag_ssitc_eddypro_test
+        df = pd.DataFrame({'FC_SSITC_TEST': [0.0, 1.0, 2.0]}, index=self._idx(3))
+        flag = flag_ssitc_eddypro_test(df=df, flux='FC')
+        self.assertEqual(list(flag), [0.0, 1.0, 2.0])
+
+        # ... and `setflag_timeperiod` is what promotes 1 to 2 for chosen periods.
+        promoted = flag_ssitc_eddypro_test(
+            df=df, flux='FC', setflag_timeperiod={2: [[1, '2022-06-01', '2022-06-02']]})
+        self.assertEqual(list(promoted), [0.0, 2.0, 2.0])
+
+    def test_scalar_zero_code_is_flag_zero(self):
+        # Finding L25: a raw code of 0 (no flag raised) must extract as flag 0.
+        # It used to become NaN, because the float->string round-trip made it
+        # '0.0' and the digit at the requested position was the '.'.
+        from diive.preprocessing.qaqc.eddyproflags import (
+            flag_steadiness_horizontal_wind_eddypro_test, flags_vm97_eddypro_fluxnetfile_tests)
+        df = pd.DataFrame({'VM97_NSHW_HF': [80.0, 81.0, 0.0, np.nan]}, index=self._idx(4))
+        flag = flag_steadiness_horizontal_wind_eddypro_test(df=df, flux='FC')
+        # 80 -> passed (0), 81 -> hard fail (2), 0 -> passed (0), missing -> NaN.
+        self.assertEqual(list(flag[:3]), [0.0, 2.0, 0.0])
+        self.assertTrue(np.isnan(flag.iloc[3]))
+
+        # Same for the multi-digit VM97 column, at a position beyond the first.
+        vm97 = pd.DataFrame({'CO2_VM97_TEST': [800000000.0, 810000000.0, 0.0]},
+                            index=self._idx(3))
+        flags = flags_vm97_eddypro_fluxnetfile_tests(df=vm97, flux='FC', fluxbasevar='CO2',
+                                                     spikes=True, dropout=True)
+        self.assertEqual(list(flags['FLAG_FC_CO2_VM97_SPIKE_HF_TEST']), [0.0, 2.0, 0.0])
+        self.assertEqual(list(flags['FLAG_FC_CO2_VM97_DROPOUT_TEST']), [0.0, 0.0, 0.0])
+
+
 class TestMeasurementsRegistry(unittest.TestCase):
     """The measurement/correction registry: which measurement is a column, and
     which corrections are physically meaningful for it.

@@ -219,7 +219,9 @@ class FlagQCF:
             2 = Poor quality (critical issues or too many soft flags)
 
         Returns:
-            Series with QCF values (0, 1, 2, or NaN if no flags available).
+            Series with QCF values (0, 1 or 2). Never NaN: a record for which no test
+            raised a flag - including one where every test flag is NaN - has flag sums
+            of zero and therefore QCF=0.
         """
         return self.flags[self.flagqcfcol]
 
@@ -637,7 +639,8 @@ class FlagQCF:
     def _calculate_flag_qcf(self, df: DataFrame) -> DataFrame:
         """Calculate QCF flag (0/1/2) using hierarchical decision rules and apply day/night thresholds."""
 
-        # QCF is NaN if no flag is available
+        # Initialize the column; every record is assigned below, since the flag sums are
+        # zero (not NaN) where no flag was raised, which the next rule turns into QCF=0.
         df[self.flagqcfcol] = np.nan
 
         # QCF is 0 if all flags show zero

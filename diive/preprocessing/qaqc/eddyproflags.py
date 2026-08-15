@@ -47,6 +47,7 @@ def _extract_and_convert_flag_from_multidigit(df: DataFrame, column_name: str,
     flag = df[column_name].copy()
     flag = flag.apply(pd.to_numeric, errors='coerce').astype(float)
     flag = flag.fillna(899999999)  # 9 = missing flag (use multi-digit value to ensure proper string extraction)
+    flag = flag.replace(0, 800000000)  # 0 = no flag raised (use multi-digit value, see above)
     flag = flag.astype(str)
     flag = flag.str[int(position)]
     flag = flag.apply(pd.to_numeric, errors='coerce')  # Use coerce to handle non-numeric characters like '.'
@@ -460,8 +461,11 @@ def flag_ssitc_eddypro_test(df: DataFrame, flux: str, setflag_timeperiod: dict =
     characteristics criteria (Mauder & Foken, 2004). This test assesses whether conditions
     are sufficiently stationary for reliable flux measurements during the averaging period.
 
-    The SSITC test flag is extracted from EddyPro FluxNet output and converted to DIIVE
-    standard format (0=good, 2=bad).
+    The SSITC test flag is taken from EddyPro FluxNet output unchanged: EddyPro's values
+    0/1/2 already coincide with the DIIVE standard format (0=good, 1=soft warning, 2=bad),
+    so no conversion is needed. In particular, EddyPro's intermediate quality 1 stays a
+    DIIVE *soft* flag, i.e. such records pass `FlagQCF` as marginal rather than being
+    rejected. Use `setflag_timeperiod` to promote 1 to 2 for chosen periods.
 
     Args:
         df: A DataFrame containing EddyPro FluxNet or full output data.
@@ -474,8 +478,8 @@ def flag_ssitc_eddypro_test(df: DataFrame, flux: str, setflag_timeperiod: dict =
         idstr: An optional identifier string to append to the flag name.
 
     Returns:
-        A pandas Series containing the SSITC quality flag in DIIVE format
-        (0=good, 2=bad).
+        A pandas Series containing the SSITC quality flag in DIIVE format, with the
+        EddyPro values passed through (0=good, 1=soft warning, 2=bad).
 
     See Also:
         See examples/preprocessing/qaqc/qc_eddypro_flags.py for a complete working example.
