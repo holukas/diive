@@ -72,6 +72,11 @@ the above. Once a project is open, **Ctrl+S (File ▸ Save project)** updates it
 place, and the window title shows the project name. diive reopens your most recent
 project automatically the next time you launch it.
 
+A saved setting can only come back if what it points at still exists. On the
+partitioning and uncertainty tabs, a saved column pick whose column is no longer in
+the data leaves that dropdown on its current value and says so in the tab's status
+line, so check those controls before running.
+
 ### Saving just the data
 
 **File ▸ Export data as…** writes only the current dataset, including any features
@@ -542,8 +547,10 @@ line and the scatter update on **Run**.
 - **Resolution.** Classify **monthly** or **daily** periods.
 - **Standardize by.** *Deseasonalized* (recommended) compares each month/day against
   the same time of year across all years, so the normal seasonal cycle does not count
-  as "extreme". *Whole-record* uses one average over everything (simpler, but summer
-  months tend to flag).
+  as "extreme". It therefore needs **at least two years** of data — with a single
+  year every period is compared against itself, no z-score can be computed, and the
+  run stops with a message saying so. *Whole-record* uses one average over everything
+  (simpler, works on one year, but summer months tend to flag).
 - **Category labels.** Rename the single-variable categories (default *Air* / *Soil*)
   to match your drivers; they appear in the legend and point labels.
 - **Copy Python** copies a runnable script that reproduces the classification and plot.
@@ -894,7 +901,9 @@ two variables, rename, inspect metadata, and calculate derived variables. It als
 Add a common **prefix and/or suffix** to **all** variables at once, for example to
 tag every column with a site code (`CH-DAV_…`) or a year (`…_2024`). Type a prefix
 and/or suffix; the table **previews** the old → new names (changed ones in bold)
-before anything happens. **Apply rename** commits it to the loaded dataset.
+before anything happens. **Apply rename** commits it to the loaded dataset. A rename
+that would give two variables the same name is refused with a warning and nothing
+changes — one of the two would otherwise lose its values and its history.
 
 To rename just **one** variable, **double-click its name** in the table (the same
 as the right-click **Rename…** on any variable list). Renaming is non-destructive to
@@ -1138,9 +1147,13 @@ red ✗ marker showing whether the chosen column exists):
   uncertainty).
 
 Set the **site coordinates** (latitude, and for the methods that need them,
-longitude and UTC offset; all default from **Settings ▸ Project settings**). For the
-daytime methods, the **VPD is in kPa** toggle says whether your VPD column is in kPa
-(the diive convention, default) or hPa.
+longitude and UTC offset; all default from **Settings ▸ Project settings**). The site
+has to be filled in there first: a method that needs coordinates **refuses to run**
+while Project settings is empty, and says why in the status line. Left to their
+defaults the boxes read 0 / 0 / 0, so the run would partition at latitude 0,
+longitude 0 on UTC and return plausible-looking GPP and RECO for the wrong place. For
+the daytime methods, the **VPD is in kPa** toggle says whether your VPD column is in
+kPa (the diive convention, default) or hPa.
 
 Click **Run partitioning** (it runs in the background; the daytime methods can take
 a while, roughly tens of seconds per year). The preview shows daily-mean NEE, GPP,
