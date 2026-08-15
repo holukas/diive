@@ -696,6 +696,49 @@ class TestReconstructionOnlyHonoursTheComponentsItUses(unittest.TestCase):
         self.assertLess((measured - std.series.loc[measured.index]).abs().max(), 1e-9)
 
 
+class TestClassicalDecomposeRequestsNoExtrapolation(unittest.TestCase):
+    """L87: the trend edges are NaN on purpose, and the code must say so.
+
+    `classical_decompose` used to pass `extrapolate='freq'` inside a
+    `try/except TypeError`. The statsmodels parameter is `extrapolate_trend`, so the
+    call raised on every version and the no-extrapolation fallback ran every time --
+    a dead branch that read as if extrapolation were happening. The behaviour it
+    silently produced is the one we want, so the fix removed the branch rather than
+    switching extrapolation on: filling those records would invent trend values and
+    move `seasonality_strength`.
+    """
+
+    @staticmethod
+    def _series(n=400, period=31):
+        import numpy as np
+        import pandas as pd
+        t = np.arange(n)
+        return pd.Series(5.0 * np.sin(2 * np.pi * t / period) + 10.0 + t * 0.01,
+                         index=pd.date_range('2015-01-01', periods=n, freq='D')), period
+
+    def test_trend_edges_stay_nan(self):
+        from diive.core.times.decomposition_utils import classical_decompose
+        series, period = self._series()
+        out = classical_decompose(series, period=period)
+        expected = 2 * ((period - 1) // 2)
+        self.assertEqual(int(out['trend'].isna().sum()), expected)
+        self.assertEqual(int(out['residual'].isna().sum()), expected)
+        # The seasonal component is defined everywhere; only the moving average is not.
+        self.assertEqual(int(out['seasonal'].isna().sum()), 0)
+
+    def test_interior_trend_is_a_centred_moving_average(self):
+        """Pins the values, so enabling extrapolation later cannot pass unnoticed."""
+        import numpy as np
+        from diive.core.times.decomposition_utils import classical_decompose
+        series, period = self._series()
+        out = classical_decompose(series, period=period)
+        half = (period - 1) // 2
+        interior = out['trend'].iloc[half:-half]
+        self.assertEqual(int(interior.isna().sum()), 0)
+        manual = series.rolling(window=period, center=True).mean().iloc[half:-half]
+        np.testing.assert_allclose(interior.to_numpy(), manual.to_numpy(), rtol=1e-9)
+
+
 class TestStlReturnsNoFakeIterationCount(unittest.TestCase):
     """L60: 'iterations' held `DecomposeResult.nobs`, an observation count.
 

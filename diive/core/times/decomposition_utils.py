@@ -196,19 +196,26 @@ def classical_decompose(
             - 'residual': pd.Series, residual component
 
     Notes:
-        - First (period-1)//2 and last (period-1)//2 observations get NaN for trend
+        - First (period-1)//2 and last (period-1)//2 observations get NaN for trend,
+          and so does the residual. This is deliberate: the trend is a centred moving
+          average, so those records have no window. Extrapolating them
+          (``extrapolate_trend='freq'``) is available in statsmodels but not enabled,
+          because an extrapolated edge is indistinguishable from a measured one.
         - Missing values in input may propagate through output
     """
     if period < 2:
         raise ValueError(f"period must be >= 2, got {period}")
 
     try:
-        # Try with extrapolate parameter first (newer statsmodels versions)
-        try:
-            decomp = seasonal_decompose(series, model=model, period=period, extrapolate='freq')
-        except TypeError:
-            # Fall back to without extrapolate for older statsmodels versions
-            decomp = seasonal_decompose(series, model=model, period=period)
+        # NaN trend edges are the intended contract here, so no extrapolation is
+        # requested. This used to pass `extrapolate='freq'` inside a try/except
+        # TypeError; the parameter is spelled `extrapolate_trend`, so the call raised
+        # on every statsmodels version and the fallback below ran every time. Enabling
+        # it would fill the (period-1)//2 records at each end with a least-squares
+        # extrapolation indistinguishable from a measured trend, and shift
+        # `seasonality_strength` — a change nobody asked for, since the misspelled
+        # name was an internal literal and never a caller's argument.
+        decomp = seasonal_decompose(series, model=model, period=period)
 
         if verbose:
             detail(f"Classical decomposition: period={period}, model={model}", verbose=verbose)
