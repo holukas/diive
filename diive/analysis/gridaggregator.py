@@ -111,16 +111,25 @@ class GridAggregator:
         self.x_bin_col_name = f'BIN_{self.x_col_name}'
         self.y_bin_col_name = f'BIN_{self.y_col_name}'
 
+        # Internal, guaranteed-unique keys for the working frame. Two roles may
+        # legitimately carry the same Series name (the same variable as x and z,
+        # say): keyed by name, the frame keeps only one of them, so one role's
+        # data was silently binned as another's -- and x and y sharing a name
+        # made pivot_table raise. The names above are restored on the way out.
+        self._xc, self._yc, self._zc = '_x', '_y', '_z'
+        self._xbc, self._ybc = f'BIN_{self._xc}', f'BIN_{self._yc}'
+        self._display_names = {self._xc: self.x_col_name,
+                               self._yc: self.y_col_name,
+                               self._zc: self.z_col_name}
+
         # Map 'count' string to numpy.size (more appropriate for counts than nonzero)
         # For other aggregation strings, pandas handles them directly in pivot_table.
         self.aggfunc = np.size if aggfunc == 'count' else aggfunc
 
         # Prepare the internal DataFrame for long format data
-        self._df_long = pd.DataFrame({
-            self.x_col_name: self.x,
-            self.y_col_name: self.y,
-            self.z_col_name: self.z
-        })
+        self._df_long = pd.concat([self.x.rename(self._xc),
+                                   self.y.rename(self._yc),
+                                   self.z.rename(self._zc)], axis=1)
         self._df_long.index.name = 'INDEX'
         # Reset index to make the original index available as a column for counting
         self._df_long = self._df_long.reset_index(drop=False).copy()
@@ -197,7 +206,12 @@ class GridAggregator:
         """
         if self._df_long.empty and not self._df_long.columns.empty:  # Check if empty but columns exist (e.g., after dropna leads to empty)
             raise AttributeError("Long (non-aggregated) DataFrame is not available.")
-        return self._df_long.copy()  # Return a copy to prevent external modification
+        # Return a copy (renamed to the caller-facing names) to prevent external modification
+        return self._df_long.rename(columns={self._xc: self.x_col_name,
+                                             self._yc: self.y_col_name,
+                                             self._zc: self.z_col_name,
+                                             self._xbc: self.x_bin_col_name,
+                                             self._ybc: self.y_bin_col_name})
 
     @property
     def df_agg_wide(self) -> pd.DataFrame:
@@ -249,8 +263,8 @@ class GridAggregator:
         values in the specified columns. The bin assignments are based on percentiles
         of the data, and they are stored in new columns within the DataFrame.
         """
-        self._df_long[self.x_bin_col_name] = self._assign_bins_quantiles(series=self._df_long[self.x_col_name])
-        self._df_long[self.y_bin_col_name] = self._assign_bins_quantiles(series=self._df_long[self.y_col_name])
+        self._df_long[self._xbc] = self._assign_bins_quantiles(series=self._df_long[self._xc])
+        self._df_long[self._ybc] = self._assign_bins_quantiles(series=self._df_long[self._yc])
 
     def _apply_equal_width_binning(self):
         """
@@ -261,8 +275,8 @@ class GridAggregator:
         stores the binned results in columns named `self.x_bin_col_name` and
         `self.y_bin_col_name`, respectively.
         """
-        self._df_long[self.x_bin_col_name] = self._assign_bins_equal_width(series=self._df_long[self.x_col_name])
-        self._df_long[self.y_bin_col_name] = self._assign_bins_equal_width(series=self._df_long[self.y_col_name])
+        self._df_long[self._xbc] = self._assign_bins_equal_width(series=self._df_long[self._xc])
+        self._df_long[self._ybc] = self._assign_bins_equal_width(series=self._df_long[self._yc])
 
     def _apply_custom_binning(self):
         """
@@ -271,10 +285,10 @@ class GridAggregator:
         Sets up custom binning for x and y columns based on the provided custom bin
         configuration and assigns the resulting bins to new columns.
         """
-        self._df_long[self.x_bin_col_name] = self._assign_bins_custom(series=self._df_long[self.x_col_name],
-                                                                      bins=self.custom_x_bins)
-        self._df_long[self.y_bin_col_name] = self._assign_bins_custom(series=self._df_long[self.y_col_name],
-                                                                      bins=self.custom_y_bins)
+        self._df_long[self._xbc] = self._assign_bins_custom(series=self._df_long[self._xc],
+                                                            bins=self.custom_x_bins)
+        self._df_long[self._ybc] = self._assign_bins_custom(series=self._df_long[self._yc],
+                                                            bins=self.custom_y_bins)
 
     def _assign_bins_quantiles(self, series: pd.Series) -> pd.Series:
         """
@@ -291,7 +305,7 @@ class GridAggregator:
                        If quantile bins cannot be formed, the output series contains NaN for all indices.
         """
         # Use a consistent name for the series in warnings
-        series_name = series.name if series.name else 'Unnamed Series'
+        series_name = self._display_names.get(series.name, 'Unnamed Series')  # the caller knows this name
 
         try:
             # First, determine bins to get actual number of bins and drop duplicates if needed
@@ -335,7 +349,7 @@ class GridAggregator:
             pd.Series: A new pandas Series containing the numeric bin labels corresponding to the lower
             bounds of the bins. If an error occurs or no bins are created, returns a Series of NaN values.
         """
-        series_name = series.name if series.name else 'Unnamed Series'
+        series_name = self._display_names.get(series.name, 'Unnamed Series')  # the caller knows this name
         try:
             # Calculate bins and labels
             # pd.cut automatically handles cases where n_bins might be too high for the data range
@@ -382,7 +396,7 @@ class GridAggregator:
             pd.Series: A pandas Series with assigned bin labels represented as float values, based on
             the lower bounds of the provided bins.
         """
-        series_name = series.name if series.name else 'Unnamed Series'
+        series_name = self._display_names.get(series.name, 'Unnamed Series')  # the caller knows this name
         try:
             # Custom bins are already validated in __init__
             # Create labels based on the lower bound of each bin
@@ -407,7 +421,7 @@ class GridAggregator:
         """
         # Drop rows where binning failed (NaNs in bin columns)
         initial_rows = len(self._df_long)
-        self._df_long = self._df_long.dropna(subset=[self.x_bin_col_name, self.y_bin_col_name], inplace=False)
+        self._df_long = self._df_long.dropna(subset=[self._xbc, self._ybc], inplace=False)
         if len(self._df_long) < initial_rows:
             info(f"Dropped {initial_rows - len(self._df_long)} rows due to NaN values "
                  f"in '{self.x_bin_col_name}' or '{self.y_bin_col_name}' after binning.")
@@ -420,8 +434,8 @@ class GridAggregator:
             return
 
         # Create a combined bin identifier string
-        self._df_long['BIN_COMBINED_STR'] = (self._df_long[self.x_bin_col_name].astype(str) +
-                                             "+" + self._df_long[self.y_bin_col_name].astype(str))
+        self._df_long['BIN_COMBINED_STR'] = (self._df_long[self._xbc].astype(str) +
+                                             "+" + self._df_long[self._ybc].astype(str))
 
         # Filter out bins that don't meet the minimum value requirement
         # Use 'original_index' for accurate counts per bin from the initial dataset
@@ -439,9 +453,9 @@ class GridAggregator:
             return
 
         self._df_agg_wide = pd.pivot_table(self._df_long,
-                                           index=self.y_bin_col_name,  # Rows
-                                           columns=self.x_bin_col_name,  # Columns
-                                           values=self.z_col_name,  # Values to aggregate
+                                           index=self._ybc,  # Rows
+                                           columns=self._xbc,  # Columns
+                                           values=self._zc,  # Values to aggregate
                                            aggfunc=self.aggfunc)
 
         # Restore the bins nothing fell into, for EVERY binning type. pivot_table
@@ -450,14 +464,14 @@ class GridAggregator:
         # adjacent and stretches a cell across the gap. This used to run for
         # 'custom' only, so an equal-width grid over a bimodal variable rendered
         # its empty middle as solid data.
-        expected_x = self._expected_labels.get(self.x_col_name)
-        expected_y = self._expected_labels.get(self.y_col_name)
+        expected_x = self._expected_labels.get(self._xc)
+        expected_y = self._expected_labels.get(self._yc)
         if expected_x is not None or expected_y is not None:
             self._df_agg_wide = self._df_agg_wide.reindex(
                 index=expected_y if expected_y is not None else self._df_agg_wide.index,
                 columns=expected_x if expected_x is not None else self._df_agg_wide.columns)
-            self._df_agg_wide.index.name = self.y_bin_col_name
-            self._df_agg_wide.columns.name = self.x_bin_col_name
+            self._df_agg_wide.index.name = self._ybc
+            self._df_agg_wide.columns.name = self._xbc
 
         if pd.api.types.is_numeric_dtype(self._df_agg_wide.index):
             self._df_agg_wide = self._df_agg_wide.sort_index(axis=0)
@@ -468,18 +482,34 @@ class GridAggregator:
         df_agg_long_temp = self._df_agg_wide.reset_index()
 
         # Identify value columns to melt, which are all columns except the y-bin column
-        value_vars_for_melt = [col for col in df_agg_long_temp.columns if col != self.y_bin_col_name]
+        value_vars_for_melt = [col for col in df_agg_long_temp.columns if col != self._ybc]
 
-        self._df_agg_long = df_agg_long_temp.melt(id_vars=[self.y_bin_col_name],
+        self._df_agg_long = df_agg_long_temp.melt(id_vars=[self._ybc],
                                                   value_vars=value_vars_for_melt,
-                                                  var_name=self.x_bin_col_name,
-                                                  value_name=self.z_col_name)
+                                                  var_name=self._xbc,
+                                                  value_name=self._zc)
 
         # Ensure bin columns in the long format DataFrame are float
         # This is important for consistent data types after melting, especially if some bins might be NaN originally.
-        self._df_agg_long[self.x_bin_col_name] = self._df_agg_long[self.x_bin_col_name].astype(float)
-        self._df_agg_long[self.y_bin_col_name] = self._df_agg_long[self.y_bin_col_name].astype(float)
+        self._df_agg_long[self._xbc] = self._df_agg_long[self._xbc].astype(float)
+        self._df_agg_long[self._ybc] = self._df_agg_long[self._ybc].astype(float)
 
         # Only drop NaNs for non-custom binning in the long format to retain empty custom bins
         if self.binning_type != 'custom':
-            self._df_agg_long.dropna(subset=[self.z_col_name], inplace=True)
+            self._df_agg_long.dropna(subset=[self._zc], inplace=True)
+
+        self._restore_display_names()
+
+    def _restore_display_names(self):
+        """
+        Puts the caller-facing names back on the aggregated DataFrames.
+
+        The working frame is keyed by the internal `_x`/`_y`/`_z` keys (see `__init__`),
+        everything published carries the Series names instead. Renaming last means the
+        aggregation itself is unaffected when two roles share a name.
+        """
+        self._df_agg_wide.index.name = self.y_bin_col_name
+        self._df_agg_wide.columns.name = self.x_bin_col_name
+        self._df_agg_long = self._df_agg_long.rename(columns={self._xbc: self.x_bin_col_name,
+                                                              self._ybc: self.y_bin_col_name,
+                                                              self._zc: self.z_col_name})

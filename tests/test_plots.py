@@ -676,6 +676,40 @@ if __name__ == '__main__':
     unittest.main()
 
 
+class TestHeatmapDateTimeShowLessXticklabels(unittest.TestCase):
+    """`show_less_xticklabels=True` must actually thin out the x-tick labels.
+
+    The parameter was documented, exposed by the GUI's plot settings and emitted
+    into copied code snippets, but `HeatmapDateTime.plot` only stored it — label
+    visibility was identical for True and False. (`get_xticklabels` returns only
+    the visible labels, so hiding shows up as a shorter list.)
+    """
+
+    @staticmethod
+    def _labels(orientation, show_less):
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        fig, ax = plt.subplots()
+        HeatmapDateTime(_synthetic_series(years=1), ax_orientation=orientation).plot(
+            ax=ax, fig=fig, show_less_xticklabels=show_less)
+        texts = [label.get_text() for label in ax.get_xticklabels()]
+        plt.close(fig)
+        return texts
+
+    def test_every_second_hour_label_is_hidden(self):
+        # Hourly data puts ticks on every 3rd hour.
+        self.assertEqual(self._labels("vertical", False),
+                         ['3', '6', '9', '12', '15', '18', '21'])
+        self.assertEqual(self._labels("vertical", True), ['3', '9', '15', '21'])
+
+    def test_it_also_thins_the_date_axis(self):
+        # Horizontal puts the dates on x, where the labels come from the
+        # auto date locator instead of a fixed tick list.
+        full = self._labels("horizontal", False)
+        thinned = self._labels("horizontal", True)
+        self.assertEqual(thinned, full[::2])
+        self.assertLess(len(thinned), len(full))
+
+
 class TestHeatmapYearMonthLattice(unittest.TestCase):
     """Cells must sit on a complete year x month lattice.
 

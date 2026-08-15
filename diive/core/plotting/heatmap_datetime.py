@@ -307,6 +307,13 @@ class HeatmapDateTime(HeatmapBase):
         else:
             raise NotImplementedError
 
+        # Hide every second x-label if requested
+        if self.show_less_xticklabels:
+            labels = self.ax.get_xticklabels()
+            for i, label in enumerate(labels):
+                if i % 2 != 0:
+                    label.set_visible(False)
+
         if self.show_values:
             self.show_vals_in_plot()
 
