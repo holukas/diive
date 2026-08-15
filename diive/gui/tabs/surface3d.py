@@ -740,9 +740,12 @@ class Surface3DTab(SingleVariableExplorerTab):
         keep = (finite[:-1, :-1] & finite[:-1, 1:]
                 & finite[1:, :-1] & finite[1:, 1:])
         faces = self._grid_faces(idx, keep)
-        # Continuous UVs: vertex (i,j) samples texel (i,j).
+        # Continuous UVs: vertex (i,j) samples texel (i,j). glTF/trimesh put the
+        # texture origin at the LOWER left (image row = (1-v)*(rows-1)), so the
+        # row coordinate is flipped -- without that, row i samples texel d-1-i
+        # and the baked colours come out mirrored along the date axis.
         uu, vv = np.meshgrid(np.arange(t) / max(t - 1, 1),
-                             np.arange(d) / max(d - 1, 1))
+                             1.0 - np.arange(d) / max(d - 1, 1))
         uv = np.column_stack([uu.ravel(), vv.ravel()])
         return verts, faces, uv
 
@@ -810,12 +813,14 @@ class Surface3DTab(SingleVariableExplorerTab):
 
     def _extruded_export_arrays(self, xn, yn, height, z, d, t):
         # Per-cell boxes + a UV per corner at its cell's texel centre, so every
-        # face of a bar samples one texel -> one uniform colour.
+        # face of a bar samples one texel -> one uniform colour. The row (v)
+        # coordinate is flipped for glTF/trimesh's lower-left texture origin
+        # (see _smooth_export_arrays).
         verts, faces, ii, jj = self._extruded_box_geometry(xn, yn, height, z)
         if verts is None:
             return None, None, None
         uv = np.column_stack([np.repeat((jj + 0.5) / t, 8),
-                              np.repeat((ii + 0.5) / d, 8)])
+                              np.repeat(1.0 - (ii + 0.5) / d, 8)])
         return verts, faces, uv
 
     def _export_print(self) -> None:
@@ -917,10 +922,24 @@ class Surface3DTab(SingleVariableExplorerTab):
             return
         data = self._grid_data()
         if data is None:
+            self._clear_grid_state()
             self.canvas.clear()
             self.canvas.render()
             return
         self._render_surface(*data)
+
+    def _clear_grid_state(self) -> None:
+        """Forget the stashed relief after a render that showed nothing.
+
+        The export handlers gate on ``_grid_height``, so leaving the previous
+        variable's grid in place would write *its* surface under the current
+        target's filename.
+        """
+        self._grid_xn = None
+        self._grid_yn = None
+        self._grid_height = None
+        self._grid_z = None
+        self._grid_style = None
 
     def _render_surface(self, x_values, y_values, z, frame_key, title) -> None:
         """Shared pipeline: normalise -> build mesh (extruded/smooth) -> render.
@@ -944,6 +963,7 @@ class Surface3DTab(SingleVariableExplorerTab):
 
         finite = np.isfinite(z)
         if not finite.any():
+            self._clear_grid_state()
             self.canvas.clear()
             self.canvas.render()
             return

@@ -3624,3 +3624,148 @@ def test_combine_variables_tab_reports_records_lost_to_one_sided_gaps(app):
 
     # The emitted snippet no longer carries the removed argument.
     assert "keep_overlap_only" not in (tab._python_code() or "")
+
+
+def _stub_pyvista_canvas(monkeypatch):
+    """Replace the 3-D tabs' GL canvas with a recording stub.
+
+    VTK cannot create an OpenGL window under the offscreen Qt platform, so the
+    real `Pyvista3DCanvas` can't be built in tests. Mesh construction itself is
+    pure CPU work, so a stub plotter lets the whole render pipeline run.
+    """
+    from PySide6.QtWidgets import QWidget
+
+    import diive.gui.tabs.surface3d as surface3d
+
+    class _StubPlotter:
+        def __init__(self):
+            self.meshes = []
+
+        def clear(self):
+            self.meshes.clear()
+
+        def add_mesh(self, mesh, **_kw):
+            self.meshes.append(mesh)
+
+        def show_axes(self):
+            pass
+
+    class _StubCanvas(QWidget):
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.plotter = _StubPlotter()
+
+        def on_interaction_start(self, _cb):
+            pass
+
+        def on_first_show(self, _cb):
+            pass
+
+        def clear(self):
+            self.plotter.clear()
+
+        def render(self):
+            pass
+
+        def set_view(self, *_a, **_kw):
+            pass
+
+        def apply_shadows(self, *_a, **_kw):
+            pass
+
+    monkeypatch.setattr(surface3d, "Pyvista3DCanvas", _StubCanvas)
+
+
+def test_surface3d_export_texture_rows_not_mirrored(app):
+    # The VR / PowerPoint export bakes the colormap into an image texture, one
+    # texel per grid cell with image row i = grid row i. glTF (and trimesh) put
+    # the texture origin at the LOWER left -- image row = (1 - v) * (rows - 1) --
+    # so a top-left v mapping samples row d-1-i and mirrors the colours along the
+    # date axis (an annual surface paints the winter ridge in summer colours).
+    # Both export paths (smooth sheet, extruded bars) must map row i to texel i.
+    pytest.importorskip("trimesh")
+    import numpy as np
+    from PIL import Image
+    from trimesh.visual import uv_to_color
+
+    from diive.gui.tabs.surface3d import Surface3DTab
+
+    d, t = 4, 2
+    # Monotone along the date (row) axis: each row a distinct grey, so a flipped
+    # row mapping is unmistakable.
+    z = np.tile(np.arange(d, dtype=float)[:, None], (1, t))
+    height = z / z.max()
+    xn = np.arange(t, dtype=float)
+    yn = np.arange(d, dtype=float)
+    grey = (z / z.max() * 255).astype(np.uint8)
+    image = Image.fromarray(np.repeat(grey[:, :, None], 3, axis=2))
+
+    tab = Surface3DTab()  # arrays only; no widgets needed
+    # Vertex -> grid row: the smooth sheet is one vertex per cell in row-major
+    # order, the extruded style 8 box corners per (row-major) measured cell.
+    cases = {
+        "smooth": (tab._smooth_export_arrays(xn, yn, height, np.isfinite(z), d, t),
+                   np.repeat(np.arange(d), t)),
+        "extruded": (tab._extruded_export_arrays(xn, yn, height, z, d, t),
+                     np.repeat(np.arange(d), t * 8)),
+    }
+    for style, ((_verts, faces, uv), rows) in cases.items():
+        assert faces is not None and len(uv) == len(rows), style
+        sampled = uv_to_color(uv, image)[:, 0]
+        np.testing.assert_array_equal(sampled, grey[rows, 0], err_msg=style)
+        # Guard the specific failure mode: the reversed mapping must be wrong.
+        assert not np.array_equal(sampled, grey[rows[::-1], 0]), style
+
+
+def test_surface3d_export_state_cleared_when_render_shows_nothing(app, monkeypatch):
+    # The export buttons gate on the stashed relief (`_grid_height`), so a render
+    # that produced nothing must clear it -- otherwise "VR (.glb)" / "3-D print
+    # (.stl)" write the PREVIOUS variable's surface under the current target's
+    # filename. Two paths reach that state: an all-NaN grid (Surface3DTab) and
+    # `_grid_data()` returning None (the X/Y/Z subclass, e.g. an unset role).
+    pytest.importorskip("pyvista")
+    import numpy as np
+
+    _stub_pyvista_canvas(monkeypatch)
+    from diive.gui.tabs.surface3d import Surface3DTab
+    from diive.gui.tabs.surfacexyz import SurfaceXYZTab
+
+    idx = pd.date_range("2024-06-01", periods=48 * 20, freq="30min",
+                        name="TIMESTAMP_MIDDLE")
+    df = pd.DataFrame({"A": np.sin(np.arange(len(idx)) / 10.0),
+                       "ALL_NAN": np.nan}, index=idx)
+
+    tab = Surface3DTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    QApplication.processEvents()
+    assert tab._target == "A" and tab._grid_height is not None
+
+    tab._on_select("ALL_NAN")            # canvas clears; nothing to export
+    QApplication.processEvents()
+    assert tab._target == "ALL_NAN"
+    assert tab._grid_height is None and tab._grid_z is None
+    assert tab._grid_xn is None and tab._grid_yn is None
+    assert tab._grid_style is None
+
+    # X/Y/Z subclass: the same guard has to hold when the gridding is skipped.
+    rng = np.random.RandomState(0)
+    n = 500
+    xyz = pd.DataFrame(
+        {"X": rng.rand(n) * 10, "Y": rng.rand(n) * 10, "Z": rng.randn(n)},
+        index=pd.date_range("2024-01-01", periods=n, freq="30min",
+                            name="TIMESTAMP_MIDDLE"))
+    xyz_tab = SurfaceXYZTab()
+    xyz_tab.widget()
+    xyz_tab.on_data_loaded(xyz)
+    QApplication.processEvents()
+    assert xyz_tab._grid_height is not None
+
+    # A Z role that isn't a real column (e.g. a stale restored pick) skips the
+    # gridding entirely.
+    combo = xyz_tab.picker.combos()["z"]
+    combo.addItem("NOT_A_COLUMN")
+    combo.setCurrentText("NOT_A_COLUMN")
+    QApplication.processEvents()
+    assert xyz_tab._grid_data() is None
+    assert xyz_tab._grid_height is None and xyz_tab._grid_style is None
