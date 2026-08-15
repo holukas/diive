@@ -89,7 +89,7 @@ opposite of what the code produces. Re-read it against the corrected behaviour.
 
 ---
 
-# Triage index — all 91 findings by severity
+# Triage index — all 105 findings by severity
 
 The detailed entries below stay grouped by review round and module. This index is the **fix order**.
 
@@ -131,7 +131,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L2~~ | ~~`WindDirOffset` ignores `hist_n_bins`~~ (done 2026-08-07) — also pinned the bins to the full circle | `preprocessing/corrections/offsetcorrection.py:476` |
 | ~~G1~~ | ~~Partitioning tabs run at **(0, 0) UTC** when the project site is unconfigured~~ (done 2026-08-07) — 3 of the 4 ports | `gui/tabs/_partitioning_base.py:300` |
 
-## S2 — Silently does nothing / silently loses data (28)
+## S2 — Silently does nothing / silently loses data (31)
 
 | ID | Finding | Where |
 |---|---|---|
@@ -151,6 +151,9 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L50~~ | ~~`quality_weighted_decompose` ignores the weights entirely; `summary()` prints "Quality-weighted: True"~~ (done 2026-08-07) — fake path removed | `core/times/decomposition_utils.py:100` |
 | ~~L58~~ | ~~`detect_seasonality` fabricates `primary_period=365` when the periodogram yields nothing~~ (done 2026-08-07) | `core/times/decomposition_utils.py:490` |
 | ~~L51~~ | ~~`StratifiedAnalysis` drops z-bins whose rounded label collides — 19 of 120 lost, no warning~~ (done 2026-08-07) | `analysis/decoupling.py:213` |
+| L86 | `UstarVekuriThresholdDetection.bootstrap()` has no `random_state`, so u* thresholds differ run to run | `flux/lowres/ustar_vekuri_detection.py` |
+| L87 | `classical_decompose` passes `extrapolate=` where the parameter is `extrapolate_trend`, so it always raises and the trend edges are always NaN | `core/times/decomposition_utils.py:207` |
+| L92 | `ScreeningTabBase._select` does not bump `_run_id` — G2's bug in the tab cited as the correct pattern | `gui/tabs/_screening_base.py` |
 | L76 | BUR06 uses a canopy `ra` (`u/u*^2`) where Burba 2006 specifies a per-element one (`7.4*sqrt(d/U)`, ~6x apart) and drops the retained fraction `fr`; the fitted SF absorbs both | `flux/lowres/selfheating.py:471` |
 | ~~L53~~ | ~~`CompoundExtremes` returns zero classified periods for a single year, silently~~ (done 2026-08-07) | `analysis/compoundextremes.py:168` |
 | ~~L59~~ | ~~`multi_scale_harmonics` swallows every exception~~ (done 2026-08-07) — function deleted as dead code | `analysis/harmonic.py:432` |
@@ -182,49 +185,60 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L13~~ | ~~`transform_yearmonth_matrix_to_longform` hardcodes the column names it drops~~ (done 2026-08-15) | `core/dfun/frames.py:644` |
 | ~~L22~~ | ~~`MultiDataFileReader` raises `AttributeError` when every file is empty~~ (done 2026-08-15) | `core/io/filereader.py:320` |
 | ~~G2~~ | ~~`_outlier_base._on_done` can `KeyError` when the dataset changes mid-run~~ (done 2026-08-15) — **has a silent half too**: a narrowed frame is adopted with no exception at all | `gui/tabs/_outlier_base.py:666` |
-| L79 | `transform_yearmonth_matrix_to_longform` rejects non-contiguous month columns — a seasonal record from its own producer raises; 4th instance of the contiguity family (L61/L63) | `core/dfun/frames.py` |
-| L81 | `TimeLagAnalysis`: a `histogram_startbin`/`endbin` range excluding every lag empties `results`, then `detect_peak_range` fails | `flux/lowres/timelag_analysis.py` |
+| ~~L79~~ | ~~`transform_yearmonth_matrix_to_longform` rejects non-contiguous month columns — a seasonal record from its own producer raises; 4th instance of the contiguity family (L61/L63)~~ (done 2026-08-15) | `core/dfun/frames.py` |
+| ~~L81~~ | ~~`TimeLagAnalysis`: a `histogram_startbin`/`endbin` range excluding every lag empties `results`, then `detect_peak_range` fails~~ (done 2026-08-15) | `flux/lowres/timelag_analysis.py` |
 
-## S4 — Contract mismatch (15)
-
-| ID | Finding | Where |
-|---|---|---|
-| L15 | `flag_ssitc_eddypro_test` performs no conversion despite documenting one | `preprocessing/qaqc/eddyproflags.py:490` |
-| L41 | `ScopPhysics` documents an RF + MDV gap-fill that does not exist | `flux/lowres/selfheating.py:152` |
-| L44 | `TimeLagAnalysis` docstring states three parameter facts the code contradicts | `flux/lowres/timelag_analysis.py:90` |
-| L57 | `reconstruct_from_components` forces the trend's NaN onto reconstructions excluding the trend | `core/times/decomposition_utils.py:420` |
-| L60 | `seasonality_strength` formula and `'iterations'` return value both mis-documented | `analysis/seasonaltrend.py:174` |
-| L62 | `show_less_xticklabels` accepted and documented by `HeatmapDateTime` but never applied | `core/plotting/heatmap_datetime.py:245` |
-| L21 | `crosscorr` omits dates for three early-outs while others write NaN | `preprocessing/qaqc/detect_timestamp_shifts.py` |
-| L18 | `FeatureEngineer` rolling stages re-engineer already-engineered columns; other stages skip them | `core/ml/feature_engineer.py` |
-| L9 | `GridAggregator` keys its frame by Series name — two roles sharing a name collide | `analysis/gridaggregator.py:119` |
-| L11 | `JointUncertaintyPAS20` cumulative scenario term not masked to available flux | `flux/lowres/uncertainty.py:867` |
-| L6 | Random-uncertainty method 4 uses an asymmetric neighbour window (5 below, 4 above) | `flux/lowres/uncertainty.py:708` |
-| L8 | `FlagQCF`'s documented "QCF is NaN if no flag available" branch is unreachable | `preprocessing/qaqc/qcf.py:640` |
-| G3 | Pinned tabs are not actually frozen against added columns | `gui/app.py:899` |
-| G6 | `WorkerRunner` clears `is_running` before emitting — re-entry window | `gui/widgets/worker.py:73` |
-| L78 | `percent_matching`/`confidence` parsed back out of a `'{:.0f}%'` string, so 99.9% reports as 100.0 | `core/times/times.py` |
-
-## S5 — Cosmetic / dead / latent (16)
+## S4 — Contract mismatch (20)
 
 | ID | Finding | Where |
 |---|---|---|
-| L10 | `vectorize_timestamps` `.SEASON` as `Int64` forces object-dtype arrays into every ML fit | `core/times/times.py:1245` |
-| L12 | `LocalSD`: values exactly on the limit are in neither `ok` nor `rejected` | `preprocessing/outlier_detection/localsd.py:279` |
-| L20 | `lagged_variants` edge-fill is conditional but documented as unconditional | `variables/temporal.py:461` |
-| L23 | `sort_multiindex_columns_names` mutates the list it iterates (reverses moved columns) | `core/dfun/frames.py:510` |
-| L24 | Nested-quote f-string prints a literal `{limit}`; `_calculate_gap_sizes` is dead | `gapfilling/interpolate.py:143` |
-| L25 | `_extract_and_convert_flag_from_multidigit` turns a scalar `0` code into NaN | `preprocessing/qaqc/eddyproflags.py:47` |
-| L35 | USTAR docstring examples import from the wrong namespace | `flux/lowres/ustar_bootstrap.py:133` |
-| L70 | Rolling cell aggregator uses an `n+1`-row window for even `n` | `gui/tabs/surface3d.py:98` |
-| L71 | `convert_ts_to_timezone` cannot accept the `DatetimeIndex` its docstring promises | `core/io/db/influx/common.py:59` |
-| G5 | `_screening_base._run` starts unbounded concurrent worker threads | `gui/tabs/_screening_base.py:729` |
-| G7 | `_compute_payload` writes tab state from the worker thread | `gui/tabs/_outlier_base.py:463` |
-| G8 | `save_config` catches only `OSError` | `gui/config.py:36` |
-| G9 | Project load transiently materialises the previous session's event columns | `gui/app.py:1372` |
-| L77 | `MultiDataFileReader.metadata_df`'s guard tests `self._data_df`, the wrong attribute | `core/io/filereader.py` |
-| L80 | `UstarVekuriThresholdDetection.bootstrap_results_` initialised, never read | `flux/lowres/ustar_vekuri_detection.py` |
-| L82 | Exceptions in Qt-invoked slots are swallowed — GUI tests driving via signals may be weaker than they look | `tests/test_gui.py` (methodology) |
+| ~~L15~~ | ~~`flag_ssitc_eddypro_test` performs no conversion despite documenting one~~ (done 2026-08-15) | `preprocessing/qaqc/eddyproflags.py:490` |
+| ~~L41~~ | ~~`ScopPhysics` documents an RF + MDV gap-fill that does not exist~~ (done 2026-08-15) | `flux/lowres/selfheating.py:152` |
+| ~~L44~~ | ~~`TimeLagAnalysis` docstring states three parameter facts the code contradicts~~ (done 2026-08-15) | `flux/lowres/timelag_analysis.py:90` |
+| ~~L57~~ | ~~`reconstruct_from_components` forces the trend's NaN onto reconstructions excluding the trend~~ (done 2026-08-15) | `core/times/decomposition_utils.py:420` |
+| ~~L60~~ | ~~`seasonality_strength` formula and `'iterations'` return value both mis-documented~~ (done 2026-08-15) | `analysis/seasonaltrend.py:174` |
+| ~~L62~~ | ~~`show_less_xticklabels` accepted and documented by `HeatmapDateTime` but never applied~~ (done 2026-08-15) | `core/plotting/heatmap_datetime.py:245` |
+| ~~L21~~ | ~~`crosscorr` omits dates for three early-outs while others write NaN~~ (done 2026-08-15) | `preprocessing/qaqc/detect_timestamp_shifts.py` |
+| ~~L18~~ | ~~`FeatureEngineer` rolling stages re-engineer already-engineered columns; other stages skip them~~ (done 2026-08-15) | `core/ml/feature_engineer.py` |
+| ~~L9~~ | ~~`GridAggregator` keys its frame by Series name — two roles sharing a name collide~~ (done 2026-08-15) | `analysis/gridaggregator.py:119` |
+| ~~L11~~ | ~~`JointUncertaintyPAS20` cumulative scenario term not masked to available flux~~ (done 2026-08-15) | `flux/lowres/uncertainty.py:867` |
+| ~~L6~~ | ~~Random-uncertainty method 4 uses an asymmetric neighbour window (5 below, 4 above)~~ (done 2026-08-15) | `flux/lowres/uncertainty.py:708` |
+| ~~L8~~ | ~~`FlagQCF`'s documented "QCF is NaN if no flag available" branch is unreachable~~ (done 2026-08-15) | `preprocessing/qaqc/qcf.py:640` |
+| ~~G3~~ | ~~Pinned tabs are not actually frozen against added columns~~ (done 2026-08-15) | `gui/app.py:899` |
+| ~~G6~~ | ~~`WorkerRunner` clears `is_running` before emitting — re-entry window~~ (done 2026-08-15) | `gui/widgets/worker.py:73` |
+| ~~L78~~ | ~~`percent_matching`/`confidence` parsed back out of a `'{:.0f}%'` string, so 99.9% reports as 100.0~~ (done 2026-08-15) | `core/times/times.py` |
+| L83 | `histogram_startbin`/`endbin` are seconds but named as bin indices (rename is breaking) | `flux/lowres/timelag_analysis.py` |
+| L84 | `ignore_fringe_bins` still described as "bin indices" in `__init__` (they are counts) | `flux/lowres/timelag_analysis.py` |
+| L88 | `detect_seasonality`'s `'strength'` is a peak-power ratio, documented as a variance ratio | `core/times/decomposition_utils.py` |
+| L91 | `hexbin.py` accepts, documents and forwards `show_less_xticklabels`, and nothing applies it | `core/plotting/hexbin.py:272` |
+| L95 | `ScopPhysics.fct_unsc_gf` is `'FCT_UNSC_gfRF'` though the fill is XGBoost; rename is breaking | `flux/lowres/selfheating.py` |
+
+## S5 — Cosmetic / dead / latent (22)
+
+| ID | Finding | Where |
+|---|---|---|
+| ~~L10~~ | ~~`vectorize_timestamps` `.SEASON` as `Int64` forces object-dtype arrays into every ML fit~~ (done 2026-08-15) | `core/times/times.py:1245` |
+| ~~L12~~ | ~~`LocalSD`: values exactly on the limit are in neither `ok` nor `rejected`~~ (done 2026-08-15) | `preprocessing/outlier_detection/localsd.py:279` |
+| ~~L20~~ | ~~`lagged_variants` edge-fill is conditional but documented as unconditional~~ (done 2026-08-15) | `variables/temporal.py:461` |
+| ~~L23~~ | ~~`sort_multiindex_columns_names` mutates the list it iterates (reverses moved columns)~~ (done 2026-08-15) | `core/dfun/frames.py:510` |
+| ~~L24~~ | ~~Nested-quote f-string prints a literal `{limit}`; `_calculate_gap_sizes` is dead~~ (done 2026-08-15) | `gapfilling/interpolate.py:143` |
+| ~~L25~~ | ~~`_extract_and_convert_flag_from_multidigit` turns a scalar `0` code into NaN~~ (done 2026-08-15) | `preprocessing/qaqc/eddyproflags.py:47` |
+| ~~L35~~ | ~~USTAR docstring examples import from the wrong namespace~~ (done 2026-08-15) | `flux/lowres/ustar_bootstrap.py:133` |
+| ~~L70~~ | ~~Rolling cell aggregator uses an `n+1`-row window for even `n`~~ (done 2026-08-15) | `gui/tabs/surface3d.py:98` |
+| ~~L71~~ | ~~`convert_ts_to_timezone` cannot accept the `DatetimeIndex` its docstring promises~~ (done 2026-08-15) | `core/io/db/influx/common.py:59` |
+| ~~G5~~ | ~~`_screening_base._run` starts unbounded concurrent worker threads~~ (done 2026-08-15) | `gui/tabs/_screening_base.py:729` |
+| ~~G7~~ | ~~`_compute_payload` writes tab state from the worker thread~~ (done 2026-08-15) | `gui/tabs/_outlier_base.py:463` |
+| ~~G8~~ | ~~`save_config` catches only `OSError`~~ (done 2026-08-15) | `gui/config.py:36` |
+| ~~G9~~ | ~~Project load transiently materialises the previous session's event columns~~ (done 2026-08-15) | `gui/app.py:1372` |
+| ~~L77~~ | ~~`MultiDataFileReader.metadata_df`'s guard tests `self._data_df`, the wrong attribute~~ (done 2026-08-15) | `core/io/filereader.py` |
+| ~~L80~~ | ~~`UstarVekuriThresholdDetection.bootstrap_results_` initialised, never read~~ (done 2026-08-15) | `flux/lowres/ustar_vekuri_detection.py` |
+| ~~L82~~ | ~~Exceptions in Qt-invoked slots are swallowed — GUI tests driving via signals may be weaker than they look~~ (done 2026-08-15) — the guard uncovered a real leaked-slot bug 44 tests were passing over | `tests/test_gui.py` (methodology) |
+| L85 | No doctest runner anywhere — docstring examples are never executed (L35 had been broken twice over) | `tests/` (methodology) |
+| L89 | `-9999` at position 6 still reads as a passing flag | `preprocessing/qaqc/eddyproflags.py` |
+| L90 | `docs/auto_examples/flux/uncertainty.*` stale generated copies | `docs/auto_examples/` |
+| L93 | `EventManager.load_dict({})` early-returns without clearing, so previous events survive | `gui/events.py` |
+| L94 | `crosscorr`'s `len(pot_arr) == 0` branch is unreachable dead code | `preprocessing/qaqc/detect_timestamp_shifts.py` |
+| L96 | `ScatterXY` uses `plt.colorbar` instead of `ax.figure.colorbar` | `core/plotting/scatter.py:169` |
 
 ## Cross-cutting observations
 
@@ -453,7 +467,7 @@ uncertainty.
 
 ---
 
-### [ ] L6. Random-uncertainty method 4 uses an asymmetric neighbour window
+### [x] L6. Random-uncertainty method 4 uses an asymmetric neighbour window
 
 `diive/flux/lowres/uncertainty.py:708-710`
 
@@ -502,7 +516,7 @@ input is NaN) or fix the docstrings — currently they contradict the code in ni
 
 ---
 
-### [ ] L8. `FlagQCF`: "QCF is NaN if no flag is available" is unreachable
+### [x] L8. `FlagQCF`: "QCF is NaN if no flag is available" is unreachable
 
 `diive/preprocessing/qaqc/qcf.py:640-645`, docstring at `:222`
 
@@ -514,7 +528,7 @@ describe a state that cannot occur.
 
 ## Library — lower severity
 
-### [ ] L9. `GridAggregator` builds its frame from a dict keyed by Series names
+### [x] L9. `GridAggregator` builds its frame from a dict keyed by Series names
 
 `diive/analysis/gridaggregator.py:119-123`
 
@@ -529,7 +543,7 @@ collide too. Harmless when the two roles are literally the same column (the comm
 3-D X/Y/Z surface tab), wrong when two *different* Series happen to share a name. `ScatterXY`
 already guards exactly this with internal `_x`/`_y`/`_z` keys — apply the same pattern here.
 
-### [ ] L10. `vectorize_timestamps` makes `.SEASON` a nullable `Int64`, forcing object-dtype arrays
+### [x] L10. `vectorize_timestamps` makes `.SEASON` a nullable `Int64`, forcing object-dtype arrays
 
 `diive/core/times/times.py:1245` (`insert_season` returns `.astype('Int64')`)
 
@@ -539,13 +553,13 @@ One nullable-extension column turns the whole frame's `.to_numpy()` into **objec
 so nothing breaks — but every run pays a hidden object→float conversion. A plain `int` cast (or
 `.astype('float64')`) avoids it.
 
-### [ ] L11. `JointUncertaintyPAS20`: cumulative scenario term is not masked to available flux
+### [x] L11. `JointUncertaintyPAS20`: cumulative scenario term is not masked to available flux
 
 `diive/flux/lowres/uncertainty.py:867-871` — the random term uses `.where(flux.notna())`, the
 scenario term does not. If the scenario columns have NaN where the flux does not (or vice versa),
 the two cumulative terms sum over different record sets.
 
-### [ ] L12. `LocalSD`: values exactly on the limit are in neither `ok` nor `rejected`
+### [x] L12. `LocalSD`: values exactly on the limit are in neither `ok` nor `rejected`
 
 `diive/preprocessing/outlier_detection/localsd.py:279-282` — `ok` uses `<`/`>`, `rejected` uses
 `>`/`<`, so an exact-limit record gets a NaN flag for that iteration (resolving to 0 via L7).
@@ -647,7 +661,7 @@ staleness check (`:710-712`, `:785`) — that pattern is the model to copy.
 
 ---
 
-### [ ] G3. Pinned tabs are not actually frozen against added columns
+### [x] G3. Pinned tabs are not actually frozen against added columns
 
 `diive/gui/app.py:899` (`_add_features`) and `:1035` (`_sync_event_columns`)
 
@@ -707,13 +721,13 @@ tab pointing at a *different* input than was saved, with no indication. Affects 
 
 Suggested fix: return a list of unrestored keys and surface it in the tab's status line.
 
-### [ ] G5. `_screening_base._run` starts an unbounded number of concurrent worker threads
+### [x] G5. `_screening_base._run` starts an unbounded number of concurrent worker threads
 
 `diive/gui/tabs/_screening_base.py:729-733` — no `is_running` guard. Stale *results* are correctly
 discarded via `run_id`, but rapid chain edits stack up CPU-heavy threads that all run to completion.
 `WorkerRunner` (used by the other tabs) already has the guard.
 
-### [ ] G6. `WorkerRunner` clears `is_running` before emitting
+### [x] G6. `WorkerRunner` clears `is_running` before emitting
 
 `diive/gui/widgets/worker.py:73` and `:80` — `self._running = False` precedes the queued
 cross-thread `emit`, so `is_running` reads False during the window before the GUI thread processes
@@ -722,21 +736,21 @@ cross-thread `emit`, so `is_running` reads False during the window before the GU
 the first. Also, `str(err)` is empty for some exception types, leaving a bare "Failed: " in the
 status line.
 
-### [ ] G7. `_compute_payload` writes tab state from the worker thread
+### [x] G7. `_compute_payload` writes tab state from the worker thread
 
 `diive/gui/tabs/_outlier_base.py:463` — `self._live_is_daytime = ...` is assigned off the GUI
 thread, in a method whose own call site comments that "the worker must not read live Qt widgets".
 Single attribute assignment so it's GIL-safe in practice, but it contradicts the stated contract;
 carry it in the returned payload instead.
 
-### [ ] G8. `save_config` only catches `OSError`
+### [x] G8. `save_config` only catches `OSError`
 
 `diive/gui/config.py:36-41` — a non-JSON-serializable value anywhere in the persisted blob (theme,
 site, events, `variable_metadata`) raises `TypeError` out of `MainWindow.closeEvent`. All current
 producers emit plain types, so this is latent, not active. Catching `(OSError, TypeError, ValueError)`
 would match the module's stated "all failures are swallowed" contract.
 
-### [ ] G9. Project load transiently materialises the *previous* session's event columns
+### [x] G9. Project load transiently materialises the *previous* session's event columns
 
 `diive/gui/app.py:1372` vs `:1380` — `_set_data` calls `_sync_event_columns()` while
 `events.manager` still holds the outgoing session's events, so their `EVENT_*` columns are created
@@ -798,7 +812,7 @@ correct the docstring and warn in the GUI.
 
 ---
 
-### [ ] L15. `flag_ssitc_eddypro_test` performs no conversion despite documenting one
+### [x] L15. `flag_ssitc_eddypro_test` performs no conversion despite documenting one
 
 `diive/preprocessing/qaqc/eddyproflags.py:490`
 
@@ -921,7 +935,7 @@ give the DataFrame duplicate column labels.
 
 Suggested fix: raise on a collision in `MetadataStore.rename`.
 
-### [ ] L18. `FeatureEngineer`: the rolling stages re-engineer already-engineered columns, the others don't
+### [x] L18. `FeatureEngineer`: the rolling stages re-engineer already-engineered columns, the others don't
 
 `diive/core/ml/feature_engineer.py` — `_rolling_features` / `_rolling_features_advanced` select
 `feature_cols` with no `.`-prefix filter, while `_differencing_features`, `_ema_features`,
@@ -952,7 +966,7 @@ and only says so via `detail()` (DEBUG level, verbose ≥ 3). Real flux drivers 
 have gaps, so a user who enables STL features at the default verbosity gets no STL features and no
 visible indication. Promote the skip message to `warn()`, or gap-fill the driver before decomposing.
 
-### [ ] L20. `lagged_variants`: the edge-fill is conditional but documented as unconditional
+### [x] L20. `lagged_variants`: the edge-fill is conditional but documented as unconditional
 
 `diive/variables/temporal.py:461` — the shift-induced NaNs at the series edges are backfilled only
 when the source column is **completely gap-free** (`n_missing_vals_before == 0`). For any real
@@ -963,7 +977,7 @@ them to the flag-2 fallback. The closing verbose message states unconditionally 
 The behaviour is defensible (don't fill genuine gaps) and is already documented as a *consequence*
 in the SWIN class docstring; only the message here is wrong.
 
-### [ ] L21. `crosscorr` omits dates instead of writing NaN for three of its early-outs
+### [x] L21. `crosscorr` omits dates instead of writing NaN for three of its early-outs
 
 `diive/preprocessing/qaqc/detect_timestamp_shifts.py` — the `pot_sum < 100` and clearness-index
 branches write `{'shift_minutes': nan, 'max_corr': nan}`, but the `(pot > 0).sum() < 5`,
@@ -993,7 +1007,7 @@ to a full date index get holes where they expect NaN.
 (or the file list is empty), and `sort_multiindex_columns_names(df=None, ...)` then fails with
 `'NoneType' object has no attribute 'columns'` instead of a clear "no readable data" error.
 
-### [ ] L23. `sort_multiindex_columns_names` mutates the list it is iterating
+### [x] L23. `sort_multiindex_columns_names` mutates the list it is iterating
 
 `diive/core/dfun/frames.py:510` and `:516`
 
@@ -1007,7 +1021,7 @@ for ix, col in enumerate(cols_list):
 moved columns end up in **reverse** order at the front, in both the `priority_vars` block and the
 dot-prefix block. Cosmetic (column ordering only), but the pattern is a trap for the next edit.
 
-### [ ] L24. `interpolate.py`: a nested-quote f-string prints a literal `{limit}`
+### [x] L24. `interpolate.py`: a nested-quote f-string prints a literal `{limit}`
 
 `diive/gapfilling/interpolate.py:143` and `:183`
 
@@ -1021,7 +1035,7 @@ interpolated: the verbose report header reads `Gap Analysis (limit={limit})`.
 Also in this module: `_calculate_gap_sizes` (`:19`) is dead — nothing calls it; the module reads
 `GAP_LENGTH` off `GapFinder` directly. Flagging, not removing.
 
-### [ ] L25. `_extract_and_convert_flag_from_multidigit` turns a scalar `0` code into NaN
+### [x] L25. `_extract_and_convert_flag_from_multidigit` turns a scalar `0` code into NaN
 
 `diive/preprocessing/qaqc/eddyproflags.py:47-52` — the float→string round-trip makes `0` become
 `'0.0'`, so `str[1]` reads `'.'` and `to_numeric(errors='coerce')` yields NaN rather than flag 0.
@@ -1294,7 +1308,7 @@ The seven in the u\* files were fixed with L29; these are the rest. Two ways to 
 one line but changes what every existing call does, so it needs a deliberate decision — and the
 CLAUDE.md convention should be corrected either way, since following it is what causes this.
 
-**[ ] L35. USTAR docstring examples import from the wrong namespace**
+**[x] L35. USTAR docstring examples import from the wrong namespace**
 `ustar_bootstrap.py:133`, `ustar_vekuri_detection.py:80` — `dv.UstarBootstrapThresholds`,
 `dv.UstarMovingPointDetection`, `dv.UstarVekuriThresholdDetection` all live on `dv.flux`; the
 snippets raise `AttributeError` as written.
@@ -1485,7 +1499,7 @@ Not to be confused with L46 (the dilution factor), which is settled: 2006 Eq. (8
 and the LI-7500 poster all carry `(1 + 1.6077 rho_v/rho_d)`, and 2006 even quantifies it as
 "typically very small, on the order of 0.5-2%" — diive measured +1.16 % on CH-LAE.
 
-**[ ] L41. `ScopPhysics` documents an RF + MDV gap-fill that does not exist**
+**[x] L41. `ScopPhysics` documents an RF + MDV gap-fill that does not exist**
 `selfheating.py:152` — the class docstring promises "a hybrid approach using Random Forest and Mean
 Diurnal Variation (MDV)", `stats()` prints "-> Imputed (RF + MDV)" (`:311`) and the output column is
 `FCT_UNSC_gfRF` (`:127`). The implementation is XGBoost-only with no MDV stage, and (L36) imputes
@@ -1523,7 +1537,7 @@ values leaves nothing and `peakbins[0]` raises a bare `IndexError`. `analyze_all
 `plot_all_gases` catch only `ValueError`, so the whole batch aborts — contradicting their
 docstrings' "Failed analyses … print warnings but do not raise exceptions".
 
-**[ ] L44. `TimeLagAnalysis` class docstring states three parameter facts the code contradicts**
+**[x] L44. `TimeLagAnalysis` class docstring states three parameter facts the code contradicts**
 `timelag_analysis.py:90` — (a) `ignore_fringe_bins` "Default: None" but the code defaults to
 `[5, 10]`; (b) `zoom_margin` "Default: [0.5, 0.8]" but code and `__init__` docstring both say
 `[0.5, 1.5]`; (c) `histogram_startbin`/`histogram_endbin` are documented as bin *indices* but are
@@ -1744,7 +1758,7 @@ seasons (`regime_dependence=False`); against each model's own floor it is weak/w
 so `plot(frequencies, amplitudes)` raises. `harmonic_analysis` prepends a zero to fix exactly this —
 the two functions disagree.
 
-**[ ] L57. `reconstruct_from_components` forces the trend's NaN onto reconstructions that exclude the trend**
+**[x] L57. `reconstruct_from_components` forces the trend's NaN onto reconstructions that exclude the trend**
 `decomposition_utils.py:420` — `result[trend.isna()] = np.nan` runs unconditionally, ignoring
 `components_to_use`. A seasonal-only reconstruction from a classical decomposition is blanked at the
 `(period-1)//2` edges where the trend is NaN by design, even though the seasonal component is fully
@@ -1779,7 +1793,7 @@ Related: the `signal.hamming` fallback at `:68` / `:330` is dead on scipy ≥ 1.
 longer exists), so a bad `window` name raises `AttributeError` instead of falling back, every period
 fails, and the caller receives `{'scales': []}` as if the analysis had run and found nothing.
 
-**[ ] L60. Two more docstring claims the code does not honour**
+**[x] L60. Two more docstring claims the code does not honour**
 `seasonaltrend.py:174` — `seasonality_strength` documents "Ratio of seasonal variance to total
 variance of **trend** + residual" but computes `var_seasonal / (var_seasonal + var_residual)`; the
 trend is not involved. `decomposition_utils.py:59` — the returned `'iterations'` is `decomp.nobs`
@@ -1813,7 +1827,7 @@ February's mean is painted across the region labelled March–September. `Heatma
 (`TimestampSanitizer(regularize=True)` guarantees a complete lattice); `HeatmapXYZ._prepare_data`
 (`heatmap_xyz.py:269`) shares the construction — see L63.
 
-**[ ] L62. `show_less_xticklabels` is accepted and documented by `HeatmapDateTime` but never applied** ⚠ **[verified independently]**
+**[x] L62. `show_less_xticklabels` is accepted and documented by `HeatmapDateTime` but never applied** ⚠ **[verified independently]**
 `core/plotting/heatmap_datetime.py:245` — the parameter is documented, forwarded to `super().plot()`
 and stored (`heatmap_base.py:304`), but only `HeatmapYearMonth` reads it (`:537`). Label visibility
 is identical with `True` and `False`. The GUI exposes the same checkbox for both heatmap types and
@@ -1976,12 +1990,12 @@ empty Series when a column has no valid values (normal for a scenario column tha
 Same pattern at `cumulative.py:186` in `CumulativeYear`. `IndexError: single positional indexer is
 out-of-bounds`.
 
-**[ ] L70. Rolling cell aggregator uses an `n+1`-row window for even `n`**
+**[x] L70. Rolling cell aggregator uses an `n+1`-row window for even `n`**
 `gui/tabs/surface3d.py:98` — `z[max(0, i-half) : i+half+1]` with `half = n//2` gives five rows for
 `n = 4`. The docstring says "a centred rolling window of `n` rows" and the tooltip says "the window
 width"; every even setting of the "Y cell (days)" spin box smooths one day wider than requested.
 
-**[ ] L71. `convert_ts_to_timezone` cannot accept the `DatetimeIndex` its docstring promises**
+**[x] L71. `convert_ts_to_timezone` cannot accept the `DatetimeIndex` its docstring promises**
 `core/io/db/influx/common.py:59` — the body calls `.dt.tz_convert(...)`, which exists only on a
 Series. The one in-tree caller passes a Series, so this is documentation-only — but the function is
 exported from the influx package and reads as index-safe.
@@ -2115,21 +2129,21 @@ Six defects noticed *adjacent* to an S3 fix and deliberately left alone, so that
 surgical. Each was reported by the agent that found it rather than folded into an unrelated commit.
 None is reproduced beyond what its note says.
 
-**[ ] L77. `MultiDataFileReader.metadata_df` tests the wrong attribute**
+**[x] L77. `MultiDataFileReader.metadata_df` tests the wrong attribute**
 `core/io/filereader.py` — the `metadata_df` property's emptiness guard checks `self._data_df`, not
 `self._metadata_df`, so it reports on the wrong frame. Found while fixing L22, and now unreachable
 via that path (L22's `ValueError` fires first), which is exactly why it should be recorded rather
 than left to be rediscovered. Both properties also still carry bare
 `raise Exception('data is empty')` fallbacks.
 
-**[ ] L78. `percent_matching` / `confidence` are recovered by parsing a formatted string**
+**[x] L78. `percent_matching` / `confidence` are recovered by parsing a formatted string**
 `core/times/times.py` — `DetectFrequency` stores its match rate as `'{:.0f}% occurrence'` and later
 parses the number back out of that string, so both values are rounded to whole percent: a genuine
 99.9% is reported as `100.0`, indistinguishable from a perfectly regular record. Found while fixing
 L3, which corrected the *denominator* feeding this; the rounding is a separate defect and survives
 the fix. S4 — the number is defensible, the precision it implies is not.
 
-**[ ] L79. `transform_yearmonth_matrix_to_longform` rejects non-contiguous month columns**
+**[x] L79. `transform_yearmonth_matrix_to_longform` rejects non-contiguous month columns**
 `core/dfun/frames.py` — with non-contiguous months `pd.infer_freq` returns `None`, so the
 `freqstr == 'MS'` guard trips and the function raises
 `ValueError('Failed building monthly timestamp for long-form time series.')`. Reachable from its own
@@ -2141,22 +2155,109 @@ docstring's own example (`MONTH 1 2 3`) hits the same path. Found while fixing L
 "the aggregator kept only the bins that occurred, and the consumer treated them as contiguous"
 (L61 `HeatmapYearMonth`, L63 `GridAggregator`). Worth fixing as that family rather than one-off.
 
-**[ ] L80. `UstarVekuriThresholdDetection.bootstrap_results_` is never read**
+**[x] L80. `UstarVekuriThresholdDetection.bootstrap_results_` is never read**
 `flux/lowres/ustar_vekuri_detection.py` — initialised in `__init__` and never assigned or read;
 `bootstrap()` builds its own local `boot_results`. Dead attribute, not deleted per the
 "mention, don't delete" rule. Found while fixing L33.
 
-**[ ] L81. `TimeLagAnalysis`: a bin range excluding every lag empties `results`**
+**[x] L81. `TimeLagAnalysis`: a bin range excluding every lag empties `results`**
 `flux/lowres/timelag_analysis.py` — with `histogram_startbin`/`histogram_endbin` set so that no lag
 value falls inside, `results` ends up empty and `detect_peak_range` fails on the zero-size array.
 A second route to the emptiness L43 fixed for `ignore_fringe_bins`, through different parameters.
 Overlaps L44's territory (the `TimeLagAnalysis` docstring/parameter contract), so it belongs with
 that entry.
 
-**[ ] L82. An exception inside a Qt-invoked slot is swallowed, so GUI tests can pass over a crash**
+**[x] L82. An exception inside a Qt-invoked slot is swallowed, so GUI tests can pass over a crash**
 `gui/` (methodology, not one file) — PySide6's signal machinery absorbs exceptions raised inside a
 slot it invokes, so a test that exercises a widget *through a signal* (e.g. toggling a checkbox whose
 `toggled` handler raises) sees no failure. G2's regression test calls `_rerender_last()` directly for
 this reason. **This casts doubt on any existing GUI test that drives behaviour via signals and
 asserts only that nothing raised** — those tests may be weaker than they look. Worth an audit of
 `tests/test_gui.py` for that pattern. Found while fixing G2.
+
+---
+
+# Round 5 — found while fixing S4/S5 (2026-08-15)
+
+Fourteen defects noticed *adjacent* to a fix and deliberately left alone. Three are S2 (silent), and
+those three are the ones to take first.
+
+**[ ] L86. `UstarVekuriThresholdDetection.bootstrap()` is not reproducible**
+`flux/lowres/ustar_vekuri_detection.py` — calls `df.sample` with no `random_state`, so the bootstrap
+percentiles differ run to run (observed: one season's p50 moved 0.1634 -> 0.1488 across two runs).
+These thresholds feed u\* filtering and therefore the whole flux chain. CLAUDE.md is explicit that the
+rf/xgb seeds are pinned *because* output drifts without them; this path was missed. Found while fixing L80.
+
+**[ ] L87. `classical_decompose` passes a parameter name that does not exist**
+`core/times/decomposition_utils.py:207` — passes `extrapolate='freq'` to `seasonal_decompose`, whose
+parameter is `extrapolate_trend`. It therefore *always* raises `TypeError` and *always* falls into the
+no-extrapolation fallback, so the trend edges are unconditionally NaN. A silently-ignored argument, the
+same species as L2. This dead kwarg is what made **L57** visible on real data. Found while fixing L57.
+
+**[ ] L92. `ScreeningTabBase._select` does not bump `_run_id`**
+`gui/tabs/_screening_base.py` — switching the selected variable mid-run can still adopt the previous
+variable's chain result, with no exception. This is **G2's bug, in the tab this document cites as the
+correct `run_id` pattern to copy**. Found while fixing G5.
+
+**[ ] L83. `histogram_startbin` / `histogram_endbin` are seconds, not bin indices**
+`flux/lowres/timelag_analysis.py` — L44 corrected the types and docstrings, but the parameter *names*
+still say "bin". Renaming is a public-API change, deferred.
+
+**[ ] L84. `ignore_fringe_bins` described as "bin indices" in `__init__`**
+`flux/lowres/timelag_analysis.py` — `Histogram` treats `[i, j]` as *counts* of leading/trailing bins to
+drop. L44 fixed the class docstring; the same loose wording survives in `__init__`.
+
+**[ ] L85. Docstring examples are not executed by anything**
+`tests/` — there is no doctest runner (`grep -rn doctest` over the config and tests is empty), and
+`test_docstrings.py` only tests the tooltip-extraction helpers. **L35 was a docstring example that had
+been broken twice over** (wrong namespace *and* a column that does not exist in the example data) and
+nothing caught it. A doctest or example-execution pass would have.
+
+**[ ] L88. `detect_seasonality`'s `'strength'` is mis-documented**
+`core/times/decomposition_utils.py` — documented as "seasonal var / total var", actually a
+peak-power / total-power ratio. Same species as L60(a), not named in that entry. Found while fixing L60.
+
+**[ ] L89. `-9999` at position 6 yields flag 0**
+`preprocessing/qaqc/eddyproflags.py` — L25 fixed the scalar-`0` case narrowly and deliberately did not
+touch the float->string round-trip; a junk `-9999` value still reads as a passing flag at some positions.
+
+**[ ] L90. `docs/auto_examples/flux/uncertainty.*` are stale**
+Generated copies still describe method 2 as "±5 days" and method 4 as "5 nearest fluxes" — both wrong,
+the latter now doubly so after L6. Belongs to the `docs/` sweep in *Before this work is called done*.
+
+**[ ] L91. `hexbin.py` also accepts `show_less_xticklabels` and never applies it**
+`core/plotting/hexbin.py:272` — accepts, documents and forwards it, and nothing applies it. L62's exact
+defect in a second file. Found while fixing L62.
+
+**[ ] L93. `EventManager.load_dict({})` does not clear**
+`gui/events.py` — early-returns on an empty dict, so opening a project with no events keeps the previous
+session's events. Adjacent to G9. Found while fixing G9.
+
+**[ ] L94. `crosscorr`'s `len(pot_arr) == 0` branch is unreachable**
+`preprocessing/qaqc/detect_timestamp_shifts.py` — `window` always spans at least the sun-up rows, which
+the preceding check guarantees non-empty. L21 made it consistent anyway; it is dead code.
+
+**[ ] L95. `ScopPhysics.fct_unsc_gf` carries a legacy RF name**
+`flux/lowres/selfheating.py` — `ColumnConfig.fct_unsc_gf` is `'FCT_UNSC_gfRF'` while the fill is
+XGBoost, so `physics.fct_unsc_gf.name` is `'FCT_UNSC_gfXG'` but `get_results()` carries `FCT_UNSC_gfRF`.
+L41 documented this rather than renaming: the name is indexed by two examples, the generated docs and
+`tests/test_selfheating.py`, so a rename is **breaking**. Deferred, not forgotten.
+
+**[ ] L96. `ScatterXY` uses `plt.colorbar`**
+`core/plotting/scatter.py:169` — against CLAUDE.md's rule that library plots use `ax.figure.colorbar` so
+they embed in a GUI figure; emits `UserWarning: Adding colorbar to a different Figure`. Found while
+auditing for L82.
+
+## Also for the CHANGELOG (behaviour changes from this round)
+
+- **L79** — `transform_yearmonth_matrix_to_longform` now always returns a full-year span, so a
+  partial-year matrix that was contiguous within one year is padded to 12 months with NaN.
+- **L60** — the `'iterations'` key is gone from `stl_decompose`'s result dict (it held a shape tuple,
+  not a count).
+- **L6** — random-uncertainty method 4 now averages 10 neighbours rather than 9; affects only records
+  that fall through to method 4 (~0.01% on CH-DAV).
+- **L11** — a joint-uncertainty cumulative record with incomplete scenario inputs is now NaN rather
+  than a wrong number.
+- **L78** — `frequency_percent_matching` / `confidence` are no longer rounded to whole percent.
+- **L82's fix** — `VariablePanel` no longer leaks a dead slot per closed tab; in the real GUI this was
+  raising and swallowing one `RuntimeError` per closed tab on every metadata edit.
