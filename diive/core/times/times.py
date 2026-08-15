@@ -348,6 +348,9 @@ class TimestampSanitizer:
 class DetectFrequency:
     """Detect data time resolution from time series index
 
+    Two regular timestamps are enough, since they define one interval. An index
+    with a single timestamp defines no interval at all and therefore raises
+    RuntimeError, same as an index that is too irregular to detect.
 
     - Example notebook available in:
         notebooks/TimeStamps/Detect_time_resolution.ipynb
@@ -1360,16 +1363,19 @@ def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> tuple
         (inferred_freq, freqinfo)
         - inferred_freq : str or None
             Detected frequency string (e.g., '30min', '1h'), or None if no interval
-            appears in >50% of data.
+            appears in >50% of all intervals.
         - freqinfo : str
-            Detection result with statistics (e.g., 'timedelta 99.5%'),
-            or '-failed-' if detection failed.
+            Detection result with statistics (e.g., '100% occurrence'),
+            '-not-enough-datarows-' if there is no interval to measure (fewer than
+            2 timestamps, or none of the deltas is valid), or '-failed-' if no
+            interval dominates.
 
     Notes
     -----
     - Requires at least 2 timestamps (to calculate one interval)
     - Robust to occasional irregular intervals
     - Returns frequency only if most common interval covers >50% of all intervals
+      (n timestamps give n-1 intervals)
     - Useful for data with small gaps or timing variations
 
     References
@@ -1383,13 +1389,22 @@ def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> tuple
     df['tvalue'] = timestamp_ix
     df['tvalue_shifted'] = df['tvalue'].shift()
     df['delta'] = (df['tvalue'] - df['tvalue_shifted'])
-    n_rows = df['delta'].size  # Total length of data
+    # n timestamps yield n-1 intervals, because the first delta is always NaT.
+    # Dividing by the row count instead under-reports the match (99% for a
+    # perfectly regular 100-row index) and rejects a clean 2-row series,
+    # because 1 of 2 is not > 50%.
+    n_deltas = len(df) - 1  # Number of intervals between timestamps
     detected_deltas = df['delta'].value_counts()  # Found unique deltas
+    if n_deltas < 1 or detected_deltas.empty:
+        # A single timestamp has no interval at all, and an all-NaT delta column
+        # has no mode, so .mode()[0] would raise a bare KeyError here.
+        freqinfo = '-not-enough-datarows-'
+        return inferred_freq, freqinfo
     most_frequent_delta = df['delta'].mode()[0]  # Delta with most occurrences
     most_frequent_delta_counts = detected_deltas[
         most_frequent_delta]  # Number of occurrences for most frequent delta
-    most_frequent_delta_perc = most_frequent_delta_counts / n_rows  # Fraction
-    # Check whether the most frequent delta appears in >50% of all data rows
+    most_frequent_delta_perc = most_frequent_delta_counts / n_deltas  # Fraction
+    # Check whether the most frequent delta appears in >50% of all intervals
     if most_frequent_delta_perc > 0.50:
         inferred_freq = to_offset(most_frequent_delta)
         inferred_freq = inferred_freq.freqstr

@@ -111,6 +111,66 @@ class TestTime(unittest.TestCase):
         freq = f.get()
         self.assertEqual(freq, '30min')
 
+    def test_detect_freq_percent_matching(self):
+        """n timestamps have n-1 intervals, and the reported match must say so.
+
+        The denominator used to be the row count, which reported 99% for a
+        perfectly regular 100-row index and 60% (instead of 75%) for the
+        one-gap index below.
+        """
+        from diive.core.times.times import timestamp_infer_freq_from_timedelta
+
+        # Perfectly regular: every interval matches.
+        idx = pd.date_range('2022-01-01 00:30', periods=100, freq='30min')
+        self.assertEqual(timestamp_infer_freq_from_timedelta(idx), ('30min', '100% occurrence'))
+        f = DetectFrequency(index=idx)
+        self.assertEqual(f.get(), '30min')
+        self.assertEqual(f.percent_matching, 100.0)
+        self.assertEqual(f.confidence, 1.0)
+
+        # Three of four intervals are 30min, one is 60min -> 75%, not 60%.
+        idx = pd.DatetimeIndex(['2022-01-01 00:30', '2022-01-01 01:00', '2022-01-01 01:30',
+                                '2022-01-01 02:00', '2022-01-01 03:00'])
+        self.assertEqual(timestamp_infer_freq_from_timedelta(idx), ('30min', '75% occurrence'))
+        f = DetectFrequency(index=idx)
+        self.assertEqual(f.get(), '30min')
+        self.assertEqual(f.percent_matching, 75.0)
+        self.assertEqual(f.confidence, 0.75)
+
+    def test_detect_freq_two_records(self):
+        """Two regular timestamps define one interval, which is enough.
+
+        With the row count as denominator this raised RuntimeError, because
+        1 of 2 is not more than 50%.
+        """
+        idx = pd.date_range('2022-01-01 00:30', periods=2, freq='30min')
+        f = DetectFrequency(index=idx)
+        self.assertEqual(f.get(), '30min')
+        self.assertEqual(f.percent_matching, 100.0)
+        self.assertEqual(f.detection_method, 'timedelta')
+
+        # Same for other resolutions.
+        self.assertEqual(DetectFrequency(index=pd.date_range('2022-01-01', periods=2, freq='1h')).get(), 'h')
+
+    def test_detect_freq_single_record_raises(self):
+        """One timestamp has no interval: a clear error, not a bare KeyError."""
+        from diive.core.times.times import timestamp_infer_freq_from_timedelta
+
+        idx = pd.date_range('2022-01-01 00:30', periods=1, freq='30min')
+        self.assertEqual(timestamp_infer_freq_from_timedelta(idx), (None, '-not-enough-datarows-'))
+        with self.assertRaises(RuntimeError):
+            DetectFrequency(index=idx)
+
+    def test_sanitizer_reports_percent_matching(self):
+        """The public status number must be the interval match, not row-count based."""
+        from diive.core.times.times import TimestampSanitizer
+        idx = pd.date_range('2022-01-01 00:30', periods=48, freq='30min', name='TIMESTAMP_END')
+        s = pd.Series(1.0, index=idx, name='x')
+        status = TimestampSanitizer(data=s, validate_naming=False, output_middle_timestamp=False,
+                                    verbose=False).get_status()
+        self.assertEqual(status['inferred_frequency'], '30min')
+        self.assertEqual(status['frequency_percent_matching'], 100.0)
+
     def test_resampling_to_30MIN(self):
         df, metadata_df = ed.load_exampledata_GENERIC_CSV_HEADER_1ROW_TS_MIDDLE_FULL_1MIN_long()
         resampled_ta = resample_series_to_30MIN(series=df['TA_T1_2_1_Avg'])
