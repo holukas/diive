@@ -86,7 +86,9 @@ def _roll_rows(z: np.ndarray, n: int, fn) -> np.ndarray:
 
     Keeps the row count (unlike ``_bin_rows``); ``fn`` is a NaN-aware reducer
     (nanmean/nanmedian) applied across each window. The window shrinks at the
-    ends, and original gap cells stay NaN so smoothing never invents data.
+    ends, and original gap cells stay NaN so smoothing never invents data. An
+    even ``n`` has no exact centre, so it takes ``n // 2`` rows before the row
+    and the rest after — the window is exactly ``n`` rows wide either way.
     """
     d = z.shape[0]
     half = n // 2
@@ -95,7 +97,7 @@ def _roll_rows(z: np.ndarray, n: int, fn) -> np.ndarray:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN window -> NaN
         for i in range(d):
-            out[i] = fn(z[max(0, i - half):i + half + 1], axis=0)
+            out[i] = fn(z[max(0, i - half):i + n - half], axis=0)
     out[~finite] = np.nan  # don't fabricate values where the cell was a gap
     return out
 

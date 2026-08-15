@@ -895,8 +895,13 @@ class MainWindow(QMainWindow):
         """
         if new_df is None or new_df.empty or self._full_data is None:
             return
-        for col in new_df.columns:
-            self._full_data[col] = new_df[col]  # aligns on index
+        # Rebind instead of mutating in place (`assign` aligns on index just the
+        # same): with no active range `_data` *is* `_full_data`, the very frame
+        # already pushed to every tab, so an in-place column write leaked new
+        # columns into pinned tabs that `_push_data` deliberately skips. Column
+        # drops rebind too, so the freeze now holds in both directions.
+        self._full_data = self._full_data.assign(
+            **{str(c): new_df[c] for c in new_df.columns})
         self._created |= {str(c) for c in new_df.columns}
         # While a variable subset is active, a freshly created column would be
         # filtered out (it isn't in the subset) and silently invisible — so add
@@ -1028,17 +1033,22 @@ class MainWindow(QMainWindow):
                 if self._var_subset is not None and col in self._var_subset:
                     self._var_subset.remove(col)
                 changed = True
+        # Collected, then assigned in one rebind — an in-place write would reach
+        # pinned tabs holding the same frame (see `_add_features`).
+        additions = {}
         for col, series in desired.items():
             if col not in self._full_data.columns \
                     or not self._full_data[col].equals(series):
                 is_new = col not in self._full_data.columns
-                self._full_data[col] = series
+                additions[col] = series
                 self._created.add(col)
                 if is_new:
                     added.append(col)
                     if self._var_subset is not None and col not in self._var_subset:
                         self._var_subset.append(col)
                 changed = True
+        if additions:
+            self._full_data = self._full_data.assign(**additions)
         self._event_columns = set(desired)
         if added:
             metadata_store.manager.store.record_original(
@@ -1378,6 +1388,17 @@ class MainWindow(QMainWindow):
         # Clear the current workspace before loading, so the project's saved tabs
         # replace it (and stale tabs don't get the incoming data push).
         self._close_all_menu_tabs()
+        # Restore the project's events *before* the data swap: `_set_data` builds
+        # every event's 0/1 column on the incoming index, so loading them after it
+        # first materialised the outgoing session's events on the new data and
+        # then replaced them. Signals are blocked so this load can't sync columns
+        # onto the outgoing dataset; `changed` is re-emitted below (once the data
+        # is in place) for the menu toggle and the Overview overlays.
+        events.manager.blockSignals(True)
+        try:
+            events.manager.load_dict(project.extras.get("events") or {})
+        finally:
+            events.manager.blockSignals(False)
         # Load the data clean (no config tags), then overlay the project's full
         # metadata (origin/parent/provenance/tags/notes) authoritatively.
         self._set_data(project.data, source=project.name, persist_metadata=False)
@@ -1386,9 +1407,11 @@ class MainWindow(QMainWindow):
         rng = project.extras.get("range")
         self._range = (pd.Timestamp(rng[0]), pd.Timestamp(rng[1])) if rng else None
         self._var_subset = list(project.extras.get("var_subset") or []) or None
-        # Restore the project's events (rebuilds their 0/1 columns via changed →
-        # _sync_event_columns; matches the EVENT_ columns the parquet carries).
-        events.manager.load_dict(project.extras.get("events") or {})
+        # The events themselves are already loaded (above, before the data swap);
+        # this only announces them, so the menu toggle picks up the project's
+        # visibility and the Overview draws the overlays. Their 0/1 columns were
+        # built by `_set_data`, matching the EVENT_ columns the parquet carries.
+        events.manager.changed.emit()
         self._project_dir, self._project_name = Path(folder), project.name
         self._last_project_dir = str(Path(folder).parent)
         self._last_project = str(Path(folder))

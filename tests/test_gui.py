@@ -1113,6 +1113,58 @@ def test_stepwise_screening_corrections(app):
     assert "setto_max" in tab.corrections_panel._rows
 
 
+def test_stepwise_screening_runs_one_chain_at_a_time(app):
+    """Rapid Run clicks must not stack CPU-heavy worker threads. The run id already
+    discards a superseded *result*, but every extra click still started a thread
+    that ran the whole chain for nothing (`WorkerRunner` guards the other tabs)."""
+    import threading
+
+    import diive as dv
+    from diive.gui.tabs.stepwise import StepwiseScreeningTab
+    from diive.gui.widgets.stepwise_method_params import ZScoreParams
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-01-01", periods=48 * 5, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.05)
+    df.index.name = "TIMESTAMP_END"
+
+    tab = StepwiseScreeningTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._select("observed_value")
+    tab._steps = [ZScoreParams().step()]
+
+    # Stand-in worker that blocks inside the thread, so the run stays in flight
+    # for as long as the test needs — no sleeps, no timing assumptions.
+    entered, release = threading.Event(), threading.Event()
+    spawned = []
+
+    def blocking_worker(*args):
+        spawned.append(args[-1])  # the run id the thread was started with
+        entered.set()
+        release.wait(10)
+
+    tab._worker = blocking_worker
+
+    tab.run_outliers_btn.click()
+    assert entered.wait(10)                 # the first run is inside the worker
+    assert tab._running
+
+    run_id = tab._run_id
+    tab.run_outliers_btn.click()            # a second click while it runs
+    tab.run_outliers_btn.click()
+    assert spawned == [run_id]              # ... started no further thread
+    assert tab._run_id == run_id            # ... and no further run
+
+    # The guard is released when the result is handled, stale ones included.
+    tab._on_done({"run_id": run_id - 1})
+    assert not tab._running
+    tab.run_outliers_btn.click()
+    assert entered.wait(10)
+    assert len(spawned) == 2
+    release.set()
+
+
 def test_correction_tabs(app):
     # The standalone correction tabs (RF/XGB-style shared template): each is one
     # correction on a selected variable, producing a corrected column + provenance,
@@ -2554,6 +2606,44 @@ def test_pin_freezes_menu_tab(window):
     assert len(calls) == 1
 
 
+def test_pinned_tab_does_not_see_columns_added_later(window):
+    """With no active range `_data` *is* `_full_data` — the very frame already
+    pushed to every tab — so adding a column in place leaked it into pinned tabs
+    that `_push_data` deliberately skips. Every mutation must rebind instead."""
+    from diive.events import Event
+    from diive.gui import events
+
+    events.manager.clear()
+    window._open_menu_tab("Time series")
+    tab = window._menu_tab_list[-1]
+
+    held = []
+    tab.on_data_loaded = lambda df, created=None: held.append(df)
+    window._apply_range()                  # the frame the tab now holds
+    QApplication.processEvents()
+    frozen = held[-1]
+    window._toggle_pin(tab)
+
+    # (a) an engineered/derived column (every tab's "Add" goes through here)
+    new = window._full_data[["Tair_f"]].rename(columns={"Tair_f": "PINTEST"})
+    window._add_features(new)
+    QApplication.processEvents()
+    assert "PINTEST" in window._full_data.columns   # the dataset has it ...
+    assert "PINTEST" not in frozen.columns          # ... the frozen tab does not
+
+    # (b) an event flag column (the other in-place writer). Re-sync first, so this
+    # half is judged on its own frame and not on the one (a) already rebound away.
+    window._toggle_pin(tab)                # unpin -> receives the current frame
+    QApplication.processEvents()
+    frozen = held[-1]
+    window._toggle_pin(tab)                # pin again
+    events.manager.add(Event("PinEv", window._full_data.index.min()))
+    QApplication.processEvents()
+    assert "EVENT_PinEv" in window._full_data.columns
+    assert "EVENT_PinEv" not in frozen.columns
+    events.manager.clear()
+
+
 def test_hampel_outlier_tab_keeps_original_cleaned_flag(window):
     window._open_menu_tab("Hampel filter")
     tab = window._menu_tab_list[-1]
@@ -2775,6 +2865,45 @@ def test_project_save_and_open(window, tmp_path, monkeypatch):
     assert store.get(var).description == "important variable"
     assert site.manager.latitude == 46.8           # site restored from the project
     assert var in [str(c) for c in window._data.columns]
+
+
+def test_project_load_does_not_materialise_previous_events(window, tmp_path, monkeypatch):
+    """Opening a project must build *its* event columns on the incoming data, once.
+    Loading the project's events only after `_set_data` meant the outgoing
+    session's events were materialised on the new data first, then replaced."""
+    from diive.events import Event
+    from diive.gui import events
+    from PySide6.QtWidgets import QFileDialog
+
+    events.manager.clear()
+    events.manager.add(Event("Proj", window._full_data.index.min()))
+    folder = tmp_path / "Events.diive"
+    assert window._write_project(folder, "Events")
+
+    # A different session: another event, and the project's is gone.
+    events.manager.clear()
+    events.manager.add(Event("Stale", window._full_data.index.min()))
+
+    seen = []
+    original = window._sync_event_columns
+
+    def spy():
+        seen.append(sorted(ev.flag_name for ev in events.manager.events))
+        return original()
+
+    window._sync_event_columns = spy
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory",
+                        staticmethod(lambda *a, **k: str(folder)))
+    window._open_project()
+    QApplication.processEvents()
+    del window._sync_event_columns  # restore the bound method
+
+    assert seen  # the load did reconcile the columns
+    assert ["EVENT_Proj"] in seen                          # ... for this project
+    assert all("EVENT_Stale" not in call for call in seen)  # ... and never the old one
+    assert "EVENT_Proj" in window._full_data.columns
+    assert "EVENT_Stale" not in window._full_data.columns
+    events.manager.clear()
 
 
 def test_frameless_resize_cursor_no_int_error(app):
@@ -3048,6 +3177,80 @@ def test_outlier_tab_discards_result_when_dataset_changed_midrun(window):
     QApplication.processEvents()
 
 
+def test_worker_runner_reports_running_until_result_is_handled(app):
+    """Tabs use `is_running` as their re-entry guard, so it must stay True until
+    the GUI thread has *handled* the result — not merely until the worker thread
+    finished. Clearing it before the (queued) emit left a window in which a
+    second run could start and interleave its result with the first."""
+    import threading
+
+    from diive.gui.widgets.worker import WorkerRunner
+
+    runner = WorkerRunner()
+    seen, failed = [], []
+    # Record what `is_running` reads *inside* the handler: it must be clear by
+    # then, so a done handler may start the next run.
+    runner.done.connect(lambda payload: seen.append((payload, runner.is_running)))
+    runner.failed.connect(failed.append)
+
+    # Run the worker-thread body on its own thread and join it: everything that
+    # thread does has then happened, with no sleep and no race.
+    runner._running = True  # what `run()` sets before spawning the thread
+    worker = threading.Thread(target=runner._work, args=(lambda: "payload", (), {}))
+    worker.start()
+    worker.join()
+    assert seen == []                # the result is queued, not yet delivered
+    assert runner.is_running         # ... so the job still counts as in flight
+    assert runner.run(lambda: "second") is False   # the guard holds
+    QApplication.processEvents()
+    assert seen == [("payload", False)]
+    assert not runner.is_running
+
+    # A failure with no message must not leave a bare "Failed: " in a status line.
+    def _raise_bare():
+        raise TimeoutError()
+
+    runner._running = True
+    worker = threading.Thread(target=runner._work, args=(_raise_bare, (), {}))
+    worker.start()
+    worker.join()
+    assert runner.is_running
+    QApplication.processEvents()
+    assert failed == ["TimeoutError"]
+    assert not runner.is_running
+
+
+def test_outlier_compute_payload_writes_no_tab_state(window):
+    """`_compute_payload` runs on the worker thread, so it must not write tab
+    state: the daytime mask reaches the tab through the progress signal (which Qt
+    marshals to the GUI thread), never by assignment from the worker."""
+    window._open_menu_tab("Absolute limits filter")
+    tab = window._menu_tab_list[-1]
+    var = "Tair_f"
+    tab._select(var)
+    series = window._data[var]
+    lo, hi = float(series.quantile(0.01)), float(series.quantile(0.99))
+    kwargs = dict(separate_day_night=True, minval_daytime=lo, maxval_daytime=hi,
+                  minval_nighttime=lo, maxval_nighttime=hi,
+                  lat=46.8, lon=9.8, utc_offset=1)
+
+    tab._live_is_daytime = None
+    # Signals blocked = the worker thread in isolation (in the app its emissions
+    # are queued to the GUI thread, so they land later, not during the compute).
+    tab._sig.blockSignals(True)
+    try:
+        payload = tab._compute_payload(series, kwargs, False, True)
+    finally:
+        tab._sig.blockSignals(False)
+    assert payload["is_daytime"] is not None       # the mask was computed
+    assert tab._live_is_daytime is None            # but not written from the worker
+
+    # It arrives with every progress emission and is stored on the GUI thread.
+    mask = payload["is_daytime"]
+    tab._on_progress(1, 5, payload["cleaned"], None, mask)
+    assert tab._live_is_daytime is mask
+
+
 def test_trimlow_outlier_tab_keeps_original_cleaned_flag(window):
     window._open_menu_tab("Trim-low filter")
     tab = window._menu_tab_list[-1]
@@ -3202,6 +3405,22 @@ def test_live_theme_edit(window):
     assert _pill_for("GPP_CUT_REF_f")[1].name() == "#000000"
     theme.manager.reset(silent=False)
     assert _pill_for("GPP_CUT_REF_f")[1].name() != "#000000"
+
+
+def test_save_config_swallows_unserializable_value(tmp_path, monkeypatch):
+    """Preferences are best-effort: a value some producer put in the blob that
+    `json.dumps` can't encode raised `TypeError` straight out of `closeEvent`."""
+    from diive.gui import config
+
+    target = tmp_path / "gui_settings.json"
+    monkeypatch.setattr(config, "config_file", lambda: target)
+
+    config.save_config({"a": 1})                       # a good save first
+    config.save_config({"theme": {"token": object()}})  # must not raise
+    # The unwritable blob left the previous file alone, and saving still works.
+    assert config.load_config() == {"a": 1}
+    config.save_config({"a": 2})
+    assert config.load_config() == {"a": 2}
 
 
 def test_theme_persistence_roundtrip():
@@ -3870,3 +4089,30 @@ def test_surface3d_export_state_cleared_when_render_shows_nothing(app, monkeypat
     QApplication.processEvents()
     assert xyz_tab._grid_data() is None
     assert xyz_tab._grid_height is None and xyz_tab._grid_style is None
+
+
+def test_surface3d_rolling_window_is_n_rows_wide():
+    # "Y cell (days)" is documented (docstring + tooltip) as the *window width*,
+    # so a rolling window of n must span exactly n rows. `i-half : i+half+1` with
+    # half = n//2 spanned n+1 rows for every even n, smoothing one day too wide.
+    pytest.importorskip("pyvista")
+    import numpy as np
+
+    from diive.gui.tabs.surface3d import _roll_rows
+
+    z = np.arange(10, dtype=float).reshape(10, 1)  # one column, row value = row
+    # Even n: no exact centre, so half the rows before and the rest after.
+    assert _roll_rows(z, 4, np.nanmean)[5, 0] == np.mean([3, 4, 5, 6])
+    assert _roll_rows(z, 2, np.nanmean)[5, 0] == np.mean([4, 5])
+    # Odd n: symmetric around the row (unchanged).
+    assert _roll_rows(z, 5, np.nanmean)[5, 0] == np.mean([3, 4, 5, 6, 7])
+    assert _roll_rows(z, 1, np.nanmean)[5, 0] == 5.0
+    # A window's own width, counted: the count reducer must return exactly n away
+    # from the edges, for every n.
+    count = lambda a, axis=0: np.sum(np.isfinite(a), axis=axis)
+    for n in range(1, 7):
+        assert _roll_rows(z, n, count)[5, 0] == n, n
+    # Gap cells stay gaps regardless of the width.
+    gappy = z.copy()
+    gappy[5, 0] = np.nan
+    assert np.isnan(_roll_rows(gappy, 4, np.nanmean)[5, 0])

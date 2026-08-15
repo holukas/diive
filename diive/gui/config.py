@@ -37,5 +37,9 @@ def save_config(data: dict) -> None:
     """Write preferences to disk (best-effort)."""
     try:
         config_file().write_text(json.dumps(data, indent=2), encoding="utf-8")
-    except OSError:
+    except (OSError, TypeError, ValueError):
+        # OSError: unwritable path. TypeError/ValueError: `json.dumps` on a value
+        # some producer put in the blob that isn't JSON-serializable (or is
+        # circular). Preferences are best-effort, so none of these may take down
+        # `closeEvent` — but only serialization and I/O are swallowed here.
         pass

@@ -132,6 +132,7 @@ class ScreeningTabBase(DiiveTab):
         self._corrected = None                # corrected series (or None)
         self._result_df = None                # columns pending "Add"
         self._run_id = 0                       # guards against stale worker results
+        self._running = False                  # a chain run is in flight
         self._step_cards: list[StepCard] = []
         self._sig = _StepwiseSignals()
         self._sig.run_done.connect(self._on_done)
@@ -707,6 +708,12 @@ class ScreeningTabBase(DiiveTab):
     def _run(self) -> None:
         if self._df is None or self._var is None:
             return
+        # One chain run at a time (the same guard `WorkerRunner` gives the other
+        # tabs). The run id already discards a superseded *result*, but without
+        # this every extra click also started another CPU-heavy thread that ran
+        # to completion for nothing.
+        if self._running:
+            return
         # Bump the run id so any in-flight worker's result is ignored on arrival
         # (results can land out of order under rapid edits).
         self._run_id += 1
@@ -726,6 +733,7 @@ class ScreeningTabBase(DiiveTab):
         self.status.setText("Running chain…")
         self.add_btn.setEnabled(False)
         self.copy_btn.setEnabled(False)
+        self._running = True
         threading.Thread(
             target=self._worker,
             args=(self._df, self._var, list(self._steps), self._coords(),
@@ -781,6 +789,7 @@ class ScreeningTabBase(DiiveTab):
         self._sig.run_done.emit(payload)
 
     def _on_done(self, payload: dict) -> None:
+        self._running = False  # cleared here, so the guard covers the whole run
         # Ignore a stale result from a superseded run (out-of-order completion).
         if payload.get("run_id") != self._run_id:
             return
@@ -813,6 +822,7 @@ class ScreeningTabBase(DiiveTab):
         self._refresh_preview()
 
     def _on_failed(self, data) -> None:
+        self._running = False  # cleared here, so the guard covers the whole run
         run_id, msg = data
         if run_id != self._run_id:
             return  # a superseded run failed; the latest run governs the UI
