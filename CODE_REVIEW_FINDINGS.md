@@ -31,7 +31,7 @@ Fixing the findings is not the whole job. These are deliberately **not** done pe
 them once the backlog settles avoids rewriting the same entries repeatedly — but they must happen
 before a release, and several are already stale today.
 
-### [ ] CHANGELOG.md
+### [x] CHANGELOG.md
 
 Drafted 2026-08-15 into `CHANGELOG.md`'s unreleased v0.91.0 entry, as `### Fixed (code review)`.
 **Six breaking changes** have landed on `indev` and each needs an entry saying what silently changes
@@ -61,7 +61,7 @@ many depends entirely on how gappy the site's u\* is). The
 v0.91.0 entry already opens with *"Two of these change results silently, with no error and no
 warning"*; this round needs the same treatment.
 
-### [~] `diive/gui/MANUAL.md`
+### [x] `diive/gui/MANUAL.md`
 
 The *"Keep overlapping data points only"* checkbox description (line 969) was stale from
 `876bec12` and has been **fixed 2026-08-07** — replaced with the overlap-only rule plus the new
@@ -72,7 +72,7 @@ immediately rather than batched because it was left behind by a change in this s
 self-heating path and the outlier flag semantics both have user-facing descriptions that may
 still describe the old behaviour.
 
-### [ ] `CLAUDE.md`
+### [x] `CLAUDE.md`
 
 Updated piecemeal so far (the combine-variables tab description, `1c392e66`). Re-read the sections
 covering every changed area once the backlog settles: the outlier day/night conventions (flag
@@ -93,7 +93,7 @@ opposite of what the code produces. Re-read it against the corrected behaviour.
 
 ---
 
-# Triage index — all 105 findings by severity
+# Triage index — all 106 findings by severity
 
 The detailed entries below stay grouped by review round and module. This index is the **fix order**.
 
@@ -135,7 +135,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L2~~ | ~~`WindDirOffset` ignores `hist_n_bins`~~ (done 2026-08-07) — also pinned the bins to the full circle | `preprocessing/corrections/offsetcorrection.py:476` |
 | ~~G1~~ | ~~Partitioning tabs run at **(0, 0) UTC** when the project site is unconfigured~~ (done 2026-08-07) — 3 of the 4 ports | `gui/tabs/_partitioning_base.py:300` |
 
-## S2 — Silently does nothing / silently loses data (31)
+## S2 — Silently does nothing / silently loses data (32)
 
 | ID | Finding | Where |
 |---|---|---|
@@ -155,9 +155,10 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L50~~ | ~~`quality_weighted_decompose` ignores the weights entirely; `summary()` prints "Quality-weighted: True"~~ (done 2026-08-07) — fake path removed | `core/times/decomposition_utils.py:100` |
 | ~~L58~~ | ~~`detect_seasonality` fabricates `primary_period=365` when the periodogram yields nothing~~ (done 2026-08-07) | `core/times/decomposition_utils.py:490` |
 | ~~L51~~ | ~~`StratifiedAnalysis` drops z-bins whose rounded label collides — 19 of 120 lost, no warning~~ (done 2026-08-07) | `analysis/decoupling.py:213` |
-| L86 | `UstarVekuriThresholdDetection.bootstrap()` has no `random_state`, so u* thresholds differ run to run | `flux/lowres/ustar_vekuri_detection.py` |
-| L87 | `classical_decompose` passes `extrapolate=` where the parameter is `extrapolate_trend`, so it always raises and the trend edges are always NaN | `core/times/decomposition_utils.py:207` |
-| L92 | `ScreeningTabBase._select` does not bump `_run_id` — G2's bug in the tab cited as the correct pattern | `gui/tabs/_screening_base.py` |
+| L97 | `UstarBootstrapThresholds` resamples unseeded in **both** paths (`ustar_bootstrap.py:50`, and the fast path never passes the `rng` that `bootstrap_annual_samples` already accepts) — this is the class the flux chain uses for CUT/VUT | `flux/lowres/ustar_bootstrap.py:50` |
+| ~~L86~~ | ~~`UstarVekuriThresholdDetection.bootstrap()` has no `random_state`, so u* thresholds differ run to run~~ (done 2026-08-15) — **the same defect in `UstarBootstrapThresholds` is open as L97** | `flux/lowres/ustar_vekuri_detection.py` |
+| ~~L87~~ | ~~`classical_decompose` passes `extrapolate=` where the parameter is `extrapolate_trend`, so it always raises and the trend edges are always NaN~~ (done 2026-08-15) — dead branch removed; NaN edges kept on purpose | `core/times/decomposition_utils.py:207` |
+| ~~L92~~ | ~~`ScreeningTabBase._select` does not bump `_run_id` — G2's bug in the tab cited as the correct pattern~~ (done 2026-08-15) | `gui/tabs/_screening_base.py` |
 | L76 | BUR06 uses a canopy `ra` (`u/u*^2`) where Burba 2006 specifies a per-element one (`7.4*sqrt(d/U)`, ~6x apart) and drops the retained fraction `fr`; the fitted SF absorbs both | `flux/lowres/selfheating.py:471` |
 | ~~L53~~ | ~~`CompoundExtremes` returns zero classified periods for a single year, silently~~ (done 2026-08-07) | `analysis/compoundextremes.py:168` |
 | ~~L59~~ | ~~`multi_scale_harmonics` swallows every exception~~ (done 2026-08-07) — function deleted as dead code | `analysis/harmonic.py:432` |
@@ -242,7 +243,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | L90 | `docs/auto_examples/flux/uncertainty.*` stale generated copies | `docs/auto_examples/` |
 | L93 | `EventManager.load_dict({})` early-returns without clearing, so previous events survive | `gui/events.py` |
 | L94 | `crosscorr`'s `len(pot_arr) == 0` branch is unreachable dead code | `preprocessing/qaqc/detect_timestamp_shifts.py` |
-| L96 | `ScatterXY` uses `plt.colorbar` instead of `ax.figure.colorbar` | `core/plotting/scatter.py:169` |
+| ~~L96~~ | ~~`ScatterXY` uses `plt.colorbar` instead of `ax.figure.colorbar`~~ (done 2026-08-15) — also `DetectTimestampShifts.plot_radiation_fingerprint` | `core/plotting/scatter.py:169` |
 
 ## Cross-cutting observations
 
@@ -2186,19 +2187,62 @@ asserts only that nothing raised** — those tests may be weaker than they look.
 Fourteen defects noticed *adjacent* to a fix and deliberately left alone. Three are S2 (silent), and
 those three are the ones to take first.
 
-**[ ] L86. `UstarVekuriThresholdDetection.bootstrap()` is not reproducible**
+**[x] L86. `UstarVekuriThresholdDetection.bootstrap()` is not reproducible**
+
+> **Fixed 2026-08-15.** New `random_state: int | None = 42` on `__init__`, threaded into the
+> resample as `self.random_state + boot_idx` so the draws still differ from each other while the run
+> as a whole is reproducible; `None` restores the old non-deterministic behaviour. Covered by
+> `TestVekuriBootstrapIsReproducible` — one test that two same-seed runs agree, and one that two
+> *different* seeds disagree, so the seed is proven to reach `sample` rather than the first test
+> passing because the bootstrap collapsed to a constant. Mutation-checked: unseeded gives
+> `DataFrame.iloc[:, 0] (column name="mean") values are different (50.0 %)`.
+>
+> **The same defect is still open in `UstarBootstrapThresholds` — see L97, and it matters more:**
+> that is the class the flux chain uses for CUT/VUT detection.
 `flux/lowres/ustar_vekuri_detection.py` — calls `df.sample` with no `random_state`, so the bootstrap
 percentiles differ run to run (observed: one season's p50 moved 0.1634 -> 0.1488 across two runs).
 These thresholds feed u\* filtering and therefore the whole flux chain. CLAUDE.md is explicit that the
 rf/xgb seeds are pinned *because* output drifts without them; this path was missed. Found while fixing L80.
 
-**[ ] L87. `classical_decompose` passes a parameter name that does not exist**
+**[x] L87. `classical_decompose` passes a parameter name that does not exist**
+
+> **Fixed 2026-08-15 by removing the dead branch, NOT by enabling extrapolation.** The
+> `try: extrapolate='freq' / except TypeError: <no extrapolation>` pair always took the fallback, so
+> the behaviour users have always had is the no-extrapolation one; the branch merely read as if
+> extrapolation happened. Measured before deciding: `extrapolate_trend='freq'` fills all 30 edge NaN
+> in both trend and residual and leaves interior trend values identical.
+>
+> Enabling it was the first attempt and was reverted. The L2 analogy in this entry does not hold —
+> `hist_n_bins` was a *caller's* argument being ignored, whereas `extrapolate` was an internal
+> literal no user ever passed, so no expectation was being violated. Switching it on would fill
+> (period-1)//2 records at each end with a least-squares extrapolation indistinguishable from a
+> measured trend, and shift `seasonality_strength` because the residual variance would gain those
+> records. The docstring now states the NaN edges are deliberate and why.
+>
+> Covered by `TestClassicalDecomposeRequestsNoExtrapolation`: one test pinning the NaN counts, one
+> pinning the interior trend against a manual centred rolling mean so enabling extrapolation later
+> cannot pass unnoticed. Mutation-checked in the meaningful direction — switching extrapolation on
+> fails 3 tests, two of them **L57's**, which confirms the NaN edges are load-bearing for that
+> contract rather than incidental. Reinstating the original misspelling is behaviour-identical by
+> construction and no test can catch it; that is the nature of a dead-code fix.
 `core/times/decomposition_utils.py:207` — passes `extrapolate='freq'` to `seasonal_decompose`, whose
 parameter is `extrapolate_trend`. It therefore *always* raises `TypeError` and *always* falls into the
 no-extrapolation fallback, so the trend edges are unconditionally NaN. A silently-ignored argument, the
 same species as L2. This dead kwarg is what made **L57** visible on real data. Found while fixing L57.
 
-**[ ] L92. `ScreeningTabBase._select` does not bump `_run_id`**
+**[x] L92. `ScreeningTabBase._select` does not bump `_run_id`**
+
+> **Fixed 2026-08-15.** `_run_id += 1` in `_show_variable`, not `_select`: it is the common path for
+> both a user pick and a data reload, and it is already where the "clear any prior run (it's now
+> stale)" logic lives — its docstring claimed the staleness the code did not enforce. G5's `_running`
+> flag does not cover this: switching variable does not stop the running worker, so the stale result
+> still arrives and only the id check can reject it.
+>
+> Covered by `test_stepwise_screening_discards_a_run_for_the_previous_variable`, which blocks a
+> stand-in worker mid-run (no sleeps), switches variable, then hands the stale payload to `_on_done`
+> **directly** rather than through a signal — per L82, a signal-driven version could pass over a
+> crash. Mutation-checked: `AssertionError: switching variable must invalidate the run in flight`
+> / `assert 1 != 1`.
 `gui/tabs/_screening_base.py` — switching the selected variable mid-run can still adopt the previous
 variable's chain result, with no exception. This is **G2's bug, in the tab this document cites as the
 correct `run_id` pattern to copy**. Found while fixing G5.
@@ -2247,7 +2291,16 @@ XGBoost, so `physics.fct_unsc_gf.name` is `'FCT_UNSC_gfXG'` but `get_results()` 
 L41 documented this rather than renaming: the name is indexed by two examples, the generated docs and
 `tests/test_selfheating.py`, so a rename is **breaking**. Deferred, not forgotten.
 
-**[ ] L96. `ScatterXY` uses `plt.colorbar`**
+**[x] L96. `ScatterXY` uses `plt.colorbar`**
+
+> **Fixed 2026-08-15.** `ax.figure.colorbar` in `ScatterXY`, and `fig.colorbar` +
+> `fig.tight_layout()` in `DetectTimestampShifts.plot_radiation_fingerprint`, which had the same
+> defect plus a `plt.tight_layout()` on the same wrong figure. Verified by passing an axes belonging
+> to a bare `Figure()` (not created through pyplot) and asserting no warning; mutation-checked, the
+> warning returns. A repo-wide sweep found the two remaining `plt.colorbar` callers create their own
+> figure and accept no `ax`, so pyplot's current figure is correct there. The rule is now in
+> CLAUDE.md's **Plotting** conventions rather than buried in one tab's bullet, which is why it was
+> missed twice.
 `core/plotting/scatter.py:169` — against CLAUDE.md's rule that library plots use `ax.figure.colorbar` so
 they embed in a GUI figure; emits `UserWarning: Adding colorbar to a different Figure`. Found while
 auditing for L82.
@@ -2265,3 +2318,17 @@ auditing for L82.
 - **L78** — `frequency_percent_matching` / `confidence` are no longer rounded to whole percent.
 - **L82's fix** — `VariablePanel` no longer leaks a dead slot per closed tab; in the real GUI this was
   raising and swallowing one `RuntimeError` per closed tab on every metadata edit.
+
+**[ ] L97. `UstarBootstrapThresholds` resamples unseeded, in both of its paths**
+`flux/lowres/ustar_bootstrap.py:50` — the generic loop calls
+`df_window.sample(n=..., replace=True)` with no `random_state`, and the fast path
+(`:36`) calls `detector.bootstrap_annual_samples(n_iter)` without the `rng` that method
+**already accepts** (`ustar_mp_detection.py:598`). So VUT and CUT thresholds differ between
+runs. Found while fixing L86, and this is the more consequential half: `run_chain` does its
+CUT detection through this class, whereas the Vekuri detector is a standalone tool.
+
+Not fixed with L86 because it needs a design decision L86 did not: with `n_jobs > 1` the
+years run in parallel, so a single seed must be **derived per year** (`seed + year`, or a
+`SeedSequence` spawn) — one shared seed would make every year draw the same resample
+indices, which is worse than unseeded. Inventing that scheme silently for the flux chain's
+u\* thresholds is not a one-liner, so it is recorded instead.
