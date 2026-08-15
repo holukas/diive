@@ -33,11 +33,15 @@ before a release, and several are already stale today.
 
 ### [ ] CHANGELOG.md
 
-Nothing in this effort has been written up yet. **Five breaking changes** have landed on `indev` so
-far and each needs an entry saying what silently changes for existing code:
+Drafted 2026-08-15 into `CHANGELOG.md`'s unreleased v0.91.0 entry, as `### Fixed (code review)`.
+**Six breaking changes** have landed on `indev` and each needs an entry saying what silently changes
+for existing code. Count the `!` commits (`git log af022000..HEAD --oneline | grep '!:'`) rather than
+the rows below — this table was recounted twice and was wrong both times, because a row was added
+without the count being updated and `85eb97cc` was never listed at all:
 
 | Commit | Breaks |
 |---|---|
+| `85eb97cc` `refactor!: remove UstarDetectionMPT` | `UstarDetectionMPT` gone from `dv.flux` (it was in `__all__`); superseded by `UstarMovingPointDetection`. Landed with L32's fix |
 | `45614fb3` `feat!: remove the H2O self-heating path` | `flux_type` gone from `ScopPhysics` / `ScopOptimizer` / `ScopApplicator`; LE correction no longer offered at all |
 | `a327a4ee` `fix!: flag missing records as NaN, not 0` | `overall_flag` is NaN at missing records; any `(flag == 0).count()` changes |
 | `876bec12` `feat!: combine variables only where both are available` | `keep_overlap_only` gone from `combine_variables` and its codegen |
