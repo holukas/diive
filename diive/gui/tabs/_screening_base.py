@@ -615,6 +615,10 @@ class ScreeningTabBase(DiiveTab):
         (on a user pick) or keeps the current one (on a data reload)."""
         self._var = name
         self.varpanel.set_panels([name])
+        # Invalidate any run still in flight: clearing the stored results below is not
+        # enough, because a worker started on the previous variable still carries the
+        # matching run_id and its handler would adopt the result onto this one.
+        self._run_id += 1
         # Nothing is computed until the user clicks Run — only the raw series.
         self._payload = None
         self._corrected = None

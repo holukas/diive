@@ -1223,6 +1223,57 @@ def test_stepwise_screening_corrections(app):
     assert "setto_max" in tab.corrections_panel._rows
 
 
+def test_stepwise_screening_discards_a_run_for_the_previous_variable(app):
+    """L92: switching variable mid-run must invalidate the run in flight.
+
+    `_show_variable` cleared the stored results and its docstring said the prior run
+    "is now stale", but it never bumped `_run_id` — so a worker started on the previous
+    variable still carried the matching id and `_on_done` adopted its result onto the
+    new one. G2's bug, in the tab the review cites as the correct run_id pattern.
+
+    The handler is called directly rather than through a signal: Qt swallows an
+    exception raised inside a slot, so a signal-driven version could pass over a crash.
+    """
+    import threading
+
+    import diive as dv
+    from diive.gui.tabs.stepwise import StepwiseScreeningTab
+    from diive.gui.widgets.stepwise_method_params import ZScoreParams
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-01-01", periods=48 * 5, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.05)
+    df.index.name = "TIMESTAMP_END"
+    df["other_value"] = df["observed_value"] * 2.0
+
+    tab = StepwiseScreeningTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._select("observed_value")
+    tab._steps = [ZScoreParams().step()]
+
+    entered, release = threading.Event(), threading.Event()
+
+    def blocking_worker(*args):
+        entered.set()
+        release.wait(10)
+
+    tab._worker = blocking_worker
+    tab.run_outliers_btn.click()
+    assert entered.wait(10)
+    stale_id = tab._run_id                      # the id the in-flight run carries
+
+    tab._select("other_value")                  # user switches variable mid-run
+    assert tab._var == "other_value"
+    assert tab._run_id != stale_id, "switching variable must invalidate the run in flight"
+
+    # The stale result arrives afterwards and must be dropped, not adopted.
+    tab._on_done({"run_id": stale_id, "series": df["observed_value"], "flag": None})
+    assert tab._result_df is None
+    assert tab._var == "other_value"
+    release.set()
+
+
 def test_stepwise_screening_runs_one_chain_at_a_time(app):
     """Rapid Run clicks must not stack CPU-heavy worker threads. The run id already
     discards a superseded *result*, but every extra click still started a thread
