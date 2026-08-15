@@ -123,6 +123,35 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         self.assertEqual(level31_storage_col("H"), "SH_SINGLE")
         self.assertIsNone(level31_storage_col("NOT_A_FLUX"))
 
+    def test_level31_set_storage_to_zero_without_storage_column(self):
+        """set_storage_to_zero=True must not require a storage column.
+
+        This is the documented H / LE path: those fluxes have no storage
+        profile, so the storage column is missing from the input data.
+        """
+        import pandas as pd
+        from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+        from diive.flux.fluxprocessingchain import init_flux_data, run_level2, run_level31
+
+        df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
+                              if c in df.columns])
+        df = df.drop(columns=['SLE_SINGLE'])  # no storage profile for LE
+        data = init_flux_data(df=df, fluxcol='LE',
+                              site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+        data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None})
+
+        data31 = run_level31(data, set_storage_to_zero=True)
+
+        self.assertEqual(data31.level_ids, ['L2', 'L3.1'])
+        self.assertEqual(data31.levels.flux_corrected_col, 'LE_L3.1')
+        self.assertIsNone(data31.levels.level31.strgcol)
+        self.assertNotIn('SLE_SINGLE', data31.fpc_df.columns)
+        # Storage term zero -> corrected flux is the measured flux
+        pd.testing.assert_series_equal(data31.fpc_df['LE_L3.1'], df['LE'], check_names=False)
+        # The report must not need the storage column either
+        data31.levels.level31.report()
+
     def test_level2_custom_input_columns(self):
         # Each L2 test can read a differently-named column via a 'col' override
         # (two keys for the two-column completeness test).
