@@ -89,7 +89,7 @@ opposite of what the code produces. Re-read it against the corrected behaviour.
 
 ---
 
-# Triage index — all 85 findings by severity
+# Triage index — all 91 findings by severity
 
 The detailed entries below stay grouped by review round and module. This index is the **fix order**.
 
@@ -164,26 +164,28 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~G4~~ | ~~`restore_controls` silently keeps the current combo value when the saved entry is gone — can flip the joint-uncertainty divisor~~ (done 2026-08-15) | `gui/widgets/state_utils.py:51` |
 | ~~L73~~ | ~~`harmonic_decompose` picks the top-N bins by power, so a windowed strong component's leakage outranks a genuine weaker one — the same component is returned twice~~ (done 2026-08-07) | `core/times/decomposition_utils.py:275` |
 
-## S3 — Crash on legitimate input (14)
+## S3 — Crash on legitimate input (16)
 
 | ID | Finding | Where |
 |---|---|---|
-| L1 | `Hampel` crashes on any non-fixed frequency (monthly/yearly/business-day) | `preprocessing/outlier_detection/hampel.py:228` |
-| L3 | Frequency detection: off-by-one denominator → clean 2-row series "too irregular", 1-row bare `KeyError` | `core/times/times.py:1386` |
-| L27 | `set_storage_to_zero=True` still requires the storage column — the exact case it documents | `flux/lowres/storage_correction.py:150` |
-| L39 | `ScopApplicator`'s undocumented column-name contract — legal inputs raise `KeyError` | `flux/lowres/selfheating.py:1214` |
-| L43 | Default fringe-bin trimming empties the time-lag histogram; the `IndexError` escapes the batch helpers | `flux/lowres/timelag_analysis.py:148` |
-| L31 | `UstarThresholdConstantScenarios.calc(showplot=True)` crashes on pandas 3 | `flux/lowres/ustarthreshold.py:337` |
-| L33 | `UstarVekuriThresholdDetection.summary()` crashes on its own guard before `detect()` | `flux/lowres/ustar_vekuri_detection.py:187` |
+| ~~L1~~ | ~~`Hampel` crashes on any non-fixed frequency (monthly/yearly/business-day)~~ (done 2026-08-15) | `preprocessing/outlier_detection/hampel.py:228` |
+| ~~L3~~ | ~~Frequency detection: off-by-one denominator → clean 2-row series "too irregular", 1-row bare `KeyError`~~ (done 2026-08-15) — one bad denominator caused both the crash and the wrong confidence | `core/times/times.py:1386` |
+| ~~L27~~ | ~~`set_storage_to_zero=True` still requires the storage column — the exact case it documents~~ (done 2026-08-15) | `flux/lowres/storage_correction.py:150` |
+| ~~L39~~ | ~~`ScopApplicator`'s undocumented column-name contract — legal inputs raise `KeyError`~~ (done 2026-08-15) — names normalised at the boundary | `flux/lowres/selfheating.py:1214` |
+| ~~L43~~ | ~~Default fringe-bin trimming empties the time-lag histogram; the `IndexError` escapes the batch helpers~~ (done 2026-08-15) | `flux/lowres/timelag_analysis.py:148` |
+| ~~L31~~ | ~~`UstarThresholdConstantScenarios.calc(showplot=True)` crashes on pandas 3~~ (done 2026-08-15) — **two** sites, not the one this entry named | `flux/lowres/ustarthreshold.py:337` |
+| ~~L33~~ | ~~`UstarVekuriThresholdDetection.summary()` crashes on its own guard before `detect()`~~ (done 2026-08-15) — guard fixed, not made to raise | `flux/lowres/ustar_vekuri_detection.py:187` |
 | ~~L56~~ | ~~`harmonic_decompose` returns `frequencies` one element longer~~ (done 2026-08-07) | `core/times/decomposition_utils.py:307` |
-| L65 | `RidgeLinePlot` cannot plot any series containing a gap | `core/plotting/ridgeline.py:196` |
-| L69 | `Cumulative.plot` raises on an all-NaN column | `core/plotting/cumulative.py:327` |
-| L68 | `datetime_surface_grid` destroys a variable literally named `DATE` or `TIME` | `core/plotting/surface_grid.py:71` |
-| L13 | `transform_yearmonth_matrix_to_longform` hardcodes the column names it drops | `core/dfun/frames.py:644` |
-| L22 | `MultiDataFileReader` raises `AttributeError` when every file is empty | `core/io/filereader.py:320` |
-| G2 | `_outlier_base._on_done` can `KeyError` when the dataset changes mid-run | `gui/tabs/_outlier_base.py:666` |
+| ~~L65~~ | ~~`RidgeLinePlot` cannot plot any series containing a gap~~ (done 2026-08-15) | `core/plotting/ridgeline.py:196` |
+| ~~L69~~ | ~~`Cumulative.plot` raises on an all-NaN column~~ (done 2026-08-15) — also `CumulativeYear.plot` | `core/plotting/cumulative.py:327` |
+| ~~L68~~ | ~~`datetime_surface_grid` destroys a variable literally named `DATE` or `TIME`~~ (done 2026-08-15) — **the `HeatmapDateTime` half is S1, not S3**: no crash there, it silently paints the timestamps | `core/plotting/surface_grid.py:71` |
+| ~~L13~~ | ~~`transform_yearmonth_matrix_to_longform` hardcodes the column names it drops~~ (done 2026-08-15) | `core/dfun/frames.py:644` |
+| ~~L22~~ | ~~`MultiDataFileReader` raises `AttributeError` when every file is empty~~ (done 2026-08-15) | `core/io/filereader.py:320` |
+| ~~G2~~ | ~~`_outlier_base._on_done` can `KeyError` when the dataset changes mid-run~~ (done 2026-08-15) — **has a silent half too**: a narrowed frame is adopted with no exception at all | `gui/tabs/_outlier_base.py:666` |
+| L79 | `transform_yearmonth_matrix_to_longform` rejects non-contiguous month columns — a seasonal record from its own producer raises; 4th instance of the contiguity family (L61/L63) | `core/dfun/frames.py` |
+| L81 | `TimeLagAnalysis`: a `histogram_startbin`/`endbin` range excluding every lag empties `results`, then `detect_peak_range` fails | `flux/lowres/timelag_analysis.py` |
 
-## S4 — Contract mismatch (14)
+## S4 — Contract mismatch (15)
 
 | ID | Finding | Where |
 |---|---|---|
@@ -201,8 +203,9 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | L8 | `FlagQCF`'s documented "QCF is NaN if no flag available" branch is unreachable | `preprocessing/qaqc/qcf.py:640` |
 | G3 | Pinned tabs are not actually frozen against added columns | `gui/app.py:899` |
 | G6 | `WorkerRunner` clears `is_running` before emitting — re-entry window | `gui/widgets/worker.py:73` |
+| L78 | `percent_matching`/`confidence` parsed back out of a `'{:.0f}%'` string, so 99.9% reports as 100.0 | `core/times/times.py` |
 
-## S5 — Cosmetic / dead / latent (13)
+## S5 — Cosmetic / dead / latent (16)
 
 | ID | Finding | Where |
 |---|---|---|
@@ -219,6 +222,9 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | G7 | `_compute_payload` writes tab state from the worker thread | `gui/tabs/_outlier_base.py:463` |
 | G8 | `save_config` catches only `OSError` | `gui/config.py:36` |
 | G9 | Project load transiently materialises the previous session's event columns | `gui/app.py:1372` |
+| L77 | `MultiDataFileReader.metadata_df`'s guard tests `self._data_df`, the wrong attribute | `core/io/filereader.py` |
+| L80 | `UstarVekuriThresholdDetection.bootstrap_results_` initialised, never read | `flux/lowres/ustar_vekuri_detection.py` |
+| L82 | Exceptions in Qt-invoked slots are swallowed — GUI tests driving via signals may be weaker than they look | `tests/test_gui.py` (methodology) |
 
 ## Cross-cutting observations
 
@@ -239,7 +245,17 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 
 ## Library — real bugs
 
-### [ ] L1. `Hampel` crashes on any non-fixed frequency (monthly / yearly / business-day)
+### [x] L1. `Hampel` crashes on any non-fixed frequency (monthly / yearly / business-day)
+
+> **Fixed 2026-08-15.** `_gap_flanking_records` guards the `index.freq.nanos` read and falls through
+> to the existing median-of-diffs branch, so a non-fixed offset takes its step from the timestamps.
+> A `try/except ValueError` on that single attribute is deliberate: pandas 3 offers no non-raising
+> fixedness test (`Day` is no longer a `Tick` yet has working `.nanos`, and `hasattr` propagates the
+> error), so the attempt *is* the test. The fixed-frequency path is unchanged code, so today's
+> numbers cannot move — confirmed, `test_outlierdetection.py`'s exact-value assertions still pass.
+> Covered by `TestNonFixedFrequencyIndex` (monthly `MS`, yearly `YS`), which also asserts
+> `_untestable` stays False in the interior, pinning the computed step rather than only the absence
+> of a crash. Mutation-checked: `ValueError: <YearBegin: month=1> is a non-fixed frequency`.
 
 `diive/preprocessing/outlier_detection/hampel.py:228`
 
@@ -301,7 +317,23 @@ because wind direction spans ~0–360 in every year).
 
 ---
 
-### [ ] L3. Frequency detection: off-by-one denominator breaks short series and mis-reports confidence
+### [x] L3. Frequency detection: off-by-one denominator breaks short series and mis-reports confidence
+
+> **Fixed 2026-08-15.** One fix, two lines. Dividing the modal-delta count by the number of
+> *intervals* (`len(df) - 1`) rather than rows corrects both the reported confidence and the 2-row
+> failure — the same expression caused both. The 1-row `KeyError` needed a second line: an
+> empty-mode guard returning `'-not-enough-datarows-'`, which routes to `DetectFrequency`'s existing
+> informative `RuntimeError` instead of `KeyError: 0`.
+>
+> Because this runs at the front of nearly every diive workflow, the no-change claim was verified
+> rather than asserted: all four bundled datasets detect the identical frequency before and after
+> (only the reported match rises to a correct 100%), and a 3000-trial randomised sweep shows the
+> detected frequency can change in exactly one arithmetically constrained case — even `n` where the
+> top delta occurs `n/2` times, a genuine majority of `n-1` intervals that the old code rejected
+> outright. So the change only *adds* detections.
+>
+> Mutation-checked both lines separately: `('30min', '99% occurrence')` vs `100%` and `98.0 != 100.0`
+> for the denominator, `KeyError: 0` for the guard. See L78 for the string-parsing wart left behind.
 
 `diive/core/times/times.py:1386-1393`
 
@@ -519,7 +551,19 @@ the two cumulative terms sum over different record sets.
 `>`/`<`, so an exact-limit record gets a NaN flag for that iteration (resolving to 0 via L7).
 Same effective outcome as "ok", but the asymmetry is easy to misread.
 
-### [ ] L13. `transform_yearmonth_matrix_to_longform` hardcodes the column names it drops
+### [x] L13. `transform_yearmonth_matrix_to_longform` hardcodes the column names it drops
+
+> **Fixed 2026-08-15.** Pins the axis names (`rename_axis(index='YEAR', columns='MONTH')`) before
+> melting, so the later lookups and `drop` always match; `rename_axis` copies, so the caller's frame
+> keeps its own names. Two distinct failures existed on documented input — unnamed axes gave
+> `KeyError: None`, any other naming gave `KeyError: "['YEAR', 'MONTH'] not found in axis"`.
+>
+> Covered by `TestYearMonthMatrixToLongform` (4 tests incl. a round-trip from
+> `resample_to_monthly_agg_matrix`). Mutation-checked, and worth recording: the round-trip test
+> **kept passing** with the bug reinstated, because the producer names its axes correctly — the
+> other three carry the regression. A test that does not discriminate is not evidence.
+>
+> A second defect in the same function is **not** fixed and is filed separately as L79.
 
 `diive/core/dfun/frames.py:644` — derives `rows`/`cols` generically but then
 `drop(['YEAR', 'MONTH'])`, so any matrix not produced by `resample_to_monthly_agg_matrix` raises
@@ -564,7 +608,26 @@ Suggested fix: add the same `configured` guard to `BasePartitioningTab._run` (an
 
 ---
 
-### [ ] G2. `_outlier_base._on_done` can raise `KeyError` when the dataset changes mid-run
+### [x] G2. `_outlier_base._on_done` can raise `KeyError` when the dataset changes mid-run
+
+> **Fixed 2026-08-15.** `_on_done` discards a completed detection whose target column or frame index
+> no longer matches the dataset the tab now holds, after resetting `run_btn`/`progress` so the tab
+> stays usable. The run's index travels in the **payload**, not in a new `self._run_*` attribute, so
+> `_compute_payload` still writes no tab state — G7 stays exactly as fixable as before, and G6 does
+> not interact (a second run would carry its own payload index). No `run_id` counter: `WorkerRunner`
+> allows one job in flight here, so out-of-order completion is impossible.
+>
+> **This entry understates the severity.** Mutating away only the index check, keeping the column
+> check, produces *no exception at all* — the narrowed frame's result is silently adopted
+> (`assert <17519 rows x 2 columns> is None`). So G2 has a silent-corruption half as well as the
+> `KeyError` half, and by this document's own rubric that half ranks above S3.
+>
+> `_rerender_last` was tightened too, which goes slightly beyond this entry's text — the entry says
+> it "already guards exactly this", but it guarded only the missing-column half. Mutation 3:
+> `IndexingError: Unalignable boolean Series provided as indexer` after a record extension. Covered by
+> `test_outlier_tab_discards_result_when_dataset_changed_midrun` (4 cases incl. the unchanged frame,
+> so the guard is not a blanket refusal). See L82 for a testing caveat found here that affects other
+> GUI tests.
 
 `diive/gui/tabs/_outlier_base.py:666`
 
@@ -912,7 +975,19 @@ to a full date index get holes where they expect NaN.
 
 ## Round 2 — library: lower severity
 
-### [ ] L22. `MultiDataFileReader` raises `AttributeError` when every file is empty
+### [x] L22. `MultiDataFileReader` raises `AttributeError` when every file is empty
+
+> **Fixed 2026-08-15.** Raises a clear `ValueError` rather than returning an empty result: an empty
+> frame has no timestamp index to reindex and would travel on into `continuous_timestamp_freq` and
+> into the GUI as an inexplicably blank dataset. Two messages so the cause is named — no files given
+> vs all files empty, the latter including the first path so a bad glob is visible.
+>
+> The partially-empty case (some files empty, some not) was verified to already work — real example
+> file + a 0-byte file merges to 1488×101, `progress_callback` still fires for the skipped file — and
+> locked in with its own test rather than assumed. Covered by `TestMultiDataFileReaderEmptyFiles`
+> (3 tests). Mutation-checked: `AttributeError: 'NoneType' object has no attribute 'columns'`.
+>
+> An adjacent copy-paste defect found here is filed separately as L77.
 
 `diive/core/io/filereader.py:320` — `data_df` stays `None` if every file raises `EmptyDataError`
 (or the file list is empty), and `sort_multiindex_columns_names(df=None, ...)` then fails with
@@ -1004,7 +1079,18 @@ the NaN, silently dropping up to 11 candidates. Triggered by u* reported at 2-de
 `degenerate classes: 3` on 6000 synthetic nighttime records. No final threshold flipped across 30
 seeds, so the wrong *intermediate* value is confirmed but a wrong *result* is not.
 
-**[ ] L27. `set_storage_to_zero=True` still requires the storage column — the exact case it documents**
+**[x] L27. `set_storage_to_zero=True` still requires the storage column — the exact case it documents**
+
+> **Fixed 2026-08-15.** With `set_storage_to_zero=True` and the storage column absent, `strgcol` is
+> set to `None` and the three sites that read it cope: `storage_correction()` selects only the flux
+> column, `report()` prints a "storage term set to zero" line instead of computing availability, and
+> `showplot()` derives its scale from the flux. The explicit-`strgcol` existence check now raises only
+> when the storage term is actually used; the real (non-zero) paths are untouched. Covered by
+> `test_level31_set_storage_to_zero_without_storage_column`, which drives the documented H/LE path
+> end to end (`init_flux_data(fluxcol='LE')` → L2 → L3.1 with `SLE_SINGLE` dropped) and asserts
+> `LE_L3.1` equals measured `LE`. Mutation-checked: `KeyError: "['SLE_SINGLE'] not in index"`.
+
+
 `storage_correction.py:150` — the flag is documented for "fluxes where no storage profile is
 available (e.g. H, LE)", and `run_level31`'s docstring repeats it, but `_detect_storage_var()` runs
 unconditionally in `__init__` and `storage_correction()` opens with `self.df[[fluxcol, strgcol]]`.
@@ -1104,7 +1190,18 @@ partially-covered VUT series silently passes low-turbulence data. The in-library
 (`level33.py:531`) fills NaN years from CUT, so the chain is currently safe; the exposure is via the
 public class.
 
-**[ ] L31. `UstarThresholdConstantScenarios.calc(showplot=True)` crashes on pandas 3**
+**[x] L31. `UstarThresholdConstantScenarios.calc(showplot=True)` crashes on pandas 3**
+
+> **Fixed 2026-08-15.** `counts` comes from `describe().loc['count']` and is indexed by column name,
+> so the lookups in `_bartxt` must be positional: `counts.div(counts.iloc[0])` and
+> `counts_perc.iloc[ix]`. **This entry named only the first site**; the second has the identical
+> defect one line later and would crash immediately after. Mutation-checked the second site *alone*
+> (first restored) to prove the test covers both edits: `KeyError: 0` either way. Covered by
+> `TestScenarioPlotCountsAreAddressedPositionally`, asserting all 6 bar annotations and that the
+> unfiltered column reads 100%; `matplotlib.use("Agg")` added to `test_ustar_mp.py`, which had no
+> backend pin. Display-only code — no threshold value moved.
+
+
 `ustarthreshold.py:337`, `:345` — `counts.div(counts[0])` uses positional `__getitem__` on a
 label-indexed Series, removed in pandas 3 (the project pins 3.0+). `KeyError: 0`. Plotting is the
 only purpose of this class.
@@ -1126,7 +1223,19 @@ assignment. `run()` never calls the collectors, so `results_seasons_df`/`results
 all-NaN and the detected threshold is only *printed*, never stored — contradicting the class
 docstring. `bts_results_df` is not reset in `run()`, so a second run mixes both runs' quantiles.
 
-**[ ] L33. `UstarVekuriThresholdDetection.summary()` crashes before `detect()`**
+**[x] L33. `UstarVekuriThresholdDetection.summary()` crashes before `detect()`**
+
+> **Fixed 2026-08-15.** `summary()` before `detect()` is deliberately **not** made an error: the
+> method already intends to return "Run detect() first", and the sibling ONEFlux port
+> `UstarMovingPointDetection` behaves identically, so raising would put a gratuitous divergence
+> between two classes users swap between. The actual bug was `results_ = {}` in `__init__` — a dict
+> has no `.empty`, so the guard itself raised `AttributeError`. Now `pd.DataFrame()`, as is
+> `bootstrap_stats_`, which was documented in Attributes but never assigned (the entry's second
+> half); `bootstrap()` now assigns it. Docstrings updated to match. Covered by
+> `TestVekuriSummaryBeforeDetect`. Mutation-checked: `AttributeError: 'dict' object has no attribute
+> 'empty'`. No computed number touched. See L80 for dead code noticed alongside.
+
+
 `ustar_vekuri_detection.py:187` — `__init__` sets `results_ = {}` (a dict) while `summary()` does
 `if self.results_.empty:` to print its "run detect() first" message, so the guard itself raises
 `AttributeError`. `UstarMovingPointDetection` gets this right with `pd.DataFrame()`. Also, the
@@ -1311,7 +1420,23 @@ open-path flux but no correction term drops out of the deliverable rather than b
 uncorrected or flagged. Combined with L36 this deletes real measurements: 200 of 1000 records lost
 in the reviewer's run.
 
-**[ ] L39. `ScopApplicator` has an undocumented column-name contract; legal inputs raise `KeyError`**
+**[x] L39. `ScopApplicator` has an undocumented column-name contract; legal inputs raise `KeyError`**
+
+> **Fixed 2026-08-15.** Any legal input is now **accepted** rather than the contract being tightened:
+> `__init__` renames `fct_unsc` → `ColumnConfig.fct_unsc_gf` and `daytime` → `ColumnConfig.daytime`
+> at the boundary. That is the right direction because the rest of the class already reads both
+> columns through its own `ColumnConfig` — the canonical-name convention was the intended design and
+> simply was not applied at the entry point, so one rename replaces changes at ~10 downstream `.name`
+> sites. It also fixes `name=None` inputs. Docstring now states which names are normalised and which
+> are kept.
+>
+> All three legal inputs the entry names were reproduced first (`FCT_UNSC`, `FCT_UNSC_gfXG`,
+> `DAYTIME_FLAG` — each `KeyError`). Covered by `TestApplicatorAcceptsAnyInputSeriesName`, which
+> asserts the corrected series is *numerically identical* across namings, not merely that it runs.
+> Mutation-checked: all three `KeyError`s return. No H2O/LE leftover in this path. L41 is untouched
+> and stays a one-line change (`fct_unsc_gf` is still `'FCT_UNSC_gfRF'` though the fill is XGBoost).
+
+
 `selfheating.py:1214` — `run()` looks up the hardcoded `'FCT_UNSC_gfRF'`, but `__init__` stores the
 series under `fct_unsc.name`. Passing what `ScopPhysics.run(gapfill=False)` produces (`FCT_UNSC`) or
 `physics.fct_unsc_gf` (`FCT_UNSC_gfXG`) raises. Independently, `:1250` passes `by=self.daytime.name`
@@ -1377,7 +1502,21 @@ different `.name`s.
 as 0. A run with 1519 of 3000 records containing data reports `Valid records: 2986 (99.5%)`. The
 same numbers are returned in the public `summary` dict.
 
-**[ ] L43. Default fringe-bin trimming can empty the time-lag histogram; the `IndexError` escapes the batch helpers**
+**[x] L43. Default fringe-bin trimming can empty the time-lag histogram; the `IndexError` escapes the batch helpers**
+
+> **Fixed 2026-08-15.** `Histogram(method='uniques')` yields `n_unique - 1` bins, so
+> `ignore_fringe_bins` is now compared against that count first. If trimming would remove every bin
+> it is **skipped for that gas** with a visible `warn` naming the bin/value counts — trimming anyway
+> and returning a peak from a partly-trimmed histogram would convert this crash into a quietly wrong
+> number, which this document ranks as worse. Below two distinct lag values a `ValueError` explains
+> why, and `analyze_all_gases` / `plot_all_gases` already catch `ValueError`, so the batch warns and
+> continues as their docstrings promise instead of aborting on a bare `IndexError`.
+>
+> New test file `tests/test_timelag.py` (nothing existing fits — `TimeLagAnalysis` is `dv.flux`
+> lowres). Mutation-checked: `IndexError: list index out of range` at `peak = peakbins[0]`. A related
+> emptying path is filed separately as L81.
+
+
 `timelag_analysis.py:148` — `ignore_fringe_bins or [5, 10]` drops 5 leading and 10 trailing bins;
 `Histogram(method='uniques')` produces `n_unique - 1` bins, so a TLAG column with few distinct lag
 values leaves nothing and `peakbins[0]` raises a bare `IndexError`. `analyze_all_gases` /
@@ -1727,7 +1866,16 @@ the summer colours. Verified against the installed trimesh 4.12.2 with a monoton
 sampled row colours came back exactly reversed. Both the smooth and extruded paths are affected;
 `u` is correct.
 
-**[ ] L65. `RidgeLinePlot` cannot plot any series that contains a gap**
+**[x] L65. `RidgeLinePlot` cannot plot any series that contains a gap**
+
+> **Fixed 2026-08-15.** `dropna()` once in `__init__`, before grouping — one place rather than at the
+> two `kde.fit` sites — so a group left with no valid values simply gets no ridge, and an all-NaN
+> series raises a `ValueError` that says so. Docstring documents both. Covered by
+> `test_ridgeline_plots_a_series_that_contains_gaps` (scattered gaps plus one month blanked → 11
+> ridges, July absent). Mutation-checked: `ValueError: Input X contains NaN. KernelDensity does not
+> accept missing values…`.
+
+
 `core/plotting/ridgeline.py:196`, `:234` — `np.array(series)` goes straight into
 `KernelDensity.fit`, which rejects NaN. Every gappy time series raises
 `ValueError: Input X contains NaN`. The GUI path works only because `ridgeline_to_code` and the
@@ -1787,13 +1935,42 @@ assigning `_grid_xn/_yn/_height/_z/_style` (`:963`), and `_compute` returns earl
 clears but "VR (.glb)" / "3-D print (.stl)" still write the *previous* variable's relief under a
 filename built from the *current* target.
 
-**[ ] L68. `datetime_surface_grid` silently destroys a variable named `DATE` or `TIME`**
+**[x] L68. `datetime_surface_grid` silently destroys a variable named `DATE` or `TIME`**
+
+> **Fixed 2026-08-15.** Both files pivot through an internal value key
+> (`series.rename('_values')`, `values='_values'`) — the `ScatterXY` `_x`/`_y`/`_z` precedent — so the
+> `DATE`/`TIME` helper columns can never collide with the data column. L66's `TIMESTAMP_START`
+> conversion is untouched.
+>
+> **This was filed at the wrong severity for its second half.** In `HeatmapDateTime._prepare_data`
+> there is no crash at all: `to_numpy()` without `dtype=float` yields an object array, so the heatmap
+> **silently paints the timestamps** and produces a plausible-looking wrong figure. By this document's
+> rubric that half is S1, not S3 — the entry's own "the crash is the lucky outcome" remark was more
+> literally true than it read.
+>
+> Covered by `test_datetime_surface_grid_keeps_a_variable_named_date` (subtests for both names,
+> asserting the grid's and the heatmap's `z` equal the un-renamed series'). Mutation-checked per file:
+> `TypeError: float() argument must be … not 'datetime.time'` for the grid, and
+> `TypeError: unsupported operand type(s) for -: 'datetime.time' and 'float'` with only
+> `heatmap_datetime.py` reverted — proving the heatmap half is genuinely covered.
+
+
 `core/plotting/surface_grid.py:71` — `df["DATE"] = df.index.date` overwrites the data column when
 `series.name` is one of those. The crash (`TypeError: float() argument must be … not
 'datetime.time'`) is the lucky outcome; the defect is the silent overwrite.
 `HeatmapDateTime._prepare_data` (`heatmap_datetime.py:96`) has the identical construction.
 
-**[ ] L69. `Cumulative.plot` raises on an all-NaN column**
+**[x] L69. `Cumulative.plot` raises on an all-NaN column**
+
+> **Fixed 2026-08-15.** `valid = series.dropna()` computed once; an empty column is labelled
+> `"{col}: no data"` so the legend keeps one entry per column and states there is nothing there, and
+> the end-point marker/annotation is skipped rather than annotating `nan`. The same one-liner was
+> applied to `CumulativeYear.plot`, which this entry names as the same pattern. Covered by
+> `test_cumulative_labels_an_all_nan_column_instead_of_raising`. Mutation-checked twice, so both
+> halves bite: `IndexError: single positional indexer is out-of-bounds` for the label, and
+> `'nan' unexpectedly found in '262800 nan'` for the marker guard.
+
+
 `core/plotting/cumulative.py:327` — `series.dropna().iloc[-1]` inside an f-string label indexes an
 empty Series when a column has no valid values (normal for a scenario column that was never filled).
 Same pattern at `cumulative.py:186` in `CumulativeYear`. `IndexError: single positional indexer is
@@ -1929,3 +2106,57 @@ Reachable from the GUI Seasonal-trend tab's "Harmonic" option.
 
 Fixing it means peak-picking with mainlobe exclusion (skip bins adjacent to one already
 taken) rather than a plain top-N — a design change, so it is recorded rather than done.
+
+---
+
+# Round 4 — found while fixing S3 (2026-08-15)
+
+Six defects noticed *adjacent* to an S3 fix and deliberately left alone, so that each fix stayed
+surgical. Each was reported by the agent that found it rather than folded into an unrelated commit.
+None is reproduced beyond what its note says.
+
+**[ ] L77. `MultiDataFileReader.metadata_df` tests the wrong attribute**
+`core/io/filereader.py` — the `metadata_df` property's emptiness guard checks `self._data_df`, not
+`self._metadata_df`, so it reports on the wrong frame. Found while fixing L22, and now unreachable
+via that path (L22's `ValueError` fires first), which is exactly why it should be recorded rather
+than left to be rediscovered. Both properties also still carry bare
+`raise Exception('data is empty')` fallbacks.
+
+**[ ] L78. `percent_matching` / `confidence` are recovered by parsing a formatted string**
+`core/times/times.py` — `DetectFrequency` stores its match rate as `'{:.0f}% occurrence'` and later
+parses the number back out of that string, so both values are rounded to whole percent: a genuine
+99.9% is reported as `100.0`, indistinguishable from a perfectly regular record. Found while fixing
+L3, which corrected the *denominator* feeding this; the rounding is a separate defect and survives
+the fix. S4 — the number is defensible, the precision it implies is not.
+
+**[ ] L79. `transform_yearmonth_matrix_to_longform` rejects non-contiguous month columns**
+`core/dfun/frames.py` — with non-contiguous months `pd.infer_freq` returns `None`, so the
+`freqstr == 'MS'` guard trips and the function raises
+`ValueError('Failed building monthly timestamp for long-form time series.')`. Reachable from its own
+documented producer: a seasonal record (e.g. June–August across 2018–2020) makes
+`resample_to_monthly_agg_matrix` emit a 3-column matrix that this function then refuses. The
+docstring's own example (`MONTH 1 2 3`) hits the same path. Found while fixing L13.
+
+**This is the fourth instance of the shape already called out under *Cross-cutting observations*** —
+"the aggregator kept only the bins that occurred, and the consumer treated them as contiguous"
+(L61 `HeatmapYearMonth`, L63 `GridAggregator`). Worth fixing as that family rather than one-off.
+
+**[ ] L80. `UstarVekuriThresholdDetection.bootstrap_results_` is never read**
+`flux/lowres/ustar_vekuri_detection.py` — initialised in `__init__` and never assigned or read;
+`bootstrap()` builds its own local `boot_results`. Dead attribute, not deleted per the
+"mention, don't delete" rule. Found while fixing L33.
+
+**[ ] L81. `TimeLagAnalysis`: a bin range excluding every lag empties `results`**
+`flux/lowres/timelag_analysis.py` — with `histogram_startbin`/`histogram_endbin` set so that no lag
+value falls inside, `results` ends up empty and `detect_peak_range` fails on the zero-size array.
+A second route to the emptiness L43 fixed for `ignore_fringe_bins`, through different parameters.
+Overlaps L44's territory (the `TimeLagAnalysis` docstring/parameter contract), so it belongs with
+that entry.
+
+**[ ] L82. An exception inside a Qt-invoked slot is swallowed, so GUI tests can pass over a crash**
+`gui/` (methodology, not one file) — PySide6's signal machinery absorbs exceptions raised inside a
+slot it invokes, so a test that exercises a widget *through a signal* (e.g. toggling a checkbox whose
+`toggled` handler raises) sees no failure. G2's regression test calls `_rerender_last()` directly for
+this reason. **This casts doubt on any existing GUI test that drives behaviour via signals and
+asserts only that nothing raised** — those tests may be weaker than they look. Worth an audit of
+`tests/test_gui.py` for that pattern. Found while fixing G2.
