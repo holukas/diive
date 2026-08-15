@@ -239,7 +239,8 @@ class MultiDataFileReader:
     ``DataFrame.combine_first`` (existing values take precedence; the incoming
     file fills gaps), columns are sorted, and the merged data is reindexed to a
     continuous timestamp at the filetype's frequency. Files that are empty
-    (``pandas.errors.EmptyDataError``) are skipped.
+    (``pandas.errors.EmptyDataError``) are skipped; if that leaves no data at
+    all (every file empty, or no files given), a ``ValueError`` is raised.
 
     Use the :attr:`data_df` and :attr:`metadata_df` properties to retrieve the
     merged results after construction.
@@ -268,6 +269,10 @@ class MultiDataFileReader:
                 been merged); ``done`` is the count of finished files and
                 ``total`` the number of files. Empty (skipped) files still emit a
                 ``'done'`` event so the count stays consistent.
+
+        Raises:
+            ValueError: If ``filepaths`` is empty, or if all given files are
+                empty and therefore no data could be read.
         """
 
         # Getting configs for filetype
@@ -317,6 +322,13 @@ class MultiDataFileReader:
             finally:
                 if self.progress_callback:
                     self.progress_callback('done', idx + 1, total, filepath)
+        if not isinstance(data_df, DataFrame):
+            if not self.filepaths:
+                raise ValueError("No files given: `filepaths` is empty. Check the search folder "
+                                 "and the file pattern used to collect the files.")
+            raise ValueError(f"No data found: all {total} given files are empty and were skipped. "
+                             f"Check that the files contain data records and that the filetype "
+                             f"configuration matches them (first file: {self.filepaths[0]}).")
         data_df = sort_multiindex_columns_names(df=data_df, priority_vars=None)
         return data_df, metadata_df
 
