@@ -161,7 +161,10 @@ class SeasonalTrendDecomposition:
         """
         Strength of seasonality (0–1).
 
-        Ratio of seasonal variance to total variance of trend + residual.
+        Seasonal variance divided by the sum of seasonal and residual variance.
+        The trend is not involved: this is the detrended-variance form of the
+        Wang/Hyndman seasonal strength `1 - var(residual) / var(seasonal +
+        residual)`, which it equals when the two components are uncorrelated.
         Higher = stronger recurring patterns.
 
         Returns:

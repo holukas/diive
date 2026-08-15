@@ -58,7 +58,6 @@ def stl_decompose(
             - 'residual': pd.Series, residual (noise + anomalies)
             - 'n_interpolated': int, records interpolated for the fit and masked
               back out of the components
-            - 'iterations': int, number of inner loop iterations
 
     Raises:
         ValueError: If the series is all-NaN, or seasonal < 2, or trend < 3.
@@ -69,6 +68,9 @@ def stl_decompose(
         - trend must be >= 3
         - Observation weights are not supported: statsmodels' STL takes none. Its
           `robust` flag down-weights outliers internally.
+        - No iteration count is returned: statsmodels' STL does not report one.
+          The removed 'iterations' key held `DecomposeResult.nobs`, an observation
+          count (a shape tuple), never an iteration count.
     """
     # Input validation
     if len(series) < 2 * seasonal:
@@ -154,14 +156,13 @@ def stl_decompose(
 
         if verbose:
             detail(f"STL decomposition: period={period}, seasonal={stl_seasonal_smoother}, "
-                   f"trend={trend}, robust={robust}, iterations={decomp.nobs}", verbose=verbose)
+                   f"trend={trend}, robust={robust}", verbose=verbose)
 
         return {
             'seasonal': seasonal,
             'trend': trend_comp,
             'residual': residual,
-            'n_interpolated': n_gaps,
-            'iterations': decomp.nobs if hasattr(decomp, 'nobs') else None
+            'n_interpolated': n_gaps
         }
 
     except Exception as e:
@@ -374,7 +375,8 @@ def reconstruct_from_components(
 
     Notes:
         - Uses original index from trend (assumes all components have same index)
-        - NaN values in input are preserved in output
+        - NaN in a component that is used is preserved in the output; a component
+          left out of `components_to_use` does not affect it
     """
     if components_to_use is None:
         components_to_use = ['trend', 'seasonal', 'residual']
@@ -402,9 +404,11 @@ def reconstruct_from_components(
     else:
         raise ValueError(f"Unknown model: {model}")
 
-    # Preserve NaN from trend
-    result[trend.isna()] = np.nan
-
+    # No explicit NaN mask: a gap in a component that is used propagates through
+    # the arithmetic above on its own. Masking with `trend.isna()` regardless of
+    # `components_to_use` blanked a trend-excluding reconstruction wherever the
+    # trend is NaN by design - the (period-1)//2 edges of a classical
+    # decomposition - although the seasonal component is defined there.
     return result
 
 

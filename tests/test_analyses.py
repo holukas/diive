@@ -650,3 +650,67 @@ class TestCompoundExtremesSaysWhenItCannotClassify(unittest.TestCase):
             ce = CompoundExtremes(var1=ta, var2=vpd)
         self.assertEqual(len(ce.results), 2)
         self.assertIn('could not be classified', cap.get())
+
+
+class TestReconstructionOnlyHonoursTheComponentsItUses(unittest.TestCase):
+    """L57: the trend's NaN must not reach a trend-excluding reconstruction.
+
+    A classical decomposition leaves the trend NaN at the (period-1)//2 records at
+    each end by design, while the seasonal component is defined everywhere. The
+    unconditional `result[trend.isna()] = np.nan` blanked those records in a
+    seasonal-only reconstruction too, and disagreed with `detrend()`, which sums
+    the same two components directly.
+    """
+
+    @staticmethod
+    def _decomp():
+        import numpy as np
+        import pandas as pd
+        from diive.analysis.seasonaltrend import SeasonalTrendDecomposition
+        t = np.arange(400)
+        series = pd.Series(5.0 * np.sin(2 * np.pi * t / 31) + 10.0 + t * 0.01,
+                           index=pd.date_range('2015-01-01', periods=400, freq='D'))
+        return SeasonalTrendDecomposition(series, method='classical', seasonal_period=31)
+
+    def test_a_seasonal_only_reconstruction_keeps_every_record(self):
+        std = self._decomp()
+        self.assertEqual(int(std.trend.isna().sum()), 30)  # NaN by design
+        self.assertEqual(int(std.seasonal.isna().sum()), 0)
+        recon = std.reconstruct(keep_components=['seasonal'])
+        self.assertEqual(int(recon.isna().sum()), 0)
+        self.assertLess((recon - std.seasonal).abs().max(), 1e-12)
+
+    def test_it_agrees_with_detrend(self):
+        import pandas as pd
+        std = self._decomp()
+        recon = std.reconstruct(keep_components=['seasonal', 'residual'])
+        pd.testing.assert_series_equal(recon, std.detrend())
+
+    def test_a_used_component_still_carries_its_gaps_over(self):
+        std = self._decomp()
+        # The trend is used here, so its NaN belongs in the output.
+        self.assertEqual(int(std.reconstruct(keep_components=['trend']).isna().sum()), 30)
+        full = std.reconstruct()
+        self.assertEqual(int(full.isna().sum()), 30)
+        measured = full.dropna()
+        self.assertLess((measured - std.series.loc[measured.index]).abs().max(), 1e-9)
+
+
+class TestStlReturnsNoFakeIterationCount(unittest.TestCase):
+    """L60: 'iterations' held `DecomposeResult.nobs`, an observation count.
+
+    On the installed statsmodels that property returns a *shape tuple*, so the key
+    documented as "number of inner loop iterations" carried `(n,)`. statsmodels'
+    STL reports no iteration count, so none is returned.
+    """
+
+    def test_the_result_carries_only_keys_it_can_fill(self):
+        import numpy as np
+        import pandas as pd
+        from diive.core.times.decomposition_utils import stl_decompose
+        t = np.arange(600)
+        series = pd.Series(5.0 * np.sin(2 * np.pi * t / 30) + t * 0.01,
+                           index=pd.date_range('2015-01-01', periods=600, freq='D'))
+        res = stl_decompose(series, seasonal=30, trend=61, robust=False)
+        self.assertEqual(set(res), {'seasonal', 'trend', 'residual', 'n_interpolated'})
+        self.assertNotIn('iterations', res)
