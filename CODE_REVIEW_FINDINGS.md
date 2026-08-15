@@ -93,7 +93,7 @@ opposite of what the code produces. Re-read it against the corrected behaviour.
 
 ---
 
-# Triage index — all 106 findings by severity
+# Triage index — all 107 findings by severity
 
 The detailed entries below stay grouped by review round and module. This index is the **fix order**.
 
@@ -218,7 +218,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | L91 | `hexbin.py` accepts, documents and forwards `show_less_xticklabels`, and nothing applies it | `core/plotting/hexbin.py:272` |
 | L95 | `ScopPhysics.fct_unsc_gf` is `'FCT_UNSC_gfRF'` though the fill is XGBoost; rename is breaking | `flux/lowres/selfheating.py` |
 
-## S5 — Cosmetic / dead / latent (22)
+## S5 — Cosmetic / dead / latent (23)
 
 | ID | Finding | Where |
 |---|---|---|
@@ -239,6 +239,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L80~~ | ~~`UstarVekuriThresholdDetection.bootstrap_results_` initialised, never read~~ (done 2026-08-15) | `flux/lowres/ustar_vekuri_detection.py` |
 | ~~L82~~ | ~~Exceptions in Qt-invoked slots are swallowed — GUI tests driving via signals may be weaker than they look~~ (done 2026-08-15) — the guard uncovered a real leaked-slot bug 44 tests were passing over | `tests/test_gui.py` (methodology) |
 | L85 | No doctest runner anywhere — docstring examples are never executed (L35 had been broken twice over) | `tests/` (methodology) |
+| L98 | `run_all_examples.py` forces no matplotlib backend, so the 16 examples ending in `plt.show()` block forever waiting for a window — the suite cannot run unattended | `examples/run_all_examples.py` |
 | L89 | `-9999` at position 6 still reads as a passing flag | `preprocessing/qaqc/eddyproflags.py` |
 | L90 | `docs/auto_examples/flux/uncertainty.*` stale generated copies | `docs/auto_examples/` |
 | L93 | `EventManager.load_dict({})` early-returns without clearing, so previous events survive | `gui/events.py` |
@@ -2332,3 +2333,21 @@ years run in parallel, so a single seed must be **derived per year** (`seed + ye
 `SeedSequence` spawn) — one shared seed would make every year draw the same resample
 indices, which is worse than unseeded. Inventing that scheme silently for the flux chain's
 u\* thresholds is not a one-liner, so it is recorded instead.
+
+**[ ] L98. The example suite cannot run unattended: `plt.show()` blocks**
+`examples/run_all_examples.py` — sets no matplotlib backend, and **16 of ~76 examples end with a
+bare `plt.show()`**. With PySide6 installed the Qt backend is the default, so `plt.show()` blocks
+until a human closes the window. Running the suite headless stalls on the first such example
+indefinitely — not slowly, permanently. Found while verifying `outlier_stepwise.py` after L12's
+fix: two log checks 20 minutes apart were byte-identical, and `MPLBACKEND=Agg` made the same
+example finish in seconds (exit 0).
+
+This is distinct from the `showplot=True` item on CLAUDE.md's example checklist — the detectors in
+these examples all pass `showplot=False` correctly; it is the trailing hand-rolled figure that
+blocks. **It may also be the unstated reason for CLAUDE.md's "[CRITICAL] NEVER RUN EXAMPLE SUITE"
+rule**, which currently gives none; if so, the rule and this finding should cross-reference.
+
+The fix is one line in the runner (force `Agg`, or set `MPLBACKEND` in its environment), but it
+changes how the suite behaves for someone running it interactively to look at the plots, so it is
+recorded rather than done. The alternative — dropping `plt.show()` from 16 examples — is worse:
+it is what a human running one example by hand actually wants.
