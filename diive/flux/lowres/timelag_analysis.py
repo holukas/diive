@@ -88,15 +88,17 @@ class TimeLagAnalysis:
     df : pd.DataFrame
         Dataframe with TLAG columns (e.g., 'CO2_TLAG_ACTUAL') and datetime index
     ignore_fringe_bins : list, optional
-        Bin indices to exclude from histogram. Default: None
+        [i, j]: number of leading and trailing histogram bins to exclude.
+        Default: None, which means [5, 10]
     lag_window_min, lag_window_max : float
         Reference acceptable lag range for visualization (seconds)
-    histogram_startbin, histogram_endbin : int
-        Bin range for display and analysis. Default: 0 to 10
+    histogram_startbin, histogram_endbin : float
+        Lag range in seconds kept for display and analysis. Default: 0 to 10
     gradient_threshold : float
         Edge detection sensitivity; lower = stricter. Default: 0.15
     zoom_margin : list, optional
-        [before_peak, after_peak] offsets for zoomed view (seconds). Default: [0.5, 0.8]
+        [before_peak, after_peak] offsets for zoomed view (seconds).
+        Default: None, which means [0.5, 1.5]
 
     Example
     -------
@@ -131,10 +133,13 @@ class TimeLagAnalysis:
         lag_window_max : float
             Upper bound of physically acceptable lag range in seconds. Used for
             reference line visualization (typically ~1.00s). Default: 1.00
-        histogram_startbin : int
-            First histogram bin index to display in plots. Default: 0
-        histogram_endbin : int
-            Last histogram bin index to display in plots. Default: 10
+        histogram_startbin : float
+            Lowest lag value in seconds kept for display and analysis. Bins are
+            compared against their inclusive start, not their index. Default: 0
+        histogram_endbin : float
+            Highest lag value in seconds kept for display and analysis. If no bin
+            falls into the range, the whole lag range is kept and a warning is
+            issued. Default: 10
         gradient_threshold : float
             Threshold for gradient-based peak edge detection (0-1 range).
             Lower values = stricter edge detection. Controls where peak edges are
@@ -352,7 +357,8 @@ class TimeLagAnalysis:
         1. Extracts time lag series for specified gas (*_TLAG_ACTUAL column)
         2. Creates histogram using unique value binning
         3. Excludes specified fringe bins (non-physical accumulations)
-        4. Filters histogram to display range (startbin-endbin)
+        4. Filters histogram to display range (startbin-endbin, in lag seconds),
+           skipping the filter with a warning if it would keep no bin at all
         5. Detects peak lag using histogram maximum
         6. Identifies peak range boundaries via gradient-based edge detection
         7. Adjusts range for EddyPro's discrete 0.05s steps
@@ -425,10 +431,20 @@ class TimeLagAnalysis:
             raise ValueError(f"No histogram bins for {gascol}: found {n_uniques} distinct "
                              f"lag value(s), at least 2 are needed to form a bin")
 
-        # Filter histogram bins to display range
+        # Filter histogram bins to display range. The range is given in lag
+        # seconds, so a range that no measured lag falls into would leave no
+        # bins and detect_peak_range would fail on the empty array. Keep all
+        # bins in that case, and say so, for the same reason as above.
         locs = ((results['BIN_START_INCL'] >= self.histogram_startbin) &
                 (results['BIN_START_INCL'] <= self.histogram_endbin))
-        results = results[locs].copy()
+        if locs.any():
+            results = results[locs].copy()
+        else:
+            warn(f"{gascol}: no lag value falls into histogram_startbin="
+                 f"{self.histogram_startbin} to histogram_endbin={self.histogram_endbin} "
+                 f"(both in seconds); keeping all bins, the analysis therefore covers "
+                 f"the full lag range.")
+            results = results.copy()
 
         # Detect peak and ranges
         peak = peakbins[0]
