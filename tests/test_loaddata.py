@@ -261,6 +261,25 @@ class TestMultiDataFileReaderEmptyFiles(unittest.TestCase):
         self.assertEqual(data_df.index.name, 'TIMESTAMP_MIDDLE')
         self.assertEqual(data_df.index.freqstr, '30min')
 
+    def test_property_guards_test_their_own_frame(self):
+        """Each property's emptiness guard reports on its own frame, not the other one"""
+        reader = MultiDataFileReader(filepaths=[self.EXAMPLE_FILE], filetype='DIIVE-CSV-30MIN')
+
+        # Missing metadata must be reported by metadata_df, not silently returned
+        reader._metadata_df = None
+        with self.assertRaises(ValueError) as ctx:
+            _ = reader.metadata_df
+        self.assertIn('metadata', str(ctx.exception))
+        self.assertEqual(type(reader.data_df), DataFrame)  # data is still there
+
+        # Missing data must not make metadata_df raise
+        reader._metadata_df = reader.data_df  # any DataFrame
+        reader._data_df = None
+        with self.assertRaises(ValueError) as ctx:
+            _ = reader.data_df
+        self.assertIn('data', str(ctx.exception))
+        self.assertEqual(type(reader.metadata_df), DataFrame)
+
 
 if __name__ == '__main__':
     unittest.main()

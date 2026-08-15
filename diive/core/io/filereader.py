@@ -290,15 +290,18 @@ class MultiDataFileReader:
     @property
     def data_df(self):
         """Get dataframe of merged files data"""
+        # Both guards are unreachable from __init__ (_get_incoming_data raises
+        # ValueError first) and are kept as a safety net only. Each must test its
+        # own frame: metadata_df tested _data_df, so it reported on the wrong one.
         if not isinstance(self._data_df, DataFrame):
-            raise Exception('data is empty')
+            raise ValueError('No data available.')
         return self._data_df
 
     @property
     def metadata_df(self):
         """Get dataframe of merged files metadata"""
-        if not isinstance(self._data_df, DataFrame):
-            raise Exception('metadata is empty')
+        if not isinstance(self._metadata_df, DataFrame):
+            raise ValueError('No metadata available.')
         return self._metadata_df
 
     def _get_incoming_data(self) -> tuple[DataFrame, DataFrame]:
