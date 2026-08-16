@@ -34,6 +34,17 @@ _COLOR_ZERO = '#90A4AE'  # blue-grey 300 — zero reference line
 _COLOR_NOCOLOR = '#90A4AE'  # blue-grey 300 — measured, but no colour value to show
 
 
+def _display_name(series: Series) -> str:
+    """Name used for the Bokeh labels, with a fallback for an unnamed Series.
+
+    An unnamed Series is legitimate input — `plot()` draws it — but Bokeh raises
+    `ValueError: legend_label value must be a string` on `legend_label=None`, and
+    an f-string of a missing name renders the literal "None" as a plot title. The
+    fallback is the name Bokeh already gives the data column.
+    """
+    return str(series.name) if series.name is not None else 'value'
+
+
 # output_notebook()
 
 
@@ -118,14 +129,16 @@ class TimeSeries:
             >>> ts = dv.plotting.TimeSeries(series=pd.Series([1.0, 2.0, 1.5], index=idx, name='TA'))
             >>> ts.plot_interactive(height=800, width=1600)  # opens a browser tab
         """
+        name = _display_name(self.series)
+
         # Handle file output: temp file if not saving, named file if saving
         if save_to_file:
-            output_file(filename=f"{self.series.name}_interactive.html", title=self.series.name)
+            output_file(filename=f"{name}_interactive.html", title=name)
         else:
             # Use temporary directory so file is automatically cleaned up
             temp_dir = tempfile.gettempdir()
             temp_file = os.path.join(temp_dir, f"bokeh_{id(self)}.html")
-            output_file(filename=temp_file, title=self.series.name)
+            output_file(filename=temp_file, title=name)
 
         # Bokeh needs dataframe
         df = pd.DataFrame()
@@ -139,7 +152,7 @@ class TimeSeries:
         # Modern scientific Bokeh styling
         p = figure(height=height,
                    width=width,
-                   title=f"{self.series.name}",
+                   title=name,
                    tools=[
                        HoverTool(
                            tooltips=[('Date', '@date{%F %T}'),
@@ -162,11 +175,11 @@ class TimeSeries:
 
         # Modern line styling (publication-ready)
         p.line(x='date', y='value', line_width=2.0, source=source, color=_COLOR_LINE, alpha=0.95,
-               legend_label=self.series.name)
+               legend_label=name)
         p.scatter(x='date', y='value', size=4, source=source, color=_COLOR_LINE, alpha=0.6)
 
         # Modern axis styling
-        p.yaxis.axis_label = self.series.name
+        p.yaxis.axis_label = name
         p.xaxis.axis_label = self.series.index.name
 
         # Modern typography and aesthetics
@@ -254,11 +267,13 @@ class TimeSeries:
             >>> ts = dv.plotting.TimeSeries(series=pd.Series([1.0, 2.0, 1.5], index=idx, name='TA'))
             >>> ts.plot_rangetool(init_range=0.1)  # opens a browser tab, zoomed to the first 10%
         """
+        name = _display_name(self.series)
+
         if save_to_file:
-            output_file(filename=f"{self.series.name}_rangetool.html", title=self.series.name)
+            output_file(filename=f"{name}_rangetool.html", title=name)
         else:
             temp_file = os.path.join(tempfile.gettempdir(), f"bokeh_rangetool_{id(self)}.html")
-            output_file(filename=temp_file, title=self.series.name)
+            output_file(filename=temp_file, title=name)
 
         df = pd.DataFrame({'date': pd.to_datetime(self.series.index), 'value': self.series.to_numpy()})
         source = ColumnDataSource(df)
@@ -274,9 +289,9 @@ class TimeSeries:
         detail = figure(height=height, width=width, x_axis_type='datetime', x_axis_location='above',
                         window_axis='x', x_range=(x_start, x_end), tools='xpan,xwheel_zoom,reset',
                         toolbar_location='right', background_fill_color='#FAFAFA',
-                        border_fill_color='white', title=f"{self.series.name}")
+                        border_fill_color='white', title=name)
         detail.line('date', 'value', source=source, line_width=2.0, color=_COLOR_LINE, alpha=0.95)
-        detail.yaxis.axis_label = self.series.name
+        detail.yaxis.axis_label = name
         detail.xaxis.axis_label = self.series.index.name
 
         # Overview panel (bottom): the full series with its own (full-range) y-axis,

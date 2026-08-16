@@ -8,9 +8,11 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from bokeh.io.state import curstate
 from matplotlib.collections import LineCollection
 from matplotlib.colors import to_rgb
 
+import diive.core.plotting.timeseries as timeseries
 from diive.core.plotting.timeseries import TimeSeries, _COLOR_NOCOLOR
 from diive.core.utils.console import add_console_sink, remove_console_sink
 
@@ -240,6 +242,96 @@ class TestUnalignedColourSeriesWarns(_TimeSeriesRenderMixin, unittest.TestCase):
         ta_one.iloc[0] = 12.0
         self._render(ta_one)
         self.assertIn("1 of 200 records", self.sink.text)
+
+
+class TestUnnamedSeriesLabels(unittest.TestCase):
+    """L119: `plot_interactive()` raised on an unnamed Series; `plot()` did not.
+
+    Bokeh rejects `legend_label=None` outright (`ValueError: legend_label value
+    must be a string`), so the whole method died at the `p.line(...)` call. Its
+    two siblings on the same input got through: `plot()` draws a blank-labelled
+    line, and `plot_rangetool()` rendered the *literal string* "None" as its
+    title, from `title=f"{self.series.name}"` — the same missing-name defect,
+    non-fatal. Measured before the fix: interactive raised; rangetool titled
+    'None'; `plot()` titled ''.
+    """
+
+    N = 20
+
+    def setUp(self):
+        idx = pd.date_range('2024-06-01', periods=self.N, freq='30min')
+        self.unnamed = pd.Series(np.linspace(0, 5, self.N), index=idx)
+        self.named = pd.Series(np.linspace(0, 5, self.N), index=idx, name='TA')
+        self.assertIsNone(self.unnamed.name)
+        # Bokeh's `show()` opens a browser tab; capture the figure instead. Only
+        # `show()` writes the HTML file, so `output_file()` stays harmless.
+        self._shown = []
+        self._real_show = timeseries.show
+        timeseries.show = lambda obj, *a, **kw: self._shown.append(obj)
+        self.addCleanup(setattr, timeseries, 'show', self._real_show)
+
+    def tearDown(self):
+        plt.close('all')
+
+    def _interactive(self, series, **kwargs):
+        TimeSeries(series=series).plot_interactive(**kwargs)
+        return self._shown[-1]
+
+    def _rangetool_detail(self, series, **kwargs):
+        TimeSeries(series=series).plot_rangetool(**kwargs)
+        return self._shown[-1].children[0]  # column(detail, overview)
+
+    @staticmethod
+    def _legend_labels(fig):
+        return [item.label.value for legend in fig.legend for item in legend.items]
+
+    def test_unnamed_series_gets_a_string_legend_label(self):
+        fig = self._interactive(self.unnamed)
+        self.assertEqual(self._legend_labels(fig), ['value'])
+
+    def test_named_series_keeps_its_own_legend_label(self):
+        fig = self._interactive(self.named)
+        self.assertEqual(self._legend_labels(fig), ['TA'])
+
+    def test_unnamed_series_title_and_axis_are_not_the_string_none(self):
+        fig = self._interactive(self.unnamed)
+        self.assertEqual(fig.title.text, 'value')
+        self.assertEqual(fig.yaxis[0].axis_label, 'value')
+
+    def test_named_series_title_and_axis_unchanged(self):
+        fig = self._interactive(self.named)
+        self.assertEqual(fig.title.text, 'TA')
+        self.assertEqual(fig.yaxis[0].axis_label, 'TA')
+
+    def test_rangetool_unnamed_title_is_not_the_string_none(self):
+        """The sibling defect: this one never raised, it just titled itself 'None'."""
+        detail = self._rangetool_detail(self.unnamed)
+        self.assertEqual(detail.title.text, 'value')
+        self.assertEqual(detail.yaxis[0].axis_label, 'value')
+
+    def test_rangetool_named_title_unchanged(self):
+        detail = self._rangetool_detail(self.named)
+        self.assertEqual(detail.title.text, 'TA')
+        self.assertEqual(detail.yaxis[0].axis_label, 'TA')
+
+    def test_saved_filename_uses_the_fallback_not_none(self):
+        """`save_to_file=True` on an unnamed Series wrote 'None_interactive.html'."""
+        self._interactive(self.unnamed, save_to_file=True)
+        file_config = curstate().file
+        self.assertEqual(file_config.filename, 'value_interactive.html')
+        self.assertEqual(file_config.title, 'value')
+
+    def test_saved_filename_of_a_named_series_unchanged(self):
+        self._interactive(self.named, save_to_file=True)
+        self.assertEqual(curstate().file.filename, 'TA_interactive.html')
+
+    def test_unnamed_series_still_draws_a_blank_labelled_matplotlib_line(self):
+        """`plot()` is the sibling the finding compares against: leave it alone."""
+        fig, ax = plt.subplots()
+        TimeSeries(series=self.unnamed).plot(ax=ax)
+        self.assertEqual(ax.get_title(), '')
+        self.assertEqual(ax.get_ylabel(), '')
+        self.assertEqual(len(ax.lines[0].get_ydata()), self.N)
 
 
 if __name__ == "__main__":
