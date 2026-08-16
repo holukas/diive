@@ -67,6 +67,7 @@ class ShiftedDistributionPlot:
 
         self.fig = None
         self.ax = None
+        self._artists = []  # What this instance drew on `self.ax`, taken back on a repeat plot()
 
         self._ref_data = series.loc[ref_period[0]:ref_period[1]].dropna().values
         self._comp_data = series.loc[comp_period[0]:comp_period[1]].dropna().values
@@ -74,7 +75,15 @@ class ShiftedDistributionPlot:
         # A period holding no records has no mean and no spread. Asking numpy for them
         # anyway only emits "Mean of empty slice" warnings on the way to the same NaN.
         ref_mean = self._ref_data.mean() if self._ref_data.size else np.nan
-        ref_std = self._ref_data.std() if self._ref_data.size else np.nan
+        # Sample sd (ddof=1), as everywhere else in diive: a reference period is a sample,
+        # and the population sd understates its spread by sqrt(n/(n-1)) -- 41% at n=2, 1.7%
+        # even at n=30 -- which narrows every zone and over-counts extremes. A single record
+        # has no sample sd, so it keeps 0.0 and stays the spike it is rather than losing its
+        # zones to NaN.
+        if self._ref_data.size > 1:
+            ref_std = self._ref_data.std(ddof=1)
+        else:
+            ref_std = 0.0 if self._ref_data.size else np.nan
 
         # 4 cut points → 5 zones: extremely low | low | normal | high | extremely high
         self.breakpoints = [
@@ -113,6 +122,13 @@ class ShiftedDistributionPlot:
         kde.fit(data.reshape(-1, 1))
         log_dens = kde.score_samples(self._x.reshape(-1, 1))
         return np.exp(log_dens)
+
+    def _remember_artists(self, n_before: tuple):
+        """Record what this plot() added to the axes, so a repeat call can take it back."""
+        n_collections, n_lines, n_texts = n_before
+        self._artists = [*self.ax.collections[n_collections:],
+                         *self.ax.lines[n_lines:],
+                         *self.ax.texts[n_texts:]]
 
     def get_fig(self):
         """Return the matplotlib Figure (available after :meth:`plot`)."""
@@ -153,13 +169,27 @@ class ShiftedDistributionPlot:
             show_xaxis: Show x-axis spine, ticks, and tick labels (default True).
             show_yaxis: Show y-axis spine, ticks, and tick labels (default True).
             figsize: Figure size when ax is None.
-            zone_labels: 5 zone labels from lowest to highest. Defaults to temperature labels.
-            zone_colors: 5 fill colors for the zones (lowest to highest).
+            zone_labels: Exactly 5 zone labels from lowest to highest. Defaults to
+                temperature labels. Any other length raises ``ValueError``.
+            zone_colors: Exactly 5 fill colors for the zones (lowest to highest).
+
+        Calling this again on the same axes replaces the previous rendering; calling it
+        on a different axes leaves the earlier one drawn.
         """
         # Resolve styling: plot() arg wins, then the (deprecated) constructor value,
         # then the class defaults.
         zone_labels = zone_labels or self.zone_labels or self._DEFAULT_LABELS
         zone_colors = zone_colors or self.zone_colors or self._DEFAULT_COLORS
+
+        # The plot has exactly five zones, so anything else is caller error: too few
+        # colours used to raise IndexError halfway through drawing, too few labels left
+        # zones unlabelled and a longer list was dropped, all without a word.
+        for _name, _value in (('zone_labels', zone_labels), ('zone_colors', zone_colors)):
+            if len(_value) != len(self._DEFAULT_LABELS):
+                raise ValueError(
+                    f"ShiftedDistributionPlot: `{_name}` needs exactly {len(self._DEFAULT_LABELS)} "
+                    f"entries, one per zone from lowest to highest, but got {len(_value)}."
+                )
 
         # The dashed breakpoint markers already carry the vertical structure, so a second
         # family of dashed verticals would only compete with them: the grid is off in this
@@ -169,6 +199,16 @@ class ShiftedDistributionPlot:
 
         self.ax = ax
         self.fig, self.ax, showplot = pf.setup_figax(ax=self.ax, figsize=figsize)
+
+        # A second plot() on the *same* axes replaces this plot instead of stacking a
+        # second copy over it; on a different axes both stay, which is what the two-phase
+        # contract promises. Only this instance's own artists go -- everything else on the
+        # axes is the caller's, and one the caller has already cleared away has no axes.
+        for artist in self._artists:
+            if artist.axes is self.ax:
+                artist.remove()
+        self._artists = []
+        _n_before = (len(self.ax.collections), len(self.ax.lines), len(self.ax.texts))
 
         _ref_label = ref_label or f"Reference ({self.ref_period[0]} - {self.ref_period[1]})"
         _comp_label = comp_label or f"Comparison ({self.comp_period[0]} - {self.comp_period[1]})"
@@ -181,6 +221,7 @@ class ShiftedDistributionPlot:
                          fontsize=12, color=theme.COLOR_TEXT)
             self.ax.set_xticks([])
             self.ax.set_yticks([])
+            self._remember_artists(_n_before)
             if showplot:
                 self.fig.show()
             return
@@ -270,7 +311,7 @@ class ShiftedDistributionPlot:
         # Zone labels: text annotations just above the top spine, in data-x / axes-y coords
         if has_zones:
             trans = blended_transform_factory(self.ax.transData, self.ax.transAxes)
-            for i, label, color in zip(range(5), zone_labels, zone_colors, strict=False):
+            for i, label, color in zip(range(5), zone_labels, zone_colors, strict=True):
                 if not zone_in_view[i]:
                     continue
                 self.ax.text(
@@ -299,6 +340,8 @@ class ShiftedDistributionPlot:
                 fontsize=legend_fs, framealpha=0.0, edgecolor='none',
                 loc='upper left', bbox_to_anchor=(0.01, 0.99),
             )
+
+        self._remember_artists(_n_before)
 
         if showplot:
             self.fig.show()

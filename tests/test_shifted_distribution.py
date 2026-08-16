@@ -8,8 +8,10 @@ with no spread (constant, or a single record) must still be drawn as the spike
 it is, and an ordinary two-period comparison must be untouched.
 
 Also covers the plot's `FormatStyle` contract — the caller's chrome fields must
-survive, the class overriding only the title and legend it re-draws itself — and
-the zone geometry when a +-3 SD breakpoint falls outside the evaluation grid.
+survive, the class overriding only the title and legend it re-draws itself — the
+zone geometry when a +-3 SD breakpoint falls outside the evaluation grid, the
+five-entry contract on the zone label/colour lists, what a repeated `plot()` on
+one axes does, and the sample (ddof=1) standard deviation behind the zones.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -186,7 +188,7 @@ class TestOrdinaryComparisonUnchanged(unittest.TestCase):
         ref = self.series.loc[REF_PERIOD[0]:REF_PERIOD[1]].dropna().values
         comp = self.series.loc[COMP_PERIOD[0]:COMP_PERIOD[1]].dropna().values
         all_vals = np.concatenate([ref, comp])
-        margin = ref.std()
+        margin = ref.std(ddof=1)  # The grid margin is the reference *sample* sd
         x = np.linspace(all_vals.min() - margin, all_vals.max() + margin, 1000)
         np.testing.assert_array_equal(self.sdp._x, x)
         for name, data, got in (('ref', ref, self.sdp._ref_kde), ('comp', comp, self.sdp._comp_kde)):
@@ -197,7 +199,7 @@ class TestOrdinaryComparisonUnchanged(unittest.TestCase):
 
     def test_breakpoints_are_the_reference_mean_plus_minus_one_and_three_sd(self):
         ref = self.series.loc[REF_PERIOD[0]:REF_PERIOD[1]].dropna().values
-        expected = [ref.mean() + k * ref.std() for k in (-3, -1, 1, 3)]
+        expected = [ref.mean() + k * ref.std(ddof=1) for k in (-3, -1, 1, 3)]
         np.testing.assert_array_equal(self.sdp.breakpoints, expected)
 
     def test_all_artists_and_labels_are_drawn(self):
@@ -319,6 +321,154 @@ class TestZonesOutsideTheEvaluationGrid(unittest.TestCase):
                     step = x[1] - x[0]
                     self.assertTrue(lo - step <= pos <= hi + step,
                                     f"{text} at {pos} is not over its fill [{lo}, {hi}]")
+
+
+class TestZoneListLengths(unittest.TestCase):
+    """The plot has exactly five zones, so a list of any other length is caller error."""
+
+    def setUp(self):
+        self.sdp = ShiftedDistributionPlot(_series(), REF_PERIOD, COMP_PERIOD)
+
+    def test_a_short_or_long_zone_list_raises_naming_the_argument_and_the_count(self):
+        cases = {'zone_colors 3': (dict(zone_colors=['#111111'] * 3), 'zone_colors', 3),
+                 'zone_labels 3': (dict(zone_labels=list('abc')), 'zone_labels', 3),
+                 'zone_labels 6': (dict(zone_labels=list('abcdef')), 'zone_labels', 6),
+                 'zone_colors 6': (dict(zone_colors=['#111111'] * 6), 'zone_colors', 6)}
+        for name, (kwargs, argname, count) in cases.items():
+            with self.subTest(case=name):
+                fig, ax = plt.subplots()
+                with self.assertRaises(ValueError) as raised:
+                    self.sdp.plot(ax=ax, **kwargs)
+                plt.close(fig)
+                self.assertEqual(
+                    str(raised.exception),
+                    f"ShiftedDistributionPlot: `{argname}` needs exactly 5 entries, "
+                    f"one per zone from lowest to highest, but got {count}.")
+
+    def test_the_deprecated_constructor_lists_are_validated_too(self):
+        """The constructor values are resolved in plot(), so they meet the same check."""
+        with self.assertWarns(DeprecationWarning):
+            sdp = ShiftedDistributionPlot(_series(), REF_PERIOD, COMP_PERIOD, zone_labels=list('abc'))
+        fig, ax = plt.subplots()
+        with self.assertRaisesRegex(ValueError, r'`zone_labels` needs exactly 5 entries'):
+            sdp.plot(ax=ax)
+        plt.close(fig)
+
+    def test_five_entries_are_accepted_and_reach_the_axes(self):
+        """The check must pass valid lists through untouched, colours included."""
+        ax = _styled(self.sdp, zone_labels=list('abcde'), zone_colors=['#123456'] * 5)
+        self.assertEqual(_zone_labels(ax), list('abcde'))
+        self.assertEqual([t.get_color() for t in ax.texts], ['#123456'] * 5)
+        fills = [c for c in ax.collections if c.get_hatch() is None]
+        self.assertEqual(len(fills), 5)
+
+
+class TestRepeatedPlotOnTheSameAxes(unittest.TestCase):
+    """A second plot() on one axes replaces this plot; on another axes both survive."""
+
+    @staticmethod
+    def _counts(ax) -> tuple:
+        return len(ax.collections), len(ax.lines), len(ax.texts)
+
+    @staticmethod
+    def _geometry(ax) -> list:
+        return ([(t.get_text(), t.get_position()) for t in ax.texts]
+                + [(np.asarray(l.get_xdata()).tolist(), np.asarray(l.get_ydata()).tolist())
+                   for l in ax.lines])
+
+    def test_a_second_plot_replaces_the_first_instead_of_stacking(self):
+        sdp = ShiftedDistributionPlot(_series(), REF_PERIOD, COMP_PERIOD)
+        fig, ax = plt.subplots()
+        sdp.plot(ax=ax)
+        first_counts, first_geometry = self._counts(ax), self._geometry(ax)
+        first_limits = (ax.get_xlim(), ax.get_ylim())
+        for repeat in (2, 3):
+            sdp.plot(ax=ax)
+            with self.subTest(call=repeat):
+                self.assertEqual(self._counts(ax), first_counts)
+                self.assertEqual(self._geometry(ax), first_geometry)
+                self.assertEqual((ax.get_xlim(), ax.get_ylim()), first_limits)
+        plt.close(fig)
+        self.assertEqual(first_counts, (6, 6, 5))  # The single-plot artist counts
+
+    def test_a_repeat_plot_removes_only_this_plots_own_artists(self):
+        """Whatever the caller drew on the axes first must still be there afterwards."""
+        fig, ax = plt.subplots()
+        caller_line, = ax.plot([0.0, 1.0], [0.0, 1.0])
+        caller_text = ax.text(0.5, 0.5, 'CALLER')
+        sdp = ShiftedDistributionPlot(_series(), REF_PERIOD, COMP_PERIOD)
+        sdp.plot(ax=ax)
+        sdp.plot(ax=ax)
+        self.assertIn(caller_line, list(ax.lines))
+        self.assertIn(caller_text, list(ax.texts))
+        self.assertEqual((len(ax.collections), len(ax.lines), len(ax.texts)), (6, 7, 6))
+        plt.close(fig)
+
+    def test_plotting_on_a_different_axes_leaves_the_earlier_one_drawn(self):
+        """Re-callability across axes is the two-phase contract; only the same axes is replaced."""
+        sdp = ShiftedDistributionPlot(_series(), REF_PERIOD, COMP_PERIOD)
+        fig, (ax1, ax2) = plt.subplots(1, 2)
+        sdp.plot(ax=ax1)
+        sdp.plot(ax=ax2)
+        self.assertEqual(self._counts(ax1), (6, 6, 5))
+        self.assertEqual(self._counts(ax2), (6, 6, 5))
+        plt.close(fig)
+
+    def test_the_no_data_message_is_not_stacked_either(self):
+        """The early-return path draws a text and must take it back as well."""
+        sdp = ShiftedDistributionPlot(_series(), OUTSIDE_PERIOD, ('2060-01-01', '2060-12-31'))
+        fig, ax = plt.subplots()
+        sdp.plot(ax=ax)
+        sdp.plot(ax=ax)
+        self.assertEqual(_zone_labels(ax), ["No data in reference or comparison period"])
+        plt.close(fig)
+
+    def test_a_repeat_plot_survives_the_caller_clearing_the_axes(self):
+        """Cleared artists are detached, so there is nothing left for this plot to take back."""
+        sdp = ShiftedDistributionPlot(_series(), REF_PERIOD, COMP_PERIOD)
+        fig, ax = plt.subplots()
+        sdp.plot(ax=ax)
+        ax.clear()
+        sdp.plot(ax=ax)
+        self.assertEqual(self._counts(ax), (6, 6, 5))
+        plt.close(fig)
+
+
+class TestSampleStandardDeviation(unittest.TestCase):
+    """Zone boundaries come from the reference *sample* sd (ddof=1), as elsewhere in diive."""
+
+    def test_breakpoints_match_pandas_ddof_1_and_not_the_population_sd(self):
+        series = _series()
+        sdp = ShiftedDistributionPlot(series, REF_PERIOD, COMP_PERIOD)
+        ref = series.loc[REF_PERIOD[0]:REF_PERIOD[1]].dropna()
+        np.testing.assert_array_equal(
+            sdp.breakpoints, [ref.mean() + k * ref.std() for k in (-3, -1, 1, 3)])
+        population = [ref.mean() + k * ref.values.std() for k in (-3, -1, 1, 3)]
+        self.assertNotEqual(list(sdp.breakpoints), population)
+
+    def test_a_short_reference_widens_the_zones_by_the_bessel_factor(self):
+        """The shorter the reference, the more the population sd understated its spread."""
+        series = _series()
+        for n, ref_period in ((10, ('1990-01-01', '1990-01-10')), (31, ('1990-01-01', '1990-01-31'))):
+            with self.subTest(n=n):
+                sdp = ShiftedDistributionPlot(series, ref_period, COMP_PERIOD)
+                ref = series.loc[ref_period[0]:ref_period[1]].dropna().values
+                self.assertEqual(len(ref), n)
+                population = np.array([ref.mean() + k * ref.std() for k in (-3, -1, 1, 3)])
+                widening = np.sqrt(n / (n - 1))
+                # Every boundary moves outward by (sqrt(n/(n-1)) - 1) times its sigma distance.
+                np.testing.assert_allclose(
+                    np.asarray(sdp.breakpoints) - ref.mean(),
+                    (population - ref.mean()) * widening)
+                self.assertGreater(sdp.breakpoints[3] - sdp.breakpoints[0],
+                                   population[3] - population[0])
+
+    def test_a_single_record_reference_keeps_its_collapsed_breakpoints(self):
+        """One record has no sample sd; NaN there would drop the zones L118 established."""
+        sdp = ShiftedDistributionPlot(_series(), ('1990-06-01', '1990-06-01'), COMP_PERIOD)
+        value = _series().loc['1990-06-01']
+        np.testing.assert_array_equal(sdp.breakpoints, [value] * 4)
+        self.assertEqual(len(_plotted(sdp).texts), 5)  # Zones still drawn
 
 
 if __name__ == '__main__':
