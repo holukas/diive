@@ -144,6 +144,21 @@ class WaterfallPlot:
             self.ax = ax
             self.fig = ax.get_figure()
             self._own_fig = False
+
+        # An input without a single valid value (e.g. a scenario column that was never
+        # gap-filled) has nothing to accumulate: contributions and the running total are
+        # both empty. Say so on the axes instead of indexing the empty running total for
+        # the final value, and skip the chrome, whose automatic title reads the (now
+        # missing) first and last period.
+        if self.cumulative.empty:
+            label = f"{self.varname}: no data" if self.varname else "No data"
+            self.ax.text(0.5, 0.5, label, ha='center', va='center',
+                         transform=self.ax.transAxes, fontsize=theme.FONTSIZE_TXT_LEGEND)
+            pf.hide_ticks_and_ticklabels(ax=self.ax)
+            if self._own_fig and showplot:
+                self.fig.show()
+            return self.ax
+
         self.ax.xaxis.axis_date()
 
         # Uptake/release split depends on the sign convention.

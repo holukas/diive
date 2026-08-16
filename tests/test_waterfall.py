@@ -4,7 +4,8 @@ TESTS: WATERFALL PLOT
 
 Tests for the period aggregation of `WaterfallPlot`: a period holding no
 measurements at all must be absent for every aggregation, and a gap-free
-series must be aggregated exactly as before.
+series must be aggregated exactly as before. Also for its rendering of an
+input without a single valid value, which must say so instead of raising.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -14,6 +15,7 @@ import matplotlib
 
 matplotlib.use('Agg')
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -105,6 +107,85 @@ class TestWaterfallGapFree(unittest.TestCase):
         ax = wf.plot(showplot=False)
         self.assertIsNotNone(ax)
         self.assertEqual(len(ax.patches), 27)
+
+
+class TestWaterfallNoData(unittest.TestCase):
+    """An input without a single valid value must say so instead of raising."""
+
+    @staticmethod
+    def _plot(series, **kwargs):
+        fig, ax = plt.subplots()
+        WaterfallPlot(series, **kwargs).plot(ax=ax, showplot=False)
+        return ax
+
+    def test_all_nan_series_says_no_data(self):
+        """An all-NaN column draws no bars and states there is no data."""
+        series = pd.Series(np.nan, index=pd.date_range('2020-01-01', periods=48, freq='30min'),
+                           name='FLUX')
+        ax = self._plot(series, resample='D', agg='sum')
+        self.assertEqual(len(ax.patches), 0)
+        self.assertEqual([t.get_text() for t in ax.texts], ['FLUX: no data'])
+
+    def test_all_nan_series_says_no_data_without_resampling(self):
+        """The same holds with resample=None, where the series is used as-is."""
+        series = pd.Series(np.nan, index=pd.date_range('2020-01-01', periods=48, freq='30min'),
+                           name='FLUX')
+        ax = self._plot(series, resample=None)
+        self.assertEqual(len(ax.patches), 0)
+        self.assertEqual([t.get_text() for t in ax.texts], ['FLUX: no data'])
+
+    def test_empty_series_says_no_data(self):
+        """An empty series has no periods either."""
+        series = pd.Series(dtype=float, index=pd.DatetimeIndex([]), name='FLUX')
+        ax = self._plot(series, resample='D', agg='sum')
+        self.assertEqual(len(ax.patches), 0)
+        self.assertEqual([t.get_text() for t in ax.texts], ['FLUX: no data'])
+
+    def test_unnamed_all_nan_series_says_no_data(self):
+        """Without a series name the message must not read 'None: no data'."""
+        series = pd.Series(np.nan, index=pd.date_range('2020-01-01', periods=48, freq='30min'))
+        ax = self._plot(series, resample='D', agg='sum')
+        self.assertEqual([t.get_text() for t in ax.texts], ['No data'])
+
+    def test_no_data_axes_draws_nothing_else(self):
+        """The message replaces the plot: no bars, no connectors, no end marker, no ticks."""
+        series = pd.Series(np.nan, index=pd.date_range('2020-01-01', periods=48, freq='30min'),
+                           name='FLUX')
+        ax = self._plot(series, resample='D', agg='sum')
+        self.assertEqual(len(ax.lines), 0)
+        self.assertFalse(ax.xaxis.get_tick_params()['labelbottom'])
+
+    def test_single_valid_record_still_plots(self):
+        """One valid record is a real (if minimal) waterfall, not a no-data case."""
+        series = pd.Series(np.nan, index=pd.date_range('2020-01-01', periods=48, freq='30min'),
+                           name='FLUX')
+        series.iloc[10] = 2.5
+        ax = self._plot(series, resample='D', agg='sum')
+        self.assertEqual(len(ax.patches), 1)
+        self.assertAlmostEqual(ax.patches[0].get_height(), 2.5, places=9)
+        self.assertIn('2', [t.get_text() for t in ax.texts])
+
+
+class TestWaterfallOrdinarySeriesUnaffected(unittest.TestCase):
+    """The no-data guard must not touch a series that has data."""
+
+    def test_ordinary_series_renders_unchanged(self):
+        """Bar heights, bottoms, connectors, end marker and annotation are as computed."""
+        series = _series(with_outage=True)
+        expected = series.dropna().resample('D').agg('sum')
+        expected = expected[series.dropna().resample('D').count() > 0]
+
+        fig, ax = plt.subplots()
+        WaterfallPlot(series, resample='D', agg='sum').plot(ax=ax, showplot=False)
+
+        self.assertEqual(len(ax.patches), 27)
+        np.testing.assert_allclose([p.get_height() for p in ax.patches], expected.values)
+        np.testing.assert_allclose([p.get_y() for p in ax.patches],
+                                   expected.cumsum().shift(1).fillna(0.0).values)
+        # 26 connectors between the 27 bars, plus the end-of-series marker.
+        self.assertEqual(len(ax.lines), 27)
+        np.testing.assert_allclose(ax.lines[-1].get_ydata(), [expected.sum()])
+        self.assertIn(f"{expected.sum():.0f}", [t.get_text() for t in ax.texts])
 
 
 if __name__ == '__main__':
