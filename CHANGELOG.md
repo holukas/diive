@@ -11,6 +11,12 @@
 
 Two of these change results silently, with no error and no warning:
 
+- **`ScopApplicator` now exposes its input correction term as `FCT_UNSC`, not `FCT_UNSC_gfXG`.** The class
+  accepts either the gap-filled or the ungapfilled term from `ScopPhysics` and gap-fills neither, so the
+  `_gfXG` label claimed a fill that may never have happened. Code reading
+  `ScopApplicator.get_results()["FCT_UNSC_gfXG"]` must read `["FCT_UNSC"]`; `ScopPhysics`'s own
+  `FCT_UNSC_gfXG` column is unchanged.
+
 - **`ScopPhysics`'s gap-filled results column is renamed `FCT_UNSC_gfRF` -> `FCT_UNSC_gfXG`.** The suffix named Random
   Forest while the fill has been XGBoost, and it disagreed with the `.fct_unsc_gf` attribute holding the very same
   series, which was already named `FCT_UNSC_gfXG`. Code doing `physics.get_results()["FCT_UNSC_gfRF"]` now raises
@@ -622,6 +628,9 @@ those are the ones to check existing results against.
   would pass both of `_calculate_series_qcf`'s filters; it is documented as never-NaN with a test to keep it that way.
   A scalar `0` flag code no longer becomes NaN through a `'0.0'[1]` round-trip, which is a reporting fix, not a
   screening change, since flag sums count only 1 and 2.
+- `ScopPhysics.plot_diel_cycles()`, `ScopOptimizer.plot()` and `ScopApplicator.plot_dashboard()` now take
+  `showplot: bool = True` and return their figure, so a script can render headless and close the figure
+  instead of leaking a 24x20-inch one per call.
 - `ScopPhysics` documented "a hybrid approach using Random Forest and Mean Diurnal Variation" and printed "-> Imputed
   (RF + MDV)"; the gap-fill is XGBoost with no MDV stage, and MDV lives in `ScopApplicator`, which the docstring now
   points at. The results column is renamed from its legacy `FCT_UNSC_gfRF` to

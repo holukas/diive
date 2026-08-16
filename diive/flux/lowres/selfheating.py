@@ -1219,8 +1219,12 @@ class ScopApplicator:
         The names of the `fct_unsc` and `daytime` input series are not part of the
         contract — both are renamed to the class's own column names (`ColumnConfig`)
         on input, so a correction term straight from `ScopPhysics` is accepted whether
-        or not it was gap-filled. The `flux_openpath` and `classvar` names *are* kept
-        and appear in the results dataframe.
+        or not it was gap-filled. The correction term is renamed to the neutral
+        `ColumnConfig.fct_unsc` ('FCT_UNSC') rather than to `.fct_unsc_gf`
+        ('FCT_UNSC_gfXG'): this class does not gap-fill anything, so a `_gf` name in its
+        results dataframe would claim a fill that may never have happened. The
+        `flux_openpath` and `classvar` names *are* kept and appear in the results
+        dataframe.
 
     See Also:
         ScopPhysics : Calculate unscaled flux correction term.
@@ -1241,7 +1245,9 @@ class ScopApplicator:
         Args:
             fct_unsc: series, unscaled flux correction term (flux units), as produced by
                 `ScopPhysics` — either `.fct_unsc` (ungapfilled) or `.fct_unsc_gf`.
-                Its name is ignored; it is renamed to `ColumnConfig.fct_unsc_gf` internally.
+                Its name is ignored; it is renamed to `ColumnConfig.fct_unsc` internally
+                and appears under that name in the results dataframe, whichever of the two
+                was passed.
             scaling_factors_df: dataframe of fitted scaling factors from `ScopOptimizer.get()`,
                 carrying the columns 'DAYTIME', 'GROUP_CLASSVAR', 'GROUP_CLASSVAR_MIN' and
                 'SF_MEDIAN'.
@@ -1256,12 +1262,15 @@ class ScopApplicator:
         self.cols = ColumnConfig()
 
         # The applicator works in its own column names throughout: run(), stats() and the
-        # dashboard all read self.cols.fct_unsc_gf and self.cols.daytime. Renaming the two
+        # dashboard all read self.cols.fct_unsc and self.cols.daytime. Renaming the two
         # inputs here is what makes any legally named series acceptable — ScopPhysics
         # produces 'FCT_UNSC' without gap-filling and 'FCT_UNSC_gfXG' with it, and a
         # day/night flag may carry any name; all three used to raise KeyError, one in run()
         # and one in the merge_asof of _assign_scaling_factors().
-        self.fct_unsc = fct_unsc.copy().rename(self.cols.fct_unsc_gf)
+        # The target of that rename is the neutral fct_unsc, not fct_unsc_gf: this class
+        # accepts either input and gap-fills neither, so naming its own column '..._gfXG'
+        # credited a fill that may never have run.
+        self.fct_unsc = fct_unsc.copy().rename(self.cols.fct_unsc)
         self.scaling_factors_df = scaling_factors_df.copy()
         self.flux_openpath = flux_openpath.copy()
         self.classvar = classvar.copy()
@@ -1288,7 +1297,7 @@ class ScopApplicator:
 
         # Calculate final flux correction term
         # Corrected OP = uncorrected OP + (FCT_unscaled * ScalingFactor)
-        self.df[self.cols.fct] = self.df[self.cols.fct_unsc_gf] * self.df[self.cols.sf]
+        self.df[self.cols.fct] = self.df[self.cols.fct_unsc] * self.df[self.cols.sf]
 
         # Apply correction. A record with a measured flux but no correction term is
         # carried through *uncorrected* rather than deleted: `flux + NaN` used to
@@ -1704,7 +1713,7 @@ class ScopApplicator:
             # SECTION C: DIEL CYCLES (Rows 2 & 3)
             # =================================================================
             diel_vars = [
-                {'col': self.cols.fct_unsc_gf, 'title': r'C1. Unscaled Corr. ($FCT_{unsc}$)', 'unit': r'$\mu mol$'},
+                {'col': self.cols.fct_unsc, 'title': r'C1. Unscaled Corr. ($FCT_{unsc}$)', 'unit': r'$\mu mol$'},
                 {'col': self.cols.sf, 'title': r'C2. Scaling Factor ($\xi$)', 'unit': '-'},
                 {'col': self.cols.fct, 'title': 'C3. Final Correction Term', 'unit': r'$\mu mol$'},
                 {'col': None},

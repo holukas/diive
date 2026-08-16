@@ -119,7 +119,7 @@ physics_calib.stats()
 
 # Plot diurnal cycles of correction term
 print(f"\nGenerating diurnal cycle plots...")
-physics_calib.plot_diel_cycles()
+physics_calib.plot_diel_cycles(showplot=False)
 
 # %%
 # Step 2a: Optimize scaling factors (Calibration Period)
@@ -159,7 +159,7 @@ optimizer.stats()
 
 # Plot optimization results
 print(f"\nGenerating optimization results plots...")
-optimizer.plot()
+optimizer.plot(showplot=False)
 
 # %%
 # Step 3a: Validate table on parallel data (Calibration Period)
@@ -202,7 +202,7 @@ applicator_calib.stats(flux_closedpath=flux_cp_ref)
 
 # Plot correction validation dashboard
 print(f"\nGenerating correction validation dashboard...")
-applicator_calib.plot_dashboard(flux_closedpath=flux_cp_ref)
+applicator_calib.plot_dashboard(flux_closedpath=flux_cp_ref, showplot=False)
 
 # %%
 # Scaling Factors Lookup Table Details
@@ -301,7 +301,7 @@ physics_longterm.stats()
 
 # Plot diurnal cycles for long-term period
 print(f"\nGenerating diurnal cycle plots...")
-physics_longterm.plot_diel_cycles()
+physics_longterm.plot_diel_cycles(showplot=False)
 
 # %%
 # Step 2b: Apply lookup table (Long-term Period)
@@ -365,7 +365,7 @@ applicator_longterm.stats()
 
 # Plot long-term correction dashboard
 print(f"\nGenerating long-term correction dashboard...")
-applicator_longterm.plot_dashboard()
+applicator_longterm.plot_dashboard(showplot=False)
 
 # %%
 # Scaling factor assignment distribution (Long-term)

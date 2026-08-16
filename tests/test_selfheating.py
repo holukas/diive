@@ -252,5 +252,137 @@ class TestApplicatorAcceptsAnyInputSeriesName(unittest.TestCase):
                                    reference.to_numpy())
 
 
+class TestApplicatorDoesNotClaimAGapFill(unittest.TestCase):
+    """The applicator's own column must not credit a gap-fill it never performed.
+
+    `__init__` renames the input correction term to one canonical name (L39, so that
+    any legal input name is accepted). That target used to be `ColumnConfig.fct_unsc_gf`
+    ('FCT_UNSC_gfXG'), so the results frame labelled an ungapfilled input as gap-filled -
+    the applicator gap-fills nothing. The target is now the neutral `ColumnConfig.fct_unsc`.
+    """
+
+    def _applicator(self, fct_name):
+        from diive.flux.lowres.selfheating import ScopApplicator
+        n = 96
+        idx = pd.date_range('2023-06-01 00:15', periods=n, freq='30min')
+        rng = np.random.RandomState(0)
+        fct = pd.Series(rng.normal(1.0, 0.1, n), index=idx, name=fct_name)
+        fct.iloc[10:20] = np.nan  # never gap-filled by anyone
+        app = ScopApplicator(
+            fct_unsc=fct,
+            scaling_factors_df=pd.DataFrame(
+                {'DAYTIME': [0, 1], 'GROUP_CLASSVAR': [0, 0],
+                 'GROUP_CLASSVAR_MIN': [0.0, 0.0], 'GROUP_CLASSVAR_MAX': [1.0, 1.0],
+                 'SF_MEDIAN': [2.0, 2.0]}),
+            flux_openpath=pd.Series(rng.normal(-5, 1, n), index=idx, name='NEE'),
+            classvar=pd.Series(0.4, index=idx, name='USTAR'),
+            daytime=pd.Series(np.tile([1] * 24 + [0] * 24, n // 48), index=idx, name='DAYTIME'))
+        app.run()
+        return app, fct
+
+    def test_the_ungapfilled_input_is_not_labelled_gap_filled(self):
+        from diive.flux.lowres.selfheating import ColumnConfig
+        app, fct = self._applicator('FCT_UNSC')
+        results = app.get_results()
+        self.assertIn(ColumnConfig().fct_unsc, results.columns)
+        self.assertNotIn(ColumnConfig().fct_unsc_gf, results.columns)
+        # And the column really is the input term, gaps included - nothing was filled.
+        np.testing.assert_allclose(results[ColumnConfig().fct_unsc].to_numpy(),
+                                   fct.to_numpy())
+        self.assertGreater(int(results[ColumnConfig().fct_unsc].isna().sum()), 0)
+
+    def test_a_gapfilled_input_lands_under_the_same_neutral_name(self):
+        # L39: any input name is accepted, and there is exactly one internal name.
+        from diive.flux.lowres.selfheating import ColumnConfig
+        app, _ = self._applicator('FCT_UNSC_gfXG')
+        self.assertIn(ColumnConfig().fct_unsc, app.get_results().columns)
+        self.assertNotIn(ColumnConfig().fct_unsc_gf, app.get_results().columns)
+        self.assertEqual(app.fct_unsc.name, ColumnConfig().fct_unsc)
+
+
+class TestPlotsCanBeSilenced(unittest.TestCase):
+    """The three SCOP plots used to call plt.show() unconditionally.
+
+    An example could therefore not satisfy the 'disable showplot=True' standard, and
+    every call leaked a figure the caller had no handle on (the dashboard is 24x20 in).
+    Each plot now takes showplot and returns its figure.
+    """
+
+    def setUp(self):
+        import matplotlib.pyplot as plt
+        self._plt = plt
+        self._shown = []
+        self._real_show = plt.show
+        plt.show = lambda *a, **kw: self._shown.append(1)
+
+    def tearDown(self):
+        self._plt.show = self._real_show
+        self._plt.close('all')
+
+    def _physics(self):
+        from diive.flux.lowres.selfheating import ScopPhysics
+        n = 480
+        idx = pd.date_range('2023-06-01 00:15', periods=n, freq='30min', name='TIMESTAMP_MIDDLE')
+        hr = idx.hour + idx.minute / 60
+        physics = ScopPhysics(
+            ta=pd.Series(15 + 8 * np.sin(2 * np.pi * (hr - 9) / 24), index=idx),
+            gas_density=pd.Series(1.7e7, index=idx), rho_a=pd.Series(1.2, index=idx),
+            rho_v=pd.Series(0.012, index=idx), u=pd.Series(2.5, index=idx),
+            c_p=pd.Series(1005.0, index=idx), ustar=pd.Series(0.4, index=idx),
+            lat=47.478333, lon=8.364389, utc_offset=1)
+        physics.run(correction_method_base="JAR09", gapfill=False)
+        return physics
+
+    def _optimizer(self):
+        from diive.flux.lowres.selfheating import ScopOptimizer
+        n = 400
+        idx = pd.date_range('2023-06-01 00:15', periods=n, freq='30min')
+        rng = np.random.RandomState(0)
+        opt = ScopOptimizer(
+            class_var=pd.Series(np.linspace(0, 1, n), index=idx), n_classes=2,
+            fct_unsc=pd.Series(rng.normal(1, 0.1, n), index=idx),
+            daytime=pd.Series(((idx.hour >= 6) & (idx.hour < 18)).astype(int), index=idx),
+            n_bootstrap_runs=0,
+            flux_openpath=pd.Series(rng.normal(-5, 1, n), index=idx),
+            flux_closedpath=pd.Series(rng.normal(-5, 1, n), index=idx))
+        opt.run()
+        return opt
+
+    def _applicator(self):
+        from diive.flux.lowres.selfheating import ScopApplicator
+        n = 96
+        idx = pd.date_range('2023-06-01 00:15', periods=n, freq='30min')
+        rng = np.random.RandomState(0)
+        app = ScopApplicator(
+            fct_unsc=pd.Series(rng.normal(1.0, 0.1, n), index=idx),
+            scaling_factors_df=pd.DataFrame(
+                {'DAYTIME': [0, 1], 'GROUP_CLASSVAR': [0, 0],
+                 'GROUP_CLASSVAR_MIN': [0.0, 0.0], 'GROUP_CLASSVAR_MAX': [1.0, 1.0],
+                 'SF_MEDIAN': [2.0, 2.0]}),
+            flux_openpath=pd.Series(rng.normal(-5, 1, n), index=idx, name='NEE'),
+            classvar=pd.Series(0.4, index=idx, name='USTAR'),
+            daytime=pd.Series(np.tile([1] * 24 + [0] * 24, n // 48), index=idx))
+        app.run()
+        return app
+
+    def _check(self, plotfunc):
+        from matplotlib.figure import Figure
+        fig = plotfunc(showplot=False)
+        self.assertIsInstance(fig, Figure)
+        self.assertEqual(self._shown, [], 'showplot=False still called plt.show()')
+        # The flag must be wired both ways, not merely off.
+        plotfunc(showplot=True)
+        self.assertEqual(len(self._shown), 1)
+
+    def test_physics_diel_cycles(self):
+        self._check(self._physics().plot_diel_cycles)
+
+    def test_optimizer_scaling_factors(self):
+        self._check(self._optimizer().plot)
+
+    def test_applicator_dashboard(self):
+        self._check(self._applicator().plot_dashboard)
+
+
 if __name__ == '__main__':
     unittest.main()
