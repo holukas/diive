@@ -11,6 +11,7 @@ import tempfile
 import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
+from matplotlib import colormaps
 from matplotlib.collections import LineCollection
 from matplotlib.colors import Normalize
 from bokeh.layouts import column
@@ -22,6 +23,7 @@ from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
 from diive.core.plotting.styles.format import FormatStyle
+from diive.core.utils.console import warn
 
 # Material Design palette, matching diive's plotting conventions (CLAUDE.md):
 # blue 500 for lines, blue-grey shades for ink/gridlines/reference.
@@ -29,6 +31,7 @@ _COLOR_LINE = '#2196F3'  # blue 500 — the series line/markers
 _COLOR_INK = '#455A64'   # blue-grey 700 — text, spines, ticks, legend edge
 _COLOR_GRID = '#B0BEC5'  # blue-grey 200 — subtle gridlines
 _COLOR_ZERO = '#90A4AE'  # blue-grey 300 — zero reference line
+_COLOR_NOCOLOR = '#90A4AE'  # blue-grey 300 — measured, but no colour value to show
 
 
 # output_notebook()
@@ -67,9 +70,13 @@ class TimeSeries:
             color_series: Optional second series whose values colour the line (and
                 markers) via a colormap instead of a single colour — e.g. colour a
                 flux line by air temperature. Aligned to `series`' index; segments
-                are coloured by the mean of their endpoints' values. When given,
-                `plot()`'s `cmap`/`color_vmin`/`color_vmax`/`show_colorbar`/
-                `color_label` apply and the scalar `color` argument is ignored.
+                are coloured by the mean of their endpoints' values; a segment whose
+                colour value is missing is drawn in a neutral grey, since the data
+                itself was measured. When given, `plot()`'s `cmap`/`color_vmin`/
+                `color_vmax`/`show_colorbar`/`color_label` apply and the scalar
+                `color` argument is ignored — unless alignment leaves fewer than two
+                colour values, in which case `plot()` warns and falls back to a plain
+                line drawn in `color`.
 
         See Also:
             plot : Render the time series with matplotlib styling options
@@ -305,8 +312,10 @@ class TimeSeries:
 
         Each segment between consecutive samples is coloured by the mean of its
         endpoints' colour values; segments touching a NaN in the data (a gap) are
-        dropped so the line breaks rather than bridging. A `LineCollection` does
-        not autoscale the axes, so x/y limits are set explicitly.
+        dropped so the line breaks rather than bridging. Segments whose *colour*
+        value is missing are still measured data, so they are drawn in a neutral
+        grey. A `LineCollection` does not autoscale the axes, so x/y limits are
+        set explicitly.
         """
         x = mdates.date2num(self.series.index)
         y = self.series.to_numpy(dtype=float)
@@ -319,6 +328,16 @@ class TimeSeries:
         vmin = color_vmin if color_vmin is not None else np.nanmin(color_vals)
         vmax = color_vmax if color_vmax is not None else np.nanmax(color_vals)
         norm = Normalize(vmin=vmin, vmax=vmax)
+
+        # A missing colour value means "measured, but the colour driver has a gap
+        # here". matplotlib's default "bad" colour is (0, 0, 0, 0) — and because
+        # an all-zero bad colour also makes `Colormap.__call__` discard the
+        # collection alpha, those records were painted fully transparent and read
+        # as missing data. Paint them a neutral grey so they stay visible while
+        # plainly not being a value on the colour scale.
+        cmap = (colormaps[cmap] if isinstance(cmap, str) else cmap).copy()
+        cmap.set_bad(_COLOR_NOCOLOR)
+
         lc = LineCollection(segments, cmap=cmap, norm=norm)
         lc.set_array(seg_c)
         lc.set_linewidth(linewidth)
@@ -363,7 +382,9 @@ class TimeSeries:
                 (title, labels, units, fonts, colours, grid, legend). When None the
                 diive house style is used.
             color: Line color (default: Material Design blue #2196F3). Ignored when
-                a `color_series` was given (the line is then colormap-coloured).
+                a `color_series` was given (the line is then colormap-coloured) —
+                except when that series aligns to fewer than two values, where the
+                plot falls back to a plain line in this colour and warns.
             linewidth: Line width in points (default: 2.2).
             alpha: Line/marker opacity, 0-1 (default: 0.95).
             marker: If True, draw a point marker at each observation (default: False).
@@ -411,6 +432,18 @@ class TimeSeries:
                                     linewidth, alpha, marker, markersize,
                                     show_colorbar, color_label)
         else:
+            if color_vals is not None:
+                # Say so: this branch turns cmap/show_colorbar/color_label into
+                # no-ops, and a non-overlapping index (the usual cause) is
+                # invisible in the resulting plain line.
+                warn(f"Cannot colour '{self.varname}' by '{self.color_name}': only "
+                     f"{int(np.isfinite(color_vals).sum())} of {len(color_vals)} records "
+                     f"have a colour value after aligning to the index of '{self.varname}'. "
+                     f"The likely cause is that the two series share no (or almost no) "
+                     f"timestamps, e.g. TIMESTAMP_END vs TIMESTAMP_MIDDLE or a differently "
+                     f"resampled driver. Drawing a plain line instead -> cmap, color_vmin, "
+                     f"color_vmax, show_colorbar and color_label have no effect here, and "
+                     f"the scalar color argument is used.")
             # NaNs are kept (unless drop_gaps=True) so the line breaks at gaps
             # instead of bridging them.
             self.ax.plot(self.series.index,
