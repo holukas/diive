@@ -12,6 +12,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+import gc
 import sys
 import threading
 import traceback
@@ -21,7 +22,8 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import Qt
+import shiboken6
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QApplication
 
 import diive as dv
@@ -85,6 +87,62 @@ def example_year():
     return dv.times.keep_daterange(df, "2021-01-01", "2021-12-31 23:30")
 
 
+def _destroy_window(win):
+    """Really destroy a MainWindow, so nothing of it outlives the test.
+
+    Every window subscribes to process-wide singletons (theme, metadata, site,
+    events, db). Dropping the last Python reference frees nothing -- a child
+    event-filter helper (``FramelessResizeHelper._window``) holds a strong
+    reference back to the window -- so without this every window the suite
+    builds stays alive and subscribed for the whole session, and each singleton
+    emit fans out into all of them: dozens of accumulated matplotlib renders
+    (which can also segfault). Measured: one ``theme.manager.apply()`` costs 3 s
+    against a single window and 21 s behind 30 leaked ones, which is why
+    ``test_live_theme_edit``, at position 96 of 121, took 135 s.
+
+    It has to be ``shiboken6.delete`` and not ``deleteLater()``: a deferred-
+    delete event posted while no event loop is running is not consumed by
+    ``processEvents()``, so the window survived it (measured: ``isValid(win)``
+    still True, one more ``MainWindow`` in ``topLevelWidgets()`` per call, and
+    ``apply()`` still climbing 0.14 s -> 1.37 s over 6 windows). With the
+    immediate delete that cost stays flat.
+
+    The queue is drained *first* because ``VariablePanel.run_with_loading``
+    defers its payload with ``QTimer.singleShot(0, ...)`` and a test can end
+    with that timer still pending. Destroying the window first leaves the
+    callback to fire against deleted widgets during a *later* test
+    ("Internal C++ object (VariableList) already deleted"), which
+    ``slot_exceptions`` then reports against whichever innocent test happened to
+    pump the loop.
+    """
+    QApplication.processEvents()
+    win.close()          # runs closeEvent: drops the event-store connections
+    shiboken6.delete(win)
+    # Release the retained tab objects too. `MainWindow` deliberately keeps them
+    # (their signal slots would otherwise go inert), and a `DiiveTab` is a plain
+    # Python object, not a QObject -- so Qt cannot reap its subscriptions to the
+    # app-wide singletons when the C++ widgets die, and a tab whose widgets are
+    # gone still runs its handler on the *next* test's edit. Measured before this
+    # line: a Metadata explorer tab from the previous test crashed in
+    # `_refresh_detail` with "Internal C++ object (QVBoxLayout) already deleted".
+    # PySide6 keeps only a weak reference to a bound method's instance, so
+    # freeing the tabs removes those subscriptions.
+    win._tabs.clear()
+    win._menu_tab_list.clear()
+    win._pinned.clear()
+    gc.collect()
+    QApplication.processEvents()
+    # Finish the deletions the app asked for. GUI code that rebuilds a dynamic
+    # panel detaches the old widgets and calls `deleteLater()`, which completes
+    # in the running app but never here: the suite has no event loop, and
+    # `processEvents()` at loop level 0 does not consume a DeferredDelete event.
+    # Worth ~260 of the ~4800 widgets still alive after 31 tests (a
+    # `StepEditorDialog` and 21 `_CorrectionRow`s among them); the rest are
+    # parentless widgets nothing on the Python side owns, which a test cannot
+    # reach.
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
 @pytest.fixture
 def window(app, monkeypatch, example_year):
     # Make the GUI use only one year of example data, including the constructor's
@@ -97,25 +155,9 @@ def window(app, monkeypatch, example_year):
     win.show()
     app.processEvents()
     yield win
-    # Teardown: stop this window reacting to the app-wide event store. The store
-    # is a process-wide singleton, so without this every window the suite creates
-    # stays subscribed and they all re-render on the next events edit -- dozens of
-    # accumulated matplotlib renders that can segfault. Also reset the store so
-    # event state can't leak between tests.
+    _destroy_window(win)
+    # Reset the app-wide event store so event state can't leak between tests.
     from diive.gui import events as _events
-    try:
-        _events.manager.changed.disconnect(win._on_events_changed)
-    except (RuntimeError, TypeError):
-        pass
-    try:
-        _events.manager.categories_changed.disconnect(
-            win._on_event_categories_changed)
-    except (RuntimeError, TypeError):
-        pass
-    try:
-        _events.manager.focus_requested.disconnect(win._focus_event_on_overview)
-    except (RuntimeError, TypeError):
-        pass
     _events.manager.events.clear()
     _events.manager.visible = True
     _events.manager.categories = dict(_events.DEFAULT_CATEGORIES)
@@ -824,8 +866,7 @@ def test_window_geometry_clamped_to_screen(app, monkeypatch, example_year):
         assert fg.right() <= avail.right() and fg.bottom() <= avail.bottom()
         assert fg.x() >= avail.x() and fg.y() >= avail.y()
     finally:
-        win.close()
-        win.deleteLater()
+        _destroy_window(win)
 
 
 def test_window_fills_workarea_without_clipping(app, monkeypatch, example_year):
@@ -848,8 +889,7 @@ def test_window_fills_workarea_without_clipping(app, monkeypatch, example_year):
         assert g.width() <= avail.width()
         assert g.bottom() <= avail.bottom()
     finally:
-        win.close()
-        win.deleteLater()
+        _destroy_window(win)
 
 
 def test_overview_layout_stable_on_zoom(window):
@@ -3185,10 +3225,13 @@ def test_startup_reopens_last_project(window, tmp_path, monkeypatch):
     monkeypatch.setattr("diive.load_exampledata_parquet", _boom)
 
     win2 = MainWindow(config={"last_project": str(folder)})
-    QApplication.processEvents()
-    assert win2._project_name == "Proj"
-    assert win2._project_dir == folder
-    assert "favorite" in store.get(var).tags
+    try:
+        QApplication.processEvents()
+        assert win2._project_name == "Proj"
+        assert win2._project_dir == folder
+        assert "favorite" in store.get(var).tags
+    finally:
+        _destroy_window(win2)  # this second window was leaking for the session
 
 
 def test_project_saves_and_restores_open_tabs(window, tmp_path, monkeypatch):
@@ -3642,10 +3685,23 @@ def test_live_theme_edit(window):
     from diive.gui import theme
     from diive.gui.widgets.variable_delegate import _pill_for
     theme.manager.pills["GPP"][1] = "#000000"
+    theme.manager.list_width = 333
     theme.manager.apply()
+    QApplication.processEvents()
     assert _pill_for("GPP_CUT_REF_f")[1].name() == "#000000"
+    # `apply()` must reach the live app, not just the theme dict: the edited
+    # token lands in the app-wide stylesheet and the shared variable list picks
+    # up the new width through `changed`. Without these the test passed with no
+    # window at all -- `_pill_for` only reads `theme.manager.pills`.
+    assert window._tabs[0].varpanel.width() == 333
+    theme.manager.tokens["ACCENT"] = "#010203"
+    theme.manager.apply()
+    assert "#010203" in QApplication.instance().styleSheet()
     theme.manager.reset(silent=False)
+    QApplication.processEvents()
     assert _pill_for("GPP_CUT_REF_f")[1].name() != "#000000"
+    assert "#010203" not in QApplication.instance().styleSheet()
+    assert window._tabs[0].varpanel.width() == theme.DEFAULT_LIST_WIDTH
 
 
 def test_save_config_swallows_unserializable_value(tmp_path, monkeypatch):
@@ -3756,8 +3812,8 @@ def test_studio_chrome_builds_frameless_with_header(app, monkeypatch, example_ye
         # Events fold into the Data menu.
         data_items = [a.text() for a in menu_btns[1].menu().actions()]
         assert any("Events" in t for t in data_items)
-        win.close()
     finally:
+        _destroy_window(win)
         theme.manager.reset(silent=True)
 
 
@@ -4361,3 +4417,4 @@ def test_surface3d_rolling_window_is_n_rows_wide():
     gappy = z.copy()
     gappy[5, 0] = np.nan
     assert np.isnan(_roll_rows(gappy, 4, np.nanmean)[5, 0])
+
