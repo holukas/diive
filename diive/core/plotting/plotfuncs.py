@@ -171,8 +171,11 @@ def format_spines(ax, color, lw):
 
 def non_numeric_error(ax):
     """Draw a centred 'data are non-numeric' message in place of a plot."""
-    plt.text(0.5, 0.5, 'Sorry, no plot. Data are non-numeric.', horizontalalignment='center',
-             verticalalignment='center', transform=ax.transAxes, bbox=dict(facecolor='red', alpha=0.5))
+    # `ax.text`, not `plt.text`: pyplot draws on its own current figure, so with
+    # `transform=ax.transAxes` the message was positioned in this axes' coordinates
+    # but landed on a different figure.
+    ax.text(0.5, 0.5, 'Sorry, no plot. Data are non-numeric.', horizontalalignment='center',
+            verticalalignment='center', transform=ax.transAxes, bbox=dict(facecolor='red', alpha=0.5))
 
 
 def clear_ax(ax):

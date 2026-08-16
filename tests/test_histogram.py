@@ -8,6 +8,7 @@ explicit non-uniform bin edges.
 Part of the diive library: https://github.com/holukas/diive
 """
 import unittest
+import warnings
 
 import matplotlib
 
@@ -316,6 +317,88 @@ class TestHistogramPinnedBinGrid(unittest.TestCase):
         part, _, _ = _plot(subset, n_bins=10)
         self.assertFalse(np.allclose(full.edges, part.edges),
                          msg="fixture is broken: the two subsets already share a grid")
+
+
+def _info_text(series: pd.Series, method, **kwargs) -> str:
+    """Plot with an arbitrary `method` and return the single info-box string."""
+    fig, ax = plt.subplots()
+    hist = HistogramPlot(series=series, method=method, n_bins=10, **kwargs)
+    hist.plot(ax=ax, show_zscores=False, show_counts=False)
+    boxes = [t.get_text() for t in ax.texts if t.get_text().startswith('method:')]
+    plt.close(fig)
+    assert len(boxes) == 1, boxes
+    return boxes[0], hist
+
+
+class TestHistogramInfoBox(unittest.TestCase):
+    """Each fact must appear in the box exactly once.
+
+    `info_txt += f"..." if cond else info_txt` appended the box to itself on the
+    false branch, so any `method` other than 'n_bins' doubled the string twice.
+    """
+
+    def test_n_bins_box_is_the_expected_string(self):
+        series = _series()
+        text, hist = _info_text(series, 'n_bins')
+        ix_max = int(np.asarray(hist.counts).argmax())
+        expected = (f"method: n_bins\nn_bins: 10\n"
+                    f"PEAK between {hist.edges[ix_max]:.02f} and {hist.edges[ix_max + 1]:.02f}")
+        self.assertEqual(text, expected)
+
+    def test_other_method_states_the_method_once(self):
+        series = _series()
+        for method in ('uniform', 'uniques', None):
+            with self.subTest(method=method):
+                text, _ = _info_text(series, method)
+                self.assertEqual(text, f"method: {method}")
+
+    def test_other_method_with_trim_states_both_facts_once(self):
+        series = _spiked_series()
+        text, _ = _info_text(series, 'uniform', ignore_fringe_bins=[1, 1])
+        self.assertEqual(text, "method: uniform\nignore_fringe_bins: [1, 1]")
+
+    def test_other_method_without_peak_highlight(self):
+        """Only one of the two conditional lines runs, so this doubles once, not twice."""
+        series = _series()
+        fig, ax = plt.subplots()
+        HistogramPlot(series=series, method='uniform', n_bins=10).plot(
+            ax=ax, show_zscores=False, show_counts=False, highlight_peak=False)
+        boxes = [t.get_text() for t in ax.texts if t.get_text().startswith('method:')]
+        plt.close(fig)
+        self.assertEqual(boxes, ["method: uniform"])
+
+
+class TestNonNumericError(unittest.TestCase):
+    """`non_numeric_error` must draw on the axes it is handed.
+
+    It positions with `transform=ax.transAxes`, so drawing via `plt.text` put the
+    message in that axes' coordinates on pyplot's current figure instead. Currently
+    the helper has no callers in the repo, so this guards a latent defect.
+    """
+
+    def test_text_lands_on_the_passed_axes_not_on_pyplots_figure(self):
+        from matplotlib.figure import Figure
+
+        import diive.core.plotting.plotfuncs as pf
+
+        # A bare Figure() is not registered with pyplot, so it can never be gcf().
+        bare = Figure()
+        bare_ax = bare.add_subplot(1, 1, 1)
+        pyplot_fig, pyplot_ax = plt.subplots()  # this is what plt.text would target
+        try:
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter('always')
+                pf.non_numeric_error(bare_ax)
+            self.assertEqual(caught, [], msg=f"unexpected warnings: {[str(w.message) for w in caught]}")
+            self.assertEqual([t.get_text() for t in bare_ax.texts],
+                             ['Sorry, no plot. Data are non-numeric.'])
+            self.assertEqual([t.get_text() for t in pyplot_ax.texts], [],
+                             msg="the message landed on pyplot's figure, not the given axes")
+            self.assertIs(bare_ax.texts[0].axes, bare_ax)
+            self.assertIs(bare_ax.texts[0].get_figure(root=True), bare)
+            self.assertIsNot(plt.gcf(), bare, msg="fixture is broken: the bare figure became gcf()")
+        finally:
+            plt.close(pyplot_fig)
 
 
 if __name__ == '__main__':

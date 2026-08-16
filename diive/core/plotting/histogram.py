@@ -212,12 +212,13 @@ class HistogramPlot:
 
         if show_info:
             info_txt = f"method: {self.method}"
-            info_txt += f"\nn_bins: {self.n_bins}" if self.method == 'n_bins' else info_txt
+            if self.method == 'n_bins':
+                info_txt += f"\nn_bins: {self.n_bins}"
             # Otherwise the box claims a bin count the plot does not show.
             if self.ignore_fringe_bins:
                 info_txt += f"\nignore_fringe_bins: {self.ignore_fringe_bins}"
-            if highlight_peak:
-                info_txt += f"\nPEAK between {self.edges[ix_max]:.02f} and {self.edges[ix_max + 1]:.02f}" if self.method == 'n_bins' else info_txt
+            if highlight_peak and self.method == 'n_bins':
+                info_txt += f"\nPEAK between {self.edges[ix_max]:.02f} and {self.edges[ix_max + 1]:.02f}"
 
             self.ax.text(0.05, 0.95, info_txt,
                          size=16, color="black", backgroundcolor='None', transform=self.ax.transAxes,
