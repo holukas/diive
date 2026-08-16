@@ -80,7 +80,8 @@ semantics), `dv.analysis` and `dv.plotting` namespace tables, and the self-heati
 
 ### [ ] `docs/`
 
-**Deferred as a whole until everything else is closed** (user's decision, 2026-08-15). The tree
+**Its own separate project, not part of this campaign** (user's decision, 2026-08-15). Do not
+pick it up as review follow-up work. The tree
 predates this campaign: written against the dead `diive.pkgs.*` layout, with hand-written pages
 calling API that no longer exists, and `auto_examples/` is Sphinx-Gallery output whose rebuild
 executes every example. Stale generated content was tracked as **L90, now removed** rather than left
