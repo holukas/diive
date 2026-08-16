@@ -372,9 +372,11 @@ The rest raise or fail at import:
 
 ### Fixed (code review)
 
-A read-only review of the library and the GUI, in four rounds, recorded 155 findings ranked so that a silently wrong
-number sits above a crash: a traceback blocks you, a plausible wrong number gets published. 122 are resolved, 3 of them
-closed as by design. The fixes landed as separate commits, each naming the findings it closes, and every closed entry
+A read-only review of the library and the GUI, in four rounds, recorded 159 findings ranked so that a silently wrong
+number sits above a crash: a traceback blocks you, a plausible wrong number gets published. 128 are resolved, 3 of them
+closed as by design. Four of the 159 were found while fixing the others, which is also how several entries were caught
+overstating or understating what they described; each closed entry says so where it happened. The fixes landed as
+separate commits, each naming the findings it closes, and every closed entry
 in `CODE_REVIEW_FINDINGS.md` carries what was changed, why that direction was chosen (code or docstring), and how it
 was verified. **Removed API comes first below, then the fixes that change numbers with no error and no warning**, since
 those are the ones to check existing results against.
@@ -423,6 +425,43 @@ those are the ones to check existing results against.
 - Two smaller removals: the `'iterations'` key is gone from `stl_decompose`'s result dict (it returned
   `DecomposeResult.nobs`, a shape tuple, where a count was documented, and statsmodels exposes no iteration count to
   report honestly), and the unread `UstarVekuriThresholdDetection.bootstrap_results_` attribute is gone.
+
+#### Plots no longer die on degenerate input
+
+Six crashes on input a user can legitimately hand a plot class. All are in the family the closed
+`Cumulative` fix established: an axes that states plainly there is nothing to draw beats a traceback,
+and beats a silently blank panel.
+
+- **`HistogramPlot` raised on any series with zero spread**, and it did so *inside the outlier
+  detectors' own diagnostic*: `show_zscores` defaults to True, `zscore()` divides by a standard
+  deviation of 0, and every z-score came back NaN. Any detector run with `showplot=True` whose retained
+  subset is constant died in its own plot. The trigger is not only a constant series — a single record
+  and two equal records do it too. The overlay is now skipped when no z-score is finite; the histogram
+  of a constant series is still drawn. (L115)
+- **`HistogramPlot` raised on an all-NaN column** (`autodetected range of [nan, nan] is not finite`) and
+  **`WaterfallPlot` raised `IndexError`** on one. Both now say `"<name>: no data"` on the axes. The
+  waterfall guard returns before the chrome because a second crash waited in the automatic title, which
+  reads the first and last period of the now-empty index. (L116, L117)
+- **`ShiftedDistributionPlot` died with an opaque error on four degenerate periods** — a mistyped
+  period, a variable starting mid-record, or a genuinely constant one (precipitation in a dry decade, a
+  flag). The four collapse to two conditions, and they get different answers. A period with **zero
+  spread** has a real distribution, so it is drawn as a spike via a bandwidth fallback rather than
+  called "no data" (measured: peak within one grid cell of the true value, integral 1.0000000, width
+  1.1% of the plotted range). A period with **no records** is labelled `": no data"` in the legend, and
+  an empty reference additionally drops the zone breakpoints instead of drawing five of them at NaN. A
+  third condition the finding did not list — *both* periods empty — failed earlier still, on the shared
+  grid, and now states so on the axes. (L118)
+- **`TimeSeries.plot_interactive()` raised on an unnamed Series**, which bokeh rejects
+  (`legend_label value must be a string`). Six sibling labels in the same two bokeh methods had the
+  identical unhandled `None` and degraded silently instead — `plot_rangetool()` titled the plot the
+  literal string `None`, and the saved file was `None_interactive.html`. All now fall back to `value`,
+  the name bokeh already gives the data column. A named Series is byte-identical. (L119)
+- **`LongtermAnomaliesYear` drew an empty chart annotated `nan±nansd`** when the reference period held
+  no measurement — reachable by reversing the period, or by one landing wholly inside an outage of the
+  record, which the GUI's clamped spin boxes permit. Every anomaly was NaN, so every bar was flat, under
+  a title asserting the record's full span. That and a record with no measured year at all now raise a
+  `ValueError` naming the class and the input; the GUI paints the message onto the canvas. A reference
+  period that overlaps the record at all still plots, over the overlapping years. (L120)
 
 #### Results change, with no error and no warning
 
@@ -788,11 +827,10 @@ those are the ones to check existing results against.
 #### Plot classes, docstring examples, and GUI object lifetime
 
 Round 4 covered the eight files the earlier rounds had left out — `windrose.py`, `hexbin.py`, `histogram.py`,
-`waterfall.py`, `shifted_distribution.py`, `timeseries.py`, `bar.py` and the GUI's `icons.py`. Of its 40 findings, the
-9 that produced a silently wrong or silently incomplete figure are fixed — every one of them listed above under
-breaking changes or under "results change, with no error and no warning" — and the remaining 31 are recorded with a
-repro but not yet fixed. Those 31 are crashes on legitimate input, contract mismatches and cosmetic defects; none of
-them silently changes what a figure shows.
+`waterfall.py`, `shifted_distribution.py`, `timeseries.py`, `bar.py` and the GUI's `icons.py`. Of its 40 findings, 15
+are fixed: the 9 that produced a silently wrong or silently incomplete figure, and the 6 that crashed on legitimate
+input — all listed above. The remaining 25 are recorded with a repro but not yet fixed; they are contract mismatches
+and cosmetic defects, and none of them silently changes what a figure shows.
 
 What did change:
 
@@ -810,8 +848,11 @@ What did change:
 
 #### Still open
 
-32 findings are open, each with a repro or a source citation in `CODE_REVIEW_FINDINGS.md`; 31 of them are round 4's,
-described above. The remaining one needs an external source: whether InfluxDB v2's delete range excludes `stop`, in
+30 findings are open, each with a repro or a source citation in `CODE_REVIEW_FINDINGS.md`; 25 of them are round 4's,
+described above, and 4 were turned up while fixing the rest — an empty-series crash in `HistogramPlot.__init__` that the
+guard in `plot` cannot reach, a reference-period "N years" that counts the requested span rather than the measured
+years behind the number, an unreported NaN drop in `ShiftedDistributionPlot`, and a dead helper that draws on pyplot's
+current figure instead of the axes it is handed. The remaining one needs an external source: whether InfluxDB v2's delete range excludes `stop`, in
 which case the pre-upload delete leaves the last record and duplicates survive. Deferred separately is BUR06/JAR09's
 aerodynamic resistance, where diive passes the canopy momentum resistance `u/u*^2` in place of Burba 2006's per-element
 `7.4*sqrt(d/U)` and has no equivalent of `fr`, the fraction of instrument heat retained in the optical path. That is not

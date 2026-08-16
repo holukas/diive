@@ -105,7 +105,7 @@ opposite of what the code produces. Re-read it against the corrected behaviour.
 
 ---
 
-# Triage index — all 155 findings by severity
+# Triage index — all 159 findings by severity
 
 The detailed entries below stay grouped by review round and module. This index is the **fix order**.
 
@@ -151,10 +151,11 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L2~~ | ~~`WindDirOffset` ignores `hist_n_bins`~~ (done 2026-08-07) — also pinned the bins to the full circle | `preprocessing/corrections/offsetcorrection.py:476` |
 | ~~G1~~ | ~~Partitioning tabs run at **(0, 0) UTC** when the project site is unconfigured~~ (done 2026-08-07) — 3 of the 4 ports | `gui/tabs/_partitioning_base.py:300` |
 
-## S2 — Silently does nothing / silently loses data (37)
+## S2 — Silently does nothing / silently loses data (38)
 
 | ID | Finding | Where |
 |---|---|---|
+| L151 | `ShiftedDistributionPlot` drops NaNs with no report, so a 95%-gappy reference period yields a confident-looking KDE from 5% of the records (spun out of L118) | `core/plotting/shifted_distribution.py:71` |
 | ~~L111~~ | ~~`WaterfallPlot` draws a fully missing period as a 0.0 bar under the default `agg='sum'` — 429 of 3652 bars on bundled `LW_IN`; `agg='mean'` drops them instead~~ (done 2026-08-16) — **also `count` and `prod`**, which the entry missed | `core/plotting/waterfall.py:66` |
 | ~~L112~~ | ~~`TimeSeries` colour-by draws **measured** records fully transparent wherever the *colour* series has a gap — 80 of 200~~ (done 2026-08-16) — **the markers too**, which the entry missed | `core/plotting/timeseries.py:315` |
 | ~~L113~~ | ~~Colour-by silently degrades to a plain line on index mismatch; `cmap`/`show_colorbar`/`color_label` become no-ops~~ (done 2026-08-16) | `core/plotting/timeseries.py:405` |
@@ -193,16 +194,17 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~G4~~ | ~~`restore_controls` silently keeps the current combo value when the saved entry is gone — can flip the joint-uncertainty divisor~~ (done 2026-08-15) | `gui/widgets/state_utils.py:51` |
 | ~~L73~~ | ~~`harmonic_decompose` picks the top-N bins by power, so a windowed strong component's leakage outranks a genuine weaker one — the same component is returned twice~~ (done 2026-08-07) | `core/times/decomposition_utils.py:275` |
 
-## S3 — Crash on legitimate input (23)
+## S3 — Crash on legitimate input (24)
 
 | ID | Finding | Where |
 |---|---|---|
-| L115 | `HistogramPlot.plot` raises on a constant series — **inside the outlier detectors' own `showplot=True` diagnostic** | `core/plotting/histogram.py:177` |
-| L116 | `HistogramPlot.plot` raises on an all-NaN column (L69 family) | `core/plotting/histogram.py:118` |
-| L117 | `WaterfallPlot.plot` raises `IndexError` on an all-NaN column (L69 family) | `core/plotting/waterfall.py:164` |
-| L118 | `ShiftedDistributionPlot` dies on an empty / all-NaN / single-record / constant period — unguarded Silverman bandwidth | `core/plotting/shifted_distribution.py:94` |
-| L119 | `TimeSeries.plot_interactive()` raises on an unnamed Series; `plot()` and `plot_rangetool()` handle it | `core/plotting/timeseries.py:156` |
-| L120 | `LongtermAnomaliesYear` raises `KeyError: None` on an unnamed Series (same root as L110) | `core/plotting/bar.py:101` |
+| L148 | `HistogramPlot.__init__` raises `IndexError` on an **empty** series at `series.index[0]` — reachable through `flagbase` when a detector rejects every record; needs a guard in `__init__`, so outside L115/L116 | `core/plotting/histogram.py:62` |
+| ~~L115~~ | ~~`HistogramPlot.plot` raises on a constant series — **inside the outlier detectors' own `showplot=True` diagnostic**~~ (done 2026-08-17) — line is `:183`, and **any** zero-spread series does it, not only a constant one | `core/plotting/histogram.py:183` |
+| ~~L116~~ | ~~`HistogramPlot.plot` raises on an all-NaN column (L69 family)~~ (done 2026-08-17) | `core/plotting/histogram.py:118` |
+| ~~L117~~ | ~~`WaterfallPlot.plot` raises `IndexError` on an all-NaN column (L69 family)~~ (done 2026-08-17) — a **second** crash waited in the auto-title | `core/plotting/waterfall.py:164` |
+| ~~L118~~ | ~~`ShiftedDistributionPlot` dies on an empty / all-NaN / single-record / constant period — unguarded Silverman bandwidth~~ (done 2026-08-17) — **two** conditions, not four; single-record *is* zero spread | `core/plotting/shifted_distribution.py:94` |
+| ~~L119~~ | ~~`TimeSeries.plot_interactive()` raises on an unnamed Series; `plot()` and `plot_rangetool()` handle it~~ (done 2026-08-17) — `plot_rangetool()` does **not**: it titles the plot `None` | `core/plotting/timeseries.py:164` |
+| ~~L120~~ | ~~`LongtermAnomaliesYear` raises `KeyError: None` on an unnamed Series (same root as L110)~~ (done 2026-08-17) — 2 of its 3 cases were stale; the `nan±nan` one blanks the whole chart | `core/plotting/bar.py:101` |
 | ~~L1~~ | ~~`Hampel` crashes on any non-fixed frequency (monthly/yearly/business-day)~~ (done 2026-08-15) | `preprocessing/outlier_detection/hampel.py:228` |
 | ~~L3~~ | ~~Frequency detection: off-by-one denominator → clean 2-row series "too irregular", 1-row bare `KeyError`~~ (done 2026-08-15) — one bad denominator caused both the crash and the wrong confidence | `core/times/times.py:1386` |
 | ~~L27~~ | ~~`set_storage_to_zero=True` still requires the storage column — the exact case it documents~~ (done 2026-08-15) | `flux/lowres/storage_correction.py:150` |
@@ -221,10 +223,11 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L81~~ | ~~`TimeLagAnalysis`: a `histogram_startbin`/`endbin` range excluding every lag empties `results`, then `detect_peak_range` fails~~ (done 2026-08-15) | `flux/lowres/timelag_analysis.py` |
 | ~~L101~~ | ~~**Two examples broken by this campaign's own breaking change** since `45614fb3`: `flux_selfheating.py` and `flux_selfheating_production.py` index `LATENT_HEAT_VAPORIZATION_J_UMOL`, removed with the H2O path (L37)~~ (done 2026-08-15) | `examples/flux/lowres/` |
 
-## S4 — Contract mismatch (31)
+## S4 — Contract mismatch (32)
 
 | ID | Finding | Where |
 |---|---|---|
+| L149 | `LongtermAnomaliesYear`'s "N years" in the reference annotation is `end - start + 1`, a label — never a count of the years behind the number | `core/plotting/bar.py:141` |
 | L121 | `ignore_fringe_bins` accepted, documented and stored by `HistogramPlot`; nothing applies it (L62/L91 family — a working impl exists in `analysis/histogram.py`) | `core/plotting/histogram.py:45` |
 | L122 | `minticks`/`maxticks` accepted, documented and forwarded by hexbin; only `nice_date_ticks` consumes them and hexbin never reaches it | `core/plotting/hexbin.py:268` |
 | L123 | `color_bad` accepted, documented and forwarded by hexbin; it takes effect only via `set_cmap`, which hexbin never calls | `core/plotting/hexbin.py:270` |
@@ -257,11 +260,12 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L91~~ | ~~`hexbin.py` accepts, documents and forwards `show_less_xticklabels`, and nothing applies it~~ (done 2026-08-15) | `core/plotting/hexbin.py:272` |
 | ~~L95~~ | ~~`ScopPhysics.fct_unsc_gf` is `'FCT_UNSC_gfRF'` though the fill is XGBoost~~ (done 2026-08-15) — the suffix was hardcoded twice, which is why it drifted; now one string | `flux/lowres/selfheating.py` |
 
-## S5 — Cosmetic / dead / latent (44)
+## S5 — Cosmetic / dead / latent (45)
 
 | ID | Finding | Where |
 |---|---|---|
 | ~~L147~~ | ~~**Menu-action lambdas capture `self`** — the actual, sole reason no `MainWindow` is ever collected (L105's real cause)~~ (done 2026-08-16) — all 7 lambdas out of `app.py`; **4 windows live -> 0**. ~55 remain elsewhere in `gui/`, mostly rescued by L106; the unrescued ones are listed in the entry | `gui/app.py:423` |
+| L150 | `plotfuncs.non_numeric_error(ax)` takes an `ax` and draws with `plt.text` — the colorbar family (L107 rule). Dead code, zero callers, so latent | `core/plotting/plotfuncs.py:172` |
 | L131 | Histogram info box appends itself — the text is printed up to four times | `core/plotting/histogram.py:160` |
 | L132 | The wind rose drops out-of-range directions (sentinels, radians) without reporting the count | `core/plotting/windrose.py:198` |
 | ~~L133~~ | ~~`WindRosePlot`'s docstring example calls a function that does not exist — **and reST `Example::` blocks are invisible to both docstring tests** (L85 hole)~~ (done 2026-08-16) — the real count was **41** literal blocks, not 13; the extended check found 5 more dead names | `core/plotting/windrose.py:85` |
@@ -3074,6 +3078,14 @@ Low likelihood (a variable named `reference_mean` is unusual), but the establish
 
 ## S2 — silently does nothing / silently loses data
 
+**[ ] L151. `ShiftedDistributionPlot` drops NaNs with no report**
+`core/plotting/shifted_distribution.py:71-72` — spun out of L118, whose crash half is fixed. Each
+period is `dropna()`ed and the count is never surfaced, so a reference period that is 95% gaps
+produces a KDE from 5% of the records that is visually indistinguishable from a complete one — and
+the zone breakpoints derived from its mean and sd inherit that. Nothing in the plot states the sample
+size. Needs a verbosity channel the class does not currently have, which is why it was not folded
+into L118.
+
 **[x] L111. `WaterfallPlot` turns a fully missing period into a 0.0 contribution bar under the default `agg='sum'`**
 > **Fixed 2026-08-16.** Mask on the record count instead of trusting the trailing `dropna()`:
 > `resampler.agg(agg).where(resampler.count() > 0).dropna()`. Chosen over `min_count=1` because `agg`
@@ -3224,7 +3236,35 @@ or use `ax.bar(x=years, ...)` on a numeric axis.
 
 ## S3 — crash on legitimate input
 
-**[ ] L115. `HistogramPlot.plot` raises on a constant series, inside the outlier detectors' own diagnostic plot**
+**[ ] L148. `HistogramPlot.__init__` raises `IndexError` on an empty series**
+`core/plotting/histogram.py:62` — `self.first_date = series.index[0]`:
+`IndexError: index 0 is out of bounds for axis 0 with size 0`. Found while fixing L115/L116 and left
+open because it needs a guard in `__init__`, where those two are both in `plot`.
+
+**[reproduced]** end to end through the detectors' own diagnostic, the same path L115 names — a
+detector that rejects *every* record hands `plot` an empty retained subset:
+
+```python
+dv.outliers.AbsoluteLimits(constant_5_series, minval=100, maxval=200, showplot=True).run()
+```
+
+L116's `dropna().empty` guard in `plot` cannot help: the object never gets that far.
+
+**[x] L115. `HistogramPlot.plot` raises on a constant series, inside the outlier detectors' own diagnostic plot**
+> **Fixed 2026-08-17.** The overlay is gated on `show_zscores and np.isfinite(zscores).any()`. Only the
+> twiny overlay disappears — the histogram of a constant series is still worth showing, so the bars,
+> counts, peak highlight and info box are untouched.
+>
+> **Three corrections to this entry.** The raising line is **183**, not 177 (177 is `self.ax.twiny()`).
+> It dies on the **retained (`ok`) subset** at `flagbase.py:248`, the second of the two histograms, not
+> the raw one. And the trigger is zero spread, not "constant": a **single record** and **two equal
+> records** raise identically, since `np.std` is 0 for all three. `showplot` is a *constructor*
+> argument, which the entry's `run(showplot=True)` snippet gets wrong.
+>
+> Moves only a series whose z-scores are all non-finite. An ordinary series is byte-identical across
+> three configurations (default, `show_zscores=False`, KDE+mean+median): counts, edges, per-bar
+> geometry and facecolour, text, line ydata, xlim, xticks, twiny presence and all seven z-score
+> vlines. Mutation-checked with two reverts and two deliberately over-broad guards.
 `core/plotting/histogram.py:177` — `zscore()` divides by `np.std`, which is 0 for a constant series,
 so every z-score is NaN and `int(math.floor(zscores.min()))` fails. `show_zscores` defaults to
 **True**, and `core/base/flagbase.py:243,248` draws `HistogramPlot(...)` on both the raw series and
@@ -3242,18 +3282,66 @@ ValueError: cannot convert float NaN to integer
 So any detector run with `showplot=True` on a variable whose retained subset is constant dies inside
 its own diagnostic. Suggested fix: skip the z-score overlay when `zscores` holds no finite value.
 
-**[ ] L116. `HistogramPlot.plot` raises on an all-NaN column**
+**[x] L116. `HistogramPlot.plot` raises on an all-NaN column**
+> **Fixed 2026-08-17.** L69's precedent: an early-out drawing `"{name}: no data"` on a titled axes.
+> Confirmed independent of `show_zscores`, so it is genuinely the `ax.hist` range autodetection.
+> `hist.counts`/`hist.edges` stay `None` for that case. Ordinary series byte-identical (see L115).
 `core/plotting/histogram.py:118` — the closed L69 family. `ax.hist` autodetects the range:
 `ValueError: autodetected range of [nan, nan] is not finite`. Reached through the same `flagbase`
 path and through the GUI Overview histogram panel (which catches it and prints "Cannot plot").
 Suggested fix: early-out with an empty-axes message, as L69 did.
 
-**[ ] L117. `WaterfallPlot.plot` raises `IndexError` on an all-NaN column**
+**[x] L117. `WaterfallPlot.plot` raises `IndexError` on an all-NaN column**
+> **Fixed 2026-08-17.** L69's precedent again: a centred `"{varname}: no data"` on a tick-free axes,
+> returning before the chrome. The guard returns early rather than only skipping the end marker because
+> the empty case hits a **second** crash immediately after — `_apply_format`'s automatic title reads
+> `contributions.index.min().date()` on the now-empty index. The entry does not mention that.
+>
+> All four empty-after-`dropna()` paths land on the same line: all-NaN, all-NaN with `resample=None`,
+> an empty series, and an unnamed all-NaN series (which gets `"No data"`, since `"None: no data"` reads
+> like a variable called None). There is **no separate "all-NaN after resampling" case** — L111's count
+> mask already collapses it into the all-NaN case. Single-record and one-valid-record inputs never
+> raised. Ordinary gappy series bit-identical, max abs diff 0.0 across bars, connectors, marker,
+> annotation and limits. Mutation-checked three ways, including a guard forced always-on.
 `core/plotting/waterfall.py:164` — `dropna()` empties the series, `__init__` still succeeds, and
 `plot` indexes `self.cumulative.index[-1]`: `IndexError: index -1 is out of bounds for axis 0 with
 size 0`. Same L69 family. Suggested fix: guard on `self.cumulative.empty`.
 
-**[ ] L118. `ShiftedDistributionPlot.__init__` dies with an opaque error on an empty, all-NaN, single-record or constant period**
+**[x] L118. `ShiftedDistributionPlot.__init__` dies with an opaque error on an empty, all-NaN, single-record or constant period**
+> **Fixed 2026-08-17.** `__init__` confirmed as the raising method for all four (the object never gets
+> built), but **the four cases collapse to two conditions**, and the entry's split is wrong about which:
+> `self._ref_data` is an ndarray, so `.std()` is `ddof=0` and is `0.0` for a **single record** exactly as
+> for a constant period. Single-record is not a third case — it is zero spread. The real split is
+> `n == 0` versus `n >= 1 and std == 0`, and each gets a different answer:
+>
+> - **Zero spread (constant, or single record) draws the spike.** The distribution is real, so treating
+>   it as "no data" would be wrong. When Silverman returns `bw <= 0`, fall back to
+>   `(x[-1] - x[0]) / 200`. Measured on a constant comparison period of 5.0 over a 26.48-unit grid:
+>   peak at **x = 4.988** (within one 0.0265 grid cell of the true value), **integral 1.0000000** — a
+>   genuine normalised density, not a stub — **FWHM 1.1% of the plotted range**, 94% of the mass inside
+>   ±1%. Zone breakpoints for a constant reference correctly collapse onto the single value.
+> - **No records (empty or all-NaN) draws nothing and says so.** L69's precedent: `_fit_kde` returns
+>   `None` and `plot` labels that period `"Reference (…): no data"` in the legend, one entry per period.
+>   An empty *reference* also leaves the breakpoints NaN, so the breakpoint lines and five zone labels
+>   are skipped rather than drawn at NaN, and the comparison is filled unzoned in the neutral colour —
+>   without which it survives only as an alpha-0.4 hairline.
+>
+> **Three cases the entry does not list**, all measured: a constant *comparison* period (it names only a
+> constant reference); a single-record *reference* period; and **both periods empty**, which fails
+> *earlier and differently* — `ValueError: zero-size array to reduction operation minimum which has no
+> identity` at `:88`, before `_fit_kde` is reached, so a bandwidth-only guard would not have covered it.
+> That case now states `"No data in reference or comparison period"` on a tick-free axes. The empty and
+> all-NaN paths also emitted four numpy `RuntimeWarning`s on the way to the exception; those are gone.
+>
+> A valid two-period comparison is unchanged: max abs diff **0.0** on the grid, both KDE curves, the four
+> breakpoints, all 4016 line coordinates, the five zone-label positions and both axis limits, with
+> identical artist counts, legend text and title. Six mutations, each biting only its intended tests —
+> one (M6) exists solely to prove the unchanged-path test is not vacuous, recomputing the pre-fix
+> Silverman grid inline and asserting exact array equality.
+>
+> **Not addressed:** this entry's trailing sub-finding, that NaNs are dropped at `:71-72` with no report
+> so a 95%-gappy reference yields a confident-looking KDE. It needs a verbosity channel the class does
+> not have, and is not a crash. Filed separately as **L151**.
 `core/plotting/shifted_distribution.py:94` — Silverman's
 `bw = 1.06 * data.std() * len(data) ** (-0.2)` has no guard.
 
@@ -3276,17 +3364,67 @@ Suggested fix: validate both periods in `__init__` and raise a named error ("ref
 at `:71-72` with no report, so a 95%-gappy reference period yields a confident-looking KDE from 5% of
 the records.
 
-**[ ] L119. `TimeSeries.plot_interactive()` raises on an unnamed Series, which `plot()` handles fine**
+**[x] L119. `TimeSeries.plot_interactive()` raises on an unnamed Series, which `plot()` handles fine**
+> **Fixed 2026-08-17.** One module-level `_display_name(series)` helper returning `str(series.name)` or
+> `'value'`, substituted at every name-derived label site in the two bokeh methods. `plot()` untouched.
+>
+> **The entry's "both siblings succeed" claim is true but flattering.** On the same unnamed input
+> `plot()` is genuinely clean (blank title and label), but `plot_rangetool()` renders the literal string
+> **`None`** as its plot title, from `title=f"{self.series.name}"`. So it was one crash plus one silent
+> cosmetic defect, not one crash and two clean siblings. **Six more sites** carry the same missing-`None`
+> handling — titles, y-axis labels, and `output_file`'s filename (`None_interactive.html`) — in both
+> bokeh methods; only the legend was fatal, the rest degraded silently. All are in this fix.
+> `p.xaxis.axis_label = self.series.index.name` is deliberately left alone: `None` there correctly means
+> an unnamed index.
+>
+> The fallback is `'value'` because both methods already name the bokeh data column `df['value']` — there
+> was no existing convention to match, since `plot()` uses no fallback and `plot_rangetool()`'s was the
+> bug. Nothing moves for a named Series: the full bokeh document serialised under `HEAD` and after is
+> byte-identical for both methods (10728 and 12637 chars). Three mutations, all nine new tests made to
+> fail; assertions read the real bokeh objects (`legend.items[i].label.value`, `fig.title.text`,
+> `curstate().file`), never absence of an exception. Line reference in this entry (`:156`) predates
+> commit `4c97f48d`; the call is at `:164`.
 `core/plotting/timeseries.py:156` — `legend_label=self.series.name` is `None`, which bokeh rejects
 (`ValueError: legend_label value must be a string`). `plot()` and `plot_rangetool()` both succeed on
 the same input, so the inconsistency sits inside one class. Suggested fix:
 `str(self.series.name or "value")`.
 
-**[ ] L120. `LongtermAnomaliesYear` raises `KeyError: None` on an unnamed Series**
+**[x] L120. `LongtermAnomaliesYear` raises `KeyError: None` on an unnamed Series**
 > **Partly closed 2026-08-16 by L110's fix** (`f580914e`): an unnamed Series no longer raises
 > `KeyError: None`, because the working frame is keyed internally rather than by `series.name`. The
 > other two cases in this entry are untouched — an empty series still raises `IndexError`, and a
 > reference period outside the record still annotates `nan±nan`.
+>
+> **Closed 2026-08-17.** Both remaining cases now raise a `ValueError` naming the class and the input.
+> **Two of this entry's three cases were stale by the time they were fixed**, in opposite directions:
+>
+> - *Unnamed Series* — genuinely closed, re-verified. (Cosmetic leftover, not a defect: `anomalies_df`'s
+>   data column comes back labelled `NaN`, because the caller's name *is* `None`.)
+> - *Empty series* — the entry says `IndexError` at `:83` in `plot()`. **L114's reindex moved it a day
+>   earlier**, to `ValueError: cannot convert float NaN to integer` in `__init__`. Fixed as a **named
+>   error only, not a recovery path**: the old message named `int(self.data_first_year)`, an internal
+>   detail introduced the previous day, so what a caller saw was unstable across two commits. It is one
+>   condition and no control flow, and it is user-visible — `gui/tabs/seasonaltrend.py:276` renders
+>   `f"Cannot plot:\n{err}"` onto the canvas, so the message *is* the UI.
+> - *Reference period outside the record* — reproduced, and **worse than this entry states**. It is not
+>   just an odd annotation: `reference_mean` is NaN, so **every** anomaly is NaN and all 42 bars are
+>   flat. An empty chart under a title asserting the record's full span.
+>
+> **Two cases the entry misses**, both measured: an **all-NaN but non-empty** series produces the same
+> blank chart and passes the GUI's `self._yearly.empty` guard; and a reference period landing **wholly
+> inside an outage** does too — which is the *GUI-reachable* one, since the reference spin boxes are
+> clamped to `[record.min, record.max]` (`seasonaltrend.py:202-205`). A reversed period (`start > end`)
+> is also reachable. Hence `ref_subset.dropna().empty` rather than `len(...) == 0`: after L114's reindex
+> a window inside an outage has rows, all NaN.
+>
+> A *partial* overlap still plots, over the overlapping years only. Five scenarios fingerprinted before
+> and after — `anomalies_df`, patch heights and positions, both annotation strings, title, ylabel, xlim,
+> tick count — every field identical, max abs diff 0.0. Composes with the L109 sort, the L110
+> `_VALUECOL` key and the L114 reindex, none of which are touched. Mutation-checked; two of the six tests
+> are labelled no-regression guards rather than claimed as coverage.
+>
+> **Spun out:** the partial-overlap annotation prints the *nominal* span, not the years behind the
+> number — filed as **L149**.
 
 `core/plotting/bar.py:101` — same root cause as L110; the internal-key fix closes both. Two
 neighbours in the same family: an *empty* series gives `IndexError: index 0 is out of bounds` at
@@ -3294,6 +3432,21 @@ neighbours in the same family: an *empty* series gives `IndexError: index 0 is o
 `"reference period mean: nan±nansd"` rather than raising.
 
 ## S4 — contract mismatch
+
+**[ ] L149. `LongtermAnomaliesYear`'s reference "N years" is a label, not a count**
+`core/plotting/bar.py:141` — `ref_n_years = end - start + 1` is the *nominal* span of the requested
+period, never the number of measured years the mean and sd were actually computed over. Spun out of
+L120, where a partial overlap was measured as behaving correctly in every respect but this.
+
+**[reproduced]** record 2000-2020, reference period 1995-2005 — 6 overlapping years:
+
+```
+reference period mean: <computed over 6 years>  (1995-2005, 11 years)
+```
+
+The number is right and its stated provenance is wrong, which is the worse half. It also mislabels
+any reference window containing an outage, which after L114's reindex is a window with NaN rows.
+Suggested fix: count `ref_subset.dropna()`, or print both ("11 years requested, 6 measured").
 
 **[ ] L121. `ignore_fringe_bins` is accepted, documented and stored by `HistogramPlot`, and nothing applies it**
 `core/plotting/histogram.py:36`, `:45`, `:61` — the L62/L91 defect exactly. The name is not
@@ -3407,6 +3560,21 @@ cosmetic one. Suggested fix: clip the breakpoints into `[x[0], x[-1]]` before bu
 and skip the label when the clipped interval is empty.
 
 ## S5 — cosmetic / dead / latent
+
+**[ ] L150. `non_numeric_error` takes an `ax` and draws on pyplot's current figure**
+`core/plotting/plotfuncs.py:172` — the CLAUDE.md colorbar rule (L107's family) in a helper whose
+whole job is to write on the axes it is handed:
+
+```python
+def non_numeric_error(ax):
+    plt.text(0.5, 0.5, 'Sorry, no plot. Data are non-numeric.', ..., transform=ax.transAxes, ...)
+```
+
+`transform=ax.transAxes` positions it in that axes' coordinates while `plt.text` puts it on pyplot's
+current axes, so in the GUI the message lands on a different figure than the one it describes.
+**Latent, not live: the function has zero callers in the whole repo.** Noticed while fixing L117,
+where it was the obvious helper to reach for and was deliberately not used. Suggested fix:
+`ax.text(...)`, or delete it.
 
 **[ ] L131. Histogram info box appends itself, printing the text up to four times**
 `core/plotting/histogram.py:160,162` — `info_txt += f"..." if self.method == 'n_bins' else info_txt`
