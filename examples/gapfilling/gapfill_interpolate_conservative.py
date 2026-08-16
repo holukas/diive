@@ -69,4 +69,4 @@ ax_output.tick_params(left=True, right=False, top=False, bottom=True,
 
 fig.show()
 
-print("✓ Linear interpolation (conservative) complete.")
+print("[OK] Linear interpolation (conservative) complete.")

@@ -141,7 +141,12 @@ rfts = dv.gapfilling.RandomForestTS(
     max_depth=None,
     min_samples_split=10,
     min_samples_leaf=5,
-    n_jobs=-1
+    n_jobs=-1,
+    # Explain a 5000-row sample instead of every row. TreeSHAP costs time linear
+    # in the number of rows and mean |SHAP| converges long before the full record,
+    # so the ranking (and therefore the reduction below) is unchanged; the sample
+    # is seeded, so the result stays reproducible.
+    shap_max_rows=5000,
 )
 
 # Feature reduction using SHAP importance
@@ -211,4 +216,4 @@ dv.plotting.Cumulative(
     end_year=2020
 ).plot()
 
-print("✓ Random Forest gap-filling complete.")
+print("[OK] Random Forest gap-filling complete.")

@@ -76,7 +76,7 @@ boot_mp = dv.flux.UstarBootstrapThresholds(
     df=data,
     detector_class=dv.flux.UstarMovingPointDetection,
     detector_kwargs=dict(ta_classes_count=7, ustar_classes_count=20),
-    n_iter=100,
+    n_iter=20,  # kept small for the example; use n_iter=100 in production
     percentiles=(16, 50, 84),
     n_jobs=-1,
     verbose=1,
@@ -91,7 +91,7 @@ print("=" * 70)
 boot_vekuri = dv.flux.UstarBootstrapThresholds(
     df=data,
     detector_class=dv.flux.UstarVekuriThresholdDetection,
-    n_iter=100,
+    n_iter=20,  # kept small for the example; use n_iter=100 in production
     percentiles=(16, 50, 84),
     n_jobs=-1,
     verbose=1,

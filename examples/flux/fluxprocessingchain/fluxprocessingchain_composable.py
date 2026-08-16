@@ -308,6 +308,10 @@ data = run_level41_rf(
     min_samples_leaf=1,
     random_state=42,
     n_jobs=-1,
+    # SHAP explains a seeded 5000-row sample rather than the whole record. Its cost
+    # is linear in rows while mean |SHAP| converges early, so the ranking that
+    # reduce_features selects on is unchanged, and it stays reproducible.
+    shap_max_rows=5000,
 )
 print("Random Forest gap-filling complete")
 
@@ -332,6 +336,7 @@ data = run_level41_xgb(
     min_child_weight=5,
     random_state=42,
     n_jobs=-1,
+    shap_max_rows=5000,  # as above: same ranking, a fraction of the SHAP cost
 )
 print("XGBoost gap-filling complete")
 

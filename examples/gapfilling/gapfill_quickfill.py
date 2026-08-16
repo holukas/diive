@@ -97,4 +97,4 @@ gapfilled = qf.get_gapfilled_target()
 dv.plotting.HeatmapDateTime(series=df[TARGET_COL]).show()
 dv.plotting.HeatmapDateTime(series=gapfilled).show()
 
-print("✓ QuickFill gap-filling complete.")
+print("[OK] QuickFill gap-filling complete.")

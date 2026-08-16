@@ -154,7 +154,7 @@ n_ok = (flag_complete == 1).sum()
 n_bad = (flag_complete == 2).sum()
 
 print("\nBase Variable (CO2) Completeness:")
-print(f"  Good (≥99% complete): {n_good}")
+print(f"  Good (>=99% complete): {n_good}")
 print(f"  Ok (97-99% complete): {n_ok}")
 print(f"  Bad (<97% complete): {n_bad}")
 
