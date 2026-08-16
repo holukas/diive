@@ -265,23 +265,23 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ID | Finding | Where |
 |---|---|---|
 | ~~L147~~ | ~~**Menu-action lambdas capture `self`** — the actual, sole reason no `MainWindow` is ever collected (L105's real cause)~~ (done 2026-08-16) — all 7 lambdas out of `app.py`; **4 windows live -> 0**. ~55 remain elsewhere in `gui/`, mostly rescued by L106; the unrescued ones are listed in the entry | `gui/app.py:423` |
-| L150 | `plotfuncs.non_numeric_error(ax)` takes an `ax` and draws with `plt.text` — the colorbar family (L107 rule). Dead code, zero callers, so latent | `core/plotting/plotfuncs.py:172` |
-| L131 | Histogram info box appends itself — the text is printed up to four times | `core/plotting/histogram.py:160` |
-| L132 | The wind rose drops out-of-range directions (sentinels, radians) without reporting the count | `core/plotting/windrose.py:198` |
+| ~~L150~~ | ~~`plotfuncs.non_numeric_error(ax)` takes an `ax` and draws with `plt.text` — dead code, zero callers, so latent~~ (done 2026-08-17) — fails **silently**, no warning to notice | `core/plotting/plotfuncs.py:172` |
+| ~~L131~~ | ~~Histogram info box appends itself — the text is printed up to four times~~ (done 2026-08-17) — latent in-repo: every call site passes `method='n_bins'` or `show_info=False` | `core/plotting/histogram.py:160` |
+| ~~L132~~ | ~~The wind rose drops out-of-range directions without reporting the count~~ (done 2026-08-17) — **mis-tiered: this is S2.** A signed -180..180 column loses 41.7% of the record, leaving empty sectors | `core/plotting/windrose.py:198` |
 | ~~L133~~ | ~~`WindRosePlot`'s docstring example calls a function that does not exist — **and reST `Example::` blocks are invisible to both docstring tests** (L85 hole)~~ (done 2026-08-16) — the real count was **41** literal blocks, not 13; the extended check found 5 more dead names | `core/plotting/windrose.py:85` |
-| L134 | A waterfall contribution of exactly 0.0 is coloured "release" (compounds L111) | `core/plotting/waterfall.py:142` |
-| L135 | `zone_colors`/`zone_labels` lengths unvalidated — 3 colours raise, 3 labels silently under-label | `core/plotting/shifted_distribution.py:171` |
-| L136 | Colour-by replaces the caller's axes limits instead of `update_datalim` + `autoscale_view` | `core/plotting/timeseries.py:330` |
-| L137 | A second `plot()` on the **same** axes stacks artists and colorbars — all three of timeseries/bar/shifted-distribution | `core/plotting/timeseries.py:339` |
-| L138 | `fig.tight_layout()` on a figure built `layout='constrained'` — warns and silently disables the engine | `core/plotting/bar.py:173` |
-| L139 | `LongtermAnomaliesYear.get()` before `plot()` raises `AttributeError` | `core/plotting/bar.py:176` |
-| L140 | `icons.py`'s `('calculate', _ln_gear)` rule is unreachable — both derived-variable calculators fall back to the generic glyph | `gui/icons.py:571` |
-| L141 | Icons baked at 16x16 with `devicePixelRatio` 1 — blurry at Windows 150%/200% scaling | `gui/icons.py:26` |
-| L142 | Sub-pixel coordinates discarded by PySide6's integer `drawLine` overload (~12 glyphs) | `gui/icons.py` |
-| L143 | `menu_icon(None)` raises, though the docstring promises unknown labels fall back | `gui/icons.py:730` |
-| L144 | Both bokeh methods call `show(p)` unconditionally — no `showplot` toggle (L104 family) | `core/plotting/timeseries.py:217` |
-| L145 | `bar.py` uses Material 400-level colours where the convention specifies 300 | `core/plotting/bar.py:143` |
-| L146 | `ShiftedDistributionPlot` uses the population sd (ddof=0) for its zone boundaries where diive uses ddof=1 | `core/plotting/shifted_distribution.py:75` |
+| ~~L134~~ | ~~A waterfall contribution of exactly 0.0 is coloured "release" (compounds L111)~~ (done 2026-08-17) — real in the array, **unobservable on canvas**: repainting 1820 zero bars moved 0 pixels | `core/plotting/waterfall.py:142` |
+| ~~L135~~ | ~~`zone_colors`/`zone_labels` lengths unvalidated~~ (done 2026-08-17) — **four** failure modes, not two; a 6th label was silently dropped | `core/plotting/shifted_distribution.py:171` |
+| ~~L136~~ | ~~Colour-by replaces the caller's axes limits instead of `update_datalim` + `autoscale_view`~~ (done 2026-08-17) — also overwrote limits the caller set deliberately | `core/plotting/timeseries.py:330` |
+| ~~L137~~ | ~~A second `plot()` on the **same** axes stacks artists and colorbars — timeseries/bar/shifted-distribution~~ (done 2026-08-17) — **not one defect**: two classes fixed, one documented; family is wider | `core/plotting/timeseries.py:339` |
+| ~~L138~~ | ~~`fig.tight_layout()` on a figure built `layout='constrained'` — warns and silently disables the engine~~ (done 2026-08-17) — **mis-tiered: S3 in `timeseries.py`**, where the default colour-by call *raises* | `core/plotting/bar.py:173` |
+| ~~L139~~ | ~~`LongtermAnomaliesYear.get()` before `plot()` raises `AttributeError`~~ (done 2026-08-17) — the sibling shape alone would only relocate the crash | `core/plotting/bar.py:176` |
+| ~~L140~~ | ~~`icons.py`'s `('calculate', _ln_gear)` rule is unreachable~~ (done 2026-08-17) — not shadowing: the label is a Qt section header, which never reaches `menu_icon` | `gui/icons.py:571` |
+| ~~L141~~ | ~~Icons baked at 16x16 with `devicePixelRatio` 1 — blurry at Windows 150%/200% scaling~~ (done 2026-08-17) — measured: 0 fully-opaque px when upscaled, 69% when painted natively | `gui/icons.py:26` |
+| ~~L142~~ | ~~Sub-pixel coordinates discarded by PySide6's integer `drawLine` overload (~12 glyphs)~~ (done 2026-08-17) — **18** glyphs, and `_ln_lag` (named here) is not one of them | `gui/icons.py` |
+| ~~L143~~ | ~~`menu_icon(None)` raises, though the docstring promises unknown labels fall back~~ (done 2026-08-17) | `gui/icons.py:730` |
+| ~~L144~~ | ~~Both bokeh methods call `show(p)` unconditionally — no `showplot` toggle (L104 family)~~ (done 2026-08-17) — they also returned `None`, so the toggle needed a return value to be usable | `core/plotting/timeseries.py:217` |
+| ~~L145~~ | ~~`bar.py` uses Material 400-level colours where the convention specifies 300~~ (done 2026-08-17) — **the convention was wrong, not the code**; fixed in `CLAUDE.md`, no colour changed | `core/plotting/bar.py:143` |
+| ~~L146~~ | ~~`ShiftedDistributionPlot` uses the population sd (ddof=0) for its zone boundaries~~ (done 2026-08-17) — **mis-tiered: S1 for a short reference**, 1% of records reclassified at n=30, 20.6% at n=2 | `core/plotting/shifted_distribution.py:75` |
 | ~~L10~~ | ~~`vectorize_timestamps` `.SEASON` as `Int64` forces object-dtype arrays into every ML fit~~ (done 2026-08-15) | `core/times/times.py:1245` |
 | ~~L12~~ | ~~`LocalSD`: values exactly on the limit are in neither `ok` nor `rejected`~~ (done 2026-08-15) | `preprocessing/outlier_detection/localsd.py:279` |
 | ~~L20~~ | ~~`lagged_variants` edge-fill is conditional but documented as unconditional~~ (done 2026-08-15) | `variables/temporal.py:461` |
@@ -3809,7 +3809,14 @@ and skip the label when the clipped interval is empty.
 
 ## S5 — cosmetic / dead / latent
 
-**[ ] L150. `non_numeric_error` takes an `ax` and draws on pyplot's current figure**
+**[x] L150. `non_numeric_error` takes an `ax` and draws on pyplot's current figure**
+> **Fixed 2026-08-17.** `plt.text` -> `ax.text`. Zero-callers claim re-verified (only its own definition
+> and this file). Kept rather than deleted, per CLAUDE.md's mention-dead-code rule.
+>
+> Worth recording how it fails: **silently**. Drawing on an axes of a bare `Figure()` while a pyplot
+> figure existed gave `warnings: []`, `texts on the bare figure's axes: []`, and the message on pyplot's
+> current axes -- no `Adding colorbar to a different Figure` equivalent to notice. Nothing moves today; the
+> fix takes effect the first time someone uses it.
 `core/plotting/plotfuncs.py:172` — the CLAUDE.md colorbar rule (L107's family) in a helper whose
 whole job is to write on the axes it is handed:
 
@@ -3824,13 +3831,57 @@ current axes, so in the GUI the message lands on a different figure than the one
 where it was the obvious helper to reach for and was deliberately not used. Suggested fix:
 `ax.text(...)`, or delete it.
 
-**[ ] L131. Histogram info box appends itself, printing the text up to four times**
+**[x] L131. Histogram info box appends itself, printing the text up to four times**
+> **Fixed 2026-08-17.** The two `x += y if cond else x` lines become plain `if`s.
+>
+> "Up to four times" is exact, and doubling-once is separately reachable with `highlight_peak=False`
+> (only one of the two buggy lines runs). **Latent in-repo**, established by auditing every construction:
+> `gui/tabs/plotting.py:1287`, `codegen.py:226`, both examples and the tests all pass `method='n_bins'`;
+> the two sites that omit `method` -- `flagbase.py` and `gui/tabs/overview.py:922` -- both pass
+> `show_info=False`. So no in-repo path renders the corrupted box, but `method` is an optional public
+> parameter documented as "e.g. `'n_bins'`", so a library user who omits it and leaves the default
+> `show_info=True` sees it live.
+>
+> `method='n_bins'` is byte-identical (8 fingerprint cases, max abs diff 0.0). Four mutations, two
+> over-broad.
 `core/plotting/histogram.py:160,162` — `info_txt += f"..." if self.method == 'n_bins' else info_txt`
 appends `info_txt` to itself on the false branch. Two such lines run, so the string doubles twice.
 **[reproduced]** `'method: uniformmethod: uniformmethod: uniformmethod: uniform'`. Suggested fix: a
 plain `if`.
 
-**[ ] L132. The wind rose drops out-of-range directions without reporting the count**
+**[x] L132. The wind rose drops out-of-range directions without reporting the count**
+> **Fixed 2026-08-17**, and **this is S2, not S5** -- the rubric's S2 is literally "it dropped records
+> without saying so". Left in the S5 table for provenance; treat the tier as S2.
+>
+> Measured on the real CH-FRU 2021 record (16 994 paired records) with plausible defects injected:
+>
+> | record | dropped | visible? |
+> |---|---|---|
+> | as-is | 0 (0.0%) | -- |
+> | signed `-180..180` convention | **7 091 (41.7%)** | three sectors sit at exactly `N_VALS=0` |
+> | hand-rolled `+40 deg`, no modulo | 867 (5.1%) | nothing looks wrong |
+> | `-9999` every 10th record | 1 698 (10.0%) | nothing looks wrong |
+>
+> A signed column loses 41.7% and leaves empty sectors that read as "no wind from the west". Both bundled
+> records are clean (0 out of range), which argues for the *low end* of S2, not for cosmetic.
+>
+> **Reports rather than wraps, and that is the whole decision.** `-9999 % 360 == 81.0` (ENE) and
+> `999 % 360 == 279.0` (WNW) -- wrapping turns a fill value into a plausible bearing, and nothing at that
+> point distinguishes a sentinel from a legitimately wrappable `-5`. Raising was rejected too: many records
+> carry a handful of genuinely disposable bad values. `360.0` still folds to `0.0`, unchanged. NaN is not
+> counted -- `dropna()` removes it at the pairing step, before the range screen. Count also exposed as
+> `n_out_of_range`, sibling to `n_used`.
+>
+> **The entry's causes are partly wrong:** `WindDirOffset` cannot produce this -- `_correct_degrees` is
+> `s % 360` on every output path. The real sources are raw fill values, an alternative signed convention,
+> and hand-rolled shifts.
+>
+> The warning is deliberately **not** gated on `self.verbose`: that flag means "emit the Rich per-sector
+> report" and defaults to `False`, so gating would make the fix inert in the default case -- mutation M5
+> proves it. `warn()` follows the module verbosity, so `dv.set_verbosity(VERBOSE_SILENT)` still silences it.
+>
+> Nothing renders differently; five renders byte-identical, **0 extra characters** emitted on a clean
+> record. Six mutations, all caught.
 `core/plotting/windrose.py:198`, mirrored at `:235` — `df[(df['wd'] >= 0) & (df['wd'] <= 360)]`
 silently removes sentinels (-9999, 999) and anything off the circle. Dropping them is right; being
 silent is not — `report()` prints `n_used` but never how many were rejected or why, so a
@@ -3862,66 +3913,282 @@ There are **13 such blocks across 7 files** (`core/ml/results.py`, `core/plottin
 `treering.py`, `windrose.py`, `flux/fluxprocessingchain/container.py`, `run_chain.py`,
 `gapfilling/swin.py`), none of them currently checked by anything.
 
-**[ ] L134. A waterfall contribution of exactly 0.0 is coloured "release"**
+**[x] L134. A waterfall contribution of exactly 0.0 is coloured "release"**
+> **Closed 2026-08-17 as a docstring fix -- the colour is real in the array and unobservable on the canvas.**
+>
+> **This entry is wrong in both directions.** Its premise is that L111's fabricated bars were what made this
+> matter; in fact `LW_IN` now has **zero** 0.0 bars after L111, while genuine zeros are common elsewhere --
+> bundled CH-DAV `PREC_TOT_T1_25+20_1` is **1820 of 3649 daily bars (49.9%)**. Not "almost never".
+>
+> But `plot()` hardcodes `edgecolor='none'`, so a 0.0 contribution is a zero-height rectangle covering zero
+> area. **Repainting all 1820 zero bars of the real precipitation waterfall bright green moved 0 pixels** of
+> the RGBA buffer -- reproduced at dpi 100 and 600, under `patch.force_edgecolor=True`, `patch.linewidth=5`,
+> `patch.antialiased=False`, and the `ggplot` / `seaborn-v0_8` / `bmh` styles. A zero period is already drawn
+> honestly: nothing but the flat connector.
+>
+> So a `color_zero` parameter would be a control whose value can never reach the canvas -- the speculative
+> machinery CLAUDE.md forbids, and untestable visually. The real defect was that the docstring described only
+> negative and positive, leaving 0.0 undefined; it now states which side 0.0 falls on and why that has no
+> visual consequence. Five mutations, including the entry's own suggested fix. The pixel test was itself
+> rewritten mid-task after its first version proved to be killed by a shape guard rather than by the pixel
+> count.
+>
+> **Residual, not L134 and no colour choice would fix it:** after L111 a genuine 0.0 period and a dropped
+> empty period look identical, both being just a flat connector.
 `core/plotting/waterfall.py:142` — `uptake_mask = contributions < 0` puts 0.0 in the `False` bucket,
 taking the red release colour the docstring reserves for positive values. **[reproduced]**
 `[1.0, 0.0, -1.0]` -> `[red, red, blue]`. Compounds L111: a no-data period is painted as a red
 release day.
 
-**[ ] L135. `zone_colors` / `zone_labels` lengths are unvalidated**
+**[x] L135. `zone_colors` / `zone_labels` lengths are unvalidated**
+> **Fixed 2026-08-17.** A five-entry check after the zone lists are resolved, raising `ValueError` naming the
+> argument and the count, plus `strict=True` on the label zip as a second net (it caught mutation M8).
+>
+> **Four failure modes, not the two implied:** 3 colours -> `IndexError` mid-draw, leaving a half-rendered
+> axes; 3 labels -> only 3 zones labelled against 5 fills; **6 labels -> the 6th silently dropped**;
+> 6 colours -> silently ignored. The deprecated constructor path was equally unvalidated.
+>
+> Raised at `plot()`, not `__init__`: the two sources (deprecated constructor args, `plot()` args) are
+> *resolved* in `plot()`, so one check covers both, where an `__init__` check would need duplicating and
+> still miss the `plot()` path. Every valid call is byte-identical. No caller breaks -- the GUI's
+> `_SHIFTEDDIST_ZONE_PRESETS` are 5-entry or `None`, codegen passes the same dict.
 `core/plotting/shifted_distribution.py:171`, `:209` — the docstring says 5 of each. Three colours
 raise `IndexError: list index out of range`; three labels silently under-label (`zip(...,
 strict=False)`), leaving 2 zones unlabelled. **[reproduced]** both.
 
-**[ ] L136. Colour-by replaces the caller's axes limits with its own data range**
+**[x] L136. Colour-by replaces the caller's axes limits with its own data range**
+> **Fixed 2026-08-17** with `update_datalim` + `autoscale_view`, exactly as the entry prescribes.
+>
+> Confirmed, and it is two defects: the caller's *other artists* were pushed out of view (ylim
+> `(49.68, 50.29)` -> `(-7.15, 9.50)`), and limits the caller set **deliberately** via `ax.set_ylim(-100, 100)`
+> were overwritten. The new code respects both for free, since matplotlib turns autoscaling off on an
+> explicit `set_ylim`. L112's comment called the explicit limits deliberate; they were wrong either way.
+>
+> **The fix does change the lone plot, on x only.** ylim is max abs diff **0.0** in every case -- the old
+> `pad = span*0.05` is exactly matplotlib's default margin, and autoscale reproduces the constant-series
+> `or 1.0` fallback via its own singular-axis expansion. xlim moves by 0.2073 days each end, the 5% margin
+> `set_xlim(nanmin, nanmax)` omitted -- and the new value is **byte-identical to the plain path's xlim**, so
+> the two paths now agree in all 6 edge cases where they previously disagreed. Only an all-NaN series differs
+> in kind, and both old and new are matplotlib defaults for "no data".
+>
+> `update_datalim` is **not** redundant with `add_collection`'s built-in autolim, which is why the entry is
+> right to name it: an isolated finite record no segment touches (surrounded by NaN) was placed outside the
+> view by bare autoscale (`ylim[1]=1.05` for a y=99 record).
 `core/plotting/timeseries.py:330-335` — `LineCollection` genuinely does not autoscale, but the fix is
 `update_datalim` + `autoscale_view`, not `set_xlim`/`set_ylim`. **[reproduced]** ylim
 `(47.25, 52.75)` -> `(-1.1, 1.1)`, putting a pre-existing series at y=50 off-screen.
 
-**[ ] L137. A second `plot()` on the same axes stacks artists and colorbars**
+**[x] L137. A second `plot()` on the same axes stacks artists and colorbars**
+> **Closed 2026-08-17 across its three files, with two different answers** -- the three classes do not have
+> the same defect, which the entry treats as one.
+>
+> **`shifted_distribution.py` and `bar.py`: fixed by taking back only this instance's own artists**, and only
+> when handed the same axes. A blanket `ax.clear()` was rejected in both -- measured to destroy artists the
+> caller drew, and no plot class in `core/plotting` clears a caller's axes; the only precedent,
+> `RidgeLinePlot`, clears a figure it owns end to end, and `plotfuncs.clear_ax` has no callers. Re-plotting
+> onto a *different* axes still leaves both drawn, which is what the two-phase contract promises.
+>
+> **`timeseries.py`: documented as appending, not changed.** Clearing there would destroy exactly what L136
+> restores -- compositing onto a caller's axes -- and the GUI already calls `fig.clear()`/`ax.clear()` before
+> every render, so appending is not GUI-reachable. The docstring now states it, names the colorbar cost, and
+> gives both escapes (`show_colorbar=False`, `ax.clear()`).
+>
+> **The entry undercounts on two of the three and overcounts on the third.** For `bar.py` it names
+> `(patches, texts)` and misses that `lines` (the FormatStyle zero line) and `ax.containers` stack too:
+> `12/1/1/2 -> 24/2/2/4 -> 36/3/3/6`. For `shifted_distribution.py` "and colorbars" **does not apply** -- that
+> class draws none, `len(fig.axes)` stays 1, and matplotlib *replaces* the legend rather than stacking it;
+> only three artist families stack. For `timeseries.py` the colorbar half is real and is the only symptom
+> that costs geometry (main-axes width 0.651 -> 0.547 -> 0.459); with `show_colorbar=False` the axes count
+> stays 1 while collections still stack, so artist stacking is the cause and the colorbar is one extra axes
+> per call on top.
+>
+> **The family is wider than the three classes named:** `CumulativeYear` and `WaterfallPlot` stack
+> identically. Not fixed here.
+>
+> A `WeakKeyDictionary` per-axes tracker was tried in `bar.py` and **measured not to work**: stored artists
+> back-reference their axes, so five discarded figures stayed alive, and `BarContainer` is not weakref-able,
+> so weak values cannot rescue it. A single slot keyed to the `self.ax` the class already holds retains
+> nothing extra; the trade-off is that `plot(ax1) -> plot(ax2) -> plot(ax1)` still stacks on ax1.
 `core/plotting/timeseries.py:339`, `bar.py:147`, `shifted_distribution.py:158` — all three classes.
 **[reproduced]** TimeSeries figure axes after 1/2/3 calls: 2/3/4 (each colorbar steals more width);
 bar `(patches, texts)` `(12,1)` -> `(24,2)`; shifted distribution `(collections, lines, texts)`
 `(6,6,5)` -> `(12,12,10)`. The two-phase docstrings promise re-callability "with different styling",
 which holds across *different* axes; the same-axes limitation is worth stating.
 
-**[ ] L138. `fig.tight_layout()` on a figure built with `layout='constrained'`**
+**[x] L138. `fig.tight_layout()` on a figure built with `layout='constrained'`**
+> **Fixed 2026-08-17 in both files by dropping the call**, letting the constrained engine the figure asked
+> for do its job. **`ax=None` path only; the `ax=` path never touched it.**
+>
+> **In `timeseries.py` this is not a warning, it is a crash -- S3, not S5.** The exact trigger is
+> `ax=None` + `color_series` + `show_colorbar=True`, i.e. **the default colour-by call**
+> `TimeSeries(series=s, color_series=c).plot()`, which raises `RuntimeError: Colorbar layout of new layout
+> engine not compatible with old engine, and a colorbar has been created.` and draws nothing at all.
+> matplotlib downgrades to a warning when no colorbar exists and refuses when one does, so the plain path
+> and `show_colorbar=False` only warn. One cause, one fix.
+>
+> In `bar.py` it warns exactly as filed, and the colorbar variant is unreachable -- checked, not assumed:
+> the file contains `colorbar` zero times and `FormatStyle` creates none on any path.
+>
+> **`tight_layout` was papering over nothing and cost area.** Stress render (24 pt title, 20 pt y-label,
+> 18 pt ticks, 7-digit tick labels): nothing clipped either way in both files. The axes gets *bigger* --
+> `bar.py` +5.8% to +6.1% in area across three record lengths, a uniform
+> `(-0.0089, -0.0156, +0.0089, +0.0156)` shift; `timeseries.py` max 0.031 in figure fractions. `bar.py`'s
+> two-line annotation is anchored at `(0.98, 0.02)` in **axes** coordinates, so it rides with the axes and
+> figure padding could never clip it.
+>
+> Mutations worth recording: forcing `set_layout_engine('none')` (kills the engine *without* warning) fails
+> the engine assertion while passing the warning assertion, proving the two are not restatements of each
+> other.
 `core/plotting/bar.py:173`, `timeseries.py:431` — `ax=None` path only. **[reproduced]**
 `UserWarning: The figure layout has changed to tight` — the constrained engine is silently disabled.
 
-**[ ] L139. `LongtermAnomaliesYear.get()` before `plot()` raises `AttributeError`**
+**[x] L139. `LongtermAnomaliesYear.get()` before `plot()` raises `AttributeError`**
+> **Fixed 2026-08-17**, and matching the siblings alone would **not** have fixed it. Every sibling
+> (`cumulative.py`, `waterfall.py`, `histogram.py`, `scatter.py`, `shifted_distribution.py`,
+> `heatmap_base.py`) sets `self.ax = None` in `__init__`, so `get()` returns `None` -- which just relocates
+> the same unhelpful crash to the caller's next line as `'NoneType' object has no attribute ...`. So both:
+> the sibling shape, plus a `RuntimeError` from `get()` naming the skipped step.
+>
+> Moves only a `get()` before `plot()`; no caller in the repo uses `get()` at all.
 `core/plotting/bar.py:176-178` — `self.ax` is created only in `plot()`.
 
-**[ ] L140. `icons.py`'s `('calculate', _ln_gear)` rule is unreachable**
+**[x] L140. `icons.py`'s `('calculate', _ln_gear)` rule is unreachable**
+> **Fixed 2026-08-17.** Mechanism established: **not shadowing** -- no earlier rule matches inside
+> `"calculate"`, so it is reachable in principle and dead because nothing is ever passed to `menu_icon`
+> containing that word. "Calculate" exists only as `variables_menu.addSection("Calculate")`, and Qt renders
+> section headers without an icon.
+>
+> All 91 real labels audited against the rule table: **no label gets a wrong glyph**, so this is dead code
+> rather than over-matching -- but it is also a **live cosmetic miss**, since the two calculators the rule was
+> written for, `VPD (TA + RH)` and `Potential radiation`, were falling back to the generic chart glyph.
+> Neither reordered nor plainly deleted: the unreachable keyword is replaced by the two labels it was meant
+> for (`"vpd"`, `"radiation"`), with a comment recording why a `"calculate"` rule can never fire. Verified
+> neither keyword collides with any other label. The other 89 labels route exactly as before.
+>
+> **Reported, not acted on:** `diive on &PyPI` also falls back to the generic glyph -- same cosmetic class,
+> separate label, no rule added.
 `gui/icons.py:571` — the comment claims it covers "derived-variable calculators (VPD, …)", but no
 menu label contains "calculate"; it is an `addSection` header (`app.py:481`) and never passed to
 `menu_icon`. **[reproduced]** *Potential radiation*, *VPD (TA + RH)* and *diive on &PyPI* fall back to
 the generic chart glyph. The other 90 of 93 real labels resolve correctly.
 
-**[ ] L141. Icons are baked at 16x16 with `devicePixelRatio` 1**
+**[x] L141. Icons are baked at 16x16 with `devicePixelRatio` 1**
+> **Fixed 2026-08-17** inside `_canvas()`: allocate `_SIZE*dpr` px, `setDevicePixelRatio(dpr)`,
+> `p.scale(dpr, dpr)` -- so all 52 glyph bodies keep their 16x16 logical coordinates untouched.
+>
+> Blur confirmed as real, not theoretical: `_ln_grid` as a 16 px bitmap smooth-scaled to 32 gives 848 ink
+> pixels and **0 fully opaque**; painted natively at 32 it gives 487 ink pixels, 337 opaque (69%).
+>
+> `QIcon.addPixmap` at several sizes was rejected -- it needs each glyph body run once per size, i.e.
+> converting every `_ln_*` into a draw-callback, a restructure. A fixed `2.0` was rejected because querying
+> the sharpest connected screen means a ratio-1 machine renders **byte-identically to today** (verified)
+> instead of being downscaled. At 150%/200% the bitmap becomes 24x24 / 32x32 tagged with that ratio;
+> `deviceIndependentSize` stays 16x16.
 `gui/icons.py:26-31` — at Windows 150%/200% display scaling Qt upscales the bitmap, so the glyphs are
 blurry on exactly the hardware this runs on. **[reproduced]** `requested 16x16 @dpr=2.0 -> got 16x16
 px, devicePixelRatio=1.0`; `availableSizes(): [QSize(16,16)]`.
 
-**[ ] L142. Sub-pixel coordinates are discarded by PySide6's integer `drawLine` overload**
+**[x] L142. Sub-pixel coordinates are discarded by PySide6's integer `drawLine` overload**
+> **Fixed 2026-08-17** with a `_line(p, x1, y1, x2, y2)` helper next to `_poly` (its float counterpart), and
+> **all 51** scalar call sites routed through it -- not only the fractional subset, because the integer ones
+> are provably byte-identical either way and a mixed file re-introduces the trap on the next edit. A test
+> enforces that no glyph calls the 4-scalar overload.
+>
+> **The entry undercounts and names one wrong glyph.** 51 static call sites, 83 executions, and **52
+> executions carry at least one fraction across 18 glyph functions**, not ~12: `_ln_calendar`, `_ln_clock`,
+> `_ln_correction`, `_ln_database`, `_ln_export`, `_ln_gear`, `_ln_github`, `_ln_info`, `_ln_issue`,
+> `_ln_outlier`, `_ln_partition`, `_ln_profile`, `_ln_props`, `_ln_settings`, `_ln_surface3d`,
+> `_ln_uncertainty`, `_ln_waterfall`, `_ln_windrose`. The entry names `_ln_lag`, whose scalar arguments are
+> **all integers**. The loop-driven cases are invisible to a source grep, which is presumably how the count
+> came out low. Behaviour is **truncation, not rounding**: `drawLine(4.2, 9, 5.6, 9)` renders byte-identical
+> to `(4,9,5,9)`, differs from `(4,9,6,9)`, and differs from the `QPointF` render by 6 px / 268 alpha units.
+>
+> 18 glyphs shift by a fraction of a pixel, worst `_ln_correction` at 78 differing px (max alpha delta 170);
+> the other **34** icons are byte-identical.
 `gui/icons.py`, ~12 glyphs (`_ln_gear`, `_ln_waterfall`, `_ln_windrose`, `_ln_clock`, `_ln_calendar`,
 `_ln_lag`, …) — `p.drawLine(4.2, 9, 5.6, 9)` binds `drawLine(int,int,int,int)`, while the `QRectF` /
 `QPointF` / `_poly` calls in the same functions keep sub-pixel placement. **[reproduced]** the float
 call renders identically to the truncated-int call.
 
-**[ ] L143. `menu_icon(None)` raises `AttributeError`**
+**[x] L143. `menu_icon(None)` raises `AttributeError`**
+> **Fixed 2026-08-17.** `key = (label or "")`, signature widened to `str | None`, docstring matched.
+> Confirmed as `AttributeError: 'NoneType' object has no attribute 'lower'`. Only the `None`/`""` path
+> changes, from a raise to the generic glyph.
 `gui/icons.py:730` — no current caller passes `None`; noted only because the docstring promises that
 unknown labels fall back.
 
-**[ ] L144. Both bokeh methods call `show(p)` unconditionally**
+**[x] L144. Both bokeh methods call `show(p)` unconditionally**
+> **Fixed 2026-08-17** with **`showplot: bool = True`**, matching the house convention (`WaterfallPlot.plot`,
+> `Cumulative.plot`, and codegen's emitted `showplot=False`) rather than inventing a name. Both methods now
+> also **return** the bokeh object (`figure` / `column`), which they previously did not -- without that,
+> `showplot=False` would build a plot and hand back nothing.
+>
+> Callers today are `stepwiseoutlierdetection.py:150,155`, `meteoscreening.py:303,309` and two examples, all
+> no-arg; **no codegen and no GUI caller** of either method. Nothing moves for them: both bokeh documents
+> serialise to identical length (11051 / 12981 chars) and `show()` is still called exactly once by default.
+> That L119's tests had to neutralise `show` by rebinding the module-level import is itself the argument for
+> a real control.
 `core/plotting/timeseries.py:217`, `:295` — the L104 family: no `showplot` toggle, so they always try
 to open a browser. Documented behaviour, hence low priority.
 
-**[ ] L145. `bar.py` uses Material 400-level colours where the convention specifies 300**
+**[x] L145. `bar.py` uses Material 400-level colours where the convention specifies 300**
+> **Closed 2026-08-17 by fixing the convention, not the code -- no colour changed.** The finding's premise is
+> wrong: `bar.py` is not out of step, `CLAUDE.md` was.
+>
+> Three measurements:
+> 1. **The CLAUDE.md line contradicted itself in one sentence** -- it said "300-level (bars/lines)" and then
+>    listed `#2196F3 / #F44336 / #FFC107 / #455A64`, which are 500/500/500/**700**. The hexes given as the
+>    example were the *background* palette.
+> 2. A hex census of the whole plotting package: **no diive plot fills a bar or draws a line with a
+>    300-level colour.** Bars are 400 (`histogram.py`, `bar.py`) or 500 (`waterfall.py`); lines are 500
+>    throughout (`timeseries.py`, `cumulative.py`, `LightTheme` defaults).
+> 3. L145's proposed `#E57373` / `#64B5F6` appear nowhere in the package as a bar or line colour.
+>
+> The rule is real but **figure-specific**: it is the two-panel optimum-range rule -- a bar/line panel sharing
+> a figure with a shaded-background panel takes the lighter 300 shade so the two do not clash.
+> `analysis/optimumrange.py` is the only file in the package carrying the full 300+500 pairing. The CLAUDE.md
+> bullet generalised it to the whole package and lost which half the hexes belonged to.
+>
+> So `bar.py` at 400 sits with the majority of bar charts; moving it to 300 would have made it the sole
+> 300-level bar chart in diive. The CLAUDE.md bullet now states the default (500 lines, 400/500 bars), scopes
+> the 300/500 split to the two-panel case, names `optimumrange.py` as the reference, and warns against
+> exactly this misreading. A test pins `bar.py`'s current colours so the next reviewer's "correction" fails
+> loudly.
 `core/plotting/bar.py:143-144` — `#EF5350` / `#42A5F5` against CLAUDE.md's `#E57373` / `#64B5F6` for
 bars and lines.
 
-**[ ] L146. `ShiftedDistributionPlot` uses the population sd for its zone boundaries**
+**[x] L146. `ShiftedDistributionPlot` uses the population sd for its zone boundaries**
+> **Fixed 2026-08-17** with ddof=1 plus an explicit `n == 1` branch. **This is S1 for a short reference and
+> S5 only for a long one** -- and this entry was written from an 11 000-record measurement, which is the one
+> regime where the bug cannot bite. Left in the S5 table for provenance; treat the tier as conditional.
+>
+> The error is **systematic and always in one direction**: the population sd understates a sample's spread,
+> so every zone was too narrow and both "Extremely cold/hot" buckets over-counted. Magnitude is purely
+> `sqrt(n/(n-1)) - 1` per sigma, i.e. a function of reference length alone:
+>
+> | n (ref) | delta(+3sd) | records reclassified |
+> |---|---|---|
+> | 2 | +2.506471 | **826 (20.56%)** |
+> | 3 | +1.539347 | 399 (9.93%) |
+> | 5 | +1.185857 | 226 (5.62%) |
+> | 10 | +0.431135 | 122 (3.04%) |
+> | 30 | +0.117500 | **40 (1.00%)** |
+> | 100 | +0.035038 | 14 (0.35%) |
+> | 1000 | +0.004453 | 2 (0.05%) |
+> | 4018 | +0.001120 | 0 (0.00%) |
+>
+> It crosses 1% of records reclassified at **n = 30**, one month of daily data. On real CH-DAV `Tair_f` with
+> a 2013-2016 reference (n = 70 128) the +3sd moves 0.000156 degC -- invisible, which is the climatological
+> case this class is built for.
+>
+> **The `n == 1` branch is load-bearing, not defensive:** `np.std(ddof=1)` on one record is NaN, which would
+> set all four breakpoints NaN, take `has_zones` False, and **silently delete the zones from a single-record
+> reference -- undoing L118's decision that a single record is a real spike.** It keeps 0.0 there, so the
+> breakpoints still collapse onto the value.
+>
+> Downstream, because the grid margin *is* the reference sd, the evaluation grid moves 0.000373 and both KDE
+> curves by <= 2.9e-6 in density on the long reference. Two existing test assertions legitimately followed the
+> change; both stay exact-equality and mutation M1 proves they still bite.
 `core/plotting/shifted_distribution.py:75` — `.values.std()` is ddof=0 where the rest of diive uses
 pandas' ddof=1. **[reproduced]** on an 11 000-record reference the +3σ breakpoint differs by 0.0022
 (ddof=0 `5.971005` vs ddof=1 `5.971748`) — negligible for a long reference period, not for a short

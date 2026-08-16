@@ -391,7 +391,7 @@ scatter.plot(ax=axes[1], title='Log', ylim='auto')
 ```
 
 **Conventions:**
-- **Colors:** Material Design 300-level (bars/lines) + 500-level (backgrounds): blue `#2196F3`, red `#F44336`, amber `#FFC107`, grey `#455A64`.
+- **Colors:** Material Design. Default line and bar palette is **500-level** — blue `#2196F3`, red `#F44336`, amber `#FFC107` — with blue-grey `#455A64` (700) for ink, text and spines. **The 300/500 split is a two-panel rule, not a package-wide one:** where a bar/line panel shares a figure with a shaded-background panel, the bars take the lighter 300 shade (`#64B5F6` / `#E57373` / `#FFD54F`) and the background fills take the matching 500 shade, so the two panels don't clash. `analysis/optimumrange.py` is the reference and the only implementation. A single-panel plot picks one level and stays there: 500 for lines throughout, 400 or 500 for bar fills (`bar.py` 400, `waterfall.py` 500). Don't "correct" a 400/500 bar fill to 300 on the strength of this bullet — that was a misreading of it (L145).
 - **Bar labels:** `va='center_baseline'` (not `va='center'`) for digit-only strings inside bars.
 - **Label contrast:** `text_color = 'white' if 0.299*r + 0.587*g + 0.114*b < 0.5 else 'black'`
 - **Dynamic height:** `height = max(1.5, n_years * 0.38)` inches for multi-year panels.

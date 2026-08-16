@@ -373,7 +373,7 @@ The rest raise or fail at import:
 ### Fixed (code review)
 
 A read-only review of the library and the GUI, in four rounds, recorded 159 findings ranked so that a silently wrong
-number sits above a crash: a traceback blocks you, a plausible wrong number gets published. 139 are resolved, 3 of them
+number sits above a crash: a traceback blocks you, a plausible wrong number gets published. 155 are resolved, 3 of them
 closed as by design. Four of the 159 were found while fixing the others, which is also how several entries were caught
 overstating or understating what they described; each closed entry says so where it happened. The fixes landed as
 separate commits, each naming the findings it closes, and every closed entry
@@ -425,6 +425,58 @@ those are the ones to check existing results against.
 - Two smaller removals: the `'iterations'` key is gone from `stl_decompose`'s result dict (it returned
   `DecomposeResult.nobs`, a shape tuple, where a count was documented, and statsmodels exposes no iteration count to
   report honestly), and the unread `UstarVekuriThresholdDetection.bootstrap_results_` attribute is gone.
+
+#### Plot polish, and four things the findings had wrong
+
+Sixteen cosmetic and latent defects. Four turned out to be mis-filed once measured, and those are the
+ones worth reading:
+
+- **The wind rose dropped out-of-range directions without saying so** — filed as cosmetic, but a
+  wind-direction column in the signed `-180 to 180` convention loses **41.7%** of its records and leaves
+  three sectors sitting at exactly zero, which reads as "no wind from the west". It now reports the count
+  and the range. It still drops rather than wrapping, deliberately: `-9999 % 360` is `81.0` and
+  `999 % 360` is `279.0`, so wrapping turns a fill value into a plausible bearing, and nothing at that
+  point distinguishes a sentinel from a legitimately wrappable `-5`. Both bundled records are clean.
+- **`ShiftedDistributionPlot` used the population standard deviation for its zone boundaries.** The error
+  is systematic and one-directional — every zone came out too narrow and both extreme buckets
+  over-counted — and its size depends only on how long the reference period is: 0.05% of records
+  reclassified at n = 1000, **1% at n = 30**, 20.6% at n = 2. The finding was measured on an
+  11 000-record reference, the one regime where it cannot bite. Now ddof=1, matching pandas and the rest
+  of diive, with an explicit single-record branch so a one-record reference keeps its spike.
+- **`fig.tight_layout()` on a constrained-layout figure is a crash, not a warning, for `TimeSeries`.**
+  With a colorbar matplotlib refuses outright, so `TimeSeries(series=s, color_series=c).plot()` with no
+  `ax` — the default colour-by call — raised `RuntimeError` and drew nothing. Dropping the call fixes
+  both that and the warning `LongtermAnomaliesYear` emitted, and the axes ends up ~6% larger, since
+  `tight_layout` was padding more than the engine the figure asked for.
+- **`bar.py`'s bar colours were not wrong; the convention was.** The finding read CLAUDE.md's
+  "300-level (bars/lines)" as package-wide, but that sentence then listed four 500/700-level hexes as its
+  example, and no diive plot fills a bar or draws a line at 300-level. The 300/500 split is a two-panel
+  rule for optimum-range figures, where a bar panel shares a figure with a shaded-background panel.
+  `analysis/optimumrange.py` is its only implementation. No colour changed; the convention line was fixed
+  instead, and a test pins the current colours so the next "correction" fails loudly.
+
+The rest:
+
+- **Calling `plot()` twice on the same axes stacked artists instead of replacing them.** Fixed for
+  `LongtermAnomaliesYear` and `ShiftedDistributionPlot` by taking back only the artists that instance
+  drew — never `ax.clear()`, which would delete the caller's own. Left as appending for `TimeSeries`,
+  where compositing onto a caller's axes is the point, and documented there along with the colorbar cost.
+- **Colour-by replaced the caller's axes limits with its own data range**, pushing a pre-existing series
+  off-screen and overriding limits set deliberately. Now `update_datalim` + `autoscale_view`, which also
+  brings the colour-by path's x margins into line with the plain path — they had disagreed.
+- **The bokeh methods always opened a browser** and returned nothing. They take `showplot=True` now, the
+  same spelling as the matplotlib classes, and return the bokeh object so the toggle is usable.
+- **`zone_colors` / `zone_labels` lengths are validated**: a short list raised mid-draw leaving a
+  half-rendered figure, a long one was silently truncated.
+- `LongtermAnomaliesYear.get()` before `plot()` names the step you skipped instead of raising
+  `AttributeError` on an internal attribute; the histogram info box no longer repeats itself up to four
+  times for a non-default `method`; a waterfall contribution of exactly 0.0 is documented as taking the
+  release colour, which is unobservable because the bar has zero height; and the dead
+  `plotfuncs.non_numeric_error` writes on the axes it is handed rather than pyplot's current figure.
+- **GUI icons are painted at device resolution**, so they stop being upscaled bitmaps at Windows
+  150%/200% display scaling; ~18 glyphs had their sub-pixel line coordinates silently truncated by
+  PySide6's integer `drawLine` overload and now keep them; `menu_icon(None)` falls back instead of
+  raising; and the two derived-variable calculators get their intended glyph rather than the generic one.
 
 #### Plot controls that did nothing now do what they say
 
@@ -883,10 +935,10 @@ and beats a silently blank panel.
 #### Plot classes, docstring examples, and GUI object lifetime
 
 Round 4 covered the eight files the earlier rounds had left out — `windrose.py`, `hexbin.py`, `histogram.py`,
-`waterfall.py`, `shifted_distribution.py`, `timeseries.py`, `bar.py` and the GUI's `icons.py`. Of its 40 findings, 25
-are fixed: the 9 that produced a silently wrong or silently incomplete figure, the 6 that crashed on legitimate input,
-and the 10 contract mismatches — all listed above. The remaining 15 are recorded with a repro but not yet fixed; they
-are cosmetic or dead-code defects, and none of them silently changes what a figure shows.
+`waterfall.py`, `shifted_distribution.py`, `timeseries.py`, `bar.py` and the GUI's `icons.py`. **All 40 are fixed** —
+the 9 that produced a silently wrong or silently incomplete figure, the 6 that crashed on legitimate input, the 10
+contract mismatches and the 15 cosmetic or latent ones — all listed above. Four of the last group turned out to be
+mis-tiered once measured, and two of those changed numbers rather than appearance.
 
 What did change:
 
@@ -904,11 +956,10 @@ What did change:
 
 #### Still open
 
-19 findings are open, each with a repro or a source citation in `CODE_REVIEW_FINDINGS.md`; 15 of them are round 4's,
-described above, and 3 were turned up while fixing the rest — an empty-series crash in `HistogramPlot.__init__` that the
-guard in `plot` cannot reach, an unreported NaN drop in `ShiftedDistributionPlot`, and a dead helper that draws on
-pyplot's current figure instead of the axes it is handed. (A fourth, a reference-period year count that reported the
-requested span, was fixed in the same pass.) The remaining one needs an external source: whether InfluxDB v2's delete range excludes `stop`, in
+Three findings are open. Two were turned up while fixing the others and are recorded with a repro: an empty-series
+crash in `HistogramPlot.__init__` that the guard in `plot` cannot reach, and an unreported NaN drop in
+`ShiftedDistributionPlot`, where a 95%-gappy reference period yields a confident-looking density from 5% of the records.
+The third needs an external source: whether InfluxDB v2's delete range excludes `stop`, in
 which case the pre-upload delete leaves the last record and duplicates survive. Deferred separately is BUR06/JAR09's
 aerodynamic resistance, where diive passes the canopy momentum resistance `u/u*^2` in place of Burba 2006's per-element
 `7.4*sqrt(d/U)` and has no equivalent of `fr`, the fraction of instrument heat retained in the optical path. That is not
