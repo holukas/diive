@@ -6,8 +6,16 @@ success/failure with detailed error messages and execution times.
 
 Usage:
     python examples/run_all_examples.py
+
+Runs each example with ``MPLBACKEND=Agg`` so matplotlib writes figures without
+opening a window. Sixteen examples end in ``plt.show()``, which blocks until a
+window is closed; unattended that meant each one burned the full 120 s timeout
+and was reported as a failure it had not earned. Set ``MPLBACKEND`` yourself to
+override — e.g. ``MPLBACKEND=QtAgg`` to watch the plots appear — but then the
+run needs someone to close each window.
 """
 
+import os
 import subprocess
 import sys
 import time
@@ -163,11 +171,14 @@ def run_example(example_file, examples_dir):
         }
 
     try:
+        # A caller-set MPLBACKEND wins, so the plots can still be watched on purpose.
+        env = {**os.environ, 'MPLBACKEND': os.environ.get('MPLBACKEND', 'Agg')}
         result = subprocess.run(
             [sys.executable, str(example_path)],
             capture_output=True,
             text=True,
-            timeout=120
+            timeout=120,
+            env=env
         )
         elapsed = time.time() - start_time
 
@@ -192,7 +203,7 @@ def run_example(example_file, examples_dir):
         return {
             'file': example_file,
             'status': 'timeout',
-            'error': 'Timeout (exceeded 60 seconds)',
+            'error': 'Timeout (exceeded 120 seconds)',
             'time': elapsed
         }
     except Exception as e:
