@@ -141,8 +141,11 @@ class ShiftedDistributionPlot:
         Args:
             ax: Matplotlib axes (creates new figure if None).
             format_style: A :class:`~diive.plotting.FormatStyle` describing the chrome
-                (title/x-label/font sizes/colours/ticks/grid). When None the diive house
-                style is used.
+                (axis labels/font sizes/colours/ticks/grid). When None the diive house
+                style is used, with the grid off — pass ``show_grid=True`` to draw it.
+                The y-label defaults to ``"Density"``; the title and the legend keep this
+                plot's own left-aligned placement, so ``legend_loc``/``legend_ncol`` do
+                not apply.
             ref_label: Legend label for reference period.
             comp_label: Legend label for comparison period.
             show_legend: Show legend (default True).
@@ -158,10 +161,11 @@ class ShiftedDistributionPlot:
         zone_labels = zone_labels or self.zone_labels or self._DEFAULT_LABELS
         zone_colors = zone_colors or self.zone_colors or self._DEFAULT_COLORS
 
-        # The custom left-aligned title and patch legend are rendered below, so this
-        # plot drives apply() with the legend suppressed and only uses it for the
-        # shared chrome (facecolor/ticks/spines/x-label/grid).
-        style = format_style or FormatStyle()
+        # The dashed breakpoint markers already carry the vertical structure, so a second
+        # family of dashed verticals would only compete with them: the grid is off in this
+        # plot's *default* style rather than forced off over the caller's, so a caller
+        # asking for show_grid=True still gets it (same pattern as the heatmaps).
+        style = format_style or FormatStyle(show_grid=False)
 
         self.ax = ax
         self.fig, self.ax, showplot = pf.setup_figax(ax=self.ax, figsize=figsize)
@@ -183,9 +187,20 @@ class ShiftedDistributionPlot:
 
         x = self._x
         bp = self.breakpoints
-        zone_edges = [x[0]] + list(bp) + [x[-1]]
         # An empty reference period leaves the breakpoints NaN, so there are no zones.
         has_zones = bool(np.isfinite(bp).all())
+
+        # A +-3 SD breakpoint falls outside the evaluation grid whenever the reference is
+        # skewed or bounded (RH against 100, precipitation against 0). Left unclipped the
+        # edges stop being monotonic, so that zone's interval is inverted: it paints
+        # nothing while its label sits over the neighbour it does not describe. Clip the
+        # drawn edges into the grid; an inverted interval means the zone lies entirely off
+        # the plotted range, so it is neither painted nor labelled.
+        zone_edges, zone_in_view = [], []
+        if has_zones:
+            raw_edges = [x[0]] + list(bp) + [x[-1]]
+            zone_edges = [x[0]] + list(np.clip(bp, x[0], x[-1])) + [x[-1]]
+            zone_in_view = [raw_edges[i] <= raw_edges[i + 1] for i in range(5)]
 
         # Reference period: gray hatched outline drawn first (behind colored zones)
         if self._ref_kde is None:
@@ -204,7 +219,7 @@ class ShiftedDistributionPlot:
         elif has_zones:
             for i in range(5):
                 mask = (x >= zone_edges[i]) & (x <= zone_edges[i + 1])
-                if mask.any():
+                if zone_in_view[i] and mask.any():
                     self.ax.fill_between(
                         x[mask], self._comp_kde[mask],
                         color=zone_colors[i], alpha=0.5, linewidth=0, zorder=2,
@@ -222,17 +237,21 @@ class ShiftedDistributionPlot:
         # Thin dashed lines at breakpoints
         if has_zones:
             for bp_val in bp:
-                self.ax.axvline(bp_val, color='white', linewidth=1.0, alpha=0.7, linestyle='--', zorder=5)
+                # A breakpoint off the grid marks nothing that is drawn; it would only
+                # stretch the x-axis into empty space.
+                if x[0] <= bp_val <= x[-1]:
+                    self.ax.axvline(bp_val, color='white', linewidth=1.0, alpha=0.7,
+                                    linestyle='--', zorder=5)
 
-        # Shared chrome: facecolor/ticks/spines/x-label/grid. The y-label ("Density"),
-        # the custom left-aligned title, and the patch legend are handled separately
-        # below, so suppress them here. This plot has no zero reference line and no grid.
+        # Shared chrome: facecolor/ticks/spines/axis labels/grid. The title and the legend
+        # are re-drawn below with this plot's own placement, so they are the only two
+        # fields the class overrides — everything else, the y-label included, stays the
+        # caller's. "Density" is passed as the *default* y-label so a caller-set
+        # FormatStyle.ylabel still wins. No zeroline_data is passed, so show_zeroline is
+        # inert here either way.
         _default_xlabel = str(self.series.name) if self.series.name else ""
-        chrome = style.merged(ylabel="Density")
-        chrome.show_grid = False
-        chrome.show_zeroline = False
-        chrome.show_legend = False
-        chrome.apply(ax=self.ax, default_title="", default_xlabel=_default_xlabel)
+        chrome = style.merged(title="", show_legend=False)
+        chrome.apply(ax=self.ax, default_xlabel=_default_xlabel, default_ylabel="Density")
         self.ax.spines['top'].set_visible(False)
         self.ax.spines['right'].set_visible(False)
         self.ax.tick_params(right=False, top=False)
@@ -251,10 +270,11 @@ class ShiftedDistributionPlot:
         # Zone labels: text annotations just above the top spine, in data-x / axes-y coords
         if has_zones:
             trans = blended_transform_factory(self.ax.transData, self.ax.transAxes)
-            label_positions = [(zone_edges[i] + zone_edges[i + 1]) / 2 for i in range(5)]
-            for pos, label, color in zip(label_positions, zone_labels, zone_colors, strict=False):
+            for i, label, color in zip(range(5), zone_labels, zone_colors, strict=False):
+                if not zone_in_view[i]:
+                    continue
                 self.ax.text(
-                    pos, 1.01, label,
+                    (zone_edges[i] + zone_edges[i + 1]) / 2, 1.01, label,
                     transform=trans, color=color, fontsize=11, fontweight='bold',
                     ha='center', va='bottom', clip_on=False,
                 )

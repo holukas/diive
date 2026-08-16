@@ -1182,7 +1182,7 @@ class PlotSettingsPanel(QScrollArea):
         self.sd_show_yaxis = self._check("Show y-axis", form, checked=False)
         self._col.addWidget(disp)
 
-        self._build_format_group(fields=["title", "xlabel", "fonts"])
+        self._build_format_group(fields=["title", "xlabel", "fonts", "show_grid"])
 
     def _dateedit(self, form, label) -> QLineEdit:
         edit = QLineEdit()
@@ -1453,7 +1453,7 @@ class PlotSettingsPanel(QScrollArea):
             self.fmt_ticks_fs = self._fontspin(form, "Tick font")
         if "show_grid" in fields:
             grid_default = self._plot_type not in (
-                HEATMAP, HEATMAP_YEARMONTH, HEATMAP_XYZ, HEXBIN)
+                HEATMAP, HEATMAP_YEARMONTH, HEATMAP_XYZ, HEXBIN, SHIFTEDDIST)
             self.fmt_grid = self._check("Show grid", form, checked=grid_default)
         if "show_legend" in fields:
             self.fmt_legend = self._check("Show legend", form, checked=True)

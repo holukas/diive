@@ -7,6 +7,10 @@ A period with no records at all must be labelled rather than raise, a period
 with no spread (constant, or a single record) must still be drawn as the spike
 it is, and an ordinary two-period comparison must be untouched.
 
+Also covers the plot's `FormatStyle` contract — the caller's chrome fields must
+survive, the class overriding only the title and legend it re-draws itself — and
+the zone geometry when a +-3 SD breakpoint falls outside the evaluation grid.
+
 Part of the diive library: https://github.com/holukas/diive
 """
 import unittest
@@ -21,6 +25,7 @@ import pandas as pd
 from sklearn.neighbors import KernelDensity
 
 from diive.core.plotting.shifted_distribution import ShiftedDistributionPlot
+from diive.core.plotting.styles.format import FormatStyle
 
 REF_PERIOD = ('1990-01-01', '2000-12-31')
 COMP_PERIOD = ('2010-01-01', '2020-12-31')
@@ -51,6 +56,42 @@ def _spike_stats(x: np.ndarray, density: np.ndarray) -> tuple:
     """Return (peak position, integral, full width at half maximum) of a density curve."""
     above_half = density >= density.max() / 2
     return x[np.argmax(density)], np.trapezoid(density, x), x[above_half][-1] - x[above_half][0]
+
+
+def _styled(sdp: ShiftedDistributionPlot, **plot_kwargs):
+    """Render on a throwaway axes with the given plot() arguments and return it."""
+    fig, ax = plt.subplots()
+    sdp.plot(ax=ax, **plot_kwargs)
+    plt.close(fig)
+    return ax
+
+
+def _visible_gridlines(ax) -> list:
+    return [gl for gl in ax.get_xgridlines() + ax.get_ygridlines() if gl.get_visible()]
+
+
+def _zone_labels(ax) -> list:
+    return [t.get_text() for t in ax.texts]
+
+
+def _label_x(ax, label: str) -> float:
+    return next(t.get_position()[0] for t in ax.texts if t.get_text() == label)
+
+
+def _bounded_above() -> ShiftedDistributionPlot:
+    """RH-like: a reference pressed against the 100 ceiling, so mean + 3 SD overshoots the grid."""
+    rng = np.random.default_rng(7)
+    values = np.clip(100 - np.abs(rng.normal(0, 4.5, len(INDEX))), 0, 100)
+    in_comp = (INDEX >= COMP_PERIOD[0]) & (INDEX <= COMP_PERIOD[1])
+    values[in_comp] = np.clip(100 - np.abs(rng.normal(0, 18.0, in_comp.sum())), 0, 100)
+    return ShiftedDistributionPlot(pd.Series(values, index=INDEX, name='RH'), REF_PERIOD, COMP_PERIOD)
+
+
+def _bounded_below() -> ShiftedDistributionPlot:
+    """Precipitation-like gamma: mean - 3 SD undershoots the grid's lower end."""
+    rng = np.random.default_rng(7)
+    values = rng.gamma(1.2, 3.0, len(INDEX))
+    return ShiftedDistributionPlot(pd.Series(values, index=INDEX, name='PREC'), REF_PERIOD, COMP_PERIOD)
 
 
 class TestEmptyPeriods(unittest.TestCase):
@@ -169,6 +210,115 @@ class TestOrdinaryComparisonUnchanged(unittest.TestCase):
                          [f"Reference ({REF_PERIOD[0]} - {REF_PERIOD[1]})",
                           f"Comparison ({COMP_PERIOD[0]} - {COMP_PERIOD[1]})"])
         self.assertEqual(ax.get_title(loc='left'), 'Shifted distribution: TA')
+
+
+class TestFormatStyleContract(unittest.TestCase):
+    """The caller's FormatStyle owns the chrome; the class overrides only what it re-draws."""
+
+    def setUp(self):
+        self.sdp = ShiftedDistributionPlot(_series(), REF_PERIOD, COMP_PERIOD)
+
+    def test_a_caller_set_ylabel_wins_over_the_density_default(self):
+        """'Density' is the default y-label, not an override of the caller's."""
+        self.assertEqual(_styled(self.sdp).get_ylabel(), 'Density')
+        self.assertEqual(_styled(self.sdp, format_style=FormatStyle()).get_ylabel(), 'Density')
+        ax = _styled(self.sdp, format_style=FormatStyle(ylabel='Probability density (1/K)'))
+        self.assertEqual(ax.get_ylabel(), 'Probability density (1/K)')
+        # Units still append to whichever label won.
+        ax = _styled(self.sdp, format_style=FormatStyle(ylabel='p', yunits='(1/K)'))
+        self.assertEqual(ax.get_ylabel(), 'p (1/K)')
+
+    def test_the_grid_is_off_by_default_but_the_caller_can_turn_it_on(self):
+        """Grid-off belongs to this plot's default style, not on top of the caller's."""
+        self.assertEqual(_visible_gridlines(_styled(self.sdp)), [])
+        self.assertEqual(_visible_gridlines(_styled(self.sdp, format_style=FormatStyle(show_grid=False))), [])
+        ax = _styled(self.sdp, format_style=FormatStyle(show_grid=True, grid_color='#FF0000'))
+        gridlines = _visible_gridlines(ax)
+        self.assertGreater(len(gridlines), 0)
+        self.assertEqual(gridlines[0].get_color(), '#FF0000')
+
+    def test_a_caller_set_title_is_drawn_once_and_left_aligned(self):
+        """apply() must not also write a centred copy of the title this plot places itself."""
+        ax = _styled(self.sdp, format_style=FormatStyle(title='MY TITLE'))
+        self.assertEqual(ax.get_title(loc='left'), 'MY TITLE')
+        self.assertEqual(ax.get_title(loc='center'), '')
+        # show_title=False must leave no title at all, in either position.
+        ax = _styled(self.sdp, format_style=FormatStyle(title='MY TITLE'), show_title=False)
+        self.assertEqual(ax.get_title(loc='left'), '')
+        self.assertEqual(ax.get_title(loc='center'), '')
+
+    def test_the_remaining_chrome_fields_reach_the_axes(self):
+        """Colours, fonts and spine geometry are the caller's, unchanged by this plot."""
+        style = FormatStyle(xlabel='MY X', axlabel_fontsize=34.0, text_color='#FF00FF',
+                            chrome_color='#00FF00', facecolor='#FFFF00', spine_linewidth=4.5)
+        ax = _styled(self.sdp, format_style=style)
+        self.assertEqual(ax.get_xlabel(), 'MY X')
+        self.assertEqual(ax.xaxis.label.get_fontsize(), 34.0)
+        self.assertEqual(ax.xaxis.label.get_color(), '#FF00FF')
+        self.assertEqual(ax.spines['bottom'].get_linewidth(), 4.5)
+        self.assertEqual(ax.get_facecolor(), (1.0, 1.0, 0.0, 1.0))
+
+    def test_plot_does_not_mutate_the_caller_style(self):
+        """The forced title/legend suppression must land on a copy."""
+        style = FormatStyle(ylabel='CALLER', title='CALLER TITLE', show_grid=True)
+        _styled(self.sdp, format_style=style)
+        self.assertEqual((style.ylabel, style.title), ('CALLER', 'CALLER TITLE'))
+        self.assertEqual((style.show_grid, style.show_legend, style.show_zeroline), (True, True, True))
+
+
+class TestZonesOutsideTheEvaluationGrid(unittest.TestCase):
+    """A +-3 SD breakpoint beyond the grid must not leave a zone unpainted under its label."""
+
+    def test_bounded_above_drops_the_highest_zone_and_recentres_its_neighbour(self):
+        sdp = _bounded_above()
+        x, bp = sdp._x, sdp.breakpoints
+        self.assertGreater(bp[3], x[-1])  # Precondition: +3 SD overshoots the grid
+        ax = _plotted(sdp)
+        # 'Extremely hot' spans [+3 SD, grid end], which is empty: not painted, not labelled.
+        self.assertEqual(_zone_labels(ax), ['Extremely cold', 'Cold', 'Normal', 'Hot'])
+        self.assertEqual(len(ax.collections), 5)  # 1 hatched reference + 4 zone fills
+        # 'Hot' is clipped to [+1 SD, grid end] and its label sits at that midpoint.
+        self.assertAlmostEqual(_label_x(ax, 'Hot'), (bp[2] + x[-1]) / 2)
+
+    def test_bounded_below_drops_the_lowest_zone_and_recentres_its_neighbour(self):
+        sdp = _bounded_below()
+        x, bp = sdp._x, sdp.breakpoints
+        self.assertLess(bp[0], x[0])  # Precondition: -3 SD undershoots the grid
+        ax = _plotted(sdp)
+        self.assertEqual(_zone_labels(ax), ['Cold', 'Normal', 'Hot', 'Extremely hot'])
+        self.assertEqual(len(ax.collections), 5)
+        self.assertAlmostEqual(_label_x(ax, 'Cold'), (x[0] + bp[1]) / 2)
+
+    def test_a_breakpoint_off_the_grid_draws_no_line_and_leaves_the_axis_alone(self):
+        sdp = _bounded_below()
+        x = sdp._x
+        ax = _plotted(sdp)
+        self.assertEqual(len(ax.lines), 5)  # 2 KDE outlines + 3 in-grid breakpoint lines
+        for line in ax.lines[2:]:
+            self.assertTrue(x[0] <= line.get_xdata()[0] <= x[-1])
+        # Nothing is drawn beyond the grid, so the axis keeps its plain 5% autoscale margin.
+        span = x[-1] - x[0]
+        np.testing.assert_allclose(ax.get_xlim(), (x[0] - 0.05 * span, x[-1] + 0.05 * span))
+
+    def test_every_zone_label_sits_over_the_zone_it_names(self):
+        """The invariant behind both findings, checked on skewed and symmetric data alike."""
+        cases = {'bounded above': _bounded_above(), 'bounded below': _bounded_below(),
+                 'symmetric': ShiftedDistributionPlot(_series(), REF_PERIOD, COMP_PERIOD)}
+        for name, sdp in cases.items():
+            with self.subTest(case=name):
+                x = sdp._x
+                ax = _plotted(sdp)
+                fills = [c for c in ax.collections if c.get_hatch() is None]
+                self.assertEqual(len(_zone_labels(ax)), len(fills))
+                for text, fill in zip(_zone_labels(ax), fills, strict=True):
+                    lo, hi = fill.get_paths()[0].vertices[:, 0].min(), fill.get_paths()[0].vertices[:, 0].max()
+                    pos = _label_x(ax, text)
+                    self.assertGreater(hi, lo, f"{text} is painted with no width")
+                    self.assertTrue(x[0] <= pos <= x[-1], f"{text} at {pos} is off the grid")
+                    # Within one grid step of the painted span, which is discretised on x.
+                    step = x[1] - x[0]
+                    self.assertTrue(lo - step <= pos <= hi + step,
+                                    f"{text} at {pos} is not over its fill [{lo}, {hi}]")
 
 
 if __name__ == '__main__':
