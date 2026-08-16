@@ -4647,3 +4647,181 @@ def test_mainwindow_is_garbage_collectable(app):
     QApplication.processEvents()
     gc.collect()
     assert [r() for r in refs] == [None, None, None]
+
+
+# --- gui/icons.py ----------------------------------------------------------
+
+
+def _icon_image(icon, size=16, dpr=1.0):
+    """The pixels a `QIcon` actually hands the widget at `size` and `dpr`."""
+    from PySide6.QtCore import QSize
+    return icon.pixmap(QSize(size, size), dpr).toImage()
+
+
+def _opaque_ink(img):
+    """(ink pixels, fully opaque ink pixels) -- a blur measure for thin lines."""
+    ink = opaque = 0
+    for y in range(img.height()):
+        for x in range(img.width()):
+            alpha = (img.pixel(x, y) >> 24) & 0xFF
+            if alpha:
+                ink += 1
+                opaque += alpha > 250
+    return ink, opaque
+
+
+def _glyph_functions():
+    from diive.gui import icons
+    return [(n, f) for n, f in vars(icons).items()
+            if n.startswith("_ln_") and callable(f)]
+
+
+def test_menu_icon_for_derived_variable_calculators(app):
+    """The Variables > Calculate entries get the gear, not the generic glyph.
+
+    The rule keyed on "calculate", which is only ever an `addSection` header
+    (`app.py`) -- Qt renders those without an icon and never passes them to
+    `menu_icon` -- so the rule could not fire and both calculators fell back to
+    the generic chart glyph.
+    """
+    from diive.gui import icons
+    gear = _icon_image(icons._ln_gear())
+    assert gear != _icon_image(icons._ln_generic())   # the two are distinguishable
+    for label in ("VPD (TA + RH)", "Potential radiation"):
+        assert _icon_image(icons.menu_icon(label)) == gear, label
+
+
+def test_menu_icon_none_falls_back_to_generic(app):
+    """`menu_icon(None)` must fall back, as its docstring promises, not raise."""
+    from diive.gui import icons
+    generic = _icon_image(icons._ln_generic())
+    assert _icon_image(icons.menu_icon(None)) == generic
+    assert _icon_image(icons.menu_icon("")) == generic
+
+
+def test_menu_icon_label_routing_is_stable(app):
+    """The load-bearing `_LINE_RULES` order still sends these labels home.
+
+    Each of these only lands on the right glyph because a specific rule precedes
+    a more general one that also matches ("gap-filling" before "gap", "reset"
+    before "set to", "screening" before "database", ...).
+    """
+    from diive.gui import icons
+    expected = {
+        "MDS gap-filling": "_ln_gapfill",          # before "gap"
+        "Gaps & coverage": "_ln_grid",
+        "Reset to &full range": "_ln_reset",       # before "set to"
+        "Set to value": "_ln_correction",
+        "Meteo screening (database)": "_ln_steps",  # before "database"
+        "Database explorer": "_ln_database",
+        "Manual removal": "_ln_outlier",
+        "Remove nighttime zero offset": "_ln_correction",   # before "time"
+        "Time lag analysis": "_ln_lag",                     # before "time"
+        "Time series": "_ln_chart",
+        "Open &project...": "_ln_project",         # before "open"
+        "&Open data file...": "_ln_folder",
+    }
+    for label, glyph in expected.items():
+        assert _icon_image(icons.menu_icon(label)) ==                _icon_image(getattr(icons, glyph)()), label
+
+
+def test_glyphs_never_use_the_truncating_drawline_overload(app):
+    """No glyph may call `drawLine(x1, y1, x2, y2)`.
+
+    That signature binds PySide6's `drawLine(int, int, int, int)` overload and
+    truncates every fraction (4.2 -> 4), while the `QRectF` / `QPointF` / `_poly`
+    calls beside it keep sub-pixel placement -- so a single glyph ends up mixing
+    snapped and unsnapped geometry. `_line()` routes through `QPointF`.
+    """
+    from PySide6.QtGui import QPainter
+    scalar_calls = []
+    original = QPainter.drawLine
+    current = {"glyph": None}
+
+    def _spy(self, *args):
+        if len(args) == 4:
+            scalar_calls.append((current["glyph"], args))
+        return original(self, *args)
+
+    QPainter.drawLine = _spy
+    try:
+        for name, fn in _glyph_functions():
+            current["glyph"] = name
+            fn()
+    finally:
+        QPainter.drawLine = original
+    assert scalar_calls == []
+
+
+def test_line_helper_keeps_subpixel_coordinates(app):
+    """`_line` must render the exact coordinates, not their truncation."""
+    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtGui import QPainter, QPixmap
+    from diive.gui import icons
+
+    def _render(draw):
+        pm = QPixmap(16, 16)
+        pm.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        p.setPen(icons._line_pen(0.9))
+        draw(p)
+        p.end()
+        return pm.toImage()
+
+    exact = _render(lambda p: p.drawLine(QPointF(4.2, 9), QPointF(5.6, 9)))
+    truncated = _render(lambda p: p.drawLine(4, 9, 5, 9))
+    assert exact != truncated          # the fraction is visible at this size
+    assert _render(lambda p: icons._line(p, 4.2, 9, 5.6, 9)) == exact
+
+
+def test_menu_icons_are_painted_at_device_resolution(app, monkeypatch):
+    """Icons are baked for the sharpest screen, not always at 16 physical px.
+
+    A 16x16 bitmap tagged `devicePixelRatio` 1 is what Qt has to *upscale* at
+    Windows 150%/200% display scaling, which smears every thin line. Painting
+    the canvas at `16 * dpr` with the ratio set (and the painter scaled, so the
+    glyph code keeps its 16x16 logical units) hands Qt a bitmap it can use
+    as-is.
+    """
+    from PySide6.QtCore import QSize, Qt
+    from diive.gui import icons
+
+    monkeypatch.setattr(icons, "_device_pixel_ratio", lambda: 2.0)
+    icon = icons.menu_icon("Heatmap date/time")
+    pixmap = icon.pixmap(QSize(16, 16), 2.0)
+    assert (pixmap.width(), pixmap.height()) == (32, 32)
+    assert pixmap.devicePixelRatio() == 2.0
+    assert pixmap.deviceIndependentSize().toSize() == QSize(16, 16)
+    assert icon.availableSizes() == [QSize(32, 32)]   # nothing left to upscale
+
+    # And it is sharp: the natively painted 32px glyph keeps solid ink, while
+    # the upscaled 16px one is partial alpha everywhere.
+    native = pixmap.toImage()
+    monkeypatch.setattr(icons, "_device_pixel_ratio", lambda: 1.0)
+    upscaled = _icon_image(icons.menu_icon("Heatmap date/time")).scaled(
+        32, 32, Qt.AspectRatioMode.IgnoreAspectRatio,
+        Qt.TransformationMode.SmoothTransformation)
+    assert _opaque_ink(native)[1] > 0.5 * _opaque_ink(native)[0]
+    assert _opaque_ink(upscaled)[1] == 0
+
+
+def test_glyphs_unchanged_at_device_pixel_ratio_one(app, monkeypatch):
+    """On a ratio-1 screen the icons must still be painted one to one.
+
+    Guards the `_canvas` rewrite from the other side: with the ratio at 1 the
+    bitmap has to stay 16 physical pixels and `scale(1, 1)` a no-op, so the
+    glyphs come out exactly as they did before -- no supersample-and-downscale,
+    which would soften them on the machines that were fine.
+
+    Asserting only the *delivered* 16x16 image would be vacuous: Qt downscales a
+    32px bitmap on request, so `pixmap(16, 16)` is 16x16 either way. The painted
+    size is what `availableSizes()` reports.
+    """
+    from PySide6.QtCore import QSize
+    from diive.gui import icons
+    monkeypatch.setattr(icons, "_device_pixel_ratio", lambda: 1.0)
+    for name, fn in _glyph_functions():
+        icon = fn()
+        assert icon.availableSizes() == [QSize(16, 16)], name
+        assert _opaque_ink(_icon_image(icon))[0] > 0, name   # it really drew ink
