@@ -63,7 +63,15 @@ class WaterfallPlot:
 
         s = series.dropna()
         # Aggregate to one bar per period unless the caller opted out.
-        self.contributions = s.resample(resample).agg(agg).dropna() if resample else s.copy()
+        if resample:
+            resampler = s.resample(resample)
+            # Pandas returns a real value for a group holding no measurements at all
+            # ('sum' -> 0.0, 'prod' -> 1.0, 'count' -> 0), which the trailing dropna()
+            # cannot remove, so a data gap is drawn as a genuine zero-contribution bar.
+            # Masking on the record count keeps that out for every agg the caller passes.
+            self.contributions = resampler.agg(agg).where(resampler.count() > 0).dropna()
+        else:
+            self.contributions = s.copy()
 
         # Each bar floats from the previous running total to the new one.
         self.cumulative = self.contributions.cumsum()
