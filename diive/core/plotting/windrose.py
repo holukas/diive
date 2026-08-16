@@ -27,7 +27,7 @@ from rich.table import Table
 
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.styles.format import FormatStyle
-from diive.core.utils.console import console, info
+from diive.core.utils.console import console, info, warn
 
 # 16-point compass labels, North-first, clockwise. 8- and 4-sector layouts are
 # regular subsets of this list (every 2nd / every 4th label).
@@ -62,6 +62,10 @@ class WindRosePlot:
     Args:
         series: Variable to aggregate (numeric Series).
         wind_dir: Wind direction in degrees (0-360), aligned to ``series`` by index.
+            Readings outside that range (fill values such as -9999, a signed
+            -180 to 180 convention, an un-wrapped offset) are dropped rather than
+            wrapped, and the number dropped is warned about and kept in
+            :attr:`n_out_of_range`.
         agg: Aggregation applied per sector — one of ``'mean'``, ``'median'``,
             ``'min'``, ``'max'``, ``'sum'`` (cumulative), ``'std'``, ``'count'``.
             Drives the plotted radius; the full table always holds every statistic.
@@ -78,6 +82,9 @@ class WindRosePlot:
         results: Per-sector ``DataFrame`` indexed by sector label, with columns
             ``CENTER_DEG``, ``N_VALS``, ``MEAN``, ``MEDIAN``, ``MIN``, ``MAX``,
             ``STD``, ``SUM`` (plus ``Z`` when a colour variable is given).
+        n_used: Records that reached the sectors (both variables present, direction
+            on the circle).
+        n_out_of_range: Records lost because their wind direction was off the circle.
 
     Example:
         >>> import diive as dv, pandas as pd, numpy as np
@@ -193,7 +200,26 @@ class WindRosePlot:
         # Pair the two series on their shared index, drop rows missing either value
         # or carrying an out-of-range / invalid direction.
         df = pd.DataFrame({'val': self.series, 'wd': self.wind_dir}).dropna()
-        df = df[(df['wd'] >= 0) & (df['wd'] <= 360)].copy()
+        # Directions off the circle are dropped, not wrapped: a fill value of
+        # -9999 wraps to 81 degrees and 999 to 279, fabricating a plausible
+        # bearing out of a sentinel. Nothing here can tell one apart from a
+        # legitimately wrappable -5, so report the loss instead of guessing --
+        # it is otherwise invisible, and e.g. a signed -180..180 record costs
+        # about 40% of its data with three sectors left standing at zero.
+        in_range = (df['wd'] >= 0) & (df['wd'] <= 360)
+        self.n_out_of_range = int((~in_range).sum())
+        if self.n_out_of_range:
+            bad = df.loc[~in_range, 'wd']
+            # Deliberately not gated on `self.verbose`: that flag switches the
+            # per-sector report on, whereas losing records is something every
+            # caller must see (still silenceable via `dv.set_verbosity`).
+            warn(f"Wind rose: dropped {self.n_out_of_range} of {len(df)} records "
+                 f"({100 * self.n_out_of_range / len(df):.1f}%) whose wind direction lies "
+                 f"outside 0-360 degrees (range {bad.min():g} to {bad.max():g}). Fill values "
+                 f"(e.g. -9999) and a signed -180 to 180 convention are the usual causes; "
+                 f"they are not wrapped into range because wrapping a fill value would "
+                 f"fabricate a bearing.")
+        df = df[in_range].copy()
         # 360 degrees is the same bearing as 0 (North); fold it in so it does not
         # fall outside the sector range.
         df.loc[df['wd'] == 360, 'wd'] = 0.0
@@ -230,6 +256,8 @@ class WindRosePlot:
     def _aggregate_z(self, labels: list[str]) -> list[float]:
         """Aggregate the optional colour variable ``z`` per wind sector."""
         zdf = pd.DataFrame({'z': self.z, 'wd': self.wind_dir}).dropna()
+        # Same out-of-range drop as the bar variable, reported once from
+        # `_aggregate()` -- both paths screen the same direction series.
         zdf = zdf[(zdf['wd'] >= 0) & (zdf['wd'] <= 360)].copy()
         zdf.loc[zdf['wd'] == 360, 'wd'] = 0.0
         sector_idx = self._sector_index(zdf['wd'])

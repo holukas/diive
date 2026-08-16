@@ -9,6 +9,11 @@ rose that created its own figure keeps the suptitle. The `FormatStyle` fields
 that describe something a polar rose actually draws must reach the axes, and
 the cartesian-only fields must stay ignored.
 
+Also covers what happens to a wind direction that is not on the circle: it is
+dropped rather than wrapped (wrapping a fill value would fabricate a bearing),
+and the drop is reported instead of being silent -- while a record that is
+merely gappy stays quiet.
+
 Part of the diive library: https://github.com/holukas/diive
 """
 import unittest
@@ -215,6 +220,106 @@ class TestDefaultRenderUnchanged(unittest.TestCase):
         self.assertEqual(ax.xaxis.get_gridlines()[0].get_alpha(), 0.3)
         self.assertEqual(ax.get_facecolor(), (1.0, 1.0, 1.0, 1.0))
         plt.close(ax.figure)
+
+
+class _Sink:
+    """Mirror console collecting everything the library prints."""
+
+    def __init__(self):
+        self.lines = []
+
+    def print(self, *args, **kwargs):
+        self.lines.append(" ".join(str(a) for a in args))
+
+    def log(self, *args, **kwargs):
+        self.print(*args, **kwargs)
+
+
+def _rose_with_console(wind_dir, values, **kwargs) -> tuple[WindRosePlot, str]:
+    """Build a rose and return it together with everything it printed."""
+    from diive.core.utils.console import add_console_sink, remove_console_sink
+    sink = _Sink()
+    add_console_sink(sink)
+    try:
+        rose = WindRosePlot(series=values, wind_dir=wind_dir, agg='mean',
+                            n_sectors=N_SECTORS, **kwargs)
+    finally:
+        remove_console_sink(sink)
+    return rose, "\n".join(sink.lines)
+
+
+def _mixed_record() -> tuple[pd.Series, pd.Series]:
+    """One reading per sector centre, plus a NaN and three directions off the circle.
+
+    The three bad ones are picked so that wrapping them (``% 360``) would land
+    them in an occupied sector: -9999 -> 81 deg (E), 400 -> 40 deg (NE),
+    -5 -> 355 deg (N). Their values are 8, 9, 10, so a wrapped record would move
+    those sector means well away from the sector index.
+    """
+    centers = list(np.arange(N_SECTORS) * (360.0 / N_SECTORS))
+    dirs = centers + [-9999.0, 400.0, -5.0, np.nan]
+    index = pd.date_range('2021-01-01', periods=len(dirs), freq='30min')
+    return (pd.Series(dirs, index=index, name='WD'),
+            pd.Series(np.arange(len(dirs), dtype=float), index=index, name='FC'))
+
+
+class TestOutOfRangeDirections(unittest.TestCase):
+    """Directions off the compass circle are dropped, not wrapped, and the loss is reported."""
+
+    def test_dropped_count_is_reported(self):
+        """The rose says how many records it lost and over what range of values."""
+        wind_dir, values = _mixed_record()
+        rose, out = _rose_with_console(wind_dir, values)
+        # 12 records in, 1 with a NaN direction (routine, dropped by the pairing),
+        # 3 off the circle -> 8 reach the sectors.
+        self.assertEqual(rose.n_out_of_range, 3)
+        self.assertEqual(rose.n_used, 8)
+        self.assertIn("dropped 3 of 11 records (27.3%)", out)
+        self.assertIn("outside 0-360 degrees", out)
+        self.assertIn("range -9999 to 400", out)
+
+    def test_bad_directions_are_not_wrapped_into_a_fabricated_bearing(self):
+        """A fill value must not become a plausible bearing: sector means stay put."""
+        wind_dir, values = _mixed_record()
+        rose, _ = _rose_with_console(wind_dir, values)
+        # One reading per sector; wrapping would add a second one to N, NE and E.
+        self.assertEqual(rose.results['N_VALS'].tolist(), [1] * N_SECTORS)
+        np.testing.assert_allclose(rose.results['MEAN'].to_numpy(dtype=float),
+                                   np.arange(N_SECTORS, dtype=float))
+
+    def test_reported_even_though_verbose_is_off(self):
+        """`verbose` switches the per-sector report on; losing records is always said."""
+        wind_dir, values = _mixed_record()
+        _, quiet = _rose_with_console(wind_dir, values)  # verbose defaults to False
+        _, loud = _rose_with_console(wind_dir, values, verbose=True)
+        self.assertIn("dropped 3 of 11 records", quiet)
+        # And the noisy path says it once, not twice.
+        self.assertEqual(loud.count("outside 0-360 degrees"), 1)
+
+    def test_a_gappy_but_valid_record_stays_quiet(self):
+        """Missing values are routine, so a record full of NaN must not warn."""
+        centers = np.arange(N_SECTORS) * (360.0 / N_SECTORS)
+        index = pd.date_range('2021-01-01', periods=N_SECTORS, freq='30min')
+        wind_dir = pd.Series(centers, index=index, name='WD')
+        values = pd.Series(np.arange(N_SECTORS, dtype=float), index=index, name='FC')
+        wind_dir.iloc[1] = np.nan  # gap in the direction
+        values.iloc[2] = np.nan  # gap in the variable
+        rose, out = _rose_with_console(wind_dir, values)
+        self.assertEqual(rose.n_out_of_range, 0)
+        self.assertEqual(rose.n_used, N_SECTORS - 2)
+        self.assertEqual(out, "")
+        self.assertEqual(rose.results['N_VALS'].tolist(), [1, 0, 0, 1, 1, 1, 1, 1])
+
+    def test_exactly_360_is_north_not_out_of_range(self):
+        """360 deg is the same bearing as 0, so it is folded in rather than dropped."""
+        index = pd.date_range('2021-01-01', periods=2, freq='30min')
+        wind_dir = pd.Series([360.0, 0.0], index=index, name='WD')
+        values = pd.Series([2.0, 4.0], index=index, name='FC')
+        rose, out = _rose_with_console(wind_dir, values)
+        self.assertEqual(rose.n_out_of_range, 0)
+        self.assertEqual(out, "")
+        self.assertEqual(rose.results['N_VALS'].tolist(), [2, 0, 0, 0, 0, 0, 0, 0])
+        self.assertAlmostEqual(rose.results['MEAN'].iloc[0], 3.0, places=12)
 
 
 if __name__ == '__main__':
