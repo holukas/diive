@@ -104,7 +104,7 @@ opposite of what the code produces. Re-read it against the corrected behaviour.
 
 ---
 
-# Triage index — all 110 findings by severity
+# Triage index — all 112 findings by severity
 
 The detailed entries below stay grouped by review round and module. This index is the **fix order**.
 
@@ -170,7 +170,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L86~~ | ~~`UstarVekuriThresholdDetection.bootstrap()` has no `random_state`, so u* thresholds differ run to run~~ (done 2026-08-15) — **the same defect in `UstarBootstrapThresholds` is open as L97** | `flux/lowres/ustar_vekuri_detection.py` |
 | ~~L87~~ | ~~`classical_decompose` passes `extrapolate=` where the parameter is `extrapolate_trend`, so it always raises and the trend edges are always NaN~~ (done 2026-08-15) — dead branch removed; NaN edges kept on purpose | `core/times/decomposition_utils.py:207` |
 | ~~L92~~ | ~~`ScreeningTabBase._select` does not bump `_run_id` — G2's bug in the tab cited as the correct pattern~~ (done 2026-08-15) | `gui/tabs/_screening_base.py` |
-| L99 | Running the test suite **overwrites the developer's real GUI preferences**: three tests call `win.close()`, and `closeEvent` -> `save_config()` writes theme/geometry/`last_project`/`variable_metadata` to the live `QStandardPaths` file, non-atomically | `gui/config.py` + `tests/test_gui.py` |
+| ~~L99~~ | ~~Running the test suite **overwrites the developer's real GUI preferences**: three tests call `win.close()`, and `closeEvent` -> `save_config()` writes theme/geometry/`last_project`/`variable_metadata` to the live `QStandardPaths` file, non-atomically~~ (done 2026-08-15) | `gui/config.py` + `tests/test_gui.py` |
 | L76 | BUR06 uses a canopy `ra` (`u/u*^2`) where Burba 2006 specifies a per-element one (`7.4*sqrt(d/U)`, ~6x apart) and drops the retained fraction `fr`; the fitted SF absorbs both | `flux/lowres/selfheating.py:471` |
 | ~~L53~~ | ~~`CompoundExtremes` returns zero classified periods for a single year, silently~~ (done 2026-08-07) | `analysis/compoundextremes.py:168` |
 | ~~L59~~ | ~~`multi_scale_harmonics` swallows every exception~~ (done 2026-08-07) — function deleted as dead code | `analysis/harmonic.py:432` |
@@ -204,8 +204,9 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~G2~~ | ~~`_outlier_base._on_done` can `KeyError` when the dataset changes mid-run~~ (done 2026-08-15) — **has a silent half too**: a narrowed frame is adopted with no exception at all | `gui/tabs/_outlier_base.py:666` |
 | ~~L79~~ | ~~`transform_yearmonth_matrix_to_longform` rejects non-contiguous month columns — a seasonal record from its own producer raises; 4th instance of the contiguity family (L61/L63)~~ (done 2026-08-15) | `core/dfun/frames.py` |
 | ~~L81~~ | ~~`TimeLagAnalysis`: a `histogram_startbin`/`endbin` range excluding every lag empties `results`, then `detect_peak_range` fails~~ (done 2026-08-15) | `flux/lowres/timelag_analysis.py` |
+| ~~L101~~ | ~~**Two examples broken by this campaign's own breaking change** since `45614fb3`: `flux_selfheating.py` and `flux_selfheating_production.py` index `LATENT_HEAT_VAPORIZATION_J_UMOL`, removed with the H2O path (L37)~~ (done 2026-08-15) | `examples/flux/lowres/` |
 
-## S4 — Contract mismatch (20)
+## S4 — Contract mismatch (21)
 
 | ID | Finding | Where |
 |---|---|---|
@@ -224,13 +225,14 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~G3~~ | ~~Pinned tabs are not actually frozen against added columns~~ (done 2026-08-15) | `gui/app.py:899` |
 | ~~G6~~ | ~~`WorkerRunner` clears `is_running` before emitting — re-entry window~~ (done 2026-08-15) | `gui/widgets/worker.py:73` |
 | ~~L78~~ | ~~`percent_matching`/`confidence` parsed back out of a `'{:.0f}%'` string, so 99.9% reports as 100.0~~ (done 2026-08-15) | `core/times/times.py` |
-| L83 | `histogram_startbin`/`endbin` are seconds but named as bin indices (rename is breaking) | `flux/lowres/timelag_analysis.py` |
+| L103 | `ScopApplicator` labels an **un**-gap-filled input `FCT_UNSC_gfXG`: `__init__` normalises whatever term it is handed to `ColumnConfig.fct_unsc_gf`, so the frame claims a fill that did not happen. Predates L95 (it said `gfRF`) and follows from L39's boundary normalisation | `flux/lowres/selfheating.py` |
+| ~~L83~~ | ~~`histogram_startbin`/`endbin` are seconds but named as bin indices~~ (done 2026-08-15) — also fixed the integer GUI spinboxes that could not express 0.40 s | `flux/lowres/timelag_analysis.py` |
 | ~~L84~~ | ~~`ignore_fringe_bins` still described as "bin indices" in `__init__` (they are counts)~~ (done 2026-08-15) | `flux/lowres/timelag_analysis.py` |
 | ~~L88~~ | ~~`detect_seasonality`'s `'strength'` is a peak-power ratio, documented as a variance ratio~~ (done 2026-08-15) | `core/times/decomposition_utils.py` |
 | ~~L91~~ | ~~`hexbin.py` accepts, documents and forwards `show_less_xticklabels`, and nothing applies it~~ (done 2026-08-15) | `core/plotting/hexbin.py:272` |
-| L95 | `ScopPhysics.fct_unsc_gf` is `'FCT_UNSC_gfRF'` though the fill is XGBoost; rename is breaking | `flux/lowres/selfheating.py` |
+| ~~L95~~ | ~~`ScopPhysics.fct_unsc_gf` is `'FCT_UNSC_gfRF'` though the fill is XGBoost~~ (done 2026-08-15) — the suffix was hardcoded twice, which is why it drifted; now one string | `flux/lowres/selfheating.py` |
 
-## S5 — Cosmetic / dead / latent (24)
+## S5 — Cosmetic / dead / latent (25)
 
 | ID | Finding | Where |
 |---|---|---|
@@ -251,11 +253,14 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L80~~ | ~~`UstarVekuriThresholdDetection.bootstrap_results_` initialised, never read~~ (done 2026-08-15) | `flux/lowres/ustar_vekuri_detection.py` |
 | ~~L82~~ | ~~Exceptions in Qt-invoked slots are swallowed — GUI tests driving via signals may be weaker than they look~~ (done 2026-08-15) — the guard uncovered a real leaked-slot bug 44 tests were passing over | `tests/test_gui.py` (methodology) |
 | L85 | No doctest runner anywhere — docstring examples are never executed (L35 had been broken twice over). **Partly addressed**: reference + public-name resolution now checked, execution still not | `tests/` (methodology) |
+| L104 | `ScopPhysics.plot_diel_cycles()`, `ScopOptimizer.plot()` and `ScopApplicator.plot_dashboard()` call `plt.show()` unconditionally with no `showplot` toggle, so an example cannot satisfy the disable-showplot standard and figures accumulate | `flux/lowres/selfheating.py` |
 | ~~L98~~ | ~~`run_all_examples.py` forces no matplotlib backend, so the 16 examples ending in `plt.show()` block~~ (done 2026-08-15) — corrected: the 120 s timeout meant **spurious failures**, not a permanent hang | `examples/run_all_examples.py` |
 | ~~L89~~ | ~~`-9999` at position 6 still reads as a passing flag~~ (done 2026-08-15) — **two** holes, not one: `-1` at position 1 read as a soft warning | `preprocessing/qaqc/eddyproflags.py` |
 | ~~L93~~ | ~~`EventManager.load_dict({})` early-returns without clearing, so previous events survive~~ (done 2026-08-15) | `gui/events.py` |
 | ~~L94~~ | ~~`crosscorr`'s `len(pot_arr) == 0` branch is unreachable dead code~~ (annotated, kept 2026-08-15) | `preprocessing/qaqc/detect_timestamp_shifts.py` |
 | ~~L96~~ | ~~`ScatterXY` uses `plt.colorbar` instead of `ax.figure.colorbar`~~ (done 2026-08-15) — also `DetectTimestampShifts.plot_radiation_fingerprint` | `core/plotting/scatter.py:169` |
+| ~~L100~~ | ~~4 test modules never set the matplotlib backend and inherit `Agg` from an alphabetically earlier module; the real default here is `qtagg`, so they pass serially by accident~~ (done 2026-08-15) | `tests/` (methodology) |
+| ~~L102~~ | ~~`show_values=True` on a large date/time heatmap draws one text artist per cell (17 520 for a year of half-hourly data) with no guard: 15.8 s to render, and every later re-layout walks them - the next tab open went 1.2 s -> 43.1 s~~ (done 2026-08-15) | `core/plotting/heatmap_base.py` |
 
 ## Cross-cutting observations
 
@@ -2259,7 +2264,16 @@ same species as L2. This dead kwarg is what made **L57** visible on real data. F
 variable's chain result, with no exception. This is **G2's bug, in the tab this document cites as the
 correct `run_id` pattern to copy**. Found while fixing G5.
 
-**[ ] L83. `histogram_startbin` / `histogram_endbin` are seconds, not bin indices**
+**[x] L83. `histogram_startbin` / `histogram_endbin` are seconds, not bin indices**
+> **Fixed 2026-08-15** (`76674429`). Renamed to `histogram_start_seconds` / `histogram_end_seconds`;
+> the `histogram_` prefix stays because these bound the analysed histogram, a different range from the
+> neighbouring `lag_window_min`/`lag_window_max`. An old name raises a `TypeError` naming its
+> replacement, the way the outlier detectors answer their pre-unification names, while anything else
+> still raises the normal unexpected-keyword error so a typo cannot pass through `**legacy`.
+>
+> **A second defect fell out of it:** the GUI fields were `QSpinBox`, i.e. integer-only, so a 0.40 s
+> bound could not be entered at all. Now `QDoubleSpinBox`, labelled "(s)". A misleading name had
+> produced a matching wrong widget. Two CHANGELOG bullets this rename falsified were corrected too.
 `flux/lowres/timelag_analysis.py` — L44 corrected the types and docstrings, but the parameter *names*
 still say "bin". Renaming is a public-API change, deferred.
 
@@ -2360,7 +2374,18 @@ session's events. Adjacent to G9. Found while fixing G9.
 `preprocessing/qaqc/detect_timestamp_shifts.py` — `window` always spans at least the sun-up rows, which
 the preceding check guarantees non-empty. L21 made it consistent anyway; it is dead code.
 
-**[ ] L95. `ScopPhysics.fct_unsc_gf` carries a legacy RF name**
+**[x] L95. `ScopPhysics.fct_unsc_gf` carries a legacy RF name**
+> **Fixed 2026-08-15** (`20cb27f3`). Straight rename to `FCT_UNSC_gfXG`, no alias: two columns
+> differing only by a regressor tag invite publishing numbers from the one that names the wrong method,
+> and v0.91.0 is unreleased with breaking changes already listed.
+>
+> **The root cause was worth more than the rename.** The suffix was hardcoded in two places - once as
+> `ColumnConfig`'s results key, once as `_gapfill`'s lookup into `XGBoostTS` output - which is why they
+> drifted. `_gapfill` now looks the column up under `ColumnConfig` itself, so the emitted column, the
+> series `.name` and the lookup key are one string by construction: a future regressor change raises
+> `KeyError` rather than shipping a mislabelled column. Confirmed the regressor is genuinely fixed
+> (`_gapfill` instantiates `XGBoostTS`; no argument selects it). See L103 for the applicator's
+> remaining mislabel.
 `flux/lowres/selfheating.py` — `ColumnConfig.fct_unsc_gf` is `'FCT_UNSC_gfRF'` while the fill is
 XGBoost, so `physics.fct_unsc_gf.name` is `'FCT_UNSC_gfXG'` but `get_results()` carries `FCT_UNSC_gfRF`.
 L41 documented this rather than renaming: the name is indexed by two examples, the generated docs and
@@ -2470,7 +2495,18 @@ changes how the suite behaves for someone running it interactively to look at th
 recorded rather than done. The alternative — dropping `plt.show()` from 16 examples — is worse:
 it is what a human running one example by hand actually wants.
 
-**[ ] L99. Running the test suite overwrites the developer's real GUI preferences**
+**[x] L99. Running the test suite overwrites the developer's real GUI preferences**
+> **Fixed 2026-08-15** in two parts. The test side in `ebdf57f0`: a session fixture in
+> `tests/conftest.py` redirects `config.config_file`, so the suite no longer overwrites the developer's
+> real preferences. The library side in `2c84d943`: `save_config` serialises first (so an
+> unserializable value fails before touching the filesystem), then writes a uniquely named temp file in
+> the target's own directory, flushes, `fsync`s and `os.replace`s it - `os.rename` is not atomic over
+> an existing file on Windows - cleaning up the temp file on every failure path.
+>
+> G8's `(OSError, TypeError, ValueError)` swallowing is unchanged, and its promise that the previous
+> file survives a `TypeError` is now actually true rather than accidentally true. A further defect
+> found on the way: `load_config` returned valid-JSON-that-is-not-an-object (`null`, a list) as-is, it
+> reached the first `cfg.get()` and crashed startup; now falls back to `{}`.
 `gui/config.py` + `tests/test_gui.py` — three GUI tests call `win.close()`. `MainWindow.closeEvent`
 calls `config.save_config()`, which writes theme, geometry, `last_project` and `variable_metadata` to
 the **live** `QStandardPaths` application-config file, with a non-atomic `write_text`. So running the
@@ -2485,7 +2521,10 @@ this function's error handling without noticing it.
 
 Found while profiling the test suite for runtime, not by looking for it.
 
-**[ ] L100. Four test modules inherit their matplotlib backend from an unrelated module**
+**[x] L100. Four test modules inherit their matplotlib backend from an unrelated module**
+> **Fixed 2026-08-15** (`ebdf57f0`). `matplotlib.use("Agg")` at `tests/conftest.py` import time, before
+> any test module is imported, so the backend is stated once instead of inherited from whichever module
+> sorted first.
 `tests/` (methodology) — the default backend in this environment is `qtagg`, not `Agg`.
 `test_analyses.py`, `test_heatmap_xyz.py`, `test_hexbin_plot.py` and `test_selfheating.py` never set
 one, and pass only because an alphabetically earlier module (`test_corrections.py`,
@@ -2496,7 +2535,18 @@ accident, and it breaks the moment tests are distributed across processes or run
 is one `matplotlib.use('Agg')` in a `conftest.py`, before any test module imports. Related to L98 —
 the example suite had the same "no backend pinned" problem from the other direction.
 
-**[ ] L101. Two examples were broken by this campaign and nobody could see it**
+**[x] L101. Two examples were broken by this campaign and nobody could see it**
+> **Fixed 2026-08-15** (`21b4e2a5`, `d9435e3c`). `ScopOptimizer` no longer takes the
+> `latent_heat_vaporization` kwarg at all - it was only the umol->W conversion for the removed LE path
+> - so dropping it is the whole functional fix and nothing the examples taught for CO2 is lost.
+>
+> Both examples were corrected beyond the crash, recorded here because it goes past the finding: the
+> quickstart claimed Random Forest gap-filling (it is XGBoost) and had no reference to judge the
+> correction against; the production example printed a non-cp1252 character that would have raised
+> `UnicodeEncodeError` the moment the `KeyError` was fixed, and its "Phase 2" fitted and re-applied to
+> the *same data* while claiming to teach transfer - it now calibrates on one half-year and applies to
+> a held-back one. Hardcoded scaling-factor ranges belonging to the old period were removed.
+> 166 s-then-crash -> exit 0 in 4 s and 6 s. See L104 for the `plt.show()` issue underneath.
 `examples/flux/lowres/flux_selfheating.py:98` and `flux_selfheating_production.py:136` both do
 `results_physics_df["LATENT_HEAT_VAPORIZATION_J_UMOL"]` and raise `KeyError`. That column was removed
 by **`45614fb3` `feat!: remove the H2O self-heating path`** — L37's fix, from this review. `grep`
@@ -2516,7 +2566,19 @@ recorded rather than patched blind.
 
 Found by running the example suite for timing, not by looking for it.
 
-**[ ] L102. `show_values` has no cell-count guard, so it can appear to hang the GUI**
+**[x] L102. `show_values` has no cell-count guard, so it can appear to hang the GUI**
+> **Fixed 2026-08-15** (`7789c7f6`). `show_vals_in_plot` skips above `SHOW_VALUES_MAX_CELLS = 2000`,
+> overridable per call as `plot(show_values_max_cells=...)`, `None` for no limit. The limit was measured
+> rather than guessed - 144 / 1000 / 2000 / 4000 / 17520 cells - at the point where both the render and
+> the following redraw stay under a second.
+>
+> Two deliberate choices: the guard lives in the library on the grid size, so it covers every caller
+> including `HeatmapXYZ` and plain scripts rather than only the GUI; and it **warns** instead of
+> skipping quietly, which would have converted a visible slowness into a silently ignored parameter,
+> the L2/L62 defect class. The warning passes `verbose=self.verbose or None`, because
+> `HeatmapBase.verbose` defaults `False` which resolves to silent and would have hidden the one
+> explanation for the missing labels. Year/month heatmaps cannot reach the limit (12 cells a year) and
+> the GUI test's 3-day range is ~144 cells, so both still label.
 `gui/widgets/plot_settings.py` (the checkbox) + `core/plotting/heatmap_base.py`
 (`show_vals_in_plot`) — the overlay writes one text artist per cell. That is fine for a
 year/month heatmap (12 x N cells, which is what it was designed for) and unusable for a
@@ -2541,3 +2603,29 @@ smallest and honest. Not fixed here because which of the three is right is a UX 
 
 Found while cutting `test_plot_settings_live_render` from 283 s to 11 s — that one
 checkbox was ~58 s of it, and the test never actually checked the labels appeared.
+
+**[ ] L103. `ScopApplicator` labels an un-gap-filled input as gap-filled**
+`flux/lowres/selfheating.py` — `ScopApplicator.__init__` renames whatever correction term it is
+handed to `ColumnConfig.fct_unsc_gf`, which is L39's deliberate boundary normalisation (accept any
+input name, work internally under one). The side effect is that its own results frame labels an input
+that was never gap-filled `FCT_UNSC_gfXG`, i.e. claims a fill that did not happen.
+
+The mislabel predates the L95 rename — it said `FCT_UNSC_gfRF` before, so L95 changed which wrong
+name it uses, not the wrongness. Found while doing L95, and left alone because L39's normalisation is
+intentional and the fix is a design call: the applicator's internal name should probably be the
+neutral `FCT_UNSC`, but that touches the column its results frame exposes.
+
+**[ ] L104. Three self-heating plots call `plt.show()` with no `showplot` toggle**
+`flux/lowres/selfheating.py` — `ScopPhysics.plot_diel_cycles()`, `ScopOptimizer.plot()` and
+`ScopApplicator.plot_dashboard()` each call `plt.show()` unconditionally. Consequences:
+
+- an example using them **cannot** satisfy CLAUDE.md's "disable `showplot=True`" standard, because
+  there is no parameter to disable; `examples/flux/lowres/flux_selfheating_production.py` emits three
+  `FigureCanvasAgg is non-interactive` warnings for this reason;
+- figures accumulate rather than being closed (the dashboard is 24x20 in), so a script calling these
+  in a loop grows its figure count until matplotlib warns;
+- it is the same shape as L98 from the other direction — library code deciding to open a window,
+  where the caller should decide.
+
+Every other diive plot class takes `showplot` or an `ax`. These three predate that convention. Found
+while repairing the examples for L101.
