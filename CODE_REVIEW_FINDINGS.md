@@ -104,7 +104,7 @@ opposite of what the code produces. Re-read it against the corrected behaviour.
 
 ---
 
-# Triage index — all 112 findings by severity
+# Triage index — all 114 findings by severity
 
 The detailed entries below stay grouped by review round and module. This index is the **fix order**.
 
@@ -254,6 +254,8 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L82~~ | ~~Exceptions in Qt-invoked slots are swallowed — GUI tests driving via signals may be weaker than they look~~ (done 2026-08-15) — the guard uncovered a real leaked-slot bug 44 tests were passing over | `tests/test_gui.py` (methodology) |
 | L85 | No doctest runner anywhere — docstring examples are never executed (L35 had been broken twice over). **Partly addressed**: reference + public-name resolution now checked, execution still not | `tests/` (methodology) |
 | ~~L104~~ | ~~`ScopPhysics.plot_diel_cycles()`, `ScopOptimizer.plot()` and `ScopApplicator.plot_dashboard()` call `plt.show()` unconditionally with no `showplot` toggle, so an example cannot satisfy the disable-showplot standard and figures accumulate~~ (done 2026-08-15) | `flux/lowres/selfheating.py` |
+| L105 | `FramelessResizeHelper` stores `self._window` while also being parented to that window's grip, so **no `MainWindow` can ever be garbage-collected**; every one stays subscribed to the app-wide singletons for the process lifetime | `gui/widgets/frameless.py:28` |
+| L106 | Parentless widgets accumulate for the session: after 31 GUI tests with every window destroyed, **201 top-level and 4593 total widgets** were still alive with no Python referrer. Largest contributor is the flux-chain tab at **46 parentless QFrames per test** | `gui/` (source not located) |
 | ~~L98~~ | ~~`run_all_examples.py` forces no matplotlib backend, so the 16 examples ending in `plt.show()` block~~ (done 2026-08-15) — corrected: the 120 s timeout meant **spurious failures**, not a permanent hang | `examples/run_all_examples.py` |
 | ~~L89~~ | ~~`-9999` at position 6 still reads as a passing flag~~ (done 2026-08-15) — **two** holes, not one: `-1` at position 1 read as a soft warning | `preprocessing/qaqc/eddyproflags.py` |
 | ~~L93~~ | ~~`EventManager.load_dict({})` early-returns without clearing, so previous events survive~~ (done 2026-08-15) | `gui/events.py` |
@@ -2688,3 +2690,37 @@ neutral `FCT_UNSC`, but that touches the column its results frame exposes.
 
 Every other diive plot class takes `showplot` or an `ax`. These three predate that convention. Found
 while repairing the examples for L101.
+
+**[ ] L105. No `MainWindow` can ever be garbage-collected**
+`gui/widgets/frameless.py:28-31` — `FramelessResizeHelper.__init__` parents itself to the window's
+size grip *and* stores `self._window = window`. That closes a window -> grip -> helper -> window
+reference cycle through Qt's C++ parentage, which Python's collector cannot break, so the
+`MainWindow` wrapper outlives every attempt to drop it: measured, dropping the last reference and
+running `gc.collect()` freed nothing and the live `MainWindow` count grew 1, 2, 3, … (+14 top-level
+widgets each time).
+
+In the shipped app this is close to harmless — there is normally one window for the process
+lifetime. It matters because **each leaked window stays subscribed to the process-wide singletons**
+(`theme.manager`, `metadata_store.manager`, `site.manager`, `events.manager`, `db.manager`), so every
+emit fans out into all of them. Measured `theme.manager.apply()`: **2.15 s behind one window, 21 s
+behind thirty.** A `weakref` for `_window` would be the library-side fix.
+
+Found while cutting `tests/test_gui.py` from 25 min to 5.5 min (`606554db`); the test suite now
+destroys each window explicitly with `shiboken6.delete`, which works around it but does not fix it.
+Related to the "retain tab instances" gotcha in CLAUDE.md, which is the same lifetime problem from
+the other direction.
+
+**[ ] L106. Parentless widgets accumulate for the whole session**
+`gui/` — after 31 GUI tests, with every `MainWindow` explicitly destroyed, **201 top-level and 4593
+total widgets** were still alive with *no* Python referrer: 137 `QFrame`, 36 `QMenu`, 24 `QWidget`,
+4 `MplCanvas`. Largest single contributor is the flux-chain tab, **46 parentless `QFrame`s per test**
+(`test_flux_chain_tab_level32`); the wind rose adds 7 and the screening tab 2.
+
+Why it is not merely untidy: `app.setStyleSheet` re-polishes **every** widget in the application, so
+an accumulating pool of orphans slows every theme change. It is why `test_live_theme_edit` is still
+9-10 s inside the file against 2.5 s alone, after the window leak (L105) was dealt with. In a
+long-running GUI session the same growth applies to any app-wide restyle.
+
+Two known-correct sites were ruled out — `corrections_panel.py:272` and `stepwise_cards.py:110` both
+do `setParent(None)` + `deleteLater()` properly — so the `QFrame`s come from somewhere else in
+`diive/gui` that was not located. Finding the source is the first step, not a fix.
