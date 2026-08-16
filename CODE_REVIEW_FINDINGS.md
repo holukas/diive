@@ -225,7 +225,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~G3~~ | ~~Pinned tabs are not actually frozen against added columns~~ (done 2026-08-15) | `gui/app.py:899` |
 | ~~G6~~ | ~~`WorkerRunner` clears `is_running` before emitting — re-entry window~~ (done 2026-08-15) | `gui/widgets/worker.py:73` |
 | ~~L78~~ | ~~`percent_matching`/`confidence` parsed back out of a `'{:.0f}%'` string, so 99.9% reports as 100.0~~ (done 2026-08-15) | `core/times/times.py` |
-| L103 | `ScopApplicator` labels an **un**-gap-filled input `FCT_UNSC_gfXG`: `__init__` normalises whatever term it is handed to `ColumnConfig.fct_unsc_gf`, so the frame claims a fill that did not happen. Predates L95 (it said `gfRF`) and follows from L39's boundary normalisation | `flux/lowres/selfheating.py` |
+| ~~L103~~ | ~~`ScopApplicator` labels an **un**-gap-filled input `FCT_UNSC_gfXG`: `__init__` normalises whatever term it is handed to `ColumnConfig.fct_unsc_gf`, so the frame claims a fill that did not happen. Predates L95 (it said `gfRF`) and follows from L39's boundary normalisation~~ (done 2026-08-15) | `flux/lowres/selfheating.py` |
 | ~~L83~~ | ~~`histogram_startbin`/`endbin` are seconds but named as bin indices~~ (done 2026-08-15) — also fixed the integer GUI spinboxes that could not express 0.40 s | `flux/lowres/timelag_analysis.py` |
 | ~~L84~~ | ~~`ignore_fringe_bins` still described as "bin indices" in `__init__` (they are counts)~~ (done 2026-08-15) | `flux/lowres/timelag_analysis.py` |
 | ~~L88~~ | ~~`detect_seasonality`'s `'strength'` is a peak-power ratio, documented as a variance ratio~~ (done 2026-08-15) | `core/times/decomposition_utils.py` |
@@ -253,7 +253,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L80~~ | ~~`UstarVekuriThresholdDetection.bootstrap_results_` initialised, never read~~ (done 2026-08-15) | `flux/lowres/ustar_vekuri_detection.py` |
 | ~~L82~~ | ~~Exceptions in Qt-invoked slots are swallowed — GUI tests driving via signals may be weaker than they look~~ (done 2026-08-15) — the guard uncovered a real leaked-slot bug 44 tests were passing over | `tests/test_gui.py` (methodology) |
 | L85 | No doctest runner anywhere — docstring examples are never executed (L35 had been broken twice over). **Partly addressed**: reference + public-name resolution now checked, execution still not | `tests/` (methodology) |
-| L104 | `ScopPhysics.plot_diel_cycles()`, `ScopOptimizer.plot()` and `ScopApplicator.plot_dashboard()` call `plt.show()` unconditionally with no `showplot` toggle, so an example cannot satisfy the disable-showplot standard and figures accumulate | `flux/lowres/selfheating.py` |
+| ~~L104~~ | ~~`ScopPhysics.plot_diel_cycles()`, `ScopOptimizer.plot()` and `ScopApplicator.plot_dashboard()` call `plt.show()` unconditionally with no `showplot` toggle, so an example cannot satisfy the disable-showplot standard and figures accumulate~~ (done 2026-08-15) | `flux/lowres/selfheating.py` |
 | ~~L98~~ | ~~`run_all_examples.py` forces no matplotlib backend, so the 16 examples ending in `plt.show()` block~~ (done 2026-08-15) — corrected: the 120 s timeout meant **spurious failures**, not a permanent hang | `examples/run_all_examples.py` |
 | ~~L89~~ | ~~`-9999` at position 6 still reads as a passing flag~~ (done 2026-08-15) — **two** holes, not one: `-1` at position 1 read as a soft warning | `preprocessing/qaqc/eddyproflags.py` |
 | ~~L93~~ | ~~`EventManager.load_dict({})` early-returns without clearing, so previous events survive~~ (done 2026-08-15) | `gui/events.py` |
@@ -2644,7 +2644,16 @@ smallest and honest. Not fixed here because which of the three is right is a UX 
 Found while cutting `test_plot_settings_live_render` from 283 s to 11 s — that one
 checkbox was ~58 s of it, and the test never actually checked the labels appeared.
 
-**[ ] L103. `ScopApplicator` labels an un-gap-filled input as gap-filled**
+**[x] L103. `ScopApplicator` labels an un-gap-filled input as gap-filled**
+> **Fixed 2026-08-15** (`d60ff96d`). `ScopApplicator.__init__` normalises the input to the neutral
+> `ColumnConfig.fct_unsc` ('FCT_UNSC') instead of `.fct_unsc_gf`. The class gap-fills nothing and
+> explicitly accepts an ungapfilled term, so a `_gf` label on its own results column asserted a fill
+> that provably had not happened. L39's accept-any-input-name behaviour is untouched, and L95's
+> single-source property holds - the name still lives only in `ColumnConfig`, a different field of it.
+>
+> Breaking, but narrowly: only code reading `ScopApplicator.get_results()["FCT_UNSC_gfXG"]` is
+> affected, and nothing in the repo did. `ScopPhysics`'s own column of that name is unchanged.
+> Mutation-checked: pointing the rename back at `fct_unsc_gf` fails both new tests.
 `flux/lowres/selfheating.py` — `ScopApplicator.__init__` renames whatever correction term it is
 handed to `ColumnConfig.fct_unsc_gf`, which is L39's deliberate boundary normalisation (accept any
 input name, work internally under one). The side effect is that its own results frame labels an input
@@ -2655,7 +2664,17 @@ name it uses, not the wrongness. Found while doing L95, and left alone because L
 intentional and the fix is a design call: the applicator's internal name should probably be the
 neutral `FCT_UNSC`, but that touches the column its results frame exposes.
 
-**[ ] L104. Three self-heating plots call `plt.show()` with no `showplot` toggle**
+**[x] L104. Three self-heating plots call `plt.show()` with no `showplot` toggle**
+> **Fixed 2026-08-15** (library half committed by mistake in `cc0857eb`, remainder in `d60ff96d`).
+> All three plots take `showplot: bool = True` and **return their figure**, matching
+> `DailyCorrelation.plot`. Returning the figure is what answers the accumulation half of the finding:
+> with `showplot=False` and no handle, a loop caller could not close a 24x20-inch figure. The
+> production example passes `showplot=False` at all five call sites - five calls against three library
+> sites, which is why the finding saw three warnings - and its `FigureCanvasAgg` warnings are gone.
+>
+> Mutation-checked twice: restoring the unconditional `plt.show()` fails all three tests, and
+> returning `None` instead of the figure fails all three, so the flag is pinned in both directions
+> rather than only when off.
 `flux/lowres/selfheating.py` — `ScopPhysics.plot_diel_cycles()`, `ScopOptimizer.plot()` and
 `ScopApplicator.plot_dashboard()` each call `plt.show()` unconditionally. Consequences:
 
