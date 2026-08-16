@@ -10,6 +10,10 @@ spurious CO2 flux measurements caused by sun-induced heating of instrument surfa
 
 Includes physics modeling, optimization of scaling factors, and correction application.
 
+The correction applies to the CO2 flux (NEE) only. Whether a self-heating correction
+applies to the latent heat flux (LE) is unresolved in eddy covariance, so diive offers
+none, and this example has no LE counterpart.
+
 Best for: Correcting systematic bias in open-path IRGA CO2 flux measurements.
 """
 
@@ -33,8 +37,10 @@ print("=" * 80)
 # Load example data with parallel IRGA measurements
 df = load_exampledata_parquet_lae()
 
-# Parallel measurements starting 27 May 2016
-df = df.loc["2016-05-27 00:15:00":"2017-12-11 23:45:00"].copy()
+# One full year (2017). The parallel campaign starts 27 May 2016, so 2017 is the
+# first calendar year carrying both instruments over all seasons - which is what
+# the day/night and USTAR-binned optimization needs.
+df = df.loc["2017-01-01 00:15:00":"2017-12-31 23:45:00"].copy()
 
 print(f"\nData period: {df.index.min()} to {df.index.max()}")
 print(f"Total records: {len(df)}")
@@ -60,8 +66,8 @@ physics = ScopPhysics(
     u=df["U_IRGA72"].copy(),
     c_p=df["AIR_CP_IRGA72"].copy(),
     ustar=df["USTAR_IRGA72"].copy(),
-    lat=47.478333,  # CH–LAE
-    lon=8.364389,   # CH–LAE
+    lat=47.478333,  # CH-LAE
+    lon=8.364389,   # CH-LAE
     utc_offset=1,
 )
 physics.run(correction_method_base="JAR09", gapfill=True)
@@ -72,14 +78,16 @@ elapsed = time.time() - tic
 
 print(f"\n[OK] Physics calculation completed in {elapsed:.1f}s")
 print(f"  Correction term (FCT_UNSC) calculated")
-print(f"  Gap-filling with Random Forest applied")
+print(f"  Gap-filled term available as FCT_UNSC_gfRF")
+print(f"  (the gap-fill is XGBoost; the _gfRF suffix is a legacy column name)")
 
 # %%
 # Step 2: Optimize scaling factors
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # Use ScopOptimizer to find optimal scaling factors by comparing
-# open-path and closed-path measurements.
+# open-path and closed-path measurements. Both fluxes and the correction term are
+# in umol m-2 s-1, so the optimization needs no unit conversion.
 
 print(f"\n" + "=" * 80)
 print("Step 2: Scaling Factor Optimization")
@@ -95,7 +103,6 @@ optimizer = ScopOptimizer(
     flux_openpath=df["NEE_L3.1_L3.2_QCF_IRGA75"].copy(),
     flux_closedpath=df["NEE_L3.1_L3.2_QCF_IRGA72"].copy(),
     daytime=results_physics_df["DAYTIME"],
-    latent_heat_vaporization=results_physics_df["LATENT_HEAT_VAPORIZATION_J_UMOL"],
 )
 scaling_factors_df = optimizer.run()
 optimizer.stats()
@@ -132,7 +139,20 @@ corrected_flux = results_df['NEE_OP_CORR']
 elapsed = time.time() - tic
 
 print(f"\n[OK] Correction applied in {elapsed:.1f}s")
-print(f"  Original flux (open-path): {df['NEE_L3.1_L3.2_QCF_IRGA75'].mean():.3f} µmol m-2 s-1")
-print(f"  Corrected flux: {corrected_flux.mean():.3f} µmol m-2 s-1")
+print(f"  Original flux (open-path):   {df['NEE_L3.1_L3.2_QCF_IRGA75'].mean():.3f} µmol m-2 s-1")
+print(f"  Corrected flux (open-path):  {corrected_flux.mean():.3f} µmol m-2 s-1")
+print(f"  Reference flux (closed-path):{df['NEE_L3.1_L3.2_QCF_IRGA72'].mean():>7.3f} µmol m-2 s-1")
+
+# %%
+# Step 4: Check the correction against the reference
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# The correction removes an artificial CO2 uptake, so the corrected open-path flux
+# must move towards the closed-path reference rather than away from it. Passing the
+# reference to `stats()` adds a section with recovery, RMSE and regression slope, which
+# is how the correction is verified: the scaling factors were fitted to this reference,
+# so this is a sanity check on the fit, not independent validation.
+
+applicator.stats(flux_closedpath=df["NEE_L3.1_L3.2_QCF_IRGA72"])
 
 print("\n[OK] Self-heating correction workflow complete.")
