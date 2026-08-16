@@ -72,6 +72,17 @@ class LongtermAnomaliesYear:
         self.data_first_year = self.series.index.min()
         self.data_last_year = self.series.index.max()
 
+        # Complete the year lattice. The bars are drawn with `plot.bar`, which is
+        # categorical, so a year the record does not cover takes up no axis width
+        # at all: a 12-year outage was one bar-width jump between two evenly spaced
+        # ticks, while the title below asserts the full first-to-last span. Years
+        # nothing was measured in become NaN bars, i.e. visible holes. The reference
+        # mean and sd are computed over the values and skip NaN, so the injected
+        # years leave them untouched.
+        self.series = self.series.reindex(
+            pd.Index(range(int(self.data_first_year), int(self.data_last_year) + 1),
+                     name=self.series.index.name))
+
         self._anomalies_df = self._calc_reference()
 
     @property
