@@ -103,7 +103,7 @@ opposite of what the code produces. Re-read it against the corrected behaviour.
 
 ---
 
-# Triage index — all 106 findings by severity
+# Triage index — all 109 findings by severity
 
 The detailed entries below stay grouped by review round and module. This index is the **fix order**.
 
@@ -145,7 +145,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L2~~ | ~~`WindDirOffset` ignores `hist_n_bins`~~ (done 2026-08-07) — also pinned the bins to the full circle | `preprocessing/corrections/offsetcorrection.py:476` |
 | ~~G1~~ | ~~Partitioning tabs run at **(0, 0) UTC** when the project site is unconfigured~~ (done 2026-08-07) — 3 of the 4 ports | `gui/tabs/_partitioning_base.py:300` |
 
-## S2 — Silently does nothing / silently loses data (32)
+## S2 — Silently does nothing / silently loses data (33)
 
 | ID | Finding | Where |
 |---|---|---|
@@ -169,6 +169,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L86~~ | ~~`UstarVekuriThresholdDetection.bootstrap()` has no `random_state`, so u* thresholds differ run to run~~ (done 2026-08-15) — **the same defect in `UstarBootstrapThresholds` is open as L97** | `flux/lowres/ustar_vekuri_detection.py` |
 | ~~L87~~ | ~~`classical_decompose` passes `extrapolate=` where the parameter is `extrapolate_trend`, so it always raises and the trend edges are always NaN~~ (done 2026-08-15) — dead branch removed; NaN edges kept on purpose | `core/times/decomposition_utils.py:207` |
 | ~~L92~~ | ~~`ScreeningTabBase._select` does not bump `_run_id` — G2's bug in the tab cited as the correct pattern~~ (done 2026-08-15) | `gui/tabs/_screening_base.py` |
+| L99 | Running the test suite **overwrites the developer's real GUI preferences**: three tests call `win.close()`, and `closeEvent` -> `save_config()` writes theme/geometry/`last_project`/`variable_metadata` to the live `QStandardPaths` file, non-atomically | `gui/config.py` + `tests/test_gui.py` |
 | L76 | BUR06 uses a canopy `ra` (`u/u*^2`) where Burba 2006 specifies a per-element one (`7.4*sqrt(d/U)`, ~6x apart) and drops the retained fraction `fr`; the fitted SF absorbs both | `flux/lowres/selfheating.py:471` |
 | ~~L53~~ | ~~`CompoundExtremes` returns zero classified periods for a single year, silently~~ (done 2026-08-07) | `analysis/compoundextremes.py:168` |
 | ~~L59~~ | ~~`multi_scale_harmonics` swallows every exception~~ (done 2026-08-07) — function deleted as dead code | `analysis/harmonic.py:432` |
@@ -182,7 +183,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~G4~~ | ~~`restore_controls` silently keeps the current combo value when the saved entry is gone — can flip the joint-uncertainty divisor~~ (done 2026-08-15) | `gui/widgets/state_utils.py:51` |
 | ~~L73~~ | ~~`harmonic_decompose` picks the top-N bins by power, so a windowed strong component's leakage outranks a genuine weaker one — the same component is returned twice~~ (done 2026-08-07) | `core/times/decomposition_utils.py:275` |
 
-## S3 — Crash on legitimate input (16)
+## S3 — Crash on legitimate input (17)
 
 | ID | Finding | Where |
 |---|---|---|
@@ -228,7 +229,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L91~~ | ~~`hexbin.py` accepts, documents and forwards `show_less_xticklabels`, and nothing applies it~~ (done 2026-08-15) | `core/plotting/hexbin.py:272` |
 | L95 | `ScopPhysics.fct_unsc_gf` is `'FCT_UNSC_gfRF'` though the fill is XGBoost; rename is breaking | `flux/lowres/selfheating.py` |
 
-## S5 — Cosmetic / dead / latent (22)
+## S5 — Cosmetic / dead / latent (23)
 
 | ID | Finding | Where |
 |---|---|---|
@@ -2467,3 +2468,49 @@ The fix is one line in the runner (force `Agg`, or set `MPLBACKEND` in its envir
 changes how the suite behaves for someone running it interactively to look at the plots, so it is
 recorded rather than done. The alternative — dropping `plt.show()` from 16 examples — is worse:
 it is what a human running one example by hand actually wants.
+
+**[ ] L99. Running the test suite overwrites the developer's real GUI preferences**
+`gui/config.py` + `tests/test_gui.py` — three GUI tests call `win.close()`. `MainWindow.closeEvent`
+calls `config.save_config()`, which writes theme, geometry, `last_project` and `variable_metadata` to
+the **live** `QStandardPaths` application-config file, with a non-atomic `write_text`. So running the
+test suite silently replaces the developer's own saved preferences with whatever state a test
+happened to leave behind, and a crash mid-write truncates the file.
+
+Two separate defects in one: the tests should not touch the real config path (a session fixture
+redirecting it to a tmp dir fixes that side), and `save_config` should write atomically — write to a
+temporary file in the same directory and `os.replace` — so an interrupted save cannot destroy an
+existing config. The second half is a library defect independent of the tests, and G8 already touched
+this function's error handling without noticing it.
+
+Found while profiling the test suite for runtime, not by looking for it.
+
+**[ ] L100. Four test modules inherit their matplotlib backend from an unrelated module**
+`tests/` (methodology) — the default backend in this environment is `qtagg`, not `Agg`.
+`test_analyses.py`, `test_heatmap_xyz.py`, `test_hexbin_plot.py` and `test_selfheating.py` never set
+one, and pass only because an alphabetically earlier module (`test_corrections.py`,
+`test_events.py`, …) calls `matplotlib.use("Agg")` first and the backend is process-global.
+
+Same family as the console-rebinding order dependency fixed in `752e42a8`: correct serially by
+accident, and it breaks the moment tests are distributed across processes or run as a subset. The fix
+is one `matplotlib.use('Agg')` in a `conftest.py`, before any test module imports. Related to L98 —
+the example suite had the same "no backend pinned" problem from the other direction.
+
+**[ ] L101. Two examples were broken by this campaign and nobody could see it**
+`examples/flux/lowres/flux_selfheating.py:98` and `flux_selfheating_production.py:136` both do
+`results_physics_df["LATENT_HEAT_VAPORIZATION_J_UMOL"]` and raise `KeyError`. That column was removed
+by **`45614fb3` `feat!: remove the H2O self-heating path`** — L37's fix, from this review. `grep`
+confirms the name exists nowhere in `diive/` any more.
+
+**The interesting part is why it went unnoticed for the whole campaign.** L98: the example runner
+pinned no matplotlib backend, so 16 examples blocked on `plt.show()` and were reported as timeout
+failures. Against that noise, two genuine failures were indistinguishable from the spurious ones —
+and CLAUDE.md's "NEVER RUN EXAMPLE SUITE" rule meant nobody looked. Fixing L98 is what made these
+visible: the after-run reports exactly 2 failures instead of 3-plus-noise.
+
+So this is not really an S3 crash on its own; it is the cost of a breaking change landing without the
+one check that would have caught it. The *fix* is small (drop or replace those two lines, since LE
+self-heating no longer exists as a concept — see the `no-selfheating-correction-for-le` note), but it
+belongs with a decision about what those two examples should now demonstrate, which is why it is
+recorded rather than patched blind.
+
+Found by running the example suite for timing, not by looking for it.
