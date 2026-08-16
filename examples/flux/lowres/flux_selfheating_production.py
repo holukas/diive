@@ -10,6 +10,10 @@ This comprehensive example demonstrates the full SCOP methodology:
 1. **Calibration phase**: Create reusable scaling factors lookup table from parallel IRGA measurements
 2. **Application phase**: Apply the table to long-term data without parallel measurements
 
+The correction applies to the CO2 flux (NEE) only. Whether a self-heating correction
+applies to the latent heat flux (LE) is unresolved in eddy covariance, so diive offers
+none.
+
 Includes multiple visualizations throughout the workflow:
 - **Diurnal cycle plots**: Mean daily cycles of correction term (instrument heating patterns)
 - **Optimization results**: Scaling factors by USTAR class with uncertainty bounds
@@ -31,6 +35,8 @@ to operational correction of multi-year flux datasets, with full diagnostic visu
 # 1. ScopPhysics: Calculate unscaled flux correction term (FCT_UNSC)
 # 2. ScopOptimizer: Optimize scaling factors using closed-path reference
 # 3. Output: **Scaling factors lookup table** (20 USTAR classes × day/night)
+#
+# Only the CO2 flux is corrected. There is no self-heating correction for LE.
 #
 # **Phase 2: Application (Long-term Operational Period)**
 # 1. ScopPhysics: Calculate correction term for long-term data
@@ -64,8 +70,13 @@ print("=" * 80)
 # Load parallel measurement data
 df_calibration = load_exampledata_parquet_lae()
 
-# Restrict to parallel measurement period
-df_calibration = df_calibration.loc["2016-05-27 00:15:00":"2017-12-11 23:45:00"].copy()
+# Calibrate on the first half of 2017 and apply to the second half (below). The two
+# phases must run on *different* periods, otherwise the example demonstrates fitting
+# and re-fitting the same data instead of transferring a table to a period with no
+# closed-path reference. Splitting one year in half also keeps the two physics runs
+# and the bootstrap quick; in production the calibration period is the whole parallel
+# campaign.
+df_calibration = df_calibration.loc["2017-01-01 00:15:00":"2017-06-30 23:45:00"].copy()
 
 print(f"\nCalibration data period: {df_calibration.index.min()} to {df_calibration.index.max()}")
 print(f"Total records: {len(df_calibration):,}")
@@ -94,7 +105,7 @@ physics_calib = ScopPhysics(
     u=df_calibration["U_IRGA72"].copy(),
     c_p=df_calibration["AIR_CP_IRGA72"].copy(),
     ustar=df_calibration["USTAR_IRGA72"].copy(),
-    lat=47.478333,  # CH–LAE
+    lat=47.478333,  # CH-LAE
     lon=8.364389,
     utc_offset=1,
 )
@@ -129,11 +140,10 @@ optimizer = ScopOptimizer(
     fct_unsc=results_physics_calib["FCT_UNSC_gfRF"],
     class_var=df_calibration["USTAR_IRGA72"].copy(),
     n_classes=20,                                         # Production: 20 classes
-    n_bootstrap_runs=100,                                 # Production: 100 runs
+    n_bootstrap_runs=20,  # kept small for the example; use 100 in production
     flux_openpath=df_calibration["NEE_L3.1_L3.2_QCF_IRGA75"].copy(),
     flux_closedpath=df_calibration["NEE_L3.1_L3.2_QCF_IRGA72"].copy(),
     daytime=results_physics_calib["DAYTIME"],
-    latent_heat_vaporization=results_physics_calib["LATENT_HEAT_VAPORIZATION_J_UMOL"],
 )
 
 scaling_factors_df = optimizer.run()
@@ -202,19 +212,23 @@ applicator_calib.plot_dashboard(flux_closedpath=flux_cp_ref)
 # Each bin shows the median scaling factor (SF_MEDIAN) and uncertainty ranges
 # (quartiles and percentiles). The table is indexed by USTAR class and day/night.
 #
-# Key patterns:
-# - Daytime: Higher scaling factors (0.13-0.38) due to stronger heating during high radiation
-# - Nighttime: Lower scaling factors (0.02-0.09) due to weaker heating in darkness
-# - Low USTAR: Larger factors (poor wind mixing accumulates heating effect)
-# - High USTAR: Smaller factors (better wind mixing reduces heating effect)
+# Key patterns to look for in the printed table:
+# - Daytime factors exceed nighttime factors: heating is radiation-driven
+# - Low USTAR gives larger factors: poor wind mixing accumulates the heating effect
+# - High USTAR gives smaller factors: better wind mixing removes the heat
+#
+# A class with fewer than `ScopOptimizer.MIN_ROWS_PER_CLASS` complete records is not
+# fitted and gets no row of its own, so the table can hold fewer than
+# 2 x n_classes rows. `ScopOptimizer.run()` warns which classes those were, and
+# `ScopApplicator` resolves their records to a neighbouring class's factor.
 
 print(f"\n" + "=" * 80)
 print("SCALING FACTORS LOOKUP TABLE")
 print("=" * 80)
 
 print(f"\nTable structure: {len(scaling_factors_df)} rows × {len(scaling_factors_df.columns)} columns")
-print(f"  Daytime bins: {(scaling_factors_df['DAYTIME'] == 1.0).sum()} (20 USTAR classes)")
-print(f"  Nighttime bins: {(scaling_factors_df['DAYTIME'] == 0.0).sum()} (20 USTAR classes)")
+print(f"  Daytime bins: {(scaling_factors_df['DAYTIME'] == 1.0).sum()} of 20 USTAR classes")
+print(f"  Nighttime bins: {(scaling_factors_df['DAYTIME'] == 0.0).sum()} of 20 USTAR classes")
 
 print(f"\nMedian scaling factors:")
 dt_sf = scaling_factors_df[scaling_factors_df['DAYTIME'] == 1.0]['SF_MEDIAN']
@@ -228,27 +242,30 @@ for idx, row in dt_sample.iterrows():
     iqr = row['SF_Q75'] - row['SF_Q25']
     print(f"  Bin {int(row['GROUP_CLASSVAR']):2d} (USTAR {row['GROUP_CLASSVAR_MIN']:5.3f}-{row['GROUP_CLASSVAR_MAX']:5.3f}): {row['SF_MEDIAN']:.4f} ± {iqr:.4f}")
 
-print(f"\nFull scaling factors table (all 40 bins):")
+print(f"\nFull scaling factors table (all {len(scaling_factors_df)} bins):")
 print(scaling_factors_df[['DAYTIME', 'GROUP_CLASSVAR', 'GROUP_CLASSVAR_MIN', 'GROUP_CLASSVAR_MAX', 'SF_MEDIAN', 'SF_Q25', 'SF_Q75']].to_string(index=False))
 
 # %%
 # PHASE 2: APPLICATION — Correct Long-Term Data
 # ==============================================
 #
-# Now apply the scaling factors table to long-term open-path flux data
-# (without parallel measurements). The same physics model is used, but
-# correction is applied using the pre-computed lookup table.
+# Now apply the scaling factors table to open-path flux data from a period the
+# optimization never saw. The same physics model is used, but no closed-path reference
+# and no optimization are needed: the correction comes from the pre-computed table.
 
 print(f"\n" + "=" * 80)
 print("PHASE 2: APPLICATION — Correct Long-Term Flux Data")
 print("=" * 80)
 
-# Load long-term data
+# Load the operational period: the second half of 2017, held back from calibration.
+# Only the open-path flux and the physics drivers are used below, so this stands in
+# for the multi-year, open-path-only record a real application would have.
 df_longterm = load_exampledata_parquet_lae()
+df_longterm = df_longterm.loc["2017-07-01 00:15:00":"2017-12-31 23:45:00"].copy()
 
 print(f"\nLong-term data period: {df_longterm.index.min()} to {df_longterm.index.max()}")
 print(f"Total records: {len(df_longterm):,}")
-print("Note: For this example, using same dataset. In practice, this would be multi-year data.")
+print("Note: half a year here; in practice this would be the multi-year record.")
 
 # %%
 # Step 1b: Physics calculation (Long-term Period)
@@ -338,7 +355,7 @@ budget_uncorr = flux_longterm_uncorr.sum()
 budget_corr = flux_longterm_corr.sum()
 budget_change = budget_corr - budget_uncorr
 
-print(f"\nAnnual budget impact (cumulative):")
+print(f"\nBudget impact over the application period (cumulative):")
 print(f"  Uncorrected sum:  {budget_uncorr:>12,.0f} µmol m-2")
 print(f"  Corrected sum:    {budget_corr:>12,.0f} µmol m-2")
 print(f"  Net adjustment:   {budget_change:>12,.0f} µmol m-2  ({(budget_change/abs(budget_uncorr))*100:+.1f}%)")
@@ -404,8 +421,8 @@ print(f"\n" + "=" * 80)
 print("PRODUCTION WORKFLOW COMPLETE")
 print("=" * 80)
 
-print(f"\n✅ Calibration phase: Scaling factors table created ({len(scaling_factors_df)} bins)")
-print(f"✅ Application phase: Long-term fluxes corrected ({flux_longterm_corr.count()} records)")
+print(f"\n[OK] Calibration phase: Scaling factors table created ({len(scaling_factors_df)} bins)")
+print(f"[OK] Application phase: Long-term fluxes corrected ({flux_longterm_corr.count()} records)")
 print(f"\nScaling factors table ready for:")
 print(f"  - Operational correction of multi-year flux datasets")
 print(f"  - Annual carbon budget calculations")

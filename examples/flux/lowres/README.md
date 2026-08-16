@@ -14,7 +14,7 @@ Covers time lag detection, quality filtering, self-heating correction, uncertain
 
 ### Self-Heating Correction (SCOP)
 - **flux_selfheating.py** — Quick demonstration of SCOP workflow (5 USTAR classes, 5 bootstrap runs)
-- **flux_selfheating_production.py** — Complete production workflow: create scaling factors table from parallel measurements (20 classes, 100 bootstrap runs) and apply to long-term data
+- **flux_selfheating_production.py** — Complete production workflow: calibrate a scaling-factor table on one period with parallel measurements (20 classes, 20 bootstrap runs for the example; use 100 in production) and apply it to a held-back period with no reference
 
 ### Measurement Uncertainty & Turbulence
 - **flux_uncertainty.py** — Random uncertainty estimation using the PAS20 method (Pastorello et al. 2020)
