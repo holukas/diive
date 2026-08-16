@@ -171,7 +171,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L87~~ | ~~`classical_decompose` passes `extrapolate=` where the parameter is `extrapolate_trend`, so it always raises and the trend edges are always NaN~~ (done 2026-08-15) — dead branch removed; NaN edges kept on purpose | `core/times/decomposition_utils.py:207` |
 | ~~L92~~ | ~~`ScreeningTabBase._select` does not bump `_run_id` — G2's bug in the tab cited as the correct pattern~~ (done 2026-08-15) | `gui/tabs/_screening_base.py` |
 | ~~L99~~ | ~~Running the test suite **overwrites the developer's real GUI preferences**: three tests call `win.close()`, and `closeEvent` -> `save_config()` writes theme/geometry/`last_project`/`variable_metadata` to the live `QStandardPaths` file, non-atomically~~ (done 2026-08-15) | `gui/config.py` + `tests/test_gui.py` |
-| L76 | ~~BUR06 uses a canopy `ra` where Burba 2006 specifies a per-element one and drops `fr`~~ **answered from the paper 2026-08-15, partly wrong**: dropping `fr` is fine, but the SF does **not** absorb the `ra` shape — ~4.8x residual spread *within* each USTAR class. Open for a data decision | `flux/lowres/selfheating.py:471` |
+| L76 | ~~BUR06 uses a canopy `ra` where Burba 2006 specifies a per-element one and drops `fr`~~ **answered from the paper 2026-08-15, partly wrong**: dropping `fr` is fine, but the SF does **not** absorb the `ra` shape — ~4.8x residual spread *within* each USTAR class. **deferred to a future session**, methodology still open | `flux/lowres/selfheating.py:471` |
 | ~~L53~~ | ~~`CompoundExtremes` returns zero classified periods for a single year, silently~~ (done 2026-08-07) | `analysis/compoundextremes.py:168` |
 | ~~L59~~ | ~~`multi_scale_harmonics` swallows every exception~~ (done 2026-08-07) — function deleted as dead code | `analysis/harmonic.py:432` |
 | ~~L19~~ | ~~`features_stl=True` can produce nothing — any single NaN skips a column, logged only at DEBUG~~ (done 2026-08-07) | `core/ml/feature_engineer.py:726` |
@@ -1518,7 +1518,13 @@ empty correction.
 > near-vertical instrument, laminar boundary layers and no flow obstruction, so the paper's form is
 > not automatically better for a given site.
 >
-> **Left open, scoped to a decision that needs data, not code:** implement Eqs. 10-16 as a selectable
+> **DEFERRED TO A FUTURE SESSION (user's decision, 2026-08-15). Do not pick this up as review
+> follow-up work.** Open methodology questions remain beyond what this entry settles — the paper is a
+> progress report, its Sect. 5.1 caveats are unresolved, and Burba et al. (2008) supersedes parts of
+> it. The measurement below stands and is worth keeping; the choice it feeds does not belong to this
+> campaign.
+>
+> When it is taken up, the scoped question is: implement Eqs. 10-16 as a selectable
 > `ra` method and compare both against the reference instrument (CH-LAE has IRGA72 and IRGA75, so this
 > is testable on the bundled data), or keep the bulk form and justify it on its own terms. Either way
 > the residual within-class spread should be stated wherever this correction's uncertainty is reported.
