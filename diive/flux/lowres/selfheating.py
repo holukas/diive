@@ -121,9 +121,12 @@ class ColumnConfig:
 
     flux_corr_suffix: str = '_OP_CORR'
     fct_unsc: str = 'FCT_UNSC'
-    # Legacy name: the gap-fill is XGBoost, not Random Forest. Kept because renaming
-    # it would break every script and example indexing results_df['FCT_UNSC_gfRF'].
-    fct_unsc_gf: str = 'FCT_UNSC_gfRF'
+    # The suffix names the regressor that produced the column, as everywhere else in
+    # diive, and `ScopPhysics._gapfill()` looks the column up under *this* name in the
+    # gap-filler's output. So swapping the fixed XGBoost for another regressor raises
+    # KeyError here instead of quietly shipping a mislabelled column, which is what the
+    # previous 'FCT_UNSC_gfRF' did: an RF name on an XGBoost fill.
+    fct_unsc_gf: str = 'FCT_UNSC_gfXG'
     fct: str = 'FCT'
     sf: str = 'SF'
     s: str = 'S'  # Sensible heat from all key instrument surfaces (W m-2) (BUR08)
@@ -157,10 +160,11 @@ class ScopPhysics:
 
     Key Outputs:
     * **FCT_UNSC**: The unscaled flux correction term in µmol m-2 s-1.
-    * **FCT_UNSC_gfRF**: The gap-filled unscaled flux correction term. The `_gfRF`
-      suffix is a legacy name kept for backwards compatibility, the gap-fill is
-      XGBoost. The `.fct_unsc_gf` attribute carries the same data but is named
-      `FCT_UNSC_gfXG` after the method that produced it.
+    * **FCT_UNSC_gfXG**: The gap-filled unscaled flux correction term, the same data
+      as the `.fct_unsc_gf` attribute and under the same name. The `_gfXG` suffix
+      names the regressor. Renamed in v0.91.0 from `FCT_UNSC_gfRF`, a leftover from
+      an earlier Random Forest implementation; code indexing the old name must be
+      updated.
     * **S**: Modeled sensible heat flux from instrument surfaces (W m-2).
     * **TS**: Estimated instrument surface temperature (°C).
 
@@ -433,9 +437,10 @@ class ScopPhysics:
                 if isinstance(metric_value, (int, float)):
                     info(f"      {metric_name}: {metric_value:.4f}")
 
-        # Get gap-filled result (XGBoost creates column with _gfXG suffix)
-        gf_col = f"{self.cols.fct_unsc}_gfXG"
-        fct_gf = xgb.gapfilling_df_[gf_col].copy()
+        # One name for the lookup and the output: XGBoostTS names its gap-filled column
+        # '{target}_gfXG', which is what ColumnConfig.fct_unsc_gf spells out, so the
+        # emitted column and the returned series cannot disagree (see ColumnConfig).
+        fct_gf = xgb.gapfilling_df_[self.cols.fct_unsc_gf].copy()
         fct_result = fct_gf.reindex(self.ta.index)
 
         # Report remaining gaps

@@ -11,6 +11,14 @@
 
 Two of these change results silently, with no error and no warning:
 
+- **`ScopPhysics`'s gap-filled results column is renamed `FCT_UNSC_gfRF` -> `FCT_UNSC_gfXG`.** The suffix named Random
+  Forest while the fill has been XGBoost, and it disagreed with the `.fct_unsc_gf` attribute holding the very same
+  series, which was already named `FCT_UNSC_gfXG`. Code doing `physics.get_results()["FCT_UNSC_gfRF"]` now raises
+  `KeyError`; there is no alias, since a duplicated column in a results frame invites publishing numbers from the one
+  that names the wrong method. `ScopApplicator` accepts either name (it normalises its input), so only direct indexing
+  of the physics results frame is affected. The name now lives in one place and doubles as the lookup key into the
+  gap-filler's output, so a future regressor change fails loudly instead of mislabelling.
+
 - **`potrad` now runs a different algorithm**, a faithful port of ONEFlux's `get_rpot` (the routine behind FLUXNET's
   `SW_IN_POT`). The signature is unchanged, so existing calls keep running and return different numbers: RMSE 20.0 W/m2
   against the old version, annual sum +1.1%, day/night classification changed on 2.27% of half-hours. Re-check any
@@ -616,8 +624,8 @@ those are the ones to check existing results against.
   screening change, since flag sums count only 1 and 2.
 - `ScopPhysics` documented "a hybrid approach using Random Forest and Mean Diurnal Variation" and printed "-> Imputed
   (RF + MDV)"; the gap-fill is XGBoost with no MDV stage, and MDV lives in `ScopApplicator`, which the docstring now
-  points at. The results column keeps its legacy `FCT_UNSC_gfRF` name, which two examples, the generated docs and the
-  tests all index, so the `.name` mismatch is documented rather than renamed.
+  points at. The results column is renamed from its legacy `FCT_UNSC_gfRF` to
+  `FCT_UNSC_gfXG`, so the attribute and the frame agree; see *Breaking Changes*.
 - `TimeLagAnalysis`'s class docstring stated three parameter facts the code contradicts: `ignore_fringe_bins` defaults
   to `[5, 10]` and counts leading and trailing bins rather than naming indices, `zoom_margin` defaults to `[0.5, 1.5]`,
   and `histogram_startbin` / `histogram_endbin` are lag values in seconds, hence floats. Those two names were

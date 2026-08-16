@@ -137,7 +137,7 @@ print("Creating scaling factors table from parallel measurements...")
 tic = time.time()
 
 optimizer = ScopOptimizer(
-    fct_unsc=results_physics_calib["FCT_UNSC_gfRF"],
+    fct_unsc=results_physics_calib["FCT_UNSC_gfXG"],
     class_var=df_calibration["USTAR_IRGA72"].copy(),
     n_classes=20,                                         # Production: 20 classes
     n_bootstrap_runs=20,  # kept small for the example; use 100 in production
@@ -175,7 +175,7 @@ print("=" * 80)
 tic = time.time()
 
 applicator_calib = ScopApplicator(
-    fct_unsc=results_physics_calib["FCT_UNSC_gfRF"],
+    fct_unsc=results_physics_calib["FCT_UNSC_gfXG"],
     scaling_factors_df=scaling_factors_df,
     flux_openpath=df_calibration["NEE_L3.1_L3.2_QCF_IRGA75"].copy(),
     classvar=df_calibration["USTAR_IRGA72"].copy(),
@@ -318,7 +318,7 @@ print("Correcting long-term fluxes using pre-computed lookup table...")
 tic = time.time()
 
 applicator_longterm = ScopApplicator(
-    fct_unsc=results_physics_longterm["FCT_UNSC_gfRF"],
+    fct_unsc=results_physics_longterm["FCT_UNSC_gfXG"],
     scaling_factors_df=scaling_factors_df,                   # Reuse table from calibration
     flux_openpath=df_longterm["NEE_L3.1_L3.2_QCF_IRGA75"].copy(),
     classvar=df_longterm["USTAR_IRGA72"].copy(),

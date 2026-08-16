@@ -78,8 +78,8 @@ elapsed = time.time() - tic
 
 print(f"\n[OK] Physics calculation completed in {elapsed:.1f}s")
 print(f"  Correction term (FCT_UNSC) calculated")
-print(f"  Gap-filled term available as FCT_UNSC_gfRF")
-print(f"  (the gap-fill is XGBoost; the _gfRF suffix is a legacy column name)")
+print(f"  Gap-filled term available as FCT_UNSC_gfXG")
+print(f"  (the _gfXG suffix names the gap-filling regressor, XGBoost)")
 
 # %%
 # Step 2: Optimize scaling factors
@@ -96,7 +96,7 @@ print("=" * 80)
 tic = time.time()
 
 optimizer = ScopOptimizer(
-    fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
+    fct_unsc=results_physics_df["FCT_UNSC_gfXG"],
     class_var=df["USTAR_IRGA72"].copy(),
     n_classes=5,
     n_bootstrap_runs=5,
@@ -126,7 +126,7 @@ print("=" * 80)
 tic = time.time()
 
 applicator = ScopApplicator(
-    fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
+    fct_unsc=results_physics_df["FCT_UNSC_gfXG"],
     scaling_factors_df=scaling_factors_df,
     flux_openpath=df["NEE_L3.1_L3.2_QCF_IRGA75"].copy(),
     classvar=df["USTAR_IRGA72"].copy(),

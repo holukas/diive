@@ -63,6 +63,23 @@ class TestWaterVapourDilutionIsAppliedByEveryMethod(unittest.TestCase):
         self.assertGreater(self._expected_factor(), 1.015)
 
 
+def _physics_gapfilled():
+    """One gap-filled ScopPhysics run: wind gaps make the correction term uncomputable."""
+    from diive.flux.lowres.selfheating import ScopPhysics
+    n = 480  # 10 days at 30 min
+    idx = pd.date_range('2023-06-01 00:15', periods=n, freq='30min', name='TIMESTAMP_MIDDLE')
+    hr = idx.hour + idx.minute / 60
+    ta = pd.Series(15 + 8 * np.sin(2 * np.pi * (hr - 9) / 24), index=idx)
+    u = pd.Series(2.5, index=idx)
+    u.iloc[100:140] = np.nan  # wind gaps -> the correction term cannot be computed
+    physics = ScopPhysics(
+        ta=ta, gas_density=pd.Series(1.7e7, index=idx), rho_a=pd.Series(1.2, index=idx),
+        rho_v=pd.Series(0.012, index=idx), u=u, c_p=pd.Series(1005.0, index=idx),
+        ustar=pd.Series(0.4, index=idx), lat=47.478333, lon=8.364389, utc_offset=1)
+    physics.run(correction_method_base="BUR08", gapfill=True)
+    return physics
+
+
 class TestGapFillFillsTheGaps(unittest.TestCase):
     """The gap-fill must fill; it used to delete the gaps and report success.
 
@@ -73,22 +90,39 @@ class TestGapFillFillsTheGaps(unittest.TestCase):
     """
 
     def test_gaps_in_the_correction_term_are_filled(self):
-        from diive.flux.lowres.selfheating import ScopPhysics
-        n = 480
-        idx = pd.date_range('2023-06-01 00:15', periods=n, freq='30min', name='TIMESTAMP_MIDDLE')
-        hr = idx.hour + idx.minute / 60
-        ta = pd.Series(15 + 8 * np.sin(2 * np.pi * (hr - 9) / 24), index=idx)
-        u = pd.Series(2.5, index=idx)
-        u.iloc[100:140] = np.nan  # wind gaps -> the correction term cannot be computed
-        physics = ScopPhysics(
-            ta=ta, gas_density=pd.Series(1.7e7, index=idx), rho_a=pd.Series(1.2, index=idx),
-            rho_v=pd.Series(0.012, index=idx), u=u, c_p=pd.Series(1005.0, index=idx),
-            ustar=pd.Series(0.4, index=idx), lat=47.478333, lon=8.364389, utc_offset=1)
-        physics.run(correction_method_base="BUR08", gapfill=True)
+        physics = _physics_gapfilled()
         before = int(physics.fct_unsc.isna().sum())
         after = int(physics.fct_unsc_gf.isna().sum())
         self.assertGreater(before, 0, 'the fixture must produce gaps')
         self.assertLess(after, before)
+
+
+class TestGapFilledColumnNamesTheRegressorThatFilledIt(unittest.TestCase):
+    """The attribute, the results column and the regressor must all say the same thing.
+
+    `ColumnConfig.fct_unsc_gf` was 'FCT_UNSC_gfRF', left over from a Random Forest
+    implementation, while `_gapfill()` read XGBoostTS's own 'FCT_UNSC_gfXG' column and
+    returned it unrenamed. So `physics.fct_unsc_gf.name` and the `get_results()` column
+    holding that very series disagreed, and the results frame credited a regressor that
+    never ran. Renamed to 'FCT_UNSC_gfXG' in v0.91.0 (breaking for code indexing the
+    old name).
+    """
+
+    def test_the_series_name_the_results_column_and_the_regressor_agree(self):
+        from diive.flux.lowres.selfheating import ColumnConfig
+        physics = _physics_gapfilled()
+        results = physics.get_results()
+        gfcol = ColumnConfig().fct_unsc_gf
+        # The gap-fill is XGBoostTS, hardcoded in _gapfill(), so the suffix is _gfXG.
+        self.assertEqual(gfcol, 'FCT_UNSC_gfXG')
+        self.assertEqual(physics.fct_unsc_gf.name, gfcol)
+        self.assertIn(gfcol, results.columns)
+        self.assertNotIn('FCT_UNSC_gfRF', results.columns)
+        # And the column really holds the gap-filled series, not the ungapfilled one.
+        np.testing.assert_allclose(results[gfcol].to_numpy(),
+                                   physics.fct_unsc_gf.to_numpy())
+        self.assertLess(int(results[gfcol].isna().sum()),
+                        int(results[ColumnConfig().fct_unsc].isna().sum()))
 
 
 class TestUnknownMethodRaises(unittest.TestCase):
@@ -145,7 +179,7 @@ class TestMeasuredFluxSurvivesAMissingCorrection(unittest.TestCase):
         n = 96
         idx = pd.date_range('2023-06-01 00:15', periods=n, freq='30min')
         rng = np.random.RandomState(0)
-        fct_unsc = pd.Series(rng.normal(1.0, 0.1, n), index=idx, name='FCT_UNSC_gfRF')
+        fct_unsc = pd.Series(rng.normal(1.0, 0.1, n), index=idx, name='FCT_UNSC_gfXG')
         fct_unsc.iloc[10:20] = np.nan  # no correction term for these records
         flux = pd.Series(rng.normal(-5, 1, n), index=idx, name='NEE')
         classvar = pd.Series(0.4, index=idx, name='USTAR')
@@ -170,12 +204,12 @@ class TestMeasuredFluxSurvivesAMissingCorrection(unittest.TestCase):
 class TestApplicatorAcceptsAnyInputSeriesName(unittest.TestCase):
     """The applicator used to demand two exact, undocumented series names.
 
-    `run()` looked up the hardcoded 'FCT_UNSC_gfRF' although __init__ stored the
+    `run()` looked up one hardcoded canonical name although __init__ stored the
     correction term under `fct_unsc.name`, and the `merge_asof` keyed on
     `daytime.name` while the scaling-factors table always names that column
     'DAYTIME'. So `ScopPhysics.run(gapfill=False)` output ('FCT_UNSC'), the
-    gap-filled series ('FCT_UNSC_gfXG') and any day/night flag not called
-    'DAYTIME' each raised KeyError before a single record was corrected.
+    gap-filled series and any day/night flag not called 'DAYTIME' each raised
+    KeyError before a single record was corrected.
     """
 
     def _inputs(self):
@@ -202,18 +236,19 @@ class TestApplicatorAcceptsAnyInputSeriesName(unittest.TestCase):
         return app.df[app.col_flux_corr]
 
     def test_the_correction_term_may_carry_any_name(self):
-        # 'FCT_UNSC' = ScopPhysics.run(gapfill=False), 'FCT_UNSC_gfXG' = .fct_unsc_gf,
-        # 'FCT_UNSC_gfRF' = the results-dataframe column used by the examples.
-        reference = self._corrected('FCT_UNSC_gfRF', 'DAYTIME')
+        # 'FCT_UNSC_gfXG' = .fct_unsc_gf and the results-dataframe column used by the
+        # examples, 'FCT_UNSC' = ScopPhysics.run(gapfill=False), 'FCT_UNSC_gfRF' = the
+        # pre-v0.91.0 column name an old script may still be carrying around.
+        reference = self._corrected('FCT_UNSC_gfXG', 'DAYTIME')
         self.assertGreater(int(reference.notna().sum()), 0)
-        for name in ('FCT_UNSC', 'FCT_UNSC_gfXG'):
+        for name in ('FCT_UNSC', 'FCT_UNSC_gfRF'):
             with self.subTest(fct_unsc=name):
                 np.testing.assert_allclose(self._corrected(name, 'DAYTIME').to_numpy(),
                                            reference.to_numpy())
 
     def test_the_daytime_flag_may_carry_any_name(self):
-        reference = self._corrected('FCT_UNSC_gfRF', 'DAYTIME')
-        np.testing.assert_allclose(self._corrected('FCT_UNSC_gfRF', 'DAYTIME_FLAG').to_numpy(),
+        reference = self._corrected('FCT_UNSC_gfXG', 'DAYTIME')
+        np.testing.assert_allclose(self._corrected('FCT_UNSC_gfXG', 'DAYTIME_FLAG').to_numpy(),
                                    reference.to_numpy())
 
 
