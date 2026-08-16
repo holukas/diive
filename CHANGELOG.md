@@ -373,7 +373,7 @@ The rest raise or fail at import:
 ### Fixed (code review)
 
 A read-only review of the library and the GUI, in four rounds, recorded 155 findings ranked so that a silently wrong
-number sits above a crash: a traceback blocks you, a plausible wrong number gets published. 114 are resolved, 2 of them
+number sits above a crash: a traceback blocks you, a plausible wrong number gets published. 122 are resolved, 3 of them
 closed as by design. The fixes landed as separate commits, each naming the findings it closes, and every closed entry
 in `CODE_REVIEW_FINDINGS.md` carries what was changed, why that direction was chosen (code or docstring), and how it
 was verified. **Removed API comes first below, then the fixes that change numbers with no error and no warning**, since
@@ -426,6 +426,35 @@ those are the ones to check existing results against.
 
 #### Results change, with no error and no warning
 
+- **Four plots drew missing data as if it were measured.** Each is a different mechanism reaching the same wrong
+  picture, so they are listed separately, but the shape is one: a gap rendered as a value.
+  - **`WaterfallPlot` drew a period holding no measurements at all as a zero-height bar.** `sum` over an empty pandas
+    group returns `0.0`, not NaN, so the trailing `dropna()` could not remove it and a data gap was indistinguishable
+    from a period whose fluxes genuinely balanced — 429 of 3652 bars on the bundled CH-DAV `LW_IN` record. `count`
+    (`-> 0`) and `prod` (`-> 1.0`) had the same defect; `mean`, `median`, `min`, `max`, `std`, `var`, `first` and
+    `last` returned NaN and were already dropped, so the aggregations disagreed about what the plot contained. Empty
+    periods are now masked on the record count, which holds for any `agg` string rather than a list of names to keep
+    in sync. Retained bars and the running total are bit-identical — adding 0 was already a no-op for the total, the
+    defect was purely visual. (L111)
+  - **`TimeSeries` colour-by painted *measured* records fully transparent** wherever the colour driver had a gap: a
+    NaN colour value hit the colormap's "bad" entry, whose matplotlib default is `(0, 0, 0, 0)`. 81 of 199 segments
+    and 80 of 200 markers vanished on a complete flux series, reading exactly like missing data. An all-zero bad
+    colour also makes matplotlib discard the collection alpha, so the segments were exactly transparent rather than
+    faint. They are now drawn in blue-grey `#90A4AE`, visible but plainly not a value on the colour scale. A colour
+    series without gaps is bit-identical. (L112)
+  - **`LongtermAnomaliesYear` drew missing years as adjacent bars** while the title asserted the full span: `plot.bar`
+    is categorical, so a year absent from the index took up no axis width. A 12-year outage was one bar-width jump
+    between two evenly spaced ticks. The series is now reindexed onto the full year lattice, so uncovered years are
+    NaN bars and leave visible holes. Reference mean and sd are unchanged (`mean()`/`std()` skip NaN) and a gapless
+    record is bit-identical; the "last 10 years" annotation now covers the last 10 calendar years rather than the last
+    10 measured years, which it had been mislabelling with their wider span. Fifth and last of the contiguity family
+    (L61, L63, L79, L114). (L114)
+- **`TimeSeries` colour-by fell back to a plain line without saying so.** A `color_series` that does not align to the
+  data index — TIMESTAMP_END against TIMESTAMP_MIDDLE, or a differently resampled driver — reindexes to all-NaN, and
+  the guard then took the plain-line branch silently, turning `cmap`, `color_vmin`, `color_vmax`, `show_colorbar` and
+  `color_label` into no-ops. It now warns, naming the surviving record count and the likely cause. A partial overlap
+  still colours what it can, silently, as before. The docstring claim that the scalar `color` is ignored when a
+  `color_series` was given was false in exactly this branch and is corrected. (L113)
 - **`LongtermAnomaliesYear` discarded its own `sort_index()`.** An unsorted yearly record was plotted in input order and
   its "last 10 years mean ± sd" annotation was computed from ten arbitrary years. Bar order, results-frame row order and
   that annotation change for unsorted input; per-year anomaly and reference values are unaffected, because the reference
@@ -759,14 +788,11 @@ those are the ones to check existing results against.
 #### Plot classes, docstring examples, and GUI object lifetime
 
 Round 4 covered the eight files the earlier rounds had left out — `windrose.py`, `hexbin.py`, `histogram.py`,
-`waterfall.py`, `shifted_distribution.py`, `timeseries.py`, `bar.py` and the GUI's `icons.py`. Its 40 findings are
-recorded but not yet fixed, so **nothing in those plot classes changed in this release**. Four are worth knowing about
-before you trust an existing figure: `HexbinPlot`'s `mincnt=0` default draws hexagons over cells holding no data (with
-`reduce_C_function=np.sum` those read as a measured zero, 99 of 116 hexagons on a two-cloud test record);
-`HistogramPlot`'s KDE overlay is scaled by the first bin width, so it is wrong for any non-uniform bin list;
-`LongtermAnomaliesYear` discards its own `sort_index`, so an unsorted yearly series is plotted and its "last 10 years"
-statistics averaged in file order; and `WaterfallPlot` draws a period with no measurements at all as a 0.0 bar under the
-default `agg='sum'`, which looks like a period that genuinely balanced.
+`waterfall.py`, `shifted_distribution.py`, `timeseries.py`, `bar.py` and the GUI's `icons.py`. Of its 40 findings, the
+9 that produced a silently wrong or silently incomplete figure are fixed — every one of them listed above under
+breaking changes or under "results change, with no error and no warning" — and the remaining 31 are recorded with a
+repro but not yet fixed. Those 31 are crashes on legitimate input, contract mismatches and cosmetic defects; none of
+them silently changes what a figure shows.
 
 What did change:
 
@@ -784,7 +810,7 @@ What did change:
 
 #### Still open
 
-41 findings are open, each with a repro or a source citation in `CODE_REVIEW_FINDINGS.md`; 40 of them are round 4's,
+32 findings are open, each with a repro or a source citation in `CODE_REVIEW_FINDINGS.md`; 31 of them are round 4's,
 described above. The remaining one needs an external source: whether InfluxDB v2's delete range excludes `stop`, in
 which case the pre-upload delete leaves the last record and duplicates survive. Deferred separately is BUR06/JAR09's
 aerodynamic resistance, where diive passes the canopy momentum resistance `u/u*^2` in place of Burba 2006's per-element

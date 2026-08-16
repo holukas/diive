@@ -155,10 +155,10 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 
 | ID | Finding | Where |
 |---|---|---|
-| L111 | `WaterfallPlot` draws a fully missing period as a 0.0 bar under the default `agg='sum'` — 429 of 3652 bars on bundled `LW_IN`; `agg='mean'` drops them instead | `core/plotting/waterfall.py:66` |
-| L112 | `TimeSeries` colour-by draws **measured** records fully transparent wherever the *colour* series has a gap — 80 of 200 | `core/plotting/timeseries.py:315` |
-| L113 | Colour-by silently degrades to a plain line on index mismatch; `cmap`/`show_colorbar`/`color_label` become no-ops | `core/plotting/timeseries.py:405` |
-| L114 | Missing years drawn as adjacent bars while the title asserts the full span (L61/L63/L79 family; GUI `dropna()` feeds it) | `core/plotting/bar.py:147` |
+| ~~L111~~ | ~~`WaterfallPlot` draws a fully missing period as a 0.0 bar under the default `agg='sum'` — 429 of 3652 bars on bundled `LW_IN`; `agg='mean'` drops them instead~~ (done 2026-08-16) — **also `count` and `prod`**, which the entry missed | `core/plotting/waterfall.py:66` |
+| ~~L112~~ | ~~`TimeSeries` colour-by draws **measured** records fully transparent wherever the *colour* series has a gap — 80 of 200~~ (done 2026-08-16) — **the markers too**, which the entry missed | `core/plotting/timeseries.py:315` |
+| ~~L113~~ | ~~Colour-by silently degrades to a plain line on index mismatch; `cmap`/`show_colorbar`/`color_label` become no-ops~~ (done 2026-08-16) | `core/plotting/timeseries.py:405` |
+| ~~L114~~ | ~~Missing years drawn as adjacent bars while the title asserts the full span (L61/L63/L79 family; GUI `dropna()` feeds it)~~ (done 2026-08-16) — fifth and last of the contiguity family | `core/plotting/bar.py:147` |
 | ~~L75~~ | ~~25 `detail()` debug lines cannot print at any verbosity~~ (done 2026-08-07) — module default is now settable | `core/utils/console.py:191` |
 | ~~L36~~ | ~~Self-heating gap-fill drops every gap before filling~~ (done 2026-08-07) | `flux/lowres/selfheating.py:390` |
 | ~~L38~~ | ~~Corrected flux becomes NaN wherever the correction term is missing~~ (done 2026-08-07) — carried through + flagged | `flux/lowres/selfheating.py:1225` |
@@ -3074,7 +3074,22 @@ Low likelihood (a variable named `reference_mean` is unusual), but the establish
 
 ## S2 — silently does nothing / silently loses data
 
-**[ ] L111. `WaterfallPlot` turns a fully missing period into a 0.0 contribution bar under the default `agg='sum'`**
+**[x] L111. `WaterfallPlot` turns a fully missing period into a 0.0 contribution bar under the default `agg='sum'`**
+> **Fixed 2026-08-16.** Mask on the record count instead of trusting the trailing `dropna()`:
+> `resampler.agg(agg).where(resampler.count() > 0).dropna()`. Chosen over `min_count=1` because `agg`
+> is a free-form string — a hardcoded "sum-like" name list would need keeping in sync, and measurement
+> showed it would have missed two cases.
+>
+> **This entry undercounts the affected aggregations.** Measured on the same 429 empty groups: `sum` -> 0.0,
+> `count` -> 0 and `prod` -> 1.0 all survive `dropna()`; `mean`, `median`, `min`, `max`, `std`, `var`,
+> `first`, `last` return NaN and were already dropped. So three aggregations fabricated bars, not one.
+>
+> Only periods holding **zero** measurements move: on CH-DAV `LW_IN` all seven aggregations now return
+> **3223** bars (was 3652 for `sum`/`count`/`prod`). The 3223 retained values are element-wise identical
+> to the pre-fix subset, and the final running total is bit-identical (`43153901.57400006`, diff exactly
+> 0.0) — adding 0 was already a no-op for the total, the defect was purely visual. A gap-free series and
+> a partly covered period are unchanged (max abs diff 0.0); `resample=None` untouched. Mutation-checked:
+> 5 of 9 new tests fail with the old line restored.
 `core/plotting/waterfall.py:66` — `series.dropna()` then `.resample(...).agg(agg).dropna()`. Pandas'
 `sum` over an empty group returns `0.0` (`min_count=0`), not NaN, so the trailing `dropna()` cannot
 remove it. A period with **no measurements at all** is drawn as a zero-height bar with a flat
@@ -3095,7 +3110,28 @@ L134: those 429 fabricated bars are painted in the "release" colour.
 Suggested fix: `min_count=1` for sum-like aggregations, or mask periods whose `count()` is 0 before
 aggregating, so an empty period is NaN for every `agg`.
 
-**[ ] L112. `TimeSeries` colour-by renders *measured* data fully transparent wherever the colour series has a gap**
+**[x] L112. `TimeSeries` colour-by renders *measured* data fully transparent wherever the colour series has a gap**
+> **Fixed 2026-08-16.** `cmap.copy()` + `set_bad('#90A4AE')` (blue-grey 300, the house 300-level for lines) so a
+> missing colour value paints a visible neutral instead of `(0, 0, 0, 0)`.
+>
+> Chosen over the entry's other suggestion — extending `keep` to drop those segments — because dropping removes
+> the measured record from the plot entirely, which is the same defect in a different colour, and because a broken
+> line is this module's own established signal for *missing data* (that is what `keep` is for). A neutral grey
+> keeps "measured but uncoloured" distinct from both a value on the scale and a gap.
+>
+> **The entry names the mechanism but misses half of its reach.** Measured on the resolved RGBA after
+> `fig.canvas.draw()`: **81 of 199 segments** *and* **80 of 200 markers** were exactly transparent — the entry
+> does not mention the markers. They were *exactly* transparent rather than merely faint because an all-zero bad
+> colour makes `Colormap.__call__` discard the collection alpha outright
+> (`if (lut[-1] == 0).all(): rgba[mask_bad] = (0,0,0,0)`), so `lc.set_alpha(0.95)` could not rescue them. Measured
+> records touched by a visible segment went 120/200 -> 200/200.
+>
+> Moves only segments and markers whose colour value is NaN. A colour series without NaNs is bit-identical
+> (segments, colour array, resolved RGBA, x/y limits, colorbar count — `array_equal` True, max abs diff 0.0),
+> checked against `git show HEAD` across default, `marker=True, cmap='plasma'`, and explicit
+> `color_vmin`/`color_vmax`. Mutation-checked; one mutation (`set_bad` without `.copy()`) initially passed because
+> `colormaps[name]` already returns a copy, so the test was rewritten to pass a `Colormap` **instance**, which is
+> the only path `.copy()` actually protects.
 `core/plotting/timeseries.py:315-317`
 
 ```python
@@ -3116,7 +3152,20 @@ Suggested fix: extend `keep` to cover `isnan(seg_c)` and draw those segments in 
 `cmap.copy().set_bad(<visible grey>)` — anything that stops "measured but uncoloured" from reading as
 "missing".
 
-**[ ] L113. Colour-by silently degrades to a plain line when the colour series does not align**
+**[x] L113. Colour-by silently degrades to a plain line when the colour series does not align**
+> **Fixed 2026-08-16.** `warn()` in the fallback branch naming the surviving record count, the likely cause
+> (TIMESTAMP_END vs MIDDLE, or a differently resampled driver), and the exact arguments it turns into no-ops.
+> Both docstring claims corrected: `__init__`'s `color_series` and `plot()`'s "`color` is ignored when a
+> `color_series` was given" now state the fallback.
+>
+> Entry confirmed verbatim: zero shared timestamps gave 0 `LineCollection`s, 1 figure axes (no colorbar), plain
+> fallback, no output — and the scalar `color` *was* applied, so the docstring was false exactly there.
+>
+> Fires only when alignment leaves fewer than two finite colour values. A **partial** overlap already took the
+> coloured branch before the fix and still does, silently — verified by a deliberate over-broad mutation (warn
+> whenever any colour value is missing), which failed the partial-overlap test and proved the warning does not
+> spam an ordinary gappy driver. Text is ASCII-only for cp1252 stdout. `TimeSeries` carries no `verbose`, so
+> `warn()` resolves to the module default, matching the existing `heatmap_base.py:488` call.
 `core/plotting/timeseries.py:82-84` and `:405` — `color_series.reindex(self.series.index)` yields
 all-NaN when the indices differ (TIMESTAMP_END vs MIDDLE, or a differently-resampled driver). The
 guard at `:405` then takes the plain-line branch with no warning, so `cmap`, `show_colorbar` and
@@ -3129,7 +3178,31 @@ scalar `color` "is ignored when a `color_series` was given" is false in exactly 
 Suggested fix: `warn()` on the fallback naming zero-overlap as the likely cause, and correct the
 docstring.
 
-**[ ] L114. `LongtermAnomaliesYear` draws missing years as adjacent bars while the title asserts the full span**
+**[x] L114. `LongtermAnomaliesYear` draws missing years as adjacent bars while the title asserts the full span**
+> **Fixed 2026-08-16.** `self.series.reindex(range(first_year, last_year + 1))` in `__init__`, after the L109
+> `sort_index` and before `_calc_reference`. Fifth instance of the contiguity family and the **same local
+> reindex-onto-the-full-lattice fix** L61, L63 and L79 each used — no helper extracted, because the three prior
+> sites differ in what the lattice is (month columns, X/Y bins, years) and a two-line reindex does not carry an
+> abstraction.
+>
+> Entry accurate, reproduced verbatim (1950-2021, 1980-1991 absent): 60 rows / 120 patches -> 72 / 144, x labels
+> around the gap go `'1976','1978','1992'` -> `'1978','1980'...'1990','1992'`, the 1979->1992 centre distance goes
+> from one bar width to thirteen, xlim `(-1, 60)` -> `(-1, 72)`.
+>
+> Moves only a record skipping at least one calendar year between its first and last. Reference mean and sd are
+> **identical** (`8.295044236242315 / 0.3174063843351433`) — `mean()`/`std()` skip NaN, so injected years cannot
+> shift them — and per-year `TA`/`reference_mean`/`reference_sd`/`anomaly` on the 60 measured years are max abs
+> diff 0.0. A gapless record is bit-identical (`anomalies_df.equals` True). One semantic change beyond the plot:
+> the "last 10 years" annotation now covers the last 10 **calendar** years rather than the last 10 *measured*
+> years, which it had been mislabelling with their wider span (`12.50±3.03sd (2008-2020)`). Mutation-checked, 4 of
+> 5 new tests fail with the reindex removed.
+>
+> **Two follow-ups, reported not acted on.** (1) The GUI `dropna()` at `gui/tabs/seasonaltrend.py:196` is now
+> harmless — the library restores the holes itself. It is redundant (`resample("YE")` already emits every calendar
+> year), worth deleting for clarity, not a defect. (2) An **empty** series now raises `ValueError: cannot convert
+> float NaN to integer` in `__init__` where it previously raised `IndexError` later in `plot()`. The class has
+> never supported an empty series and the GUI guards `self._yearly.empty` before constructing, so nothing
+> reachable regresses; no guard added, per "no error handling for impossible scenarios".
 `core/plotting/bar.py:147-160`, title at `:163` — `plot.bar` is categorical, so a year absent from
 the index consumes zero axis width. Fourth member of the L61/L63/L79 family, and GUI-reachable:
 `gui/tabs/seasonaltrend.py:196` calls `yearly.dropna()`, which *removes* empty years rather than
