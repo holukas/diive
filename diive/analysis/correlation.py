@@ -55,8 +55,10 @@ def rank_drivers(
         the target is constant/all-NaN or no candidate qualifies.
 
     Example:
-        >>> ranked = rank_drivers(df, target='NEE', method='pearson', max_lag=4)
-        >>> ranked.head()  # strongest drivers first
+        >>> import diive as dv, pandas as pd, numpy as np
+        >>> idx = pd.date_range('2024-06-01', periods=200, freq='30min')
+        >>> df = pd.DataFrame({'NEE': np.sin(np.arange(200.)), 'TA': np.arange(200.)}, index=idx)
+        >>> ranked = dv.analysis.rank_drivers(df, target='NEE', method='pearson', max_lag=4)
     """
     if target not in df.columns:
         raise ValueError(f"target '{target}' not in df columns.")

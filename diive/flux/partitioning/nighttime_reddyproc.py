@@ -399,12 +399,13 @@ class NighttimePartitioningReddyProc:
     Example: ``examples/flux/partitioning/partitioning_nighttime_reddyproc.py``
 
     Example:
-        >>> part = NighttimePartitioningReddyProc(
-        ...     nee=df['NEE_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
-        ...     nee_f=df['NEE_f'], ta_f=df['Tair_f'],
+        >>> import diive as dv
+        >>> df = dv.load_exampledata_parquet()
+        >>> part = dv.flux.NighttimePartitioningReddyProc(
+        ...     nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
+        ...     nee_f=df['NEE_CUT_REF_f'], ta_f=df['Tair_f'],
         ...     lat=46.815, lon=9.855, utc_offset=1)
-        >>> part.run()
-        >>> results = part.results   # DataFrame with RECO_NT_RP, GPP_NT_RP, ...
+        >>> part.run()  # then part.results -> DataFrame with RECO_NT_RP, GPP_NT_RP, ...
     """
 
     def __init__(self,

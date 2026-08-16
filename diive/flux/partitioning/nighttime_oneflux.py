@@ -401,11 +401,12 @@ class NighttimePartitioningOneFlux:
     Example: ``examples/flux/partitioning/partitioning_nighttime_oneflux.py``
 
     Example:
-        >>> part = NighttimePartitioningOneFlux(
-        ...     nee=df['NEE_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
-        ...     nee_f=df['NEE_f'], ta_f=df['Tair_f'], lat=46.815)
-        >>> part.run()
-        >>> results = part.results   # DataFrame with RECO_NT_OF, GPP_NT_OF, ...
+        >>> import diive as dv
+        >>> df = dv.load_exampledata_parquet()
+        >>> part = dv.flux.NighttimePartitioningOneFlux(
+        ...     nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
+        ...     nee_f=df['NEE_CUT_REF_f'], ta_f=df['Tair_f'], lat=46.815)
+        >>> part.run()  # then part.results -> DataFrame with RECO_NT_OF, GPP_NT_OF, ...
     """
 
     def __init__(self,

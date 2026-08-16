@@ -7,37 +7,8 @@ bins. This is useful for identifying patterns in high-frequency or high-volume d
 **Important:** Input Series must have no NaN values in x and y; z may contain NaNs (ignored
 during aggregation).
 
-Top-level alias: ``dv.hexbinplot(x, y, z, ...)``
-
-Example with percentile normalization::
-
-    import diive as dv
-    df = dv.load_exampledata_parquet()
-    hm = dv.hexbinplot(
-        x=df['Tair_f'],
-        y=df['VPD_f'],
-        z=df['NEE_CUT_REF_f'],
-        normalize_axes=True,  # Convert drivers to 0-100 percentile scale
-        gridsize=11,          # Number of hexagon bins
-        xlabel='Air temperature (percentile)',
-        ylabel='Vapor pressure deficit (percentile)',
-        zlabel='Net ecosystem exchange'
-    )
-    hm.show()
-
-Example with absolute values::
-
-    hm = dv.hexbinplot(
-        x=df['Tair_f'],
-        y=df['VPD_f'],
-        z=df['NEE_CUT_REF_f'],
-        normalize_axes=False,  # Use original values
-        gridsize=11,
-        xlabel='Air temperature (°C)',
-        ylabel='Vapor pressure deficit (hPa)',
-        zlabel='NEE (µmol m⁻² s⁻¹)'
-    )
-    hm.show()
+Public name: ``dv.plotting.HexbinPlot(x, y, z, ...)``. ``normalize_axes=True`` puts both
+drivers on a 0-100 percentile scale; see the class for a sample.
 """
 
 import warnings
@@ -60,7 +31,11 @@ class HexbinPlot(HeatmapBase):
     **Important:** Input Series must have one value per observation (not pre-aggregated).
     X and Y axes must have no NaN values; Z may contain NaNs (ignored during aggregation).
 
-    Top-level alias: ``dv.hexbinplot(x, y, z, ...)``
+    Example:
+        >>> import diive as dv, pandas as pd, numpy as np
+        >>> ta, vpd, nee = (pd.Series(np.arange(100.), name=n) for n in ('TA', 'VPD', 'NEE'))
+        >>> hm = dv.plotting.HexbinPlot(x=ta, y=vpd, z=nee, gridsize=11, normalize_axes=True)
+        >>> ax = hm.plot(zlabel='Net ecosystem exchange')
 
     See Also:
         examples/visualization/plot_hexbin_basic.py — Hexbin variations (percentile normalization, aggregation, overlay)

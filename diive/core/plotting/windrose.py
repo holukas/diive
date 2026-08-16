@@ -79,14 +79,12 @@ class WindRosePlot:
             ``CENTER_DEG``, ``N_VALS``, ``MEAN``, ``MEDIAN``, ``MIN``, ``MAX``,
             ``STD``, ``SUM`` (plus ``Z`` when a colour variable is given).
 
-    Example::
-
-        import diive as dv
-        df, meta = dv.load_exampledata_EDDYPRO_FULL_OUTPUT_CSV_30MIN()
-        rose = dv.plotting.WindRosePlot(series=df['co2_flux'], wind_dir=df['wind_dir'],
-                                        agg='mean', n_sectors=16)
-        rose.plot(cmap='RdBu_r', cb_label='Mean CO2 flux')
-        print(rose.results)
+    Example:
+        >>> import diive as dv, pandas as pd, numpy as np
+        >>> flux = pd.Series(np.sin(np.arange(360.)), name='co2_flux')
+        >>> rose = dv.plotting.WindRosePlot(series=flux, wind_dir=pd.Series(np.arange(360.)),
+        ...                                 agg='mean', n_sectors=16)
+        >>> ax = rose.plot(cmap='RdBu_r', cb_label='Mean CO2 flux')  # then rose.results
 
     See Also:
         examples/visualization/plot_windrose_basic.py

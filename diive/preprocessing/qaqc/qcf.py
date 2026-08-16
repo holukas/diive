@@ -18,15 +18,11 @@ Typical workflow:
     4. Use reporting methods for diagnostics: report_qcf_flags(), report_qcf_evolution()
 
 Example:
-    >>> qcf = FlagQCF(
-    ...     df=data_with_flags,
-    ...     series=flux_series,
-    ...     outname='NEE',
-    ...     swinpot=sw_in_pot  # Optional: enables daytime/nighttime separation
-    ... )
+    >>> import diive as dv, pandas as pd
+    >>> df = pd.DataFrame({'NEE': [1.0, 2.0], 'FLAG_TEST1_L41_NEE_TEST': [0, 2]},
+    ...                   index=pd.date_range('2024-06-01', periods=2, freq='30min'))
+    >>> qcf = dv.qaqc.FlagQCF(df=df, target_col='NEE', idstr='_L41')
     >>> qcf.calculate(daytime_accept_qcf_below=2, nighttime_accept_qcf_below=2)
-    >>> quality_controlled_flux = qcf.filteredseries  # NaN for rejected values
-    >>> highest_quality_flux = qcf.filteredseries_hq  # NaN for any QCF > 0
 """
 
 import matplotlib.gridspec as gridspec
@@ -103,12 +99,10 @@ class FlagQCF:
             KeyError: If target_col or swinpot_col column not found in DataFrame.
 
         Example:
-            >>> qcf = FlagQCF(
-            ...     df=data,  # Must contain FLAG_TEST1_L41_NEE_TEST, FLAG_TEST2_L41_NEE_TEST, etc.
-            ...     target_col='NEE',  # Column name of variable to check
-            ...     swinpot_col='SW_IN_POT',  # Optional: for daytime/nighttime separation
-            ...     idstr='_L41'  # Identifies flags as FLAG_*_L41_NEE_TEST pattern
-            ... )
+            >>> import diive as dv, pandas as pd
+            >>> df = pd.DataFrame({'NEE': [1.0, 2.0], 'FLAG_TEST1_L41_NEE_TEST': [0, 2]},
+            ...                   index=pd.date_range('2024-06-01', periods=2, freq='30min'))
+            >>> qcf = dv.qaqc.FlagQCF(df=df, target_col='NEE', idstr='_L41')
         """
         if target_col not in df.columns:
             raise KeyError(f"Column '{target_col}' not found in DataFrame")

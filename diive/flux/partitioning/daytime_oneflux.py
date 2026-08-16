@@ -820,11 +820,12 @@ class DaytimePartitioningOneFlux:
     Example: ``examples/flux/partitioning/partitioning_daytime_oneflux.py``
 
     Example:
-        >>> part = DaytimePartitioningOneFlux(
-        ...     nee=df['NEE_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
+        >>> import diive as dv
+        >>> df = dv.load_exampledata_parquet()
+        >>> part = dv.flux.DaytimePartitioningOneFlux(
+        ...     nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
         ...     ta_f=df['Tair_f'], sw_in_f=df['Rg_f'], vpd=df['VPD_f'])
-        >>> part.run()
-        >>> results = part.results   # DataFrame with RECO_DT_OF, GPP_DT_OF, ...
+        >>> part.run()  # then part.results -> DataFrame with RECO_DT_OF, GPP_DT_OF, ...
     """
 
     def __init__(self,

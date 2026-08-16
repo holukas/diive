@@ -192,24 +192,12 @@ class TimeSince:
 
     Examples
     --------
-    **Time since last precipitation (dry period detection):**
+    Records since the last rain (dry-period length):
 
-    >>> df = dv.load_exampledata_parquet()
-    >>> prec = df.loc[(df.index.year == 2022) & (df.index.month == 7),
-    ...               "PREC_TOT_T1_25+20_1"].copy()
-    >>> ts_prec = dv.variables.TimeSince(prec, lower_lim=0, include_lim=False)
-    >>> ts_prec.calc()
-    >>> max_dry = ts_prec.get_timesince().max()
-    >>> print(f"Maximum dry period: {max_dry} records (~{max_dry * 0.5:.1f} hours)")
-
-    **Time since last freezing temperature:**
-
-    >>> temp = df.loc[(df.index.year == 2022) & (df.index.month == 3),
-    ...               "Tair_f"].copy()
-    >>> ts_temp = dv.variables.TimeSince(temp, upper_lim=0, include_lim=True)
-    >>> ts_temp.calc()
-    >>> results = ts_temp.get_full_results()
-    >>> print(results.head(10))
+    >>> import diive as dv, pandas as pd
+    >>> idx = pd.date_range('2024-07-01', periods=6, freq='30min')
+    >>> prec = pd.Series([0.0, 0.0, 1.2, 0.0, 0.0, 0.0], index=idx, name='PREC')
+    >>> dv.variables.TimeSince(prec, lower_lim=0, include_lim=False).calc()
 
     See Also
     --------

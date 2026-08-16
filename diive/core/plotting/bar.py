@@ -122,9 +122,10 @@ class LongtermAnomaliesYear:
             None (displays plot if ax=None, otherwise renders on provided axes)
 
         Example:
-            >>> anomaly = dv.plotting.LongtermAnomaliesYear(series=data, reference_start_year=2015)
-            >>> anomaly.plot(format_style=dv.plotting.FormatStyle(title='Custom Title'))
-            >>> anomaly.plot(ax=ax1)  # Plot on existing axis
+            >>> import diive as dv, pandas as pd, matplotlib.pyplot as plt
+            >>> annual = pd.Series([5.1, 5.4, 6.0, 6.3], index=[2021, 2022, 2023, 2024], name='TA')
+            >>> anomaly = dv.plotting.LongtermAnomaliesYear(annual, 2021, 2022)
+            >>> anomaly.plot(ax=plt.subplots()[1], format_style=dv.plotting.FormatStyle(title='TA'))
         """
         style = format_style or FormatStyle()
 

@@ -70,11 +70,12 @@ def classify_variable(name: str) -> VariableClass | None:
         variables, or ``None`` if the name matches no known prefix.
 
     Examples:
-        >>> classify_variable('NEE_CUT_REF_f')
+        >>> import diive as dv
+        >>> dv.variables.classify_variable('NEE_CUT_REF_f')
         VariableClass(kind='NEE', category='carbon')
-        >>> classify_variable('LE_f')
+        >>> dv.variables.classify_variable('LE_f')
         VariableClass(kind='LE', category='water')
-        >>> classify_variable('TA_f') is None
+        >>> dv.variables.classify_variable('QC_NEE') is None
         True
     """
     if not isinstance(name, str):

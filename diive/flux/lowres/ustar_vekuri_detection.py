@@ -78,9 +78,7 @@ class UstarVekuriThresholdDetection:
     >>> import diive as dv
     >>> df = dv.load_exampledata_parquet_lae()
     >>> detector = dv.flux.UstarVekuriThresholdDetection(df)
-    >>> thresholds = detector.detect()
-    >>> print(detector.summary())
-    >>> stats = detector.bootstrap()
+    >>> thresholds = detector.detect()  # then detector.summary() / detector.bootstrap()
 
     Notes
     -----

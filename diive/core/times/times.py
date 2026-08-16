@@ -118,46 +118,13 @@ class TimestampSanitizer:
 
         Examples
         --------
-        **Basic usage with default settings:**
+        >>> import diive as dv, pandas as pd
+        >>> idx = pd.date_range('2024-06-01 00:30', periods=48, freq='30min', name='TIMESTAMP_END')
+        >>> df = pd.DataFrame({'TA': range(48)}, index=idx)
+        >>> clean = dv.times.TimestampSanitizer(data=df, nominal_freq='30min').get()
 
-        >>> import pandas as pd
-        >>> import diive as dv
-        >>> df = dv.load_exampledata_parquet()
-        >>> series = df['NEE_CUT_REF_f'].copy()
-        >>> sanitizer = dv.times.TimestampSanitizer(data=series, verbose=False)
-        >>> clean_series = sanitizer.get()
-
-        **With frequency validation:**
-
-        >>> sanitizer = dv.times.TimestampSanitizer(
-        ...     data=series,
-        ...     nominal_freq='30min',  # Expect 30-minute resolution
-        ...     verbose=True
-        ... )
-        >>> clean_series = sanitizer.get()
-
-        **Selective processing (skip some steps):**
-
-        >>> sanitizer = dv.times.TimestampSanitizer(
-        ...     data=series,
-        ...     regularize=False,                    # Keep gaps in data
-        ...     output_middle_timestamp=False,       # Keep end-of-period format
-        ...     remove_index_nat=True,
-        ...     verbose=True
-        ... )
-        >>> result = sanitizer.get()
-
-        **Error handling for corrupted data:**
-
-        >>> try:
-        ...     sanitizer = dv.times.TimestampSanitizer(
-        ...         data=corrupted_data,
-        ...         nominal_freq='30min',
-        ...         validate_naming=True
-        ...     )
-        ... except ValueError as e:
-        ...     print(f"Timestamp validation failed: {e}")
-        ...     # Handle error: fix data or re-run without nominal_freq
+        See ``examples/times/times_timestamp_sanitizer.py`` for clean data, minor
+        issues, badly broken timestamps, and selective processing.
         """
         self._validate_input(data)
         self.data = data.copy()
@@ -221,9 +188,10 @@ class TimestampSanitizer:
 
         Example
         -------
-        >>> sanitizer = dv.times.TimestampSanitizer(data=df, verbose=False)
-        >>> status = sanitizer.get_status()
-        >>> print(f"Removed {status['rows_removed']} rows, frequency confidence: {status['frequency_confidence']:.0%}")
+        >>> import diive as dv, pandas as pd
+        >>> idx = pd.date_range('2024-06-01 00:30', periods=48, freq='30min', name='TIMESTAMP_END')
+        >>> sanitizer = dv.times.TimestampSanitizer(pd.DataFrame({'TA': range(48)}, index=idx))
+        >>> status = sanitizer.get_status()  # rows_removed, frequency_confidence, ...
         """
         return {
             'original_shape': self._original_shape,
@@ -658,10 +626,6 @@ def sort_timestamp_ascending(data: Union[Series, DataFrame], verbose: bool = Fal
     -------
     Union[Series, DataFrame]
         Data with sorted timestamp index.
-
-    Examples
-    --------
-    >>> df_sorted = sort_timestamp_ascending(df, verbose=True)
     """
     if verbose:
         info("Sort ascending: OK", verbose=verbose)
@@ -693,11 +657,6 @@ def remove_rows_nat(df: Union[Series, DataFrame], verbose: bool = False) -> tupl
     ------
     ValueError
         If all rows are removed (all timestamps are NaT).
-
-    Examples
-    --------
-    >>> df_clean, n_removed = remove_rows_nat(df, verbose=True)
-    >>> print(f"Removed {n_removed} NaT rows")
     """
     no_date = df.index.isnull()
     n_rows = no_date.sum()
@@ -740,10 +699,6 @@ def convert_timestamp_to_datetime(data: Union[Series, DataFrame], verbose: bool 
     ------
     ValueError
         If timestamp index cannot be converted to datetime format.
-
-    Examples
-    --------
-    >>> df_dt = convert_timestamp_to_datetime(df, verbose=True)
     """
     try:
         data.index = pd.to_datetime(data.index, errors='coerce')
@@ -789,12 +744,6 @@ def validate_timestamp_naming(data: Union[Series, DataFrame], verbose: bool = Fa
     - 'TIMESTAMP_END': Timestamp marks the END of the averaging period
     - 'TIMESTAMP_START': Timestamp marks the START of the averaging period
     - 'TIMESTAMP_MIDDLE': Timestamp marks the MIDDLE of the averaging period
-
-    Examples
-    --------
-    >>> df.index.name = 'TIMESTAMP_END'
-    >>> name = validate_timestamp_naming(df, verbose=True)
-    >>> print(f"Valid timestamp format: {name}")
     """
     timestamp_name = data.index.name
     allowed_timestamp_names = ['TIMESTAMP_END', 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE']
@@ -849,10 +798,6 @@ def validate_timestamp_monotonic(data: Union[Series, DataFrame], verbose: bool =
     "Strictly monotonic" means no two timestamps are equal and all are in
     ascending order. After sorting and duplicate removal, data should always
     pass this check. If it fails, it indicates a data or processing error.
-
-    Examples
-    --------
-    >>> validate_timestamp_monotonic(df, verbose=True)
     """
     if not data.index.is_monotonic_increasing:
         # Find where monotonicity breaks to help debugging
@@ -1462,11 +1407,6 @@ def remove_index_duplicates(data: Union[Series, DataFrame],
         - Union[Series, DataFrame]: Data with duplicates removed
         - int: Number of duplicate rows removed
 
-    Examples
-    --------
-    >>> df_clean, n_removed = remove_index_duplicates(df, keep='last', verbose=True)
-    >>> print(f"Removed {n_removed} duplicate timestamps")
-
     Notes
     -----
     Duplicate detection is based on the index only, not data values.
@@ -1523,10 +1463,6 @@ def continuous_timestamp_freq(data: Union[Series, DataFrame], freq: str, verbose
     - Original timestamp index name is preserved
     - Data values are NaN for any timestamps not in original data
     - The number of rows will increase if there are gaps in the original data
-
-    Examples
-    --------
-    >>> df_continuous = continuous_timestamp_freq(df, freq='30min', verbose=True)
     """
     first_date = data.index[0]
     last_date = data.index[-1]
@@ -1744,9 +1680,10 @@ def format_timestamp(
         aligned to *data*'s index.
 
     Examples:
-        >>> df.index.name = 'TIMESTAMP_MIDDLE'
-        >>> df['TIMESTAMP_END'] = format_timestamp(df, convention='end')
-        >>> df['TS'] = format_timestamp(df, convention='start', fmt='%Y%m%d%H%M')
+        >>> import diive as dv, pandas as pd
+        >>> idx = pd.date_range('2024-06-01 00:15', periods=4, freq='30min', name='TIMESTAMP_MIDDLE')
+        >>> df = pd.DataFrame({'TA': range(4)}, index=idx)
+        >>> df['TS'] = dv.times.format_timestamp(df, convention='start', fmt='%Y%m%d%H%M')
 
     Added in: v0.92.0
     """
@@ -1806,13 +1743,6 @@ def convert_series_timestamp_to_middle(data: Union[Series, DataFrame], verbose: 
     - TIMESTAMP_END 12:00   → TIMESTAMP_MIDDLE 11:45
     - TIMESTAMP_START 12:00 → TIMESTAMP_MIDDLE 12:15
     - TIMESTAMP_MIDDLE 12:15 → (no change)
-
-    Examples
-    --------
-    >>> df.index.name = 'TIMESTAMP_END'
-    >>> df_middle = convert_series_timestamp_to_middle(df, verbose=True)
-    >>> print(df_middle.index.name)
-    TIMESTAMP_MIDDLE
     """
     timestamp_name_before = data.index.name
     timestamp_name_after = 'TIMESTAMP_MIDDLE'

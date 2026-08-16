@@ -460,9 +460,10 @@ def sstats(s: Series) -> DataFrame:
 
     Example
     -------
-    >>> series = pd.Series([1.2, 1.5, 1.3, 1.8, 1.6, ...])
-    >>> stats = sstats(series)
-    >>> print(stats)
+    >>> import diive as dv, pandas as pd
+    >>> idx = pd.date_range('2024-06-01', periods=4, freq='30min')
+    >>> series = pd.Series([1.2, 1.5, 1.3, 1.8], index=idx, name='TA')
+    >>> stats = dv.sstats(series)
     """
     col = s.name
     df = pd.DataFrame(columns=[col])

@@ -106,8 +106,10 @@ class TimeSeries:
             - Save: Export plot as PNG image
 
         Example:
-            >>> ts = dv.plotting.TimeSeries(series=data)
-            >>> ts.plot_interactive(height=800, width=1600)  # Larger interactive plot
+            >>> import diive as dv, pandas as pd
+            >>> idx = pd.date_range('2024-06-01', periods=3, freq='30min')
+            >>> ts = dv.plotting.TimeSeries(series=pd.Series([1.0, 2.0, 1.5], index=idx, name='TA'))
+            >>> ts.plot_interactive(height=800, width=1600)  # opens a browser tab
         """
         # Handle file output: temp file if not saving, named file if saving
         if save_to_file:
@@ -240,8 +242,10 @@ class TimeSeries:
                 (default: False, opens in browser only).
 
         Example:
-            >>> ts = dv.plotting.TimeSeries(series=data)
-            >>> ts.plot_rangetool(init_range=0.1)  # start zoomed to the first 10%
+            >>> import diive as dv, pandas as pd
+            >>> idx = pd.date_range('2024-06-01', periods=3, freq='30min')
+            >>> ts = dv.plotting.TimeSeries(series=pd.Series([1.0, 2.0, 1.5], index=idx, name='TA'))
+            >>> ts.plot_rangetool(init_range=0.1)  # opens a browser tab, zoomed to the first 10%
         """
         if save_to_file:
             output_file(filename=f"{self.series.name}_rangetool.html", title=self.series.name)
@@ -375,10 +379,10 @@ class TimeSeries:
             so callers can apply further styling.
 
         Example:
-            >>> ts = dv.plotting.TimeSeries(series=data)
-            >>> ax = ts.plot(ax=ax1, color='#2196F3')  # Plot on axis
-            >>> style = dv.plotting.FormatStyle(title='Custom', yunits='(°C)')
-            >>> ts.plot(format_style=style)  # New figure with a shared style
+            >>> import diive as dv, pandas as pd, matplotlib.pyplot as plt
+            >>> idx = pd.date_range('2024-06-01', periods=3, freq='30min')
+            >>> ts = dv.plotting.TimeSeries(series=pd.Series([1.0, 2.0, 1.5], index=idx, name='TA'))
+            >>> ax = ts.plot(ax=plt.subplots()[1], format_style=dv.plotting.FormatStyle(yunits='(°C)'))
         """
         # Chrome comes only from the caller-supplied style.
         style = format_style or FormatStyle()

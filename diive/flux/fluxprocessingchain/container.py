@@ -1323,13 +1323,10 @@ def add_driver(
             its index does not match ``data.full_df.index``, or a column
             with the resolved name already exists in ``full_df``.
 
-    Example::
-
-        from diive.flux.fluxprocessingchain import add_driver
-        from diive.variables import calc_vpd_from_ta_rh
-
-        vpd = calc_vpd_from_ta_rh(ta=data.full_df['TA'], rh=data.full_df['RH'])
-        data = add_driver(data, vpd, name='VPD_kPa')
+    Example:
+        >>> import diive as dv
+        >>> vpd = dv.variables.calc_vpd_from_ta_rh(ta=data.full_df['TA'], rh=data.full_df['RH'])
+        >>> data = dv.flux.add_driver(data, vpd, name='VPD_kPa')
     """
     col_name = name if name is not None else (
         str(series.name) if series.name is not None else None

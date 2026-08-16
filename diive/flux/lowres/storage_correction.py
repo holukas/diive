@@ -73,14 +73,6 @@ class FluxStorageCorrectionSinglePointEddyPro:
             flux_corrected_col: Name of the corrected flux column.
             gapfilled_strgcol: Name of the gap-filled storage column (if enabled).
             flag_isgapfilled: Flag column (0=original, 1=gap-filled).
-
-        Example:
-            >>> corrector = FluxStorageCorrectionSinglePointEddyPro(
-            ...     df=data, fluxcol='FC', basevar='CO2',
-            ...     gapfill_storage_term=True, idstr='_L3.1'
-            ... )
-            >>> corrector.storage_correction()
-            >>> corrected_data = corrector.results
         """
         self.df = df.copy()
         self.fluxcol = fluxcol
@@ -369,9 +361,6 @@ class FluxStorageCorrectionSinglePointEddyPro:
             maxflux: Maximum absolute value for colorbar scaling. If None, scales to
                 the 95th percentile. Pass the same value across multiple plots to
                 keep colors consistent.
-
-        Example:
-            >>> corrector.showplot(maxflux=5)
         """
 
         fig = plt.figure(facecolor='white', figsize=(20, 9))

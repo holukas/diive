@@ -43,7 +43,7 @@ class HeatmapDateTime(HeatmapBase):
     ``0.5`` for 00:30, ``6.0`` for 06:00) because ``pcolormesh`` requires
     numeric coordinates.
 
-    Top-level alias: ``dv.heatmap_datetime(series, ...)``
+    Public name: ``dv.plotting.HeatmapDateTime(series, ...)``
 
     See Also:
         examples/visualization/plot_heatmap_datetime_basic.py — DateTime heatmap variations (vertical/horizontal)

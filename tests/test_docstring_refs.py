@@ -9,13 +9,23 @@ faults that actually occurred:
 - ``examples/...`` pointers that no longer exist. A folder rename left 30 of 87
   distinct pointers dangling, so "just reference the script instead of inlining a
   sample" swaps one rotting thing for another unless the reference is checked.
-- ``dv.<attr>`` names inside ``>>>`` samples that are not on the public API. Finding
-  L35 was exactly this (``dv.UstarBootstrapThresholds`` for
+- ``dv.<attr>`` names inside samples that are not on the public API. Finding L35 was
+  exactly this (``dv.UstarBootstrapThresholds`` for
   ``dv.flux.UstarBootstrapThresholds``), and it sat broken through two rounds of
   review because nothing executes or resolves these lines.
 
+"Sample" means both forms the codebase uses: ``>>>`` doctest lines and reST literal
+blocks (a line ending in ``::`` followed by an indented block). Checking only the
+first form left a hole that hid four more L35s, including a ``WindRosePlot`` sample
+calling a ``dv.load_exampledata_EDDYPRO_FULL_OUTPUT_CSV_30MIN`` that is not exported
+at top level. Note that only ``>>>`` samples are *executed*, by
+``test_docstring_examples`` — a literal block gets its names resolved here and
+nothing more, which is the reason to prefer ``>>>`` for anything runnable.
+
 Docstrings are collected with ``ast``, not by importing, so ``diive.gui`` is covered
-without needing the optional PySide6 dependency.
+without needing the optional PySide6 dependency. Attribute docstrings (a bare string
+after a class-level assignment) are collected too: they are invisible at runtime, so
+``doctest`` cannot reach them and this is the only check they get.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -39,8 +49,21 @@ EXAMPLE_PATH = re.compile(r'examples/[\w./-]+\.py')
 DV_ATTR = re.compile(r'\bdv\.([A-Za-z_][A-Za-z0-9_.]*[A-Za-z0-9_])')
 
 
+def _attribute_docstrings(tree):
+    """Yield (lineno, docstring) for every ``x = ...`` followed by a bare string."""
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.ClassDef)):
+            continue
+        for prev, cur in zip(node.body, node.body[1:]):
+            if (isinstance(prev, (ast.Assign, ast.AnnAssign))
+                    and isinstance(cur, ast.Expr)
+                    and isinstance(cur.value, ast.Constant)
+                    and isinstance(cur.value.value, str)):
+                yield cur.lineno, cur.value.value
+
+
 def _docstrings():
-    """Yield (path, lineno, docstring) for every module, class and function."""
+    """Yield (path, lineno, docstring) for every module, class, function and attribute."""
     for path in sorted(PACKAGE_ROOT.rglob('*.py')):
         try:
             tree = ast.parse(path.read_text(encoding='utf-8'))
@@ -53,6 +76,35 @@ def _docstrings():
             doc = ast.get_docstring(node)
             if doc:
                 yield path, getattr(node, 'lineno', 1), doc
+        for lineno, doc in _attribute_docstrings(tree):
+            yield path, lineno, doc
+
+
+def _sample_lines(doc):
+    """Yield the lines of *doc* that a reader would copy and run.
+
+    Two forms: ``>>>`` / ``...`` doctest lines, and reST literal blocks — a line
+    ending in ``::`` followed by a block indented deeper than it. Prose is left
+    out on purpose: it mentions a namespace loosely (``dv.plotting`` classes),
+    whereas a sample is code. A ``.. note::`` / ``.. warning::`` directive ends in
+    ``::`` too but its body is prose, so directives are skipped.
+    """
+    lines = doc.splitlines()
+    i = 0
+    while i < len(lines):
+        line, stripped = lines[i], lines[i].strip()
+        i += 1
+        if stripped.startswith('>>>') or stripped.startswith('...'):
+            yield stripped
+        elif stripped.endswith('::') and not stripped.startswith('..'):
+            indent = len(line) - len(line.lstrip())
+            while i < len(lines):
+                nxt = lines[i]
+                if nxt.strip() and len(nxt) - len(nxt.lstrip()) <= indent:
+                    break
+                if nxt.strip():
+                    yield nxt.strip()
+                i += 1
 
 
 class TestDocstringExamplePointers(unittest.TestCase):
@@ -73,11 +125,7 @@ class TestDocstringExamplePointers(unittest.TestCase):
 
 
 class TestDocstringPublicApiNames(unittest.TestCase):
-    """Every ``dv.<attr>`` used in a ``>>>`` sample must resolve on the real API.
-
-    Only ``>>>`` lines are checked. Prose mentions a namespace loosely
-    (``dv.plotting`` classes), whereas a sample is code a reader will copy.
-    """
+    """Every ``dv.<attr>`` used in a sample must resolve on the real API."""
 
     @staticmethod
     def _resolves(dotted):
@@ -91,11 +139,8 @@ class TestDocstringPublicApiNames(unittest.TestCase):
         unresolved = []
         checked = 0
         for path, lineno, doc in _docstrings():
-            for line in doc.splitlines():
-                stripped = line.strip()
-                if not stripped.startswith('>>>'):
-                    continue
-                for dotted in DV_ATTR.findall(stripped):
+            for line in _sample_lines(doc):
+                for dotted in DV_ATTR.findall(line):
                     checked += 1
                     if not self._resolves(dotted):
                         unresolved.append(

@@ -163,10 +163,6 @@ class ColumnNamesSanitizer:
     unique, choosing the next free suffix if a suffixed name already exists.
     The first occurrence keeps its original name; a warning is emitted for each
     rename. Operates on a copy — the input DataFrame is not modified.
-
-    Example:
-        >>> sanitizer = ColumnNamesSanitizer(df)
-        >>> clean_df = sanitizer.get()
     """
 
     def __init__(self,
@@ -244,11 +240,6 @@ class MultiDataFileReader:
 
     Use the :attr:`data_df` and :attr:`metadata_df` properties to retrieve the
     merged results after construction.
-
-    Example:
-        >>> reader = MultiDataFileReader(filepaths=files, filetype='DIIVE-CSV-30MIN')
-        >>> data = reader.data_df
-        >>> meta = reader.metadata_df
     """
 
     def __init__(self, filepaths: list, filetype: str, output_middle_timestamp: bool = True,

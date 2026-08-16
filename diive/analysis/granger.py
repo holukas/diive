@@ -31,11 +31,10 @@ class GrangerCausality:
     Example:
         See `examples/analysis/analysis_granger.py` for complete examples.
 
-        Quick start:
-
-        >>> gc = GrangerCausality(x=radiation, y=co2_flux, max_lag=10)
-        >>> gc.report()  # Print results
-        >>> results = gc.results  # Access raw results
+        >>> import diive as dv, pandas as pd, numpy as np
+        >>> idx = pd.date_range('2024-06-01', periods=200, freq='30min')
+        >>> radiation, co2_flux = pd.Series(np.arange(200.), index=idx), pd.Series(np.sin(np.arange(200.)), index=idx)
+        >>> gc = dv.analysis.GrangerCausality(x=radiation, y=co2_flux, max_lag=10)
     """
 
     def __init__(self, x: Series, y: Series, max_lag: int = 5, verbose: bool = True):

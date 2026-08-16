@@ -175,25 +175,16 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
         ``examples/flux/fluxprocessingchain/fluxprocessingchain_runchain.py``
         for a runnable end-to-end example.
 
-    Example::
-
-        from diive.flux.fluxprocessingchain import (
-            FluxConfig, init_flux_data, run_chain,
-        )
-
-        cfg = FluxConfig(
-            fluxcol='FC',
-            ustar_thresholds=[0.18],
-            ustar_labels=['CUT_50'],
-            outlier_sigma_daytime=5.5,
-            outlier_sigma_nighttime=5.5,
-            gapfilling_features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_kPa_1_1_1'],
-            level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
-            mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_kPa_1_1_1',
-        )
-        data = init_flux_data(df, fluxcol='FC',
-                              site_lat=46.6, site_lon=9.8, utc_offset=1)
-        data = run_chain(data, cfg)
+    Example:
+        >>> import diive as dv
+        >>> cfg = dv.flux.FluxConfig(
+        ...     fluxcol='FC', ustar_thresholds=[0.18], ustar_labels=['CUT_50'],
+        ...     outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,
+        ...     gapfilling_features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_kPa_1_1_1'],
+        ...     level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+        ...     mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_kPa_1_1_1')
+        >>> data = dv.flux.init_flux_data(df, fluxcol='FC', site_lat=46.6, site_lon=9.8, utc_offset=1)
+        >>> data = dv.flux.run_chain(data, cfg)
     """
     if data.meta.fluxcol != config.fluxcol:
         raise ValueError(

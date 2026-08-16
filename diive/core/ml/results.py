@@ -46,18 +46,11 @@ class GapFillingResult:
         accepted_features: Feature names kept after SHAP-based reduction. None if not run.
         rejected_features: Feature names removed after SHAP-based reduction. None if not run.
 
-    Example::
-
-        rf = dv.gapfilling.RandomForestTS(input_df=engineered, target_col='NEE_f')
-        rf.run()
-        r = rf.results
-
-        r.gapfilled          # gap-filled Series
-        r.flag               # flag Series
-        r.scores['r2']       # gap-filling R²
-        r.scores_traintest['rmse']
-        r.feature_importances
-        r.model.feature_importances_
+    Example:
+        >>> import diive as dv
+        >>> df = dv.load_exampledata_parquet()[['NEE_CUT_REF_f', 'Tair_f', 'Rg_f']]
+        >>> rf = dv.gapfilling.RandomForestTS(input_df=df, target_col='NEE_CUT_REF_f')
+        >>> rf.run()  # then rf.results -> .gapfilled, .flag, .scores['r2'], .model
     """
 
     gapfilled: pd.Series
