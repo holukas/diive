@@ -11,6 +11,15 @@
 
 Two of these change results silently, with no error and no warning:
 
+- **`dv.plotting.HexbinPlot`'s `mincnt` now defaults to `1` (was `0`) and rejects values below `1`.** matplotlib's
+  cutoff is `len(values) >= mincnt`, so `0` handed *empty* cells to `reduce_C_function`: with `np.sum` an empty cell
+  came back as `0.0` and was painted as a measured zero — on a two-cloud test record, 105 of 116 drawn hexagons, 91% of
+  the plot, covered cells holding no data. With `np.max`/`np.min` the call raised `ValueError`; with
+  `np.mean`/`np.median` it produced one `RuntimeWarning` per empty cell (210 in the same test) for a cell matplotlib
+  discarded anyway. No reducer made `0` correct, so it is closed off with an error naming `mincnt=1`. Plots using the
+  default `np.median` reducer are unchanged apart from the lost warnings; a plot that relied on the old default with a
+  summing reducer loses its fabricated cells. The GUI's hexbin "Min count" spinbox now starts and floors at 1.
+
 - **`ScopApplicator` now exposes its input correction term as `FCT_UNSC`, not `FCT_UNSC_gfXG`.** The class
   accepts either the gap-filled or the ungapfilled term from `ScopPhysics` and gap-fills neither, so the
   `_gfXG` label claimed a fill that may never have happened. Code reading
@@ -416,6 +425,21 @@ those are the ones to check existing results against.
   report honestly), and the unread `UstarVekuriThresholdDetection.bootstrap_results_` attribute is gone.
 
 #### Results change, with no error and no warning
+
+- **`LongtermAnomaliesYear` discarded its own `sort_index()`.** An unsorted yearly record was plotted in input order and
+  its "last 10 years mean ± sd" annotation was computed from ten arbitrary years. Bar order, results-frame row order and
+  that annotation change for unsorted input; per-year anomaly and reference values are unaffected, because the reference
+  subset is selected by year comparison and so is order-independent. Sorted input is byte-identical. (L109)
+- **`LongtermAnomaliesYear` built its working frame keyed by the caller's Series name**, so a variable named
+  `reference_mean`, `reference_sd` or `anomaly` overwrote the data column before the anomaly was computed — zeroing every
+  anomaly. The frame is now built on an internal `_values` key with the caller's name restored last, matching `ScatterXY`
+  and `GridAggregator`. Anomalies change only for those colliding names. An unnamed Series no longer raises
+  `KeyError: None`. `anomalies_df` is now a property returning a copy, the contract `GridAggregator.df_long` already had.
+  (L110, and part of L120)
+- **`HistogramPlot`'s KDE overlay was scaled by the *first* bin width**, an identity that holds only for uniform bins.
+  `n_bins` accepts an explicit edge list, and a non-uniform one made the curve wrong by `w_i / w_0` in every bin —
+  measured peaking 4.5x above the tallest bar, drawn on the same axis as the bars where it reads as a fit. The density is
+  now scaled per bin from `np.diff(edges)`. Uniform bins, which is every current caller, are unchanged to 3e-13. (L108)
 
 - **The MDS similarity window is trimmed at the ends of a record, not clipped.** ONEFlux narrows the window bounds and
   its diurnal method skips out-of-range positions, so a real record enters a fill at most once; diive folded every

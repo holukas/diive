@@ -133,10 +133,10 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 
 | ID | Finding | Where |
 |---|---|---|
-| L107 | `HexbinPlot`'s `mincnt=0` default paints hexagons over cells holding no data — 85% of a two-cloud plot fabricated with `np.sum`, `ValueError` with `np.max` | `core/plotting/hexbin.py:76` |
-| L108 | Histogram KDE overlay scaled by the *first* bin width, so it is wrong for any non-uniform bin list — 5.1x above the tallest bar | `core/plotting/histogram.py:142` |
-| L109 | `LongtermAnomaliesYear` discards its own `sort_index`, so an unsorted record is plotted **and averaged** in file order | `core/plotting/bar.py:64` |
-| L110 | `LongtermAnomaliesYear` keys its working frame by the caller's Series name — a collision zeroes every anomaly (L9 family) | `core/plotting/bar.py:94` |
+| ~~L107~~ | ~~`HexbinPlot`'s `mincnt=0` default paints hexagons over cells holding no data — 85% of a two-cloud plot fabricated with `np.sum`, `ValueError` with `np.max`~~ (done 2026-08-16) | `core/plotting/hexbin.py:76` |
+| ~~L108~~ | ~~Histogram KDE overlay scaled by the *first* bin width, so it is wrong for any non-uniform bin list — 5.1x above the tallest bar~~ (done 2026-08-16) | `core/plotting/histogram.py:142` |
+| ~~L109~~ | ~~`LongtermAnomaliesYear` discards its own `sort_index`, so an unsorted record is plotted **and averaged** in file order~~ (done 2026-08-16) | `core/plotting/bar.py:64` |
+| ~~L110~~ | ~~`LongtermAnomaliesYear` keys its working frame by the caller's Series name — a collision zeroes every anomaly (L9 family)~~ (done 2026-08-16) | `core/plotting/bar.py:94` |
 | ~~L37~~ | ~~**The H2O/LE self-heating path must be removed**~~ (done 2026-08-07) — no self-heating correction for LE exists in EC science | `flux/lowres/selfheating.py` |
 | ~~L28~~ | ~~USTAR bootstrap bypasses the 3000-record minimum `detect()` enforces~~ (done 2026-08-07) | `flux/lowres/ustar_mp_detection.py:561` |
 | ~~L14~~ | ~~`combine_variables(keep_overlap_only=False)`: subtract/divide return the **negation / reciprocal**~~ (done 2026-08-07) — option removed | `variables/utilities.py:73` |
@@ -257,7 +257,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L91~~ | ~~`hexbin.py` accepts, documents and forwards `show_less_xticklabels`, and nothing applies it~~ (done 2026-08-15) | `core/plotting/hexbin.py:272` |
 | ~~L95~~ | ~~`ScopPhysics.fct_unsc_gf` is `'FCT_UNSC_gfRF'` though the fill is XGBoost~~ (done 2026-08-15) — the suffix was hardcoded twice, which is why it drifted; now one string | `flux/lowres/selfheating.py` |
 
-## S5 — Cosmetic / dead / latent (42)
+## S5 — Cosmetic / dead / latent (44)
 
 | ID | Finding | Where |
 |---|---|---|
@@ -2942,7 +2942,20 @@ reproduced but latent (no diive call site currently triggers it) and is marked a
 
 ## S1 — silently wrong scientific output
 
-**[ ] L107. `HexbinPlot`'s `mincnt=0` default paints hexagons over cells holding no data**
+**[x] L107. `HexbinPlot`'s `mincnt=0` default paints hexagons over cells holding no data**
+> **Fixed 2026-08-16** (`6f7d6bb9`). `mincnt` defaults to `1` and below 1 raises, naming `mincnt=1` as the
+> replacement the way the outlier detectors answer their removed parameter names. `1` over `None` because
+> matplotlib's `None` already resolves to 1, and `None` would print as `mincnt=None` in copied GUI code.
+>
+> **Measured before fixing, and it refines this entry.** Two clouds, n=1000, `gridsize=10`, 11 of 116 cells
+> occupied; emptiness checked against a reference `hexbin(reduce_C_function=len)` rather than assumed:
+> `np.sum` drew 116 hexagons of which **105 covered empty cells (91% fabricated)**; `np.max` raised
+> `ValueError: zero-size array to reduction operation maximum` and produced no plot at all; **diive's shipped
+> `np.median` default drew 0 fabricated cells** — matplotlib discards the NaN — but emitted **210
+> `RuntimeWarning`s**. So the default path was already rendering correctly and only the summing reducers
+> fabricated. Breaking twice over: an explicit `mincnt=0` now raises, and a plot that relied on the old
+> default with a summing reducer loses its invented cells. The GUI spinbox floors at 1 so it cannot request
+> what the library rejects.
 `core/plotting/hexbin.py:76` — matplotlib's own default is `mincnt=None` -> 1, and its docs state
 that `mincnt=0` "will pass empty input to the reduction function". Since matplotlib unified the
 cutoff to `len(acc) >= mincnt` (`axes/_axes.py:5329`), diive's `0` means *include cells with zero
@@ -2969,7 +2982,18 @@ misplaced one.
 Suggested fix: default `mincnt: int = 1`, and say in the docstring that `0` passes empty input to the
 reducer. One line, and it also removes the 202 warnings from the default plot.
 
-**[ ] L108. `HistogramPlot`'s KDE overlay is scaled by the *first* bin width**
+**[x] L108. `HistogramPlot`'s KDE overlay is scaled by the *first* bin width**
+> **Fixed 2026-08-16** (`965f425d`). The bars are raw counts, so the comparable curve value at `x` is
+> `N * density(x) * (width of the bin containing x)`; the width is now looked up per bin from
+> `np.diff(edges)` instead of being taken from `edges[1] - edges[0]`.
+>
+> Measured on edges `[0,5,8,9,10,11,12,15,20]`: the curve peaked **4.47x** above the tallest bar, now
+> **1.54x**, and that residual is legitimate — it sits inside the 3-wide bin where the density rises steeply
+> and is pointwise correct. The bin-averaged curve now tracks the counts (80/78, 72/66, 96/104). **Uniform
+> bins are unchanged** — the plotted curve still equals the old single-width expression to 2.8e-13, verified
+> independently — and no call site in `diive/`, `tests/` or `examples/` passes an edge list, so nothing
+> shipped moves. Mutation-checked: restoring `bin_widths[0]` fails both non-uniform tests and correctly
+> leaves the uniform test passing, since the bug is a no-op there.
 `core/plotting/histogram.py:142` -> `:146` — the density is rescaled onto the counts axis as
 `density * N * bin_width`, with `bin_width = self.edges[1] - self.edges[0]`. That identity holds only
 for uniform bins. `n_bins` is documented as "int or list", and an explicit edge list need not be
@@ -2987,7 +3011,15 @@ max KDE y      : 561.54     vs max count: 110.0
 The KDE tops out 5.1x above the tallest bar. Suggested fix: scale per bin from `np.diff(edges)`
 interpolated at `xvals`, or refuse the overlay when the edges are non-uniform.
 
-**[ ] L109. `LongtermAnomaliesYear` discards its own `sort_index`, so an unsorted record is plotted and averaged in file order**
+**[x] L109. `LongtermAnomaliesYear` discards its own `sort_index`, so an unsorted record is plotted and averaged in file order**
+> **Fixed 2026-08-16** (`f580914e`). `self.series = self.series.sort_index(ascending=True)` — the result was
+> being computed and discarded.
+>
+> Scoped precisely: this moves bar order, x-axis labels, results-frame row order and the **"last 10 years
+> mean ± sd"** annotation, but **only for a record that arrives out of chronological order**. Per-year
+> `anomaly` / `reference_mean` / `reference_sd` are **unaffected**, because the reference subset is selected
+> by year comparison, which is order-independent. Sorted input is byte-identical. The GUI path resamples
+> yearly and already arrives sorted. Mutation-checked with a seeded 31-year shuffle.
 `core/plotting/bar.py:64`
 
 ```python
@@ -3012,7 +3044,19 @@ arrives sorted); this bites library and notebook callers who build the yearly se
 
 Suggested fix: assign the result.
 
-**[ ] L110. `LongtermAnomaliesYear` builds its working frame keyed by the caller's Series name**
+**[x] L110. `LongtermAnomaliesYear` builds its working frame keyed by the caller's Series name**
+> **Fixed 2026-08-16** (`f580914e`). Built on an internal `_VALUECOL = '_values'` key with the caller's name
+> restored last, in a new `anomalies_df` property — the **L9 / `ScatterXY` / L68 pattern**, fourth instance,
+> no new mechanism. Deliberately **not** a collision guard: the same name legitimately appearing twice is the
+> case that pattern exists to support.
+>
+> Only bites when the caller's Series is named `reference_mean`, `reference_sd`, `anomaly`, `anomaly_above`
+> or `anomaly_below`; previously the data column was overwritten *before* the subtraction, so every anomaly
+> came out 0.0 or a constant. No public column name changed, so no consumer needed editing. `anomalies_df` is
+> now a property returning a copy, the contract `GridAggregator.df_long` already had. Mutation-checked over
+> all three colliding names.
+>
+> **Incidentally closes part of L120:** an unnamed Series no longer raises `KeyError: None`.
 `core/plotting/bar.py:94-104` — the L9 / `ScatterXY` family. `_calc_reference` does
 `pd.DataFrame(self.series)` (column = the caller's name) and then adds `reference_mean`,
 `reference_sd` and `anomaly` beside it. A collision overwrites the data column *before* the anomaly
@@ -3166,6 +3210,11 @@ the same input, so the inconsistency sits inside one class. Suggested fix:
 `str(self.series.name or "value")`.
 
 **[ ] L120. `LongtermAnomaliesYear` raises `KeyError: None` on an unnamed Series**
+> **Partly closed 2026-08-16 by L110's fix** (`f580914e`): an unnamed Series no longer raises
+> `KeyError: None`, because the working frame is keyed internally rather than by `series.name`. The
+> other two cases in this entry are untouched — an empty series still raises `IndexError`, and a
+> reference period outside the record still annotates `nan±nan`.
+
 `core/plotting/bar.py:101` — same root cause as L110; the internal-key fix closes both. Two
 neighbours in the same family: an *empty* series gives `IndexError: index 0 is out of bounds` at
 `:83` (`last10.index[0]`), and a reference period outside the record annotates
