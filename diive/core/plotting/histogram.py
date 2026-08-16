@@ -135,15 +135,21 @@ class HistogramPlot:
 
         # Distribution overlays: a KDE fit line plus dashed mean/median markers.
         # Each carries its value in the label so the shared legend reads as a
-        # small stats panel. The KDE density is scaled by N * bin_width so it
-        # sits on the same counts axis as the bars.
+        # small stats panel. The bars are counts, so the expected bar height at x
+        # is N * density(x) * (width of the bin containing x) -- the width has to
+        # be looked up per bin, because `bins` may be an explicit non-uniform
+        # edge list and a single bin width would then misscale every other bin.
         if show_kde or show_mean or show_median:
             vals = self.s.dropna().to_numpy()
-            bin_width = self.edges[1] - self.edges[0]
-            if show_kde and vals.size > 1 and bin_width > 0:
+            bin_widths = np.diff(self.edges)
+            if show_kde and vals.size > 1 and bin_widths.size and bin_widths.min() > 0:
                 from scipy.stats import gaussian_kde
                 xvals = np.linspace(self.edges[0], self.edges[-1], 200)
-                yvals = gaussian_kde(vals)(xvals) * self.counts.sum() * bin_width
+                # Index of the bin each sample point falls in (last bin is closed
+                # on the right, matching np.histogram).
+                ix_bin = np.clip(np.searchsorted(self.edges, xvals, side='right') - 1,
+                                 0, bin_widths.size - 1)
+                yvals = gaussian_kde(vals)(xvals) * self.counts.sum() * bin_widths[ix_bin]
                 self.ax.plot(xvals, yvals, color="#5E35B1", linewidth=2,
                              zorder=500, label="KDE")
             if show_mean and vals.size:
