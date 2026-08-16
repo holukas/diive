@@ -101,7 +101,8 @@ class TimeSeries:
                              if color_series is not None else None)
         self.color_name = color_series.name if color_series is not None else None
 
-    def plot_interactive(self, height: int = 600, width: int = 1200, save_to_file: bool = False):
+    def plot_interactive(self, height: int = 600, width: int = 1200, save_to_file: bool = False,
+                         showplot: bool = True):
         """
         Render interactive time series plot using Bokeh.
 
@@ -112,6 +113,10 @@ class TimeSeries:
             height: Plot height in pixels (default: 600)
             width: Plot width in pixels (default: 1200)
             save_to_file: Save plot to HTML file (default: False, display in browser only)
+            showplot: Open the plot in a browser (default: True). Set False to build
+                the figure without displaying it, e.g. to embed it in a Bokeh layout
+                or to write it out yourself. Note that the HTML file is written by
+                the display step, so `save_to_file=True, showplot=False` writes nothing.
 
         Tools Available:
             - Hover: Display date and value on mouse over
@@ -122,6 +127,9 @@ class TimeSeries:
             - Wheel Zoom: Scroll to zoom in/out
             - Undo/Redo: Undo and redo zoom/pan operations
             - Save: Export plot as PNG image
+
+        Returns:
+            The Bokeh `figure`, so it can be embedded or saved by the caller.
 
         Example:
             >>> import diive as dv, pandas as pd
@@ -236,10 +244,13 @@ class TimeSeries:
         #           formatters={'@DateTime': 'datetime'})
 
         # Show plot
-        show(p)
+        if showplot:
+            show(p)
+        return p
 
     def plot_rangetool(self, height: int = 300, width: int = 900, overview_height: int = 130,
-                       init_range: float = 0.25, save_to_file: bool = False):
+                       init_range: float = 0.25, save_to_file: bool = False,
+                       showplot: bool = True):
         """
         Render an interactive Bokeh plot with a RangeTool overview.
 
@@ -260,6 +271,14 @@ class TimeSeries:
                 measured from the start (default: 0.25 = first quarter).
             save_to_file: Save to a named HTML file instead of a temp file
                 (default: False, opens in browser only).
+            showplot: Open the plot in a browser (default: True). Set False to build
+                the layout without displaying it, e.g. to embed it or to write it out
+                yourself. Note that the HTML file is written by the display step, so
+                `save_to_file=True, showplot=False` writes nothing.
+
+        Returns:
+            The Bokeh `column(detail, overview)` layout, so it can be embedded or
+            saved by the caller.
 
         Example:
             >>> import diive as dv, pandas as pd
@@ -318,7 +337,10 @@ class TimeSeries:
             p.grid.grid_line_color = _COLOR_GRID
             p.grid.grid_line_alpha = 0.3
 
-        show(column(detail, overview))
+        layout = column(detail, overview)
+        if showplot:
+            show(layout)
+        return layout
 
     def _plot_colored_line(self, color_vals, cmap, color_vmin, color_vmax,
                            linewidth, alpha, marker, markersize,
@@ -329,8 +351,8 @@ class TimeSeries:
         endpoints' colour values; segments touching a NaN in the data (a gap) are
         dropped so the line breaks rather than bridging. Segments whose *colour*
         value is missing are still measured data, so they are drawn in a neutral
-        grey. A `LineCollection` does not autoscale the axes, so x/y limits are
-        set explicitly.
+        grey. A `LineCollection` does not autoscale the axes, so the data are fed
+        to the axes' data limits and the view is rescaled from there.
         """
         x = mdates.date2num(self.series.index)
         y = self.series.to_numpy(dtype=float)
@@ -364,13 +386,18 @@ class TimeSeries:
             self.ax.scatter(x, y, c=color_vals, cmap=cmap, norm=norm,
                             s=markersize ** 2, edgecolors='none', alpha=alpha, zorder=100)
 
-        # LineCollection does not autoscale; set limits from the data.
-        self.ax.set_xlim(np.nanmin(x), np.nanmax(x))
-        finite = np.isfinite(y)
+        # A LineCollection does not rescale the view by itself, but setting the
+        # limits outright would discard whatever else the caller already drew on
+        # these axes (and override limits they set deliberately). Grow the data
+        # limits instead and let matplotlib rescale, which unions with the other
+        # artists. `add_collection` already contributes the segments; the finite
+        # points are added explicitly so a measured record that no *segment*
+        # touches (isolated between gaps) still counts, as it does on the plain
+        # path.
+        finite = np.isfinite(x) & np.isfinite(y)
         if finite.any():
-            ymin, ymax = float(np.min(y[finite])), float(np.max(y[finite]))
-            pad = (ymax - ymin) * 0.05 or 1.0
-            self.ax.set_ylim(ymin - pad, ymax + pad)
+            self.ax.update_datalim(np.column_stack([x[finite], y[finite]]))
+        self.ax.autoscale_view()
         self.ax.xaxis_date()
 
         if show_colorbar:
@@ -391,8 +418,16 @@ class TimeSeries:
         the line itself and stay here. Can be called multiple times on the same
         object to draw on different axes with different styling.
 
+        Drawing is **additive**: a second call on the *same* axes appends its line
+        to whatever is already there rather than replacing it, and with a
+        `color_series` it appends a second colorbar, which shrinks the main axes.
+        That is what makes overlaying several series on one axes work; to re-draw
+        instead of overlay, clear the axes first (`ax.clear()`) or pass a fresh one.
+
         Args:
             ax: Matplotlib axes to plot on. If None, creates a new figure and displays it.
+                Existing artists and any limits the caller set are kept — the series is
+                drawn on top and the view grows to fit both.
             format_style: A :class:`~diive.plotting.FormatStyle` describing the chrome
                 (title, labels, units, fonts, colours, grid, legend). When None the
                 diive house style is used.
@@ -480,7 +515,11 @@ class TimeSeries:
 
         if self.showplot:
             self.fig.patch.set_facecolor('white')
-            self.fig.tight_layout(pad=1.2)
+            # No tight_layout(): `pf.create_ax` builds the figure with
+            # layout='constrained', which already spaces it and keeps doing so on
+            # every redraw. Switching engines here warned on an ordinary plot and
+            # raised outright once a colorbar existed, so the default colour-by
+            # plot (`ax=None`, `show_colorbar=True`) could not be drawn at all.
             self.fig.show()
 
         return self.ax
