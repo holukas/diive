@@ -208,8 +208,15 @@ class TestGapFilling(unittest.TestCase):
         """
         import re
         import pandas as pd
-        from diive.core.utils.console import console
+        from diive.gapfilling import interpolate as interpolate_module
         from diive.gapfilling.interpolate import linear_interpolation
+
+        # Capture on the console object `interpolate` itself holds, not on whatever
+        # `diive.core.utils.console.console` currently points at. The module binds it by
+        # name at import time, and `refresh_console()` rebinds the global to a NEW object
+        # (its own docstring says so) — so after tests/test_console.py has run, importing
+        # the name here captured a different console and this test saw empty output.
+        console = interpolate_module._console
 
         idx = pd.date_range('2022-06-01', periods=20, freq='30min', name='TIMESTAMP_END')
         series = pd.Series(np.arange(20.0), index=idx, name='TA')
