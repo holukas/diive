@@ -299,7 +299,6 @@ def test_plot_settings_live_render(window):
     tab.settings.orientation.setCurrentText("horizontal")
     tab.settings.vmin.setText("-5")
     tab.settings.vmax.setText("5")
-    tab.settings.show_values.setChecked(True)
     tab.settings.cb_extend.setCurrentText("both")
     tab.settings.fmt_axlabel_fs.setValue(8)
     assert tab.update_btn.isEnabled() is True  # an edit marked it dirty
@@ -317,6 +316,29 @@ def test_plot_settings_live_render(window):
     _cx = _np.asarray(_qm.get_coordinates())[..., 0]
     _xl = hax.get_xlim()
     assert min(_xl) <= _cx.max() and _cx.min() <= max(_xl)  # data is in view
+
+    # show_values on a short range, which is the only way it is usable: it writes one
+    # text label per cell, so a year of half-hourly data means 17 520 artists. Measured
+    # on this fixture, ticking it there cost 15.8 s to render and left every later
+    # re-layout walking those artists -- opening the next tab went 1.2 s -> 43.1 s, ~58 s
+    # of this one test. Three days is 144 cells: legible, and it actually checks that the
+    # labels appear, which the year-long version never did (it only checked for the
+    # error-fallback text).
+    window._range = (pd.Timestamp("2021-06-01"), pd.Timestamp("2021-06-03 23:30"))
+    window._apply_range()
+    QApplication.processEvents()
+    tab.settings.show_values.setChecked(True)
+    tab.update_btn.click()
+    QApplication.processEvents()
+    assert tab.settings.values()["show_values"] is True
+    labels = [t for a in tab.canvas.fig.axes for t in a.texts]
+    assert 100 < len(labels) < 500, f"expected one label per cell, got {len(labels)}"
+    assert any(t.get_text().strip() for t in labels)  # they carry the cell values
+    assert not _fallback(tab)
+    # Back to the full fixture range for the rest of the test.
+    tab.settings.show_values.setChecked(False)
+    window._reset_range()
+    QApplication.processEvents()
 
     # Reverse-colormap toggle (heatmap): appends/strips the _r suffix.
     tab.settings.cmap.setCurrentText("viridis")
