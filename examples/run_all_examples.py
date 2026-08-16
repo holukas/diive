@@ -13,6 +13,9 @@ window is closed; unattended that meant each one burned the full 120 s timeout
 and was reported as a failure it had not earned. Set ``MPLBACKEND`` yourself to
 override — e.g. ``MPLBACKEND=QtAgg`` to watch the plots appear — but then the
 run needs someone to close each window.
+
+Examples are otherwise left to use the machine as they see fit; see
+``_child_env`` for why capping their thread count made the suite slower.
 """
 
 import os
@@ -154,7 +157,55 @@ EXAMPLE_FILES = [
     'gapfilling/gapfill_swin.py',
 ]
 
-MAX_WORKERS = 8  # Number of parallel workers
+# Examples are submitted in the order listed above, on purpose. Scheduling the
+# known-heavy ones first (longest-processing-time first, the usual answer to a
+# long tail) measured worse: the heavy examples are the multi-threaded ones, so
+# starting a dozen of them together left each with a fraction of the cores and
+# they all finished late -- gapfill_swin took 19.78 s when spread out and 144 s
+# when front-loaded. Interleaved with the cheap examples they get the machine
+# more or less to themselves.
+MAX_WORKERS = min(12, os.cpu_count() or 4)  # Number of parallel workers
+TIMEOUT = 240  # Seconds per example
+
+
+def _child_env():
+    """Environment for an example: non-interactive plots.
+
+    A caller-set MPLBACKEND wins, so the plots can still be watched on purpose.
+
+    Deliberately does NOT cap the child's thread count. Handing each worker
+    ``cpu_count // MAX_WORKERS`` threads looks like the fix for the
+    oversubscription of a dozen examples that each pass ``n_jobs=-1``, and it is
+    not: measured over the whole suite it was far worse. The examples that ask
+    for every core genuinely scale on them (GridSearchCV, XGBoost, the SHAP
+    pass), and at two threads each they slowed by 5-9x -- e.g.
+    ``gapfill_optimize_xgboost`` 38 s -> 190 s -- which costs more than the
+    contention it avoids, because the light examples are dominated by imports
+    and leave cores idle anyway. If you revisit this, measure the suite total,
+    not one example.
+    """
+    return {**os.environ, 'MPLBACKEND': os.environ.get('MPLBACKEND', 'Agg')}
+
+
+def _kill_tree(proc):
+    """Kill the example and anything it spawned.
+
+    ``Popen.kill()`` only ends the direct child. Two things routinely sit below
+    it: the virtualenv launcher re-execs the real interpreter, and ``n_jobs=-1``
+    spawns joblib worker processes. Killing only the top process leaves those
+    running at full tilt for the rest of the suite, stealing the CPU that the
+    remaining examples are being timed on.
+    """
+    if sys.platform == 'win32':
+        subprocess.run(['taskkill', '/F', '/T', '/PID', str(proc.pid)],
+                       capture_output=True)
+    else:
+        import signal
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+    proc.kill()
 
 
 def run_example(example_file, examples_dir):
@@ -171,15 +222,22 @@ def run_example(example_file, examples_dir):
         }
 
     try:
-        # A caller-set MPLBACKEND wins, so the plots can still be watched on purpose.
-        env = {**os.environ, 'MPLBACKEND': os.environ.get('MPLBACKEND', 'Agg')}
-        result = subprocess.run(
+        popen_kwargs = {} if sys.platform == 'win32' else {'start_new_session': True}
+        proc = subprocess.Popen(
             [sys.executable, str(example_path)],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=120,
-            env=env
+            env=_child_env(),
+            **popen_kwargs
         )
+        try:
+            stdout, stderr = proc.communicate(timeout=TIMEOUT)
+        except subprocess.TimeoutExpired:
+            _kill_tree(proc)
+            stdout, stderr = proc.communicate()
+            raise
+        result = subprocess.CompletedProcess(proc.args, proc.returncode, stdout, stderr)
         elapsed = time.time() - start_time
 
         if result.returncode == 0:
@@ -203,7 +261,7 @@ def run_example(example_file, examples_dir):
         return {
             'file': example_file,
             'status': 'timeout',
-            'error': 'Timeout (exceeded 120 seconds)',
+            'error': f'Timeout (exceeded {TIMEOUT} seconds)',
             'time': elapsed
         }
     except Exception as e:
