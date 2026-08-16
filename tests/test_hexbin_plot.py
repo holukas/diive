@@ -311,3 +311,93 @@ class TestHexbinShowLessXticklabels(unittest.TestCase):
         """The other direction: the flag must not thin labels when it is off."""
         self.assertEqual(self._labels(False), self._labels(False))
         self.assertNotEqual(self._labels(False), self._labels(True))
+
+
+class TestHexbinEmptyCellsNotDrawn(unittest.TestCase):
+    """L107: no hexagon may be drawn over a cell that holds no data.
+
+    matplotlib's cutoff is `len(values) >= mincnt`, so the old `mincnt=0` default
+    handed *empty* cells to `reduce_C_function`. With `np.sum` the empty cell comes
+    back as 0.0 and is painted as a measured zero; with `np.max` the call raises;
+    with `np.mean`/`np.median` it returns NaN at the price of one RuntimeWarning per
+    empty cell. Same family as L61/L63: an empty cell renders empty.
+    """
+
+    GRIDSIZE = 10
+
+    def setUp(self):
+        # Two tight clouds with a genuinely empty region between them, so the hexbin
+        # grid spans a large area that holds no observations at all.
+        rng = np.random.default_rng(42)
+        n = 500
+        self.x = pd.Series(np.concatenate([rng.normal(2, .5, n), rng.normal(18, .5, n)]), name="Tair")
+        self.y = pd.Series(np.concatenate([rng.normal(2, .5, n), rng.normal(18, .5, n)]), name="WFPS")
+        self.z = pd.Series(np.concatenate([rng.normal(5, 1, n), rng.normal(-5, 1, n)]), name="NEP")
+
+    def _occupied_cells(self, ax) -> set:
+        """Centres of the grid cells that actually contain observations.
+
+        Same x/y and gridsize, so the grid geometry (and therefore the offsets) is
+        identical to the plot under test. `len` as reducer counts the members.
+        """
+        p = ax.hexbin(self.x.to_numpy(), self.y.to_numpy(), C=np.ones(len(self.x)),
+                      gridsize=self.GRIDSIZE, reduce_C_function=len, mincnt=1)
+        cells = {(round(cx, 6), round(cy, 6)) for cx, cy in p.get_offsets()}
+        p.remove()
+        return cells
+
+    def _render(self, reducer, **kwargs):
+        """Returns (n_hexagons_drawn, n_of_those_over_an_empty_cell)."""
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots()
+        try:
+            occupied = self._occupied_cells(ax)
+            hb = HexbinPlot(self.x, self.y, self.z, gridsize=self.GRIDSIZE,
+                            reduce_C_function=reducer, **kwargs)
+            hb.plot(ax=ax, fig=fig)
+            drawn = [(round(cx, 6), round(cy, 6)) for cx, cy in hb.p.get_offsets()]
+            over_empty = [c for c in drawn if c not in occupied]
+            return len(drawn), len(over_empty)
+        finally:
+            plt.close(fig)
+
+    def test_default_mincnt_is_one(self):
+        """The default must be matplotlib's effective default, not 0."""
+        self.assertEqual(HexbinPlot(self.x, self.y, self.z).mincnt, 1)
+
+    def test_sum_reducer_draws_only_cells_holding_data(self):
+        """np.sum is the fabricating case: an empty cell sums to a plausible 0.0."""
+        n_drawn, n_over_empty = self._render(np.sum)
+        # The two clouds occupy 11 of the 116 grid cells.
+        self.assertEqual(n_drawn, 11)
+        self.assertEqual(n_over_empty, 0)
+
+    def test_max_reducer_is_usable_at_all(self):
+        """np.max on an empty cell raised ValueError, so `0` was broken, not just misleading."""
+        n_drawn, n_over_empty = self._render(np.max)
+        self.assertEqual(n_drawn, 11)
+        self.assertEqual(n_over_empty, 0)
+
+    def test_median_default_emits_no_empty_slice_warnings(self):
+        """diive's own default reducer warned once per empty cell (210 warnings here)."""
+        import warnings as _warnings
+        with _warnings.catch_warnings(record=True) as caught:
+            _warnings.simplefilter("always")
+            n_drawn, n_over_empty = self._render(np.median)
+        runtime = [w for w in caught if issubclass(w.category, RuntimeWarning)]
+        self.assertEqual(n_drawn, 11)
+        self.assertEqual(n_over_empty, 0)
+        self.assertEqual(runtime, [])
+
+    def test_mincnt_below_one_is_rejected(self):
+        """`0` cannot produce a correct plot for any documented reducer, so it is closed off."""
+        for bad in (0, -1):
+            with self.assertRaises(ValueError) as ctx:
+                HexbinPlot(self.x, self.y, self.z, mincnt=bad)
+            self.assertIn("mincnt must be >= 1", str(ctx.exception))
+
+    def test_explicit_mincnt_still_thins_sparse_cells(self):
+        """The knob itself keeps working above 1."""
+        n_drawn, n_over_empty = self._render(np.median, mincnt=200)
+        self.assertEqual(n_over_empty, 0)
+        self.assertLess(n_drawn, 11)

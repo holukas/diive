@@ -48,7 +48,7 @@ class HexbinPlot(HeatmapBase):
                  gridsize: int = 11,
                  reduce_C_function=np.median,
                  normalize_axes: bool = False,
-                 mincnt: int = 0,
+                 mincnt: int = 1,
                  edgecolors: str = None,
                  xlabel: str = None,
                  ylabel: str = None,
@@ -65,7 +65,11 @@ class HexbinPlot(HeatmapBase):
                 (default np.median). Can be np.mean, np.sum, etc.
             normalize_axes: If True, convert x/y to percentile ranks (0-100 scale)
                 (default False, use original values)
-            mincnt: Minimum number of data points per hexagon (default 0)
+            mincnt: Minimum number of data points a hexagon must hold to be drawn
+                (default 1, i.e. only cells that actually contain data). Must be
+                >= 1: matplotlib's cutoff is ``len(values) >= mincnt``, so
+                ``mincnt=0`` passes *empty* input to ``reduce_C_function`` and is
+                rejected here — see Raises
             edgecolors: Hexagon edge color (default 'none')
             xlabel: Label for x-axis (auto-inferred from x.name if None)
             ylabel: Label for y-axis (auto-inferred from y.name if None)
@@ -75,6 +79,11 @@ class HexbinPlot(HeatmapBase):
         Raises:
             ValueError: If Series have mismatched lengths or no names
             ValueError: If x or y contain NaN values
+            ValueError: If mincnt < 1. An empty cell must render as empty, and no
+                reducer makes ``mincnt=0`` correct: ``np.sum`` returns 0.0 so the
+                empty cell is painted as a measured zero, ``np.max``/``np.min``
+                raise, and ``np.mean``/``np.median`` return NaN (dropped by
+                matplotlib anyway) at the cost of one RuntimeWarning per empty cell
 
         See Also:
             plot : Render the hexbin plot with matplotlib styling options
@@ -88,6 +97,17 @@ class HexbinPlot(HeatmapBase):
 
         if x.isnull().any() or y.isnull().any():
             raise ValueError("X and Y Series cannot contain NaN values (required for hexbin)")
+
+        # matplotlib's cutoff is `len(values) >= mincnt`, so anything below 1 hands empty
+        # input to reduce_C_function: np.sum paints an empty cell as a measured 0.0,
+        # np.max/np.min raise, np.mean/np.median warn per empty cell. No reducer makes it
+        # right, so reject it rather than document a trap.
+        if mincnt < 1:
+            raise ValueError(f"mincnt must be >= 1, got {mincnt}. A value below 1 includes "
+                             f"hexagons holding no data, which passes empty input to "
+                             f"reduce_C_function (np.sum then draws them as measured zeros, "
+                             f"np.max raises). Use mincnt=1 to draw every cell that contains "
+                             f"data.")
 
         # Warn if z has NaNs
         if z.isnull().any():

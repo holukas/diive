@@ -694,7 +694,8 @@ class PlotSettingsPanel(QScrollArea):
         form = QFormLayout(binning)
         self.gridsize = self._spin(11, 2, 100, form, "Grid size")
         self.normalize_axes = self._check("Normalize (pctile)", form)
-        self.mincnt = self._spin(0, 0, 1000, form, "Min count")
+        # Floor is 1, not 0: mincnt=0 hands empty cells to the reducer (HexbinPlot rejects it).
+        self.mincnt = self._spin(1, 1, 1000, form, "Min count")
         self._col.addWidget(binning)
 
         colors = QGroupBox("Colors")
