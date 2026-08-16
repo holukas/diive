@@ -373,7 +373,7 @@ The rest raise or fail at import:
 ### Fixed (code review)
 
 A read-only review of the library and the GUI, in four rounds, recorded 159 findings ranked so that a silently wrong
-number sits above a crash: a traceback blocks you, a plausible wrong number gets published. 128 are resolved, 3 of them
+number sits above a crash: a traceback blocks you, a plausible wrong number gets published. 139 are resolved, 3 of them
 closed as by design. Four of the 159 were found while fixing the others, which is also how several entries were caught
 overstating or understating what they described; each closed entry says so where it happened. The fixes landed as
 separate commits, each naming the findings it closes, and every closed entry
@@ -425,6 +425,62 @@ those are the ones to check existing results against.
 - Two smaller removals: the `'iterations'` key is gone from `stl_decompose`'s result dict (it returned
   `DecomposeResult.nobs`, a shape tuple, where a count was documented, and statsmodels exposes no iteration count to
   report honestly), and the unread `UstarVekuriThresholdDetection.bootstrap_results_` attribute is gone.
+
+#### Plot controls that did nothing now do what they say
+
+Eleven contract mismatches, where the code and the docstring disagreed about what a control does. Fixed in
+whichever direction measurement supported — usually the code, twice the documentation, because the plot type
+turned out to be structurally unable to honour the parameter.
+
+- **`HistogramPlot`'s `ignore_fringe_bins` was accepted, documented, stored and never applied.** It now trims
+  the first and last bins as `dv.analysis.Histogram` already did — the semantics were one module away, so this
+  is not a guess. Trimming every bin raises naming the parameter instead of failing inside matplotlib, and the
+  info box states the trim rather than claiming ten bins above eight bars. Only a call passing a truthy value
+  changes; every caller in diive, the examples and the GUI passes `False` or nothing. (L121)
+- **Hexbin's `minticks`/`maxticks` were inert in both directions** — `maxticks=3` and `maxticks=30` gave the
+  same ticks, and so did `minticks=20, maxticks=3`. They now drive a `MaxNLocator` on both axes. Their
+  defaults move from `3`/`10` to `None`, which changes no behaviour, since 3 and 10 never did anything. (L122)
+- **Hexbin's `color_bad` cannot be honoured at all**, which the finding did not establish: `ax.hexbin`
+  *removes* cells whose aggregate is NaN rather than colouring them, so a hexbin has no bad cells to paint.
+  It is documented as ignored, and the GUI tooltip says so. (L123)
+- **Hexbin's automatic colorbar arrows were computed from the raw `z` range while the colorbar maps the
+  aggregate.** With `np.median` that drew arrows for clipping that was not happening; with `np.sum` — where
+  the aggregate range is *wider* than the raw one, the case the finding missed — it drew **no** arrow while
+  114 hexagons really were clipped. Now read off the drawn aggregate. (L124)
+- **Hexbin paired `x`, `y` and `z` positionally.** Three free-standing Series with different indexes were
+  silently mispaired; only equal length was checked. They are now aligned by label when the indexes differ,
+  and a disjoint index raises. Nothing in diive hit this — the GUI, codegen and both examples slice one
+  dataframe — but the public API invites it. (L125)
+- **Hexbin gained `extent`**, so two subsets can share one hex grid; without it a 50/50 split of one record
+  produced different cell boundaries in the two panels, making cell *i* a different region in each. The same
+  finding's histogram half needed no code: `n_bins` already accepts an explicit edge sequence and pins the
+  grid exactly, which the docstring did not say and now does. Pinning the outlier detectors' before/after
+  panels to one grid was measured and rejected — the shared grid has to be the raw grid, which is set by the
+  very outliers the plot exists to remove, so the "after" panel collapses toward a single bar. (L126)
+- **`WindRosePlot.plot(ax=...)` retitled and reflowed the caller's whole figure.** Given an axes inside a
+  multi-panel figure it overwrote the figure suptitle and moved the neighbouring panels. The suptitle path now
+  runs only for a figure the class created itself; a caller-supplied axes gets an axes title. The GUI is on
+  that path, so the wind-rose title moves from figure level to above the rose. (L127)
+- **The wind rose honoured only the title out of `FormatStyle`.** Seven fields now reach the polar axes
+  (`ticks_fontsize`, `chrome_color`, `show_grid`, `grid_color`, `facecolor`, plus the title trio), each only
+  when explicitly set, so a plain `plot()` is byte-identical. The rest are documented as deliberately ignored
+  with the reason — axis labels have no meaning when the angular axis is a compass ring, the rose creates no
+  labelled artists for a legend to list, and the spine/tick geometry fields resolve `None` to a theme value,
+  so honouring them would change the rose's look for every existing caller. (L128)
+- **`ShiftedDistributionPlot` overrode the caller's `FormatStyle`.** A caller-set `ylabel` was replaced by
+  `"Density"`, the grid was forced off, and — unrecorded in the finding — a caller-set title was drawn
+  *twice*, once centred and once left-aligned. The y-label is now a default the caller can beat, the title is
+  drawn once, and grid-off moved from an override to the class's default style, the way the heatmaps already
+  do it. Any explicitly constructed `FormatStyle`, including a bare `FormatStyle()`, now draws a grid where
+  none appeared before; the GUI gained the matching checkbox, unticked. (L129)
+- **A ±3σ zone breakpoint outside the plotted range left one zone unpainted and its label over a region it did
+  not describe** — routine for a bounded variable such as relative humidity against 100 or precipitation
+  against 0. Zone edges are now clipped into the evaluation grid, and a zone lying entirely off it is neither
+  painted nor labelled, nor does its breakpoint line stretch the axis into empty space. (L130)
+- **`LongtermAnomaliesYear`'s reference-period "N years" counted the requested span, not the measured years.**
+  A period overlapping six measured years still printed "11 years". It now counts what the mean and sd were
+  computed over. The sibling annotation had a neighbouring defect — on a record shorter than a decade it read
+  "last 10 years" beside a span of five — and now prints the length it actually used. (L149)
 
 #### Plots no longer die on degenerate input
 
@@ -827,10 +883,10 @@ and beats a silently blank panel.
 #### Plot classes, docstring examples, and GUI object lifetime
 
 Round 4 covered the eight files the earlier rounds had left out — `windrose.py`, `hexbin.py`, `histogram.py`,
-`waterfall.py`, `shifted_distribution.py`, `timeseries.py`, `bar.py` and the GUI's `icons.py`. Of its 40 findings, 15
-are fixed: the 9 that produced a silently wrong or silently incomplete figure, and the 6 that crashed on legitimate
-input — all listed above. The remaining 25 are recorded with a repro but not yet fixed; they are contract mismatches
-and cosmetic defects, and none of them silently changes what a figure shows.
+`waterfall.py`, `shifted_distribution.py`, `timeseries.py`, `bar.py` and the GUI's `icons.py`. Of its 40 findings, 25
+are fixed: the 9 that produced a silently wrong or silently incomplete figure, the 6 that crashed on legitimate input,
+and the 10 contract mismatches — all listed above. The remaining 15 are recorded with a repro but not yet fixed; they
+are cosmetic or dead-code defects, and none of them silently changes what a figure shows.
 
 What did change:
 
@@ -848,11 +904,11 @@ What did change:
 
 #### Still open
 
-30 findings are open, each with a repro or a source citation in `CODE_REVIEW_FINDINGS.md`; 25 of them are round 4's,
-described above, and 4 were turned up while fixing the rest — an empty-series crash in `HistogramPlot.__init__` that the
-guard in `plot` cannot reach, a reference-period "N years" that counts the requested span rather than the measured
-years behind the number, an unreported NaN drop in `ShiftedDistributionPlot`, and a dead helper that draws on pyplot's
-current figure instead of the axes it is handed. The remaining one needs an external source: whether InfluxDB v2's delete range excludes `stop`, in
+19 findings are open, each with a repro or a source citation in `CODE_REVIEW_FINDINGS.md`; 15 of them are round 4's,
+described above, and 3 were turned up while fixing the rest — an empty-series crash in `HistogramPlot.__init__` that the
+guard in `plot` cannot reach, an unreported NaN drop in `ShiftedDistributionPlot`, and a dead helper that draws on
+pyplot's current figure instead of the axes it is handed. (A fourth, a reference-period year count that reported the
+requested span, was fixed in the same pass.) The remaining one needs an external source: whether InfluxDB v2's delete range excludes `stop`, in
 which case the pre-upload delete leaves the last record and duplicates survive. Deferred separately is BUR06/JAR09's
 aerodynamic resistance, where diive passes the canopy momentum resistance `u/u*^2` in place of Burba 2006's per-element
 `7.4*sqrt(d/U)` and has no equivalent of `fr`, the fraction of instrument heat retained in the optical path. That is not

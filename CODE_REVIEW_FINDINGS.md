@@ -227,17 +227,17 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 
 | ID | Finding | Where |
 |---|---|---|
-| L149 | `LongtermAnomaliesYear`'s "N years" in the reference annotation is `end - start + 1`, a label — never a count of the years behind the number | `core/plotting/bar.py:141` |
-| L121 | `ignore_fringe_bins` accepted, documented and stored by `HistogramPlot`; nothing applies it (L62/L91 family — a working impl exists in `analysis/histogram.py`) | `core/plotting/histogram.py:45` |
-| L122 | `minticks`/`maxticks` accepted, documented and forwarded by hexbin; only `nice_date_ticks` consumes them and hexbin never reaches it | `core/plotting/hexbin.py:268` |
-| L123 | `color_bad` accepted, documented and forwarded by hexbin; it takes effect only via `set_cmap`, which hexbin never calls | `core/plotting/hexbin.py:270` |
-| L124 | Hexbin's auto `cb_extend` reads the **raw** `z` range while the colorbar maps the aggregate — arrows asserting data that is not clipped | `core/plotting/hexbin.py:330` |
-| L125 | Hexbin pairs x/y/z positionally, never by index — same-labelled Series in a different order are mispaired silently *(latent)* | `core/plotting/hexbin.py:377` |
-| L126 | Histogram/hexbin derive bin edges per subset with no way to pin them, and `flagbase` puts two such panels side by side (L2 family) | `core/plotting/histogram.py:118` |
-| L127 | `WindRosePlot.plot(ax=...)` writes the **figure** suptitle and adjusts the caller's layout | `core/plotting/windrose.py:448` |
-| L128 | The wind rose ignores every `FormatStyle` field but the title, while the GUI feeds it the full shared Format section | `core/plotting/windrose.py:347` |
-| L129 | `ShiftedDistributionPlot` overrides a caller-set `FormatStyle.ylabel` via `merged()` where `apply(default_ylabel=)` is correct, and forces grid off | `core/plotting/shifted_distribution.py:186` |
-| L130 | A zone breakpoint outside the evaluation grid leaves one zone unpainted and puts its label over a region it does not describe | `core/plotting/shifted_distribution.py:154` |
+| ~~L149~~ | ~~`LongtermAnomaliesYear`'s "N years" is `end - start + 1`, a label — never a count of the years behind the number~~ (done 2026-08-17) — the sibling "last 10 years" label had a neighbouring defect, fixed with it | `core/plotting/bar.py:141` |
+| ~~L121~~ | ~~`ignore_fringe_bins` accepted, documented and stored by `HistogramPlot`; nothing applies it (L62/L91 family)~~ (done 2026-08-17) — implemented against `analysis/histogram.py`'s semantics | `core/plotting/histogram.py:45` |
+| ~~L122~~ | ~~`minticks`/`maxticks` accepted, documented and forwarded by hexbin; only `nice_date_ticks` consumes them~~ (done 2026-08-17) — inert in **both** directions, not just as a cap | `core/plotting/hexbin.py:268` |
+| ~~L123~~ | ~~`color_bad` accepted, documented and forwarded by hexbin; it takes effect only via `set_cmap`~~ (done 2026-08-17) — **diagnosis wrong**: `ax.hexbin` *removes* NaN cells, so it is inapplicable, not unapplied | `core/plotting/hexbin.py:270` |
+| ~~L124~~ | ~~Hexbin's auto `cb_extend` reads the **raw** `z` range while the colorbar maps the aggregate~~ (done 2026-08-17) — also the reverse, unrecorded: **no** arrow while 114 hexagons are clipped | `core/plotting/hexbin.py:330` |
+| ~~L125~~ | ~~Hexbin pairs x/y/z positionally, never by index — mispaired silently *(latent)*~~ (done 2026-08-17) — latent in-repo only; the entry's expected values were wrong | `core/plotting/hexbin.py:377` |
+| ~~L126~~ | ~~Histogram/hexbin derive bin edges per subset with no way to pin them (L2 family)~~ (done 2026-08-17) — **histogram half wrong** (`n_bins` already pins, and pinning `flagbase` measures worse); hexbin half real, `extent` added | `core/plotting/histogram.py:118` |
+| ~~L127~~ | ~~`WindRosePlot.plot(ax=...)` writes the **figure** suptitle and adjusts the caller's layout~~ (done 2026-08-17) — the GUI is on the caller-axes path too, contrary to the entry | `core/plotting/windrose.py:448` |
+| ~~L128~~ | ~~The wind rose ignores every `FormatStyle` field but the title~~ (done 2026-08-17) — 7 fields now honoured; the GUI feeds it **two** dead controls, not the full section | `core/plotting/windrose.py:347` |
+| ~~L129~~ | ~~`ShiftedDistributionPlot` overrides a caller-set `FormatStyle.ylabel` via `merged()`, and forces grid off~~ (done 2026-08-17) — **five** deviations, incl. a caller title drawn twice | `core/plotting/shifted_distribution.py:186` |
+| ~~L130~~ | ~~A zone breakpoint outside the evaluation grid leaves one zone unpainted and mis-places its label~~ (done 2026-08-17) — clip-and-drop; only `bp[0]`/`bp[3]` can escape | `core/plotting/shifted_distribution.py:154` |
 | ~~L15~~ | ~~`flag_ssitc_eddypro_test` performs no conversion despite documenting one~~ (done 2026-08-15) | `preprocessing/qaqc/eddyproflags.py:490` |
 | ~~L41~~ | ~~`ScopPhysics` documents an RF + MDV gap-fill that does not exist~~ (done 2026-08-15) | `flux/lowres/selfheating.py:152` |
 | ~~L44~~ | ~~`TimeLagAnalysis` docstring states three parameter facts the code contradicts~~ (done 2026-08-15) | `flux/lowres/timelag_analysis.py:90` |
@@ -3433,7 +3433,34 @@ neighbours in the same family: an *empty* series gives `IndexError: index 0 is o
 
 ## S4 — contract mismatch
 
-**[ ] L149. `LongtermAnomaliesYear`'s reference "N years" is a label, not a count**
+**[x] L149. `LongtermAnomaliesYear`'s reference "N years" is a label, not a count**
+> **Fixed 2026-08-17.** `self._ref_n_years = int(ref_subset.count())`. `count()` not `len()`: after L114's
+> reindex an outage inside the window is rows, all NaN.
+>
+> Entry correct as filed, confirmed on four cases. Wrong exactly when the window is not fully measured —
+> partial overlap (11 printed, 6 measured) or an outage inside it (11 printed, 8 measured); a gapless
+> window and a single-year window already printed the truth.
+>
+> **Printed the measured count rather than the entry's "both" option**, because `end - start + 1` is fully
+> derivable from the span printed immediately beside it: `(1995-2005, 11 years)` states one fact twice.
+> Replacing the number makes the line carry two independent facts — which window, and how many years are
+> behind the statistic — at the same length, and stays byte-identical whenever they coincide.
+>
+> **The sibling "last 10 years" annotation has a neighbouring defect, fixed with it.** On a record shorter
+> than ten calendar years it printed `last 10 years mean: 2.20±1.92sd (2016-2020)` — the label asserts ten,
+> the span beside it says five, and the figure contradicts itself with no outside knowledge needed. Now
+> `len(last10)`, byte-identical for any record of ≥10 years. Its *outage-in-the-tail* case is deliberately
+> **not** changed: both halves name the window, which after L114 really is those ten calendar years, and
+> NaN-skipping is the class's convention throughout (`reference_mean` does the same) — no count is claimed,
+> so none is misstated. `tests/test_plots.py` asserts `"(2011-2020)"` verbatim, which is a signal that the
+> parenthesis is an established contract.
+>
+> Nine scenarios fingerprinted: exactly three annotation strings move, each one a case where the old text
+> was false; the other six and every other rendered field are bit-identical, max abs diff 0.0. Four
+> mutations, two of them deliberately over-broad — including the "N requested, M measured" variant that was
+> rejected — both of which failed the no-regression guards, so those guards are not vacuous.
+>
+> Pre-existing, left alone: the `1 years` grammar, and `±nansd` when N=1 (`std()` is ddof=1).
 `core/plotting/bar.py:141` — `ref_n_years = end - start + 1` is the *nominal* span of the requested
 period, never the number of measured years the mean and sd were actually computed over. Spun out of
 L120, where a partial overlap was measured as behaving correctly in every respect but this.
@@ -3448,26 +3475,95 @@ The number is right and its stated provenance is wrong, which is the worse half.
 any reference window containing an outage, which after L114's reindex is a window with NaN rows.
 Suggested fix: count `ref_subset.dropna()`, or print both ("11 years requested, 6 measured").
 
-**[ ] L121. `ignore_fringe_bins` is accepted, documented and stored by `HistogramPlot`, and nothing applies it**
+**[x] L121. `ignore_fringe_bins` is accepted, documented and stored by `HistogramPlot`, and nothing applies it**
+> **Fixed 2026-08-17 by implementing it**, the L62/L91 direction — and here it is not a guess, because
+> `analysis/histogram.py:107` carries the reference semantics one module away: bin the full series on the
+> full grid, then drop the first `i` and last `j` bins (`counts[i:len(counts)-j]`; the `len()`-based stop
+> matters, `j == 0` must trim nothing).
+>
+> Entry confirmed: `False` and `[1, 1]` returned identical counts, edges and bar counts. The fix re-bins on
+> the trimmed edge array rather than slicing counts afterwards, so it stays a single `ax.hist` call — that
+> call is what draws the bars, the bar labels and the peak highlight. Verified equal to `analysis.Histogram`
+> for trims `[1,1]`, `[2,0]`, `[0,3]`, `[3,4]`, with surviving bars keeping their original geometry.
+> Trimming every bin now raises naming the parameter, instead of matplotlib's `attempt to get argmax of an
+> empty sequence`. The info box states the trim — otherwise it asserts `n_bins: 10` above 8 bars.
+>
+> Moves only a call passing a truthy `ignore_fringe_bins`. Every caller in diive, the examples and the GUI
+> passes `False` or nothing, so all are unchanged to the last float (8 fingerprint cases, max abs diff 0.0).
+> Mutation-checked, including an over-broad mutation flipping the default, which also broke a pre-existing
+> test.
+>
+> **Reported, not acted on:** the parameter now does something but is unreachable from the GUI and absent
+> from `histogram_to_code` — a candidate for both, and the timelag tab already exposes the same idea as two
+> spinboxes (`gui/tabs/timelag.py:249`). Also `histogram.py:214`'s
+> `info_txt += f"…" if self.method == 'n_bins' else info_txt` re-appends the whole accumulated string in the
+> `else` branch (dead today, `method` is always `'n_bins'`; same shape two lines down). And with a trim
+> active the KDE is scaled by `counts.sum()` while `gaussian_kde` is fitted on all records, so the curve
+> sits low by `N_kept / N_all` — the same convention that already applies when an explicit edge list clips
+> data, so no new behaviour class.
 `core/plotting/histogram.py:36`, `:45`, `:61` — the L62/L91 defect exactly. The name is not
 speculative: `analysis/histogram.py:107` carries a working `_ignore_fringe_bins`, so the plotting
 class looks like it inherited the parameter and lost the behaviour. **[reproduced]** counts with
 `False` and with `[1, 1]` are identical; the identifier occurs 4 times in the module, never in a
 computation.
 
-**[ ] L122. `minticks` / `maxticks` are accepted, documented and forwarded by `hexbin.py`, and nothing applies them**
+**[x] L122. `minticks` / `maxticks` are accepted, documented and forwarded by `hexbin.py`, and nothing applies them**
+> **Fixed 2026-08-17 by implementing them**, the L91 direction: a per-axis
+> `MaxNLocator(nbins=maxticks-1, min_n_ticks=minticks, steps=[1,2,2.5,5,10])` installed after `format()`,
+> and only when one of the two is set. Defaults moved `3`/`10` -> `None`, which is a documented-default
+> change and not a behaviour change, since 3 and 10 never did anything.
+>
+> **Stronger than the entry:** not only do `maxticks=3` and `maxticks=30` agree, `minticks=20, maxticks=3`
+> also yields the same seven ticks. Inert in both directions.
+>
+> Nothing moves unless you pass one of them (`maxticks=3` -> 2 visible x-ticks, `=30` -> 21, `minticks=8`
+> -> at least 8). `heatmap_base.py` needed no change; its own handling is correct for the date-axis
+> heatmaps that actually reach `nice_date_ticks`.
 `core/plotting/hexbin.py:268-269`, `:299-300`, `:360-361` — sibling of the already-fixed L91 in the
 same file. `HeatmapBase.plot` only *stores* them; the sole consumer of `self.minticks` in the whole
 plotting package is `heatmap_datetime.py:308,314` (`nice_date_ticks`), which hexbin never reaches —
 its axes are not date axes. **[reproduced]** `maxticks=3` and `maxticks=30` give identical ticks.
 
-**[ ] L123. `color_bad` is accepted, documented and forwarded by `hexbin.py`, and nothing applies it**
+**[x] L123. `color_bad` is accepted, documented and forwarded by `hexbin.py`, and nothing applies it**
+> **Closed 2026-08-17 as a docstring fix — the entry's diagnosis is wrong, and that changes the direction.**
+> It is right that nothing applies it, but it implies applying it would work (the L91 shape). It would not:
+> `ax.hexbin` computes `good_idxs = ~np.isnan(accum)` and **removes** those hexagons
+> (`matplotlib/axes/_axes.py`, mpl 3.10.9). Measured on data whose whole corner has NaN `z`: **45 hexagons
+> drawn, 0 NaN**, and still 0 NaN after applying `cmap.set_bad('red')` by hand. A hexbin has no bad cells
+> for `color_bad` to paint. It is **inapplicable, not unapplied**.
+>
+> So implementing is impossible and removal is blocked: `codegen.py:306` and `gui/tabs/plotting.py:917`
+> both pass `color_bad=`. The docstring now states it is ignored and names the matplotlib mechanism, which
+> also propagates to the GUI tooltip via `param_docs`. Nothing moves at runtime.
+>
+> **The mutation that mattered was the one that did *not* fail.** Handing `ax.hexbin` a masked `C` — the
+> plausible "make `color_bad` work" edit — left all 52 tests passing, which is the evidence for this
+> direction rather than L91's.
+>
+> **Reported, not acted on:** the GUI still builds a "Missing color" combo on the hexbin panel
+> (`gui/widgets/plot_settings.py:716-720`, emitted at `:1690`) and both the GUI and codegen pass the dead
+> keyword. The honest fix drops the widget and the two pass-throughs, which would then let `color_bad` leave
+> the hexbin signature — a coordinated GUI + codegen + library change.
 `core/plotting/hexbin.py:270`, `:301`, `:362` — third sibling in the same file. `color_bad` takes
 effect only through `HeatmapBase.set_cmap`, called from `plot_pcolormesh`; hexbin renders via
 `ax.hexbin` and calls neither. **[reproduced]** stored value `grey`, colormap bad colour actually
 used `[0, 0, 0, 0]`.
 
-**[ ] L124. Hexbin's auto `cb_extend` is derived from the raw `z` range while the colorbar maps the aggregate**
+**[x] L124. Hexbin's auto `cb_extend` is derived from the raw `z` range while the colorbar maps the aggregate**
+> **Fixed 2026-08-17.** The raw-`z` block is gone; a new `_auto_cb_extend(vmin, vmax)` reads
+> `self.p.get_array()` — the drawn aggregate — and runs after `ax.hexbin`, before `format()`.
+>
+> **The entry records half of it.** It says the aggregate range "is always narrower". That holds for
+> `np.median` but not for the reducers the docstring advertises:
+>
+> | reducer | raw range | aggregate range | auto `cb_extend` | actually clipped |
+> |---|---|---|---|---|
+> | `np.median` | -16.95 … 22.27 | 1.29 … 8.41 | `'both'` | **0** — false arrows |
+> | `np.sum` | -16.95 … 22.27 | 14.08 … 179.77 | `'neither'` | **114** — missing arrows |
+>
+> So the second, unrecorded failure is the opposite of the filed one: arrows *absent* while data really is
+> clipped. Moves only when `vmin` or `vmax` is set and the aggregate range differs from the raw range on
+> that side; an explicit `cb_extend` still wins.
 `core/plotting/hexbin.py:330-344` — `z_min`/`z_max` come from `self.z` (per-record), but the
 mappable's data is the per-hexagon reduction, whose range is always narrower. **[reproduced]** raw
 range `-3.7719 … 14.7499`, aggregate range `-3.2043 … 14.6104`; setting `vmin`/`vmax` to exactly the
@@ -3475,7 +3571,23 @@ aggregate range clips nothing and still draws both extension arrows, asserting d
 colour scale. Suggested fix: compare against `self.p.get_array()` after the hexbin is drawn, or
 document that `cb_extend` refers to the raw range.
 
-**[ ] L125. Hexbin pairs `x` / `y` / `z` positionally, never by index**  *(latent)*
+**[x] L125. Hexbin pairs `x` / `y` / `z` positionally, never by index**  *(latent)*
+> **Fixed 2026-08-17.** An alignment block after the name check, via
+> `pd.concat([x, y, z], axis=1, keys=['_x','_y','_z'])` — the L9 / `ScatterXY` internal-key pattern — run
+> **only when the three indexes differ**, and raising if aligning changes the record count, so a disjoint
+> index fails loudly instead of plotting a mispaired hexbin.
+>
+> **"Latent" is right for the repo but understated.** The GUI (`plotting.py:912`), codegen and both examples
+> slice one dataframe, so in-tree nothing can hit it. But the public API takes three free-standing Series
+> and the only cross-check was equal length, so a library user assembling x, y and z from different sources
+> is not protected. **The entry's expected values are also wrong**: for z indexed `3,2,1,0` it claims
+> `[40, 30, 20, 10]`, which assumes hexagon order equals value order; the offsets are
+> `[[1,1],[4,4],[1.75,2.5],[3.25,2.5]]`, so the correct aligned result is `[40, 10, 30, 20]` against a
+> positional `[10, 40, 20, 30]`.
+>
+> Moves only when the three indexes are not identical. The `index.equals` guard is a **fast path**, not a
+> correctness path — aligning unconditionally passed all 52 tests; it exists to avoid building a 3-column
+> copy of the whole record on every plot, and no test asserts it, correctly.
 `core/plotting/hexbin.py:108-109`, `:377-379` — the only cross-Series validation is equal length, and
 each is taken through `.to_numpy()`. Three Series carrying the same labels in a different order are
 mispaired silently. **[reproduced]** z passed with index `3,2,1,0` yields aggregate values
@@ -3484,7 +3596,40 @@ passes misaligned Series, so this is latent. Suggested fix:
 `pd.concat([x, y, z], axis=1, keys=['_x','_y','_z'])` — the internal-key idiom already used by
 `ScatterXY` and `GridAggregator` aligns and makes the frame collision-proof at once.
 
-**[ ] L126. Histogram and hexbin derive bin edges per subset, with no way to pin them — and `flagbase` puts two such panels side by side**
+**[x] L126. Histogram and hexbin derive bin edges per subset, with no way to pin them — and `flagbase` puts two such panels side by side**
+> **Closed 2026-08-17 in two halves, which turned out to need opposite answers.**
+>
+> **Histogram half — the entry is wrong.** It states there is "no `range=` or explicit-edge argument on
+> either `__init__` or `plot`". `n_bins` **already** accepts an edge sequence and pins the grid exactly:
+> `n_bins=np.linspace(-10, 15, 11)` gives `edges == [-10, -7.5, …, 15]`, and the same sequence handed to a
+> series and to a subset produces bar-for-bar identical geometry. The existing `NONUNIFORM_EDGES` fixture in
+> `tests/test_histogram.py` and the KDE comment both already rely on it. The docstring said only
+> "int or list", which is presumably how the reviewer concluded no such control exists. Fixed there.
+>
+> **And pinning the `flagbase` figure would make it strictly worse**, measured on real detector output
+> (`zScoreRolling` on the spiked July record; raw -40.34…338.92, cleaned 2.15…28.47):
+>
+> | shared bins | occupied, raw panel | occupied, cleaned panel |
+> |---|---|---|
+> | 10 | 10 | **1** |
+> | 30 | 23 | 3 |
+> | 50 | 32 | 5 |
+> | 100 | 41 | 8 |
+>
+> The shared grid must be the raw grid, and the raw grid is set by the very outliers the plot exists to
+> remove — so the "after" panel collapses toward a single bar, and no bin count escapes it. The two
+> distributions differ in scale *because* the detection worked. `flagbase.defaultplot` therefore keeps
+> independent grids and carries a WHY comment with these numbers so the next reviewer does not re-file it
+> (the L94 annotate-don't-delete precedent), plus a pointer at the second such figure,
+> `plot_outlier_daytime_nighttime`.
+>
+> **Hexbin half — the entry is right.** No `extent` on `__init__` or `plot`; a random 50/50 split of one
+> record at `gridsize=6` gave first centres `[0.005187, 0.064230]` vs `[0.010675, 0.247793]` and different
+> x-limits, so cell *i* was a different region in the two panels. A new `extent` parameter pins it; with it
+> the two subsets get identical offsets and identical limits. Nothing moves unless it is passed.
+>
+> **Reported, not acted on:** `extent` is library-only — neither `hexbin_to_code` nor the GUI panel exposes
+> it, so a GUI user still cannot pin one grid across two subsets.
 `core/plotting/histogram.py:118-123` (no `range=` or explicit-edge argument on either `__init__` or
 `plot`) — the L2 (`WindDirOffset`) family: bin *i* is not the same interval across two histograms of
 related subsets. `core/base/flagbase.py:243,248` draws `HistogramPlot(series)` and
@@ -3504,7 +3649,21 @@ first hexagon centre `[0.0534, 6.7152]` vs `[0.0638, 0.0461]`. Suggested fix: ex
 control (`range=` / explicit edges; `extent=` for hexbin) so a caller comparing subsets can share one
 grid.
 
-**[ ] L127. `WindRosePlot.plot(ax=...)` writes the *figure* suptitle and adjusts the caller's figure layout**
+**[x] L127. `WindRosePlot.plot(ax=...)` writes the *figure* suptitle and adjusts the caller's figure layout**
+> **Fixed 2026-08-17.** `own_fig = ax is None` recorded at figure creation; the suptitle +
+> `subplots_adjust(top=0.92)` path now runs only for a figure the class made itself, and a caller-supplied
+> axes gets `ax.set_title(...)` padded clear of the compass ring.
+>
+> **The entry's impact assessment is wrong.** It says the impact is limited because the GUI gives the rose
+> its own figure. `gui/tabs/plotting.py:1114` does `fig.add_subplot(111, projection="polar")` and passes
+> `ax=`, so the GUI is on the caller-axes path too — it simply has no neighbour to disturb.
+> `windrose_to_code` emits the same shape. Measured on a two-panel figure: the caller's
+> `fig.suptitle('CALLER SUPTITLE')` was **destroyed** (replaced by the plot title) and the neighbour's
+> height grew by 0.04, while the rose's own axes title stayed empty.
+>
+> Moves only when you pass your own `ax` **and** set a title. **GUI-visible consequence, intended:** the
+> wind-rose title moves from figure level (`y=0.97`) to an axes title above the rose, and one
+> `subplots_adjust` call that fought the GUI canvas layout is gone.
 `core/plotting/windrose.py:448-451` — when a title is set the class calls `self.fig.suptitle(...)`
 and `self.fig.subplots_adjust(top=0.92)` even for a caller-supplied axes. **[reproduced]** plotting
 into one panel of a multi-panel figure sets the figure suptitle to `'panel A'` and leaves
@@ -3512,7 +3671,39 @@ into one panel of a multi-panel figure sets the figure suptitle to `'panel A'` a
 is a live trap for anyone composing panels. Suggested fix: `ax.set_title(...)` when `ax` was passed
 in; keep the suptitle path for the figure the class created itself.
 
-**[ ] L128. The wind rose ignores every `FormatStyle` field except the title, and the GUI feeds it the full shared Format section**
+**[x] L128. The wind rose ignores every `FormatStyle` field except the title, and the GUI feeds it the full shared Format section**
+> **Fixed 2026-08-17** following the `TreeRingPlot` precedent (inline chrome, honest docstring), but with the
+> honoured set widened to everything the rose actually draws. Now honoured: `ticks_fontsize` (compass +
+> radial, as a fallback under the dedicated `sector_label_fontsize`), `chrome_color`, `show_grid`,
+> `grid_color`, `facecolor`, plus the existing title trio. Each applied **only when non-`None`**, so the
+> default render is untouched.
+>
+> **The "full shared Format section" half is wrong.** The wind-rose panel calls
+> `_build_format_group(fields=["title", "fonts"])` (`plot_settings.py:1046`), exposing Title, Title font,
+> Axis-label font and Tick font — not the whole section. So the GUI-visible dead controls were exactly
+> **Tick font** and **Axis-label font**; the grid and chrome-colour part is a library-caller gap, not a GUI
+> one (`chrome_color` has no GUI widget for any plot type). A 25-field audit confirmed only `title` and its
+> three modifiers had any effect before.
+>
+> **Deliberately not honoured, with reasons in the docstring:** `xlabel`/`ylabel`/`xunits`/`yunits` and their
+> fonts — the angular axis *is* the compass ring and the radial axis is named by the colorbar, so matplotlib
+> would place the text under the disc, colliding with the S label; `zlabel` — the colorbar label has its own
+> `cb_label` with a non-trivial auto default, and CLAUDE.md keeps `cb_*`/`zlabel` as direct `plot()` kwargs;
+> the four legend fields — the rose creates no labelled artists; `show_zeroline` — the polar equivalent
+> already exists as `show_zero_circle`; and `spine_linewidth`/`ticks_direction`/`ticks_length`/`ticks_width`
+> — these describe cartesian spines a polar axes lacks **and** their `apply()` semantics resolve `None` to a
+> theme value, so honouring them would change the rose's default look for every existing caller. That last
+> point was decisive.
+>
+> Four renders × 26 properties compared before and after: `before == after` exactly, max abs diff 0.0. Nine
+> mutations, four of them over-broad — two changing a single default (grid alpha 0.3 -> 0.31, bar width
+> 0.9 -> 0.8) purely to prove the no-regression test is not vacuous on chrome and geometry independently.
+>
+> **Reported, not acted on.** (1) The GUI's "Axis-label font" row is still inert for the rose, because the
+> `"fonts"` group bundles title/axis-label/tick fonts; the honest fix is to split the group or drop the row
+> for this type. (2) **`FormatStyle.apply(ax)` raises `KeyError: 'top'` on *any* polar axes** —
+> `plotfuncs.format_spines` walks the four cartesian spines. That is why both `windrose.py` and
+> `treering.py` hand-roll their chrome; making `apply` polar-safe would let them share one path.
 `core/plotting/windrose.py:347-354`, hardcoded chrome at `:438-446` — the docstring is honest ("only
 the `title` / title-font fields apply"), so the *library* contract holds. The *exposure* does not:
 `gui/tabs/plotting.py:1122` passes `FormatStyle(**opts["_format"])` from the one shared Format
@@ -3521,7 +3712,35 @@ indication. **[reproduced]** `show_grid=False` leaves 8 gridlines drawn and visi
 `chrome_color='red'` leaves tick labels black. Suggested fix: honour at least `show_grid` and
 `chrome_color` on the polar axes (one line each), or hide the inapplicable controls for this type.
 
-**[ ] L129. `ShiftedDistributionPlot.plot()` overrides a caller-set `FormatStyle.ylabel` and forces the grid off while documenting it as controllable**
+**[x] L129. `ShiftedDistributionPlot.plot()` overrides a caller-set `FormatStyle.ylabel` and forces the grid off while documenting it as controllable**
+> **Fixed 2026-08-17.** `apply(default_ylabel="Density")` replaces `merged(ylabel=...)` — the family
+> convention, 12 `default_ylabel=` call sites against this one `merged(ylabel=)`. The chrome copy now forces
+> exactly two fields, `title=""` and `show_legend=False`, the two the class re-draws with its own placement.
+>
+> **Five deviations, not the two this entry names.** Unlisted and the worst of them: a caller-set title was
+> drawn **twice** — `apply()` wrote a centred copy while the class wrote the left-aligned one — because the
+> class passed `default_title=""`, which suppresses `apply()`'s title only while `style.title is None`.
+> `show_title=False` did not help; the centred copy survived it. Also collateral: `grid_color` was inert
+> because the grid was hardcoded off. `show_zeroline=False` was dropped as an override of nothing —
+> `apply()` draws the zeroline only when handed `zeroline_data`, which this plot never passes.
+>
+> **Is forcing the grid off defensible? As a default, not as an override.** There is a real reason to want
+> it off: this plot's own ±1σ/±3σ markers are white dashed verticals, and `apply()` draws the grid as grey
+> dashed lines, so two dashed families compete and the one carrying the meaning is the fainter. But that
+> argues for a default, not for denying the caller. `heatmap_base.py:553` already shows the family's answer —
+> `format_style or FormatStyle(show_grid=False)`, so a caller who passes a style wins outright. Adopted.
+> This also removes the latent trap that `merged()` returns `self` and the following lines mutated it.
+>
+> Moves only when a `format_style` is passed — which means **any** explicitly constructed `FormatStyle`, a
+> bare `FormatStyle()` included, now draws a grid where none appeared before. Default `plot()` byte-identical
+> across four cases, max abs diff 0.0.
+>
+> **GUI regression this fix would have shipped, fixed with it:** the shifted-distribution tab had no grid
+> control (`plot_settings.py:1185`, `fields=["title", "xlabel", "fonts"]`), so `_format_values()` never
+> emitted the key and the dataclass default `True` applied — the GUI would have drawn a grid the user could
+> not switch off. Added `"show_grid"` to that field list and `SHIFTEDDIST` to the unticked-by-default tuple
+> at `:1455`, matching the library default. `codegen.py` needed nothing: it builds `FormatStyle` from the
+> same `_format` dict, so canvas and generated script move together.
 `core/plotting/shifted_distribution.py:186-189` — `chrome = style.merged(ylabel="Density")`.
 `merged()` applies every non-`None` override unconditionally, so it *replaces* a caller-set ylabel
 instead of supplying a default; the correct call is `apply(default_ylabel="Density")`, which is what
@@ -3536,7 +3755,36 @@ Latent, same lines: `merged()` returns `self` when it receives no non-`None` ove
 three lines mutate the result in place. It is safe today only because `ylabel="Density"` is always
 passed; dropping that argument would start mutating the caller's `FormatStyle`.
 
-**[ ] L130. A zone breakpoint outside the evaluation grid leaves one zone unpainted and mis-places its label**
+**[x] L130. A zone breakpoint outside the evaluation grid leaves one zone unpainted and mis-places its label**
+> **Fixed 2026-08-17, clip-and-drop.** The drawn edges are clipped into the grid; a zone whose raw interval
+> comes out inverted lies entirely off the plotted range, so it is neither painted nor labelled, and its
+> breakpoint line is skipped as well.
+>
+> Argued from what the zones mean: they partition the reference distribution's σ-space, but the plot shows
+> only the range where records exist, so a zone's *drawn* extent is its intersection with that range.
+> Clipping keeps a partly visible zone honest — its label re-centres on what is actually painted. A zone
+> whose intersection is empty is not in the view at all, so painting a degenerate sliver or writing its
+> label over the neighbour asserts something false. **Extending the grid to cover the breakpoints was
+> rejected**: it pads every skewed plot with a wide empty margin and changes the KDE evaluation range for a
+> cosmetic reason.
+>
+> Reproduced on both bounded shapes — RH-like against 100 (`bp[3]=104.52` outside a grid ending 102.69: 4
+> fills for 5 labels, "Extremely hot" written at x=103.60 over nothing, "Hot" centred on an *inverted*
+> interval rather than its fill) and gamma against 0 (`bp[0]=-6.12`, same shape). **One correction:** the
+> axis stretching the entry describes happens only when the off-grid breakpoint clears matplotlib's 5%
+> autoscale margin — the RH case's `xlim` was unchanged, the gamma case stretched by 3.0 units.
+>
+> Also proved, and it makes the test complete: only `bp[0]` and `bp[3]` can escape the grid, since
+> `bp[1] = mean-1σ ≥ min(all)-σ_ref = x[0]` and `bp[2] = mean+1σ ≤ max(all)+σ_ref = x[-1]` hold by
+> construction. So an out-of-range breakpoint always inverts exactly the outermost zone, and "inverted
+> interval" is a complete test for "off the plotted range".
+>
+> Moves only when a ±3σ breakpoint falls outside the grid — skewed or bounded variables. A symmetric normal
+> reference is untouched. **One mutation is worth recording:** using `<` instead of `<=` in the in-view test
+> broke L118's constant-reference and single-record tests, since equal-edged zones must stay in view — which
+> is why the rule is `<=`. And `test_every_zone_label_sits_over_the_zone_it_names` **survived every mutation
+> on the first pass**, i.e. it was vacuous; adding a zero-width assertion made it bite. Second vacuous test
+> the mutation step has caught in this campaign.
 `core/plotting/shifted_distribution.py:154`, `:166-172`, `:208` — `zone_edges = [x[0]] + breakpoints
 + [x[-1]]` assumes the ±3σ breakpoints lie inside the grid, but the grid spans `[all_min - 1σ,
 all_max + 1σ]`. For any skewed or bounded variable a breakpoint falls outside, `zone_edges` stops
