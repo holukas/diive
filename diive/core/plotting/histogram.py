@@ -11,6 +11,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
+from matplotlib import rcParams
 
 import diive.core.plotting.plotfuncs as pf
 from diive.core.funcs.funcs import zscore, val_from_zscore
@@ -32,8 +33,16 @@ class HistogramPlot:
     Args:
         series: Series to plot
         method: Binning method (e.g., 'n_bins')
-        n_bins: Number of bins for histogram (int or list)
-        ignore_fringe_bins: Whether to ignore fringe bins
+        n_bins: Number of bins for histogram. An int (or None for the matplotlib
+            default) lets the edges follow this series' own range; a sequence is
+            used as the explicit bin edges. Passing the same sequence to two
+            histograms is how a shared bin grid is pinned, so that bin *i* means
+            the same interval in both (values outside the sequence are not binned).
+        ignore_fringe_bins: List of two integers ``[i, j]``: the first *i* and the
+            last *j* bins are dropped from the plot. The edges are derived from the
+            full series first, so the bins that remain are the same intervals the
+            untrimmed histogram would have shown, and records falling into a dropped
+            bin are not plotted. Default False (keep all bins).
 
     Call `plot()` to render with styling options (title, labels, display options).
 
@@ -66,6 +75,28 @@ class HistogramPlot:
         self.ax = None
         self.counts = None
         self.edges = None
+
+    def _trimmed_edges(self):
+        """Return the bin edges with the fringe bins removed.
+
+        Same semantics as :meth:`diive.analysis.Histogram._ignore_fringe_bins`:
+        the edges come from the *full* series, then the first `i` and last `j`
+        bins are dropped, so the bins that survive are the ones the untrimmed
+        histogram would have shown. Re-binning on the trimmed edge array (rather
+        than slicing the counts afterwards) keeps one `ax.hist` call, which is
+        what draws the bars and their labels.
+        """
+        n_first, n_last = self.ignore_fringe_bins[0], self.ignore_fringe_bins[1]
+        # `bins=None` is matplotlib's "use the rcParam", which numpy does not know.
+        bins = self.n_bins if self.n_bins is not None else rcParams['hist.bins']
+        edges = np.histogram_bin_edges(self.s.dropna().to_numpy(), bins=bins)
+        # len()-based stop so that n_last == 0 trims nothing from the end.
+        kept = edges[n_first:len(edges) - n_last]
+        if len(kept) < 2:
+            raise ValueError(f"ignore_fringe_bins={self.ignore_fringe_bins} removes all "
+                             f"{len(edges) - 1} bins of {self.s.name}, "
+                             f"nothing would be left to plot.")
+        return kept
 
     def get_fig(self):
         """Return the matplotlib Figure (available after :meth:`plot`)."""
@@ -130,9 +161,12 @@ class HistogramPlot:
             return
 
         # Plot histogram
+        bins = self.n_bins
+        if self.ignore_fringe_bins:
+            bins = self._trimmed_edges()
         self.counts, self.edges, bars = self.ax.hist(
             x=self.s,
-            bins=self.n_bins,
+            bins=bins,
             rwidth=0.95,
             color="#78909c"
         )
@@ -179,6 +213,9 @@ class HistogramPlot:
         if show_info:
             info_txt = f"method: {self.method}"
             info_txt += f"\nn_bins: {self.n_bins}" if self.method == 'n_bins' else info_txt
+            # Otherwise the box claims a bin count the plot does not show.
+            if self.ignore_fringe_bins:
+                info_txt += f"\nignore_fringe_bins: {self.ignore_fringe_bins}"
             if highlight_peak:
                 info_txt += f"\nPEAK between {self.edges[ix_max]:.02f} and {self.edges[ix_max + 1]:.02f}" if self.method == 'n_bins' else info_txt
 

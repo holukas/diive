@@ -236,6 +236,15 @@ class FlagBase:
         ax_series.plot(self.series[rejected].index, self.series[rejected],
                        label="outlier (rejected)", color="#F44336", alpha=1, linestyle='none',
                        markersize=12, markeredgecolor='none', marker='X')
+        # `n_bins=None` bins each panel over its own range, so bin i is not the same
+        # interval in the two histograms. That is deliberate here: sharing one grid
+        # (pass explicit edges as `n_bins`) is the only way to compare them bar for
+        # bar, but the shared grid would have to be the raw series' grid, and that is
+        # set by the very outliers this plot exists to remove -- on a spiked July
+        # record the cleaned panel collapses to 1 occupied bin of 10 (3 of 30, 5 of
+        # 50). Each panel resolving its own distribution is worth more than bar-for-bar
+        # comparability; both panels tick-label every bin edge, so the scales are read
+        # off the axes, not assumed equal.
         hist_computation_kwargs = dict(method='n_bins', n_bins=None)
         hist_styling_kwargs = dict(highlight_peak=True, show_zscores=True, show_info=False,
                                     show_title=False, show_zscore_values=False,
@@ -314,6 +323,7 @@ class FlagBase:
         axes_series = [ax_series, ax_cleaned, ax_series_dt, ax_cleaned_dt, ax_series_nt, ax_cleaned_nt]
         axes_hist = [ax_series_hist, ax_cleaned_hist, ax_series_dt_hist,
                      ax_cleaned_dt_hist, ax_series_nt_hist, ax_cleaned_nt_hist]
+        # Per-panel bin grids, for the reason given in `defaultplot`.
         hist_computation_kwargs = dict(method='n_bins', n_bins=None)
         hist_styling_kwargs = dict(highlight_peak=True, show_zscores=True, show_info=False,
                                     show_title=False, show_zscore_values=False,
