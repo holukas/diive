@@ -50,16 +50,16 @@ class TestTimeLagAnalysis(unittest.TestCase):
     def test_bin_range_excluding_every_lag_keeps_all_bins(self):
         """A lag range that no bin falls into must not empty the histogram.
 
-        histogram_startbin/histogram_endbin are lag seconds, so a range above
-        every measured lag used to leave zero bins and crash detect_peak_range
-        on the empty array.
+        histogram_start_seconds/histogram_end_seconds are lag seconds, so a range
+        above every measured lag used to leave zero bins and crash
+        detect_peak_range on the empty array.
         """
         from diive.flux.lowres.timelag_analysis import TimeLagAnalysis
 
         lags = [0.30, 0.35, 0.40, 0.45, 0.50, 0.55]
         df = self._tlag_df(lags)
 
-        kwargs = dict(histogram_startbin=5, histogram_endbin=10)
+        kwargs = dict(histogram_start_seconds=5, histogram_end_seconds=10)
         res = TimeLagAnalysis(df=df, **kwargs).analyze_gas('CO2')
         self.assertEqual(len(res['histogram_results']), 5)
         self.assertIn(res['peak'], lags)
@@ -74,8 +74,38 @@ class TestTimeLagAnalysis(unittest.TestCase):
 
         df = self._tlag_df([0.30, 0.35, 0.40, 0.45, 0.50, 0.55])
 
-        analysis = TimeLagAnalysis(df=df, histogram_startbin=0.40, histogram_endbin=10)
+        analysis = TimeLagAnalysis(df=df,
+                                   histogram_start_seconds=0.40,
+                                   histogram_end_seconds=10)
         res = analysis.analyze_gas('CO2')
+        self.assertEqual(list(res['histogram_results']['BIN_START_INCL']), [0.40, 0.45, 0.50])
+
+    def test_renamed_histogram_range_params_are_rejected_by_name(self):
+        """The old bin-index names must say what replaced them.
+
+        They were renamed because the values are lag seconds, not bin indices;
+        an unrelated keyword must still raise the normal error so a typo cannot
+        pass silently through **legacy.
+        """
+        from diive.flux.lowres.timelag_analysis import TimeLagAnalysis
+
+        df = self._tlag_df([0.30, 0.35, 0.40, 0.45, 0.50, 0.55])
+
+        for old, new in (('histogram_startbin', 'histogram_start_seconds'),
+                         ('histogram_endbin', 'histogram_end_seconds')):
+            with self.subTest(old=old):
+                with self.assertRaises(TypeError) as ctx:
+                    TimeLagAnalysis(df=df, **{old: 0.40})
+                self.assertIn(new, str(ctx.exception))
+
+        with self.assertRaises(TypeError) as ctx:
+            TimeLagAnalysis(df=df, histogram_start_secondz=0.40)
+        self.assertIn('unexpected keyword argument', str(ctx.exception))
+
+        # The new names work and still trim the histogram
+        res = TimeLagAnalysis(df=df,
+                              histogram_start_seconds=0.40,
+                              histogram_end_seconds=10).analyze_gas('CO2')
         self.assertEqual(list(res['histogram_results']['BIN_START_INCL']), [0.40, 0.45, 0.50])
 
 

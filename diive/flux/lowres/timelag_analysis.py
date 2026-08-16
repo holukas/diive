@@ -68,6 +68,36 @@ plt.rcParams.update({
 })
 
 
+#: Parameter names that changed when the histogram range was renamed to state its
+#: unit. Old name -> new name. The old names read as bin *indices* although the
+#: values were always lag values in seconds.
+_RENAMED_PARAMS = {
+    'histogram_startbin': 'histogram_start_seconds',
+    'histogram_endbin': 'histogram_end_seconds',
+}
+
+
+def _reject_legacy_params(unexpected: dict) -> None:
+    """Raise for any leftover keyword argument, naming its replacement if it has one.
+
+    ``TimeLagAnalysis`` accepts ``**legacy`` purely so a call using the old
+    ``histogram_startbin`` / ``histogram_endbin`` names can be answered with a
+    message that says what to change, instead of Python's bare "unexpected
+    keyword argument". Names outside the rename table are still rejected, so a
+    typo cannot pass silently through ``**legacy``.
+    """
+    if not unexpected:
+        return
+    name = next(iter(unexpected))
+    if name in _RENAMED_PARAMS:
+        raise TypeError(
+            f"TimeLagAnalysis: '{name}' was renamed to '{_RENAMED_PARAMS[name]}' because "
+            f"the value is a lag value in seconds, not a bin index. "
+            f"Pass '{_RENAMED_PARAMS[name]}' instead."
+        )
+    raise TypeError(f"TimeLagAnalysis.__init__() got an unexpected keyword argument '{name}'")
+
+
 class TimeLagAnalysis:
     """
     Analyze and visualize time lags in eddy covariance flux measurements.
@@ -92,7 +122,7 @@ class TimeLagAnalysis:
         Default: None, which means [5, 10]
     lag_window_min, lag_window_max : float
         Reference acceptable lag range for visualization (seconds)
-    histogram_startbin, histogram_endbin : float
+    histogram_start_seconds, histogram_end_seconds : float
         Lag range in seconds kept for display and analysis. Default: 0 to 10
     gradient_threshold : float
         Edge detection sensitivity; lower = stricter. Default: 0.15
@@ -110,10 +140,11 @@ class TimeLagAnalysis:
                  ignore_fringe_bins=None,
                  lag_window_min=0.10,
                  lag_window_max=1.00,
-                 histogram_startbin=0,
-                 histogram_endbin=10,
+                 histogram_start_seconds=0,
+                 histogram_end_seconds=10,
                  gradient_threshold=0.15,
-                 zoom_margin=None):
+                 zoom_margin=None,
+                 **legacy):
         """
         Initialize TimeLagAnalysis with data and parameters.
 
@@ -134,10 +165,10 @@ class TimeLagAnalysis:
         lag_window_max : float
             Upper bound of physically acceptable lag range in seconds. Used for
             reference line visualization (typically ~1.00s). Default: 1.00
-        histogram_startbin : float
+        histogram_start_seconds : float
             Lowest lag value in seconds kept for display and analysis. Bins are
             compared against their inclusive start, not their index. Default: 0
-        histogram_endbin : float
+        histogram_end_seconds : float
             Highest lag value in seconds kept for display and analysis. If no bin
             falls into the range, the whole lag range is kept and a warning is
             issued. Default: 10
@@ -149,13 +180,17 @@ class TimeLagAnalysis:
             Zoom range offsets [before_peak, after_peak] in seconds for zoomed
             subplots. Defines how far left/right of peak to display in zoom views.
             Default: [0.5, 1.5]
+        **legacy
+            Only accepted to reject renamed parameters with a message naming
+            their replacement, see :data:`_RENAMED_PARAMS`.
         """
+        _reject_legacy_params(legacy)
         self.df = df
         self.ignore_fringe_bins = ignore_fringe_bins or [5, 10]
         self.lag_window_min = lag_window_min
         self.lag_window_max = lag_window_max
-        self.histogram_startbin = histogram_startbin
-        self.histogram_endbin = histogram_endbin
+        self.histogram_start_seconds = histogram_start_seconds
+        self.histogram_end_seconds = histogram_end_seconds
         self.gradient_threshold = gradient_threshold
         self.zoom_margin = zoom_margin or [0.5, 1.5]
 
@@ -436,13 +471,14 @@ class TimeLagAnalysis:
         # seconds, so a range that no measured lag falls into would leave no
         # bins and detect_peak_range would fail on the empty array. Keep all
         # bins in that case, and say so, for the same reason as above.
-        locs = ((results['BIN_START_INCL'] >= self.histogram_startbin) &
-                (results['BIN_START_INCL'] <= self.histogram_endbin))
+        locs = ((results['BIN_START_INCL'] >= self.histogram_start_seconds) &
+                (results['BIN_START_INCL'] <= self.histogram_end_seconds))
         if locs.any():
             results = results[locs].copy()
         else:
-            warn(f"{gascol}: no lag value falls into histogram_startbin="
-                 f"{self.histogram_startbin} to histogram_endbin={self.histogram_endbin} "
+            warn(f"{gascol}: no lag value falls into histogram_start_seconds="
+                 f"{self.histogram_start_seconds} to histogram_end_seconds="
+                 f"{self.histogram_end_seconds} "
                  f"(both in seconds); keeping all bins, the analysis therefore covers "
                  f"the full lag range.")
             results = results.copy()
@@ -566,7 +602,7 @@ class TimeLagAnalysis:
 
         # Auto-detect optimal number of ticks based on display ranges
         # Histogram x-axis (lag bins)
-        overview_range = self.histogram_endbin - self.histogram_startbin + bin_width
+        overview_range = self.histogram_end_seconds - self.histogram_start_seconds + bin_width
         overview_nbins_x = max(10, int(overview_range / bin_width))
         overview_nbins_x = self._check_tick_overlap(overview_nbins_x, overview_range, 'numeric')
 

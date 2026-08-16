@@ -391,6 +391,12 @@ those are the ones to check existing results against.
   ONEFlux port of the same algorithm and is what the chain, the bootstrap wrapper and the GUI use. The removed class
   read 11 attributes that were never assigned anywhere in it, and `run()` never called its own collectors, so its
   threshold was only ever printed, never stored.
+- **`TimeLagAnalysis`'s `histogram_startbin` / `histogram_endbin` are renamed to `histogram_start_seconds` /
+  `histogram_end_seconds`.** Both are compared against each histogram bin's inclusive start, so the values are lag
+  values in seconds and never were bin indices; the names invited a caller to pass a count, which lands somewhere
+  arbitrary on the lag axis. Passing an old name raises a `TypeError` naming its replacement, the way the outlier
+  detectors answer their pre-unification parameter names, so existing code stops instead of analysing an unintended
+  range. The GUI's two fields moved with them and now accept fractional seconds.
 - Two smaller removals: the `'iterations'` key is gone from `stl_decompose`'s result dict (it returned
   `DecomposeResult.nobs`, a shape tuple, where a count was documented, and statsmodels exposes no iteration count to
   report honestly), and the unread `UstarVekuriThresholdDetection.bootstrap_results_` attribute is gone.
@@ -567,8 +573,8 @@ those are the ones to check existing results against.
   a `n_unique - 1` bin histogram and `peakbins[0]` raised a bare `IndexError` that escaped `analyze_all_gases` and
   `plot_all_gases` despite their documented warn-and-continue. Trimming is skipped for that gas with a warning, since
   trimming anyway would return a peak from a partly-trimmed histogram, turning a crash into a quietly wrong number. A
-  `histogram_startbin` / `histogram_endbin` range that excludes every lag emptied `results` the same way through
-  different parameters.
+  `histogram_start_seconds` / `histogram_end_seconds` range that excludes every lag emptied `results` the same way
+  through different parameters.
 - `UstarThresholdConstantScenarios.calc(showplot=True)` on pandas 3, at two sites rather than the one the finding named:
   `counts.div(counts[0])` indexes a label-keyed Series positionally. Display only, so no threshold moves.
 - `UstarVekuriThresholdDetection.summary()` before `detect()`, where `results_` was initialised as a dict, so the guard
@@ -614,8 +620,8 @@ those are the ones to check existing results against.
   tests all index, so the `.name` mismatch is documented rather than renamed.
 - `TimeLagAnalysis`'s class docstring stated three parameter facts the code contradicts: `ignore_fringe_bins` defaults
   to `[5, 10]` and counts leading and trailing bins rather than naming indices, `zoom_margin` defaults to `[0.5, 1.5]`,
-  and `histogram_startbin` / `histogram_endbin` are lag values in seconds, hence floats. The misleading parameter names
-  are left alone, since renaming them is breaking.
+  and `histogram_startbin` / `histogram_endbin` are lag values in seconds, hence floats. Those two names were
+  subsequently renamed to state the unit, see *Removed or renamed API* above.
 - `reconstruct_from_components` masked every reconstruction with the trend's NaN regardless of `components_to_use`, so a
   seasonal-only reconstruction from a classical decomposition lost the trend's edge records (30 of 400 at period 31) and
   disagreed with `detrend()` on the same request. The mask was redundant where the trend was included, since gaps

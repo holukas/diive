@@ -40,8 +40,8 @@ analysis = TimeLagAnalysis(
     ignore_fringe_bins=[5, 10],  # Exclude edge bins with accumulated non-physical lags
     lag_window_min=0.05,  # Lower bound of acceptable lag range (seconds)
     lag_window_max=1.00,  # Upper bound of acceptable lag range (seconds)
-    histogram_startbin=0,  # First histogram bin to display
-    histogram_endbin=10,  # Last histogram bin to display
+    histogram_start_seconds=0,  # Lowest lag kept for display and analysis (seconds)
+    histogram_end_seconds=10,  # Highest lag kept for display and analysis (seconds)
     gradient_threshold=0.15,  # Edge detection sensitivity (lower = stricter)
     zoom_margin=[0.5, 0.8]  # Zoom offsets: [before_peak, after_peak] seconds
 )
