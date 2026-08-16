@@ -114,6 +114,21 @@ class HistogramPlot:
         self.ax = ax
         self.fig, self.ax, showplot = pf.setup_figax(ax=self.ax, figsize=(16, 9))
 
+        # A series without a single valid value has nothing to bin: `ax.hist`
+        # autodetects the range and dies on `[nan, nan]`. Say so on the axes
+        # instead -- this is reached from the outlier detectors' own diagnostic
+        # plot, where a traceback would kill the detector run over one empty panel.
+        if self.s.dropna().empty:
+            self.ax.text(0.5, 0.5, f"{self.s.name}: no data",
+                         size=16, color="black", transform=self.ax.transAxes,
+                         horizontalalignment='center', verticalalignment='center')
+            style.apply(ax=self.ax,
+                        default_title=f"{self.s.name} (between {self.first_date} and {self.last_date})",
+                        default_xlabel="", default_ylabel="Counts")
+            if showplot:
+                self.fig.show()
+            return
+
         # Plot histogram
         self.counts, self.edges, bars = self.ax.hist(
             x=self.s,
@@ -171,9 +186,11 @@ class HistogramPlot:
                          size=16, color="black", backgroundcolor='None', transform=self.ax.transAxes,
                          alpha=1, horizontalalignment='left', verticalalignment='top', zorder=999)
 
-        # z-scores
-        if show_zscores:
-            zscores = zscore(series=self.s, absolute=False)
+        # z-scores. A constant series has zero standard deviation, so every z-score
+        # is NaN and there is no z-axis range to lay out. Only the overlay is
+        # dropped -- the histogram of a constant series is still worth showing.
+        zscores = zscore(series=self.s, absolute=False) if show_zscores else None
+        if show_zscores and np.isfinite(zscores).any():
             self.axx = self.ax.twiny()
             self.axx.set_xlim(self.ax.get_xlim()[0], self.ax.get_xlim()[1])
             self.axx.grid(False)
