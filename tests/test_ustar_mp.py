@@ -460,6 +460,85 @@ class TestScenarioPlotCountsAreAddressedPositionally(unittest.TestCase):
         self.assertIn('100%', texts)
 
 
+class TestBootstrapThresholdsAreReproducible(unittest.TestCase):
+    """L97: UstarBootstrapThresholds resampled unseeded, in both of its paths.
+
+    The generic loop called `df_window.sample()` with no random_state, and the fast path
+    never passed the `rng` that `bootstrap_annual_samples` already accepted. So VUT and
+    CUT thresholds moved between runs — and this is the class `run_chain` uses for CUT
+    detection, unlike the standalone Vekuri detector fixed in L86.
+
+    The seed is derived per window year rather than shared, which is what lets the serial
+    and parallel paths agree: a single shared seed would make every window resample the
+    same positions, correlating years that are meant to be independent draws.
+    """
+
+    @staticmethod
+    def _df(years=(2021, 2022, 2023), per_year=2880, seed=0):
+        import pandas as pd
+        rng = np.random.RandomState(seed)
+        frames = []
+        for y in years:
+            ix = pd.date_range(f'{y}-06-01 00:15', periods=per_year, freq='30min',
+                               name='TIMESTAMP_MIDDLE')
+            ustar = rng.uniform(0, 0.9, per_year)
+            nee = np.where(ustar < 0.25, -1.0 - 4.0 * ustar, -2.0) + rng.normal(0, 0.3, per_year)
+            frames.append(pd.DataFrame({'NEE': nee, 'TA': rng.normal(10, 6, per_year),
+                                        'USTAR': ustar, 'SW_IN': 0.0}, index=ix))
+        return pd.concat(frames)
+
+    def _run(self, **kwargs):
+        from diive.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
+        from diive.flux.lowres.ustar_vekuri_detection import UstarVekuriThresholdDetection
+        boot = UstarBootstrapThresholds(
+            self._df(), detector_class=UstarVekuriThresholdDetection,
+            detector_kwargs=dict(nee_col='NEE', ta_col='TA', ustar_col='USTAR',
+                                 swin_col='SW_IN'),
+            n_iter=3, verbose=0, **kwargs)
+        annual = boot.run()
+        return annual, boot.get_cut_threshold()
+
+    def test_two_runs_with_the_same_seed_agree(self):
+        import pandas as pd
+        (a_vut, a_cut), (b_vut, b_cut) = self._run(), self._run()
+        pd.testing.assert_frame_equal(a_vut, b_vut)
+        self.assertEqual(a_cut, b_cut)
+
+    def test_a_different_seed_gives_a_different_draw(self):
+        """Guards the other direction: the seed must actually reach both paths."""
+        a_vut, _ = self._run(random_state=42)
+        b_vut, _ = self._run(random_state=7)
+        self.assertFalse(a_vut.equals(b_vut))
+
+    def test_serial_and_parallel_agree(self):
+        """The point of deriving the seed per year: n_jobs must not change the answer.
+
+        With one shared seed this would still be deterministic, but every window would
+        draw the same positions. With no seed the two paths would simply disagree.
+        """
+        import pandas as pd
+        serial_vut, serial_cut = self._run(n_jobs=1)
+        parallel_vut, parallel_cut = self._run(n_jobs=2)
+        pd.testing.assert_frame_equal(serial_vut, parallel_vut)
+        self.assertEqual(serial_cut, parallel_cut)
+
+    def test_the_seed_is_derived_per_year(self):
+        """Two windows must not draw the same positions, or the years are not independent."""
+        from diive.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
+        from diive.flux.lowres.ustar_vekuri_detection import UstarVekuriThresholdDetection
+        boot = UstarBootstrapThresholds(
+            self._df(), detector_class=UstarVekuriThresholdDetection,
+            detector_kwargs=dict(nee_col='NEE', ta_col='TA', ustar_col='USTAR',
+                                 swin_col='SW_IN'), n_iter=2, random_state=42, verbose=0)
+        seeds = [boot._seed_for(y) for y in boot.years_]
+        self.assertEqual(len(set(seeds)), len(seeds))
+        self.assertIsNone(UstarBootstrapThresholds(
+            self._df(), detector_class=UstarVekuriThresholdDetection,
+            detector_kwargs=dict(nee_col='NEE', ta_col='TA', ustar_col='USTAR',
+                                 swin_col='SW_IN'), random_state=None,
+            verbose=0)._seed_for(2021))
+
+
 class TestVekuriBootstrapIsReproducible(unittest.TestCase):
     """L86: bootstrap() resampled with no random_state, so its percentiles moved.
 

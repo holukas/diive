@@ -23,6 +23,7 @@ def _bootstrap_window_worker(
     detector_class: type,
     detector_kwargs: dict,
     n_iter: int,
+    seed: Optional[int] = None,
 ) -> tuple:
     """
     Bootstrap all iterations for one window (module-level for picklability).
@@ -30,11 +31,17 @@ def _bootstrap_window_worker(
     Fast path: if the detector exposes ``bootstrap_annual_samples`` it is built once on the
     window and resamples internally on pre-extracted arrays (no per-iteration DataFrame copy
     or detector reconstruction). Otherwise falls back to the generic resample-and-detect loop.
+
+    ``seed`` must already be derived per year by the caller. Both paths were previously
+    unseeded, so VUT and CUT thresholds differed between runs. A single shared seed would
+    be worse than none: every window would draw the same resample positions, correlating
+    years that are supposed to be independent draws. None keeps the old random behaviour.
     """
     if hasattr(detector_class, 'bootstrap_annual_samples'):
         try:
             detector = detector_class(df_window, verbose=0, **detector_kwargs)
-            samples = [float(s) for s in detector.bootstrap_annual_samples(n_iter)
+            samples = [float(s) for s in
+                       detector.bootstrap_annual_samples(n_iter, rng=np.random.default_rng(seed))
                        if s is not None and not np.isnan(s)]
         except Exception as err:
             # Carry the reason out rather than swallowing it: an empty sample list
@@ -46,8 +53,11 @@ def _bootstrap_window_worker(
 
     samples = []
     last_err = None
-    for _ in range(n_iter):
-        df_boot = df_window.sample(n=len(df_window), replace=True)
+    for i in range(n_iter):
+        # Offset by the iteration so the draws differ from each other, as the fast path's
+        # single Generator does across its own iterations.
+        df_boot = df_window.sample(n=len(df_window), replace=True,
+                                   random_state=None if seed is None else seed + i)
         try:
             detector = detector_class(df_boot, verbose=0, **detector_kwargs)
             detector.detect()
@@ -120,6 +130,12 @@ class UstarBootstrapThresholds:
         1 = sequential; -1 = use all available CPUs; N = use N processes.
         Uses joblib/loky backend, which works correctly on Windows without
         requiring an if __name__ == '__main__' guard in scripts.
+    random_state : int or None, default=42
+        Seed for the bootstrap resampling, so the same input gives the same VUT and CUT
+        thresholds. Pass None for a fresh draw on every run. The seed is derived per
+        window year, so results do not depend on ``n_jobs`` or on the order in which
+        windows finish, and separate years remain independent draws — a single shared
+        seed would make every window resample the same positions.
     verbose : int, default=0
         Verbosity: 0=silent, 1=progress per year.
 
@@ -160,9 +176,16 @@ class UstarBootstrapThresholds:
         n_iter: int = 100,
         percentiles: Tuple[int, ...] = (16, 50, 84),
         n_jobs: int = 1,
+        random_state: Optional[int] = 42,
         verbose: int = 0,
     ):
-        """Set up multi-year bootstrap USTAR threshold detection. See the class docstring."""
+        """Set up multi-year bootstrap USTAR threshold detection. See the class docstring.
+
+        ``random_state`` seeds the resampling, so the same input gives the same VUT and
+        CUT thresholds; pass None for the old per-run variation. The seed is derived per
+        window year, so the result does not depend on ``n_jobs`` or on the order windows
+        finish in, and separate years still draw independently.
+        """
         if df is None or df.empty:
             raise ValueError("Input DataFrame cannot be None or empty")
         if not isinstance(df.index, pd.DatetimeIndex):
@@ -175,6 +198,7 @@ class UstarBootstrapThresholds:
         self.n_iter = n_iter
         self.percentiles = sorted(percentiles)
         self.n_jobs = n_jobs
+        self.random_state = random_state
         self.verbose = verbose
 
         self.years_: List[int] = sorted(self.df.index.year.unique().tolist())
@@ -184,6 +208,14 @@ class UstarBootstrapThresholds:
         self._window_years_: Dict[int, List[int]] = {}
         self.annual_stats_: Optional[pd.DataFrame] = None
         self._all_samples_: Optional[List[float]] = None
+
+    def _seed_for(self, year: int) -> Optional[int]:
+        """Per-year bootstrap seed, or None when seeding is off.
+
+        Derived from the year rather than shared, so each window is an independent draw
+        and the result is identical whether the windows run serially or in parallel.
+        """
+        return None if self.random_state is None else int(self.random_state) + int(year)
 
     def _get_window_years(self, year_idx: int) -> List[int]:
         """
@@ -266,7 +298,8 @@ class UstarBootstrapThresholds:
                     info(f"  {year} [window: {win_str}] ({len(df_window)} records)...")
 
                 _, samples, err = _bootstrap_window_worker(
-                    year, df_window, self.detector_class, self.detector_kwargs, self.n_iter
+                    year, df_window, self.detector_class, self.detector_kwargs, self.n_iter,
+                    self._seed_for(year)
                 )
                 self._raw_samples_[year] = samples
 
@@ -287,7 +320,8 @@ class UstarBootstrapThresholds:
 
             results = Parallel(n_jobs=n_workers)(
                 delayed(_bootstrap_window_worker)(
-                    year, df_windows[year], self.detector_class, self.detector_kwargs, self.n_iter
+                    year, df_windows[year], self.detector_class, self.detector_kwargs, self.n_iter,
+                    self._seed_for(year)
                 )
                 for year in self.years_
             )

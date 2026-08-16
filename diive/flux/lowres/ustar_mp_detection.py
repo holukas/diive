@@ -80,6 +80,11 @@ class UstarMovingPointDetection:
         ONEFlux default ``default_seasons_group = "1,2,3;4,5,6;7,8,9;10,11,12"``.
     bootstrapping_times : int, default=100
         Number of bootstrap resampling iterations for uncertainty estimation
+    random_state : int or None, default=42
+        Seed for the bootstrap resampling, so ``bootstrap()`` returns the same
+        distribution for the same input. Pass None for a fresh draw each call.
+        ``detect()`` is deterministic and unaffected. Seeding selects which resamples
+        are drawn, not how a threshold is computed, so ONEFlux parity is unaffected.
     verbose : int, default=0
         Verbosity level: 0=silent, 1=progress, 2=detailed debug output
 
@@ -148,10 +153,17 @@ class UstarMovingPointDetection:
         forward_mode_n: int = 2,
         season_groups: Optional[List[List[int]]] = None,
         bootstrapping_times: int = 100,
+        random_state: Optional[int] = 42,
         verbose: int = 0,
     ):
         # Validate input
-        """Set up moving-point USTAR threshold detection. See the class docstring."""
+        """Set up moving-point USTAR threshold detection. See the class docstring.
+
+        ``random_state`` seeds the bootstrap resampling so a threshold is reproducible;
+        pass None for a fresh draw on every call. It does not affect ``detect()``, which
+        is deterministic. Seeding changes which resamples are drawn, not the algorithm,
+        so ONEFlux parity is unaffected.
+        """
         if df is None or df.empty:
             raise ValueError("Input DataFrame cannot be None or empty")
         if forward_mode_n < 1:
@@ -209,6 +221,7 @@ class UstarMovingPointDetection:
         self.ustar_classes_count = ustar_classes_count
         self.forward_mode_n = forward_mode_n
         self.bootstrapping_times = bootstrapping_times
+        self.random_state = random_state
         self.verbose = verbose
 
         # Default season groups: calendar quarters (ONEFlux default)
@@ -657,7 +670,9 @@ class UstarMovingPointDetection:
         if self.verbose >= 1:
             info(f"Running {n_iter} bootstrap iterations...")
 
-        rng = np.random.default_rng()
+        # Seeded so the returned distribution is reproducible; unseeded, every call
+        # gave different percentiles for the same input.
+        rng = np.random.default_rng(self.random_state)
         per_season: List[List[float]] = [[] for _ in range(self.seasons_count)]
         annual_samples: List[float] = []
 
