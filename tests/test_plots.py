@@ -436,6 +436,88 @@ class TestPlotClasses(unittest.TestCase):
                                      np.asarray(ranks, dtype=float),
                                      equal_nan=True))
 
+    # --- show_values cell-count guard ---
+
+    @staticmethod
+    def _datetime_heatmap_labels(series, **plot_kwargs):
+        """Render a HeatmapDateTime and report the overlay's cost and console output.
+
+        Returns ``(n_text_artists, n_cells, console_text)``. Text-artist count is
+        the measurable signal for the ``show_values`` guard: the overlay writes one
+        artist per cell and those artists stay on the axes.
+        """
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        from diive.core.utils.console import add_console_sink, remove_console_sink
+
+        class _Sink:
+            """Mirror console collecting everything the library prints."""
+
+            def __init__(self):
+                self.lines = []
+
+            def print(self, *args, **kwargs):
+                self.lines.append(" ".join(str(a) for a in args))
+
+            def log(self, *args, **kwargs):
+                self.print(*args, **kwargs)
+
+        sink = _Sink()
+        hm = HeatmapDateTime(series)
+        fig, ax = plt.subplots()
+        add_console_sink(sink)
+        try:
+            hm.plot(ax=ax, fig=fig, **plot_kwargs)
+        finally:
+            remove_console_sink(sink)
+        n_texts, n_cells = len(ax.texts), int(hm.z.size)
+        plt.close(fig)
+        return n_texts, n_cells, "\n".join(sink.lines)
+
+    def test_show_values_labels_every_cell_below_the_cell_limit(self):
+        from diive.core.plotting.heatmap_base import SHOW_VALUES_MAX_CELLS
+        n_texts, n_cells, out = self._datetime_heatmap_labels(
+            self.series.head(24 * 5), show_values=True)
+        self.assertLess(n_cells, SHOW_VALUES_MAX_CELLS)
+        self.assertEqual(n_texts, n_cells)  # one text artist per cell
+        self.assertNotIn("show_values skipped", out)
+
+    def test_show_values_skipped_above_the_cell_limit_and_says_so(self):
+        # ~100 days of hourly data, just past the limit. One year of half-hourly
+        # data (17 520 cells) took 6.3 s to draw and 4.9 s per later redraw.
+        from diive.core.plotting.heatmap_base import SHOW_VALUES_MAX_CELLS
+        n_texts, n_cells, out = self._datetime_heatmap_labels(
+            self.series.head(24 * 100), show_values=True)
+        self.assertGreater(n_cells, SHOW_VALUES_MAX_CELLS)
+        self.assertEqual(n_texts, 0)  # no artists left behind
+        self.assertIn("show_values skipped", out)  # not a silent skip
+        self.assertIn(str(n_cells), out)
+        self.assertIn(str(SHOW_VALUES_MAX_CELLS), out)
+
+    def test_show_values_max_cells_override_forces_the_labels(self):
+        from diive.core.plotting.heatmap_base import SHOW_VALUES_MAX_CELLS
+        n_texts, n_cells, out = self._datetime_heatmap_labels(
+            self.series.head(24 * 100), show_values=True, show_values_max_cells=None)
+        self.assertGreater(n_cells, SHOW_VALUES_MAX_CELLS)
+        self.assertEqual(n_texts, n_cells)
+        self.assertNotIn("show_values skipped", out)
+
+    def test_yearmonth_show_values_unaffected_by_the_cell_limit(self):
+        # A year x month grid is 12 cells per year, far below the limit, so the
+        # guard must never fire on the plot type the overlay was designed for.
+        from diive.core.plotting.heatmap_base import SHOW_VALUES_MAX_CELLS
+        from diive.core.plotting.heatmap_datetime import HeatmapYearMonth
+        hm = HeatmapYearMonth(self.series)
+        fig, ax = plt.subplots()
+        hm.plot(ax=ax, fig=fig, show_values=True)
+        n_texts, n_cells = len(ax.texts), int(hm.z.size)
+        plt.close(fig)
+        # Whole 12-month rows covering at least the three years present (the
+        # TIMESTAMP_START convention pulls in one more calendar year).
+        self.assertEqual(n_cells % 12, 0)
+        self.assertGreaterEqual(n_cells, 3 * 12)
+        self.assertLess(n_cells, SHOW_VALUES_MAX_CELLS)
+        self.assertEqual(n_texts, n_cells)
+
     # --- cumulative / waterfall ---
 
     def test_cumulative_ends_at_the_series_sum(self):

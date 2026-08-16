@@ -25,6 +25,21 @@ from diive.core.plotting.plotfuncs import hide_xaxis_yaxis, hide_ticks_and_tickl
 from diive.core.plotting.styles import LightTheme as theme
 from diive.core.plotting.styles.format import FormatStyle
 from diive.core.times.times import TimestampSanitizer, insert_timestamp
+from diive.core.utils.console import warn
+
+#: Default cell-count ceiling for the ``show_values`` cell-label overlay.
+#:
+#: The overlay writes one matplotlib text artist per cell, and those artists stay
+#: on the axes: every later re-layout of the figure walks all of them. Measured
+#: (Agg, 10x7 in, one text per cell): 2 000 cells = 0.70 s to draw and 0.40 s per
+#: later redraw, 4 000 cells = 1.41 s / 0.81 s, one year of half-hourly data
+#: (17 520 cells) = 6.30 s / 4.87 s — and in an interactive backend the same grid
+#: cost 15.8 s to draw plus 43 s on the next relayout, i.e. an apparent freeze.
+#: 2 000 keeps the worst case sub-second while leaving every realistic
+#: ``HeatmapYearMonth`` untouched: a year x month grid holds 12 cells per year, so
+#: it would need 166 years of record to reach the limit. Raise it per call with
+#: ``plot(show_values_max_cells=...)``.
+SHOW_VALUES_MAX_CELLS = 2_000
 
 
 def auto_colorbar_digits(z) -> int:
@@ -213,7 +228,8 @@ class HeatmapBase:
              show_less_xticklabels: bool = False,
              show_values: bool = False,
              show_values_fontsize: float = theme.AX_LABELS_FONTSIZE,
-             show_values_n_dec_places: int = 0):
+             show_values_n_dec_places: int = 0,
+             show_values_max_cells: int | None = SHOW_VALUES_MAX_CELLS):
         """Render heatmap with matplotlib styling (Phase 2 of two-phase design).
 
         All styling and presentation parameters go here. This method is abstract
@@ -268,6 +284,12 @@ class HeatmapBase:
             show_values_fontsize: Font size for the cell-value overlay text.
             show_values_n_dec_places: Decimal places for the cell-value overlay.
                                       Defaults to 0.
+            show_values_max_cells: Largest grid the ``show_values`` overlay is
+                drawn on.  Above it the overlay is skipped and a warning names
+                the cell count, because one text artist per cell is both
+                illegible and slow (see
+                :data:`SHOW_VALUES_MAX_CELLS`, the default).  Raise it to label a
+                big grid anyway, or pass *None* for no limit.
 
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
@@ -305,6 +327,7 @@ class HeatmapBase:
         self.show_values = show_values
         self.showvalues_fontsize = show_values_fontsize
         self.showvalues_n_dec_places = show_values_n_dec_places
+        self.show_values_max_cells = show_values_max_cells
         self.show_colormap = show_colormap
 
     def show(self):
@@ -442,6 +465,11 @@ class HeatmapBase:
         - ``'datetime_horizontal'`` — numeric midpoint on the float-hour
           y-axis; ``timedelta`` midpoint on the ``datetime.date`` x-axis.
 
+        Grids larger than ``self.show_values_max_cells`` (set by
+        :meth:`plot`, default :data:`SHOW_VALUES_MAX_CELLS`) are skipped with a
+        warning: one text artist per cell is illegible at that size and stays on
+        the axes, so it also slows down every later re-layout of the figure.
+
         Raises:
             NotImplementedError: If ``self.heatmaptype`` is not one of the
                 supported values listed above.
@@ -451,6 +479,19 @@ class HeatmapBase:
             thousands of cells produces an unreadable result.  This method is
             most useful for coarse grids such as ``HeatmapYearMonth``.
         """
+        n_cells = int(self.z.size)
+        if self.show_values_max_cells is not None and n_cells > self.show_values_max_cells:
+            # `self.verbose` is a progress flag that defaults to False, and routing
+            # this through it would silence the one message that explains why the
+            # requested labels are missing. Fall back to the module verbosity, which
+            # `dv.set_verbosity(0)` can still silence.
+            warn(f"show_values skipped: the grid has {n_cells} cells, more than the "
+                 f"show_values_max_cells limit of {self.show_values_max_cells}. One "
+                 f"label per cell would be illegible and slow down every later redraw. "
+                 f"Raise show_values_max_cells (or pass None) to label it anyway.",
+                 verbose=self.verbose or None)
+            return
+
         for i in range(self.z.shape[0]):
             for j in range(self.z.shape[1]):
                 # Calculate the center coordinates for each heatmap type

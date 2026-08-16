@@ -25,7 +25,7 @@ import pandas as pd
 from pandas import Series
 
 from diive.core.times.resampling import resample_to_monthly_agg_matrix
-from diive.core.plotting.heatmap_base import HeatmapBase
+from diive.core.plotting.heatmap_base import HeatmapBase, SHOW_VALUES_MAX_CELLS
 from diive.core.plotting.plotfuncs import nice_date_ticks
 from diive.core.plotting.styles import LightTheme as theme
 from diive.core.plotting.styles.format import FormatStyle
@@ -217,7 +217,8 @@ class HeatmapDateTime(HeatmapBase):
              show_less_xticklabels: bool = False,
              show_values: bool = False,
              show_values_fontsize: float = None,
-             show_values_n_dec_places: int = 0):
+             show_values_n_dec_places: int = 0,
+             show_values_max_cells: int | None = SHOW_VALUES_MAX_CELLS):
         """Render HeatmapDateTime with matplotlib styling (Phase 2 of two-phase design).
 
         All styling and presentation parameters go here. Can be called multiple times
@@ -249,6 +250,12 @@ class HeatmapDateTime(HeatmapBase):
             show_values: Overlay numeric values on cells (default: False)
             show_values_fontsize: Font size for value overlay text
             show_values_n_dec_places: Decimal places for value overlay (default: 0)
+            show_values_max_cells: Largest grid the overlay is drawn on; above it
+                the overlay is skipped with a warning (default:
+                :data:`~diive.core.plotting.heatmap_base.SHOW_VALUES_MAX_CELLS`).
+                One year of half-hourly data is 17 520 cells, where one label per
+                cell is unreadable and slows down every later redraw. Raise it,
+                or pass None for no limit, to label such a grid anyway.
 
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
@@ -285,7 +292,8 @@ class HeatmapDateTime(HeatmapBase):
             show_less_xticklabels=show_less_xticklabels,
             show_values=show_values,
             show_values_fontsize=show_values_fontsize,
-            show_values_n_dec_places=show_values_n_dec_places
+            show_values_n_dec_places=show_values_n_dec_places,
+            show_values_max_cells=show_values_max_cells
         )
 
         # Domain-specific rendering (pcolormesh + formatting)
@@ -466,7 +474,8 @@ class HeatmapYearMonth(HeatmapBase):
              show_less_xticklabels: bool = False,
              show_values: bool = False,
              show_values_fontsize: float = None,
-             show_values_n_dec_places: int = 0):
+             show_values_n_dec_places: int = 0,
+             show_values_max_cells: int | None = SHOW_VALUES_MAX_CELLS):
         """Render HeatmapYearMonth with matplotlib styling (Phase 2 of two-phase design).
 
         All styling and presentation parameters go here. Can be called multiple times
@@ -496,6 +505,11 @@ class HeatmapYearMonth(HeatmapBase):
             show_values: Overlay numeric values on cells (default: False)
             show_values_fontsize: Font size for value overlay text
             show_values_n_dec_places: Decimal places for value overlay (default: 0)
+            show_values_max_cells: Largest grid the overlay is drawn on; above it
+                the overlay is skipped with a warning (default:
+                :data:`~diive.core.plotting.heatmap_base.SHOW_VALUES_MAX_CELLS`).
+                A year x month grid holds 12 cells per year, so no realistic
+                record comes near the limit.
 
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
@@ -536,7 +550,8 @@ class HeatmapYearMonth(HeatmapBase):
             show_less_xticklabels=show_less_xticklabels,
             show_values=show_values,
             show_values_fontsize=show_values_fontsize,
-            show_values_n_dec_places=show_values_n_dec_places
+            show_values_n_dec_places=show_values_n_dec_places,
+            show_values_max_cells=show_values_max_cells
         )
 
         # Domain-specific rendering (pcolormesh + formatting)
