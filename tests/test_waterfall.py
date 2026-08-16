@@ -18,6 +18,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.colors import to_hex
 
 from diive.core.plotting.waterfall import WaterfallPlot
 
@@ -186,6 +187,84 @@ class TestWaterfallOrdinarySeriesUnaffected(unittest.TestCase):
         self.assertEqual(len(ax.lines), 27)
         np.testing.assert_allclose(ax.lines[-1].get_ydata(), [expected.sum()])
         self.assertIn(f"{expected.sum():.0f}", [t.get_text() for t in ax.texts])
+
+
+class TestWaterfallZeroContribution(unittest.TestCase):
+    """A contribution of exactly 0.0 is neither uptake nor release.
+
+    It takes the release colour under both sign conventions, which is documented
+    rather than given a third colour because a zero-height bar paints no pixels.
+    """
+
+    UPTAKE = '#2196f3'
+    RELEASE = '#f44336'
+
+    @staticmethod
+    def _facecolors(series, **kwargs):
+        fig, ax = plt.subplots()
+        WaterfallPlot(series, resample=None, **kwargs).plot(ax=ax, showplot=False)
+        colors = [to_hex(p.get_facecolor()) for p in ax.patches]
+        plt.close(fig)
+        return colors
+
+    def test_zero_contribution_takes_release_color(self):
+        """0.0 falls in the release bucket with the default NEE sign convention."""
+        series = pd.Series([1.0, 0.0, -1.0],
+                           index=pd.date_range('2020-01-01', periods=3, freq='D'), name='FLUX')
+        self.assertEqual(self._facecolors(series),
+                         [self.RELEASE, self.RELEASE, self.UPTAKE])
+
+    def test_zero_contribution_takes_release_color_when_uptake_is_positive(self):
+        """The same holds sign-flipped: 0.0 is release, not uptake."""
+        series = pd.Series([1.0, 0.0, -1.0],
+                           index=pd.date_range('2020-01-01', periods=3, freq='D'), name='FLUX')
+        self.assertEqual(self._facecolors(series, uptake_is_negative=False),
+                         [self.UPTAKE, self.RELEASE, self.RELEASE])
+
+    def test_signed_bars_keep_their_own_colors(self):
+        """Small-but-real contributions must stay signed, not be lumped in with 0.0."""
+        series = pd.Series([1.0, 0.25, 0.0, -0.25, -1.0],
+                           index=pd.date_range('2020-01-01', periods=5, freq='D'), name='FLUX')
+        self.assertEqual(self._facecolors(series),
+                         [self.RELEASE, self.RELEASE, self.RELEASE, self.UPTAKE, self.UPTAKE])
+
+    def test_zero_bar_paints_no_pixels(self):
+        """The zero bar's colour is unobservable, which is why it gets no colour of its own.
+
+        The same repaint on a non-zero bar is measured first, so a count of 0 means
+        the colour is invisible rather than that the measurement is inert.
+        """
+        series = pd.Series([1.0, 0.0, -1.0],
+                           index=pd.date_range('2020-01-01', periods=3, freq='D'), name='FLUX')
+
+        def pixels_moved_by_repainting(bar_index):
+            fig, ax = plt.subplots(figsize=(6, 3), dpi=100)
+            WaterfallPlot(series, resample=None).plot(ax=ax, showplot=False)
+            fig.canvas.draw()
+            before = np.asarray(fig.canvas.buffer_rgba()).copy()
+            ax.patches[bar_index].set_facecolor('#00FF00')
+            fig.canvas.draw()
+            after = np.asarray(fig.canvas.buffer_rgba()).copy()
+            plt.close(fig)
+            return int((before != after).any(axis=2).sum())
+
+        self.assertGreater(pixels_moved_by_repainting(0), 0)  # control: a real bar does move pixels
+        self.assertEqual(pixels_moved_by_repainting(1), 0)
+
+    def test_genuinely_zero_period_is_drawn_not_dropped(self):
+        """A dry day is measured, so it keeps its (invisible) bar — unlike an empty day."""
+        index = pd.date_range('2020-01-01', periods=5 * 48, freq='30min')
+        series = pd.Series(0.0, index=index, name='PREC')
+        series.loc['2020-01-03'] = 0.5  # one wet day among four dry ones
+        wf = WaterfallPlot(series, resample='D', agg='sum')
+        self.assertEqual(len(wf.contributions), 5)
+        self.assertEqual(int((wf.contributions == 0.0).sum()), 4)
+
+        fig, ax = plt.subplots()
+        wf.plot(ax=ax, showplot=False)
+        colors = [to_hex(p.get_facecolor()) for p in ax.patches]
+        plt.close(fig)
+        self.assertEqual(colors, [self.RELEASE] * 5)
 
 
 if __name__ == '__main__':

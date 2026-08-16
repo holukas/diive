@@ -41,6 +41,11 @@ class WaterfallPlot:
             (NEE convention), negative values are treated as uptake (sink) and
             colored blue, positive values as release (source) and colored red.
             Set to False when the data is sign-flipped so positive means uptake.
+            A contribution of exactly 0.0 is neither uptake nor release and takes
+            the release color under both conventions, which is never seen: the bar
+            has zero height, so such a period shows only the flat connector. This
+            is common for a variable that is genuinely zero for whole periods
+            (1820 of 3649 daily bars for bundled CH-DAV precipitation).
 
     Methods:
         plot : Render the waterfall chart with styling options
@@ -126,7 +131,8 @@ class WaterfallPlot:
             showplot: Show the figure (only when this object created the figure).
             digits_after_comma: Decimals for the final-total annotation.
             color_uptake: Bar color for uptake (sink) periods.
-            color_release: Bar color for release (source) periods.
+            color_release: Bar color for release (source) periods, and for a
+                contribution of exactly 0.0 (see ``uptake_is_negative``).
             bar_width: Bar width in days. Defaults to ~80% of the median spacing
                 between periods.
             show_connectors: Draw thin lines linking consecutive bars.
@@ -161,7 +167,10 @@ class WaterfallPlot:
 
         self.ax.xaxis.axis_date()
 
-        # Uptake/release split depends on the sign convention.
+        # Uptake/release split depends on the sign convention. Exactly 0.0 is neither
+        # and lands in the release bucket; no third color for it, because a zero-height
+        # bar paints no pixels with edgecolor='none' (measured: repainting all 1820 zero
+        # bars of a daily precipitation waterfall moves 0 pixels of the canvas).
         uptake_mask = self.contributions < 0 if self.uptake_is_negative else self.contributions > 0
         colors = uptake_mask.map({True: color_uptake, False: color_release})
 
