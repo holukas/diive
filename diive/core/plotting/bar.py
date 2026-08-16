@@ -36,6 +36,11 @@ class LongtermAnomaliesYear:
         See `examples/visualization/plot_other_plots.py` for complete example.
     """
 
+    # Internal key for the data column of the working frame. Keying it by the
+    # caller's Series name lets a variable called e.g. 'reference_mean' overwrite
+    # the data before the anomaly is computed (same reason as ScatterXY/GridAggregator).
+    _VALUECOL = '_values'
+
     def __init__(self,
                  series: Series,
                  reference_start_year: int,
@@ -61,18 +66,25 @@ class LongtermAnomaliesYear:
         self.reference_start_year = reference_start_year
         self.reference_end_year = reference_end_year
 
-        self.series.sort_index(ascending=True)
+        # Chronological order is required: the bars are drawn in frame order and
+        # the "last 10 years" annotation is a tail() of the same frame.
+        self.series = self.series.sort_index(ascending=True)
         self.data_first_year = self.series.index.min()
         self.data_last_year = self.series.index.max()
 
-        self.anomalies_df = self._calc_reference()
+        self._anomalies_df = self._calc_reference()
+
+    @property
+    def anomalies_df(self) -> pd.DataFrame:
+        """Results frame (copy), with the data column back under the caller's Series name."""
+        return self._anomalies_df.rename(columns={self._VALUECOL: self.series.name})
 
     def _annotate_reference(self):
         """Draw the domain-specific reference-statistics info box (not shared chrome)."""
-        ref_mean = self.anomalies_df['reference_mean'].iloc[-1]
-        ref_sd = self.anomalies_df['reference_sd'].iloc[-1]
+        ref_mean = self._anomalies_df['reference_mean'].iloc[-1]
+        ref_sd = self._anomalies_df['reference_sd'].iloc[-1]
         ref_n_years = (self.reference_end_year - self.reference_start_year) + 1
-        last10 = self.anomalies_df[self.series.name].tail(10)
+        last10 = self._anomalies_df[self._VALUECOL].tail(10)
         last10_mean = last10.mean()
         last10_std = last10.std()
 
@@ -91,14 +103,14 @@ class LongtermAnomaliesYear:
         self.ax.set_xlim(-1, len(self.series))
 
     def _calc_reference(self):
-        anomalies_df = pd.DataFrame(self.series)
+        anomalies_df = self.series.rename(self._VALUECOL).to_frame()
 
         ref_subset = self.series.loc[(self.series.index >= self.reference_start_year)
                                      & (self.series.index <= self.reference_end_year)]
         # ref_subset = self.series.between(self.reference_start_ix, self.reference_end_ix)
         anomalies_df['reference_mean'] = ref_subset.mean()
         anomalies_df['reference_sd'] = ref_subset.std()
-        anomalies_df['anomaly'] = anomalies_df[self.series.name].sub(anomalies_df['reference_mean'])
+        anomalies_df['anomaly'] = anomalies_df[self._VALUECOL].sub(anomalies_df['reference_mean'])
         anomalies_df['anomaly_above'] = anomalies_df['anomaly'].loc[anomalies_df['anomaly'] >= 0]
         anomalies_df['anomaly_below'] = anomalies_df['anomaly'].loc[anomalies_df['anomaly'] < 0]
         return anomalies_df
@@ -145,14 +157,14 @@ class LongtermAnomaliesYear:
         color_below = '#42A5F5'  # Blue for below-reference
 
         # Plot bars
-        self.anomalies_df['anomaly_above'].plot.bar(
+        self._anomalies_df['anomaly_above'].plot.bar(
             color=color_above,
             ax=self.ax,
             legend=False,
             width=0.7,
             alpha=0.9
         )
-        self.anomalies_df['anomaly_below'].plot.bar(
+        self._anomalies_df['anomaly_below'].plot.bar(
             color=color_below,
             ax=self.ax,
             legend=False,
@@ -164,7 +176,7 @@ class LongtermAnomaliesYear:
         default_title = f"{self.series_label} anomaly per year ({self.data_first_year}-{self.data_last_year})"
         default_ylabel = f"{self.series_label} anomaly" + (f" {self.series_units}" if self.series_units else "")
         style.apply(ax=self.ax, default_title=default_title, default_xlabel='Year',
-                    default_ylabel=default_ylabel, zeroline_data=self.anomalies_df['anomaly'])
+                    default_ylabel=default_ylabel, zeroline_data=self._anomalies_df['anomaly'])
 
         # Domain-specific annotation + categorical x-axis tweaks (not shared chrome).
         self._annotate_reference()

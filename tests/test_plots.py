@@ -652,6 +652,77 @@ class TestPlotClasses(unittest.TestCase):
         self.assertEqual(len(ax.patches), 2 * len(yearly))
         plt.close(fig)
 
+    def test_longterm_anomalies_sorts_an_unsorted_record(self):
+        # L109: the class used to discard its own sort_index(), so an unsorted
+        # record was plotted AND averaged in input order. An already-sorted input
+        # cannot show this, so the index is deliberately shuffled here.
+        import random
+        import pandas as pd
+        from diive.core.plotting.bar import LongtermAnomaliesYear
+        years = list(range(1990, 2021))
+        values = {yr: 8.0 + (yr - 1990) * 0.1 for yr in years}  # distinct, monotonic in year
+        shuffled = years.copy()
+        random.Random(42).shuffle(shuffled)
+        self.assertNotEqual(shuffled, years)  # guard: the input really is unsorted
+        yearly = pd.Series([values[yr] for yr in shuffled], index=shuffled, name="TA")
+
+        plot = LongtermAnomaliesYear(series=yearly, reference_start_year=1990,
+                                     reference_end_year=2000)
+        anomalies = plot.anomalies_df
+        self.assertEqual(list(anomalies.index), years)
+
+        # The reference statistics are selected by year (order-independent), but
+        # the "last 10 years" annotation is a tail() of the frame and is not.
+        ref_mean = float(anomalies["reference_mean"].iloc[-1])
+        self.assertAlmostEqual(ref_mean, sum(values[yr] for yr in range(1990, 2001)) / 11)
+        last10 = [values[yr] for yr in range(2011, 2021)]
+        expected_last10_mean = sum(last10) / 10
+
+        fig, ax = plt.subplots()
+        plot.plot(ax=ax)
+        annotation = [t.get_text() for t in ax.texts if "last 10 years mean" in t.get_text()]
+        self.assertEqual(len(annotation), 1)
+        self.assertIn("(2011-2020)", annotation[0])
+        self.assertIn(f"last 10 years mean: {expected_last10_mean:.2f}", annotation[0])
+
+        # The bars themselves are drawn in frame order: above-bars first, then
+        # below-bars, each with one rectangle per year (0-height where the year
+        # belongs to the other series).
+        n = len(years)
+        heights = [p.get_height() for p in ax.patches]
+        self.assertEqual(len(heights), 2 * n)
+        drawn = [heights[i] + heights[n + i] for i in range(n)]
+        expected = [values[yr] - ref_mean for yr in years]
+        for got, want in zip(drawn, expected):
+            self.assertAlmostEqual(got, want)
+        plt.close(fig)
+
+    def test_longterm_anomalies_survive_a_reference_name_collision(self):
+        # L110: the working frame used to be keyed by the caller's Series name, so a
+        # variable called 'reference_mean' overwrote the data column before the
+        # anomaly was computed, zeroing every anomaly.
+        import pandas as pd
+        from diive.core.plotting.bar import LongtermAnomaliesYear
+        for colliding_name in ("reference_mean", "reference_sd", "anomaly"):
+            with self.subTest(name=colliding_name):
+                yearly = pd.Series([1.0, 3.0, 2.0, 5.0, 0.0],
+                                   index=[2016, 2017, 2018, 2019, 2020],
+                                   name=colliding_name)
+                plot = LongtermAnomaliesYear(series=yearly, reference_start_year=2016,
+                                            reference_end_year=2018)
+                # Reference mean over 2016-2018 is 2.0, unchanged by the name.
+                anomaly = plot.anomalies_df["anomaly"]
+                if colliding_name == "anomaly":
+                    # The caller-facing rename puts two columns under this name.
+                    anomaly = anomaly.iloc[:, -1]
+                self.assertAlmostEqual(float(anomaly.loc[2018]), 0.0)
+                self.assertAlmostEqual(float(anomaly.loc[2019]), 3.0)
+                self.assertAlmostEqual(float(anomaly.loc[2020]), -2.0)
+                fig, ax = plt.subplots()
+                plot.plot(ax=ax)
+                self.assertEqual(len(ax.patches), 2 * len(yearly))
+                plt.close(fig)
+
     # --- 3D surface grid (library path, no gui3d extra needed) ---
 
     def test_datetime_surface_grid_shape_and_axes(self):
