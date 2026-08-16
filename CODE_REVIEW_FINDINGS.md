@@ -1,7 +1,8 @@
 # Code Review Findings
 
 Review dates: 2026-08-06 (round 1: core numerics + GUI) · 2026-08-07 (round 2: the modules round 1
-left out; round 3: everything both left out) · diive v0.91.0 · branch `indev` (at `af022000`)
+left out; round 3: everything both left out) · 2026-08-16 (round 4: the eight files round 3 still
+left out) · diive v0.91.0 · branch `indev` (at `af022000`)
 
 Working document. The review itself changed no code; fixes land as separate commits and each one
 is recorded in place, in the entry it closes. Findings are ordered by severity within each section;
@@ -104,7 +105,7 @@ opposite of what the code produces. Re-read it against the corrected behaviour.
 
 ---
 
-# Triage index — all 114 findings by severity
+# Triage index — all 155 findings by severity
 
 The detailed entries below stay grouped by review round and module. This index is the **fix order**.
 
@@ -128,10 +129,14 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L46~~ | ~~Does Burba 2008 intend BUR08 to drop the WPL dilution factor?~~ **Answered 2026-08-07: no, it applies to every method.** Fixed | `flux/lowres/selfheating.py:614` |
 | L72 | Is InfluxDB v2's *delete* range stop-exclusive? If so the pre-upload delete leaves the last record and duplicates survive | `core/io/db/influx/influxio.py:122` |
 
-## S1 — Silently wrong scientific output (12 + 1 by design)
+## S1 — Silently wrong scientific output (16 + 1 by design)
 
 | ID | Finding | Where |
 |---|---|---|
+| L107 | `HexbinPlot`'s `mincnt=0` default paints hexagons over cells holding no data — 85% of a two-cloud plot fabricated with `np.sum`, `ValueError` with `np.max` | `core/plotting/hexbin.py:76` |
+| L108 | Histogram KDE overlay scaled by the *first* bin width, so it is wrong for any non-uniform bin list — 5.1x above the tallest bar | `core/plotting/histogram.py:142` |
+| L109 | `LongtermAnomaliesYear` discards its own `sort_index`, so an unsorted record is plotted **and averaged** in file order | `core/plotting/bar.py:64` |
+| L110 | `LongtermAnomaliesYear` keys its working frame by the caller's Series name — a collision zeroes every anomaly (L9 family) | `core/plotting/bar.py:94` |
 | ~~L37~~ | ~~**The H2O/LE self-heating path must be removed**~~ (done 2026-08-07) — no self-heating correction for LE exists in EC science | `flux/lowres/selfheating.py` |
 | ~~L28~~ | ~~USTAR bootstrap bypasses the 3000-record minimum `detect()` enforces~~ (done 2026-08-07) | `flux/lowres/ustar_mp_detection.py:561` |
 | ~~L14~~ | ~~`combine_variables(keep_overlap_only=False)`: subtract/divide return the **negation / reciprocal**~~ (done 2026-08-07) — option removed | `variables/utilities.py:73` |
@@ -146,10 +151,14 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L2~~ | ~~`WindDirOffset` ignores `hist_n_bins`~~ (done 2026-08-07) — also pinned the bins to the full circle | `preprocessing/corrections/offsetcorrection.py:476` |
 | ~~G1~~ | ~~Partitioning tabs run at **(0, 0) UTC** when the project site is unconfigured~~ (done 2026-08-07) — 3 of the 4 ports | `gui/tabs/_partitioning_base.py:300` |
 
-## S2 — Silently does nothing / silently loses data (33)
+## S2 — Silently does nothing / silently loses data (37)
 
 | ID | Finding | Where |
 |---|---|---|
+| L111 | `WaterfallPlot` draws a fully missing period as a 0.0 bar under the default `agg='sum'` — 429 of 3652 bars on bundled `LW_IN`; `agg='mean'` drops them instead | `core/plotting/waterfall.py:66` |
+| L112 | `TimeSeries` colour-by draws **measured** records fully transparent wherever the *colour* series has a gap — 80 of 200 | `core/plotting/timeseries.py:315` |
+| L113 | Colour-by silently degrades to a plain line on index mismatch; `cmap`/`show_colorbar`/`color_label` become no-ops | `core/plotting/timeseries.py:405` |
+| L114 | Missing years drawn as adjacent bars while the title asserts the full span (L61/L63/L79 family; GUI `dropna()` feeds it) | `core/plotting/bar.py:147` |
 | ~~L75~~ | ~~25 `detail()` debug lines cannot print at any verbosity~~ (done 2026-08-07) — module default is now settable | `core/utils/console.py:191` |
 | ~~L36~~ | ~~Self-heating gap-fill drops every gap before filling~~ (done 2026-08-07) | `flux/lowres/selfheating.py:390` |
 | ~~L38~~ | ~~Corrected flux becomes NaN wherever the correction term is missing~~ (done 2026-08-07) — carried through + flagged | `flux/lowres/selfheating.py:1225` |
@@ -184,10 +193,16 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~G4~~ | ~~`restore_controls` silently keeps the current combo value when the saved entry is gone — can flip the joint-uncertainty divisor~~ (done 2026-08-15) | `gui/widgets/state_utils.py:51` |
 | ~~L73~~ | ~~`harmonic_decompose` picks the top-N bins by power, so a windowed strong component's leakage outranks a genuine weaker one — the same component is returned twice~~ (done 2026-08-07) | `core/times/decomposition_utils.py:275` |
 
-## S3 — Crash on legitimate input (17)
+## S3 — Crash on legitimate input (23)
 
 | ID | Finding | Where |
 |---|---|---|
+| L115 | `HistogramPlot.plot` raises on a constant series — **inside the outlier detectors' own `showplot=True` diagnostic** | `core/plotting/histogram.py:177` |
+| L116 | `HistogramPlot.plot` raises on an all-NaN column (L69 family) | `core/plotting/histogram.py:118` |
+| L117 | `WaterfallPlot.plot` raises `IndexError` on an all-NaN column (L69 family) | `core/plotting/waterfall.py:164` |
+| L118 | `ShiftedDistributionPlot` dies on an empty / all-NaN / single-record / constant period — unguarded Silverman bandwidth | `core/plotting/shifted_distribution.py:94` |
+| L119 | `TimeSeries.plot_interactive()` raises on an unnamed Series; `plot()` and `plot_rangetool()` handle it | `core/plotting/timeseries.py:156` |
+| L120 | `LongtermAnomaliesYear` raises `KeyError: None` on an unnamed Series (same root as L110) | `core/plotting/bar.py:101` |
 | ~~L1~~ | ~~`Hampel` crashes on any non-fixed frequency (monthly/yearly/business-day)~~ (done 2026-08-15) | `preprocessing/outlier_detection/hampel.py:228` |
 | ~~L3~~ | ~~Frequency detection: off-by-one denominator → clean 2-row series "too irregular", 1-row bare `KeyError`~~ (done 2026-08-15) — one bad denominator caused both the crash and the wrong confidence | `core/times/times.py:1386` |
 | ~~L27~~ | ~~`set_storage_to_zero=True` still requires the storage column — the exact case it documents~~ (done 2026-08-15) | `flux/lowres/storage_correction.py:150` |
@@ -206,10 +221,20 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L81~~ | ~~`TimeLagAnalysis`: a `histogram_startbin`/`endbin` range excluding every lag empties `results`, then `detect_peak_range` fails~~ (done 2026-08-15) | `flux/lowres/timelag_analysis.py` |
 | ~~L101~~ | ~~**Two examples broken by this campaign's own breaking change** since `45614fb3`: `flux_selfheating.py` and `flux_selfheating_production.py` index `LATENT_HEAT_VAPORIZATION_J_UMOL`, removed with the H2O path (L37)~~ (done 2026-08-15) | `examples/flux/lowres/` |
 
-## S4 — Contract mismatch (21)
+## S4 — Contract mismatch (31)
 
 | ID | Finding | Where |
 |---|---|---|
+| L121 | `ignore_fringe_bins` accepted, documented and stored by `HistogramPlot`; nothing applies it (L62/L91 family — a working impl exists in `analysis/histogram.py`) | `core/plotting/histogram.py:45` |
+| L122 | `minticks`/`maxticks` accepted, documented and forwarded by hexbin; only `nice_date_ticks` consumes them and hexbin never reaches it | `core/plotting/hexbin.py:268` |
+| L123 | `color_bad` accepted, documented and forwarded by hexbin; it takes effect only via `set_cmap`, which hexbin never calls | `core/plotting/hexbin.py:270` |
+| L124 | Hexbin's auto `cb_extend` reads the **raw** `z` range while the colorbar maps the aggregate — arrows asserting data that is not clipped | `core/plotting/hexbin.py:330` |
+| L125 | Hexbin pairs x/y/z positionally, never by index — same-labelled Series in a different order are mispaired silently *(latent)* | `core/plotting/hexbin.py:377` |
+| L126 | Histogram/hexbin derive bin edges per subset with no way to pin them, and `flagbase` puts two such panels side by side (L2 family) | `core/plotting/histogram.py:118` |
+| L127 | `WindRosePlot.plot(ax=...)` writes the **figure** suptitle and adjusts the caller's layout | `core/plotting/windrose.py:448` |
+| L128 | The wind rose ignores every `FormatStyle` field but the title, while the GUI feeds it the full shared Format section | `core/plotting/windrose.py:347` |
+| L129 | `ShiftedDistributionPlot` overrides a caller-set `FormatStyle.ylabel` via `merged()` where `apply(default_ylabel=)` is correct, and forces grid off | `core/plotting/shifted_distribution.py:186` |
+| L130 | A zone breakpoint outside the evaluation grid leaves one zone unpainted and puts its label over a region it does not describe | `core/plotting/shifted_distribution.py:154` |
 | ~~L15~~ | ~~`flag_ssitc_eddypro_test` performs no conversion despite documenting one~~ (done 2026-08-15) | `preprocessing/qaqc/eddyproflags.py:490` |
 | ~~L41~~ | ~~`ScopPhysics` documents an RF + MDV gap-fill that does not exist~~ (done 2026-08-15) | `flux/lowres/selfheating.py:152` |
 | ~~L44~~ | ~~`TimeLagAnalysis` docstring states three parameter facts the code contradicts~~ (done 2026-08-15) | `flux/lowres/timelag_analysis.py:90` |
@@ -232,10 +257,27 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L91~~ | ~~`hexbin.py` accepts, documents and forwards `show_less_xticklabels`, and nothing applies it~~ (done 2026-08-15) | `core/plotting/hexbin.py:272` |
 | ~~L95~~ | ~~`ScopPhysics.fct_unsc_gf` is `'FCT_UNSC_gfRF'` though the fill is XGBoost~~ (done 2026-08-15) — the suffix was hardcoded twice, which is why it drifted; now one string | `flux/lowres/selfheating.py` |
 
-## S5 — Cosmetic / dead / latent (25)
+## S5 — Cosmetic / dead / latent (42)
 
 | ID | Finding | Where |
 |---|---|---|
+| ~~L147~~ | ~~**Menu-action lambdas capture `self`** — the actual, sole reason no `MainWindow` is ever collected (L105's real cause)~~ (done 2026-08-16) — all 7 lambdas out of `app.py`; **4 windows live -> 0**. ~55 remain elsewhere in `gui/`, mostly rescued by L106; the unrescued ones are listed in the entry | `gui/app.py:423` |
+| L131 | Histogram info box appends itself — the text is printed up to four times | `core/plotting/histogram.py:160` |
+| L132 | The wind rose drops out-of-range directions (sentinels, radians) without reporting the count | `core/plotting/windrose.py:198` |
+| ~~L133~~ | ~~`WindRosePlot`'s docstring example calls a function that does not exist — **and reST `Example::` blocks are invisible to both docstring tests** (L85 hole)~~ (done 2026-08-16) — the real count was **41** literal blocks, not 13; the extended check found 5 more dead names | `core/plotting/windrose.py:85` |
+| L134 | A waterfall contribution of exactly 0.0 is coloured "release" (compounds L111) | `core/plotting/waterfall.py:142` |
+| L135 | `zone_colors`/`zone_labels` lengths unvalidated — 3 colours raise, 3 labels silently under-label | `core/plotting/shifted_distribution.py:171` |
+| L136 | Colour-by replaces the caller's axes limits instead of `update_datalim` + `autoscale_view` | `core/plotting/timeseries.py:330` |
+| L137 | A second `plot()` on the **same** axes stacks artists and colorbars — all three of timeseries/bar/shifted-distribution | `core/plotting/timeseries.py:339` |
+| L138 | `fig.tight_layout()` on a figure built `layout='constrained'` — warns and silently disables the engine | `core/plotting/bar.py:173` |
+| L139 | `LongtermAnomaliesYear.get()` before `plot()` raises `AttributeError` | `core/plotting/bar.py:176` |
+| L140 | `icons.py`'s `('calculate', _ln_gear)` rule is unreachable — both derived-variable calculators fall back to the generic glyph | `gui/icons.py:571` |
+| L141 | Icons baked at 16x16 with `devicePixelRatio` 1 — blurry at Windows 150%/200% scaling | `gui/icons.py:26` |
+| L142 | Sub-pixel coordinates discarded by PySide6's integer `drawLine` overload (~12 glyphs) | `gui/icons.py` |
+| L143 | `menu_icon(None)` raises, though the docstring promises unknown labels fall back | `gui/icons.py:730` |
+| L144 | Both bokeh methods call `show(p)` unconditionally — no `showplot` toggle (L104 family) | `core/plotting/timeseries.py:217` |
+| L145 | `bar.py` uses Material 400-level colours where the convention specifies 300 | `core/plotting/bar.py:143` |
+| L146 | `ShiftedDistributionPlot` uses the population sd (ddof=0) for its zone boundaries where diive uses ddof=1 | `core/plotting/shifted_distribution.py:75` |
 | ~~L10~~ | ~~`vectorize_timestamps` `.SEASON` as `Int64` forces object-dtype arrays into every ML fit~~ (done 2026-08-15) | `core/times/times.py:1245` |
 | ~~L12~~ | ~~`LocalSD`: values exactly on the limit are in neither `ok` nor `rejected`~~ (done 2026-08-15) | `preprocessing/outlier_detection/localsd.py:279` |
 | ~~L20~~ | ~~`lagged_variants` edge-fill is conditional but documented as unconditional~~ (done 2026-08-15) | `variables/temporal.py:461` |
@@ -252,10 +294,10 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L77~~ | ~~`MultiDataFileReader.metadata_df`'s guard tests `self._data_df`, the wrong attribute~~ (done 2026-08-15) | `core/io/filereader.py` |
 | ~~L80~~ | ~~`UstarVekuriThresholdDetection.bootstrap_results_` initialised, never read~~ (done 2026-08-15) | `flux/lowres/ustar_vekuri_detection.py` |
 | ~~L82~~ | ~~Exceptions in Qt-invoked slots are swallowed — GUI tests driving via signals may be weaker than they look~~ (done 2026-08-15) — the guard uncovered a real leaked-slot bug 44 tests were passing over | `tests/test_gui.py` (methodology) |
-| L85 | No doctest runner anywhere — docstring examples are never executed (L35 had been broken twice over). **Partly addressed**: reference + public-name resolution now checked, execution still not | `tests/` (methodology) |
+| ~~L85~~ | ~~No doctest runner anywhere — docstring examples are never executed (L35 had been broken twice over)~~ (done 2026-08-16) — 34 samples → 22, 12 executed by `test_docstring_examples.py`, 10 excluded with a stated reason each; found two more stale samples on the way | `tests/` (methodology) |
 | ~~L104~~ | ~~`ScopPhysics.plot_diel_cycles()`, `ScopOptimizer.plot()` and `ScopApplicator.plot_dashboard()` call `plt.show()` unconditionally with no `showplot` toggle, so an example cannot satisfy the disable-showplot standard and figures accumulate~~ (done 2026-08-15) | `flux/lowres/selfheating.py` |
-| L105 | `FramelessResizeHelper` stores `self._window` while also being parented to that window's grip, so **no `MainWindow` can ever be garbage-collected**; every one stays subscribed to the app-wide singletons for the process lifetime | `gui/widgets/frameless.py:28` |
-| L106 | Parentless widgets accumulate for the session: after 31 GUI tests with every window destroyed, **201 top-level and 4593 total widgets** were still alive with no Python referrer. Largest contributor is the flux-chain tab at **46 parentless QFrames per test** | `gui/` (source not located) |
+| ~~L105~~ | ~~`FramelessResizeHelper` stores `self._window` while also being parented to that window's grip, so **no `MainWindow` can ever be garbage-collected**~~ (done 2026-08-16) — **diagnosis was wrong**: the collector *can* break that cycle; the weakref only makes collection refcount-deterministic. The real pin is **L147** | `gui/widgets/frameless.py:28` |
+| ~~L106~~ | ~~Parentless widgets accumulate for the session~~ (done 2026-08-16) — two passes: `_on_tab_close` deletes the page (**511 leaked widgets per open/close -> 1**), and the `self`-capturing lambdas that made a `DiiveTab` uncollectable are gone (**28 of 41 tab classes leaked on drop -> 0**; suite-end live widgets **13 149 -> 133**, live tabs **0**). `CopyPythonButton._provider` was **not** part of it | `gui/app.py:792`, `gui/widgets/weak_slot.py` |
 | ~~L98~~ | ~~`run_all_examples.py` forces no matplotlib backend, so the 16 examples ending in `plt.show()` block~~ (done 2026-08-15) — corrected: the 120 s timeout meant **spurious failures**, not a permanent hang | `examples/run_all_examples.py` |
 | ~~L89~~ | ~~`-9999` at position 6 still reads as a passing flag~~ (done 2026-08-15) — **two** holes, not one: `-1` at position 1 read as a soft warning | `preprocessing/qaqc/eddyproflags.py` |
 | ~~L93~~ | ~~`EventManager.load_dict({})` early-returns without clearing, so previous events survive~~ (done 2026-08-15) | `gui/events.py` |
@@ -2147,6 +2189,8 @@ Round 3 additions (checked by the parallel reviewers, no defect found):
 
 Still not reviewed even after round 3: `windrose.py`, `hexbin.py`, `histogram.py`, `waterfall.py`,
 `shifted_distribution.py`, `timeseries.py`, `bar.py` in `core/plotting`, and `gui/icons.py`.
+**All eight were reviewed in round 4 (2026-08-16) — see the *Round 4* section. Nothing in the
+reviewed scope is now unreviewed.**
 
 ---
 
@@ -2328,9 +2372,59 @@ still say "bin". Renaming is a public-API change, deferred.
 `flux/lowres/timelag_analysis.py` — `Histogram` treats `[i, j]` as *counts* of leading/trailing bins to
 drop. L44 fixed the class docstring; the same loose wording survives in `__init__`.
 
-**[~] L85. Docstring examples are not executed by anything**
+**[x] L85. Docstring examples are not executed by anything**
 
-> **First step done 2026-08-15; the entry stays open because nothing *executes* a sample yet.**
+> **Fixed 2026-08-16.** `tests/test_docstring_examples.py` runs the samples. It parses the tree for
+> sample-bearing modules, imports them, and executes every `>>>` sample through `doctest` unless its
+> name is in a module-level `SKIP` dict carrying a one-line reason. A new sample is therefore
+> executed without anyone remembering to register it, and a second test fails on a `SKIP` key that
+> no longer matches a real sample, so the exclusion list cannot rot. 0.7 s for the doctest pass.
+>
+> **The `>>>` samples: 34 became 30.** Twelve were dropped as internal helpers, none reachable from
+> `dv.*`: `ColumnNamesSanitizer` and `MultiDataFileReader` in `core/io/filereader.py`, eight
+> `core/times/times.py` step functions, and both `FluxStorageCorrectionSinglePointEddyPro` samples.
+> `Args:`/`Parameters:` text was left alone, so the GUI tooltips are untouched. Every keeper is a
+> public entry point and a self-contained call-shape snippet of at most four statements — 17 of the
+> original keepers referenced names they never defined (`df`, `data`, `ax1`, `radiation`,
+> `corrupted_data`), fixed with a two-line setup rather than a `doctest_namespace` fixture.
+> **17 execute; 13 are excluded**, each with its reason in `SKIP`: `GrangerCausality` (statsmodels'
+> `grangercausalitytests` prints its own report to stdout, which doctest reads as unexpected
+> output), `TimeSeries.plot_interactive` / `.plot_rangetool` (bokeh `show()` opens a browser tab),
+> the three USTAR detectors, the four partitioning ports (~20 s/year), `GapFillingResult` (trains a
+> random forest on the full record), `run_chain` and `add_driver` (need a built `FluxLevelData`).
+>
+> **The reST half was the bigger hole**, and it is why L133 exists. `test_docstring_refs` and the new
+> runner both keyed off `>>>`, so a sample written as an `Example::` literal block was checked by
+> nothing. A grep for `Example::` finds 13 such blocks — but reST introduces a literal block with
+> *any* line ending in `::`, and there are **41**, including
+> `Example (recommended with GridAggregator)::`. Two things close it: six blocks that name public API
+> were converted to `>>>` (`GapFillingResult`, `HeatmapXYZ.from_gridaggregator`, `TreeRingPlot`,
+> `WindRosePlot`, `run_chain`, `add_driver`), and `test_docstring_refs` now resolves `dv.<attr>`
+> inside literal blocks **and inside attribute docstrings**, which are invisible at runtime and so
+> unreachable by `doctest` at all. Seven blocks stay literal on purpose: five `container.py` samples
+> that call methods on a `data` the reader already holds and name no importable symbol, the
+> `FluxConfig.level2_test_settings` dict literal, and the `swin.py` `feature_kwargs=` fragment, which
+> is not even a statement. reST directives (`.. note::`, `.. warning::`) are skipped — their bodies
+> are prose.
+>
+> **Eight broken samples, every one documentation wrong against correct code.** Two among the `>>>`
+> samples: the `FlagQCF` module sample documented `series=` / `outname=` / `swinpot=`, a signature the
+> class has not taken in a long time (`TypeError` on the first line), and `classify_variable('TA_f')`
+> was documented as returning `None` when the `TA_` rule classifies it as meteo. Six in the reST
+> blocks: `WindRosePlot` called a `dv.load_exampledata_EDDYPRO_FULL_OUTPUT_CSV_30MIN` that is not a
+> top-level export (**L133**); `TreeRingPlot` called a non-existent `dv.plot_treering` *and* passed a
+> `title=` removed in v0.91.0; `HeatmapXYZ.from_gridaggregator` called `dv.ga` and `dv.heatmap_xyz`,
+> neither of which exists, and passed `show_values=` to Phase 1 where it raises `TypeError`; and the
+> `heatmap_xyz` and `hexbin` **module** docstrings repeated the same dead names — found only after the
+> literal-block check went in, which is the argument for that check.
+>
+> Two side findings fixed while there. Five prose "Top-level alias" claims named functions that do not
+> exist (`dv.plot_heatmap_xyz`, `dv.hexbinplot` twice, `dv.heatmap_datetime`, `dv.plot_treering`), all
+> corrected to the real `dv.plotting.*` names. And `HeatmapXYZ.from_gridaggregator`'s `**kwargs` entry
+> advertised `figsize` / `cmap` / `vmin` / `vmax` / `show_values` — every one a Phase-2 `plot()`
+> argument that raises `TypeError` if passed to Phase 1.
+
+> **First step done 2026-08-15; the entry stayed open because nothing *executed* a sample yet.**
 > `tests/test_docstring_refs.py` now checks the two things that can be checked without any doctest
 > infrastructure: every `examples/...` pointer resolves on disk, and every `dv.<attr>` inside a `>>>`
 > line resolves on the real public API. Milliseconds to run, and it would have caught L35.
@@ -2691,7 +2785,42 @@ neutral `FCT_UNSC`, but that touches the column its results frame exposes.
 Every other diive plot class takes `showplot` or an `ax`. These three predate that convention. Found
 while repairing the examples for L101.
 
-**[ ] L105. No `MainWindow` can ever be garbage-collected**
+**[x] L105. No `MainWindow` can ever be garbage-collected**
+
+> **Fixed 2026-08-16 — with a correction to this entry's diagnosis.**
+> `FramelessResizeHelper._window` is now a `weakref.ref`, and the single deref in `eventFilter`
+> resolves it and falls through when the referent is gone (a raise there would be swallowed by Qt).
+> That form matches `header_bar.py`, which already reaches the window through `self.window()` rather
+> than storing it.
+>
+> **But this entry blamed the wrong code.** A direct-referrer census of a leaked `MainWindow` showed
+> two referrers before the change and one after; the survivor is a closure cell from
+> `MainWindow._build_menus`. Stub `_build_menus` out and 4 of 4 windows are collected **with the
+> pre-fix strong reference too** — PySide6 traverses the Qt parent/child tree in `tp_traverse`, so the
+> collector *can* break the window -> grip -> helper -> window cycle. What it cannot break is
+> `act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))` (`gui/app.py:423`,
+> `:436`, ~30 sibling sites): the lambda captures `self`, the `QAction` holds it on the C++ side where
+> the collector cannot see it, and the QAction is parented to the window. The headline stays true and
+> the measured leak is **unchanged** — 4 built, 4 live, before and after. Recorded as **L147**.
+>
+> What the weakref does buy was measured with the cyclic collector disabled, so only refcounting can
+> free the window: before, 4 of 4 survived the last `del` (both a minimal frameless shell and a real
+> `MainWindow` with menus stubbed); after, 0 of 4. The window now dies deterministically at its last
+> reference instead of waiting for a gc generation pass, and the helper is off its referrer list.
+>
+> Covered by `test_frameless_helper_does_not_pin_its_window` (gc off, three shells, every weakref dead
+> — a concrete post-condition, not the absence of a traceback) and
+> `test_frameless_resize_starts_native_resize` (an edge press hands `Edge.RightEdge` to
+> `startSystemResize` and consumes the event; an interior press does neither). `startSystemResize`
+> hands off to the window manager, so an offscreen test can assert the handoff but **not** an actual
+> geometry change — real edge-drag resizing on a desktop session is unverified. Mutation-checked:
+> restoring the strong reference fails the leak test with three live shells. Full GUI suite: 123
+> passed.
+>
+> `tests/test_gui.py`'s `shiboken6.delete` workaround **stays** — windows still leak via L147, and it
+> also destroys the C++ widget tree, which no Python-side change achieves. Its docstring at
+> `tests/test_gui.py:95` still names `FramelessResizeHelper._window` as the cause and is now wrong.
+
 `gui/widgets/frameless.py:28-31` — `FramelessResizeHelper.__init__` parents itself to the window's
 size grip *and* stores `self._window = window`. That closes a window -> grip -> helper -> window
 reference cycle through Qt's C++ parentage, which Python's collector cannot break, so the
@@ -2710,7 +2839,80 @@ destroys each window explicitly with `shiboken6.delete`, which works around it b
 Related to the "retain tab instances" gotcha in CLAUDE.md, which is the same lifetime problem from
 the other direction.
 
-**[ ] L106. Parentless widgets accumulate for the whole session**
+**[x] L106. Parentless widgets accumulate for the whole session**
+
+> **Fixed 2026-08-16, in two passes.**
+>
+> **The orphan `QFrame`s are not authored frames at all.** Instrumenting `QFrame`/`QWidget`/`QMenu`
+> `__init__` with a creation stack over the real suite shows no separate creation site: they are
+> `QComboBoxPrivateContainer`s — one popup container per `QComboBox`, which PySide6 wraps as a plain
+> `QFrame`. So "46 parentless `QFrame`s per test" is just the flux-chain tab's 46 combo boxes, and
+> what actually survives is **the whole tab**.
+>
+> **Fixed at tab close.** `MainWindow._on_tab_close` (`gui/app.py:792`) called `removeTab` and
+> stopped. `QTabWidget.removeTab` only *detaches* the page; it never deletes it, and nothing on the
+> Python side collects it either, so every closed tab's entire widget tree stayed alive and
+> parentless for the rest of the session. Measured on the flux-chain tab: **511 widgets leaked per
+> open/close**, never released (155 -> 666 -> 1177 -> 1688 over three cycles). `widget.setParent(None)`
+> + `deleteLater()` — the pattern `corrections_panel.py:272` and `stepwise_cards.py:110` already use —
+> takes that to **+1 per cycle**, and `theme.manager.apply()` after three cycles from **0.987 s to
+> 0.090 s** (`app.setStyleSheet` re-polishes every live widget, so the cost tracks the count). It also
+> *releases* the `DiiveTab`: once the C++ children die, the connections and `__dict__`s holding `self`
+> go with them, so the tab is collected and its `theme`/`site`/`events`/`db` manager subscriptions
+> drop — no stale-slot window. `tests/test_gui.py`: 123 passed.
+>
+> **Pass 2 — why nothing was collected: `self`-capturing lambdas in Qt connections.** A `DiiveTab` was
+> uncollectable the moment it was built. PySide6 holds a **bound method** connected to a signal only
+> weakly, but a **lambda** is owned by the connection object, which lives on the C++ side — so
+> tab -> root widget -> C++ children -> connection -> closure -> tab is a cycle with no Python leg and
+> the collector cannot walk it. **Same family as L147**, one level down: there the lambda pins the
+> window, here it pins the tab. Pass 1 hid it in the shipped app (deleting the C++ children destroys
+> the connections), but not in the suite, which builds tabs and drops them.
+>
+> **The blocking set was much smaller than the grep suggests.** ~95 `self`-referencing lambdas exist
+> under `gui/tabs`, but most capture a *sub-widget* (`_PanelPills`, `_EventCard`, `_ColorSwatch`), not
+> the tab. Probing every registered tab — build, push data, drop, `gc.collect()`, read
+> `gc.get_referrers` — narrowed it to **30 sites in 13 files**, five of them shared templates covering
+> 25 of the 41 tab classes (`_outlier_base.py:152`, `_correction_base.py:129`,
+> `_ml_gapfilling_base.py:385`, `_screening_base.py` x8, `plotting.py:209`). Two sites are built only
+> *after* interaction and a build-time sweep misses them: the screening step cards
+> (`_screening_base.py:499-504`, only after a run — the reason a first pass still ended with 3 live
+> `StepwiseScreeningTab`) and the event cards (`events.py:615-619`).
+>
+> **Fix:** 43 lambda sites removed across 15 files — 29 to a new `weak_slot(method, *args)`
+> (`gui/widgets/weak_slot.py`; binds the arguments a signal does not carry, holds the method's object
+> weakly, truncates signal args to the target's arity the way Qt does), 12 to a plain bound method,
+> and 2 to `widget.setDisabled` (`toggled(on)` is exactly the old `setEnabled(not on)`). Measured:
+> **28 of 41 tab classes leaked on drop -> 0** (64 instances probed); flux-chain **+509 widgets per
+> build/drop cycle -> +0**; `theme.manager.apply()` after three such cycles **0.65 s -> 0.000 s**;
+> suite-end **13 149 live widgets -> 133, live `DiiveTab` -> 0**; `test_live_theme_edit` **~18 s ->
+> 7.57 s** in-file (2.5 s alone). Regression test `test_dropped_tab_is_collectable`.
+>
+> **`CopyPythonButton._provider` was a red herring — correction to the earlier diagnosis.** A bound
+> method of the tab stored in a child `QPushButton`'s `__dict__` does **not** pin the tab: PySide6
+> traverses a wrapper's instance dict, so that cycle is collectable. It appeared in `get_referrers`
+> only as a co-referrer of a tab the lambdas were already holding. A `weakref.WeakMethod` version was
+> written, measured to change nothing, and reverted — the same mistake as the L105 weakref, made twice
+> in one campaign.
+>
+> **Freeing the Events tab exposed a latent crash.** Once collectable, `EventsTab` took the process
+> down with an access violation inside `gc.collect()` — not an exception, so `slot_exceptions` would
+> never have caught it. `_refresh` runs twice (from `build()`, then on the first data push) and
+> `QScrollArea.setWidget` destroys the old board on the C++ side while its Python wrappers live on;
+> collecting those in the same pass that frees the tab puts a virtual call
+> (`_AddCard.mousePressEvent`, a Python override on a `QFrame` subclass) on a half-finalized wrapper.
+> Fixed by taking the old board back and deleting it deliberately (`takeWidget` + `setParent(None)` +
+> `deleteLater()`). Verified with `DeferredDelete` drained, so the tab is genuinely freed rather than
+> the crash merely deferred. **Generalizes:** any Python `QWidget` subclass with a virtual override,
+> destroyed implicitly by a container swap, is the same hazard.
+>
+> **Not a regression risk for open tabs** (CLAUDE.md "retain tab instances"): `MainWindow._tabs`
+> retention is what keeps a tab alive, and the change only makes a tab collectable when nothing holds
+> it. Verified against a live window with seven open tabs after `gc.collect()`: all survive,
+> `VariablePanel.selected` still reaches `_select`, `weak_slot` slots with bound arguments still fire,
+> the Plot Update button still re-renders, `theme.manager` / `metadata_store.manager` emits still land,
+> and a data push still repopulates a variable list — 12/12, zero swallowed slot exceptions.
+
 `gui/` — after 31 GUI tests, with every `MainWindow` explicitly destroyed, **201 top-level and 4593
 total widgets** were still alive with *no* Python referrer: 137 `QFrame`, 36 `QMenu`, 24 `QWidget`,
 4 `MplCanvas`. Largest single contributor is the flux-chain tab, **46 parentless `QFrame`s per test**
@@ -2724,3 +2926,650 @@ long-running GUI session the same growth applies to any app-wide restyle.
 Two known-correct sites were ruled out — `corrections_panel.py:272` and `stepwise_cards.py:110` both
 do `setParent(None)` + `deleteLater()` properly — so the `QFrame`s come from somewhere else in
 `diive/gui` that was not located. Finding the source is the first step, not a fix.
+
+---
+
+# Round 4 — the eight files rounds 1-3 left unreviewed
+
+Review date: 2026-08-16 · two parallel reviewers, four files each · diive v0.91.0 · branch `indev`.
+
+Scope: `core/plotting/windrose.py`, `hexbin.py`, `histogram.py`, `waterfall.py`,
+`shifted_distribution.py`, `timeseries.py`, `bar.py`, and `gui/icons.py` — the list recorded at the
+end of *Reviewed and found sound* as still outstanding after round 3. **That list is now empty.**
+
+Every finding below was reproduced with executed output; nothing here is a hypothesis. L125 is
+reproduced but latent (no diive call site currently triggers it) and is marked as such.
+
+## S1 — silently wrong scientific output
+
+**[ ] L107. `HexbinPlot`'s `mincnt=0` default paints hexagons over cells holding no data**
+`core/plotting/hexbin.py:76` — matplotlib's own default is `mincnt=None` -> 1, and its docs state
+that `mincnt=0` "will pass empty input to the reduction function". Since matplotlib unified the
+cutoff to `len(acc) >= mincnt` (`axes/_axes.py:5329`), diive's `0` means *include cells with zero
+points*, and what happens next depends entirely on the reducer — which the `__init__` docstring
+advertises as "`np.mean`, `np.sum`, etc.":
+
+| reducer | result for an empty cell |
+|---|---|
+| `np.sum` | `0.0` — the hexagon **is drawn and coloured as a measured zero** |
+| `np.max` | `ValueError: zero-size array to reduction operation maximum` |
+| `np.median` (diive default) | NaN + one `RuntimeWarning` per empty cell, dropped from the render |
+
+**[reproduced]** On a synthetic two-cloud record with a genuinely empty region between the clusters
+(`gridsize=10`, `reduce_C_function=np.sum`): **116 hexagons drawn, 99 of them holding no data at
+all** — 85% of the plot fabricated. With `mincnt=1`: 17 hexagons, none empty. On the bundled
+`load_exampledata_parquet()` (`Tair_f` x `VPD_f` x `NEE_CUT_REF_f`, 175 296 records) the default call
+also emits **202 `RuntimeWarning`s** (`Mean of empty slice`, `invalid value encountered in scalar
+divide`).
+
+This is the L61/L63/L79 family — "the aggregator kept bins that never occurred and the consumer
+rendered them" — with the twist that the fabricated cells carry a *plausible* value rather than a
+misplaced one.
+
+Suggested fix: default `mincnt: int = 1`, and say in the docstring that `0` passes empty input to the
+reducer. One line, and it also removes the 202 warnings from the default plot.
+
+**[ ] L108. `HistogramPlot`'s KDE overlay is scaled by the *first* bin width**
+`core/plotting/histogram.py:142` -> `:146` — the density is rescaled onto the counts axis as
+`density * N * bin_width`, with `bin_width = self.edges[1] - self.edges[0]`. That identity holds only
+for uniform bins. `n_bins` is documented as "int or list", and an explicit edge list need not be
+uniform, so the curve is off by `w_i / w_0` in every bin — drawn on the same axis as the bars, where
+it reads as a fit.
+
+**[reproduced]** edges `[0, 5, 8, 9, 10, 11, 12, 15, 20]` over `normal(10, 2)`:
+
+```
+counts         : [2, 73, 74, 103, 110, 85, 49, 4]
+bin_width used : 5.0        (the first bin; the narrow bins are 1.0)
+max KDE y      : 561.54     vs max count: 110.0
+```
+
+The KDE tops out 5.1x above the tallest bar. Suggested fix: scale per bin from `np.diff(edges)`
+interpolated at `xvals`, or refuse the overlay when the edges are non-uniform.
+
+**[ ] L109. `LongtermAnomaliesYear` discards its own `sort_index`, so an unsorted record is plotted and averaged in file order**
+`core/plotting/bar.py:64`
+
+```python
+self.series.sort_index(ascending=True)   # return value discarded; nothing else sorts
+```
+
+pandas returns a new object. Nothing else in the class sorts, so the bars are drawn in input order
+**and** `_annotate_reference` (`:75`) computes its "last 10 years mean ± sd" from `tail(10)` of the
+same unsorted frame — ten arbitrary years reported as a decade.
+
+**[reproduced]** 31-year record, identical values, shuffled index:
+
+```
+sorted   'last 10 years' -> [2011 ... 2020]   mean=9.914 sd=0.807
+shuffled 'last 10 years' -> [2006, 1990, 2005, 2020, 2019, 1999, 1998, 2002, 2001, 1995]
+shuffled                                      mean=9.417 sd=0.827
+```
+
+The printed period label ("2006-1995") is visibly odd, but the mean and sd are believable numbers
+over the wrong decade. The GUI path is safe (`gui/tabs/seasonaltrend.py:194` resamples yearly, so it
+arrives sorted); this bites library and notebook callers who build the yearly series by hand.
+
+Suggested fix: assign the result.
+
+**[ ] L110. `LongtermAnomaliesYear` builds its working frame keyed by the caller's Series name**
+`core/plotting/bar.py:94-104` — the L9 / `ScatterXY` family. `_calc_reference` does
+`pd.DataFrame(self.series)` (column = the caller's name) and then adds `reference_mean`,
+`reference_sd` and `anomaly` beside it. A collision overwrites the data column *before* the anomaly
+is computed.
+
+**[reproduced]** correct anomalies are `[-0.5, 0.5, 1.5, 2.5]`:
+
+```
+series named 'reference_mean' -> anomaly = [0.0, 0.0, 0.0, 0.0]
+series named 'reference_sd'   -> anomaly = [-9.793, -9.793, -9.793, -9.793]
+```
+
+Low likelihood (a variable named `reference_mean` is unusual), but the established internal-key fix
+(`_values`) is cheap and also closes L120.
+
+## S2 — silently does nothing / silently loses data
+
+**[ ] L111. `WaterfallPlot` turns a fully missing period into a 0.0 contribution bar under the default `agg='sum'`**
+`core/plotting/waterfall.py:66` — `series.dropna()` then `.resample(...).agg(agg).dropna()`. Pandas'
+`sum` over an empty group returns `0.0` (`min_count=0`), not NaN, so the trailing `dropna()` cannot
+remove it. A period with **no measurements at all** is drawn as a zero-height bar with a flat
+connector — visually identical to a period whose fluxes genuinely balanced. The running total is
+unaffected (adding 0 == skipping), so nothing warns.
+
+**[reproduced]** on bundled CH-DAV `LW_IN`, 2013-2022, with exactly the call the GUI Overview
+waterfall panel makes (`resample="D", agg="sum"`):
+
+```
+bars drawn: 3652   bars for days with NO data: 429   of those drawn as exactly 0.0: 429
+```
+
+`agg='mean'` returns NaN for the same group and drops the period (30 bars vs 27 on a synthetic
+3-day outage), so the two aggregations disagree about what the plot even contains. Compounded by
+L134: those 429 fabricated bars are painted in the "release" colour.
+
+Suggested fix: `min_count=1` for sum-like aggregations, or mask periods whose `count()` is 0 before
+aggregating, so an empty period is NaN for every `agg`.
+
+**[ ] L112. `TimeSeries` colour-by renders *measured* data fully transparent wherever the colour series has a gap**
+`core/plotting/timeseries.py:315-317`
+
+```python
+seg_c = (color_vals[:-1] + color_vals[1:]) / 2.0
+keep = ~(np.isnan(y[:-1]) | np.isnan(y[1:]))   # gaps in y only, never in the colour
+```
+
+A gap in the colour driver leaves `seg_c` NaN, which maps to the colormap's "bad" colour — whose
+matplotlib default is `(0, 0, 0, 0)`, fully transparent. Measured records vanish, and the result is
+indistinguishable from a data gap.
+
+**[reproduced]** complete `FC`, gappy colour driver: **80 of 200 measured records drawn fully
+transparent**; the plain path draws all 200. GUI-reachable — the Time-series plot tab passes any
+picked variable straight through (`gui/tabs/plotting.py:1206-1215`), and meteo drivers routinely
+have gaps.
+
+Suggested fix: extend `keep` to cover `isnan(seg_c)` and draw those segments in a neutral grey, or
+`cmap.copy().set_bad(<visible grey>)` — anything that stops "measured but uncoloured" from reading as
+"missing".
+
+**[ ] L113. Colour-by silently degrades to a plain line when the colour series does not align**
+`core/plotting/timeseries.py:82-84` and `:405` — `color_series.reindex(self.series.index)` yields
+all-NaN when the indices differ (TIMESTAMP_END vs MIDDLE, or a differently-resampled driver). The
+guard at `:405` then takes the plain-line branch with no warning, so `cmap`, `show_colorbar` and
+`color_label` all become no-ops.
+
+**[reproduced]** zero index overlap: `0` `LineCollection`s drawn, `0` colorbar axes, plain fallback
+taken. The fallback is described only in a code comment, and the `plot()` docstring's claim that the
+scalar `color` "is ignored when a `color_series` was given" is false in exactly this branch.
+
+Suggested fix: `warn()` on the fallback naming zero-overlap as the likely cause, and correct the
+docstring.
+
+**[ ] L114. `LongtermAnomaliesYear` draws missing years as adjacent bars while the title asserts the full span**
+`core/plotting/bar.py:147-160`, title at `:163` — `plot.bar` is categorical, so a year absent from
+the index consumes zero axis width. Fourth member of the L61/L63/L79 family, and GUI-reachable:
+`gui/tabs/seasonaltrend.py:196` calls `yearly.dropna()`, which *removes* empty years rather than
+keeping them as NaN rows.
+
+**[reproduced]** 1950-2021 with 1980-1991 absent:
+
+```
+n years present : 60
+title           : TA anomaly per year (1950-2021)
+visible x labels: ['1950','1952', ... ,'1976','1978','1992','1994', ... ,'2020']
+```
+
+The 12-year outage is a single bar-width jump between two evenly spaced ticks, and
+`locator_params(nbins=50)` thins the labels so 1979-1991 carry no tick at all.
+
+Suggested fix: reindex onto `range(first, last + 1)` before plotting so NaN bars leave visible holes,
+or use `ax.bar(x=years, ...)` on a numeric axis.
+
+## S3 — crash on legitimate input
+
+**[ ] L115. `HistogramPlot.plot` raises on a constant series, inside the outlier detectors' own diagnostic plot**
+`core/plotting/histogram.py:177` — `zscore()` divides by `np.std`, which is 0 for a constant series,
+so every z-score is NaN and `int(math.floor(zscores.min()))` fails. `show_zscores` defaults to
+**True**, and `core/base/flagbase.py:243,248` draws `HistogramPlot(...)` on both the raw series and
+the retained (`ok`) subset.
+
+**[reproduced]** `dv.outliers.AbsoluteLimits(...).run(showplot=True)` on a constant 5.0 series with
+three spikes:
+
+```
+File ".../histogram.py", line 177, in plot
+    for z in range(int(math.floor(zscores.min())), int(math.ceil(zscores.max()))):
+ValueError: cannot convert float NaN to integer
+```
+
+So any detector run with `showplot=True` on a variable whose retained subset is constant dies inside
+its own diagnostic. Suggested fix: skip the z-score overlay when `zscores` holds no finite value.
+
+**[ ] L116. `HistogramPlot.plot` raises on an all-NaN column**
+`core/plotting/histogram.py:118` — the closed L69 family. `ax.hist` autodetects the range:
+`ValueError: autodetected range of [nan, nan] is not finite`. Reached through the same `flagbase`
+path and through the GUI Overview histogram panel (which catches it and prints "Cannot plot").
+Suggested fix: early-out with an empty-axes message, as L69 did.
+
+**[ ] L117. `WaterfallPlot.plot` raises `IndexError` on an all-NaN column**
+`core/plotting/waterfall.py:164` — `dropna()` empties the series, `__init__` still succeeds, and
+`plot` indexes `self.cumulative.index[-1]`: `IndexError: index -1 is out of bounds for axis 0 with
+size 0`. Same L69 family. Suggested fix: guard on `self.cumulative.empty`.
+
+**[ ] L118. `ShiftedDistributionPlot.__init__` dies with an opaque error on an empty, all-NaN, single-record or constant period**
+`core/plotting/shifted_distribution.py:94` — Silverman's
+`bw = 1.06 * data.std() * len(data) ** (-0.2)` has no guard.
+
+**[reproduced]**, all four ordinary user paths:
+
+```
+empty comp period        : ZeroDivisionError: 0.0 cannot be raised to a negative power
+all-NaN ref period       : ZeroDivisionError: 0.0 cannot be raised to a negative power
+constant ref period      : InvalidParameterError: 'bandwidth' ... Got np.float64(0.0)
+single-record comp period: InvalidParameterError: 'bandwidth' ... Got np.float64(0.0)
+```
+
+A mistyped period, a variable that starts mid-record, or a genuinely constant period (precipitation
+in a dry reference decade, snow depth, a flag) all land here. The GUI paints the raw message on the
+canvas (`gui/tabs/plotting.py:882`), so the user sees *"Cannot plot 'TA': 0.0 cannot be raised to a
+negative power"*.
+
+Suggested fix: validate both periods in `__init__` and raise a named error ("reference period
+1990-2000 contains 0 non-missing records / has zero variance"). Related, same file: NaNs are dropped
+at `:71-72` with no report, so a 95%-gappy reference period yields a confident-looking KDE from 5% of
+the records.
+
+**[ ] L119. `TimeSeries.plot_interactive()` raises on an unnamed Series, which `plot()` handles fine**
+`core/plotting/timeseries.py:156` — `legend_label=self.series.name` is `None`, which bokeh rejects
+(`ValueError: legend_label value must be a string`). `plot()` and `plot_rangetool()` both succeed on
+the same input, so the inconsistency sits inside one class. Suggested fix:
+`str(self.series.name or "value")`.
+
+**[ ] L120. `LongtermAnomaliesYear` raises `KeyError: None` on an unnamed Series**
+`core/plotting/bar.py:101` — same root cause as L110; the internal-key fix closes both. Two
+neighbours in the same family: an *empty* series gives `IndexError: index 0 is out of bounds` at
+`:83` (`last10.index[0]`), and a reference period outside the record annotates
+`"reference period mean: nan±nansd"` rather than raising.
+
+## S4 — contract mismatch
+
+**[ ] L121. `ignore_fringe_bins` is accepted, documented and stored by `HistogramPlot`, and nothing applies it**
+`core/plotting/histogram.py:36`, `:45`, `:61` — the L62/L91 defect exactly. The name is not
+speculative: `analysis/histogram.py:107` carries a working `_ignore_fringe_bins`, so the plotting
+class looks like it inherited the parameter and lost the behaviour. **[reproduced]** counts with
+`False` and with `[1, 1]` are identical; the identifier occurs 4 times in the module, never in a
+computation.
+
+**[ ] L122. `minticks` / `maxticks` are accepted, documented and forwarded by `hexbin.py`, and nothing applies them**
+`core/plotting/hexbin.py:268-269`, `:299-300`, `:360-361` — sibling of the already-fixed L91 in the
+same file. `HeatmapBase.plot` only *stores* them; the sole consumer of `self.minticks` in the whole
+plotting package is `heatmap_datetime.py:308,314` (`nice_date_ticks`), which hexbin never reaches —
+its axes are not date axes. **[reproduced]** `maxticks=3` and `maxticks=30` give identical ticks.
+
+**[ ] L123. `color_bad` is accepted, documented and forwarded by `hexbin.py`, and nothing applies it**
+`core/plotting/hexbin.py:270`, `:301`, `:362` — third sibling in the same file. `color_bad` takes
+effect only through `HeatmapBase.set_cmap`, called from `plot_pcolormesh`; hexbin renders via
+`ax.hexbin` and calls neither. **[reproduced]** stored value `grey`, colormap bad colour actually
+used `[0, 0, 0, 0]`.
+
+**[ ] L124. Hexbin's auto `cb_extend` is derived from the raw `z` range while the colorbar maps the aggregate**
+`core/plotting/hexbin.py:330-344` — `z_min`/`z_max` come from `self.z` (per-record), but the
+mappable's data is the per-hexagon reduction, whose range is always narrower. **[reproduced]** raw
+range `-3.7719 … 14.7499`, aggregate range `-3.2043 … 14.6104`; setting `vmin`/`vmax` to exactly the
+aggregate range clips nothing and still draws both extension arrows, asserting data outside the
+colour scale. Suggested fix: compare against `self.p.get_array()` after the hexbin is drawn, or
+document that `cb_extend` refers to the raw range.
+
+**[ ] L125. Hexbin pairs `x` / `y` / `z` positionally, never by index**  *(latent)*
+`core/plotting/hexbin.py:108-109`, `:377-379` — the only cross-Series validation is equal length, and
+each is taken through `.to_numpy()`. Three Series carrying the same labels in a different order are
+mispaired silently. **[reproduced]** z passed with index `3,2,1,0` yields aggregate values
+`[10, 40, 20, 30]` where index alignment would give `[40, 30, 20, 10]`. No diive call site currently
+passes misaligned Series, so this is latent. Suggested fix:
+`pd.concat([x, y, z], axis=1, keys=['_x','_y','_z'])` — the internal-key idiom already used by
+`ScatterXY` and `GridAggregator` aligns and makes the frame collision-proof at once.
+
+**[ ] L126. Histogram and hexbin derive bin edges per subset, with no way to pin them — and `flagbase` puts two such panels side by side**
+`core/plotting/histogram.py:118-123` (no `range=` or explicit-edge argument on either `__init__` or
+`plot`) — the L2 (`WindDirOffset`) family: bin *i* is not the same interval across two histograms of
+related subsets. `core/base/flagbase.py:243,248` draws `HistogramPlot(series)` and
+`HistogramPlot(series[ok])` in one figure with `n_bins=None` for both, inviting exactly the
+before/after shape comparison the differing grids invalidate.
+
+**[reproduced]**
+
+```
+full-series edges : [-9.0, -6.7, -4.4, -2.1, 0.2, 2.5, 4.8, 7.1, 9.4, 11.7, 14.0]   width 2.3
+'ok'-subset edges : [-2.686, -2.111, ... , 3.056]                                   width 0.574
+-> bar 5 left covers (0.2, 2.5); bar 5 right covers (-0.39, 0.19)
+```
+
+Hexbin has the identical gap (no `extent=`): daytime and nighttime subsets get different hex grids,
+first hexagon centre `[0.0534, 6.7152]` vs `[0.0638, 0.0461]`. Suggested fix: expose the pinned-grid
+control (`range=` / explicit edges; `extent=` for hexbin) so a caller comparing subsets can share one
+grid.
+
+**[ ] L127. `WindRosePlot.plot(ax=...)` writes the *figure* suptitle and adjusts the caller's figure layout**
+`core/plotting/windrose.py:448-451` — when a title is set the class calls `self.fig.suptitle(...)`
+and `self.fig.subplots_adjust(top=0.92)` even for a caller-supplied axes. **[reproduced]** plotting
+into one panel of a multi-panel figure sets the figure suptitle to `'panel A'` and leaves
+`axes[0].get_title()` empty. Impact today is limited (the GUI gives the rose its own figure), but it
+is a live trap for anyone composing panels. Suggested fix: `ax.set_title(...)` when `ax` was passed
+in; keep the suptitle path for the figure the class created itself.
+
+**[ ] L128. The wind rose ignores every `FormatStyle` field except the title, and the GUI feeds it the full shared Format section**
+`core/plotting/windrose.py:347-354`, hardcoded chrome at `:438-446` — the docstring is honest ("only
+the `title` / title-font fields apply"), so the *library* contract holds. The *exposure* does not:
+`gui/tabs/plotting.py:1122` passes `FormatStyle(**opts["_format"])` from the one shared Format
+section, so its grid, chrome-colour and axis-label-font controls are inert for this plot type with no
+indication. **[reproduced]** `show_grid=False` leaves 8 gridlines drawn and visible;
+`chrome_color='red'` leaves tick labels black. Suggested fix: honour at least `show_grid` and
+`chrome_color` on the polar axes (one line each), or hide the inapplicable controls for this type.
+
+**[ ] L129. `ShiftedDistributionPlot.plot()` overrides a caller-set `FormatStyle.ylabel` and forces the grid off while documenting it as controllable**
+`core/plotting/shifted_distribution.py:186-189` — `chrome = style.merged(ylabel="Density")`.
+`merged()` applies every non-`None` override unconditionally, so it *replaces* a caller-set ylabel
+instead of supplying a default; the correct call is `apply(default_ylabel="Density")`, which is what
+the rest of the family does. Grid is then hard-forced off three lines later, while the `format_style`
+docstring at `:126-128` advertises the style as covering "*(title/x-label/font sizes/colours/ticks/
+grid)*". **[reproduced]** caller asks for `'Probability density (1/K)'` and `show_grid=True`; the axes
+shows `'Density'` with no grid. The caller's style object is *not* mutated (`merged()` copies), and
+the GUI is unaffected (`plot_settings.py:1184` omits both controls for this tab), so this is a
+library-caller bug only.
+
+Latent, same lines: `merged()` returns `self` when it receives no non-`None` overrides, and the next
+three lines mutate the result in place. It is safe today only because `ylabel="Density"` is always
+passed; dropping that argument would start mutating the caller's `FormatStyle`.
+
+**[ ] L130. A zone breakpoint outside the evaluation grid leaves one zone unpainted and mis-places its label**
+`core/plotting/shifted_distribution.py:154`, `:166-172`, `:208` — `zone_edges = [x[0]] + breakpoints
++ [x[-1]]` assumes the ±3σ breakpoints lie inside the grid, but the grid spans `[all_min - 1σ,
+all_max + 1σ]`. For any skewed or bounded variable a breakpoint falls outside, `zone_edges` stops
+being monotonic, the inverted interval yields an empty mask (zone silently not drawn), and the label
+lands at the midpoint of the inverted interval.
+
+**[reproduced]**, bounded-above (RH-like):
+
+```
+grid span  : 40.59 -> 104.53
+zone_edges : [40.59, 82.89, 91.95, 101.02, 110.09, 104.53]   monotonic: False
+  Hot            x=105.55   <- beyond the data end, outside its own fill
+  Extremely hot  x=107.31   <- 1.8 units from "Hot" on a 76-unit axis: overlapping
+zone fills drawn: 5   -> one zone missing
+```
+
+Bounded-below (gamma/precipitation) reproduces identically. The `axvline` at the out-of-range
+breakpoint also stretches the x-axis into empty space. Because the zone labels are the interpretive
+key of this plot, a label sitting over a region it does not describe is a contract error, not a
+cosmetic one. Suggested fix: clip the breakpoints into `[x[0], x[-1]]` before building `zone_edges`,
+and skip the label when the clipped interval is empty.
+
+## S5 — cosmetic / dead / latent
+
+**[ ] L131. Histogram info box appends itself, printing the text up to four times**
+`core/plotting/histogram.py:160,162` — `info_txt += f"..." if self.method == 'n_bins' else info_txt`
+appends `info_txt` to itself on the false branch. Two such lines run, so the string doubles twice.
+**[reproduced]** `'method: uniformmethod: uniformmethod: uniformmethod: uniform'`. Suggested fix: a
+plain `if`.
+
+**[ ] L132. The wind rose drops out-of-range directions without reporting the count**
+`core/plotting/windrose.py:198`, mirrored at `:235` — `df[(df['wd'] >= 0) & (df['wd'] <= 360)]`
+silently removes sentinels (-9999, 999) and anything off the circle. Dropping them is right; being
+silent is not — `report()` prints `n_used` but never how many were rejected or why, so a
+wind-direction column in radians or carrying a bad sentinel yields a rose built on a fraction of the
+record with no hint. **[reproduced]** 8 records in (1 NaN + 3 out of range) -> `n_used: 4`. On the
+real EddyPro example the count is clean (`445 of 468`, matching `co2_flux` non-NaN exactly), so this
+is a robustness gap rather than an active loss.
+
+**[x] L133. `WindRosePlot`'s class-docstring example is not runnable, and no test can see it**
+
+> **Fixed 2026-08-16, together with L85's second pass.** The sample was converted to a `>>>` block
+> with the correct import, and `test_docstring_refs` was extended to resolve `dv.<attr>` inside reST
+> literal blocks and attribute docstrings — so the whole family is now checked, not just this one.
+> Turning that check on immediately found **five more** dead names nobody had listed (the
+> `heatmap_xyz` and `hexbin` module docstrings, `TreeRingPlot`, and
+> `HeatmapXYZ.from_gridaggregator`), plus five stale "Top-level alias" prose claims. See L85 for the
+> full accounting; the count of `::`-introduced literal blocks is **41**, not the 13 this entry
+> found by grepping for `Example::`.
+
+`core/plotting/windrose.py:85` — calls `dv.load_exampledata_EDDYPRO_FULL_OUTPUT_CSV_30MIN()`, which
+does not exist (`diive/__init__.py` exports only `load_exampledata_parquet` / `_lae`):
+`AttributeError` on the second line. The bundled example file gets it right
+(`from diive.configs.exampledata import ...`); only the docstring is wrong. The rest of the sample
+runs once the import is corrected.
+
+**This is an L85 coverage hole, not just a typo.** The sample is a reST `Example::` literal block, not
+a `>>>` block, so neither `test_docstring_refs.py` nor the new `test_docstring_examples.py` sees it.
+There are **13 such blocks across 7 files** (`core/ml/results.py`, `core/plotting/heatmap_xyz.py`,
+`treering.py`, `windrose.py`, `flux/fluxprocessingchain/container.py`, `run_chain.py`,
+`gapfilling/swin.py`), none of them currently checked by anything.
+
+**[ ] L134. A waterfall contribution of exactly 0.0 is coloured "release"**
+`core/plotting/waterfall.py:142` — `uptake_mask = contributions < 0` puts 0.0 in the `False` bucket,
+taking the red release colour the docstring reserves for positive values. **[reproduced]**
+`[1.0, 0.0, -1.0]` -> `[red, red, blue]`. Compounds L111: a no-data period is painted as a red
+release day.
+
+**[ ] L135. `zone_colors` / `zone_labels` lengths are unvalidated**
+`core/plotting/shifted_distribution.py:171`, `:209` — the docstring says 5 of each. Three colours
+raise `IndexError: list index out of range`; three labels silently under-label (`zip(...,
+strict=False)`), leaving 2 zones unlabelled. **[reproduced]** both.
+
+**[ ] L136. Colour-by replaces the caller's axes limits with its own data range**
+`core/plotting/timeseries.py:330-335` — `LineCollection` genuinely does not autoscale, but the fix is
+`update_datalim` + `autoscale_view`, not `set_xlim`/`set_ylim`. **[reproduced]** ylim
+`(47.25, 52.75)` -> `(-1.1, 1.1)`, putting a pre-existing series at y=50 off-screen.
+
+**[ ] L137. A second `plot()` on the same axes stacks artists and colorbars**
+`core/plotting/timeseries.py:339`, `bar.py:147`, `shifted_distribution.py:158` — all three classes.
+**[reproduced]** TimeSeries figure axes after 1/2/3 calls: 2/3/4 (each colorbar steals more width);
+bar `(patches, texts)` `(12,1)` -> `(24,2)`; shifted distribution `(collections, lines, texts)`
+`(6,6,5)` -> `(12,12,10)`. The two-phase docstrings promise re-callability "with different styling",
+which holds across *different* axes; the same-axes limitation is worth stating.
+
+**[ ] L138. `fig.tight_layout()` on a figure built with `layout='constrained'`**
+`core/plotting/bar.py:173`, `timeseries.py:431` — `ax=None` path only. **[reproduced]**
+`UserWarning: The figure layout has changed to tight` — the constrained engine is silently disabled.
+
+**[ ] L139. `LongtermAnomaliesYear.get()` before `plot()` raises `AttributeError`**
+`core/plotting/bar.py:176-178` — `self.ax` is created only in `plot()`.
+
+**[ ] L140. `icons.py`'s `('calculate', _ln_gear)` rule is unreachable**
+`gui/icons.py:571` — the comment claims it covers "derived-variable calculators (VPD, …)", but no
+menu label contains "calculate"; it is an `addSection` header (`app.py:481`) and never passed to
+`menu_icon`. **[reproduced]** *Potential radiation*, *VPD (TA + RH)* and *diive on &PyPI* fall back to
+the generic chart glyph. The other 90 of 93 real labels resolve correctly.
+
+**[ ] L141. Icons are baked at 16x16 with `devicePixelRatio` 1**
+`gui/icons.py:26-31` — at Windows 150%/200% display scaling Qt upscales the bitmap, so the glyphs are
+blurry on exactly the hardware this runs on. **[reproduced]** `requested 16x16 @dpr=2.0 -> got 16x16
+px, devicePixelRatio=1.0`; `availableSizes(): [QSize(16,16)]`.
+
+**[ ] L142. Sub-pixel coordinates are discarded by PySide6's integer `drawLine` overload**
+`gui/icons.py`, ~12 glyphs (`_ln_gear`, `_ln_waterfall`, `_ln_windrose`, `_ln_clock`, `_ln_calendar`,
+`_ln_lag`, …) — `p.drawLine(4.2, 9, 5.6, 9)` binds `drawLine(int,int,int,int)`, while the `QRectF` /
+`QPointF` / `_poly` calls in the same functions keep sub-pixel placement. **[reproduced]** the float
+call renders identically to the truncated-int call.
+
+**[ ] L143. `menu_icon(None)` raises `AttributeError`**
+`gui/icons.py:730` — no current caller passes `None`; noted only because the docstring promises that
+unknown labels fall back.
+
+**[ ] L144. Both bokeh methods call `show(p)` unconditionally**
+`core/plotting/timeseries.py:217`, `:295` — the L104 family: no `showplot` toggle, so they always try
+to open a browser. Documented behaviour, hence low priority.
+
+**[ ] L145. `bar.py` uses Material 400-level colours where the convention specifies 300**
+`core/plotting/bar.py:143-144` — `#EF5350` / `#42A5F5` against CLAUDE.md's `#E57373` / `#64B5F6` for
+bars and lines.
+
+**[ ] L146. `ShiftedDistributionPlot` uses the population sd for its zone boundaries**
+`core/plotting/shifted_distribution.py:75` — `.values.std()` is ddof=0 where the rest of diive uses
+pandas' ddof=1. **[reproduced]** on an 11 000-record reference the +3σ breakpoint differs by 0.0022
+(ddof=0 `5.971005` vs ddof=1 `5.971748`) — negligible for a long reference period, not for a short
+one.
+
+## Round 4 — reviewed and found sound (no action)
+
+**`windrose.py`**
+
+- **The 0/360 wrap is handled correctly.** Sector 0 is centred on North by the half-sector shift at
+  `:183`, and 360 folds to 0 at `:201`. Directions `[0, 10, 350, 359, 360, 22.4, 337.6]` all land in
+  `N`; `22.6` / `337.4` correctly land in `NE` / `NW`. **Sector edges are pinned to the full circle**
+  (`i * 360/n`), *not* derived from the observed range — the L2 family does not apply here.
+- **Binning is exhaustive and equal-width**: one reading per degree over 0-359 gives
+  `[45, 45, 45, 45, 45, 45, 45, 45]`, all 360 binned. Verified for `n_sectors` 2, 3, 5, 8, 16.
+- **Degrees -> radians happens once**, at `:399` and `:437`; the sector arithmetic stays in degrees.
+  No mixed-unit path.
+- **The results table agrees with the drawn wedges**, verified numerically on synthetic *and* real
+  EddyPro data: per bar, the signed radial extent equals `results[col]` exactly. The GUI's side table
+  (`gui/tabs/plotting.py:1050`) is filled from the same `rose.results` object it plots, so table and
+  picture cannot drift.
+- **Negative aggregates render correctly** — bars anchored at the zero ring
+  (`bottoms = min(v, 0)`, `heights = |v|`), `rorigin` set below `rmin`; verified against
+  `ax.patches` geometry.
+- `fig.colorbar` at `:463`, not `plt.colorbar` — no warning against an axes on a bare `Figure()`.
+- No caller-frame mutation; two-phase respected. An all-NaN variable raises a deliberate
+  `ValueError("No finite aggregated values to plot (all sectors empty).")`.
+- **Calm/zero wind is not special-cased** — `wd == 0` is a valid North bearing and is binned as such.
+  Defensible (there is no wind-speed input to define "calm"), but worth knowing.
+
+**`hexbin.py`**
+
+- **NaN in `z` really is ignored, as documented** — matplotlib calls `cbook.delete_masked_points`
+  before binning, so a NaN removes one record, not the hexagon. 10% NaN blanked 0 of 77 hexagons.
+- `show_values` places labels correctly (`get_offsets()` is in data coordinates and `get_array()` is
+  filtered by the same `good_idxs`, so the zip cannot skew).
+- Colorbar goes through `HeatmapBase.format` -> `fig.colorbar`; no warning against a bare `Figure()`.
+- `HeatmapBase.format`'s `self.series.name` auto-title — which `HexbinPlot` has no `self.series` for —
+  is unreachable here, since hexbin calls `format()` without `shown_freq`.
+- No caller-frame mutation, including with `normalize_axes=True`. Percentile output spans `(0, 100]`,
+  not `[0, 100]` — harmless, but not what "0-100 scale" literally says.
+- L91 (`show_less_xticklabels`) is applied at `:412-415`. Confirmed fixed.
+
+**`histogram.py`**
+
+- Counts exclude NaN and `counts.sum()` equals the non-NaN record count (40 of 50 on a 20%-gappy
+  series) — no silent double-counting.
+- A gappy series does **not** crash (matplotlib uses `np.nanmin`/`np.nanmax` for the auto range);
+  only the all-NaN and constant cases do (L115/L116). A 0/2 flag column plots fine.
+- No caller-frame mutation; no `plt.colorbar`/`plt.tight_layout`; chrome routed through
+  `style.apply(...)` at `:203` with no removed flat kwargs surviving.
+
+**`waterfall.py`**
+
+- **The running total is exact**: `sum(contributions) == cumulative.iloc[-1] == sum(raw series)` to
+  floating point on a 30-day half-hourly record.
+- **Negative increments are placed correctly and the connectors line up.** For `[+2, -3, +1.5]` the
+  bars span `[0,2] -> [2,-1] -> [-1,0.5]` and the connectors sit at exactly `cumulative[:-1]`.
+- `uptake_is_negative=False` flips colours only; the cumulative is bit-identical. Single-record input
+  works. No `plt.*`, no caller-frame mutation, `series_units` folded onto a *copied* `FormatStyle`.
+
+**`timeseries.py`, `bar.py`, `shifted_distribution.py`**
+
+- **No pyplot leakage in any of the three.** `timeseries.py:339` uses `ax.figure.colorbar(...)`;
+  verified against an axes on a bare `Figure()` never created through pyplot — the colorbar lands on
+  the caller's figure with **zero warnings**. No `plt.colorbar`, `plt.tight_layout`, `plt.show`,
+  `plt.gca` or `plt.subplots` anywhere; `fig.show()` fires only when the class created the figure.
+- **No caller-frame mutation** — verified with `.equals()` before/after a full `plot()`, for both the
+  series and the colour series.
+- **`FormatStyle` compliance**: no leftover flat chrome kwargs on any `plot()` signature.
+  `TimeSeries.plot` round-trips a full style correctly (title, units-appended ylabel, `show_grid` and
+  `show_legend` honoured); `LongtermAnomaliesYear.plot` routes everything through `style.apply(...)`
+  with correct `default_*` and `zeroline_data`. `ShiftedDistributionPlot` is the only offender (L129),
+  and even there the caller's style object is not mutated.
+- **`ShiftedDistributionPlot`'s distribution alignment is sound** — the L2 concern does not apply.
+  Both KDEs are evaluated on the **same** 1000-point grid spanning both periods, and both integrate
+  to 1.000 by trapezoid. Each curve gets its own Silverman bandwidth (1.2038 / 1.2070), fitted to its
+  own data — the standard choice. Overlapping ref/comp periods are permitted without warning, which
+  is defensible since a "vs. full record" reference is a legitimate framing.
+- **`TimeSeries` degenerate inputs all survive**: all-NaN (plain and coloured), single-record (the
+  `>= 2 finite` guard catches it), duplicate timestamps, and `drop_gaps=True` combined with a colour
+  series (indices stay aligned, 490/490). Default gap handling is correct and correctly documented —
+  NaNs are kept so matplotlib breaks the line. `drop_gaps=True` does bridge gaps (max plotted step
+  `1 day 16:30` on 30-min data), which is what the parameter means and what the docstring says.
+- **`timeseries.py`'s internal frame keys are literals** (`df['date']` / `df['value']` built from the
+  index and `.to_numpy()`), so a Series named `date`, `value`, `DATE` or `TIME` cannot collide — the
+  L68 hazard does not reach here. No resampling happens in the module, so the START/MIDDLE
+  half-period question (L66/L68) does not arise.
+- **`bar.py`'s bar conventions are not applicable, correctly**: the class draws no value labels and
+  sets no figure height, so the contrast formula, `va='center_baseline'` and the dynamic-height rule
+  have nothing to apply to. Negative and zero values split into two non-overlapping columns drawn at
+  identical positions and width; NaN falls into neither and leaves the slot empty.
+
+**`gui/icons.py`**
+
+- All 44 `_ln_*` factories and all 8 public builders run, call `p.end()`, and produce a non-blank
+  16x16 icon; a fresh `QPainter.begin()` succeeds afterwards, so **no painter is left active**.
+- **No domain knowledge or algorithm in the module** — it is a keyword table over drawing primitives,
+  correctly GUI-only. The one piece of domain mapping that exists (variable name -> pill kind) is
+  properly in the library.
+- **Ink comes from `theme.manager.tokens["INK"]` and follows a live edit** (`#1E2226` -> `#FF0000`
+  verified end-to-end on a rendered pixmap). The only two hex literals are the `_line_ink` fallback
+  for isolated test contexts.
+- `menu_icon` handles empty string, whitespace, digits, unicode and `&` mnemonics without raising.
+  The `_LINE_RULES` ordering comment is accurate: every documented precedence trap ("reset" before
+  "set to", "screening" before "database", "removal" before "manual", "partition"/"time lag" before
+  "time", "gap-filling" before "gap", "open project" before "open") fires in the right order.
+
+## Round 4 — coverage limits
+
+- These classes were not exercised *through* the GUI; the four relevant call sites
+  (`gui/tabs/plotting.py`, `gui/tabs/overview.py`, `core/base/flagbase.py`) were read to judge realism
+  and are quoted where they matter.
+- The bundled examples were not run end to end (the never-run-the-example-suite rule). The wind-rose
+  docstring snippet was re-run on its own, which is how L133 surfaced.
+- `HeatmapBase` is out of scope; it was read only far enough to trace which hexbin parameters die
+  there (L122/L123). Its own `minticks` / `color_bad` handling for `HeatmapDateTime` / `HeatmapXYZ` is
+  correct and untouched by these findings.
+- `codegen.py`'s `histogram_to_code` / `waterfall_to_code` round-trips were not audited.
+- Bokeh visual output was exercised only to model construction, with `show` / `output_file`
+  monkeypatched. The rendered HTML, `window_axis='x'` auto-scaling and the `RangeTool` linkage were
+  not verified, nor was `init_range` edge behaviour for 1- and 2-record series.
+- The 44 rendered glyphs were verified non-blank and correctly inked, but not inspected to judge
+  whether each reads as its intended object.
+
+---
+
+**[x] L147. Menu-action lambdas capture `self`, which is what actually pins every `MainWindow`**
+
+> **Fixed 2026-08-16.** Every `self`-capturing lambda is out of `gui/app.py` — all seven, not just the
+> menu ones. The five menu sites collapsed into one `MainWindow._menu_tab_action(label)`:
+> `act.setData(label)` plus `connect(self._on_menu_tab_action)`, which reads the label back off
+> `sender().data()`. Sweeping the whole file found two siblings with the identical shape (emitter is a
+> long-lived child of the window): the tab close button (`:822`), whose slot now matches `sender()`
+> against `bar.tabButton(i, RightSide)` instead of closing over the page widget, and the tab
+> pin/unpin entry (`:845`), whose tab now travels on `act.setData(tab)` — that menu is parented to the
+> window and never deleted, so its action outlives the click. `_make_close_button` lost its now-unused
+> `widget` parameter. `&`-escaping, icons, mnemonics and label->tab routing are unchanged.
+>
+> This form rather than a `functools.partial` or a weakref dance: PySide6 holds a connected bound
+> method's receiver only **weakly**, which is why the neighbouring `_act(text, self._open_file)` calls
+> never leaked. The label/tab has to survive on the Qt side, and `QAction.data()` is where Qt already
+> keeps per-action payload.
+>
+> Measured (offscreen, weakrefs after `gc.collect()`): 4 minimal windows built and dropped — **4 live
+> before, 0 after**. Realistic path (data auto-loaded, `show()`n, a menu tab opened and closed through
+> its close button), 3 windows — **3 live before, 0 after**. Before the fix the leaked window's only
+> Python referrers were closure cells (1 minimal, 65 realistic); after, none, so there is no second
+> pin behind this one — with L105's weakref in place the window is now fully released.
+>
+> Covered by `test_mainwindow_is_garbage_collectable`, `test_menu_actions_carry_their_label` (all 65
+> registered labels: an action exists for each, text is `&`-escaped, triggering routes each to
+> `_open_menu_tab` with its own label), `test_menu_action_opens_its_tab` (end-to-end) and
+> `test_tab_context_menu_pins_tab`; the close-button rewiring is covered by the existing
+> `test_tabs_movable_renamable_and_close_buttons`. Mutation-checked: reinstating the lambda fails the
+> gc test with three live windows; hard-coding a label in `_on_menu_tab_action` fails both menu tests.
+>
+> **The rest of `gui/` still has ~55 `self`-capturing lambdas of this family.** Most are now rescued
+> by L106's page deletion and `weak_slot` sweep; the ones that are **not** are
+> `tabs/database_explorer.py:105-117` (emitters are parentless `WorkerRunner` QObjects held as tab
+> attributes, so page deletion never reaches them) and the never-deleted context menus in
+> `widgets/variable_panel.py:198,215`, `widgets/notes_wall.py:179`, `tabs/events.py:305-313`,
+> `widgets/header_bar.py:209` — every right-click permanently adds a menu plus actions and pins the
+> panel. Separately, `widgets/hover.py:59,60` is the same class of bug in another framework:
+> matplotlib's `CallbackRegistry` holds plain lambdas **strongly** while weakref'ing bound methods.
+
+`gui/app.py:423`, `:436`, and ~30 sibling call sites in `_build_menus`
+
+```python
+act = QAction(menu_icon(label), label.replace("&", "&&"), self)
+act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))
+```
+
+The lambda captures `self`; the `QAction` holds the lambda on the C++ side, where Python's cyclic
+collector cannot see it; and the `QAction` is parented to the window. That closes a pin the collector
+cannot break, and it is the **sole** reason a `MainWindow` survives — see the L105 correction, where
+stubbing `_build_menus` frees 4 of 4 windows even with L105's pre-fix strong reference in place.
+
+Same shape as CLAUDE.md's existing "never connect a lambda to a process-wide singleton signal" rule,
+one level in: there the lambda outlives the receiver, here it outlives the *sender's owner*. The
+neighbouring `_act(text, self._open_file)` calls are fine, because PySide6 holds only a **weak**
+reference to a connected bound method — which is exactly the fix shape here:
+`act.setData(label)` + `connect(self._on_menu_tab_action)`, reading the label back off `sender()`.
+
+Consequence is L105's, undiminished: every leaked window stays subscribed to `theme.manager`,
+`metadata_store.manager`, `site.manager`, `events.manager` and `db.manager`, so each emit fans out
+into all of them (`theme.manager.apply()`: 2.15 s behind one window, 21 s behind thirty). Harmless in
+the shipped single-window app; it is the test suite and any embed-diive-in-a-bigger-app scenario that
+pay.
