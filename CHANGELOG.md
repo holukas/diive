@@ -363,8 +363,8 @@ The rest raise or fail at import:
 
 ### Fixed (code review)
 
-A read-only review of the library and the GUI, in three rounds, recorded 105 findings ranked so that a silently wrong
-number sits above a crash: a traceback blocks you, a plausible wrong number gets published. 87 are fixed and 2 are
+A read-only review of the library and the GUI, in four rounds, recorded 155 findings ranked so that a silently wrong
+number sits above a crash: a traceback blocks you, a plausible wrong number gets published. 114 are resolved, 2 of them
 closed as by design. The fixes landed as separate commits, each naming the findings it closes, and every closed entry
 in `CODE_REVIEW_FINDINGS.md` carries what was changed, why that direction was chosen (code or docstring), and how it
 was verified. **Removed API comes first below, then the fixes that change numbers with no error and no warning**, since
@@ -732,21 +732,43 @@ those are the ones to check existing results against.
   flaggers, so it cannot be mistaken for an oversight. Everything else in the comparison follows ONEFlux, including the
   missing-u\* rejection above.
 
+#### Plot classes, docstring examples, and GUI object lifetime
+
+Round 4 covered the eight files the earlier rounds had left out — `windrose.py`, `hexbin.py`, `histogram.py`,
+`waterfall.py`, `shifted_distribution.py`, `timeseries.py`, `bar.py` and the GUI's `icons.py`. Its 40 findings are
+recorded but not yet fixed, so **nothing in those plot classes changed in this release**. Four are worth knowing about
+before you trust an existing figure: `HexbinPlot`'s `mincnt=0` default draws hexagons over cells holding no data (with
+`reduce_C_function=np.sum` those read as a measured zero, 99 of 116 hexagons on a two-cloud test record);
+`HistogramPlot`'s KDE overlay is scaled by the first bin width, so it is wrong for any non-uniform bin list;
+`LongtermAnomaliesYear` discards its own `sort_index`, so an unsorted yearly series is plotted and its "last 10 years"
+statistics averaged in file order; and `WaterfallPlot` draws a period with no measurements at all as a 0.0 bar under the
+default `agg='sum'`, which looks like a period that genuinely balanced.
+
+What did change:
+
+- **Docstring examples are executed.** `tests/test_docstring_examples.py` runs 17 of them (previously none ran
+  anywhere), and the reference check now also resolves names inside reST literal blocks and attribute docstrings.
+  Landing it fixed 8 broken samples — all documentation wrong against correct code, including a `FlagQCF` sample
+  documenting a signature the class has not taken in a long time — plus five "Top-level alias" claims naming functions
+  that do not exist.
+- **The GUI no longer leaks windows and tabs.** A lambda capturing `self` and connected to a child widget's signal is
+  owned by the connection object on Qt's C++ side, where Python's collector cannot walk it, so the cycle was unbreakable:
+  no `MainWindow` was ever collected, and 28 of 41 tab classes leaked on drop. Since every leaked window and tab stays
+  subscribed to the app-wide singletons, a theme change re-rendered all of them. Fixed by replacing 43 lambda sites with
+  bound methods or the new `weak_slot` helper, and by deleting a tab's page on close. Suite-end live widgets fall from
+  13 149 to 133, and `theme.manager.apply()` after three flux-chain cycles from 0.65 s to 0.000 s.
+
 #### Still open
 
-16 findings are open, each with a repro or a source citation in `CODE_REVIEW_FINDINGS.md`. The three that can move a
-number: `UstarVekuriThresholdDetection.bootstrap()` calls `df.sample` with no `random_state`, so its percentiles differ
-from run to run (one season's p50 moved 0.1634 to 0.1488 across two runs) and those thresholds feed u\* filtering;
-`classical_decompose` passes `extrapolate=` where the parameter is `extrapolate_trend`, so it always raises internally,
-always falls into the no-extrapolation fallback, and its trend edges are unconditionally NaN; and
-`ScreeningTabBase._select` does not bump `_run_id`, so switching the selected variable mid-run can adopt the previous
-variable's chain result. Two need an external source: whether InfluxDB v2's delete range excludes `stop`, in which case
-the pre-upload delete leaves the last record and duplicates survive, and BUR06/JAR09's aerodynamic resistance, where
-diive passes the canopy momentum resistance `u/u*^2` in place of Burba 2006's per-element `7.4*sqrt(d/U)` (about 6x
-apart on CH-LAE) and has no equivalent of `fr`, the fraction of instrument heat retained in the optical path. Neither
-resistance issue is fatal in the pipeline, because `ScopOptimizer` fits a scaling factor against a closed-path
-reference and absorbs both, but it makes those two methods semi-empirical rather than the published formulation, which
-matters for anyone running `ScopPhysics` without the optimizer.
+41 findings are open, each with a repro or a source citation in `CODE_REVIEW_FINDINGS.md`; 40 of them are round 4's,
+described above. The remaining one needs an external source: whether InfluxDB v2's delete range excludes `stop`, in
+which case the pre-upload delete leaves the last record and duplicates survive. Deferred separately is BUR06/JAR09's
+aerodynamic resistance, where diive passes the canopy momentum resistance `u/u*^2` in place of Burba 2006's per-element
+`7.4*sqrt(d/U)` and has no equivalent of `fr`, the fraction of instrument heat retained in the optical path. That is not
+fatal in the pipeline, because `ScopOptimizer` fits a scaling factor against a closed-path reference and absorbs both,
+but it makes those two methods semi-empirical rather than the published formulation, which matters for anyone running
+`ScopPhysics` without the optimizer — and the fitted factor cannot absorb the roughly 4.8x residual spread that remains
+*within* each u\* class.
 
 ### Unittests
 
