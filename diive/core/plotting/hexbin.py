@@ -63,7 +63,7 @@ class HexbinPlot(HeatmapBase):
     Top-level alias: ``dv.hexbinplot(x, y, z, ...)``
 
     See Also:
-        examples/visualization/hexbin.py — Hexbin variations (percentile normalization, aggregation, overlay)
+        examples/visualization/plot_hexbin_basic.py — Hexbin variations (percentile normalization, aggregation, overlay)
     """
 
     def __init__(self,

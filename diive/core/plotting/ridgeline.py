@@ -23,7 +23,7 @@ class RidgeLinePlot:
         - https://scikit-learn.org/stable/modules/density.html#kernel-density
 
     See Also:
-        examples/visualization/ridgeline.py — Ridge line plots with kernel density estimation
+        examples/visualization/plot_ridgeline_basic.py — Ridge line plots with kernel density estimation
     """
 
     def __init__(self, series: pd.Series):

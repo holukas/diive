@@ -114,7 +114,7 @@ def calc_vpd_from_ta_rh(df: DataFrame, rh_col: str, ta_col: str) -> Series:
 
     See Also
     --------
-    examples/variables/feature_vpd.py : Complete examples with gap-filling and visualizations.
+    examples/features/feature_vpd.py : Complete examples with gap-filling and visualizations.
 
     """
 
@@ -158,7 +158,7 @@ def air_temp_from_sonic_temp(sonic_temp: pd.Series, h2o: pd.Series) -> pd.Series
         pd.Series: Air temperature data in Kelvin.
 
     Example:
-        See `examples/variables/feature_sonic_temp_conversion.py` for complete example.
+        See `examples/features/feature_sonic_temp_conversion.py` for complete example.
 
     See Also:
         latent_heat_of_vaporization : Calculate latent heat from air temperature
@@ -187,7 +187,7 @@ def latent_heat_of_vaporization(ta: pd.Series) -> pd.Series:
         Latent heat of vaporization (J kg-1)
 
     Example:
-        See `examples/variables/feature_latent_heat.py` for complete example.
+        See `examples/features/feature_latent_heat.py` for complete example.
 
     See Also:
         et_from_le : Convert latent heat flux to evapotranspiration
@@ -213,7 +213,7 @@ def et_from_le(le: pd.Series, ta: pd.Series) -> pd.Series:
         Evapotranspiration (mm H2O h-1)
 
     Example:
-        See `examples/variables/feature_evapotranspiration.py` for complete example.
+        See `examples/features/feature_evapotranspiration.py` for complete example.
 
     See Also:
         latent_heat_of_vaporization : Calculate latent heat from air temperature

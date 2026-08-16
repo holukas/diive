@@ -59,7 +59,7 @@ class HeatmapXYZ(HeatmapBase):
     Top-level alias: ``dv.plot_heatmap_xyz(x, y, z, ...)``
 
     Example:
-        See `examples/core/visualization/plot_heatmap_xyz_basic.py` for complete examples
+        See `examples/visualization/plot_heatmap_xyz_basic.py` for complete examples
         with GridAggregator integration and styling options.
 
     See Also:

@@ -60,9 +60,9 @@ class FeatureEngineer:
         # Pass df_engineered to gap-filling models
 
     See Also:
-        examples/gap_filling/randomforest_ts.py — Random Forest gap-filling with feature engineering
-        examples/gap_filling/xgboost_ts.py — XGBoost gap-filling with feature engineering
-        examples/gap_filling/comparison.py — Multi-method comparison using engineered features
+        examples/gapfilling/gapfill_randomforest.py — Random Forest gap-filling with feature engineering
+        examples/gapfilling/gapfill_xgboost.py — XGBoost gap-filling with feature engineering
+        examples/gapfilling/gapfill_comparison.py — Multi-method comparison using engineered features
     """
 
     def __init__(self,

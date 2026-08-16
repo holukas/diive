@@ -15,7 +15,7 @@ Both modes use the quality flag system:
   - flag=2: Value outside acceptable range (outlier, removed)
   - NaN: Record missing in the input, so no test could be performed
 
-See examples/preprocessing/outlier_detection/absolutelimits.py for working examples.
+See examples/preprocessing/outlier_detection/outlier_absolutelimits.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
@@ -55,7 +55,7 @@ class AbsoluteLimits(FlagBase):
     - NaN: Record missing in the input, so no test could be performed
 
     Example:
-        See `examples/preprocessing/outlier_detection/absolutelimits.py` for complete examples.
+        See `examples/preprocessing/outlier_detection/outlier_absolutelimits.py` for complete examples.
     """
 
     flagid = 'OUTLIER_ABSLIM'

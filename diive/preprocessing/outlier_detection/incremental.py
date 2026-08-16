@@ -17,7 +17,7 @@ Quality flags:
   - flag=2: Value detected as outlier (removed)
   - NaN: Record missing in the input, so no test could be performed
 
-See examples/preprocessing/outlier_detection/incremental.py for working examples.
+See examples/preprocessing/outlier_detection/outlier_incremental.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
@@ -47,7 +47,7 @@ class zScoreIncrements(FlagBase):
     to isolated spikes while allowing gradual changes.
 
     Example:
-        See `examples/preprocessing/outlier_detection/incremental.py` for complete examples.
+        See `examples/preprocessing/outlier_detection/outlier_incremental.py` for complete examples.
     """
 
     flagid = 'OUTLIER_INCRZ'

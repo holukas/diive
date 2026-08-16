@@ -41,7 +41,7 @@ class DaytimeNighttimeFlag:
                 are flagged as nighttime (W m-2)
 
         Example:
-            See `examples/createvar/daynightflag.py` for complete examples.
+            See `examples/features/feature_daynightflag.py` for complete examples.
         """
 
         self.timestamp_index = timestamp_index
@@ -197,7 +197,7 @@ class TimeSince:
     >>> df = dv.load_exampledata_parquet()
     >>> prec = df.loc[(df.index.year == 2022) & (df.index.month == 7),
     ...               "PREC_TOT_T1_25+20_1"].copy()
-    >>> ts_prec = dv.TimeSince(prec, lower_lim=0, include_lim=False)
+    >>> ts_prec = dv.variables.TimeSince(prec, lower_lim=0, include_lim=False)
     >>> ts_prec.calc()
     >>> max_dry = ts_prec.get_timesince().max()
     >>> print(f"Maximum dry period: {max_dry} records (~{max_dry * 0.5:.1f} hours)")
@@ -206,14 +206,14 @@ class TimeSince:
 
     >>> temp = df.loc[(df.index.year == 2022) & (df.index.month == 3),
     ...               "Tair_f"].copy()
-    >>> ts_temp = dv.TimeSince(temp, upper_lim=0, include_lim=True)
+    >>> ts_temp = dv.variables.TimeSince(temp, upper_lim=0, include_lim=True)
     >>> ts_temp.calc()
     >>> results = ts_temp.get_full_results()
     >>> print(results.head(10))
 
     See Also
     --------
-    examples/variables/feature_timesince.py : Complete usage examples with visualizations.
+    examples/features/feature_timesince.py : Complete usage examples with visualizations.
 
     Notes
     -----
@@ -393,7 +393,7 @@ def lagged_variants(df: DataFrame,
         cannot be told apart from filling its genuine gaps, so the edges stay missing.
 
     Example:
-        See `examples/createvar/laggedvariants.py` for complete examples.
+        See `examples/features/feature_laggedvariants.py` for complete examples.
 
     Args:
         df: dataframe that contains variables that will be lagged

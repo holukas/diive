@@ -20,7 +20,7 @@ Quality flags:
   - flag=2: Value detected as outlier (removed)
   - NaN: Record missing in the input, so no test could be performed
 
-See examples/preprocessing/outlier_detection/hampel.py for working examples.
+See examples/preprocessing/outlier_detection/outlier_hampel.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
@@ -50,7 +50,7 @@ class Hampel(FlagBase):
     Optional double-differencing (Papale et al. 2006) removes trends before detection.
 
     Example:
-        See `examples/preprocessing/outlier_detection/hampel.py` for complete examples.
+        See `examples/preprocessing/outlier_detection/outlier_hampel.py` for complete examples.
     """
 
     flagid = 'OUTLIER_HAMPEL'

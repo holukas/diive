@@ -25,7 +25,7 @@ Kudos:
 References:
     [1] https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.LocalOutlierFactor.html
 
-See examples/preprocessing/outlier_detection/lof.py for working examples.
+See examples/preprocessing/outlier_detection/outlier_lof.py for working examples.
 
 """
 import numpy as np

@@ -25,7 +25,7 @@ class CumulativeYear:
     mean and ±1 standard deviation band for comparison.
 
     See Also:
-        examples/visualization/timeseries_and_cumulative.py — Yearly cumulative plots with reference bands
+        examples/visualization/plot_cumulative_basic.py — Yearly cumulative plots with reference bands
     """
 
     def __init__(self,
@@ -223,8 +223,8 @@ class Cumulative:
         end_year: End year of shown data.
 
     See Also:
-        examples/visualization/timeseries_and_cumulative.py — Cumulative plots with multiple scenarios
-        examples/flux/uncertainty.py — Cumulative uncertainty visualization
+        examples/visualization/plot_cumulative_basic.py — Cumulative plots with multiple scenarios
+        examples/flux/lowres/flux_uncertainty.py — Cumulative uncertainty visualization
     """
 
     def __init__(self,

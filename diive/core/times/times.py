@@ -71,7 +71,7 @@ class TimestampSanitizer:
 
     See Also
     --------
-    examples/timeseries/timestamp_sanitizer.py : Examples with clean data,
+    examples/times/times_timestamp_sanitizer.py : Examples with clean data,
         minor issues, and badly broken timestamps.
     """
 
@@ -124,12 +124,12 @@ class TimestampSanitizer:
         >>> import diive as dv
         >>> df = dv.load_exampledata_parquet()
         >>> series = df['NEE_CUT_REF_f'].copy()
-        >>> sanitizer = dv.TimestampSanitizer(data=series, verbose=False)
+        >>> sanitizer = dv.times.TimestampSanitizer(data=series, verbose=False)
         >>> clean_series = sanitizer.get()
 
         **With frequency validation:**
 
-        >>> sanitizer = dv.TimestampSanitizer(
+        >>> sanitizer = dv.times.TimestampSanitizer(
         ...     data=series,
         ...     nominal_freq='30min',  # Expect 30-minute resolution
         ...     verbose=True
@@ -138,7 +138,7 @@ class TimestampSanitizer:
 
         **Selective processing (skip some steps):**
 
-        >>> sanitizer = dv.TimestampSanitizer(
+        >>> sanitizer = dv.times.TimestampSanitizer(
         ...     data=series,
         ...     regularize=False,                    # Keep gaps in data
         ...     output_middle_timestamp=False,       # Keep end-of-period format
@@ -150,7 +150,7 @@ class TimestampSanitizer:
         **Error handling for corrupted data:**
 
         >>> try:
-        ...     sanitizer = dv.TimestampSanitizer(
+        ...     sanitizer = dv.times.TimestampSanitizer(
         ...         data=corrupted_data,
         ...         nominal_freq='30min',
         ...         validate_naming=True
@@ -221,7 +221,7 @@ class TimestampSanitizer:
 
         Example
         -------
-        >>> sanitizer = dv.TimestampSanitizer(data=df, verbose=False)
+        >>> sanitizer = dv.times.TimestampSanitizer(data=df, verbose=False)
         >>> status = sanitizer.get_status()
         >>> print(f"Removed {status['rows_removed']} rows, frequency confidence: {status['frequency_confidence']:.0%}")
         """

@@ -247,7 +247,7 @@ def diel_cycle(series: Series,
         minmax: Also compute the per-time-of-day minimum/maximum (``min``/``max``).
 
     See Also:
-        examples/visualization/dielcycle.py — Diurnal cycle visualization with DielCycle class
+        examples/visualization/plot_dielcycle.py — Diurnal cycle visualization with DielCycle class
     """
     from diive.core.dfun.stats import q25, q75
 

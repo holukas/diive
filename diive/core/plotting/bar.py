@@ -33,7 +33,7 @@ class LongtermAnomaliesYear:
         plot : Render anomaly bar chart with styling options
 
     Example:
-        See `examples/core/visualization/plot_other_plots.py` for complete example.
+        See `examples/visualization/plot_other_plots.py` for complete example.
     """
 
     def __init__(self,
@@ -122,7 +122,7 @@ class LongtermAnomaliesYear:
             None (displays plot if ax=None, otherwise renders on provided axes)
 
         Example:
-            >>> anomaly = dv.plot_longterm_anomalies_year(series=data, reference_start_year=2015)
+            >>> anomaly = dv.plotting.LongtermAnomaliesYear(series=data, reference_start_year=2015)
             >>> anomaly.plot(format_style=dv.plotting.FormatStyle(title='Custom Title'))
             >>> anomaly.plot(ax=ax1)  # Plot on existing axis
         """

@@ -46,9 +46,9 @@ class HeatmapDateTime(HeatmapBase):
     Top-level alias: ``dv.heatmap_datetime(series, ...)``
 
     See Also:
-        examples/visualization/heatmap_datetime.py — DateTime heatmap variations (vertical/horizontal)
-        examples/gap_filling/interpolate.py — Heatmap in gap-filling context
-        examples/gap_filling/randomforest_ts.py — Heatmap for model output visualization
+        examples/visualization/plot_heatmap_datetime_basic.py — DateTime heatmap variations (vertical/horizontal)
+        examples/gapfilling/gapfill_interpolate_generous.py — Heatmap in gap-filling context
+        examples/gapfilling/gapfill_randomforest.py — Heatmap for model output visualization
     """
 
     def __init__(self,
@@ -341,7 +341,7 @@ class HeatmapYearMonth(HeatmapBase):
     It supports different aggregation methods and the display of ranks instead of raw values.
 
     See Also:
-        examples/visualization/heatmap_datetime.py — Year/Month heatmap variations (rank, multi-panel, colormaps)
+        examples/visualization/plot_heatmap_datetime_basic.py — Year/Month heatmap variations (rank, multi-panel, colormaps)
     """
 
     def __init__(self,

@@ -23,7 +23,7 @@ Quality flags:
   - flag=2: Value detected as outlier (removed)
   - NaN: Record missing in the input, so no test could be performed
 
-See examples/preprocessing/outlier_detection/localsd.py for working examples.
+See examples/preprocessing/outlier_detection/outlier_localsd.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
@@ -78,7 +78,7 @@ class LocalSD(FlagBase):
         flagid (str): The identifier for this flagging method, 'OUTLIER_LOCALSD'.
 
     Example:
-        See `examples/preprocessing/outlier_detection/localsd.py` for complete examples.
+        See `examples/preprocessing/outlier_detection/outlier_localsd.py` for complete examples.
     """
     flagid = 'OUTLIER_LOCALSD'
 
