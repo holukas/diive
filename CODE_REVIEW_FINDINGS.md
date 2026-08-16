@@ -155,7 +155,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L50~~ | ~~`quality_weighted_decompose` ignores the weights entirely; `summary()` prints "Quality-weighted: True"~~ (done 2026-08-07) — fake path removed | `core/times/decomposition_utils.py:100` |
 | ~~L58~~ | ~~`detect_seasonality` fabricates `primary_period=365` when the periodogram yields nothing~~ (done 2026-08-07) | `core/times/decomposition_utils.py:490` |
 | ~~L51~~ | ~~`StratifiedAnalysis` drops z-bins whose rounded label collides — 19 of 120 lost, no warning~~ (done 2026-08-07) | `analysis/decoupling.py:213` |
-| L97 | `UstarBootstrapThresholds` resamples unseeded in **both** paths (`ustar_bootstrap.py:50`, and the fast path never passes the `rng` that `bootstrap_annual_samples` already accepts) — this is the class the flux chain uses for CUT/VUT | `flux/lowres/ustar_bootstrap.py:50` |
+| ~~L97~~ | ~~`UstarBootstrapThresholds` resamples unseeded in **both** paths~~ (done 2026-08-15) — and a **third** site the entry missed: `UstarMovingPointDetection.bootstrap()`. Seed derived per year, so `n_jobs` cannot change the answer | `flux/lowres/ustar_bootstrap.py:50` |
 | ~~L86~~ | ~~`UstarVekuriThresholdDetection.bootstrap()` has no `random_state`, so u* thresholds differ run to run~~ (done 2026-08-15) — **the same defect in `UstarBootstrapThresholds` is open as L97** | `flux/lowres/ustar_vekuri_detection.py` |
 | ~~L87~~ | ~~`classical_decompose` passes `extrapolate=` where the parameter is `extrapolate_trend`, so it always raises and the trend edges are always NaN~~ (done 2026-08-15) — dead branch removed; NaN edges kept on purpose | `core/times/decomposition_utils.py:207` |
 | ~~L92~~ | ~~`ScreeningTabBase._select` does not bump `_run_id` — G2's bug in the tab cited as the correct pattern~~ (done 2026-08-15) | `gui/tabs/_screening_base.py` |
@@ -2367,7 +2367,33 @@ auditing for L82.
 - **L82's fix** — `VariablePanel` no longer leaks a dead slot per closed tab; in the real GUI this was
   raising and swallowing one `RuntimeError` per closed tab on every metadata edit.
 
-**[ ] L97. `UstarBootstrapThresholds` resamples unseeded, in both of its paths**
+**[x] L97. `UstarBootstrapThresholds` resamples unseeded, in both of its paths**
+
+> **Fixed 2026-08-15.** New `random_state: int | None = 42` on `UstarBootstrapThresholds`, and the
+> same on `UstarMovingPointDetection` — which turned out to be a **third** unseeded site this entry
+> did not name: its own `bootstrap()` built `np.random.default_rng()` with no seed
+> (`ustar_mp_detection.py:660`). Both wrapper paths are now seeded: the fast path gets
+> `rng=np.random.default_rng(seed)`, and the generic loop gets `random_state=seed + i` so its draws
+> differ from each other the way the fast path's single Generator already did.
+>
+> **The seed is derived per window year** (`_seed_for`, `random_state + year`), which was the open
+> design question. A single shared seed would be deterministic but wrong in a subtler way: every
+> window would resample the same positions, correlating years that are meant to be independent
+> draws. Deriving from the year also makes the result independent of `n_jobs` and of the order
+> windows finish in — asserted, and measured identical for `n_jobs=1` vs `2`.
+>
+> Covered by `TestBootstrapThresholdsAreReproducible`: same seed agrees, *different* seeds disagree
+> (so the seed is proven to reach both paths), serial equals parallel, and the per-year seeds are
+> distinct with `None` propagating. Mutation-checked: reverting both paths gives
+> `DataFrame.iloc[:, 0] (column name="p16") values are different (100.0 %)`.
+>
+> Since the default is 42, `run_chain`'s CUT detection (`level33.py`) becomes reproducible with no
+> change at the call site. No threshold algorithm was touched, so ONEFlux parity is unaffected —
+> seeding chooses which resamples are drawn, not how a threshold is computed.
+>
+> One self-inflicted bug found and fixed en route: the first edit put `_seed_for` inside `__init__`,
+> which left the results-storage assignments after it unreachable. `test_vut_before_run_raises`
+> caught it.
 `flux/lowres/ustar_bootstrap.py:50` — the generic loop calls
 `df_window.sample(n=..., replace=True)` with no `random_state`, and the fast path
 (`:36`) calls `detector.bootstrap_annual_samples(n_iter)` without the `rng` that method
