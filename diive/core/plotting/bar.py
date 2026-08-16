@@ -66,6 +66,19 @@ class LongtermAnomaliesYear:
         self.reference_start_year = reference_start_year
         self.reference_end_year = reference_end_year
 
+        # Phase 2 output. Named here so the attributes exist before the first
+        # plot() call, the shape every other diive plot class already has.
+        self.fig = None
+        self.ax = None
+
+        # What the last plot() drew, so a repeat call on the same axes replaces its
+        # own output instead of stacking a second set on the first. Only the most
+        # recent axes is remembered, which is the one self.ax already retains: a map
+        # over every axes ever drawn on cannot be weakly keyed, because the artists
+        # stored as its values reference their axes straight back.
+        self._drawn_on = None
+        self._drawn = ([], [])
+
         # Without a single measured year there is nothing to anomalise. Caught here
         # because the year lattice below derives its bounds from min()/max(), which
         # fail with "cannot convert float NaN to integer" - an internal detail that
@@ -98,6 +111,28 @@ class LongtermAnomaliesYear:
     def anomalies_df(self) -> pd.DataFrame:
         """Results frame (copy), with the data column back under the caller's Series name."""
         return self._anomalies_df.rename(columns={self._VALUECOL: self.series.name})
+
+    @staticmethod
+    def _axes_artists(ax) -> list:
+        """Return every removable artist currently held by *ax*."""
+        return [*ax.patches, *ax.texts, *ax.lines, *ax.collections]
+
+    def _remove_previous(self, ax):
+        """Drop what the previous plot() of this instance drew, if it was on *ax*."""
+        if self._drawn_on is not ax:
+            return
+        artists, containers = self._drawn
+        self._drawn_on, self._drawn = None, ([], [])
+        for artist in artists:
+            # An ax.clear() between the two calls already detached them.
+            if artist.axes is ax:
+                artist.remove()
+        if containers:
+            # A BarContainer is not an Artist, so it stays behind when its
+            # rectangles are removed. Filtered by identity: two BarContainers
+            # compare equal whenever their tuples do.
+            ax.containers[:] = [c for c in ax.containers
+                                if not any(c is old for old in containers)]
 
     def _annotate_reference(self):
         """Draw the domain-specific reference-statistics info box (not shared chrome)."""
@@ -158,7 +193,9 @@ class LongtermAnomaliesYear:
         line) comes from a shared :class:`~diive.plotting.FormatStyle` so it looks and
         is configured the same way as every other diive plot. The red/blue above/below
         bar colouring is data encoding and stays here. Can be called multiple times on
-        the same object to draw on different axes with different styling.
+        the same object to draw on different axes with different styling; calling it
+        again on an axes it already drew on replaces that rendering rather than
+        stacking a second one on top of it.
 
         Args:
             ax: Matplotlib axes to plot on. If None, creates new figure and displays it
@@ -186,6 +223,15 @@ class LongtermAnomaliesYear:
             # If no ax is given, create fig and ax and then show the plot
             self.fig, self.ax = pf.create_ax()
             self.showplot = True
+
+        # A second plot() on the same axes used to stack a second full set of bars,
+        # a second annotation box and a second zero line on top of the first: the
+        # overlaid alpha darkened the figure and the artists accumulated. Only this
+        # instance's own artists are dropped, so anything the caller drew on the
+        # same axes survives.
+        self._remove_previous(self.ax)
+        drawn_before = {id(a) for a in self._axes_artists(self.ax)}
+        containers_before = {id(c) for c in self.ax.containers}
 
         # Publication-ready colors for above/below anomalies (data encoding)
         color_above = '#EF5350'  # Red for above-reference
@@ -216,11 +262,31 @@ class LongtermAnomaliesYear:
         # Domain-specific annotation + categorical x-axis tweaks (not shared chrome).
         self._annotate_reference()
 
+        # Recorded last, so it also covers whatever the shared chrome layer added.
+        self._drawn_on = self.ax
+        self._drawn = ([a for a in self._axes_artists(self.ax) if id(a) not in drawn_before],
+                       [c for c in self.ax.containers if id(c) not in containers_before])
+
         if self.showplot:
             self.fig.patch.set_facecolor('white')
-            self.fig.tight_layout(pad=1.2)
+            # No tight_layout(): pf.create_ax() asks for layout='constrained', and
+            # calling it swapped that engine out for a PlaceHolderLayoutEngine
+            # ("UserWarning: The figure layout has changed to tight") for a ~6%
+            # smaller axes. The constrained engine reserves room for the title,
+            # labels and ticks by itself, and the reference annotation is anchored
+            # in axes coordinates, so it rides with the axes either way.
             self.fig.show()
 
     def get(self):
-        """Return axis"""
+        """Return the axes this plot was rendered on.
+
+        Raises:
+            RuntimeError: If called before `plot()`. There is no axes until phase 2
+                has run, and the bare `AttributeError` this used to raise named an
+                internal attribute rather than the step that was skipped.
+        """
+        if self.ax is None:
+            raise RuntimeError("LongtermAnomaliesYear has no axes to return yet: call "
+                               "plot() before get(), rendering is phase 2 of the "
+                               "two-phase design.")
         return self.ax
