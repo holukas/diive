@@ -71,8 +71,10 @@ class ShiftedDistributionPlot:
         self._ref_data = series.loc[ref_period[0]:ref_period[1]].dropna().values
         self._comp_data = series.loc[comp_period[0]:comp_period[1]].dropna().values
 
-        ref_mean = self._ref_data.mean()
-        ref_std = self._ref_data.std()
+        # A period holding no records has no mean and no spread. Asking numpy for them
+        # anyway only emits "Mean of empty slice" warnings on the way to the same NaN.
+        ref_mean = self._ref_data.mean() if self._ref_data.size else np.nan
+        ref_std = self._ref_data.std() if self._ref_data.size else np.nan
 
         # 4 cut points → 5 zones: extremely low | low | normal | high | extremely high
         self.breakpoints = [
@@ -82,16 +84,31 @@ class ShiftedDistributionPlot:
             ref_mean + 3 * ref_std,
         ]
 
-        # Evaluation grid spans both periods with a small margin
+        # Evaluation grid spans both periods with a small margin. The reference SD is
+        # that margin, but it is zero for a constant reference and NaN for an empty one,
+        # either of which would collapse the grid onto a single point (or onto NaN), so
+        # fall back to a margin scaled to the data instead.
         all_vals = np.concatenate([self._ref_data, self._comp_data])
-        margin = ref_std
-        self._x = np.linspace(all_vals.min() - margin, all_vals.max() + margin, 1000)
+        if all_vals.size == 0:
+            self._x = None  # Neither period holds a record: nothing to evaluate on
+        else:
+            lo, hi = float(all_vals.min()), float(all_vals.max())
+            margin = ref_std if np.isfinite(ref_std) and ref_std > 0 else 0.1 * max(abs(lo), abs(hi), 1.0)
+            self._x = np.linspace(lo - margin, hi + margin, 1000)
 
         self._ref_kde = self._fit_kde(self._ref_data)
         self._comp_kde = self._fit_kde(self._comp_data)
 
-    def _fit_kde(self, data: np.ndarray) -> np.ndarray:
+    def _fit_kde(self, data: np.ndarray) -> np.ndarray | None:
+        if data.size == 0 or self._x is None:
+            return None  # No records, hence no density; plot() labels the period instead
         bw = 1.06 * data.std() * len(data) ** (-0.2)  # Silverman's rule
+        if bw <= 0:
+            # A constant period, or one holding a single record, has zero spread, so
+            # Silverman's rule gives a zero bandwidth that KernelDensity rejects. The
+            # distribution is real — a spike — so draw it as one, with a kernel narrow
+            # against the plotted range, rather than refusing the whole plot.
+            bw = (self._x[-1] - self._x[0]) / 200
         kde = KernelDensity(kernel='gaussian', bandwidth=bw)
         kde.fit(data.reshape(-1, 1))
         log_dens = kde.score_samples(self._x.reshape(-1, 1))
@@ -149,35 +166,63 @@ class ShiftedDistributionPlot:
         self.ax = ax
         self.fig, self.ax, showplot = pf.setup_figax(ax=self.ax, figsize=figsize)
 
+        _ref_label = ref_label or f"Reference ({self.ref_period[0]} - {self.ref_period[1]})"
+        _comp_label = comp_label or f"Comparison ({self.comp_period[0]} - {self.comp_period[1]})"
+
+        if self._x is None:
+            # Neither period holds a record, so there is no density and no zone
+            # structure. Say so on the axes rather than raising.
+            self.ax.text(0.5, 0.5, "No data in reference or comparison period",
+                         transform=self.ax.transAxes, ha='center', va='center',
+                         fontsize=12, color=theme.COLOR_TEXT)
+            self.ax.set_xticks([])
+            self.ax.set_yticks([])
+            if showplot:
+                self.fig.show()
+            return
+
         x = self._x
         bp = self.breakpoints
         zone_edges = [x[0]] + list(bp) + [x[-1]]
+        # An empty reference period leaves the breakpoints NaN, so there are no zones.
+        has_zones = bool(np.isfinite(bp).all())
 
         # Reference period: gray hatched outline drawn first (behind colored zones)
-        _ref_label = ref_label or f"Reference ({self.ref_period[0]} - {self.ref_period[1]})"
-        self.ax.fill_between(
-            x, self._ref_kde,
-            facecolor='none', edgecolor='#546E7A', linewidth=0,
-            hatch='///', alpha=0.55, label=_ref_label, zorder=1,
-        )
-        self.ax.plot(x, self._ref_kde, color='#546E7A', linewidth=1.2, alpha=0.7, zorder=1)
+        if self._ref_kde is None:
+            _ref_label = f"{_ref_label}: no data"
+        else:
+            self.ax.fill_between(
+                x, self._ref_kde,
+                facecolor='none', edgecolor='#546E7A', linewidth=0,
+                hatch='///', alpha=0.55, label=_ref_label, zorder=1,
+            )
+            self.ax.plot(x, self._ref_kde, color='#546E7A', linewidth=1.2, alpha=0.7, zorder=1)
 
         # Comparison period: filled colored zones on top
-        for i in range(5):
-            mask = (x >= zone_edges[i]) & (x <= zone_edges[i + 1])
-            if mask.any():
-                self.ax.fill_between(
-                    x[mask], self._comp_kde[mask],
-                    color=zone_colors[i], alpha=0.5, linewidth=0, zorder=2,
-                )
+        if self._comp_kde is None:
+            _comp_label = f"{_comp_label}: no data"
+        elif has_zones:
+            for i in range(5):
+                mask = (x >= zone_edges[i]) & (x <= zone_edges[i + 1])
+                if mask.any():
+                    self.ax.fill_between(
+                        x[mask], self._comp_kde[mask],
+                        color=zone_colors[i], alpha=0.5, linewidth=0, zorder=2,
+                    )
+        else:
+            # Without a reference there is nothing to grade the comparison against, so
+            # it is filled unzoned in the neutral colour instead of not at all.
+            self.ax.fill_between(x, self._comp_kde, color=zone_colors[2],
+                                 alpha=0.5, linewidth=0, zorder=2)
 
         # Thin outline on comparison KDE
-        _comp_label = comp_label or f"Comparison ({self.comp_period[0]} - {self.comp_period[1]})"
-        self.ax.plot(x, self._comp_kde, color='#37474F', linewidth=0.8, alpha=0.4, zorder=3)
+        if self._comp_kde is not None:
+            self.ax.plot(x, self._comp_kde, color='#37474F', linewidth=0.8, alpha=0.4, zorder=3)
 
         # Thin dashed lines at breakpoints
-        for bp_val in bp:
-            self.ax.axvline(bp_val, color='white', linewidth=1.0, alpha=0.7, linestyle='--', zorder=5)
+        if has_zones:
+            for bp_val in bp:
+                self.ax.axvline(bp_val, color='white', linewidth=1.0, alpha=0.7, linestyle='--', zorder=5)
 
         # Shared chrome: facecolor/ticks/spines/x-label/grid. The y-label ("Density"),
         # the custom left-aligned title, and the patch legend are handled separately
@@ -204,14 +249,15 @@ class ShiftedDistributionPlot:
             self.ax.set_ylabel('')
 
         # Zone labels: text annotations just above the top spine, in data-x / axes-y coords
-        trans = blended_transform_factory(self.ax.transData, self.ax.transAxes)
-        label_positions = [(zone_edges[i] + zone_edges[i + 1]) / 2 for i in range(5)]
-        for pos, label, color in zip(label_positions, zone_labels, zone_colors, strict=False):
-            self.ax.text(
-                pos, 1.01, label,
-                transform=trans, color=color, fontsize=11, fontweight='bold',
-                ha='center', va='bottom', clip_on=False,
-            )
+        if has_zones:
+            trans = blended_transform_factory(self.ax.transData, self.ax.transAxes)
+            label_positions = [(zone_edges[i] + zone_edges[i + 1]) / 2 for i in range(5)]
+            for pos, label, color in zip(label_positions, zone_labels, zone_colors, strict=False):
+                self.ax.text(
+                    pos, 1.01, label,
+                    transform=trans, color=color, fontsize=11, fontweight='bold',
+                    ha='center', va='bottom', clip_on=False,
+                )
 
         # Title font/colour/weight come from the style; the left-aligned, padded
         # placement is this plot's own layout (not part of the shared chrome). An
