@@ -66,6 +66,15 @@ class LongtermAnomaliesYear:
         self.reference_start_year = reference_start_year
         self.reference_end_year = reference_end_year
 
+        # Without a single measured year there is nothing to anomalise. Caught here
+        # because the year lattice below derives its bounds from min()/max(), which
+        # fail with "cannot convert float NaN to integer" - an internal detail that
+        # names neither the class nor the empty input.
+        if self.series.dropna().empty:
+            raise ValueError(f"LongtermAnomaliesYear needs at least one year of data, "
+                             f"the given series holds none "
+                             f"(length {len(self.series)}, all missing).")
+
         # Chronological order is required: the bars are drawn in frame order and
         # the "last 10 years" annotation is a tail() of the same frame.
         self.series = self.series.sort_index(ascending=True)
@@ -119,6 +128,14 @@ class LongtermAnomaliesYear:
         ref_subset = self.series.loc[(self.series.index >= self.reference_start_year)
                                      & (self.series.index <= self.reference_end_year)]
         # ref_subset = self.series.between(self.reference_start_ix, self.reference_end_ix)
+        # A reference period holding no measurement leaves mean and sd NaN, which
+        # makes every anomaly NaN: an empty chart carrying a title that asserts the
+        # record's full span and an annotation reading "nan+/-nansd". Reachable with
+        # the period reversed, or landing wholly inside an outage of the record.
+        if ref_subset.dropna().empty:
+            raise ValueError(f"Reference period {self.reference_start_year}-{self.reference_end_year} "
+                             f"holds no data, so no anomaly can be calculated "
+                             f"(record covers {self.data_first_year}-{self.data_last_year}).")
         anomalies_df['reference_mean'] = ref_subset.mean()
         anomalies_df['reference_sd'] = ref_subset.std()
         anomalies_df['anomaly'] = anomalies_df[self._VALUECOL].sub(anomalies_df['reference_mean'])
