@@ -103,7 +103,7 @@ opposite of what the code produces. Re-read it against the corrected behaviour.
 
 ---
 
-# Triage index — all 109 findings by severity
+# Triage index — all 110 findings by severity
 
 The detailed entries below stay grouped by review round and module. This index is the **fix order**.
 
@@ -229,7 +229,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L91~~ | ~~`hexbin.py` accepts, documents and forwards `show_less_xticklabels`, and nothing applies it~~ (done 2026-08-15) | `core/plotting/hexbin.py:272` |
 | L95 | `ScopPhysics.fct_unsc_gf` is `'FCT_UNSC_gfRF'` though the fill is XGBoost; rename is breaking | `flux/lowres/selfheating.py` |
 
-## S5 — Cosmetic / dead / latent (23)
+## S5 — Cosmetic / dead / latent (24)
 
 | ID | Finding | Where |
 |---|---|---|
@@ -2514,3 +2514,29 @@ belongs with a decision about what those two examples should now demonstrate, wh
 recorded rather than patched blind.
 
 Found by running the example suite for timing, not by looking for it.
+
+**[ ] L102. `show_values` has no cell-count guard, so it can appear to hang the GUI**
+`gui/widgets/plot_settings.py` (the checkbox) + `core/plotting/heatmap_base.py`
+(`show_vals_in_plot`) — the overlay writes one text artist per cell. That is fine for a
+year/month heatmap (12 x N cells, which is what it was designed for) and unusable for a
+date/time heatmap, where one year of half-hourly data is **17 520 cells**.
+
+Measured on the GUI test fixture (one year, CH-DAV):
+
+| | render | next tab open | text artists |
+|---|---|---|---|
+| `show_values=True` | 15.84 s | 43.12 s | 17 520 |
+| `show_values=False` | 0.22 s | 1.15 s | 0 |
+
+The second column is the real problem: the artists persist, so **every subsequent
+re-layout in the whole application** walks them. A user ticking the box on a multi-year
+heatmap gets no feedback and a frozen window, and would reasonably force-quit. 17 520
+overlaid numbers are also illegible, so the render is expensive *and* useless.
+
+Options, in the order I would consider them: skip the overlay with a status-line note
+above some cell count; or gate the checkbox on the current cell count so it cannot be
+ticked where it cannot work; or draw labels only for the visible axes range. The first is
+smallest and honest. Not fixed here because which of the three is right is a UX decision.
+
+Found while cutting `test_plot_settings_live_render` from 283 s to 11 s — that one
+checkbox was ~58 s of it, and the test never actually checked the labels appeared.
