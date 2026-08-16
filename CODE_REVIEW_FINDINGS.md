@@ -80,6 +80,16 @@ semantics), `dv.analysis` and `dv.plotting` namespace tables, and the self-heati
 
 ### [ ] `docs/`
 
+**Deferred as a whole until everything else is closed** (user's decision, 2026-08-15). The tree
+predates this campaign: written against the dead `diive.pkgs.*` layout, with hand-written pages
+calling API that no longer exists, and `auto_examples/` is Sphinx-Gallery output whose rebuild
+executes every example. Stale generated content was tracked as **L90, now removed** rather than left
+open — it is a symptom of this deferral, not a separate defect. Known stale at the time of removal:
+`auto_examples/flux/uncertainty.*` (method 2 as "±5 days", method 4 as "5 nearest fluxes", the latter
+doubly wrong after L6), `auto_examples/flux/selfheating.*` (passes the removed `flux_type`), and
+`api/pkgs/*.rst` (lists the removed `UstarDetectionMPT`; orphaned, no toctree reaches it).
+Regenerate once the code has settled.
+
 `docs/auto_examples/` is **generated** by sphinx-gallery from `examples/`, so it regenerates on the
 next build — no hand-editing. It is currently stale (`selfheating.py`/`.ipynb`/`.rst` still pass
 `flux_type=FLUX_TYPE`). Just remember to rebuild, and check the API pages no longer list the four
@@ -93,7 +103,7 @@ opposite of what the code produces. Re-read it against the corrected behaviour.
 
 ---
 
-# Triage index — all 107 findings by severity
+# Triage index — all 106 findings by severity
 
 The detailed entries below stay grouped by review round and module. This index is the **fix order**.
 
@@ -218,7 +228,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L91~~ | ~~`hexbin.py` accepts, documents and forwards `show_less_xticklabels`, and nothing applies it~~ (done 2026-08-15) | `core/plotting/hexbin.py:272` |
 | L95 | `ScopPhysics.fct_unsc_gf` is `'FCT_UNSC_gfRF'` though the fill is XGBoost; rename is breaking | `flux/lowres/selfheating.py` |
 
-## S5 — Cosmetic / dead / latent (23)
+## S5 — Cosmetic / dead / latent (22)
 
 | ID | Finding | Where |
 |---|---|---|
@@ -238,10 +248,9 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L77~~ | ~~`MultiDataFileReader.metadata_df`'s guard tests `self._data_df`, the wrong attribute~~ (done 2026-08-15) | `core/io/filereader.py` |
 | ~~L80~~ | ~~`UstarVekuriThresholdDetection.bootstrap_results_` initialised, never read~~ (done 2026-08-15) | `flux/lowres/ustar_vekuri_detection.py` |
 | ~~L82~~ | ~~Exceptions in Qt-invoked slots are swallowed — GUI tests driving via signals may be weaker than they look~~ (done 2026-08-15) — the guard uncovered a real leaked-slot bug 44 tests were passing over | `tests/test_gui.py` (methodology) |
-| L85 | No doctest runner anywhere — docstring examples are never executed (L35 had been broken twice over) | `tests/` (methodology) |
+| L85 | No doctest runner anywhere — docstring examples are never executed (L35 had been broken twice over). **Partly addressed**: reference + public-name resolution now checked, execution still not | `tests/` (methodology) |
 | ~~L98~~ | ~~`run_all_examples.py` forces no matplotlib backend, so the 16 examples ending in `plt.show()` block~~ (done 2026-08-15) — corrected: the 120 s timeout meant **spurious failures**, not a permanent hang | `examples/run_all_examples.py` |
 | ~~L89~~ | ~~`-9999` at position 6 still reads as a passing flag~~ (done 2026-08-15) — **two** holes, not one: `-1` at position 1 read as a soft warning | `preprocessing/qaqc/eddyproflags.py` |
-| L90 | `docs/auto_examples/flux/uncertainty.*` stale generated copies | `docs/auto_examples/` |
 | ~~L93~~ | ~~`EventManager.load_dict({})` early-returns without clearing, so previous events survive~~ (done 2026-08-15) | `gui/events.py` |
 | ~~L94~~ | ~~`crosscorr`'s `len(pot_arr) == 0` branch is unreachable dead code~~ (annotated, kept 2026-08-15) | `preprocessing/qaqc/detect_timestamp_shifts.py` |
 | ~~L96~~ | ~~`ScatterXY` uses `plt.colorbar` instead of `ax.figure.colorbar`~~ (done 2026-08-15) — also `DetectTimestampShifts.plot_radiation_fingerprint` | `core/plotting/scatter.py:169` |
@@ -2261,7 +2270,27 @@ still say "bin". Renaming is a public-API change, deferred.
 `flux/lowres/timelag_analysis.py` — `Histogram` treats `[i, j]` as *counts* of leading/trailing bins to
 drop. L44 fixed the class docstring; the same loose wording survives in `__init__`.
 
-**[ ] L85. Docstring examples are not executed by anything**
+**[~] L85. Docstring examples are not executed by anything**
+
+> **First step done 2026-08-15; the entry stays open because nothing *executes* a sample yet.**
+> `tests/test_docstring_refs.py` now checks the two things that can be checked without any doctest
+> infrastructure: every `examples/...` pointer resolves on disk, and every `dv.<attr>` inside a `>>>`
+> line resolves on the real public API. Milliseconds to run, and it would have caught L35.
+>
+> Landing it required fixing what it found — 43 pointer occurrences across 30 dead paths (a folder
+> rename), and 7 bad `dv.` references (`dv.TimestampSanitizer`, `dv.TimeSince`,
+> `dv.plot_longterm_anomalies_year`, the last of which never existed).
+>
+> **A survey of all 34 samples informs what is left** (2026-08-15): 11 of 34 were faulty, 7 badly
+> enough to raise on the first line; 29 of 34 reference names they never define, so a doctest runner
+> needs a `doctest_namespace` fixture and most samples need rewriting; 7 are too heavy to execute
+> (bootstrap loops, the partitioning ports at ~20 s/year). Also established: `core/utils/docstrings`
+> and the GUI tooltips read **only** `Args:`/`Parameters:` text, never the `>>>` block, so pruning
+> samples cannot change the GUI — but Sphinx autodoc does publish them.
+>
+> Agreed direction: keep a ≤4-line call-shape snippet on public entry points plus the pointer, drop
+> the ~15 samples on internal helpers, and make only the cheap subset executable — a pointer cannot
+> serve `help()` or an IDE hover, which is where the question gets asked.
 `tests/` — there is no doctest runner (`grep -rn doctest` over the config and tests is empty), and
 `test_docstrings.py` only tests the tooltip-extraction helpers. **L35 was a docstring example that had
 been broken twice over** (wrong namespace *and* a column that does not exist in the example data) and
@@ -2293,10 +2322,6 @@ peak-power / total-power ratio. Same species as L60(a), not named in that entry.
 > Mutation-checked: both subtests fail with the guard removed.
 `preprocessing/qaqc/eddyproflags.py` — L25 fixed the scalar-`0` case narrowly and deliberately did not
 touch the float->string round-trip; a junk `-9999` value still reads as a passing flag at some positions.
-
-**[ ] L90. `docs/auto_examples/flux/uncertainty.*` are stale**
-Generated copies still describe method 2 as "±5 days" and method 4 as "5 nearest fluxes" — both wrong,
-the latter now doubly so after L6. Belongs to the `docs/` sweep in *Before this work is called done*.
 
 **[x] L91. `hexbin.py` also accepts `show_less_xticklabels` and never applies it**
 
