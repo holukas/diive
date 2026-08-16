@@ -44,6 +44,7 @@ from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.progress_bar import ProgressBar
 from diive.gui.widgets.tab_chrome import build_titlebar
+from diive.gui.widgets.weak_slot import weak_slot
 from diive.gui.widgets.worker import WorkerRunner
 
 #: Datetime format used by the start/end pickers and passed to the download.
@@ -102,19 +103,19 @@ class DatabaseExplorerTab(DiiveTab):
         # One runner per stage so a slow query in one column can't block another.
         self._buckets_runner = WorkerRunner()
         self._buckets_runner.done.connect(self._on_buckets)
-        self._buckets_runner.failed.connect(lambda e: self._fail("buckets", e))
+        self._buckets_runner.failed.connect(weak_slot(self._fail, "buckets"))
         self._versions_runner = WorkerRunner()
         self._versions_runner.done.connect(self._on_versions)
-        self._versions_runner.failed.connect(lambda e: self._fail("data versions", e))
+        self._versions_runner.failed.connect(weak_slot(self._fail, "data versions"))
         self._meas_runner = WorkerRunner()
         self._meas_runner.done.connect(self._on_measurements)
-        self._meas_runner.failed.connect(lambda e: self._fail("measurements", e))
+        self._meas_runner.failed.connect(weak_slot(self._fail, "measurements"))
         self._fields_runner = WorkerRunner()
         self._fields_runner.done.connect(self._on_fields)
-        self._fields_runner.failed.connect(lambda e: self._fail("fields", e))
+        self._fields_runner.failed.connect(weak_slot(self._fail, "fields"))
         self._overview_runner = WorkerRunner()
         self._overview_runner.done.connect(self._on_overview)
-        self._overview_runner.failed.connect(lambda e: self._fail("field overview", e))
+        self._overview_runner.failed.connect(weak_slot(self._fail, "field overview"))
         self._download_runner = WorkerRunner()
         self._download_runner.done.connect(self._on_downloaded)
         self._download_runner.failed.connect(self._on_download_failed)

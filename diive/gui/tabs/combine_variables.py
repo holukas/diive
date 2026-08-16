@@ -40,6 +40,7 @@ from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
+from diive.gui.widgets.weak_slot import weak_slot
 
 _C_MUTED = "#6B7780"
 
@@ -246,8 +247,8 @@ class CombineVariablesTab(DiiveTab):
         self.slot1 = _HeatmapSlot("Heatmap 1", accepts_drop=True)
         self.slot2 = _HeatmapSlot("Heatmap 2", accepts_drop=True)
         self.slot3 = _HeatmapSlot("Heatmap 3", accepts_drop=False)
-        self.slot1.dropped.connect(lambda name: self._assign(1, name))
-        self.slot2.dropped.connect(lambda name: self._assign(2, name))
+        self.slot1.dropped.connect(weak_slot(self._assign, 1))
+        self.slot2.dropped.connect(weak_slot(self._assign, 2))
         for slot in (self.slot1, self.slot2, self.slot3):
             heatmaps.addWidget(slot, stretch=1)
         rlay.addLayout(heatmaps, stretch=1)

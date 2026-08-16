@@ -246,6 +246,77 @@ def test_variable_panel_metadata_slot_dies_with_the_panel(app, slot_exceptions):
     assert slot_exceptions == []
 
 
+def test_dropped_tab_is_collectable(app, example_year):
+    """A `DiiveTab` nobody holds any more must be collected, with its widgets.
+
+    Regression: a tab used to be uncollectable the moment it was built. A
+    ``self``-capturing lambda connected to one of its own child widgets was
+    enough -- the connection owns the lambda on the C++ side, so the cycle
+    tab -> widgets -> connection -> tab has no Python leg for the collector to
+    walk, and every tab a test built stayed alive with ~500 widgets behind it.
+    (A bound method in a child widget's ``__dict__``, e.g.
+    ``CopyPythonButton._provider``, is *not* part of this: PySide6 traverses a
+    wrapper's instance dict, so that cycle is collectable -- measured.)
+    ``app.setStyleSheet`` re-polishes every live widget, so the leak showed up as
+    theme cost: ``theme.manager.apply()`` measured 0.65 s after three build/drop
+    cycles of the flux-chain tab against 0.00 s once they are collected.
+
+    Closing a tab in the app hides this -- deleting the C++ children destroys the
+    connections that hold the tab -- so the leak only shows when a tab is
+    *dropped* rather than closed, which is what this suite does.
+
+    The Events tab is in the list for a second reason: freeing it used to crash
+    the interpreter. Its board is rebuilt on every refresh, and ``setWidget``
+    destroyed the old one on the C++ side while its Python wrappers lived on;
+    collecting those in the same pass that freed the tab put a virtual call
+    (``_AddCard.mousePressEvent``) on a half-finalized wrapper -- an access
+    violation, not an exception. It only became reachable once the tab was
+    collectable at all.
+    """
+    import gc
+
+    from PySide6.QtCore import QEvent
+
+    from diive.gui.tabs.base import DiiveTab
+    from diive.gui.tabs.events import EventsTab
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.tabs.gapfilling import XGBoostGapFillingTab
+    from diive.gui.tabs.outliers_zscore import ZScoreOutlierTab
+    from diive.gui.tabs.plotting import PlottingTab
+    from diive.gui.widgets.plot_settings import TIMESERIES
+
+    df = example_year.copy()
+    for factory in (FluxChainTab,
+                    XGBoostGapFillingTab,
+                    ZScoreOutlierTab,
+                    EventsTab,
+                    lambda: PlottingTab(TIMESERIES, "Time series")):
+        gc.collect()
+        before = len(QApplication.allWidgets())
+        tab = factory()
+        tab.widget()
+        tab.on_data_loaded(df, set())
+        QApplication.processEvents()
+        cls = type(tab)
+        del tab
+        gc.collect()
+        QApplication.processEvents()
+        # Finish the deletions the tab asked for while rebuilding a panel; with
+        # no event loop a DeferredDelete is never consumed on its own, and the
+        # C++ object it holds keeps the tab alive.
+        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        gc.collect()
+        live = [o for o in gc.get_objects()
+                if isinstance(o, DiiveTab) and type(o) is cls]
+        assert not live, (
+            f"{cls.__name__} survived being dropped; referrers: "
+            f"{[type(r).__name__ for r in gc.get_referrers(live[0])]}")
+        del live
+        gc.collect()
+        assert len(QApplication.allWidgets()) == before, (
+            f"{cls.__name__} leaked widgets after being dropped")
+
+
 def test_pill_classification():
     from diive.gui.widgets.variable_delegate import _pill_for
     assert _pill_for("GPP_CUT_REF_f")[0] == "GPP"
@@ -3202,6 +3273,74 @@ def test_frameless_resize_cursor_no_int_error(app):
     assert h._edges(QPoint(200, 150)).value == 0  # interior -> no edge
 
 
+def test_frameless_helper_does_not_pin_its_window(app):
+    """The resize helper must not keep its window alive (L105).
+
+    The helper is parented to the grip, which is a child of the window, so
+    storing the window strongly closes a window -> grip -> helper -> window
+    cycle. Measured with the cyclic collector switched off, so only refcounting
+    can free the window: with a strong reference all three windows survived the
+    ``del``, with the weakref none do.
+    """
+    import weakref
+
+    from PySide6.QtWidgets import QMainWindow, QWidget
+
+    from diive.gui.widgets.frameless import FramelessResizeHelper
+
+    class _Shell(QMainWindow):
+        def __init__(self):
+            super().__init__()
+            root = QWidget()
+            self.setCentralWidget(root)
+            self._resize_helper = FramelessResizeHelper(self, root)
+
+    refs = []
+    gc.disable()
+    try:
+        for _ in range(3):
+            w = _Shell()
+            refs.append(weakref.ref(w))
+            del w
+    finally:
+        gc.enable()
+    assert [r() for r in refs] == [None, None, None]
+
+
+def test_frameless_resize_starts_native_resize(app):
+    # The weakref must still resolve: an edge press hands the edges off to the
+    # native resize and consumes the event; an interior press does neither.
+    from PySide6.QtCore import QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtWidgets import QMainWindow, QWidget
+
+    from diive.gui.widgets.frameless import FramelessResizeHelper
+
+    win = QMainWindow()
+    win.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+    root = QWidget()
+    win.setCentralWidget(root)
+    win.resize(400, 300)
+    helper = FramelessResizeHelper(win, root)
+    win.show()
+    app.processEvents()
+
+    started = []
+    win.windowHandle().startSystemResize = lambda edges: started.append(edges)
+
+    def press(x, y):
+        ev = QMouseEvent(QEvent.Type.MouseButtonPress, QPointF(x, y),
+                         Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+                         Qt.KeyboardModifier.NoModifier)
+        return helper.eventFilter(root, ev)
+
+    assert press(root.width() - 2, root.height() // 2) is True
+    assert started[-1].value == Qt.Edge.RightEdge.value
+    assert press(root.width() // 2, root.height() // 2) is False
+    assert len(started) == 1
+    shiboken6.delete(win)
+
+
 def test_startup_loads_example_when_no_project(window):
     # The fixture builds MainWindow() with no saved project -> example data.
     assert window._data is not None
@@ -4418,3 +4557,93 @@ def test_surface3d_rolling_window_is_n_rows_wide():
     gappy[5, 0] = np.nan
     assert np.isnan(_roll_rows(gappy, 4, np.nanmean)[5, 0])
 
+
+
+def _menu_tab_actions(window):
+    """Every menu QAction that opens a tab, keyed by its label."""
+    from PySide6.QtGui import QAction
+    from diive.gui.registry import MENU_TAB_CLASSES
+    acts = {}
+    for act in window.findChildren(QAction):
+        label = act.data()
+        if isinstance(label, str) and label in MENU_TAB_CLASSES:
+            acts[label] = act
+    return acts
+
+
+def test_menu_actions_carry_their_label(window, monkeypatch):
+    """Every menu-tab entry is wired, with the right label, and '&' escaped.
+
+    The actions route through `data()` + a bound method (never a `self`-capturing
+    lambda, which Qt holds C++-side and which pinned every MainWindow in memory),
+    so the label an action carries is the whole wiring -- if it is wrong the menu
+    opens the wrong tab.
+    """
+    from diive.gui.registry import MENU_TABS
+    acts = _menu_tab_actions(window)
+    expected = {label for group in MENU_TABS.values() for label in group}
+    assert expected <= set(acts)
+    for label, act in acts.items():
+        # '&' is escaped so Qt doesn't read it as a mnemonic ("Gaps & coverage").
+        assert act.text() == label.replace("&", "&&")
+
+    # Triggering routes each action to _open_menu_tab with its own label.
+    opened = []
+    monkeypatch.setattr(window, "_open_menu_tab", opened.append)
+    for act in acts.values():
+        act.trigger()
+    assert opened == list(acts)
+
+
+def test_menu_action_opens_its_tab(window):
+    """End-to-end: triggering the action really opens that tab (not just a call)."""
+    acts = _menu_tab_actions(window)
+    for label in ("Time series", "Histogram", "Metadata explorer"):
+        acts[label].trigger()
+        tab = window._menu_tab_list[-1]
+        assert tab._menu_label == label
+        assert window._tabwidget.currentWidget() is tab.widget()
+
+
+def test_tab_context_menu_pins_tab(window, monkeypatch):
+    """The tab right-click menu still pins/unpins the tab it was opened on."""
+    from diive.gui.widgets.menu import studio_menu
+    # `_tab_context_menu` blocks in `menu.exec`; fire the entry instead of showing it.
+    monkeypatch.setattr(type(studio_menu()), "exec",
+                        lambda self, *args: self.actions()[0].trigger())
+    window._open_menu_tab("Time series")
+    tab = window._menu_tab_list[-1]
+    bar = window._tabwidget.tabBar()
+    pos = bar.tabRect(window._tabwidget.indexOf(tab.widget())).center()
+    window._tab_context_menu(pos)
+    assert tab in window._pinned
+    window._tab_context_menu(pos)  # menu now offers "Unpin"
+    assert tab not in window._pinned
+
+
+def test_mainwindow_is_garbage_collectable(app):
+    """A dropped MainWindow must actually be freed.
+
+    Menu actions used to be wired with a lambda that captured `self`. The QAction
+    is parented to the window and Qt holds the lambda inside the connection on
+    the C++ side, so the loop window -> QAction -> connection -> lambda -> window
+    had no link Python could see and `gc` could never break it: measured 4
+    windows built, dropped, `gc.collect()` -> 4 still live (stubbing out
+    `_build_menus` freed all 4, which is how it was isolated). Every window
+    subscribes to the app-wide singletons (theme, metadata, site, events, db), so
+    a leaked one keeps re-rendering on every edit for the rest of the session.
+    Bound methods, whose receiver PySide6 holds only weakly, are the fix -- see
+    `MainWindow._menu_tab_action`.
+    """
+    import weakref
+    from diive.gui.app import MainWindow
+
+    refs = []
+    for _ in range(3):
+        win = MainWindow(config={}, autoload=False)
+        refs.append(weakref.ref(win))
+        del win
+    gc.collect()
+    QApplication.processEvents()
+    gc.collect()
+    assert [r() for r in refs] == [None, None, None]

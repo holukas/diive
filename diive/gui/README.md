@@ -124,6 +124,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `widgets/drop_combo.py` | `DropComboBox` — a non-editable `QComboBox` that also accepts a variable name **dropped** onto it as plain text (selects the matching item). Shared by the plot role pickers (`plot_settings.py`) and `ColumnPicker` |
 | `widgets/sub_tabs.py` | `SubTabs` — standardized in-tab sub-navigation (segmented pills over a `QStackedWidget`) for output-heavy tabs; `add_page`/`set_page`/`changed`, `add_corner_widget` (action buttons by the pills) + `add_corner_separator` (faded `_CornerSeparator` divider) |
 | `widgets/state_utils.py` | `save_controls`/`restore_controls` — serialize a tab's standard Qt controls by stable key for `save_state`/`restore_state` |
+| `widgets/weak_slot.py` | `weak_slot(method, *args)` — a connectable slot that binds extra arguments a signal does not carry while holding the method's object only weakly. Use it instead of `lambda: self._run_level(idx)`: PySide6 keeps a plain bound method weakly, but a lambda is owned by the C++ connection and pins the whole tab (L106) |
 
 **Adding a tab:** always-on tabs (Overview, Log) go in `TAB_CLASSES`. Menu-opened tabs go in `registry.MENU_TABS`
 (grouped by menu; values are factories) — they open as **new numbered instances** each time (Heatmap 1, 2, 3 ...), all

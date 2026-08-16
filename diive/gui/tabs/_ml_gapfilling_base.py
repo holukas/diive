@@ -382,7 +382,7 @@ class MlGapFillingTab(DiiveTab):
         tcol.addWidget(self._list_header("Target", "click to set target"))
         self.target_list = VariablePanel()
         self.target_list.list.setToolTip("Click a variable to set it as the gap-fill target.")
-        self.target_list.selected.connect(lambda name, _c: self._set_target(name))
+        self.target_list.selected.connect(self._set_target)
         tcol.addWidget(self.target_list, stretch=1)
         row.addLayout(tcol)
 

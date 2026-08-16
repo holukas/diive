@@ -126,7 +126,7 @@ class BaseCorrectionTab(DiiveTab):
         tcol.addWidget(self._list_header("Target", "click to set target"))
         self.varpanel = VariablePanel()
         self.varpanel.list.setToolTip("Click a variable to set it as the correction target.")
-        self.varpanel.selected.connect(lambda name, _ctrl: self._select(name))
+        self.varpanel.selected.connect(self._select)
         tcol.addWidget(self.varpanel, stretch=1)
         layout.addLayout(tcol)
 

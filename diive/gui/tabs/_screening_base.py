@@ -74,6 +74,7 @@ from diive.gui.widgets.stepwise_cards import (
 from diive.gui.widgets.sub_tabs import SubTabs
 from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.variable_panel import VariablePanel
+from diive.gui.widgets.weak_slot import weak_slot
 from diive.preprocessing.corrections import apply_corrections
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 from diive.preprocessing.outlier_detection.codegen import stepwise_to_code
@@ -150,7 +151,7 @@ class ScreeningTabBase(DiiveTab):
 
         # Left: the shared variable list (identical to every other tab).
         self.varpanel = VariablePanel()
-        self.varpanel.selected.connect(lambda name, _ctrl: self._select(name))
+        self.varpanel.selected.connect(self._select)
         layout.addWidget(self.varpanel)
 
         # Centre: the segmented inspector (Outliers / Corrections / Report) —
@@ -234,7 +235,7 @@ class ScreeningTabBase(DiiveTab):
             b = QPushButton(label)
             b.setCheckable(True)
             b.setCursor(Qt.PointingHandCursor)
-            b.clicked.connect(lambda _c=False, idx=i: self._set_inspector_page(idx))
+            b.clicked.connect(weak_slot(self._set_inspector_page, i))
             seg.addWidget(b)
             self._seg_btns.append(b)
         self._apply_segment_style()
@@ -308,7 +309,7 @@ class ScreeningTabBase(DiiveTab):
         self.run_outliers_btn.setToolTip(
             "Run the outlier chain on the selected variable and compute the QCF. "
             "Edits to the steps apply only when you run.")
-        self.run_outliers_btn.clicked.connect(lambda: self._run())
+        self.run_outliers_btn.clicked.connect(self._run)
         theme.set_button_role(self.run_outliers_btn, "confirm")
         outer.addWidget(self.run_outliers_btn)
         return page
@@ -367,7 +368,7 @@ class ScreeningTabBase(DiiveTab):
         self.run_corrections_btn.setToolTip(
             "Apply the corrections to the QCF-filtered series (or the raw series "
             "when no outlier chain has been run).")
-        self.run_corrections_btn.clicked.connect(lambda: self._recompute_corrections())
+        self.run_corrections_btn.clicked.connect(self._recompute_corrections)
         theme.set_button_role(self.run_corrections_btn, "confirm")
         outer.addWidget(self.run_corrections_btn)
         return page
@@ -404,7 +405,7 @@ class ScreeningTabBase(DiiveTab):
             "Overlay the selected step's upper/lower detection band on the "
             "original series (methods with a single envelope only).")
         # The band overlay only affects the Series page.
-        self.limits_cb.toggled.connect(lambda *_: self._refresh_preview(pages=(0,)))
+        self.limits_cb.toggled.connect(weak_slot(self._refresh_preview, (0,)))
         bar.addWidget(self.limits_cb)
 
         bar.addStretch(1)
@@ -495,12 +496,12 @@ class ScreeningTabBase(DiiveTab):
             n = len(removed[i]) if removed is not None else None
             card = StepCard(i, step, removed=n, selected=(i == self._selected_step),
                             enabled=step.get("enabled", True))
-            card.clicked.connect(lambda idx=i: self._select_step(idx))
-            card.edit.connect(lambda idx=i: self._edit_step(idx))
-            card.delete.connect(lambda idx=i: self._delete_step(idx))
-            card.move_left.connect(lambda idx=i: self._move_step(idx, -1))
-            card.move_right.connect(lambda idx=i: self._move_step(idx, 1))
-            card.toggle.connect(lambda on, idx=i: self._toggle_step(idx, on))
+            card.clicked.connect(weak_slot(self._select_step, i))
+            card.edit.connect(weak_slot(self._edit_step, i))
+            card.delete.connect(weak_slot(self._delete_step, i))
+            card.move_left.connect(weak_slot(self._move_step, i, -1))
+            card.move_right.connect(weak_slot(self._move_step, i, 1))
+            card.toggle.connect(weak_slot(self._toggle_step, i))
             self._strip.addWidget(card)
             self._step_cards.append(card)
         add = AddStepCard()

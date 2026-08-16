@@ -74,6 +74,7 @@ _XYZ_TYPES = (HEXBIN, HEATMAP_XYZ, SCATTER, WINDROSE)
 #: order. This is the standard role-selection method for every X/Y/Z plot type.
 _ROLE_DROPDOWN_TYPES = (SCATTER, WINDROSE, HEXBIN, HEATMAP_XYZ)
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
+from diive.gui.widgets.weak_slot import weak_slot
 
 #: Plot types laid out like a heatmap (panels side by side, shared axes).
 _HEATMAP_TYPES = (HEATMAP, HEATMAP_YEARMONTH)
@@ -206,7 +207,7 @@ class PlottingTab(DiiveTab):
         theme.set_button_role(self.update_btn, "confirm")
         self.update_btn.setEnabled(False)
         # Keep the current pan/zoom when applying setting changes.
-        self.update_btn.clicked.connect(lambda: self._render(preserve_view=True))
+        self.update_btn.clicked.connect(weak_slot(self._render, True))
         action_row = QHBoxLayout()
         action_row.setContentsMargins(10, 0, 10, 4)
         action_row.addWidget(self.update_btn)

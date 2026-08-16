@@ -94,7 +94,7 @@ class FeatureEngineerTab(DiiveTab):
         avail_box.setContentsMargins(0, 0, 0, 0)
         avail_box.addWidget(list_header("Available variables", "click to add"))
         self.available = VariablePanel()
-        self.available.selected.connect(lambda name, _ctrl: self._add_feature(name))
+        self.available.selected.connect(self._add_feature)
         avail_box.addWidget(self.available)
         layout.addWidget(avail_col)
 

@@ -42,6 +42,7 @@ from diive.gui import metadata_store, theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
+from diive.gui.widgets.weak_slot import weak_slot
 
 #: Background tint per origin (matches the "modified/derived/original" wording).
 _ORIGIN_COLORS = {
@@ -83,7 +84,7 @@ class MetadataExplorerTab(DiiveTab):
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.varpanel = VariablePanel(clearable=True)
-        self.varpanel.selected.connect(lambda name, _ctrl: self._select(name))
+        self.varpanel.selected.connect(self._select)
         self.varpanel.clearRequested.connect(self._clear_one)
         splitter.addWidget(self.varpanel)
 
@@ -237,10 +238,10 @@ class MetadataExplorerTab(DiiveTab):
         add_row = QHBoxLayout()
         self._tag_input = QLineEdit()
         self._tag_input.setPlaceholderText("add a tag…")
-        self._tag_input.returnPressed.connect(lambda: self._add_tag(name))
+        self._tag_input.returnPressed.connect(weak_slot(self._add_tag, name))
         add_row.addWidget(self._tag_input)
         add_btn = QPushButton("Add")
-        add_btn.clicked.connect(lambda: self._add_tag(name))
+        add_btn.clicked.connect(weak_slot(self._add_tag, name))
         add_row.addWidget(add_btn)
         v.addLayout(add_row)
 
@@ -249,7 +250,7 @@ class MetadataExplorerTab(DiiveTab):
             clear_btn = QPushButton("Clear this variable's tags & note")
             clear_btn.setFlat(True)
             clear_btn.setStyleSheet(f"color:{_MUTED}; text-align:left;")
-            clear_btn.clicked.connect(lambda: self._clear_one(name))
+            clear_btn.clicked.connect(weak_slot(self._clear_one, name))
             v.addWidget(clear_btn, alignment=Qt.AlignmentFlag.AlignLeft)
         return box
 

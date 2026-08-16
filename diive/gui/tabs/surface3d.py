@@ -47,6 +47,7 @@ from diive.gui.widgets.pyvista_canvas import (
     pyvista_available,
 )
 from diive.gui.widgets.tab_chrome import list_header
+from diive.gui.widgets.weak_slot import weak_slot
 
 #: A continuous flux with a strong diel cycle makes the relief instantly legible.
 _DEFAULT_VAR = "NEE_CUT_REF_f"
@@ -438,8 +439,7 @@ class Surface3DTab(SingleVariableExplorerTab):
         n = len(_VIEWS)
         for i, (label, vector, viewup) in enumerate(_VIEWS):
             btn = QPushButton(label)
-            btn.clicked.connect(
-                lambda _=False, v=vector, u=viewup: self._set_view(v, u))
+            btn.clicked.connect(weak_slot(self._set_view, vector, viewup))
             if i == n - 1 and n % 2 == 1:
                 views.addWidget(btn, i // 2, 0, 1, 2)  # trailing odd -> full width
             else:

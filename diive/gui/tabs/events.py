@@ -47,6 +47,7 @@ from diive.gui.widgets.category_dialog import CategoryDialog
 from diive.gui.widgets.flow_layout import FlowLayout
 from diive.gui.widgets.menu import studio_menu
 from diive.gui.widgets.tab_chrome import build_titlebar
+from diive.gui.widgets.weak_slot import weak_slot
 
 #: Board behind the cards — a touch darker than the white cards so they pop.
 _BOARD_BG = "#ECECE8"
@@ -575,7 +576,7 @@ class EventsTab(DiiveTab):
                      if text in evs[i].name.lower()
                      or text in (evs[i].category or "").lower()]
 
-        # Build a fresh board (setWidget deletes the previous container + cards).
+        # Build a fresh board; the previous container + cards go at the end.
         container = QWidget()
         container.setStyleSheet("background: transparent;")
         sp = container.sizePolicy()
@@ -605,6 +606,15 @@ class EventsTab(DiiveTab):
         else:
             last_flow.addWidget(add_card)
         vbox.addStretch(1)
+        # Take the previous board back and delete it deliberately. `setWidget`
+        # alone destroys it on the C++ side and leaves its Python wrappers behind;
+        # collecting those later -- in the same pass that frees this tab -- lands
+        # a virtual call (`_AddCard.mousePressEvent`) on a half-finalized wrapper
+        # and takes the process down with an access violation.
+        old = self.scroll.takeWidget()
+        if old is not None:
+            old.setParent(None)
+            old.deleteLater()
         self.scroll.setWidget(container)
 
     def _make_card(self, idx: int, color: str, span, now,
@@ -612,8 +622,8 @@ class EventsTab(DiiveTab):
         ev = events_store.manager.events[idx]
         return _EventCard(
             ev, color, span, now, compact=compact,
-            on_edit=lambda i=idx: self._edit(i),
-            on_delete=lambda i=idx: self._delete(i),
-            on_focus=lambda i=idx: self._focus(i),
-            on_duplicate=lambda i=idx: self._duplicate(i),
-            on_shift=lambda d, i=idx: self._shift(i, d))
+            on_edit=weak_slot(self._edit, idx),
+            on_delete=weak_slot(self._delete, idx),
+            on_focus=weak_slot(self._focus, idx),
+            on_duplicate=weak_slot(self._duplicate, idx),
+            on_shift=weak_slot(self._shift, idx))

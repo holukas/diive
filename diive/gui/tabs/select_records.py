@@ -114,7 +114,7 @@ class SelectRecordsTab(DiiveTab):
         tcol.addWidget(list_header("Target", "click to set target"))
         self.varpanel = VariablePanel()
         self.varpanel.list.setToolTip("Click a variable to filter its records by a condition.")
-        self.varpanel.selected.connect(lambda name, _ctrl: self._select(name))
+        self.varpanel.selected.connect(self._select)
         tcol.addWidget(self.varpanel, stretch=1)
         layout.addLayout(tcol)
 

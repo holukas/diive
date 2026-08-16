@@ -70,8 +70,7 @@ class LocalOutlierFactorTab(BaseOutlierTab):
             "Let scikit-learn set the outlier threshold automatically (the original "
             "LOF paper's rule) instead of a fixed proportion. Disables the "
             "contamination field above.")
-        self.contamination_auto.toggled.connect(
-            lambda on: self.contamination.setEnabled(not on))
+        self.contamination_auto.toggled.connect(self.contamination.setDisabled)
         form.addRow(self.contamination_auto)
 
         # Fill the fields with library-recommended settings for the picked variable.
