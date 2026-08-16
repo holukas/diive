@@ -251,12 +251,94 @@ class TestLongtermAnomaliesYearReferencePeriod(unittest.TestCase):
                                      reference_end_year=2018, series_label='TA')
         fig, ax = plt.subplots()
         plot.plot(ax=ax)
+        # The "last N" is the tail's real length since L149; this record is 5 years.
         self.assertEqual([t.get_text() for t in ax.texts],
                          ["reference period mean: 2.00±1.00sd (2016-2018, 3 years)\n"
-                          "last 10 years mean: 2.20±1.92sd (2016-2020)"])
+                          "last 5 years mean: 2.20±1.92sd (2016-2020)"])
         heights = [p.get_height() for p in ax.patches]
         self.assertEqual(heights, [0.0, 1.0, 0.0, 3.0, 0.0, -1.0, 0.0, 0.0, 0.0, -2.0])
         plt.close(fig)
+
+
+class TestLongtermAnomaliesYearAnnotationCounts(unittest.TestCase):
+    """L149: the annotation's "N years" was `end - start + 1`, a label, never a count."""
+
+    @staticmethod
+    def _record(years):
+        years = list(years)
+        return pd.Series(np.arange(len(years), dtype=float), index=years, name='TA')
+
+    @staticmethod
+    def _annotation(plot, needle):
+        fig, ax = plt.subplots()
+        plot.plot(ax=ax)
+        found = [t.get_text() for t in ax.texts if needle in t.get_text()]
+        plt.close(fig)
+        return found
+
+    def test_partly_overlapping_reference_counts_the_overlap(self):
+        # The reported case: 1995-2005 is 11 nominal years but only 2000-2005 is
+        # covered, so the mean and sd come from 6 years and used to say "11 years".
+        series = self._record(range(2000, 2021))
+        plot = LongtermAnomaliesYear(series=series, reference_start_year=1995,
+                                     reference_end_year=2005, series_label='TA')
+        covered = series.loc[2000:2005]
+        self.assertEqual(len(covered), 6)  # guard: the overlap really is 6 years
+        annotation = self._annotation(plot, 'reference period mean')
+        self.assertEqual(len(annotation), 1)
+        # The requested window stays, next to the count actually behind the number.
+        self.assertIn(f"reference period mean: {float(covered.mean()):.2f}"
+                      f"±{float(covered.std()):.2f}sd (1995-2005, 6 years)", annotation[0])
+
+    def test_outage_inside_the_reference_window_is_not_counted(self):
+        # After L114's reindex the missing years are rows, all NaN. mean() and std()
+        # skip them, so the count has to as well.
+        years = [y for y in range(2000, 2021) if y not in (2005, 2006, 2007)]
+        series = self._record(years)
+        plot = LongtermAnomaliesYear(series=series, reference_start_year=2000,
+                                     reference_end_year=2010, series_label='TA')
+        measured = series.loc[(series.index >= 2000) & (series.index <= 2010)]
+        self.assertEqual(len(measured), 8)  # guard: three reference years are missing
+        annotation = self._annotation(plot, 'reference period mean')
+        self.assertIn("(2000-2010, 8 years)", annotation[0])
+        self.assertNotIn("11 years", annotation[0])
+
+    def test_fully_measured_reference_prints_its_nominal_span(self):
+        # No-regression guard: where every requested year is measured the count and
+        # the nominal span coincide, so these strings must not move at all.
+        series = self._record(range(2000, 2021))
+        for label, (start, end, expected) in (
+                ('reference is the whole record', (2000, 2020, '(2000-2020, 21 years)')),
+                ('sub-window', (2000, 2010, '(2000-2010, 11 years)')),
+                ('single year', (2005, 2005, '(2005-2005, 1 years)'))):
+            with self.subTest(period=label):
+                plot = LongtermAnomaliesYear(series=series, reference_start_year=start,
+                                             reference_end_year=end, series_label='TA')
+                annotation = self._annotation(plot, 'reference period mean')
+                self.assertEqual(len(annotation), 1)
+                self.assertIn(expected, annotation[0])
+
+    def test_last_years_label_matches_the_span_it_prints(self):
+        # A record shorter than ten years read "last 10 years mean" beside its own
+        # five-year span - the figure contradicting itself.
+        series = self._record(range(2016, 2021))
+        plot = LongtermAnomaliesYear(series=series, reference_start_year=2016,
+                                     reference_end_year=2018, series_label='TA')
+        annotation = self._annotation(plot, 'years mean:')
+        self.assertEqual(len(annotation), 1)
+        self.assertIn("last 5 years mean: ", annotation[0])
+        self.assertIn("(2016-2020)", annotation[0])
+        self.assertNotIn("last 10 years", annotation[0])
+
+    def test_last_ten_years_label_is_unchanged_on_a_long_record(self):
+        # No-regression guard: with at least ten calendar years the tail is ten rows
+        # long, gaps in it included, so the label stays exactly "last 10 years".
+        years = [y for y in range(2000, 2021) if y not in (2015, 2016, 2017)]
+        plot = LongtermAnomaliesYear(series=self._record(years), reference_start_year=2000,
+                                     reference_end_year=2010, series_label='TA')
+        annotation = self._annotation(plot, 'years mean:')
+        self.assertIn("last 10 years mean: ", annotation[0])
+        self.assertIn("(2011-2020)", annotation[0])
 
 
 if __name__ == '__main__':

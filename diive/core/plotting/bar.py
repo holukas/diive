@@ -103,15 +103,21 @@ class LongtermAnomaliesYear:
         """Draw the domain-specific reference-statistics info box (not shared chrome)."""
         ref_mean = self._anomalies_df['reference_mean'].iloc[-1]
         ref_sd = self._anomalies_df['reference_sd'].iloc[-1]
-        ref_n_years = (self.reference_end_year - self.reference_start_year) + 1
         last10 = self._anomalies_df[self._VALUECOL].tail(10)
         last10_mean = last10.mean()
         last10_std = last10.std()
 
+        # The reference count is the measured years the mean and sd were computed
+        # over, not the width of the requested window: the width is already printed
+        # as the span right next to it, so a nominal count states the same fact twice
+        # and, whenever the window only partly overlaps the record or holds an
+        # outage, states it as the provenance of a number it is not the provenance
+        # of. The "last N" is likewise the tail's real length - a record shorter than
+        # 10 years read "last 10 years" beside its own five-year span.
         self.ax.text(0.98, 0.02, f"reference period mean: {ref_mean:.2f}±{ref_sd:.2f}sd "
                                  f"({self.reference_start_year}-{self.reference_end_year}, "
-                                 f"{ref_n_years} years)\n"
-                                 f"last 10 years mean: {last10_mean:.2f}±{last10_std:.2f}sd "
+                                 f"{self._ref_n_years} years)\n"
+                                 f"last {len(last10)} years mean: {last10_mean:.2f}±{last10_std:.2f}sd "
                                  f"({last10.index[0]}-{last10.index[-1]})",
                      size=11, color='#2C3E50', backgroundcolor='white', transform=self.ax.transAxes,
                      alpha=0.9, horizontalalignment='right', verticalalignment='bottom',
@@ -136,6 +142,7 @@ class LongtermAnomaliesYear:
             raise ValueError(f"Reference period {self.reference_start_year}-{self.reference_end_year} "
                              f"holds no data, so no anomaly can be calculated "
                              f"(record covers {self.data_first_year}-{self.data_last_year}).")
+        self._ref_n_years = int(ref_subset.count())
         anomalies_df['reference_mean'] = ref_subset.mean()
         anomalies_df['reference_sd'] = ref_subset.std()
         anomalies_df['anomaly'] = anomalies_df[self._VALUECOL].sub(anomalies_df['reference_mean'])
