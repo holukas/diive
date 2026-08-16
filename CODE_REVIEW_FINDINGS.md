@@ -171,7 +171,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L87~~ | ~~`classical_decompose` passes `extrapolate=` where the parameter is `extrapolate_trend`, so it always raises and the trend edges are always NaN~~ (done 2026-08-15) — dead branch removed; NaN edges kept on purpose | `core/times/decomposition_utils.py:207` |
 | ~~L92~~ | ~~`ScreeningTabBase._select` does not bump `_run_id` — G2's bug in the tab cited as the correct pattern~~ (done 2026-08-15) | `gui/tabs/_screening_base.py` |
 | ~~L99~~ | ~~Running the test suite **overwrites the developer's real GUI preferences**: three tests call `win.close()`, and `closeEvent` -> `save_config()` writes theme/geometry/`last_project`/`variable_metadata` to the live `QStandardPaths` file, non-atomically~~ (done 2026-08-15) | `gui/config.py` + `tests/test_gui.py` |
-| L76 | BUR06 uses a canopy `ra` (`u/u*^2`) where Burba 2006 specifies a per-element one (`7.4*sqrt(d/U)`, ~6x apart) and drops the retained fraction `fr`; the fitted SF absorbs both | `flux/lowres/selfheating.py:471` |
+| L76 | ~~BUR06 uses a canopy `ra` where Burba 2006 specifies a per-element one and drops `fr`~~ **answered from the paper 2026-08-15, partly wrong**: dropping `fr` is fine, but the SF does **not** absorb the `ra` shape — ~4.8x residual spread *within* each USTAR class. Open for a data decision | `flux/lowres/selfheating.py:471` |
 | ~~L53~~ | ~~`CompoundExtremes` returns zero classified periods for a single year, silently~~ (done 2026-08-07) | `analysis/compoundextremes.py:168` |
 | ~~L59~~ | ~~`multi_scale_harmonics` swallows every exception~~ (done 2026-08-07) — function deleted as dead code | `analysis/harmonic.py:432` |
 | ~~L19~~ | ~~`features_stl=True` can produce nothing — any single NaN skips a column, logged only at DEBUG~~ (done 2026-08-07) | `core/ml/feature_engineer.py:726` |
@@ -1487,7 +1487,41 @@ named anything else raises before any correction happens.
 empty placeholder from `__init__`. `run()` completes without warning and every consumer sees an
 empty correction.
 
-**[ ] L76. BUR06 uses a canopy aerodynamic resistance where Burba 2006 specifies a per-element one, and drops the retained fraction `fr`**
+**[~] L76. BUR06 uses a canopy aerodynamic resistance where Burba 2006 specifies a per-element one, and drops the retained fraction `fr`**
+
+> **Answered from the paper 2026-08-15** (Burba et al. 2006, AMS progress report, supplied by the
+> user). Documented in `_flux_correction_term_unscaled_jar09_bur06`. **The entry's own conclusion —
+> "the fitted SF absorbs both" — is half wrong, and measurement says so.**
+>
+> What the paper specifies: Eq. 8 carries `fr`, the fraction of instrument sensible heat retained in
+> the optical path; Eqs. 10/11 give per-element forced-convection resistances
+> `ra ~ 7.4*sqrt(d/U)` for the can (d=0.133 m) and ball (d=0.042 m); Eqs. 12-16 build `fr` from
+> boundary-layer thicknesses and a Reynolds number.
+>
+> **`fr` being dropped is fine.** It is near-constant (~0.06 on the bundled CH-LAE record), and a
+> near-constant factor is exactly what a fitted scaling factor absorbs.
+>
+> **The `ra` form is not fine, and the scaling factor does not rescue it.** In the paper's own
+> formulation the U-dependence of `fr` and of `ra` largely cancel, so `fr/ra` is nearly flat in wind
+> speed; the bulk `ustar**2/u` is not. Measured on CH-LAE (n=27331, U 0.2-11.9 m/s), the ratio of the
+> two forms varies by a **factor of ~30 across USTAR classes** — absorbed, because `ScopOptimizer`
+> fits one constant per class — but still spreads by a **factor of ~4.8 (p10-p90) within each of the
+> 20 USTAR classes**, worst 9.3. A per-class constant cannot absorb a within-class spread. So the
+> correction's wind-speed dependence is wrong by up to several-fold, and worst at low wind, which is
+> when self-heating matters most (the paper reports gradients "may exceed 2 C per 1 mm" in cold, calm
+> air).
+>
+> **Why it is still not simply a bug.** Sect. 5.2 explicitly sanctions solving Eq. 9 for the `fr/ra`
+> ratio empirically against a closed-path reference *"in place of the Eqs. 9-16"* — which is what
+> diive does. But it asks for that ratio *"for different wind speeds and directions"*, i.e. as a
+> function; USTAR classes are only a partial proxy. And Sect. 5.1 cautions that Eqs. 10-16 assume a
+> near-vertical instrument, laminar boundary layers and no flow obstruction, so the paper's form is
+> not automatically better for a given site.
+>
+> **Left open, scoped to a decision that needs data, not code:** implement Eqs. 10-16 as a selectable
+> `ra` method and compare both against the reference instrument (CH-LAE has IRGA72 and IRGA75, so this
+> is testable on the bundled data), or keep the bulk form and justify it on its own terms. Either way
+> the residual within-class spread should be stated wherever this correction's uncertainty is reported.
 ⚠ **[found 2026-08-07 while reading Burba et al. 2006 alongside 2008]**
 
 `selfheating.py:471` / `:584` — Burba et al. (2006), *Correcting apparent off-season CO2 uptake…*

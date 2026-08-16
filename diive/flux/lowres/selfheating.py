@@ -624,8 +624,45 @@ class ScopPhysics:
     def _flux_correction_term_unscaled_jar09_bur06(self, ts: pd.Series) -> pd.Series:
         """
         Calculate unscaled flux correction term.
-        Equation (8) in Burba et al. (2006).
+        Equation (8) in Burba et al. (2006), without the retained fraction ``fr``.
         Used by JAR09 and BUR06.
+
+        Burba et al. (2006) Eq. 8 is::
+
+            Fc_new = Fc + fr * (Ts - Ta) * qc / (ra * (Ta + 273.15)) * (1 + 1.6077 rho_v/rho_d)
+
+        Two deliberate departures from that paper, both absorbed into the scaling factor
+        that :class:`ScopOptimizer` fits against a reference instrument:
+
+        1. **``fr`` is not computed.** In the paper it is the fraction of the instrument's
+           sensible heat retained in the optical path, from boundary-layer thicknesses
+           (their Eqs. 12-16; ~0.06 for a vertical LI-7500 on this dataset). A near-constant
+           factor is exactly what a fitted scaling factor absorbs, so omitting it costs
+           nothing here.
+        2. **``ra`` is the bulk canopy resistance** ``u / ustar**2`` (Kittler et al. 2017,
+           after Stull 1988), not the paper's per-element forced-convection resistances
+           ``ra ~ 7.4 * sqrt(d / U)`` for the can and the ball (their Eqs. 10/11).
+
+        Departure 2 is **not** absorbed, and that is worth knowing before trusting the
+        wind-speed dependence of this correction. The paper's ``fr/ra`` is nearly flat in
+        wind speed, because the U-dependence of ``fr`` and of ``ra`` largely cancel; the
+        bulk ``ustar**2/u`` is not. Measured on the bundled CH-LAE record (n=27331,
+        U 0.2-11.9 m/s), the ratio of the two forms varies by a factor of ~30 across
+        USTAR classes -- which the per-class scaling factor does absorb, since it fits one
+        constant per class -- but still spreads by a factor of ~4.8 (p10 to p90) *within*
+        each of the 20 USTAR classes, and a per-class constant cannot absorb that.
+
+        This is not simply an error: Burba et al. (2006) Sect. 5.2 explicitly sanctions
+        solving their Eq. 9 for the ``fr/ra`` ratio empirically against a closed-path
+        reference "in place of the Eqs. 9-16", which is what this implementation does. But
+        Sect. 5.2 asks for that ratio "for different wind speeds and directions", i.e. as a
+        function, and USTAR classes are only a partial proxy for wind speed -- hence the
+        residual spread above. Their Eqs. 10-16 also assume a near-vertical instrument with
+        laminar boundary layers and no flow obstruction, which Sect. 5.1 cautions about, so
+        the paper's own form is not automatically the better choice for a given site.
+
+        Recorded as finding L76; deciding it needs the reference-instrument comparison, not
+        a code change.
 
         Args:
             ts: series, instrument surface temperature (°C)
@@ -678,10 +715,18 @@ class ScopPhysics:
 
         return ts
 
-    def plot_diel_cycles(self):
+    def plot_diel_cycles(self, showplot: bool = True) -> plt.Figure:
         """
         Plots the mean diurnal cycles.
         Auto-detects if BUR08 surfaces exist and plots them individually.
+
+        Args:
+            showplot: if True, call plt.show() to display the figure interactively.
+                Set to False in non-interactive environments (Sphinx Gallery, headless
+                testing) or when the caller wants to close the figure itself.
+
+        Returns:
+            matplotlib Figure.
         """
         import matplotlib.pyplot as plt
         import matplotlib.gridspec as gridspec
@@ -794,7 +839,10 @@ class ScopPhysics:
                 if series.min() < 0 < series.max(): ax.axhline(0, lw=1, color='k')
 
             fig.suptitle("Physics Drivers (CO2)", fontsize=16, fontweight='bold', y=1.02)
-            plt.show()
+            if showplot:
+                plt.show()
+
+        return fig
 
 
 class ScopOptimizer:
@@ -1003,10 +1051,19 @@ class ScopOptimizer:
         # Trim to the exact original length n (since num_blocks * block_size >= n)
         return indices_circular[:n]
 
-    def plot(self):
-        """Plots optimized scaling factors with confidence intervals."""
+    def plot(self, showplot: bool = True) -> Optional[plt.Figure]:
+        """Plots optimized scaling factors with confidence intervals.
+
+        Args:
+            showplot: if True, call plt.show() to display the figure interactively.
+                Set to False in non-interactive environments (Sphinx Gallery, headless
+                testing) or when the caller wants to close the figure itself.
+
+        Returns:
+            matplotlib Figure, or None if there are no fitted scaling factors to plot.
+        """
         if self.scaling_factors_df.empty:
-            return
+            return None
 
         info("Plotting Scaling Factors...")
         plot_df = self.scaling_factors_df.copy()
@@ -1043,7 +1100,10 @@ class ScopOptimizer:
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
 
-        plt.show()
+        if showplot:
+            plt.show()
+
+        return fig
 
     def stats(self):
         """
@@ -1500,9 +1560,22 @@ class ScopApplicator:
         print_sep('=', 75)
         vspace("\n")
 
-    def plot_dashboard(self, flux_closedpath: Optional[pd.Series] = None):
+    def plot_dashboard(self, flux_closedpath: Optional[pd.Series] = None,
+                       showplot: bool = True) -> Optional[plt.Figure]:
         """
         Generates a master dashboard with INCREASED FONT SIZES for better readability.
+
+        Args:
+            flux_closedpath: optional series, closed-path reference flux, added as a
+                comparison line and used for the residual panels.
+            showplot: if True, call plt.show() to display the figure interactively.
+                Set to False in non-interactive environments (Sphinx Gallery, headless
+                testing) or when the caller wants to close the figure itself. The
+                dashboard is 24x20 inches, so a script that draws it in a loop should
+                close the returned figure.
+
+        Returns:
+            matplotlib Figure, or None if `run()` has not been called yet.
         """
 
         info("Generating Comprehensive Flux Dashboard (Large Font Edition)...")
@@ -1510,7 +1583,7 @@ class ScopApplicator:
         # --- 1. DATA PREPARATION ---
         if self.col_flux_corr not in self.df.columns:
             warn(f"Warning: '{self.col_flux_corr}' not found. Run .run() first.")
-            return
+            return None
 
         plot_df = self.df.copy()
 
@@ -1693,4 +1766,7 @@ class ScopApplicator:
             cbar.set_ticklabels(['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'])
             cbar.outline.set_visible(False)
 
-            plt.show()
+            if showplot:
+                plt.show()
+
+        return fig
