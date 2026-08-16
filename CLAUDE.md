@@ -406,10 +406,17 @@ scatter.plot(ax=axes[1], title='Log', ylim='auto')
 
 **[CRITICAL] NEVER COMMIT CHANGES.** User stages and commits exclusively.
 
-**[CRITICAL] NEVER RUN EXAMPLE SUITE.** Only test individual examples:
+**[CRITICAL] NEVER RUN EXAMPLE SUITE.** 113 examples, several of them minutes long — the reason is
+cost, not correctness. Only test individual examples:
 ```bash
-uv run python examples/gapfilling/gapfill_randomforest.py
+MPLBACKEND=Agg uv run python examples/gapfilling/gapfill_randomforest.py
 ```
+
+**Pass `MPLBACKEND=Agg` when running one unattended.** 16 examples end in a bare `plt.show()`, which
+blocks until a window is closed — headless that looks exactly like a slow example, not a stuck one
+(the giveaway is an output file whose size stops changing). `run_all_examples.py` now forces `Agg`
+itself, so the 120 s timeouts it used to report against those 16 were spurious failures, not real
+ones; a caller-set `MPLBACKEND` still wins if you want to watch the plots.
 
 **Commit message style:** one-line title (< 50 chars) + bullet points.
 

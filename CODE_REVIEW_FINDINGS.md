@@ -239,7 +239,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L80~~ | ~~`UstarVekuriThresholdDetection.bootstrap_results_` initialised, never read~~ (done 2026-08-15) | `flux/lowres/ustar_vekuri_detection.py` |
 | ~~L82~~ | ~~Exceptions in Qt-invoked slots are swallowed — GUI tests driving via signals may be weaker than they look~~ (done 2026-08-15) — the guard uncovered a real leaked-slot bug 44 tests were passing over | `tests/test_gui.py` (methodology) |
 | L85 | No doctest runner anywhere — docstring examples are never executed (L35 had been broken twice over) | `tests/` (methodology) |
-| L98 | `run_all_examples.py` forces no matplotlib backend, so the 16 examples ending in `plt.show()` block forever waiting for a window — the suite cannot run unattended | `examples/run_all_examples.py` |
+| ~~L98~~ | ~~`run_all_examples.py` forces no matplotlib backend, so the 16 examples ending in `plt.show()` block~~ (done 2026-08-15) — corrected: the 120 s timeout meant **spurious failures**, not a permanent hang | `examples/run_all_examples.py` |
 | ~~L89~~ | ~~`-9999` at position 6 still reads as a passing flag~~ (done 2026-08-15) — **two** holes, not one: `-1` at position 1 read as a soft warning | `preprocessing/qaqc/eddyproflags.py` |
 | L90 | `docs/auto_examples/flux/uncertainty.*` stale generated copies | `docs/auto_examples/` |
 | ~~L93~~ | ~~`EventManager.load_dict({})` early-returns without clearing, so previous events survive~~ (done 2026-08-15) | `gui/events.py` |
@@ -2407,7 +2407,25 @@ years run in parallel, so a single seed must be **derived per year** (`seed + ye
 indices, which is worse than unseeded. Inventing that scheme silently for the flux chain's
 u\* thresholds is not a one-liner, so it is recorded instead.
 
-**[ ] L98. The example suite cannot run unattended: `plt.show()` blocks**
+**[x] L98. The example suite reports spurious timeouts: `plt.show()` blocks**
+
+> **Fixed 2026-08-15.** `run_all_examples.py` now runs each example with `MPLBACKEND=Agg`, and a
+> caller-set `MPLBACKEND` still wins so the plots can be watched deliberately. Also corrected the
+> timeout message, which said 60 seconds against a 120 s timeout.
+>
+> **This entry's original wording was wrong and is corrected here:** the runner has a 120 s
+> `subprocess.run` timeout, so the suite did *not* stall forever. Each of the 16 blocking examples
+> burned the full 120 s and was then reported as a **timeout failure it had not earned** — worse in
+> one way than a hang, because the run completes and the report looks like 16 broken examples.
+>
+> Measured on `analysis/analysis_gapstats.py` through the runner's own `run_example()`:
+> `timeout, 120.0s` with a window backend versus `pass, 1.8s` with the new default. 16 of the 113
+> listed examples end in a bare `plt.show()`.
+>
+> CLAUDE.md's "NEVER RUN EXAMPLE SUITE" rule is kept — 113 examples is genuinely expensive — but it
+> now states that the reason is cost rather than breakage, and the documented single-example command
+> carries `MPLBACKEND=Agg`, since running one of those 16 by hand hits the same block. Headless, that
+> block is indistinguishable from a slow example; the giveaway is an output file that stops growing.
 `examples/run_all_examples.py` — sets no matplotlib backend, and **16 of ~76 examples end with a
 bare `plt.show()`**. With PySide6 installed the Qt backend is the default, so `plt.show()` blocks
 until a human closes the window. Running the suite headless stalls on the first such example
