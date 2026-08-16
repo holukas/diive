@@ -307,9 +307,23 @@ class WindRosePlot:
 
         Args:
             ax: Polar matplotlib axes. If None, a new polar figure is created.
-            format_style: Shared :class:`~diive.plotting.FormatStyle`. On this polar
-                plot only the ``title`` / title-font fields apply (the cartesian
-                spines/ticks/grid of ``FormatStyle.apply`` do not).
+                The title then goes on this axes, not on the figure, so the rose can
+                be one panel of a caller's multi-panel figure.
+            format_style: Shared :class:`~diive.plotting.FormatStyle`. This is a polar
+                plot, so only the fields that describe something the rose actually
+                draws are honoured: ``title`` (+ ``title_fontsize``,
+                ``title_fontweight``, ``text_color``), ``ticks_fontsize`` (compass and
+                radial tick labels, when ``sector_label_fontsize`` is not given),
+                ``chrome_color`` (tick labels + tick marks), ``show_grid``,
+                ``grid_color`` and ``facecolor``. Deliberately ignored: the axis-label
+                fields (``xlabel``/``ylabel``/``xunits``/``yunits``/``axlabel_*``) —
+                the angular axis is the compass and the radial axis is labelled by the
+                colorbar; ``zlabel`` — the colorbar label has its own ``cb_label``
+                argument here; the legend fields — the rose draws no labelled artists;
+                ``show_zeroline`` — the polar equivalent is ``show_zero_circle``; and
+                the spine/tick geometry fields (``spine_linewidth``,
+                ``ticks_direction``, ``ticks_length``, ``ticks_width``), which describe
+                cartesian spines a polar axes does not have.
             figsize: Figure size in inches (default (9, 9)).
             figdpi: Figure DPI (default 100).
             cmap: Colormap used to colour bars by the colour source — the ``z``
@@ -346,8 +360,13 @@ class WindRosePlot:
 
         if cb_labelsize is None:
             cb_labelsize = theme.AX_LABELS_FONTSIZE
+        # The dedicated `sector_label_fontsize` wins; the shared tick font size is
+        # the fallback, so a style handed to several plots also reaches this one.
         if sector_label_fontsize is None:
-            sector_label_fontsize = theme.AX_LABELS_FONTSIZE
+            sector_label_fontsize = (style.ticks_fontsize if style.ticks_fontsize is not None
+                                     else theme.AX_LABELS_FONTSIZE)
+        radial_label_fontsize = (style.ticks_fontsize if style.ticks_fontsize is not None
+                                 else theme.TICKS_LABELS_FONTSIZE - 4)
         title_fs = style.title_fontsize if style.title_fontsize is not None else theme.FONTSIZE_TITLE
         title_color = style.text_color if style.text_color is not None else theme.COLOR_TEXT
 
@@ -382,7 +401,8 @@ class WindRosePlot:
         rmax = max(0.0, data_max)
         span = (rmax - rmin) or (abs(rmax) or 1.0)
 
-        if ax is None:
+        own_fig = ax is None
+        if own_fig:
             self.fig = plt.figure(figsize=figsize, dpi=figdpi)
             ax = self.fig.add_subplot(111, projection='polar')
         else:
@@ -439,14 +459,31 @@ class WindRosePlot:
             ax.tick_params(axis='x', pad=sector_label_pad)
         else:
             ax.set_xticks([])
-        ax.tick_params(axis='y', labelsize=theme.TICKS_LABELS_FONTSIZE - 4)
-        ax.grid(True, alpha=0.3, zorder=0)
+        ax.tick_params(axis='y', labelsize=radial_label_fontsize)
+        if style.chrome_color is not None:
+            ax.tick_params(axis='both', colors=style.chrome_color)
+        if style.facecolor is not None:
+            ax.set_facecolor(style.facecolor)
+        if style.show_grid:
+            grid_kw = {} if style.grid_color is None else {'color': style.grid_color}
+            ax.grid(True, alpha=0.3, zorder=0, **grid_kw)
+        else:
+            ax.grid(False)
         ax.set_axisbelow(True)
 
         if style.title:
-            self.fig.subplots_adjust(top=0.92)
-            self.fig.suptitle(style.title, fontsize=title_fs, color=title_color,
-                              fontweight=style.title_fontweight, y=0.97)
+            if own_fig:
+                self.fig.subplots_adjust(top=0.92)
+                self.fig.suptitle(style.title, fontsize=title_fs, color=title_color,
+                                  fontweight=style.title_fontweight, y=0.97)
+            else:
+                # A caller-supplied axes may be one panel among several, so the title
+                # goes on the axes: a suptitle would rename the caller's whole figure
+                # and reflowing the layout would move their other panels.
+                # Clear the compass ring (labels sit `sector_label_pad` outside it).
+                ax.set_title(style.title, fontsize=title_fs, color=title_color,
+                             fontweight=style.title_fontweight,
+                             pad=(sector_label_pad + 6.0) if show_sector_labels else None)
 
         if show_colorbar and color is None:
             sm = plt.cm.ScalarMappable(cmap=colormap, norm=norm)
