@@ -89,6 +89,20 @@ _FONT_SIZE = 9
 _TICK_LENGTH = 4
 _LINE_WIDTH = 0.8
 
+# Most ticks a datetime x-axis may place. Without a cap, matplotlib puts one per
+# year, and ten years of labels run together into a solid block in a bottom-row
+# panel one gridspec column wide. One value covers every datetime panel because
+# `sharex` makes the linked axes share a single Ticker, so the last locator set
+# wins for all of them; it is therefore tuned for the narrowest panel. Measured
+# on a 16x9 figure with the bundled 10-year record: 5 puts four labels across
+# 94% of a small panel's width, while 6 puts five across 117% and they overlap.
+_MAX_XTICKS = 5
+
+# AutoDateLocator's year steps jump 1, 2, 4, so a ten-year record gets either
+# eleven labels or two, with nothing usable between. Allowing 3 gives the
+# four-label spacing that actually fits.
+_YEAR_STEPS = [1, 2, 3, 4, 5, 10, 20, 40, 50, 100]
+
 # Refined, mutually distinct line colours so each panel reads at a glance and
 # looks professional (the bright Material blue read as garish).
 _TS_COLOR = "#22303C"     # near-black ink — time series (lets the heatmap carry the colour)
@@ -820,6 +834,23 @@ class OverviewTab(DiiveTab):
             # overrides this, so live zoom/pan is unaffected.
             ax.set_xmargin(0)
             ax.autoscale(enable=True, axis="x")
+        if plot_type in _DATETIME_X_PANELS:
+            self._thin_date_ticks(ax)
+
+    @staticmethod
+    def _thin_date_ticks(ax) -> None:
+        """Cap how many date ticks the axis may draw, so the labels stay apart.
+
+        Re-applied on every render because the plot classes set their own
+        locators. The formatter is bound to the locator it was built with, so the
+        two are always replaced together. Zooming is unaffected: the locator
+        re-picks its interval from the visible range, so a zoomed-in view
+        relabels itself in months or days.
+        """
+        locator = mdates.AutoDateLocator(maxticks=_MAX_XTICKS, minticks=2)
+        locator.intervald[mdates.YEARLY] = list(_YEAR_STEPS)
+        ax.xaxis.set_major_locator(locator)
+        ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
 
     @staticmethod
     def _panel_fonts(ax) -> None:
