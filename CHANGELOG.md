@@ -2,233 +2,265 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.91.0 | XX May 2026
+## v0.91.0 | XX August 2026
 
-652 commits since v0.90.0. Desktop app, a flux chain that comes apart into levels, ten namespaces
-instead of one flat one, and four methods for splitting net ecosystem exchange. Method detail is in
-the docstrings and `examples/`; `CODE_REVIEW_FINDINGS.md` covers the reasoning behind the behaviour
-changes.
+### Highlights
+
+- `diive` now also features a desktop application with a graphical user interface that can be used to quickly visualize
+  and analyze flux data
+- Several new and improved plotting functions, with harmonized parameter handling
+- The API has been reorganized into ten namespaces to make it easier to find certain functions.
+- New and improved partitioning methods for NEE fluxes from eddy covariance
+- Improved flux processing chain for eddy covariance fluxes
+- New and improved outlier detection methods
+- Many speed improvements and bug fixes
+- Version 0.91.0 is the largest release so far, with 652 commits since v0.90.0, adding many new
+  and improved features. It is an important milestone towards a 1.0 release, but it is still a
+  work-in-progress
+
+### Important
+
+- Raw high-frequency data processing has moved to the separate [dyco](https://github.com/holukas/dyco) package, because
+  the focus on `diive` are averaged (e.g. half-hourly) data
+- Method details and validation numbers are in the docstrings and in `examples/`.
 
 ### Breaking changes
 
-- **Imports change.** Ten namespaces replace the flat one: `dv.outliers`, `dv.gapfilling`,
-  `dv.flux`, `dv.analysis`, `dv.plotting`, `dv.times`, `dv.variables`, `dv.corrections`, `dv.qaqc`,
-  `dv.events`.
-- **Raw high-frequency tooling moved to [dyco](https://github.com/holukas/dyco).** Wind rotation,
-  Reynolds decomposition, the flux detection limit and the time-lag detection classes are gone from
-  `dv.flux`, and the four `diive-tlag-*` commands are now `dyco-*`. `TimeLagAnalysis` stays, because
-  it reads EddyPro output rather than raw data. `diive-gui` is the only command diive installs.
-- **Plot styling goes through `FormatStyle`.** Titles, axis labels, units, legend position and grid
-  are gone from `plot()` as separate keywords. Pass `format_style=dv.plotting.FormatStyle(...)`, or
-  `.merged(**overrides)` to vary one field. Colours and colorbars are unaffected.
-- **Day and night settings are the same on every outlier detector**: `separate_day_night` to switch,
-  one value for both periods, optional `*_daytime` or `*_nighttime` overrides. Gone are the
-  `[day, night]` lists on `LocalSD` and `AbsoluteLimits`, `Hampel`'s duplicate `n_sigma_dt` and
-  `n_sigma_nt`, and `zScoreDaytimeNighttime`, now `zScore(separate_day_night=True)`. Defaults are
-  unchanged, and every removed name raises an error naming its replacement.
-- **`AbsoluteLimitsDaytimeNighttime` and `LocalOutlierFactorDaytimeNighttime` really do split day
-  from night now.** Both were aliases that inherited a switch defaulting to off, so they ran on the
-  whole series while their name said otherwise.
-- **`combine_variables` always works on the overlap**, and `keep_overlap_only` is gone: it filled in
-  for a missing operand, so `NEE - RECO` quietly returned `-RECO` wherever NEE was missing.
-  `method='fillgaps'` remains for filling a gap on purpose.
-- **Feature settings moved into `FeatureEngineer`**, which is built first and passed to
-  `RandomForestTS` or `XGBoostTS`.
-- **The MDS fill flag reads `method * 1000 + time_window`**, 0 for measured, replacing levels 1 to
-  60. ONEFlux quality codes moved to `.PREDICTIONS_QUALITY`, and `avg_min_n_vals` defaults to 2.
-- **The self-heating correction is gone for latent heat**, and with it `flux_type` on `ScopPhysics`,
-  `ScopOptimizer` and `ScopApplicator`. Whether a Burba-style correction applies to LE is unsettled
-  in eddy covariance, and the code behind it was broken anyway.
-- Smaller ones: `DailyCorrelation` is a class rather than a function, `HeatmapXYZ` expects
-  pre-aggregated data, plotting aliases take a `plot_` prefix, `make_level32_detector` returns
-  `(data, sod)`, and `gapfill_storage_term` defaults to True. `FluxProcessingChain` still works, but
-  `run_chain` replaces it and its `finalize_level*()` calls now do nothing except warn.
+- **Imports**: ten namespaces replace the flat namespace. Update all imports to `dv.outliers`,
+  `dv.gapfilling`, `dv.flux`, `dv.analysis`, `dv.plotting`, `dv.times`, `dv.variables`,
+  `dv.corrections`, `dv.qaqc`, `dv.events`.
+- **Raw high-frequency tooling moved to [dyco](https://github.com/holukas/dyco)**:
+    - `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `FluxDetectionLimit` and the
+      PWB time-lag classes are no longer part of `dv.flux`.
+    - The four `diive-tlag-*` commands are now `dyco-*`, leaving `diive-gui` as the only command
+      diive installs.
+    - `TimeLagAnalysis` remains in diive, because it reads EddyPro's `*_TLAG_ACTUAL` columns rather
+      than raw data.
+- **Plot styling**: the individual chrome keywords (`title`, `xlabel`, `ylabel`, `series_units`,
+  `legend_loc`, `show_grid` and others) were removed from `plot()`. Pass
+  `format_style=dv.plotting.FormatStyle(...)` instead, and use `.merged(**overrides)` to vary a
+  single field. Colours, colormaps and colorbar arguments are unchanged.
+- **Day/nighttime settings in outlier detection** are now the same across all methods:
+    - The switch is `separate_day_night` everywhere.
+    - One global value covers both periods, with optional `*_daytime` and `*_nighttime` overrides.
+    - Removed: the `[day, night]` lists in `LocalSD` and `AbsoluteLimits`, the duplicate `n_sigma_dt`
+      and `n_sigma_nt` in `Hampel`, and `zScoreDaytimeNighttime`, now
+      `zScore(separate_day_night=True)`.
+    - Defaults are unchanged, results do not move, and every removed name raises an error naming its
+      replacement.
+- **`AbsoluteLimitsDaytimeNighttime` and `LocalOutlierFactorDaytimeNighttime`** now separate daytime
+  from nighttime data. Both were aliases for their base class and inherited a switch that defaults
+  to off, so they ran on the whole series despite their name.
+- **`combine_variables`** always works on the overlap of both variables, `keep_overlap_only` was
+  removed. The old option substituted the operation's identity for a missing operand, so
+  `NEE - RECO` returned `-RECO` wherever NEE was missing. Use `method='fillgaps'` to fill a gap on
+  purpose.
+- **Feature settings** moved out of the gap-filling classes into `FeatureEngineer`, which is built
+  first and then passed to `RandomForestTS` or `XGBoostTS`.
+- **MDS gap-filling flag** is now `method * 1000 + time_window`, with 0 for measured values,
+  replacing the old levels 1 to 60. The ONEFlux quality codes 1, 2 and 3 are available in
+  `.PREDICTIONS_QUALITY`, and `avg_min_n_vals` defaults to 2 instead of 5.
+- **Self-heating correction (SCOP)** is no longer offered for latent heat. `flux_type` was removed
+  from `ScopPhysics`, `ScopOptimizer` and `ScopApplicator`. Whether a open-path self-heating correction applies
+  to LE is still unresolved in eddy covariance, and the removed code path was broken.
+- Smaller ones: `DailyCorrelation` is a class instead of a function, `HeatmapXYZ` requires
+  pre-aggregated input, plotting aliases use the `plot_` prefix, `make_level32_detector` returns
+  `(data, sod)`, and `gapfill_storage_term` defaults to *True*. `FluxProcessingChain` still works
+  but is superseded by `run_chain`; its `finalize_level*()` methods do nothing and warn.
 
-#### Results that change, with nothing to warn about it
+#### Silent result changes
 
-These change numbers that were already produced, so results calculated with an earlier version are
-worth recalculating.
+The following change numbers that were calculated with earlier versions.
 
-- **`potrad` calculates potential radiation differently.** It now matches the ONEFlux routine that
-  produces FLUXNET's `SW_IN_POT`. Old calls still run and return different numbers: 20 W/m2 RMSE
+- **`potrad`** now implements a faithful port of the ONEFlux routine behind FLUXNET's `SW_IN_POT`.
+  The signature is unchanged, so existing calls run and return different values: 20 W m-2 RMSE
   against the previous version, annual sums 1.1% higher, and 2.3% of half-hours classified
-  differently as day or night. Every part of diive that uses potential radiation returns different
-  numbers as a result: the flux chain, u\* detection, gap-filling, partitioning, meteo screening,
-  and every outlier method that separates day from night.
-- **A record with no u\* value is now rejected**, as ONEFlux does it. Those records used to slip
-  through as accepted, with turbulence unknown. The cost depends on how gappy the site's u\* record
-  is.
-- **Outlier flags are NaN for records that hold no data**, where they used to be 0. A flag says what
-  a test found, and no test can run on a value that is not there. Anything counting `(flag == 0)`
-  reads differently. `FlagQCF` output is unchanged, so the flux chain is too.
-- **Gap-filling with MDS is more accurate near the start and end of a record.** When its search
-  window ran past the edge, every position outside got folded back onto the first or last record, so
-  one value could enter an average hundreds of times. Duplicates carry no spread, so the reported
-  uncertainty near both ends was too small by almost half. The window now stops at the edge. Fills
-  in the middle are unchanged.
-- **Amplitudes from `harmonic_analysis` were roughly half their real size.** Windowing a signal
-  shrinks it, and that shrinkage was never taken back out. The function also looked up the wrong
-  frequency, so a tone sitting exactly on one came back as zero. A test signal with amplitude 3.0
-  now comes back as 3.0 under every window.
-- **A series with gaps can be decomposed again.** Seasonal-trend decomposition used to return
-  nothing but NaN if a single value was missing, which is most real flux data. Anything built on
-  `features_stl` shifts as a result.
-- **`Hampel` no longer throws away flat stretches.** Where more than half the values in a window are
-  identical there is no spread to measure, and the detector was calling everything else an outlier:
-  one soil moisture record lost 19.4% of an era, 97 085 values, no matter how high the threshold
-  went. It also stopped comparing values across a gap, which had made the records on either side of
-  one look like spikes.
-- **`ManualRemoval` removes the whole day** for a date given without a time, instead of the midnight
-  record alone.
-- **`HexbinPlot` no longer paints empty cells.** `mincnt` defaults to 1 and refuses 0, which used to
-  let cells holding no data through and draw them as a measured zero.
-- Smaller shifts: `harmonic_decompose` picks real peaks in the spectrum rather than the loudest
-  individual frequencies, `StratifiedAnalysis` keeps rows and bins it used to drop, and every number
-  `DriverAnalysis` reports has moved.
+  differently as daytime or nighttime. Everything that uses potential radiation moves with it: the
+  flux processing chain, u\* detection, gap-filling, partitioning, meteoscreening and all
+  day/nighttime outlier methods.
+- **u\* filtering** rejects records with a missing u\* value, as ONEFlux does. These records were
+  previously accepted, with turbulence unknown. How much data this removes depends on the gaps in
+  the u\* record.
+- **Outlier flags** are `NaN` for records without data, previously `0`. A flag reports a test
+  result, and no test can run where there is no value. Code counting `(flag == 0)` will see
+  different numbers. `FlagQCF` output is unchanged, so the flux processing chain is unaffected.
+- **MDS gap-filling** is more accurate near the start and end of a record. Positions outside the
+  search window were folded back onto the first or last record, so one value could enter an average
+  hundreds of times. Repeated values carry no spread, so the reported uncertainty at both ends was
+  too small by almost half. The window now stops at the edge; fills in the middle are unchanged.
+- **`harmonic_analysis`** returned amplitudes about half their real size, because the window applied
+  to the signal was never divided back out, and it also read the wrong frequency, so a tone sitting
+  exactly on one returned zero. A test signal with amplitude 3.0 now returns 3.0 for all windows.
+- **Seasonal-trend decomposition** works on gappy series. It previously returned all-`NaN`
+  components if a single value was missing, which applies to most flux data. Anything built on
+  `features_stl` changes as a result.
+- **`Hampel`** no longer rejects flat stretches. Where more than half the values in a window are
+  identical there is no spread to measure, and the filter flagged everything else as an outlier: one
+  soil moisture record lost 19.4% of an era, 97'085 values, at any `n_sigma`. It also no longer
+  compares values across a gap, which made the records flanking a gap look like spikes.
+- **`ManualRemoval`** removes the full day for a date given without a time, previously only the
+  midnight record.
+- **`HexbinPlot`**: `mincnt` defaults to 1 and rejects 0, which previously passed empty cells to the
+  reducer and drew them as measured zeros.
+- Smaller ones: `harmonic_decompose` selects spectral peaks instead of the strongest bins,
+  `StratifiedAnalysis` keeps records and z bins it previously dropped, and all numbers reported by
+  `DriverAnalysis` change.
 
 ### New features
 
-- **A desktop app.** `pip install 'diive[gui]'`, then `diive-gui`. 67 tabs covering plotting,
-  outlier detection, corrections, gap-filling, a guided flux chain, NEE partitioning, uncertainty,
-  analysis, an InfluxDB browser, per-variable metadata, event markers, and project folders that move
-  between machines. It calls the library rather than reimplementing any of it.
-- **Copy Python.** Every GUI tab writes out a runnable script for what was just done, so work
-  started by clicking does not have to stay there. Built on `*_to_code` functions that are part of
-  the library and usable directly.
-- **NEE partitioning**, four methods copied from the tools that define them and checked against
-  those originals: nighttime ONEFlux (`*_NT_OF`), nighttime REddyProc (`*_NT_RP`), daytime REddyProc
-  (`*_DT_RP`), daytime ONEFlux (`*_DT_OF`). Correlations with the originals run between 0.999 and
-  0.9999 for both respiration and uptake. Output columns are tagged so all four can sit in one
-  dataframe and be compared. Bootstrap uncertainty is not reported yet.
-- **The flux chain comes apart into levels.** `run_chain(data, FluxConfig)` runs the standard
-  pipeline, or one function per level gives control over every detector and flag. Re-running a level
-  clears the levels after it, so a chain cannot end up half stale. u\* detection can run inside the
-  chain, and `add_driver` puts a variable where the gap-fillers look for it.
-- **u\* threshold detection**: the moving-point method (Papale 2006), a quantile-based method, and
-  per-year bootstrap thresholds.
-- **`SWINGapFillerXGBoost`** fills incoming shortwave radiation with the physics built in. Nighttime
-  gaps go to zero, daytime gaps are modelled from potential radiation and the timestamp, and all it
-  needs is the series and the site coordinates. Without a second radiation measurement it can only
-  give the typical value for that time of day and year, because every input is something the
-  calendar already determines. Feeding it a nearby sensor through `context_df` fixes that: on the
-  bundled example record it cut the error on gaps from 138 to 26 W/m2.
-- **Joint uncertainty** (`JointUncertaintyPAS20`) combines the random uncertainty of each record with
-  the spread across u\* scenarios, the way the ONEFlux routine does.
-- **Five new plot types**: wind rose, waterfall, tree ring, shifted distribution and compound
-  extremes, plus a date and time 3-D surface and an interactive range tool on `TimeSeries`.
-- **Events** (`dv.events`) turn dated notes, such as a sensor swap or a management operation, into
-  0/1 columns and plot overlays.
-- **Per-variable metadata**: tags, a description, and a record of what each variable was made from.
-  The `.diive` project format saves and reloads an entire working state.
-- **An InfluxDB engine** (`pip install 'diive[db]'`) does download, upload, delete and schema
-  browsing in-house, replacing an external package.
+- **Desktop application** (`pip install 'diive[gui]'`, then `diive-gui`):
+    - 67 tabs for plotting, outlier detection, corrections, gap-filling, a guided flux processing
+      chain, NEE partitioning, uncertainty, analyses, an InfluxDB browser, per-variable metadata,
+      event markers and portable `.diive` project folders.
+    - The app calls the library, it does not reimplement it.
+    - Every tab has a **Copy Python** button that writes out the Python code for the settings
+      currently on screen, so an analysis set up by clicking can be continued as a script. The
+      `*_to_code` functions behind it are part of the library and can be called directly.
+    - The optional `gui3d` extra adds two 3D surface tabs.
+    - Manual: `diive/gui/MANUAL.md`. A standalone Windows application can be built from
+      `packaging/`.
+- **NEE partitioning into GPP and RECO**, four faithful ports, each validated against its reference
+  implementation:
+    - `NighttimePartitioningOneFlux` (`*_NT_OF`), `NighttimePartitioningReddyProc` (`*_NT_RP`),
+      `DaytimePartitioningReddyProc` (`*_DT_RP`), `DaytimePartitioningOneFlux` (`*_DT_OF`).
+    - Correlations against the original implementations are 0.999 to 0.9999 for RECO and GPP.
+    - Output columns are tagged, so all four can be kept in one dataframe and compared.
+    - Also available as `partition_nee_*` functions and as Level-4.2 of the flux processing chain.
+    - Bootstrap uncertainty is not yet emitted.
+- **Composable flux processing chain**:
+    - `run_chain(data, FluxConfig)` runs the standard pipeline, or one function per level
+      (`run_level2`, `run_level31`, `run_level32`, `run_level33_*`, `run_level41_*`, `run_level42_*`)
+      gives full control over each detector and flag.
+    - Re-running a level resets the levels after it, so a chain cannot end up half stale.
+    - u\* detection can now run inside the chain, and `add_driver` puts a variable where the
+      gap-filling methods look for it.
+- **u\* threshold detection**: `UstarMovingPointDetection` (moving-point method, Papale 2006),
+  `UstarVekuriThresholdDetection` (quantile-based) and `UstarBootstrapThresholds` (per-year
+  p16/p50/p84).
+- **`SWINGapFillerXGBoost`** fills gaps in incoming shortwave radiation:
+    - Nighttime gaps are set to zero, daytime gaps are modelled from potential radiation and
+      timestamp features. Only the series and site coordinates are required.
+    - Without a second radiation measurement every feature is a function of the timestamp, so the
+      model reproduces a climatology and cannot know whether a gap was cloudy or clear. Passing a
+      second sensor (pyranometer or PPFD) through `context_df` removes that limit: on the bundled
+      example data it reduced the error on gaps from 138 to 26 W m-2.
+- **`JointUncertaintyPAS20`** combines random uncertainty per record with the spread across u\*
+  scenarios, a port of the ONEFlux routine.
+- **New plots**: `WindRosePlot`, `WaterfallPlot`, `TreeRingPlot`, `ShiftedDistributionPlot`,
+  `CompoundExtremesPlot`, `DateTimeSurface` (3D), and `TimeSeries.plot_rangetool()` for an
+  interactive Bokeh plot.
+- **New analyses**: `CompoundExtremes`, `GapStats`, `GrangerCausality`, `SeasonalTrendDecomposition`,
+  `StratifiedAnalysis`, `DetectTimestampShifts`, `spectrogram`, `harmonic_analysis`, `rank_drivers`,
+  `profile_dataframe`, `keep_records_where`. `DriverAnalysis` is included provisionally in
+  `dv.analysis.experimental` and emits an `ExperimentalWarning`.
+- **Events** (`dv.events`): `Event`, `event_to_flag` and `overlay_events` turn dated notes, such as a
+  sensor change or a management operation, into 0/1 columns and plot overlays.
+- **Per-variable metadata and projects**: tags, description and provenance for each variable
+  (`diive.core.metadata`), and the `.diive` project format (`diive.core.io.project`) to save and
+  reload a full working state.
+- **InfluxDB engine `InfluxIO`** (`pip install 'diive[db]'` or `uv sync --group db`) for download,
+  upload, delete and schema browsing, replacing the external `dbc-influxdb` dependency.
+  `influxdb-client` is imported lazily.
+- **`resample_series_to_freq`** generalizes `resample_series_to_30MIN` to any time resolution.
 
-#### Everything new, by namespace
+### Changes
 
-The 87 names the ten namespaces export today that v0.90.0 did not have. Internal helpers, about 160
-of them, are not listed.
+- **MDS gap-filling is now a faithful ONEFlux port**: the 6-stage expanding-window cascade, the
+  `>=2` sample acceptance, N-1 standard deviation and the ONEFlux SWIN tolerance. Filled values
+  agree with native ONEFlux to r ~ 0.9997. The similarity search is shared with random uncertainty
+  through `diive.gapfilling.similarity`, so there is one implementation instead of two. It also runs
+  4x faster, bit-identical to before.
+- **`RandomUncertaintyPAS20`** was aligned to the ONEFlux C reference (methods 1 and 2), runs ~35x
+  faster with bit-identical output, and takes `vpd_in_kpa=True`.
+- **`UstarMovingPointDetection`** was rewritten for ONEFlux parity (calendar-quarter seasons,
+  tie-aware class boundaries, the one-big-season fallback) and runs ~8x faster.
+- **`import diive` is faster**, 2.35 s to 0.96 s. The ten namespaces load on first attribute access,
+  so a script that only reads a parquet file no longer imports scikit-learn, XGBoost, SHAP and
+  statsmodels. All documented import paths behave as before.
+- **Feature importances** are calculated from a capped subsample (`shap_max_rows`, 10'000 rows for
+  `SWINGapFillerXGBoost`, all rows elsewhere). Mean importance converges long before the full
+  record: on 10 years of half-hourly data the subsample reproduced the ranking exactly, with values
+  within 2%. Predictions and scores use the full record.
+- **`FeatureEngineer`** can be used on its own as an 8-stage pipeline. All gap-filling classes expose
+  `.results`, the machine learning classes have `plot_feature_importances()`, and `verbose>=2` prints
+  a full report during the run.
+- `OptimizeParamsRFTS` was generalized to `OptimizeParamsTS` for any scikit-learn compatible
+  regressor.
+- Heatmaps and `HexbinPlot` follow the two-phase pattern (data in `__init__`, styling in `plot()`),
+  and `.run()` / `.result` behave the same across the outlier, gap-filling and analysis classes.
+- Console output was migrated to Rich and now renders correctly in Jupyter.
+- The nighttime threshold was standardized to 20 W m-2 (was 50).
+- `shap` was raised to `>=0.50.0` and the XGBoost `base_score` monkey-patch removed.
 
-- **`dv.flux`** (20): `NighttimePartitioningOneFlux`, `NighttimePartitioningReddyProc`,
-  `DaytimePartitioningReddyProc`, `DaytimePartitioningOneFlux` and the same four as `partition_nee_*`
-  functions; `run_chain`, `FluxConfig`, `FluxLevelData`, `init_flux_data`, `add_driver`;
-  `UstarMovingPointDetection`, `UstarVekuriThresholdDetection`, `UstarBootstrapThresholds`,
-  `FlagMultipleVariableUstarThresholds`; `JointUncertaintyPAS20`, `joint_uncertainty_pas20`,
-  `TimeLagAnalysis`.
-- **`dv.analysis`** (12): `CompoundExtremes`, `GapStats`, `GrangerCausality`,
-  `SeasonalTrendDecomposition`, `StratifiedAnalysis`, `DailyCorrelation`, `harmonic_analysis`,
-  `spectrogram`, `rank_drivers`, `count_gaps`, `profile_dataframe`, `dataframe_overview`.
-- **`dv.variables`** (12): `combine_variables`, `classify_variable`, `VariableClass`,
-  `auto_pick_column`, `generate_noisy_timeseries`, the four `CATEGORY_*` constants, and
-  `combine_variables_to_code`, `calc_vpd_from_ta_rh_to_code`, `potrad_to_code`.
-- **`dv.plotting`** (9): `WindRosePlot`, `WaterfallPlot`, `TreeRingPlot`, `ShiftedDistributionPlot`,
-  `CompoundExtremesPlot`, `DateTimeSurface`, `datetime_surface_grid`, `HexbinPlot`, `FormatStyle`.
-- **`dv.qaqc`** (8): `MEASUREMENTS`, `Measurement`, `CORRECTIONS`, `CorrectionSpec`,
-  `correction_spec`, `corrections_for_measurement`, `detect_measurement`, `measurement_label`.
-- **`dv.events`** (5), the whole namespace: `Event`, `event_to_flag`, `overlay_events`,
-  `make_event_flag_name`, `CATEGORY_COLORS`.
-- **`dv.gapfilling`** (4): `SWINGapFillerXGBoost`, `FeatureEngineer`, `GapFillingResult`,
-  `OptimizeParamsTS`.
-- **`dv.corrections`** (4): `remove_nighttime_zero_offset`, `nighttime_zero_offset_diagnostics`,
-  `NighttimeZeroOffsetResult`, `apply_corrections`.
-- **`dv.times`** (4): `keep_daterange`, `resample_to_daily_agg`, `format_timestamp`,
-  `validate_timestamp_column_name`.
-- **`dv.outliers`** (2): `Hampel` and `LocalOutlierFactor`, which replace the separate day/night
-  classes.
-- **Top level** (7): `keep_vars`, `keep_records_where`, `load_parquet_many`, `to_diive_format`,
-  `load_exampledata_parquet_lae`, `set_verbosity`, `get_verbosity`.
+### Removed and renamed
 
-### Changed
+- Removed:
+    - `UstarDetectionMPT`, which never stored the threshold it found. `UstarMovingPointDetection`
+      implements the same algorithm.
+    - `quality_weighted_decompose` and the STL weighting arguments, which never weighted anything.
+    - `reconstruct_harmonics`, `periodogram`, `fft_decompose` and `multi_scale_harmonics`, which had
+      no callers.
+    - `potrad_eot`, with no replacement.
+    - The `'iterations'` key from the `stl_decompose` result, which reported a shape, not a count.
+- Renamed:
+    - `remove_radiation_zero_offset` to `remove_nighttime_zero_offset`, since it suits any variable
+      that reads zero at night. New optional parameter `clamp_negatives=True`.
+    - `FCT_UNSC_gfRF` to `FCT_UNSC_gfXG` in the `ScopPhysics` results, since the gap-filling is done
+      with XGBoost. `ScopApplicator` now exposes its input as `FCT_UNSC`, because it gap-fills
+      nothing.
+    - `histogram_startbin` / `histogram_endbin` to `histogram_start_seconds` /
+      `histogram_end_seconds` in `TimeLagAnalysis`, since the values are seconds, never bin indices.
+    - `nighttimetime_accept_qcf_below` to `nighttime_accept_qcf_below`.
+    - The `level41_methods()` keys to `'rf'` and `'xgb'`.
+- A `.diive` project file saved with an earlier version still loads, the renames are handled when the
+  project is read.
 
-- **MDS gap-filling matches ONEFlux**, and shares its search for similar conditions with the random
-  uncertainty code, so there is one implementation of that instead of two. Filled values agree with
-  ONEFlux to about r = 0.9997.
-- **`FeatureEngineer` works on its own** as an eight-stage pipeline, every gap-filler exposes
-  `.results`, the machine-learning classes gained `plot_feature_importances()`, and `verbose>=2`
-  prints a full report while they run.
-- **Feature importances come from a sample of the data** rather than every row (`shap_max_rows`,
-  capped at 10 000 rows for the radiation filler, uncapped elsewhere). The ranking settles long
-  before the rows run out: on ten years of half-hourly data the sample gave the same order and
-  values within 2%. Predictions and scores still use the full record.
-- `OptimizeParamsRFTS` became `OptimizeParamsTS` and accepts any scikit-learn compatible model.
-- Heatmaps and `HexbinPlot` take their data at creation and their styling at plot time, matching the
-  rest of the plots, and `.run()` and `.result` work the same way across the outlier, gap-filling
-  and analysis classes.
-- Console output moved to Rich and now renders properly in Jupyter.
+### Bugfixes
 
-### Removed
-
-| Removed | Reason |
-|---|---|
-| `UstarDetectionMPT` | never stored the threshold it found; `UstarMovingPointDetection` replaces it |
-| `quality_weighted_decompose`, STL weighting arguments | never weighted anything |
-| `reconstruct_harmonics`, `periodogram`, `fft_decompose`, `multi_scale_harmonics` | nothing called them |
-| `potrad_eot` | no replacement |
-| `'iterations'` key from `stl_decompose` | reported a shape, not a count |
-
-Renamed:
-
-| Old | New | Why |
-|---|---|---|
-| `remove_radiation_zero_offset` | `remove_nighttime_zero_offset` | suits any variable that reads zero at night; gained `clamp_negatives=True` |
-| `FCT_UNSC_gfRF` | `FCT_UNSC_gfXG` | the fill has been XGBoost for a while |
-| `histogram_startbin` / `histogram_endbin` | `histogram_start_seconds` / `histogram_end_seconds` | they always held seconds, never bin numbers |
-| `nighttimetime_accept_qcf_below` | `nighttime_accept_qcf_below` | typo |
-| `level41_methods()` keys | `'rf'` and `'xgb'` | |
-| `ScopApplicator`'s input column | `FCT_UNSC` | it gap-fills nothing, so `_gfXG` claimed a fill that may not have happened |
-
-A `.diive` project file saved by an earlier version still loads. The renames above are handled when
-the project is read.
-
-### Fixed
-
-- **`Hampel` ignored `n_sigma` when splitting day from night**, because the per-period defaults were
-  real numbers instead of `None`, so the fallback never ran.
-- **Every ridgeline plot failed** when its colours came from a colormap.
-- **Meteo screening failed on any variable whose logger changed sampling rate partway through**, on
-  an invalid frequency string built out of float seconds.
-- **Five outlier detectors printed no statistics at `verbose=True`.** The count went through a
-  helper that only prints in debug mode, so the one number requested was the one number withheld.
-- **Console reports crashed when piped to a file on Windows.** Box-drawing characters do not survive
-  the encoding Python falls back to there. A test now checks every string the library prints.
-- **Leaving `idstr` unset put the word "None" into column names**, producing names like
+- **`Hampel`** ignored `n_sigma` in daytime/nighttime mode: the per-period parameters defaulted to
+  the literal `5.5` instead of `None`, so the fallback to the global value never ran.
+- **Ridgeline plots** failed with `unhashable type: 'numpy.ndarray'` whenever their colours came from
+  a colormap.
+- **`StepwiseMeteoScreeningDb`** failed on any variable whose logger changed sampling rate partway
+  through the record, on an invalid pandas frequency string built from float seconds.
+- **`verbose=True` printed no statistics** in `Hampel`, `zScore`, `LocalSD`, `LocalOutlierFactor` and
+  `AbsoluteLimits`. The "Total found outliers" lines went through `detail()`, which only prints at
+  `VERBOSE_DEBUG`, so the one number requested was never shown.
+- **Console reports crashed on a redirected Windows stdout**, because `FlagQCF.report_qcf_flags()`
+  printed box-drawing characters that cp1252 cannot encode.
+- **A falsy `idstr` leaked the text "None" into column names**, producing names such as
   `FLAGNone_FC_QCF`.
-- **Three corrections renamed the Series passed to them**, so the caller's own variable came back
-  called "input_data".
-- Also: `import diive` no longer forces matplotlib's `Agg` backend and disables interactive windows,
-  `sstats` copes with an empty or all-NaN series, `lagged_variants` no longer does nothing when
-  handed a single column, `default_format` stopped writing the word "False" into axis labels,
-  cumulative random uncertainty survives a NaN instead of turning every later value into one, and
-  `TrimLow` no longer demands coordinates it has no use for.
+- **Three corrections renamed the caller's Series**: `setto_threshold`,
+  `set_exact_values_to_missing` and `remove_relativehumidity_offset` set `series.name` on the
+  parameter itself, so the caller's own object came back named `"input_data"`.
+- Further fixes: `import diive` no longer forces the matplotlib `Agg` backend, `sstats` handles empty
+  and all-`NaN` series, `lagged_variants` no longer silently produces no lags for a single-column
+  dataframe, `default_format` no longer writes the string "False" into axis labels, cumulative random
+  uncertainty is no longer poisoned by a single `NaN`, and `TrimLow` no longer requires coordinates
+  when no day/night split is used.
 
-### Documentation
+### Notebooks
 
-- **113 examples** across ten folders, with new ones for the flux chain, all four partitioning
-  methods, u\* detection, radiation gap-filling, compound extremes, gap statistics, events and file
-  I/O. `examples/CATALOG.md` lists them all.
-- **New InfluxDB notebooks** for downloading, screening and deleting. 21 older notebooks were
-  archived and their content moved into examples.
-- **A manual for the desktop app**, `diive/gui/MANUAL.md`, also shipped as HTML with the standalone
-  Windows build.
+- Added `DatabaseInfluxDownloadSpecificVars`, `DatabaseInfluxDownloadAllVarsOfMeasurements`,
+  `DatabaseInfluxStepwiseMeteoScreening` and `DatabaseInfluxDeleteData` for working with the InfluxDB
+  database.
+- 21 older notebooks were archived, their content was migrated to `examples/`.
+
+### Examples
+
+- 113 examples in 10 folders, in Sphinx Gallery format, with new examples for the flux processing
+  chain, all four partitioning methods, u\* detection, SW_IN gap-filling, compound extremes, gap
+  statistics, events and file I/O.
+- `examples/CATALOG.md` lists all of them.
+
+### Environment
+
+- Switched from poetry to `uv` for dependency management.
+- Python 3.12 and 3.13 are supported.
+
+### Unittests
+
+- 1057/1057 unittests ran successfully.
 
 ## v0.90.0 | 13 Jan 2026
 
@@ -274,7 +306,8 @@ the project is read.
       daytime/nighttime mode. They now default to `None` and fall back to `n_sigma`, matching the `Hampel` class.
     * Added the missing `flag_missingvals_test()` method (it was documented in the class but not implemented).
     * Added the `output_middle_timestamp` parameter (default `True`, unchanged behaviour). Set it to `False` to keep the
-      input timestamp convention (e.g. `TIMESTAMP_END`) instead of shifting to the middle of the averaging period, so the
+      input timestamp convention (e.g. `TIMESTAMP_END`) instead of shifting to the middle of the averaging period, so
+      the
       resulting flags align to an existing dataframe on merge.
     * Fixed the `last_flag` property guard, which never raised when no test had been run yet.
     * Extended the example to show how to calculate the overall quality flag (`QCF`) from the accumulated test flags.
