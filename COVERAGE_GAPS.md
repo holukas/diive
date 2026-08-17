@@ -1,10 +1,16 @@
 # Example & Test Coverage Gaps
 
-Survey date: 2026-07-26 · diive v0.91.0 · branch `indev`
+Survey date: 2026-07-26 · **headline re-measured 2026-08-17** · diive v0.91.0 · branch `indev`
 
 > **Since this survey:** `flux/hires` moved to [dyco](https://github.com/holukas/dyco), taking
 > ~10 000 LOC and `tests/test_echires.py`'s 74 tests with it. Its entries are removed below; the
-> measured percentages and the 460-test run still include it and were not recomputed.
+> 460- and 665-test runs still include it.
+>
+> **The headline numbers were re-measured on 2026-08-17** after the code-review campaign (see
+> `CODE_REVIEW_FINDINGS.md`) added ~390 tests. That run excludes `flux/hires`, so its denominator
+> is 4 134 statements smaller. Everything below *Headline numbers* — the tier sections, the
+> per-file before/after tables, the runtime investigation — is the 2026-07-26 record and was **not**
+> re-measured; read those percentages as dated.
 
 Working document. Goal state: every important public function has at least one example and one test.
 
@@ -33,44 +39,56 @@ What coverage settles, and what it does not:
 
 ## Headline numbers
 
-Re-measured 2026-07-26 after this session's test work (**665 tests**, up from 460; 29 min).
+Re-measured **2026-08-17** (**1 057 tests**, up from 665; 858 subtests; 23 min 10 s). Everything
+below this heading is current as of that run; the per-tier sections further down are left as the
+dated record of the 2026-07-26 session and were not re-measured.
 
-| Scope | Baseline | Now |
-|---|---|---|
-| Library (`diive/`, excluding `diive/gui/`) | 57 % | **61 %** (14 789 / 24 414) |
-| GUI (`diive/gui/`) | 68 % | 67 % |
-| Combined | 62 % | **64 %** |
-| Library files at 0 % | 13 | **12** |
+| Scope | Baseline | 2026-07-26 | 2026-08-17 |
+|---|---|---|---|
+| Library (`diive/`, excluding `diive/gui/`) | 57 % | 61 % (14 789 / 24 414) | **72 %** (14 588 / 20 280) |
+| GUI (`diive/gui/`) | 68 % | 67 % | **73 %** (14 194 / 19 502) |
+| Combined | 62 % | 64 % | **72 %** (28 782 / 39 782) |
+| Library files at 0 % | 13 | 12 | **9** |
 
-### The structural finding: the GUI test suite is carrying the library
+**Two things moved the library number, and only one of them is test work.** The code-review
+campaign (2026-08-06 to 2026-08-17) added ~390 tests. But the denominator also shrank by 4 134
+statements when `flux/hires` moved to dyco — the 24 414 figure still counted it, as the note at the
+top of this file says. Do not read 61 % → 72 % as eleven points of new testing; part of it is
+poorly-covered code leaving the repository.
+
+**The run was not clean:** 5 tests failed (4 in `tests/test_shifted_distribution.py`, 1 in
+`tests/test_windrose.py`). All five pass in isolation and pass alongside the other plotting files,
+so they are cross-file state leakage rather than broken library code — the same family as L100.
+Failed tests still contribute the lines they executed before failing, so treat these percentages as
+carrying a few lines of slop.
+
+### The structural finding: the GUI test suite was carrying the library — it no longer is
 
 Baseline: **5 114 of the library's covered lines — 37 % — were reachable only through
-`tests/test_gui.py`.** Now **3 995 (27 %)**.
+`tests/test_gui.py`.** 2026-07-26: 3 995 (27 %). Now: **471 (3 %)**.
 
-> Delete `tests/test_gui.py` and library coverage falls from 61 % to **44 %** — it was 36 %.
+> Delete `tests/test_gui.py` and library coverage falls from 72 % to **70 %**. It was 36 % at
+> baseline and 44 % in July.
 
-That 36 % → 44 % figure is the honest measure of this session's work: the headline library number
-moved 4 points, but coverage that does not depend on a GUI smoke path moved **8**. Roughly 1 100
-lines were converted from incidentally-executed to actually-asserted.
+A 2-point drop instead of a 25-point one. The library's coverage now stands on its own tests, which
+was the point of this document. The same caveat as above applies: some of the gap closed because
+`flux/hires` — heavily GUI-reachable, thinly tested — left the repository, not only because tests
+were added.
 
-Still fully GUI-dependent (≥25 statements, every covered line from `test_gui.py`):
+Fully GUI-dependent modules (≥25 covered statements, every one of them from `test_gui.py`):
+**none.** The July list of ten is empty. `flux/lowres/selfheating.py`, which headed it at 69 of 667
+covered, now reads 64 % from real tests — the six findings this file recorded there (L36–L41, L45)
+were fixed with tests attached.
 
-| Covered / total | Module |
-|---|---|
-| 69 / 667 | `flux/lowres/selfheating.py` |
-| 36 / 36 | `flux/__init__.py` |
-| 33 / 37 | `preprocessing/outlier_detection/manualremoval.py` |
-| 27 / 222 | `analysis/optimumrange.py` |
-| 25 / 302 | `core/ml/optimization.py` |
-| 25 / 79 | `core/io/db/influxdb.py` |
-| 23 / 211 | `flux/lowres/timelag_analysis.py` |
-| 19 / 193 | `flux/lowres/ustar_vekuri_detection.py` |
-| 10 / 171 | `flux/lowres/hqflux.py` |
-| 10 / 53 | `analysis/granger.py` |
+Largest remaining GUI-only line counts, none of them a whole module:
 
-The whole plotting cluster is gone from that list. Largest remaining GUI-only line counts:
-`flux/fluxprocessingchain/container.py` (235 of 269 covered lines), `analysis/gapfinder.py` (124),
-`flux/lowres/ustarthreshold.py` (92).
+| GUI-only lines | Module | Module coverage |
+|---|---|---|
+| 88 | `flux/fluxprocessingchain/container.py` | 66 % |
+| 76 | `analysis/gapfinder.py` | 43 % |
+| 64 | `flux/fluxprocessingchain/levels/level33.py` | — |
+| 44 | `gapfilling/mds.py` | — |
+| 39 | `preprocessing/outlier_detection/stepwiseoutlierdetection.py` | — |
 
 ### Runtime — investigated, no regression
 
@@ -167,6 +185,12 @@ Baseline list below; **`diive/corrections/__init__.py` is now covered**, leaving
 statements never executed by any test. `core/plotting/seasonaltrend.py` (149) is the one this
 session touched adjacent work on without closing — its four functions take prepared inputs
 (a decomposition object, a harmonics list, frequency/power arrays) rather than a series.
+
+> **2026-08-17:** the count is now **9**, and they are exactly the nine unstruck rows in the table
+> below — every file listed here that was at 0 % in July still is. The drop from 12 is files that
+> left with `flux/hires`, not files that gained tests. Two of the nine, `io/formats/fluxnet.py` and
+> `io/formats/meteo.py` (372 statements between them), are the modules the stale notebooks in
+> `notebooks/` still import under their removed `diive.pkgs.io.formats.*` paths.
 
 | Stmts | File | Example? |
 |---|---|---|
