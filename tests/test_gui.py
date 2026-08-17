@@ -4386,6 +4386,55 @@ def test_combine_variables_tab_reports_records_lost_to_one_sided_gaps(app):
     assert "keep_overlap_only" not in (tab._python_code() or "")
 
 
+def test_combine_variables_tab_marks_exact_zeros(app):
+    # "Mark zeros" is offered only for the difference (where zero means the two
+    # variables agree) and overlays a second mesh painting those cells. The
+    # comparison is exact float equality, so the count is always stated — a
+    # highlight that paints nothing must not read as "no cells matched".
+    import numpy as np
+    import pandas as pd
+    from diive.gui.tabs.combine_variables import CombineVariablesTab
+
+    ix = pd.date_range("2023-01-01", periods=480, freq="30min",
+                       name="TIMESTAMP_MIDDLE")
+    a = pd.Series(np.arange(480, dtype=float), index=ix, name="A")
+    same = a.copy()          # A - SAME is exactly zero everywhere
+    same.iloc[100:] += 0.5   # ... except for the first 100 records
+    df = pd.DataFrame({"A": a, "SAME": same, "OFF": a + 0.5})
+
+    tab = CombineVariablesTab()
+    root = tab.widget()
+    root.show()  # isVisible() is False for every widget of an unshown window
+    tab.on_data_loaded(df)
+    tab._assign(1, "A")
+    tab._assign(2, "SAME")
+
+    tab.method.setCurrentIndex(tab.method.findData("multiply"))
+    QApplication.processEvents()
+    assert not tab.zero_check.isVisible()
+    tab.method.setCurrentIndex(tab.method.findData("subtract"))
+    QApplication.processEvents()
+    assert tab.zero_check.isVisible() and tab.zero_color_btn.isVisible()
+
+    n_meshes = len(tab.slot3.canvas.fig.axes[0].collections)
+    tab.zero_check.setChecked(True)
+    QApplication.processEvents()
+    # The overlay is a second mesh in the picked colour, on top of the heatmap.
+    assert len(tab.slot3.canvas.fig.axes[0].collections) == n_meshes + 1
+    assert tab.slot3.canvas.fig.axes[0].collections[-1].cmap(0.0)[:3] == (0.0, 0.0, 0.0)
+    assert "100 record(s) exactly zero" in tab.status.text()
+
+    # No exact zeros: no overlay, and the status says so rather than staying mute.
+    tab._assign(2, "OFF")
+    QApplication.processEvents()
+    assert len(tab.slot3.canvas.fig.axes[0].collections) == n_meshes
+    assert "No record is exactly zero" in tab.status.text()
+
+    tab.zero_check.setChecked(False)
+    QApplication.processEvents()
+    assert "exactly zero" not in tab.status.text()
+
+
 def test_preview_heatmaps_follow_the_app_wide_colormap(app):
     # Every heatmap the tabs render as a preview honours theme.manager.heatmap_cmap
     # (edited in Appearance), instead of each tab hardcoding the library default.
