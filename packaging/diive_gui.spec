@@ -79,8 +79,6 @@ _collect = [
     "llvmlite",
     "sklearn",
     "statsmodels",
-    "category_encoders",
-    "skopt",
     "pyarrow",
     "matplotlib",
 ]

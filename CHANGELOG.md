@@ -255,6 +255,11 @@ oversight.
   their content moved into examples.
 - Dependency management moved from poetry to `uv`, ruff is configured and enforced, and line endings
   are pinned in `.gitattributes`.
+- **A default install is about 54 MB smaller.** Seven runtime dependencies were declared but never
+  imported anywhere: `prophet` (with its Stan toolchain, almost all of the 54 MB), `eli5`,
+  `dtreeviz`, `pymannkendall`, `category-encoders`, `scikit-optimize` and `jupyter-bokeh`. Nothing
+  in diive used them, so nothing changes except install size and time. `bokeh` itself stays, and so
+  does `seaborn`, `yellowbrick` and `pyarrow`.
 
 ## v0.90.0 | 13 Jan 2026
 
