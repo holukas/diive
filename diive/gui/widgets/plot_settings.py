@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from diive.gui.widgets.colormaps import COLORMAPS as _COLORMAPS
 from diive.gui.widgets.drop_combo import DropComboBox as _DropComboBox
 
 #: Sentinel entry meaning "no colour-by variable" in the colour-by dropdown.
@@ -124,15 +125,6 @@ _YEARMONTH_AGGS = ["mean", "median", "sum", "min", "max", "std"]
 #: explicit edges, so it is omitted here) and aggregation functions.
 _XYZ_BINNING_TYPES = ["quantiles", "equal_width"]
 _XYZ_AGGFUNCS = ["mean", "median", "min", "max", "sum", "count"]
-
-#: Curated colormaps offered in the heatmap dropdown (it stays editable, so any
-#: valid matplotlib name can also be typed). Diverging first (the diive
-#: default), then perceptually-uniform sequential, then a few classics.
-_COLORMAPS = [
-    "RdYlBu_r", "RdYlBu", "RdBu_r", "coolwarm", "Spectral", "Spectral_r",
-    "viridis", "plasma", "inferno", "magma", "cividis", "turbo",
-    "YlOrRd", "YlGnBu", "Greys", "jet",
-]
 
 #: NaN-cell colour choices (also editable so any colour name/hex can be typed).
 _BAD_COLORS = ["grey", "white", "black", "lightgrey", "#FAFAFA", "none"]

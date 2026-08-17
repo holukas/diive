@@ -1632,7 +1632,7 @@ class FluxChainTab(DiiveTab):
         ax = self.canvas.new_axes(1)[0]
         try:
             dv.plotting.HeatmapDateTime(series).plot(
-                ax=ax, fig=self.canvas.fig,
+                ax=ax, fig=self.canvas.fig, cmap=theme.manager.heatmap_cmap,
                 format_style=dv.plotting.FormatStyle(title=f"{label}: {name}"),
                 cb_digits_after_comma="auto")
         except Exception as err:

@@ -702,7 +702,8 @@ class MdsGapFillingTab(DiiveTab):
             both = pd.concat([observed.dropna(), gapfilled.dropna()])
             vmin = float(np.nanpercentile(both, 1)) if len(both) else None
             vmax = float(np.nanpercentile(both, 99)) if len(both) else None
-            opts = {"vmin": vmin, "vmax": vmax, "cb_labelsize": _HM_FONT}
+            opts = {"vmin": vmin, "vmax": vmax, "cb_labelsize": _HM_FONT,
+                    "cmap": theme.manager.heatmap_cmap}
             hm_style = dv.plotting.FormatStyle(ticks_fontsize=_HM_FONT, axlabel_fontsize=_HM_FONT)
             dv.plotting.HeatmapDateTime(series=observed).plot(
                 ax=ax_obs, format_style=hm_style, show_colormap=False, **opts)

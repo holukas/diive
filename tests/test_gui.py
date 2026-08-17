@@ -4386,6 +4386,42 @@ def test_combine_variables_tab_reports_records_lost_to_one_sided_gaps(app):
     assert "keep_overlap_only" not in (tab._python_code() or "")
 
 
+def test_preview_heatmaps_follow_the_app_wide_colormap(app):
+    # Every heatmap the tabs render as a preview honours theme.manager.heatmap_cmap
+    # (edited in Appearance), instead of each tab hardcoding the library default.
+    import numpy as np
+    import pandas as pd
+    from diive.gui import theme
+    from diive.gui.tabs.combine_variables import CombineVariablesTab
+    from diive.gui.tabs.settings import SettingsTab
+
+    saved = theme.manager.heatmap_cmap
+    try:
+        settings = SettingsTab()
+        settings.widget()
+        settings.cmap_combo.setCurrentText("cividis")
+        assert theme.manager.heatmap_cmap == "cividis"
+        assert theme.manager.as_dict()["heatmap_cmap"] == "cividis"
+
+        ix = pd.date_range("2023-01-01", periods=480, freq="30min",
+                           name="TIMESTAMP_MIDDLE")
+        df = pd.DataFrame({"A": pd.Series(np.arange(480, dtype=float), index=ix)})
+        tab = CombineVariablesTab()
+        tab.widget()
+        tab.on_data_loaded(df)
+        tab._assign(1, "A")
+        QApplication.processEvents()
+        assert tab.slot1.canvas.fig.axes[0].collections[0].cmap.name == "cividis"
+
+        # The per-tab dropdown overrides it for that tab only.
+        tab.cmap_combo.setCurrentText("magma")
+        QApplication.processEvents()
+        assert tab.slot1.canvas.fig.axes[0].collections[0].cmap.name == "magma"
+        assert theme.manager.heatmap_cmap == "cividis"
+    finally:
+        theme.manager.heatmap_cmap = saved
+
+
 def _stub_pyvista_canvas(monkeypatch):
     """Replace the 3-D tabs' GL canvas with a recording stub.
 

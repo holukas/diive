@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.colormaps import colormap_combo
 from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.variable_delegate import (
     CREATED_ROLE,
@@ -98,6 +99,7 @@ class SettingsTab(DiiveTab):
         col.addWidget(self._pill_group())
         col.addWidget(self._ui_group())
         col.addWidget(self._timeseries_group())
+        col.addWidget(self._heatmap_group())
         col.addWidget(self._layout_group())
 
         reset = QPushButton("Reset to defaults")
@@ -170,6 +172,27 @@ class SettingsTab(DiiveTab):
         row.addStretch(1)
         return box
 
+    def _heatmap_group(self) -> QGroupBox:
+        box = QGroupBox("Heatmap colours")
+        form = QFormLayout(box)
+        self.cmap_combo = colormap_combo(theme.manager.heatmap_cmap)
+        self.cmap_combo.setToolTip(
+            "Colormap for the date/time heatmaps the tabs render as previews "
+            "(combine variables, derived variables, flux chain, gap-filling, "
+            "screening).\nThe Plot-menu heatmap tabs keep their own per-plot "
+            "colormap setting. Already-drawn heatmaps keep their colours until "
+            "they are redrawn.")
+        self.cmap_combo.currentTextChanged.connect(self._set_heatmap_cmap)
+        form.addRow("Preview heatmaps", self.cmap_combo)
+        return box
+
+    @staticmethod
+    def _set_heatmap_cmap(name: str) -> None:
+        name = name.strip()
+        if name:
+            theme.manager.heatmap_cmap = name
+            theme.manager.apply()
+
     def _layout_group(self) -> QGroupBox:
         box = QGroupBox("Layout")
         form = QFormLayout(box)
@@ -219,4 +242,10 @@ class SettingsTab(DiiveTab):
         self.width_spin.blockSignals(True)
         self.width_spin.setValue(theme.manager.list_width)
         self.width_spin.blockSignals(False)
+        # Only write back when it actually differs — the combo is editable, and
+        # setCurrentText while the user types would move their cursor.
+        if self.cmap_combo.currentText().strip() != theme.manager.heatmap_cmap:
+            self.cmap_combo.blockSignals(True)
+            self.cmap_combo.setCurrentText(theme.manager.heatmap_cmap)
+            self.cmap_combo.blockSignals(False)
         self.preview.viewport().update()

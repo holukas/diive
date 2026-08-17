@@ -109,7 +109,7 @@ class _HeatmapPanel(QFrame):
         ax = self.canvas.new_axes(1)[0]
         try:
             dv.plotting.HeatmapDateTime(series).plot(
-                ax=ax, fig=self.canvas.fig,
+                ax=ax, fig=self.canvas.fig, cmap=theme.manager.heatmap_cmap,
                 format_style=dv.plotting.FormatStyle(
                     title_fontsize=TITLE_FONTSIZE, axlabel_fontsize=FONT_SIZE,
                     ticks_fontsize=FONT_SIZE),

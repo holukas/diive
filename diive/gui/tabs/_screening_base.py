@@ -1044,7 +1044,7 @@ class ScreeningTabBase(DiiveTab):
         ax = canvas.new_axes(1)[0]
         try:
             dv.plotting.HeatmapDateTime(cleaned).plot(
-                ax=ax, fig=canvas.fig,
+                ax=ax, fig=canvas.fig, cmap=theme.manager.heatmap_cmap,
                 format_style=dv.plotting.FormatStyle(
                     title="cleaned", axlabel_fontsize=8, ticks_fontsize=7),
                 cb_digits_after_comma="auto", cb_labelsize=7)
