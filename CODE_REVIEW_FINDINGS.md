@@ -560,8 +560,14 @@ are weighted ~300× in the fill.
 - If ONEFlux filters out-of-range indices instead → fills in the first/last half-window are biased,
   and the largest cascade windows (up to 427 days, loop 6) push that band deep into the record.
 
-Affects `FluxMDS`, `RandomUncertaintyPAS20` (shared kernel) and the daytime-partitioning NEE
-uncertainty.
+Affects `FluxMDS` and the daytime-partitioning NEE uncertainty
+(`daytime_oneflux._uncert_via_gapfill`), the only two callers of the cascade.
+
+> **Correction, 2026-08-17.** This line originally also named `RandomUncertaintyPAS20` as affected,
+> "(shared kernel)". It is not. PAS20 imports only the similarity *tolerances* (`TA_TOLERANCE`,
+> `VPD_TOLERANCE`, `swin_tolerance`) and runs its own window loop, which bounds itself with
+> `np.searchsorted` and therefore already truncates at the record edges rather than folding onto
+> record 0 or n-1. Checked in both windowed methods (`_method1`, `_method2`).
 
 ---
 
