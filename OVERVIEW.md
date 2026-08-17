@@ -91,6 +91,16 @@ Source in `docs/` (`conf.py`, `getting_started.rst`, `installation.rst`,
 long-term home for reference docs; the per-surface READMEs above are the working notes
 that feed it.
 
+**The tree is stale — don't trust it yet.** Its code examples are written against the
+flat pre-namespace API (`dv.Hampel`, `dv.RandomForestTS`), most of the symbols it names
+no longer exist, `api_reference.rst` lists modules that were removed, the checked-in
+generated trees predate the current `examples/`, `installation.rst` is wrong about the
+Python version and the extras, and nothing in `docs/` mentions the desktop GUI. Reworking
+it is deferred as its own separate project (recorded in `CODE_REVIEW_FINDINGS.md`) and is
+not part of the code-review campaign. Note that a build executes every example:
+`conf.py` runs sphinx-gallery with `plot_gallery: True` over all 113 scripts. Until the
+rework, the READMEs and [`CLAUDE.md`](CLAUDE.md) are the accurate references.
+
 ## Repository layout (top level)
 
 ```
@@ -99,7 +109,7 @@ packaging/    PyInstaller build for the Windows exe
 examples/     113 runnable API examples
 notebooks/    exploratory Jupyter notebooks
 tests/        unit + integration tests
-docs/         Sphinx documentation source
+docs/         Sphinx documentation source (stale, rework deferred)
 README.md     front door (install, quick start, features)
 CLAUDE.md     internal architecture + dev guide
 CONTRIBUTING.md  how to contribute

@@ -356,21 +356,31 @@ if __name__ == '__main__':
 
 ### Building Docs Locally
 
-With uv:
+**A full build runs every example.** `docs/conf.py` configures sphinx-gallery with
+`plot_gallery: True` over all 113 scripts in `examples/`, several of which take minutes.
+Pass `-D plot_gallery=0` to build the pages without executing anything:
 
 ```bash
 cd docs
-uv run sphinx-build -b html . _build/html
+uv run sphinx-build -D plot_gallery=0 -b html . _build/html
 ```
 
-Or if environment is activated:
+Or if the environment is activated:
 
 ```bash
 cd docs
-sphinx-build -b html . _build/html
+sphinx-build -D plot_gallery=0 -b html . _build/html
 ```
+
+Drop the flag only when you actually need the gallery output regenerated.
 
 Open `docs/_build/html/index.html` in a browser to preview.
+
+**The `docs/` tree is stale.** It is written against the flat pre-namespace API, and most
+of the symbols it documents no longer exist. Reworking it is deferred as its own separate
+project, so don't treat a broken page there as a bug to fix in passing. See
+[`OVERVIEW.md`](OVERVIEW.md) for what is wrong with it and which references are accurate
+in the meantime.
 
 ### Docstring Style
 
