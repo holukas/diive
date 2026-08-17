@@ -4,1081 +4,257 @@
 
 ## v0.91.0 | XX May 2026
 
-**Major release: desktop GUI, composable flux chain, 10 domain namespaces, four NEE partitioning ports.**
-652 commits since v0.90.0. Method detail and validation live in the docstrings and `examples/`; this is what changed.
+652 commits since v0.90.0, and the biggest release so far. diive now ships a desktop app, the flux
+processing chain can be run one level at a time, the public API is grouped into ten namespaces, and
+NEE partitioning arrives with four ports of the standard reference routines. diive also starts at
+averaged data now: the raw high-frequency tooling moved to a project of its own.
 
-### Breaking Changes
+This entry is a summary. Method detail and validation numbers are in the docstrings and in
+`examples/`; the code review that closed out the release is written up in `CODE_REVIEW_FINDINGS.md`.
 
-Two of these change results silently, with no error and no warning:
+### Before you upgrade
 
-- **`dv.plotting.HexbinPlot`'s `mincnt` now defaults to `1` (was `0`) and rejects values below `1`.** matplotlib's
-  cutoff is `len(values) >= mincnt`, so `0` handed *empty* cells to `reduce_C_function`: with `np.sum` an empty cell
-  came back as `0.0` and was painted as a measured zero — on a two-cloud test record, 105 of 116 drawn hexagons, 91% of
-  the plot, covered cells holding no data. With `np.max`/`np.min` the call raised `ValueError`; with
-  `np.mean`/`np.median` it produced one `RuntimeWarning` per empty cell (210 in the same test) for a cell matplotlib
-  discarded anyway. No reducer made `0` correct, so it is closed off with an error naming `mincnt=1`. Plots using the
-  default `np.median` reducer are unchanged apart from the lost warnings; a plot that relied on the old default with a
-  summing reducer loses its fabricated cells. The GUI's hexbin "Min count" spinbox now starts and floors at 1.
+**Imports change.** Ten namespaces replace the flat one: `dv.outliers`, `dv.gapfilling`, `dv.flux`,
+`dv.analysis`, `dv.plotting`, `dv.times`, `dv.variables`, `dv.corrections`, `dv.qaqc`, `dv.events`.
 
-- **`ScopApplicator` now exposes its input correction term as `FCT_UNSC`, not `FCT_UNSC_gfXG`.** The class
-  accepts either the gap-filled or the ungapfilled term from `ScopPhysics` and gap-fills neither, so the
-  `_gfXG` label claimed a fill that may never have happened. Code reading
-  `ScopApplicator.get_results()["FCT_UNSC_gfXG"]` must read `["FCT_UNSC"]`; `ScopPhysics`'s own
-  `FCT_UNSC_gfXG` column is unchanged.
+**Raw high-frequency tooling moved to [dyco](https://github.com/holukas/dyco).** Wind rotation,
+Reynolds decomposition, the flux detection limit and the time-lag detection classes are gone from
+`dv.flux`, and the four `diive-tlag-*` scripts are now `dyco-*`. `TimeLagAnalysis` stays, since it
+reads EddyPro output rather than raw data. `diive-gui` is the only script diive installs.
 
-- **`ScopPhysics`'s gap-filled results column is renamed `FCT_UNSC_gfRF` -> `FCT_UNSC_gfXG`.** The suffix named Random
-  Forest while the fill has been XGBoost, and it disagreed with the `.fct_unsc_gf` attribute holding the very same
-  series, which was already named `FCT_UNSC_gfXG`. Code doing `physics.get_results()["FCT_UNSC_gfRF"]` now raises
-  `KeyError`; there is no alias, since a duplicated column in a results frame invites publishing numbers from the one
-  that names the wrong method. `ScopApplicator` accepts either name (it normalises its input), so only direct indexing
-  of the physics results frame is affected. The name now lives in one place and doubles as the lookup key into the
-  gap-filler's output, so a future regressor change fails loudly instead of mislabelling.
+#### Results that change with no error and no warning
 
-- **`potrad` now runs a different algorithm**, a faithful port of ONEFlux's `get_rpot` (the routine behind FLUXNET's
-  `SW_IN_POT`). The signature is unchanged, so existing calls keep running and return different numbers: RMSE 20.0 W/m2
-  against the old version, annual sum +1.1%, day/night classification changed on 2.27% of half-hours. Re-check any
-  stored `SW_IN_POT`, day/night flag, or downstream result. `potrad_eot` is removed with no replacement.
-- **`SW_IN_POT` and day/night classification shift everywhere as a result**: the flux chain, USTAR detection,
-  gap-filling, NEE partitioning, meteo screening, `SWINGapFillerXGBoost`, `DetectTimestampShifts`, and every
-  day/night-capable outlier method (`LocalSD`, `Hampel`, `AbsoluteLimits`, `LocalOutlierFactor`, the zScore variants,
-  `TrimLow`).
+Worth re-checking stored output against:
 
-The rest raise or fail at import:
+- **`potrad` runs a different algorithm**, a faithful port of the ONEFlux routine behind FLUXNET's
+  `SW_IN_POT`. The signature is the same, so old calls keep working and return different numbers:
+  RMSE 20 W/m2 against the old version, annual sum up 1.1%, day/night classification changed on 2.3%
+  of half-hours. Everything downstream moves with it, including the flux chain, USTAR detection,
+  gap-filling, partitioning, meteo screening and every day/night outlier method.
+- **u\* filtering now rejects records whose u\* is missing**, as ONEFlux does. Those records used to
+  pass as "turbulence unknown, accepted". How much data this costs depends on how gappy the site's
+  u\* record is.
+- **Outlier flags are NaN where the record is missing**, not 0. A flag records a test result, and no
+  test can run where there is no value. Anything counting `(flag == 0)` changes. `FlagQCF` output is
+  bit-identical, so the flux chain is unaffected.
+- **The MDS similarity window is trimmed at the ends of a record** instead of folded back onto the
+  first and last record, which had been counting one edge value hundreds of times. Uncertainty near
+  both ends was understated by nearly half. Interior fills are unchanged.
+- **Windowed FFT amplitudes were about 54% of the truth**, because the window's coherent gain was
+  never divided out, and `harmonic_analysis` read the wrong bin on top of that. A 3.0 cosine now
+  returns 3.0 under every window.
+- **STL returns components for a gappy series** instead of all-NaN, so anything built on
+  `features_stl` shifts.
+- **`Hampel` stopped rejecting flat stretches wholesale.** A window where more than half the values
+  are identical has no scale to judge by; one such record lost 19.4% of an era, 97 085 values, at any
+  threshold. It also no longer differences across gaps.
+- **`ManualRemoval` treats a date-only entry as the whole day**, not just the midnight record.
+- **`HexbinPlot`'s `mincnt` defaults to 1** and refuses 0, which used to hand empty cells to the
+  reducer and paint them as measured zeros.
+- Smaller shifts: `harmonic_decompose` selects spectral peaks rather than the strongest bins,
+  `StratifiedAnalysis` keeps rows and z bins it used to drop, and every number `DriverAnalysis`
+  reports moves.
 
-- **Raw high-frequency tooling moved to [dyco](https://github.com/holukas/dyco).** `WindDoubleRotation`,
-  `reynolds_decomposition`, `MaxCovariance`, `FluxDetectionLimit` and the PWB time-lag classes
-  (`PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `DetectRemoveTUI`) are gone from
-  `dv.flux`. The four `diive-tlag-*` console scripts are now `dyco-pwb-batch`, `dyco-apply-batch`,
-  `dyco-detect-remove` and `dyco-detect-remove-tui`, leaving `diive-gui` as the only script diive installs. diive
-  starts at averaged (e.g. 30-minute) data now. `TimeLagAnalysis` stays: it reads EddyPro's `*_TLAG_ACTUAL` columns,
-  not raw data. `textual` and `polars` went with the move.
-- **10 domain namespaces** replace the flat namespace: `dv.outliers`, `dv.gapfilling`, `dv.flux`, `dv.analysis`,
-  `dv.plotting`, `dv.times`, `dv.variables`, `dv.corrections`, `dv.qaqc`, `dv.events`. Update all imports.
-- **Plot chrome is `FormatStyle`-only.** Every flat chrome keyword (`title`, `xlabel`, `ylabel`, `series_units`,
-  `axlabels_fontsize`, `legend_loc`, `show_grid`, ...) is removed from `plot()`. Pass
-  `format_style=dv.plotting.FormatStyle(...)`, and `.merged(**overrides)` to vary one field. Data and colorbar args
-  (`color`, `cmap`, `vmin`/`vmax`, `cb_*`) are unchanged.
-- **Gap-filling `features_*` parameters moved to `FeatureEngineer`.** Pass a pre-built instance to `RandomForestTS` /
-  `XGBoostTS`.
-- **MDS gap-fill flag is now `method * 1000 + time_window`** (0 = measured), replacing the old 1-60 levels. The faithful
-  ONEFlux 1/2/3 quality moved to `.PREDICTIONS_QUALITY`. `avg_min_n_vals` default 5 -> 2.
-- **`remove_radiation_zero_offset` renamed to `remove_nighttime_zero_offset`** (and the matching
-  `StepwiseMeteoScreeningDb` method), since it suits any variable that reads zero at night. New optional
-  `clamp_negatives=True`. Saved projects still load.
-- **`zScore` unified**: use `zScore(separate_day_night=True)`. `zScoreDaytimeNighttime` removed.
-- **One way to set day/night thresholds across every outlier detector.** The switch is `separate_day_night`
-  everywhere (`separate_daytime_nighttime` is gone), and per-period values are always a global value plus optional
-  `*_daytime` / `*_nighttime` overrides that fall back to it:
-    - `LocalSD`: `n_sd` and `winsize` no longer accept a `[day, night]` list. Use `n_sd_daytime`, `n_sd_nighttime`,
-      `winsize_daytime`, `winsize_nighttime`.
-    - `AbsoluteLimits`: `daytime_minmax` / `nighttime_minmax` are replaced by `minval_daytime`, `maxval_daytime`,
-      `minval_nighttime`, `maxval_nighttime`. `minval` / `maxval` alone now cover both periods instead of raising.
-    - `Hampel`: the duplicate `n_sigma_dt` / `n_sigma_nt` pair is removed; use `n_sigma_daytime` /
-      `n_sigma_nighttime`.
-  Defaults are unchanged, so results do not move. Every removed name raises a message naming its replacement, so a
-  stale call fails immediately rather than running with a silently ignored argument.
-- **`AbsoluteLimitsDaytimeNighttime` and `LocalOutlierFactorDaytimeNighttime` now separate day from night.** Both were
-  aliases for their base class and inherited its off-by-default switch, so they ran whole-series detection under a name
-  promising otherwise; `LocalOutlierFactorDaytimeNighttime` was the same object as `LocalOutlierFactorAllData`. Code
-  that relied on the old behaviour will see different flags. `LocalOutlierFactorAllData` and `HampelDaytimeNighttime`
-  are unaffected: both names already matched what their base class did.
-- **`DailyCorrelation` is now a class**; the function API is removed.
-- **`HeatmapXYZ` requires pre-aggregated input.**
-- **Plotting aliases use the `plot_` prefix**; old unprefixed names removed.
-- **`make_level32_detector` returns `(data, sod)`.**
-- **Flux chain renames**: `level41_methods()` keys are now `'rf'` / `'xgb'`; `nighttimetime_accept_qcf_below` is
-  `nighttime_accept_qcf_below`; `gapfill_storage_term` defaults to True; the energy-flux set adds `G`, `SH`, `SLE`,
-  `FH2O`.
-- **`FluxProcessingChain` is superseded** by `run_chain` plus the composable per-level callables. It still works, but
-  `finalize_level2/31/33()` no-op with a `DeprecationWarning`.
-- **The code-review round removes more public API** (`flux_type`, `keep_overlap_only`, the STL quality-weighting
-  surface, four dead harmonic functions, `UstarDetectionMPT`) **and makes outlier flags NaN at missing records.** It
-  also changes results in more than twenty other places with no error and no warning. All of it is under *Fixed (code
-  review)* below.
+#### Removed or renamed
 
-### Added
+- **Plot styling is `FormatStyle` only.** Every flat chrome keyword (`title`, `xlabel`, `ylabel`,
+  `series_units`, `legend_loc`, `show_grid` and the rest) is gone from `plot()`. Pass
+  `format_style=dv.plotting.FormatStyle(...)`, and `.merged(**overrides)` to vary one field. Colour,
+  colormap and colorbar arguments are untouched.
+- **Day and night thresholds work the same way everywhere.** The switch is `separate_day_night` on
+  every detector, and per-period values are a global value plus optional `*_daytime` /
+  `*_nighttime` overrides. Lists and packed pairs are gone from `LocalSD` and `AbsoluteLimits`,
+  `Hampel` loses its duplicate `n_sigma_dt` / `n_sigma_nt`, and `zScoreDaytimeNighttime` is replaced
+  by `zScore(separate_day_night=True)`. Defaults are unchanged, so results do not move. Every
+  removed name raises a message naming its replacement.
+- **`AbsoluteLimitsDaytimeNighttime` and `LocalOutlierFactorDaytimeNighttime` actually separate day
+  from night now.** Both were aliases that inherited an off-by-default switch, so they ran
+  whole-series detection under a name promising otherwise.
+- **The self-heating correction is no longer offered for LE.** Whether a Burba-type correction
+  applies to latent heat is unresolved in eddy covariance, so diive should not offer one, and the
+  removed branch was broken anyway. `flux_type` is gone from `ScopPhysics`, `ScopOptimizer` and
+  `ScopApplicator`.
+- **`keep_overlap_only` is gone from `combine_variables`.** Arithmetic is always overlap-only now.
+  The option substituted the operation's identity for a missing operand, so `NEE - RECO` quietly
+  returned `-RECO` wherever NEE was missing. Use `method='fillgaps'` when a gap should be filled.
+- **Gap-filling `features_*` parameters moved to `FeatureEngineer`.** Build one and pass it to
+  `RandomForestTS` or `XGBoostTS`.
+- **The MDS gap-fill flag is now `method * 1000 + time_window`** (0 means measured), replacing the
+  old 1 to 60 levels. The ONEFlux 1/2/3 quality moved to `.PREDICTIONS_QUALITY`, and
+  `avg_min_n_vals` defaults to 2 instead of 5.
+- **`remove_radiation_zero_offset` is now `remove_nighttime_zero_offset`**, since it suits any
+  variable that reads zero at night. New optional `clamp_negatives=True`. Saved projects still load.
+- **`UstarDetectionMPT` is removed.** `UstarMovingPointDetection` is the faithful port of the same
+  algorithm. The old class never stored its own results.
+- **Also gone**: `quality_weighted_decompose` and the STL weighting surface (none of it ever
+  weighted anything), four unused harmonic functions, `potrad_eot`, and the `'iterations'` key from
+  `stl_decompose`'s result.
+- **Also renamed**: `ScopPhysics`'s results column `FCT_UNSC_gfRF` to `FCT_UNSC_gfXG` (the fill has
+  been XGBoost for a while), `ScopApplicator`'s input column to `FCT_UNSC`, `TimeLagAnalysis`'s
+  `histogram_startbin` / `histogram_endbin` to `histogram_start_seconds` / `histogram_end_seconds`
+  (they were always seconds, never bin indices), `nighttimetime_accept_qcf_below` to
+  `nighttime_accept_qcf_below`, and `level41_methods()` keys to `'rf'` / `'xgb'`.
+- **Smaller API changes**: `DailyCorrelation` is a class, `HeatmapXYZ` wants pre-aggregated input,
+  plotting aliases carry the `plot_` prefix, `make_level32_detector` returns `(data, sod)`, and
+  `gapfill_storage_term` defaults to True. `FluxProcessingChain` still works but is superseded by
+  `run_chain`; its `finalize_level*()` calls are no-ops with a warning.
 
-- **Desktop GUI** (`pip install 'diive[gui]'`, then `diive-gui`): 67 tabs driving the library, each with a **Copy
-  Python** button that emits a runnable script. Covers plotting (17 types), outlier detection (9 methods), corrections
-  (5), gap-filling (XGBoost / Random Forest / MDS, with a long-term per-year mode), a guided flux processing chain,
-  NEE partitioning, uncertainty, analysis tabs, InfluxDB browsing, per-variable metadata with provenance, events, and
-  portable `.diive` project folders. Optional `gui3d` extra adds two GPU 3-D surface tabs. Manual:
-  `diive/gui/MANUAL.md`. Standalone Windows build: `packaging/`.
-- **NEE partitioning**: four faithful ports, each validated against its reference implementation and tagged so all four
-  coexist in one dataframe. `NighttimePartitioningOneFlux` (`*_NT_OF`), `NighttimePartitioningReddyProc` (`*_NT_RP`),
-  `DaytimePartitioningReddyProc` (`*_DT_RP`, RECO r = 0.9992 / GPP r = 0.9999 vs a fresh REddyProc run),
-  `DaytimePartitioningOneFlux` (`*_DT_OF`, RECO r = 0.999 / GPP r = 0.9999 vs native ONEFlux). Also available as
-  `partition_nee_*` functions and as chain Level 4.2 (`run_level42_*`). Bootstrap uncertainty is not yet emitted.
-- **Composable flux chain**: `run_chain(data, FluxConfig)` for the standard L2 to L4.2 pipeline, or one pure callable
-  per level (`run_level2`, `run_level31`, `make_level32_detector` + `run_level32`, `run_level33_constant_ustar` /
-  `_variable_ustar` / `_ustar_detection`, `run_level41_mds` / `_rf` / `_xgb`, `run_level42_*`) for full control, over
-  typed containers (`FluxLevelData`, `FluxMeta`, `LevelResults`). Adds in-chain USTAR detection (CUT or VUT), Level 4.2
-  partitioning, a proper L3.1 QCF, cascading re-runs, and `add_driver`.
-- **InfluxDB engine `InfluxIO`** (`diive.core.io.db`, `pip install 'diive[db]'` or `uv sync --group db`): in-house
-  download / upload / delete / schema browsing, replacing the external `dbc-influxdb` dependency. `influxdb-client` is
-  imported lazily.
-- **USTAR detection**: `UstarMovingPointDetection` (ONEFlux moving-point, Papale 2006),
-  `UstarVekuriThresholdDetection` (quantile-based), `UstarBootstrapThresholds` (per-year p16/p50/p84).
-- **Uncertainty**: `JointUncertaintyPAS20` / `joint_uncertainty_pas20`, the ONEFlux `compute_join` port combining random
-  uncertainty with scenario spread in quadrature.
-- **Gap-filling**: `SWINGapFillerXGBoost`, physics-aware for shortwave radiation (nighttime gaps set to zero, daytime
-  gaps modelled by XGBoost on SW_IN_POT + timestamp features; needs only lat/lon/UTC offset). With no context drivers
-  every feature is a deterministic function of the timestamp, so the model reproduces a climatology and cannot recover
-  a gap's sky state; passing a second radiation measurement (a pyranometer or PPFD sensor) through `context_df` is what
-  breaks that ceiling. **The class is designed to need nothing but `series` + `lat`/`lon`/`utc_offset`**, so the
-  remaining settings adapt themselves. `interpolate_short_gaps` defaults to `'auto'`: clearness-index interpolation is
-  enabled at a 2-record limit when there is no `context_df` and disabled when there is, which is the better branch in
-  each direction (CH-DAV, 1 year, 15% scattered gaps: no-context 100.6 -> 75.2 W m-2 with it on, but PPFD-context
-  12.6 -> 66.0 if forced on). Defaults tuned late in the dev
-  cycle, which shift results for anyone tracking `indev`: **nighttime offset correction is on by default**
-  (`correct_nighttime_offset=True`), near a no-op on a quality-controlled series but removing the thermal-offset bias
-  on a raw pyranometer record; **lag features are off by default** (`features_lag=[]`) because a lag of a gappy
-  context driver is NaN whenever a neighbour is missing, which demotes otherwise-fillable records to the timestamp-only
-  fallback; and **SW_IN_POT is excluded from the rolling and EMA stages**, since rolling/EMA variants of a
-  deterministic timestamp curve measure identically to leaving them out. A continuous record number is added by
-  default (`add_continuous_record_number=True`) as cheap insurance against sensor drift on long raw records (neutral
-  on clean data). Feature-engineering settings are configured the same way as the XGBoost ones: a **`feature_kwargs`
-  dict** overriding the SW_IN defaults in `_FE_DEFAULTS`, replacing the individual `features_lag` /
-  `features_rolling` / `features_rolling_stats` / `features_ema` / `add_record_number` parameters. This reaches
-  *every* `FeatureEngineer` argument, including the diff, polynomial and STL stages that the old signature could not
-  express. Passing a `FeatureEngineer` argument as a top-level keyword now raises `TypeError` pointing at
-  `feature_kwargs` — previously it would have been swallowed into `**kwargs` and silently ignored by XGBRegressor.
-  XGBoost defaults are now set for SW_IN rather than inherited from XGBoost: **`n_estimators=3000`, `max_depth=6`,
-  `early_stopping_rounds=20`**, all overridable through `**kwargs`. The large tree budget with early stopping cuts
-  daytime-gap RMSE by 17% with no context driver (CH-DAV, 10 years, 20% gaps: 132 -> 109 W m-2) and 5% with a PPFD
-  context sensor (23.2 -> 21.9), stopping at ~600-1200 trees. Early stopping is not optional at this budget: building
-  all 3000 trees barely improves RMSE but makes the SHAP pass several times slower, since TreeSHAP cost is linear in
-  tree count. To keep that affordable, SHAP importances are now computed on a capped 10k-row subsample
-  (new `shap_max_rows` on `MlRegressorGapFillingBase` / `XGBoostTS`, `None` = every row and the default everywhere
-  else). Mean |SHAP| converges well before the full record — on a 10-year half-hourly record the subsample reproduced
-  the feature ranking exactly (Kendall tau 1.000) with importances within 2%. Predictions and scores are unaffected;
-  only the reported importances (and, if enabled, `reduce_features` selection) read the subsample. Also
-  `FeatureEngineer` as a standalone 8-stage pipeline, a new
-  `GapFillingResult.feature_importances_reduction` carrying the SHAP table as it stood *before* feature reduction
-  dropped anything — the only view that includes the `.RANDOM` benchmark column the keep threshold is derived from —
-  `GapFillingResult` +
-  a `.results` property on every gap-filler, `plot_feature_importances()` on the ML base class, and a Rich console
-  report at `verbose>=2`. **Fixed:** `quickplot` keyed a list of series by name, so same-named series silently
-  collapsed to one panel and the survivor was labelled with a dropped series' name — visible in
-  `remove_nighttime_zero_offset(showplot=True)`, which passes the raw and the corrected series (both carrying the
-  variable's name) and therefore lost the measured panel while labelling the corrected one as the measurement.
-  Duplicates are now suffixed, and that caller names each stage explicitly.
-  `SWINGapFillerXGBoost` also exposes the model that did the filling as **`daytime_model_`**
-  (`None` when there were no daytime gaps): its `traintest_details_` carries the held-out test set, so the fill can be
-  validated against data the model never saw — which the results object alone does not allow, since `gapfilled` equals
-  the measurement wherever the flag is 0.
-- **Analysis**: `CompoundExtremes` (+ `CompoundExtremesPlot`), `GapStats`, `GrangerCausality`,
-  `SeasonalTrendDecomposition`, `DetectTimestampShifts`, `spectrogram`, `harmonic_analysis`, `rank_drivers`,
-  `profile_dataframe`, `keep_records_where`, `keep_vars`. `DriverAnalysis` ships **provisionally** in
-  `dv.analysis.experimental` and emits an `ExperimentalWarning`.
-- **Plots**: `WindRosePlot`, `WaterfallPlot`, `TreeRingPlot`, `ShiftedDistributionPlot`, `DateTimeSurface`,
-  `TimeSeries.plot_rangetool()` (interactive Bokeh).
-- **Events** (`dv.events`): `Event`, `event_to_flag`, `overlay_events` for time-stamped markers as 0/1 columns and plot
-  overlays.
-- **Per-variable metadata** (`diive.core.metadata`) and the `.diive` **project format** (`diive.core.io.project`):
-  headless tag + provenance model, and save/load of a full working state.
-- **Codegen**: `*_to_code` renderers across plotting, gap-filling, outliers, corrections, partitioning, uncertainty and
-  the flux chain, so any call can be emitted as a runnable script. This is what the GUI's Copy Python uses.
-- **`resample_series_to_freq`**, which generalises `resample_series_to_30MIN` to any resolution.
+### Desktop GUI
 
-### Improved
+`pip install 'diive[gui]'`, then `diive-gui`. It drives the library rather than reimplementing it,
+across 67 tabs: plotting, outlier detection, corrections, gap-filling (XGBoost, Random Forest and
+MDS, with a long-term per-year mode), a guided flux processing chain, NEE partitioning, uncertainty,
+analysis, InfluxDB browsing, per-variable metadata with provenance, events, and portable `.diive`
+project folders. Every tab has a **Copy Python** button that emits a runnable script, so anything
+done by clicking can be moved into code.
 
-- **`import diive` dropped from 2.35 s to 0.96 s.** The ten domain namespaces and `diive.io`'s submodules now load on
-  first attribute access (PEP 562), so a script that only reads a parquet file no longer pays for sklearn, xgboost,
-  shap and statsmodels. `dv.gapfilling`, `from diive import flux` and every documented import path behave as before;
-  IDEs and type checkers still see the real modules. Most of the saving came from `diive.io`: `formats.fluxnet`
-  imports `ManualRemoval`, which pulled in the whole preprocessing tree down to bokeh.
-- **`core.ml` no longer depends on the `gapfilling` package.** `prediction_scores` moved to `diive.core.ml.scores`;
-  `diive.gapfilling.scores` re-exports it, and `dv.gapfilling.prediction_scores` is unchanged. Importing
-  `diive.core.ml.common` on its own previously raised `ImportError` from a circular import that only stayed hidden
-  because `diive/__init__` happened to import `gapfilling` first.
-- **Ruff is configured and enforced**, replacing a config that set only a cache path. `line-length` is now explicit
-  (the 88 default would have had `ruff format` rewrite 290 of 303 files), bugbear rules are on, and `gui/`'s
-  one-line-per-widget Qt style is exempted rather than fought. Findings went 411 -> 93, and every remaining one is
-  style or judgment: deliberate lazy imports, leftover locals, and the Qt setup lines.
-- **Every `zip()` states its length handling.** Most are `strict=False`, which is accurate: in the plotting loops the
-  artist collection is built from the sequence being zipped, so a mismatch cannot occur. Seven are `strict=True` where
-  both sides are provably equal and a future edit should fail loudly. Three stay `strict=False` because truncation is
-  intended (seeding X/Y/Z from fewer than three numeric columns, restoring saved GUI state that predates a widget, and
-  a `.get(key, [])` default).
-- **Line endings are pinned** in `.gitattributes` (`* text=auto eol=lf` plus the binary formats), so working trees stop
-  drifting from the index. No stored content changed: no blob had CRLF.
-- **MDS is now a faithful ONEFlux port**: the 6-stage expanding-window cascade, `>=2`-sample acceptance, N-1 standard
-  deviation, and the ONEFlux SWIN tolerance. Fill values r ~ 0.9997 to 0.99997 against native ONEFlux. Shared with
-  random uncertainty via `diive.gapfilling.similarity`, so there is one similarity scan. Also 4x faster,
-  bit-identical to before.
-- **Random uncertainty `RandomUncertaintyPAS20` aligned to the ONEFlux C reference** (methods 1 and 2), ~35x faster with
-  bit-identical output, and takes `vpd_in_kpa=True` so VPD units are consistent across the ONEFlux ports.
-- **`UstarMovingPointDetection` rewritten** for ONEFlux parity (calendar-quarter seasons, tie-aware class boundaries,
-  the one-big-season fallback, an `Annual` bootstrap row) and ~8x faster.
-- **Nighttime threshold standardised to 20 W/m2** (was 50) throughout.
-- **`shap` floor raised to `>=0.50.0`** and the XGBoost `base_score` monkey-patch removed; it was fatal on shap
-  `>=0.52`. Environments pinned to shap 0.48/0.49 must upgrade.
-- **`verbose=0` is now actually silent** for gap-filling (XGBoost's own eval history is gated to DEBUG).
-- **Rich console migration** across production modules, and the console now renders correctly in Jupyter (wider tables,
-  legible `rule()` colour).
-- **`.run()` / `.result` unified** across the outlier, gap-filling and analysis class families, enabling
-  `dv.outliers.Hampel(s, n_sigma=5).run().result`.
-- **Two-phase design** extended to the heatmaps and `HexbinPlot` (data in `__init__`, styling in `plot()`), and
-  `FormatStyle` gives every plot one shared chrome definition resolving to the `LightTheme` house style.
-- `OptimizeParamsRFTS` generalised to `OptimizeParamsTS` (any sklearn-compatible regressor). SHAP replaces permutation
-  importance for feature reduction. `GapFinder` single-pass vectorized (`limit` -> `max_length`, new `min_length`).
-  `Hampel`, `LocalOutlierFactor` and `zScore` consolidated from their day/night variants.
-- `FlagMultipleVariableUstarThresholds` is now public, and `LevelResults.level33` is annotated with both flagger types.
+The optional `gui3d` extra adds two GPU 3-D surface tabs. The manual is `diive/gui/MANUAL.md`, and
+`packaging/` builds a standalone Windows app for people with no Python.
 
-### Fixed
+### Flux processing
 
-- **`InfluxIO.delete(measurements=True)` deleted nothing and reported success.** Expanding `True` went through
-  `schema.measurements()` without a `start` argument, so InfluxDB applied its 30-day default and returned no
-  measurements for any bucket whose newest record is older than that. The delete loop then never ran, while the summary
-  line — built from the *inputs*, not from what was deleted — still announced that all measurements had been wiped. The
-  lookup now covers the full history and is scoped to `data_version`, an empty result raises instead of passing
-  silently, and the summary names the measurements actually targeted. `schema.fieldKeys()` in `fields_in_bucket` had the
-  same missing `start`, so `show_fields_in_bucket` under-reported for older buckets (the GUI Database explorer's
-  measurement list too).
-- **`Hampel` ignored `n_sigma` in day/night mode**: the per-period defaults were the literal `5.5` instead of `None`, so
-  the fall-back was dead. **Results change** for callers who passed `n_sigma` alone with `separate_day_night=True`.
-- **`make_patch_spines_invisible` raised `AttributeError` on every call**, so the heatmap black-and-white render and
-  `make_secondary_yaxis`'s twin axis both failed. `ax.spines.values()` had been rewritten to `ax.spines.to_numpy()()` by
-  the global `.values` -> `.to_numpy()` replace during the pandas 3.0 upgrade. The rest of the codebase was swept for the
-  same damage; this was the only instance.
-- **Every ridgeline plot failed with `unhashable type: 'numpy.ndarray'`.** `adjust_color_lightness` looked a colour up in
-  `matplotlib.colors.cnames`, which raises `TypeError` (not `KeyError`) for an RGBA tuple or numpy array, and
-  `RidgeLinePlot` passes colours straight from a colormap. It now accepts named, hex, tuple and array colours alike.
-- **Warnings blamed the library instead of the caller.** Three `warnings.warn` calls had no `stacklevel`, so a complaint
-  about the caller's series being too short was reported at `decomposition_utils.py` rather than at the line that passed
-  the data.
-- **Re-raised exceptions discarded the original traceback.** Eight handlers interpolated the caught exception into a new
-  message and dropped it; an STL or Granger failure inside statsmodels surfaced as a wrapped string with nothing pointing
-  at where it broke. All now chain with `raise ... from e`.
-- **Two bare `except:` handlers** also swallowed `KeyboardInterrupt` and `SystemExit`; both are narrowed.
-- **`FluxLevelData.gap_stats` had an undefined annotation** (`dict[str, 'GapStats']` with `GapStats` never imported), so
-  `typing.get_type_hints()` and Sphinx autodoc failed on it.
-- **`lagged_variants` silently produced no lags for a single-column dataframe**, returning it unchanged with no warning.
-  The same column lags correctly when it is one of two, so the guard was treating "only one column" as "nothing to lag".
-  It now raises only when that column is also in `exclude_cols`. It also no longer adds its columns to the caller's
-  dataframe as a side effect, and neither does `add_continuous_record_number`.
-- **`sstats` raised on a series with no valid values**: `ZeroDivisionError` for an all-NaN series, `IndexError` for an
-  empty one, although a variable with no data in the selected period is ordinary. `series_start` / `series_end` /
-  `series_duration` return `NaT` on an empty index and `outlier_percentage` returns `NaN` when nothing is valid. An
-  all-NaN series keeps its real start and end, since only the values are missing.
-- **`DetectFrequency`'s failure message recommended three fixes, none of which worked.** `regularize` and `nominal_freq`
-  belong to `TimestampSanitizer`, already default to the suggested values, and cannot skip detection: it runs before
-  regularization, and `nominal_freq` only gates a later validation step.
-- **Dead code removed**: `diive/logger.py` (unreferenced, and broken since its PyQt5 import was commented out) and
-  `plotfuncs.remove_prev_lines` (unreferenced, and assigning to `ax.collections` has raised since matplotlib 3.7).
-- **`RandomUncertaintyPAS20` cumulative uncertainty was poisoned by a single NaN**, turning every later value NaN.
-- **`ManualRemoval` date matching was not day-inclusive**: a date-only spec matched only the `00:00:00` record.
-  **Results change**: it now removes the whole day. Malformed `remove_dates` entries raise instead of being ignored.
-- **`TrimLow` required lat/lon/UTC offset** even with no day/night split, and drew its plot twice. Coordinates are now
-  validated only when a split is requested.
-- **`SeasonalTrendDecomposition(method='stl')` always raised**: the wrapper never passed `period` and called an
-  unsupported `STL.fit(weights=...)`.
-- **`Hampel` rejected the signal instead of the outliers wherever the local MAD was zero.** A window in which more than
-  half the records are identical has a MAD of exactly `0`; the code substituted `1e-6` to dodge the division, which
-  collapses the detection band to zero width and flags every value that differs from the local median at all. On a
-  soil-moisture record whose 10MIN era had been upsampled to 1MIN (runs of ten identical values) this rejected **19.4%
-  of that era — 97 085 records — at any `n_sigma`**: raising it from 8 to 100 changed the count by 1%. Such records are
-  now left unflagged, with the count reported, since a window with no scale cannot judge anything. **Results change**
-  for any series with flat or quantized stretches; a real spike surrounded by normal variability is unaffected.
-- **`Hampel(use_differencing=True)` differenced across gaps.** Missing records are dropped before the double
-  difference is taken, so the two records flanking every gap were compared with a partner hours or days away and looked
-  like spikes. Differences that span more than 1.5x the nominal record spacing are now excluded from the test.
-  **Results change** on gappy series.
-- **`verbose=True` printed no statistics** in `Hampel`, `zScore`, `LocalSD`, `LocalOutlierFactor` and `AbsoluteLimits`.
-  Their per-iteration "Total found outliers" lines go through `detail()`, which only prints from `VERBOSE_DEBUG` (3),
-  while the documented `verbose=True` maps to `VERBOSE_PROGRESS` (2) - so the one number the caller asked for was the
-  one number never shown, visible only in the preview figure's title. Those lines are now pinned to
-  `VERBOSE_PROGRESS`. Output only.
-- **`default_format` wrote the string "False" into axis labels.** Its "no label" default is `False`, which was passed
-  straight to `ax.set_xlabel()` / `ax.set_ylabel()` and rendered literally on every plot that relied on the defaults,
-  including the outlier detection preview plots.
-- **`StepwiseMeteoScreeningDb` raised on input with more than one time resolution**, i.e. on any variable whose logger
-  changed sampling rate partway through the record. `_harmonize_timeresolution` built the upsampling frequency as
-  `f'{targetfreq}S'` from the float seconds returned by `detect_freq_groups`, giving pandas the invalid alias
-  `'60.0S'`, and then back-filled with the `fillna(method=...)` removed in pandas 3. Frequencies are now passed as
-  `Timedelta`. Single-resolution input never reached either line, which is why this survived the pandas 3 migration
-  untested; `tests/test_meteoscreening.py` now covers both paths.
-- **`HeatmapYearMonth` raised `AttributeError`** from a wrong import path.
-- **`import diive` forced the matplotlib `Agg` backend**, disabling interactive windows.
-- **`_TeeConsole` double-printed every `rule()`** to mirror consoles such as the GUI Log tab.
-- Flux chain L3.3 gained VUT filtering (`mode='cut'|'vut'`), and `UstarBootstrapThresholds` gained
-  `get_vut_thresholds()` alongside `get_cut_threshold()`. diive's VUT is smoothed over a 3-year window, a deliberate
-  departure from strict ONEFlux VUT.
-- XGBoost/SHAP on Python 3.13; pandas 3.0.3 compatibility; `LocalOutlierFactor` `contamination='auto'`;
-  `linear_interpolation` on the current `GapFinder` API; `data.filteredseries` reset after
-  `run_level33_constant_ustar()`; `calc_vpd_from_ta_rh` export; `SortingBinsMethod` alias; 7 misrouted `__init__`
-  exports.
+- **NEE partitioning**, four faithful ports validated against their reference implementations and
+  tagged so all four can live in one dataframe: nighttime ONEFlux (`*_NT_OF`), nighttime REddyProc
+  (`*_NT_RP`), daytime REddyProc (`*_DT_RP`) and daytime ONEFlux (`*_DT_OF`). Correlations against
+  the originals run from 0.999 to 0.9999 for RECO and GPP. Available as classes, as
+  `partition_nee_*` functions, and as chain Level 4.2. Bootstrap uncertainty is not emitted yet.
+- **The chain is composable.** Use `run_chain(data, FluxConfig)` for the standard pipeline, or one
+  pure callable per level when you need control over every detector and flag. Adds in-chain USTAR
+  detection (CUT or VUT), a proper L3.1 QCF, cascading re-runs, and `add_driver`.
+- **USTAR detection**: moving-point (Papale 2006), a quantile-based method, and per-year bootstrap
+  thresholds.
+- **Uncertainty**: `JointUncertaintyPAS20` combines random uncertainty with scenario spread in
+  quadrature, following the ONEFlux routine.
+- **MDS is now a faithful ONEFlux port** and shares its similarity scan with random uncertainty, so
+  there is one implementation instead of two. Fill values agree with native ONEFlux to about
+  r = 0.9997, and it runs four times faster with identical output.
 
-### Documentation
+### Gap-filling
 
-- **113 examples** across 10 domain folders (Sphinx Gallery format), with new coverage for the flux chain (L2 standalone,
-  composable, multi-flux, partitioning), all four partitioning ports plus a comparison, USTAR methods, SW_IN
-  gap-filling, compound extremes, gap stats, events, and I/O. `examples/CATALOG.md` now lists every one.
-- **New InfluxDB notebooks** (`notebooks/DatabaseInflux*`) for download, meteo screening, and delete. 21 older notebooks
-  archived, their content migrated to examples.
-- Switched from poetry to `uv` for dependency management.
+- **`SWINGapFillerXGBoost`** fills shortwave radiation with the physics built in: nighttime gaps go
+  to zero, daytime gaps are modelled on potential radiation and timestamp features. It needs nothing
+  but the series and site coordinates, and the remaining settings adapt themselves.
 
-### Fixed (timestamp-shift detection)
+  One thing worth knowing: with no other radiation measurement, every feature is a function of the
+  timestamp, so the model can only reproduce a climatology and cannot tell whether a gap was cloudy
+  or clear. Passing a second sensor (a pyranometer or PPFD) through `context_df` is what breaks that
+  ceiling, and on the bundled Davos record it cut gap RMSE from 138 to 26 W/m2.
+- **SHAP importances are computed on a capped subsample** (`shap_max_rows`, 10 000 rows for SWIN,
+  every row elsewhere). Mean importance converges long before the full record: on ten years of
+  half-hourly data the subsample reproduced the ranking exactly and the values within 2%, several
+  times faster. Predictions and scores are untouched.
+- `FeatureEngineer` is usable on its own as an eight-stage pipeline, every gap-filler exposes
+  `.results`, ML classes gained `plot_feature_importances()`, and `verbose>=2` prints a full console
+  report.
+- `OptimizeParamsRFTS` is generalised to `OptimizeParamsTS`, which takes any sklearn-compatible
+  regressor.
 
-- **`DetectTimestampShifts.crosscorr()` now recovers a clock offset.** It returned 0 for a planted 60-minute shift and
-  -54 for a 120-minute one, on noise-free synthetic radiation — while a brute-force Pearson scan over the same day
-  found the true lag at r = 1.0000, so the signal was there and the method was losing it. Two causes: the daytime mask
-  (`sun_up`, derived from *potential* radiation) clipped both series before correlating and truncated the shifted
-  measured curve, and the FFT cross-correlation was not normalised per lag by the overlap count, so lags with less
-  overlap scored lower and `argmax` was pulled toward zero. The search window is now padded by `max_shift_min` on each
-  side and the lag scan is a direct Pearson correlation — which is what the docstring always promised. **Results
-  change**: on CH-DAV 2022 the method now reports -5.0 min against the FFT method's -5.9 min (they used to disagree by
-  ~6 min, with crosscorr stuck near 0), and a perfect match now scores r = 1.000 instead of 0.913 — the latter mattered
-  because `plot_crosscorr_results` filters at `min_corr=0.97` by default and was hiding good days. One year takes
-  0.78 s (was 0.31 s for the wrong answer). `max_shift_min` and the reported shift are now converted through the
-  upsampled step, so a non-default `upsample_freq` no longer silently reinterprets minutes as samples.
+### Plotting, analysis and data handling
 
-### Fixed (naming)
+- **New plots**: wind rose, waterfall, tree ring, shifted distribution, date/time 3-D surface, and
+  an interactive Bokeh range tool on `TimeSeries`.
+- **New analysis**: compound extremes, gap statistics, Granger causality, seasonal-trend
+  decomposition, timestamp-shift detection, spectrogram, harmonic analysis, driver ranking, and
+  record selection by condition. `DriverAnalysis` ships provisionally in `dv.analysis.experimental`.
+- **Events** (`dv.events`) turn time-stamped markers into 0/1 columns and plot overlays.
+- **Per-variable metadata** carries tags and full provenance, and the `.diive` project format saves
+  and reloads a whole working state.
+- **An InfluxDB engine** (`pip install 'diive[db]'`) handles download, upload, delete and schema
+  browsing in-house, replacing an external dependency.
+- **Code generation**: `*_to_code` renderers across plotting, gap-filling, outliers, corrections,
+  partitioning, uncertainty and the flux chain. This is what the GUI's Copy Python uses.
+- Heatmaps and `HexbinPlot` follow the two-phase pattern now (data in `__init__`, styling in
+  `plot()`), and `.run()` / `.result` work the same way across the outlier, gap-filling and analysis
+  families.
 
-- **A falsy `idstr` no longer leaks the text "None" into column names.** `validate_id_string` returned `None`
-  unchanged for a falsy input, and callers interpolate the result straight into names, so omitting the optional
-  argument produced `FLAGNone_FC_QCF` / `FCNone_QCF` from `FlagQCF` — and the same latent bug sat in
-  `eddyproflags` (`FLAGNone_FC_SIGNAL_STRENGTH_TEST`), `storage_correction` and `quality_flags`. It now normalises to
-  `''`, giving `FLAG_FC_QCF` / `FC_QCF` / `FC_QCF0`. Callers that branch on `if idstr:` (`FlagBase`, the USTAR
-  flaggers) are unaffected, since an empty string is falsy too. **No shipped code path changes**: every production
-  call site passes an explicit idstr (`L2`, `L3.1`, `STEPWISE`, `METSCR`), so only direct library calls that omit the
-  documented-optional argument see different names.
+### Faster
 
-### Fixed (console output)
+- **`import diive` dropped from 2.35 s to 0.96 s.** The ten namespaces load on first use, so a
+  script that only reads a parquet file no longer pays for sklearn, xgboost, shap and statsmodels.
+  Every documented import path behaves as before.
+- Random uncertainty is about 35 times faster with identical output, USTAR moving-point detection
+  about 8 times faster, and MDS four times.
+- `core.ml` no longer depends on the `gapfilling` package, which removes a circular import that only
+  stayed hidden because of import order.
 
-- **Console reports no longer crash on a redirected Windows stdout.** `FlagQCF.report_qcf_flags()` printed U+2550
-  box-drawing rules, so `python ... | head` or `> log.txt` raised `UnicodeEncodeError: 'charmap' codec can't encode
-  character` — Python falls back to cp1252 whenever stdout is a pipe, while a terminal and pytest are both UTF-8, which
-  is why it went unnoticed. CLAUDE.md already required console strings to be cp1252-safe. Fixed in the two places that
-  actually print: `qcf.py` (box-drawing -> `= - |`) and `gapfilling/interpolate.py` (`≥` -> `>=`, including the
-  `ValueError` message, which reaches stderr the same way).
-- **New `tests/test_console.py::TestConsoleStringsAreCp1252Safe`** walks the library's printed string literals — those
-  passed to the console helpers, `_console.print/log/rule`, builtin `print`, and `raise` — and fails on any character
-  cp1252 cannot encode. Its blind spots are documented in the test: strings assembled into a variable before printing
-  are not seen, and `diive/gui/` (Qt) is excluded because it never writes to plain stdout.
-  Docstrings and comments are deliberately ignored.
+### Fixes
 
-### Fixed (corrections)
+Beyond the code review below, roughly forty standalone fixes. The ones most likely to have bitten
+you:
 
-- **Three corrections no longer rename the caller's Series.** `setto_threshold`, `set_exact_values_to_missing` and
-  `remove_relativehumidity_offset` did `series.name = "input_data"` on the parameter itself, so the object the caller
-  still held came back named `"input_data"`. The returned series was always named correctly, and `apply_corrections`
-  copies before it dispatches, so the GUI and the meteo-screening path were unaffected — a direct library call was
-  not. Each now binds a renamed copy (`work = series.rename("input_data")`), the pattern `_nighttime_zero_offset`
-  already used. `setto_threshold` validates its `type` argument *after* the old rename, so a rejected call left the
-  caller's series renamed too; that is fixed with it. Values, index and output names are unchanged. One visible side
-  effect: the console line `Variable: input_data` now names the real variable, as do the `showplot` titles.
+- **`InfluxIO.delete(measurements=True)` deleted nothing and reported success.** Expanding `True`
+  hit InfluxDB's 30-day default window, so buckets whose newest record was older returned no
+  measurements, the delete loop never ran, and the summary still announced a full wipe. The same
+  missing argument made `show_fields_in_bucket` under-report.
+- **`Hampel` ignored `n_sigma` in day/night mode.** The per-period defaults were literals instead of
+  `None`, so the fallback was dead code.
+- **`SeasonalTrendDecomposition(method='stl')` always raised**, and every ridgeline plot failed on a
+  colormap colour.
+- **`StepwiseMeteoScreeningDb` raised on any variable whose logger changed sampling rate partway
+  through**, from an invalid pandas frequency string built out of float seconds.
+- **`verbose=True` printed no statistics** for five outlier detectors: the one number the caller
+  asked for went through a debug-level helper that could not print at that setting.
+- **Console reports crashed on a redirected Windows stdout**, because box-drawing characters do not
+  survive cp1252. A new test now walks the library's printed strings and fails on any character that
+  cannot.
+- **A falsy `idstr` leaked the text "None" into column names**, producing names like
+  `FLAGNone_FC_QCF`.
+- **Three corrections renamed the caller's Series** in place, so the object you still held came back
+  called "input_data".
+- **Six of the eight bundled example parquet files had never been committed.** A `*.parquet` ignore
+  rule from January 2025 meant `git add` skipped them silently, so the documented loaders raised
+  `FileNotFoundError` for anyone installing diive, and 23 tests depended on a file only present in
+  local working copies. All are tracked now, with explicit exceptions to the ignore rule.
+- Also: `import diive` no longer forces the matplotlib `Agg` backend, `sstats` handles an empty or
+  all-NaN series, `lagged_variants` no longer silently does nothing for a single-column frame,
+  `default_format` no longer writes the string "False" into axis labels, cumulative random
+  uncertainty is no longer poisoned by a single NaN, and `TrimLow` no longer demands coordinates it
+  does not use.
 
-### Fixed (code review)
+### The code review
 
-A read-only review of the library and the GUI, in four rounds, recorded 159 findings ranked so that a silently wrong
-number sits above a crash: a traceback blocks you, a plausible wrong number gets published. 155 are resolved, 3 of them
-closed as by design. Four of the 159 were found while fixing the others, which is also how several entries were caught
-overstating or understating what they described; each closed entry says so where it happened. The fixes landed as
-separate commits, each naming the findings it closes, and every closed entry
-in `CODE_REVIEW_FINDINGS.md` carries what was changed, why that direction was chosen (code or docstring), and how it
-was verified. **Removed API comes first below, then the fixes that change numbers with no error and no warning**, since
-those are the ones to check existing results against.
+A read-only review of the library and the GUI, run in four rounds, recorded 159 findings and ranked
+them so that a silently wrong number sits above a crash. The reasoning: a traceback blocks you, a
+plausible wrong number gets published. 155 are resolved, three of those closed as by design, and
+three remain open with a repro recorded.
 
-#### Removed or renamed API
+The results-changing outcomes are listed under *Before you upgrade* above. The rest were crashes on
+legitimate input, controls that silently did nothing, docstrings that described behaviour the code
+did not have, and dead code. `CODE_REVIEW_FINDINGS.md` has every finding with what changed, why that
+direction was chosen, and how it was verified.
 
-- **`flux_type` is gone from `ScopPhysics`, `ScopOptimizer` and `ScopApplicator`, and the self-heating correction is no
-  longer offered for LE at all.** Whether a Burba-type correction applies to the latent heat flux is unresolved in eddy
-  covariance, so diive must not offer one. The removed branch never worked either: it computed its µmol to W conversion
-  and then discarded it, so the fitted scaling factor absorbed Lv and `ScopApplicator` multiplied by Lv a second time. A
-  planted factor of 1.500 came back as 0.0666 through the H2O path, and comes back exactly on the CO2 path. Drop the
-  argument from existing calls; it had one legal value left, and all 9 example call sites passed it.
-- **Outlier flags are NaN where the input record is missing, not 0.** A flag records a test result, and no test can run
-  where there is no value, but `FlagBase.repeat` summed an all-NaN row to `0`, so every never-measured record read as
-  "tested, passed". Any code reading `overall_flag` directly, or counting `(flag == 0)`, changes. `MissingValues` keeps
-  0/2, since missing records are that detector's subject, via the new `nan_flag_at_missing` class attribute. `FlagQCF`
-  output is bit-identical (NaN and 0 both contribute nothing to the flag sums), so the flux processing chain is
-  unaffected. Seven docstring claims across five modules had promised this behaviour all along and were rewritten to
-  describe the flag as it is; preserving missing data is `.filteredseries`'s job, not the flag's.
-- **`keep_overlap_only` is gone from `combine_variables` and `combine_variables_to_code`.** The arithmetic methods are
-  now always overlap-only, NaN wherever either input is missing. The option substituted the operation's identity for a
-  missing operand, which returned `-B` for `subtract` and `1/B` for `divide` when the left operand was the missing one,
-  so `NEE - RECO` silently yielded `-RECO` wherever NEE was missing. Even for `add` and `multiply` a one-sided result is
-  just the other variable wearing a sum's label. Substituting a value for a gap is a gap-filling decision, which
-  `method='fillgaps'` already states plainly, so nothing is lost. The GUI tab reports how many records the overlap rule
-  costs, split by which variable was missing, since a large one-sided count usually means the two variables cover
-  different periods.
-- **`quality_weighted_decompose` is removed, `weights` is gone from `stl_decompose`, and `quality` /
-  `quality_weighted` are gone from `SeasonalTrendDecomposition`** along with the "Quality-weighted: True" summary line.
-  None of it ever weighted anything: statsmodels' STL accepts no observation weights, the computed weights were dropped
-  before the fit, and weighted and unweighted output were byte-identical. Nothing in the library, GUI, tests or examples
-  used it. `robust=` is the real outlier knob and stays.
-- **Four dead harmonic functions removed** (182 lines): `reconstruct_harmonics`, `periodogram`, `fft_decompose`,
-  `multi_scale_harmonics`. None had a caller anywhere and none was in `dv.analysis.__all__`. `harmonic_analysis` and
-  `spectrogram` are unaffected and stay exported.
-- **`UstarDetectionMPT` removed** (653 lines) with its `dv.flux` export. `UstarMovingPointDetection` is the faithful
-  ONEFlux port of the same algorithm and is what the chain, the bootstrap wrapper and the GUI use. The removed class
-  read 11 attributes that were never assigned anywhere in it, and `run()` never called its own collectors, so its
-  threshold was only ever printed, never stored.
-- **`TimeLagAnalysis`'s `histogram_startbin` / `histogram_endbin` are renamed to `histogram_start_seconds` /
-  `histogram_end_seconds`.** Both are compared against each histogram bin's inclusive start, so the values are lag
-  values in seconds and never were bin indices; the names invited a caller to pass a count, which lands somewhere
-  arbitrary on the lag axis. Passing an old name raises a `TypeError` naming its replacement, the way the outlier
-  detectors answer their pre-unification parameter names, so existing code stops instead of analysing an unintended
-  range. The GUI's two fields moved with them and now accept fractional seconds.
-- Two smaller removals: the `'iterations'` key is gone from `stl_decompose`'s result dict (it returned
-  `DecomposeResult.nobs`, a shape tuple, where a count was documented, and statsmodels exposes no iteration count to
-  report honestly), and the unread `UstarVekuriThresholdDetection.bootstrap_results_` attribute is gone.
+Two GUI outcomes are worth calling out on their own:
 
-#### Plot polish, and four things the findings had wrong
+- **The GUI leaked windows and tabs.** A lambda capturing `self` and connected to a Qt signal is
+  owned on the C++ side, where Python's garbage collector cannot reach the cycle, so no main window
+  was ever collected and 28 of 41 tab classes leaked when closed. Every leaked object stayed
+  subscribed to the app-wide singletons, so changing the theme re-rendered all of them. Live widgets
+  at the end of the test suite fell from 13 149 to 133.
+- **The partitioning tabs used to run at (0, 0) on UTC** when the project site was unset, and
+  returned plausible-looking GPP and RECO from it. They now refuse.
 
-Sixteen cosmetic and latent defects. Four turned out to be mis-filed once measured, and those are the
-ones worth reading:
+One deviation from ONEFlux is kept on purpose: u\* filtering is `ustar >= threshold` and nothing
+more. ONEFlux also discards the first half-hour above the threshold after a period below it,
+to avoid the burst of CO2 that accumulated under the canopy. diive keeps that record and leaves the
+trade-off to you. It is documented where the flagging happens so it cannot be mistaken for an
+oversight.
 
-- **The wind rose dropped out-of-range directions without saying so** — filed as cosmetic, but a
-  wind-direction column in the signed `-180 to 180` convention loses **41.7%** of its records and leaves
-  three sectors sitting at exactly zero, which reads as "no wind from the west". It now reports the count
-  and the range. It still drops rather than wrapping, deliberately: `-9999 % 360` is `81.0` and
-  `999 % 360` is `279.0`, so wrapping turns a fill value into a plausible bearing, and nothing at that
-  point distinguishes a sentinel from a legitimately wrappable `-5`. Both bundled records are clean.
-- **`ShiftedDistributionPlot` used the population standard deviation for its zone boundaries.** The error
-  is systematic and one-directional — every zone came out too narrow and both extreme buckets
-  over-counted — and its size depends only on how long the reference period is: 0.05% of records
-  reclassified at n = 1000, **1% at n = 30**, 20.6% at n = 2. The finding was measured on an
-  11 000-record reference, the one regime where it cannot bite. Now ddof=1, matching pandas and the rest
-  of diive, with an explicit single-record branch so a one-record reference keeps its spike.
-- **`fig.tight_layout()` on a constrained-layout figure is a crash, not a warning, for `TimeSeries`.**
-  With a colorbar matplotlib refuses outright, so `TimeSeries(series=s, color_series=c).plot()` with no
-  `ax` — the default colour-by call — raised `RuntimeError` and drew nothing. Dropping the call fixes
-  both that and the warning `LongtermAnomaliesYear` emitted, and the axes ends up ~6% larger, since
-  `tight_layout` was padding more than the engine the figure asked for.
-- **`bar.py`'s bar colours were not wrong; the convention was.** The finding read CLAUDE.md's
-  "300-level (bars/lines)" as package-wide, but that sentence then listed four 500/700-level hexes as its
-  example, and no diive plot fills a bar or draws a line at 300-level. The 300/500 split is a two-panel
-  rule for optimum-range figures, where a bar panel shares a figure with a shaded-background panel.
-  `analysis/optimumrange.py` is its only implementation. No colour changed; the convention line was fixed
-  instead, and a test pins the current colours so the next "correction" fails loudly.
+### Tests, examples and tooling
 
-The rest:
-
-- **Calling `plot()` twice on the same axes stacked artists instead of replacing them.** Fixed for
-  `LongtermAnomaliesYear` and `ShiftedDistributionPlot` by taking back only the artists that instance
-  drew — never `ax.clear()`, which would delete the caller's own. Left as appending for `TimeSeries`,
-  where compositing onto a caller's axes is the point, and documented there along with the colorbar cost.
-- **Colour-by replaced the caller's axes limits with its own data range**, pushing a pre-existing series
-  off-screen and overriding limits set deliberately. Now `update_datalim` + `autoscale_view`, which also
-  brings the colour-by path's x margins into line with the plain path — they had disagreed.
-- **The bokeh methods always opened a browser** and returned nothing. They take `showplot=True` now, the
-  same spelling as the matplotlib classes, and return the bokeh object so the toggle is usable.
-- **`zone_colors` / `zone_labels` lengths are validated**: a short list raised mid-draw leaving a
-  half-rendered figure, a long one was silently truncated.
-- `LongtermAnomaliesYear.get()` before `plot()` names the step you skipped instead of raising
-  `AttributeError` on an internal attribute; the histogram info box no longer repeats itself up to four
-  times for a non-default `method`; a waterfall contribution of exactly 0.0 is documented as taking the
-  release colour, which is unobservable because the bar has zero height; and the dead
-  `plotfuncs.non_numeric_error` writes on the axes it is handed rather than pyplot's current figure.
-- **GUI icons are painted at device resolution**, so they stop being upscaled bitmaps at Windows
-  150%/200% display scaling; ~18 glyphs had their sub-pixel line coordinates silently truncated by
-  PySide6's integer `drawLine` overload and now keep them; `menu_icon(None)` falls back instead of
-  raising; and the two derived-variable calculators get their intended glyph rather than the generic one.
-
-#### Plot controls that did nothing now do what they say
-
-Eleven contract mismatches, where the code and the docstring disagreed about what a control does. Fixed in
-whichever direction measurement supported — usually the code, twice the documentation, because the plot type
-turned out to be structurally unable to honour the parameter.
-
-- **`HistogramPlot`'s `ignore_fringe_bins` was accepted, documented, stored and never applied.** It now trims
-  the first and last bins as `dv.analysis.Histogram` already did — the semantics were one module away, so this
-  is not a guess. Trimming every bin raises naming the parameter instead of failing inside matplotlib, and the
-  info box states the trim rather than claiming ten bins above eight bars. Only a call passing a truthy value
-  changes; every caller in diive, the examples and the GUI passes `False` or nothing. (L121)
-- **Hexbin's `minticks`/`maxticks` were inert in both directions** — `maxticks=3` and `maxticks=30` gave the
-  same ticks, and so did `minticks=20, maxticks=3`. They now drive a `MaxNLocator` on both axes. Their
-  defaults move from `3`/`10` to `None`, which changes no behaviour, since 3 and 10 never did anything. (L122)
-- **Hexbin's `color_bad` cannot be honoured at all**, which the finding did not establish: `ax.hexbin`
-  *removes* cells whose aggregate is NaN rather than colouring them, so a hexbin has no bad cells to paint.
-  It is documented as ignored, and the GUI tooltip says so. (L123)
-- **Hexbin's automatic colorbar arrows were computed from the raw `z` range while the colorbar maps the
-  aggregate.** With `np.median` that drew arrows for clipping that was not happening; with `np.sum` — where
-  the aggregate range is *wider* than the raw one, the case the finding missed — it drew **no** arrow while
-  114 hexagons really were clipped. Now read off the drawn aggregate. (L124)
-- **Hexbin paired `x`, `y` and `z` positionally.** Three free-standing Series with different indexes were
-  silently mispaired; only equal length was checked. They are now aligned by label when the indexes differ,
-  and a disjoint index raises. Nothing in diive hit this — the GUI, codegen and both examples slice one
-  dataframe — but the public API invites it. (L125)
-- **Hexbin gained `extent`**, so two subsets can share one hex grid; without it a 50/50 split of one record
-  produced different cell boundaries in the two panels, making cell *i* a different region in each. The same
-  finding's histogram half needed no code: `n_bins` already accepts an explicit edge sequence and pins the
-  grid exactly, which the docstring did not say and now does. Pinning the outlier detectors' before/after
-  panels to one grid was measured and rejected — the shared grid has to be the raw grid, which is set by the
-  very outliers the plot exists to remove, so the "after" panel collapses toward a single bar. (L126)
-- **`WindRosePlot.plot(ax=...)` retitled and reflowed the caller's whole figure.** Given an axes inside a
-  multi-panel figure it overwrote the figure suptitle and moved the neighbouring panels. The suptitle path now
-  runs only for a figure the class created itself; a caller-supplied axes gets an axes title. The GUI is on
-  that path, so the wind-rose title moves from figure level to above the rose. (L127)
-- **The wind rose honoured only the title out of `FormatStyle`.** Seven fields now reach the polar axes
-  (`ticks_fontsize`, `chrome_color`, `show_grid`, `grid_color`, `facecolor`, plus the title trio), each only
-  when explicitly set, so a plain `plot()` is byte-identical. The rest are documented as deliberately ignored
-  with the reason — axis labels have no meaning when the angular axis is a compass ring, the rose creates no
-  labelled artists for a legend to list, and the spine/tick geometry fields resolve `None` to a theme value,
-  so honouring them would change the rose's look for every existing caller. (L128)
-- **`ShiftedDistributionPlot` overrode the caller's `FormatStyle`.** A caller-set `ylabel` was replaced by
-  `"Density"`, the grid was forced off, and — unrecorded in the finding — a caller-set title was drawn
-  *twice*, once centred and once left-aligned. The y-label is now a default the caller can beat, the title is
-  drawn once, and grid-off moved from an override to the class's default style, the way the heatmaps already
-  do it. Any explicitly constructed `FormatStyle`, including a bare `FormatStyle()`, now draws a grid where
-  none appeared before; the GUI gained the matching checkbox, unticked. (L129)
-- **A ±3σ zone breakpoint outside the plotted range left one zone unpainted and its label over a region it did
-  not describe** — routine for a bounded variable such as relative humidity against 100 or precipitation
-  against 0. Zone edges are now clipped into the evaluation grid, and a zone lying entirely off it is neither
-  painted nor labelled, nor does its breakpoint line stretch the axis into empty space. (L130)
-- **`LongtermAnomaliesYear`'s reference-period "N years" counted the requested span, not the measured years.**
-  A period overlapping six measured years still printed "11 years". It now counts what the mean and sd were
-  computed over. The sibling annotation had a neighbouring defect — on a record shorter than a decade it read
-  "last 10 years" beside a span of five — and now prints the length it actually used. (L149)
-
-#### Plots no longer die on degenerate input
-
-Seven crashes on input a user can legitimately hand a plot class. All are in the family the closed
-`Cumulative` fix established: an axes that states plainly there is nothing to draw beats a traceback,
-and beats a silently blank panel.
-
-- **`HistogramPlot` raised on any series with zero spread**, and it did so *inside the outlier
-  detectors' own diagnostic*: `show_zscores` defaults to True, `zscore()` divides by a standard
-  deviation of 0, and every z-score came back NaN. Any detector run with `showplot=True` whose retained
-  subset is constant died in its own plot. The trigger is not only a constant series — a single record
-  and two equal records do it too. The overlay is now skipped when no z-score is finite; the histogram
-  of a constant series is still drawn. (L115)
-- **`HistogramPlot` raised on an all-NaN column** (`autodetected range of [nan, nan] is not finite`) and
-  **`WaterfallPlot` raised `IndexError`** on one. Both now say `"<name>: no data"` on the axes. The
-  waterfall guard returns before the chrome because a second crash waited in the automatic title, which
-  reads the first and last period of the now-empty index. (L116, L117)
-- **`ShiftedDistributionPlot` died with an opaque error on four degenerate periods** — a mistyped
-  period, a variable starting mid-record, or a genuinely constant one (precipitation in a dry decade, a
-  flag). The four collapse to two conditions, and they get different answers. A period with **zero
-  spread** has a real distribution, so it is drawn as a spike via a bandwidth fallback rather than
-  called "no data" (measured: peak within one grid cell of the true value, integral 1.0000000, width
-  1.1% of the plotted range). A period with **no records** is labelled `": no data"` in the legend, and
-  an empty reference additionally drops the zone breakpoints instead of drawing five of them at NaN. A
-  third condition the finding did not list — *both* periods empty — failed earlier still, on the shared
-  grid, and now states so on the axes. (L118)
-- **`HistogramPlot` raised `IndexError` before drawing anything** when handed an empty series — the
-  same detector diagnostic as L115, one step earlier. A test that rejects *every* record hands the
-  retained-subset histogram an empty index, and the constructor read `series.index[0]` off it, so the
-  guard L116 added in `plot` was never reached. The first and last date it was computing feed only the
-  default title, so an empty panel is now titled `"<name> (no records)"` rather than a `None` to
-  `None` range that reads like a real date span. (L148)
-- **`TimeSeries.plot_interactive()` raised on an unnamed Series**, which bokeh rejects
-  (`legend_label value must be a string`). Six sibling labels in the same two bokeh methods had the
-  identical unhandled `None` and degraded silently instead — `plot_rangetool()` titled the plot the
-  literal string `None`, and the saved file was `None_interactive.html`. All now fall back to `value`,
-  the name bokeh already gives the data column. A named Series is byte-identical. (L119)
-- **`LongtermAnomaliesYear` drew an empty chart annotated `nan±nansd`** when the reference period held
-  no measurement — reachable by reversing the period, or by one landing wholly inside an outage of the
-  record, which the GUI's clamped spin boxes permit. Every anomaly was NaN, so every bar was flat, under
-  a title asserting the record's full span. That and a record with no measured year at all now raise a
-  `ValueError` naming the class and the input; the GUI paints the message onto the canvas. A reference
-  period that overlaps the record at all still plots, over the overlapping years. (L120)
-
-#### Results change, with no error and no warning
-
-- **Four plots drew missing data as if it were measured.** Each is a different mechanism reaching the same wrong
-  picture, so they are listed separately, but the shape is one: a gap rendered as a value.
-  - **`WaterfallPlot` drew a period holding no measurements at all as a zero-height bar.** `sum` over an empty pandas
-    group returns `0.0`, not NaN, so the trailing `dropna()` could not remove it and a data gap was indistinguishable
-    from a period whose fluxes genuinely balanced — 429 of 3652 bars on the bundled CH-DAV `LW_IN` record. `count`
-    (`-> 0`) and `prod` (`-> 1.0`) had the same defect; `mean`, `median`, `min`, `max`, `std`, `var`, `first` and
-    `last` returned NaN and were already dropped, so the aggregations disagreed about what the plot contained. Empty
-    periods are now masked on the record count, which holds for any `agg` string rather than a list of names to keep
-    in sync. Retained bars and the running total are bit-identical — adding 0 was already a no-op for the total, the
-    defect was purely visual. (L111)
-  - **`TimeSeries` colour-by painted *measured* records fully transparent** wherever the colour driver had a gap: a
-    NaN colour value hit the colormap's "bad" entry, whose matplotlib default is `(0, 0, 0, 0)`. 81 of 199 segments
-    and 80 of 200 markers vanished on a complete flux series, reading exactly like missing data. An all-zero bad
-    colour also makes matplotlib discard the collection alpha, so the segments were exactly transparent rather than
-    faint. They are now drawn in blue-grey `#90A4AE`, visible but plainly not a value on the colour scale. A colour
-    series without gaps is bit-identical. (L112)
-  - **`LongtermAnomaliesYear` drew missing years as adjacent bars** while the title asserted the full span: `plot.bar`
-    is categorical, so a year absent from the index took up no axis width. A 12-year outage was one bar-width jump
-    between two evenly spaced ticks. The series is now reindexed onto the full year lattice, so uncovered years are
-    NaN bars and leave visible holes. Reference mean and sd are unchanged (`mean()`/`std()` skip NaN) and a gapless
-    record is bit-identical; the "last 10 years" annotation now covers the last 10 calendar years rather than the last
-    10 measured years, which it had been mislabelling with their wider span. Fifth and last of the contiguity family
-    (L61, L63, L79, L114). (L114)
-- **`TimeSeries` colour-by fell back to a plain line without saying so.** A `color_series` that does not align to the
-  data index — TIMESTAMP_END against TIMESTAMP_MIDDLE, or a differently resampled driver — reindexes to all-NaN, and
-  the guard then took the plain-line branch silently, turning `cmap`, `color_vmin`, `color_vmax`, `show_colorbar` and
-  `color_label` into no-ops. It now warns, naming the surviving record count and the likely cause. A partial overlap
-  still colours what it can, silently, as before. The docstring claim that the scalar `color` is ignored when a
-  `color_series` was given was false in exactly this branch and is corrected. (L113)
-- **`LongtermAnomaliesYear` discarded its own `sort_index()`.** An unsorted yearly record was plotted in input order and
-  its "last 10 years mean ± sd" annotation was computed from ten arbitrary years. Bar order, results-frame row order and
-  that annotation change for unsorted input; per-year anomaly and reference values are unaffected, because the reference
-  subset is selected by year comparison and so is order-independent. Sorted input is byte-identical. (L109)
-- **`LongtermAnomaliesYear` built its working frame keyed by the caller's Series name**, so a variable named
-  `reference_mean`, `reference_sd` or `anomaly` overwrote the data column before the anomaly was computed — zeroing every
-  anomaly. The frame is now built on an internal `_values` key with the caller's name restored last, matching `ScatterXY`
-  and `GridAggregator`. Anomalies change only for those colliding names. An unnamed Series no longer raises
-  `KeyError: None`. `anomalies_df` is now a property returning a copy, the contract `GridAggregator.df_long` already had.
-  (L110, and part of L120)
-- **`HistogramPlot`'s KDE overlay was scaled by the *first* bin width**, an identity that holds only for uniform bins.
-  `n_bins` accepts an explicit edge list, and a non-uniform one made the curve wrong by `w_i / w_0` in every bin —
-  measured peaking 4.5x above the tallest bar, drawn on the same axis as the bars where it reads as a fit. The density is
-  now scaled per bin from `np.diff(edges)`. Uniform bins, which is every current caller, are unchanged to 3e-13. (L108)
-- **`ShiftedDistributionPlot` never said how much of each period it had actually used.** Both periods are
-  `dropna()`ed before their density is fitted, and a KDE is normalized to the same unit area whether it was built
-  from 70 128 records or from 201 of them — so a mostly-empty reference drew a curve indistinguishable from a
-  complete one, and set the zone breakpoints from whatever survived. On the bundled CH-DAV data with a 2013-2016
-  reference, `NEE_CUT_REF_orig` fits on 23 285 of 70 128 records (66.8% missing), `LE_orig` on 47 454, `LW_IN` on
-  49 305 and `Tair_f` on all of them — four figures that previously looked alike. The counts are now kept as
-  attributes, warned about when a period loses records, and stated on the figure: both legend labels carry
-  `n = 23285 of 70128`, or `n = 70128` when nothing was dropped. A caller-supplied `ref_label`/`comp_label` gets
-  the count too, so renaming the periods cannot take it off the plot. New `verbose=True` prints a per-period
-  table with each period's mean, sd and retained fraction alongside the breakpoints. What the gaps cost is real
-  and depends on *why* they are missing: measured NEE against its gap-filled counterpart over the same period
-  gives mean -4.080 vs -0.684 and sd 6.496 vs 5.355, moving the -3 sd cut 6.82 umol lower, while thinning `LW_IN`
-  at random to 5% of its records moves the breakpoints by under 2 W m-2. Nothing about the drawn density or the
-  zones changes. (L151)
-
-- **The MDS similarity window is trimmed at the ends of a record, not clipped.** ONEFlux narrows the window bounds and
-  its diurnal method skips out-of-range positions, so a real record enters a fill at most once; diive folded every
-  out-of-range offset onto record 0 or n-1 and counted the edge value hundreds of times in the mean, the SD and the
-  count. The cascade's largest window reaches 427 days on each side, so the bias reached more than a year into each end
-  of a record. Interior fills are bit-identical, which is why the ~5e-7 agreement with a native ONEFlux run never
-  caught it. On a 40-day synthetic record a gap at index 2 moved from count 453 / fill -3.3071 / SD 0.5381 to
-  count 120 / fill -4.0003 / SD 0.6638:
-  duplicates carry no spread, so the reported uncertainty near the edges was understated by nearly half. Affects
-  `FluxMDS`, `RandomUncertaintyPAS20` and the daytime-partitioning NEE uncertainty, which share the kernel.
-- **u\* filtering now rejects a record whose u\* is missing.** The rejected set was `ustar < threshold`, and neither
-  comparison matches NaN, so those records landed in neither set and their flag summed to 0: accepted, with turbulence
-  unknown. ONEFlux rejects exactly these records (a missing u\* is `INVALID_VALUE` = -9999, below every threshold), so
-  diive accepting them was a deviation rather than a choice. **u\*-filtered fluxes therefore lose those records, and how
-  many depends entirely on how gappy the site's u\* record is.** A per-record threshold Series that does not cover every
-  record now raises, which is what its docstring already required, instead of quietly rejecting the uncovered records;
-  the in-chain VUT path builds a full-coverage series, so only a hand-built one can trip it.
-- **Windowed FFT amplitudes are corrected for the window's coherent gain, and `harmonic_analysis` reads the bin it
-  means to.** Both functions applied a window (hamming by default, mean ~0.54) and reported `2*|rfft(x)|/n` without
-  dividing by the window mean, so every amplitude was about 54% of the truth and a reconstruction built from them was
-  short by the rest, with the shortfall landing in `residual`. `harmonic_analysis` additionally indexed DC-stripped
-  arrays with the full-rfft bin number, so a tone sitting exactly on its bin came back with amplitude 0, and its
-  harmonics list disagreed with the spectrum in the same result dict. A 3.0 cosine now returns 3.0 under boxcar,
-  hamming, hann and blackman.
-- **`harmonic_decompose` selects spectral peaks instead of the strongest bins**, so a windowed component's leakage
-  shoulder can no longer be returned as a second component. Two components (period 50 at amplitude 3, period 25 at
-  amplitude 1) previously came back as period 50 twice, with the residual absorbing the component that was missed.
-  Knock-on: the reconstruction is built from N distinct components rather than N bins, so it carries slightly less of
-  the signal's energy, and **anything built on `features_stl` with the harmonic method shifts**. Used as a gap-filling
-  feature it is marginally weaker: `test_gapfilling_stl_features_xgboost` moved mae 2.79 to 3.01 and r2 0.53 to 0.47,
-  and its bound was widened. Fewer than `n_harmonics` components come back when the spectrum holds fewer peaks.
-- **STL survives a gap.** statsmodels' STL has no NaN handling and propagates rather than raising, so one missing value
-  in 1460 returned three all-NaN components, `seasonality_strength` 0.0 and a `summary()` of "nan ± nan", on the default
-  path for real EC data, and against four docstring claims of gap tolerance. It now fits on a linearly interpolated copy
-  (`limit_direction='both'`, since one leftover edge NaN is enough to poison the fit) and masks the gaps back out of all
-  three components, so a gap in is a gap out and no interpolated value is ever returned. The count is reported as
-  `n_interpolated`; an all-NaN series raises. **A gappy series that used to decompose to nothing now returns
-  components**, which reaches `SeasonalTrendDecomposition` and, through the next item, gap-filling features.
-- **`FeatureEngineer(features_stl=True)` gives gappy drivers their STL features.** The blanket skip of any column
-  holding a single NaN existed only because STL could not fit around a gap, and it announced itself through `detail()`
-  at DEBUG level, so asking for STL features at default verbosity produced none of them and no visible sign. Measured on
-  a driver with 300 gaps, the components are NaN exactly where the source column is, so the feature costs no model rows.
-  `'classical'` genuinely cannot decompose gaps; that column alone is skipped, now with a warning, plus a summary
-  warning when no column could be decomposed at all.
-- **`DriverAnalysis` (experimental): every number it reports moves.** `deseasonalize=True` interpolated every gap so
-  statsmodels' STL could run and then returned the interpolated values as part of the decomposition, so fabricated
-  target records entered every model matrix, including the chronological hold-out the class scores itself on: a 4-day
-  gap came back with 0 NaN. The interpolation stays, since STL cannot fit without it, but is masked back out in the
-  helper, which covers `_apply_deseasonalize`, `scale_resolved` and `granger` at once. Separately, per-scale and
-  per-regime relevance was judged against the headline model's injected `.RANDOM` floor instead of each submodel's own,
-  although each submodel is fitted on a different subset with its own noise scale. On the CH-DAV example month the
-  per-scale floors span 0.013 to 0.392 against a global 0.246, so individual labels move, and since `regime_dependence`
-  is the only trigger for `verdict='context_dependent'`, the headline verdict can flip with them.
-- **`StratifiedAnalysis` analyses the records it used to drop and keeps the z bins it used to lose**, so both the curves
-  and the bin count in an existing figure change. `dropna()` ran over every column of the input frame, so passing a
-  working dataframe, which is the obvious call, cut 20 000 rows to 100 through one unrelated gappy column, and the
-  on-plot count reported the survivors as if they were the data; `zvar` / `xvar` / `yvar` are extracted first now, and
-  `n_records_input` / `n_records_used` say what was dropped. Per-bin results were also keyed by the bin aggregate
-  rounded to 2 decimals, so adjacent quantile bins that rounded alike overwrote each other: 60 bins over a z range of
-  0.1 stored 11 of them, with the legend blaming classes that were "not generated". Labels are now widened until they
-  are distinct, so the legend still reads in real units.
-- **Cells are no longer drawn over regions that hold no data.** `HeatmapYearMonth` handed the months that occurred to
-  `pcolormesh` as cell boundaries while keeping regular 1..12 ticks, so a November to February record drew February
-  across the region labelled March to September. `GridAggregator` reindexed onto the full bin lattice for
-  `binning_type='custom'` only, although `min_n_vals_per_bin` can empty a bin of any type, so a bimodal variable over 30
-  equal-width bins collapsed to 5 columns and its empty middle rendered as solid data (which also defeated the X/Y/Z
-  surface's `_drop_gap_risers`). Fixed in `GridAggregator`, so `HeatmapXYZ` and the 3-D X/Y/Z surface both benefit, and
-  its wide output now carries every bin the binning defined.
-- **`WindDirOffset` honours `hist_n_bins`, and its bins span the full circle.** The per-year histogram was hardcoded to
-  360 bins while the reference histogram used `hist_n_bins`, so any other setting left the two `COUNTS` series with
-  different lengths and `Series.corr()` aligned them on the RangeIndex: the best offset was picked by correlating a
-  truncated, mismatched bin set. The edges are now pinned to `linspace(0, 360, hist_n_bins + 1)` rather than derived
-  from each subset's own range, since correlating bin by bin only means something once bin *i* covers the same
-  directions in both. The wrap is `% 360`, which handles any offset magnitude and maps an exact 360 to 0.
-- **BUR08 applies the water-vapour dilution factor** `(1 + 1.6077 rho_v/rho_d)` that BUR06 and JAR09 already applied,
-  settled from Burba et al. 2008 and the LI-7500 poster, which give the already-WPL-corrected form diive implements with
-  the factor present. `correction_method_base` had been changing two things at once: the surface-temperature model, and
-  whether the factor applied at all. On CH-LAE 2016-2017 the BUR08 correction term rises 1.16% in the mean and 1.31% in
-  the median, with one record fewer, since a record without humidity cannot carry the factor.
-- **The self-heating gap-fill actually fills gaps, and stops deleting measurements.** `_gapfill()` dropped rows with a
-  NaN in any column including the target, which is exactly the rows to be filled, so XGBoost reported "Filling 0 missing
-  records" and the console blamed insufficient drivers (CH-LAE June to August 2016: 497 gaps in, 497 out, now 0). A
-  record with a measured flux but no correction term was deleted by `flux + NaN`; it is carried through uncorrected
-  instead, with a new informational `FLAG_NEE_OP_CORR_ISCORRECTED` (1 corrected, 0 carried through, NaN no measured
-  flux) and a warning giving the count. An unrecognised `correction_method_base` raises instead of leaving the
-  correction empty and completing without a word, and classes with fewer than `MIN_ROWS_PER_CLASS` complete records are
-  reported rather than silently taking a neighbouring class's scaling factor.
-- **The 3000-record minimum applies to every u\* detection entry point.** `detect()` enforced it while `bootstrap()` and
-  `bootstrap_annual_samples()` reached the internals directly, and those are the paths `UstarBootstrapThresholds` and
-  the chain's L3.3 detection actually call: at 1000 records `detect()` raised and `bootstrap()` returned 0.4197. The
-  check moved into the one point every public entry passes through. A window that finds nothing now reports why at
-  `warn` level, where "too few records", "mistyped column name" and "detection genuinely found nothing" had been
-  indistinguishable from each other and from bare NaN thresholds. `annual_thresholds_` holds NaN after a failed
-  detection instead of the `THRESHOLD_NOT_FOUND` sentinel 10.0, a plausible-looking threshold that would filter out
-  every record. Class binning now follows the C tie-extension branch diive was missing and treats an inverted class as
-  empty, the way the C accumulation loop does; on CH-LAE no final threshold moves, so that one corrects an intermediate
-  value.
-- **Random uncertainty method 4 averages 10 neighbours, not 9.** The slice took 5 below the target and only 4 above,
-  skewed toward lower fluxes, against a documented 10. It affects only records that fall through to method 4: about
-  0.01% on CH-DAV, 2 of 21 000 on the shipped example. Methods 1 and 2, the ONEFlux port, are untouched.
-- **A joint-uncertainty cumulative record with incomplete scenario inputs is NaN** rather than a wrong number. The
-  random term was masked to available flux and the scenario term was not, so a record carrying only one percentile moved
-  one cumsum and not the other, and with a narrow band the running spread could come out negative. Both documented
-  cumulative conventions are preserved.
-- **`detect_seasonality` raises instead of fabricating a result.** With no candidate period in `[2, max_period]` it
-  returned `primary_period=365`, `secondary_periods=[7, 30]` and `strength=0.0`, so a failed detection was
-  indistinguishable from a real answer, and `SeasonalTrendDecomposition._get_seasonal_period` calls it whenever
-  `seasonal_period` is not supplied: a 5-point series was decomposed at period 365. The message names the range, the
-  number of valid values and the way out. The "no peaks, use max power" branch stays; that one is a real answer.
-- **`CompoundExtremes` raises when nothing can be classified.** With the documented defaults (`agg='monthly'`,
-  `standardize_by='season'`) a single year gives every calendar-month group one member, so the ddof=1 standard deviation
-  is NaN, every period drops out, and the empty result was the same output a record genuinely holding no extremes would
-  give. The message names the cause, how many years the record spans, and `standardize_by='record'`. A partial loss
-  warns with the count instead of passing unmentioned: on CH-DAV a 13-month slice keeps 2 periods and warns about the 11
-  it dropped.
-- **`analyze_highest_quality_flux` counts only measured records.** It reported 1519 of 3000 records as "Valid records:
-  2986 (99.5%)", in the console and in the public `summary` dict alike. The flag change above fixes the count; the rates
-  were wrong independently, since they used the potential-record count as the denominator although a record with no
-  value was never a candidate for being an outlier. Both rates are per measured record now, with `measured_records`
-  reported alongside.
-- **Frequency detection counts intervals, not rows.** The modal-delta count was divided by `len(df)`, so
-  `DetectFrequency.percent_matching` and `TimestampSanitizer.get_status()['frequency_percent_matching']` came out one
-  interval short (99.0 for a perfectly regular 100-record index) and a clean 2-record series was rejected as too
-  irregular. Both values were additionally recovered by parsing them back out of a `'{:.0f}% occurrence'` string, so a
-  genuine 99.9% read as an indistinguishable 100.0; the exact fraction is carried internally now, and the public tuple
-  and its display string are unchanged. The detected frequency itself does not move for normal-length data: identical on
-  all four bundled datasets, and a 3000-trial randomised sweep found one arithmetically constrained change, even *n*
-  where the top delta occurs exactly *n*/2 times, which is a genuine majority of intervals that the old denominator
-  rejected outright. So the change only adds detections. A 1-record index now reaches the informative `RuntimeError`
-  instead of a bare `KeyError`.
-- **An unset bound in `keep_records_where` is open for every `inclusive` value.** It substituted the condition's
-  observed `min()` / `max()`, so `inclusive='neither'`, `'left'` or `'right'` excluded the extreme record although the
-  docstring promised that side was open; `-inf` / `+inf` are used now. Reachable straight from the GUI's Select records
-  by condition tab, whose shaded preview and result now agree, and `select_records_to_code` inherits the fix because it
-  omits an unset bound.
-- **The 3-D date/time surface sits on the heatmap's time axis.** `datetime_surface_grid` sanitized the index but never
-  converted it to `TIMESTAMP_START` as `HeatmapBase._setup_timestamp` does, so under diive's MIDDLE working convention
-  the surface's time-of-day axis sat half a period from the heatmap's for the same data, against the function's own
-  claim to use "the same preparation the 2-D heatmap uses". Two assertions in
-  `test_datetime_surface_grid_shape_and_axes` encoded the offset and moved with the fix.
-- **A variable named `DATE` or `TIME` is no longer destroyed by the pivot helpers.** In `datetime_surface_grid` this
-  raised a `TypeError`; in `HeatmapDateTime` it did not, because without `dtype=float` the array stays object dtype, so
-  the heatmap silently painted the timestamps and produced a plausible-looking wrong figure. Both pivot through an
-  internal value key now.
-- **The glTF `.glb` export no longer mirrors its texture along the date axis.** glTF and trimesh sample from a
-  lower-left texture origin, so vertex row *i* sampled texel row *d-1-i*: the geometry was right while an exported
-  annual NEE surface painted the winter ridge with the summer colours. Both export paths, smooth and extruded, were
-  affected.
-- **`transform_yearmonth_matrix_to_longform` accepts a matrix with months missing**, which its own producer emits for a
-  seasonal record and its own docstring example shows. Note that it now always returns a full-year span, so a partial
-  year that happened to be contiguous is padded to 12 months with NaN.
-- **`crosscorr` writes a NaN row for three early-outs that used to omit the date entirely**, so a caller aligning the
-  result to a full date index no longer finds holes where it expects NaN, and an all-omitted result still carries the
-  `max_corr` column its plotter looks for.
-
-#### Crashes on documented input
-
-- `Hampel` on any non-fixed frequency (monthly `MS`, yearly `YS`, business-day, weekly). `index.freq.nanos` raises for
-  those offsets, and the median-of-diffs branch beside it already handled them. pandas 3 offers no non-raising fixedness
-  test, so the attempt is the test. The fixed-frequency path is unchanged code, so no existing number moves.
-- `run_level31(set_storage_to_zero=True)` without a storage column, which is the exact case the flag documents for H and
-  LE: `KeyError: "['SLE_SINGLE'] not in index"`. The correction, the report and the plot all cope with no storage term
-  now; the real storage paths are untouched.
-- `ScopApplicator` with any legal input series name. It read incoming series through hardcoded canonical names, so what
-  `ScopPhysics.run(gapfill=False)` produces (`FCT_UNSC`), `physics.fct_unsc_gf` (`FCT_UNSC_gfXG`) and a day/night flag
-  named anything but `DAYTIME` all raised `KeyError`. Both names are normalised at the boundary, which is where the
-  class's own `ColumnConfig` convention was meant to apply.
-- `TimeLagAnalysis` on a gas with few distinct lag values. The default fringe trimming (`[5, 10]`) removed every bin of
-  a `n_unique - 1` bin histogram and `peakbins[0]` raised a bare `IndexError` that escaped `analyze_all_gases` and
-  `plot_all_gases` despite their documented warn-and-continue. Trimming is skipped for that gas with a warning, since
-  trimming anyway would return a peak from a partly-trimmed histogram, turning a crash into a quietly wrong number. A
-  `histogram_start_seconds` / `histogram_end_seconds` range that excludes every lag emptied `results` the same way
-  through different parameters.
-- `UstarThresholdConstantScenarios.calc(showplot=True)` on pandas 3, at two sites rather than the one the finding named:
-  `counts.div(counts[0])` indexes a label-keyed Series positionally. Display only, so no threshold moves.
-- `UstarVekuriThresholdDetection.summary()` before `detect()`, where `results_` was initialised as a dict, so the guard
-  that exists to print "run detect() first" raised `AttributeError` on `.empty`. It now behaves like the sibling ONEFlux
-  port rather than raising. The documented `bootstrap_stats_` attribute was never assigned; `bootstrap()` assigns it.
-- `RidgeLinePlot` on any series containing a gap, since NaN went straight into `KernelDensity.fit`. Dropped once in
-  `__init__`, so a group left with no valid values simply gets no ridge, and an all-NaN series raises with a message
-  saying why. The GUI path worked only because its codegen and tab dropped NaN first, so the public API was strictly
-  worse than the GUI's.
-- `Cumulative.plot` and `CumulativeYear.plot` on an all-NaN column, normal for a scenario column that was never filled:
-  the legend label indexed `dropna().iloc[-1]`. Such a column is labelled "no data" and its end marker skipped, so the
-  legend keeps one entry per column.
-- `transform_yearmonth_matrix_to_longform` on any matrix not produced by `resample_to_monthly_agg_matrix`: unnamed axes
-  gave `KeyError: None`, any other naming `KeyError: "['YEAR', 'MONTH'] not found in axis"`. The axis names are pinned
-  on a copy, leaving the caller's frame alone.
-- `MultiDataFileReader` when every input file is empty or the file list is empty, which reached
-  `sort_multiindex_columns_names(df=None)` and an `AttributeError`. It raises with two messages, naming either "no files
-  given" or "all files empty" and quoting the first path so a bad glob is visible. Returning an empty frame was rejected
-  as the fix: it has no timestamp index and would arrive in the GUI as an inexplicably blank dataset.
-- `harmonic_decompose` returned `frequencies` one element longer than the arrays it is documented to pair with, so
-  `plot(frequencies, amplitudes)` raised.
-
-#### Reporting, contracts and dead code
-
-- **`detail()` output was unreachable at every verbosity setting.** It defaulted to `verbose=VERBOSE_PROGRESS` (2) while
-  its own `min_level` is `VERBOSE_DEBUG` (3), so a bare `detail(msg)` printed at no setting at all, and 25 debug lines
-  across the library were lines their authors believed they had written. Passing `verbose=` at each site was not
-  available, since 24 of the 25 have no `self.verbose` and no `verbose` parameter, so the helpers now default to
-  `verbose=None`, meaning "use the module default", and that default is settable: **new `dv.set_verbosity(level)` and
-  `dv.get_verbosity()`, exported at top level.** Behaviour at the default is unchanged (`detail` quiet, `info` printing)
-  and an explicit `verbose=` still wins. The CLAUDE.md convention that produced the defect, calling helpers without
-  `verbose=` inside a `if self.verbose >= N:` guard, is corrected.
-- **Three quality-flag contracts corrected.** `flag_ssitc_eddypro_test` documented a conversion it does not perform, but
-  the code is right: EddyPro SSITC is already 0/1/2, so the conversion is the identity and promoting 1 to 2 would reject
-  records FLUXNET treats as usable, which is what `setflag_timeperiod` exists for. The docstring was fixed instead.
-  `FlagQCF`'s documented "NaN if no flag available" branch is genuinely unreachable and should stay so, since a NaN QCF
-  would pass both of `_calculate_series_qcf`'s filters; it is documented as never-NaN with a test to keep it that way.
-  A scalar `0` flag code no longer becomes NaN through a `'0.0'[1]` round-trip, which is a reporting fix, not a
-  screening change, since flag sums count only 1 and 2.
-- `ScopPhysics.plot_diel_cycles()`, `ScopOptimizer.plot()` and `ScopApplicator.plot_dashboard()` now take
-  `showplot: bool = True` and return their figure, so a script can render headless and close the figure
-  instead of leaking a 24x20-inch one per call.
-- `ScopPhysics` documented "a hybrid approach using Random Forest and Mean Diurnal Variation" and printed "-> Imputed
-  (RF + MDV)"; the gap-fill is XGBoost with no MDV stage, and MDV lives in `ScopApplicator`, which the docstring now
-  points at. The results column is renamed from its legacy `FCT_UNSC_gfRF` to
-  `FCT_UNSC_gfXG`, so the attribute and the frame agree; see *Breaking Changes*.
-- `TimeLagAnalysis`'s class docstring stated three parameter facts the code contradicts: `ignore_fringe_bins` defaults
-  to `[5, 10]` and counts leading and trailing bins rather than naming indices, `zoom_margin` defaults to `[0.5, 1.5]`,
-  and `histogram_startbin` / `histogram_endbin` are lag values in seconds, hence floats. Those two names were
-  subsequently renamed to state the unit, see *Removed or renamed API* above.
-- `reconstruct_from_components` masked every reconstruction with the trend's NaN regardless of `components_to_use`, so a
-  seasonal-only reconstruction from a classical decomposition lost the trend's edge records (30 of 400 at period 31) and
-  disagreed with `detrend()` on the same request. The mask was redundant where the trend was included, since gaps
-  propagate through the arithmetic anyway. `seasonality_strength`'s docstring described a formula the code does not
-  compute; it computes the Wang/Hyndman variant.
-- `show_less_xticklabels` is applied by `HeatmapDateTime`, which accepted, documented and forwarded it while only
-  `HeatmapYearMonth` read it. The GUI exposes it from a shared checkbox and codegen emits it into copied snippets, so
-  removing it was not an option.
-- `GridAggregator` keys its working frame by internal `_x` / `_y` / `_z` names, the pattern `ScatterXY` already uses, so
-  two roles sharing a Series name no longer collide: a z sharing the x name replaced x and the plot carried z's range on
-  the x axis, and x and y sharing a name raised "Grouper not 1-dimensional". Public naming is unchanged.
-- The `FeatureEngineer` rolling stages no longer re-engineer their own output. They were the only per-column stages
-  without a dot-prefix filter, so feeding the engineer a frame that already contains engineered columns, which the GUI's
-  Feature engineering tab makes easy, produced names like `..TA_POL2_MEAN4`. No library path changes: the rolling stages
-  receive `df[original_input_features]` and no caller passes an engineered column, so no model's features, SHAP values or
-  `reduce_features` selection move.
-- `MetadataStore.rename` raises on a collision instead of collapsing two entries and losing the loser's metadata,
-  provenance and tags. The collision is judged on the resulting names, so a swap `{A: B, B: A}` and a whole-set prefix
-  rename still work, and it is checked before any mutation, so a rejected rename leaves the store untouched.
-  `MainWindow._rename_variables` validates its mapping the same way rather than handing the frame duplicate column
-  labels.
-- Smaller ones: `LocalSD` no longer leaves a value sitting exactly on the limit in neither `ok` nor `rejected` (no flag
-  count moves, since `rejected` is untouched); `vectorize_timestamps` returns `.SEASON` as a plain integer instead of a
-  nullable `Int64`, which had been forcing an object-dtype array into every ML fit (RF and XGBoost predictions are
-  bit-identical, only the hidden conversion is gone); `lagged_variants`' closing message no longer claims the edge fill
-  is unconditional, since it is correctly skipped for a gappy source, where an edge fill cannot be told apart from
-  inventing driver values; `sort_multiindex_columns_names` no longer reverses the columns it moves;
-  `gapfilling/interpolate.py`'s verbose header no longer prints a literal `{limit}`, and its dead `_calculate_gap_sizes`
-  is gone; `convert_ts_to_timezone` accepts the `DatetimeIndex` its docstring promises; `MultiDataFileReader.metadata_df`
-  tests its own frame rather than the data frame; and the USTAR docstring examples import from `dv.flux` and run.
-
-#### Desktop GUI
-
-- **The NEE partitioning tabs refuse to run without site coordinates.** The lat/lon/UTC spin boxes default to 0/0/0 and
-  `_seed_site` left them there when the project site is unset, so a run partitioned at (0, 0) on UTC and returned
-  plausible-looking GPP and RECO. The guard covers `_python_code` too, which would otherwise emit a runnable snippet
-  carrying `lat=0.0, lon=0.0`. It applies to three of the four tabs: Daytime ONEFlux splits on measured Rg, not solar
-  geometry, so it reads no coordinate.
-- **An outlier tab discards a result whose dataset changed mid-run.** Detection runs on a background thread, so creating
-  a feature, narrowing the date range or deleting a variable during a run left `_on_done` indexing the new frame with
-  the old variable: `KeyError` when the column was gone, and no exception at all when the range had merely changed, in
-  which case the mismatched result was adopted silently. The run's index travels in the payload, so the worker still
-  writes no tab state. `_rerender_last` is tightened the same way; its existing guard covered only the missing-column
-  half.
-- **A saved control that could not be restored is reported.** `restore_controls` kept the widget's current value when a
-  saved combo entry was gone, so reopening a project whose columns or preset labels were renamed left a tab pointing at
-  a different input with no indication. The worst case is numeric: the joint-uncertainty divisor falls back from
-  `JOINT_DIVISOR_IQR` (1.349) to `JOINT_DIVISOR_1SIGMA` (2.0). The unrestored keys are surfaced in the tabs where the
-  fallback changes a number (random and joint uncertainty, and the four partitioning tabs). The return value is purely
-  additive, so callers that ignore it behave as before.
-- **Pinned tabs are frozen.** `_add_features` and `_sync_event_columns` wrote columns in place, so a pinned tab holding
-  the same frame object saw them anyway, while column drops rebind and did not leak, making the freeze inconsistent in
-  both directions.
-- **`WorkerRunner` clears `is_running` on the GUI thread**, just before emitting `done` / `failed`, so a caller using it
-  as a re-entry guard can no longer start a second run whose result interleaves with the first. `_screening_base` hand
-  rolls its own thread and needed its own guard: it had been starting an unbounded number of CPU-heavy chains on rapid
-  chain edits. `_outlier_base._compute_payload` no longer writes tab state from the worker thread; the daytime mask
-  travels with the progress signal.
-- **The 3-D export buttons no longer write the previous variable's relief** under the current variable's filename after
-  a render that produced nothing, either an all-NaN variable or a Z role that is not a real column. The rolling cell
-  aggregator uses an *n*-row window for even *n*, as its docstring and its tooltip both say.
-- `save_config` catches `TypeError` and `ValueError` as well as `OSError`, which is what `json.dumps` raises, so one
-  unserializable value no longer costs the whole file. Project load no longer syncs the outgoing session's `EVENT_*`
-  columns onto the incoming frame before replacing them.
-- **A test fixture now fails a test when Qt swallows a slot exception.** PySide6 routes an exception raised inside a slot
-  it invokes to `sys.excepthook` and returns normally, so a test that drives behaviour through a signal and then only
-  checks that nothing broke passes even when the slot crashed. The fixture immediately exposed a real defect:
-  `VariablePanel` connected a lambda to the process-wide `metadata_store.manager.changed` signal, which Qt cannot sever
-  when the receiver dies, so every closed tab left a dead slot firing. 44 tests were passing over 168 swallowed
-  `RuntimeError`s from that one line, and in the running GUI it raised and swallowed one per closed tab on every
-  metadata edit. Seven tests whose only evidence was a stale figure standing after a failed render now assert concrete
-  post-conditions.
-
-#### Bundled example data
-
-- **Six of the eight example parquet files had never been committed.** A `*.parquet` ignore rule added in January 2025
-  meant `git add` silently skipped them, so only a working-directory copy existed: the documented
-  `load_exampledata_parquet_lae*` loaders raised `FileNotFoundError` for anyone installing diive, 8 examples did not
-  run, and once that local copy went, 23 tests failed or errored (the whole GUI flux chain tab, all of
-  `test_ustar_mp.py`, the L2 custom columns). Recovered from the v0.91.0 GUI build, which had frozen a copy at packaging
-  time. Every file now carries an explicit exception to the ignore rule so it cannot hide them again. 33.6 MB total, of
-  which 15.4 MB was already tracked.
-
-#### One deviation from ONEFlux, kept on purpose
-
-- **u\* filtering is `ustar >= threshold` and nothing more.** ONEFlux, and Pastorello et al. 2020, additionally discard
-  the first half-hour above the threshold following a period below it, to avoid the false emission pulse from CO2 that
-  accumulated under the canopy and flushes past in one burst. diive keeps that record, favouring data availability, and
-  leaves the trade-off to the user, who can drop those records. It is documented in
-  `FlagMultipleConstantUstarThresholds` with the reason and the reference, and pointed at from the single and variable
-  flaggers, so it cannot be mistaken for an oversight. Everything else in the comparison follows ONEFlux, including the
-  missing-u\* rejection above.
-
-#### Plot classes, docstring examples, and GUI object lifetime
-
-Round 4 covered the eight files the earlier rounds had left out — `windrose.py`, `hexbin.py`, `histogram.py`,
-`waterfall.py`, `shifted_distribution.py`, `timeseries.py`, `bar.py` and the GUI's `icons.py`. **All 40 are fixed** —
-the 9 that produced a silently wrong or silently incomplete figure, the 6 that crashed on legitimate input, the 10
-contract mismatches and the 15 cosmetic or latent ones — all listed above. Four of the last group turned out to be
-mis-tiered once measured, and two of those changed numbers rather than appearance.
-
-What did change:
-
-- **Docstring examples are executed.** `tests/test_docstring_examples.py` runs 17 of them (previously none ran
-  anywhere), and the reference check now also resolves names inside reST literal blocks and attribute docstrings.
-  Landing it fixed 8 broken samples — all documentation wrong against correct code, including a `FlagQCF` sample
-  documenting a signature the class has not taken in a long time — plus five "Top-level alias" claims naming functions
-  that do not exist.
-- **The GUI no longer leaks windows and tabs.** A lambda capturing `self` and connected to a child widget's signal is
-  owned by the connection object on Qt's C++ side, where Python's collector cannot walk it, so the cycle was unbreakable:
-  no `MainWindow` was ever collected, and 28 of 41 tab classes leaked on drop. Since every leaked window and tab stays
-  subscribed to the app-wide singletons, a theme change re-rendered all of them. Fixed by replacing 43 lambda sites with
-  bound methods or the new `weak_slot` helper, and by deleting a tab's page on close. Suite-end live widgets fall from
-  13 149 to 133, and `theme.manager.apply()` after three flux-chain cycles from 0.65 s to 0.000 s.
-
-#### Still open
-
-Three findings are open. Two were turned up while fixing the others and are recorded with a repro: an empty-series
-crash in `HistogramPlot.__init__` that the guard in `plot` cannot reach, and an unreported NaN drop in
-`ShiftedDistributionPlot`, where a 95%-gappy reference period yields a confident-looking density from 5% of the records.
-The third needs an external source: whether InfluxDB v2's delete range excludes `stop`, in
-which case the pre-upload delete leaves the last record and duplicates survive. Deferred separately is BUR06/JAR09's
-aerodynamic resistance, where diive passes the canopy momentum resistance `u/u*^2` in place of Burba 2006's per-element
-`7.4*sqrt(d/U)` and has no equivalent of `fr`, the fraction of instrument heat retained in the optical path. That is not
-fatal in the pipeline, because `ScopOptimizer` fits a scaling factor against a closed-path reference and absorbs both,
-but it makes those two methods semi-empirical rather than the published formulation, which matters for anyone running
-`ScopPhysics` without the optimizer — and the fitted factor cannot absorb the roughly 4.8x residual spread that remains
-*within* each u\* class.
-
-### Unittests
-
-- **New `tests/test_codegen.py` covers the `*_to_code` script generators.** 47 of the 55 had no test, and the 8 that
-  did were either the six flux-chain ones in `tests/test_flux_codegen.py` or reached only incidentally by
-  `tests/test_gui.py` — `core/plotting/codegen.py` read 94% covered while nothing asserted anything about it. Each
-  generator is now checked three ways: the snippet compiles, it contains the call it claims to reproduce, and every
-  keyword it passes to a `dv.*` callable is accepted by that callable's signature. The third check is the one that
-  matters — a renamed library parameter leaves a snippet that still compiles but raises `TypeError` when a user runs
-  it, which compiling alone cannot see. `**legacy` is deliberately not treated as a wildcard: `reject_legacy_params`
-  raises on unknown names, so the named parameters are the real accepted set, and without that carve-out the check
-  skipped every outlier-detector constructor. A completeness test fails if a new `*_to_code` function lands without a
-  test. 67 tests, ~3 s, no GUI or data required.
-- **`TestPlotClasses` in `tests/test_plots.py` covers the plot classes that no non-GUI test reached.** The file tested
-  five classes; `HeatmapDateTime` (used by 16 of the 113 examples), `HeatmapYearMonth`, `Cumulative`,
-  `CumulativeYear`, `RidgeLinePlot`, `TreeRingPlot`, `ShiftedDistributionPlot`, `WaterfallPlot`,
-  `LongtermAnomaliesYear` and `datetime_surface_grid` were executed only incidentally by `tests/test_gui.py`. The
-  fixture is a deterministic synthetic three-year hourly series, so aggregates are exact expected values: the
-  `Cumulative` curve must end at the series sum, the waterfall budget must close on the total, and mean/max/ranks
-  aggregation must give genuinely different meshes. `RidgeLinePlot`'s test pins the documented gotcha that `hspace`
-  has to reach the gridspec at creation. Without any GUI-test contribution these modules now run 80-100% covered
-  (`surface_grid.py` 100%, `heatmap_datetime.py` 91%, `ridgeline.py` 91%, `cumulative.py` 87%, `treering.py` 80%).
-- **`tests/test_corrections.py` grew from 2 tests to 26**, covering all ten public symbols of `dv.corrections`. The
-  `diive/corrections/__init__.py` namespace module was at 0% — no test imported it, so its `__all__` was unverified
-  and a dropped re-export would have kept the suite green; it is now 100%, as is the `apply_corrections` dispatch
-  table (previously reached only by `tests/test_gui.py`), with `offsetcorrection.py` at 98% and `setto.py` at 94%.
-  Each dispatch key is compared against calling the underlying function directly rather than merely running, every
-  `CorrectionSpec` key in `dv.qaqc.CORRECTIONS` is asserted dispatchable, and the nighttime offset is injected at a
-  known constant so the detected daily offset is an exact expected value.
-- **The `dv.qaqc` measurement registry and `dv.variables` classification are tested.** Both read as well-covered
-  (98% and 97%) while being verified by nothing — every covered line came from `tests/test_gui.py`, which drove them
-  without asserting on the answers. `tests/test_qaqc.py` went from 3 tests to 14, `tests/test_createvar.py` from 21 to
-  41; `measurements.py` and `classification.py` are now at 100% from real tests. The assertions cover the two
-  documented traps — `SWC` must beat `SW` in `detect_measurement`, and `FC` must not swallow `FCH4` in
-  `classify_variable` — plus cross-checks that every code `detect_measurement` returns exists in `MEASUREMENTS` and
-  every key `corrections_for_measurement` returns exists in `CORRECTIONS`. `combine_variables`, `auto_pick_column`
-  and `daytime_nighttime_flag_from_swinpot` are covered too.
-- **`tests/test_imports.py` now verifies the whole public namespace surface** — 515 subtests covering every symbol of
-  all ten namespaces. Nothing checked these lists before, so a symbol dropped from a re-export would have vanished
-  from the public API with the suite still green. The test is driven off `_LAZY_SUBMODULES` rather than a hard-coded
-  list, and additionally enforces the four-place namespace registration CLAUDE.md documents: `_LAZY_SUBMODULES`, the
-  `TYPE_CHECKING` block, `diive.__all__`, and `packaging/diive_gui.spec`'s `hiddenimports`. The last one otherwise
-  fails **only in the frozen GUI build**, since PyInstaller cannot follow a PEP 562 `__getattr__` — an unlisted
-  namespace passes every test and every dev run, then is missing from the packaged app.
-- **The non-GUI test suite runs in half the time** (402 s -> 199 s). One `setUpClass` in
-  `tests/test_driveranalysis.py` cost 220 s — 55% of the whole non-GUI suite — by running `DriverAnalysis` at static
-  + temporal levels over a 4-month fixture. Row count is what costs: every temporal stage ends in a TreeSHAP pass
-  over the full matrix and more rows also deepen the forest, so 2x the data costs 7.5x the time, while the lag span
-  is nearly free. The fixture is now 2 months (matching the static class) with the lag range unchanged: setup 220 s
-  -> 27.6 s. Ten convergence/verdict branches that `months=4` happened to reach are no longer covered; no test
-  asserted on them, and they are noted in `COVERAGE_GAPS.md` as needing deliberate tests.
-- **`GapFillingResult` and `prediction_scores` are tested.** `GapFillingResult` is the documented return type of
-  `.results` on every gap-filler; `core/ml/results.py` read 100% covered while every one of its lines came from
-  `tests/test_gui.py`, and `core/ml/scores.py` had no test at all. Both are now at 100% from real tests. The ML
-  contract is pinned (no NaN in `gapfilled`, `flag` in {0,1,2}, observed records never overwritten, all seven metrics
-  in `scores` and `scores_traintest`, `model`/`feature_importances` populated), as is the reduction-field behaviour
-  and the MDS variant where the regressor-only fields stay `None`. `prediction_scores` is checked for argument order:
-  `r2` and `mape` are asymmetric in (true, predicted), so a swapped internal call changes them while the other five
-  metrics do not — verified by mutation.
-
-- **The flux-chain re-run cascade is tested.** Re-running a level invalidates that level and every later one; without
-  it a second `run_level2` would concat duplicate column labels into `fpc_df`, leaving ambiguous lookups and stale
-  flags for `FlagQCF`. The behaviour was documented but untested, its coverage arriving only from the GUI driving
-  levels repeatedly — `levels/_rerun.py` goes from 87% incidental to 98% from real tests. Covered: the cascade and
-  its column-drop, container purity across a re-run, the `filteredseries` fallback to the newest surviving level,
-  clearing of the additive L4.1/L4.2 state, and `drop_columns_for_key` keeping gap-filling methods independent.
-  Mutation-tested by neutering `cascade_reset`.
-- **`stl_decompose` has regression tests for the two bugs fixed in it** (`core/times/decomposition_utils.py`, now 84%
-  on that function). The wrapper never passed `seasonal` through as statsmodels' `period`, so the caller's cycle
-  length was ignored, and it called `STL.fit(weights=...)`, which statsmodels does not accept. Both are pinned by
-  restoring the original bug in the source and confirming the test fails: a known 24-step cycle must come back with
-  lag-24 autocorrelation above 0.99 (correct period gives 0.9999, a wrong one 0.005, with a control test proving the
-  assertion is not vacuous), and a `weights=` call must not raise. Additive reconstruction, trend-window
-  normalisation, argument validation and the short-series warning are covered too.
-- **`FlagQCF` goes from 53% to 95%** (`preprocessing/qaqc/qcf.py`). The existing tests covered aggregation, the
-  filtered series and the OVERALL screening report; the whole `swinpot_col` day/night path, all three console reports
-  and both plot methods had none. Added: the `> 3 soft flags` boundary the old tests jumped over (exactly 3 must
-  still be QCF 1), the day/night acceptance thresholds (a stricter daytime threshold promotes marginal daytime
-  records while nighttime survives), the DAYTIME/NIGHTTIME split in the screening report, the three reports via a
-  console sink, both plot methods, and the `KeyError` validation. Mutation-tested by breaking three QCF rules in
-  turn. Two bugs found while writing these are recorded in `COVERAGE_GAPS.md`: the reports crash on a cp1252 stdout,
-  and omitting the optional `idstr` yields column names containing a literal "None".
-- **New `tests/test_timestamp_shifts.py` takes `DetectTimestampShifts` from 0% to 92%** — the largest library file no
-  test executed at all (281 statements), despite having a worked example. The tests plant a known clock offset in
-  noise-free synthetic radiation and check each of the three methods recovers it, which validates the algorithms
-  rather than their plumbing — and immediately exposed that `crosscorr` cannot (see Known issues). Construction
-  (auto-computed vs supplied potential radiation, coordinate validation), the clearness filters, all five plot
-  methods and the timedelta formatter are covered too.
-- **`pytest-cov` added to the `dev` group**, giving the first line-coverage baseline: 57% library, 68% GUI, 62%
-  combined. Gaps are catalogued in `COVERAGE_GAPS.md`.
-- **`tests/test_echires.py` left with the code it tested** and runs in dyco as `tests/test_pwb.py`. The suite goes from
-  727 to 653 tests, which is exactly that file's 74. Nothing was lost.
+- **113 examples** across ten folders, with new coverage for the flux chain, all four partitioning
+  ports, USTAR methods, SW_IN gap-filling, compound extremes, gap statistics, events and I/O.
+  `examples/CATALOG.md` lists every one.
+- **New test suites** for the code generators (67 tests, none of which existed before), the plot
+  classes that only the GUI tests had been reaching, and the docstring examples, which now actually
+  run. Landing that last one fixed eight broken samples.
+- **A test fixture now fails a test when Qt swallows an exception inside a slot.** PySide6 sends it
+  to `sys.excepthook` and returns normally, so a test that drives a widget through a signal passes
+  even when the slot crashed. Installing the fixture immediately exposed 168 swallowed errors that
+  44 tests had been passing over.
+- New InfluxDB notebooks for download, screening and delete. 21 older notebooks were archived and
+  their content moved into examples.
+- Dependency management moved from poetry to `uv`, ruff is configured and enforced, and line endings
+  are pinned in `.gitattributes`.
 
 ## v0.90.0 | 13 Jan 2026
 
