@@ -2290,6 +2290,36 @@ def test_all_menu_items_have_icons(window):
     assert count >= 12  # File/Data/Plot/Outliers/Flux/Analyze/Settings/Help entries
 
 
+def test_icon_glyphs_are_identical_at_every_device_pixel_ratio(app, monkeypatch):
+    # A QPainter on a paint device carrying a devicePixelRatio applies that
+    # transform itself. `_canvas` scaling by the ratio on top of that drew every
+    # glyph at `dpr` times its size, so the 16-unit artwork ran off its box —
+    # invisible at 100% display scaling, plainly wrong on a scaled 4K screen.
+    from PySide6.QtGui import QColor
+
+    import diive.gui.icons as icons
+
+    def ink_box(icon_factory, dpr):
+        monkeypatch.setattr(icons, "_device_pixel_ratio", lambda: dpr)
+        img = icon_factory().pixmap(16, 16).toImage()
+        pts = [(x, y) for x in range(img.width()) for y in range(img.height())
+               if QColor(img.pixelColor(x, y)).alpha() > 40]
+        assert pts, "glyph drew no ink at all"
+        n = img.width()
+        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+        # As fractions of the icon box, so the ratios are directly comparable.
+        return tuple(round(v / n, 2)
+                     for v in (min(xs), min(ys), max(xs), max(ys)))
+
+    for factory in (icons.close_icon, icons._ln_folder, icons._ln_gear):
+        boxes = {dpr: ink_box(factory, dpr) for dpr in (1.0, 1.5, 2.0)}
+        assert len(set(boxes.values())) == 1, boxes
+        # ... and it stays inside its box rather than running off an edge.
+        left, top, right, bottom = boxes[2.0]
+        assert left >= 0.02 and top >= 0.02
+        assert right <= 0.98 and bottom <= 0.98
+
+
 def test_diel_cycle_tab(window):
     from diive.gui.icons import menu_icon
     assert not menu_icon("Diel cycle").isNull()

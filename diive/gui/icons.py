@@ -34,11 +34,17 @@ def _canvas() -> tuple[QPixmap, QPainter]:
     """A transparent icon canvas, painted at the screen's device resolution.
 
     The bitmap is allocated at `_SIZE * dpr` pixels and tagged with that ratio,
-    while the painter is scaled so every glyph still draws in 16x16 logical
-    units. Without this the icons are baked at 16 physical pixels and Qt has to
-    upscale them at Windows 150%/200% display scaling, which smears every
-    thin line (measured: a 16px glyph blown up to 32px has no fully opaque ink
-    pixel left, against 69% for a natively painted 32px one).
+    so every glyph draws in 16x16 logical units while the ink is rasterised at
+    the screen's real resolution. Without this the icons are baked at 16 physical
+    pixels and Qt has to upscale them at Windows 150%/200% display scaling, which
+    smears every thin line (measured: a 16px glyph blown up to 32px has no fully
+    opaque ink pixel left, against 69% for a natively painted 32px one).
+
+    Do NOT add `p.scale(dpr, dpr)` here: a QPainter on a paint device that
+    carries a devicePixelRatio applies that transform itself, so scaling again
+    draws every glyph at `dpr` times its intended size and the 16-unit artwork
+    is clipped to the top-left corner of the icon box. That is a no-op at 100%
+    display scaling and only shows up on a scaled (4K) screen.
     """
     dpr = _device_pixel_ratio()
     pm = QPixmap(round(_SIZE * dpr), round(_SIZE * dpr))
@@ -46,7 +52,6 @@ def _canvas() -> tuple[QPixmap, QPainter]:
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-    p.scale(dpr, dpr)
     return pm, p
 
 
