@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.91.0 | XX May 2026
+## v0.91.0 | XX Aug 2026
 
 652 commits since v0.90.0, and the biggest release so far. diive now has a desktop app. The flux
 processing chain can be run one level at a time. The public API is split into ten namespaces, and
@@ -157,8 +157,8 @@ installed.
   Worth knowing before trusting it: without a second radiation measurement, every input is something
   the calendar already determines, so the model can only give the typical value for that time of day
   and year. It cannot know whether a particular gap was cloudy or clear. Feeding it a nearby sensor
-  through `context_df` is what fixes that, and on the bundled Davos record it cut the error on gaps
-  from 138 to 26 W/m2.
+  through `context_df` is what fixes that, and on the bundled example record it cut the error on
+  gaps from 138 to 26 W/m2.
 - **Feature importances are now calculated from a sample of the data** rather than every row
   (`shap_max_rows`, capped at 10 000 rows for the radiation filler and uncapped elsewhere). The
   ranking settles long before the rows run out: on ten years of half-hourly data, the sample gave
