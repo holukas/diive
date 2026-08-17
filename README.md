@@ -38,8 +38,37 @@ pip install 'diive[gui,gui3d]'    # + 3-D surface views (PyVista/VTK)
 pip install 'diive[db]'           # + InfluxDB read/write
 ```
 
-Working from a clone? [CONTRIBUTING.md](CONTRIBUTING.md) has the `uv` setup, including which optional pieces are extras
-(`--extra`) and which are dependency groups (`--group`).
+### From a clone, with `uv`
+
+```bash
+uv sync                              # core library + the 'dev' group (synced by default)
+uv sync --all-extras --all-groups    # everything: all extras AND all groups
+```
+
+**`uv sync --all-extras` alone is not everything.** The optional pieces are split across two uv
+mechanisms, and `--all-extras` reaches only the first:
+
+| Kind | Name | Pulls in | Install |
+|---|---|---|---|
+| extra | `gui` | PySide6 desktop GUI (`diive-gui`) | `uv sync --extra gui` |
+| extra | `gui3d` | PyVista/VTK 3-D surface tabs, `trimesh` glTF export | `uv sync --extra gui3d` |
+| extra + group | `db` | `influxdb-client`, the InfluxDB read/write engine | `uv sync --group db` |
+| group | `dev` | test, lint and notebook tooling | synced by default |
+| group | `build` | PyInstaller, for the standalone Windows app | `uv sync --group build` |
+
+`db` is deliberately both. Working *on* diive, use the group — `uv sync --group db`. Depending on
+diive from another project, ask for the extra — `diive[db]` — because a dependency group is local to
+the project that declares it and never reaches the published metadata.
+
+Combine as needed, e.g. `uv sync --extra gui --extra gui3d --group db`. Then run anything through
+`uv run`:
+
+```bash
+uv run pytest tests/ -v
+uv run diive-gui
+```
+
+[CONTRIBUTING.md](CONTRIBUTING.md) has the rest of the development setup.
 
 ## Quick start
 
