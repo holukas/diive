@@ -10,7 +10,7 @@ NEE partitioning arrives with four ports of the standard reference routines. dii
 averaged data now: the raw high-frequency tooling moved to a project of its own.
 
 This entry is a summary. Method detail and validation numbers are in the docstrings and in
-`examples/`; the code review that closed out the release is written up in `CODE_REVIEW_FINDINGS.md`.
+`examples/`, and `CODE_REVIEW_FINDINGS.md` has the reasoning behind the behaviour changes below.
 
 ### Before you upgrade
 
@@ -33,7 +33,10 @@ Worth re-checking stored output against:
   gap-filling, partitioning, meteo screening and every day/night outlier method.
 - **u\* filtering now rejects records whose u\* is missing**, as ONEFlux does. Those records used to
   pass as "turbulence unknown, accepted". How much data this costs depends on how gappy the site's
-  u\* record is.
+  u\* record is. One deviation from ONEFlux is kept on purpose: diive filters on
+  `ustar >= threshold` and nothing more, where ONEFlux also drops the first half-hour above the
+  threshold after a period below it, to avoid the burst of CO2 that built up under the canopy. diive
+  keeps that record and leaves the trade-off to you.
 - **Outlier flags are NaN where the record is missing**, not 0. A flag records a test result, and no
   test can run where there is no value. Anything counting `(flag == 0)` changes. `FlagQCF` output is
   bit-identical, so the flux chain is unaffected.
@@ -179,7 +182,7 @@ The optional `gui3d` extra adds two GPU 3-D surface tabs. The manual is `diive/g
 
 ### Fixes
 
-Beyond the code review below, roughly forty standalone fixes. The ones most likely to have bitten
+Roughly forty fixes beyond the behaviour changes listed above. The ones most likely to have bitten
 you:
 
 - **`InfluxIO.delete(measurements=True)` deleted nothing and reported success.** Expanding `True`
@@ -211,33 +214,15 @@ you:
   uncertainty is no longer poisoned by a single NaN, and `TrimLow` no longer demands coordinates it
   does not use.
 
-### The code review
+In the GUI:
 
-A read-only review of the library and the GUI, run in four rounds, recorded 159 findings and ranked
-them so that a silently wrong number sits above a crash. The reasoning: a traceback blocks you, a
-plausible wrong number gets published. 155 are resolved, three of those closed as by design, and
-three remain open with a repro recorded.
-
-The results-changing outcomes are listed under *Before you upgrade* above. The rest were crashes on
-legitimate input, controls that silently did nothing, docstrings that described behaviour the code
-did not have, and dead code. `CODE_REVIEW_FINDINGS.md` has every finding with what changed, why that
-direction was chosen, and how it was verified.
-
-Two GUI outcomes are worth calling out on their own:
-
-- **The GUI leaked windows and tabs.** A lambda capturing `self` and connected to a Qt signal is
-  owned on the C++ side, where Python's garbage collector cannot reach the cycle, so no main window
-  was ever collected and 28 of 41 tab classes leaked when closed. Every leaked object stayed
-  subscribed to the app-wide singletons, so changing the theme re-rendered all of them. Live widgets
-  at the end of the test suite fell from 13 149 to 133.
-- **The partitioning tabs used to run at (0, 0) on UTC** when the project site was unset, and
-  returned plausible-looking GPP and RECO from it. They now refuse.
-
-One deviation from ONEFlux is kept on purpose: u\* filtering is `ustar >= threshold` and nothing
-more. ONEFlux also discards the first half-hour above the threshold after a period below it,
-to avoid the burst of CO2 that accumulated under the canopy. diive keeps that record and leaves the
-trade-off to you. It is documented where the flagging happens so it cannot be mistaken for an
-oversight.
+- **The partitioning tabs used to run at latitude 0, longitude 0 on UTC** when the project site was
+  unset, and returned plausible-looking GPP and RECO from it. They now refuse to run.
+- **The app leaked every window and tab it ever opened**, and each leaked object stayed subscribed to
+  the shared settings, so changing the theme re-rendered all of them and got slower the longer a
+  session ran.
+- A saved control that cannot be restored when reopening a project is now reported instead of
+  silently falling back, and a result whose dataset changed mid-run is discarded rather than adopted.
 
 ### Tests, examples and tooling
 
