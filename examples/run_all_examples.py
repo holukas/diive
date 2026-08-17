@@ -228,6 +228,14 @@ def run_example(example_file, examples_dir):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            # A byte the locale codec cannot decode used to kill the reader thread
+            # outright (UnicodeDecodeError in `_readerthread`), losing that example's
+            # entire captured output while the run still reported PASS off the return
+            # code. Replace the byte instead: this output is diagnostic, and a mangled
+            # character beats a discarded traceback. The child's own encoding is left
+            # alone deliberately, so an example printing a genuinely non-cp1252 string
+            # still shows up as the Windows console problem it is.
+            errors='replace',
             env=_child_env(),
             **popen_kwargs
         )
