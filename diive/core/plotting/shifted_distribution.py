@@ -14,12 +14,14 @@ import warnings
 import numpy as np
 from matplotlib.patches import Patch
 from matplotlib.transforms import blended_transform_factory
+from rich.table import Table
 from sklearn.neighbors import KernelDensity
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
 from diive.core.plotting.styles import LightTheme as theme
 from diive.core.plotting.styles.format import FormatStyle
+from diive.core.utils.console import console, info, warn
 
 
 class ShiftedDistributionPlot:
@@ -34,9 +36,26 @@ class ShiftedDistributionPlot:
         series: Time-indexed Series with the variable to plot.
         ref_period: (start, end) date strings for the reference period.
         comp_period: (start, end) date strings for the comparison period.
+        verbose: Print the per-period report (sample size, mean, sd, retained
+            fraction, zone breakpoints) on construction (default False). Records
+            lost to missing values are warned about either way.
+
+    Missing values are dropped per period before the density is fitted. How many
+    each period lost is kept in the ``n_*`` attributes, warned about when it is
+    not zero, and stated on the figure itself: :meth:`plot` appends the sample
+    size to both legend labels, as ``n = 201 of 4018`` when records were dropped
+    and ``n = 4018`` when none were. Without that a reference period that is 95%
+    gaps draws a curve indistinguishable from a complete one — and its mean and
+    sd set the zone breakpoints.
 
     Call `plot()` to render with styling options (including ``zone_labels`` and
     ``zone_colors``).
+
+    Attributes:
+        n_ref_records / n_comp_records: Records the period holds, gaps included.
+        n_ref_used / n_comp_used: Records the density (and, for the reference,
+            the zone breakpoints) is built from.
+        n_ref_missing / n_comp_missing: Records the period lost to missing values.
 
     See Also:
         examples/visualization/plot_shifted_distribution.py
@@ -52,12 +71,14 @@ class ShiftedDistributionPlot:
         comp_period: tuple,
         zone_labels: list = None,
         zone_colors: list = None,
+        verbose: bool = False,
     ):
         """Fit the reference/comparison KDEs and zone breakpoints. See the class docstring
         for parameters (``zone_labels``/``zone_colors`` here are deprecated — pass them to :meth:`plot`)."""
         self.series = series
         self.ref_period = ref_period
         self.comp_period = comp_period
+        self.verbose = verbose
         # Styling belongs in plot(); kept here only as deprecated pass-throughs.
         if zone_labels is not None or zone_colors is not None:
             warnings.warn("ShiftedDistributionPlot: `zone_labels`/`zone_colors` in the constructor "
@@ -69,8 +90,10 @@ class ShiftedDistributionPlot:
         self.ax = None
         self._artists = []  # What this instance drew on `self.ax`, taken back on a repeat plot()
 
-        self._ref_data = series.loc[ref_period[0]:ref_period[1]].dropna().values
-        self._comp_data = series.loc[comp_period[0]:comp_period[1]].dropna().values
+        self._ref_data, self.n_ref_records, self.n_ref_used = self._period_values(ref_period, 'reference')
+        self._comp_data, self.n_comp_records, self.n_comp_used = self._period_values(comp_period, 'comparison')
+        self.n_ref_missing = self.n_ref_records - self.n_ref_used
+        self.n_comp_missing = self.n_comp_records - self.n_comp_used
 
         # A period holding no records has no mean and no spread. Asking numpy for them
         # anyway only emits "Mean of empty slice" warnings on the way to the same NaN.
@@ -108,6 +131,69 @@ class ShiftedDistributionPlot:
         self._ref_kde = self._fit_kde(self._ref_data)
         self._comp_kde = self._fit_kde(self._comp_data)
 
+        if self.verbose:
+            self.report()
+
+    def _period_values(self, period: tuple, which: str) -> tuple:
+        """Return one period's non-missing values plus (records held, records kept).
+
+        Reports what the gaps cost, because nothing downstream can: the KDE is a
+        density, so it is normalized to the same unit area whether it was fitted on
+        4018 records or on 201 of them, and it is the reference period's mean and sd
+        that fix the zone breakpoints.
+        """
+        in_period = self.series.loc[period[0]:period[1]]
+        kept = in_period.dropna()
+        n_records, n_used = len(in_period), len(kept)
+        n_missing = n_records - n_used
+        if n_missing:
+            # Deliberately not gated on `self.verbose`: that flag switches the
+            # per-period report on, whereas losing records is something every caller
+            # must see (still silenceable via `dv.set_verbosity`). Same reasoning as
+            # the wind rose's out-of-range warning.
+            tail = (" Its mean and sd set the zone breakpoints, so those rest on the "
+                    "kept records too.") if which == 'reference' else ""
+            warn(f"Shifted distribution: the {which} period ({period[0]} - {period[1]}) holds "
+                 f"{n_records} records, of which {n_missing} ({100 * n_missing / n_records:.1f}%) "
+                 f"are missing, so its density is built from the remaining {n_used}.{tail}")
+        return kept.values, n_records, n_used
+
+    def report(self):
+        """Print a Rich table of both periods' sample size, mean and sd, plus the zone breakpoints."""
+        # Seven columns is what fits an 80-column console without Rich truncating the
+        # row labels; the two date ranges go on their own line below instead.
+        table = Table(title=f"Shifted distribution: {self.series.name}",
+                      title_style="bold blue", header_style="bold")
+        table.add_column("Period", justify="left", style="cyan")
+        table.add_column("Records", justify="right")
+        table.add_column("Used", justify="right")
+        table.add_column("Missing", justify="right")
+        table.add_column("Used %", justify="right")
+        table.add_column("Mean", justify="right")
+        table.add_column("SD", justify="right")
+
+        def _f(x):
+            return "-" if x is None or not np.isfinite(x) else f"{x:.3g}"
+
+        rows = (('Reference', self._ref_data,
+                 self.n_ref_records, self.n_ref_used, self.n_ref_missing),
+                ('Comparison', self._comp_data,
+                 self.n_comp_records, self.n_comp_used, self.n_comp_missing))
+        for name, data, n_records, n_used, n_missing in rows:
+            mean = data.mean() if data.size else np.nan
+            sd = data.std(ddof=1) if data.size > 1 else (0.0 if data.size else np.nan)
+            pct = f"{100 * n_used / n_records:.1f}" if n_records else "-"
+            # A period that lost records is the one the reader has to judge, so mark it.
+            style = "bold yellow" if n_missing else None
+            table.add_row(name, str(n_records), str(n_used), str(n_missing),
+                          pct, _f(mean), _f(sd), style=style)
+
+        console.print(table)
+        info(f"Reference {self.ref_period[0]} - {self.ref_period[1]}, "
+             f"comparison {self.comp_period[0]} - {self.comp_period[1]}.", verbose=self.verbose)
+        info(f"Zone breakpoints (reference mean +-1 and +-3 sd): "
+             f"{', '.join(_f(bp) for bp in self.breakpoints)}.", verbose=self.verbose)
+
     def _fit_kde(self, data: np.ndarray) -> np.ndarray | None:
         if data.size == 0 or self._x is None:
             return None  # No records, hence no density; plot() labels the period instead
@@ -122,6 +208,13 @@ class ShiftedDistributionPlot:
         kde.fit(data.reshape(-1, 1))
         log_dens = kde.score_samples(self._x.reshape(-1, 1))
         return np.exp(log_dens)
+
+    @staticmethod
+    def _count_label(label: str, n_used: int, n_records: int) -> str:
+        """Append a period's sample size to its legend label, plus what the gaps cost."""
+        if n_used < n_records:
+            return f"{label}, n = {n_used} of {n_records}"
+        return f"{label}, n = {n_used}"
 
     def _remember_artists(self, n_before: tuple):
         """Record what this plot() added to the axes, so a repeat call can take it back."""
@@ -164,6 +257,12 @@ class ShiftedDistributionPlot:
                 not apply.
             ref_label: Legend label for reference period.
             comp_label: Legend label for comparison period.
+                Both labels get the period's sample size appended — ``n = 4018``,
+                or ``n = 201 of 4018`` when records were dropped as missing. This
+                also applies to a caller-supplied label: the count is what tells a
+                reader whether the curve rests on a full period or on a handful of
+                records, and it must stay on the figure whoever names the periods.
+                A period holding nothing keeps its ``: no data`` label instead.
             show_legend: Show legend (default True).
             show_title: Show title (default True).
             show_xaxis: Show x-axis spine, ticks, and tick labels (default True).
@@ -247,6 +346,7 @@ class ShiftedDistributionPlot:
         if self._ref_kde is None:
             _ref_label = f"{_ref_label}: no data"
         else:
+            _ref_label = self._count_label(_ref_label, self.n_ref_used, self.n_ref_records)
             self.ax.fill_between(
                 x, self._ref_kde,
                 facecolor='none', edgecolor='#546E7A', linewidth=0,
@@ -257,19 +357,21 @@ class ShiftedDistributionPlot:
         # Comparison period: filled colored zones on top
         if self._comp_kde is None:
             _comp_label = f"{_comp_label}: no data"
-        elif has_zones:
-            for i in range(5):
-                mask = (x >= zone_edges[i]) & (x <= zone_edges[i + 1])
-                if zone_in_view[i] and mask.any():
-                    self.ax.fill_between(
-                        x[mask], self._comp_kde[mask],
-                        color=zone_colors[i], alpha=0.5, linewidth=0, zorder=2,
-                    )
         else:
-            # Without a reference there is nothing to grade the comparison against, so
-            # it is filled unzoned in the neutral colour instead of not at all.
-            self.ax.fill_between(x, self._comp_kde, color=zone_colors[2],
-                                 alpha=0.5, linewidth=0, zorder=2)
+            _comp_label = self._count_label(_comp_label, self.n_comp_used, self.n_comp_records)
+            if has_zones:
+                for i in range(5):
+                    mask = (x >= zone_edges[i]) & (x <= zone_edges[i + 1])
+                    if zone_in_view[i] and mask.any():
+                        self.ax.fill_between(
+                            x[mask], self._comp_kde[mask],
+                            color=zone_colors[i], alpha=0.5, linewidth=0, zorder=2,
+                        )
+            else:
+                # Without a reference there is nothing to grade the comparison against, so
+                # it is filled unzoned in the neutral colour instead of not at all.
+                self.ax.fill_between(x, self._comp_kde, color=zone_colors[2],
+                                     alpha=0.5, linewidth=0, zorder=2)
 
         # Thin outline on comparison KDE
         if self._comp_kde is not None:

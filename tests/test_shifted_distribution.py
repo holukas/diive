@@ -11,7 +11,9 @@ Also covers the plot's `FormatStyle` contract — the caller's chrome fields mus
 survive, the class overriding only the title and legend it re-draws itself — the
 zone geometry when a +-3 SD breakpoint falls outside the evaluation grid, the
 five-entry contract on the zone label/colour lists, what a repeated `plot()` on
-one axes does, and the sample (ddof=1) standard deviation behind the zones.
+one axes does, the sample (ddof=1) standard deviation behind the zones, and the
+accounting for records dropped as missing (public counts, unconditional warning,
+sample size on the figure, optional per-period report).
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -28,6 +30,7 @@ from sklearn.neighbors import KernelDensity
 
 from diive.core.plotting.shifted_distribution import ShiftedDistributionPlot
 from diive.core.plotting.styles.format import FormatStyle
+from diive.core.utils.console import console
 
 REF_PERIOD = ('1990-01-01', '2000-12-31')
 COMP_PERIOD = ('2010-01-01', '2020-12-31')
@@ -78,6 +81,48 @@ def _zone_labels(ax) -> list:
 
 def _label_x(ax, label: str) -> float:
     return next(t.get_position()[0] for t in ax.texts if t.get_text() == label)
+
+
+def _gappy(*specs) -> pd.Series:
+    """Return the daily series with all but every `keep_every`-th record of each period NaN.
+
+    Each spec is ``(period, keep_every)``, so ``(REF_PERIOD, 20)`` keeps 5% of the
+    reference period and drops the rest as missing.
+    """
+    series = _series()
+    for period, keep_every in specs:
+        in_period = np.flatnonzero((series.index >= period[0]) & (series.index <= period[1]))
+        series.iloc[np.setdiff1d(in_period, in_period[::keep_every])] = np.nan
+    return series
+
+
+def _legend(ax) -> list:
+    return [t.get_text() for t in ax.get_legend().get_texts()]
+
+
+def _n_in(period: tuple) -> int:
+    return int(((INDEX >= period[0]) & (INDEX <= period[1])).sum())
+
+
+class _captured:
+    """Capture the shared console at a fixed wide width for the block.
+
+    The default 80 columns wrap the report table and the warning mid-sentence,
+    which would make the assertions below depend on where the line breaks fall.
+    """
+
+    def __enter__(self):
+        self._width = console._width
+        console.width = 220
+        self._cap = console.capture()
+        self._cap.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        self._cap.__exit__(*exc)
+        console._width = self._width
+        self.text = self._cap.get()
+        return False
 
 
 def _bounded_above() -> ShiftedDistributionPlot:
@@ -209,8 +254,8 @@ class TestOrdinaryComparisonUnchanged(unittest.TestCase):
         self.assertEqual([t.get_text() for t in ax.texts],
                          ['Extremely cold', 'Cold', 'Normal', 'Hot', 'Extremely hot'])
         self.assertEqual([t.get_text() for t in ax.get_legend().get_texts()],
-                         [f"Reference ({REF_PERIOD[0]} - {REF_PERIOD[1]})",
-                          f"Comparison ({COMP_PERIOD[0]} - {COMP_PERIOD[1]})"])
+                         [f"Reference ({REF_PERIOD[0]} - {REF_PERIOD[1]}), n = {self.sdp.n_ref_used}",
+                          f"Comparison ({COMP_PERIOD[0]} - {COMP_PERIOD[1]}), n = {self.sdp.n_comp_used}"])
         self.assertEqual(ax.get_title(loc='left'), 'Shifted distribution: TA')
 
 
@@ -469,6 +514,125 @@ class TestSampleStandardDeviation(unittest.TestCase):
         value = _series().loc['1990-06-01']
         np.testing.assert_array_equal(sdp.breakpoints, [value] * 4)
         self.assertEqual(len(_plotted(sdp).texts), 5)  # Zones still drawn
+
+
+class TestMissingValueAccounting(unittest.TestCase):
+    """Records dropped as missing must be counted, reported, and stated on the figure."""
+
+    def test_the_per_period_counts_are_public(self):
+        sdp = ShiftedDistributionPlot(_gappy((REF_PERIOD, 20)), REF_PERIOD, COMP_PERIOD)
+        n_ref, n_comp = _n_in(REF_PERIOD), _n_in(COMP_PERIOD)
+        self.assertEqual(sdp.n_ref_records, n_ref)
+        self.assertEqual(sdp.n_ref_used, len(sdp._ref_data))
+        self.assertEqual(sdp.n_ref_used, -(-n_ref // 20))  # every 20th record kept
+        self.assertEqual(sdp.n_ref_missing, n_ref - sdp.n_ref_used)
+        # The untouched comparison period loses nothing.
+        self.assertEqual((sdp.n_comp_records, sdp.n_comp_used, sdp.n_comp_missing),
+                         (n_comp, n_comp, 0))
+
+    def test_a_gappy_reference_warns_without_being_asked_to(self):
+        """The warning is not gated on `verbose`: the flag switches the report, not the loss."""
+        with _captured() as cap:
+            sdp = ShiftedDistributionPlot(_gappy((REF_PERIOD, 20)), REF_PERIOD, COMP_PERIOD)
+        self.assertIn('reference period', cap.text)
+        self.assertIn(str(sdp.n_ref_records), cap.text)
+        self.assertIn(str(sdp.n_ref_missing), cap.text)
+        self.assertIn(str(sdp.n_ref_used), cap.text)
+        self.assertIn(f"{100 * sdp.n_ref_missing / sdp.n_ref_records:.1f}%", cap.text)
+        # The zone breakpoints come from this period's mean and sd, so say so.
+        self.assertIn('breakpoints', cap.text)
+        # The comparison period is complete, so it is not mentioned.
+        self.assertNotIn('comparison', cap.text)
+
+    def test_a_complete_record_warns_about_nothing(self):
+        with _captured() as cap:
+            ShiftedDistributionPlot(_series(), REF_PERIOD, COMP_PERIOD)
+        self.assertEqual(cap.text, '')
+
+    def test_each_period_is_warned_about_separately(self):
+        with _captured() as cap:
+            sdp = ShiftedDistributionPlot(_gappy((REF_PERIOD, 20), (COMP_PERIOD, 2)),
+                                          REF_PERIOD, COMP_PERIOD)
+        self.assertIn('reference period', cap.text)
+        self.assertIn('comparison period', cap.text)
+        self.assertEqual(sdp.n_comp_used, -(-sdp.n_comp_records // 2))
+        # Only the reference sets the zones, so only its warning says so.
+        self.assertEqual(cap.text.count('breakpoints'), 1)
+
+    def test_an_all_nan_period_is_warned_about_as_a_total_loss(self):
+        with _captured() as cap:
+            sdp = ShiftedDistributionPlot(_series(REF_PERIOD, np.nan), REF_PERIOD, COMP_PERIOD)
+        self.assertEqual((sdp.n_ref_used, sdp.n_ref_missing), (0, _n_in(REF_PERIOD)))
+        self.assertIn('100.0%', cap.text)
+
+    def test_a_period_outside_the_record_holds_nothing_to_lose(self):
+        """No records at all is not a NaN loss, so there is nothing to warn about."""
+        with _captured() as cap:
+            sdp = ShiftedDistributionPlot(_series(), REF_PERIOD, OUTSIDE_PERIOD)
+        self.assertEqual((sdp.n_comp_records, sdp.n_comp_used, sdp.n_comp_missing), (0, 0, 0))
+        self.assertEqual(cap.text, '')
+
+    def test_the_legend_states_the_sample_size(self):
+        sdp = ShiftedDistributionPlot(_series(), REF_PERIOD, COMP_PERIOD)
+        labels = _legend(_plotted(sdp))
+        self.assertEqual(labels[0],
+                         f"Reference ({REF_PERIOD[0]} - {REF_PERIOD[1]}), n = {_n_in(REF_PERIOD)}")
+        self.assertEqual(labels[1],
+                         f"Comparison ({COMP_PERIOD[0]} - {COMP_PERIOD[1]}), n = {_n_in(COMP_PERIOD)}")
+
+    def test_the_legend_states_what_the_gaps_cost(self):
+        """The finding's core complaint: a 5%-complete KDE must not look like a full one."""
+        sdp = ShiftedDistributionPlot(_gappy((REF_PERIOD, 20)), REF_PERIOD, COMP_PERIOD)
+        labels = _legend(_plotted(sdp))
+        self.assertTrue(labels[0].endswith(f", n = {sdp.n_ref_used} of {sdp.n_ref_records}"), labels[0])
+        # The complete comparison period keeps the plain count, with nothing to compare to.
+        self.assertTrue(labels[1].endswith(f", n = {sdp.n_comp_used}"), labels[1])
+        self.assertNotIn(' of ', labels[1])
+
+    def test_a_caller_supplied_label_carries_the_count_too(self):
+        """Renaming the periods must not be a way to drop the sample size off the figure."""
+        sdp = ShiftedDistributionPlot(_gappy((REF_PERIOD, 20)), REF_PERIOD, COMP_PERIOD)
+        labels = _legend(_styled(sdp, ref_label='Baseline', comp_label='Recent'))
+        self.assertEqual(labels[0], f"Baseline, n = {sdp.n_ref_used} of {sdp.n_ref_records}")
+        self.assertEqual(labels[1], f"Recent, n = {sdp.n_comp_used}")
+
+    def test_an_empty_period_keeps_its_no_data_label(self):
+        """'no data' already states the sample size; 'n = 0 of 4018' on top would be noise."""
+        labels = _legend(_plotted(ShiftedDistributionPlot(_series(), REF_PERIOD, OUTSIDE_PERIOD)))
+        self.assertTrue(labels[1].endswith(': no data'), labels[1])
+        self.assertNotIn('n = ', labels[1])
+
+    def test_verbose_prints_the_per_period_report(self):
+        with _captured() as cap:
+            sdp = ShiftedDistributionPlot(_gappy((REF_PERIOD, 20)), REF_PERIOD, COMP_PERIOD,
+                                          verbose=True)
+        for expected in ('Reference', 'Comparison', 'Missing', 'Used %',
+                         str(sdp.n_ref_used), str(sdp.n_ref_missing),
+                         str(sdp.n_comp_used), 'breakpoints'):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, cap.text)
+
+    def test_the_report_table_fits_a_default_width_console(self):
+        """Rich truncates cells to fit, so a too-wide table would show 'Refer...' instead."""
+        with console.capture() as cap:  # no width override: the default 80 columns
+            ShiftedDistributionPlot(_series(), REF_PERIOD, COMP_PERIOD, verbose=True)
+        out = cap.get()
+        self.assertIn('Reference', out)
+        self.assertIn('Comparison', out)
+        self.assertNotIn('…', out)  # Rich's truncation ellipsis
+
+    def test_the_report_stays_off_by_default(self):
+        with _captured() as cap:
+            ShiftedDistributionPlot(_gappy((REF_PERIOD, 20)), REF_PERIOD, COMP_PERIOD)
+        self.assertNotIn('Used %', cap.text)  # the report table, as opposed to the warning
+
+    def test_the_report_survives_a_degenerate_period(self):
+        """An empty and a single-record period have no mean/sd to tabulate; report anyway."""
+        with _captured() as cap:
+            ShiftedDistributionPlot(_series(), ('1990-06-01', '1990-06-01'), OUTSIDE_PERIOD,
+                                    verbose=True)
+        self.assertIn('Reference', cap.text)
+        self.assertIn('Comparison', cap.text)
 
 
 if __name__ == '__main__':
