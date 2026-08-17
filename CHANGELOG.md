@@ -6,8 +6,8 @@
 
 ### Highlights
 
-- `diive` now also features a desktop application with a graphical user interface that can be used to quickly visualize
-  and analyze flux data
+- `diive` now features the first version of a new desktop application with a graphical user interface that can be
+  used to quickly visualize and analyze flux data
 - Several new and improved plotting functions, with harmonized parameter handling
 - The API has been reorganized into ten namespaces to make it easier to find certain functions.
 - New and improved partitioning methods for NEE fluxes from eddy covariance
@@ -70,7 +70,7 @@
 
 #### Silent result changes
 
-The following change numbers that were calculated with earlier versions.
+These changes affect numbers calculated with earlier versions.
 
 - **`potrad`** now implements a faithful port of the ONEFlux routine behind FLUXNET's `SW_IN_POT`.
   The signature is unchanged, so existing calls run and return different values: 20 W m-2 RMSE
