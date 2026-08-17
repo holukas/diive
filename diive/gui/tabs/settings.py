@@ -60,13 +60,19 @@ class _ColorSwatch(QPushButton):
     def __init__(self, get_hex, set_hex) -> None:
         super().__init__()
         self._get, self._set = get_hex, set_hex
+        self.setObjectName("colorswatch")
         self.setFixedSize(46, 22)
         self.clicked.connect(self._pick)
         self.refresh()
 
     def refresh(self) -> None:
+        # Scoped to this widget's objectName: a stylesheet applies to the widget
+        # AND its children, and the colour dialog below is parented to the
+        # swatch, so an unscoped rule would paint the dialog's own buttons
+        # (OK/Cancel/Pick Screen Color) in the swatch colour.
         self.setStyleSheet(
-            f"background: {self._get()}; border: 1px solid #607D8B; border-radius: 4px;")
+            f"QPushButton#colorswatch {{ background: {self._get()};"
+            f" border: 1px solid #607D8B; border-radius: 4px; }}")
 
     def _pick(self) -> None:
         chosen = QColorDialog.getColor(QColor(self._get()), self, "Pick colour")
