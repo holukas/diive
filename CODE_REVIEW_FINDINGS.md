@@ -155,7 +155,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 
 | ID | Finding | Where |
 |---|---|---|
-| L151 | `ShiftedDistributionPlot` drops NaNs with no report, so a 95%-gappy reference period yields a confident-looking KDE from 5% of the records (spun out of L118) | `core/plotting/shifted_distribution.py:71` |
+| ~~L151~~ | ~~`ShiftedDistributionPlot` drops NaNs with no report, so a 95%-gappy reference period yields a confident-looking KDE from 5% of the records (spun out of L118)~~ (done 2026-08-17) — **the entry worries along the wrong axis**: random thinning to 5% barely moves the zones, non-random loss at 67% moves them a lot | `core/plotting/shifted_distribution.py:71` |
 | ~~L111~~ | ~~`WaterfallPlot` draws a fully missing period as a 0.0 bar under the default `agg='sum'` — 429 of 3652 bars on bundled `LW_IN`; `agg='mean'` drops them instead~~ (done 2026-08-16) — **also `count` and `prod`**, which the entry missed | `core/plotting/waterfall.py:66` |
 | ~~L112~~ | ~~`TimeSeries` colour-by draws **measured** records fully transparent wherever the *colour* series has a gap — 80 of 200~~ (done 2026-08-16) — **the markers too**, which the entry missed | `core/plotting/timeseries.py:315` |
 | ~~L113~~ | ~~Colour-by silently degrades to a plain line on index mismatch; `cmap`/`show_colorbar`/`color_label` become no-ops~~ (done 2026-08-16) | `core/plotting/timeseries.py:405` |
@@ -198,7 +198,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 
 | ID | Finding | Where |
 |---|---|---|
-| L148 | `HistogramPlot.__init__` raises `IndexError` on an **empty** series at `series.index[0]` — reachable through `flagbase` when a detector rejects every record; needs a guard in `__init__`, so outside L115/L116 | `core/plotting/histogram.py:62` |
+| ~~L148~~ | ~~`HistogramPlot.__init__` raises `IndexError` on an **empty** series at `series.index[0]` — reachable through `flagbase` when a detector rejects every record; needs a guard in `__init__`, so outside L115/L116~~ (done 2026-08-17) — the raising line is `:71`, not `:62` | `core/plotting/histogram.py:71` |
 | ~~L115~~ | ~~`HistogramPlot.plot` raises on a constant series — **inside the outlier detectors' own `showplot=True` diagnostic**~~ (done 2026-08-17) — line is `:183`, and **any** zero-spread series does it, not only a constant one | `core/plotting/histogram.py:183` |
 | ~~L116~~ | ~~`HistogramPlot.plot` raises on an all-NaN column (L69 family)~~ (done 2026-08-17) | `core/plotting/histogram.py:118` |
 | ~~L117~~ | ~~`WaterfallPlot.plot` raises `IndexError` on an all-NaN column (L69 family)~~ (done 2026-08-17) — a **second** crash waited in the auto-title | `core/plotting/waterfall.py:164` |
@@ -3078,7 +3078,45 @@ Low likelihood (a variable named `reference_mean` is unusual), but the establish
 
 ## S2 — silently does nothing / silently loses data
 
-**[ ] L151. `ShiftedDistributionPlot` drops NaNs with no report**
+**[x] L151. `ShiftedDistributionPlot` drops NaNs with no report**
+> **Fixed 2026-08-17.** Each period's `dropna()` runs through a new `_period_values()`, which keeps
+> the counts as public attributes (`n_ref_records`/`n_ref_used`/`n_ref_missing` and the `n_comp_*`
+> trio) and emits an unconditional `warn()` naming records held, records missing, the percentage and
+> the number the density was actually built from; the reference period's message adds that its mean
+> and sd set the zone breakpoints. Not gated on the new `verbose` flag, same as the wind rose's
+> out-of-range warning (L132) and for the same reason: the flag switches the report on, losing
+> records is something every caller must see. `verbose=True` prints a `report()` Rich table (records
+> / used / missing / used % / mean / sd per period, plus the breakpoints) — seven columns, because a
+> nine-column version truncated the row labels to `Refer…` on an 80-column console.
+>
+> The sample size also went **onto the figure**, which is what the finding was really about: both
+> legend labels now end in `n = 23285 of 70128` when records were dropped, `n = 70128` when none
+> were. A caller-supplied `ref_label`/`comp_label` gets it appended too — renaming the periods must
+> not be a way to take the count off the plot. An empty period keeps its existing `: no data` label,
+> which already states n = 0. The KDE/zone code (L118/L129/L130/L135/L146) is untouched.
+>
+> **Measured** on the bundled CH-DAV record, reference 2013-2016 vs comparison 2019-2022 (70 128
+> records each): `NEE_CUT_REF_orig` fits its reference density on 23 285 records (66.8% missing),
+> `LE_orig` on 47 454 (32.3%), `LW_IN` on 49 305 (29.7%), `Tair_f` on all 70 128 — and before the fix
+> all four produced the same-looking figure and the same-looking legend. Measured NEE against its
+> gap-filled counterpart over the identical period: mean -4.080 vs -0.684, sd 6.496 vs 5.355,
+> breakpoints `[-23.57, -10.58, 2.42, 15.41]` vs `[-16.75, -6.04, 4.67, 15.38]` — the -3 sd cut 6.82
+> µmol lower, the ±1 sd band 12.99 wide instead of 10.71.
+>
+> **One correction to the entry's diagnosis: "95% gaps" is the wrong axis to worry along.** Thinning
+> the `LW_IN` reference at random from 49 305 records to 2 504 moves the breakpoints by only
+> 0.27-1.98 W m-2 — a 5%-complete but *randomly* sampled reference gives essentially the right zones.
+> What distorts them is loss that is not missing at random, which is the normal case for a measured
+> flux: NEE's 66.8% is nighttime- and u\*-selected, and it moves the zones far more than LW_IN's 95%
+> random thinning does. The invisibility was the real defect either way, since nothing on the figure
+> distinguished the two situations.
+>
+> Tests: `TestMissingValueAccounting` (12 tests) plus updated legend expectations in
+> `TestOrdinaryComparisonUnchanged`. Reverting the source fails 12 of them; three further tests in the
+> class are guards that pass either way by construction (a complete record must warn about nothing,
+> the report must stay off by default, an empty period must keep `: no data`). No GUI or codegen
+> change needed — the GUI passes no `verbose`, so the warning reaches the Log tab through the console
+> tee, and `shifted_distribution_to_code` stays as it is, matching `windrose_to_code`.
 `core/plotting/shifted_distribution.py:71-72` — spun out of L118, whose crash half is fixed. Each
 period is `dropna()`ed and the count is never surfaced, so a reference period that is 95% gaps
 produces a KDE from 5% of the records that is visually indistinguishable from a complete one — and
@@ -3236,7 +3274,37 @@ or use `ax.bar(x=years, ...)` on a numeric axis.
 
 ## S3 — crash on legitimate input
 
-**[ ] L148. `HistogramPlot.__init__` raises `IndexError` on an empty series**
+**[x] L148. `HistogramPlot.__init__` raises `IndexError` on an empty series**
+> **Fixed 2026-08-17.** `histogram.py:71-76` — `first_date`/`last_date` fall back to `None` on an
+> empty index instead of indexing it. **Two corrections to this entry.** The raising line is `:71`,
+> not `:62` — it moved when the `s`-deprecation block landed above it. And `showplot` is a
+> **constructor** argument of the detector, not a `run()` one (the same correction L115 records), so
+> the repro is `dv.outliers.AbsoluteLimits(constant_5_series, minval=100, maxval=200,
+> showplot=True).run()`, raising at `flagbase.py:257` -> `histogram.py:71`.
+>
+> `first_date`/`last_date` feed exactly one thing — the default title
+> `"{name} (between {first} and {last})"`, passed to `FormatStyle.apply` at the two exits of `plot`.
+> So the fix is the guard plus a `_default_title()` helper (`:105`) that both exits now call: an
+> empty series titles the panel `X (no records)` rather than `X (between None and None)`, which
+> would read like a real date span. Nothing else in the class reads either attribute.
+>
+> It composes with L116 rather than duplicating it: `plot`'s `dropna().empty` branch is True for an
+> empty series, so the empty case takes the existing "no data" axes and never reaches
+> `_trimmed_edges` (L121), the info box (L131) or the z-score gate (L115). Of `flagbase.py`'s eight
+> construction sites only `defaultplot`'s `self.series[ok]` can be empty-indexed; the six in
+> `plot_outlier_daytime_nighttime` slice columns of a full-index frame, so they are
+> all-NaN-but-non-empty — L116's case, already covered.
+>
+> Non-empty output is unmoved: counts, every bin edge, xlim/ylim, title, labels, every axes text,
+> every bar's (x, width, height), every line's full x/y data, axes count and the twiny axis's
+> label/ticks/tick-labels, dumped at full `repr()` precision over four configurations (default,
+> `ignore_fringe_bins=[1,1]`, KDE+mean+median, `method='uniform'`) plus the all-NaN and constant
+> series — byte-identical before and after (19 556 bytes). Three tests added to
+> `tests/test_histogram.py` (direct empty construction, its title, and the end-to-end detector path
+> asserting exactly one "no data" panel on `detector.fig`), plus a title assertion on the existing
+> non-empty control; all three fail with the original `IndexError` when the guard is reverted.
+> `tests/test_histogram.py` 24 passed / 11 subtests, `test_outlierdetection.py` + `test_plots.py`
+> 68 passed / 15 subtests.
 `core/plotting/histogram.py:62` — `self.first_date = series.index[0]`:
 `IndexError: index 0 is out of bounds for axis 0 with size 0`. Found while fixing L115/L116 and left
 open because it needs a guard in `__init__`, where those two are both in `plot`.

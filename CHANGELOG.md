@@ -536,7 +536,7 @@ turned out to be structurally unable to honour the parameter.
 
 #### Plots no longer die on degenerate input
 
-Six crashes on input a user can legitimately hand a plot class. All are in the family the closed
+Seven crashes on input a user can legitimately hand a plot class. All are in the family the closed
 `Cumulative` fix established: an axes that states plainly there is nothing to draw beats a traceback,
 and beats a silently blank panel.
 
@@ -559,6 +559,12 @@ and beats a silently blank panel.
   an empty reference additionally drops the zone breakpoints instead of drawing five of them at NaN. A
   third condition the finding did not list — *both* periods empty — failed earlier still, on the shared
   grid, and now states so on the axes. (L118)
+- **`HistogramPlot` raised `IndexError` before drawing anything** when handed an empty series — the
+  same detector diagnostic as L115, one step earlier. A test that rejects *every* record hands the
+  retained-subset histogram an empty index, and the constructor read `series.index[0]` off it, so the
+  guard L116 added in `plot` was never reached. The first and last date it was computing feed only the
+  default title, so an empty panel is now titled `"<name> (no records)"` rather than a `None` to
+  `None` range that reads like a real date span. (L148)
 - **`TimeSeries.plot_interactive()` raised on an unnamed Series**, which bokeh rejects
   (`legend_label value must be a string`). Six sibling labels in the same two bokeh methods had the
   identical unhandled `None` and degraded silently instead — `plot_rangetool()` titled the plot the
@@ -616,6 +622,20 @@ and beats a silently blank panel.
   `n_bins` accepts an explicit edge list, and a non-uniform one made the curve wrong by `w_i / w_0` in every bin —
   measured peaking 4.5x above the tallest bar, drawn on the same axis as the bars where it reads as a fit. The density is
   now scaled per bin from `np.diff(edges)`. Uniform bins, which is every current caller, are unchanged to 3e-13. (L108)
+- **`ShiftedDistributionPlot` never said how much of each period it had actually used.** Both periods are
+  `dropna()`ed before their density is fitted, and a KDE is normalized to the same unit area whether it was built
+  from 70 128 records or from 201 of them — so a mostly-empty reference drew a curve indistinguishable from a
+  complete one, and set the zone breakpoints from whatever survived. On the bundled CH-DAV data with a 2013-2016
+  reference, `NEE_CUT_REF_orig` fits on 23 285 of 70 128 records (66.8% missing), `LE_orig` on 47 454, `LW_IN` on
+  49 305 and `Tair_f` on all of them — four figures that previously looked alike. The counts are now kept as
+  attributes, warned about when a period loses records, and stated on the figure: both legend labels carry
+  `n = 23285 of 70128`, or `n = 70128` when nothing was dropped. A caller-supplied `ref_label`/`comp_label` gets
+  the count too, so renaming the periods cannot take it off the plot. New `verbose=True` prints a per-period
+  table with each period's mean, sd and retained fraction alongside the breakpoints. What the gaps cost is real
+  and depends on *why* they are missing: measured NEE against its gap-filled counterpart over the same period
+  gives mean -4.080 vs -0.684 and sd 6.496 vs 5.355, moving the -3 sd cut 6.82 umol lower, while thinning `LW_IN`
+  at random to 5% of its records moves the breakpoints by under 2 W m-2. Nothing about the drawn density or the
+  zones changes. (L151)
 
 - **The MDS similarity window is trimmed at the ends of a record, not clipped.** ONEFlux narrows the window bounds and
   its diurnal method skips out-of-range positions, so a real record enters a fill at most once; diive folded every
