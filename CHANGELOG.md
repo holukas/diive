@@ -46,13 +46,15 @@ changes.
 
 #### Results that change, with nothing to warn about it
 
-Worth checking stored output against.
+These change numbers that were already produced, so results calculated with an earlier version are
+worth recalculating.
 
 - **`potrad` calculates potential radiation differently.** It now matches the ONEFlux routine that
   produces FLUXNET's `SW_IN_POT`. Old calls still run and return different numbers: 20 W/m2 RMSE
   against the previous version, annual sums 1.1% higher, and 2.3% of half-hours classified
-  differently as day or night. Anything reading potential radiation moves with it: the flux chain,
-  u\* detection, gap-filling, partitioning, meteo screening, every day/night outlier method.
+  differently as day or night. Every part of diive that uses potential radiation returns different
+  numbers as a result: the flux chain, u\* detection, gap-filling, partitioning, meteo screening,
+  and every outlier method that separates day from night.
 - **A record with no u\* value is now rejected**, as ONEFlux does it. Those records used to slip
   through as accepted, with turbulence unknown. The cost depends on how gappy the site's u\* record
   is.
@@ -194,18 +196,14 @@ Renamed:
 | `level41_methods()` keys | `'rf'` and `'xgb'` | |
 | `ScopApplicator`'s input column | `FCT_UNSC` | it gap-fills nothing, so `_gfXG` claimed a fill that may not have happened |
 
-Saved projects still open.
+A `.diive` project file saved by an earlier version still loads. The renames above are handled when
+the project is read.
 
 ### Fixed
 
-- **`InfluxIO.delete(measurements=True)` deleted nothing and reported success.** Looking up the
-  measurements used InfluxDB's default 30-day window, so any bucket whose newest record was older
-  came back empty. The delete loop never ran, and the summary was built from the request rather than
-  from what happened. The same missing argument made `show_fields_in_bucket` under-report.
 - **`Hampel` ignored `n_sigma` when splitting day from night**, because the per-period defaults were
   real numbers instead of `None`, so the fallback never ran.
-- **`SeasonalTrendDecomposition(method='stl')` always failed**, and every ridgeline plot failed when
-  its colours came from a colormap.
+- **Every ridgeline plot failed** when its colours came from a colormap.
 - **Meteo screening failed on any variable whose logger changed sampling rate partway through**, on
   an invalid frequency string built out of float seconds.
 - **Five outlier detectors printed no statistics at `verbose=True`.** The count went through a
@@ -216,38 +214,11 @@ Saved projects still open.
   `FLAGNone_FC_QCF`.
 - **Three corrections renamed the Series passed to them**, so the caller's own variable came back
   called "input_data".
-- **Six of the eight bundled example files had never been committed.** A `*.parquet` ignore rule
-  added in January 2025 meant `git add` skipped them silently, so the documented loaders raised
-  `FileNotFoundError` for anyone who installed diive, and 23 tests were relying on files that
-  existed only on one machine. All eight are tracked now.
 - Also: `import diive` no longer forces matplotlib's `Agg` backend and disables interactive windows,
   `sstats` copes with an empty or all-NaN series, `lagged_variants` no longer does nothing when
   handed a single column, `default_format` stopped writing the word "False" into axis labels,
   cumulative random uncertainty survives a NaN instead of turning every later value into one, and
   `TrimLow` no longer demands coordinates it has no use for.
-
-In the desktop app:
-
-- **The partitioning tabs used to run at latitude 0, longitude 0 in UTC** when the project site had
-  not been filled in, and returned believable-looking numbers from it. They now refuse to start.
-- **The app never released a window or tab that was closed.** Each stayed subscribed to the shared
-  settings, so changing the theme redrew all of them and a long session got slower as it went.
-- Reopening a project reports a saved setting that could not be restored instead of quietly using a
-  different one, and a result whose dataset changed while it was still running is discarded rather
-  than displayed.
-
-### Performance
-
-- **`import diive` went from 2.35 s to 0.96 s.** The ten namespaces load on first use, so a script
-  that just reads a parquet file no longer waits for scikit-learn, XGBoost, SHAP and statsmodels.
-  Every documented import still works the same way.
-- Random uncertainty runs about 35 times faster, u\* moving-point detection about 8 times, and MDS
-  four times. All three give identical results to before.
-- **A default install is about 54 MB smaller.** Seven dependencies were declared but never imported:
-  `prophet` and its Stan toolchain, which is almost all of it, plus `eli5`, `dtreeviz`,
-  `pymannkendall`, `category-encoders`, `scikit-optimize` and `jupyter-bokeh`.
-- `core.ml` no longer imports from the `gapfilling` package, which clears out a circular import that
-  only stayed hidden because of the order things loaded in.
 
 ### Documentation and tests
 
@@ -257,10 +228,6 @@ In the desktop app:
 - **New test suites** for the script generators (67 tests where there were none), for the plot
   classes that only the GUI tests had been touching, and for the examples inside docstrings, which
   nothing had ever run. Running them turned up eight that were broken.
-- **Tests now fail when Qt swallows an error.** PySide6 hands an exception raised inside a slot to
-  `sys.excepthook` and carries on, so a test that clicks something and then checks that nothing
-  broke passes even if the click crashed. Switching this on exposed 168 swallowed errors that 44
-  tests had been walking past.
 - New InfluxDB notebooks for downloading, screening and deleting. 21 older notebooks were archived
   and their content moved into examples.
 - Dependency management moved from poetry to `uv`, ruff is configured and enforced, and line endings
