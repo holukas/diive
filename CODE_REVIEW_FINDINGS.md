@@ -97,11 +97,35 @@ next build — no hand-editing. It is currently stale (`selfheating.py`/`.ipynb`
 `flux_type=FLUX_TYPE`). Just remember to rebuild, and check the API pages no longer list the four
 deleted harmonic functions.
 
-### [ ] Examples
+### [x] Examples
 
 `examples/analysis/analysis_harmonic.py` is the only caller of `harmonic_analysis`, and it was
-written against the buggy amplitudes — its narrative text about the window's effect may now say the
-opposite of what the code produces. Re-read it against the corrected behaviour.
+written against the buggy amplitudes. **Re-read and corrected 2026-08-17.** The stale part was the
+*explanation*, not the numbers: Example 3 said the windows "trade amplitude accuracy against leakage
+suppression, so the recovered amplitude shifts slightly between them", which described the bug
+exactly — before L49 the window's mean scaled the answer directly, so the windows really did differ
+in amplitude accuracy. After the coherent-gain division they do not: a pure on-bin 3.0 cosine now
+returns **3.0000 under boxcar, hamming, hann and blackman alike**. The prose now says that, and
+attributes the residual real-data spread to its actual cause — the diel cycle is not a pure on-bin
+sinusoid, so its energy sits across neighbouring bins and a wider main lobe gathers more of it back
+(blackman highest, hamming lowest).
+
+Measured on the example's own call (NEE, June 2015, `period=48`), fixed vs the pre-L48/L49 code path:
+
+```
+window      mean    old H1    new H1
+hamming    0.540     2.560     9.865
+hann       0.500     2.717     9.954
+blackman   0.420     2.663    10.138
+spread across windows: old 5.9%   new 2.7%     old averages 27% of new
+```
+
+Note the old amplitudes are **27%** of the corrected ones, not the ~54% L49 predicts from the hamming
+mean alone — the off-by-one bin (L48) compounds it, since the neighbouring bin holds only part of the
+peak. The example now prints the spread instead of asserting it, and its plot title carries the
+measured number. `harmonic_analysis`'s docstring `Notes:` gained the coherent-gain statement, which
+was the API-visible half of L49 and had gone unrecorded. The catalog and README one-liners
+("window effect") stay accurate.
 
 ---
 

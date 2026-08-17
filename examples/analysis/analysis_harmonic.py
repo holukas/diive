@@ -153,9 +153,16 @@ plt.show()
 # Example 3: Effect of the analysis window
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # The ``window`` tapers the series before the FFT to reduce spectral leakage
-# (energy smearing into neighbouring frequencies). Different windows trade
-# amplitude accuracy against leakage suppression, so the recovered amplitude of
-# the fundamental shifts slightly between them.
+# (energy smearing into neighbouring frequencies). The reported amplitude is
+# divided by the window's own mean, so the taper does not shrink it: a pure
+# cosine of amplitude 3.0 sitting exactly on a frequency bin is returned as 3.0
+# under every window below, and under no window at all.
+#
+# On real data the three still disagree a little, because the diel cycle of NEE
+# is not a pure sinusoid parked on a bin. Its energy is spread across
+# neighbouring bins, and the wider a window's main lobe, the more of that energy
+# it gathers back into the harmonic — which is why blackman reads highest here
+# and hamming lowest.
 
 print("\n" + "=" * 70)
 print("Example 3: Window function effect on the diel fundamental (H1)")
@@ -172,10 +179,13 @@ for win in windows:
     h1_amps.append(amp)
     print(f"{win:<12}{amp:>14.3f}")
 
+spread = 100 * (max(h1_amps) - min(h1_amps)) / (sum(h1_amps) / len(h1_amps))
+print(f"\nSpread across the three windows: {spread:.1f}% of the mean amplitude.")
+
 fig, ax = plt.subplots(figsize=(6, 4.5), constrained_layout=True)
 ax.bar(windows, h1_amps, color='#FFC107', edgecolor='white', width=0.6)
 ax.set_ylabel('H1 amplitude')
-ax.set_title('Window choice slightly changes the recovered amplitude')
+ax.set_title(f'Window choice moves the amplitude by {spread:.1f}%')
 ax.grid(True, axis='y', alpha=0.2)
 for i, a in enumerate(h1_amps):
     ax.text(i, a, f"{a:.3f}", ha='center', va='bottom', fontsize=9, color='#455A64')

@@ -47,6 +47,9 @@ def harmonic_analysis(
 
     Notes:
         - Window function reduces spectral leakage
+        - Amplitudes are divided by the window's coherent gain (its mean), so the
+          taper does not scale them down and a given signal returns the same
+          amplitude under any window
         - Phase is in radians [-π, π]
         - Harmonics are ordered by harmonic number (1st, 2nd, 3rd, etc.)
 
