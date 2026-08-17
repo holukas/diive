@@ -10,7 +10,6 @@ from pandas import DataFrame
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
-from yellowbrick.regressor import PredictionError, ResidualsPlot
 
 from rich.table import Table
 
@@ -1540,6 +1539,11 @@ def plot_prediction_residuals_error_regr(model,
         - https://www.scikit-yb.org/en/latest/api/regressor/residuals.html
         - https://www.scikit-yb.org/en/latest/api/regressor/peplot.html
     """
+
+    # Imported here, not at module level: yellowbrick restyles the global matplotlib
+    # rcParams on import (ticks and text to '.15', grid to '.8'), which would silently
+    # restyle every later plot in the session for anyone who merely touches an ML path.
+    from yellowbrick.regressor import PredictionError, ResidualsPlot
 
     # Scientific color palette for consistency
     COLOR_POINTS = '#003A70'  # Deep Blue

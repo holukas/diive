@@ -35,6 +35,8 @@ References:
     detect optimal lags from measured distributions and format them for EddyPro input.
 """
 
+import functools
+
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -47,8 +49,13 @@ from diive.core.utils.console import info, warn
 from diive.analysis.histogram import Histogram
 
 
-# Apply modern plot style
-plt.rcParams.update({
+#: Figure styling for this module's plots. Applied per figure via
+#: :func:`matplotlib.pyplot.rc_context`, NOT with a module-level
+#: ``plt.rcParams.update``: that ran on import and restyled every plot in the process —
+#: grid lines on everywhere, a grey figure background — for anyone who merely touched
+#: ``dv.flux``, which exports this class. `selfheating.py` uses the same rc_context
+#: pattern.
+_PLOT_STYLE = {
     'figure.facecolor': '#f8f9fa',
     'axes.facecolor': '#ffffff',
     'axes.edgecolor': '#dee2e6',
@@ -65,7 +72,18 @@ plt.rcParams.update({
     'grid.alpha': 0.25,
     'grid.color': '#dee2e6',
     'grid.linestyle': '-',
-})
+}
+
+
+def _styled(fn):
+    """Draw the wrapped method's figure under :data:`_PLOT_STYLE`."""
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with plt.rc_context(_PLOT_STYLE):
+            return fn(*args, **kwargs)
+
+    return wrapper
 
 
 #: Parameter names that changed when the histogram range was renamed to state its
@@ -509,6 +527,7 @@ class TimeLagAnalysis:
         self._analysis_cache[gas] = analysis
         return analysis
 
+    @_styled
     def plot_gas(self, gas, outdir=None, figsize=(18, 9), show=True, fig=None):
         """
         Create comprehensive visualization of time lag analysis for a gas species.
@@ -565,8 +584,9 @@ class TimeLagAnalysis:
 
         Notes
         -----
-        Figure styling is applied via matplotlib rcParams set at module import.
-        Colors and fonts are pre-configured and consistent across all plots.
+        Figure styling is applied for the duration of this call only, via
+        :data:`_PLOT_STYLE`. Colors and fonts are consistent across this module's
+        plots and leave the caller's matplotlib settings untouched.
 
         Examples
         --------

@@ -56,11 +56,26 @@ class TestConsoleEnvironment(unittest.TestCase):
         self.assertGreater(con._JUPYTER_CONSOLE_WIDTH, 80)
 
 
-class TestRefreshConsole(unittest.TestCase):
+class _RestoresConsole(unittest.TestCase):
+    """Base for tests that call ``refresh_console()``.
+
+    Put the *original* console object back afterwards, rather than calling
+    ``refresh_console()`` again to build yet another one. 17 library modules do
+    ``from ...console import console``, so a replacement object leaves every one of them
+    printing to a console the rest of the suite is no longer looking at — which silently
+    broke the shifted-distribution warning tests three files later.
+    """
+
+    def setUp(self):
+        self._console = con.console
+        self._rule_line_style = con._rule_line_style
 
     def tearDown(self):
-        # Always restore a terminal console for the rest of the suite.
-        con.refresh_console()
+        con.console = self._console
+        con._rule_line_style = self._rule_line_style
+
+
+class TestRefreshConsole(_RestoresConsole):
 
     def test_refresh_switches_rule_style_for_jupyter(self):
         with _fake_jupyter():
@@ -80,7 +95,7 @@ class TestRefreshConsole(unittest.TestCase):
         con.remove_console_sink(mirror)
 
 
-class TestJupyterRuleIsLegible(unittest.TestCase):
+class TestJupyterRuleIsLegible(_RestoresConsole):
     """Regression guard for the reported bug: the rule line rendered as bright
     green (#00ff00), illegible on a white notebook background."""
 
