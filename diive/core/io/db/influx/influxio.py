@@ -386,6 +386,11 @@ class InfluxIO:
                 If True, all data in *fields* in *measurements* will be deleted.
             start: start datetime, e.g. '2022-07-04 00:30:00'
             stop: stop datetime, e.g. '2022-07-05 12:00:00'
+                The delete range includes both bounds: InfluxDB's storage engine
+                deletes everything in ``[start, stop]``. Note this differs from a
+                Flux ``range(start:, stop:)`` *query*, which excludes *stop* - the
+                same pair of bounds therefore covers one more record when deleting
+                than when reading the data back.
             timezone_offset_to_utc_hours: the timezone of *start* and *stop* datetimes.
                 Necessary because the database always stores data with UTC timestamps.
                 For example, if data were originally recorded using CET (winter time),

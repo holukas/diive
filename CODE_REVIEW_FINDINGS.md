@@ -151,7 +151,7 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 |---|---|---|
 | ~~L5~~ | ~~Does ONEFlux clip or trim window indices?~~ **Answered 2026-08-07: it trims** — diive clipped, so edge fills were biased. Fixed | `gapfilling/similarity.py:240` |
 | ~~L46~~ | ~~Does Burba 2008 intend BUR08 to drop the WPL dilution factor?~~ **Answered 2026-08-07: no, it applies to every method.** Fixed | `flux/lowres/selfheating.py:614` |
-| L72 | Is InfluxDB v2's *delete* range stop-exclusive? If so the pre-upload delete leaves the last record and duplicates survive | `core/io/db/influx/influxio.py:122` |
+| ~~L72~~ | ~~Is InfluxDB v2's *delete* range stop-exclusive? If so the pre-upload delete leaves the last record and duplicates survive~~ **answered 2026-08-17: it is inclusive** — `[min, max]`, so the pre-upload delete does reach the last record. Not a bug; the asymmetry with Flux `range()` is now documented | `core/io/db/influx/influxio.py:122` |
 
 ## S1 — Silently wrong scientific output (16 + 1 by design)
 
@@ -2134,7 +2134,27 @@ width"; every even setting of the "Y cell (days)" spin box smooths one day wider
 Series. The one in-tree caller passes a Series, so this is documentation-only — but the function is
 exported from the influx package and reads as index-safe.
 
-**[ ] L72. Open question: does InfluxDB v2's delete range exclude `stop`?**
+**[x] L72. Answered: InfluxDB v2's delete range is inclusive of `stop`, so there is no bug**
+
+> **Answered 2026-08-17.** The user-facing manual never states it — `write-data/delete-data/` and
+> the `influx delete` CLI reference both only say data "between the specified start and stop times",
+> and the API reference's field descriptions ("earliest time to delete data from" / "latest time to
+> delete data from") are suggestive but not binding. The binding statement is the storage engine's
+> own contract, which the HTTP delete request's `start`/`stop` map straight onto as `min`/`max`:
+>
+> > `DeleteBucketRangePredicate` deletes data within a bucket from the storage engine. Any data
+> > deleted must be in `[min, max]` […]
+> >
+> > — `influxdata/influxdb/v2/storage`, pkg.go.dev
+>
+> A closed interval on both ends. So `upload_singlevar`'s pre-upload delete does reach the record at
+> `var_df.index[-1]`, and it achieves its stated purpose. **No code change needed.**
+>
+> The asymmetry the entry suspected is real, just harmless here: a Flux **query** `range(start:,
+> stop:)` *is* stop-exclusive while a **delete** of the same two timestamps is not, so the same pair
+> of bounds covers one more record when deleting than when reading it back. Recorded in `delete`'s
+> docstring, since that is where the next reader will look for it.
+
 `core/io/db/influx/influxio.py:122` — `upload_singlevar`'s pre-upload delete uses
 `stop = str(var_df.index[-1])`. If the delete range is stop-exclusive (as the Flux *query* range is,
 which the code documents), the final record of the range survives and the delete does not achieve
