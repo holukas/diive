@@ -116,6 +116,12 @@ These changes affect numbers calculated with earlier versions.
     - Every tab has a **Copy Python** button that writes out the Python code for the settings
       currently on screen, so an analysis set up by clicking can be continued as a script. The
       `*_to_code` functions behind it are part of the library and can be called directly.
+    - Every colormap dropdown offers the same list. The plotting tabs keep their own per-plot
+      colormap; the heatmaps other tabs draw as previews follow one app-wide setting in
+      **Appearance**.
+    - **Combine variables** got a colormap for its three heatmaps, and, for the difference, an
+      option to mark the cells where both variables hold the identical value. The count is always
+      stated, since exact equality of two measured values is rarer than it looks.
     - The optional `gui3d` extra adds two 3D surface tabs.
     - Manual: `diive/gui/MANUAL.md`. A standalone Windows application can be built from
       `packaging/`.
