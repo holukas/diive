@@ -190,6 +190,58 @@ installed.
   the rest of the plots, and `.run()` and `.result` work the same way across the outlier,
   gap-filling and analysis classes.
 
+### New features, by namespace
+
+Everything the ten namespaces export today that v0.90.0 did not have. 87 names in all, and the
+sections above explain the larger ones. Not listed here: the desktop GUI, which is an application
+rather than an API, and roughly 160 internal helpers that came with these.
+
+**`dv.flux`** (20). Splitting net ecosystem exchange:
+`NighttimePartitioningOneFlux`, `NighttimePartitioningReddyProc`, `DaytimePartitioningReddyProc`,
+`DaytimePartitioningOneFlux`, and the same four as `partition_nee_*` functions. Running the chain:
+`run_chain`, `FluxConfig`, `FluxLevelData`, `init_flux_data`, `add_driver`. Turbulence thresholds:
+`UstarMovingPointDetection`, `UstarVekuriThresholdDetection`, `UstarBootstrapThresholds`,
+`FlagMultipleVariableUstarThresholds`. Also `JointUncertaintyPAS20` and
+`joint_uncertainty_pas20` for combined uncertainty, and `TimeLagAnalysis` for EddyPro time lags.
+
+**`dv.analysis`** (12). `CompoundExtremes` for events that coincide, `GapStats` for what is missing
+and where, `GrangerCausality`, `SeasonalTrendDecomposition`, `StratifiedAnalysis`,
+`DailyCorrelation`, `harmonic_analysis`, `spectrogram`, `rank_drivers`, `count_gaps`,
+`profile_dataframe`, `dataframe_overview`.
+
+**`dv.variables`** (12). `combine_variables` for arithmetic between two series,
+`classify_variable` and `VariableClass` for recognising what a variable is from its name,
+`auto_pick_column`, `generate_noisy_timeseries`, the four `CATEGORY_*` constants, and the code
+generators `combine_variables_to_code`, `calc_vpd_from_ta_rh_to_code`, `potrad_to_code`.
+
+**`dv.plotting`** (9). Five new plot types: `WindRosePlot`, `WaterfallPlot`, `TreeRingPlot`,
+`ShiftedDistributionPlot`, `CompoundExtremesPlot`. Plus `DateTimeSurface` and
+`datetime_surface_grid` for 3-D surfaces, `HexbinPlot`, and `FormatStyle`, which now holds the
+styling for every plot.
+
+**`dv.qaqc`** (8). A description of which corrections suit which measurement, readable from code:
+`MEASUREMENTS`, `Measurement`, `CORRECTIONS`, `CorrectionSpec`, `correction_spec`,
+`corrections_for_measurement`, `detect_measurement`, `measurement_label`.
+
+**`dv.events`** (5). The whole namespace is new: `Event`, `event_to_flag`, `overlay_events`,
+`make_event_flag_name`, `CATEGORY_COLORS`.
+
+**`dv.gapfilling`** (4). `SWINGapFillerXGBoost` for shortwave radiation, `FeatureEngineer` as a
+standalone pipeline, `GapFillingResult` as the shared result object, and `OptimizeParamsTS`.
+
+**`dv.corrections`** (4). `remove_nighttime_zero_offset` with its `nighttime_zero_offset_diagnostics`
+and `NighttimeZeroOffsetResult`, plus `apply_corrections` to run several in sequence.
+
+**`dv.times`** (4). `keep_daterange`, `resample_to_daily_agg`, `format_timestamp`,
+`validate_timestamp_column_name`.
+
+**`dv.outliers`** (2). `Hampel` and `LocalOutlierFactor`, which replace the separate day/night
+classes.
+
+**Top level** (7). `keep_vars` and `keep_records_where` for narrowing a dataframe,
+`load_parquet_many`, `to_diive_format`, `load_exampledata_parquet_lae`, and `set_verbosity` /
+`get_verbosity` for how much the library prints.
+
 ### Faster
 
 - **`import diive` went from 2.35 s to 0.96 s.** The ten namespaces now load on first use, so a
