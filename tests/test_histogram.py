@@ -162,6 +162,32 @@ class TestHistogramDegenerateInput(unittest.TestCase):
         finally:
             plt.close(fig)
 
+    def test_empty_series_says_no_data_instead_of_raising(self):
+        """A series with no records at all must not raise in `__init__`.
+
+        `first_date = series.index[0]` used to raise `IndexError` before `plot`
+        (and its `dropna().empty` guard) was ever reached.
+        """
+        hist, fig, ax = self._plot([])
+        try:
+            texts = [t.get_text() for t in ax.texts]
+            self.assertEqual(len(texts), 1, msg=f"expected one message, got {texts}")
+            self.assertIn('no data', texts[0])
+            self.assertEqual(len(ax.patches), 0, msg="nothing to draw, but bars were drawn")
+            self.assertIsNone(hist.counts)
+        finally:
+            plt.close(fig)
+
+    def test_empty_series_title_states_no_records_instead_of_a_date_range(self):
+        """`first_date`/`last_date` only feed the title, so report the absence."""
+        hist, fig, ax = self._plot([])
+        try:
+            self.assertIsNone(hist.first_date)
+            self.assertIsNone(hist.last_date)
+            self.assertEqual(ax.get_title(), 'X (no records)')
+        finally:
+            plt.close(fig)
+
     def test_ordinary_series_keeps_bars_and_zscore_overlay(self):
         """Control: neither guard may fire on a series with actual spread."""
         rng = np.random.default_rng(7)
@@ -175,10 +201,46 @@ class TestHistogramDegenerateInput(unittest.TestCase):
                             msg=f"the info box must still be drawn, got {texts}")
             self.assertFalse(any('no data' in t for t in texts),
                              msg=f"the empty-data guard fired on real data: {texts}")
+            self.assertEqual(ax.get_title(),
+                             f"X (between {hist.first_date} and {hist.last_date})",
+                             msg="the default title must still state the covered period")
             twins = [a for a in fig.axes if a is not ax]
             self.assertEqual(len(twins), 1, msg="z-score overlay is missing")
             self.assertGreater(len(twins[0].lines), 0, msg="no z-score marker lines")
             self.assertEqual(twins[0].get_xlabel(), 'z-score')
+        finally:
+            plt.close(fig)
+
+
+class TestHistogramFromOutlierDetector(unittest.TestCase):
+    """The detectors' own diagnostic plot is how an empty series is reached.
+
+    `core/base/flagbase.py::defaultplot` histograms the raw series *and* the
+    retained (`flag == 0`) subset. A detector that rejects every record hands
+    the second `HistogramPlot` an empty series, so a raise there kills the
+    detector run over its own diagnostic.
+    """
+
+    def test_detector_rejecting_every_record_still_draws_its_diagnostic(self):
+        import diive as dv
+
+        series = pd.Series(np.full(200, 5.0),
+                           index=pd.date_range('2020-01-01', periods=200, freq='30min'),
+                           name='X')
+        with warnings.catch_warnings():
+            # Agg cannot show a figure; the diagnostic still gets drawn.
+            warnings.filterwarnings('ignore', message='FigureCanvasAgg is non-interactive')
+            detector = dv.outliers.AbsoluteLimits(series, minval=100, maxval=200,
+                                                  showplot=True).run()
+        fig = detector.fig
+        try:
+            self.assertEqual(int((detector.overall_flag == 2).sum()), 200,
+                             msg="fixture is broken: not every record was rejected")
+            self.assertTrue(detector.filteredseries.dropna().empty)
+            # The retained-subset panel must say so rather than being missing.
+            messages = [t.get_text() for ax in fig.axes for t in ax.texts if 'no data' in t.get_text()]
+            self.assertEqual(len(messages), 1,
+                             msg=f"expected exactly one empty-panel message, got {messages}")
         finally:
             plt.close(fig)
 

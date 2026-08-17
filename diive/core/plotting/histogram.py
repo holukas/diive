@@ -68,8 +68,12 @@ class HistogramPlot:
         self.method = method
         self.n_bins = n_bins
         self.ignore_fringe_bins = ignore_fringe_bins
-        self.first_date = series.index[0]
-        self.last_date = series.index[-1]
+        # An empty series has no first/last record to report. Guarding here rather
+        # than raising is what keeps the outlier detectors' own diagnostic plot
+        # alive: it histograms the retained subset, which is empty whenever a test
+        # rejects every record. `plot` draws an honest "no data" axes for it.
+        self.first_date = series.index[0] if len(series.index) else None
+        self.last_date = series.index[-1] if len(series.index) else None
 
         self.fig = None
         self.ax = None
@@ -97,6 +101,16 @@ class HistogramPlot:
                              f"{len(edges) - 1} bins of {self.s.name}, "
                              f"nothing would be left to plot.")
         return kept
+
+    def _default_title(self):
+        """Default title: the variable and the period it covers.
+
+        An empty series has no period, so state that instead of printing a
+        `None to None` range that reads like a real date span.
+        """
+        if self.first_date is None:
+            return f"{self.s.name} (no records)"
+        return f"{self.s.name} (between {self.first_date} and {self.last_date})"
 
     def get_fig(self):
         """Return the matplotlib Figure (available after :meth:`plot`)."""
@@ -153,8 +167,7 @@ class HistogramPlot:
             self.ax.text(0.5, 0.5, f"{self.s.name}: no data",
                          size=16, color="black", transform=self.ax.transAxes,
                          horizontalalignment='center', verticalalignment='center')
-            style.apply(ax=self.ax,
-                        default_title=f"{self.s.name} (between {self.first_date} and {self.last_date})",
+            style.apply(ax=self.ax, default_title=self._default_title(),
                         default_xlabel="", default_ylabel="Counts")
             if showplot:
                 self.fig.show()
@@ -261,7 +274,7 @@ class HistogramPlot:
             self.axx.set_xlabel("z-score", color='#AB47BC', fontsize=16)
 
         # Shared formatting layer: title/x-label/y-label/fonts/grid.
-        style.apply(ax=self.ax, default_title=f"{self.s.name} (between {self.first_date} and {self.last_date})",
+        style.apply(ax=self.ax, default_title=self._default_title(),
                     default_xlabel="", default_ylabel="Counts")
 
         self.ax.locator_params(axis='both', nbins=10)
