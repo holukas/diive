@@ -69,9 +69,13 @@ The *"Keep overlapping data points only"* checkbox description (line 969) was st
 record-loss reporting, and `MANUAL.html` regenerated via `diive/gui/build_manual.py`. Fixed
 immediately rather than batched because it was left behind by a change in this same effort.
 
-**Still to do:** sweep the rest of the manual for the other removals before release — the H2O
-self-heating path and the outlier flag semantics both have user-facing descriptions that may
-still describe the old behaviour.
+**Sweep done 2026-08-17, no-op.** The two suspected leftovers turned out to have no footprint in the
+manual at all: the H2O self-heating path (`45614fb3`) was never exposed in the GUI, so nothing
+described it — zero hits for `self-heat` / `flux_type` / the H2O correction. And the outlier flag
+semantics (`a327a4ee`, missing records now NaN rather than 0) contradict nothing written, because
+the manual names the flag *columns* (`FLAG_{var}_OUTLIER_*_TEST`) but never documents their numeric
+values. The only manual entry this campaign made stale was the combine-variables checkbox, fixed
+above.
 
 ### [x] `CLAUDE.md`
 
