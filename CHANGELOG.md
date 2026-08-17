@@ -260,7 +260,7 @@ These changes affect numbers calculated with earlier versions.
 
 ### Unittests
 
-- 1057/1057 unittests ran successfully.
+- 1057/1057 unittests ran successfully (859 subtests).
 
 ## v0.90.0 | 13 Jan 2026
 
