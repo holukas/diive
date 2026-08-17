@@ -220,18 +220,15 @@ the project is read.
   cumulative random uncertainty survives a NaN instead of turning every later value into one, and
   `TrimLow` no longer demands coordinates it has no use for.
 
-### Documentation and tests
+### Documentation
 
 - **113 examples** across ten folders, with new ones for the flux chain, all four partitioning
   methods, u\* detection, radiation gap-filling, compound extremes, gap statistics, events and file
   I/O. `examples/CATALOG.md` lists them all.
-- **New test suites** for the script generators (67 tests where there were none), for the plot
-  classes that only the GUI tests had been touching, and for the examples inside docstrings, which
-  nothing had ever run. Running them turned up eight that were broken.
-- New InfluxDB notebooks for downloading, screening and deleting. 21 older notebooks were archived
-  and their content moved into examples.
-- Dependency management moved from poetry to `uv`, ruff is configured and enforced, and line endings
-  are pinned in `.gitattributes`.
+- **New InfluxDB notebooks** for downloading, screening and deleting. 21 older notebooks were
+  archived and their content moved into examples.
+- **A manual for the desktop app**, `diive/gui/MANUAL.md`, also shipped as HTML with the standalone
+  Windows build.
 
 ## v0.90.0 | 13 Jan 2026
 
