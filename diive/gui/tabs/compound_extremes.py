@@ -60,6 +60,22 @@ class CompoundExtremesTab(DiiveTab):
              "an atmospheric-dryness extreme, low soil water content a soil-dryness "
              "extreme, both together a compound extreme.")
 
+    #: How the z-scores are computed — shown under the intro in the controls
+    #: column. The single most misread part of the method: which records a period
+    #: is standardized against is a choice, and it changes what counts as extreme.
+    method_note = (
+        "Each driver is aggregated to the chosen resolution first, then "
+        "standardized as set under 'Standardize by':\n\n"
+        "• Deseasonalized compares like with like across the years. Monthly, all "
+        "Januarys are pooled and each January is scored against the other "
+        "Januarys only; daily, each day is scored against the same day-of-year "
+        "in the other years. A period needs at least two years to compare "
+        "against, so a single-year record yields no z-scores this way.\n\n"
+        "• Whole-record uses one mean and standard deviation over the entire "
+        "aggregated series. Nothing is pooled by calendar position, so for a "
+        "seasonal driver such as VPD the season itself dominates the z-score and "
+        "summer periods read as extreme.")
+
     # --- build ---------------------------------------------------------
     def build(self) -> QWidget:
         self._df: pd.DataFrame | None = None
@@ -107,6 +123,11 @@ class CompoundExtremesTab(DiiveTab):
         intro.setWordWrap(True)
         intro.setStyleSheet(f"color: {_C_MUTED};")
         v.addWidget(intro)
+
+        note = QLabel(self.method_note)
+        note.setWordWrap(True)
+        note.setStyleSheet(f"color: {_C_MUTED}; padding-top: 6px;")
+        v.addWidget(note)
 
         # Two role-based variable combos with availability markers.
         cols_box = QGroupBox("Input variables")
