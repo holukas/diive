@@ -18,10 +18,6 @@ from diive.core.times.times import current_time_microseconds_str
 # from diive.core.times.times import timedelta_to_string
 from diive.core.utils.console import VERBOSE_PROGRESS, info
 
-pd.set_option('display.width', 1500)
-pd.set_option('display.max_columns', 30)
-pd.set_option('display.max_rows', 50)
-
 
 def keep_vars(data: DataFrame | Series,
               variables: list[str],

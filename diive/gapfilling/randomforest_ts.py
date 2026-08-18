@@ -12,16 +12,11 @@ Feature engineering pipeline and model scoring included.
 
 Part of the diive library: https://github.com/holukas/diive
 """
-import pandas as pd
 from pandas import DataFrame, Series
 from sklearn.ensemble import RandomForestRegressor  # Import the model we are using
 
 from diive.core.ml.common import MlRegressorGapFillingBase
 from diive.core.ml.optimization import OptimizeParamsTS
-
-pd.set_option('display.max_rows', 50)
-pd.set_option('display.max_columns', 12)
-pd.set_option('display.width', 1000)
 
 
 # Backward compatibility alias for existing code

@@ -18,10 +18,6 @@ import diive.core.dfun.frames as fr
 from diive.core.utils.console import console as _console, info, rule, success, error
 from diive.core.ml.scores import prediction_scores
 
-pd.set_option('display.max_rows', 50)
-pd.set_option('display.max_columns', 12)
-pd.set_option('display.width', 1000)
-
 
 class OptimizeParamsTS:
     """

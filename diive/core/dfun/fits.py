@@ -28,10 +28,6 @@ import pandas as pd
 # from gui import plotfuncs
 from diive.core.dfun.stats import q25, q75
 
-pd.set_option('display.width', 1500)
-pd.set_option('display.max_columns', 30)
-pd.set_option('display.max_rows', 30)
-
 
 def groupagg(df, num_bins, bin_col) -> pd.DataFrame:
     """Bin *bin_col* into *num_bins* groups and return per-bin aggregates."""

@@ -98,10 +98,6 @@ from diive.variables import dry_air_density, aerodynamic_resistance
 from diive.variables import DaytimeNighttimeFlag
 from diive.preprocessing.outlier_detection.hampel import HampelDaytimeNighttime
 
-pd.set_option('display.width', 2000)
-pd.set_option('display.max_columns', 14)
-pd.set_option('display.max_rows', 30)
-
 
 @dataclass(frozen=True)
 class ColumnConfig:

@@ -29,10 +29,6 @@ from diive.core.utils.console import (
 )
 from diive.core.ml.scores import prediction_scores
 
-pd.set_option('display.max_rows', 50)
-pd.set_option('display.max_columns', 12)
-pd.set_option('display.width', 1000)
-
 
 class MlRegressorGapFillingBase:
     """Base class for ML-regressor gap-fillers (Random Forest, XGBoost): training, scoring and gap-filling."""

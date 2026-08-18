@@ -10,7 +10,6 @@ import math
 import warnings
 
 import numpy as np
-import pandas as pd
 from matplotlib import rcParams
 
 import diive.core.plotting.plotfuncs as pf
@@ -19,8 +18,6 @@ from diive.core.plotting.styles.format import FormatStyle
 
 # pd.options.display.width = None
 # pd.options.display.max_columns = None
-pd.set_option('display.max_rows', 50)
-pd.set_option('display.max_columns', 50)
 
 from pandas import Series
 
