@@ -208,6 +208,39 @@ def _kill_tree(proc):
     proc.kill()
 
 
+def _error_tail(error, n_lines=1):
+    """Last non-empty lines of a captured traceback -- i.e. the exception itself.
+
+    Reporting the *first* line instead summarised every traceback as
+    ``Traceback (most recent call last):``, identical for every failure and
+    carrying no information at all. What matters is at the other end.
+    """
+    lines = [line.rstrip() for line in (error or '').splitlines() if line.strip()]
+    return lines[-n_lines:] if lines else ['Unknown error']
+
+
+def _exit_code_str(returncode):
+    """Exit code, plus its hex form when the OS rather than Python ended the run.
+
+    An example that raises exits 1 and leaves a traceback. One the OS takes out
+    leaves nothing, and then the code is the only evidence there is: on Windows
+    an NTSTATUS (0xC0000005 access violation, 0xC0000017 no memory), elsewhere
+    the negated signal number (-9 = SIGKILL, the out-of-memory killer).
+    """
+    if returncode is None:
+        return 'None'
+    if sys.platform == 'win32':
+        # Windows hands back the raw DWORD, so a crash shows up as a large
+        # positive number, not a negative one -- 3221225477, say, which means
+        # nothing until it is read as hex.
+        if returncode < 0 or returncode > 255:
+            return f'{returncode} (0x{returncode & 0xFFFFFFFF:08X})'
+        return str(returncode)
+    if returncode < 0:
+        return f'{returncode} (signal {-returncode})'
+    return str(returncode)
+
+
 def run_example(example_file, examples_dir):
     """Run a single example and return result with timing."""
     start_time = time.time()
@@ -261,6 +294,7 @@ def run_example(example_file, examples_dir):
                 'file': example_file,
                 'status': 'fail',
                 'error': error_msg,
+                'returncode': result.returncode,
                 'time': elapsed
             }
 
@@ -314,8 +348,9 @@ def run_all_examples():
                 results['passed'].append((example_file, elapsed))
             elif status == 'fail':
                 print(f"[FAIL] {example_file:<40} ({elapsed:6.2f}s) [{completed:2d}/{len(EXAMPLE_FILES)} {progress:5.1f}%]")
-                error_line = result['error'].split('\n')[0][:60]
-                print(f"       Error: {error_line}")
+                print(f"       Exit code: {_exit_code_str(result.get('returncode'))}")
+                for error_line in _error_tail(result['error']):
+                    print(f"       Error: {error_line[:120]}")
                 results['failed'].append((example_file, result['error'], elapsed))
             elif status == 'timeout':
                 print(f"[TIMEOUT] {example_file:<38} ({elapsed:6.2f}s) [{completed:2d}/{len(EXAMPLE_FILES)} {progress:5.1f}%]")
@@ -352,8 +387,8 @@ def run_all_examples():
         for example_file, error, elapsed in results['failed']:
             print(f"   {example_file:<50} {elapsed:6.2f}s")
             if error and error != "File not found":
-                error_line = error.split('\n')[0][:80]
-                print(f"     {error_line}")
+                for error_line in _error_tail(error, n_lines=5):
+                    print(f"     {error_line[:160]}")
         print("\nRun individual examples for full error details:")
         for example_file, _, _ in results['failed']:
             print(f"   python examples/{example_file}")
