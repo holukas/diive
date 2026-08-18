@@ -9,7 +9,7 @@
 - `diive` now features the first version of a new desktop application with a graphical user interface that can be
   used to quickly visualize and analyze flux data
 - Several new and improved plotting functions, with harmonized parameter handling
-- The API has been reorganized into ten namespaces to make it easier to find certain functions.
+- The API has been reorganized into ten namespaces to make it easier to find certain functions
 - New and improved partitioning methods for NEE fluxes from eddy covariance
 - Improved flux processing chain for eddy covariance fluxes
 - New and improved outlier detection methods
@@ -133,6 +133,7 @@ These changes affect numbers calculated with earlier versions.
     - Output columns are tagged, so all four can be kept in one dataframe and compared.
     - Also available as `partition_nee_*` functions and as Level-4.2 of the flux processing chain.
     - Bootstrap uncertainty is not yet emitted.
+    - Still need more testing before v1.0.
 - **Composable flux processing chain**:
     - `run_chain(data, FluxConfig)` runs the standard pipeline, or one function per level
       (`run_level2`, `run_level31`, `run_level32`, `run_level33_*`, `run_level41_*`, `run_level42_*`)
