@@ -2,17 +2,31 @@
 
 import os
 import sys
+from datetime import date
 from pathlib import Path
 
 # Add source directory to path for autodoc
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Imported after the path insert above, so a source checkout wins over any
+# diive that happens to be installed in the build environment.
+from diive import __version__ as diive_version  # noqa: E402
+
+# Whether the example gallery runs the examples. Read here rather than at the
+# gallery config below, because the stylesheet list depends on it too.
+execute_gallery = os.environ.get("DIIVE_DOCS_GALLERY", "0") == "1"
+
 # Project information
 project = "diive"
-copyright = "2025, Lukas Hörtnagl"
+# Year is derived so the footer does not silently go stale; first commit was 2021.
+copyright = f"2021-{date.today().year}, Lukas Hörtnagl"
 author = "Lukas Hörtnagl"
-version = "0.91.0"
-release = version
+# Single source of truth: diive/__init__.py reads the installed distribution
+# metadata (which hatchling fills from pyproject.toml) and falls back to a
+# literal only when running from an uninstalled source tree. Hardcoding it here
+# meant the docs footer drifted from the package at every release.
+release = diive_version
+version = release
 
 # General configuration
 extensions = [
@@ -52,6 +66,10 @@ html_theme_options = {
 }
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
+if not execute_gallery:
+    # Without execution there are no figures, so every gallery card gets the
+    # same stock placeholder image. Show the example summaries instead.
+    html_css_files.append("gallery_textcards.css")
 html_logo = None
 
 # Autodoc configuration
@@ -64,6 +82,15 @@ autodoc_default_options = {
     "undoc-members": False,
     "show-inheritance": True,
 }
+
+# Napoleon renders an "Attributes:" section as .. attribute:: directives and a
+# "Methods:" section as .. method:: directives. Those collide with the members
+# autodoc already documents on the same page, which is fatal under
+# fail_on_warning (56 "duplicate object description"). Rendering both as field
+# lists instead keeps the prose and drops the duplicate directive. Napoleon has
+# no dedicated option for "Methods", hence the custom section.
+napoleon_use_ivar = True
+napoleon_custom_sections = [("Methods", "params_style")]
 
 # Sphinx Gallery configuration - handle nested subdirectories
 # Build separate galleries for each category subdirectory
@@ -86,7 +113,7 @@ sphinx_gallery_conf = {
     # minutes long, which does not fit a Read the Docs build. The gallery pages
     # are still generated, without running the code or producing figures.
     # Set DIIVE_DOCS_GALLERY=1 to execute them locally (docs/build_docs.ps1 -Gallery).
-    "plot_gallery": os.environ.get("DIIVE_DOCS_GALLERY", "0") == "1",
+    "plot_gallery": execute_gallery,
     "abort_on_example_error": False,
     "matplotlib_animations": True,
     "backreferences_dir": "api/generated",
@@ -108,49 +135,10 @@ myst_enable_extensions = ["colon_fence", "deflist", "html_image"]
 myst_url_schemes = ("http", "https", "mailto")
 
 # Source and suffix
+# ".md" maps to the parser name myst_parser registers, not to "myst-nb":
+# myst-nb is a separate package that is neither installed nor in requirements.txt,
+# so naming it here fails the build as soon as any .md page is added under docs/.
 source_suffix = {
     ".rst": None,
-    ".md": "myst-nb",
+    ".md": "markdown",
 }
-
-# Post-process sg_execution_times.rst to fix cross-reference warnings
-def fix_execution_times_references(app, env, docnames):
-    """Convert :ref: directives to :doc: in sg_execution_times.rst files."""
-    import re
-    from pathlib import Path
-
-    categories = [
-        'analysis', 'binary', 'corrections', 'createvar',
-        'fits', 'flux', 'gap_filling', 'outlierdetection', 'timeseries', 'visualization'
-    ]
-
-    def replace_ref(match):
-        inner = match.group(1)
-        inner = inner.replace('sphx_glr_auto_examples_', '').replace('.py', '')
-
-        for cat in categories:
-            if inner.startswith(cat + '_'):
-                name = inner[len(cat)+1:]
-                return f":doc:`/auto_examples/{cat}/{name}`"
-
-        return match.group(0)
-
-    # Process all sg_execution_times.rst files
-    auto_examples_dir = Path(app.srcdir) / "auto_examples"
-    if auto_examples_dir.exists():
-        for rst_file in auto_examples_dir.rglob("sg_execution_times.rst"):
-            with open(rst_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-
-            # Only process if it has the problematic :ref: directives
-            if ':ref:`sphx_glr_auto_examples_' in content:
-                # Replace :ref: with :doc:
-                pattern = r':ref:`(sphx_glr_auto_examples_[^`]+)`'
-                new_content = re.sub(pattern, replace_ref, content)
-
-                with open(rst_file, 'w', encoding='utf-8') as f:
-                    f.write(new_content)
-
-def setup(app):
-    """Register Sphinx event handlers."""
-    app.connect('env-before-read-docs', fix_execution_times_references)
