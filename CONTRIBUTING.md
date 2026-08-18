@@ -376,12 +376,14 @@ from a bare `sphinx-build`:
   are rebuilt every time. A leftover page for a symbol that no longer exists hides
   the error that should be reported.
 
-The example gallery is **not** executed by default, on Read the Docs or locally —
-running all 113 examples does not fit an RTD build. To run them and get the
-figures:
+The example gallery **is** executed, on Read the Docs and locally. That is what
+puts the figures and the captured console output on each example page, and it
+generates every thumbnail. A cold full build takes about 7.5 minutes, of which
+the 113 examples are 2.8 minutes. To skip execution for a fast pass over the
+prose and API pages:
 
 ```powershell
-.\docs\build_docs.ps1 -Gallery
+.\docs\build_docs.ps1 -NoGallery
 ```
 
 That works through the `DIIVE_DOCS_GALLERY` environment variable, because
@@ -391,11 +393,9 @@ cannot reach.
 Use `-NoClean` to keep the previous build's output, and `-NoFailOnWarning` to
 build through warnings — bearing in mind Read the Docs will still refuse them.
 
-**The `docs/` tree is stale.** It is written against the flat pre-namespace API, and most
-of the symbols it documents no longer exist. Reworking it is deferred as its own separate
-project, so don't treat a broken page there as a bug to fix in passing. See
-[`OVERVIEW.md`](OVERVIEW.md) for what is wrong with it and which references are accurate
-in the meantime.
+The `docs/` tree is written against the ten-namespace API and builds without warnings,
+so a broken page there is a real bug. Build before opening a PR that touches a docstring:
+`fail_on_warning` means malformed markup in one blocks the hosted build.
 
 ### Docstring Style
 
