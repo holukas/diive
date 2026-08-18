@@ -7,8 +7,6 @@ Enforce physical or measurement validity constraints by rejecting
 values outside specified min/max ranges.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/outlier_absolutelimits.png'
-
 # %%
 # Create synthetic test data
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^

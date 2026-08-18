@@ -8,8 +8,6 @@ The correction detects excess values, calculates daily mean offset,
 and caps the maximum at 100%.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/correction_relativehumidity_offset.png'
-
 # %%
 # Load and scale RH data
 # ^^^^^^^^^^^^^^^^^^^^^^

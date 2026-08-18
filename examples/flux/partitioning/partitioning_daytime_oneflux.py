@@ -20,8 +20,6 @@ Best for: matching an ONEFlux / FLUXNET2015 daytime partitioning, or comparing
 the ONEFlux and REddyProc daytime implementations.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/partitioning_daytime_oneflux.png'
-
 # %%
 # Inputs and reference columns
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

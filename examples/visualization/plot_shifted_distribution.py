@@ -11,8 +11,6 @@ period's mean and standard deviation (Hansen et al. methodology: +-1sigma and
 Best for: Detecting long-term shifts in climate variables, comparing two decades.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_shifted_distribution.png'
-
 import diive as dv
 
 # %%

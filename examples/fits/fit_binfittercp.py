@@ -17,8 +17,6 @@ Best for: Understanding nonlinear relationships between variables with
 quantified uncertainty.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/fit_binfittercp.png'
-
 # %%
 # Overview: Why Binned Fitting?
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

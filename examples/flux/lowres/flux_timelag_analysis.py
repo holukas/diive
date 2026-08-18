@@ -16,8 +16,6 @@ The workflow includes:
 - Multi-panel visualization showing overview and zoomed perspectives
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/flux_timelag_analysis.png'
-
 # %%
 # Load data and initialize analyzer
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

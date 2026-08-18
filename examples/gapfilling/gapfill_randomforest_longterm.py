@@ -14,8 +14,6 @@ on data from the target year plus 2 neighboring years (e.g., 2020 model uses
 Best for: Multi-year datasets where seasonal/yearly variation is significant.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/gapfill_randomforest_longterm.png'
-
 # %%
 # Long-term random forest gap-filling approach
 # ==============================================

@@ -12,8 +12,6 @@ distribution within, above, and below the optimum range.
 Best for: Identifying operating conditions for ecosystem processes
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/analysis_optimumrange.png'
-
 # %%
 # Load data
 # ^^^^^^^^^

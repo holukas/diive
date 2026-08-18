@@ -9,8 +9,6 @@ Useful for tracking cumulative fluxes and total mass balance.
 Best for: Cumulative flux budgets, total mass balance analysis
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_cumulative_basic.png'
-
 import diive as dv
 
 # %%

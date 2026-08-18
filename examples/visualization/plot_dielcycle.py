@@ -9,8 +9,6 @@ Shows hourly mean values and seasonal changes in daily patterns.
 Best for: Understanding diurnal cycles and seasonal variation in fluxes
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_dielcycle.png'
-
 import diive as dv
 
 # %%

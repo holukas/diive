@@ -9,8 +9,6 @@ Shows daily patterns with optional custom styling.
 Best for: Visualizing daily patterns, identifying diurnal cycles
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_heatmap_datetime_basic.png'
-
 import diive as dv
 
 # %%

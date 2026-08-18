@@ -9,8 +9,6 @@ multi-variable side-by-side comparison.
 Best for: Seasonal patterns, comparing multiple variables across dimensions
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_heatmap_advanced.png'
-
 import matplotlib.pyplot as plt
 
 import diive as dv

@@ -13,8 +13,6 @@ flux tower data and compares calculated ET with reference values.
 Best for: Converting latent heat flux measurements to water flux (ET).
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/feature_evapotranspiration.png'
-
 # %%
 # Evapotranspiration from Latent Heat Flux
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

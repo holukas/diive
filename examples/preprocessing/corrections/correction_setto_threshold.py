@@ -7,8 +7,6 @@ Constrain data to physically realistic limits by clipping values
 above or below specified thresholds.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/correction_setto_threshold.png'
-
 # %%
 # Create test data with values outside acceptable range
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -12,8 +12,6 @@ Here we look at the directional response of the CO2 flux: which wind sectors the
 station sees net uptake (negative flux) from, and which it sees release from.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_windrose_basic.png'
-
 # %%
 # Load data
 # ^^^^^^^^^

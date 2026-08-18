@@ -12,8 +12,6 @@ the relationship stays stable or changes as temperature increases.
 Best for: Understanding how environmental controls interact
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/analysis_decoupling.png'
-
 # %%
 # Load and prepare data
 # ^^^^^^^^^^^^^^^^^^^^^

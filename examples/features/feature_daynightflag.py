@@ -11,8 +11,6 @@ that vary between day and night.
 Best for: Separating measurements into day/night periods for analysis.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/feature_daynightflag.png'
-
 # %%
 # Calculate Daytime/Nighttime Flags
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

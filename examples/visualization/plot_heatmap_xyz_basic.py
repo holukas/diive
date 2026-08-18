@@ -9,8 +9,6 @@ Shows relationships between two variables through aggregated flux values.
 Best for: Visualizing binned flux relationships (e.g., NEE binned by temperature and VPD)
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_heatmap_xyz_basic.png'
-
 import diive as dv
 
 # %%

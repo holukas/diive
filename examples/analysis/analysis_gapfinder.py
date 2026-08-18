@@ -12,8 +12,6 @@ events and assessing overall data quality.
 Best for: Understanding missing data patterns and data availability
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/analysis_gapfinder.png'
-
 # %%
 # Load data
 # ^^^^^^^^^

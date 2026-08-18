@@ -13,8 +13,6 @@ Best for: Isolating a variable under specific conditions, e.g. CO2 fluxes only
 during warm periods, or radiation only on high-VPD days.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/analysis_keep_records_where.png'
-
 # %%
 # Load data
 # ^^^^^^^^^

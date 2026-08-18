@@ -14,8 +14,6 @@ Speed: Very fast (~3 seconds)
 Use case: Quick prototyping, testing, parameter exploration
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/gapfill_quickfill.png'
-
 # %%
 # QuickFill example
 # =================

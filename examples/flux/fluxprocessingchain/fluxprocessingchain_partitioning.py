@@ -26,8 +26,6 @@ are available on the composable per-level API (see
 ``fluxprocessingchain_composable.py``).
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/fluxprocessingchain_partitioning.png'
-
 # %%
 # Imports
 # ^^^^^^^

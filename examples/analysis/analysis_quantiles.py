@@ -12,8 +12,6 @@ with detailed statistics.
 Best for: Understanding data distribution quantiles and percentile values
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/analysis_quantiles.png'
-
 # %%
 # Load data
 # ^^^^^^^^^

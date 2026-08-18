@@ -26,8 +26,6 @@ other and against the bundled REddyProc reference columns (``Reco_CUT_REF`` /
 Best for: choosing a partitioning method, or seeing how much the choice matters.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/partitioning_comparison.png'
-
 # %%
 # Load data
 # ^^^^^^^^^

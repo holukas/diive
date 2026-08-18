@@ -13,8 +13,6 @@ while preserving ecosystem signal.
 Best for: Identifying and removing measurement spikes in CO2 flux data.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/flux_hqflux.png'
-
 # %%
 # Load and prepare CO2 flux data
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

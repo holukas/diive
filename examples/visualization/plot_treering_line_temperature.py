@@ -11,8 +11,6 @@ All years share the same y-axis so lines overlap naturally. Early years (cooler)
 blue; recent years (warmer) appear red.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_treering_line_temperature.png'
-
 # %%
 # Load data
 # ^^^^^^^^^^

@@ -11,8 +11,6 @@ using the 4-method PAS20 approach (gap-filling uncertainty, daytime, nighttime, 
 Best for: Assessing measurement reliability and random error propagation in flux data.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/flux_uncertainty.png'
-
 # %%
 # Load data and calculate random uncertainty
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

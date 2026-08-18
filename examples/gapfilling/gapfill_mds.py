@@ -22,8 +22,6 @@ References:
   https://doi.org/10.1038/s41598-023-28827-2
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/gapfill_mds.png'
-
 # %%
 # Overview: Marginal Distribution Sampling (MDS)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

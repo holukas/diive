@@ -7,8 +7,6 @@ Robust outlier detection using Median Absolute Deviation (MAD).
 Detects values that deviate significantly from local trend, ideal for spike removal.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/outlier_hampel.png'
-
 # %%
 # Load data and add synthetic noise
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

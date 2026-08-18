@@ -7,8 +7,6 @@ Symmetric trimming approach: remove values below threshold,
 then remove equal number of values from high end (trimmed mean).
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/outlier_trim.png'
-
 # %%
 # Create test data with synthetic noise
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

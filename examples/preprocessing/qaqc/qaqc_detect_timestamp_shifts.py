@@ -17,8 +17,6 @@ positive shift = measured peaks **earlier** than potential (leading clock),
 negative shift = measured peaks **later** (lagging clock).
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/qaqc_detect_timestamp_shifts.png'
-
 # %%
 # Load data and prepare the DataFrame
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

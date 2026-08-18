@@ -8,8 +8,6 @@ Simple scatter plot of two variables showing their relationship.
 Best for: Exploring variable relationships, quick correlation checks
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_scatter_xy_basic.png'
-
 import diive as dv
 
 # %%

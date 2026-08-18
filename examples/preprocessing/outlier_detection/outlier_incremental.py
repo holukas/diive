@@ -7,8 +7,6 @@ Identify spikes and abrupt changes by detecting anomalous increments
 between consecutive measurements.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/outlier_incremental.png'
-
 # %%
 # Create test data with impulse noise
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

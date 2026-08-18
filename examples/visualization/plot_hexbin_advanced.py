@@ -8,8 +8,6 @@ Advanced Hexbin Plots
 Best for: Detailed density visualization with actual values and custom aggregation
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_hexbin_advanced.png'
-
 import matplotlib.pyplot as plt
 import numpy as np
 import diive as dv

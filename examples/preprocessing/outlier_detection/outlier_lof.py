@@ -7,8 +7,6 @@ Density-based outlier detection identifying values with anomalous local neighbor
 Effective for detecting contextual outliers where local density varies.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/outlier_lof.png'
-
 # %%
 # Create test data with synthetic noise
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

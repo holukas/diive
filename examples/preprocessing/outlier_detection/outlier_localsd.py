@@ -7,8 +7,6 @@ Adaptive outlier detection based on rolling window statistics.
 Identifies values deviating significantly from local median and standard deviation.
 """
 
-# sphinx_gallery_thumbnail_path = '_static/thumbs/outlier_localsd.png'
-
 # %%
 # Create test data with impulse noise
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
