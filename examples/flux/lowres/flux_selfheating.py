@@ -1,7 +1,7 @@
 """
-=========================================
+==========================================
 Self-Heating Correction (SCOP Methodology)
-=========================================
+==========================================
 
 Remove spurious CO2 flux caused by sun-induced heating of open-path IRGA sensors.
 

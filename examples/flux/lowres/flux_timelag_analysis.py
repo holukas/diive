@@ -1,7 +1,7 @@
 """
-============================
+=============================
 Time Lag Analysis for EC Data
-============================
+=============================
 
 Analyze and visualize time lags in eddy covariance flux measurements.
 
@@ -48,7 +48,7 @@ analysis = TimeLagAnalysis(
 
 # %%
 # Analyze individual gas
-# ^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^^^
 #
 # Perform time lag analysis for a specific gas species.
 

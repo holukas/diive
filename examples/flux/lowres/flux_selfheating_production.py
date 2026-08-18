@@ -393,7 +393,7 @@ for daytime_flag, label in [(1.0, "DAYTIME"), (0.0, "NIGHTTIME")]:
 
 # %%
 # Using the Scaling Factors Table in Future Applications
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # The scaling factors table is now ready for operational use. It can be saved
 # and applied to any future period at the same site as long as the instrument

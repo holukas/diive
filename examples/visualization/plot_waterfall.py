@@ -1,7 +1,7 @@
 """
-=========================
+==========================
 Waterfall Flux Budget Plot
-=========================
+==========================
 
 Financial-style waterfall chart of daily CO2 contributions building up a running
 flux budget. Each day floats from the previous running total, colored by uptake

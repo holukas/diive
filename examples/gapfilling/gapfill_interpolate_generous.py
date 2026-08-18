@@ -1,7 +1,7 @@
 """
-====================================
+=====================================
 Linear Interpolation - Generous Limit
-====================================
+=====================================
 
 Gap-fill time series using linear interpolation with generous gap size limit.
 

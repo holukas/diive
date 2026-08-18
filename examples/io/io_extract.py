@@ -1,7 +1,7 @@
 """
-==================
+=======================
 Binary Value Extraction
-==================
+=======================
 
 Extract specific bits and encoded values from integer data.
 

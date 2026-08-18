@@ -1,7 +1,7 @@
 """
-================================
+==================================
 Overall Quality Control Flag (QCF)
-================================
+==================================
 
 Combine multiple quality test flags into a single overall quality indicator.
 QCF values: 0=good, 1=marginal, 2=poor/rejected.
@@ -61,7 +61,7 @@ print(f"  Individual test flags: 6 (with overlaps)")
 
 # %%
 # Calculate overall QCF
-# ^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^^
 #
 # Combine all test flags into single quality indicator.
 # Hard flags (2) weighted more heavily than soft flags (1).

@@ -1,7 +1,7 @@
 """
-===========================
+============================
 Yearly Comparison Histograms
-===========================
+============================
 
 Compare distributions across different years to identify temporal patterns.
 

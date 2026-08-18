@@ -1,7 +1,7 @@
 """
-======================
+============================
 Percentile/Quantile Analysis
-======================
+============================
 
 Calculate and visualize percentiles 0-100 for time series data.
 
@@ -29,7 +29,7 @@ percentiles_df = dv.analysis.percentiles101(series=df['Tair_f'], showplot=True, 
 
 # %%
 # Display full results
-# ^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^
 
 print("\nAll percentiles (0-100):")
 print(percentiles_df)

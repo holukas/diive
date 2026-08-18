@@ -1,7 +1,7 @@
 """
-===========================================
+=============================================
 Daytime NEE Partitioning REddyProc (RECO/GPP)
-===========================================
+=============================================
 
 Partition net ecosystem exchange (NEE) into gross primary production (GPP) and
 ecosystem respiration (RECO) with the daytime method of Lasslop et al. (2010),
@@ -49,6 +49,7 @@ print(f"Period: {df.index.min().date()} to {df.index.max().date()} ({len(df)} re
 # ^^^^^^^^^^^^^^^^^^^^^
 # Inputs (REddyProc's daytime method uses the gap-filled meteo drivers
 # throughout and quality-filters only NEE):
+#
 #   - measured NEE (gaps are records that were not measured / did not pass QC)
 #   - gap-filled air temperature (for the fit and for RECO)
 #   - gap-filled VPD (diive's kPa is converted to REddyProc's hPa internally)

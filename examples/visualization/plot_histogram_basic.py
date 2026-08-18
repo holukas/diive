@@ -1,7 +1,7 @@
 """
-============================
+=============================
 Basic Histogram with Z-Scores
-============================
+=============================
 
 Distribution analysis with z-score overlay, peak bin highlighting, and custom bin edges.
 

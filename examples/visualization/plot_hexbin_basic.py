@@ -1,7 +1,7 @@
 """
-============================
+==============================
 Basic Hexbin Plot (Percentile)
-============================
+==============================
 
 2D hexagonal binning with percentile normalization for standardized comparison.
 

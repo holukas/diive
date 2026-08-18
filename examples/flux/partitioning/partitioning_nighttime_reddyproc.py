@@ -1,7 +1,7 @@
 """
-==============================================
+===============================================
 Nighttime NEE Partitioning REddyProc (RECO/GPP)
-==============================================
+===============================================
 
 Partition net ecosystem exchange (NEE) into gross primary production (GPP) and
 ecosystem respiration (RECO) with the nighttime method of Reichstein et al.

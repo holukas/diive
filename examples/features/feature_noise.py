@@ -1,7 +1,7 @@
 """
-===========================
+=============================
 Noise Generation and Addition
-===========================
+=============================
 
 Demonstrates generating synthetic time series with noise and outliers,
 and adding impulse noise to existing time series. Useful for testing

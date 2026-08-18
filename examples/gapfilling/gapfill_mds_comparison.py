@@ -1,7 +1,7 @@
 """
-==================================
+=====================================
 FluxMDS reproducibility / determinism
-==================================
+=====================================
 
 Show that MDS gap-filling is deterministic: running ``FluxMDS`` twice on the
 same data produces bit-identical gap-filled values and quality flags.

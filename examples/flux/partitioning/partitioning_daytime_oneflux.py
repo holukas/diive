@@ -1,7 +1,7 @@
 """
-=========================================
+===========================================
 Daytime NEE Partitioning ONEFlux (RECO/GPP)
-=========================================
+===========================================
 
 Partition net ecosystem exchange (NEE) into gross primary production (GPP) and
 ecosystem respiration (RECO) with the daytime method of Lasslop et al. (2010),

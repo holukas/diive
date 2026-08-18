@@ -13,7 +13,8 @@ pipeline and demonstrates the key advantage of the composable functional API:
 and four NEE partitioning variants from the same upstream state without
 repeating any work.
 
-Pipeline at a glance:
+Pipeline at a glance::
+
   L2   -> ``run_level2``                — EddyPro quality-flag expansion + QCF
   L3.1 -> ``run_level31``               — storage correction (``FC -> NEE``)
   L3.2 -> ``make_level32_detector`` +

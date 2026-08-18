@@ -1,7 +1,7 @@
 """
-============================
+=============================
 Cumulative Flux Visualization
-============================
+=============================
 
 Cumulative time series plots showing running totals across all time periods.
 Useful for tracking cumulative fluxes and total mass balance.
