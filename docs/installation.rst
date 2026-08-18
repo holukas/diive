@@ -41,7 +41,7 @@ Option 2: Using uv (Modern, Fast)
 Option 3: Development Setup with uv
 ------------------------------------
 
-For development and contributing to DIIVE, clone the repository and use uv:
+For development and contributing to diive, clone the repository and use uv:
 
 .. code-block:: bash
 
@@ -67,7 +67,7 @@ If you prefer conda, use the provided environment file:
 Verifying Installation
 ======================
 
-Check that DIIVE is installed correctly:
+Check that diive is installed correctly:
 
 .. code-block:: python
 
@@ -88,7 +88,7 @@ Verify with a simple example:
 Key Dependencies
 ================
 
-DIIVE depends on:
+diive depends on:
 
 - **Data processing:** pandas, numpy, pyarrow
 - **Machine learning:** scikit-learn, xgboost, prophet
@@ -97,7 +97,7 @@ DIIVE depends on:
 - **Interpretability:** shap, eli5, yellowbrick
 - **Time series:** sktime, pymannkendall
 
-All dependencies are automatically installed with DIIVE.
+All dependencies are automatically installed with diive.
 
 Optional Dependencies
 =====================
@@ -112,7 +112,7 @@ Troubleshooting
 ===============
 
 **ImportError: No module named 'diive'**
-   Make sure DIIVE is installed (see above) and your Python environment is activated.
+   Make sure diive is installed (see above) and your Python environment is activated.
 
 **EnvironmentError: Conda environment not found**
    If using conda, activate the environment first:
@@ -136,7 +136,7 @@ Troubleshooting
       import matplotlib
       matplotlib.use('TkAgg')  # or 'Qt5Agg', 'Agg', etc.
 
-Updating DIIVE
+Updating diive
 ==============
 
 To update to the latest version:

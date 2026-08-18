@@ -1,6 +1,6 @@
 ![](../images/logo_diive1_128px.png)
 
-# DIIVE Examples & Notebooks
+# diive Examples & Notebooks
 
 ---
 

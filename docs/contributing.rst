@@ -493,4 +493,4 @@ Getting Help
 Thank You!
 ==========
 
-We appreciate your contributions. Whether it's code, documentation, examples, or bug reports, you're helping make DIIVE better for everyone.
+We appreciate your contributions. Whether it's code, documentation, examples, or bug reports, you're helping make diive better for everyone.

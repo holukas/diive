@@ -3,7 +3,7 @@
 EddyPro Quality Flags
 ===================================
 
-Extract and convert EddyPro quality flags to DIIVE standard format.
+Extract and convert EddyPro quality flags to diive standard format.
 Understand signal quality, test failures, and data completeness.
 """
 

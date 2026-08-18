@@ -1,12 +1,12 @@
-.. DIIVE documentation master file
+.. diive documentation master file
 
 ========
-DIIVE
+diive
 ========
 
 **Data Integration and Interactive Visualization Engine**
 
-DIIVE is a Python library for time series processing and analysis with focus on ecosystem flux data. It provides:
+diive is a Python library for time series processing and analysis with focus on ecosystem flux data. It provides:
 
 - **Feature engineering** — 8-stage composable pipeline for ML preparation
 - **Gap-filling** — Multiple ML methods (Random Forest, XGBoost) and meteorological matching
@@ -126,7 +126,7 @@ Quick Example
 Next Steps
 ==========
 
-- **New to DIIVE?** Start with the :ref:`Getting Started <getting_started>` guide.
+- **New to diive?** Start with the :ref:`Getting Started <getting_started>` guide.
 - **Looking for examples?** Browse the :ref:`Example Gallery <auto_examples/index>`.
 - **Want the full API?** See the :ref:`API Reference <api_reference>`.
 - **Contributing?** Check out :ref:`Contributing <contributing>`.

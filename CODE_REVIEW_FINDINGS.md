@@ -925,7 +925,7 @@ ssitc_flag = Series(index=df.index, data=df[flagname], name=flagname_out)
 ```
 
 The raw EddyPro column is copied verbatim. Its docstring says twice that the flag "is extracted from
-EddyPro FluxNet output and **converted to DIIVE standard format (0=good, 2=bad)**". Every *other*
+EddyPro FluxNet output and **converted to diive standard format (0=good, 2=bad)**". Every *other*
 flag function in this module really does convert (via `_extract_and_convert_flag_from_multidigit`
 or explicit thresholding); SSITC is the only pass-through.
 

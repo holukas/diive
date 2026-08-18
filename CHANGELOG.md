@@ -1,6 +1,6 @@
 # Changelog
 
-![DIIVE](images/logo_diive1_256px.png)
+![diive](images/logo_diive1_256px.png)
 
 ## v0.91.0 | XX August 2026
 
@@ -758,7 +758,7 @@ Vekuri et al. (2023), similar to the standard gap-filling procedures used by FLU
 platforms. This method fills gaps by substituting missing flux values with average flux values observed under comparable
 meteorological conditions.
 
-![DIIVE](images/plotMDS_diive_v0.85.5.png)
+![diive](images/plotMDS_diive_v0.85.5.png)
 
 #### Background: different flux levels
 
@@ -866,7 +866,7 @@ meteorological conditions.
 - New class `BinFitterCP` for fitting function to binned data, includes confidence interval and prediction interval (
   `diive.pkgs.fits.fitter.BinFitterCP`)
 
-![DIIVE](images/BinFitterCP_diive_v0.84.0.png)
+![diive](images/BinFitterCP_diive_v0.84.0.png)
 
 ### Additions
 
@@ -1260,7 +1260,7 @@ With this update, the `FluxProcessingChain` class can handle various data proces
 This version introduces a histogram plot that has the option to display z-score as vertical lines superimposed on the
 distribution, which helps in assessing z-score settings used by some outlier removal functions.
 
-![DIIVE](images/plotHistogram_diive_v0.79.0.png)
+![diive](images/plotHistogram_diive_v0.79.0.png)
 
 *Histogram plot of half-hourly air temperature measurements at the ICOS Class 1 ecosystem
 station [Davos](https://www.swissfluxnet.ethz.ch/index.php/sites/site-info-ch-dav/) between 2013 and 2022, displayed in
@@ -1514,7 +1514,7 @@ it plots the (monthly) diel cycles as means (+/- standard deviation). It makes u
 datetime timestamp index of the data. All aggregates are calculated by grouping data by time and (optional) separately
 for each month. The diel cycles have the same time resolution as the time component of the timestamp index, e.g. hourly.
 
-![DIIVE](images/plotDielCycle_diive_v0.76.0.png)
+![diive](images/plotDielCycle_diive_v0.76.0.png)
 
 ### New features
 
@@ -1741,7 +1741,7 @@ multiple outlier tests into one single overall outlier flag.
 - Added new heatmap plotting class `HeatmapYearMonth` that allows to plot a variable in year/month
   classes(`diive.core.plotting.heatmap_datetime.HeatmapYearMonth`)
 
-![DIIVE](images/plotHeatmapYearMonth_diive_v0.72.0.png)
+![diive](images/plotHeatmapYearMonth_diive_v0.72.0.png)
 
 ### Changes
 
@@ -1760,7 +1760,7 @@ multiple outlier tests into one single overall outlier flag.
 
 ## v0.71.6 | 23 Mar 2024
 
-![DIIVE](images/analysesZaggregatesInQuantileClassesOfXY_diive_v0.71.6.png)
+![diive](images/analysesZaggregatesInQuantileClassesOfXY_diive_v0.71.6.png)
 
 ### Notebooks
 
@@ -1776,7 +1776,7 @@ multiple outlier tests into one single overall outlier flag.
 
 - Updated notebook for `SortingBinsMethod` (`diive.pkgs.analysis.decoupling.SortingBinsMethod`)
 
-![DIIVE](images/analysesDecoupling_sortingBinsMethod_diive_v0.71.5.png)
+![diive](images/analysesDecoupling_sortingBinsMethod_diive_v0.71.5.png)
 
 *Plot showing vapor pressure deficit (y) in 10 classes of short-wave incoming radiation (x), separate for 5 classes of
 air temperature (z). All values shown are medians of the respective variable. The shaded errorbars refer to the
@@ -1788,7 +1788,7 @@ interquartile range for the respective class. Plot was generated using the class
 
 - Refactored class `LongtermAnomaliesYear` (`diive.core.plotting.bar.LongtermAnomaliesYear`)
 
-![DIIVE](images/plotBarLongtermAnomaliesYear_diive_v0.71.4.png)
+![diive](images/plotBarLongtermAnomaliesYear_diive_v0.71.4.png)
 
 ### Notebooks
 
@@ -1851,7 +1851,7 @@ to detect and remove time lags from time series data and can also handle driftin
 are not constant over time. This is especially useful for eddy covariance data, where the detection of
 accurate time lags is of high importance for the calculation of ecosystem fluxes.
 
-![DIIVE](images/lagMaxCovariance_diive_v0.71.0.png)
+![diive](images/lagMaxCovariance_diive_v0.71.0.png)
 *Plot showing the covariance between the turbulent departures of vertical wind and CO2 measurements.
 Maximum (absolute) covariance was found at record -26, which means that the CO2 signal has to be shifted
 by 26 records in relation to the wind data to obtain the maximum covariance between the two variables.
@@ -2029,7 +2029,7 @@ the updated `FluxProcessingChain`notebook (`notebooks/FluxProcessingChain/FluxPr
 
 - Added new class `ScatterXY`: a simple scatter plot that supports bins (`core.plotting.scatter.ScatterXY`)
 
-![DIIVE](images/ScatterXY_diive_v0.66.0.png)
+![diive](images/ScatterXY_diive_v0.66.0.png)
 
 ### Notebooks
 
@@ -2755,7 +2755,7 @@ updates.
       based on the observed differences. Works well with data that do not have a diel cycle,
       e.g. soil water content.
 
-![DIIVE](images/fluxUstarthreshold_UstarThresholdConstantScenarios_diive_v0.48.0.png)
+![diive](images/fluxUstarthreshold_UstarThresholdConstantScenarios_diive_v0.48.0.png)
 
 ## v0.47.0 | 28 Jan 2023
 
@@ -2949,7 +2949,7 @@ updates.
   `x` and `y`. For example: show mean GPP (`y`) in 5 classes of VPD (`x`), separate for
   10 classes of air temperature (`z`).
 
-![DIIVE](images/analysesDecoupling_sortingBinsMethod_diive_v0.42.0.png)
+![diive](images/analysesDecoupling_sortingBinsMethod_diive_v0.42.0.png)
 
 - **Time series plot**: `core.plotting.timeseries.TimeSeries` plots a simple time series. This will
   be the default method to plot time series.
@@ -2984,7 +2984,7 @@ updates.
 #### Example of updated `BinFitterBTS` as used in `CriticalDays`
 
 It is now possible to show confidence intervals for the upper and lower prediction bands.  
-![DIIVE](images/fluxCriticalDaysWithUpdatedBinFitterBTS_diive_v0.41.0.png)
+![diive](images/fluxCriticalDaysWithUpdatedBinFitterBTS_diive_v0.41.0.png)
 
 ### Other
 
@@ -3008,11 +3008,11 @@ It is now possible to show confidence intervals for the upper and lower predicti
   the difference between the observed co2 flux and the potential co2 flux modelled
   from less extreme environmental conditions.
 
-![DIIVE](images/fluxCO2penalty_cumulative_diive_v0.40.0.png)
+![diive](images/fluxCO2penalty_cumulative_diive_v0.40.0.png)
 
-![DIIVE](images/fluxCO2penalty_penaltyPerYear_diive_v0.40.0.png)
+![diive](images/fluxCO2penalty_penaltyPerYear_diive_v0.40.0.png)
 
-![DIIVE](images/fluxCO2penalty_dielCycles_diive_v0.40.0.png)
+![diive](images/fluxCO2penalty_dielCycles_diive_v0.40.0.png)
 
 ### VPD Calculation
 
@@ -3034,7 +3034,7 @@ It is now possible to show confidence intervals for the upper and lower predicti
   example below critical days are defined as the VPD daily max value where the daily
   sum of NEE (in g CO2 m-2 d-1) becomes positive (i.e., emission of CO2 from the
   ecosystem to the atmosphere).
-  ![DIIVE](images/fluxCriticalDays_diive_v0.39.0.png)
+  ![diive](images/fluxCriticalDays_diive_v0.39.0.png)
 
 ## v0.38.0 | 3 Sep 2022
 
@@ -3043,16 +3043,16 @@ It is now possible to show confidence intervals for the upper and lower predicti
 - New analysis: `pkgs.analyses.optimumrange.FindOptimumRange` finds the optimum for a
   variable in binned other variable. This is useful for e.g. detecting the VPD
   range where CO2 uptake was highest (=most negative).  
-  ![DIIVE](images/analysesOptimumRange_diive_v0.38.0.png)
+  ![diive](images/analysesOptimumRange_diive_v0.38.0.png)
 
 ## v0.37.0 | 2 Sep 2022
 
 ### Cumulative and Anomaly Plots
 
 - New plot: `core.plotting.cumulative.CumulativeYear` plots cumulative sums per year  
-  ![DIIVE](images/plotCumulativeYear_diive_v0.37.0.png)
+  ![diive](images/plotCumulativeYear_diive_v0.37.0.png)
 - New plot: `core.plotting.bar.LongtermAnomaliesYear` plots yearly anomalies in relation to a reference period  
-  ![DIIVE](images/plotBarLongtermAnomaliesYear_diive_v0.37.0.png)
+  ![diive](images/plotBarLongtermAnomaliesYear_diive_v0.37.0.png)
 - Refactored various code bits for plotting
 
 ## v0.36.0 | 27 Aug 2022

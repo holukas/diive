@@ -32,12 +32,12 @@ import diive as dv
 # Session information
 # ^^^^^^^^^^^^^^^^^^^
 #
-# Display DIIVE version and current timestamp.
+# Display diive version and current timestamp.
 
 dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 print(f"Session timestamp: {dt_string}")
 version_diive = importlib.metadata.version("diive")
-print(f"DIIVE version: v{version_diive}")
+print(f"diive version: v{version_diive}")
 
 # %%
 # QuickFillRFTS overview

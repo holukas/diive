@@ -347,14 +347,14 @@ class TestFlagQCFNeverNaN(unittest.TestCase):
 
 
 class TestEddyProFlags(unittest.TestCase):
-    """Conversion of EddyPro output flags to DIIVE format (0/1/2)."""
+    """Conversion of EddyPro output flags to diive format (0/1/2)."""
 
     def _idx(self, n: int):
         return pd.date_range('2022-06-01', periods=n, freq='30min', name='TIMESTAMP_END')
 
     def test_ssitc_values_are_passed_through(self):
         # Finding L15: SSITC is deliberately NOT thresholded -- EddyPro's 0/1/2
-        # already is the DIIVE scale, so intermediate quality 1 stays a soft flag.
+        # already is the diive scale, so intermediate quality 1 stays a soft flag.
         from diive.preprocessing.qaqc.eddyproflags import flag_ssitc_eddypro_test
         df = pd.DataFrame({'FC_SSITC_TEST': [0.0, 1.0, 2.0]}, index=self._idx(3))
         flag = flag_ssitc_eddypro_test(df=df, flux='FC')

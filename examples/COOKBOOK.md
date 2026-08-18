@@ -1,4 +1,4 @@
-# DIIVE Cookbook
+# diive Cookbook
 
 Six essential workflows, each in minimal working code.
 Start here, then follow the links to full examples.

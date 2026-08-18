@@ -7,7 +7,7 @@ Frequently Asked Questions
 Installation and setup
 ======================
 
-**Q: What Python versions does DIIVE support?**
+**Q: What Python versions does diive support?**
 
 A: Python 3.12 and 3.13. Check your version:
 
@@ -43,7 +43,7 @@ A: Install the package:
 
       conda activate diive
 
-**Q: Which version of DIIVE am I using?**
+**Q: Which version of diive am I using?**
 
 A: Print the version:
 
@@ -53,7 +53,7 @@ A: Print the version:
 
       print(dv.__version__)
 
-**Q: Can I install DIIVE on Windows, macOS and Linux?**
+**Q: Can I install diive on Windows, macOS and Linux?**
 
 A: Yes. The installation steps are the same on all three.
 
@@ -83,9 +83,9 @@ A: Any pandas DataFrame with a datetime index works. Read it however you like:
       df = pd.read_csv('mydata.csv', index_col=0, parse_dates=True)
 
    ``pd.read_excel`` works too, but it needs the ``openpyxl`` package, which
-   DIIVE does not install.
+   diive does not install.
 
-   DIIVE reads parquet directly and has parsers for common flux and logger file
+   diive reads parquet directly and has parsers for common flux and logger file
    formats:
 
    .. code-block:: python
@@ -102,7 +102,7 @@ A: Any pandas DataFrame with a datetime index works. Read it however you like:
           filepath='eddypro_fluxnet_output.csv',
       ).get_filedata()
 
-**Q: What data format does DIIVE expect?**
+**Q: What data format does diive expect?**
 
 A: A pandas DataFrame with:
 
@@ -127,7 +127,7 @@ A: A pandas DataFrame with:
       df = dv.times.TimestampSanitizer(data=df, nominal_freq='30min').get()
       print(df.index.name)  # TIMESTAMP_MIDDLE
 
-**Q: How do I load DIIVE's example data?**
+**Q: How do I load diive's example data?**
 
 A: The loaders live in ``diive.configs.exampledata``. Two of them are
    re-exported at the top level. None of them take arguments, each one loads one
@@ -670,7 +670,7 @@ A: Cut the feature count or the record length. Every feature engineering stage
 
 **Q: There is too much (or too little) console output**
 
-A: Output goes through DIIVE's Rich console, controlled globally:
+A: Output goes through diive's Rich console, controlled globally:
 
    .. code-block:: python
 

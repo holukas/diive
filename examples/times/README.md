@@ -231,7 +231,7 @@ uv run python examples/run_all_examples.py
 
 ## Example Dataset Expectations
 
-DIIVE examples use 30-minute timestamps (typical for flux tower data):
+diive examples use 30-minute timestamps (typical for flux tower data):
 - Frequency: `30min`
 - No gaps (fully regularized)
 - No duplicates

@@ -1,6 +1,6 @@
-# DIIVE Examples
+# diive Examples
 
-Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
+Executable examples demonstrating how to use diive for time series processing, gap-filling, quality control, and visualization.
 
 **113 examples across 10 organized folders by functional domain.**
 

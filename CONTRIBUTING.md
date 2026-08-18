@@ -1,4 +1,4 @@
-# Contributing to DIIVE
+# Contributing to diive
 
 This guide covers development setup, running tests, and contributing code.
 
@@ -482,5 +482,5 @@ Set `'abort_on_example_error': False` in `docs/conf.py`. Check build logs.
 
 - **Issues:** [GitHub Issues](https://github.com/holukas/diive/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/holukas/diive/discussions)
-- **Documentation:** [DIIVE ReadTheDocs](https://diive.readthedocs.io/)
+- **Documentation:** [diive ReadTheDocs](https://diive.readthedocs.io/)
 

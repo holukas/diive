@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Project information
-project = "DIIVE"
+project = "diive"
 copyright = "2025, Lukas Hörtnagl"
 author = "Lukas Hörtnagl"
 version = "0.91.0"
@@ -38,7 +38,7 @@ gettext_compact = False
 
 # HTML output options
 html_theme = "furo"
-html_title = "DIIVE"
+html_title = "diive"
 html_theme_options = {
     "sidebar_hide_name": False,
     "light_css_variables": {

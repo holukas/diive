@@ -1,4 +1,4 @@
-# CLAUDE.md - DIIVE Development Guide
+# CLAUDE.md - diive Development Guide
 
 See `CHANGELOG.md` for version history.
 
