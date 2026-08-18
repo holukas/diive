@@ -37,7 +37,8 @@ ts.plot_rangetool(
     height=300,           # detail panel height (px)
     width=900,            # plot width (px)
     overview_height=130,  # overview panel height (px)
-    init_range=0.1        # start zoomed to the first 10% of the record
+    init_range=0.1,       # start zoomed to the first 10% of the record
+    showplot=False        # build the layout without opening a browser tab
 )
 
 print("\nCreated range-tool time series plot")

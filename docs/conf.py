@@ -12,9 +12,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # diive that happens to be installed in the build environment.
 from diive import __version__ as diive_version  # noqa: E402
 
-# Whether the example gallery runs the examples. Read the Docs does not: it uses
-# the thumbnails committed under docs/_static/thumbs by docs/sync_thumbnails.py.
-execute_gallery = os.environ.get("DIIVE_DOCS_GALLERY", "0") == "1"
+# Whether the example gallery runs the examples. It does by default, including on
+# Read the Docs, which sets no environment variable. DIIVE_DOCS_GALLERY=0 opts out
+# for a fast local build (docs/build_docs.ps1 -NoGallery).
+execute_gallery = os.environ.get("DIIVE_DOCS_GALLERY", "1") == "1"
 
 # Project information
 project = "diive"
@@ -105,15 +106,19 @@ sphinx_gallery_conf = {
     "gallery_dirs": gallery_dirs,
     "filename_pattern": r"^[^_].*\.py$",
     "ignore_pattern": r"(__pycache__|\.pyc|run_all_examples|__init__)",
-    # Off by default: a build would execute all 113 examples, several of them
-    # minutes long, which does not fit a Read the Docs build. The gallery pages
-    # are still generated, without running the code or producing figures.
-    # Set DIIVE_DOCS_GALLERY=1 to execute them locally (docs/build_docs.ps1 -Gallery).
+    # On by default, because executing the examples is what puts figures and
+    # captured console output on their pages - without it a plotting library
+    # documents itself with code listings and nothing else. It also generates
+    # every thumbnail. Measured on a cold full build: 7.5 minutes end to end,
+    # of which the 113 examples are 2.8 minutes (slowest single example 15.5 s),
+    # which fits a Read the Docs build. Set DIIVE_DOCS_GALLERY=0 to skip
+    # execution locally (docs/build_docs.ps1 -NoGallery).
     "plot_gallery": execute_gallery,
     "abort_on_example_error": False,
     "matplotlib_animations": True,
-    # The 32 examples that produce no figure (data and I/O examples, and the two
-    # Bokeh ones) would otherwise get sphinx-gallery's stock placeholder.
+    # Still needed with execution on: 32 of the 113 examples produce no figure
+    # (the data, times, io and qaqc ones compute and print, the two Bokeh ones
+    # emit HTML) and would otherwise get sphinx-gallery's stock placeholder.
     "default_thumb_file": str(Path(__file__).parent.parent / "images" / "logo_diive1_256px.png"),
     "backreferences_dir": "api/generated",
     "doc_module": ("diive",),
