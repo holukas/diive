@@ -12,10 +12,12 @@ Read EddyPro fluxnet CSV file by specifying all parameters manually.
 # Read single file with explicit parameters for timestamp, missing values, and frequency.
 
 from pathlib import Path
+
+import diive
 from diive.core.io.filereader import DataFileReader
 
-# Resolve example data file path relative to this script
-data_dir = Path(__file__).parent.parent.parent / "diive" / "configs" / "exampledata" / "EDDYPRO-FLUXNET-CSV-30MIN_multiple"
+# Resolve the example data shipped inside the installed diive package
+data_dir = Path(diive.__file__).parent / "configs" / "exampledata" / "EDDYPRO-FLUXNET-CSV-30MIN_multiple"
 FILE = data_dir / "eddypro_CH-HON_FR-20240819-090003_fluxnet_2024-08-19T090019_adv.csv"
 
 dfr = DataFileReader(
