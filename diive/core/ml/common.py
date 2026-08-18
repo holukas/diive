@@ -276,7 +276,7 @@ class MlRegressorGapFillingBase:
         """In-sample scores of the gap-filling model: the final model predicting on
         ALL complete rows, including the rows it was trained on, so these are
         optimistically biased. For an honest generalization estimate use
-        scores_traintest_ (computed on the held-out test set)."""
+        ``scores_traintest_`` (computed on the held-out test set)."""
         if not self._scores:
             raise Exception(f'Not available: model scores for gap-filling.')
         return self._scores
@@ -479,7 +479,7 @@ class MlRegressorGapFillingBase:
                                  title: str = "SHAP feature importance"):
         """Plot SHAP feature importances as a horizontal bar chart (two-phase).
 
-        Importances are mean |SHAP value| per feature with SD error bars, sorted
+        Importances are mean ``|SHAP value|`` per feature with SD error bars, sorted
         ascending so the strongest feature sits at the top.
 
         Two-phase rendering: with ``ax=None`` a new standalone figure is created

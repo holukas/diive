@@ -70,6 +70,7 @@ class CompoundExtremesPlot:
         See Also:
             CompoundExtremesPlot.from_compound_extremes : build directly from a
                 :class:`~diive.analysis.compoundextremes.CompoundExtremes` instance.
+
             examples/visualization/plot_compound_extremes.py : worked examples.
         """
         self.xname = str(x.name) if x.name is not None else 'var1'

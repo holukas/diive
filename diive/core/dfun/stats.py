@@ -343,7 +343,7 @@ SSTATS_DESCRIPTIONS: dict[str, str] = {
 
 
 def sstats(s: Series) -> DataFrame:
-    """
+    r"""
     Calculate comprehensive time series statistics.
 
     Returns 30 metrics across 8 categories:
@@ -358,7 +358,7 @@ def sstats(s: Series) -> DataFrame:
         Total time span covered by series
 
     VALUE COUNTS
-    -----------
+    ------------
     NOV : int
         Number of valid (non-missing) observations
     MISSING : int
@@ -376,7 +376,7 @@ def sstats(s: Series) -> DataFrame:
         Total sum of all values (integration over time period)
 
     DISPERSION (Spread) - Basic
-    --------------------------
+    ---------------------------
     SD : float
         Standard deviation - spread around mean
     VAR : float
@@ -392,9 +392,9 @@ def sstats(s: Series) -> DataFrame:
         Maximum value in series
 
     DISPERSION (Spread) - Robust
-    --------------------------
+    ----------------------------
     CV : float
-        Coefficient of variation (SD / |Mean|)
+        Coefficient of variation (SD / \|Mean\|)
         Relative variability, independent of scale. Use for comparing different series.
     IQR : float
         Interquartile range (Q3 - Q1)

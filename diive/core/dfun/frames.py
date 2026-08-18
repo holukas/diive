@@ -598,11 +598,13 @@ def transform_yearmonth_matrix_to_longform(matrixdf: pd.DataFrame, z_var_name: s
     * Numerical values representing the data.
 
     Example:
-        MONTH    1     2     3
-        YEAR
-        1997    2.0   9.0   5.0
-        1998   10.0   1.0  19.0
-        1999    8.0  22.0  13.0
+        ::
+
+            MONTH    1     2     3
+            YEAR
+            1997    2.0   9.0   5.0
+            1998   10.0   1.0  19.0
+            1999    8.0  22.0  13.0
 
     **Transformation:**
 
@@ -610,7 +612,7 @@ def transform_yearmonth_matrix_to_longform(matrixdf: pd.DataFrame, z_var_name: s
     a datetime index. The corresponding values from the matrix become the values of the
     resulting Series.
 
-    Example Output (with `z_var_name` as 'VALUE'):
+    Example Output (with `z_var_name` as 'VALUE')::
 
                      VALUE
         TIMESTAMP

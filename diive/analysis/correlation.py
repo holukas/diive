@@ -184,6 +184,7 @@ class DailyCorrelation:
 
         Returns:
             dict with:
+
             - count: number of valid (non-NaN) days
             - median: median correlation
             - mean: mean correlation
@@ -196,6 +197,7 @@ class DailyCorrelation:
             - kurtosis: distribution kurtosis (heavy/light tails)
             - normality_statistic: Shapiro-Wilk test statistic
             - normality_pvalue: p-value (>0.05 suggests normal distribution)
+
             All float fields are NaN when no valid days exist.
         """
         daycorrs_clean = self.daycorrs_.dropna()

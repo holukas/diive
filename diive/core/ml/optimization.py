@@ -49,7 +49,8 @@ class OptimizeParamsTS:
             target_col: Column name of target variable
             regressor_class: Regressor class (not instance), e.g. RandomForestRegressor,
                            XGBRegressor, or any sklearn-compatible regressor
-            **model_params: Parameter ranges to test as lists, e.g.:
+            **model_params: Parameter ranges to test as lists, e.g.::
+
                 {
                     'n_estimators': [10, 50, 100, 200],
                     'max_depth': [5, 10, 15, None],
@@ -62,23 +63,25 @@ class OptimizeParamsTS:
             report_optimization(top_n=5): Print comprehensive report with recommendations
 
         Examples:
-            # Random Forest optimization
-            from sklearn.ensemble import RandomForestRegressor
-            opt = OptimizeParamsTS(df=df, target_col='NEE',
-                                   regressor_class=RandomForestRegressor,
-                                   n_estimators=[10, 50, 100],
-                                   max_depth=[5, 10, 15])
-            opt.optimize()
-            opt.report_optimization()
+            ::
 
-            # XGBoost optimization
-            import xgboost as xgb
-            opt = OptimizeParamsTS(df=df, target_col='NEE',
-                                   regressor_class=xgb.XGBRegressor,
-                                   n_estimators=[50, 100, 200],
-                                   max_depth=[3, 6, 9])
-            opt.optimize()
-            opt.report_optimization()
+                # Random Forest optimization
+                from sklearn.ensemble import RandomForestRegressor
+                opt = OptimizeParamsTS(df=df, target_col='NEE',
+                                       regressor_class=RandomForestRegressor,
+                                       n_estimators=[10, 50, 100],
+                                       max_depth=[5, 10, 15])
+                opt.optimize()
+                opt.report_optimization()
+
+                # XGBoost optimization
+                import xgboost as xgb
+                opt = OptimizeParamsTS(df=df, target_col='NEE',
+                                       regressor_class=xgb.XGBRegressor,
+                                       n_estimators=[50, 100, 200],
+                                       max_depth=[3, 6, 9])
+                opt.optimize()
+                opt.report_optimization()
 
         See: https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html
              https://xgboost.readthedocs.io/en/stable/python/python_intro.html

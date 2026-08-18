@@ -30,7 +30,7 @@ from diive.preprocessing.outlier_detection.common import create_daytime_nighttim
 
 @ConsoleOutputDecorator()
 class zScore(FlagBase):
-    """Detect outliers using z-score with flexible threshold modes.
+    r"""Detect outliers using z-score with flexible threshold modes.
 
     Supports two modes:
 
@@ -42,12 +42,14 @@ class zScore(FlagBase):
        data characteristics vary significantly between day and night.
 
     **Algorithm:**
+
     - In global mode: Calculates z-score for entire series, flags values > threshold
     - In day/night mode: Calculates z-scores separately for daytime and nighttime periods,
       applies appropriate threshold to each period
-    - Marks records with |z-score| > threshold as outliers (flag=2)
+    - Marks records with \|z-score\| > threshold as outliers (flag=2)
 
     **Quality Flags:**
+
     - 0: Value within acceptable range (valid)
     - 2: Value detected as outlier (removed)
     - NaN: Record missing in the input, so no test could be performed

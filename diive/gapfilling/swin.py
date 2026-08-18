@@ -218,13 +218,15 @@ class SWINGapFillerXGBoost:
             daytime gaps, since the model is then never built.
 
     Result flags:
-        0 = observed (any period)
-        1 = daytime gap, filled by the XGBoost model
-        2 = daytime gap, filled by the timestamp-only fallback model, i.e. a
-            driver was missing here so the full model could not predict
-        3 = nighttime gap, set to zero by physics
-        4 = daytime gap, filled by clearness-index interpolation (only when
-            interpolate_short_gaps is set)
+        ::
+
+            0 = observed (any period)
+            1 = daytime gap, filled by the XGBoost model
+            2 = daytime gap, filled by the timestamp-only fallback model, i.e. a
+                driver was missing here so the full model could not predict
+            3 = nighttime gap, set to zero by physics
+            4 = daytime gap, filled by clearness-index interpolation (only when
+                interpolate_short_gaps is set)
 
         Values 0/1/2 carry the same meaning as everywhere else in diive (see
         GapFillingResult); 3 is specific to this class, which is the only

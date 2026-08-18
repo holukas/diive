@@ -366,7 +366,7 @@ class StepwiseMeteoScreeningDb:
                                   verbose: bool = False,
                                   repeat: bool = True,
                                   idstr: str = None):
-        """
+        r"""
         Flag outliers using z-score threshold (global or separate day/night).
 
         Applies z-score detection to identify values deviating from the mean by more than
@@ -374,7 +374,7 @@ class StepwiseMeteoScreeningDb:
         or separately for daytime and nighttime periods.
 
         Global mode: Computes mean and standard deviation across entire time series, then
-        flags any value where |z| > threshold. Simple and fast, but ignores time-of-day
+        flags any value where \|z\| > threshold. Simple and fast, but ignores time-of-day
         variation in signal characteristics.
 
         Day/Night mode: Computes separate mean/std for daytime and nighttime records.
@@ -385,7 +385,7 @@ class StepwiseMeteoScreeningDb:
         Parameters
         ----------
         thres_zscore : float, default 4
-            Z-score threshold for flagging. Typical range: 2.5-5. Values where |z| > threshold
+            Z-score threshold for flagging. Typical range: 2.5-5. Values where \|z\| > threshold
             are flagged as outliers. Lower values (2.5-3) more aggressive; higher values (4-5)
             more conservative.
         separate_day_night : bool, default False

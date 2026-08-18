@@ -141,6 +141,7 @@ def air_temp_from_sonic_temp(sonic_temp: pd.Series, h2o: pd.Series) -> pd.Series
     the effect of water vapor on sonic wave speed.
 
     Based on the code in:
+
     Striednig, M., Graus, M., Märk, T. D., & Karl, T. G. (2020). InnFLUX – an open-source
         code for conventional and disjunct eddy covariance analysis of trace gas measurements:
         An urban test case. Atmospheric Measurement Techniques, 13(3), 1447–1465.

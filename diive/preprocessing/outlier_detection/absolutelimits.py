@@ -44,12 +44,14 @@ class AbsoluteLimits(FlagBase):
        data characteristics vary significantly between day and night conditions.
 
     **Algorithm:**
+
     - In global mode: Checks if each value is within [minval, maxval] range
     - In day/night mode: Automatically detects daytime/nighttime from location
       and applies appropriate threshold range to each period
     - Marks records outside their respective ranges as outliers (flag=2)
 
     **Quality Flags:**
+
     - 0: Value within acceptable range (valid)
     - 2: Value outside acceptable range (outlier, removed)
     - NaN: Record missing in the input, so no test could be performed

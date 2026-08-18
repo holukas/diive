@@ -163,7 +163,7 @@ class TimeLagAnalysis:
                  gradient_threshold=0.15,
                  zoom_margin=None,
                  **legacy):
-        """
+        r"""
         Initialize TimeLagAnalysis with data and parameters.
 
         Parameters
@@ -171,7 +171,7 @@ class TimeLagAnalysis:
         df : pd.DataFrame
             Input dataframe with TLAG columns (e.g., 'CO2_TLAG_ACTUAL', 'H2O_TLAG_ACTUAL')
             and a datetime index. Expected to contain columns matching pattern
-            '*_TLAG_ACTUAL' for analysis.
+            '\*_TLAG_ACTUAL' for analysis.
         ignore_fringe_bins : list, optional
             How many bins to drop from each end of the histogram, as
             [leading, trailing] counts — not bin indices. The outermost bins tend to
@@ -322,7 +322,7 @@ class TimeLagAnalysis:
 
     @staticmethod
     def detect_peak_range(histogram_results, peakbins, gradient_threshold=0.15):
-        """
+        r"""
         Detect the range around a histogram peak using gradient-based edge detection.
 
         Identifies peak boundaries by finding where the histogram gradient (first derivative)
@@ -330,14 +330,16 @@ class TimeLagAnalysis:
         and works well for both symmetric and skewed distributions.
 
         **Algorithm:**
+
         1. Normalize counts to 0-1 range
         2. Compute first derivative (gradient) of normalized counts
         3. Locate peak bin (closest bin to peakbins[0])
-        4. Search left: find first bin where |gradient| < threshold
-        5. Search right: find first bin where |gradient| < threshold
+        4. Search left: find first bin where \|gradient\| < threshold
+        5. Search right: find first bin where \|gradient\| < threshold
         6. Return boundaries at these indices
 
         **Gradient threshold interpretation:**
+
         - 0.15 (default): detects moderate slope changes, suited for moderately sharp peaks
         - < 0.10: stricter, captures narrower peaks, sensitive to noise
         - > 0.20: lenient, captures broader tails, includes more uncertainty range
@@ -346,6 +348,7 @@ class TimeLagAnalysis:
         ----------
         histogram_results : pd.DataFrame
             Histogram bin data with required columns:
+
             - 'BIN_START_INCL' : bin boundaries (inclusive)
             - 'COUNTS' : bin counts/frequencies
         peakbins : array-like
@@ -404,11 +407,12 @@ class TimeLagAnalysis:
         return min_lag, max_lag
 
     def analyze_gas(self, gas):
-        """
+        r"""
         Analyze time lags for a specific gas species.
 
         Performs complete lag analysis workflow:
-        1. Extracts time lag series for specified gas (*_TLAG_ACTUAL column)
+
+        1. Extracts time lag series for specified gas (\*_TLAG_ACTUAL column)
         2. Creates histogram using unique value binning
         3. Excludes specified fringe bins (non-physical accumulations)
         4. Filters histogram to display range (startbin-endbin, in lag seconds),
@@ -765,10 +769,10 @@ class TimeLagAnalysis:
         return fig
 
     def analyze_all_gases(self, gases=None):
-        """
+        r"""
         Analyze multiple gas species in batch mode.
 
-        Automatically detects all available gases (based on *_TLAG_ACTUAL column names)
+        Automatically detects all available gases (based on \*_TLAG_ACTUAL column names)
         if not explicitly specified. Calls analyze_gas() for each gas and returns
         consolidated results. Errors in individual gas analyses are caught and reported
         without interrupting the batch process.

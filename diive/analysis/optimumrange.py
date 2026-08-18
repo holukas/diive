@@ -37,7 +37,7 @@ class FindOptimumRange:
                  define_optimum: Literal['min', 'max'] = 'max',
                  threshold: float = 0.95,
                  prominence_threshold: float = 1.0):
-        """
+        r"""
         Find x range for optimum y.
 
         Bins x data and aggregates y values per bin, then applies rolling aggregation
@@ -60,7 +60,7 @@ class FindOptimumRange:
                 curve range from the peak (default: 0.95). Must be in (0, 1).
             prominence_threshold: Minimum peak prominence (in units of curve std) required
                 to consider the optimum meaningful. The peak prominence is
-                |peak - curve_mean| / curve_std. Results below this value set
+                \|peak - curve_mean\| / curve_std. Results below this value set
                 `is_optimum_prominent=False` (default: 1.0).
 
         Properties:

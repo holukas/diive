@@ -95,6 +95,7 @@ class RandomUncertaintyPAS20:
     every record gets an estimate.
 
     Core Methods:
+
     * **Method 1** (ONEFlux) — standard deviation of measured fluxes in a sliding
       ±7-day / ±1-hour window under similar meteorological conditions (TA, VPD,
       SW_IN), requiring more than 5 matching values.
@@ -106,6 +107,7 @@ class RandomUncertaintyPAS20:
       closest in magnitude, with no similarity restriction.
 
     Key Features:
+
     * Hierarchical approach ensures all records have uncertainty estimates
     * Proper error propagation through cumulative calculations using uncertainties package
     * Separate day/night or combined uncertainty depending on data quality

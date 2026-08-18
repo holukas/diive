@@ -163,7 +163,7 @@ class HeatmapXYZ(HeatmapBase):
             y_col: Original y series name used when creating GridAggregator
             z_col: Original z series name used when creating GridAggregator.
                    The aggregated z-values in df_agg_long keep the original name
-                   (no BIN_ prefix).
+                   (no ``BIN_`` prefix).
             xlabel: x-axis label. When *None*, uses ``x_col``.
             ylabel: y-axis label. When *None*, uses ``y_col``.
             zlabel: Colorbar label. When *None*, uses ``z_col``.

@@ -45,7 +45,7 @@ class CumulativeYear:
             highlight_year_color: Deprecated — pass this styling option to plot() instead.
             yearly_end_date: Calculate cumulatives up to this date, given as string,
                 e.g. "08-11" means that cumulatives for each year are calculated until
-                    11 August of each year.
+                11 August of each year.
             cumulative_for:
                 - "all" for cumulative sum over all years
                 - "year" for yearly cumulative sums

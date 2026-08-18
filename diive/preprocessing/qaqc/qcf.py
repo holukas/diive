@@ -52,7 +52,8 @@ class FlagQCF:
     Flags: 0=pass, 1=soft (minor), 2=hard (critical). Sums add flag *values*, so
     sumsoftflags == soft count but sumhardflags == 2 x hard count.
 
-    QCF:
+    QCF::
+
         0: no flags
         1: 1-3 soft flags, no hard flags
         2: >3 soft flags OR >=1 hard flag OR rejected by day/night logic
@@ -164,7 +165,7 @@ class FlagQCF:
 
     @property
     def flags(self) -> DataFrame:
-        """Return dataframe containing all test flags and calculated QCF results.
+        r"""Return dataframe containing all test flags and calculated QCF results.
 
         Returns:
             DataFrame with original test flags plus calculated QCF columns:
@@ -172,8 +173,8 @@ class FlagQCF:
                 - SUM*_FLAGS: Sum of all flag values (soft sum + hard sum)
                 - SUM*_HARDFLAGS: Sum of hard-flag values (2 x hard-flag count)
                 - SUM*_SOFTFLAGS: Sum of soft-flag values (== soft-flag count)
-                - *_QCF: Quality-controlled series (NaN for QCF=2)
-                - *_QCF0: Highest-quality series (NaN for QCF>0)
+                - \*_QCF: Quality-controlled series (NaN for QCF=2)
+                - \*_QCF0: Highest-quality series (NaN for QCF>0)
         """
         if not isinstance(self._flags_df, DataFrame):
             raise Exception('Results for flags are empty')

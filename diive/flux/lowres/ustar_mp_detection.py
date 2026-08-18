@@ -20,7 +20,7 @@ from diive.core.utils.console import info, detail, warn
 
 
 class UstarMovingPointDetection:
-    """
+    r"""
     Detect USTAR threshold using ONEFlux moving point method (Papale et al., 2006).
 
     This class implements the complete USTAR threshold detection workflow for eddy covariance
@@ -33,6 +33,7 @@ class UstarMovingPointDetection:
     respiration stabilizes. The threshold is where respiration stops changing with increasing u*.
 
     Algorithm steps (mirrors ``ustar.c::ustar_threshold``):
+
     1. FILTER DATA: Select nighttime records only (SW_IN < 10 W/m2) for pure respiration signal
     2. STRATIFY BY SEASON: Divide year into 4 seasons (calendar quarters by default)
     3. STRATIFY BY TEMPERATURE: Within each season, divide into 7 temperature classes
@@ -56,7 +57,7 @@ class UstarMovingPointDetection:
         Looks for columns containing 'NEE' and 'QCF' preferentially
     ta_col : str, optional
         Air temperature column name (auto-detected if None)
-        Looks for columns containing 'TA_' or similar
+        Looks for columns containing 'TA\_' or similar
     ustar_col : str, optional
         Friction velocity column name (auto-detected if None)
         Looks for columns containing 'USTAR' or 'U_STAR'
@@ -109,9 +110,10 @@ class UstarMovingPointDetection:
     Notes
     -----
     The algorithm requires:
+
     - At least 3000 valid records for valid detection (MIN_VALUE_PERIOD)
-    - At least 700 (= 100 * 7) records per season for per-season detection
-      (TA_CLASS_MIN_SAMPLE * ta_classes_count); seasons below this are skipped
+    - At least 700 (= 100 \* 7) records per season for per-season detection
+      (TA_CLASS_MIN_SAMPLE \* ta_classes_count); seasons below this are skipped
     - If every season is below 700, all night data is pooled into one season
       (ONEFlux "second method", one big season)
 

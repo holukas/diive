@@ -75,6 +75,7 @@ class CompoundExtremes:
                 (falls back to *threshold*).
             var2_threshold: Optional per-variable threshold magnitude for *var2*.
             standardize_by: How z-scores are computed.
+
                 - 'season': deseasonalized — each period is standardized against the
                   same position in the seasonal cycle (calendar month for monthly,
                   day-of-year for daily). Removes the seasonal cycle so genuinely
@@ -83,6 +84,7 @@ class CompoundExtremes:
                 - 'record': a single mean/std over the whole aggregated record.
                   Simpler, but the seasonal cycle of variables such as VPD dominates
                   the z-score.
+
             var1_label: Human-readable label for the var1-only category (default:
                 the *var1* series name).
             var2_label: Human-readable label for the var2-only category (default:
@@ -90,7 +92,8 @@ class CompoundExtremes:
             compound_label: Label for the compound (both-extreme) category.
             none_label: Label for the no-extreme category.
 
-        Properties:
+        Properties::
+
             .results: DataFrame indexed by period with aggregated values, z-scores,
                 per-variable extreme flags, the CATEGORY code, and a human LABEL.
             .counts: Per-category record counts (Series, indexed by label).

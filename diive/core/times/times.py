@@ -1211,10 +1211,11 @@ def timestamp_infer_freq_progressively(timestamp_ix: pd.DatetimeIndex) -> tuple:
     -------
     tuple
         (inferred_freq, freqinfo)
+
         - inferred_freq : str or None
-            Detected frequency string (e.g., '30min', '1h'), or None if detection failed.
+          Detected frequency string (e.g., '30min', '1h'), or None if detection failed.
         - freqinfo : str or None
-            Detection method description ('data N+N' if successful, None otherwise).
+          Detection method description ('data N+N' if successful, None otherwise).
 
     Notes
     -----
@@ -1260,11 +1261,12 @@ def timestamp_infer_freq_from_fullset(timestamp_ix: pd.DatetimeIndex) -> tuple:
     -------
     tuple
         (inferred_freq, freqinfo)
+
         - inferred_freq : str or None
-            Detected frequency string (e.g., '30min', '1h'), or None if detection failed.
+          Detected frequency string (e.g., '30min', '1h'), or None if detection failed.
         - freqinfo : str
-            Detection result ('full data' if successful, '-not-enough-datarows-' if <10 rows,
-            '-failed-' if inference failed).
+          Detection result ('full data' if successful, '-not-enough-datarows-' if <10 rows,
+          '-failed-' if inference failed).
 
     Notes
     -----
@@ -1306,14 +1308,15 @@ def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> tuple
     -------
     tuple
         (inferred_freq, freqinfo)
+
         - inferred_freq : str or None
-            Detected frequency string (e.g., '30min', '1h'), or None if no interval
-            appears in >50% of all intervals.
+          Detected frequency string (e.g., '30min', '1h'), or None if no interval
+          appears in >50% of all intervals.
         - freqinfo : str
-            Detection result with statistics (e.g., '100% occurrence'),
-            '-not-enough-datarows-' if there is no interval to measure (fewer than
-            2 timestamps, or none of the deltas is valid), or '-failed-' if no
-            interval dominates.
+          Detection result with statistics (e.g., '100% occurrence'),
+          '-not-enough-datarows-' if there is no interval to measure (fewer than
+          2 timestamps, or none of the deltas is valid), or '-failed-' if no
+          interval dominates.
 
     Notes
     -----

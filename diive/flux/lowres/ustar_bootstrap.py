@@ -72,7 +72,7 @@ def _bootstrap_window_worker(
 
 
 class UstarBootstrapThresholds:
-    """
+    r"""
     Multi-year bootstrap USTAR threshold estimation — VUT and CUT.
 
     Wrapper around any USTAR detection class that implements detect() and
@@ -81,11 +81,11 @@ class UstarBootstrapThresholds:
     of annual thresholds is then summarized two ways, following the FLUXNET /
     ONEFlux convention:
 
-    - **VUT (Variable U\\* Threshold)** — one threshold *per year*. Returned by
+    - **VUT (Variable U\* Threshold)** — one threshold *per year*. Returned by
       :meth:`run` / :meth:`get_vut_thresholds` (the ``annual_stats_`` table):
       each year's row holds the requested percentiles of that year's bootstrap
       distribution, so the threshold varies year to year.
-    - **CUT (Constant U\\* Threshold)** — one threshold for the *whole record*.
+    - **CUT (Constant U\* Threshold)** — one threshold for the *whole record*.
       Returned by :meth:`get_cut_threshold`: all bootstrap samples from every
       year are pooled into a single distribution and the percentiles taken once,
       giving one constant threshold applied uniformly to every year.
@@ -141,11 +141,11 @@ class UstarBootstrapThresholds:
 
     Attributes
     ----------
-    annual_stats_ : pd.DataFrame
+    annual_stats\_ : pd.DataFrame
         Per-year (VUT) bootstrap percentile thresholds. Also returned by
         :meth:`get_vut_thresholds`.
         Index: year (int), columns: p16, p50, p84 (or custom percentiles).
-    years_ : list of int
+    years\_ : list of int
         Calendar years present in the input data.
 
     Examples

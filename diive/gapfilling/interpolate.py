@@ -28,7 +28,7 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
         limit: Maximum number of consecutive missing values to fill.
                Must be ≥ 1. Default: 3.
                Example: limit=1 fills only isolated single-value gaps,
-                       limit=5 fills gaps up to 5 consecutive records.
+               limit=5 fills gaps up to 5 consecutive records.
         verbose: Print summary statistics table showing method parameters,
                  input/output data, gap analysis, and gap size distribution.
                  Default: False.
