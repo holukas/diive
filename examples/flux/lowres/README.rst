@@ -1,55 +1,70 @@
-# Low-Resolution Flux Processing Examples
+Low-Resolution Flux Processing Examples
+=======================================
 
 Low-resolution (30-minute) eddy-covariance flux processing at the Swiss FluxNet site (CH-LAE).
 Covers time lag detection, quality filtering, self-heating correction, uncertainty estimation, and turbulence thresholds.
 
-## Examples
+Examples
+--------
 
-### Time Lag Detection
+Time Lag Detection
+~~~~~~~~~~~~~~~~~~
+
 - **flux_timelag_analysis.py** — Time lag detection and visualization for gas concentrations using covariance analysis
 
-### Base Flux Detection & Quality
+Base Flux Detection & Quality
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 - **flux_common.py** — Detect flux variable nomenclature and base gas measurements
 - **flux_hqflux.py** — Extract highest-quality flux records using Hampel outlier filtering
 
-### Self-Heating Correction (SCOP)
+Self-Heating Correction (SCOP)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 - **flux_selfheating.py** — Quick demonstration of SCOP workflow (5 USTAR classes, 5 bootstrap runs)
 - **flux_selfheating_production.py** — Complete production workflow: calibrate a scaling-factor table on one period with parallel measurements (20 classes, 20 bootstrap runs for the example; use 100 in production) and apply it to a held-back period with no reference
 
-### Measurement Uncertainty & Turbulence
+Measurement Uncertainty & Turbulence
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 - **flux_uncertainty.py** — Random uncertainty estimation using the PAS20 method (Pastorello et al. 2020)
 - **flux_ustar_mp_detection.py** — Moving Point (MP) friction velocity detection for nighttime turbulence thresholds (Papale et al. 2006)
 - **flux_ustar_vekuri_detection.py** — Simplified quantile-based friction velocity detection (Vekuri method)
 - **flux_ustar_method_comparison.py** — Compare ONEFlux and Vekuri USTAR detection approaches
 
-All three USTAR examples use `UstarBootstrapThresholds` as the multi-year bootstrap wrapper. It runs N iterations per calendar year using a 3-year sliding window, then returns **VUT** (variable, per-year p16/p50/p84 — `get_vut_thresholds()` / `run()`) and **CUT** (constant, pooled across all years — `get_cut_threshold()`) thresholds, following the FLUXNET/ONEFlux convention. diive's VUT is smoothed over the 3-year window (the year plus its two neighbours) for stability, which differs from the strict single-year ONEFlux VUT. The detection algorithm (moving point vs. quantile-based) is swapped via `detector_class`.
+All three USTAR examples use ``UstarBootstrapThresholds`` as the multi-year bootstrap wrapper. It runs N iterations per calendar year using a 3-year sliding window, then returns **VUT** (variable, per-year p16/p50/p84 — ``get_vut_thresholds()`` / ``run()``) and **CUT** (constant, pooled across all years — ``get_cut_threshold()``) thresholds, following the FLUXNET/ONEFlux convention. diive's VUT is smoothed over the 3-year window (the year plus its two neighbours) for stability, which differs from the strict single-year ONEFlux VUT. The detection algorithm (moving point vs. quantile-based) is swapped via ``detector_class``.
 
-## Running Examples
+Running Examples
+----------------
 
-```bash
-# Run one example
-uv run python examples/flux/lowres/flux_timelag_analysis.py
+.. code-block:: bash
 
-# Run all low-res flux examples
-uv run python examples/flux/lowres/flux_selfheating.py
-uv run python examples/flux/lowres/flux_selfheating_production.py
-uv run python examples/flux/lowres/flux_uncertainty.py
-```
+   # Run one example
+   uv run python examples/flux/lowres/flux_timelag_analysis.py
 
-## Key Concepts
+   # Run all low-res flux examples
+   uv run python examples/flux/lowres/flux_selfheating.py
+   uv run python examples/flux/lowres/flux_selfheating_production.py
+   uv run python examples/flux/lowres/flux_uncertainty.py
+
+Key Concepts
+------------
 
 **Self-heating correction (SCOP method):**
+
 - Sun-induced heating of open-path IRGA sensors creates spurious negative CO2 flux
 - Correction uses physics-based unscaled term (FCT_UNSC) scaled by factors from parallel measurements
 - Scaling factors binned by USTAR and time-of-day, reusable across seasons
 
 **Quality filtering:**
+
 - Hampel filter for identifying robust flux estimates
 - USTAR-based selection for stable atmospheric conditions
 
 **Uncertainty:** Random measurement uncertainty following the PAS20 method (Pastorello et al. 2020)
 
-## Related Documentation
+Related Documentation
+---------------------
 
-- [Flux Processing Chain](../README.md) — Multi-level L2-L4.2 workflow
-- Source: `diive/flux/lowres/`
+- `Flux Processing Chain <../index.html>`_ — Multi-level L2-L4.2 workflow
+- Source: ``diive/flux/lowres/``
