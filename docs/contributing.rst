@@ -268,17 +268,17 @@ Example Test
    class TestGapFilling(unittest.TestCase):
        def setUp(self):
            """Load data once for all tests."""
-           self.df = dv.load_exampledata_parquet(data_id='TLL')
+           self.df = dv.load_exampledata_parquet()
 
        def test_randomforest_basic(self):
            """Random Forest gap-filling produces valid output."""
-           engineer = dv.FeatureEngineer(
+           engineer = dv.gapfilling.FeatureEngineer(
                target_col='NEE',
                features_lag=[-1, 1],
            )
            df_eng = engineer.fit_transform(self.df)
 
-           model = dv.RandomForestTS(
+           model = dv.gapfilling.RandomForestTS(
                input_df=df_eng,
                target_col='NEE',
            )
@@ -335,12 +335,12 @@ Example Structure
    import matplotlib.pyplot as plt
 
    # Load example data
-   df = dv.load_exampledata_parquet(data_id='TLL')
+   df = dv.load_exampledata_parquet()
 
    # Example 1: Basic usage
    def example_basic_usage():
        """Description of this example."""
-       model = dv.RandomForestTS(
+       model = dv.gapfilling.RandomForestTS(
            input_df=df,
            target_col='NEE',
        )
