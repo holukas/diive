@@ -79,7 +79,10 @@ sphinx_gallery_conf = {
     "gallery_dirs": gallery_dirs,
     "filename_pattern": r"^[^_].*\.py$",
     "ignore_pattern": r"(__pycache__|\.pyc|run_all_examples|__init__)",
-    "plot_gallery": True,
+    # Off: a build would execute all 113 examples, several of them minutes long,
+    # which does not fit a Read the Docs build. The gallery pages are still
+    # generated, without running the code or producing figures.
+    "plot_gallery": False,
     "abort_on_example_error": False,
     "matplotlib_animations": True,
     "backreferences_dir": "api/generated",
