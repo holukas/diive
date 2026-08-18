@@ -7,7 +7,7 @@ Installation
 System Requirements
 ===================
 
-- **Python:** 3.12 (exact match recommended)
+- **Python:** 3.12 or 3.13
 - **OS:** Windows, macOS, Linux
 - **Disk space:** ~1 GB (for development environment)
 
