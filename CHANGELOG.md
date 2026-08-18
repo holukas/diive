@@ -14,7 +14,7 @@
 - Improved flux processing chain for eddy covariance fluxes
 - New and improved outlier detection methods
 - Many speed improvements and bug fixes
-- Version 0.91.0 is the largest release so far, with 652 commits since v0.90.0, adding many new
+- Version 0.91.0 is the largest release so far, with 905 commits since v0.90.0, adding many new
   and improved features. It is an important milestone towards a 1.0 release, but it is still a
   work-in-progress
 

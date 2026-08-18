@@ -8,7 +8,7 @@ Usage:
     python examples/run_all_examples.py
 
 Runs each example with ``MPLBACKEND=Agg`` so matplotlib writes figures without
-opening a window. Sixteen examples end in ``plt.show()``, which blocks until a
+opening a window. Eighteen examples call ``plt.show()``, which blocks until a
 window is closed; unattended that meant each one burned the full 120 s timeout
 and was reported as a failure it had not earned. Set ``MPLBACKEND`` yourself to
 override — e.g. ``MPLBACKEND=QtAgg`` to watch the plots appear — but then the

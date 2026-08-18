@@ -31,7 +31,10 @@ examples/
 │   ├── plot_timeseries_rangetool.py
 │   ├── plot_shifted_distribution.py
 │   ├── plot_treering_temperature.py
-│   └── plot_treering_line_temperature.py
+│   ├── plot_treering_line_temperature.py
+│   ├── plot_waterfall.py
+│   ├── plot_windrose_basic.py
+│   └── plot_compound_extremes.py
 ├── times/                 # Timestamp handling (7 examples)
 │   ├── times_timestamp_sanitizer.py
 │   ├── times_keep_daterange.py
@@ -136,7 +139,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs the headless-safe suite (113 scripts) in parallel with 8 workers, reporting execution time and any errors. Every example in `examples/` is registered; the database-backed meteoscreening workflows and the interactive TUI demo that used to be excluded no longer exist as example scripts.
+This runs the headless-safe suite (113 scripts) in parallel with up to 12 workers, reporting execution time and any errors. Every example in `examples/` is registered; the database-backed meteoscreening workflows and the interactive TUI demo that used to be excluded no longer exist as example scripts.
 
 ## Finding Examples
 
