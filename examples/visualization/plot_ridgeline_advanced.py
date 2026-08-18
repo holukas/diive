@@ -9,6 +9,8 @@ Compare distribution patterns across months, years, and seasons.
 Best for: Detailed temporal evolution, comparing multiple variables, publication-quality plots
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_ridgeline_advanced.png'
+
 import diive as dv
 
 # %%

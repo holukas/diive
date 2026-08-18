@@ -29,6 +29,8 @@ Pipeline at a glance::
                                         — NEE -> GPP + RECO partitioning
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/fluxprocessingchain_composable.png'
+
 # %%
 # Imports
 # ^^^^^^^

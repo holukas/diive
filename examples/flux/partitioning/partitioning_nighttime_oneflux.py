@@ -16,6 +16,8 @@ temperatures to recover daytime respiration; GPP is then the difference
 Best for: deriving GPP and RECO from gap-filled, USTAR-filtered NEE.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/partitioning_nighttime_oneflux.png'
+
 # %%
 # Why partition NEE?
 # ^^^^^^^^^^^^^^^^^^

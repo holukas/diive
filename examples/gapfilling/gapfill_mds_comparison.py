@@ -13,6 +13,8 @@ distribution-sampling cascade). So repeated runs always return exactly the same
 result, which makes MDS reproducible without a random seed.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/gapfill_mds_comparison.png'
+
 # %%
 # Imports
 # =======

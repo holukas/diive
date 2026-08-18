@@ -14,6 +14,8 @@ Methods compared:
 - **XGBoost**: Machine learning gradient boosting approach
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/gapfill_comparison.png'
+
 # %%
 # Gap-filling method comparison
 # ==============================

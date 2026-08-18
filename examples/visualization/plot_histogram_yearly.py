@@ -8,6 +8,8 @@ Compare distributions across different years to identify temporal patterns.
 Best for: Comparing seasonal patterns, analyzing year-to-year variations
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_histogram_yearly.png'
+
 import diive as dv
 
 # %%

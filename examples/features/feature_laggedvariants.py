@@ -10,6 +10,8 @@ and investigating temporal relationships between variables.
 Best for: Discovering lag-lead relationships and creating features for ML models.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/feature_laggedvariants.png'
+
 # %%
 # Basic Lagged Variants
 # ^^^^^^^^^^^^^^^^^^^^^

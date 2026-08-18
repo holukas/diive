@@ -7,6 +7,8 @@ Constrain data to physically realistic limits by clipping values
 above or below specified thresholds.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/correction_setto_threshold.png'
+
 # %%
 # Create test data with values outside acceptable range
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -35,7 +37,7 @@ series_corr_max = dv.corrections.setto_threshold(
     series=series.copy(),
     threshold=3.0,
     type='max',
-    showplot=False
+    showplot=True
 )
 
 print("\nAfter max threshold 3.0:")
@@ -54,7 +56,7 @@ series_corr_min = dv.corrections.setto_threshold(
     series=series.copy(),
     threshold=1.0,
     type='min',
-    showplot=False
+    showplot=True
 )
 
 print("\nAfter min threshold 1.0:")

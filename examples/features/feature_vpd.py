@@ -10,6 +10,8 @@ representing the drying power of the atmosphere.
 Best for: Understanding atmospheric water stress and its drivers.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/feature_vpd.png'
+
 # %%
 # Basic VPD Calculation
 # ^^^^^^^^^^^^^^^^^^^^^

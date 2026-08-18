@@ -7,6 +7,8 @@ Adaptive outlier detection based on rolling window statistics.
 Identifies values deviating significantly from local median and standard deviation.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/outlier_localsd.png'
+
 # %%
 # Create test data with impulse noise
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -57,7 +59,7 @@ lsd_dtnt = dv.outliers.LocalSD(
     lat=46.0,
     lon=11.0,
     utc_offset=1,
-    showplot=False,
+    showplot=True,
     verbose=1
 )
 lsd_dtnt.calc(repeat=True)
@@ -83,7 +85,7 @@ lsd_global = dv.outliers.LocalSD(
     n_sd=2,
     winsize=48 * 2,  # 2-day rolling window
     constant_sd=True,  # Global SD instead of rolling
-    showplot=False,
+    showplot=True,
     verbose=1
 )
 lsd_global.calc(repeat=True)
@@ -131,7 +133,7 @@ for n_sd in n_sd_values:
         n_sd=n_sd,
         winsize=48 * 2,
         constant_sd=False,
-        showplot=False,
+        showplot=True,
         verbose=0
     )
     lsd.calc(repeat=False)
@@ -163,7 +165,7 @@ for winsize in window_sizes:
         n_sd=2.5,
         winsize=winsize,
         constant_sd=False,
-        showplot=False,
+        showplot=True,
         verbose=0
     )
     lsd_win.calc(repeat=False)

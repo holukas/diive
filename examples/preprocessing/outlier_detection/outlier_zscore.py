@@ -7,6 +7,8 @@ Statistical outlier detection using standard deviation thresholds.
 Supports global, day/night, rolling window, and increment-based approaches.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/outlier_zscore.png'
+
 # %%
 # Load example data
 # ^^^^^^^^^^^^^^^^^

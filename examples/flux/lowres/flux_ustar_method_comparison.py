@@ -11,6 +11,8 @@ Results differ due to stratification strategy (equal-sized vs. quantile bins),
 correlation threshold (0.5 vs. 0.4), and first-USTAR class validation.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/flux_ustar_method_comparison.png'
+
 # %%
 # Import and Load Data
 # ^^^^^^^^^^^^^^^^^^^^

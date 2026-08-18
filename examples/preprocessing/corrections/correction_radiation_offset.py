@@ -8,6 +8,8 @@ to identify nighttime and corrects non-zero radiation readings during night.
 Nighttime values are set to zero after offset correction.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/correction_radiation_offset.png'
+
 # %%
 # Load radiation data and define site location
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

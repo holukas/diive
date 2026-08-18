@@ -7,6 +7,8 @@ Density-based outlier detection identifying values with anomalous local neighbor
 Effective for detecting contextual outliers where local density varies.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/outlier_lof.png'
+
 # %%
 # Create test data with synthetic noise
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -48,7 +50,7 @@ lof_dtnt = dv.outliers.LocalOutlierFactor(
     lat=47.286417,
     lon=7.733750,
     utc_offset=1,
-    showplot=False,
+    showplot=True,
     verbose=1,
     n_jobs=-1
 )
@@ -76,7 +78,7 @@ lof_global = dv.outliers.LocalOutlierFactor(
     n_neighbors=20,
     contamination=0.05,
     separate_day_night=False,
-    showplot=False,
+    showplot=True,
     verbose=1,
     n_jobs=-1
 )

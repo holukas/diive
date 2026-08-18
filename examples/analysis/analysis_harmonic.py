@@ -23,6 +23,8 @@ Best for: identifying and quantifying the dominant cyclic components of a flux
 or meteo time series.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/analysis_harmonic.png'
+
 # %%
 # Imports and data
 # ^^^^^^^^^^^^^^^^^

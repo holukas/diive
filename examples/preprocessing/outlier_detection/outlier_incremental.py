@@ -7,6 +7,8 @@ Identify spikes and abrupt changes by detecting anomalous increments
 between consecutive measurements.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/outlier_incremental.png'
+
 # %%
 # Create test data with impulse noise
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -52,7 +54,7 @@ print(f"  Range: {s_noise.min():.2f} to {s_noise.max():.2f}°C")
 zsi = dv.outliers.zScoreIncrements(
     series=s_noise,
     thres_zscore=3,
-    showplot=False,
+    showplot=True,
     verbose=1
 )
 zsi.calc(repeat=True)

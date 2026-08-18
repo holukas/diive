@@ -10,6 +10,8 @@ Reference period mean ± standard deviation provided for context.
 Best for: Detecting long-term trends, identifying extreme years, climate analysis
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_other_plots.png'
+
 import diive as dv
 
 # %%

@@ -33,6 +33,8 @@ Best for: deciding which environmental variables actually drive a flux — and h
 confident the evidence lets you be.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/analysis_driveranalysis.png'
+
 # %%
 # Load and prepare data
 # ^^^^^^^^^^^^^^^^^^^^^^

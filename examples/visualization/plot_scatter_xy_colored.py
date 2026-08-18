@@ -9,6 +9,8 @@ Includes bin aggregation with trend overlay.
 Best for: Exploring three-variable relationships, identifying patterns colored by condition
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_scatter_xy_colored.png'
+
 import diive as dv
 
 # %%

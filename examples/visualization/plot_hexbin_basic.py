@@ -8,6 +8,8 @@ Basic Hexbin Plot (Percentile)
 Best for: Comparing relationships with standardized axes (0-100 percentile range)
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_hexbin_basic.png'
+
 import matplotlib.pyplot as plt
 
 import diive as dv

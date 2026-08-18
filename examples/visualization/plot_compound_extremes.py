@@ -22,6 +22,8 @@ Best for: visualizing which months/days fall into the air / soil / compound dry-
 quadrants.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_compound_extremes.png'
+
 import matplotlib.pyplot as plt
 
 import diive as dv

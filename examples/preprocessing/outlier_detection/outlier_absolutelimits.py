@@ -7,6 +7,8 @@ Enforce physical or measurement validity constraints by rejecting
 values outside specified min/max ranges.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/outlier_absolutelimits.png'
+
 # %%
 # Create synthetic test data
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -40,7 +42,7 @@ al_basic = dv.outliers.AbsoluteLimits(
     minval=6,
     maxval=74,
     idstr='basic',
-    showplot=False,
+    showplot=True,
     verbose=1
 )
 al_basic.calc()
@@ -72,7 +74,7 @@ al_dtnt = dv.outliers.AbsoluteLimitsDaytimeNighttime(
     lat=47.286417,
     lon=7.733750,
     utc_offset=1,
-    showplot=False,
+    showplot=True,
     verbose=1
 )
 al_dtnt.calc()

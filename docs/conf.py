@@ -12,8 +12,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # diive that happens to be installed in the build environment.
 from diive import __version__ as diive_version  # noqa: E402
 
-# Whether the example gallery runs the examples. Read here rather than at the
-# gallery config below, because the stylesheet list depends on it too.
+# Whether the example gallery runs the examples. Read the Docs does not: it uses
+# the thumbnails committed under docs/_static/thumbs by docs/sync_thumbnails.py.
 execute_gallery = os.environ.get("DIIVE_DOCS_GALLERY", "0") == "1"
 
 # Project information
@@ -66,10 +66,6 @@ html_theme_options = {
 }
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
-if not execute_gallery:
-    # Without execution there are no figures, so every gallery card gets the
-    # same stock placeholder image. Show the example summaries instead.
-    html_css_files.append("gallery_textcards.css")
 html_logo = None
 
 # Autodoc configuration
@@ -116,6 +112,9 @@ sphinx_gallery_conf = {
     "plot_gallery": execute_gallery,
     "abort_on_example_error": False,
     "matplotlib_animations": True,
+    # The 32 examples that produce no figure (data and I/O examples, and the two
+    # Bokeh ones) would otherwise get sphinx-gallery's stock placeholder.
+    "default_thumb_file": str(Path(__file__).parent.parent / "images" / "logo_diive1_256px.png"),
     "backreferences_dir": "api/generated",
     "doc_module": ("diive",),
 }

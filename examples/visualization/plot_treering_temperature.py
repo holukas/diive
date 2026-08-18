@@ -11,6 +11,8 @@ arranged around the circle with January at the bottom and July at the top, so th
 seasonal cycle reads naturally.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_treering_temperature.png'
+
 # %%
 # Load data
 # ^^^^^^^^^^

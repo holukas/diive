@@ -9,6 +9,8 @@ to show distribution changes over time.
 Best for: Visualizing seasonal variation, temporal evolution of distributions
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_ridgeline_basic.png'
+
 import diive as dv
 
 # %%

@@ -17,6 +17,8 @@ Best for: Understanding daily-scale relationships between variables,
 detecting measurement quality issues, and identifying anomalous days.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/analysis_daily_correlation.png'
+
 # %%
 # Overview: Why Daily Correlation?
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

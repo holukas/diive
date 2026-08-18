@@ -17,6 +17,8 @@ timestamp-shift detection, and radiation quality checks.
 Best for: a top-of-atmosphere radiation reference and solar geometry at a site.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/feature_potentialradiation.png'
+
 # %%
 # Calculate potential radiation
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

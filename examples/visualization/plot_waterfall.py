@@ -11,6 +11,8 @@ Best for: Daily CO2 uptake/release budgets, visualizing how a seasonal or annual
 net flux accumulates day by day.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_waterfall.png'
+
 import diive as dv
 
 # %%

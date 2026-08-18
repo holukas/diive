@@ -7,6 +7,8 @@ Remove error codes and sentinel values by setting specific measurements to NaN.
 Useful for removing known error codes or invalid flags from raw data.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/correction_set_exact_values_to_missing.png'
+
 # %%
 # Create test data with sentinel values
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -35,7 +37,7 @@ print(f"  Count: {len(series)}")
 series_corr = dv.corrections.set_exact_values_to_missing(
     series=series,
     values=[0, 1, 10],
-    showplot=False,
+    showplot=True,
     verbose=1
 )
 

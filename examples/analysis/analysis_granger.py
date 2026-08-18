@@ -9,6 +9,8 @@ Granger causality measures predictive causality, not true causation.
 Best for: Investigating directional relationships in time series data
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/analysis_granger.png'
+
 # %%
 # Load and prepare data
 # ^^^^^^^^^^^^^^^^^^^^^

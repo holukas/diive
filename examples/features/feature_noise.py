@@ -10,6 +10,8 @@ data processing algorithms and understanding noise effects.
 Best for: Creating synthetic datasets and testing robustness of algorithms.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/feature_noise.png'
+
 # %%
 # Generate Synthetic Time Series (Default Parameters)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

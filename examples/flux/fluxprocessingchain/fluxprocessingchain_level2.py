@@ -23,6 +23,8 @@ For the full L2 -> L4.2 pipeline see
 ``fluxprocessingchain_runchain.py`` (single-call driver).
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/fluxprocessingchain_level2.png'
+
 # %%
 # Imports
 # ^^^^^^^

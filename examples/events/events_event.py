@@ -25,6 +25,8 @@ Best for: annotating time series with field/management/instrument events, and
 encoding those annotations as analysable 0/1 columns.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/events_event.png'
+
 # %%
 # Create Events
 # ^^^^^^^^^^^^^

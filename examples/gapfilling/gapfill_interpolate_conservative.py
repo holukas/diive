@@ -12,6 +12,8 @@ gaps for other gap-filling methods (e.g., Machine Learning).
 Best for: Pre-processing step to remove only isolated missing values.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/gapfill_interpolate_conservative.png'
+
 # %%
 # Linear interpolation with conservative limit
 # =============================================

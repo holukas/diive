@@ -18,6 +18,8 @@ Best for: matching a REddyProc daytime partitioning, or comparing the daytime
 and nighttime approaches.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/partitioning_daytime_reddyproc.png'
+
 # %%
 # About the reference columns
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^

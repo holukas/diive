@@ -14,6 +14,8 @@ Use this when you need to understand *when* gaps cluster (seasonal bias),
 Best for: Pre-gap-filling data quality assessment, flux processing chain audits
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/analysis_gapstats.png'
+
 # %%
 # Load data
 # ^^^^^^^^^

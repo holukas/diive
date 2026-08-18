@@ -10,6 +10,8 @@ with uncertainty quantification.
 Best for: Understanding nonlinear relationships between flux drivers and response variables.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/fit_fitter.png'
+
 # %%
 # NEE Response to Vapor Pressure Deficit
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

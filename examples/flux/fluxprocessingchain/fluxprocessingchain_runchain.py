@@ -37,6 +37,8 @@ The chain that ``run_chain`` runs:
              the L4.1 method named by ``partition_gapfill_method``.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/fluxprocessingchain_runchain.png'
+
 # %%
 # Imports
 # ^^^^^^^

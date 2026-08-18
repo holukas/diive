@@ -12,6 +12,8 @@ and side-by-side visualization.
 Best for: Gaps smaller than 1 day. For larger gaps, use machine learning methods.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/gapfill_interpolate_generous.png'
+
 # %%
 # Linear interpolation with generous limit
 # =========================================

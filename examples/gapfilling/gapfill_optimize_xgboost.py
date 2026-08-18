@@ -14,6 +14,8 @@ cross-validation results, and parameter sensitivity plots.
 Uses 2020 data only for faster optimization testing.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/gapfill_optimize_xgboost.png'
+
 # %%
 # Hyperparameter optimization workflow
 # =====================================

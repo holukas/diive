@@ -22,6 +22,8 @@ They are compared at the end on withheld daytime-gap RMSE computed at runtime.
 Part of the diive library: https://github.com/holukas/diive
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/gapfill_swin.png'
+
 # %%
 # The climatology ceiling
 # ^^^^^^^^^^^^^^^^^^^^^^^

@@ -11,6 +11,8 @@ Demonstrates the complete workflow: feature engineering, model training, SHAP
 importance analysis, and gap-filling predictions.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/gapfill_randomforest.png'
+
 # %%
 # Random Forest gap-filling for CO₂ flux (NEE)
 # ==============================================

@@ -8,6 +8,8 @@ Distribution analysis with z-score overlay, peak bin highlighting, and custom bi
 Best for: Analyzing data distributions, identifying outliers
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_histogram_basic.png'
+
 import diive as dv
 
 # %%

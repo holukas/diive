@@ -23,6 +23,8 @@ Best for: Understanding the complete self-heating correction pipeline from calib
 to operational correction of multi-year flux datasets, with full diagnostic visualizations.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/flux_selfheating_production.png'
+
 # %%
 # Complete SCOP Workflow Overview
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

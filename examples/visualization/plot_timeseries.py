@@ -9,6 +9,8 @@ Shows multiple customization options for time series line plots.
 Best for: Visualizing temporal data with axis control, unit labels, and colors
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_timeseries.png'
+
 import diive as dv
 
 # %%

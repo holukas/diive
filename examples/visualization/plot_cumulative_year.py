@@ -9,6 +9,8 @@ Compare individual years against climatological mean and variability.
 Best for: Annual budget analysis, comparing specific years to baseline, trend detection
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/plot_cumulative_year.png'
+
 import diive as dv
 
 # %%

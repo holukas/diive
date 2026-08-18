@@ -10,6 +10,8 @@ warm spell analysis, and event-based time tracking.
 Best for: Tracking time intervals between occurrences of conditions.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/feature_timesince.png'
+
 # %%
 # Understanding TimeSince
 # ^^^^^^^^^^^^^^^^^^^^^^^

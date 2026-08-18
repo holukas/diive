@@ -7,6 +7,8 @@ Chain multiple detection methods to progressively filter outliers.
 Each method operates on data filtered by previous methods, refining results.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/outlier_stepwise.png'
+
 # %%
 # Generate synthetic test data
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^

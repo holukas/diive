@@ -17,6 +17,8 @@ the ``_RP`` token, so both variants can live in one dataframe.
 Best for: matching a REddyProc partitioning, or cross-checking the ONEFlux one.
 """
 
+# sphinx_gallery_thumbnail_path = '_static/thumbs/partitioning_nighttime_reddyproc.png'
+
 # %%
 # Why a second port?
 # ^^^^^^^^^^^^^^^^^^
