@@ -18,6 +18,9 @@ release = version
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
+    # Required: the codebase uses Google-style docstrings, which plain docutils
+    # reads as malformed indentation ("Args:" becomes a block quote).
+    "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
     "sphinx_autodoc_typehints",
