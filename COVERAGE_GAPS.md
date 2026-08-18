@@ -39,16 +39,16 @@ What coverage settles, and what it does not:
 
 ## Headline numbers
 
-Re-measured **2026-08-17** (**1 057 tests**, up from 665; 858 subtests; 23 min 10 s). Everything
-below this heading is current as of that run; the per-tier sections further down are left as the
-dated record of the 2026-07-26 session and were not re-measured.
+Re-measured **2026-08-18** (**1 070 tests**; 859 subtests; 22 min 00 s), on a clean run.
+Everything below this heading is current as of that run; the per-tier sections further down are
+left as the dated record of the 2026-07-26 session and were not re-measured.
 
-| Scope | Baseline | 2026-07-26 | 2026-08-17 |
-|---|---|---|---|
-| Library (`diive/`, excluding `diive/gui/`) | 57 % | 61 % (14 789 / 24 414) | **72 %** (14 588 / 20 280) |
-| GUI (`diive/gui/`) | 68 % | 67 % | **73 %** (14 194 / 19 502) |
-| Combined | 62 % | 64 % | **72 %** (28 782 / 39 782) |
-| Library files at 0 % | 13 | 12 | **9** |
+| Scope | Baseline | 2026-07-26 | 2026-08-17 | 2026-08-18 |
+|---|---|---|---|---|
+| Library (`diive/`, excluding `diive/gui/`) | 57 % | 61 % (14 789 / 24 414) | 72 % (14 588 / 20 280) | **72 %** (14 702 / 20 382) |
+| GUI (`diive/gui/`) | 68 % | 67 % | 73 % (14 194 / 19 502) | **73 %** (14 331 / 19 639) |
+| Combined | 62 % | 64 % | 72 % (28 782 / 39 782) | **73 %** (29 033 / 40 021) |
+| Library files at 0 % | 13 | 12 | 9 | **9** |
 
 **Two things moved the library number, and only one of them is test work.** The code-review
 campaign (2026-08-06 to 2026-08-17) added ~390 tests. But the denominator also shrank by 4 134
@@ -56,16 +56,19 @@ statements when `flux/hires` moved to dyco — the 24 414 figure still counted i
 top of this file says. Do not read 61 % → 72 % as eleven points of new testing; part of it is
 poorly-covered code leaving the repository.
 
-**That run was not clean, but the cause is fixed.** 5 tests failed (4 in
-`tests/test_shifted_distribution.py`, 1 in `tests/test_windrose.py`) — cross-file state leakage, not
-broken library code, the same family as L100. `6be3a537` closed all three leaks behind them later
-the same day: `test_console.py` rebuilt the shared console instead of restoring it (so the 17
-modules that import `console` by name printed to an object nothing was watching), importing
+**The 2026-08-17 run was not clean; the 2026-08-18 one is.** Five tests failed in the earlier run
+(4 in `tests/test_shifted_distribution.py`, 1 in `tests/test_windrose.py`) — cross-file state
+leakage, not broken library code, the same family as L100. `6be3a537` closed all three leaks behind
+them later the same day: `test_console.py` rebuilt the shared console instead of restoring it (so
+the 17 modules that import `console` by name printed to an object nothing was watching), importing
 yellowbrick restyled the global matplotlib rcParams, and `timelag_analysis.py` called
-`plt.rcParams.update()` at module import, turning grid lines on process-wide. **A full re-run on
-2026-08-18 was clean: 1 060 passed, 859 subtests, 18 min 34 s.** The percentages above still carry a
-few lines of slop from the tests that stopped early in the measured run — coverage was not
-re-measured afterwards.
+`plt.rcParams.update()` at module import, turning grid lines on process-wide. The 2026-08-18
+numbers come from a run with no failures, so they carry none of the slop the earlier column does.
+
+**The library percentage did not move, and that is the honest reading.** 114 statements were
+covered that were not before (the flux-chain reporting added in that session, with its tests), but
+the denominator grew by roughly as much. One session of feature work plus its tests holds the line;
+it does not raise it.
 
 ### The structural finding: the GUI test suite was carrying the library — it no longer is
 
