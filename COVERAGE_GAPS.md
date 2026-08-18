@@ -56,11 +56,16 @@ statements when `flux/hires` moved to dyco — the 24 414 figure still counted i
 top of this file says. Do not read 61 % → 72 % as eleven points of new testing; part of it is
 poorly-covered code leaving the repository.
 
-**The run was not clean:** 5 tests failed (4 in `tests/test_shifted_distribution.py`, 1 in
-`tests/test_windrose.py`). All five pass in isolation and pass alongside the other plotting files,
-so they are cross-file state leakage rather than broken library code — the same family as L100.
-Failed tests still contribute the lines they executed before failing, so treat these percentages as
-carrying a few lines of slop.
+**That run was not clean, but the cause is fixed.** 5 tests failed (4 in
+`tests/test_shifted_distribution.py`, 1 in `tests/test_windrose.py`) — cross-file state leakage, not
+broken library code, the same family as L100. `6be3a537` closed all three leaks behind them later
+the same day: `test_console.py` rebuilt the shared console instead of restoring it (so the 17
+modules that import `console` by name printed to an object nothing was watching), importing
+yellowbrick restyled the global matplotlib rcParams, and `timelag_analysis.py` called
+`plt.rcParams.update()` at module import, turning grid lines on process-wide. **A full re-run on
+2026-08-18 was clean: 1 060 passed, 859 subtests, 18 min 34 s.** The percentages above still carry a
+few lines of slop from the tests that stopped early in the measured run — coverage was not
+re-measured afterwards.
 
 ### The structural finding: the GUI test suite was carrying the library — it no longer is
 

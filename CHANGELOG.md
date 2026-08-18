@@ -169,6 +169,17 @@ These changes affect numbers calculated with earlier versions.
   `influxdb-client` is imported lazily.
 - **`resample_series_to_freq`** generalizes `resample_series_to_30MIN` to any time resolution.
 
+- **Reporting for the flux processing chain** (`diive.flux.fluxprocessingchain`): ten functions
+  over a finished chain, each taking the `FluxLevelData` container —
+  `report_gapfilling_variables`, `report_gapfilling_model_scores`, `report_traintest_model_scores`,
+  `report_traintest_details`, `report_gapfilling_feature_importances`,
+  `report_gapfilling_poolyears`, `gapfilled_variables`, `plot_gapfilled_cumulative`,
+  `plot_feature_ranks_per_year` and `plot_mds_gapfilling_qualities`. A method that does not produce
+  a given result (MDS has no train/test split, no year pools and no SHAP importances) is reported
+  as unavailable instead of raising. `FluxLevelData` gained `nongapfilled_cols()`, the counterpart
+  of `gapfilled_cols()`, and `merged_df()`, which returns the input data together with every column
+  the chain added.
+
 ### Changes
 
 - **MDS gap-filling is now a faithful ONEFlux port**: the 6-stage expanding-window cascade, the
@@ -250,6 +261,9 @@ These changes affect numbers calculated with earlier versions.
 - Added `DatabaseInfluxDownloadSpecificVars`, `DatabaseInfluxDownloadAllVarsOfMeasurements`,
   `DatabaseInfluxStepwiseMeteoScreening` and `DatabaseInfluxDeleteData` for working with the InfluxDB
   database.
+- `FluxProcessingChain` was rewritten for the composable per-level API. It runs on the bundled
+  example data and covers L2 to L4.1 with all three gap-filling methods, the model reports, the
+  result plots and the export.
 - 21 older notebooks were archived, their content was migrated to `examples/`.
 
 ### Examples
@@ -266,7 +280,7 @@ These changes affect numbers calculated with earlier versions.
 
 ### Unittests
 
-- 1057/1057 unittests ran successfully (859 subtests).
+- 1070/1070 unittests ran successfully (859 subtests).
 
 ## v0.90.0 | 13 Jan 2026
 
