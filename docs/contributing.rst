@@ -379,7 +379,7 @@ To add an example:
 2. Follow naming: ``feature_name.py``
 3. Use function structure above
 4. Test locally: ``python examples/feature_name.py``
-5. Will be auto-generated into :ref:`Example Gallery <auto_examples/index>`
+5. Will be auto-generated into :ref:`Example Gallery <examples_gallery>`
 
 Documentation
 ==============

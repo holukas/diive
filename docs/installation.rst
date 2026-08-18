@@ -156,4 +156,4 @@ For development installations, pull the latest changes:
 Next Steps
 ==========
 
-After installation, check out the :ref:`Getting Started <getting_started>` guide or browse the :ref:`Example Gallery <auto_examples/index>`.
+After installation, check out the :ref:`Getting Started <getting_started>` guide or browse the :ref:`Example Gallery <examples_gallery>`.

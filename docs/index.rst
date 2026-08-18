@@ -20,7 +20,7 @@ Quick Links
 
 - :doc:`installation` — Installation guide
 - :doc:`getting_started` — Quick start tutorial
-- :doc:`auto_examples/index` — Example gallery (103 examples)
+- :doc:`examples` — Example gallery (113 examples)
 - :doc:`api_reference` — API reference
 
 .. toctree::
@@ -29,7 +29,7 @@ Quick Links
 
    installation
    getting_started
-   auto_examples/index
+   examples
    api_reference
    contributing
    faq
@@ -102,32 +102,37 @@ Quick Example
 
    import diive as dv
 
-   # Load example data
-   df = dv.load_exampledata_parquet(data_id='TLL')
+   TARGET = 'NEE_CUT_REF_orig'
+
+   # Load the bundled example data (CH-DAV, 30-minute records)
+   df = dv.load_exampledata_parquet()
+   df = df.loc['2020', [TARGET, 'Tair_f', 'VPD_f', 'Rg_f']].copy()
 
    # Create engineered features
-   engineer = dv.FeatureEngineer(
-       target_col='NEE',
-       features_lag=[-1, 1],
+   engineer = dv.gapfilling.FeatureEngineer(
+       target_col=TARGET,
+       features_lag=[-2, -1],
        features_rolling=[12, 24],
+       vectorize_timestamps=True,
    )
    df_engineered = engineer.fit_transform(df)
 
    # Gap-fill with Random Forest
-   model = dv.RandomForestTS(
+   model = dv.gapfilling.RandomForestTS(
        input_df=df_engineered,
-       target_col='NEE',
+       target_col=TARGET,
        n_estimators=100,
+       random_state=42,
    )
-   model.trainmodel()
-   model.fillgaps()
-   gapfilled = model.get_gapfilled_target()
+   model.run(showplot_scores=False, showplot_importance=False)
+   gapfilled = model.results.gapfilled
+   print(f"R2 on the held-out test set: {model.results.scores_traintest['r2']:.3f}")
 
 Next Steps
 ==========
 
 - **New to diive?** Start with the :ref:`Getting Started <getting_started>` guide.
-- **Looking for examples?** Browse the :ref:`Example Gallery <auto_examples/index>`.
+- **Looking for examples?** Browse the :ref:`Example Gallery <examples_gallery>`.
 - **Want the full API?** See the :ref:`API Reference <api_reference>`.
 - **Contributing?** Check out :ref:`Contributing <contributing>`.
 
