@@ -79,10 +79,11 @@ sphinx_gallery_conf = {
     "gallery_dirs": gallery_dirs,
     "filename_pattern": r"^[^_].*\.py$",
     "ignore_pattern": r"(__pycache__|\.pyc|run_all_examples|__init__)",
-    # Off: a build would execute all 113 examples, several of them minutes long,
-    # which does not fit a Read the Docs build. The gallery pages are still
-    # generated, without running the code or producing figures.
-    "plot_gallery": False,
+    # Off by default: a build would execute all 113 examples, several of them
+    # minutes long, which does not fit a Read the Docs build. The gallery pages
+    # are still generated, without running the code or producing figures.
+    # Set DIIVE_DOCS_GALLERY=1 to execute them locally (docs/build_docs.ps1 -Gallery).
+    "plot_gallery": os.environ.get("DIIVE_DOCS_GALLERY", "0") == "1",
     "abort_on_example_error": False,
     "matplotlib_animations": True,
     "backreferences_dir": "api/generated",

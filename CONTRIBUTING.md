@@ -356,25 +356,40 @@ if __name__ == '__main__':
 
 ### Building Docs Locally
 
-**A full build runs every example.** `docs/conf.py` configures sphinx-gallery with
-`plot_gallery: True` over all 113 scripts in `examples/`, several of which take minutes.
-Pass `-D plot_gallery=0` to build the pages without executing anything:
+The docs are Sphinx, hosted on Read the Docs. The tooling ships with the default
+`uv sync`, so no extra install is needed:
 
-```bash
-cd docs
-uv run sphinx-build -D plot_gallery=0 -b html . _build/html
+```powershell
+.\docs\build_docs.ps1
 ```
 
-Or if the environment is activated:
+The result is `docs/_build/html/index.html`; add `-Open` to open it.
 
-```bash
-cd docs
-sphinx-build -D plot_gallery=0 -b html . _build/html
+The script exists so a local build agrees with the hosted one. Two differences
+from a bare `sphinx-build`:
+
+- It passes `-W --keep-going`. `.readthedocs.yml` sets `fail_on_warning: true`,
+  so anything that warns locally blocks the hosted build too, and `--keep-going`
+  lists every warning in one run instead of stopping at the first.
+- It deletes the generated directories first (`_build`, `_autosummary`,
+  `api/generated`, `auto_examples`). Those are build output, untracked since they
+  are rebuilt every time. A leftover page for a symbol that no longer exists hides
+  the error that should be reported.
+
+The example gallery is **not** executed by default, on Read the Docs or locally —
+running all 113 examples does not fit an RTD build. To run them and get the
+figures:
+
+```powershell
+.\docs\build_docs.ps1 -Gallery
 ```
 
-Drop the flag only when you actually need the gallery output regenerated.
+That works through the `DIIVE_DOCS_GALLERY` environment variable, because
+`plot_gallery` lives inside a nested dict in `conf.py` that `sphinx-build -D`
+cannot reach.
 
-Open `docs/_build/html/index.html` in a browser to preview.
+Use `-NoClean` to keep the previous build's output, and `-NoFailOnWarning` to
+build through warnings — bearing in mind Read the Docs will still refuse them.
 
 **The `docs/` tree is stale.** It is written against the flat pre-namespace API, and most
 of the symbols it documents no longer exist. Reworking it is deferred as its own separate
