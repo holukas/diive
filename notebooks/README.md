@@ -31,9 +31,9 @@ See [examples/README.md](../examples/README.md) for detailed instructions.
 The following notebooks provide specialized functionality for data processing and flux analysis. Most examples have been
 migrated to Python scripts — **use the Python examples above for learning and standard workflows**.
 
-**Note:** notebooks marked **[outdated imports]** below do not run as-is. They import the removed `diive.pkgs.*` module
-layout and fail at the import cell. They still need to be updated to the current namespaced API (`import diive as dv`).
-The four InfluxDB notebooks are not affected.
+**Note:** the two `FormatMeteo*` notebooks and the four InfluxDB notebooks read from an InfluxDB database, so they
+need a database connection and a config directory to run. `FormatEddyProFluxnetFileForUpload` reads EddyPro output
+files from disk instead.
 
 ### Flux Workflows
 
@@ -57,11 +57,11 @@ The four InfluxDB notebooks are not affected.
 
 ### Data Formatting & File I/O
 
-- [FormatEddyProFluxnetFileForUpload.ipynb](FormatEddyProFluxnetFileForUpload.ipynb) **[outdated imports]** — Prepare
+- [FormatEddyProFluxnetFileForUpload.ipynb](FormatEddyProFluxnetFileForUpload.ipynb) — Prepare
   EddyPro output for FLUXNET database upload
-- [FormatMeteoForEddyProFluxProcessing.ipynb](FormatMeteoForEddyProFluxProcessing.ipynb) **[outdated imports]** — Format
+- [FormatMeteoForEddyProFluxProcessing.ipynb](FormatMeteoForEddyProFluxProcessing.ipynb) — Format
   meteorological data for EddyPro flux processing
-- [FormatMeteoForFluxnetUpload.ipynb](FormatMeteoForFluxnetUpload.ipynb) **[outdated imports]** — Format meteorological
+- [FormatMeteoForFluxnetUpload.ipynb](FormatMeteoForFluxnetUpload.ipynb) — Format meteorological
   data for FLUXNET database submission
 
 ### Workbench (Testing & Experimental)
