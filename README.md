@@ -3,6 +3,7 @@
 [![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://www.python.org/)
 [![PyPI - Version](https://img.shields.io/pypi/v/diive?style=for-the-badge&color=%23EF6C00&link=https%3A%2F%2Fpypi.org%2Fproject%2Fdiive%2F)](https://pypi.org/project/diive/)
 [![GitHub License](https://img.shields.io/github/license/holukas/diive?style=for-the-badge&color=%237CB342)](https://github.com/holukas/diive/blob/indev/LICENSE)
+[![Documentation](https://img.shields.io/readthedocs/diive?style=for-the-badge&color=%230066cc)](https://diive.readthedocs.io/)
 [![PyPI Downloads](https://static.pepy.tech/badge/diive)](https://pepy.tech/projects/diive)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10884017.svg)](https://doi.org/10.5281/zenodo.10884017)
 
@@ -22,8 +23,8 @@ There are two ways to use it, and you can pick whichever fits:
 `diive` works on averaged (e.g. 30-minute) data. For raw high-frequency (10/20 Hz) eddy covariance data — wind
 rotation, flux detection limit, time-lag detection and removal — see [dyco](https://github.com/holukas/dyco).
 
-[Project overview](OVERVIEW.md) | [Examples](examples/README.md) | [GUI manual](diive/gui/MANUAL.md) |
-[CHANGELOG](CHANGELOG.md) | [Releases](https://github.com/holukas/diive/releases)
+[Documentation](https://diive.readthedocs.io/) | [Project overview](OVERVIEW.md) | [Examples](examples/README.md) |
+[GUI manual](diive/gui/MANUAL.md) | [CHANGELOG](CHANGELOG.md) | [Releases](https://github.com/holukas/diive/releases)
 
 ---
 
@@ -128,6 +129,7 @@ guided processing chain, per-variable metadata with full provenance, and portabl
 
 | Where | What |
 |---|---|
+| [diive.readthedocs.io](https://diive.readthedocs.io/) | Hosted docs: API reference and example gallery |
 | [OVERVIEW.md](OVERVIEW.md) | How the pieces fit together: library, GUI, docs, packaging |
 | [examples/COOKBOOK.md](examples/COOKBOOK.md) | Six minimal workflows — the place to start |
 | [examples/CATALOG.md](examples/CATALOG.md) | All 113 examples, indexed by use case |
