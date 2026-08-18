@@ -137,6 +137,18 @@ from diive.flux.fluxprocessingchain.levels import (
     run_level42_nighttime_reddyproc,
 )
 from diive.flux.fluxprocessingchain.run_chain import run_chain
+from diive.flux.fluxprocessingchain.reports import (
+    gapfilled_variables,
+    plot_feature_ranks_per_year,
+    plot_gapfilled_cumulative,
+    plot_mds_gapfilling_qualities,
+    report_gapfilling_feature_importances,
+    report_gapfilling_model_scores,
+    report_gapfilling_poolyears,
+    report_gapfilling_variables,
+    report_traintest_details,
+    report_traintest_model_scores,
+)
 from diive.flux.fluxprocessingchain.codegen import (
     chain_to_code, level2_to_code, level31_to_code, level32_to_code, level33_to_code,
     level41_to_code, level42_to_code,
@@ -180,6 +192,17 @@ __all__ = [
     'run_level42_nighttime_reddyproc',
     'run_level42_daytime_reddyproc',
     'run_level42_daytime_oneflux',
+    # Reporting over a finished chain
+    'report_gapfilling_variables',
+    'report_gapfilling_model_scores',
+    'report_traintest_model_scores',
+    'report_traintest_details',
+    'report_gapfilling_feature_importances',
+    'report_gapfilling_poolyears',
+    'gapfilled_variables',
+    'plot_gapfilled_cumulative',
+    'plot_feature_ranks_per_year',
+    'plot_mds_gapfilling_qualities',
     # Level classes (for type-checking downstream)
     'FluxQualityFlagsEddyPro',
     'FluxStorageCorrectionSinglePointEddyPro',

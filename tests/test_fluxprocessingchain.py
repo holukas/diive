@@ -610,5 +610,133 @@ class TestRerunCascade(unittest.TestCase):
         self.assertEqual(recorded['L2'], list(self.d31.added_columns['L2']))
 
 
+class TestChainReports(unittest.TestCase):
+    """Reporting over a finished chain (diive/flux/fluxprocessingchain/reports.py)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import matplotlib
+        matplotlib.use('Agg')
+        from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+        from diive.flux.fluxprocessingchain import (
+            FluxConfig, init_flux_data, run_chain,
+        )
+        df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME') if c in df.columns])
+        df['TA_1_1_1'] = df['TA_1_1_1'].bfill()
+        df['SW_IN_1_1_1'] = df['SW_IN_1_1_1'].bfill()
+        df['VPD_kPa'] = df['VPD_EP'].bfill().multiply(0.1)
+        data = init_flux_data(df=df, fluxcol='FC',
+                              site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+        cfg = FluxConfig(
+            fluxcol='FC',
+            ustar_thresholds=[0.1], ustar_labels=['CUT_50'],
+            outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,
+            level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+            # MDS only: it needs no model training, so the whole class stays fast.
+            gapfill_rf=False, gapfill_xgb=False, gapfill_mds=True,
+            mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_kPa',
+        )
+        cls.data = run_chain(data, cfg)
+
+    @staticmethod
+    def _capture(fn, *args, **kwargs) -> str:
+        """Run fn and return what it printed to the shared console."""
+        from diive.core.utils.console import console
+        with console.capture() as cap:
+            fn(*args, **kwargs)
+        return cap.get()
+
+    def test_nongapfilled_cols_mirrors_gapfilled_cols(self):
+        gf = self.data.gapfilled_cols()
+        ngf = self.data.nongapfilled_cols()
+        self.assertEqual(set(gf.keys()), set(ngf.keys()))
+        for method in gf:
+            self.assertEqual(set(gf[method].keys()), set(ngf[method].keys()))
+        target = ngf['mds']['CUT_50']
+        self.assertIn(target, self.data.fpc_df.columns)
+        # The target is the measured series, not the gap-filled one.
+        self.assertNotEqual(target, gf['mds']['CUT_50'])
+
+    def test_merged_df_adds_columns_without_overwriting_input(self):
+        merged = self.data.merged_df(verbose=0)
+        full = self.data.full_df
+        self.assertEqual(len(merged), len(full))
+        # Every input column survives unchanged.
+        for c in full.columns:
+            self.assertIn(c, merged.columns)
+        pd_testing_equal = merged[full.columns.tolist()].equals(full)
+        self.assertTrue(pd_testing_equal)
+        # The gap-filled column came along.
+        self.assertIn(self.data.gapfilled_cols()['mds']['CUT_50'], merged.columns)
+
+    def test_merged_df_reports_the_added_columns(self):
+        out = self._capture(self.data.merged_df)
+        self.assertIn("New variables from the flux processing chain", out)
+        self.assertIn("only new variables added", out)
+
+    def test_gapfilled_variables_holds_both_sides(self):
+        from diive.flux.fluxprocessingchain import gapfilled_variables
+        df = gapfilled_variables(self.data)
+        self.assertIn(self.data.gapfilled_cols()['mds']['CUT_50'], df.columns)
+        self.assertIn(self.data.nongapfilled_cols()['mds']['CUT_50'], df.columns)
+        # A copy, not a view into fpc_df.
+        self.assertIsNot(df, self.data.fpc_df)
+
+    def test_report_gapfilling_variables_names_target_and_output(self):
+        from diive.flux.fluxprocessingchain import report_gapfilling_variables
+        out = self._capture(report_gapfilling_variables, self.data)
+        self.assertIn(self.data.nongapfilled_cols()['mds']['CUT_50'], out)
+        self.assertIn(self.data.gapfilled_cols()['mds']['CUT_50'], out)
+        self.assertIn('MDS', out)
+
+    def test_ml_only_reports_say_so_for_mds_instead_of_raising(self):
+        """MDS has no train/test split, no year pools and no SHAP importances.
+
+        The long-term gap-fillers expose those as properties that *raise* when
+        unset, so a plain hasattr() guard would let the exception through.
+        """
+        from diive.flux.fluxprocessingchain import (
+            report_gapfilling_feature_importances,
+            report_gapfilling_poolyears,
+            report_traintest_details,
+            report_traintest_model_scores,
+        )
+        for fn in (report_traintest_model_scores, report_traintest_details,
+                   report_gapfilling_feature_importances, report_gapfilling_poolyears):
+            out = self._capture(fn, self.data)
+            self.assertIn('MDS', out, msg=f"{fn.__name__} said nothing about MDS")
+
+    def test_report_gapfilling_model_scores_prints_a_table(self):
+        from diive.flux.fluxprocessingchain import report_gapfilling_model_scores
+        out = self._capture(report_gapfilling_model_scores, self.data)
+        self.assertIn('MDS', out)
+
+    def test_report_writes_csv_when_outpath_given(self):
+        import tempfile
+        from pathlib import Path
+        from diive.flux.fluxprocessingchain import report_gapfilling_model_scores
+        with tempfile.TemporaryDirectory() as tmp:
+            report_gapfilling_model_scores(self.data, outpath=tmp)
+            written = list(Path(tmp).glob('*.csv'))
+            self.assertTrue(written, "no CSV written")
+            self.assertIn('CUT_50', written[0].name)
+
+    def test_plot_gapfilled_cumulative_over_the_whole_record(self):
+        import matplotlib.pyplot as plt
+        from diive.flux.fluxprocessingchain import plot_gapfilled_cumulative
+        before = len(plt.get_fignums())
+        plot_gapfilled_cumulative(self.data, gain=12.011 * 1e-6 * 1800, units='gC m-2',
+                                  per_year=False, showplot=False)
+        self.assertGreater(len(plt.get_fignums()), before)
+        plt.close('all')
+
+    def test_plot_mds_gapfilling_qualities_runs(self):
+        import matplotlib.pyplot as plt
+        from diive.flux.fluxprocessingchain import plot_mds_gapfilling_qualities
+        plot_mds_gapfilling_qualities(self.data)
+        plt.close('all')
+
+
 if __name__ == '__main__':
     unittest.main()
