@@ -282,10 +282,11 @@ These changes affect numbers calculated with earlier versions.
   classes, so `run()`, `fillgaps()` and the score attributes appear on the gap-filling pages.
 - The example gallery is generated from `examples/` with Sphinx Gallery: one page per example, one
   index per category, and `docs/examples.rst` as the landing page.
-- Gallery cards carry a real thumbnail. Read the Docs cannot execute 113 examples, so the figures
-  come from one local `build_docs.ps1 -Gallery` run and are committed under `docs/_static/thumbs`;
-  `docs/sync_thumbnails.py` copies them there and points each example at its own. 81 examples
-  produce a figure. The remaining 32, which compute rather than plot, show the diive logo.
+- The gallery is executed during the build, including on Read the Docs, so each example page carries
+  its figures at full size and the console output it produced. Thumbnails are generated from those
+  figures, not committed. 32 examples produce no figure: the data, times, io and qaqc ones compute
+  and print, and the two Bokeh ones build interactive plots outside matplotlib. Those fall back to
+  the diive logo via `default_thumb_file`. A full build takes about 7.5 minutes.
 - Gallery headers are `README.rst`. Sphinx Gallery copies a header file verbatim into the
   `index.rst` it generates and does not convert Markdown.
 - `docs/conf.py` reads the version from `diive.__version__` and the copyright year from the clock.
