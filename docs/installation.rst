@@ -102,7 +102,67 @@ All dependencies are automatically installed with diive.
 Optional Dependencies
 =====================
 
-For Jupyter notebooks and interactive visualization:
+A default install gives you the library. Three extras add optional surfaces, none
+of which are pulled in unless you ask for them:
+
+.. list-table::
+   :widths: 15 85
+   :header-rows: 1
+
+   * - Extra
+     - Adds
+   * - ``gui``
+     - The desktop application (PySide6).
+   * - ``gui3d``
+     - The 3-D surface tabs inside the GUI (PyVista/VTK), and glTF and STL export.
+       Requires ``gui``.
+   * - ``db``
+     - Reading from and writing to an InfluxDB v2 database.
+
+Desktop GUI
+-----------
+
+diive ships a desktop application for loading, screening, gap-filling and plotting
+flux data without writing code. Install it with the ``gui`` extra and launch it with
+the ``diive-gui`` command:
+
+.. code-block:: bash
+
+   pip install "diive[gui]"
+   diive-gui
+
+Or with uv, from a clone:
+
+.. code-block:: bash
+
+   uv sync --extra gui
+   uv run diive-gui
+
+The 3-D surface tabs are behind a second extra, because VTK is large and most GUI
+users do not need it. It is imported lazily, so a ``gui``-only install never loads it:
+
+.. code-block:: bash
+
+   pip install "diive[gui,gui3d]"
+
+The GUI only calls into the library, so anything it does can also be scripted.
+
+Everything at once
+------------------
+
+To install every extra and every development dependency group from a clone:
+
+.. code-block:: bash
+
+   uv sync --all-extras --all-groups
+
+Note that ``--all-extras`` alone is not everything: the InfluxDB support is both an
+extra and a dependency group, and the development tooling is a group only.
+
+Jupyter
+-------
+
+For notebooks and interactive visualization:
 
 .. code-block:: bash
 
