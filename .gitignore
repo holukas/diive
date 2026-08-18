@@ -123,6 +123,7 @@ instance/
 
 # Sphinx documentation
 docs/build/
+docs/_build/
 # Sphinx-Gallery output: regenerated from examples/ on every docs build.
 docs/auto_examples/
 docs/sg_execution_times.rst
