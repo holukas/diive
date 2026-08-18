@@ -1,11 +1,16 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
+type: software
 authors:
 - family-names: "Hörtnagl"
   given-names: "Lukas"
   orcid: "https://orcid.org/0000-0002-5569-0761"
 title: "diive"
-# version: 2.0.4
-# doi: 10.5281/zenodo.1234
-# date-released: 2017-12-18
+version: "0.91.0"
+# Concept DOI: always resolves to the newest release, so this line does not
+# change per release. Zenodo also mints a version-specific DOI on publication.
+doi: 10.5281/zenodo.10884017
+# date-released: set on release day, same date as the CHANGELOG entry (YYYY-MM-DD)
+license: GPL-3.0
 url: "https://github.com/holukas/diive"
+repository-code: "https://github.com/holukas/diive"
