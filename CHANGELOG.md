@@ -274,6 +274,21 @@ These changes affect numbers calculated with earlier versions.
   statistics, events and file I/O.
 - `examples/CATALOG.md` lists all of them.
 
+### Documentation
+
+- Sphinx documentation on [Read the Docs](https://diive.readthedocs.io/), built as HTML, PDF and
+  EPUB.
+- The API reference documents the ten namespaces, including members inherited from shared base
+  classes, so `run()`, `fillgaps()` and the score attributes appear on the gap-filling pages.
+- The example gallery is generated from `examples/` with Sphinx Gallery: one page per example, one
+  index per category, and `docs/examples.rst` as the landing page.
+- Read the Docs does not execute the examples, so the gallery carries no figures and each card
+  shows the example summary instead of a thumbnail. `build_docs.ps1 -Gallery` runs them locally and
+  produces the plots.
+- Gallery headers are `README.rst`. Sphinx Gallery copies a header file verbatim into the
+  `index.rst` it generates and does not convert Markdown.
+- `docs/conf.py` reads the version from `diive.__version__` and the copyright year from the clock.
+
 ### Environment
 
 - Switched from poetry to `uv` for dependency management.
