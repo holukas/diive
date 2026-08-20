@@ -23,10 +23,9 @@ formats:
   - pdf
   - epub
 
-# Enable documentation search
-search:
-  enabled: true
-
-# Environment variables for build
-env:
-  PYTHONUNBUFFERED: "true"
+# Note: search is on by default and its only settings are `ranking` and
+# `ignore`; there is no `search.enabled`. Environment variables are set in the
+# project's web interface (Admin > Environment Variables), not here - there is
+# no top-level `env` key. Read the Docs rejects the whole file over an unknown
+# key rather than ignoring it, so both of those failed the build before it
+# reached the install step.
