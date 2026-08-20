@@ -16,12 +16,7 @@ from pandas import Series
 from diive.core.funcs.funcs import find_duplicates_in_list
 from diive.core.times.times import current_time_microseconds_str
 # from diive.core.times.times import timedelta_to_string
-from diive.core.utils.console import info
-from diive.gapfilling.interpolate import linear_interpolation
-
-pd.set_option('display.width', 1500)
-pd.set_option('display.max_columns', 30)
-pd.set_option('display.max_rows', 50)
+from diive.core.utils.console import VERBOSE_PROGRESS, info
 
 
 def keep_vars(data: DataFrame | Series,
@@ -108,8 +103,10 @@ def keep_records_where(data: DataFrame,
         raise ValueError("At least one of 'lower' / 'upper' must be given.")
 
     cond = data[condition_var]
-    eff_lower = cond.min() if lower is None else lower
-    eff_upper = cond.max() if upper is None else upper
+    # Infinity, not the observed min/max: an exclusive 'inclusive' would drop the
+    # extreme record and the unset side would not be open.
+    eff_lower = -np.inf if lower is None else lower
+    eff_upper = np.inf if upper is None else upper
     mask = cond.between(eff_lower, eff_upper, inclusive=inclusive)
     if invert:
         mask = ~mask  # NaN condition -> between is False -> ~ -> kept (not removed)
@@ -263,6 +260,10 @@ def aggregated_as_hires(aggregate_series: Series,
 
     Example: half-hourly timestamp for daily maximum temperature
     """
+    # Imported here, not at module level: gapfilling pulls in sklearn/xgboost/shap,
+    # and this leaf module is imported by low-level code that must not depend on them.
+    from diive.gapfilling.interpolate import linear_interpolation
+
     # Aggregate series
     lowres_df = pd.DataFrame(aggregate_series.resample(to_freq).agg(to_agg))
     # lowres_df = lowres_df.rolling(window=5, center=True).mean()  # Testing
@@ -503,15 +504,16 @@ def sort_multiindex_columns_names(df, priority_vars):
 
     cols_list.sort(key=custom_sort)
 
+    # Both blocks below move columns to the top of the list. Collecting them in a
+    # second list keeps them in sorted order; moving them one by one while iterating
+    # the same list reversed them (each move puts the next one above its predecessor).
     if priority_vars:
-        for ix, col in enumerate(cols_list):
-            if col[0] in priority_vars:
-                cols_list.insert(0, cols_list.pop(ix))  # removes from old location ix, puts to top of list
+        cols_list = ([col for col in cols_list if col[0] in priority_vars]
+                     + [col for col in cols_list if col[0] not in priority_vars])
 
     # Custom vars are marked w/ a dot ('.') at beginning
-    for ix, col in enumerate(cols_list):
-        if col[0].startswith('.'):
-            cols_list.insert(0, cols_list.pop(ix))
+    cols_list = ([col for col in cols_list if col[0].startswith('.')]
+                 + [col for col in cols_list if not col[0].startswith('.')])
 
     df = df[cols_list]  # assign new (sorted) column order
 
@@ -540,12 +542,14 @@ def convert_to_arrays(df: pd.DataFrame, target_col: str, complete_rows: bool = T
     return targets, features, features_names, timestamp
 
 
-def add_continuous_record_number(df: DataFrame) -> DataFrame:
+def add_continuous_record_number(df: DataFrame, verbose: int = VERBOSE_PROGRESS) -> DataFrame:
     """Add continuous record number as new column"""
     newcol = '.RECORDNUMBER'
     data = range(1, len(df) + 1)
+    df = df.copy()  # Do not add the column to the caller's dataframe as a side effect.
     df[newcol] = data
-    info(f"Added new column {newcol} with record numbers from {df[newcol].iloc[0]} to {df[newcol].iloc[-1]}.")
+    info(f"Added new column {newcol} with record numbers from {df[newcol].iloc[0]} "
+         f"to {df[newcol].iloc[-1]}.", verbose=verbose)
     return df
 
 
@@ -594,11 +598,13 @@ def transform_yearmonth_matrix_to_longform(matrixdf: pd.DataFrame, z_var_name: s
     * Numerical values representing the data.
 
     Example:
-        MONTH    1     2     3
-        YEAR
-        1997    2.0   9.0   5.0
-        1998   10.0   1.0  19.0
-        1999    8.0  22.0  13.0
+        ::
+
+            MONTH    1     2     3
+            YEAR
+            1997    2.0   9.0   5.0
+            1998   10.0   1.0  19.0
+            1999    8.0  22.0  13.0
 
     **Transformation:**
 
@@ -606,7 +612,7 @@ def transform_yearmonth_matrix_to_longform(matrixdf: pd.DataFrame, z_var_name: s
     a datetime index. The corresponding values from the matrix become the values of the
     resulting Series.
 
-    Example Output (with `z_var_name` as 'VALUE'):
+    Example Output (with `z_var_name` as 'VALUE')::
 
                      VALUE
         TIMESTAMP
@@ -617,12 +623,30 @@ def transform_yearmonth_matrix_to_longform(matrixdf: pd.DataFrame, z_var_name: s
 
     Args:
         matrixdf: pandas DataFrame with years as index and months as columns.
+            The axis names are irrelevant, unnamed axes are accepted.
         z_var_name: (Optional) Name of the resulting pandas Series. Defaults to 'VALUE'.
 
     Returns:
         pandas Series with a datetime index ('YYYY-MM-01' format, monthly start frequency 'MS') and values from the input matrix.
+        The index is gap-free, covering every month from January of the first year to December of the last year. Months not
+        present in the matrix (e.g. a seasonal record covering June-August only) are returned as NaN.
 
     """
+
+    # Only *resample_to_monthly_agg_matrix* names the axes YEAR/MONTH, and unnamed axes
+    # make melt/reset_index fall back to pandas' own 'variable'/'index'. Pin the names
+    # so the helper columns can be addressed and dropped below.
+    matrixdf = matrixdf.rename_axis(index='YEAR', columns='MONTH')
+
+    # Complete the year x month lattice. The matrix holds only the (year, month) pairs
+    # that occur, but the long form built below is a monthly time series: with months
+    # missing (a seasonal record, e.g. Jun-Aug) the timestamps skip, `pd.infer_freq`
+    # returns None and the 'MS' check further down rejected the matrix. Months nothing
+    # fell into become NaN records instead. Same reindex as `HeatmapYearMonth`, which
+    # shares the producer `resample_to_monthly_agg_matrix`.
+    matrixdf = matrixdf.reindex(
+        index=pd.Index(range(int(matrixdf.index.min()), int(matrixdf.index.max()) + 1), name='YEAR'),
+        columns=pd.Index(range(1, 13), name='MONTH'))
 
     cols = matrixdf.columns.name
     long_form_df = pd.melt(matrixdf, var_name=matrixdf.columns.name, value_name=z_var_name, ignore_index=False)

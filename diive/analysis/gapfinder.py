@@ -5,7 +5,8 @@ ANALYSIS: GAP DETECTION
 Identify and analyze missing data patterns in time series.
 Report gap locations, duration, and statistics for data quality assessment.
 
-Classes:
+Classes::
+
     GapFinder  — lightweight gap detection; returns per-gap table and headline stats.
     GapStats   — extended analysis built on GapFinder; adds monthly / annual breakdown,
                  long-gap listing, and a three-panel visualization.
@@ -64,7 +65,8 @@ class GapFinder:
         min_length: Only return gaps with GAP_LENGTH >= min_length (lower size filter)
         sort_results: Sort results by GAP_LENGTH descending (default True)
 
-    Properties:
+    Properties::
+
         .results: DataFrame with columns GAP_START, GAP_END, GAP_LENGTH, GAP_DURATION.
             GAP_DURATION is NaT when time resolution cannot be inferred.
         .summary: Dict of headline statistics (n_gaps, missing_pct, longest gap, etc.).
@@ -244,6 +246,7 @@ class GapFinder:
         """Display gap analysis visualizations.
 
         Two-panel figure:
+
         - Top: daily data availability heatmap (day-of-year × year)
         - Bottom: gap length histogram with duration reference lines
 
@@ -762,6 +765,7 @@ class GapStats:
         """Four-panel gap analysis figure.
 
         Layout (top to bottom):
+
         - Row 1 (full width): daily availability heatmap — green = data, red = gap
         - Row 2 (full width): gap spike timeline — each gap as a coloured
           vertical line, tall spikes mark long gaps
@@ -986,7 +990,7 @@ class GapStats:
         ax.grid(True, alpha=0.25)
 
         # Percentage labels above each bar
-        for angle, pct in zip(theta, pcts):
+        for angle, pct in zip(theta, pcts, strict=False):
             if pct >= max_pct * 0.05:
                 ax.text(angle, pct + max_pct * 0.08,
                         f'{pct:.0f}%',
@@ -1033,7 +1037,7 @@ class GapStats:
         ax.set_ylim(0, max(max(pcts) * 1.2, 5.0))
         ax.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.4, zorder=0)
 
-        for bar, ng in zip(bars, n_gaps):
+        for bar, ng in zip(bars, n_gaps, strict=False):
             if ng > 0:
                 ax.text(
                     bar.get_x() + bar.get_width() / 2,

@@ -56,11 +56,26 @@ class TestConsoleEnvironment(unittest.TestCase):
         self.assertGreater(con._JUPYTER_CONSOLE_WIDTH, 80)
 
 
-class TestRefreshConsole(unittest.TestCase):
+class _RestoresConsole(unittest.TestCase):
+    """Base for tests that call ``refresh_console()``.
+
+    Put the *original* console object back afterwards, rather than calling
+    ``refresh_console()`` again to build yet another one. 17 library modules do
+    ``from ...console import console``, so a replacement object leaves every one of them
+    printing to a console the rest of the suite is no longer looking at — which silently
+    broke the shifted-distribution warning tests three files later.
+    """
+
+    def setUp(self):
+        self._console = con.console
+        self._rule_line_style = con._rule_line_style
 
     def tearDown(self):
-        # Always restore a terminal console for the rest of the suite.
-        con.refresh_console()
+        con.console = self._console
+        con._rule_line_style = self._rule_line_style
+
+
+class TestRefreshConsole(_RestoresConsole):
 
     def test_refresh_switches_rule_style_for_jupyter(self):
         with _fake_jupyter():
@@ -80,7 +95,7 @@ class TestRefreshConsole(unittest.TestCase):
         con.remove_console_sink(mirror)
 
 
-class TestJupyterRuleIsLegible(unittest.TestCase):
+class TestJupyterRuleIsLegible(_RestoresConsole):
     """Regression guard for the reported bug: the rule line rendered as bright
     green (#00ff00), illegible on a white notebook background."""
 
@@ -108,5 +123,156 @@ class TestJupyterRuleIsLegible(unittest.TestCase):
         self.assertNotIn("#00ff00", rule_html.lower())
 
 
+class TestConsoleStringsAreCp1252Safe(unittest.TestCase):
+    """Printed strings must survive a Windows cp1252 stdout.
+
+    Python falls back to the locale encoding (cp1252 on a default Windows
+    install) whenever stdout is a pipe or a redirect, so a printed character
+    outside that range raises `UnicodeEncodeError` and kills the run. This
+    happened for real: `FlagQCF.report_qcf_flags()` printed U+2550 box-drawing
+    rules and crashed under `python ... | head` or `> log.txt`, while passing in
+    a terminal and under pytest (both UTF-8).
+
+    Scope and blind spots -- this check is a floor, not a guarantee:
+
+    * It inspects string *literals* passed to the console helpers, to
+      `_console.print/log/rule`, to builtin `print`, and to `raise`. A string
+      assembled into a variable first and printed later is NOT seen.
+    * `diive/gui/` is excluded: Qt renders Unicode natively and never touches
+      stdout.
+    * Docstrings and comments are ignored on purpose -- they are never printed
+      by the library itself.
+    """
+
+    #: Console helpers from diive.core.utils.console, plus builtin print.
+    EMITTER_NAMES = frozenset({
+        'print', 'info', 'detail', 'warn', 'error', 'success', 'rule', 'vspace',
+    })
+    #: Methods on a Rich console object.
+    EMITTER_METHODS = frozenset({'print', 'log', 'rule'})
+    #: Files whose output never reaches a plain stdout stream.
+    EXCLUDED = ('gui',)
+
+    @staticmethod
+    def _offending_chars(text):
+        bad = []
+        for char in text:
+            try:
+                char.encode('cp1252')
+            except UnicodeEncodeError:
+                bad.append(char)
+        return bad
+
+    @classmethod
+    def _is_emitter(cls, call):
+        import ast
+        func = call.func
+        if isinstance(func, ast.Name):
+            return func.id in cls.EMITTER_NAMES
+        if isinstance(func, ast.Attribute):
+            return func.attr in cls.EMITTER_METHODS
+        return False
+
+    def _scan(self):
+        """Yield (path, lineno, literal, bad_chars) for every offending literal."""
+        import ast
+        import pathlib
+        repo = pathlib.Path(__file__).resolve().parent.parent
+        for path in sorted((repo / 'diive').rglob('*.py')):
+            rel = path.relative_to(repo).as_posix()
+            if any(part in rel for part in self.EXCLUDED):
+                continue
+            try:
+                tree = ast.parse(path.read_text(encoding='utf-8'))
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                emitting = (isinstance(node, ast.Call) and self._is_emitter(node))
+                raising = isinstance(node, ast.Raise)
+                if not (emitting or raising):
+                    continue
+                for sub in ast.walk(node):
+                    if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                        bad = self._offending_chars(sub.value)
+                        if bad:
+                            yield rel, sub.lineno, sub.value, bad
+
+    def test_no_printed_literal_breaks_cp1252(self):
+        offenders = list(self._scan())
+        if offenders:
+            report = '\n'.join(
+                f"  {rel}:{line}  {''.join(sorted(set(bad)))}  "
+                f"(U+{'/U+'.join(f'{ord(c):04X}' for c in sorted(set(bad)))})"
+                for rel, line, _text, bad in offenders)
+            self.fail(
+                f"{len(offenders)} printed string literal(s) contain characters "
+                f"cp1252 cannot encode, so they crash on a redirected Windows "
+                f"stdout. Use ASCII equivalents (= - | -> <= ~):\n{report}")
+
+    def test_the_scanner_would_notice_a_bad_character(self):
+        # Guard against the check silently passing because the scan is broken.
+        self.assertEqual(self._offending_chars('plain ascii'), [])
+        self.assertEqual(self._offending_chars('rule ═'), ['═'])
+        self.assertEqual(self._offending_chars('arrow →'), ['→'])
+        # Characters cp1252 *does* cover must not be flagged (e.g. the degree
+        # sign, which the library prints legitimately).
+        self.assertEqual(self._offending_chars('angle 12.5°'), [])
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestModuleVerbosityMakesBareCallsReachable(unittest.TestCase):
+    """A helper call that passes no `verbose=` must still be reachable.
+
+    `detail()` defaulted to VERBOSE_PROGRESS (2) while its own min_level is
+    VERBOSE_DEBUG (3), so a bare `detail(msg)` could not print at any setting.
+    24 of the 25 sites that hit this have no verbosity parameter and no
+    `self.verbose` to thread, so the default itself had to become settable.
+    """
+
+    def setUp(self):
+        from diive.core.utils.console import get_verbosity
+        self._saved = get_verbosity()
+
+    def tearDown(self):
+        from diive.core.utils.console import set_verbosity
+        set_verbosity(self._saved)
+
+    def test_a_bare_detail_prints_once_debug_is_switched_on(self):
+        from diive.core.utils.console import console, detail, set_verbosity, VERBOSE_DEBUG
+        set_verbosity(VERBOSE_DEBUG)
+        with console.capture() as cap:
+            detail("a bare debug line")
+        self.assertIn("a bare debug line", cap.get())
+
+    def test_the_default_is_unchanged_so_debug_stays_quiet(self):
+        from diive.core.utils.console import console, detail, info, set_verbosity, VERBOSE_PROGRESS
+        set_verbosity(VERBOSE_PROGRESS)
+        with console.capture() as cap:
+            detail("must stay hidden")
+            info("must appear")
+        out = cap.get()
+        self.assertNotIn("must stay hidden", out)
+        self.assertIn("must appear", out)
+
+    def test_an_explicit_verbose_still_wins_over_the_module_default(self):
+        from diive.core.utils.console import console, info, set_verbosity, VERBOSE_DEBUG, VERBOSE_SILENT
+        set_verbosity(VERBOSE_DEBUG)
+        with console.capture() as cap:
+            info("silenced by the call", verbose=VERBOSE_SILENT)
+        self.assertNotIn("silenced by the call", cap.get())
+
+    def test_silent_switches_everything_off(self):
+        from diive.core.utils.console import console, info, warn, set_verbosity, VERBOSE_SILENT
+        set_verbosity(VERBOSE_SILENT)
+        with console.capture() as cap:
+            info("no")
+            warn("also no")
+        self.assertEqual(cap.get().strip(), "")
+
+    def test_it_is_exported_at_top_level(self):
+        import diive as dv
+        self.assertTrue(callable(dv.set_verbosity))
+        self.assertTrue(callable(dv.get_verbosity))

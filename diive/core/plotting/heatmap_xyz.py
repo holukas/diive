@@ -9,27 +9,17 @@ Unlike :class:`~diive.core.plotting.heatmap_datetime.HeatmapDateTime` (which
 reshapes a time series by date and time-of-day), ``HeatmapXYZ`` is fully
 generic: x and y can be any numeric or categorical coordinates, and z is the
 value mapped to colour.  The typical use-case is visualising the output of
-:class:`~diive.pkgs.analysis.gridaggregator.GridAggregator` — e.g. mean NEP
+:class:`~diive.analysis.gridaggregator.GridAggregator` — e.g. mean NEP
 binned by temperature and VPD.
 
 **Important:** ``HeatmapXYZ`` expects **pre-aggregated input** where each unique
 (x, y) pair appears exactly once. Use :attr:`GridAggregator.df_agg_long` (not
 ``df_long`` which contains raw observations) as the source.
 
-Top-level aliases:
-    - ``dv.heatmap_xyz(x, y, z, ...)`` — direct Series input
-    - ``dv.heatmap_xyz.from_gridaggregator(q, x_col, y_col, z_col, ...)`` — from GridAggregator output
-
-Example (recommended with GridAggregator)::
-
-    import diive as dv
-    df = dv.load_exampledata_parquet()
-    q = dv.ga(x=df['Tair_f'], y=df['VPD_f'], z=df['NEE_CUT_REF_f'],
-              binning_type='quantiles', n_bins=10,
-              min_n_vals_per_bin=1, aggfunc='mean')
-    hm = dv.heatmap_xyz.from_gridaggregator(q, 'Tair_f', 'VPD_f', 'NEE_CUT_REF_f',
-                                           show_values=True, show_values_n_dec_places=2)
-    hm.show()
+Public names:
+    - ``dv.plotting.HeatmapXYZ(x, y, z, ...)`` — direct Series input
+    - ``dv.plotting.HeatmapXYZ.from_gridaggregator(q, x_col, y_col, z_col, ...)`` — from
+      ``dv.analysis.GridAggregator`` output; see that method for a sample.
 
 References:
     https://matplotlib.org/stable/gallery/images_contours_and_fields/pcolormesh_levels.html
@@ -56,11 +46,14 @@ class HeatmapXYZ(HeatmapBase):
     Cell boundaries are computed automatically from the coordinate spacing so
     that ``pcolormesh`` renders each cell at the correct position.
 
-    Top-level alias: ``dv.plot_heatmap_xyz(x, y, z, ...)``
-
     Example:
-        See `examples/core/visualization/plot_heatmap_xyz_basic.py` for complete examples
+        See `examples/visualization/plot_heatmap_xyz_basic.py` for complete examples
         with GridAggregator integration and styling options.
+
+        >>> import diive as dv, pandas as pd, numpy as np
+        >>> gx, gy = np.meshgrid(np.arange(5.), np.arange(4.))
+        >>> hm = dv.plotting.HeatmapXYZ(x=pd.Series(gx.ravel(), name='TA'),
+        ...     y=pd.Series(gy.ravel(), name='VPD'), z=pd.Series(np.arange(20.), name='NEE'))
 
     See Also:
         GridAggregator : Bin and aggregate data into pre-aggregated format
@@ -170,13 +163,15 @@ class HeatmapXYZ(HeatmapBase):
             y_col: Original y series name used when creating GridAggregator
             z_col: Original z series name used when creating GridAggregator.
                    The aggregated z-values in df_agg_long keep the original name
-                   (no BIN_ prefix).
+                   (no ``BIN_`` prefix).
             xlabel: x-axis label. When *None*, uses ``x_col``.
             ylabel: y-axis label. When *None*, uses ``y_col``.
             zlabel: Colorbar label. When *None*, uses ``z_col``.
-            **kwargs: All keyword arguments accepted by :meth:`HeatmapXYZ.__init__`,
-                      e.g. ``figsize``, ``cmap``, ``vmin``/``vmax``,
-                      ``show_values``, ``verbose``.
+            **kwargs: Further keyword arguments accepted by
+                      :meth:`HeatmapXYZ.__init__`, i.e. ``xtickpos``/``xticklabels``,
+                      ``ytickpos``/``yticklabels`` and ``verbose``. Rendering options
+                      (``figsize``, ``cmap``, ``vmin``/``vmax``, ``show_values``, ...)
+                      belong to :meth:`plot`, not here — this is Phase 1.
 
         Returns:
             HeatmapXYZ instance ready to plot.
@@ -185,20 +180,11 @@ class HeatmapXYZ(HeatmapBase):
             AttributeError: If ``gridagg.df_agg_long`` is not available.
             KeyError: If ``x_col``, ``y_col``, or ``z_col`` not found in df_agg_long.
 
-        Example::
-
-            import diive as dv
-
-            # Create and aggregate data
-            q = dv.ga(x=df['Tair_f'], y=df['VPD_f'], z=df['NEE_CUT_REF_f'],
-                      binning_type='quantiles', n_bins=10, aggfunc='mean')
-
-            # Create heatmap directly from GridAggregator output
-            hm = dv.heatmap_xyz.from_gridaggregator(
-                q, 'Tair_f', 'VPD_f', 'NEE_CUT_REF_f',
-                show_values=True, show_values_n_dec_places=2
-            )
-            hm.show()
+        Example:
+            >>> import diive as dv, pandas as pd, numpy as np
+            >>> ta, vpd, nee = (pd.Series(np.arange(100.), name=n) for n in ('TA', 'VPD', 'NEE'))
+            >>> q = dv.analysis.GridAggregator(x=ta, y=vpd, z=nee, binning_type='quantiles', n_bins=5)
+            >>> hm = dv.plotting.HeatmapXYZ.from_gridaggregator(q, 'TA', 'VPD', 'NEE')
         """
         # Extract pre-aggregated long-format DataFrame
         df_agg = gridagg.df_agg_long
@@ -323,7 +309,6 @@ class HeatmapXYZ(HeatmapBase):
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
         """
-        from diive.core.plotting.styles import LightTheme as theme
 
         # Use theme defaults if not provided
         if cb_labelsize is None:

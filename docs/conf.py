@@ -2,22 +2,40 @@
 
 import os
 import sys
+from datetime import date
 from pathlib import Path
 
 # Add source directory to path for autodoc
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Imported after the path insert above, so a source checkout wins over any
+# diive that happens to be installed in the build environment.
+from diive import __version__ as diive_version  # noqa: E402
+
+# Whether the example gallery runs the examples. It does by default, including on
+# Read the Docs, which sets no environment variable. DIIVE_DOCS_GALLERY=0 opts out
+# for a fast local build (docs/build_docs.ps1 -NoGallery).
+execute_gallery = os.environ.get("DIIVE_DOCS_GALLERY", "1") == "1"
+
 # Project information
-project = "DIIVE"
-copyright = "2025, Lukas Hörtnagl"
+project = "diive"
+# Year is derived so the footer does not silently go stale; first commit was 2021.
+copyright = f"2021-{date.today().year}, Lukas Hörtnagl"
 author = "Lukas Hörtnagl"
-version = "0.91.0"
-release = version
+# Single source of truth: diive/__init__.py reads the installed distribution
+# metadata (which hatchling fills from pyproject.toml) and falls back to a
+# literal only when running from an uninstalled source tree. Hardcoding it here
+# meant the docs footer drifted from the package at every release.
+release = diive_version
+version = release
 
 # General configuration
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
+    # Required: the codebase uses Google-style docstrings, which plain docutils
+    # reads as malformed indentation ("Args:" becomes a block quote).
+    "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
     "sphinx_autodoc_typehints",
@@ -35,7 +53,7 @@ gettext_compact = False
 
 # HTML output options
 html_theme = "furo"
-html_title = "DIIVE"
+html_title = "diive"
 html_theme_options = {
     "sidebar_hide_name": False,
     "light_css_variables": {
@@ -62,6 +80,15 @@ autodoc_default_options = {
     "show-inheritance": True,
 }
 
+# Napoleon renders an "Attributes:" section as .. attribute:: directives and a
+# "Methods:" section as .. method:: directives. Those collide with the members
+# autodoc already documents on the same page, which is fatal under
+# fail_on_warning (56 "duplicate object description"). Rendering both as field
+# lists instead keeps the prose and drops the duplicate directive. Napoleon has
+# no dedicated option for "Methods", hence the custom section.
+napoleon_use_ivar = True
+napoleon_custom_sections = [("Methods", "params_style")]
+
 # Sphinx Gallery configuration - handle nested subdirectories
 # Build separate galleries for each category subdirectory
 examples_base = Path(__file__).parent.parent / "examples"
@@ -79,9 +106,20 @@ sphinx_gallery_conf = {
     "gallery_dirs": gallery_dirs,
     "filename_pattern": r"^[^_].*\.py$",
     "ignore_pattern": r"(__pycache__|\.pyc|run_all_examples|__init__)",
-    "plot_gallery": True,
+    # On by default, because executing the examples is what puts figures and
+    # captured console output on their pages - without it a plotting library
+    # documents itself with code listings and nothing else. It also generates
+    # every thumbnail. Measured on a cold full build: 7.5 minutes end to end,
+    # of which the 113 examples are 2.8 minutes (slowest single example 15.5 s),
+    # which fits a Read the Docs build. Set DIIVE_DOCS_GALLERY=0 to skip
+    # execution locally (docs/build_docs.ps1 -NoGallery).
+    "plot_gallery": execute_gallery,
     "abort_on_example_error": False,
     "matplotlib_animations": True,
+    # Still needed with execution on: 32 of the 113 examples produce no figure
+    # (the data, times, io and qaqc ones compute and print, the two Bokeh ones
+    # emit HTML) and would otherwise get sphinx-gallery's stock placeholder.
+    "default_thumb_file": str(Path(__file__).parent.parent / "images" / "logo_diive1_256px.png"),
     "backreferences_dir": "api/generated",
     "doc_module": ("diive",),
 }
@@ -101,49 +139,10 @@ myst_enable_extensions = ["colon_fence", "deflist", "html_image"]
 myst_url_schemes = ("http", "https", "mailto")
 
 # Source and suffix
+# ".md" maps to the parser name myst_parser registers, not to "myst-nb":
+# myst-nb is a separate package that is neither installed nor in requirements.txt,
+# so naming it here fails the build as soon as any .md page is added under docs/.
 source_suffix = {
     ".rst": None,
-    ".md": "myst-nb",
+    ".md": "markdown",
 }
-
-# Post-process sg_execution_times.rst to fix cross-reference warnings
-def fix_execution_times_references(app, env, docnames):
-    """Convert :ref: directives to :doc: in sg_execution_times.rst files."""
-    import re
-    from pathlib import Path
-
-    categories = [
-        'analysis', 'binary', 'corrections', 'createvar', 'echires',
-        'fits', 'flux', 'gap_filling', 'outlierdetection', 'timeseries', 'visualization'
-    ]
-
-    def replace_ref(match):
-        inner = match.group(1)
-        inner = inner.replace('sphx_glr_auto_examples_', '').replace('.py', '')
-
-        for cat in categories:
-            if inner.startswith(cat + '_'):
-                name = inner[len(cat)+1:]
-                return f":doc:`/auto_examples/{cat}/{name}`"
-
-        return match.group(0)
-
-    # Process all sg_execution_times.rst files
-    auto_examples_dir = Path(app.srcdir) / "auto_examples"
-    if auto_examples_dir.exists():
-        for rst_file in auto_examples_dir.rglob("sg_execution_times.rst"):
-            with open(rst_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-
-            # Only process if it has the problematic :ref: directives
-            if ':ref:`sphx_glr_auto_examples_' in content:
-                # Replace :ref: with :doc:
-                pattern = r':ref:`(sphx_glr_auto_examples_[^`]+)`'
-                new_content = re.sub(pattern, replace_ref, content)
-
-                with open(rst_file, 'w', encoding='utf-8') as f:
-                    f.write(new_content)
-
-def setup(app):
-    """Register Sphinx event handlers."""
-    app.connect('env-before-read-docs', fix_execution_times_references)

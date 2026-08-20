@@ -12,15 +12,66 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+import gc
+import sys
+import threading
+import traceback
+
 import pandas as pd
 import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import Qt
+import shiboken6
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QApplication
 
 import diive as dv
+
+
+@pytest.fixture(autouse=True)
+def slot_exceptions():
+    """Fail the test if a Qt-invoked slot raised.
+
+    PySide6 cannot let a Python exception cross back into the C++ signal
+    emitter, so it hands the traceback to ``sys.excepthook`` and lets the
+    emitting call return normally. Measured on PySide6 6.11.1, that applies to
+    every way a test drives a widget: ``setChecked``, ``setCurrentIndex``,
+    ``setValue``, ``setText``, ``click`` and a direct ``emit``. Without this
+    hook a test can toggle a control whose handler crashes, see no exception,
+    and pass -- the assertion after the trigger only proves the *previous*
+    render is still on the canvas.
+
+    Worker threads are covered too (``threading.excepthook``): a crash in a
+    ``WorkerRunner`` payload otherwise only prints.
+
+    A test that provokes a slot exception on purpose can request this fixture
+    and drain the list it yields.
+    """
+    captured = []
+
+    def _hook(etype, value, tb):
+        captured.append("".join(traceback.format_exception(etype, value, tb)))
+
+    def _thread_hook(args):
+        if args.exc_type is SystemExit:
+            return
+        captured.append(
+            f"in thread {getattr(args.thread, 'name', '?')!r}:\n"
+            + "".join(traceback.format_exception(
+                args.exc_type, args.exc_value, args.exc_traceback)))
+
+    prev_hook, prev_thread_hook = sys.excepthook, threading.excepthook
+    sys.excepthook, threading.excepthook = _hook, _thread_hook
+    try:
+        yield captured
+    finally:
+        sys.excepthook, threading.excepthook = prev_hook, prev_thread_hook
+    if captured:
+        pytest.fail(
+            f"{len(captured)} exception(s) raised inside a Qt slot or worker "
+            "thread and swallowed by PySide6:\n\n" + "\n".join(captured),
+            pytrace=False)
 
 
 @pytest.fixture(scope="module")
@@ -36,6 +87,62 @@ def example_year():
     return dv.times.keep_daterange(df, "2021-01-01", "2021-12-31 23:30")
 
 
+def _destroy_window(win):
+    """Really destroy a MainWindow, so nothing of it outlives the test.
+
+    Every window subscribes to process-wide singletons (theme, metadata, site,
+    events, db). Dropping the last Python reference frees nothing -- a child
+    event-filter helper (``FramelessResizeHelper._window``) holds a strong
+    reference back to the window -- so without this every window the suite
+    builds stays alive and subscribed for the whole session, and each singleton
+    emit fans out into all of them: dozens of accumulated matplotlib renders
+    (which can also segfault). Measured: one ``theme.manager.apply()`` costs 3 s
+    against a single window and 21 s behind 30 leaked ones, which is why
+    ``test_live_theme_edit``, at position 96 of 121, took 135 s.
+
+    It has to be ``shiboken6.delete`` and not ``deleteLater()``: a deferred-
+    delete event posted while no event loop is running is not consumed by
+    ``processEvents()``, so the window survived it (measured: ``isValid(win)``
+    still True, one more ``MainWindow`` in ``topLevelWidgets()`` per call, and
+    ``apply()`` still climbing 0.14 s -> 1.37 s over 6 windows). With the
+    immediate delete that cost stays flat.
+
+    The queue is drained *first* because ``VariablePanel.run_with_loading``
+    defers its payload with ``QTimer.singleShot(0, ...)`` and a test can end
+    with that timer still pending. Destroying the window first leaves the
+    callback to fire against deleted widgets during a *later* test
+    ("Internal C++ object (VariableList) already deleted"), which
+    ``slot_exceptions`` then reports against whichever innocent test happened to
+    pump the loop.
+    """
+    QApplication.processEvents()
+    win.close()          # runs closeEvent: drops the event-store connections
+    shiboken6.delete(win)
+    # Release the retained tab objects too. `MainWindow` deliberately keeps them
+    # (their signal slots would otherwise go inert), and a `DiiveTab` is a plain
+    # Python object, not a QObject -- so Qt cannot reap its subscriptions to the
+    # app-wide singletons when the C++ widgets die, and a tab whose widgets are
+    # gone still runs its handler on the *next* test's edit. Measured before this
+    # line: a Metadata explorer tab from the previous test crashed in
+    # `_refresh_detail` with "Internal C++ object (QVBoxLayout) already deleted".
+    # PySide6 keeps only a weak reference to a bound method's instance, so
+    # freeing the tabs removes those subscriptions.
+    win._tabs.clear()
+    win._menu_tab_list.clear()
+    win._pinned.clear()
+    gc.collect()
+    QApplication.processEvents()
+    # Finish the deletions the app asked for. GUI code that rebuilds a dynamic
+    # panel detaches the old widgets and calls `deleteLater()`, which completes
+    # in the running app but never here: the suite has no event loop, and
+    # `processEvents()` at loop level 0 does not consume a DeferredDelete event.
+    # Worth ~260 of the ~4800 widgets still alive after 31 tests (a
+    # `StepEditorDialog` and 21 `_CorrectionRow`s among them); the rest are
+    # parentless widgets nothing on the Python side owns, which a test cannot
+    # reach.
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
 @pytest.fixture
 def window(app, monkeypatch, example_year):
     # Make the GUI use only one year of example data, including the constructor's
@@ -48,25 +155,9 @@ def window(app, monkeypatch, example_year):
     win.show()
     app.processEvents()
     yield win
-    # Teardown: stop this window reacting to the app-wide event store. The store
-    # is a process-wide singleton, so without this every window the suite creates
-    # stays subscribed and they all re-render on the next events edit -- dozens of
-    # accumulated matplotlib renders that can segfault. Also reset the store so
-    # event state can't leak between tests.
+    _destroy_window(win)
+    # Reset the app-wide event store so event state can't leak between tests.
     from diive.gui import events as _events
-    try:
-        _events.manager.changed.disconnect(win._on_events_changed)
-    except (RuntimeError, TypeError):
-        pass
-    try:
-        _events.manager.categories_changed.disconnect(
-            win._on_event_categories_changed)
-    except (RuntimeError, TypeError):
-        pass
-    try:
-        _events.manager.focus_requested.disconnect(win._focus_event_on_overview)
-    except (RuntimeError, TypeError):
-        pass
     _events.manager.events.clear()
     _events.manager.visible = True
     _events.manager.categories = dict(_events.DEFAULT_CATEGORIES)
@@ -75,6 +166,18 @@ def window(app, monkeypatch, example_year):
 def _tabs(win):
     tw = win._tabwidget
     return [tw.tabText(i) for i in range(tw.count())]
+
+
+def _axes_replaced(canvas, previous):
+    """True when a real re-render happened since `previous` was captured.
+
+    `MplCanvas.new_axes` clears the whole figure, so every Axes from the earlier
+    render is gone afterwards. Needed because a crashed render leaves the *old*
+    figure on screen, and a "no error text on the canvas" check cannot tell that
+    apart from a successful redraw. Pass the Axes objects themselves (not their
+    ids) so a recycled address cannot fake a match.
+    """
+    return all(ax not in canvas.fig.axes for ax in previous)
 
 
 def test_default_tabs(window):
@@ -100,6 +203,118 @@ def test_variable_panel_shared_and_filter(window):
     visible = [overview.varpanel.list.item(i)
                for i in range(n) if not overview.varpanel.list.item(i).isHidden()]
     assert visible and all("GPP" in it.data(Qt.ItemDataRole.UserRole) for it in visible)
+
+
+def test_variable_panel_metadata_slot_dies_with_the_panel(app, slot_exceptions):
+    """A destroyed VariablePanel must stop reacting to the app-wide metadata store.
+
+    Regression: this connection used to be a lambda. `metadata_store.manager` is a
+    process-wide singleton, and Qt severs a connection only when it can see the
+    receiver die -- which it can for a bound method of a QObject, but never for a
+    lambda. So every closed tab left a dangling slot on the singleton, and the next
+    metadata edit anywhere in the app raised "Internal C++ object (QLineEdit)
+    already deleted" once per dead panel. PySide6 swallows those, which is why it
+    went unnoticed; the whole GUI suite reported 168 of them.
+    """
+    import gc
+
+    import shiboken6
+    from PySide6.QtWidgets import QVBoxLayout, QWidget
+
+    from diive.gui import metadata_store
+    from diive.gui.widgets.variable_panel import VariablePanel
+
+    host = QWidget()
+    layout = QVBoxLayout(host)
+    panel = VariablePanel()
+    layout.addWidget(panel)
+    panel.set_variables(["A", "B"])
+    QApplication.processEvents()
+
+    # Force the C++ destruction that closing a tab performs. `deleteLater` is not
+    # enough here: a live Python reference keeps the wrapper's C++ side alive.
+    shiboken6.delete(host)
+    del host, layout
+    gc.collect()
+    QApplication.processEvents()
+    assert not shiboken6.isValid(panel)
+
+    metadata_store.manager.changed.emit()
+    QApplication.processEvents()
+    # The autouse guard fails the test on a swallowed slot exception anyway; this
+    # states the expectation instead of leaving it implied by the absence of one.
+    assert slot_exceptions == []
+
+
+def test_dropped_tab_is_collectable(app, example_year):
+    """A `DiiveTab` nobody holds any more must be collected, with its widgets.
+
+    Regression: a tab used to be uncollectable the moment it was built. A
+    ``self``-capturing lambda connected to one of its own child widgets was
+    enough -- the connection owns the lambda on the C++ side, so the cycle
+    tab -> widgets -> connection -> tab has no Python leg for the collector to
+    walk, and every tab a test built stayed alive with ~500 widgets behind it.
+    (A bound method in a child widget's ``__dict__``, e.g.
+    ``CopyPythonButton._provider``, is *not* part of this: PySide6 traverses a
+    wrapper's instance dict, so that cycle is collectable -- measured.)
+    ``app.setStyleSheet`` re-polishes every live widget, so the leak showed up as
+    theme cost: ``theme.manager.apply()`` measured 0.65 s after three build/drop
+    cycles of the flux-chain tab against 0.00 s once they are collected.
+
+    Closing a tab in the app hides this -- deleting the C++ children destroys the
+    connections that hold the tab -- so the leak only shows when a tab is
+    *dropped* rather than closed, which is what this suite does.
+
+    The Events tab is in the list for a second reason: freeing it used to crash
+    the interpreter. Its board is rebuilt on every refresh, and ``setWidget``
+    destroyed the old one on the C++ side while its Python wrappers lived on;
+    collecting those in the same pass that freed the tab put a virtual call
+    (``_AddCard.mousePressEvent``) on a half-finalized wrapper -- an access
+    violation, not an exception. It only became reachable once the tab was
+    collectable at all.
+    """
+    import gc
+
+    from PySide6.QtCore import QEvent
+
+    from diive.gui.tabs.base import DiiveTab
+    from diive.gui.tabs.events import EventsTab
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.tabs.gapfilling import XGBoostGapFillingTab
+    from diive.gui.tabs.outliers_zscore import ZScoreOutlierTab
+    from diive.gui.tabs.plotting import PlottingTab
+    from diive.gui.widgets.plot_settings import TIMESERIES
+
+    df = example_year.copy()
+    for factory in (FluxChainTab,
+                    XGBoostGapFillingTab,
+                    ZScoreOutlierTab,
+                    EventsTab,
+                    lambda: PlottingTab(TIMESERIES, "Time series")):
+        gc.collect()
+        before = len(QApplication.allWidgets())
+        tab = factory()
+        tab.widget()
+        tab.on_data_loaded(df, set())
+        QApplication.processEvents()
+        cls = type(tab)
+        del tab
+        gc.collect()
+        QApplication.processEvents()
+        # Finish the deletions the tab asked for while rebuilding a panel; with
+        # no event loop a DeferredDelete is never consumed on its own, and the
+        # C++ object it holds keeps the tab alive.
+        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        gc.collect()
+        live = [o for o in gc.get_objects()
+                if isinstance(o, DiiveTab) and type(o) is cls]
+        assert not live, (
+            f"{cls.__name__} survived being dropped; referrers: "
+            f"{[type(r).__name__ for r in gc.get_referrers(live[0])]}")
+        del live
+        gc.collect()
+        assert len(QApplication.allWidgets()) == before, (
+            f"{cls.__name__} leaked widgets after being dropped")
 
 
 def test_pill_classification():
@@ -197,7 +412,6 @@ def test_plot_settings_live_render(window):
     tab.settings.orientation.setCurrentText("horizontal")
     tab.settings.vmin.setText("-5")
     tab.settings.vmax.setText("5")
-    tab.settings.show_values.setChecked(True)
     tab.settings.cb_extend.setCurrentText("both")
     tab.settings.fmt_axlabel_fs.setValue(8)
     assert tab.update_btn.isEnabled() is True  # an edit marked it dirty
@@ -215,6 +429,29 @@ def test_plot_settings_live_render(window):
     _cx = _np.asarray(_qm.get_coordinates())[..., 0]
     _xl = hax.get_xlim()
     assert min(_xl) <= _cx.max() and _cx.min() <= max(_xl)  # data is in view
+
+    # show_values on a short range, which is the only way it is usable: it writes one
+    # text label per cell, so a year of half-hourly data means 17 520 artists. Measured
+    # on this fixture, ticking it there cost 15.8 s to render and left every later
+    # re-layout walking those artists -- opening the next tab went 1.2 s -> 43.1 s, ~58 s
+    # of this one test. Three days is 144 cells: legible, and it actually checks that the
+    # labels appear, which the year-long version never did (it only checked for the
+    # error-fallback text).
+    window._range = (pd.Timestamp("2021-06-01"), pd.Timestamp("2021-06-03 23:30"))
+    window._apply_range()
+    QApplication.processEvents()
+    tab.settings.show_values.setChecked(True)
+    tab.update_btn.click()
+    QApplication.processEvents()
+    assert tab.settings.values()["show_values"] is True
+    labels = [t for a in tab.canvas.fig.axes for t in a.texts]
+    assert 100 < len(labels) < 500, f"expected one label per cell, got {len(labels)}"
+    assert any(t.get_text().strip() for t in labels)  # they carry the cell values
+    assert not _fallback(tab)
+    # Back to the full fixture range for the rest of the test.
+    tab.settings.show_values.setChecked(False)
+    window._reset_range()
+    QApplication.processEvents()
 
     # Reverse-colormap toggle (heatmap): appends/strips the _r suffix.
     tab.settings.cmap.setCurrentText("viridis")
@@ -279,8 +516,16 @@ def test_plot_settings_live_render(window):
     ym.settings.agg.setCurrentText("sum")
     ym.settings.ranks.setChecked(True)
     ym.settings.orientation.setCurrentText("horizontal")
+    prev_axes = list(ym.canvas.fig.axes)
     ym.update_btn.click()
     QApplication.processEvents()
+    # The button really re-rendered: the old Axes are gone and a mesh is back.
+    # (Without this, a crashed render leaves the first figure standing and the
+    # "no error text" check below passes on it.)
+    assert _axes_replaced(ym.canvas, prev_axes)
+    assert any(c.__class__.__name__ == "QuadMesh"
+               for a in ym.canvas.fig.axes for c in a.collections)
+    assert ym.settings.values()["agg"] == "sum"
     assert not _fallback(ym)
 
 
@@ -692,8 +937,7 @@ def test_window_geometry_clamped_to_screen(app, monkeypatch, example_year):
         assert fg.right() <= avail.right() and fg.bottom() <= avail.bottom()
         assert fg.x() >= avail.x() and fg.y() >= avail.y()
     finally:
-        win.close()
-        win.deleteLater()
+        _destroy_window(win)
 
 
 def test_window_fills_workarea_without_clipping(app, monkeypatch, example_year):
@@ -716,8 +960,7 @@ def test_window_fills_workarea_without_clipping(app, monkeypatch, example_year):
         assert g.width() <= avail.width()
         assert g.bottom() <= avail.bottom()
     finally:
-        win.close()
-        win.deleteLater()
+        _destroy_window(win)
 
 
 def test_overview_layout_stable_on_zoom(window):
@@ -1111,6 +1354,109 @@ def test_stepwise_screening_corrections(app):
     QApplication.processEvents()
     assert "radiation_zero_offset" not in tab.corrections_panel._rows
     assert "setto_max" in tab.corrections_panel._rows
+
+
+def test_stepwise_screening_discards_a_run_for_the_previous_variable(app):
+    """L92: switching variable mid-run must invalidate the run in flight.
+
+    `_show_variable` cleared the stored results and its docstring said the prior run
+    "is now stale", but it never bumped `_run_id` — so a worker started on the previous
+    variable still carried the matching id and `_on_done` adopted its result onto the
+    new one. G2's bug, in the tab the review cites as the correct run_id pattern.
+
+    The handler is called directly rather than through a signal: Qt swallows an
+    exception raised inside a slot, so a signal-driven version could pass over a crash.
+    """
+    import threading
+
+    import diive as dv
+    from diive.gui.tabs.stepwise import StepwiseScreeningTab
+    from diive.gui.widgets.stepwise_method_params import ZScoreParams
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-01-01", periods=48 * 5, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.05)
+    df.index.name = "TIMESTAMP_END"
+    df["other_value"] = df["observed_value"] * 2.0
+
+    tab = StepwiseScreeningTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._select("observed_value")
+    tab._steps = [ZScoreParams().step()]
+
+    entered, release = threading.Event(), threading.Event()
+
+    def blocking_worker(*args):
+        entered.set()
+        release.wait(10)
+
+    tab._worker = blocking_worker
+    tab.run_outliers_btn.click()
+    assert entered.wait(10)
+    stale_id = tab._run_id                      # the id the in-flight run carries
+
+    tab._select("other_value")                  # user switches variable mid-run
+    assert tab._var == "other_value"
+    assert tab._run_id != stale_id, "switching variable must invalidate the run in flight"
+
+    # The stale result arrives afterwards and must be dropped, not adopted.
+    tab._on_done({"run_id": stale_id, "series": df["observed_value"], "flag": None})
+    assert tab._result_df is None
+    assert tab._var == "other_value"
+    release.set()
+
+
+def test_stepwise_screening_runs_one_chain_at_a_time(app):
+    """Rapid Run clicks must not stack CPU-heavy worker threads. The run id already
+    discards a superseded *result*, but every extra click still started a thread
+    that ran the whole chain for nothing (`WorkerRunner` guards the other tabs)."""
+    import threading
+
+    import diive as dv
+    from diive.gui.tabs.stepwise import StepwiseScreeningTab
+    from diive.gui.widgets.stepwise_method_params import ZScoreParams
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-01-01", periods=48 * 5, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.05)
+    df.index.name = "TIMESTAMP_END"
+
+    tab = StepwiseScreeningTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._select("observed_value")
+    tab._steps = [ZScoreParams().step()]
+
+    # Stand-in worker that blocks inside the thread, so the run stays in flight
+    # for as long as the test needs — no sleeps, no timing assumptions.
+    entered, release = threading.Event(), threading.Event()
+    spawned = []
+
+    def blocking_worker(*args):
+        spawned.append(args[-1])  # the run id the thread was started with
+        entered.set()
+        release.wait(10)
+
+    tab._worker = blocking_worker
+
+    tab.run_outliers_btn.click()
+    assert entered.wait(10)                 # the first run is inside the worker
+    assert tab._running
+
+    run_id = tab._run_id
+    tab.run_outliers_btn.click()            # a second click while it runs
+    tab.run_outliers_btn.click()
+    assert spawned == [run_id]              # ... started no further thread
+    assert tab._run_id == run_id            # ... and no further run
+
+    # The guard is released when the result is handled, stale ones included.
+    tab._on_done({"run_id": run_id - 1})
+    assert not tab._running
+    tab.run_outliers_btn.click()
+    assert entered.wait(10)
+    assert len(spawned) == 2
+    release.set()
 
 
 def test_correction_tabs(app):
@@ -1944,6 +2290,36 @@ def test_all_menu_items_have_icons(window):
     assert count >= 12  # File/Data/Plot/Outliers/Flux/Analyze/Settings/Help entries
 
 
+def test_icon_glyphs_are_identical_at_every_device_pixel_ratio(app, monkeypatch):
+    # A QPainter on a paint device carrying a devicePixelRatio applies that
+    # transform itself. `_canvas` scaling by the ratio on top of that drew every
+    # glyph at `dpr` times its size, so the 16-unit artwork ran off its box —
+    # invisible at 100% display scaling, plainly wrong on a scaled 4K screen.
+    from PySide6.QtGui import QColor
+
+    import diive.gui.icons as icons
+
+    def ink_box(icon_factory, dpr):
+        monkeypatch.setattr(icons, "_device_pixel_ratio", lambda: dpr)
+        img = icon_factory().pixmap(16, 16).toImage()
+        pts = [(x, y) for x in range(img.width()) for y in range(img.height())
+               if QColor(img.pixelColor(x, y)).alpha() > 40]
+        assert pts, "glyph drew no ink at all"
+        n = img.width()
+        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+        # As fractions of the icon box, so the ratios are directly comparable.
+        return tuple(round(v / n, 2)
+                     for v in (min(xs), min(ys), max(xs), max(ys)))
+
+    for factory in (icons.close_icon, icons._ln_folder, icons._ln_gear):
+        boxes = {dpr: ink_box(factory, dpr) for dpr in (1.0, 1.5, 2.0)}
+        assert len(set(boxes.values())) == 1, boxes
+        # ... and it stays inside its box rather than running off an edge.
+        left, top, right, bottom = boxes[2.0]
+        assert left >= 0.02 and top >= 0.02
+        assert right <= 0.98 and bottom <= 0.98
+
+
 def test_diel_cycle_tab(window):
     from diive.gui.icons import menu_icon
     assert not menu_icon("Diel cycle").isNull()
@@ -2063,6 +2439,9 @@ def test_scatter_tab(window):
     assert len(tab._xyz) == 2
     tab.update_btn.click()
     QApplication.processEvents()
+    # Proof the click re-rendered rather than leaving the colour scatter up: the
+    # colorbar axes is gone (2 axes -> 1).
+    assert len(tab.canvas.fig.axes) == 1
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
     # Marker size / opacity reach the scatter collection.
@@ -2109,6 +2488,10 @@ def test_scatter_tab(window):
     tab.update_btn.click()
     QApplication.processEvents()
     assert tab.update_btn.isEnabled() is False
+    # `_render` disables the button as its FIRST statement, so the line above
+    # holds even if the render then crashed. The new marker size on the drawn
+    # collection is what actually proves the click rendered.
+    assert abs(tab.canvas.fig.axes[0].collections[0].get_sizes()[0] - 55) < 1e-6
 
 
 def test_cumulative_year_tab(window):
@@ -2128,8 +2511,14 @@ def test_cumulative_year_tab(window):
     assert "2021" in items  # the example data's year is offered
     tab.settings.cy_show_reference.setChecked(True)
     tab.settings.cy_highlight.setCurrentText("2021")
+    prev_axes = list(tab.canvas.fig.axes)
+    n_lines_before = len(prev_axes[0].lines)
     tab.update_btn.click()  # params apply on the button, not on edit
     QApplication.processEvents()
+    # `values()` only reads the widgets back, so it cannot tell a redraw from a
+    # crashed one -- the rebuilt Axes and the extra reference line can.
+    assert _axes_replaced(tab.canvas, prev_axes)
+    assert len(tab.canvas.fig.axes[0].lines) > n_lines_before  # reference curve added
     assert tab.settings.values()["highlight_year"] == 2021
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
@@ -2293,6 +2682,7 @@ def test_seasonal_trend_tab(app):
     assert tab._target == "Tair_f"
     assert tab._decomp is not None
     assert tab._decomp["strength"] > 0.4
+    strength_stl = tab._decomp["strength"]
     fig = tab.canvas.fig
     assert len(fig.axes) == 4
     assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
@@ -2312,6 +2702,11 @@ def test_seasonal_trend_tab(app):
     for _ in range(60):
         QApplication.processEvents()
     assert tab._decomp is not None
+    # A crashed re-render would leave the one-panel anomaly chart up and keep the
+    # STL result in `_decomp`, so check the four panels are back and the Classical
+    # decomposition really replaced the STL one.
+    assert len(tab.canvas.fig.axes) == 4
+    assert tab._decomp["strength"] != strength_stl
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
 
@@ -2325,8 +2720,16 @@ def test_seasonal_trend_short_data_graceful(window):
     assert tab._decomp is None
     msgs = [t.get_text() for a in tab.canvas.fig.axes for t in a.texts]
     assert any("2 years" in m for m in msgs)
+    prev_axes = list(tab.canvas.fig.axes)
     tab.view.setCurrentText("Yearly anomalies")
     QApplication.processEvents()
+    # "the anomaly view still works" has to be shown, not inferred from silence:
+    # a crashed view switch leaves the "needs 2 years" message on the canvas, and
+    # that message contains no "Cannot plot" either.
+    assert _axes_replaced(tab.canvas, prev_axes)
+    msgs = [t.get_text() for a in tab.canvas.fig.axes for t in a.texts]
+    assert not any("2 years" in m for m in msgs)  # decomposition message gone
+    assert tab.canvas.fig.axes[0].patches  # anomaly bars drawn
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
 
@@ -2554,6 +2957,44 @@ def test_pin_freezes_menu_tab(window):
     assert len(calls) == 1
 
 
+def test_pinned_tab_does_not_see_columns_added_later(window):
+    """With no active range `_data` *is* `_full_data` — the very frame already
+    pushed to every tab — so adding a column in place leaked it into pinned tabs
+    that `_push_data` deliberately skips. Every mutation must rebind instead."""
+    from diive.events import Event
+    from diive.gui import events
+
+    events.manager.clear()
+    window._open_menu_tab("Time series")
+    tab = window._menu_tab_list[-1]
+
+    held = []
+    tab.on_data_loaded = lambda df, created=None: held.append(df)
+    window._apply_range()                  # the frame the tab now holds
+    QApplication.processEvents()
+    frozen = held[-1]
+    window._toggle_pin(tab)
+
+    # (a) an engineered/derived column (every tab's "Add" goes through here)
+    new = window._full_data[["Tair_f"]].rename(columns={"Tair_f": "PINTEST"})
+    window._add_features(new)
+    QApplication.processEvents()
+    assert "PINTEST" in window._full_data.columns   # the dataset has it ...
+    assert "PINTEST" not in frozen.columns          # ... the frozen tab does not
+
+    # (b) an event flag column (the other in-place writer). Re-sync first, so this
+    # half is judged on its own frame and not on the one (a) already rebound away.
+    window._toggle_pin(tab)                # unpin -> receives the current frame
+    QApplication.processEvents()
+    frozen = held[-1]
+    window._toggle_pin(tab)                # pin again
+    events.manager.add(Event("PinEv", window._full_data.index.min()))
+    QApplication.processEvents()
+    assert "EVENT_PinEv" in window._full_data.columns
+    assert "EVENT_PinEv" not in frozen.columns
+    events.manager.clear()
+
+
 def test_hampel_outlier_tab_keeps_original_cleaned_flag(window):
     window._open_menu_tab("Hampel filter")
     tab = window._menu_tab_list[-1]
@@ -2777,6 +3218,76 @@ def test_project_save_and_open(window, tmp_path, monkeypatch):
     assert var in [str(c) for c in window._data.columns]
 
 
+def test_event_manager_load_dict_clears_on_empty(app):
+    """L93: loading empty event data must clear, not keep the previous events.
+
+    `load_dict` returned early on a falsy dict, so opening a project with no events
+    left the previous project's events standing. Both callers pass `{}` when there is
+    nothing saved (`project.extras.get("events") or {}` on project open), so the
+    project path was the one that leaked.
+    """
+    from diive.gui import events as _events
+    from diive.events import Event
+
+    mgr = _events.manager
+    mgr.load_dict({})                                  # start from a known state
+    mgr.add(Event("Stale", "2021-01-05"))
+    assert len(mgr.events) == 1
+
+    seen = []
+    mgr.changed.connect(lambda: seen.append(len(mgr.events)))
+    try:
+        mgr.load_dict({})                              # a project carrying no events
+        assert mgr.events == [], "an empty load must clear the previous events"
+        assert seen == [0], "and must announce the change, like the non-empty path"
+
+        # A non-empty load still restores, so the guard is not a blanket wipe.
+        mgr.load_dict({"events": [Event("Fresh", "2021-02-05").to_dict()]})
+        assert [e.name for e in mgr.events] == ["Fresh"]
+    finally:
+        mgr.changed.disconnect()
+        mgr.load_dict({})
+
+
+def test_project_load_does_not_materialise_previous_events(window, tmp_path, monkeypatch):
+    """Opening a project must build *its* event columns on the incoming data, once.
+    Loading the project's events only after `_set_data` meant the outgoing
+    session's events were materialised on the new data first, then replaced."""
+    from diive.events import Event
+    from diive.gui import events
+    from PySide6.QtWidgets import QFileDialog
+
+    events.manager.clear()
+    events.manager.add(Event("Proj", window._full_data.index.min()))
+    folder = tmp_path / "Events.diive"
+    assert window._write_project(folder, "Events")
+
+    # A different session: another event, and the project's is gone.
+    events.manager.clear()
+    events.manager.add(Event("Stale", window._full_data.index.min()))
+
+    seen = []
+    original = window._sync_event_columns
+
+    def spy():
+        seen.append(sorted(ev.flag_name for ev in events.manager.events))
+        return original()
+
+    window._sync_event_columns = spy
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory",
+                        staticmethod(lambda *a, **k: str(folder)))
+    window._open_project()
+    QApplication.processEvents()
+    del window._sync_event_columns  # restore the bound method
+
+    assert seen  # the load did reconcile the columns
+    assert ["EVENT_Proj"] in seen                          # ... for this project
+    assert all("EVENT_Stale" not in call for call in seen)  # ... and never the old one
+    assert "EVENT_Proj" in window._full_data.columns
+    assert "EVENT_Stale" not in window._full_data.columns
+    events.manager.clear()
+
+
 def test_frameless_resize_cursor_no_int_error(app):
     # Regression: PySide6 Qt.Edge flags aren't int()-able; the helper must use
     # `.value` (the eventFilter previously raised TypeError on every mouse move).
@@ -2790,6 +3301,74 @@ def test_frameless_resize_cursor_no_int_error(app):
     assert h._cursor_for(h._edges(QPoint(2, 150))) == Qt.CursorShape.SizeHorCursor
     assert h._cursor_for(h._edges(QPoint(200, 150))) == Qt.CursorShape.ArrowCursor
     assert h._edges(QPoint(200, 150)).value == 0  # interior -> no edge
+
+
+def test_frameless_helper_does_not_pin_its_window(app):
+    """The resize helper must not keep its window alive (L105).
+
+    The helper is parented to the grip, which is a child of the window, so
+    storing the window strongly closes a window -> grip -> helper -> window
+    cycle. Measured with the cyclic collector switched off, so only refcounting
+    can free the window: with a strong reference all three windows survived the
+    ``del``, with the weakref none do.
+    """
+    import weakref
+
+    from PySide6.QtWidgets import QMainWindow, QWidget
+
+    from diive.gui.widgets.frameless import FramelessResizeHelper
+
+    class _Shell(QMainWindow):
+        def __init__(self):
+            super().__init__()
+            root = QWidget()
+            self.setCentralWidget(root)
+            self._resize_helper = FramelessResizeHelper(self, root)
+
+    refs = []
+    gc.disable()
+    try:
+        for _ in range(3):
+            w = _Shell()
+            refs.append(weakref.ref(w))
+            del w
+    finally:
+        gc.enable()
+    assert [r() for r in refs] == [None, None, None]
+
+
+def test_frameless_resize_starts_native_resize(app):
+    # The weakref must still resolve: an edge press hands the edges off to the
+    # native resize and consumes the event; an interior press does neither.
+    from PySide6.QtCore import QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtWidgets import QMainWindow, QWidget
+
+    from diive.gui.widgets.frameless import FramelessResizeHelper
+
+    win = QMainWindow()
+    win.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+    root = QWidget()
+    win.setCentralWidget(root)
+    win.resize(400, 300)
+    helper = FramelessResizeHelper(win, root)
+    win.show()
+    app.processEvents()
+
+    started = []
+    win.windowHandle().startSystemResize = lambda edges: started.append(edges)
+
+    def press(x, y):
+        ev = QMouseEvent(QEvent.Type.MouseButtonPress, QPointF(x, y),
+                         Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+                         Qt.KeyboardModifier.NoModifier)
+        return helper.eventFilter(root, ev)
+
+    assert press(root.width() - 2, root.height() // 2) is True
+    assert started[-1].value == Qt.Edge.RightEdge.value
+    assert press(root.width() // 2, root.height() // 2) is False
+    assert len(started) == 1
+    shiboken6.delete(win)
 
 
 def test_startup_loads_example_when_no_project(window):
@@ -2815,10 +3394,13 @@ def test_startup_reopens_last_project(window, tmp_path, monkeypatch):
     monkeypatch.setattr("diive.load_exampledata_parquet", _boom)
 
     win2 = MainWindow(config={"last_project": str(folder)})
-    QApplication.processEvents()
-    assert win2._project_name == "Proj"
-    assert win2._project_dir == folder
-    assert "favorite" in store.get(var).tags
+    try:
+        QApplication.processEvents()
+        assert win2._project_name == "Proj"
+        assert win2._project_dir == folder
+        assert "favorite" in store.get(var).tags
+    finally:
+        _destroy_window(win2)  # this second window was leaking for the session
 
 
 def test_project_saves_and_restores_open_tabs(window, tmp_path, monkeypatch):
@@ -2984,6 +3566,144 @@ def test_absolutelimits_outlier_tab_keeps_original_cleaned_flag(window):
     assert set(window._data[flag].dropna().unique()) <= {0, 2}
 
 
+def test_outlier_tab_discards_result_when_dataset_changed_midrun(window):
+    """Detection runs off-thread, so the dataset can change before it finishes.
+    The completion slot must then adopt nothing instead of indexing the new frame
+    with the old variable (KeyError) or drawing a re-indexed series against this
+    run's flag/cleaned arrays."""
+    window._open_menu_tab("Absolute limits filter")
+    tab = window._menu_tab_list[-1]
+    var = "Tair_f"
+    tab._select(var)
+    series = window._data[var]
+    lo, hi = float(series.quantile(0.01)), float(series.quantile(0.99))
+    # Compute the result the worker thread would deliver, then change the dataset
+    # underneath the tab before handing it over — the mid-run race, deterministically.
+    payload = tab._compute_payload(series, dict(minval=lo, maxval=hi), True)
+
+    # Drain the per-iteration progress events the synchronous compute queued; in
+    # the app the event loop does that while the worker thread runs.
+    QApplication.processEvents()
+
+    # (a) the target is gone (renamed, deleted, or absent from a new dataset).
+    tab.on_data_loaded(window._data.drop(columns=[var]))
+    tab._on_done(payload)  # must not raise
+    QApplication.processEvents()
+    assert tab._result_df is None
+    assert not tab.add_btn.isEnabled()
+    assert tab.run_btn.isEnabled()             # the tab stays usable
+    assert "discarded" in tab.status.text()
+
+    # (b) the target is still there but the record was narrowed (date-range
+    # subselection): the result belongs to the full record, so adopting it would
+    # draw — and let "Add" merge — columns that no longer line up with the frame.
+    tab.on_data_loaded(window._data.iloc[:len(window._data) // 2])
+    tab._on_done(payload)
+    QApplication.processEvents()
+    assert tab._result_df is None
+    assert not tab.add_btn.isEnabled()
+    assert "discarded" in tab.status.text()
+    # Nothing was stored, so the limit-lines toggle has nothing to re-render.
+    tab.limits_cb.setChecked(True)  # what ticking "Show limit lines" does
+    QApplication.processEvents()
+    assert tab._last_payload is None
+
+    # The unchanged dataset is still accepted (the guard is not a blanket refusal).
+    tab.on_data_loaded(window._data)
+    tab._select(var)
+    tab._on_done(payload)
+    QApplication.processEvents()
+    assert tab._result_df is not None
+    assert tab.add_btn.isEnabled()
+
+    # The stored result goes stale the same way once it is accepted: extending the
+    # record ("Add to current" appends new periods) leaves this run's flag shorter
+    # than the frame, so re-rendering it would index with an unalignable mask.
+    assert tab._last_payload is not None
+    idx = window._data.index
+    extended = window._data.reindex(idx.union(
+        pd.date_range(idx[-1], periods=3, freq=idx[-1] - idx[-2])))
+    tab.on_data_loaded(extended)
+    # Called directly, not via the checkbox: an exception raised inside a slot Qt
+    # invokes is swallowed by the signal machinery, so the toggle would look fine.
+    tab._rerender_last()  # what toggling "Show limit lines" triggers
+    QApplication.processEvents()
+
+
+def test_worker_runner_reports_running_until_result_is_handled(app):
+    """Tabs use `is_running` as their re-entry guard, so it must stay True until
+    the GUI thread has *handled* the result — not merely until the worker thread
+    finished. Clearing it before the (queued) emit left a window in which a
+    second run could start and interleave its result with the first."""
+    import threading
+
+    from diive.gui.widgets.worker import WorkerRunner
+
+    runner = WorkerRunner()
+    seen, failed = [], []
+    # Record what `is_running` reads *inside* the handler: it must be clear by
+    # then, so a done handler may start the next run.
+    runner.done.connect(lambda payload: seen.append((payload, runner.is_running)))
+    runner.failed.connect(failed.append)
+
+    # Run the worker-thread body on its own thread and join it: everything that
+    # thread does has then happened, with no sleep and no race.
+    runner._running = True  # what `run()` sets before spawning the thread
+    worker = threading.Thread(target=runner._work, args=(lambda: "payload", (), {}))
+    worker.start()
+    worker.join()
+    assert seen == []                # the result is queued, not yet delivered
+    assert runner.is_running         # ... so the job still counts as in flight
+    assert runner.run(lambda: "second") is False   # the guard holds
+    QApplication.processEvents()
+    assert seen == [("payload", False)]
+    assert not runner.is_running
+
+    # A failure with no message must not leave a bare "Failed: " in a status line.
+    def _raise_bare():
+        raise TimeoutError()
+
+    runner._running = True
+    worker = threading.Thread(target=runner._work, args=(_raise_bare, (), {}))
+    worker.start()
+    worker.join()
+    assert runner.is_running
+    QApplication.processEvents()
+    assert failed == ["TimeoutError"]
+    assert not runner.is_running
+
+
+def test_outlier_compute_payload_writes_no_tab_state(window):
+    """`_compute_payload` runs on the worker thread, so it must not write tab
+    state: the daytime mask reaches the tab through the progress signal (which Qt
+    marshals to the GUI thread), never by assignment from the worker."""
+    window._open_menu_tab("Absolute limits filter")
+    tab = window._menu_tab_list[-1]
+    var = "Tair_f"
+    tab._select(var)
+    series = window._data[var]
+    lo, hi = float(series.quantile(0.01)), float(series.quantile(0.99))
+    kwargs = dict(separate_day_night=True, minval_daytime=lo, maxval_daytime=hi,
+                  minval_nighttime=lo, maxval_nighttime=hi,
+                  lat=46.8, lon=9.8, utc_offset=1)
+
+    tab._live_is_daytime = None
+    # Signals blocked = the worker thread in isolation (in the app its emissions
+    # are queued to the GUI thread, so they land later, not during the compute).
+    tab._sig.blockSignals(True)
+    try:
+        payload = tab._compute_payload(series, kwargs, False, True)
+    finally:
+        tab._sig.blockSignals(False)
+    assert payload["is_daytime"] is not None       # the mask was computed
+    assert tab._live_is_daytime is None            # but not written from the worker
+
+    # It arrives with every progress emission and is stored on the GUI thread.
+    mask = payload["is_daytime"]
+    tab._on_progress(1, 5, payload["cleaned"], None, mask)
+    assert tab._live_is_daytime is mask
+
+
 def test_trimlow_outlier_tab_keeps_original_cleaned_flag(window):
     window._open_menu_tab("Trim-low filter")
     tab = window._menu_tab_list[-1]
@@ -3134,10 +3854,39 @@ def test_live_theme_edit(window):
     from diive.gui import theme
     from diive.gui.widgets.variable_delegate import _pill_for
     theme.manager.pills["GPP"][1] = "#000000"
+    theme.manager.list_width = 333
     theme.manager.apply()
+    QApplication.processEvents()
     assert _pill_for("GPP_CUT_REF_f")[1].name() == "#000000"
+    # `apply()` must reach the live app, not just the theme dict: the edited
+    # token lands in the app-wide stylesheet and the shared variable list picks
+    # up the new width through `changed`. Without these the test passed with no
+    # window at all -- `_pill_for` only reads `theme.manager.pills`.
+    assert window._tabs[0].varpanel.width() == 333
+    theme.manager.tokens["ACCENT"] = "#010203"
+    theme.manager.apply()
+    assert "#010203" in QApplication.instance().styleSheet()
     theme.manager.reset(silent=False)
+    QApplication.processEvents()
     assert _pill_for("GPP_CUT_REF_f")[1].name() != "#000000"
+    assert "#010203" not in QApplication.instance().styleSheet()
+    assert window._tabs[0].varpanel.width() == theme.DEFAULT_LIST_WIDTH
+
+
+def test_save_config_swallows_unserializable_value(tmp_path, monkeypatch):
+    """Preferences are best-effort: a value some producer put in the blob that
+    `json.dumps` can't encode raised `TypeError` straight out of `closeEvent`."""
+    from diive.gui import config
+
+    target = tmp_path / "gui_settings.json"
+    monkeypatch.setattr(config, "config_file", lambda: target)
+
+    config.save_config({"a": 1})                       # a good save first
+    config.save_config({"theme": {"token": object()}})  # must not raise
+    # The unwritable blob left the previous file alone, and saving still works.
+    assert config.load_config() == {"a": 1}
+    config.save_config({"a": 2})
+    assert config.load_config() == {"a": 2}
 
 
 def test_theme_persistence_roundtrip():
@@ -3232,8 +3981,8 @@ def test_studio_chrome_builds_frameless_with_header(app, monkeypatch, example_ye
         # Events fold into the Data menu.
         data_items = [a.text() for a in menu_btns[1].menu().actions()]
         assert any("Events" in t for t in data_items)
-        win.close()
     finally:
+        _destroy_window(win)
         theme.manager.reset(silent=True)
 
 
@@ -3469,8 +4218,49 @@ def test_joint_uncertainty_tab(app, example_year):
     assert any("decomposition" in t.lower() for t in titles)
 
     # Switching the percentile convention re-picks scenarios + the divisor.
+    from diive.flux.lowres.uncertainty import JOINT_DIVISOR_IQR
     tab.divisor_combo.setCurrentIndex(1)
-    assert tab._divisor() != 2.0
+    # `_divisor()` only reads the combo back, so it says nothing about the
+    # re-pick handler having run; the moved scenario pick does.
+    assert tab._divisor() == JOINT_DIVISOR_IQR
+    assert tab._picks()["lower"] != "NEE_CUT_16_f"  # 25th-percentile needle re-picked
+
+
+def test_restore_controls_reports_missing_combo_entry(app, example_year):
+    # A saved combo entry that no longer exists must be reported as unrestored,
+    # not silently replaced by whatever the combo happens to show. For the
+    # joint-uncertainty divisor that fallback would change the published number
+    # (IQR 1.349 -> 1-sigma 2.0).
+    from PySide6.QtWidgets import QApplication
+    from diive.flux.lowres.uncertainty import JOINT_DIVISOR_1SIGMA
+    from diive.gui.tabs.uncertainty_jointunc import JointUncertaintyTab
+    from diive.gui.widgets.state_utils import restore_controls
+    df = dv.times.keep_daterange(example_year, "2021-03-01", "2021-03-31 23:30").copy()
+    df["NEE_CUT_REF_RANDUNC"] = 1.5
+    tab = JointUncertaintyTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab.divisor_combo.setCurrentIndex(1)
+    state = tab.save_state()
+    # Stand in for a project saved before a column rename / a preset relabel:
+    # neither saved entry is among the combo's items any more.
+    state["controls"]["randunc"] = "NEE_RENAMED_RANDUNC"
+    state["controls"]["divisor_combo"] = "Energy flux LE/H (old label)"
+
+    tab2 = JointUncertaintyTab()
+    tab2.widget()
+    tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    QApplication.processEvents()
+
+    # restore_controls reports exactly the keys it could not apply.
+    assert set(restore_controls(tab2._controls(), state["controls"])) == {
+        "randunc", "divisor_combo"}
+    # The tab names them (labels, not raw keys) in its status line.
+    txt = tab2.status.text()
+    assert "Random uncertainty" in txt and "Scenario percentiles" in txt
+    # The divisor did fall back to the 1-sigma preset — hence the warning.
+    assert tab2._divisor() == JOINT_DIVISOR_1SIGMA
 
 
 def test_gapfilling_mds_tab(app, example_year):
@@ -3537,3 +4327,616 @@ def test_gapfilling_mds_tab(app, example_year):
     tab2.restore_state(state)
     assert tab2._target == "NEE_CUT_REF_orig"
     assert tab2.vpd_tol.value() == 0.8
+
+
+def test_partitioning_tabs_refuse_to_run_without_site_coords(app, example_year):
+    # The lat/lon/UTC spin boxes default to 0/0/0 and _seed_site leaves them there
+    # when the site is unset, so an unguarded run would partition at (0, 0) on UTC
+    # and return plausible-looking GPP/RECO. Every coordinate-consuming tab must
+    # refuse, the way the outlier and correction tabs already do.
+    from diive.gui import site
+    from diive.gui.tabs.partitioning_daytime_oneflux import DaytimePartitioningOneFluxTab
+    from diive.gui.tabs.partitioning_daytime_reddyproc import DaytimePartitioningReddyProcTab
+    from diive.gui.tabs.partitioning_nighttime_oneflux import NighttimePartitioningOneFluxTab
+    from diive.gui.tabs.partitioning_nighttime_reddyproc import NighttimePartitioningReddyProcTab
+
+    # Set the flag directly (as the meteo-screening test above does): load_dict({})
+    # early-returns on an empty dict, so it would silently leave a site configured
+    # by an earlier test in place.
+    saved = site.manager.configured
+    try:
+        site.manager.configured = False
+        assert not site.manager.configured
+
+        needs = (NighttimePartitioningOneFluxTab, NighttimePartitioningReddyProcTab,
+                 DaytimePartitioningReddyProcTab)
+        for cls in needs:
+            tab = cls()
+            tab.widget()
+            tab.on_data_loaded(example_year)
+            assert tab.needs_coords, f"{cls.__name__} should declare a coordinate need"
+            tab._run()
+            QApplication.processEvents()
+            assert not tab._runner.is_running, f"{cls.__name__} started a run"
+            assert "Project settings" in tab.status.text()
+            # The snippet would otherwise carry lat=0.0, lon=0.0.
+            assert tab._python_code() is None
+
+        # Daytime ONEFlux splits on measured Rg, not solar geometry: no coords, no guard.
+        tab = DaytimePartitioningOneFluxTab()
+        tab.widget()
+        tab.on_data_loaded(example_year)
+        assert not tab.needs_coords
+        assert not tab._coords_missing()
+    finally:
+        site.manager.configured = saved
+
+
+def test_combine_variables_tab_reports_records_lost_to_one_sided_gaps(app):
+    # An arithmetic combination is defined only where BOTH variables were
+    # measured, so records present in exactly one are lost. Only the result is
+    # plotted, so the count has to be stated outright.
+    import numpy as np
+    import pandas as pd
+    from diive.gui.tabs.combine_variables import CombineVariablesTab
+
+    ix = pd.date_range("2023-01-01", periods=1000, freq="30min",
+                       name="TIMESTAMP_MIDDLE")
+    rng = np.random.RandomState(0)
+    a = pd.Series(rng.randn(1000), index=ix, name="NEE"); a.iloc[:150] = np.nan
+    b = pd.Series(rng.randn(1000), index=ix, name="RECO"); b.iloc[900:] = np.nan
+    df = pd.DataFrame({"NEE": a, "RECO": b})
+
+    tab = CombineVariablesTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    # The identity-fill option is gone: a combination is always overlap-only.
+    assert not hasattr(tab, "overlap_cb")
+
+    tab._vars[1], tab._vars[2] = "NEE", "RECO"
+    tab.method.setCurrentIndex(tab.method.findData("subtract"))
+    tab._recombine()
+    QApplication.processEvents()
+
+    # 150 NEE-only gaps + 100 RECO-only gaps -> 750 of 1000 records survive.
+    assert int(tab._combined.notna().sum()) == 750
+    status = tab.status.text()
+    assert "750 values" in status
+    assert "250 record(s) dropped" in status
+    assert "100 only NEE" in status and "150 only RECO" in status
+
+    # Gap-filling spans the union, so it loses nothing and says so instead.
+    tab.method.setCurrentIndex(tab.method.findData("fillgaps"))
+    tab._recombine()
+    QApplication.processEvents()
+    assert int(tab._combined.notna().sum()) == 1000
+    assert "nothing dropped" in tab.status.text()
+
+    # The emitted snippet no longer carries the removed argument.
+    assert "keep_overlap_only" not in (tab._python_code() or "")
+
+
+def test_combine_variables_tab_marks_exact_zeros(app):
+    # "Mark zeros" is offered only for the difference (where zero means the two
+    # variables agree) and overlays a second mesh painting those cells. The
+    # comparison is exact float equality, so the count is always stated — a
+    # highlight that paints nothing must not read as "no cells matched".
+    import numpy as np
+    import pandas as pd
+    from diive.gui.tabs.combine_variables import CombineVariablesTab
+
+    ix = pd.date_range("2023-01-01", periods=480, freq="30min",
+                       name="TIMESTAMP_MIDDLE")
+    a = pd.Series(np.arange(480, dtype=float), index=ix, name="A")
+    same = a.copy()          # A - SAME is exactly zero everywhere
+    same.iloc[100:] += 0.5   # ... except for the first 100 records
+    df = pd.DataFrame({"A": a, "SAME": same, "OFF": a + 0.5})
+
+    tab = CombineVariablesTab()
+    root = tab.widget()
+    root.show()  # isVisible() is False for every widget of an unshown window
+    tab.on_data_loaded(df)
+    tab._assign(1, "A")
+    tab._assign(2, "SAME")
+
+    tab.method.setCurrentIndex(tab.method.findData("multiply"))
+    QApplication.processEvents()
+    assert not tab.zero_check.isVisible()
+    tab.method.setCurrentIndex(tab.method.findData("subtract"))
+    QApplication.processEvents()
+    assert tab.zero_check.isVisible() and tab.zero_color_btn.isVisible()
+
+    n_meshes = len(tab.slot3.canvas.fig.axes[0].collections)
+    tab.zero_check.setChecked(True)
+    QApplication.processEvents()
+    # The overlay is a second mesh in the picked colour, on top of the heatmap.
+    assert len(tab.slot3.canvas.fig.axes[0].collections) == n_meshes + 1
+    assert tab.slot3.canvas.fig.axes[0].collections[-1].cmap(0.0)[:3] == (0.0, 0.0, 0.0)
+    assert "100 record(s) exactly zero" in tab.status.text()
+
+    # No exact zeros: no overlay, and the status says so rather than staying mute.
+    tab._assign(2, "OFF")
+    QApplication.processEvents()
+    assert len(tab.slot3.canvas.fig.axes[0].collections) == n_meshes
+    assert "No record is exactly zero" in tab.status.text()
+
+    tab.zero_check.setChecked(False)
+    QApplication.processEvents()
+    assert "exactly zero" not in tab.status.text()
+
+
+def test_preview_heatmaps_follow_the_app_wide_colormap(app):
+    # Every heatmap the tabs render as a preview honours theme.manager.heatmap_cmap
+    # (edited in Appearance), instead of each tab hardcoding the library default.
+    import numpy as np
+    import pandas as pd
+    from diive.gui import theme
+    from diive.gui.tabs.combine_variables import CombineVariablesTab
+    from diive.gui.tabs.settings import SettingsTab
+
+    saved = theme.manager.heatmap_cmap
+    try:
+        settings = SettingsTab()
+        settings.widget()
+        settings.cmap_combo.setCurrentText("cividis")
+        assert theme.manager.heatmap_cmap == "cividis"
+        assert theme.manager.as_dict()["heatmap_cmap"] == "cividis"
+
+        ix = pd.date_range("2023-01-01", periods=480, freq="30min",
+                           name="TIMESTAMP_MIDDLE")
+        df = pd.DataFrame({"A": pd.Series(np.arange(480, dtype=float), index=ix)})
+        tab = CombineVariablesTab()
+        tab.widget()
+        tab.on_data_loaded(df)
+        tab._assign(1, "A")
+        QApplication.processEvents()
+        assert tab.slot1.canvas.fig.axes[0].collections[0].cmap.name == "cividis"
+
+        # The per-tab dropdown overrides it for that tab only.
+        tab.cmap_combo.setCurrentText("magma")
+        QApplication.processEvents()
+        assert tab.slot1.canvas.fig.axes[0].collections[0].cmap.name == "magma"
+        assert theme.manager.heatmap_cmap == "cividis"
+    finally:
+        theme.manager.heatmap_cmap = saved
+
+
+def _stub_pyvista_canvas(monkeypatch):
+    """Replace the 3-D tabs' GL canvas with a recording stub.
+
+    VTK cannot create an OpenGL window under the offscreen Qt platform, so the
+    real `Pyvista3DCanvas` can't be built in tests. Mesh construction itself is
+    pure CPU work, so a stub plotter lets the whole render pipeline run.
+    """
+    from PySide6.QtWidgets import QWidget
+
+    import diive.gui.tabs.surface3d as surface3d
+
+    class _StubPlotter:
+        def __init__(self):
+            self.meshes = []
+
+        def clear(self):
+            self.meshes.clear()
+
+        def add_mesh(self, mesh, **_kw):
+            self.meshes.append(mesh)
+
+        def show_axes(self):
+            pass
+
+    class _StubCanvas(QWidget):
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.plotter = _StubPlotter()
+
+        def on_interaction_start(self, _cb):
+            pass
+
+        def on_first_show(self, _cb):
+            pass
+
+        def clear(self):
+            self.plotter.clear()
+
+        def render(self):
+            pass
+
+        def set_view(self, *_a, **_kw):
+            pass
+
+        def apply_shadows(self, *_a, **_kw):
+            pass
+
+    monkeypatch.setattr(surface3d, "Pyvista3DCanvas", _StubCanvas)
+
+
+def test_surface3d_export_texture_rows_not_mirrored(app):
+    # The VR / PowerPoint export bakes the colormap into an image texture, one
+    # texel per grid cell with image row i = grid row i. glTF (and trimesh) put
+    # the texture origin at the LOWER left -- image row = (1 - v) * (rows - 1) --
+    # so a top-left v mapping samples row d-1-i and mirrors the colours along the
+    # date axis (an annual surface paints the winter ridge in summer colours).
+    # Both export paths (smooth sheet, extruded bars) must map row i to texel i.
+    pytest.importorskip("trimesh")
+    import numpy as np
+    from PIL import Image
+    from trimesh.visual import uv_to_color
+
+    from diive.gui.tabs.surface3d import Surface3DTab
+
+    d, t = 4, 2
+    # Monotone along the date (row) axis: each row a distinct grey, so a flipped
+    # row mapping is unmistakable.
+    z = np.tile(np.arange(d, dtype=float)[:, None], (1, t))
+    height = z / z.max()
+    xn = np.arange(t, dtype=float)
+    yn = np.arange(d, dtype=float)
+    grey = (z / z.max() * 255).astype(np.uint8)
+    image = Image.fromarray(np.repeat(grey[:, :, None], 3, axis=2))
+
+    tab = Surface3DTab()  # arrays only; no widgets needed
+    # Vertex -> grid row: the smooth sheet is one vertex per cell in row-major
+    # order, the extruded style 8 box corners per (row-major) measured cell.
+    cases = {
+        "smooth": (tab._smooth_export_arrays(xn, yn, height, np.isfinite(z), d, t),
+                   np.repeat(np.arange(d), t)),
+        "extruded": (tab._extruded_export_arrays(xn, yn, height, z, d, t),
+                     np.repeat(np.arange(d), t * 8)),
+    }
+    for style, ((_verts, faces, uv), rows) in cases.items():
+        assert faces is not None and len(uv) == len(rows), style
+        sampled = uv_to_color(uv, image)[:, 0]
+        np.testing.assert_array_equal(sampled, grey[rows, 0], err_msg=style)
+        # Guard the specific failure mode: the reversed mapping must be wrong.
+        assert not np.array_equal(sampled, grey[rows[::-1], 0]), style
+
+
+def test_surface3d_export_state_cleared_when_render_shows_nothing(app, monkeypatch):
+    # The export buttons gate on the stashed relief (`_grid_height`), so a render
+    # that produced nothing must clear it -- otherwise "VR (.glb)" / "3-D print
+    # (.stl)" write the PREVIOUS variable's surface under the current target's
+    # filename. Two paths reach that state: an all-NaN grid (Surface3DTab) and
+    # `_grid_data()` returning None (the X/Y/Z subclass, e.g. an unset role).
+    pytest.importorskip("pyvista")
+    import numpy as np
+
+    _stub_pyvista_canvas(monkeypatch)
+    from diive.gui.tabs.surface3d import Surface3DTab
+    from diive.gui.tabs.surfacexyz import SurfaceXYZTab
+
+    idx = pd.date_range("2024-06-01", periods=48 * 20, freq="30min",
+                        name="TIMESTAMP_MIDDLE")
+    df = pd.DataFrame({"A": np.sin(np.arange(len(idx)) / 10.0),
+                       "ALL_NAN": np.nan}, index=idx)
+
+    tab = Surface3DTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    QApplication.processEvents()
+    assert tab._target == "A" and tab._grid_height is not None
+
+    tab._on_select("ALL_NAN")            # canvas clears; nothing to export
+    QApplication.processEvents()
+    assert tab._target == "ALL_NAN"
+    assert tab._grid_height is None and tab._grid_z is None
+    assert tab._grid_xn is None and tab._grid_yn is None
+    assert tab._grid_style is None
+
+    # X/Y/Z subclass: the same guard has to hold when the gridding is skipped.
+    rng = np.random.RandomState(0)
+    n = 500
+    xyz = pd.DataFrame(
+        {"X": rng.rand(n) * 10, "Y": rng.rand(n) * 10, "Z": rng.randn(n)},
+        index=pd.date_range("2024-01-01", periods=n, freq="30min",
+                            name="TIMESTAMP_MIDDLE"))
+    xyz_tab = SurfaceXYZTab()
+    xyz_tab.widget()
+    xyz_tab.on_data_loaded(xyz)
+    QApplication.processEvents()
+    assert xyz_tab._grid_height is not None
+
+    # A Z role that isn't a real column (e.g. a stale restored pick) skips the
+    # gridding entirely.
+    combo = xyz_tab.picker.combos()["z"]
+    combo.addItem("NOT_A_COLUMN")
+    combo.setCurrentText("NOT_A_COLUMN")
+    QApplication.processEvents()
+    assert xyz_tab._grid_data() is None
+    assert xyz_tab._grid_height is None and xyz_tab._grid_style is None
+
+
+def test_surface3d_rolling_window_is_n_rows_wide():
+    # "Y cell (days)" is documented (docstring + tooltip) as the *window width*,
+    # so a rolling window of n must span exactly n rows. `i-half : i+half+1` with
+    # half = n//2 spanned n+1 rows for every even n, smoothing one day too wide.
+    pytest.importorskip("pyvista")
+    import numpy as np
+
+    from diive.gui.tabs.surface3d import _roll_rows
+
+    z = np.arange(10, dtype=float).reshape(10, 1)  # one column, row value = row
+    # Even n: no exact centre, so half the rows before and the rest after.
+    assert _roll_rows(z, 4, np.nanmean)[5, 0] == np.mean([3, 4, 5, 6])
+    assert _roll_rows(z, 2, np.nanmean)[5, 0] == np.mean([4, 5])
+    # Odd n: symmetric around the row (unchanged).
+    assert _roll_rows(z, 5, np.nanmean)[5, 0] == np.mean([3, 4, 5, 6, 7])
+    assert _roll_rows(z, 1, np.nanmean)[5, 0] == 5.0
+    # A window's own width, counted: the count reducer must return exactly n away
+    # from the edges, for every n.
+    count = lambda a, axis=0: np.sum(np.isfinite(a), axis=axis)
+    for n in range(1, 7):
+        assert _roll_rows(z, n, count)[5, 0] == n, n
+    # Gap cells stay gaps regardless of the width.
+    gappy = z.copy()
+    gappy[5, 0] = np.nan
+    assert np.isnan(_roll_rows(gappy, 4, np.nanmean)[5, 0])
+
+
+
+def _menu_tab_actions(window):
+    """Every menu QAction that opens a tab, keyed by its label."""
+    from PySide6.QtGui import QAction
+    from diive.gui.registry import MENU_TAB_CLASSES
+    acts = {}
+    for act in window.findChildren(QAction):
+        label = act.data()
+        if isinstance(label, str) and label in MENU_TAB_CLASSES:
+            acts[label] = act
+    return acts
+
+
+def test_menu_actions_carry_their_label(window, monkeypatch):
+    """Every menu-tab entry is wired, with the right label, and '&' escaped.
+
+    The actions route through `data()` + a bound method (never a `self`-capturing
+    lambda, which Qt holds C++-side and which pinned every MainWindow in memory),
+    so the label an action carries is the whole wiring -- if it is wrong the menu
+    opens the wrong tab.
+    """
+    from diive.gui.registry import MENU_TABS
+    acts = _menu_tab_actions(window)
+    expected = {label for group in MENU_TABS.values() for label in group}
+    assert expected <= set(acts)
+    for label, act in acts.items():
+        # '&' is escaped so Qt doesn't read it as a mnemonic ("Gaps & coverage").
+        assert act.text() == label.replace("&", "&&")
+
+    # Triggering routes each action to _open_menu_tab with its own label.
+    opened = []
+    monkeypatch.setattr(window, "_open_menu_tab", opened.append)
+    for act in acts.values():
+        act.trigger()
+    assert opened == list(acts)
+
+
+def test_menu_action_opens_its_tab(window):
+    """End-to-end: triggering the action really opens that tab (not just a call)."""
+    acts = _menu_tab_actions(window)
+    for label in ("Time series", "Histogram", "Metadata explorer"):
+        acts[label].trigger()
+        tab = window._menu_tab_list[-1]
+        assert tab._menu_label == label
+        assert window._tabwidget.currentWidget() is tab.widget()
+
+
+def test_tab_context_menu_pins_tab(window, monkeypatch):
+    """The tab right-click menu still pins/unpins the tab it was opened on."""
+    from diive.gui.widgets.menu import studio_menu
+    # `_tab_context_menu` blocks in `menu.exec`; fire the entry instead of showing it.
+    monkeypatch.setattr(type(studio_menu()), "exec",
+                        lambda self, *args: self.actions()[0].trigger())
+    window._open_menu_tab("Time series")
+    tab = window._menu_tab_list[-1]
+    bar = window._tabwidget.tabBar()
+    pos = bar.tabRect(window._tabwidget.indexOf(tab.widget())).center()
+    window._tab_context_menu(pos)
+    assert tab in window._pinned
+    window._tab_context_menu(pos)  # menu now offers "Unpin"
+    assert tab not in window._pinned
+
+
+def test_mainwindow_is_garbage_collectable(app):
+    """A dropped MainWindow must actually be freed.
+
+    Menu actions used to be wired with a lambda that captured `self`. The QAction
+    is parented to the window and Qt holds the lambda inside the connection on
+    the C++ side, so the loop window -> QAction -> connection -> lambda -> window
+    had no link Python could see and `gc` could never break it: measured 4
+    windows built, dropped, `gc.collect()` -> 4 still live (stubbing out
+    `_build_menus` freed all 4, which is how it was isolated). Every window
+    subscribes to the app-wide singletons (theme, metadata, site, events, db), so
+    a leaked one keeps re-rendering on every edit for the rest of the session.
+    Bound methods, whose receiver PySide6 holds only weakly, are the fix -- see
+    `MainWindow._menu_tab_action`.
+    """
+    import weakref
+    from diive.gui.app import MainWindow
+
+    refs = []
+    for _ in range(3):
+        win = MainWindow(config={}, autoload=False)
+        refs.append(weakref.ref(win))
+        del win
+    gc.collect()
+    QApplication.processEvents()
+    gc.collect()
+    assert [r() for r in refs] == [None, None, None]
+
+
+# --- gui/icons.py ----------------------------------------------------------
+
+
+def _icon_image(icon, size=16, dpr=1.0):
+    """The pixels a `QIcon` actually hands the widget at `size` and `dpr`."""
+    from PySide6.QtCore import QSize
+    return icon.pixmap(QSize(size, size), dpr).toImage()
+
+
+def _opaque_ink(img):
+    """(ink pixels, fully opaque ink pixels) -- a blur measure for thin lines."""
+    ink = opaque = 0
+    for y in range(img.height()):
+        for x in range(img.width()):
+            alpha = (img.pixel(x, y) >> 24) & 0xFF
+            if alpha:
+                ink += 1
+                opaque += alpha > 250
+    return ink, opaque
+
+
+def _glyph_functions():
+    from diive.gui import icons
+    return [(n, f) for n, f in vars(icons).items()
+            if n.startswith("_ln_") and callable(f)]
+
+
+def test_menu_icon_for_derived_variable_calculators(app):
+    """The Variables > Calculate entries get the gear, not the generic glyph.
+
+    The rule keyed on "calculate", which is only ever an `addSection` header
+    (`app.py`) -- Qt renders those without an icon and never passes them to
+    `menu_icon` -- so the rule could not fire and both calculators fell back to
+    the generic chart glyph.
+    """
+    from diive.gui import icons
+    gear = _icon_image(icons._ln_gear())
+    assert gear != _icon_image(icons._ln_generic())   # the two are distinguishable
+    for label in ("VPD (TA + RH)", "Potential radiation"):
+        assert _icon_image(icons.menu_icon(label)) == gear, label
+
+
+def test_menu_icon_none_falls_back_to_generic(app):
+    """`menu_icon(None)` must fall back, as its docstring promises, not raise."""
+    from diive.gui import icons
+    generic = _icon_image(icons._ln_generic())
+    assert _icon_image(icons.menu_icon(None)) == generic
+    assert _icon_image(icons.menu_icon("")) == generic
+
+
+def test_menu_icon_label_routing_is_stable(app):
+    """The load-bearing `_LINE_RULES` order still sends these labels home.
+
+    Each of these only lands on the right glyph because a specific rule precedes
+    a more general one that also matches ("gap-filling" before "gap", "reset"
+    before "set to", "screening" before "database", ...).
+    """
+    from diive.gui import icons
+    expected = {
+        "MDS gap-filling": "_ln_gapfill",          # before "gap"
+        "Gaps & coverage": "_ln_grid",
+        "Reset to &full range": "_ln_reset",       # before "set to"
+        "Set to value": "_ln_correction",
+        "Meteo screening (database)": "_ln_steps",  # before "database"
+        "Database explorer": "_ln_database",
+        "Manual removal": "_ln_outlier",
+        "Remove nighttime zero offset": "_ln_correction",   # before "time"
+        "Time lag analysis": "_ln_lag",                     # before "time"
+        "Time series": "_ln_chart",
+        "Open &project...": "_ln_project",         # before "open"
+        "&Open data file...": "_ln_folder",
+    }
+    for label, glyph in expected.items():
+        assert _icon_image(icons.menu_icon(label)) ==                _icon_image(getattr(icons, glyph)()), label
+
+
+def test_glyphs_never_use_the_truncating_drawline_overload(app):
+    """No glyph may call `drawLine(x1, y1, x2, y2)`.
+
+    That signature binds PySide6's `drawLine(int, int, int, int)` overload and
+    truncates every fraction (4.2 -> 4), while the `QRectF` / `QPointF` / `_poly`
+    calls beside it keep sub-pixel placement -- so a single glyph ends up mixing
+    snapped and unsnapped geometry. `_line()` routes through `QPointF`.
+    """
+    from PySide6.QtGui import QPainter
+    scalar_calls = []
+    original = QPainter.drawLine
+    current = {"glyph": None}
+
+    def _spy(self, *args):
+        if len(args) == 4:
+            scalar_calls.append((current["glyph"], args))
+        return original(self, *args)
+
+    QPainter.drawLine = _spy
+    try:
+        for name, fn in _glyph_functions():
+            current["glyph"] = name
+            fn()
+    finally:
+        QPainter.drawLine = original
+    assert scalar_calls == []
+
+
+def test_line_helper_keeps_subpixel_coordinates(app):
+    """`_line` must render the exact coordinates, not their truncation."""
+    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtGui import QPainter, QPixmap
+    from diive.gui import icons
+
+    def _render(draw):
+        pm = QPixmap(16, 16)
+        pm.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        p.setPen(icons._line_pen(0.9))
+        draw(p)
+        p.end()
+        return pm.toImage()
+
+    exact = _render(lambda p: p.drawLine(QPointF(4.2, 9), QPointF(5.6, 9)))
+    truncated = _render(lambda p: p.drawLine(4, 9, 5, 9))
+    assert exact != truncated          # the fraction is visible at this size
+    assert _render(lambda p: icons._line(p, 4.2, 9, 5.6, 9)) == exact
+
+
+def test_menu_icons_are_painted_at_device_resolution(app, monkeypatch):
+    """Icons are baked for the sharpest screen, not always at 16 physical px.
+
+    A 16x16 bitmap tagged `devicePixelRatio` 1 is what Qt has to *upscale* at
+    Windows 150%/200% display scaling, which smears every thin line. Painting
+    the canvas at `16 * dpr` with the ratio set (and the painter scaled, so the
+    glyph code keeps its 16x16 logical units) hands Qt a bitmap it can use
+    as-is.
+    """
+    from PySide6.QtCore import QSize, Qt
+    from diive.gui import icons
+
+    monkeypatch.setattr(icons, "_device_pixel_ratio", lambda: 2.0)
+    icon = icons.menu_icon("Heatmap date/time")
+    pixmap = icon.pixmap(QSize(16, 16), 2.0)
+    assert (pixmap.width(), pixmap.height()) == (32, 32)
+    assert pixmap.devicePixelRatio() == 2.0
+    assert pixmap.deviceIndependentSize().toSize() == QSize(16, 16)
+    assert icon.availableSizes() == [QSize(32, 32)]   # nothing left to upscale
+
+    # And it is sharp: the natively painted 32px glyph keeps solid ink, while
+    # the upscaled 16px one is partial alpha everywhere.
+    native = pixmap.toImage()
+    monkeypatch.setattr(icons, "_device_pixel_ratio", lambda: 1.0)
+    upscaled = _icon_image(icons.menu_icon("Heatmap date/time")).scaled(
+        32, 32, Qt.AspectRatioMode.IgnoreAspectRatio,
+        Qt.TransformationMode.SmoothTransformation)
+    assert _opaque_ink(native)[1] > 0.5 * _opaque_ink(native)[0]
+    assert _opaque_ink(upscaled)[1] == 0
+
+
+def test_glyphs_unchanged_at_device_pixel_ratio_one(app, monkeypatch):
+    """On a ratio-1 screen the icons must still be painted one to one.
+
+    Guards the `_canvas` rewrite from the other side: with the ratio at 1 the
+    bitmap has to stay 16 physical pixels and `scale(1, 1)` a no-op, so the
+    glyphs come out exactly as they did before -- no supersample-and-downscale,
+    which would soften them on the machines that were fine.
+
+    Asserting only the *delivered* 16x16 image would be vacuous: Qt downscales a
+    32px bitmap on request, so `pixmap(16, 16)` is 16x16 either way. The painted
+    size is what `availableSizes()` reports.
+    """
+    from PySide6.QtCore import QSize
+    from diive.gui import icons
+    monkeypatch.setattr(icons, "_device_pixel_ratio", lambda: 1.0)
+    for name, fn in _glyph_functions():
+        icon = fn()
+        assert icon.availableSizes() == [QSize(16, 16)], name
+        assert _opaque_ink(_icon_image(icon))[0] > 0, name   # it really drew ink

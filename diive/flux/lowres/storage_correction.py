@@ -15,7 +15,7 @@ from pandas import DataFrame
 from diive.core.dfun.stats import sstats  # Time series stats
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-from diive.core.utils.console import console as _console, detail, info, rule, warn
+from diive.core.utils.console import detail, info, rule, warn
 
 
 class FluxStorageCorrectionSinglePointEddyPro:
@@ -59,6 +59,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
                 using measured or gap-filled storage data.  Use this for fluxes where
                 no storage profile is available (e.g. H, LE at low-canopy sites) or
                 when the single-point approximation is considered unreliable.
+                No storage column is needed in ``df`` in this case.
                 Default False.
             strgcol: Explicit name of the storage-term column in ``df``. Overrides
                 the built-in auto-detection (FC -> SC_SINGLE, LE -> SLE_SINGLE,
@@ -72,14 +73,6 @@ class FluxStorageCorrectionSinglePointEddyPro:
             flux_corrected_col: Name of the corrected flux column.
             gapfilled_strgcol: Name of the gap-filled storage column (if enabled).
             flag_isgapfilled: Flag column (0=original, 1=gap-filled).
-
-        Example:
-            >>> corrector = FluxStorageCorrectionSinglePointEddyPro(
-            ...     df=data, fluxcol='FC', basevar='CO2',
-            ...     gapfill_storage_term=True, idstr='_L3.1'
-            ... )
-            >>> corrector.storage_correction()
-            >>> corrected_data = corrector.results
         """
         self.df = df.copy()
         self.fluxcol = fluxcol
@@ -92,7 +85,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
         # fluxcols that aren't in the auto-detect table (e.g. EddyPro
         # full-output ``co2_flux``) still work.
         if strgcol is not None:
-            if strgcol not in df.columns:
+            if strgcol not in df.columns and not set_storage_to_zero:
                 raise KeyError(
                     f"strgcol={strgcol!r} not found in df. "
                     f"Available columns: {list(df.columns)}"
@@ -104,6 +97,13 @@ class FluxStorageCorrectionSinglePointEddyPro:
             )
         else:
             self.flux_corrected_col, self.strgcol = self._detect_storage_var()
+        # The storage column is read only when the storage term is actually
+        # used. With set_storage_to_zero=True it never is, so a missing column
+        # must not be an error: that flag exists exactly for fluxes without a
+        # storage profile (H, LE). Drop the name so the rest of the class knows
+        # there is no storage column to read or show.
+        if set_storage_to_zero and self.strgcol not in df.columns:
+            self.strgcol = None
         # Note: this class deliberately does NOT emit a 'storage missing'
         # quality-test flag (i.e. no FLAG_..._TEST column tied to NaN in the
         # corrected flux). Whether a storage term was measured or gap-filled
@@ -143,11 +143,17 @@ class FluxStorageCorrectionSinglePointEddyPro:
 
         Results are stored in `self.results`.
         """
-        info(f"Calculating storage-corrected flux {self.flux_corrected_col} "
-             f"from flux {self.fluxcol} + storage term {self.strgcol}")
+        if self.set_storage_to_zero:
+            info(f"Calculating storage-corrected flux {self.flux_corrected_col} "
+                 f"from flux {self.fluxcol} + storage term set to zero")
+        else:
+            info(f"Calculating storage-corrected flux {self.flux_corrected_col} "
+                 f"from flux {self.fluxcol} + storage term {self.strgcol}")
 
-        # Collect flux and storage term data
-        self._results = self.df[[self.fluxcol, self.strgcol]].copy()
+        # Collect flux and storage term data. There is no storage column when
+        # the storage term is set to zero for a flux without a storage profile.
+        cols = [self.fluxcol] if self.strgcol is None else [self.fluxcol, self.strgcol]
+        self._results = self.df[cols].copy()
 
         if not self.set_storage_to_zero:
             # Gap-fill storage term
@@ -176,6 +182,12 @@ class FluxStorageCorrectionSinglePointEddyPro:
         rule(f"Storage Correction: {self.flux_corrected_col}")
 
         n_flux = len(self.results[self.fluxcol].dropna())
+
+        if self.set_storage_to_zero:
+            # No storage term was used, so storage availability and gap-filling
+            # statistics do not apply.
+            info(f"Measured flux: {n_flux:,}  |  Storage term set to zero for all records")
+            return
 
         # Check missing storage for measured fluxes
         _subset = pd.concat([self.results[self.fluxcol], self.results[self.strgcol]], axis=1)
@@ -349,9 +361,6 @@ class FluxStorageCorrectionSinglePointEddyPro:
             maxflux: Maximum absolute value for colorbar scaling. If None, scales to
                 the 95th percentile. Pass the same value across multiple plots to
                 keep colors consistent.
-
-        Example:
-            >>> corrector.showplot(maxflux=5)
         """
 
         fig = plt.figure(facecolor='white', figsize=(20, 9))
@@ -365,7 +374,8 @@ class FluxStorageCorrectionSinglePointEddyPro:
 
         if not maxflux:
             maxflux = self.results[self.fluxcol].abs().quantile(.95)
-            maxstrg = self.results[self.strgcol].abs().quantile(.95)
+            maxstrg = (maxflux if self.strgcol is None
+                       else self.results[self.strgcol].abs().quantile(.95))
         else:
             maxstrg = maxflux
 
@@ -377,7 +387,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
             HeatmapDateTime(series=self.results[self.strgcol]).plot(ax=ax_storage_term, vmin=-maxstrg, vmax=maxstrg,
                             cb_digits_after_comma=1)
         else:
-            _allzeros = pd.Series(0, index=self.results[self.strgcol].index, name='zero_storage')
+            _allzeros = pd.Series(0, index=self.results.index, name='zero_storage')
             HeatmapDateTime(series=_allzeros).plot(ax=ax_storage_term,
                             cb_digits_after_comma=0)
         if self.gapfilled_strgcol:

@@ -27,7 +27,7 @@ from rich.table import Table
 
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.styles.format import FormatStyle
-from diive.core.utils.console import console, info
+from diive.core.utils.console import console, info, warn
 
 # 16-point compass labels, North-first, clockwise. 8- and 4-sector layouts are
 # regular subsets of this list (every 2nd / every 4th label).
@@ -62,6 +62,10 @@ class WindRosePlot:
     Args:
         series: Variable to aggregate (numeric Series).
         wind_dir: Wind direction in degrees (0-360), aligned to ``series`` by index.
+            Readings outside that range (fill values such as -9999, a signed
+            -180 to 180 convention, an un-wrapped offset) are dropped rather than
+            wrapped, and the number dropped is warned about and kept in
+            :attr:`n_out_of_range`.
         agg: Aggregation applied per sector — one of ``'mean'``, ``'median'``,
             ``'min'``, ``'max'``, ``'sum'`` (cumulative), ``'std'``, ``'count'``.
             Drives the plotted radius; the full table always holds every statistic.
@@ -78,15 +82,16 @@ class WindRosePlot:
         results: Per-sector ``DataFrame`` indexed by sector label, with columns
             ``CENTER_DEG``, ``N_VALS``, ``MEAN``, ``MEDIAN``, ``MIN``, ``MAX``,
             ``STD``, ``SUM`` (plus ``Z`` when a colour variable is given).
+        n_used: Records that reached the sectors (both variables present, direction
+            on the circle).
+        n_out_of_range: Records lost because their wind direction was off the circle.
 
-    Example::
-
-        import diive as dv
-        df, meta = dv.load_exampledata_EDDYPRO_FULL_OUTPUT_CSV_30MIN()
-        rose = dv.plotting.WindRosePlot(series=df['co2_flux'], wind_dir=df['wind_dir'],
-                                        agg='mean', n_sectors=16)
-        rose.plot(cmap='RdBu_r', cb_label='Mean CO2 flux')
-        print(rose.results)
+    Example:
+        >>> import diive as dv, pandas as pd, numpy as np
+        >>> flux = pd.Series(np.sin(np.arange(360.)), name='co2_flux')
+        >>> rose = dv.plotting.WindRosePlot(series=flux, wind_dir=pd.Series(np.arange(360.)),
+        ...                                 agg='mean', n_sectors=16)
+        >>> ax = rose.plot(cmap='RdBu_r', cb_label='Mean CO2 flux')  # then rose.results
 
     See Also:
         examples/visualization/plot_windrose_basic.py
@@ -195,7 +200,26 @@ class WindRosePlot:
         # Pair the two series on their shared index, drop rows missing either value
         # or carrying an out-of-range / invalid direction.
         df = pd.DataFrame({'val': self.series, 'wd': self.wind_dir}).dropna()
-        df = df[(df['wd'] >= 0) & (df['wd'] <= 360)].copy()
+        # Directions off the circle are dropped, not wrapped: a fill value of
+        # -9999 wraps to 81 degrees and 999 to 279, fabricating a plausible
+        # bearing out of a sentinel. Nothing here can tell one apart from a
+        # legitimately wrappable -5, so report the loss instead of guessing --
+        # it is otherwise invisible, and e.g. a signed -180..180 record costs
+        # about 40% of its data with three sectors left standing at zero.
+        in_range = (df['wd'] >= 0) & (df['wd'] <= 360)
+        self.n_out_of_range = int((~in_range).sum())
+        if self.n_out_of_range:
+            bad = df.loc[~in_range, 'wd']
+            # Deliberately not gated on `self.verbose`: that flag switches the
+            # per-sector report on, whereas losing records is something every
+            # caller must see (still silenceable via `dv.set_verbosity`).
+            warn(f"Wind rose: dropped {self.n_out_of_range} of {len(df)} records "
+                 f"({100 * self.n_out_of_range / len(df):.1f}%) whose wind direction lies "
+                 f"outside 0-360 degrees (range {bad.min():g} to {bad.max():g}). Fill values "
+                 f"(e.g. -9999) and a signed -180 to 180 convention are the usual causes; "
+                 f"they are not wrapped into range because wrapping a fill value would "
+                 f"fabricate a bearing.")
+        df = df[in_range].copy()
         # 360 degrees is the same bearing as 0 (North); fold it in so it does not
         # fall outside the sector range.
         df.loc[df['wd'] == 360, 'wd'] = 0.0
@@ -232,6 +256,8 @@ class WindRosePlot:
     def _aggregate_z(self, labels: list[str]) -> list[float]:
         """Aggregate the optional colour variable ``z`` per wind sector."""
         zdf = pd.DataFrame({'z': self.z, 'wd': self.wind_dir}).dropna()
+        # Same out-of-range drop as the bar variable, reported once from
+        # `_aggregate()` -- both paths screen the same direction series.
         zdf = zdf[(zdf['wd'] >= 0) & (zdf['wd'] <= 360)].copy()
         zdf.loc[zdf['wd'] == 360, 'wd'] = 0.0
         sector_idx = self._sector_index(zdf['wd'])
@@ -309,9 +335,23 @@ class WindRosePlot:
 
         Args:
             ax: Polar matplotlib axes. If None, a new polar figure is created.
-            format_style: Shared :class:`~diive.plotting.FormatStyle`. On this polar
-                plot only the ``title`` / title-font fields apply (the cartesian
-                spines/ticks/grid of ``FormatStyle.apply`` do not).
+                The title then goes on this axes, not on the figure, so the rose can
+                be one panel of a caller's multi-panel figure.
+            format_style: Shared :class:`~diive.plotting.FormatStyle`. This is a polar
+                plot, so only the fields that describe something the rose actually
+                draws are honoured: ``title`` (+ ``title_fontsize``,
+                ``title_fontweight``, ``text_color``), ``ticks_fontsize`` (compass and
+                radial tick labels, when ``sector_label_fontsize`` is not given),
+                ``chrome_color`` (tick labels + tick marks), ``show_grid``,
+                ``grid_color`` and ``facecolor``. Deliberately ignored: the axis-label
+                fields (``xlabel``/``ylabel``/``xunits``/``yunits``/``axlabel_*``) —
+                the angular axis is the compass and the radial axis is labelled by the
+                colorbar; ``zlabel`` — the colorbar label has its own ``cb_label``
+                argument here; the legend fields — the rose draws no labelled artists;
+                ``show_zeroline`` — the polar equivalent is ``show_zero_circle``; and
+                the spine/tick geometry fields (``spine_linewidth``,
+                ``ticks_direction``, ``ticks_length``, ``ticks_width``), which describe
+                cartesian spines a polar axes does not have.
             figsize: Figure size in inches (default (9, 9)).
             figdpi: Figure DPI (default 100).
             cmap: Colormap used to colour bars by the colour source — the ``z``
@@ -348,8 +388,13 @@ class WindRosePlot:
 
         if cb_labelsize is None:
             cb_labelsize = theme.AX_LABELS_FONTSIZE
+        # The dedicated `sector_label_fontsize` wins; the shared tick font size is
+        # the fallback, so a style handed to several plots also reaches this one.
         if sector_label_fontsize is None:
-            sector_label_fontsize = theme.AX_LABELS_FONTSIZE
+            sector_label_fontsize = (style.ticks_fontsize if style.ticks_fontsize is not None
+                                     else theme.AX_LABELS_FONTSIZE)
+        radial_label_fontsize = (style.ticks_fontsize if style.ticks_fontsize is not None
+                                 else theme.TICKS_LABELS_FONTSIZE - 4)
         title_fs = style.title_fontsize if style.title_fontsize is not None else theme.FONTSIZE_TITLE
         title_color = style.text_color if style.text_color is not None else theme.COLOR_TEXT
 
@@ -384,7 +429,8 @@ class WindRosePlot:
         rmax = max(0.0, data_max)
         span = (rmax - rmin) or (abs(rmax) or 1.0)
 
-        if ax is None:
+        own_fig = ax is None
+        if own_fig:
             self.fig = plt.figure(figsize=figsize, dpi=figdpi)
             ax = self.fig.add_subplot(111, projection='polar')
         else:
@@ -441,14 +487,31 @@ class WindRosePlot:
             ax.tick_params(axis='x', pad=sector_label_pad)
         else:
             ax.set_xticks([])
-        ax.tick_params(axis='y', labelsize=theme.TICKS_LABELS_FONTSIZE - 4)
-        ax.grid(True, alpha=0.3, zorder=0)
+        ax.tick_params(axis='y', labelsize=radial_label_fontsize)
+        if style.chrome_color is not None:
+            ax.tick_params(axis='both', colors=style.chrome_color)
+        if style.facecolor is not None:
+            ax.set_facecolor(style.facecolor)
+        if style.show_grid:
+            grid_kw = {} if style.grid_color is None else {'color': style.grid_color}
+            ax.grid(True, alpha=0.3, zorder=0, **grid_kw)
+        else:
+            ax.grid(False)
         ax.set_axisbelow(True)
 
         if style.title:
-            self.fig.subplots_adjust(top=0.92)
-            self.fig.suptitle(style.title, fontsize=title_fs, color=title_color,
-                              fontweight=style.title_fontweight, y=0.97)
+            if own_fig:
+                self.fig.subplots_adjust(top=0.92)
+                self.fig.suptitle(style.title, fontsize=title_fs, color=title_color,
+                                  fontweight=style.title_fontweight, y=0.97)
+            else:
+                # A caller-supplied axes may be one panel among several, so the title
+                # goes on the axes: a suptitle would rename the caller's whole figure
+                # and reflowing the layout would move their other panels.
+                # Clear the compass ring (labels sit `sector_label_pad` outside it).
+                ax.set_title(style.title, fontsize=title_fs, color=title_color,
+                             fontweight=style.title_fontweight,
+                             pad=(sector_label_pad + 6.0) if show_sector_labels else None)
 
         if show_colorbar and color is None:
             sm = plt.cm.ScalarMappable(cmap=colormap, norm=norm)

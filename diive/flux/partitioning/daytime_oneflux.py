@@ -776,7 +776,7 @@ def _partition_one_year(nee, ta, sw_in, ta_f, sw_in_f, vpd, julday, hr, nperday,
     out['SE_GPP_DT_OF'] = np.where(se_gpp > NAN, se_gpp, np.nan)
 
     # report fitted parameters at their source central records (like ONEFlux)
-    for r, p in zip(ind_ok, params_ok):
+    for r, p in zip(ind_ok, params_ok, strict=False):
         i2, i0, i1 = int(r[2]), int(r[0]), int(r[1])
         if 0 <= i2 < n:
             out['RREF_DT_OF'][i2] = p[3]
@@ -820,11 +820,12 @@ class DaytimePartitioningOneFlux:
     Example: ``examples/flux/partitioning/partitioning_daytime_oneflux.py``
 
     Example:
-        >>> part = DaytimePartitioningOneFlux(
-        ...     nee=df['NEE_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
+        >>> import diive as dv
+        >>> df = dv.load_exampledata_parquet()
+        >>> part = dv.flux.DaytimePartitioningOneFlux(
+        ...     nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
         ...     ta_f=df['Tair_f'], sw_in_f=df['Rg_f'], vpd=df['VPD_f'])
-        >>> part.run()
-        >>> results = part.results   # DataFrame with RECO_DT_OF, GPP_DT_OF, ...
+        >>> part.run()  # then part.results -> DataFrame with RECO_DT_OF, GPP_DT_OF, ...
     """
 
     def __init__(self,

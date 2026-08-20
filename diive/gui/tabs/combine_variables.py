@@ -18,9 +18,12 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import pandas as pd
+from matplotlib.colors import ListedColormap
 from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
+    QColorDialog,
     QComboBox,
     QFrame,
     QHBoxLayout,
@@ -36,10 +39,12 @@ import diive as dv
 from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.colormaps import colormap_combo
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
+from diive.gui.widgets.weak_slot import weak_slot
 
 _C_MUTED = "#6B7780"
 
@@ -56,6 +61,49 @@ _METHODS = [
     ("divide", "Divide  (a ÷ b)", "{a} ÷ {b}"),
     ("fillgaps", "Fill gaps of a with b", "gaps of {a} filled with {b}"),
 ]
+
+#: Highlight colour for cells where a difference is exactly zero. Black, so it
+#: stays distinguishable on any colormap (a diverging map's own midpoint is pale).
+_ZERO_COLOR = "#000000"
+
+
+class _ColorButton(QPushButton):
+    """A small clickable colour swatch; emits the new hex on every pick."""
+
+    changed = Signal(str)
+
+    def __init__(self, hexcolor: str) -> None:
+        super().__init__()
+        self._hex = hexcolor
+        self.setObjectName("colorbutton")
+        self.setFixedSize(28, 20)
+        self.clicked.connect(self._pick)
+        self._refresh()
+
+    def color(self) -> str:
+        return self._hex
+
+    def set_color(self, hexcolor: str) -> None:
+        self._hex = hexcolor
+        self._refresh()
+
+    def _refresh(self) -> None:
+        # Scoped to this widget's objectName, NOT a bare `QPushButton` rule: a
+        # stylesheet applies to the widget AND its children, and the colour
+        # dialog is parented to this button — an unscoped rule paints every
+        # button inside the dialog (OK/Cancel/...) in the picked colour too.
+        # All-selector QSS as well, since bare properties before the appended
+        # QToolTip block would make Qt drop that block.
+        self.setStyleSheet(
+            f"QPushButton#colorbutton {{ background: {self._hex};"
+            f" border: 1px solid #607D8B; border-radius: 4px; }}"
+            + theme.manager.tooltip_qss())
+
+    def _pick(self) -> None:
+        chosen = QColorDialog.getColor(QColor(self._hex), self, "Pick highlight colour")
+        if chosen.isValid():
+            self.set_color(chosen.name())
+            self.changed.emit(self._hex)
 
 
 class _HeatmapSlot(QFrame):
@@ -119,18 +167,34 @@ class _HeatmapSlot(QFrame):
         ax.axis("off")
         self.canvas.draw()
 
-    def plot_series(self, series: pd.Series) -> None:
-        """Render ``series`` as a date/time heatmap, or a message on failure."""
+    def plot_series(self, series: pd.Series, cmap: str,
+                    highlight_zeros: str | None = None) -> None:
+        """Render ``series`` as a date/time heatmap, or a message on failure.
+
+        ``highlight_zeros`` (a colour) additionally paints every cell whose value
+        is exactly zero in that colour.
+        """
         ax = self.canvas.new_axes(1)[0]
         try:
             # Compact chrome (matching the Overview panels) and an auto-precision
             # colorbar so labels carry only as many decimals as the range needs.
+            style = dv.plotting.FormatStyle(
+                title_fontsize=_TITLE_FONTSIZE, axlabel_fontsize=_FONT_SIZE,
+                ticks_fontsize=_FONT_SIZE)
             dv.plotting.HeatmapDateTime(series).plot(
-                ax=ax, fig=self.canvas.fig,
-                format_style=dv.plotting.FormatStyle(
-                    title_fontsize=_TITLE_FONTSIZE, axlabel_fontsize=_FONT_SIZE,
-                    ticks_fontsize=_FONT_SIZE),
+                ax=ax, fig=self.canvas.fig, cmap=cmap, format_style=style,
                 cb_digits_after_comma="auto", cb_labelsize=_FONT_SIZE)
+            if highlight_zeros:
+                # Second heatmap of the zeros-only series over the first: same
+                # index -> same date x time grid, so the cells line up. Everything
+                # but the zeros is NaN and drawn transparent (color_bad='none'),
+                # leaving the base heatmap visible around the highlights.
+                zeros = series.where(series == 0)
+                if zeros.notna().any():
+                    dv.plotting.HeatmapDateTime(zeros).plot(
+                        ax=ax, fig=self.canvas.fig, format_style=style,
+                        cmap=ListedColormap([highlight_zeros]), color_bad="none",
+                        show_colormap=False)
         except Exception as err:  # non-datetime index, all-NaN, ... — show why
             ax.clear()
             ax.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",
@@ -185,6 +249,8 @@ class CombineVariablesTab(DiiveTab):
         self._combined: pd.Series | None = None
         #: The last auto-suggested name, so user edits aren't overwritten.
         self._auto_name = ""
+        #: Status line without the exact-zero note (appended on top of it).
+        self._status_base = ""
 
         self._sig = _Signals()
         #: Exposed bound signal the main window connects to (merges the column).
@@ -246,13 +312,14 @@ class CombineVariablesTab(DiiveTab):
         self.slot1 = _HeatmapSlot("Heatmap 1", accepts_drop=True)
         self.slot2 = _HeatmapSlot("Heatmap 2", accepts_drop=True)
         self.slot3 = _HeatmapSlot("Heatmap 3", accepts_drop=False)
-        self.slot1.dropped.connect(lambda name: self._assign(1, name))
-        self.slot2.dropped.connect(lambda name: self._assign(2, name))
+        self.slot1.dropped.connect(weak_slot(self._assign, 1))
+        self.slot2.dropped.connect(weak_slot(self._assign, 2))
         for slot in (self.slot1, self.slot2, self.slot3):
             heatmaps.addWidget(slot, stretch=1)
         rlay.addLayout(heatmaps, stretch=1)
         splitter.addWidget(right)
 
+        self._update_zero_controls()
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         lock_panel_handle(splitter)
@@ -273,15 +340,29 @@ class CombineVariablesTab(DiiveTab):
         self.method.currentIndexChanged.connect(self._recombine)
         row.addWidget(self.method)
 
-        self.overlap_cb = QCheckBox("Keep overlapping data points only")
-        self.overlap_cb.setChecked(True)
-        self.overlap_cb.setToolTip(
-            "Checked: keep a result only where BOTH variables have a value. "
-            "Unchecked: a missing value is treated as the operation's identity "
-            "(0 for add/subtract, 1 for multiply/divide), so one-sided records "
-            "survive.")
-        self.overlap_cb.toggled.connect(self._recombine)
-        row.addWidget(self.overlap_cb)
+        row.addWidget(QLabel("Colormap:"))
+        # Seeded from the app-wide preview-heatmap default (Appearance tab), then
+        # editable per tab — all three heatmaps share it so they stay comparable.
+        self.cmap_combo = colormap_combo(theme.manager.heatmap_cmap)
+        self.cmap_combo.setToolTip(
+            "Colormap for all three heatmaps. Defaults to the app-wide setting "
+            "in the Appearance tab.")
+        self.cmap_combo.setMaximumWidth(160)
+        self.cmap_combo.currentTextChanged.connect(self._on_cmap_changed)
+        row.addWidget(self.cmap_combo)
+
+        # Exact-zero highlight: only meaningful for the difference, where zero
+        # means the two variables agree. Hidden for the other methods.
+        self.zero_check = QCheckBox("Mark zeros")
+        self.zero_check.setToolTip(
+            "Paint every cell where the difference is exactly zero (both "
+            "variables hold the identical value) in the colour next to this box.")
+        self.zero_check.toggled.connect(self._on_zero_changed)
+        row.addWidget(self.zero_check)
+        self.zero_color_btn = _ColorButton(_ZERO_COLOR)
+        self.zero_color_btn.setToolTip("Colour for the exact-zero cells.")
+        self.zero_color_btn.changed.connect(self._on_zero_changed)
+        row.addWidget(self.zero_color_btn)
 
         row.addWidget(QLabel("Name:"))
         self.name_edit = QLineEdit()
@@ -307,11 +388,63 @@ class CombineVariablesTab(DiiveTab):
                 self._slot(slot_no).clear_plot()
                 self._slot(slot_no).set_header(None)
             elif var is not None:
-                self._slot(slot_no).plot_series(df[var])
+                self._slot(slot_no).plot_series(df[var], self._cmap())
         self._recombine()
 
     def _slot(self, slot_no: int) -> _HeatmapSlot:
         return self.slot1 if slot_no == 1 else self.slot2
+
+    # --- colormap ------------------------------------------------------
+    def _cmap(self) -> str:
+        return self.cmap_combo.currentText().strip() or theme.manager.heatmap_cmap
+
+    def _on_cmap_changed(self, _text: str) -> None:
+        """Redraw every assigned heatmap with the newly picked colormap.
+
+        The combo is editable, so a half-typed name reaches this slot too;
+        matplotlib rejects it and the slot shows the error, which is what the
+        source slots already do for any unplottable input.
+        """
+        cmap = self._cmap()
+        for slot_no in (1, 2):
+            var = self._vars[slot_no]
+            if var is not None and self._df is not None:
+                self._slot(slot_no).plot_series(self._df[var], cmap)
+        if self._combined is not None:
+            self.slot3.plot_series(self._combined, cmap, self._zero_highlight())
+
+    # --- exact-zero highlight ------------------------------------------
+    def _zero_highlight(self) -> str | None:
+        """The highlight colour when marking zeros is on, else None."""
+        if self.method.currentData() == "subtract" and self.zero_check.isChecked():
+            return self.zero_color_btn.color()
+        return None
+
+    def _update_zero_controls(self) -> None:
+        """Show the zero controls only for the difference, where zero has meaning."""
+        show = self.method.currentData() == "subtract"
+        self.zero_check.setVisible(show)
+        self.zero_color_btn.setVisible(show)
+
+    def _on_zero_changed(self, *_args) -> None:
+        """Redraw the result with (or without) the exact-zero highlight."""
+        if self._combined is not None:
+            self.slot3.plot_series(self._combined, self._cmap(), self._zero_highlight())
+        self._refresh_status()
+
+    def _zero_note(self) -> str:
+        """Sentence about the exact-zero cells, or '' when not marking them.
+
+        Reports the count either way, so a highlight that paints nothing is
+        stated outright rather than read as "no cells match" — the comparison is
+        exact, and two floats that agree to plotting precision need not be equal.
+        """
+        if self._combined is None or self._zero_highlight() is None:
+            return ""
+        n_zero = int((self._combined == 0).sum())
+        if n_zero == 0:
+            return " No record is exactly zero — nothing highlighted."
+        return f" {n_zero:,} record(s) exactly zero, highlighted."
 
     # --- assignment ----------------------------------------------------
     def _assign(self, slot_no: int, name: str) -> None:
@@ -320,7 +453,7 @@ class CombineVariablesTab(DiiveTab):
         self._vars[slot_no] = name
         slot = self._slot(slot_no)
         slot.set_header(name)
-        slot.plot_series(self._df[name])
+        slot.plot_series(self._df[name], self._cmap())
         self._mark_selected()
         self._recombine()
 
@@ -334,10 +467,10 @@ class CombineVariablesTab(DiiveTab):
         """Recompute and preview the combined variable when both sources are set."""
         v1, v2 = self._vars[1], self._vars[2]
         method = self.method.currentData()
-        # "Keep overlapping only" is meaningless for gap-filling (always a union).
-        self.overlap_cb.setEnabled(method != "fillgaps")
+        self._update_zero_controls()
         if self._df is None or not v1 or not v2:
             self._combined = None
+            self._status_base = ""
             self.slot3.clear_plot()
             self.slot3.set_header(None)
             self.add_btn.setEnabled(False)
@@ -346,12 +479,10 @@ class CombineVariablesTab(DiiveTab):
                 self.status.setText("Assign a variable to both heatmap 1 and 2.")
             return
 
-        keep_overlap = self.overlap_cb.isChecked()
         self._refresh_auto_name(v1, v2, method)
         try:
             combined = dv.variables.combine_variables(
-                self._df[v1], self._df[v2], method=method,
-                keep_overlap_only=keep_overlap, name=self._out_name())
+                self._df[v1], self._df[v2], method=method, name=self._out_name())
         except Exception as err:
             self._combined = None
             self.add_btn.setEnabled(False)
@@ -360,13 +491,42 @@ class CombineVariablesTab(DiiveTab):
 
         self._combined = combined
         self.slot3.set_header(self._out_name())
-        self.slot3.plot_series(combined)
+        self.slot3.plot_series(combined, self._cmap(), self._zero_highlight())
         n = int(combined.notna().sum())
         phrase = {k: p for k, _label, p in _METHODS}[method].format(a=v1, b=v2)
-        self.status.setText(
-            f"{phrase} -> {n:,} values. Name it and add it to the dataset.")
+        self._status_base = (
+            f"{phrase} -> {n:,} values. {self._coverage_text(v1, v2, method)} "
+            f"Name it and add it to the dataset.")
+        self._refresh_status()
         self.add_btn.setEnabled(n > 0 and bool(self._out_name()))
         self._update_add_label()
+
+    def _refresh_status(self) -> None:
+        """Restate the status line, with the exact-zero note when marking zeros."""
+        if self._status_base:
+            self.status.setText(self._status_base + self._zero_note())
+
+    def _coverage_text(self, v1: str, v2: str, method: str) -> str:
+        """How many records the combination costs, and why.
+
+        An arithmetic combination is defined only where BOTH variables were
+        measured, so records available in exactly one of them are lost. That is
+        easy to miss when only the result is plotted, so it is stated outright —
+        with the split, since a large one-sided count usually means the two
+        variables cover different periods rather than that the data are bad.
+        """
+        a, b = self._df[v1].notna(), self._df[v2].notna()
+        n_only1 = int((a & ~b).sum())
+        n_only2 = int((~a & b).sum())
+        lost = n_only1 + n_only2
+        if method == "fillgaps":
+            # Gap-filling spans the union: series2 supplies exactly the records
+            # series1 lacks, so nothing is lost by the combination itself.
+            return f"{n_only2:,} of {v1}'s gaps filled from {v2}; nothing dropped."
+        if lost == 0:
+            return "No records lost — both variables cover the same timestamps."
+        return (f"{lost:,} record(s) dropped where only one variable was available "
+                f"({n_only1:,} only {v1}, {n_only2:,} only {v2}).")
 
     def _refresh_auto_name(self, v1: str, v2: str, method: str) -> None:
         """Update the suggested name, unless the user typed their own."""
@@ -405,7 +565,6 @@ class CombineVariablesTab(DiiveTab):
             return None
         return dv.variables.combine_variables_to_code(
             str(v1), str(v2), method=self.method.currentData(),
-            keep_overlap_only=self.overlap_cb.isChecked(),
             name=self._out_name() or None)
 
     # --- emit ----------------------------------------------------------
@@ -420,8 +579,7 @@ class CombineVariablesTab(DiiveTab):
             name: provenance_attr(
                 origin=DERIVED, parent=str(self._vars[1]), operation=self.title,
                 params={"other": str(self._vars[2]),
-                        "method": self.method.currentData(),
-                        "keep_overlap_only": self.overlap_cb.isChecked()},
+                        "method": self.method.currentData()},
                 tags=["combined"]),
         }
         self.featuresCreated.emit(result)
@@ -432,14 +590,23 @@ class CombineVariablesTab(DiiveTab):
     def save_state(self) -> dict:
         return {"var1": self._vars[1], "var2": self._vars[2],
                 "method": self.method.currentData(),
-                "keep_overlap": self.overlap_cb.isChecked(),
+                "cmap": self.cmap_combo.currentText(),
+                "mark_zeros": self.zero_check.isChecked(),
+                "zero_color": self.zero_color_btn.color(),
                 "name": self.name_edit.text()}
 
     def restore_state(self, state: dict) -> None:
         idx = self.method.findData(state.get("method"))
         if idx >= 0:
             self.method.setCurrentIndex(idx)
-        self.overlap_cb.setChecked(bool(state.get("keep_overlap", True)))
+        # Before the sources are assigned, so they draw with the right colours.
+        cmap = state.get("cmap")
+        if cmap:
+            self.cmap_combo.setCurrentText(cmap)
+        color = state.get("zero_color")
+        if color:
+            self.zero_color_btn.set_color(str(color))
+        self.zero_check.setChecked(bool(state.get("mark_zeros")))
         for slot_no, key in ((1, "var1"), (2, "var2")):
             var = state.get(key)
             if var and self._df is not None and var in self._df.columns:

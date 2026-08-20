@@ -18,9 +18,9 @@ Both modes support:
 Quality flags:
   - flag=0: Value within acceptable range (valid)
   - flag=2: Value detected as outlier (removed)
-  - NaN: Original missing data preserved
+  - NaN: Record missing in the input, so no test could be performed
 
-See examples/preprocessing/outlier_detection/hampel.py for working examples.
+See examples/preprocessing/outlier_detection/outlier_hampel.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
@@ -30,9 +30,9 @@ import pandas as pd
 from pandas import DatetimeIndex, Series
 
 from diive.core.base.flagbase import FlagBase
-from diive.core.utils.console import detail
+from diive.core.utils.console import VERBOSE_PROGRESS, detail, warn
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
+from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags, reject_legacy_params
 
 
 @ConsoleOutputDecorator()
@@ -50,7 +50,7 @@ class Hampel(FlagBase):
     Optional double-differencing (Papale et al. 2006) removes trends before detection.
 
     Example:
-        See `examples/preprocessing/outlier_detection/hampel.py` for complete examples.
+        See `examples/preprocessing/outlier_detection/outlier_hampel.py` for complete examples.
     """
 
     flagid = 'OUTLIER_HAMPEL'
@@ -64,14 +64,13 @@ class Hampel(FlagBase):
                  n_sigma: float = 5.5,
                  n_sigma_daytime: float = None,
                  n_sigma_nighttime: float = None,
-                 n_sigma_dt: float = None,
-                 n_sigma_nt: float = None,
                  k: float = 1.4826,
                  use_differencing: bool = True,
                  separate_day_night: bool = True,
                  idstr: str = None,
                  showplot: bool = False,
-                 verbose: bool = False):
+                 verbose: bool = False,
+                 **legacy):
         """
         Initialize Hampel filter for outlier detection.
 
@@ -130,22 +129,16 @@ class Hampel(FlagBase):
 
         """
 
+        reject_legacy_params(legacy, 'Hampel')
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = showplot
         self.verbose = verbose
         self.window_length = window_length
         self.n_sigma = n_sigma
-        # n_sigma_dt / n_sigma_nt are deprecated short-form aliases for
-        # n_sigma_daytime / n_sigma_nighttime. They still take precedence when set.
-        if n_sigma_dt is not None or n_sigma_nt is not None:
-            import warnings
-            warnings.warn("Hampel: `n_sigma_dt`/`n_sigma_nt` are deprecated; use "
-                          "`n_sigma_daytime`/`n_sigma_nighttime` instead.",
-                          DeprecationWarning, stacklevel=2)
-        _n_sigma_daytime = n_sigma_dt if n_sigma_dt is not None else n_sigma_daytime
-        _n_sigma_nighttime = n_sigma_nt if n_sigma_nt is not None else n_sigma_nighttime
-        self.n_sigma_daytime = _n_sigma_daytime if _n_sigma_daytime is not None else n_sigma
-        self.n_sigma_nighttime = _n_sigma_nighttime if _n_sigma_nighttime is not None else n_sigma
+        # Per-period overrides default to None and fall back to the global value,
+        # so changing n_sigma alone still affects both periods.
+        self.n_sigma_daytime = n_sigma_daytime if n_sigma_daytime is not None else n_sigma
+        self.n_sigma_nighttime = n_sigma_nighttime if n_sigma_nighttime is not None else n_sigma
         self.k = k
         self.use_differencing = use_differencing
         self.separate_day_night = separate_day_night
@@ -153,6 +146,18 @@ class Hampel(FlagBase):
         # for visualisation. Series over the current cleaned series' index.
         self.last_upper_bound = None
         self.last_lower_bound = None
+
+        # Records left undecided because the local MAD was exactly zero, summed
+        # over iterations. Reported after calc() so a degenerate window is visible
+        # rather than silent.
+        self._n_degenerate_scale = 0
+
+        # Records whose double difference would reach across a gap in the INPUT
+        # data. Computed once, from the original series, so that it stays fixed
+        # across iterations: values removed by an earlier iteration must not make
+        # their neighbours untestable, or a cluster of spikes would shelter itself
+        # after the first pass.
+        self._untestable = self._gap_flanking_records(self.series)
 
         # Detect daytime and nighttime
         if self.separate_day_night:
@@ -182,6 +187,14 @@ class Hampel(FlagBase):
         self._overall_flag, n_iterations = self.repeat(
             func=self.run_flagtests, repeat=repeat, progress_callback=progress_callback)
 
+        if self._n_degenerate_scale:
+            warn(f"Hampel: {self._n_degenerate_scale} record(s) could not be judged because the "
+                 f"local MAD was exactly zero (more than half the window identical) and were left "
+                 f"unflagged. Typical causes: coarser data upsampled onto a finer grid, quantized "
+                 f"readings, or a stuck sensor. Consider a longer window_length, "
+                 f"use_differencing=False, or screening the affected period separately.",
+                 verbose=self.verbose)
+
         if self.showplot:
             # Default plot for outlier tests, showing rejected values
             self.defaultplot(n_iterations=n_iterations)
@@ -196,6 +209,46 @@ class Hampel(FlagBase):
                                                     flag_quality=self.overall_flag,
                                                     title=title)
 
+    @staticmethod
+    def _gap_flanking_records(series: Series) -> Series:
+        """Records whose immediate neighbour is missing in the input data.
+
+        The double difference at record *t* uses both of its neighbours, so *t*
+        cannot be judged when either of them is absent: dropping missing records
+        before differencing would silently pair *t* with a partner hours or days
+        away and make every gap edge look like a spike.
+
+        Returns a boolean Series over the input index (all False when the index
+        is not a usable time axis, which leaves the previous behaviour in place).
+        """
+        index = series.index
+        if not isinstance(index, DatetimeIndex) or len(index) < 3:
+            return pd.Series(False, index=index)
+
+        # A non-fixed offset (month/year start, business day, week) has no constant
+        # duration and raises on `.nanos`; even `hasattr` propagates that error, so
+        # the attempt itself is the test. The timestamps then supply the typical step.
+        step = None
+        if index.freq is not None:
+            try:
+                step = pd.Timedelta(index.freq.nanos, unit='ns')
+            except ValueError:
+                step = None
+        if step is None:
+            step = pd.Series(index).diff().median()
+        if pd.isna(step) or step <= pd.Timedelta(0):
+            return pd.Series(False, index=index)
+
+        # A neighbour is missing either because the timestamp itself is absent
+        # (irregular index) or because it carries no value (gap on a regular grid).
+        steps = pd.Series(index).diff()
+        far_before = (steps > step * 1.5).to_numpy()
+        far_after = np.append(far_before[1:], False)
+        empty = series.isna().to_numpy()
+        empty_before = np.append(True, empty[:-1])
+        empty_after = np.append(empty[1:], True)
+        return pd.Series(far_before | far_after | empty_before | empty_after, index=index)
+
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag using optimized Pandas operations."""
 
@@ -207,6 +260,11 @@ class Hampel(FlagBase):
             # d = (x_t - x_{t-1}) - (x_{t+1} - x_t)
             s_to_test = s.diff() - s.diff().shift(-1)
             s_to_test = s_to_test.fillna(0)
+            # Missing records were dropped above, so consecutive entries can be hours
+            # or days apart. A difference taken across such a gap compares unrelated
+            # records and makes the two records flanking every gap look like spikes.
+            # Neutralize those (mask computed once from the input, see __init__).
+            s_to_test = s_to_test.mask(self._untestable.reindex(s.index, fill_value=False))
         else:
             s_to_test = s
 
@@ -218,8 +276,19 @@ class Hampel(FlagBase):
         deviations = np.abs(s_to_test - rolling_median)
         rolling_mad = deviations.rolling(window=self.window_length, center=True, min_periods=1).median()
 
-        # Add epsilon to avoid zero-division issues on flat signals
-        rolling_mad = rolling_mad + 1e-6
+        # A window in which more than half the records are identical has a MAD of
+        # exactly zero, and then the detection band has zero width: every value that
+        # differs from the local median at all becomes an outlier, however small the
+        # difference. That is not a strict filter, it is an undefined one - the data
+        # carry no scale to judge against - and substituting a tiny epsilon turns it
+        # into a silent mass rejection of the signal itself. Windows that arise from
+        # upsampled coarse data, quantized readings or a stuck sensor hit this
+        # routinely. Such records are therefore left unflagged (NaN limits compare
+        # False), and the count is reported rather than hidden.
+        degenerate = rolling_mad == 0
+        if degenerate.any():
+            self._n_degenerate_scale += int(degenerate.sum())
+        rolling_mad = rolling_mad.where(~degenerate)
 
         # Define thresholds
         if self.separate_day_night:
@@ -240,7 +309,9 @@ class Hampel(FlagBase):
         upper_bound = rolling_median + limit
         lower_bound = rolling_median - limit
 
-        is_outlier = (s_to_test > upper_bound) | (s_to_test < lower_bound)
+        # NaN limits (degenerate scale) and NaN test values (differences spanning a
+        # gap) both compare False here, i.e. no decision is made for those records.
+        is_outlier = ((s_to_test > upper_bound) | (s_to_test < lower_bound)).fillna(False)
 
         # Expose the per-iteration detection band in DATA units (for visualisation).
         # Raw mode: the bounds already are in data units. Double-differencing mode:
@@ -289,12 +360,12 @@ class Hampel(FlagBase):
                 detail(f"[Dt/Nt] {iter_str} | "
                        f"Outliers: {out_str} ({pct_str}) | "
                        f"Day: {n_dt:>5} | "
-                       f"Night: {n_nt:>5}", verbose=self.verbose)
+                       f"Night: {n_nt:>5}", verbose=self.verbose, min_level=VERBOSE_PROGRESS)
             else:
                 # Global reporting
                 # Example: [Global] ITER #01 | Outliers:   123 ( 0.45%)
                 detail(f"[Global] {iter_str} | "
-                       f"Outliers: {out_str} ({pct_str})", verbose=self.verbose)
+                       f"Outliers: {out_str} ({pct_str})", verbose=self.verbose, min_level=VERBOSE_PROGRESS)
 
         return ok, rejected, n_outliers
 

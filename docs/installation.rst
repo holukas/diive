@@ -7,7 +7,7 @@ Installation
 System Requirements
 ===================
 
-- **Python:** 3.12 (exact match recommended)
+- **Python:** 3.12 or 3.13
 - **OS:** Windows, macOS, Linux
 - **Disk space:** ~1 GB (for development environment)
 
@@ -41,7 +41,7 @@ Option 2: Using uv (Modern, Fast)
 Option 3: Development Setup with uv
 ------------------------------------
 
-For development and contributing to DIIVE, clone the repository and use uv:
+For development and contributing to diive, clone the repository and use uv:
 
 .. code-block:: bash
 
@@ -67,7 +67,7 @@ If you prefer conda, use the provided environment file:
 Verifying Installation
 ======================
 
-Check that DIIVE is installed correctly:
+Check that diive is installed correctly:
 
 .. code-block:: python
 
@@ -88,21 +88,81 @@ Verify with a simple example:
 Key Dependencies
 ================
 
-DIIVE depends on:
+diive depends on:
 
-- **Data processing:** pandas, numpy, polars
+- **Data processing:** pandas, numpy, pyarrow
 - **Machine learning:** scikit-learn, xgboost, prophet
 - **Visualization:** matplotlib, seaborn, bokeh
 - **Statistical analysis:** scipy, statsmodels, scikit-optimize
 - **Interpretability:** shap, eli5, yellowbrick
 - **Time series:** sktime, pymannkendall
 
-All dependencies are automatically installed with DIIVE.
+All dependencies are automatically installed with diive.
 
 Optional Dependencies
 =====================
 
-For Jupyter notebooks and interactive visualization:
+A default install gives you the library. Three extras add optional surfaces, none
+of which are pulled in unless you ask for them:
+
+.. list-table::
+   :widths: 15 85
+   :header-rows: 1
+
+   * - Extra
+     - Adds
+   * - ``gui``
+     - The desktop application (PySide6).
+   * - ``gui3d``
+     - The 3-D surface tabs inside the GUI (PyVista/VTK), and glTF and STL export.
+       Requires ``gui``.
+   * - ``db``
+     - Reading from and writing to an InfluxDB v2 database.
+
+Desktop GUI
+-----------
+
+diive ships a desktop application for loading, screening, gap-filling and plotting
+flux data without writing code. Install it with the ``gui`` extra and launch it with
+the ``diive-gui`` command:
+
+.. code-block:: bash
+
+   pip install "diive[gui]"
+   diive-gui
+
+Or with uv, from a clone:
+
+.. code-block:: bash
+
+   uv sync --extra gui
+   uv run diive-gui
+
+The 3-D surface tabs are behind a second extra, because VTK is large and most GUI
+users do not need it. It is imported lazily, so a ``gui``-only install never loads it:
+
+.. code-block:: bash
+
+   pip install "diive[gui,gui3d]"
+
+The GUI only calls into the library, so anything it does can also be scripted.
+
+Everything at once
+------------------
+
+To install every extra and every development dependency group from a clone:
+
+.. code-block:: bash
+
+   uv sync --all-extras --all-groups
+
+Note that ``--all-extras`` alone is not everything: the InfluxDB support is both an
+extra and a dependency group, and the development tooling is a group only.
+
+Jupyter
+-------
+
+For notebooks and interactive visualization:
 
 .. code-block:: bash
 
@@ -112,7 +172,7 @@ Troubleshooting
 ===============
 
 **ImportError: No module named 'diive'**
-   Make sure DIIVE is installed (see above) and your Python environment is activated.
+   Make sure diive is installed (see above) and your Python environment is activated.
 
 **EnvironmentError: Conda environment not found**
    If using conda, activate the environment first:
@@ -136,7 +196,7 @@ Troubleshooting
       import matplotlib
       matplotlib.use('TkAgg')  # or 'Qt5Agg', 'Agg', etc.
 
-Updating DIIVE
+Updating diive
 ==============
 
 To update to the latest version:
@@ -156,4 +216,4 @@ For development installations, pull the latest changes:
 Next Steps
 ==========
 
-After installation, check out the :ref:`Getting Started <getting_started>` guide or browse the :ref:`Example Gallery <auto_examples/index>`.
+After installation, check out the :ref:`Getting Started <getting_started>` guide or browse the :ref:`Example Gallery <examples_gallery>`.

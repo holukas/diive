@@ -243,9 +243,12 @@ class RandomUncertaintyTab(DiiveTab):
         return {"controls": save_controls(self._controls())}
 
     def restore_state(self, state: dict) -> None:
-        from diive.gui.widgets.state_utils import restore_controls
-        restore_controls(self._controls(), state.get("controls"))
+        from diive.gui.widgets.state_utils import restore_controls, unrestored_message
+        unrestored = restore_controls(self._controls(), state.get("controls"))
         self.picker.refresh_availability()
+        if unrestored:
+            labels = {s["key"]: s["label"] for s in _INPUTS}
+            self.status.setText(unrestored_message(unrestored, labels))
 
     # --- run -----------------------------------------------------------
     def _python_code(self) -> str | None:

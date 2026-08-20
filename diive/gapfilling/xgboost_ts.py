@@ -25,7 +25,8 @@ class XGBoostTS(MlRegressorGapFillingBase):
     """
 
     def __init__(self, input_df: DataFrame, target_col: str or tuple, verbose: int = 0,
-                 test_size: float = 0.25, below_zero: str = None, **kwargs):
+                 test_size: float = 0.25, below_zero: str = None,
+                 shap_max_rows: int = None, **kwargs):
         """Gap-filling for time series using XGBoost gradient boosting.
 
         Trains an XGBoost model on complete observations to predict missing values.
@@ -44,6 +45,9 @@ class XGBoostTS(MlRegressorGapFillingBase):
             below_zero: How to treat predicted values below zero for variables that
                        cannot be negative (e.g. VPD, SW_IN, PPFD).
                        None (default): keep as-is. 'zero': clip to 0.
+            shap_max_rows: Cap on rows used for SHAP feature importances.
+                       None (default): explain every row. Set this on long records,
+                       where SHAP dominates runtime. See MlRegressorGapFillingBase.
             **kwargs: XGBoost hyperparameters (n_estimators, max_depth,
                      learning_rate, min_child_weight, early_stopping_rounds,
                      random_state, n_jobs, subsample, colsample_bytree, etc).
@@ -78,6 +82,7 @@ class XGBoostTS(MlRegressorGapFillingBase):
             verbose=verbose,
             test_size=test_size,
             below_zero=below_zero,
+            shap_max_rows=shap_max_rows,
             **kwargs
         )
 

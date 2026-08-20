@@ -35,22 +35,27 @@ References:
     detect optimal lags from measured distributions and format them for EddyPro input.
 """
 
+import functools
+
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 import numpy as np
-import pandas as pd
 import warnings
 
-from diive.core.io.files import load_parquet
 from diive.core.plotting.plotfuncs import default_format
 from diive.core.utils.console import info, warn
 from diive.analysis.histogram import Histogram
 
 
-# Apply modern plot style
-plt.rcParams.update({
+#: Figure styling for this module's plots. Applied per figure via
+#: :func:`matplotlib.pyplot.rc_context`, NOT with a module-level
+#: ``plt.rcParams.update``: that ran on import and restyled every plot in the process —
+#: grid lines on everywhere, a grey figure background — for anyone who merely touched
+#: ``dv.flux``, which exports this class. `selfheating.py` uses the same rc_context
+#: pattern.
+_PLOT_STYLE = {
     'figure.facecolor': '#f8f9fa',
     'axes.facecolor': '#ffffff',
     'axes.edgecolor': '#dee2e6',
@@ -67,7 +72,48 @@ plt.rcParams.update({
     'grid.alpha': 0.25,
     'grid.color': '#dee2e6',
     'grid.linestyle': '-',
-})
+}
+
+
+def _styled(fn):
+    """Draw the wrapped method's figure under :data:`_PLOT_STYLE`."""
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with plt.rc_context(_PLOT_STYLE):
+            return fn(*args, **kwargs)
+
+    return wrapper
+
+
+#: Parameter names that changed when the histogram range was renamed to state its
+#: unit. Old name -> new name. The old names read as bin *indices* although the
+#: values were always lag values in seconds.
+_RENAMED_PARAMS = {
+    'histogram_startbin': 'histogram_start_seconds',
+    'histogram_endbin': 'histogram_end_seconds',
+}
+
+
+def _reject_legacy_params(unexpected: dict) -> None:
+    """Raise for any leftover keyword argument, naming its replacement if it has one.
+
+    ``TimeLagAnalysis`` accepts ``**legacy`` purely so a call using the old
+    ``histogram_startbin`` / ``histogram_endbin`` names can be answered with a
+    message that says what to change, instead of Python's bare "unexpected
+    keyword argument". Names outside the rename table are still rejected, so a
+    typo cannot pass silently through ``**legacy``.
+    """
+    if not unexpected:
+        return
+    name = next(iter(unexpected))
+    if name in _RENAMED_PARAMS:
+        raise TypeError(
+            f"TimeLagAnalysis: '{name}' was renamed to '{_RENAMED_PARAMS[name]}' because "
+            f"the value is a lag value in seconds, not a bin index. "
+            f"Pass '{_RENAMED_PARAMS[name]}' instead."
+        )
+    raise TypeError(f"TimeLagAnalysis.__init__() got an unexpected keyword argument '{name}'")
 
 
 class TimeLagAnalysis:
@@ -90,15 +136,17 @@ class TimeLagAnalysis:
     df : pd.DataFrame
         Dataframe with TLAG columns (e.g., 'CO2_TLAG_ACTUAL') and datetime index
     ignore_fringe_bins : list, optional
-        Bin indices to exclude from histogram. Default: None
+        [i, j]: number of leading and trailing histogram bins to exclude.
+        Default: None, which means [5, 10]
     lag_window_min, lag_window_max : float
         Reference acceptable lag range for visualization (seconds)
-    histogram_startbin, histogram_endbin : int
-        Bin range for display and analysis. Default: 0 to 10
+    histogram_start_seconds, histogram_end_seconds : float
+        Lag range in seconds kept for display and analysis. Default: 0 to 10
     gradient_threshold : float
         Edge detection sensitivity; lower = stricter. Default: 0.15
     zoom_margin : list, optional
-        [before_peak, after_peak] offsets for zoomed view (seconds). Default: [0.5, 0.8]
+        [before_peak, after_peak] offsets for zoomed view (seconds).
+        Default: None, which means [0.5, 1.5]
 
     Example
     -------
@@ -110,11 +158,12 @@ class TimeLagAnalysis:
                  ignore_fringe_bins=None,
                  lag_window_min=0.10,
                  lag_window_max=1.00,
-                 histogram_startbin=0,
-                 histogram_endbin=10,
+                 histogram_start_seconds=0,
+                 histogram_end_seconds=10,
                  gradient_threshold=0.15,
-                 zoom_margin=None):
-        """
+                 zoom_margin=None,
+                 **legacy):
+        r"""
         Initialize TimeLagAnalysis with data and parameters.
 
         Parameters
@@ -122,21 +171,25 @@ class TimeLagAnalysis:
         df : pd.DataFrame
             Input dataframe with TLAG columns (e.g., 'CO2_TLAG_ACTUAL', 'H2O_TLAG_ACTUAL')
             and a datetime index. Expected to contain columns matching pattern
-            '*_TLAG_ACTUAL' for analysis.
+            '\*_TLAG_ACTUAL' for analysis.
         ignore_fringe_bins : list, optional
-            Fringe bin indices to exclude from histogram computation. Fringe bins
-            tend to accumulate non-physical lag values and should be excluded.
-            Default: [5, 10]
+            How many bins to drop from each end of the histogram, as
+            [leading, trailing] counts — not bin indices. The outermost bins tend to
+            accumulate non-physical lag values. Default: None, which means [5, 10].
+            Trimming is skipped, with a warning, if it would remove every bin.
         lag_window_min : float
             Lower bound of physically acceptable lag range in seconds. Used for
             reference line visualization (typically ~0.10s). Default: 0.10
         lag_window_max : float
             Upper bound of physically acceptable lag range in seconds. Used for
             reference line visualization (typically ~1.00s). Default: 1.00
-        histogram_startbin : int
-            First histogram bin index to display in plots. Default: 0
-        histogram_endbin : int
-            Last histogram bin index to display in plots. Default: 10
+        histogram_start_seconds : float
+            Lowest lag value in seconds kept for display and analysis. Bins are
+            compared against their inclusive start, not their index. Default: 0
+        histogram_end_seconds : float
+            Highest lag value in seconds kept for display and analysis. If no bin
+            falls into the range, the whole lag range is kept and a warning is
+            issued. Default: 10
         gradient_threshold : float
             Threshold for gradient-based peak edge detection (0-1 range).
             Lower values = stricter edge detection. Controls where peak edges are
@@ -145,13 +198,17 @@ class TimeLagAnalysis:
             Zoom range offsets [before_peak, after_peak] in seconds for zoomed
             subplots. Defines how far left/right of peak to display in zoom views.
             Default: [0.5, 1.5]
+        **legacy
+            Only accepted to reject renamed parameters with a message naming
+            their replacement, see :data:`_RENAMED_PARAMS`.
         """
+        _reject_legacy_params(legacy)
         self.df = df
         self.ignore_fringe_bins = ignore_fringe_bins or [5, 10]
         self.lag_window_min = lag_window_min
         self.lag_window_max = lag_window_max
-        self.histogram_startbin = histogram_startbin
-        self.histogram_endbin = histogram_endbin
+        self.histogram_start_seconds = histogram_start_seconds
+        self.histogram_end_seconds = histogram_end_seconds
         self.gradient_threshold = gradient_threshold
         self.zoom_margin = zoom_margin or [0.5, 1.5]
 
@@ -265,7 +322,7 @@ class TimeLagAnalysis:
 
     @staticmethod
     def detect_peak_range(histogram_results, peakbins, gradient_threshold=0.15):
-        """
+        r"""
         Detect the range around a histogram peak using gradient-based edge detection.
 
         Identifies peak boundaries by finding where the histogram gradient (first derivative)
@@ -273,14 +330,16 @@ class TimeLagAnalysis:
         and works well for both symmetric and skewed distributions.
 
         **Algorithm:**
+
         1. Normalize counts to 0-1 range
         2. Compute first derivative (gradient) of normalized counts
         3. Locate peak bin (closest bin to peakbins[0])
-        4. Search left: find first bin where |gradient| < threshold
-        5. Search right: find first bin where |gradient| < threshold
+        4. Search left: find first bin where \|gradient\| < threshold
+        5. Search right: find first bin where \|gradient\| < threshold
         6. Return boundaries at these indices
 
         **Gradient threshold interpretation:**
+
         - 0.15 (default): detects moderate slope changes, suited for moderately sharp peaks
         - < 0.10: stricter, captures narrower peaks, sensitive to noise
         - > 0.20: lenient, captures broader tails, includes more uncertainty range
@@ -289,6 +348,7 @@ class TimeLagAnalysis:
         ----------
         histogram_results : pd.DataFrame
             Histogram bin data with required columns:
+
             - 'BIN_START_INCL' : bin boundaries (inclusive)
             - 'COUNTS' : bin counts/frequencies
         peakbins : array-like
@@ -347,14 +407,16 @@ class TimeLagAnalysis:
         return min_lag, max_lag
 
     def analyze_gas(self, gas):
-        """
+        r"""
         Analyze time lags for a specific gas species.
 
         Performs complete lag analysis workflow:
-        1. Extracts time lag series for specified gas (*_TLAG_ACTUAL column)
+
+        1. Extracts time lag series for specified gas (\*_TLAG_ACTUAL column)
         2. Creates histogram using unique value binning
         3. Excludes specified fringe bins (non-physical accumulations)
-        4. Filters histogram to display range (startbin-endbin)
+        4. Filters histogram to display range (startbin-endbin, in lag seconds),
+           skipping the filter with a warning if it would keep no bin at all
         5. Detects peak lag using histogram maximum
         6. Identifies peak range boundaries via gradient-based edge detection
         7. Adjusts range for EddyPro's discrete 0.05s steps
@@ -383,7 +445,9 @@ class TimeLagAnalysis:
         Raises
         ------
         ValueError
-            If column '{gas}_TLAG_ACTUAL' not found in input dataframe.
+            If column '{gas}_TLAG_ACTUAL' not found in input dataframe, or if
+            the lag values hold fewer than two distinct values, i.e. not even
+            one histogram bin can be formed.
 
         Notes
         -----
@@ -399,19 +463,47 @@ class TimeLagAnalysis:
 
         series = self.tlag_actual[gascol].copy()
 
+        # Fringe trimming removes a fixed number of bins from each end, but
+        # method='uniques' only yields (n_unique - 1) bins, so for a lag column
+        # with few distinct values the default [5, 10] would trim the histogram
+        # away completely and leave no peak bin. Keep all bins in that case,
+        # and say so: the peak may then sit on a fringe accumulation.
+        n_uniques = int(series.dropna().nunique())
+        n_bins = max(n_uniques - 1, 0)
+        ignore_fringe_bins = self.ignore_fringe_bins
+        if ignore_fringe_bins and sum(ignore_fringe_bins[:2]) >= n_bins:
+            warn(f"{gascol}: ignore_fringe_bins={ignore_fringe_bins} would remove all "
+                 f"{n_bins} histogram bin(s) ({n_uniques} distinct lag values); keeping "
+                 f"all bins, fringe accumulations are therefore included.")
+            ignore_fringe_bins = None
+
         # Create histogram using Histogram class
         hist = Histogram(
             series=series,
             method='uniques',
-            ignore_fringe_bins=self.ignore_fringe_bins
+            ignore_fringe_bins=ignore_fringe_bins
         )
         results = hist.results
         peakbins = hist.peakbins
+        if not peakbins:
+            raise ValueError(f"No histogram bins for {gascol}: found {n_uniques} distinct "
+                             f"lag value(s), at least 2 are needed to form a bin")
 
-        # Filter histogram bins to display range
-        locs = ((results['BIN_START_INCL'] >= self.histogram_startbin) &
-                (results['BIN_START_INCL'] <= self.histogram_endbin))
-        results = results[locs].copy()
+        # Filter histogram bins to display range. The range is given in lag
+        # seconds, so a range that no measured lag falls into would leave no
+        # bins and detect_peak_range would fail on the empty array. Keep all
+        # bins in that case, and say so, for the same reason as above.
+        locs = ((results['BIN_START_INCL'] >= self.histogram_start_seconds) &
+                (results['BIN_START_INCL'] <= self.histogram_end_seconds))
+        if locs.any():
+            results = results[locs].copy()
+        else:
+            warn(f"{gascol}: no lag value falls into histogram_start_seconds="
+                 f"{self.histogram_start_seconds} to histogram_end_seconds="
+                 f"{self.histogram_end_seconds} "
+                 f"(both in seconds); keeping all bins, the analysis therefore covers "
+                 f"the full lag range.")
+            results = results.copy()
 
         # Detect peak and ranges
         peak = peakbins[0]
@@ -439,6 +531,7 @@ class TimeLagAnalysis:
         self._analysis_cache[gas] = analysis
         return analysis
 
+    @_styled
     def plot_gas(self, gas, outdir=None, figsize=(18, 9), show=True, fig=None):
         """
         Create comprehensive visualization of time lag analysis for a gas species.
@@ -495,8 +588,9 @@ class TimeLagAnalysis:
 
         Notes
         -----
-        Figure styling is applied via matplotlib rcParams set at module import.
-        Colors and fonts are pre-configured and consistent across all plots.
+        Figure styling is applied for the duration of this call only, via
+        :data:`_PLOT_STYLE`. Colors and fonts are consistent across this module's
+        plots and leave the caller's matplotlib settings untouched.
 
         Examples
         --------
@@ -532,7 +626,7 @@ class TimeLagAnalysis:
 
         # Auto-detect optimal number of ticks based on display ranges
         # Histogram x-axis (lag bins)
-        overview_range = self.histogram_endbin - self.histogram_startbin + bin_width
+        overview_range = self.histogram_end_seconds - self.histogram_start_seconds + bin_width
         overview_nbins_x = max(10, int(overview_range / bin_width))
         overview_nbins_x = self._check_tick_overlap(overview_nbins_x, overview_range, 'numeric')
 
@@ -675,10 +769,10 @@ class TimeLagAnalysis:
         return fig
 
     def analyze_all_gases(self, gases=None):
-        """
+        r"""
         Analyze multiple gas species in batch mode.
 
-        Automatically detects all available gases (based on *_TLAG_ACTUAL column names)
+        Automatically detects all available gases (based on \*_TLAG_ACTUAL column names)
         if not explicitly specified. Calls analyze_gas() for each gas and returns
         consolidated results. Errors in individual gas analyses are caught and reported
         without interrupting the batch process.

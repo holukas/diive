@@ -10,7 +10,6 @@ import pandas as pd
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
-import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.styles.format import FormatStyle
 
 
@@ -34,8 +33,13 @@ class LongtermAnomaliesYear:
         plot : Render anomaly bar chart with styling options
 
     Example:
-        See `examples/core/visualization/plot_other_plots.py` for complete example.
+        See `examples/visualization/plot_other_plots.py` for complete example.
     """
+
+    # Internal key for the data column of the working frame. Keying it by the
+    # caller's Series name lets a variable called e.g. 'reference_mean' overwrite
+    # the data before the anomaly is computed (same reason as ScatterXY/GridAggregator).
+    _VALUECOL = '_values'
 
     def __init__(self,
                  series: Series,
@@ -62,25 +66,93 @@ class LongtermAnomaliesYear:
         self.reference_start_year = reference_start_year
         self.reference_end_year = reference_end_year
 
-        self.series.sort_index(ascending=True)
+        # Phase 2 output. Named here so the attributes exist before the first
+        # plot() call, the shape every other diive plot class already has.
+        self.fig = None
+        self.ax = None
+
+        # What the last plot() drew, so a repeat call on the same axes replaces its
+        # own output instead of stacking a second set on the first. Only the most
+        # recent axes is remembered, which is the one self.ax already retains: a map
+        # over every axes ever drawn on cannot be weakly keyed, because the artists
+        # stored as its values reference their axes straight back.
+        self._drawn_on = None
+        self._drawn = ([], [])
+
+        # Without a single measured year there is nothing to anomalise. Caught here
+        # because the year lattice below derives its bounds from min()/max(), which
+        # fail with "cannot convert float NaN to integer" - an internal detail that
+        # names neither the class nor the empty input.
+        if self.series.dropna().empty:
+            raise ValueError(f"LongtermAnomaliesYear needs at least one year of data, "
+                             f"the given series holds none "
+                             f"(length {len(self.series)}, all missing).")
+
+        # Chronological order is required: the bars are drawn in frame order and
+        # the "last 10 years" annotation is a tail() of the same frame.
+        self.series = self.series.sort_index(ascending=True)
         self.data_first_year = self.series.index.min()
         self.data_last_year = self.series.index.max()
 
-        self.anomalies_df = self._calc_reference()
+        # Complete the year lattice. The bars are drawn with `plot.bar`, which is
+        # categorical, so a year the record does not cover takes up no axis width
+        # at all: a 12-year outage was one bar-width jump between two evenly spaced
+        # ticks, while the title below asserts the full first-to-last span. Years
+        # nothing was measured in become NaN bars, i.e. visible holes. The reference
+        # mean and sd are computed over the values and skip NaN, so the injected
+        # years leave them untouched.
+        self.series = self.series.reindex(
+            pd.Index(range(int(self.data_first_year), int(self.data_last_year) + 1),
+                     name=self.series.index.name))
+
+        self._anomalies_df = self._calc_reference()
+
+    @property
+    def anomalies_df(self) -> pd.DataFrame:
+        """Results frame (copy), with the data column back under the caller's Series name."""
+        return self._anomalies_df.rename(columns={self._VALUECOL: self.series.name})
+
+    @staticmethod
+    def _axes_artists(ax) -> list:
+        """Return every removable artist currently held by *ax*."""
+        return [*ax.patches, *ax.texts, *ax.lines, *ax.collections]
+
+    def _remove_previous(self, ax):
+        """Drop what the previous plot() of this instance drew, if it was on *ax*."""
+        if self._drawn_on is not ax:
+            return
+        artists, containers = self._drawn
+        self._drawn_on, self._drawn = None, ([], [])
+        for artist in artists:
+            # An ax.clear() between the two calls already detached them.
+            if artist.axes is ax:
+                artist.remove()
+        if containers:
+            # A BarContainer is not an Artist, so it stays behind when its
+            # rectangles are removed. Filtered by identity: two BarContainers
+            # compare equal whenever their tuples do.
+            ax.containers[:] = [c for c in ax.containers
+                                if not any(c is old for old in containers)]
 
     def _annotate_reference(self):
         """Draw the domain-specific reference-statistics info box (not shared chrome)."""
-        ref_mean = self.anomalies_df['reference_mean'].iloc[-1]
-        ref_sd = self.anomalies_df['reference_sd'].iloc[-1]
-        ref_n_years = (self.reference_end_year - self.reference_start_year) + 1
-        last10 = self.anomalies_df[self.series.name].tail(10)
+        ref_mean = self._anomalies_df['reference_mean'].iloc[-1]
+        ref_sd = self._anomalies_df['reference_sd'].iloc[-1]
+        last10 = self._anomalies_df[self._VALUECOL].tail(10)
         last10_mean = last10.mean()
         last10_std = last10.std()
 
+        # The reference count is the measured years the mean and sd were computed
+        # over, not the width of the requested window: the width is already printed
+        # as the span right next to it, so a nominal count states the same fact twice
+        # and, whenever the window only partly overlaps the record or holds an
+        # outage, states it as the provenance of a number it is not the provenance
+        # of. The "last N" is likewise the tail's real length - a record shorter than
+        # 10 years read "last 10 years" beside its own five-year span.
         self.ax.text(0.98, 0.02, f"reference period mean: {ref_mean:.2f}±{ref_sd:.2f}sd "
                                  f"({self.reference_start_year}-{self.reference_end_year}, "
-                                 f"{ref_n_years} years)\n"
-                                 f"last 10 years mean: {last10_mean:.2f}±{last10_std:.2f}sd "
+                                 f"{self._ref_n_years} years)\n"
+                                 f"last {len(last10)} years mean: {last10_mean:.2f}±{last10_std:.2f}sd "
                                  f"({last10.index[0]}-{last10.index[-1]})",
                      size=11, color='#2C3E50', backgroundcolor='white', transform=self.ax.transAxes,
                      alpha=0.9, horizontalalignment='right', verticalalignment='bottom',
@@ -92,14 +164,23 @@ class LongtermAnomaliesYear:
         self.ax.set_xlim(-1, len(self.series))
 
     def _calc_reference(self):
-        anomalies_df = pd.DataFrame(self.series)
+        anomalies_df = self.series.rename(self._VALUECOL).to_frame()
 
         ref_subset = self.series.loc[(self.series.index >= self.reference_start_year)
                                      & (self.series.index <= self.reference_end_year)]
         # ref_subset = self.series.between(self.reference_start_ix, self.reference_end_ix)
+        # A reference period holding no measurement leaves mean and sd NaN, which
+        # makes every anomaly NaN: an empty chart carrying a title that asserts the
+        # record's full span and an annotation reading "nan+/-nansd". Reachable with
+        # the period reversed, or landing wholly inside an outage of the record.
+        if ref_subset.dropna().empty:
+            raise ValueError(f"Reference period {self.reference_start_year}-{self.reference_end_year} "
+                             f"holds no data, so no anomaly can be calculated "
+                             f"(record covers {self.data_first_year}-{self.data_last_year}).")
+        self._ref_n_years = int(ref_subset.count())
         anomalies_df['reference_mean'] = ref_subset.mean()
         anomalies_df['reference_sd'] = ref_subset.std()
-        anomalies_df['anomaly'] = anomalies_df[self.series.name].sub(anomalies_df['reference_mean'])
+        anomalies_df['anomaly'] = anomalies_df[self._VALUECOL].sub(anomalies_df['reference_mean'])
         anomalies_df['anomaly_above'] = anomalies_df['anomaly'].loc[anomalies_df['anomaly'] >= 0]
         anomalies_df['anomaly_below'] = anomalies_df['anomaly'].loc[anomalies_df['anomaly'] < 0]
         return anomalies_df
@@ -112,7 +193,9 @@ class LongtermAnomaliesYear:
         line) comes from a shared :class:`~diive.plotting.FormatStyle` so it looks and
         is configured the same way as every other diive plot. The red/blue above/below
         bar colouring is data encoding and stays here. Can be called multiple times on
-        the same object to draw on different axes with different styling.
+        the same object to draw on different axes with different styling; calling it
+        again on an axes it already drew on replaces that rendering rather than
+        stacking a second one on top of it.
 
         Args:
             ax: Matplotlib axes to plot on. If None, creates new figure and displays it
@@ -123,9 +206,10 @@ class LongtermAnomaliesYear:
             None (displays plot if ax=None, otherwise renders on provided axes)
 
         Example:
-            >>> anomaly = dv.plot_longterm_anomalies_year(series=data, reference_start_year=2015)
-            >>> anomaly.plot(format_style=dv.plotting.FormatStyle(title='Custom Title'))
-            >>> anomaly.plot(ax=ax1)  # Plot on existing axis
+            >>> import diive as dv, pandas as pd, matplotlib.pyplot as plt
+            >>> annual = pd.Series([5.1, 5.4, 6.0, 6.3], index=[2021, 2022, 2023, 2024], name='TA')
+            >>> anomaly = dv.plotting.LongtermAnomaliesYear(annual, 2021, 2022)
+            >>> anomaly.plot(ax=plt.subplots()[1], format_style=dv.plotting.FormatStyle(title='TA'))
         """
         style = format_style or FormatStyle()
 
@@ -140,19 +224,28 @@ class LongtermAnomaliesYear:
             self.fig, self.ax = pf.create_ax()
             self.showplot = True
 
+        # A second plot() on the same axes used to stack a second full set of bars,
+        # a second annotation box and a second zero line on top of the first: the
+        # overlaid alpha darkened the figure and the artists accumulated. Only this
+        # instance's own artists are dropped, so anything the caller drew on the
+        # same axes survives.
+        self._remove_previous(self.ax)
+        drawn_before = {id(a) for a in self._axes_artists(self.ax)}
+        containers_before = {id(c) for c in self.ax.containers}
+
         # Publication-ready colors for above/below anomalies (data encoding)
         color_above = '#EF5350'  # Red for above-reference
         color_below = '#42A5F5'  # Blue for below-reference
 
         # Plot bars
-        self.anomalies_df['anomaly_above'].plot.bar(
+        self._anomalies_df['anomaly_above'].plot.bar(
             color=color_above,
             ax=self.ax,
             legend=False,
             width=0.7,
             alpha=0.9
         )
-        self.anomalies_df['anomaly_below'].plot.bar(
+        self._anomalies_df['anomaly_below'].plot.bar(
             color=color_below,
             ax=self.ax,
             legend=False,
@@ -164,16 +257,36 @@ class LongtermAnomaliesYear:
         default_title = f"{self.series_label} anomaly per year ({self.data_first_year}-{self.data_last_year})"
         default_ylabel = f"{self.series_label} anomaly" + (f" {self.series_units}" if self.series_units else "")
         style.apply(ax=self.ax, default_title=default_title, default_xlabel='Year',
-                    default_ylabel=default_ylabel, zeroline_data=self.anomalies_df['anomaly'])
+                    default_ylabel=default_ylabel, zeroline_data=self._anomalies_df['anomaly'])
 
         # Domain-specific annotation + categorical x-axis tweaks (not shared chrome).
         self._annotate_reference()
 
+        # Recorded last, so it also covers whatever the shared chrome layer added.
+        self._drawn_on = self.ax
+        self._drawn = ([a for a in self._axes_artists(self.ax) if id(a) not in drawn_before],
+                       [c for c in self.ax.containers if id(c) not in containers_before])
+
         if self.showplot:
             self.fig.patch.set_facecolor('white')
-            self.fig.tight_layout(pad=1.2)
+            # No tight_layout(): pf.create_ax() asks for layout='constrained', and
+            # calling it swapped that engine out for a PlaceHolderLayoutEngine
+            # ("UserWarning: The figure layout has changed to tight") for a ~6%
+            # smaller axes. The constrained engine reserves room for the title,
+            # labels and ticks by itself, and the reference annotation is anchored
+            # in axes coordinates, so it rides with the axes either way.
             self.fig.show()
 
     def get(self):
-        """Return axis"""
+        """Return the axes this plot was rendered on.
+
+        Raises:
+            RuntimeError: If called before `plot()`. There is no axes until phase 2
+                has run, and the bare `AttributeError` this used to raise named an
+                internal attribute rather than the step that was skipped.
+        """
+        if self.ax is None:
+            raise RuntimeError("LongtermAnomaliesYear has no axes to return yet: call "
+                               "plot() before get(), rendering is phase 2 of the "
+                               "two-phase design.")
         return self.ax

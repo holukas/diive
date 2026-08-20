@@ -8,28 +8,11 @@ Fast and robust for regular missing data patterns.
 Part of the diive library: https://github.com/holukas/diive
 """
 
-import numpy as np
 import pandas as pd
 from pandas import Series
 
 from diive.core.utils.console import console as _console
 from diive.analysis import gapfinder
-
-
-def _calculate_gap_sizes(gap_df: pd.DataFrame, series: Series) -> np.ndarray:
-    """Calculate gap sizes in records from gap start/end timestamps.
-
-    Args:
-        gap_df: DataFrame with GAP_START and GAP_END columns.
-        series: Time series to determine median time step.
-
-    Returns:
-        Array of gap sizes in records.
-    """
-    time_delta_seconds = (gap_df['GAP_END'] - gap_df['GAP_START']).dt.total_seconds().astype(int)
-    median_step_seconds = series.index.to_series().diff().dt.total_seconds().median() or 1
-    gap_sizes = (time_delta_seconds / median_step_seconds).astype(int) + 1
-    return gap_sizes.to_numpy()
 
 
 def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) -> Series:
@@ -45,7 +28,7 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
         limit: Maximum number of consecutive missing values to fill.
                Must be ≥ 1. Default: 3.
                Example: limit=1 fills only isolated single-value gaps,
-                       limit=5 fills gaps up to 5 consecutive records.
+               limit=5 fills gaps up to 5 consecutive records.
         verbose: Print summary statistics table showing method parameters,
                  input/output data, gap analysis, and gap size distribution.
                  Default: False.
@@ -61,7 +44,7 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
         ValueError: If series is empty, limit < 1, or index is not DatetimeIndex.
 
     Examples:
-        See examples/gapfilling/gapfill_interpolate.py for examples demonstrating
+        See examples/gapfilling/gapfill_interpolate_generous.py for examples demonstrating
         conservative (limit=1) vs. generous (limit=5) gap-filling strategies.
     """
     # Input validation
@@ -70,7 +53,7 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
     if series.empty:
         raise ValueError("Input series cannot be empty")
     if limit < 1:
-        raise ValueError(f"Gap size limit must be ≥ 1, got {limit}")
+        raise ValueError(f"Gap size limit must be >= 1, got {limit}")
     if not isinstance(series.index, pd.DatetimeIndex):
         raise ValueError("Series must have a DatetimeIndex")
 
@@ -140,9 +123,9 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
             _console.print(f"\n{'Input Data':-^80}")
             _console.print(f"  {'Total records':<35} {n_total:>9,d}")
             _console.print(f"  {'Missing values':<35} {n_missing_input:>9,d}  ({pct_missing_input:>6.2f}%)")
-            _console.print(f"\n{'Gap Analysis (limit={limit})':-^80}")
+            _console.print(f"\n{f'Gap Analysis (limit={limit})':-^80}")
             _console.print(f"  {'Total gaps detected':<35} {n_gaps_total:>9,d}  (separate regions)")
-            _console.print(f"  {'Gaps ≤ '+str(limit)+' record(s)':<35} {n_gaps_filled:>9,d}  (eligible for filling)")
+            _console.print(f"  {'Gaps <= '+str(limit)+' record(s)':<35} {n_gaps_filled:>9,d}  (eligible for filling)")
             _console.print(f"  {'Gaps > '+str(limit)+' record(s)':<35} {n_gaps_skipped:>9,d}  (exceed limit)")
             _console.print(f"  {'Values to interpolate':<35} {n_records_filled:>9,d}  (in fillable gaps)")
             _console.print(f"  {'Values skipped':<35} {n_records_skipped:>9,d}  (in too-large gaps)")
@@ -180,9 +163,9 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
         _console.print(f"  {'Total records':<35} {n_total:>9,d}")
         _console.print(f"  {'Missing values':<35} {n_missing_input:>9,d}  ({pct_missing_input:>6.2f}%)")
 
-        _console.print(f"\n{'Gap Analysis (limit={limit})':-^80}")
+        _console.print(f"\n{f'Gap Analysis (limit={limit})':-^80}")
         _console.print(f"  {'Total gaps detected':<35} {n_gaps_total:>9,d}  (separate regions)")
-        _console.print(f"  {'Gaps ≤ '+str(limit)+' record(s)':<35} {n_gaps_filled:>9,d}  (eligible for filling)")
+        _console.print(f"  {'Gaps <= '+str(limit)+' record(s)':<35} {n_gaps_filled:>9,d}  (eligible for filling)")
         _console.print(f"  {'Gaps > '+str(limit)+' record(s)':<35} {n_gaps_skipped:>9,d}  (exceed limit)")
         _console.print(f"  {'Values to interpolate':<35} {n_records_filled:>9,d}  (in fillable gaps)")
         _console.print(f"  {'Values skipped':<35} {n_records_skipped:>9,d}  (in too-large gaps)")
@@ -205,4 +188,4 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
     return series_filled
 
 
-# See examples/gapfilling/gapfill_interpolate.py for usage examples.
+# See examples/gapfilling/gapfill_interpolate_generous.py for usage examples.

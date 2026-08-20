@@ -95,6 +95,7 @@ class RandomUncertaintyPAS20:
     every record gets an estimate.
 
     Core Methods:
+
     * **Method 1** (ONEFlux) — standard deviation of measured fluxes in a sliding
       ±7-day / ±1-hour window under similar meteorological conditions (TA, VPD,
       SW_IN), requiring more than 5 matching values.
@@ -106,6 +107,7 @@ class RandomUncertaintyPAS20:
       closest in magnitude, with no similarity restriction.
 
     Key Features:
+
     * Hierarchical approach ensures all records have uncertainty estimates
     * Proper error propagation through cumulative calculations using uncertainties package
     * Separate day/night or combined uncertainty depending on data quality
@@ -267,7 +269,7 @@ class RandomUncertaintyPAS20:
         # running ufloat cumsum.
         subset_cumu[fluxunc] = [
             ufloat(n if pd.notna(n) else np.nan, s if pd.notna(s) else np.nan)
-            for n, s in zip(subset_cumu[self.fluxgapfilledcol], subset_cumu[unc_cum])]
+            for n, s in zip(subset_cumu[self.fluxgapfilledcol], subset_cumu[unc_cum], strict=False)]
 
         # Calculate upper and lower cumulative flux bounds (+/- 1 sigma)
         subset_cumu[flux_upper] = subset_cumu[self.fluxgapfilledcol].add(subset_cumu[unc_cum])
@@ -705,8 +707,11 @@ class RandomUncertaintyPAS20:
         for k, i in enumerate(todo):
             self._report_progress(progress_callback, 4, k, todo.size)
             cur_ix = sorted_index.get_loc(record_index[i])
+            # The 5 records below and the 5 above the current flux magnitude. The
+            # stop is exclusive, so it needs +6 to reach the 5th record above --
+            # +5 would take only 4 and skew the median toward lower fluxes.
             start_ix = max(0, cur_ix - 5)
-            end_ix = cur_ix + 5
+            end_ix = cur_ix + 6
             seg = randunc_sorted[start_ix:end_ix]
             valid = seg[np.isfinite(seg)]
             n_vals = valid.size
@@ -853,6 +858,13 @@ class JointUncertaintyPAS20:
         -> the running spread of the cumulative scenario sums
         ``(cumsum(upper) - cumsum(lower)) / divisor``. Both use pandas' skipna
         cumsum so a single missing record never poisons the tail.
+
+        Both terms accumulate over the records that contribute to the cumulative
+        flux they bracket: a record with a missing flux, or (for the scenario term)
+        with only one of the two percentiles available, is skipped in *both*
+        scenario sums rather than in one of them. Such a record is undefined (NaN)
+        in the cumulative, like a record with a missing random uncertainty already
+        is, and the records after it are unaffected.
         """
         flux = self.df[self.fluxgapfilledcol].astype(float)
         lower = lower.astype(float).reindex(flux.index)
@@ -867,8 +879,13 @@ class JointUncertaintyPAS20:
         variance = (randunc ** 2).where(flux.notna())
         cum_random = np.sqrt(variance.cumsum())
         # Scenario part: fully correlated across records -> running spread of the
-        # cumulative scenario sums.
-        cum_scenario = (upper.cumsum() - lower.cumsum()) / self.divisor
+        # cumulative scenario sums. Both sums are masked to the same records (flux
+        # available, both percentiles available), otherwise the two skipna cumsums
+        # run over different record sets and their difference is no longer a
+        # spread -- it can even turn negative.
+        paired = flux.notna() & lower.notna() & upper.notna()
+        cum_scenario = (upper.where(paired).cumsum()
+                        - lower.where(paired).cumsum()) / self.divisor
 
         cum['UNC_RANDOM_CUMULATIVE'] = cum_random
         cum['UNC_SCENARIO_CUMULATIVE'] = cum_scenario

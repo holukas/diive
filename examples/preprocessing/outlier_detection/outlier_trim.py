@@ -45,7 +45,7 @@ print(f"  Range: {s_noise.min():.2f} to {s_noise.max():.2f}°C")
 trim_all = dv.outliers.TrimLow(
     series=s_noise,
     lower_limit=-75,
-    showplot=False,
+    showplot=True,
     verbose=1
 )
 trim_all.calc()
@@ -75,7 +75,7 @@ trim_night = dv.outliers.TrimLow(
     lat=47.286417,
     lon=7.733750,
     utc_offset=1,
-    showplot=False,
+    showplot=True,
     verbose=1
 )
 trim_night.calc()
@@ -104,7 +104,7 @@ trim_day = dv.outliers.TrimLow(
     lat=47.286417,
     lon=7.733750,
     utc_offset=1,
-    showplot=False,
+    showplot=True,
     verbose=1
 )
 trim_day.calc()
@@ -134,7 +134,7 @@ trim_both = dv.outliers.TrimLow(
     lat=47.286417,
     lon=7.733750,
     utc_offset=1,
-    showplot=False,
+    showplot=True,
     verbose=1
 )
 trim_both.calc()

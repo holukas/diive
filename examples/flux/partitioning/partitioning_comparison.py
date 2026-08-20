@@ -35,7 +35,11 @@ import numpy as np
 import diive as dv
 
 df = dv.load_exampledata_parquet()
-df = df.loc[df.index.year == 2017].copy()  # single year keeps the example quick
+# One growing season (April-September 2017): all four methods see identical input,
+# which is what the comparison needs, over the season where GPP and RECO are both
+# large enough for the methods to disagree visibly. A full year is dominated by the
+# two daytime ports, whose E0 smoother costs minutes once the window count grows.
+df = df.loc[(df.index.year == 2017) & (df.index.month.isin([4, 5, 6, 7, 8, 9]))].copy()
 
 print("Comparing 2 NIGHTTIME methods (*_NT_OF, *_NT_RP) and 2 DAYTIME methods (*_DT_RP, *_DT_OF)")
 print(f"Period: {df.index.min().date()} to {df.index.max().date()} ({len(df)} records)")

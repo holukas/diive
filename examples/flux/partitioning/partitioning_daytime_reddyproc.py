@@ -1,7 +1,7 @@
 """
-===========================================
+=============================================
 Daytime NEE Partitioning REddyProc (RECO/GPP)
-===========================================
+=============================================
 
 Partition net ecosystem exchange (NEE) into gross primary production (GPP) and
 ecosystem respiration (RECO) with the daytime method of Lasslop et al. (2010),
@@ -34,7 +34,12 @@ import numpy as np
 import diive as dv
 
 df = dv.load_exampledata_parquet()
-df = df.loc[df.index.year == 2017].copy()  # single year for the plots below
+# One growing season (April-September 2017). The light-response curve is fitted in
+# short overlapping windows, so this span carries the full seasonal range the fit
+# needs - spring onset, peak season, autumn senescence - while the run stays quick.
+# The cost of a longer span is not proportional: the E0 smoother's cost grows with
+# the *square* of the window count, and a full CH-DAV year takes minutes.
+df = df.loc[(df.index.year == 2017) & (df.index.month.isin([4, 5, 6, 7, 8, 9]))].copy()
 
 print("Partitioning method: DAYTIME (Lasslop et al. 2010, REddyProc port) -> *_DT_RP")
 print(f"Period: {df.index.min().date()} to {df.index.max().date()} ({len(df)} records)")
@@ -44,6 +49,7 @@ print(f"Period: {df.index.min().date()} to {df.index.max().date()} ({len(df)} re
 # ^^^^^^^^^^^^^^^^^^^^^
 # Inputs (REddyProc's daytime method uses the gap-filled meteo drivers
 # throughout and quality-filters only NEE):
+#
 #   - measured NEE (gaps are records that were not measured / did not pass QC)
 #   - gap-filled air temperature (for the fit and for RECO)
 #   - gap-filled VPD (diive's kPa is converted to REddyProc's hPa internally)

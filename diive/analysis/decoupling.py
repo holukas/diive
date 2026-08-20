@@ -17,7 +17,7 @@ import pandas as pd
 from diive.core.plotting.plotfuncs import default_format
 from diive.core.plotting.plotfuncs import default_legend
 from diive.core.plotting.plotfuncs import save_fig
-from diive.core.utils.console import warn
+from diive.core.utils.console import info, warn
 from pandas import DataFrame
 from scipy.stats import zscore
 
@@ -40,7 +40,9 @@ class StratifiedAnalysis:
         then within each z bin, further bins by variable x, and aggregates y within each bin.
 
         Args:
-            df: Dataframe with variables
+            df: Dataframe containing at least *zvar*, *xvar* and *yvar*. Only those three
+                columns are used: they are extracted first, then rows missing any of them
+                are dropped. Gaps in the frame's other columns do not remove records.
             zvar: Name of the stratification variable, will be shown as colors (z) in the plot.
             xvar: Name of the x-axis binning variable, will be shown on the x-axis (x) in the plot.
             yvar: Name of the variable of interest, will be shown on the y-axis (y) in the plot.
@@ -52,6 +54,7 @@ class StratifiedAnalysis:
         Properties:
             .results: All binned results as a single DataFrame with z_bin_label column
             .binaggs: Dict of DataFrames, one per z bin
+            .n_records_input / .n_records_used: Records received vs. records analyzed
 
         Methods:
             .calcbins(): Compute binned aggregates
@@ -65,7 +68,17 @@ class StratifiedAnalysis:
         See Also:
             stratified_analysis : Convenience alias (StratifiedAnalysis = stratified_analysis).
         """
-        self._df = df.copy().dropna()
+        # Restrict to the three analysis variables *before* dropping gaps. Dropping
+        # on the full frame is listwise deletion across every column it happens to
+        # carry, so one unrelated gappy column can remove almost the whole record
+        # (a working dataframe is the obvious thing to pass here).
+        self._df = df[[zvar, xvar, yvar]].copy().dropna()
+        self.n_records_input = len(df)
+        self.n_records_used = len(self._df)
+        if self.n_records_used < self.n_records_input:
+            info(f"Analyzing {self.n_records_used} of {self.n_records_input} records; "
+                 f"{self.n_records_input - self.n_records_used} dropped where "
+                 f"{zvar}, {xvar} or {yvar} was missing.")
         self.zvar = zvar
         self.xvar = xvar
         self.yvar = yvar
@@ -91,7 +104,7 @@ class StratifiedAnalysis:
 
     @property
     def df(self) -> DataFrame:
-        """The input DataFrame (NaN-dropped)."""
+        """The three analysis variables, without the records that gap any of them."""
         if self._df is None:
             raise Exception('No data available.')
         return self._df
@@ -154,16 +167,31 @@ class StratifiedAnalysis:
         # end_time = time.time()
         # print(f"Time elapsed: {end_time - start_time}")
 
+    def _z_bin_labels(self, grouped) -> dict:
+        """One display label per z bin, at the coarsest precision that keeps them unique.
+
+        The label is both the key of ``binaggs`` and the plot legend entry, so two
+        bins whose aggregate rounds to the same string would silently overwrite each
+        other. Adjacent quantile bins collide easily: at the permitted maximum of 120
+        z bins the spacing is below the two-decimal rounding resolution.
+        """
+        values = {g: g_df[self.zvar].agg(self.agg) for g, g_df in grouped}
+        for decimals in range(2, 10):
+            labels = {g: f"{round(v, decimals)}" for g, v in values.items()}
+            if len(set(labels.values())) == len(labels):
+                return labels
+        # Bins that agree to nine decimals: keep both, disambiguated by position.
+        return {g: f"{round(v, 9)} ({i})" for i, (g, v) in enumerate(values.items(), 1)}
+
     def calcbins(self):
         """Compute the stratified bin aggregates (with counts and 16th/84th percentile errors) into ``binaggs``."""
         # counter = 0
         grouped = self.df.groupby(by=self.z_group_col, observed=True, as_index=True, sort=True, group_keys=True)
+        labels = self._z_bin_labels(grouped)
         for g, g_df in grouped:
             g_df = g_df.set_index(self.z_group_col)
 
-            label_zvar = g_df[self.zvar].agg(self.agg)
-            label_zvar = label_zvar.round(decimals=2)
-            label_zvar = f"{label_zvar}"
+            label_zvar = labels[g]
 
             group, bins = pd.qcut(g_df[self.xvar], q=self.n_bins_x, retbins=True, precision=9, duplicates='drop')
             g_df[self.x_group_col] = group

@@ -21,7 +21,6 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (
@@ -29,7 +28,6 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
-    QHBoxLayout,
     QLabel,
     QPushButton,
     QSpinBox,
@@ -80,6 +78,28 @@ class BasePartitioningTab(DiiveTab):
     needs_lat = False
     needs_lon = False
     needs_utc = False
+
+    @property
+    def needs_coords(self) -> bool:
+        """True if this method reads any site coordinate."""
+        return bool(self.needs_lat or self.needs_lon or self.needs_utc)
+
+    def _coords_missing(self) -> bool:
+        """Refuse to run without a configured site, and say why.
+
+        The lat/lon/UTC spin boxes default to 0/0/0, and `_seed_site` leaves them
+        there when the site is unset — so an unguarded run would silently
+        partition at (0, 0) on UTC and return plausible-looking GPP/RECO. Mirrors
+        the guard in the outlier and correction tabs.
+        """
+        if not self.needs_coords or site.manager.configured:
+            return False
+        self.status.setText(
+            "This partitioning needs the site location for its day/night split, "
+            "but no coordinates are configured. Set latitude, longitude and UTC "
+            "offset in Settings -> Project settings first (running now would "
+            "silently partition at (0, 0) at UTC and corrupt the result).")
+        return True
     #: Show the "VPD is in kPa" toggle (daytime methods take VPD).
     has_vpd_unit = False
     #: Result columns to plot as RECO / GPP, plus the suffix shown in the status.
@@ -265,9 +285,12 @@ class BasePartitioningTab(DiiveTab):
         return {"controls": save_controls(self._state_controls())}
 
     def restore_state(self, state: dict) -> None:
-        from diive.gui.widgets.state_utils import restore_controls
-        restore_controls(self._state_controls(), state.get("controls"))
+        from diive.gui.widgets.state_utils import restore_controls, unrestored_message
+        unrestored = restore_controls(self._state_controls(), state.get("controls"))
         self.picker.refresh_availability()
+        if unrestored:
+            labels = {s["key"]: s["label"] for s in self.inputs}
+            self.status.setText(unrestored_message(unrestored, labels))
 
     # --- run -----------------------------------------------------------
     def _picks(self) -> dict[str, str]:
@@ -279,6 +302,8 @@ class BasePartitioningTab(DiiveTab):
         if self._df is None:
             self.status.setText("Load data first to copy its code.")
             return None
+        if self._coords_missing():
+            return None  # the snippet would carry lat=0.0, lon=0.0
         cols = {str(c) for c in self._df.columns}
         picks = self._picks()
         # Drop optional inputs left as "(none)"; require every other pick to be valid.
@@ -301,6 +326,8 @@ class BasePartitioningTab(DiiveTab):
 
     def _run(self) -> None:
         if self._df is None or self._runner.is_running:
+            return
+        if self._coords_missing():
             return
         cols = {str(c) for c in self._df.columns}
         picks = self._picks()

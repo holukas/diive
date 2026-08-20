@@ -100,6 +100,24 @@ class TestTime(unittest.TestCase):
         self.assertIn(".HOUR_SIN", result_df.columns)
         self.assertIn(".HOUR_COS", result_df.columns)
 
+    def test_vectorize_timestamps_season_is_not_nullable(self):
+        """.SEASON must not be a nullable extension dtype.
+
+        A single Int64 column turns the whole frame's .to_numpy() into object
+        dtype, which every ML fit downstream (e.g. the fallback model, which
+        feeds vectorize_timestamps output straight into the regressor) then has
+        to convert back to float.
+        """
+        idx = pd.date_range('2022-01-01 00:30', periods=48 * 400, freq='30min')
+        df = pd.DataFrame({'x': 1.0}, index=idx)
+        result_df = vectorize_timestamps(df, verbose=0)
+
+        self.assertEqual(result_df['.SEASON'].dtype, 'float64')
+        self.assertNotEqual(result_df.to_numpy().dtype, object)
+        # Values are unchanged: all four seasons, and matching the month map.
+        self.assertEqual(sorted(result_df['.SEASON'].unique()), [1.0, 2.0, 3.0, 4.0])
+        self.assertEqual(result_df.loc['2022-07-01 00:30', '.SEASON'], 2.0)
+
     def test_detect_freq(self):
         df, metadata_df = ed.load_exampledata_DIIVE_CSV_30MIN()
         f = DetectFrequency(index=df.index, verbose=True)
@@ -110,6 +128,87 @@ class TestTime(unittest.TestCase):
         f = DetectFrequency(index=df.index, verbose=True)
         freq = f.get()
         self.assertEqual(freq, '30min')
+
+    def test_detect_freq_percent_matching(self):
+        """n timestamps have n-1 intervals, and the reported match must say so.
+
+        The denominator used to be the row count, which reported 99% for a
+        perfectly regular 100-row index and 60% (instead of 75%) for the
+        one-gap index below.
+        """
+        from diive.core.times.times import timestamp_infer_freq_from_timedelta
+
+        # Perfectly regular: every interval matches.
+        idx = pd.date_range('2022-01-01 00:30', periods=100, freq='30min')
+        self.assertEqual(timestamp_infer_freq_from_timedelta(idx), ('30min', '100% occurrence'))
+        f = DetectFrequency(index=idx)
+        self.assertEqual(f.get(), '30min')
+        self.assertEqual(f.percent_matching, 100.0)
+        self.assertEqual(f.confidence, 1.0)
+
+        # Three of four intervals are 30min, one is 60min -> 75%, not 60%.
+        idx = pd.DatetimeIndex(['2022-01-01 00:30', '2022-01-01 01:00', '2022-01-01 01:30',
+                                '2022-01-01 02:00', '2022-01-01 03:00'])
+        self.assertEqual(timestamp_infer_freq_from_timedelta(idx), ('30min', '75% occurrence'))
+        f = DetectFrequency(index=idx)
+        self.assertEqual(f.get(), '30min')
+        self.assertEqual(f.percent_matching, 75.0)
+        self.assertEqual(f.confidence, 0.75)
+
+    def test_detect_freq_percent_matching_not_rounded(self):
+        """The match rate must keep its decimals.
+
+        It used to be parsed back out of the '{:.0f}% occurrence' display string,
+        so 999 of 1000 matching intervals reported 100.0 and was indistinguishable
+        from a perfectly regular record.
+        """
+        from diive.core.times.times import timestamp_infer_freq_from_timedelta
+
+        base = pd.date_range('2022-01-01 00:30', periods=1000, freq='30min')
+        idx = pd.DatetimeIndex(list(base) + [base[-1] + pd.Timedelta('60min')])
+        f = DetectFrequency(index=idx)
+        self.assertEqual(f.get(), '30min')
+        self.assertEqual(f.detection_method, 'timedelta')
+        self.assertAlmostEqual(f.percent_matching, 99.9, places=6)
+        self.assertAlmostEqual(f.confidence, 0.999, places=6)
+        self.assertNotEqual(f.percent_matching, 100.0)
+
+        # The public function keeps returning its rounded display string.
+        self.assertEqual(timestamp_infer_freq_from_timedelta(idx), ('30min', '100% occurrence'))
+
+    def test_detect_freq_two_records(self):
+        """Two regular timestamps define one interval, which is enough.
+
+        With the row count as denominator this raised RuntimeError, because
+        1 of 2 is not more than 50%.
+        """
+        idx = pd.date_range('2022-01-01 00:30', periods=2, freq='30min')
+        f = DetectFrequency(index=idx)
+        self.assertEqual(f.get(), '30min')
+        self.assertEqual(f.percent_matching, 100.0)
+        self.assertEqual(f.detection_method, 'timedelta')
+
+        # Same for other resolutions.
+        self.assertEqual(DetectFrequency(index=pd.date_range('2022-01-01', periods=2, freq='1h')).get(), 'h')
+
+    def test_detect_freq_single_record_raises(self):
+        """One timestamp has no interval: a clear error, not a bare KeyError."""
+        from diive.core.times.times import timestamp_infer_freq_from_timedelta
+
+        idx = pd.date_range('2022-01-01 00:30', periods=1, freq='30min')
+        self.assertEqual(timestamp_infer_freq_from_timedelta(idx), (None, '-not-enough-datarows-'))
+        with self.assertRaises(RuntimeError):
+            DetectFrequency(index=idx)
+
+    def test_sanitizer_reports_percent_matching(self):
+        """The public status number must be the interval match, not row-count based."""
+        from diive.core.times.times import TimestampSanitizer
+        idx = pd.date_range('2022-01-01 00:30', periods=48, freq='30min', name='TIMESTAMP_END')
+        s = pd.Series(1.0, index=idx, name='x')
+        status = TimestampSanitizer(data=s, validate_naming=False, output_middle_timestamp=False,
+                                    verbose=False).get_status()
+        self.assertEqual(status['inferred_frequency'], '30min')
+        self.assertEqual(status['frequency_percent_matching'], 100.0)
 
     def test_resampling_to_30MIN(self):
         df, metadata_df = ed.load_exampledata_GENERIC_CSV_HEADER_1ROW_TS_MIDDLE_FULL_1MIN_long()
@@ -205,5 +304,216 @@ class TestTime(unittest.TestCase):
                                regularize=True, verbose=False).get()
 
 
+class TestStlDecompose(unittest.TestCase):
+    """Regression tests for `core/times/decomposition_utils.py::stl_decompose`.
+
+    Two real bugs were fixed here and neither had a test: the wrapper never
+    passed `period` through to statsmodels' STL (so the cycle length the caller
+    asked for was ignored), and it called `STL.fit(weights=...)`, which
+    statsmodels does not accept, so any `weights=` call raised.
+    """
+
+    PERIOD = 24
+    CYCLES = 20
+
+    @classmethod
+    def setUpClass(cls):
+        import numpy as np
+        n = cls.PERIOD * cls.CYCLES
+        idx = pd.date_range('2021-01-01', periods=n, freq='h', name='TIMESTAMP')
+        t = np.arange(n)
+        # A clean 24-step cycle on a linear trend: the seasonal component the
+        # decomposition should recover is known exactly (amplitude 20).
+        cls.series = pd.Series(
+            10 * np.sin(2 * np.pi * t / cls.PERIOD)
+            + 0.02 * t
+            + np.random.RandomState(0).randn(n) * 0.3,
+            index=idx, name='X')
+
+    @staticmethod
+    def _decompose(series, **kwargs):
+        import warnings
+        from diive.core.times.decomposition_utils import stl_decompose
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            return stl_decompose(series, **kwargs)
+
+    @staticmethod
+    def _lag_autocorr(values, lag):
+        import numpy as np
+        return float(np.corrcoef(values[:-lag], values[lag:])[0, 1])
+
+    def test_period_is_actually_used(self):
+        """The regression: `seasonal` must reach statsmodels as `period`.
+
+        With the period honoured, the recovered seasonal component repeats
+        exactly every PERIOD steps. When it was dropped, the component tracked
+        whatever statsmodels defaulted to instead — which this separates
+        cleanly (0.9999 vs 0.005 lag-PERIOD autocorrelation).
+        """
+        result = self._decompose(self.series, seasonal=self.PERIOD,
+                                 trend=self.PERIOD * 2 + 1)
+        seasonal = result['seasonal'].to_numpy()
+        self.assertGreater(self._lag_autocorr(seasonal, self.PERIOD), 0.99)
+        # And it recovers the true amplitude of 20 (10 * sin, peak to trough).
+        self.assertAlmostEqual(float(seasonal.max() - seasonal.min()), 20.0, delta=1.5)
+
+    def test_a_wrong_period_does_not_recover_the_cycle(self):
+        # The control for the test above: asking for the wrong cycle length must
+        # give a visibly different answer, or the assertion above proves nothing.
+        result = self._decompose(self.series, seasonal=7, trend=15)
+        seasonal = result['seasonal'].to_numpy()
+        self.assertLess(abs(self._lag_autocorr(seasonal, self.PERIOD)), 0.5)
+
+    def test_weights_are_no_longer_offered(self):
+        """statsmodels' STL takes no observation weights, so neither does diive.
+
+        They used to be accepted, normalised and then dropped on the floor, while
+        `quality_weighted_decompose` and `SeasonalTrendDecomposition.summary()`
+        reported that weighting had happened. `robust=` is the real knob.
+        """
+        import numpy as np
+        with self.assertRaises(TypeError):
+            self._decompose(self.series, seasonal=self.PERIOD,
+                            trend=self.PERIOD * 2 + 1,
+                            weights=np.linspace(0.0, 1.0, len(self.series)))
+
+    def test_the_quality_weighting_wrapper_is_gone(self):
+        import diive.core.times.decomposition_utils as utils
+        from diive.analysis.seasonaltrend import SeasonalTrendDecomposition
+        self.assertFalse(hasattr(utils, 'quality_weighted_decompose'))
+        std = SeasonalTrendDecomposition(self.series, seasonal_period=self.PERIOD)
+        self.assertNotIn('Quality-weighted', std.summary())
+
+    def test_components_are_additive_and_keep_the_index(self):
+        result = self._decompose(self.series, seasonal=self.PERIOD,
+                                 trend=self.PERIOD * 2 + 1)
+        for key in ('seasonal', 'trend', 'residual'):
+            with self.subTest(component=key):
+                self.assertTrue(result[key].index.equals(self.series.index))
+        # STL is additive: the three components must sum back to the input.
+        # (The function swaps in an integer index internally, then restores the
+        # original — this catches that restoration going wrong.)
+        recomposed = result['seasonal'] + result['trend'] + result['residual']
+        pd.testing.assert_series_equal(recomposed, self.series, check_names=False,
+                                       atol=1e-9)
+
+    def test_trend_window_is_normalised(self):
+        # statsmodels requires an odd trend window strictly greater than the
+        # period; the wrapper fixes up both rather than passing them through to
+        # a raise.
+        for label, trend in (('even', self.PERIOD * 2), ('below period', 5)):
+            with self.subTest(trend=label):
+                result = self._decompose(self.series, seasonal=self.PERIOD, trend=trend)
+                self.assertEqual(int(result['trend'].isna().sum()), 0)
+
+    def test_invalid_arguments_raise(self):
+        for label, kwargs in (('seasonal < 2', dict(seasonal=1)),
+                              ('trend < 3', dict(seasonal=24, trend=2))):
+            with self.subTest(case=label):
+                with self.assertRaises(ValueError):
+                    self._decompose(self.series, **kwargs)
+
+    def test_short_series_warns(self):
+        import warnings
+        from diive.core.times.decomposition_utils import stl_decompose
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            stl_decompose(self.series.head(30), seasonal=self.PERIOD,
+                          trend=self.PERIOD * 2 + 1)
+        self.assertTrue(any(issubclass(w.category, UserWarning) for w in caught),
+                        'a series shorter than 2 * seasonal should warn')
+
+
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestStlSurvivesGaps(unittest.TestCase):
+    """A gap must not empty the whole decomposition.
+
+    statsmodels' STL has no NaN handling: it propagates rather than raising, so
+    one missing value used to give three all-NaN components, `seasonality_strength
+    = 0.0` and a `summary()` full of `nan +/- nan` - while four docstrings promised
+    gap tolerance. Gaps are the normal state of EC data.
+    """
+
+    PERIOD = 24
+    CYCLES = 20
+
+    @classmethod
+    def setUpClass(cls):
+        import numpy as np
+        n = cls.PERIOD * cls.CYCLES
+        idx = pd.date_range('2021-01-01', periods=n, freq='h', name='TIMESTAMP')
+        t = np.arange(n)
+        cls.series = pd.Series(10 * np.sin(2 * np.pi * t / cls.PERIOD) + 0.02 * t,
+                               index=idx, name='X')
+
+    def _decompose(self, series):
+        import warnings
+        from diive.core.times.decomposition_utils import stl_decompose
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            return stl_decompose(series, seasonal=self.PERIOD, trend=self.PERIOD * 2 + 1)
+
+    def test_a_single_gap_costs_a_single_record(self):
+        import numpy as np
+        gappy = self.series.copy()
+        gappy.iloc[100] = np.nan
+        result = self._decompose(gappy)
+        self.assertEqual(result['n_interpolated'], 1)
+        for key in ('seasonal', 'trend', 'residual'):
+            with self.subTest(component=key):
+                self.assertEqual(int(result[key].notna().sum()), len(gappy) - 1)
+                # The interpolated value is for the fit only - it is not returned.
+                self.assertTrue(pd.isna(result[key].iloc[100]))
+
+    def test_leading_and_trailing_gaps_are_covered_too(self):
+        # Plain interpolation leaves the edges untouched, and one NaN reaching
+        # statsmodels is enough to poison every component.
+        import numpy as np
+        gappy = self.series.copy()
+        gappy.iloc[:3] = np.nan
+        gappy.iloc[-2:] = np.nan
+        result = self._decompose(gappy)
+        self.assertEqual(result['n_interpolated'], 5)
+        self.assertEqual(int(result['trend'].notna().sum()), len(gappy) - 5)
+
+    def test_the_components_still_reconstruct_the_measured_records(self):
+        import numpy as np
+        gappy = self.series.copy()
+        gappy.iloc[50:60] = np.nan
+        result = self._decompose(gappy)
+        recomposed = result['seasonal'] + result['trend'] + result['residual']
+        measured = gappy.notna()
+        pd.testing.assert_series_equal(recomposed[measured], gappy[measured],
+                                       check_names=False, atol=1e-9)
+
+    def test_an_all_nan_series_says_so(self):
+        import numpy as np
+        allnan = pd.Series(np.nan, index=self.series.index)
+        with self.assertRaises(ValueError):
+            self._decompose(allnan)
+
+
+class TestSeasonalityDetectionDoesNotInvent(unittest.TestCase):
+    """A failed detection must not look like a successful one."""
+
+    def test_no_candidate_period_raises_instead_of_returning_365(self):
+        # It used to return primary_period=365, secondary [7, 30], strength 0.0 -
+        # a plausible-looking result - and the caller then decomposed a 5-point
+        # series at period 365.
+        from diive.core.times.decomposition_utils import detect_seasonality
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            with self.assertRaises(ValueError):
+                detect_seasonality(pd.Series([1.0, 2.0, 3.0, 4.0, 5.0]))
+
+    def test_a_real_cycle_is_still_detected(self):
+        import numpy as np
+        from diive.core.times.decomposition_utils import detect_seasonality
+        t = np.arange(1000)
+        res = detect_seasonality(pd.Series(np.sin(2 * np.pi * t / 50)))
+        self.assertAlmostEqual(res['primary_period'], 50, delta=1)

@@ -7,19 +7,16 @@ and tick formatting, legends, grids, zero lines and a quick exploratory plot.
 
 Part of the diive library: https://github.com/holukas/diive
 """
-import copy
 import time
 from pathlib import Path
 from typing import Literal
 
 import matplotlib.gridspec as gridspec
-import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt, _pylab_helpers, dates as mdates
 from pandas import DataFrame, Series
 
 import diive.core.plotting.styles.LightTheme as theme
-from diive.core.plotting.styles.LightTheme import *
 from diive.core.times.times import current_datetime
 from diive.core.utils.console import info
 
@@ -71,7 +68,7 @@ def make_patch_spines_invisible(ax):
     """Keep the frame on but hide the axes background patch and all spines."""
     ax.set_frame_on(True)
     ax.patch.set_visible(False)
-    for sp in ax.spines.to_numpy()():
+    for sp in ax.spines.values():
         sp.set_visible(False)
 
 
@@ -92,46 +89,6 @@ def hide_xaxis_yaxis(ax):
     x_axis.set_visible(False)
     y_axis = ax.axes.get_yaxis()
     y_axis.set_visible(False)
-
-
-def remove_prev_lines(ax):
-    """Remove all overlay lines (markers, limit lines) above the main line-0 plot."""
-    # Every time the slider multiplier is changed to a new value,
-    # the marker that shows the outlier values are drawn.
-    # In case there is already a marker in the plot, it needs to be
-    # removed first, then the new markers are drawn.
-    # Since the main plot of the time series is line 0, the marker
-    # and the limit lines are lines > 0. Therefore, here we try
-    # to remove all lines > 0. If there is a marker and aux lines,
-    # then all are removed. If there are none, in the current plot,
-    # nothing is removed. Line 0 is the main plot and is never removed.
-    # Since the index of lines changes after a removal, 3 times line 1
-    # is removed.
-
-    num_lines = len(ax.lines)
-    for l in range(num_lines):
-        try:
-            ax.lines[1].remove()
-        except:
-            pass
-
-    # Remove all collections in axis, e.g. .broken_barh
-    ax.collections = []
-
-    # Remove all texts in axis
-    ax.texts = []  ## this is so much simpler I cannot believe it
-
-    # num_lines = len(ax.lines)
-    # for l in range(num_lines):
-    #     try:
-    #         ax.lines[1].remove()
-    #     except:
-    #         pass
-
-    # for ix, t in enumerate(ax.texts):
-    #     ax.texts[ix].remove()
-
-    return ax
 
 
 # def remove_all_twin_ax_lines(twin_ax):
@@ -169,9 +126,10 @@ def default_format(ax,
     # Spines
     format_spines(ax=ax, color=color, lw=spines_lw)
 
-    # Set x-label
-    ax.set_xlabel(ax_xlabel_txt, color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
-                  fontweight=ax_labels_fontweight)
+    # Set x-label. The "no label" default for these parameters is False, which
+    # matplotlib renders literally as the string "False" - pass an empty label.
+    ax.set_xlabel(ax_xlabel_txt if ax_xlabel_txt else '', color=ax_labels_fontcolor,
+                  fontsize=ax_labels_fontsize, fontweight=ax_labels_fontweight)
 
     # Set y-label
     if ax_ylabel_txt and txt_ylabel_units:
@@ -179,7 +137,7 @@ def default_format(ax,
     elif ax_ylabel_txt and not txt_ylabel_units:
         _ax_ylabel_txt = f"{ax_ylabel_txt}"
     else:
-        _ax_ylabel_txt = ax_ylabel_txt
+        _ax_ylabel_txt = ''
     ax.set_ylabel(_ax_ylabel_txt, color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
                   fontweight=ax_labels_fontweight)
 
@@ -213,8 +171,11 @@ def format_spines(ax, color, lw):
 
 def non_numeric_error(ax):
     """Draw a centred 'data are non-numeric' message in place of a plot."""
-    plt.text(0.5, 0.5, 'Sorry, no plot. Data are non-numeric.', horizontalalignment='center',
-             verticalalignment='center', transform=ax.transAxes, bbox=dict(facecolor='red', alpha=0.5))
+    # `ax.text`, not `plt.text`: pyplot draws on its own current figure, so with
+    # `transform=ax.transAxes` the message was positioned in this axes' coordinates
+    # but landed on a different figure.
+    ax.text(0.5, 0.5, 'Sorry, no plot. Data are non-numeric.', horizontalalignment='center',
+            verticalalignment='center', transform=ax.transAxes, bbox=dict(facecolor='red', alpha=0.5))
 
 
 def clear_ax(ax):
@@ -374,7 +335,7 @@ def wheel_markers_7():
 def add_ax_title_inside(txt, ax):
     """Place a title *txt* inside the axes at the top-left corner."""
     text = ax.text(0.01, 0.97, f"{txt}",
-                   size=FONTSIZE_HEADER_AXIS, color=FONTCOLOR_HEADER_AXIS,
+                   size=theme.FONTSIZE_HEADER_AXIS, color=theme.FONTCOLOR_HEADER_AXIS,
                    backgroundcolor='none', transform=ax.transAxes, alpha=1,
                    horizontalalignment='left', verticalalignment='top', zorder=99)
     return text
@@ -391,7 +352,7 @@ def add_zeroline_y(data: Series or DataFrame, ax):
         _min = data.min()
         _max = data.max()
     if (_min < 0) & (_max > 0):
-        ax.axhline(0, lw=LINEWIDTH_ZERO, color=COLOR_LINE_ZERO, zorder=98)
+        ax.axhline(0, lw=theme.LINEWIDTH_ZERO, color=theme.COLOR_LINE_ZERO, zorder=98)
 
 
 def remove_line(line):
@@ -418,10 +379,20 @@ def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: 
     if isinstance(data, Series):
         data = pd.DataFrame(data)
     elif isinstance(data, list):
-        data_cols = {}
+        # Disambiguate duplicate names instead of keying a dict by them: callers
+        # routinely pass several stages of the same variable (raw and corrected,
+        # say), which share a name, and a dict silently kept only the last one —
+        # dropping a panel and labelling the survivor with the dropped series' name.
+        named, seen = [], {}
         for series in data:
-            data_cols[series.name] = series
-        data = pd.concat(data_cols, axis=1)
+            name = str(series.name)
+            if name in seen:
+                seen[name] += 1
+                name = f"{name} ({seen[name]})"
+            else:
+                seen[name] = 1
+            named.append(series.rename(name))
+        data = pd.concat(named, axis=1)
 
     fig = plt.figure(figsize=(16, 9))
 
@@ -441,7 +412,7 @@ def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: 
             # For other rows, use same x-axis scaling as for first row
             axes[a] = fig.add_subplot(gs[a, 0], sharex=axes[0])
 
-    colors = colors_12(400)
+    colors = theme.colors_12(400)
     for ix, col in enumerate(data.columns):
         ax = axes[ix] if subplots else axes[0]
         mean = data[col].mean()

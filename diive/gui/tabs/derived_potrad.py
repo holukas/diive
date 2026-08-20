@@ -8,8 +8,10 @@ dataset's timestamps and the site location via :func:`diive.variables.potrad`
 :class:`~diive.gui.tabs._derived_variable_base.BaseDerivedVariableTab` subclass
 that declares **no input columns**: the only inputs are the timestamp index and
 the site coordinates, so the variable list and the input-column box are hidden
-and a "Site coordinates" box takes their place (seeded from **Project settings**,
-mirroring the correction tabs).
+and a "Site coordinates" box takes their place. That box is a **read-only mirror
+of Project settings** — the coordinates have exactly one home, and a per-tab
+override would silently produce an ``SW_IN_POT`` curve for a different site than
+the rest of the project is processed for.
 
 All maths lives in the library; this tab only collects the coordinates, previews
 the result, and emits it with DERIVED provenance.
@@ -20,16 +22,19 @@ from __future__ import annotations
 
 import pandas as pd
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
+    QLabel,
     QSpinBox,
     QVBoxLayout,
 )
 
 import diive as dv
-from diive.gui import site
+from diive.gui import site, theme
 from diive.gui.tabs._derived_variable_base import (
+    _C_MUTED,
     FONT_SIZE,
     TITLE_FONTSIZE,
     BaseDerivedVariableTab,
@@ -42,7 +47,8 @@ class PotradTab(BaseDerivedVariableTab):
     title = "Potential radiation"
     intro = ("Calculate potential shortwave-incoming radiation (SW_IN_POT, W m-2) "
              "from the record's timestamps and the site location. Needs no input "
-             "columns - set the coordinates below.")
+             "columns - the coordinates come from Settings -> Project settings "
+             "and are shown below read-only; change them there.")
     inputs = []  # timestamps + coordinates only; no columns
     default_name = "SW_IN_POT"
     out_unit = "W m-2"
@@ -50,24 +56,46 @@ class PotradTab(BaseDerivedVariableTab):
 
     # --- settings ------------------------------------------------------
     def _add_extra_controls(self, layout: QVBoxLayout) -> None:
-        """Site coordinates, seeded from Project settings (and kept in sync)."""
+        """Site coordinates, mirrored read-only from Project settings.
+
+        Display-only on purpose: every SW_IN_POT value is a function of these
+        three numbers, so an editable copy here could silently produce a curve
+        for a different site than the rest of the project runs on."""
         box = QGroupBox("Site coordinates")
-        form = QFormLayout(box)
+        box.setToolTip("Read-only. These values come from Settings -> Project "
+                       "settings; edit them there.")
+        v = QVBoxLayout(box)
+
+        note = QLabel("From <b>Project settings</b>. To change them, go to "
+                      "Settings -> Project settings.")
+        note.setWordWrap(True)
+        note.setStyleSheet(f"QLabel {{ color: {_C_MUTED}; }}"
+                           + theme.manager.tooltip_qss())
+        v.addWidget(note)
+
+        form = QFormLayout()
         self.lat = QDoubleSpinBox()
         self.lat.setRange(-90.0, 90.0)
         self.lat.setDecimals(4)
-        self.lat.setToolTip("Site latitude in decimal degrees (north positive).")
         self.lon = QDoubleSpinBox()
         self.lon.setRange(-180.0, 180.0)
         self.lon.setDecimals(4)
-        self.lon.setToolTip("Site longitude in decimal degrees (east positive).")
         self.utc = QSpinBox()
         self.utc.setRange(-12, 14)
-        self.utc.setToolTip("UTC offset (hours) of the timestamps, e.g. 1 for "
-                            "UTC+01:00. Local standard time - no daylight saving.")
+        for w in (self.lat, self.lon, self.utc):
+            # Disabled, not read-only: read-only still reads as an input field.
+            w.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+            w.setEnabled(False)
         form.addRow("Latitude", self.lat)
         form.addRow("Longitude", self.lon)
         form.addRow("UTC offset", self.utc)
+        v.addLayout(form)
+
+        # Says why the fields read 0/0/0 when no site has been set yet.
+        self._coord_state = QLabel()
+        self._coord_state.setWordWrap(True)
+        v.addWidget(self._coord_state)
+
         layout.addWidget(box)
 
         self._seed_site()
@@ -76,10 +104,18 @@ class PotradTab(BaseDerivedVariableTab):
     def _seed_site(self) -> None:
         m = site.manager
         if not m.configured:
+            self._coord_state.setText(
+                "<b>No site configured yet</b> - set latitude, longitude and "
+                "UTC offset in Settings -> Project settings.")
+            self._coord_state.setStyleSheet(
+                f"QLabel {{ color: {theme.manager.tokens.get('DANGER_BG', '#E04646')}; }}"
+                + theme.manager.tooltip_qss())
+            self._coord_state.setVisible(True)
             return
         self.lat.setValue(m.latitude)
         self.lon.setValue(m.longitude)
         self.utc.setValue(m.utc_offset)
+        self._coord_state.setVisible(False)
 
     def _coords(self) -> tuple[float, float, int]:
         return self.lat.value(), self.lon.value(), self.utc.value()

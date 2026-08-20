@@ -26,7 +26,7 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import matplotlib.dates as mdates
 import pandas as pd

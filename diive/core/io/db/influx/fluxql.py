@@ -69,18 +69,30 @@ def fields_in_measurement(bucket: str, measurement: str, days: int = 9999) -> st
     return query
 
 
-def fields_in_bucket(bucket: str) -> str:
+def fields_in_bucket(bucket: str, days: int = 9999) -> str:
+    """Show all available fields in bucket.
+
+    As in :func:`fields_in_measurement`, *start* must be set explicitly: the
+    schema functions return results from the last 30d by default, which silently
+    hides everything in a bucket whose newest record is older than that.
+    """
     query = f'''
     import "influxdata/influxdb/schema"
-    schema.fieldKeys(bucket: "{bucket}")
+    schema.fieldKeys(bucket: "{bucket}", start: -{days}d)
     '''
     return query
 
 
-def measurements_in_bucket(bucket: str) -> str:
+def measurements_in_bucket(bucket: str, days: int = 9999) -> str:
+    """Show all available measurements in bucket.
+
+    As in :func:`fields_in_measurement`, *start* must be set explicitly: the
+    schema functions return results from the last 30d by default, which silently
+    hides everything in a bucket whose newest record is older than that.
+    """
     query = f'''
     import "influxdata/influxdb/schema"
-    schema.measurements(bucket: "{bucket}")
+    schema.measurements(bucket: "{bucket}", start: -{days}d)
     '''
     return query
 

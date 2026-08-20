@@ -56,4 +56,8 @@ def convert_ts_to_timezone(timezone_offset_to_utc_hours: int | float,
         The timestamps converted to the requested fixed offset.
     """
     offset_minutes = round(timezone_offset_to_utc_hours * 60)
-    return timestamp_index.dt.tz_convert(timezone(timedelta(minutes=offset_minutes)))
+    tz = timezone(timedelta(minutes=offset_minutes))
+    # A Series converts through the .dt accessor, a DatetimeIndex directly.
+    if hasattr(timestamp_index, 'dt'):
+        return timestamp_index.dt.tz_convert(tz)
+    return timestamp_index.tz_convert(tz)

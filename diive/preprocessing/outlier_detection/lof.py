@@ -25,7 +25,7 @@ Kudos:
 References:
     [1] https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.LocalOutlierFactor.html
 
-See examples/preprocessing/outlier_detection/lof.py for working examples.
+See examples/preprocessing/outlier_detection/outlier_lof.py for working examples.
 
 """
 import numpy as np
@@ -34,9 +34,9 @@ from pandas import Series, DatetimeIndex, DataFrame
 from sklearn.neighbors import LocalOutlierFactor as SKLocalOutlierFactor
 
 from diive.core.base.flagbase import FlagBase
-from diive.core.utils.console import detail
+from diive.core.utils.console import VERBOSE_PROGRESS, detail
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
+from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags, reject_legacy_params
 
 
 def lof(series: Series,
@@ -119,13 +119,14 @@ class LocalOutlierFactor(FlagBase):
                  idstr: str = None,
                  n_neighbors: int = 20,
                  contamination: float = 0.01,
-                 separate_daytime_nighttime: bool = False,
+                 separate_day_night: bool = False,
                  lat: float = None,
                  lon: float = None,
                  utc_offset: int = None,
                  showplot: bool = False,
                  verbose: bool = False,
-                 n_jobs: int = 1):
+                 n_jobs: int = 1,
+                 **legacy):
         """Identify outliers based on the local outlier factor.
 
         Args:
@@ -140,11 +141,11 @@ class LocalOutlierFactor(FlagBase):
                 - if 'auto', the threshold is determined as in the original paper,
                 - if a float, the contamination should be in the range (0, 0.5].
                 (description taken from scikit, ref [1])
-            separate_daytime_nighttime: If True, run outlier detection separately for daytime
+            separate_day_night: If True, run outlier detection separately for daytime
                 and nighttime periods. Requires lat, lon, and utc_offset parameters.
-            lat: Latitude of location as float (e.g., 46.583056). Required if separate_daytime_nighttime=True.
-            lon: Longitude of location as float (e.g., 9.790639). Required if separate_daytime_nighttime=True.
-            utc_offset: UTC offset in hours for sun position calculations. Required if separate_daytime_nighttime=True.
+            lat: Latitude of location as float (e.g., 46.583056). Required if separate_day_night=True.
+            lon: Longitude of location as float (e.g., 9.790639). Required if separate_day_night=True.
+            utc_offset: UTC offset in hours for sun position calculations. Required if separate_day_night=True.
             showplot: Show plot with results from the outlier detection.
             verbose: Print more text output.
             n_jobs: The number of parallel jobs to run for neighbors search. None means 1
@@ -156,6 +157,7 @@ class LocalOutlierFactor(FlagBase):
             the filtered time series and flags from all iterations.
 
         """
+        reject_legacy_params(legacy, 'LocalOutlierFactor')
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
 
         if n_neighbors < 1:
@@ -168,7 +170,7 @@ class LocalOutlierFactor(FlagBase):
         self.showplot = showplot
         self.verbose = verbose
         self.n_jobs = n_jobs
-        self.separate_daytime_nighttime = separate_daytime_nighttime
+        self.separate_day_night = separate_day_night
 
         # Density-based detection has no single data-unit threshold band, so there
         # is nothing to overlay as upper/lower limit lines.
@@ -176,9 +178,9 @@ class LocalOutlierFactor(FlagBase):
         self.last_lower_bound = None
         self.is_daytime = None
 
-        if self.separate_daytime_nighttime:
+        if self.separate_day_night:
             if lat is None or lon is None or utc_offset is None:
-                raise ValueError("lat, lon, and utc_offset are required when separate_daytime_nighttime=True")
+                raise ValueError("lat, lon, and utc_offset are required when separate_day_night=True")
             self.flag_daytime, flag_nighttime, self.is_daytime, self.is_nighttime = (
                 create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon,
                                                utc_offset=utc_offset))
@@ -199,7 +201,7 @@ class LocalOutlierFactor(FlagBase):
             self.run_flagtests, repeat=repeat, progress_callback=progress_callback)
         if self.showplot:
             self.defaultplot(n_iterations=n_iterations)
-            if self.separate_daytime_nighttime:
+            if self.separate_day_night:
                 title = (f"Local outlier factor filter daytime/nighttime: {self.series.name}, "
                          f"n_iterations = {n_iterations}, "
                          f"n_outliers = {self.series[self.overall_flag == 2].count()}")
@@ -264,7 +266,7 @@ class LocalOutlierFactor(FlagBase):
         """
         flag = pd.Series(index=self.filteredseries.index, data=np.nan)
 
-        if self.separate_daytime_nighttime:
+        if self.separate_day_night:
             s_daytime = self.filteredseries[self.is_daytime]
             ok_dt, rejected_dt, n_out_dt = self._apply_lof_to_subset(s_daytime, suffix="DAYTIME")
 
@@ -278,10 +280,10 @@ class LocalOutlierFactor(FlagBase):
 
             if self.verbose:
                 n_total = len(rejected_dt) + len(rejected_nt)
-                detail(f"ITERATION#{iteration}", verbose=self.verbose)
-                detail(f"Total found outliers: {len(rejected_dt)} values (daytime)", verbose=self.verbose)
-                detail(f"Total found outliers: {len(rejected_nt)} values (nighttime)", verbose=self.verbose)
-                detail(f"Total found outliers: {n_total} values (daytime+nighttime)", verbose=self.verbose)
+                detail(f"ITERATION#{iteration}", verbose=self.verbose, min_level=VERBOSE_PROGRESS)
+                detail(f"Total found outliers: {len(rejected_dt)} values (daytime)", verbose=self.verbose, min_level=VERBOSE_PROGRESS)
+                detail(f"Total found outliers: {len(rejected_nt)} values (nighttime)", verbose=self.verbose, min_level=VERBOSE_PROGRESS)
+                detail(f"Total found outliers: {n_total} values (daytime+nighttime)", verbose=self.verbose, min_level=VERBOSE_PROGRESS)
 
         else:
             ok, rejected, n_out = self._apply_lof_to_subset(self.filteredseries, suffix="")
@@ -289,7 +291,7 @@ class LocalOutlierFactor(FlagBase):
             flag.loc[rejected] = 2
 
             if self.verbose:
-                detail(f"ITERATION#{iteration}: Total found outliers: {n_out} values (global)", verbose=self.verbose)
+                detail(f"ITERATION#{iteration}: Total found outliers: {n_out} values (global)", verbose=self.verbose, min_level=VERBOSE_PROGRESS)
 
         _, ok, rejected = self._finalize_flags(flag)
         n_outliers = (flag == 2).sum()
@@ -297,6 +299,22 @@ class LocalOutlierFactor(FlagBase):
         return ok, rejected, n_outliers
 
 
-# Backward compatibility aliases
+# LocalOutlierFactor runs on the whole series by default, which is what this
+# name says, so a plain alias is accurate here.
 LocalOutlierFactorAllData = LocalOutlierFactor
-LocalOutlierFactorDaytimeNighttime = LocalOutlierFactor
+
+
+def LocalOutlierFactorDaytimeNighttime(*args, separate_day_night: bool = True, **kwargs):
+    """``LocalOutlierFactor`` with daytime/nighttime separation on by default.
+
+    This used to be a plain alias for ``LocalOutlierFactor``, whose
+    ``separate_day_night`` defaults to False. Picking this name for
+    what it says therefore gave whole-series detection, with no error or
+    warning -- and made this name identical to ``LocalOutlierFactorAllData``,
+    which means the opposite.
+
+    A wrapper function rather than a subclass because ``ConsoleOutputDecorator``
+    replaces the decorated class with a function, which cannot be subclassed.
+    Separating requires ``lat`` / ``lon`` / ``utc_offset``.
+    """
+    return LocalOutlierFactor(*args, separate_day_night=separate_day_night, **kwargs)

@@ -194,13 +194,12 @@ def detect_measurement(varname: str) -> str | None:
         A measurement code (e.g. ``'SW'``) or ``None`` if no prefix matches.
 
     Examples:
-        >>> detect_measurement('SW_IN_T1_2_1')
+        >>> import diive as dv
+        >>> dv.qaqc.detect_measurement('SW_IN_T1_2_1')
         'SW'
-        >>> detect_measurement('RH_T1_2_1')
-        'RH'
-        >>> detect_measurement('SWC_GF1_0.05_1')
+        >>> dv.qaqc.detect_measurement('SWC_GF1_0.05_1')
         'SWC'
-        >>> detect_measurement('FC') is None
+        >>> dv.qaqc.detect_measurement('FC') is None
         True
     """
     if not isinstance(varname, str):

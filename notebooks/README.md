@@ -1,6 +1,6 @@
 ![](../images/logo_diive1_128px.png)
 
-# DIIVE Examples & Notebooks
+# diive Examples & Notebooks
 
 ---
 
@@ -9,7 +9,7 @@
 Most functionality is now available as runnable Python scripts in the `examples/` folder — these are maintained, tested,
 and the primary reference for learning diive.
 
-**124 example scripts** organized by topic (visualization, gap-filling, flux processing, quality control, feature
+**113 example scripts** organized by topic (visualization, gap-filling, flux processing, quality control, feature
 engineering, and more)
 
 **See the complete catalog:** [examples/CATALOG.md](../examples/CATALOG.md)
@@ -31,11 +31,16 @@ See [examples/README.md](../examples/README.md) for detailed instructions.
 The following notebooks provide specialized functionality for data processing and flux analysis. Most examples have been
 migrated to Python scripts — **use the Python examples above for learning and standard workflows**.
 
+**Note:** the two `FormatMeteo*` notebooks and the four InfluxDB notebooks read from an InfluxDB database, so they
+need a database connection and a config directory to run. `FormatEddyProFluxnetFileForUpload` reads EddyPro output
+files from disk instead.
+
 ### Flux Workflows
 
-- [FluxProcessingChain.ipynb](FluxProcessingChain.ipynb) — Post-processing of Level-1 fluxes: quality flag extension (
-  L2), storage correction (L3.1), outlier removal (L3.2), USTAR threshold (L3.3), gap-filling (L4.1) with random forest
-  and MDS
+- [FluxProcessingChain.ipynb](FluxProcessingChain.ipynb) — Post-processing of Level-1 fluxes:
+  quality flag extension (L2), storage correction (L3.1), outlier removal (L3.2), USTAR threshold (L3.3), gap-filling
+  (L4.1) with random forest, XGBoost and MDS, then model reporting, result plots and export. Runs on the bundled
+  example data. Rewritten for the composable per-level API in v0.91.0
 
 ### Database (InfluxDB)
 
@@ -52,12 +57,12 @@ migrated to Python scripts — **use the Python examples above for learning and 
 
 ### Data Formatting & File I/O
 
-- [FormatEddyProFluxnetFileForUpload.ipynb](FormatEddyProFluxnetFileForUpload.ipynb) — Prepare EddyPro output for
-  FLUXNET database upload
-- [FormatMeteoForEddyProFluxProcessing.ipynb](FormatMeteoForEddyProFluxProcessing.ipynb) — Format meteorological data
-  for EddyPro flux processing
-- [FormatMeteoForFluxnetUpload.ipynb](FormatMeteoForFluxnetUpload.ipynb) — Format meteorological data for FLUXNET
-  database submission
+- [FormatEddyProFluxnetFileForUpload.ipynb](FormatEddyProFluxnetFileForUpload.ipynb) — Prepare
+  EddyPro output for FLUXNET database upload
+- [FormatMeteoForEddyProFluxProcessing.ipynb](FormatMeteoForEddyProFluxProcessing.ipynb) — Format
+  meteorological data for EddyPro flux processing
+- [FormatMeteoForFluxnetUpload.ipynb](FormatMeteoForFluxnetUpload.ipynb) — Format meteorological
+  data for FLUXNET database submission
 
 ### Workbench (Testing & Experimental)
 
@@ -68,7 +73,7 @@ development and scratch notebooks, not part of the standard workflow.
 
 ## Quick Links
 
-- [examples/CATALOG.md](../examples/CATALOG.md) — Complete index of 124 Python examples
+- [examples/CATALOG.md](../examples/CATALOG.md) — Complete index of 113 Python examples
 - [examples/README.md](../examples/README.md) — Examples folder overview
 - [CLAUDE.md](../CLAUDE.md) — Development guide and project overview
 - [CHANGELOG.md](../CHANGELOG.md) — Version history and recent updates

@@ -1,7 +1,7 @@
 """
-==================================================
+====================================================
 Flux Processing Chain - NEE Partitioning (Level 4.2)
-==================================================
+====================================================
 
 After gap-filling (Level 4.1) the chain can split the gap-filled net ecosystem
 exchange (NEE) into its gross components, gross primary production (GPP) and

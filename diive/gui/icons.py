@@ -18,13 +18,37 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPolygonF
+from PySide6.QtGui import (QColor, QGuiApplication, QIcon, QPainter, QPen,
+                           QPixmap, QPolygonF)
 
 _SIZE = 16
 
 
+def _device_pixel_ratio() -> float:
+    """Sharpest device pixel ratio among the connected screens (1.0 if none)."""
+    return max((s.devicePixelRatio() for s in QGuiApplication.screens()),
+               default=1.0)
+
+
 def _canvas() -> tuple[QPixmap, QPainter]:
-    pm = QPixmap(_SIZE, _SIZE)
+    """A transparent icon canvas, painted at the screen's device resolution.
+
+    The bitmap is allocated at `_SIZE * dpr` pixels and tagged with that ratio,
+    so every glyph draws in 16x16 logical units while the ink is rasterised at
+    the screen's real resolution. Without this the icons are baked at 16 physical
+    pixels and Qt has to upscale them at Windows 150%/200% display scaling, which
+    smears every thin line (measured: a 16px glyph blown up to 32px has no fully
+    opaque ink pixel left, against 69% for a natively painted 32px one).
+
+    Do NOT add `p.scale(dpr, dpr)` here: a QPainter on a paint device that
+    carries a devicePixelRatio applies that transform itself, so scaling again
+    draws every glyph at `dpr` times its intended size and the 16-unit artwork
+    is clipped to the top-left corner of the icon box. That is a no-op at 100%
+    display scaling and only shows up on a scaled (4K) screen.
+    """
+    dpr = _device_pixel_ratio()
+    pm = QPixmap(round(_SIZE * dpr), round(_SIZE * dpr))
+    pm.setDevicePixelRatio(dpr)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -33,6 +57,17 @@ def _canvas() -> tuple[QPixmap, QPainter]:
 
 def _poly(points) -> QPolygonF:
     return QPolygonF([QPointF(x, y) for x, y in points])
+
+
+def _line(p: QPainter, x1: float, y1: float, x2: float, y2: float) -> None:
+    """Draw a segment, keeping sub-pixel coordinates.
+
+    The scalar `QPainter.drawLine(x1, y1, x2, y2)` binds the `int` overload, so
+    PySide6 truncates every fraction (`4.2` -> `4`) while the `QRectF` / `_poly`
+    calls beside it keep theirs — one glyph then mixes snapped and unsnapped
+    geometry. Routing through `QPointF` is the float counterpart of `_poly`.
+    """
+    p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
 
 
 # --- thin-line monochrome glyphs (Studio preset) ---------------------------
@@ -62,8 +97,8 @@ def _line_canvas() -> tuple[QPixmap, QPainter]:
 
 def _ln_chart() -> QIcon:  # series / generic / driver / cumulative / seasonal
     pm, p = _line_canvas()
-    p.drawLine(2, 2, 2, 14)
-    p.drawLine(2, 14, 14, 14)
+    _line(p, 2, 2, 2, 14)
+    _line(p, 2, 14, 14, 14)
     p.drawPolyline(_poly([(3, 11), (6, 6), (9, 9), (14, 3)]))
     p.end()
     return QIcon(pm)
@@ -73,16 +108,16 @@ def _ln_grid() -> QIcon:  # heatmap / spectrogram / gaps & coverage
     pm, p = _line_canvas()
     p.drawRoundedRect(QRectF(2, 2, 12, 12), 2, 2)
     for x in (6, 10):
-        p.drawLine(x, 2, x, 14)
+        _line(p, x, 2, x, 14)
     for y in (6, 10):
-        p.drawLine(2, y, 14, y)
+        _line(p, 2, y, 14, y)
     p.end()
     return QIcon(pm)
 
 
 def _ln_bars() -> QIcon:  # histogram
     pm, p = _line_canvas()
-    p.drawLine(2, 14, 14, 14)
+    _line(p, 2, 14, 14, 14)
     for x, top in ((3, 9), (6.5, 4), (10, 7)):
         p.drawRect(QRectF(x, top, 2.6, 14 - top))
     p.end()
@@ -144,7 +179,7 @@ def _ln_book() -> QIcon:  # user manual (open book)
                           (8, 13)]))                       # left page
     p.drawPolyline(_poly([(8, 4), (12, 3), (14, 3.5), (14, 12.5), (12, 12),
                           (8, 13)]))                       # right page
-    p.drawLine(8, 4, 8, 13)                                # spine
+    _line(p, 8, 4, 8, 13)                                  # spine
     p.end()
     return QIcon(pm)
 
@@ -154,7 +189,7 @@ def _ln_document() -> QIcon:  # load example data
     p.drawPolyline(_poly([(9.5, 2), (4, 2), (4, 14), (12, 14), (12, 4.5), (9.5, 2),
                           (9.5, 4.5), (12, 4.5)]))
     for y in (8, 11):
-        p.drawLine(6, y, 10, y)
+        _line(p, 6, y, 10, y)
     p.end()
     return QIcon(pm)
 
@@ -171,7 +206,7 @@ def _ln_save() -> QIcon:  # save data as parquet
 def _ln_export() -> QIcon:  # export data as (tray + outgoing up-arrow)
     pm, p = _line_canvas()
     p.drawPolyline(_poly([(3, 9), (3, 13), (13, 13), (13, 9)]))  # tray
-    p.drawLine(8, 2, 8, 9.5)                                     # shaft
+    _line(p, 8, 2, 8, 9.5)                                       # shaft
     p.drawPolyline(_poly([(5, 5), (8, 2), (11, 5)]))             # arrowhead
     p.end()
     return QIcon(pm)
@@ -181,7 +216,7 @@ def _ln_checklist() -> QIcon:  # select variables (pick items from a list)
     pm, p = _line_canvas()
     for i, y in enumerate((4, 8, 12)):
         p.drawRect(QRectF(2, y - 1.5, 3, 3))            # checkbox
-        p.drawLine(7, y, 14, y)                          # item label
+        _line(p, 7, y, 14, y)                            # item label
         if i < 2:
             p.drawPolyline(_poly([(2.6, y), (3.3, y + 1), (4.6, y - 1.4)]))  # tick
     p.end()
@@ -191,8 +226,8 @@ def _ln_checklist() -> QIcon:  # select variables (pick items from a list)
 def _ln_clock() -> QIcon:  # add timestamp column
     pm, p = _line_canvas()
     p.drawEllipse(QRectF(2.5, 2.5, 11, 11))
-    p.drawLine(8, 8, 8, 4.6)     # hour hand
-    p.drawLine(8, 8, 11, 9)      # minute hand
+    _line(p, 8, 8, 8, 4.6)       # hour hand
+    _line(p, 8, 8, 11, 9)        # minute hand
     p.end()
     return QIcon(pm)
 
@@ -219,7 +254,7 @@ def _ln_props() -> QIcon:  # metadata explorer (per-variable properties)
     p.drawRoundedRect(QRectF(2, 2.5, 12, 11), 1.5, 1.5)
     for y in (5.5, 8, 10.5):
         p.drawEllipse(QRectF(4, y - 0.6, 1.2, 1.2))   # bullet
-        p.drawLine(6.5, y, 11.5, y)                    # value
+        _line(p, 6.5, y, 11.5, y)                      # value
     p.end()
     return QIcon(pm)
 
@@ -227,7 +262,7 @@ def _ln_props() -> QIcon:  # metadata explorer (per-variable properties)
 def _ln_exit() -> QIcon:  # exit
     pm, p = _line_canvas()
     p.drawPolyline(_poly([(8, 2.5), (3, 2.5), (3, 13.5), (8, 13.5)]))
-    p.drawLine(7, 8, 14, 8)
+    _line(p, 7, 8, 14, 8)
     p.drawPolyline(_poly([(11, 5), (14, 8), (11, 11)]))
     p.end()
     return QIcon(pm)
@@ -236,10 +271,10 @@ def _ln_exit() -> QIcon:  # exit
 def _ln_calendar() -> QIcon:  # select date range
     pm, p = _line_canvas()
     p.drawRoundedRect(QRectF(2, 3.5, 12, 10.5), 1.5, 1.5)
-    p.drawLine(2, 7, 14, 7)
-    p.drawLine(5, 2, 5, 4.5)
-    p.drawLine(11, 2, 11, 4.5)
-    p.drawLine(5, 10.5, 11, 10.5)   # a highlighted range
+    _line(p, 2, 7, 14, 7)
+    _line(p, 5, 2, 5, 4.5)
+    _line(p, 11, 2, 11, 4.5)
+    _line(p, 5, 10.5, 11, 10.5)     # a highlighted range
     p.end()
     return QIcon(pm)
 
@@ -257,8 +292,8 @@ def _ln_gear() -> QIcon:  # feature engineering
     c, r_out, r_in = 8.0, 6.6, 4.4
     for k in range(8):
         a = k * math.pi / 4
-        p.drawLine(c + r_in * math.cos(a), c + r_in * math.sin(a),
-                   c + r_out * math.cos(a), c + r_out * math.sin(a))
+        _line(p, c + r_in * math.cos(a), c + r_in * math.sin(a),
+              c + r_out * math.cos(a), c + r_out * math.sin(a))
     p.drawEllipse(QRectF(c - r_in, c - r_in, 2 * r_in, 2 * r_in))
     p.drawEllipse(QRectF(c - 1.7, c - 1.7, 3.4, 3.4))
     p.end()
@@ -279,7 +314,7 @@ def _ln_info() -> QIcon:  # about
     pm, p = _line_canvas()
     p.drawEllipse(QRectF(2.5, 2.5, 11, 11))
     p.drawPoint(QPointF(8, 5.4))
-    p.drawLine(8, 7.4, 8, 11.4)
+    _line(p, 8, 7.4, 8, 11.4)
     p.end()
     return QIcon(pm)
 
@@ -300,7 +335,7 @@ def _ln_hexbin() -> QIcon:  # hexbin density plot
 
 def _ln_distribution() -> QIcon:  # shifted distribution (bell curve)
     pm, p = _line_canvas()
-    p.drawLine(2, 13, 14, 13)                       # baseline
+    _line(p, 2, 13, 14, 13)                         # baseline
     pts = [(x, 13 - 9.0 * math.exp(-((x - 8) ** 2) / 11.0))
            for x in [2 + 0.5 * i for i in range(25)]]
     p.drawPolyline(_poly(pts))
@@ -314,7 +349,7 @@ def _ln_windrose() -> QIcon:  # wind rose / compass star
     for k in range(8):
         a = -math.pi / 2 + k * math.pi / 4
         r = 6.0 if k % 2 == 0 else 3.0              # alternating petal length
-        p.drawLine(cx, cy, cx + r * math.cos(a), cy + r * math.sin(a))
+        _line(p, cx, cy, cx + r * math.cos(a), cy + r * math.sin(a))
     p.end()
     return QIcon(pm)
 
@@ -333,9 +368,9 @@ def _ln_waterfall() -> QIcon:  # waterfall chart (stepped floating bars)
     for x, top, bottom in bars:
         p.drawRect(QRectF(x, top, 1.7, bottom - top))
     p.setPen(_line_pen(0.9))
-    p.drawLine(4.2, 9, 5.6, 9)        # connectors bridging the steps
-    p.drawLine(7.3, 6, 8.7, 6)
-    p.drawLine(10.4, 11, 11.8, 11)
+    _line(p, 4.2, 9, 5.6, 9)          # connectors bridging the steps
+    _line(p, 7.3, 6, 8.7, 6)
+    _line(p, 10.4, 11, 11.8, 11)
     p.end()
     return QIcon(pm)
 
@@ -348,21 +383,21 @@ def _ln_surface3d() -> QIcon:  # 3D surface mesh (isometric patch)
     for t in (1 / 3, 2 / 3):                         # mesh lines both directions
         ax = (tl[0] + (bl[0] - tl[0]) * t, tl[1] + (bl[1] - tl[1]) * t)
         bx = (tr[0] + (br[0] - tr[0]) * t, tr[1] + (br[1] - tr[1]) * t)
-        p.drawLine(ax[0], ax[1], bx[0], bx[1])
+        _line(p, ax[0], ax[1], bx[0], bx[1])
         ay = (tl[0] + (tr[0] - tl[0]) * t, tl[1] + (tr[1] - tl[1]) * t)
         by = (bl[0] + (br[0] - bl[0]) * t, bl[1] + (br[1] - bl[1]) * t)
-        p.drawLine(ay[0], ay[1], by[0], by[1])
+        _line(p, ay[0], ay[1], by[0], by[1])
     p.end()
     return QIcon(pm)
 
 
 def _ln_ustar() -> QIcon:  # u* threshold: saturating flux + breakpoint line
     pm, p = _line_canvas()
-    p.drawLine(2, 2, 2, 14)                                    # y-axis
-    p.drawLine(2, 14, 14, 14)                                  # x-axis
+    _line(p, 2, 2, 2, 14)                                      # y-axis
+    _line(p, 2, 14, 14, 14)                                    # x-axis
     p.drawPolyline(_poly([(3, 12.5), (5.5, 9), (8, 5.5),
                           (11, 5), (14, 5)]))                  # rise then plateau
-    p.drawLine(8, 3, 8, 14)                                    # threshold at the knee
+    _line(p, 8, 3, 8, 14)                                      # threshold at the knee
     p.end()
     return QIcon(pm)
 
@@ -373,7 +408,7 @@ def _ln_lag() -> QIcon:  # time lag: a signal and its right-shifted copy
     bot = [(x + 3, 11.0 - 2.0 * math.sin(2 * math.pi * (x - 2) / 8)) for x in range(2, 12)]
     p.drawPolyline(_poly(top))
     p.drawPolyline(_poly(bot))
-    p.drawLine(5, 8, 8, 8)                                     # shift indicator
+    _line(p, 5, 8, 8, 8)                                       # shift indicator
     p.drawPolyline(_poly([(6, 7), (5, 8), (6, 9)]))           # left arrowhead
     p.drawPolyline(_poly([(7, 7), (8, 8), (7, 9)]))           # right arrowhead
     p.end()
@@ -382,9 +417,9 @@ def _ln_lag() -> QIcon:  # time lag: a signal and its right-shifted copy
 
 def _ln_partition() -> QIcon:  # NEE -> GPP + RECO split (Y-fork)
     pm, p = _line_canvas()
-    p.drawLine(2, 8, 7.5, 8)                                   # incoming net flux
-    p.drawLine(7.5, 8, 14, 4)                                  # upper branch
-    p.drawLine(7.5, 8, 14, 12)                                 # lower branch
+    _line(p, 2, 8, 7.5, 8)                                     # incoming net flux
+    _line(p, 7.5, 8, 14, 4)                                    # upper branch
+    _line(p, 7.5, 8, 14, 12)                                   # lower branch
     p.drawEllipse(QRectF(6.8, 7.3, 1.4, 1.4))                  # fork node
     p.end()
     return QIcon(pm)
@@ -392,11 +427,11 @@ def _ln_partition() -> QIcon:  # NEE -> GPP + RECO split (Y-fork)
 
 def _ln_uncertainty() -> QIcon:  # central estimate + error envelope band
     pm, p = _line_canvas()
-    p.drawLine(2, 8, 14, 8)                                    # central estimate
+    _line(p, 2, 8, 14, 8)                                      # central estimate
     p.drawPolyline(_poly([(2, 5.5), (5, 4.2), (8, 4), (11, 4.2), (14, 5.5)]))   # upper envelope
     p.drawPolyline(_poly([(2, 10.5), (5, 11.8), (8, 12), (11, 11.8), (14, 10.5)]))  # lower envelope
-    p.drawLine(5, 4.7, 5, 11.3)                                # whisker
-    p.drawLine(11, 4.7, 11, 11.3)                              # whisker
+    _line(p, 5, 4.7, 5, 11.3)                                  # whisker
+    _line(p, 11, 4.7, 11, 11.3)                                # whisker
     p.end()
     return QIcon(pm)
 
@@ -407,10 +442,10 @@ def _ln_outlier() -> QIcon:  # scatter with one flagged outlier
         p.drawEllipse(QRectF(cx - 1.3, cy - 1.3, 2.6, 2.6))
     ox, oy = 8.5, 4.5                                              # flagged outlier
     p.drawEllipse(QRectF(ox - 1.3, oy - 1.3, 2.6, 2.6))
-    p.drawLine(ox - 3.2, oy - 3.2, ox - 1.6, oy - 1.6)            # flag mark (X corners)
-    p.drawLine(ox + 3.2, oy - 3.2, ox + 1.6, oy - 1.6)
-    p.drawLine(ox - 3.2, oy + 3.2, ox - 1.6, oy + 1.6)
-    p.drawLine(ox + 3.2, oy + 3.2, ox + 1.6, oy + 1.6)
+    _line(p, ox - 3.2, oy - 3.2, ox - 1.6, oy - 1.6)              # flag mark (X corners)
+    _line(p, ox + 3.2, oy - 3.2, ox + 1.6, oy - 1.6)
+    _line(p, ox - 3.2, oy + 3.2, ox - 1.6, oy + 1.6)
+    _line(p, ox + 3.2, oy + 3.2, ox + 1.6, oy + 1.6)
     p.end()
     return QIcon(pm)
 
@@ -418,7 +453,7 @@ def _ln_outlier() -> QIcon:  # scatter with one flagged outlier
 def _ln_correction() -> QIcon:  # two slider rows with offset handles
     pm, p = _line_canvas()
     for y, hx in ((5.5, 9.5), (10.5, 5.5)):     # row y, handle center x
-        p.drawLine(2.5, y, 13.5, y)             # slider track
+        _line(p, 2.5, y, 13.5, y)               # slider track
         p.drawRect(QRectF(hx - 1.6, y - 2.0, 3.2, 4.0))   # handle
     p.end()
     return QIcon(pm)
@@ -426,7 +461,7 @@ def _ln_correction() -> QIcon:  # two slider rows with offset handles
 
 def _ln_event() -> QIcon:  # flag-on-pole event marker
     pm, p = _line_canvas()
-    p.drawLine(4, 2, 4, 14)                                   # staff
+    _line(p, 4, 2, 4, 14)                                     # staff
     p.drawPolyline(_poly([(4, 3), (12.5, 5.5), (4, 8)]))      # pennant
     p.end()
     return QIcon(pm)
@@ -435,8 +470,8 @@ def _ln_event() -> QIcon:  # flag-on-pole event marker
 def _ln_database() -> QIcon:  # stacked-disk database cylinder
     pm, p = _line_canvas()
     p.drawEllipse(QRectF(3, 2.5, 10, 3.5))                    # top disk rim
-    p.drawLine(3, 4.25, 3, 11.75)                             # left side
-    p.drawLine(13, 4.25, 13, 11.75)                           # right side
+    _line(p, 3, 4.25, 3, 11.75)                               # left side
+    _line(p, 13, 4.25, 13, 11.75)                             # right side
     p.drawArc(QRectF(3, 10, 10, 3.5), 180 * 16, 180 * 16)     # curved bottom
     p.drawArc(QRectF(3, 6.25, 10, 3.5), 180 * 16, 180 * 16)   # mid stacked-disk arc
     p.end()
@@ -446,7 +481,7 @@ def _ln_database() -> QIcon:  # stacked-disk database cylinder
 def _ln_settings() -> QIcon:  # slider tracks for project settings
     pm, p = _line_canvas()
     for y, hx in ((4, 9.5), (8, 4.5), (12, 10.5)):
-        p.drawLine(2.5, y, 13.5, y)                           # track
+        _line(p, 2.5, y, 13.5, y)                             # track
         p.drawRect(QRectF(hx - 1.3, y - 1.6, 2.6, 3.2))       # handle
     p.end()
     return QIcon(pm)
@@ -455,17 +490,17 @@ def _ln_settings() -> QIcon:  # slider tracks for project settings
 def _ln_profile() -> QIcon:  # tabular data-profile summary
     pm, p = _line_canvas()
     p.drawRoundedRect(QRectF(2, 2.5, 12, 11), 1.5, 1.5)
-    p.drawLine(2, 6, 14, 6)                                   # header rule
+    _line(p, 2, 6, 14, 6)                                     # header rule
     for y in (8.2, 10.2, 12.2):
-        p.drawLine(4, y, 7, y)                                # row label
-        p.drawLine(8.5, y, 12, y)                             # row value
+        _line(p, 4, y, 7, y)                                  # row label
+        _line(p, 8.5, y, 12, y)                               # row value
     p.end()
     return QIcon(pm)
 
 
 def _ln_extremes() -> QIcon:  # spikes breaching a threshold line
     pm, p = _line_canvas()
-    p.drawLine(2, 6, 14, 6)                                   # threshold
+    _line(p, 2, 6, 14, 6)                                     # threshold
     p.drawPolyline(_poly([(2, 11), (4, 11), (5.5, 3), (7, 11),
                           (9.5, 11), (11, 4), (12.5, 11), (14, 11)]))  # spikes
     p.end()
@@ -474,7 +509,7 @@ def _ln_extremes() -> QIcon:  # spikes breaching a threshold line
 
 def _ln_github() -> QIcon:  # git-branch fork for GitHub
     pm, p = _line_canvas()
-    p.drawLine(4.5, 4.5, 4.5, 11.5)                           # trunk
+    _line(p, 4.5, 4.5, 4.5, 11.5)                             # trunk
     p.drawPolyline(_poly([(4.5, 5.5), (11.5, 7.5), (11.5, 9.5)]))  # branch up to node
     p.setPen(Qt.PenStyle.NoPen)
     p.setBrush(_line_ink())
@@ -487,7 +522,7 @@ def _ln_github() -> QIcon:  # git-branch fork for GitHub
 def _ln_issue() -> QIcon:  # circle-exclamation alert for issue report
     pm, p = _line_canvas()
     p.drawEllipse(QRectF(2.5, 2.5, 11, 11))
-    p.drawLine(8, 4.6, 8, 8.6)                                # stroke (above)
+    _line(p, 8, 4.6, 8, 8.6)                                  # stroke (above)
     p.drawPoint(QPointF(8, 10.6))                             # dot (below)
     p.end()
     return QIcon(pm)
@@ -568,7 +603,12 @@ _LINE_RULES = [
     ("metadata", _ln_props),
     ("feature", _ln_gear),
     ("combine", _ln_grid),
-    ("calculate", _ln_gear),        # derived-variable calculators (VPD, ...)
+    # Derived-variable calculators. Keyed on the tab labels themselves: the
+    # "Calculate" they sit under is an `addSection` header, which Qt renders
+    # without an icon and never passes here, so a ("calculate", ...) rule can
+    # never fire.
+    ("vpd", _ln_gear),
+    ("radiation", _ln_gear),
     ("rename", _ln_tag),
     ("profile", _ln_profile),
     # Analysis.
@@ -721,13 +761,13 @@ def locate_icon(color: str | None = None) -> QIcon:
     return QIcon(pm)
 
 
-def menu_icon(label: str) -> QIcon:
+def menu_icon(label: str | None) -> QIcon:
     """Pick a small thin-line drawn icon for a menu label by keyword.
 
     Strips the ``&`` mnemonic markers first so e.g. ``"E&xit"`` matches "exit";
-    unknown labels fall back to a generic chart glyph.
+    unknown labels -- and a missing one -- fall back to a generic chart glyph.
     """
-    key = label.lower().replace("&", "")
+    key = (label or "").lower().replace("&", "")
     for keyword, factory in _LINE_RULES:
         if keyword in key:
             return factory()

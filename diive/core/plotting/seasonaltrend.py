@@ -124,7 +124,7 @@ def plot_decomposition(
             ax4.set_ylabel('ACF')
             ax4.set_title('Residual Autocorrelation')
         except Exception as e:
-            warnings.warn(f"Could not plot ACF: {str(e)}")
+            warnings.warn(f"Could not plot ACF: {str(e)}", stacklevel=2)
             # Fallback to residual plot
             ax4.plot(residual.index, residual.to_numpy(), color=color_scheme['residual'],
                     linewidth=0.8, marker='o', markersize=2)
@@ -218,7 +218,7 @@ def plot_seasonal_strength_by_period(
     bars = ax.bar(range(len(strengths)), strengths, color=color, alpha=0.7, edgecolor='black')
 
     # Add value labels on bars
-    for i, (bar, strength) in enumerate(zip(bars, strengths)):
+    for i, (bar, strength) in enumerate(zip(bars, strengths, strict=True)):
         height = bar.get_height()
         ax.text(bar.get_x() + bar.get_width() / 2., height,
                f'{strength:.3f}',
@@ -292,7 +292,7 @@ def plot_harmonics(
     ax.set_title(title or f'Top {top_n} Fourier Harmonics')
 
     # Add value labels on bars
-    for i, (bar, amp) in enumerate(zip(bars, amplitudes)):
+    for i, (bar, amp) in enumerate(zip(bars, amplitudes, strict=False)):
         height = bar.get_height()
         ax.text(bar.get_x() + bar.get_width() / 2., height,
                f'{amp:.3f}',

@@ -157,8 +157,8 @@ class TestOutlierDetection(unittest.TestCase):
 
         ham = HampelDaytimeNighttime(
             series=s_noise,
-            n_sigma_dt=5.5,
-            n_sigma_nt=5.5,
+            n_sigma_daytime=5.5,
+            n_sigma_nighttime=5.5,
             window_length=48 * 3,
             use_differencing=False,
             separate_day_night=True,
@@ -207,8 +207,8 @@ class TestOutlierDetection(unittest.TestCase):
 
         ham = HampelDaytimeNighttime(
             series=s_noise,
-            n_sigma_dt=100,
-            n_sigma_nt=100,
+            n_sigma_daytime=100,
+            n_sigma_nighttime=100,
             window_length=48,
             use_differencing=True,
             separate_day_night=True,
@@ -257,8 +257,8 @@ class TestOutlierDetection(unittest.TestCase):
 
         ham = HampelDaytimeNighttime(
             series=s_noise,
-            n_sigma_dt=5.5,
-            n_sigma_nt=5.5,
+            n_sigma_daytime=5.5,
+            n_sigma_nighttime=5.5,
             window_length=48,
             use_differencing=False,
             separate_day_night=False,
@@ -349,7 +349,7 @@ class TestOutlierDetection(unittest.TestCase):
 
         zdn = zScore(
             series=s_noise,
-            separate_daytime_nighttime=True,
+            separate_day_night=True,
             lat=47.286417,
             lon=7.733750,
             utc_offset=1,
@@ -428,9 +428,11 @@ class TestOutlierDetection(unittest.TestCase):
                                     seed=42)  # Add impulse noise (spikes)
         lsd = LocalSD(
             series=s_noise,
-            separate_daytime_nighttime=True,
-            n_sd=[3, 2],
-            winsize=[48 * 2, 48 * 1],
+            separate_day_night=True,
+            n_sd_daytime=3,
+            n_sd_nighttime=2,
+            winsize_daytime=48 * 2,
+            winsize_nighttime=48 * 1,
             constant_sd=False,
             lat=46.0,
             lon=11.0,
@@ -548,6 +550,24 @@ class TestOutlierDetection(unittest.TestCase):
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1444)
 
+    def test_localsd_values_exactly_on_the_limit_are_ok(self):
+        # `ok` used strict comparisons while `rejected` did too, so a value
+        # sitting exactly on a limit was in neither set. A constant series is
+        # the float-exact case: sd = 0 puts both limits right on the data, so
+        # every single record hit it and none was reported as ok.
+        s = pd.Series(data=5.0, name='CONSTANT',
+                      index=pd.date_range('2022-06-01', periods=96, freq='30min'))
+        lsd = LocalSD(series=s, n_sd=4, winsize=10, showplot=False, verbose=False)
+        ok, rejected, n_outliers, upper, lower = lsd._identify_outliers(
+            s=s, winsize=10, n_sd=4, iteration=1)
+        # The limits really are on the data, i.e. this is the boundary case.
+        self.assertEqual(float(upper.iloc[10]), 5.0)
+        self.assertEqual(float(lower.iloc[10]), 5.0)
+        # ok and rejected must partition the series, no record in neither.
+        self.assertEqual(len(rejected), 0)
+        self.assertEqual(n_outliers, 0)
+        self.assertEqual(len(ok), len(s))
+
     def test_zscore_increments(self):
         df = ed.load_exampledata_parquet()
         s = df['Tair_f'].copy()
@@ -643,8 +663,10 @@ class TestOutlierDetection(unittest.TestCase):
             lat=46.815333,
             lon=9.855972,
             utc_offset=1,
-            daytime_minmax=daytime_minmax,
-            nighttime_minmax=nighttime_minmax
+            minval_daytime=daytime_minmax[0],
+            maxval_daytime=daytime_minmax[1],
+            minval_nighttime=nighttime_minmax[0],
+            maxval_nighttime=nighttime_minmax[1],
         )
         al.calc(repeat=False)
         flag = al.get_flag()
@@ -679,3 +701,147 @@ class TestOutlierDetection(unittest.TestCase):
         gooddata_nt_stats = gooddata_nt.describe()
         self.assertGreaterEqual(gooddata_nt_stats.loc['min']['s_noise'], nighttime_minmax[0])
         self.assertLessEqual(gooddata_nt_stats.loc['max']['s_noise'], nighttime_minmax[1])
+
+
+class TestVerboseStatistics(unittest.TestCase):
+    """verbose=True must print the per-iteration statistics the docstrings promise.
+    They go through detail(), which prints from VERBOSE_DEBUG, while verbose=True
+    maps to VERBOSE_PROGRESS - so the statistics used to be unreachable."""
+
+    def _series(self):
+        idx = pd.date_range('2020-05-01', periods=500, freq='1min', name='TIMESTAMP_MIDDLE')
+        rng = np.random.default_rng(3)
+        s = pd.Series(20 + rng.normal(0, 0.05, len(idx)), index=idx, name='SWC')
+        s.iloc[250] = 40.0
+        return s
+
+    def _run(self, verbose):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from diive.preprocessing.outlier_detection.hampel import Hampel
+
+        buf = StringIO()
+        with redirect_stdout(buf):
+            ham = Hampel(series=self._series(), lat=47.478333, lon=8.364389, utc_offset=1,
+                         window_length=60, n_sigma=8, use_differencing=True,
+                         separate_day_night=False, showplot=False, verbose=verbose)
+            ham.calc(repeat=False)
+        return buf.getvalue()
+
+    def test_verbose_true_prints_outlier_counts(self):
+        self.assertIn('Outliers', self._run(verbose=True))
+
+    def test_verbose_false_stays_quiet(self):
+        self.assertNotIn('Outliers', self._run(verbose=False))
+
+
+class TestDaytimeNighttimeNames(unittest.TestCase):
+    """The *DaytimeNighttime names must do what they say.
+
+    They used to be plain aliases for their base class, so
+    LocalOutlierFactorDaytimeNighttime was the same object as
+    LocalOutlierFactorAllData -- two names meaning opposite things -- and
+    both ran on the whole series.
+    """
+
+    @staticmethod
+    def _diel_series(periods: int = 48 * 120):
+        idx = pd.date_range('2024-06-01', periods=periods, freq='30min')
+        hours = idx.hour + idx.minute / 60
+        rng = np.random.default_rng(0)
+        return pd.Series(12 * np.sin((hours - 6) / 24 * 2 * np.pi) + 8
+                         + rng.normal(0, 1.5, periods), index=idx, name='TA')
+
+    COORDS = dict(lat=46.815333, lon=9.855972, utc_offset=1)
+
+    def test_lof_daytime_nighttime_is_not_alldata(self):
+        from diive.preprocessing.outlier_detection import (
+            LocalOutlierFactorAllData, LocalOutlierFactorDaytimeNighttime)
+        self.assertIsNot(LocalOutlierFactorDaytimeNighttime, LocalOutlierFactorAllData)
+
+        s = self._diel_series()
+
+        def n_flagged(cls):
+            d = cls(series=s.copy(), n_neighbors=20, contamination=0.01, **self.COORDS)
+            d.calc(repeat=False)
+            return int((d.overall_flag == 2).sum())
+
+        # Separating changes the neighbourhoods, so the two must disagree.
+        self.assertNotEqual(n_flagged(LocalOutlierFactorDaytimeNighttime),
+                            n_flagged(LocalOutlierFactorAllData))
+
+    def test_absolutelimits_daytime_nighttime_applies_per_period_limits(self):
+        s = self._diel_series(periods=48 * 10)
+
+        # Per-period overrides are the intended usage.
+        al = AbsoluteLimitsDaytimeNighttime(series=s.copy(),
+                                            minval_daytime=4.0, maxval_daytime=25.0,
+                                            minval_nighttime=-5.0, maxval_nighttime=10.0,
+                                            **self.COORDS)
+        al.calc(repeat=False)
+        self.assertGreater(int((al.overall_flag == 2).sum()), 0)
+
+        # minval/maxval alone cover both periods, per the shared day/night
+        # convention. AbsoluteLimits is pointwise, so equal limits on both sides
+        # must give exactly the same flags as not separating at all.
+        split = AbsoluteLimitsDaytimeNighttime(series=s.copy(), minval=-5, maxval=25, **self.COORDS)
+        split.calc(repeat=False)
+        whole = AbsoluteLimits(series=s.copy(), minval=-5, maxval=25, separate_day_night=False)
+        whole.calc(repeat=False)
+        self.assertEqual(int((split.overall_flag == 2).sum()),
+                         int((whole.overall_flag == 2).sum()))
+
+        # The removed pair name reports its replacement.
+        with self.assertRaises(TypeError) as ctx:
+            AbsoluteLimitsDaytimeNighttime(series=s.copy(), daytime_minmax=[4.0, 25.0],
+                                           nighttime_minmax=[-5.0, 10.0], **self.COORDS)
+        self.assertIn('minval_daytime', str(ctx.exception))
+
+
+class TestRenamedParamsRejected(unittest.TestCase):
+    """Removed parameter names must name their replacement.
+
+    Detectors take **legacy purely so a pre-unification call gets a useful
+    message. If that regressed, the old name would land in **kwargs and be
+    ignored, silently running with the wrong settings.
+    """
+
+    @staticmethod
+    def _series(n: int = 200):
+        idx = pd.date_range('2024-06-01', periods=n, freq='30min')
+        return pd.Series(np.arange(float(n)), index=idx, name='TA')
+
+    COORDS = dict(lat=46.8, lon=9.8, utc_offset=1)
+
+    def test_old_switch_name_names_its_replacement(self):
+        from diive.preprocessing.outlier_detection import LocalSD, LocalOutlierFactor
+        for cls, extra in ((zScore, {}), (LocalSD, {}), (LocalOutlierFactor, {}),
+                           (AbsoluteLimits, dict(minval=0, maxval=1))):
+            with self.subTest(cls=getattr(cls, '__name__', str(cls))):
+                with self.assertRaises(TypeError) as ctx:
+                    cls(series=self._series(), separate_daytime_nighttime=True,
+                        **self.COORDS, **extra)
+                msg = str(ctx.exception)
+                self.assertIn('separate_daytime_nighttime', msg)
+                self.assertIn('separate_day_night', msg)
+
+    def test_old_hampel_short_names_rejected(self):
+        with self.assertRaises(TypeError) as ctx:
+            HampelDaytimeNighttime(series=self._series(), n_sigma_dt=5, **self.COORDS)
+        self.assertIn('n_sigma_daytime', str(ctx.exception))
+
+    def test_localsd_rejects_the_old_list_form(self):
+        from diive.preprocessing.outlier_detection import LocalSD
+        # n_sd kept its name and only stopped accepting a list, so no name-based
+        # check can catch this; it needs its own type guard.
+        with self.assertRaises(TypeError) as ctx:
+            LocalSD(series=self._series(), n_sd=[4, 7], separate_day_night=True, **self.COORDS)
+        msg = str(ctx.exception)
+        self.assertIn('n_sd_daytime', msg)
+        self.assertIn('n_sd_nighttime', msg)
+
+    def test_a_plain_typo_still_raises_normally(self):
+        # **legacy must not become a silent catch-all for misspellings.
+        with self.assertRaises(TypeError) as ctx:
+            zScore(series=self._series(), thres_zscoer=4)
+        self.assertIn('unexpected keyword argument', str(ctx.exception))

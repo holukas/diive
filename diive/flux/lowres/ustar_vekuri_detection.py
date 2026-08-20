@@ -9,8 +9,7 @@ Part of the diive library: https://github.com/holukas/diive
 
 import numpy as np
 import pandas as pd
-from typing import Dict, Tuple, Optional, List
-import warnings
+from typing import Dict, Optional, List
 
 from diive.core.utils.console import info, detail, warn
 
@@ -69,19 +68,17 @@ class UstarVekuriThresholdDetection:
     results_ : pd.DataFrame
         Detected thresholds with column: 'threshold'
         Index contains season labels (Season 1, 2, 3, 4)
+        Empty until detect() has run.
     bootstrap_stats_ : pd.DataFrame
         Bootstrap statistics including mean, std, percentiles
+        Empty until bootstrap() has run.
 
     Examples
     --------
     >>> import diive as dv
     >>> df = dv.load_exampledata_parquet_lae()
-    >>> # Filter to nighttime
-    >>> df_night = df[df['SW_IN'] < 10].copy()
-    >>> detector = dv.UstarVekuriThresholdDetection(df_night)
-    >>> thresholds = detector.detect()
-    >>> print(detector.summary())
-    >>> stats = detector.bootstrap()
+    >>> detector = dv.flux.UstarVekuriThresholdDetection(df)
+    >>> thresholds = detector.detect()  # then detector.summary() / detector.bootstrap()
 
     Notes
     -----
@@ -111,9 +108,15 @@ class UstarVekuriThresholdDetection:
         n_ustar_classes: int = 20,
         season_groups: Optional[List[List[int]]] = None,
         bootstrapping_times: int = 100,
+        random_state: Optional[int] = 42,
         verbose: int = 0,
     ):
-        """Set up Vekuri USTAR threshold detection. See the class docstring."""
+        """Set up Vekuri USTAR threshold detection. See the class docstring.
+
+        ``random_state`` seeds the bootstrap resampling so a threshold is
+        reproducible; pass None for a different draw on every call. It was
+        previously unseeded, so the percentiles moved between runs.
+        """
         if df is None or df.empty:
             raise ValueError("Input DataFrame cannot be None or empty")
 
@@ -170,6 +173,7 @@ class UstarVekuriThresholdDetection:
         self.n_temperature_classes = n_temperature_classes
         self.n_ustar_classes = n_ustar_classes
         self.bootstrapping_times = bootstrapping_times
+        self.random_state = random_state
         self.verbose = verbose
 
         if season_groups is None:
@@ -185,8 +189,10 @@ class UstarVekuriThresholdDetection:
                 raise ValueError("DataFrame must have datetime index or TIMESTAMP column")
 
         self.df['month'] = self.df.index.month
-        self.results_ = {}
-        self.bootstrap_results_ = {}
+        # Results storage; empty frames until detect() / bootstrap() fill them, so
+        # summary() can report "not run yet" instead of failing in its own guard.
+        self.results_ = pd.DataFrame()
+        self.bootstrap_stats_ = pd.DataFrame()
 
     @staticmethod
     def _find_column(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
@@ -241,7 +247,7 @@ class UstarVekuriThresholdDetection:
 
             if len(df_season) < 50:
                 if self.verbose >= 2:
-                    detail(f"    Insufficient data: {len(df_season)} samples")
+                    detail(f"    Insufficient data: {len(df_season)} samples", verbose=self.verbose)
                 thresholds_list.append([np.nan])
                 continue
 
@@ -249,7 +255,7 @@ class UstarVekuriThresholdDetection:
             thresholds_list.append([threshold])
 
             if self.verbose >= 2 and not np.isnan(threshold):
-                detail(f"    Threshold: {threshold:.4f} m/s")
+                detail(f"    Threshold: {threshold:.4f} m/s", verbose=self.verbose)
 
         # Store results
         self.results_ = pd.DataFrame(
@@ -356,7 +362,8 @@ class UstarVekuriThresholdDetection:
         Returns
         -------
         pd.DataFrame
-            Bootstrap statistics (mean, std, percentiles)
+            Bootstrap statistics (mean, std, percentiles), also stored in
+            *bootstrap_stats_*
         """
         if n_iter is None:
             n_iter = self.bootstrapping_times
@@ -368,9 +375,12 @@ class UstarVekuriThresholdDetection:
 
         for boot_idx in range(n_iter):
             if self.verbose >= 2 and boot_idx % 10 == 0:
-                detail(f"  Iteration {boot_idx + 1}/{n_iter}")
+                detail(f"  Iteration {boot_idx + 1}/{n_iter}", verbose=self.verbose)
 
-            df_boot = self.df.sample(n=len(self.df), replace=True)
+            # Offset by the iteration so the draws differ from each other while the
+            # whole run stays reproducible; unseeded, the percentiles moved between runs.
+            seed = None if self.random_state is None else self.random_state + boot_idx
+            df_boot = self.df.sample(n=len(self.df), replace=True, random_state=seed)
 
             try:
                 detector_boot = UstarVekuriThresholdDetection(
@@ -397,7 +407,8 @@ class UstarVekuriThresholdDetection:
                     warn(f"Bootstrap {boot_idx} failed")
                 continue
 
-        return self._compute_bootstrap_statistics(boot_results)
+        self.bootstrap_stats_ = self._compute_bootstrap_statistics(boot_results)
+        return self.bootstrap_stats_
 
     def _compute_bootstrap_statistics(self, boot_results: Dict) -> pd.DataFrame:
         """Compute statistics from bootstrap results."""
@@ -429,7 +440,11 @@ class UstarVekuriThresholdDetection:
         )
 
     def summary(self) -> str:
-        """Return formatted summary of detection results."""
+        """Return formatted summary of detection results.
+
+        Before detect() has run there is nothing to summarize; a note saying so
+        is returned instead of raising.
+        """
         if self.results_.empty:
             return "No detection results. Run detect() first."
 

@@ -89,7 +89,16 @@ gf = LongTermGapFillingRandomForestTS(
     # NEE can be negative (carbon uptake), so None is correct here.
     n_estimators=3,  # Reduced from standard 300 for speed (demo only)
     random_state=42,
-    n_jobs=-1
+    n_jobs=-1,
+    # Ordinary flux-RF leaf sizes, and the reason this example runs in seconds.
+    # Left at the sklearn defaults (leaf=1, no depth limit) three trees grow one
+    # leaf per record on the three-year pool, and TreeSHAP's cost scales with
+    # leaves x depth^2 -- that alone made this the slowest example in the suite.
+    min_samples_split=10,
+    min_samples_leaf=5,
+    # SHAP explains a seeded 5000-row sample per year. Its cost is linear in rows
+    # and mean |SHAP| converges early, so the per-year ranking below is unchanged.
+    shap_max_rows=5000,
 )
 
 # Create yearpools: each year gets its target year +/- 1 neighbors
@@ -172,4 +181,4 @@ axs[1].tick_params(labelleft=False)
 
 fig.show()
 
-print("✓ Long-term random forest gap-filling complete.")
+print("[OK] Long-term random forest gap-filling complete.")

@@ -89,6 +89,7 @@ from diive.gui.widgets.flux_pipeline_rail import PipelineRail
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.stepwise_method_params import STEP_METHOD_BY_KEY, method_labels
 from diive.gui.widgets.tab_chrome import build_titlebar
+from diive.gui.widgets.weak_slot import weak_slot
 
 #: Pipeline stages shown on the rail -> (badge, title). Index = stacked page +
 #: the level reached after a run (see _level_to_stage).
@@ -242,7 +243,7 @@ class FluxChainTab(DiiveTab):
         btn.setToolTip("Run only this level on the current chain output; the result "
                        "feeds the next level.")
         theme.set_button_role(btn, "confirm")
-        btn.clicked.connect(lambda: self._run_level(idx))
+        btn.clicked.connect(weak_slot(self._run_level, idx))
         self._level_run_btns[idx] = btn
         return btn
 
@@ -251,7 +252,7 @@ class FluxChainTab(DiiveTab):
         btn = QPushButton("Add to dataset")
         btn.setToolTip("Add this level's flag/QCF columns and QCF-filtered flux to "
                        "the dataset (available everywhere in the app).")
-        btn.clicked.connect(lambda: self._add_level(idx))
+        btn.clicked.connect(weak_slot(self._add_level, idx))
         self._level_add_btns[idx] = btn
         return btn
 
@@ -404,7 +405,7 @@ class FluxChainTab(DiiveTab):
                 v.addLayout(self._col_picker_row(key))
             v.addWidget(self._col_marker(key))
             if key == "raw_data_screening_vm97":
-                cb.toggled.connect(lambda *_: self._refresh_vm97_enabled())
+                cb.toggled.connect(self._refresh_vm97_enabled)
                 v.addLayout(self._vm97_subtests())
         v.addLayout(self._level_button_row(1, "Run Level 2"))
         return box
@@ -616,8 +617,7 @@ class FluxChainTab(DiiveTab):
         self.l31_zero = QCheckBox("Set storage to zero (H / LE)")
         self.l31_zero.setChecked(False)
         # Setting storage to zero makes the gap-fill choice irrelevant.
-        self.l31_zero.toggled.connect(
-            lambda on: self.l31_gapfill.setEnabled(not on))
+        self.l31_zero.toggled.connect(self.l31_gapfill.setDisabled)
         v.addWidget(self.l31_zero)
         form = QFormLayout()
         self.strgcol = QComboBox()  # "" = auto-detect (FLUXNET/EddyPro naming)
@@ -655,8 +655,8 @@ class FluxChainTab(DiiveTab):
         v.addWidget(self.l32_steps_list)
         row = QHBoxLayout()
         for label, slot in (("Remove", self._remove_l32_step),
-                            ("Up", lambda: self._move_l32_step(-1)),
-                            ("Down", lambda: self._move_l32_step(1))):
+                            ("Up", weak_slot(self._move_l32_step, -1)),
+                            ("Down", weak_slot(self._move_l32_step, 1))):
             b = QPushButton(label)
             b.clicked.connect(slot)
             row.addWidget(b)
@@ -1193,7 +1193,7 @@ class FluxChainTab(DiiveTab):
                 self.l2_vm97_checks[k].setChecked(bool(val))
         # Restore per-test column picks (combos seeded by restore_controls' fluxcol).
         for k, picks in (state.get("l2_cols") or {}).items():
-            for combo, pick in zip(self.l2_cols.get(k, []), picks):
+            for combo, pick in zip(self.l2_cols.get(k, []), picks, strict=False):
                 if pick and combo.findText(pick) >= 0:
                     combo.setCurrentText(pick)
         # Rebuild the L3.2 chain (a list of {method, kwargs} steps).
@@ -1632,7 +1632,7 @@ class FluxChainTab(DiiveTab):
         ax = self.canvas.new_axes(1)[0]
         try:
             dv.plotting.HeatmapDateTime(series).plot(
-                ax=ax, fig=self.canvas.fig,
+                ax=ax, fig=self.canvas.fig, cmap=theme.manager.heatmap_cmap,
                 format_style=dv.plotting.FormatStyle(title=f"{label}: {name}"),
                 cb_digits_after_comma="auto")
         except Exception as err:

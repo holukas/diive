@@ -25,7 +25,7 @@ import pandas as pd
 from pandas import Series
 
 from diive.core.times.resampling import resample_to_monthly_agg_matrix
-from diive.core.plotting.heatmap_base import HeatmapBase
+from diive.core.plotting.heatmap_base import HeatmapBase, SHOW_VALUES_MAX_CELLS
 from diive.core.plotting.plotfuncs import nice_date_ticks
 from diive.core.plotting.styles import LightTheme as theme
 from diive.core.plotting.styles.format import FormatStyle
@@ -43,12 +43,12 @@ class HeatmapDateTime(HeatmapBase):
     ``0.5`` for 00:30, ``6.0`` for 06:00) because ``pcolormesh`` requires
     numeric coordinates.
 
-    Top-level alias: ``dv.heatmap_datetime(series, ...)``
+    Public name: ``dv.plotting.HeatmapDateTime(series, ...)``
 
     See Also:
-        examples/visualization/heatmap_datetime.py — DateTime heatmap variations (vertical/horizontal)
-        examples/gap_filling/interpolate.py — Heatmap in gap-filling context
-        examples/gap_filling/randomforest_ts.py — Heatmap for model output visualization
+        examples/visualization/plot_heatmap_datetime_basic.py — DateTime heatmap variations (vertical/horizontal)
+        examples/gapfilling/gapfill_interpolate_generous.py — Heatmap in gap-filling context
+        examples/gapfilling/gapfill_randomforest.py — Heatmap for model output visualization
     """
 
     def __init__(self,
@@ -92,15 +92,18 @@ class HeatmapDateTime(HeatmapBase):
         self.series = self._setup_timestamp(series=self.series)
 
         # Data for plotting
-        self.plotdf = pd.DataFrame(self.series)
+        # Pivot through an internal value key, not the series name: a series actually
+        # named DATE or TIME would otherwise be overwritten by the helper columns below,
+        # and the heatmap would silently show the timestamp parts instead of the data.
+        self.plotdf = self.series.rename('_values').to_frame()
         self.plotdf['DATE'] = self.plotdf.index.date
         self.plotdf['TIME'] = self.plotdf.index.time
         self.plotdf = self.plotdf.reset_index(drop=True, inplace=False)
 
         if self.ax_orientation == "vertical":
-            self.plotdf = self.plotdf.pivot(index='DATE', columns='TIME', values=self.series.name)
+            self.plotdf = self.plotdf.pivot(index='DATE', columns='TIME', values='_values')
         elif self.ax_orientation == "horizontal":
-            self.plotdf = self.plotdf.pivot(index='TIME', columns='DATE', values=self.series.name)
+            self.plotdf = self.plotdf.pivot(index='TIME', columns='DATE', values='_values')
 
         # Extend
         self.x, self.y, self.z = self._set_bounds()
@@ -214,7 +217,8 @@ class HeatmapDateTime(HeatmapBase):
              show_less_xticklabels: bool = False,
              show_values: bool = False,
              show_values_fontsize: float = None,
-             show_values_n_dec_places: int = 0):
+             show_values_n_dec_places: int = 0,
+             show_values_max_cells: int | None = SHOW_VALUES_MAX_CELLS):
         """Render HeatmapDateTime with matplotlib styling (Phase 2 of two-phase design).
 
         All styling and presentation parameters go here. Can be called multiple times
@@ -246,6 +250,12 @@ class HeatmapDateTime(HeatmapBase):
             show_values: Overlay numeric values on cells (default: False)
             show_values_fontsize: Font size for value overlay text
             show_values_n_dec_places: Decimal places for value overlay (default: 0)
+            show_values_max_cells: Largest grid the overlay is drawn on; above it
+                the overlay is skipped with a warning (default:
+                :data:`~diive.core.plotting.heatmap_base.SHOW_VALUES_MAX_CELLS`).
+                One year of half-hourly data is 17 520 cells, where one label per
+                cell is unreadable and slows down every later redraw. Raise it,
+                or pass None for no limit, to label such a grid anyway.
 
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
@@ -282,7 +292,8 @@ class HeatmapDateTime(HeatmapBase):
             show_less_xticklabels=show_less_xticklabels,
             show_values=show_values,
             show_values_fontsize=show_values_fontsize,
-            show_values_n_dec_places=show_values_n_dec_places
+            show_values_n_dec_places=show_values_n_dec_places,
+            show_values_max_cells=show_values_max_cells
         )
 
         # Domain-specific rendering (pcolormesh + formatting)
@@ -303,6 +314,13 @@ class HeatmapDateTime(HeatmapBase):
             nice_date_ticks(ax=self.ax, minticks=self.minticks, maxticks=self.maxticks, which='x')
         else:
             raise NotImplementedError
+
+        # Hide every second x-label if requested
+        if self.show_less_xticklabels:
+            labels = self.ax.get_xticklabels()
+            for i, label in enumerate(labels):
+                if i % 2 != 0:
+                    label.set_visible(False)
 
         if self.show_values:
             self.show_vals_in_plot()
@@ -331,7 +349,7 @@ class HeatmapYearMonth(HeatmapBase):
     It supports different aggregation methods and the display of ranks instead of raw values.
 
     See Also:
-        examples/visualization/heatmap_datetime.py — Year/Month heatmap variations (rank, multi-panel, colormaps)
+        examples/visualization/plot_heatmap_datetime_basic.py — Year/Month heatmap variations (rank, multi-panel, colormaps)
     """
 
     def __init__(self,
@@ -381,6 +399,18 @@ class HeatmapYearMonth(HeatmapBase):
 
         # Bring data into shape
         self.plotdf = resample_to_monthly_agg_matrix(series=self.series, agg=self.agg, ranks=self.ranks)
+
+        # Complete the year x month lattice. The matrix holds only the (year,
+        # month) pairs that occur, but `_set_bounds` below hands the surviving
+        # labels to pcolormesh as cell *boundaries* — so a month nothing fell
+        # into is not drawn empty, its neighbour simply stretches across the gap
+        # while the axis keeps its regular 1..12 ticks. A record covering
+        # Nov-Feb drew February's colour from month 2 to month 11.
+        self.plotdf = self.plotdf.reindex(
+            index=pd.Index(range(int(self.plotdf.index.min()),
+                                 int(self.plotdf.index.max()) + 1),
+                           name=self.plotdf.index.name),
+            columns=pd.Index(range(1, 13), name=self.plotdf.columns.name))
 
         # Transpose in case of horizontal, to have months as index, years as columns
         if self.ax_orientation == "horizontal":
@@ -444,7 +474,8 @@ class HeatmapYearMonth(HeatmapBase):
              show_less_xticklabels: bool = False,
              show_values: bool = False,
              show_values_fontsize: float = None,
-             show_values_n_dec_places: int = 0):
+             show_values_n_dec_places: int = 0,
+             show_values_max_cells: int | None = SHOW_VALUES_MAX_CELLS):
         """Render HeatmapYearMonth with matplotlib styling (Phase 2 of two-phase design).
 
         All styling and presentation parameters go here. Can be called multiple times
@@ -474,6 +505,11 @@ class HeatmapYearMonth(HeatmapBase):
             show_values: Overlay numeric values on cells (default: False)
             show_values_fontsize: Font size for value overlay text
             show_values_n_dec_places: Decimal places for value overlay (default: 0)
+            show_values_max_cells: Largest grid the overlay is drawn on; above it
+                the overlay is skipped with a warning (default:
+                :data:`~diive.core.plotting.heatmap_base.SHOW_VALUES_MAX_CELLS`).
+                A year x month grid holds 12 cells per year, so no realistic
+                record comes near the limit.
 
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
@@ -514,7 +550,8 @@ class HeatmapYearMonth(HeatmapBase):
             show_less_xticklabels=show_less_xticklabels,
             show_values=show_values,
             show_values_fontsize=show_values_fontsize,
-            show_values_n_dec_places=show_values_n_dec_places
+            show_values_n_dec_places=show_values_n_dec_places,
+            show_values_max_cells=show_values_max_cells
         )
 
         # Domain-specific rendering (pcolormesh + formatting)

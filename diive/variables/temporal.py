@@ -41,7 +41,7 @@ class DaytimeNighttimeFlag:
                 are flagged as nighttime (W m-2)
 
         Example:
-            See `examples/createvar/daynightflag.py` for complete examples.
+            See `examples/features/feature_daynightflag.py` for complete examples.
         """
 
         self.timestamp_index = timestamp_index
@@ -192,28 +192,16 @@ class TimeSince:
 
     Examples
     --------
-    **Time since last precipitation (dry period detection):**
+    Records since the last rain (dry-period length):
 
-    >>> df = dv.load_exampledata_parquet()
-    >>> prec = df.loc[(df.index.year == 2022) & (df.index.month == 7),
-    ...               "PREC_TOT_T1_25+20_1"].copy()
-    >>> ts_prec = dv.TimeSince(prec, lower_lim=0, include_lim=False)
-    >>> ts_prec.calc()
-    >>> max_dry = ts_prec.get_timesince().max()
-    >>> print(f"Maximum dry period: {max_dry} records (~{max_dry * 0.5:.1f} hours)")
-
-    **Time since last freezing temperature:**
-
-    >>> temp = df.loc[(df.index.year == 2022) & (df.index.month == 3),
-    ...               "Tair_f"].copy()
-    >>> ts_temp = dv.TimeSince(temp, upper_lim=0, include_lim=True)
-    >>> ts_temp.calc()
-    >>> results = ts_temp.get_full_results()
-    >>> print(results.head(10))
+    >>> import diive as dv, pandas as pd
+    >>> idx = pd.date_range('2024-07-01', periods=6, freq='30min')
+    >>> prec = pd.Series([0.0, 0.0, 1.2, 0.0, 0.0, 0.0], index=idx, name='PREC')
+    >>> dv.variables.TimeSince(prec, lower_lim=0, include_lim=False).calc()
 
     See Also
     --------
-    examples/variables/feature_timesince.py : Complete usage examples with visualizations.
+    examples/features/feature_timesince.py : Complete usage examples with visualizations.
 
     Notes
     -----
@@ -387,8 +375,13 @@ def lagged_variants(df: DataFrame,
         respective time resolution must be present. Otherwise shifting variables by x records
         might lead to undesirable results.
 
+        Shifting moves records beyond the start or end of the record, which leaves gaps at the
+        series edges. Those gaps are filled with the nearest value, but only for source columns
+        that contained no missing values to begin with: for a gappy source, filling the edges
+        cannot be told apart from filling its genuine gaps, so the edges stay missing.
+
     Example:
-        See `examples/createvar/laggedvariants.py` for complete examples.
+        See `examples/features/feature_laggedvariants.py` for complete examples.
 
     Args:
         df: dataframe that contains variables that will be lagged
@@ -407,14 +400,12 @@ def lagged_variants(df: DataFrame,
 
     exclude_cols = [] if not exclude_cols else exclude_cols
 
-    if len(df.columns) == 1:
-        if df.columns[0] in exclude_cols:
-            raise Exception(f"(!) No lagged variants can be created "
-                            f"because there is only one single column in the dataframe "
-                            f"({df.columns[0]}) and the same column is also defined in "
-                            f"the exclude list (exclude_cols={exclude_cols}). "
-                            f"This means there are no data left to lag.")
-        return df
+    if len(df.columns) == 1 and df.columns[0] in exclude_cols:
+        raise Exception(f"(!) No lagged variants can be created "
+                        f"because there is only one single column in the dataframe "
+                        f"({df.columns[0]}) and the same column is also defined in "
+                        f"the exclude list (exclude_cols={exclude_cols}). "
+                        f"This means there are no data left to lag.")
 
     if not isinstance(lag, list):
         raise Exception(f"(!) Error in lag={lag}: No lagged variables can be created "
@@ -430,6 +421,10 @@ def lagged_variants(df: DataFrame,
         if not isinstance(_lag, int):
             raise TypeError(f"(!) Error in lag={lag}: No lagged variables can be created "
                             f"because {_lag} is not an integer.")
+
+    # Work on a copy: the loop below assigns the lagged columns into df, which
+    # would otherwise add them to the caller's dataframe as a side effect.
+    df = df.copy()
 
     _included = []
     _excluded = []
@@ -464,6 +459,7 @@ def lagged_variants(df: DataFrame,
     if verbose:
         detail(f"Added lagged variants for: {_included} (lags between {lag[0]} and {lag[1]} "
                f"with stepsize {stepsize}), no lagged variants for: {_excluded}. "
-               f"Shifting the time series created gaps which were then filled with the nearest value.",
+               f"Shifting the time series created gaps at the edges of the record, which were "
+               f"filled with the nearest value for variables without missing values.",
                verbose=verbose)
     return df

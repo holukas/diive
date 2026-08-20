@@ -1,7 +1,7 @@
 """
-========================
+==========================
 Gap Detection and Analysis
-========================
+==========================
 
 Identify and characterize missing data periods in time series.
 
@@ -74,6 +74,7 @@ print(short_gaps)
 # Visualization
 # ^^^^^^^^^^^^^
 # Two-panel figure:
+#
 # - top: daily data availability heatmap (day-of-year x year),
 #   showing seasonal and annual patterns in data loss
 # - bottom: gap length histogram (log scale) with duration reference

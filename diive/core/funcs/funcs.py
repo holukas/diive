@@ -18,12 +18,21 @@ def find_duplicates_in_list(lst: list) -> dict:
     return {key: value for key, value in counter.items() if value > 1}
 
 
-def validate_id_string(idstr: str):
-    """Normalize an identifier string to start with an underscore (None/empty passes through)."""
+def validate_id_string(idstr: str) -> str:
+    """Normalize an identifier string to start with an underscore.
+
+    A falsy *idstr* (None or empty) normalizes to ``''``, never to ``None``:
+    callers interpolate the result straight into column names
+    (``f'FLAG{idstr}_{col}_QCF'``), so returning ``None`` produced names with a
+    literal "None" in them (``FLAGNone_FC_QCF``) whenever the optional argument
+    was omitted. Callers that branch on the value (``if self.idstr:``) are
+    unaffected — an empty string is falsy too.
+    """
     if idstr:
         # idstr = idstr if idstr.endswith('_') else f'{idstr}_'
         idstr = idstr if idstr.startswith('_') else f'_{idstr}'
-    return idstr
+        return idstr
+    return ''
 
 
 def filter_strings_by_elements(list1: list[str], list2: list[str]) -> list[str]:
@@ -55,9 +64,9 @@ def zscore(series: Series, absolute: bool = True) -> Series:
     """Calculate the z-score (absolute) of each record in *series*
 
     See Also:
-        examples/preprocessing/outlier_detection/zscore.py — Z-score outlier detection variations
-        examples/preprocessing/outlier_detection/incremental.py — Z-score incremental change detection
-        examples/visualization/histogram.py — Z-score overlay on histograms
+        examples/preprocessing/outlier_detection/outlier_zscore.py — Z-score outlier detection variations
+        examples/preprocessing/outlier_detection/outlier_incremental.py — Z-score incremental change detection
+        examples/visualization/plot_histogram_basic.py — Z-score overlay on histograms
     """
     mean, std = np.mean(series), np.std(series)
     if absolute:

@@ -12,10 +12,12 @@ Load EddyPro CSV file using pre-defined filetype configuration.
 # Simplest approach: use a known filetype to read single file automatically.
 
 from pathlib import Path
+
+import diive
 from diive.core.io.filereader import ReadFileType
 
-# Resolve example data file path relative to this script
-data_dir = Path(__file__).parent.parent.parent / "diive" / "configs" / "exampledata" / "EDDYPRO-FLUXNET-CSV-30MIN_multiple"
+# Resolve the example data shipped inside the installed diive package
+data_dir = Path(diive.__file__).parent / "configs" / "exampledata" / "EDDYPRO-FLUXNET-CSV-30MIN_multiple"
 filepath = data_dir / "eddypro_CH-HON_FR-20240819-090003_fluxnet_2024-08-19T090019_adv.csv"
 
 rft = ReadFileType(

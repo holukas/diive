@@ -41,6 +41,11 @@ class WaterfallPlot:
             (NEE convention), negative values are treated as uptake (sink) and
             colored blue, positive values as release (source) and colored red.
             Set to False when the data is sign-flipped so positive means uptake.
+            A contribution of exactly 0.0 is neither uptake nor release and takes
+            the release color under both conventions, which is never seen: the bar
+            has zero height, so such a period shows only the flat connector. This
+            is common for a variable that is genuinely zero for whole periods
+            (1820 of 3649 daily bars for bundled CH-DAV precipitation).
 
     Methods:
         plot : Render the waterfall chart with styling options
@@ -63,7 +68,15 @@ class WaterfallPlot:
 
         s = series.dropna()
         # Aggregate to one bar per period unless the caller opted out.
-        self.contributions = s.resample(resample).agg(agg).dropna() if resample else s.copy()
+        if resample:
+            resampler = s.resample(resample)
+            # Pandas returns a real value for a group holding no measurements at all
+            # ('sum' -> 0.0, 'prod' -> 1.0, 'count' -> 0), which the trailing dropna()
+            # cannot remove, so a data gap is drawn as a genuine zero-contribution bar.
+            # Masking on the record count keeps that out for every agg the caller passes.
+            self.contributions = resampler.agg(agg).where(resampler.count() > 0).dropna()
+        else:
+            self.contributions = s.copy()
 
         # Each bar floats from the previous running total to the new one.
         self.cumulative = self.contributions.cumsum()
@@ -118,7 +131,8 @@ class WaterfallPlot:
             showplot: Show the figure (only when this object created the figure).
             digits_after_comma: Decimals for the final-total annotation.
             color_uptake: Bar color for uptake (sink) periods.
-            color_release: Bar color for release (source) periods.
+            color_release: Bar color for release (source) periods, and for a
+                contribution of exactly 0.0 (see ``uptake_is_negative``).
             bar_width: Bar width in days. Defaults to ~80% of the median spacing
                 between periods.
             show_connectors: Draw thin lines linking consecutive bars.
@@ -136,9 +150,27 @@ class WaterfallPlot:
             self.ax = ax
             self.fig = ax.get_figure()
             self._own_fig = False
+
+        # An input without a single valid value (e.g. a scenario column that was never
+        # gap-filled) has nothing to accumulate: contributions and the running total are
+        # both empty. Say so on the axes instead of indexing the empty running total for
+        # the final value, and skip the chrome, whose automatic title reads the (now
+        # missing) first and last period.
+        if self.cumulative.empty:
+            label = f"{self.varname}: no data" if self.varname else "No data"
+            self.ax.text(0.5, 0.5, label, ha='center', va='center',
+                         transform=self.ax.transAxes, fontsize=theme.FONTSIZE_TXT_LEGEND)
+            pf.hide_ticks_and_ticklabels(ax=self.ax)
+            if self._own_fig and showplot:
+                self.fig.show()
+            return self.ax
+
         self.ax.xaxis.axis_date()
 
-        # Uptake/release split depends on the sign convention.
+        # Uptake/release split depends on the sign convention. Exactly 0.0 is neither
+        # and lands in the release bucket; no third color for it, because a zero-height
+        # bar paints no pixels with edgecolor='none' (measured: repainting all 1820 zero
+        # bars of a daily precipitation waterfall moves 0 pixels of the canvas).
         uptake_mask = self.contributions < 0 if self.uptake_is_negative else self.contributions > 0
         colors = uptake_mask.map({True: color_uptake, False: color_release})
 
@@ -155,7 +187,7 @@ class WaterfallPlot:
         # Connectors run from each bar's running total to the next bar's start.
         if show_connectors and len(self.cumulative) > 1:
             for x0, x1, y in zip(self.cumulative.index[:-1], self.cumulative.index[1:],
-                                 self.cumulative.values[:-1]):
+                                 self.cumulative.values[:-1], strict=True):
                 self.ax.plot([x0, x1], [y, y], color=theme.COLOR_LINE_ZERO,
                              lw=theme.LINEWIDTH_SPINES, alpha=0.4, zorder=9)
 

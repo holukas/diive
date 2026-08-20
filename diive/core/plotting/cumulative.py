@@ -25,7 +25,7 @@ class CumulativeYear:
     mean and ±1 standard deviation band for comparison.
 
     See Also:
-        examples/visualization/timeseries_and_cumulative.py — Yearly cumulative plots with reference bands
+        examples/visualization/plot_cumulative_basic.py — Yearly cumulative plots with reference bands
     """
 
     def __init__(self,
@@ -45,7 +45,7 @@ class CumulativeYear:
             highlight_year_color: Deprecated — pass this styling option to plot() instead.
             yearly_end_date: Calculate cumulatives up to this date, given as string,
                 e.g. "08-11" means that cumulatives for each year are calculated until
-                    11 August of each year.
+                11 August of each year.
             cumulative_for:
                 - "all" for cumulative sum over all years
                 - "year" for yearly cumulative sums
@@ -183,7 +183,11 @@ class CumulativeYear:
 
         # Plot yearly cumulatives
         for ix, year in enumerate(self.cumulatives_per_year_df.columns):
-            label = f"{year}: {self.cumulatives_per_year_df[year].dropna().iloc[-1]:.{digits_after_comma}f}"
+            # Same as in Cumulative.plot: a year left without a valid value (e.g. one
+            # whose only records sat on DOY 366, dropped above) has no total to show.
+            valid = self.cumulatives_per_year_df[year].dropna()
+            label = (f"{year}: {valid.iloc[-1]:.{digits_after_comma}f}" if not valid.empty
+                     else f"{year}: no data")
             lw = theme.WIDTH_LINE_WIDER if year == self.highlight_year else theme.WIDTH_LINE_DEFAULT
             color = hl_color if year == self.highlight_year else color_list[ix]
 
@@ -219,8 +223,8 @@ class Cumulative:
         end_year: End year of shown data.
 
     See Also:
-        examples/visualization/timeseries_and_cumulative.py — Cumulative plots with multiple scenarios
-        examples/flux/uncertainty.py — Cumulative uncertainty visualization
+        examples/visualization/plot_cumulative_basic.py — Cumulative plots with multiple scenarios
+        examples/flux/lowres/flux_uncertainty.py — Cumulative uncertainty visualization
     """
 
     def __init__(self,
@@ -324,7 +328,12 @@ class Cumulative:
         end_points = []  # (x, y, color, text) — annotated after y-limits are final
         for ix, col in enumerate(self.cumulative):
             series = self.cumulative[col]
-            label = f"{col}: {series.dropna().iloc[-1]:.{digits_after_comma}f}"
+            # A column without a single valid value (e.g. a scenario column that was
+            # never gap-filled) has no total to show. It keeps its legend entry, saying
+            # so, instead of indexing an empty Series for the end-of-series total.
+            valid = series.dropna()
+            label = (f"{col}: {valid.iloc[-1]:.{digits_after_comma}f}" if not valid.empty
+                     else f"{col}: no data")
             lw = theme.WIDTH_LINE_DEFAULT
             color = color_list[ix]
 
@@ -339,6 +348,9 @@ class Cumulative:
                 self.ax.fill_between(series.index, series.to_numpy(), 0,
                                      color=color, alpha=0.12, edgecolor='none',
                                      zorder=1)
+
+            if valid.empty:  # No end point to mark or annotate
+                continue
 
             x = series.index[-1]
             y = series.iloc[-1]

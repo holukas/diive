@@ -19,6 +19,12 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
             nee=cls.df['NEE_CUT_REF_orig'], ta=cls.df['Tair_orig'],
             sw_in=cls.df['Rg_orig'], ta_f=cls.df['Tair_f'],
             sw_in_f=cls.df['Rg_f'], vpd=cls.df['VPD_f'], verbose=0).run()
+        # A short slice for the two plumbing tests below (wrapper delegation and
+        # the kPa/hPa equivalence). Neither needs a full year: they assert shape,
+        # column names and an exact match between the two unit paths, and one
+        # month still fits enough LRC windows for a dropped conversion or a
+        # wrapper that lost rows to show up.
+        cls.short = cls.df.loc['2017-06-01':'2017-06-30']
 
     def _run(self):
         return self.part
@@ -79,26 +85,35 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
 
     def test_vpd_units_handling(self):
         # Passing VPD already in hPa (vpd_in_kpa=False) with a *10 series must
-        # reproduce the default kPa path.
+        # reproduce the default kPa path. Both paths run on the short slice, so
+        # the comparison is like-for-like.
         from diive.flux.partitioning import DaytimePartitioningOneFlux
-        res_hpa = DaytimePartitioningOneFlux(
-            nee=self.df['NEE_CUT_REF_orig'], ta=self.df['Tair_orig'],
-            sw_in=self.df['Rg_orig'], ta_f=self.df['Tair_f'],
-            sw_in_f=self.df['Rg_f'], vpd=self.df['VPD_f'] * 10.0,
-            vpd_in_kpa=False, verbose=0).run().results
-        a = res_hpa['GPP_DT_OF'].to_numpy()
-        b = self._run().results['GPP_DT_OF'].to_numpy()
+        short = self.short
+
+        def _gpp(vpd, vpd_in_kpa):
+            return DaytimePartitioningOneFlux(
+                nee=short['NEE_CUT_REF_orig'], ta=short['Tair_orig'],
+                sw_in=short['Rg_orig'], ta_f=short['Tair_f'],
+                sw_in_f=short['Rg_f'], vpd=vpd,
+                vpd_in_kpa=vpd_in_kpa, verbose=0).run().results['GPP_DT_OF'].to_numpy()
+
+        a = _gpp(short['VPD_f'] * 10.0, False)
+        b = _gpp(short['VPD_f'], True)
         m = np.isfinite(a) & np.isfinite(b)
+        # Guard against a vacuous pass: allclose over an empty selection succeeds.
+        self.assertGreater(int(m.sum()), 0)
         np.testing.assert_allclose(a[m], b[m], rtol=1e-9, atol=1e-9)
 
     def test_functional_wrapper(self):
         from diive.flux.partitioning import partition_nee_daytime_oneflux
+        short = self.short
         res = partition_nee_daytime_oneflux(
-            nee=self.df['NEE_CUT_REF_orig'], ta=self.df['Tair_orig'],
-            sw_in=self.df['Rg_orig'], ta_f=self.df['Tair_f'],
-            sw_in_f=self.df['Rg_f'], vpd=self.df['VPD_f'], verbose=0)
-        self.assertEqual(len(res), len(self.df))
+            nee=short['NEE_CUT_REF_orig'], ta=short['Tair_orig'],
+            sw_in=short['Rg_orig'], ta_f=short['Tair_f'],
+            sw_in_f=short['Rg_f'], vpd=short['VPD_f'], verbose=0)
+        self.assertEqual(len(res), len(short))
         self.assertIn('GPP_DT_OF', res.columns)
+        self.assertTrue(res.index.equals(short.index))
 
     def test_requires_datetime_index(self):
         from diive.flux.partitioning import DaytimePartitioningOneFlux

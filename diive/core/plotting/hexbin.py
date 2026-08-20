@@ -7,42 +7,15 @@ bins. This is useful for identifying patterns in high-frequency or high-volume d
 **Important:** Input Series must have no NaN values in x and y; z may contain NaNs (ignored
 during aggregation).
 
-Top-level alias: ``dv.hexbinplot(x, y, z, ...)``
-
-Example with percentile normalization::
-
-    import diive as dv
-    df = dv.load_exampledata_parquet()
-    hm = dv.hexbinplot(
-        x=df['Tair_f'],
-        y=df['VPD_f'],
-        z=df['NEE_CUT_REF_f'],
-        normalize_axes=True,  # Convert drivers to 0-100 percentile scale
-        gridsize=11,          # Number of hexagon bins
-        xlabel='Air temperature (percentile)',
-        ylabel='Vapor pressure deficit (percentile)',
-        zlabel='Net ecosystem exchange'
-    )
-    hm.show()
-
-Example with absolute values::
-
-    hm = dv.hexbinplot(
-        x=df['Tair_f'],
-        y=df['VPD_f'],
-        z=df['NEE_CUT_REF_f'],
-        normalize_axes=False,  # Use original values
-        gridsize=11,
-        xlabel='Air temperature (°C)',
-        ylabel='Vapor pressure deficit (hPa)',
-        zlabel='NEE (µmol m⁻² s⁻¹)'
-    )
-    hm.show()
+Public name: ``dv.plotting.HexbinPlot(x, y, z, ...)``. ``normalize_axes=True`` puts both
+drivers on a 0-100 percentile scale; see the class for a sample.
 """
 
 import warnings
 
 import numpy as np
+import pandas as pd
+from matplotlib.ticker import MaxNLocator
 
 from diive.core.plotting.heatmap_base import HeatmapBase
 from diive.core.plotting.styles import LightTheme as theme
@@ -60,10 +33,14 @@ class HexbinPlot(HeatmapBase):
     **Important:** Input Series must have one value per observation (not pre-aggregated).
     X and Y axes must have no NaN values; Z may contain NaNs (ignored during aggregation).
 
-    Top-level alias: ``dv.hexbinplot(x, y, z, ...)``
+    Example:
+        >>> import diive as dv, pandas as pd, numpy as np
+        >>> ta, vpd, nee = (pd.Series(np.arange(100.), name=n) for n in ('TA', 'VPD', 'NEE'))
+        >>> hm = dv.plotting.HexbinPlot(x=ta, y=vpd, z=nee, gridsize=11, normalize_axes=True)
+        >>> ax = hm.plot(zlabel='Net ecosystem exchange')
 
     See Also:
-        examples/visualization/hexbin.py — Hexbin variations (percentile normalization, aggregation, overlay)
+        examples/visualization/plot_hexbin_basic.py — Hexbin variations (percentile normalization, aggregation, overlay)
     """
 
     def __init__(self,
@@ -73,7 +50,8 @@ class HexbinPlot(HeatmapBase):
                  gridsize: int = 11,
                  reduce_C_function=np.median,
                  normalize_axes: bool = False,
-                 mincnt: int = 0,
+                 mincnt: int = 1,
+                 extent: tuple = None,
                  edgecolors: str = None,
                  xlabel: str = None,
                  ylabel: str = None,
@@ -84,13 +62,28 @@ class HexbinPlot(HeatmapBase):
         Args:
             x: pandas Series with driver variable (x-axis). Must have no NaN values
             y: pandas Series with driver variable (y-axis). Must have no NaN values
-            z: pandas Series with flux values to aggregate (color scale). NaNs ignored
+            z: pandas Series with flux values to aggregate (color scale). NaNs ignored.
+                x, y and z are paired on their index; three Series carrying the
+                same labels in a different order are re-aligned, not zipped by
+                position. Identical indexes (the usual case: three columns of one
+                dataframe) are used as they are
             gridsize: Number of hexagon bins (default 11, matches matplotlib.hexbin)
             reduce_C_function: Aggregation function for z-values in each hexagon
                 (default np.median). Can be np.mean, np.sum, etc.
             normalize_axes: If True, convert x/y to percentile ranks (0-100 scale)
                 (default False, use original values)
-            mincnt: Minimum number of data points per hexagon (default 0)
+            mincnt: Minimum number of data points a hexagon must hold to be drawn
+                (default 1, i.e. only cells that actually contain data). Must be
+                >= 1: matplotlib's cutoff is ``len(values) >= mincnt``, so
+                ``mincnt=0`` passes *empty* input to ``reduce_C_function`` and is
+                rejected here — see Raises
+            extent: ``(xmin, xmax, ymin, ymax)`` the hexagon grid is built over,
+                in the units of the *plotted* x/y — percentile ranks when
+                ``normalize_axes=True``. Default None derives the extent from
+                this dataset's own x/y range, so two subsets of one record
+                (daytime vs nighttime, before vs after) get **different**
+                hexagons and cell *i* is not the same region in both. Pass the
+                same extent to every subset to compare them cell by cell
             edgecolors: Hexagon edge color (default 'none')
             xlabel: Label for x-axis (auto-inferred from x.name if None)
             ylabel: Label for y-axis (auto-inferred from y.name if None)
@@ -99,7 +92,14 @@ class HexbinPlot(HeatmapBase):
 
         Raises:
             ValueError: If Series have mismatched lengths or no names
+            ValueError: If the three indexes differ and do not describe the same
+                records, so aligning them would change the number of observations
             ValueError: If x or y contain NaN values
+            ValueError: If mincnt < 1. An empty cell must render as empty, and no
+                reducer makes ``mincnt=0`` correct: ``np.sum`` returns 0.0 so the
+                empty cell is painted as a measured zero, ``np.max``/``np.min``
+                raise, and ``np.mean``/``np.median`` return NaN (dropped by
+                matplotlib anyway) at the cost of one RuntimeWarning per empty cell
 
         See Also:
             plot : Render the hexbin plot with matplotlib styling options
@@ -111,8 +111,37 @@ class HexbinPlot(HeatmapBase):
         if x.name is None or y.name is None or z.name is None:
             raise ValueError(f"All Series must have names. Got: x.name={x.name}, y.name={y.name}, z.name={z.name}")
 
+        # The three roles used to be zipped by position (each taken through .to_numpy()),
+        # so Series carrying the same labels in a different order were mispaired without
+        # a word. Align on the index, with the internal keys ScatterXY and GridAggregator
+        # use so a shared Series name cannot collapse two roles into one column. Identical
+        # indexes skip this: the concat is a no-op there, and a legitimately duplicated
+        # index (repeated timestamps) is then still paired the way the caller wrote it.
+        if not (x.index.equals(y.index) and x.index.equals(z.index)):
+            aligned = pd.concat([x, y, z], axis=1, keys=['_x', '_y', '_z'])
+            if len(aligned) != len(x):
+                raise ValueError(f"x, y and z have different indexes that do not describe the "
+                                 f"same {len(x)} records: aligning them yields {len(aligned)} "
+                                 f"rows. Pass Series that share an index (e.g. three columns of "
+                                 f"one dataframe), or reset the index on all three to pair them "
+                                 f"by position.")
+            x = aligned['_x'].rename(x.name)
+            y = aligned['_y'].rename(y.name)
+            z = aligned['_z'].rename(z.name)
+
         if x.isnull().any() or y.isnull().any():
             raise ValueError("X and Y Series cannot contain NaN values (required for hexbin)")
+
+        # matplotlib's cutoff is `len(values) >= mincnt`, so anything below 1 hands empty
+        # input to reduce_C_function: np.sum paints an empty cell as a measured 0.0,
+        # np.max/np.min raise, np.mean/np.median warn per empty cell. No reducer makes it
+        # right, so reject it rather than document a trap.
+        if mincnt < 1:
+            raise ValueError(f"mincnt must be >= 1, got {mincnt}. A value below 1 includes "
+                             f"hexagons holding no data, which passes empty input to "
+                             f"reduce_C_function (np.sum then draws them as measured zeros, "
+                             f"np.max raises). Use mincnt=1 to draw every cell that contains "
+                             f"data.")
 
         # Warn if z has NaNs
         if z.isnull().any():
@@ -128,6 +157,7 @@ class HexbinPlot(HeatmapBase):
         self.reduce_C_function = reduce_C_function
         self.normalize_axes = normalize_axes
         self.mincnt = mincnt
+        self.extent = extent
 
         # Styling belongs in plot(); these are kept here only as deprecated
         # pass-throughs (labels still auto-default from the data's .name).
@@ -217,12 +247,12 @@ class HexbinPlot(HeatmapBase):
                         centers.append(center)
 
                 centers = np.array(centers) if centers else np.array([])
-            except:
+            except Exception:
                 return  # If extraction fails, don't display values
 
         # Place text at each hexagon center
         if len(centers) > 0:
-            for center, val in zip(centers, array):
+            for center, val in zip(centers, array, strict=False):
                 if not np.isnan(val):  # Skip NaN values
                     x_center, y_center = center
                     val_str = f"{val:.{self.show_values_n_dec_places}f}"
@@ -233,6 +263,33 @@ class HexbinPlot(HeatmapBase):
                         color=self.show_values_color,
                         zorder=10
                     )
+
+    def _auto_cb_extend(self, vmin, vmax) -> str:
+        """Pick the colorbar extension arrows from the drawn hexagon values.
+
+        Reads the aggregated values off the plotted collection, so the arrows
+        describe what the colour scale actually clips. Call after the hexbin is
+        drawn.
+
+        Args:
+            vmin: Lower bound of the colour scale, or None for auto.
+            vmax: Upper bound of the colour scale, or None for auto.
+
+        Returns:
+            str: One of ``'neither'``, ``'min'``, ``'max'``, ``'both'``.
+        """
+        agg = np.ma.compressed(np.ma.masked_invalid(self.p.get_array()))
+        if agg.size == 0:
+            return 'neither'
+        clips_low = vmin is not None and vmin > agg.min()
+        clips_high = vmax is not None and vmax < agg.max()
+        if clips_low and clips_high:
+            return 'both'
+        if clips_low:
+            return 'min'
+        if clips_high:
+            return 'max'
+        return 'neither'
 
     @staticmethod
     def _percentile_normalize(series):
@@ -265,8 +322,8 @@ class HexbinPlot(HeatmapBase):
              cb_digits_after_comma: int = 2,
              cb_labelsize: float = None,
              cb_extend: str = None,
-             minticks: int = 3,
-             maxticks: int = 10,
+             minticks: int = None,
+             maxticks: int = None,
              color_bad: str = 'grey',
              show_colormap: bool = True,
              show_less_xticklabels: bool = False,
@@ -295,10 +352,17 @@ class HexbinPlot(HeatmapBase):
             zlabel: Colorbar label (e.g., '°C', 'µmol m⁻²s⁻¹')
             cb_digits_after_comma: Decimal places on colorbar labels (default 2)
             cb_labelsize: Font size for colorbar tick labels
-            cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
-            minticks: Minimum major ticks on axes (default 3)
-            maxticks: Maximum major ticks on axes (default 10)
-            color_bad: Color for NaN cells (default 'grey')
+            cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max').
+                Default None derives them from ``vmin``/``vmax`` against the range
+                of the *aggregated* hexagon values, which is what the colorbar maps
+            minticks: Minimum major ticks per axis. Default None keeps matplotlib's
+                own tick density, which adapts to the figure size
+            maxticks: Maximum major ticks per axis (counted within the axis view).
+                Default None keeps matplotlib's own tick density
+            color_bad: Ignored by hexbin, kept for signature parity with the other
+                heatmaps. ``ax.hexbin`` drops every cell whose aggregate is NaN
+                (matplotlib's ``good_idxs = ~np.isnan(accum)``), so a hexbin has no
+                bad cells to colour — a missing cell is blank, not ``color_bad``
             show_colormap: Whether to show colorbar (default True)
             show_less_xticklabels: Hide every second x-tick label (default False)
             show_values: Overlay numeric values on hexagons (default False)
@@ -326,23 +390,6 @@ class HexbinPlot(HeatmapBase):
         if show_values_fontsize is None:
             show_values_fontsize = theme.AX_LABELS_FONTSIZE
 
-        # Determine colorbar extension based on vmin/vmax vs data range if not provided
-        if cb_extend is None:
-            z_min = self.z.min()
-            z_max = self.z.max()
-            cb_extend = 'neither'
-            if vmin is not None and vmax is not None:
-                if vmin > z_min and vmax < z_max:
-                    cb_extend = 'both'
-                elif vmin > z_min:
-                    cb_extend = 'min'
-                elif vmax < z_max:
-                    cb_extend = 'max'
-            elif vmin is not None and vmin > z_min:
-                cb_extend = 'min'
-            elif vmax is not None and vmax < z_max:
-                cb_extend = 'max'
-
         # Call parent plot() to create figure/axes and apply styling
         super().plot(
             ax=ax,
@@ -357,8 +404,6 @@ class HexbinPlot(HeatmapBase):
             cb_digits_after_comma=cb_digits_after_comma,
             cb_labelsize=cb_labelsize,
             cb_extend=cb_extend,
-            minticks=minticks,
-            maxticks=maxticks,
             color_bad=color_bad,
             show_colormap=show_colormap,
             show_less_xticklabels=show_less_xticklabels,
@@ -380,6 +425,7 @@ class HexbinPlot(HeatmapBase):
             gridsize=self.gridsize,
             reduce_C_function=self.reduce_C_function,
             mincnt=self.mincnt,
+            extent=self.extent,
             cmap=cmap,
             edgecolors=edgecolors,
             linewidths=1,
@@ -397,6 +443,15 @@ class HexbinPlot(HeatmapBase):
             self.ax.set_aspect('equal', adjustable='datalim')
             self.ax.apply_aspect()
 
+        # The colorbar maps the per-hexagon aggregate, not the raw z, and the two ranges
+        # differ in both directions (np.median narrows them, np.sum widens them far past
+        # the raw range). Deriving the arrows from raw z therefore both invented arrows
+        # for data that is not clipped and omitted them for data that is. The aggregate
+        # only exists once ax.hexbin has run, so resolve the auto case here — before
+        # format(), which is what attaches the colorbar.
+        if cb_extend is None:
+            self.cb_extend = self._auto_cb_extend(vmin=vmin, vmax=vmax)
+
         # Overlay values on hexagons if requested
         if show_values:
             self.show_vals_in_plot()
@@ -405,3 +460,23 @@ class HexbinPlot(HeatmapBase):
         # colorbar) via the shared FormatStyle path. The hexbin's axis labels flow
         # through as the caller defaults, so a passed format_style can override them.
         self.format(plot=self.p, ax_xlabel_txt=xlabel, ax_ylabel_txt=ylabel)
+
+        # `minticks`/`maxticks` were forwarded to HeatmapBase, which only stores them for
+        # `nice_date_ticks` — a date-axis routine hexbin never reaches, so both were inert.
+        # Hexbin's axes are plain numeric driver axes, so honour them here. Left at None
+        # matplotlib keeps its own locator, which sizes the tick count to the figure.
+        if minticks is not None or maxticks is not None:
+            for axis in (self.ax.xaxis, self.ax.yaxis):
+                # One locator per axis: a Locator binds to the axis it is set on.
+                axis.set_major_locator(MaxNLocator(
+                    nbins=(maxticks - 1) if maxticks is not None else 'auto',
+                    min_n_ticks=minticks if minticks is not None else 2,
+                    steps=[1, 2, 2.5, 5, 10]))
+
+        # HeatmapBase only stores this flag; each subclass applies it. Hexbin accepted
+        # and documented it but never did, so it silently had no effect. Must run after
+        # format(), which is what sets the tick labels. Same block as HeatmapDateTime.
+        if self.show_less_xticklabels:
+            for i, label in enumerate(self.ax.get_xticklabels()):
+                if i % 2 != 0:
+                    label.set_visible(False)

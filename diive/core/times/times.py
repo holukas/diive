@@ -71,7 +71,7 @@ class TimestampSanitizer:
 
     See Also
     --------
-    examples/timeseries/timestamp_sanitizer.py : Examples with clean data,
+    examples/times/times_timestamp_sanitizer.py : Examples with clean data,
         minor issues, and badly broken timestamps.
     """
 
@@ -118,46 +118,13 @@ class TimestampSanitizer:
 
         Examples
         --------
-        **Basic usage with default settings:**
+        >>> import diive as dv, pandas as pd
+        >>> idx = pd.date_range('2024-06-01 00:30', periods=48, freq='30min', name='TIMESTAMP_END')
+        >>> df = pd.DataFrame({'TA': range(48)}, index=idx)
+        >>> clean = dv.times.TimestampSanitizer(data=df, nominal_freq='30min').get()
 
-        >>> import pandas as pd
-        >>> import diive as dv
-        >>> df = dv.load_exampledata_parquet()
-        >>> series = df['NEE_CUT_REF_f'].copy()
-        >>> sanitizer = dv.TimestampSanitizer(data=series, verbose=False)
-        >>> clean_series = sanitizer.get()
-
-        **With frequency validation:**
-
-        >>> sanitizer = dv.TimestampSanitizer(
-        ...     data=series,
-        ...     nominal_freq='30min',  # Expect 30-minute resolution
-        ...     verbose=True
-        ... )
-        >>> clean_series = sanitizer.get()
-
-        **Selective processing (skip some steps):**
-
-        >>> sanitizer = dv.TimestampSanitizer(
-        ...     data=series,
-        ...     regularize=False,                    # Keep gaps in data
-        ...     output_middle_timestamp=False,       # Keep end-of-period format
-        ...     remove_index_nat=True,
-        ...     verbose=True
-        ... )
-        >>> result = sanitizer.get()
-
-        **Error handling for corrupted data:**
-
-        >>> try:
-        ...     sanitizer = dv.TimestampSanitizer(
-        ...         data=corrupted_data,
-        ...         nominal_freq='30min',
-        ...         validate_naming=True
-        ...     )
-        ... except ValueError as e:
-        ...     print(f"Timestamp validation failed: {e}")
-        ...     # Handle error: fix data or re-run without nominal_freq
+        See ``examples/times/times_timestamp_sanitizer.py`` for clean data, minor
+        issues, badly broken timestamps, and selective processing.
         """
         self._validate_input(data)
         self.data = data.copy()
@@ -221,9 +188,10 @@ class TimestampSanitizer:
 
         Example
         -------
-        >>> sanitizer = dv.TimestampSanitizer(data=df, verbose=False)
-        >>> status = sanitizer.get_status()
-        >>> print(f"Removed {status['rows_removed']} rows, frequency confidence: {status['frequency_confidence']:.0%}")
+        >>> import diive as dv, pandas as pd
+        >>> idx = pd.date_range('2024-06-01 00:30', periods=48, freq='30min', name='TIMESTAMP_END')
+        >>> sanitizer = dv.times.TimestampSanitizer(pd.DataFrame({'TA': range(48)}, index=idx))
+        >>> status = sanitizer.get_status()  # rows_removed, frequency_confidence, ...
         """
         return {
             'original_shape': self._original_shape,
@@ -348,6 +316,9 @@ class TimestampSanitizer:
 class DetectFrequency:
     """Detect data time resolution from time series index
 
+    Two regular timestamps are enough, since they define one interval. An index
+    with a single timestamp defines no interval at all and therefore raises
+    RuntimeError, same as an index that is too irregular to detect.
 
     - Example notebook available in:
         notebooks/TimeStamps/Detect_time_resolution.ipynb
@@ -371,7 +342,10 @@ class DetectFrequency:
 
     def _run(self):
         freq_full, freqinfo_full = timestamp_infer_freq_from_fullset(timestamp_ix=self.index)
-        freq_timedelta, freqinfo_timedelta = timestamp_infer_freq_from_timedelta(timestamp_ix=self.index)
+        # The private variant also hands over the exact match fraction. Parsing it back
+        # out of freqinfo_timedelta rounded it to whole percent, so a genuine 99.9%
+        # looked like a perfectly regular record.
+        freq_timedelta, freqinfo_timedelta, match_timedelta = _infer_freq_from_timedelta(timestamp_ix=self.index)
         freq_progressive, freqinfo_progressive = timestamp_infer_freq_progressively(timestamp_ix=self.index)
 
         # Add number to frequency string, needed for Timedelta: e.g. 'min' --> '1min'
@@ -416,12 +390,10 @@ class DetectFrequency:
                 self.freq = freq_list[0]
                 self.confidence = 1.0
                 self.detection_method = "all_methods_agree"
-                # Extract % matching from timedelta if available
-                try:
-                    conf_str = freqinfo_timedelta.split('%')[0]
-                    self.percent_matching = float(conf_str)
-                except (ValueError, IndexError):
-                    self.percent_matching = 100.0
+                # % matching comes from the timedelta method, the only one that measures
+                # it. All methods agreeing means that method found a frequency, so the
+                # fraction is always available here.
+                self.percent_matching = match_timedelta * 100
                 if self.verbose:
                     info(f"Detect frequency: {self.freq} (all methods agree)", verbose=self.verbose)
 
@@ -444,14 +416,10 @@ class DetectFrequency:
             # occurred at least 90% of the time
             self.freq = freq_timedelta
             self.detection_method = "timedelta"
-            # Extract confidence from freqinfo like '75% occurrence'
-            try:
-                conf_str = freqinfo_timedelta.split('%')[0]
-                self.confidence = float(conf_str) / 100.0
-                self.percent_matching = float(conf_str)
-            except (ValueError, IndexError):
-                self.confidence = 0.75
-                self.percent_matching = 75.0
+            # This branch runs only if the timedelta method found a frequency, which is
+            # exactly when it also reports its match fraction.
+            self.confidence = match_timedelta
+            self.percent_matching = match_timedelta * 100
             # Track alternatives
             if freq_progressive:
                 self.alternatives.append(freq_progressive)
@@ -470,11 +438,14 @@ class DetectFrequency:
 
         else:
             raise RuntimeError(
-                "Could not detect timestamp frequency using any method. This typically "
-                "means your timestamps are highly irregular or have too many gaps. "
-                "To fix: (1) verify data quality (check for irregular gaps/duplicates), "
-                "(2) try regularize=True to fill gaps automatically, or "
-                "(3) skip frequency detection with nominal_freq=None."
+                "Could not detect timestamp frequency with any method (pandas "
+                "inferred_freq, most-frequent timedelta, start/end chunks). The "
+                "timestamps are too irregular: no single spacing occurs often "
+                "enough to identify. To fix, make the index regular before "
+                "calling, e.g. resample or reindex it onto the intended "
+                "frequency. Detection cannot be skipped: TimestampSanitizer's "
+                "nominal_freq only validates an already-detected frequency, and "
+                "regularize runs after detection, so neither bypasses this."
             )
 
     def get(self) -> str:
@@ -655,10 +626,6 @@ def sort_timestamp_ascending(data: Union[Series, DataFrame], verbose: bool = Fal
     -------
     Union[Series, DataFrame]
         Data with sorted timestamp index.
-
-    Examples
-    --------
-    >>> df_sorted = sort_timestamp_ascending(df, verbose=True)
     """
     if verbose:
         info("Sort ascending: OK", verbose=verbose)
@@ -690,11 +657,6 @@ def remove_rows_nat(df: Union[Series, DataFrame], verbose: bool = False) -> tupl
     ------
     ValueError
         If all rows are removed (all timestamps are NaT).
-
-    Examples
-    --------
-    >>> df_clean, n_removed = remove_rows_nat(df, verbose=True)
-    >>> print(f"Removed {n_removed} NaT rows")
     """
     no_date = df.index.isnull()
     n_rows = no_date.sum()
@@ -737,10 +699,6 @@ def convert_timestamp_to_datetime(data: Union[Series, DataFrame], verbose: bool 
     ------
     ValueError
         If timestamp index cannot be converted to datetime format.
-
-    Examples
-    --------
-    >>> df_dt = convert_timestamp_to_datetime(df, verbose=True)
     """
     try:
         data.index = pd.to_datetime(data.index, errors='coerce')
@@ -786,12 +744,6 @@ def validate_timestamp_naming(data: Union[Series, DataFrame], verbose: bool = Fa
     - 'TIMESTAMP_END': Timestamp marks the END of the averaging period
     - 'TIMESTAMP_START': Timestamp marks the START of the averaging period
     - 'TIMESTAMP_MIDDLE': Timestamp marks the MIDDLE of the averaging period
-
-    Examples
-    --------
-    >>> df.index.name = 'TIMESTAMP_END'
-    >>> name = validate_timestamp_naming(df, verbose=True)
-    >>> print(f"Valid timestamp format: {name}")
     """
     timestamp_name = data.index.name
     allowed_timestamp_names = ['TIMESTAMP_END', 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE']
@@ -846,10 +798,6 @@ def validate_timestamp_monotonic(data: Union[Series, DataFrame], verbose: bool =
     "Strictly monotonic" means no two timestamps are equal and all are in
     ascending order. After sorting and duplicate removal, data should always
     pass this check. If it fails, it indicates a data or processing error.
-
-    Examples
-    --------
-    >>> validate_timestamp_monotonic(df, verbose=True)
     """
     if not data.index.is_monotonic_increasing:
         # Find where monotonicity breaks to help debugging
@@ -1101,10 +1049,13 @@ def vectorize_timestamps(df,
         season_sin_col = f'{season_col}_SIN'
         season_cos_col = f'{season_col}_COS'
         season_period = 4
-        df[season_col] = insert_season(timestamp=df.index)
-        # Cast to float to ensure the division works smoothly even with Int64 types
-        df[season_sin_col] = np.sin(2 * np.pi * df[season_col].astype(float) / season_period)
-        df[season_cos_col] = np.cos(2 * np.pi * df[season_col].astype(float) / season_period)
+        # Cast to float: insert_season returns nullable Int64 (to carry NaN for months
+        # not assigned to a season), and one such column turns the whole frame's
+        # .to_numpy() into object dtype, which every ML fit downstream then has to
+        # convert back. Float keeps NaN representable, unlike a plain int cast.
+        df[season_col] = insert_season(timestamp=df.index).astype(float)
+        df[season_sin_col] = np.sin(2 * np.pi * df[season_col] / season_period)
+        df[season_cos_col] = np.cos(2 * np.pi * df[season_col] / season_period)
         newcols += [season_col, season_sin_col, season_cos_col]
 
     if month:
@@ -1260,10 +1211,11 @@ def timestamp_infer_freq_progressively(timestamp_ix: pd.DatetimeIndex) -> tuple:
     -------
     tuple
         (inferred_freq, freqinfo)
+
         - inferred_freq : str or None
-            Detected frequency string (e.g., '30min', '1h'), or None if detection failed.
+          Detected frequency string (e.g., '30min', '1h'), or None if detection failed.
         - freqinfo : str or None
-            Detection method description ('data N+N' if successful, None otherwise).
+          Detection method description ('data N+N' if successful, None otherwise).
 
     Notes
     -----
@@ -1309,11 +1261,12 @@ def timestamp_infer_freq_from_fullset(timestamp_ix: pd.DatetimeIndex) -> tuple:
     -------
     tuple
         (inferred_freq, freqinfo)
+
         - inferred_freq : str or None
-            Detected frequency string (e.g., '30min', '1h'), or None if detection failed.
+          Detected frequency string (e.g., '30min', '1h'), or None if detection failed.
         - freqinfo : str
-            Detection result ('full data' if successful, '-not-enough-datarows-' if <10 rows,
-            '-failed-' if inference failed).
+          Detection result ('full data' if successful, '-not-enough-datarows-' if <10 rows,
+          '-failed-' if inference failed).
 
     Notes
     -----
@@ -1355,18 +1308,22 @@ def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> tuple
     -------
     tuple
         (inferred_freq, freqinfo)
+
         - inferred_freq : str or None
-            Detected frequency string (e.g., '30min', '1h'), or None if no interval
-            appears in >50% of data.
+          Detected frequency string (e.g., '30min', '1h'), or None if no interval
+          appears in >50% of all intervals.
         - freqinfo : str
-            Detection result with statistics (e.g., 'timedelta 99.5%'),
-            or '-failed-' if detection failed.
+          Detection result with statistics (e.g., '100% occurrence'),
+          '-not-enough-datarows-' if there is no interval to measure (fewer than
+          2 timestamps, or none of the deltas is valid), or '-failed-' if no
+          interval dominates.
 
     Notes
     -----
     - Requires at least 2 timestamps (to calculate one interval)
     - Robust to occasional irregular intervals
     - Returns frequency only if most common interval covers >50% of all intervals
+      (n timestamps give n-1 intervals)
     - Useful for data with small gaps or timing variations
 
     References
@@ -1374,26 +1331,48 @@ def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> tuple
     - https://stackoverflow.com/questions/16777570/calculate-time-difference-between-pandas-dataframe-indices
     - https://stackoverflow.com/questions/31469811/convert-pandas-freq-string-to-timedelta
     """
+    inferred_freq, freqinfo, _ = _infer_freq_from_timedelta(timestamp_ix=timestamp_ix)
+    return inferred_freq, freqinfo
+
+
+def _infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> tuple:
+    """Same as *timestamp_infer_freq_from_timedelta*, plus the exact match fraction.
+
+    Returns (inferred_freq, freqinfo, match_fraction), where *match_fraction* is
+    the share of intervals equal to the detected one (0-1), or None if no
+    frequency was detected. `freqinfo` formats that fraction with zero decimals,
+    so it cannot be the source of the number: a genuine 99.9% would be reported
+    as 100%, indistinguishable from a perfectly regular record.
+    """
     inferred_freq = None
     freqinfo = None
     df = pd.DataFrame(columns=['tvalue'])
     df['tvalue'] = timestamp_ix
     df['tvalue_shifted'] = df['tvalue'].shift()
     df['delta'] = (df['tvalue'] - df['tvalue_shifted'])
-    n_rows = df['delta'].size  # Total length of data
+    # n timestamps yield n-1 intervals, because the first delta is always NaT.
+    # Dividing by the row count instead under-reports the match (99% for a
+    # perfectly regular 100-row index) and rejects a clean 2-row series,
+    # because 1 of 2 is not > 50%.
+    n_deltas = len(df) - 1  # Number of intervals between timestamps
     detected_deltas = df['delta'].value_counts()  # Found unique deltas
+    if n_deltas < 1 or detected_deltas.empty:
+        # A single timestamp has no interval at all, and an all-NaT delta column
+        # has no mode, so .mode()[0] would raise a bare KeyError here.
+        freqinfo = '-not-enough-datarows-'
+        return inferred_freq, freqinfo, None
     most_frequent_delta = df['delta'].mode()[0]  # Delta with most occurrences
     most_frequent_delta_counts = detected_deltas[
         most_frequent_delta]  # Number of occurrences for most frequent delta
-    most_frequent_delta_perc = most_frequent_delta_counts / n_rows  # Fraction
-    # Check whether the most frequent delta appears in >50% of all data rows
+    most_frequent_delta_perc = most_frequent_delta_counts / n_deltas  # Fraction
+    # Check whether the most frequent delta appears in >50% of all intervals
     if most_frequent_delta_perc > 0.50:
         inferred_freq = to_offset(most_frequent_delta)
         inferred_freq = inferred_freq.freqstr
         # inferred_freq = timedelta_to_string(most_frequent_delta)
         freqinfo = f'{most_frequent_delta_perc * 100:.0f}% occurrence'
         # most_frequent_delta = pd.to_timedelta(most_frequent_delta)
-        return inferred_freq, freqinfo
+        return inferred_freq, freqinfo, most_frequent_delta_perc
     # if most_frequent_delta_perc > 0.90:
     #     inferred_freq = to_offset(most_frequent_delta)
     #     inferred_freq = inferred_freq.freqstr
@@ -1403,7 +1382,7 @@ def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> tuple
     #     return inferred_freq, freqinfo
     else:
         freqinfo = '-failed-'
-        return inferred_freq, freqinfo
+        return inferred_freq, freqinfo, None
 
 
 def remove_index_duplicates(data: Union[Series, DataFrame],
@@ -1430,11 +1409,6 @@ def remove_index_duplicates(data: Union[Series, DataFrame],
     tuple[Union[Series, DataFrame], int]
         - Union[Series, DataFrame]: Data with duplicates removed
         - int: Number of duplicate rows removed
-
-    Examples
-    --------
-    >>> df_clean, n_removed = remove_index_duplicates(df, keep='last', verbose=True)
-    >>> print(f"Removed {n_removed} duplicate timestamps")
 
     Notes
     -----
@@ -1492,10 +1466,6 @@ def continuous_timestamp_freq(data: Union[Series, DataFrame], freq: str, verbose
     - Original timestamp index name is preserved
     - Data values are NaN for any timestamps not in original data
     - The number of rows will increase if there are gaps in the original data
-
-    Examples
-    --------
-    >>> df_continuous = continuous_timestamp_freq(df, freq='30min', verbose=True)
     """
     first_date = data.index[0]
     last_date = data.index[-1]
@@ -1713,9 +1683,10 @@ def format_timestamp(
         aligned to *data*'s index.
 
     Examples:
-        >>> df.index.name = 'TIMESTAMP_MIDDLE'
-        >>> df['TIMESTAMP_END'] = format_timestamp(df, convention='end')
-        >>> df['TS'] = format_timestamp(df, convention='start', fmt='%Y%m%d%H%M')
+        >>> import diive as dv, pandas as pd
+        >>> idx = pd.date_range('2024-06-01 00:15', periods=4, freq='30min', name='TIMESTAMP_MIDDLE')
+        >>> df = pd.DataFrame({'TA': range(4)}, index=idx)
+        >>> df['TS'] = dv.times.format_timestamp(df, convention='start', fmt='%Y%m%d%H%M')
 
     Added in: v0.92.0
     """
@@ -1775,13 +1746,6 @@ def convert_series_timestamp_to_middle(data: Union[Series, DataFrame], verbose: 
     - TIMESTAMP_END 12:00   → TIMESTAMP_MIDDLE 11:45
     - TIMESTAMP_START 12:00 → TIMESTAMP_MIDDLE 12:15
     - TIMESTAMP_MIDDLE 12:15 → (no change)
-
-    Examples
-    --------
-    >>> df.index.name = 'TIMESTAMP_END'
-    >>> df_middle = convert_series_timestamp_to_middle(df, verbose=True)
-    >>> print(df_middle.index.name)
-    TIMESTAMP_MIDDLE
     """
     timestamp_name_before = data.index.name
     timestamp_name_after = 'TIMESTAMP_MIDDLE'

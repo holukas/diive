@@ -18,7 +18,6 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QCursor

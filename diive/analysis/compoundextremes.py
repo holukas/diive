@@ -19,6 +19,8 @@ from typing import Literal
 import pandas as pd
 from pandas import DataFrame, Series
 
+from diive.core.utils.console import warn
+
 # Category codes stored in the CATEGORY column. The human-readable labels are
 # configurable (var1_label / var2_label / compound_label / none_label); these
 # codes stay fixed so downstream code can branch on them regardless of labels.
@@ -73,6 +75,7 @@ class CompoundExtremes:
                 (falls back to *threshold*).
             var2_threshold: Optional per-variable threshold magnitude for *var2*.
             standardize_by: How z-scores are computed.
+
                 - 'season': deseasonalized — each period is standardized against the
                   same position in the seasonal cycle (calendar month for monthly,
                   day-of-year for daily). Removes the seasonal cycle so genuinely
@@ -81,6 +84,7 @@ class CompoundExtremes:
                 - 'record': a single mean/std over the whole aggregated record.
                   Simpler, but the seasonal cycle of variables such as VPD dominates
                   the z-score.
+
             var1_label: Human-readable label for the var1-only category (default:
                 the *var1* series name).
             var2_label: Human-readable label for the var2-only category (default:
@@ -88,7 +92,8 @@ class CompoundExtremes:
             compound_label: Label for the compound (both-extreme) category.
             none_label: Label for the no-extreme category.
 
-        Properties:
+        Properties::
+
             .results: DataFrame indexed by period with aggregated values, z-scores,
                 per-variable extreme flags, the CATEGORY code, and a human LABEL.
             .counts: Per-category record counts (Series, indexed by label).
@@ -189,7 +194,31 @@ class CompoundExtremes:
         df[self.var2_z_col] = self._zscore(df[self.var2name])
 
         # Periods missing either z-score cannot be classified.
+        n_periods = len(df)
         df = df.dropna(subset=[self.var1_z_col, self.var2_z_col])
+        n_dropped = n_periods - len(df)
+
+        if df.empty:
+            # An empty result used to be returned as-is: `results` empty and every
+            # `counts` entry 0, which reads exactly like "no extremes occurred".
+            # The usual cause is a single year with standardize_by='season', where
+            # each calendar-month group holds one member, so std (ddof=1) is NaN
+            # and every period drops out.
+            raise ValueError(
+                f"No period could be classified: all {n_periods} aggregated periods lost "
+                f"their z-score. " + (
+                    f"With standardize_by='season' each {'calendar month' if self.agg == 'monthly' else 'day of year'} "
+                    f"is standardized against the same {'month' if self.agg == 'monthly' else 'day'} in other years, "
+                    f"which needs at least two years of data (this record spans "
+                    f"{self.var1.index.year.nunique()}). Use standardize_by='record' to "
+                    f"standardize against the whole series instead."
+                    if self.standardize_by == 'season' else
+                    "The series has no variance to standardize against."))
+
+        if n_dropped:
+            warn(f"{n_dropped} of {n_periods} periods could not be classified (no z-score: "
+                 f"the group they standardize against has fewer than two members, or no "
+                 f"variance) and are not in the results.")
 
         flag1 = self._extreme_flag(df[self.var1_z_col], self.var1_extreme, self.var1_threshold)
         flag2 = self._extreme_flag(df[self.var2_z_col], self.var2_extreme, self.var2_threshold)

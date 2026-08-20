@@ -38,10 +38,16 @@ def widget_value(w):
     return None
 
 
-def set_widget_value(w, value) -> None:
-    """Apply a value produced by :func:`widget_value` back onto a control."""
+def set_widget_value(w, value) -> bool:
+    """Apply a value produced by :func:`widget_value` back onto a control.
+
+    Returns ``False`` when the value could not be applied: a non-editable
+    :class:`QComboBox` whose saved entry is no longer among its items keeps a
+    *different* selection, which the caller must be able to report. Every other
+    case (including ``value is None``) returns ``True``.
+    """
     if value is None:
-        return
+        return True
     if isinstance(w, QCheckBox):
         w.setChecked(bool(value))
     elif isinstance(w, QSpinBox):
@@ -53,12 +59,14 @@ def set_widget_value(w, value) -> None:
             w.setCurrentText(str(value))  # preserve typed values not in the list
         else:
             i = w.findText(str(value))
-            if i >= 0:
-                w.setCurrentIndex(i)
+            if i < 0:
+                return False
+            w.setCurrentIndex(i)
     elif isinstance(w, QLineEdit):
         w.setText(str(value))
     elif isinstance(w, QPlainTextEdit):
         w.setPlainText(str(value))
+    return True
 
 
 def save_controls(controls: dict) -> dict:
@@ -66,8 +74,24 @@ def save_controls(controls: dict) -> dict:
     return {k: widget_value(w) for k, w in controls.items()}
 
 
-def restore_controls(controls: dict, values: dict) -> None:
-    """Apply a saved ``{key: value}`` dict onto a ``{key: widget}`` mapping."""
+def restore_controls(controls: dict, values: dict) -> list[str]:
+    """Apply a saved ``{key: value}`` dict onto a ``{key: widget}`` mapping.
+
+    Returns the keys whose saved value could not be applied (see
+    :func:`set_widget_value`) — those controls now hold something *other* than
+    what was saved, e.g. a combo whose column was renamed since. Callers that
+    don't surface it can ignore the return value; :func:`unrestored_message`
+    turns it into a status line.
+    """
+    unrestored = []
     for key, w in controls.items():
-        if key in (values or {}):
-            set_widget_value(w, values[key])
+        if key in (values or {}) and not set_widget_value(w, values[key]):
+            unrestored.append(key)
+    return unrestored
+
+
+def unrestored_message(keys: list, labels: dict | None = None) -> str:
+    """Status-line wording for the keys :func:`restore_controls` could not apply."""
+    names = ", ".join(str((labels or {}).get(k, k)) for k in keys)
+    return (f"Saved selection no longer available for: {names}. Those controls kept "
+            "their current value — check them before running.")

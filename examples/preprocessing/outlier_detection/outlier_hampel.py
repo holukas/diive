@@ -55,7 +55,7 @@ ham_dtnt = dv.outliers.Hampel(
     lat=47.286417,
     lon=7.733750,
     utc_offset=1,
-    showplot=False,
+    showplot=True,
     verbose=1
 )
 ham_dtnt.calc(repeat=False)
@@ -81,7 +81,7 @@ ham_global = dv.outliers.Hampel(
     window_length=48 * 13,
     use_differencing=True,
     separate_day_night=False,
-    showplot=False,
+    showplot=True,
     verbose=1
 )
 ham_global.calc(repeat=True)  # Iterate until convergence
@@ -128,7 +128,7 @@ for n_sig in n_sigma_values:
         window_length=48 * 13,
         use_differencing=True,
         separate_day_night=False,
-        showplot=False,
+        showplot=True,
         verbose=0
     )
     ham_tune.calc(repeat=False)
@@ -160,7 +160,7 @@ for win_len in window_lengths:
         window_length=win_len,
         use_differencing=True,
         separate_day_night=False,
-        showplot=False,
+        showplot=True,
         verbose=0
     )
     ham_win.calc(repeat=False)

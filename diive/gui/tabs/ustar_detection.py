@@ -363,7 +363,7 @@ class UstarDetectionTab(DiiveTab):
         cut_vals = [f"{cut[c]:.4f}" if np.isfinite(cut[c]) else "—" for c in pcols]
         rows.append(("CUT (constant)", *cut_vals))
         self._fill_table(headers, rows)
-        cut_str = "  ".join(f"{k}={v}" for k, v in zip(pcols, cut_vals))
+        cut_str = "  ".join(f"{k}={v}" for k, v in zip(pcols, cut_vals, strict=False))
         self.status.setText(
             f"Bootstrap complete. Rows per year = VUT (variable, per-year, smoothed "
             f"over a 3-year window); last row = CUT (constant, pooled across years): "

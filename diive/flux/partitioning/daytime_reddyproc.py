@@ -771,7 +771,7 @@ def _partition_daytime(nee, sd_nee, ta, vpd, rg, doy, hour, lat, lon,
     out['GPP_DT_RP'] = gpp
 
     # report LRC parameters at the central record of each window (like REddyProc)
-    for c, p in zip(central_list, params_list):
+    for c, p in zip(central_list, params_list, strict=False):
         idx = c - 1
         if 0 <= idx < n:
             out['K_DT_RP'][idx] = p[0]
@@ -802,11 +802,12 @@ class DaytimePartitioningReddyProc:
     Example: ``examples/flux/partitioning/partitioning_daytime_reddyproc.py``
 
     Example:
-        >>> part = DaytimePartitioningReddyProc(
-        ...     nee=df['NEE_orig'], ta=df['Tair_f'], vpd=df['VPD_f'],
+        >>> import diive as dv
+        >>> df = dv.load_exampledata_parquet()
+        >>> part = dv.flux.DaytimePartitioningReddyProc(
+        ...     nee=df['NEE_CUT_REF_orig'], ta=df['Tair_f'], vpd=df['VPD_f'],
         ...     sw_in=df['Rg_f'], lat=46.815, lon=9.855, utc_offset=1)
-        >>> part.run()
-        >>> results = part.results   # DataFrame with RECO_DT_RP, GPP_DT_RP, ...
+        >>> part.run()  # then part.results -> DataFrame with RECO_DT_RP, GPP_DT_RP, ...
     """
 
     def __init__(self,

@@ -245,7 +245,7 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
             ("Residual", d["residual"], _C_RESIDUAL),
         ]
         try:
-            for ax, (label, comp, color) in zip(axes, panels):
+            for ax, (label, comp, color) in zip(axes, panels, strict=False):
                 ax.plot(comp.index, comp.to_numpy(), color=color, linewidth=1.0)
                 ax.set_ylabel(label, fontsize=9)
                 ax.tick_params(labelsize=8)

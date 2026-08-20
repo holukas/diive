@@ -1,7 +1,7 @@
 """
-=============================
+===============================
 Histogram Distribution Analysis
-=============================
+===============================
 
 Histogram calculation and distribution analysis for time series data
 using different binning strategies and fringe bin removal.

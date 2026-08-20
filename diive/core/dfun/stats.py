@@ -45,17 +45,23 @@ def q95(x):
 
 
 def series_start(series: pd.Series, dtformat: str = "%Y-%m-%d %H:%M"):
-    """Return start datetime of series"""
+    """Return start datetime of series, or NaT if it has no records"""
+    if series.index.empty:
+        return pd.NaT
     return series.index[0].strftime(dtformat)
 
 
 def series_end(series: pd.Series, dtformat: str = "%Y-%m-%d %H:%M"):
-    """Return end datetime of series"""
+    """Return end datetime of series, or NaT if it has no records"""
+    if series.index.empty:
+        return pd.NaT
     return series.index[-1].strftime(dtformat)
 
 
 def series_duration(series: pd.Series):
-    """Return duration of series"""
+    """Return duration of series, or NaT if it has no records"""
+    if series.index.empty:
+        return pd.NaT
     return series.index[-1] - series.index[0]
 
 
@@ -213,8 +219,15 @@ def outlier_count(s: Series, threshold: float = 3, method: str = 'zscore') -> in
 
 
 def outlier_percentage(s: Series, threshold: float = 3, method: str = 'zscore') -> float:
-    """Outlier count as percentage of total values."""
-    return (outlier_count(s, threshold, method) / len(s.dropna())) * 100
+    """Outlier count as percentage of total values, or NaN if there are none.
+
+    A series with no valid values is ordinary here (a variable with no data in
+    the selected period), so it must not raise on the empty denominator.
+    """
+    n_valid = len(s.dropna())
+    if n_valid == 0:
+        return float('nan')
+    return (outlier_count(s, threshold, method) / n_valid) * 100
 
 
 def cumulative_sum(s: Series) -> float:
@@ -283,7 +296,7 @@ def approximate_entropy(s: Series, m: int = 2, r: float = None) -> float:
         r = 0.2 * s_clean.std()
 
     def _maxdist(x_i, x_j):
-        return max([abs(ua - va) for ua, va in zip(x_i, x_j)])
+        return max([abs(ua - va) for ua, va in zip(x_i, x_j, strict=True)])
 
     def _phi(m):
         x = [[s_clean[j] for j in range(i, i + m - 1 + 1)] for i in range(N - m + 1)]
@@ -330,7 +343,7 @@ SSTATS_DESCRIPTIONS: dict[str, str] = {
 
 
 def sstats(s: Series) -> DataFrame:
-    """
+    r"""
     Calculate comprehensive time series statistics.
 
     Returns 30 metrics across 8 categories:
@@ -345,7 +358,7 @@ def sstats(s: Series) -> DataFrame:
         Total time span covered by series
 
     VALUE COUNTS
-    -----------
+    ------------
     NOV : int
         Number of valid (non-missing) observations
     MISSING : int
@@ -363,7 +376,7 @@ def sstats(s: Series) -> DataFrame:
         Total sum of all values (integration over time period)
 
     DISPERSION (Spread) - Basic
-    --------------------------
+    ---------------------------
     SD : float
         Standard deviation - spread around mean
     VAR : float
@@ -379,9 +392,9 @@ def sstats(s: Series) -> DataFrame:
         Maximum value in series
 
     DISPERSION (Spread) - Robust
-    --------------------------
+    ----------------------------
     CV : float
-        Coefficient of variation (SD / |Mean|)
+        Coefficient of variation (SD / \|Mean\|)
         Relative variability, independent of scale. Use for comparing different series.
     IQR : float
         Interquartile range (Q3 - Q1)
@@ -447,9 +460,10 @@ def sstats(s: Series) -> DataFrame:
 
     Example
     -------
-    >>> series = pd.Series([1.2, 1.5, 1.3, 1.8, 1.6, ...])
-    >>> stats = sstats(series)
-    >>> print(stats)
+    >>> import diive as dv, pandas as pd
+    >>> idx = pd.date_range('2024-06-01', periods=4, freq='30min')
+    >>> series = pd.Series([1.2, 1.5, 1.3, 1.8], index=idx, name='TA')
+    >>> stats = dv.sstats(series)
     """
     col = s.name
     df = pd.DataFrame(columns=[col])

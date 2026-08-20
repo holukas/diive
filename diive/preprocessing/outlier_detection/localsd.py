@@ -21,9 +21,9 @@ number of standard deviations. Two modes are available:
 Quality flags:
   - flag=0: Value within acceptable range (valid)
   - flag=2: Value detected as outlier (removed)
-  - NaN: Original missing data preserved
+  - NaN: Record missing in the input, so no test could be performed
 
-See examples/preprocessing/outlier_detection/localsd.py for working examples.
+See examples/preprocessing/outlier_detection/outlier_localsd.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
@@ -37,9 +37,25 @@ from pandas import DatetimeIndex, Series
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.base.flagbase import FlagBase
 from diive.core.plotting.plotfuncs import default_format, default_legend
-from diive.core.utils.console import detail
+from diive.core.utils.console import VERBOSE_PROGRESS, detail
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
+from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags, reject_legacy_params
+
+
+def _reject_list_params(**params) -> None:
+    """Raise if a caller still passes the old [daytime, nighttime] list form.
+
+    A name-based check cannot catch this: n_sd and winsize kept their names and
+    only stopped accepting a list, so the old call would otherwise index a float
+    and fail somewhere far from the cause.
+    """
+    for name, value in params.items():
+        if isinstance(value, list):
+            raise TypeError(
+                f"LocalSD: '{name}' no longer accepts a [daytime, nighttime] list. "
+                f"Pass '{name}' to set both periods, and '{name}_daytime' / "
+                f"'{name}_nighttime' to override one of them."
+            )
 
 
 @ConsoleOutputDecorator()
@@ -62,22 +78,27 @@ class LocalSD(FlagBase):
         flagid (str): The identifier for this flagging method, 'OUTLIER_LOCALSD'.
 
     Example:
-        See `examples/preprocessing/outlier_detection/localsd.py` for complete examples.
+        See `examples/preprocessing/outlier_detection/outlier_localsd.py` for complete examples.
     """
     flagid = 'OUTLIER_LOCALSD'
 
     def __init__(self,
                  series: Series,
                  idstr: str = None,
-                 n_sd: float | list = 7,
-                 winsize: int | list = None,
+                 n_sd: float = 7,
+                 n_sd_daytime: float = None,
+                 n_sd_nighttime: float = None,
+                 winsize: int = None,
+                 winsize_daytime: int = None,
+                 winsize_nighttime: int = None,
                  constant_sd: bool = False,
-                 separate_daytime_nighttime: bool = False,
+                 separate_day_night: bool = False,
                  lat: float = None,
                  lon: float = None,
                  utc_offset: int = None,
                  showplot: bool = False,
-                 verbose: bool = False):
+                 verbose: bool = False,
+                 **legacy):
         """
         Initializes the LocalSD outlier detection instance.
 
@@ -87,24 +108,24 @@ class LocalSD(FlagBase):
                 Defaults to None.
             n_sd (float | list, optional): The number of standard deviations
                 (multiplier) to define the outlier threshold. If
-                `separate_daytime_nighttime` is True, this must be a list
+                `separate_day_night` is True, this must be a list
                 [day_sd, night_sd]. Defaults to 7.
             winsize (int | list, optional): The rolling window size for
-                median/SD calculation. If `separate_daytime_nighttime` is True,
+                median/SD calculation. If `separate_day_night` is True,
                 this must be a list [day_win, night_win]. If None, defaults
                 to 5% of the series length. Defaults to None.
             constant_sd (bool, optional): If True, uses the standard deviation
                 of the *entire* series. If False (default), uses a *rolling*
                 standard deviation based on `winsize`. Defaults to False.
-            separate_daytime_nighttime (bool, optional): If True, runs the
+            separate_day_night (bool, optional): If True, runs the
                 detection separately for day and night periods. Defaults to False.
             lat (float, optional): Latitude, required if
-                `separate_daytime_nighttime` is True for sun-position
+                `separate_day_night` is True for sun-position
                 calculations. Defaults to None.
             lon (float, optional): Longitude, required if
-                `separate_daytime_nighttime` is True. Defaults to None.
+                `separate_day_night` is True. Defaults to None.
             utc_offset (int, optional): UTC offset in hours, required if
-                `separate_daytime_nighttime` is True. Defaults to None.
+                `separate_day_night` is True. Defaults to None.
             showplot (bool, optional): If True, generates a plot of the
                 detection process upon calling `.calc()`. Defaults to False.
             verbose (bool, optional): If True, prints iteration details to the
@@ -115,7 +136,7 @@ class LocalSD(FlagBase):
             n_sd (float | list): Standard deviation multiplier.
             winsize (int | list): Rolling window size.
             constant_sd (bool): Flag for constant vs. rolling SD.
-            separate_daytime_nighttime (bool): Flag for day/night mode.
+            separate_day_night (bool): Flag for day/night mode.
             flag_daytime (Series): Boolean flags for daytime (if enabled).
             flag_nighttime (Series): Boolean flags for nighttime (if enabled).
             is_daytime (Series): Boolean mask for daytime indices (if enabled).
@@ -124,10 +145,12 @@ class LocalSD(FlagBase):
             ax_localsd (plt.Axes): Top subplot for data and limits (if showplot).
             ax2_localsd (plt.Axes): Bottom subplot for filtered data (if showplot).
         """
+        reject_legacy_params(legacy, 'LocalSD')
+        _reject_list_params(n_sd=n_sd, winsize=winsize)
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.n_sd = n_sd
         self.constant_sd = constant_sd
-        self.separate_daytime_nighttime = separate_daytime_nighttime
+        self.separate_day_night = separate_day_night
         self.lat = lat
         self.lon = lon
         self.utc_offset = utc_offset
@@ -136,13 +159,22 @@ class LocalSD(FlagBase):
 
         self.winsize = int(len(self.series) / 20) if winsize is None else winsize
 
+        # Per-period overrides default to None and fall back to the global value,
+        # so changing n_sd or winsize alone still affects both periods. winsize
+        # falls back to the *resolved* global above, not the raw argument, so the
+        # 5%-of-series default reaches both periods too.
+        self.n_sd_daytime = n_sd_daytime if n_sd_daytime is not None else self.n_sd
+        self.n_sd_nighttime = n_sd_nighttime if n_sd_nighttime is not None else self.n_sd
+        self.winsize_daytime = winsize_daytime if winsize_daytime is not None else self.winsize
+        self.winsize_nighttime = winsize_nighttime if winsize_nighttime is not None else self.winsize
+
         # Per-iteration detection band in data units (set by _flagtests); exposed
         # for visualisation. Series over the current cleaned series' index.
         self.last_upper_bound = None
         self.last_lower_bound = None
 
         # Initialize day/night attributes
-        if self.separate_daytime_nighttime:
+        if self.separate_day_night:
             self._validate_daytime_nighttime_setup()
             self.flag_daytime, self.flag_nighttime, self.is_daytime, self.is_nighttime = (
                 create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon,
@@ -157,16 +189,12 @@ class LocalSD(FlagBase):
             self.fig_localsd, self.ax_localsd, self.ax2_localsd = self._plot_init()
 
     def _validate_daytime_nighttime_setup(self):
-        if not isinstance(self.n_sd, list):
-            raise ValueError(f"n_sd must be a list if separate_daytime_nighttime is True")
-        if not isinstance(self.winsize, list):
-            raise ValueError(f"winsize must be a list if separate_daytime_nighttime is True")
         if self.lat is None:
-            raise ValueError(f"lat must be set if separate_daytime_nighttime is True")
+            raise ValueError(f"lat must be set if separate_day_night is True")
         if self.lon is None:
-            raise ValueError(f"lon must be set if separate_daytime_nighttime is True")
+            raise ValueError(f"lon must be set if separate_day_night is True")
         if self.utc_offset is None:
-            raise ValueError(f"utc_offset must be set if separate_daytime_nighttime is True")
+            raise ValueError(f"utc_offset must be set if separate_day_night is True")
 
     def calc(self, repeat: bool = True, progress_callback=None):
         """
@@ -194,7 +222,7 @@ class LocalSD(FlagBase):
             self.run_flagtests, repeat=repeat, progress_callback=progress_callback)
         if self.showplot:
 
-            if self.separate_daytime_nighttime:
+            if self.separate_day_night:
                 # Daytime/nighttime details for separated approach
                 # This is a dedicated plot in FlagBase for daytime/nighttime methods
                 title = (f"Local SD filter daytime/nighttime: {self.series.name}, "
@@ -248,13 +276,17 @@ class LocalSD(FlagBase):
             sd = s.rolling(window=winsize, center=True, min_periods=3).std()
         upper_limit = rmedian + (sd * n_sd)
         lower_limit = rmedian - (sd * n_sd)
-        ok = (s < upper_limit) & (s > lower_limit)
+        # Inclusive limits, so `ok` is the exact complement of `rejected` (which
+        # rejects strictly outside). With strict limits on both sides a value
+        # sitting exactly on a limit was in neither set, e.g. every record of a
+        # constant series, where sd = 0 puts both limits on the data.
+        ok = (s <= upper_limit) & (s >= lower_limit)
         ok = ok[ok].index
         rejected = (s > upper_limit) | (s < lower_limit)
         rejected = rejected[rejected].index
         n_outliers = len(rejected)
         if self.verbose:
-            detail(f"ITERATION#{iteration}{time_period}: Total found outliers: {len(rejected)} values", verbose=self.verbose)
+            detail(f"ITERATION#{iteration}{time_period}: Total found outliers: {len(rejected)} values", verbose=self.verbose, min_level=VERBOSE_PROGRESS)
         if self.showplot:
             self._plot_add_iteration(rmedian, upper_limit, lower_limit, iteration, time_period=time_period)
         return ok, rejected, n_outliers, upper_limit, lower_limit
@@ -285,7 +317,7 @@ class LocalSD(FlagBase):
         # Working data
         s = self.filteredseries.copy().dropna()
 
-        if not self.separate_daytime_nighttime:
+        if not self.separate_day_night:
             ok, rejected, n_outliers, upper, lower = self._identify_outliers(
                 s=s, iteration=iteration, n_sd=self.n_sd, winsize=self.winsize, time_period=" (global)")
             self.last_upper_bound = upper
@@ -294,12 +326,14 @@ class LocalSD(FlagBase):
             # Run for daytime (dt)
             s_dt = s[self.is_daytime]  # Daytime data
             ok_dt, rejected_dt, n_outliers_dt, up_dt, lo_dt = self._identify_outliers(
-                s=s_dt, iteration=iteration, n_sd=self.n_sd[0], winsize=self.winsize[0], time_period=" (daytime)")
+                s=s_dt, iteration=iteration, n_sd=self.n_sd_daytime, winsize=self.winsize_daytime,
+                time_period=" (daytime)")
 
             # Run for nighttime
             s_nt = s[self.is_nighttime]  # Nighttime data
             ok_nt, rejected_nt, n_outliers_nt, up_nt, lo_nt = self._identify_outliers(
-                s=s_nt, iteration=iteration, n_sd=self.n_sd[1], winsize=self.winsize[1], time_period=" (nighttime)")
+                s=s_nt, iteration=iteration, n_sd=self.n_sd_nighttime, winsize=self.winsize_nighttime,
+                time_period=" (nighttime)")
 
             # Collect daytime and nighttime flags in one overall flag
             ok = ok_dt.union(ok_nt)
@@ -371,7 +405,7 @@ class LocalSD(FlagBase):
         outliers_only = self.series[rejected_total]
 
         # Get daytime and nighttime time series
-        if self.separate_daytime_nighttime:
+        if self.separate_day_night:
             rejected_dt = (self.overall_flag == 2) & self.is_daytime
             rejected_nt = (self.overall_flag == 2) & self.is_nighttime
             n_outliers_dt = rejected_dt.sum()

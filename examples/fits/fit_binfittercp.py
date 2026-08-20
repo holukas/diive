@@ -1,7 +1,7 @@
 """
-=============================
+==================================
 Binned Curve Fitting (BinFitterCP)
-=============================
+==================================
 
 Demonstrates fitting polynomial functions to binned time series data with
 confidence and prediction intervals. BinFitterCP is useful for analyzing

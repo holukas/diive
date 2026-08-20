@@ -19,7 +19,6 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-import numpy as np
 from PySide6.QtWidgets import QComboBox, QSpinBox
 
 import diive as dv
@@ -90,7 +89,7 @@ class SurfaceXYZTab(Surface3DTab):
         # Seed X/Y/Z to three distinct numeric columns for a sensible first view.
         numeric = [str(c) for c in df.select_dtypes(include="number").columns]
         combos = self.picker.combos()
-        for key, col in zip(("x", "y", "z"), numeric[:3]):
+        for key, col in zip(("x", "y", "z"), numeric[:3], strict=False):
             combo = combos[key]
             combo.blockSignals(True)
             combo.setCurrentText(col)

@@ -31,8 +31,10 @@ class Histogram:
             series: A pandas Series.
             method: Method used for binning data
                 Options:
+
                     - 'uniques': Each unique value in the dataset is a separate bin
                     - 'n_bins': Number of bins
+
             n_bins: Number of bins, needed if *method* is 'n_bins', otherwise ignored.
             ignore_fringe_bins: List of integers [i, j] with length 2
                 If a list is provided, then the first i and last j number of

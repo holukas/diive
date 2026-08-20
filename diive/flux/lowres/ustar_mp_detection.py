@@ -20,7 +20,7 @@ from diive.core.utils.console import info, detail, warn
 
 
 class UstarMovingPointDetection:
-    """
+    r"""
     Detect USTAR threshold using ONEFlux moving point method (Papale et al., 2006).
 
     This class implements the complete USTAR threshold detection workflow for eddy covariance
@@ -33,6 +33,7 @@ class UstarMovingPointDetection:
     respiration stabilizes. The threshold is where respiration stops changing with increasing u*.
 
     Algorithm steps (mirrors ``ustar.c::ustar_threshold``):
+
     1. FILTER DATA: Select nighttime records only (SW_IN < 10 W/m2) for pure respiration signal
     2. STRATIFY BY SEASON: Divide year into 4 seasons (calendar quarters by default)
     3. STRATIFY BY TEMPERATURE: Within each season, divide into 7 temperature classes
@@ -56,7 +57,7 @@ class UstarMovingPointDetection:
         Looks for columns containing 'NEE' and 'QCF' preferentially
     ta_col : str, optional
         Air temperature column name (auto-detected if None)
-        Looks for columns containing 'TA_' or similar
+        Looks for columns containing 'TA\_' or similar
     ustar_col : str, optional
         Friction velocity column name (auto-detected if None)
         Looks for columns containing 'USTAR' or 'U_STAR'
@@ -80,6 +81,11 @@ class UstarMovingPointDetection:
         ONEFlux default ``default_seasons_group = "1,2,3;4,5,6;7,8,9;10,11,12"``.
     bootstrapping_times : int, default=100
         Number of bootstrap resampling iterations for uncertainty estimation
+    random_state : int or None, default=42
+        Seed for the bootstrap resampling, so ``bootstrap()`` returns the same
+        distribution for the same input. Pass None for a fresh draw each call.
+        ``detect()`` is deterministic and unaffected. Seeding selects which resamples
+        are drawn, not how a threshold is computed, so ONEFlux parity is unaffected.
     verbose : int, default=0
         Verbosity level: 0=silent, 1=progress, 2=detailed debug output
 
@@ -88,24 +94,26 @@ class UstarMovingPointDetection:
     results_ : pd.DataFrame
         Detected thresholds with column: 'threshold'
         Index contains season labels (Season 1, 2, 3, 4)
+        NaN for a season whose threshold could not be detected
     annual_thresholds_ : dict
-        Annual threshold with key: 'threshold' (maximum across seasons)
+        Annual threshold with key: 'threshold' (maximum across seasons),
+        NaN if no season yielded a threshold. Same value as
+        ``get_annual_thresholds()`` returns.
 
     Examples
     --------
     >>> import diive as dv
     >>> df = dv.load_exampledata_parquet_lae()
     >>> detector = dv.flux.UstarMovingPointDetection(df)
-    >>> thresholds = detector.detect()
-    >>> print(detector.summary())
-    >>> stats = detector.bootstrap()
+    >>> thresholds = detector.detect()  # then detector.summary() / detector.bootstrap()
 
     Notes
     -----
     The algorithm requires:
+
     - At least 3000 valid records for valid detection (MIN_VALUE_PERIOD)
-    - At least 700 (= 100 * 7) records per season for per-season detection
-      (TA_CLASS_MIN_SAMPLE * ta_classes_count); seasons below this are skipped
+    - At least 700 (= 100 \* 7) records per season for per-season detection
+      (TA_CLASS_MIN_SAMPLE \* ta_classes_count); seasons below this are skipped
     - If every season is below 700, all night data is pooled into one season
       (ONEFlux "second method", one big season)
 
@@ -145,10 +153,17 @@ class UstarMovingPointDetection:
         forward_mode_n: int = 2,
         season_groups: Optional[List[List[int]]] = None,
         bootstrapping_times: int = 100,
+        random_state: Optional[int] = 42,
         verbose: int = 0,
     ):
         # Validate input
-        """Set up moving-point USTAR threshold detection. See the class docstring."""
+        """Set up moving-point USTAR threshold detection. See the class docstring.
+
+        ``random_state`` seeds the bootstrap resampling so a threshold is reproducible;
+        pass None for a fresh draw on every call. It does not affect ``detect()``, which
+        is deterministic. Seeding changes which resamples are drawn, not the algorithm,
+        so ONEFlux parity is unaffected.
+        """
         if df is None or df.empty:
             raise ValueError("Input DataFrame cannot be None or empty")
         if forward_mode_n < 1:
@@ -206,6 +221,7 @@ class UstarMovingPointDetection:
         self.ustar_classes_count = ustar_classes_count
         self.forward_mode_n = forward_mode_n
         self.bootstrapping_times = bootstrapping_times
+        self.random_state = random_state
         self.verbose = verbose
 
         # Default season groups: calendar quarters (ONEFlux default)
@@ -291,10 +307,23 @@ class UstarMovingPointDetection:
             if class_end >= N:
                 class_end = N - 1
             value = vals_sorted[class_end]
-            # extend boundary forward across tied values
-            class_end += 1
-            while class_end < N and vals_sorted[class_end] == value:
+            # Extend the boundary forward across tied values, mirroring the C loop
+            # `while ( ++ustar_class_end < total ) { ... }`. The `class_start ==
+            # class_end` branch is load-bearing and was missing: when the previous
+            # class's tie extension ran past this class's nominal end, `class_end`
+            # restarts *behind* `class_start`, and without adopting the next value
+            # and carrying on, the class comes out as (start, start-1) - an inverted
+            # window whose mean is 0/0 = NaN. `_forward_mode` then skips every
+            # candidate whose look-ahead window touches that NaN.
+            while True:
                 class_end += 1
+                if class_end >= N:
+                    break
+                if vals_sorted[class_end] != value:
+                    if class_start == class_end:
+                        value = vals_sorted[class_end]
+                        continue
+                    break
             bounds[i, 0] = class_start
             bounds[i, 1] = class_end - 1
 
@@ -315,8 +344,16 @@ class UstarMovingPointDetection:
         for k in range(len(bounds)):
             s = bounds[k, 0]
             e = bounds[k, 1]
-            if s < 0:
-                continue  # leave 0.0 (matches C reset value for empty classes)
+            if s < 0 or e < s:
+                # Leave 0.0, which is what C computes for both: its accumulation
+                # loop `for (y = start; y <= end; y++)` never runs, so the sum
+                # stays at the reset value. An inverted window (end < start) is a
+                # real C outcome when a tie run overshoots the next class, and the
+                # cumulative-sum shortcut used below does *not* reproduce it: with
+                # a negative count the two negatives cancel and it returns a
+                # plausible-looking class mean (0.215 where C has 0.0), or 0/0 =
+                # NaN when the count is exactly zero.
+                continue
             means[k] = (cs[e + 1] - cs[s]) / (e - s + 1)
         return means
 
@@ -441,7 +478,7 @@ class UstarMovingPointDetection:
             return [th] * self.seasons_count
 
         thresholds: List[float] = []
-        for months, c in zip(self.season_groups, season_counts):
+        for months, c in zip(self.season_groups, season_counts, strict=False):
             if c < min_per_season:
                 thresholds.append(np.nan)
                 continue
@@ -456,7 +493,16 @@ class UstarMovingPointDetection:
         return float(np.max(valid)) if valid else np.nan
 
     def _night_valid_arrays(self):
-        """Extract night+valid (NEE, TA, USTAR, month) numpy arrays plus the valid count."""
+        """Extract night+valid (NEE, TA, USTAR, month) numpy arrays plus the valid count.
+
+        Also enforces the record minimum. This is the one point every public entry
+        goes through — ``detect()``, ``bootstrap()`` and ``bootstrap_annual_samples()``
+        — so the check belongs here rather than in ``detect()`` alone: the bootstrap
+        paths used to skip it, and they are the ones ``UstarBootstrapThresholds`` and
+        the flux chain's L3.3 detection actually call. A record too short for
+        ``detect()`` therefore still produced a confident threshold through the chain,
+        and that threshold decides which nighttime fluxes are discarded.
+        """
         nee = self.df[self.nee_col].to_numpy(dtype='float64')
         ta = self.df[self.ta_col].to_numpy(dtype='float64')
         ustar = self.df[self.ustar_col].to_numpy(dtype='float64')
@@ -464,6 +510,17 @@ class UstarMovingPointDetection:
 
         valid = np.isfinite(nee) & np.isfinite(ta) & np.isfinite(ustar) & np.isfinite(swin)
         night = valid & (swin < self.NIGHT_THRESHOLD)
+
+        if len(self.df) < self.MIN_SAMPLES_PERIOD:
+            raise ValueError(
+                f"Insufficient data: {len(self.df)} records, need at least {self.MIN_SAMPLES_PERIOD}"
+            )
+        n_valid = int(valid.sum())
+        if n_valid < self.MIN_SAMPLES_PERIOD:
+            raise ValueError(
+                f"Insufficient valid data: {n_valid} records, need at least {self.MIN_SAMPLES_PERIOD}"
+            )
+
         return nee, ta, ustar, self._month, valid, night
 
     # ------------------------------------------------------------------ public
@@ -484,18 +541,9 @@ class UstarMovingPointDetection:
                  f"{len(self.df)} records, {self.seasons_count} seasons, "
                  f"{self.ta_classes_count} TA classes, {self.ustar_classes_count} USTAR classes")
 
-        if len(self.df) < self.MIN_SAMPLES_PERIOD:
-            raise ValueError(
-                f"Insufficient data: {len(self.df)} records, need at least {self.MIN_SAMPLES_PERIOD}"
-            )
-
+        # The record minimum is enforced by _night_valid_arrays, so every entry
+        # point shares it (see there).
         nee, ta, ustar, month, valid, night = self._night_valid_arrays()
-
-        n_valid = int(valid.sum())
-        if n_valid < self.MIN_SAMPLES_PERIOD:
-            raise ValueError(
-                f"Insufficient valid data: {n_valid} records, need at least {self.MIN_SAMPLES_PERIOD}"
-            )
 
         nee_n = nee[night]
         ta_n = ta[night]
@@ -507,19 +555,21 @@ class UstarMovingPointDetection:
         if self.verbose >= 2:
             for i, t in enumerate(thresholds_list):
                 if np.isfinite(t):
-                    detail(f"  Season {i + 1}: {t:.4f} m/s")
+                    detail(f"  Season {i + 1}: {t:.4f} m/s", verbose=self.verbose)
                 else:
-                    detail(f"  Season {i + 1}: not found")
+                    detail(f"  Season {i + 1}: not found", verbose=self.verbose)
 
         self.results_ = pd.DataFrame(
             {'threshold': thresholds_list},
             index=[f'Season {i + 1}' for i in range(self.seasons_count)],
         )
 
+        # NaN, not THRESHOLD_NOT_FOUND: the sentinel is 10.0 m/s, a plausible-looking
+        # threshold that would filter out every record. It used to be stored here and
+        # converted back to NaN only by get_annual_thresholds(), so reading the
+        # documented attribute directly after a failed detection was a trap.
         annual = self._aggregate_annual(thresholds_list)
-        self.annual_thresholds_ = {
-            'threshold': annual if np.isfinite(annual) else self.THRESHOLD_NOT_FOUND,
-        }
+        self.annual_thresholds_ = {'threshold': annual}
 
         if self.verbose >= 1:
             if np.isfinite(annual):
@@ -543,7 +593,7 @@ class UstarMovingPointDetection:
 
         for boot_idx in range(n_iter):
             if self.verbose >= 2 and boot_idx % 10 == 0:
-                detail(f"  Iteration {boot_idx + 1}/{n_iter}")
+                detail(f"  Iteration {boot_idx + 1}/{n_iter}", verbose=self.verbose)
 
             idx = rng.integers(0, n_total, n_total)
             sel = night[idx]
@@ -620,7 +670,9 @@ class UstarMovingPointDetection:
         if self.verbose >= 1:
             info(f"Running {n_iter} bootstrap iterations...")
 
-        rng = np.random.default_rng()
+        # Seeded so the returned distribution is reproducible; unseeded, every call
+        # gave different percentiles for the same input.
+        rng = np.random.default_rng(self.random_state)
         per_season: List[List[float]] = [[] for _ in range(self.seasons_count)]
         annual_samples: List[float] = []
 
@@ -686,10 +738,7 @@ class UstarMovingPointDetection:
         """
         if not self.annual_thresholds_:
             raise RuntimeError("Detection not yet performed. Call detect() first.")
-        result = self.annual_thresholds_.copy()
-        if result.get('threshold') == self.THRESHOLD_NOT_FOUND:
-            result['threshold'] = np.nan
-        return result
+        return self.annual_thresholds_.copy()
 
     def __repr__(self) -> str:
         """String representation."""

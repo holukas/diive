@@ -13,7 +13,8 @@ pipeline and demonstrates the key advantage of the composable functional API:
 and four NEE partitioning variants from the same upstream state without
 repeating any work.
 
-Pipeline at a glance:
+Pipeline at a glance::
+
   L2   -> ``run_level2``                — EddyPro quality-flag expansion + QCF
   L3.1 -> ``run_level31``               — storage correction (``FC -> NEE``)
   L3.2 -> ``make_level32_detector`` +
@@ -155,7 +156,7 @@ sod.flag_outliers_hampel_test(
     n_sigma_daytime=5.5,
     n_sigma_nighttime=5.5,
     use_differencing=True,  # more sensitive to isolated spikes
-    separate_daytime_nighttime=True,
+    separate_day_night=True,
     showplot=False,
     verbose=True,
     repeat=True,
@@ -308,6 +309,10 @@ data = run_level41_rf(
     min_samples_leaf=1,
     random_state=42,
     n_jobs=-1,
+    # SHAP explains a seeded 5000-row sample rather than the whole record. Its cost
+    # is linear in rows while mean |SHAP| converges early, so the ranking that
+    # reduce_features selects on is unchanged, and it stays reproducible.
+    shap_max_rows=5000,
 )
 print("Random Forest gap-filling complete")
 
@@ -332,6 +337,7 @@ data = run_level41_xgb(
     min_child_weight=5,
     random_state=42,
     n_jobs=-1,
+    shap_max_rows=5000,  # as above: same ranking, a fraction of the SHAP cost
 )
 print("XGBoost gap-filling complete")
 

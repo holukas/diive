@@ -1,4 +1,4 @@
-# Contributing to DIIVE
+# Contributing to diive
 
 This guide covers development setup, running tests, and contributing code.
 
@@ -86,8 +86,29 @@ pytest tests/ -v
 The GUI tests (`tests/test_gui.py`) run offscreen and skip themselves unless the
 `gui` extra is installed (`uv sync --extra gui`).
 
-Coverage reporting is not set up — `pytest-cov` is not a dependency of this
-project. Add it to your environment first if you want `--cov`.
+`pytest-cov` is in the `dev` group, so coverage works out of the box:
+
+```bash
+# Coverage for the whole package
+uv run pytest tests/ --cov=diive --cov-report=term-missing
+
+# Record which test covered which line (then filter by test in the HTML report)
+uv run pytest tests/ --cov=diive --cov-context=test --cov-report=html
+```
+
+Note that `tests/test_gui.py` drives a lot of library code on its way through
+the widgets, so it inflates the library figure. To see what the library tests
+cover on their own, deselect it:
+
+```bash
+uv run pytest tests/ --ignore=tests/test_gui.py --cov=diive --cov-report=term-missing
+```
+
+Omitting `diive/gui` from the *report* is not the same thing — it hides those
+lines but still counts the coverage `test_gui.py` contributes elsewhere.
+
+[COVERAGE_GAPS.md](COVERAGE_GAPS.md) tracks what is still uncovered and why —
+worth a look before writing new tests, so you pick something that matters.
 
 The suite runs real models on real data (gap-filling, the flux processing chain,
 the partitioning ports), so expect it to take minutes rather than seconds. Use
@@ -279,7 +300,7 @@ examples/
 ├── visualization/      # Plotting examples
 ├── features/           # Feature engineering / variable creation
 ├── analysis/           # Time series analysis
-├── flux/               # Flux-specific analysis (incl. hires/ high-res EC)
+├── flux/               # Flux-specific analysis
 ├── events/             # Event markers
 ├── fits/               # Curve fitting
 ├── io/                 # File I/O
@@ -335,21 +356,46 @@ if __name__ == '__main__':
 
 ### Building Docs Locally
 
-With uv:
+The docs are Sphinx, hosted on Read the Docs. The tooling ships with the default
+`uv sync`, so no extra install is needed:
 
-```bash
-cd docs
-uv run sphinx-build -b html . _build/html
+```powershell
+.\docs\build_docs.ps1
 ```
 
-Or if environment is activated:
+The result is `docs/_build/html/index.html`; add `-Open` to open it.
 
-```bash
-cd docs
-sphinx-build -b html . _build/html
+The script exists so a local build agrees with the hosted one. Two differences
+from a bare `sphinx-build`:
+
+- It passes `-W --keep-going`. `.readthedocs.yml` sets `fail_on_warning: true`,
+  so anything that warns locally blocks the hosted build too, and `--keep-going`
+  lists every warning in one run instead of stopping at the first.
+- It deletes the generated directories first (`_build`, `_autosummary`,
+  `api/generated`, `auto_examples`). Those are build output, untracked since they
+  are rebuilt every time. A leftover page for a symbol that no longer exists hides
+  the error that should be reported.
+
+The example gallery **is** executed, on Read the Docs and locally. That is what
+puts the figures and the captured console output on each example page, and it
+generates every thumbnail. A cold full build takes about 7.5 minutes, of which
+the 113 examples are 2.8 minutes. To skip execution for a fast pass over the
+prose and API pages:
+
+```powershell
+.\docs\build_docs.ps1 -NoGallery
 ```
 
-Open `docs/_build/html/index.html` in a browser to preview.
+That works through the `DIIVE_DOCS_GALLERY` environment variable, because
+`plot_gallery` lives inside a nested dict in `conf.py` that `sphinx-build -D`
+cannot reach.
+
+Use `-NoClean` to keep the previous build's output, and `-NoFailOnWarning` to
+build through warnings — bearing in mind Read the Docs will still refuse them.
+
+The `docs/` tree is written against the ten-namespace API and builds without warnings,
+so a broken page there is a real bug. Build before opening a PR that touches a docstring:
+`fail_on_warning` means malformed markup in one blocks the hosted build.
 
 ### Docstring Style
 
@@ -436,5 +482,5 @@ Set `'abort_on_example_error': False` in `docs/conf.py`. Check build logs.
 
 - **Issues:** [GitHub Issues](https://github.com/holukas/diive/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/holukas/diive/discussions)
-- **Documentation:** [DIIVE ReadTheDocs](https://diive.readthedocs.io/)
+- **Documentation:** [diive ReadTheDocs](https://diive.readthedocs.io/)
 

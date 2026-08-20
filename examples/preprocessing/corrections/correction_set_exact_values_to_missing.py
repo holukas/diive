@@ -35,7 +35,7 @@ print(f"  Count: {len(series)}")
 series_corr = dv.corrections.set_exact_values_to_missing(
     series=series,
     values=[0, 1, 10],
-    showplot=False,
+    showplot=True,
     verbose=1
 )
 

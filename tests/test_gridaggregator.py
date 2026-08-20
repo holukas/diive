@@ -127,3 +127,118 @@ class TestGridAggregator(unittest.TestCase):
                 binning_type="invalid_type",
                 n_bins=3
             )
+
+
+class TestSharedSeriesNames(unittest.TestCase):
+    """Two of x/y/z may carry the same Series name — the aggregation must not care.
+
+    The working frame used to be keyed by the Series names, so a shared name kept
+    only one of the two roles: x was then binned on z's values (silently wrong
+    axis), and x and y sharing a name made `pivot_table` raise
+    `Grouper for 'BIN_...' not 1-dimensional`.
+    """
+
+    @staticmethod
+    def _series():
+        rng = np.random.RandomState(7)
+        # Three disjoint value ranges, so which role a bin label belongs to is visible.
+        return (pd.Series(rng.uniform(0, 10, 400)),
+                pd.Series(rng.uniform(100, 200, 400)),
+                pd.Series(rng.randn(400)))
+
+    @staticmethod
+    def _agg(x, y, z):
+        return GridAggregator(x=x, y=y, z=z, binning_type='equal_width', n_bins=4,
+                              aggfunc='mean')
+
+    def test_same_variable_as_x_and_z(self):
+        # The GUI's X/Y/Z surface lets one variable fill two roles. Harmless even
+        # before the fix (overwriting a column with itself changes nothing), so
+        # this documents the case rather than carrying the regression.
+        x, y, _ = self._series()
+        shared = self._agg(x.rename('A'), y.rename('B'), x.rename('A'))
+        # Bin labels are the (rounded) lower bin edges: x on the columns, y on the index.
+        self.assertLess(shared.df_agg_wide.columns.max(), 10)
+        self.assertGreater(shared.df_agg_wide.index.min(), 99)
+        # Aggregating x over x's own bins: cell means rise with the x bin.
+        means = shared.df_agg_wide.mean(axis=0).to_numpy()
+        self.assertTrue(np.all(np.diff(means) > 0))
+
+    def test_z_sharing_the_x_name_is_still_aggregated_as_z(self):
+        x, y, z = self._series()
+        shared = self._agg(x.rename('A'), y.rename('B'), z.rename('A'))
+        reference = self._agg(x.rename('A'), y.rename('B'), z.rename('Z'))
+        # Renaming a role must not move a single value or bin label.
+        np.testing.assert_allclose(shared.df_agg_wide.to_numpy(),
+                                   reference.df_agg_wide.to_numpy())
+        self.assertEqual(list(shared.df_agg_wide.columns), list(reference.df_agg_wide.columns))
+        self.assertEqual(list(shared.df_agg_wide.index), list(reference.df_agg_wide.index))
+        # The x axis carries x's range (0-10), not z's (standard normal).
+        self.assertGreater(shared.df_agg_wide.columns.max(), 5)
+
+    def test_x_and_y_sharing_a_name(self):
+        x, y, z = self._series()
+        shared = self._agg(x.rename('A'), y.rename('A'), z.rename('Z'))
+        reference = self._agg(x.rename('A'), y.rename('B'), z.rename('Z'))
+        np.testing.assert_allclose(shared.df_agg_wide.to_numpy(),
+                                   reference.df_agg_wide.to_numpy())
+        # x on the columns (0-10), y on the index (100-200) — not y twice.
+        self.assertLess(shared.df_agg_wide.columns.max(), 10)
+        self.assertGreater(shared.df_agg_wide.index.min(), 100)
+
+    def test_public_column_names_are_unchanged(self):
+        x, y, z = self._series()
+        ga = self._agg(x.rename('A'), y.rename('B'), z.rename('Z'))
+        self.assertEqual(ga.df_agg_wide.columns.name, 'BIN_A')
+        self.assertEqual(ga.df_agg_wide.index.name, 'BIN_B')
+        self.assertEqual(list(ga.df_agg_long.columns), ['BIN_B', 'BIN_A', 'Z'])
+        self.assertEqual(list(ga.df_long.columns),
+                         ['INDEX', 'A', 'B', 'Z', 'BIN_A', 'BIN_B', 'BIN_COMBINED_STR'])
+
+
+class TestEmptyBinsArePreserved(unittest.TestCase):
+    """A bin nothing fell into must survive as an empty (NaN) cell.
+
+    The pivot only emits occupied bins. Consumers that draw the grid (the x/y/z
+    heatmap, the 3-D surface) treat consecutive labels as adjacent cells, so a
+    dropped bin lets the cell beside it widen silently across the gap — painting
+    a region that holds no measurements.
+    """
+
+    def _bimodal(self, n_bins):
+        rng = np.random.RandomState(0)
+        # X is bimodal: 0-10 and 95-100, with nothing in between.
+        x = pd.Series(np.concatenate([rng.uniform(0, 10, 500),
+                                      rng.uniform(95, 100, 500)]), name='X')
+        y = pd.Series(rng.uniform(0, 10, 1000), name='Y')
+        z = pd.Series(rng.randn(1000), name='Z')
+        return GridAggregator(x=x, y=y, z=z, binning_type='equal_width', n_bins=n_bins)
+
+    def test_equal_width_keeps_the_empty_middle(self):
+        ga = self._bimodal(n_bins=30)
+        wide = ga.df_agg_wide
+        self.assertEqual(wide.shape, (30, 30), "every requested bin must be present")
+        occupied = ~wide.isna().all(axis=0)
+        self.assertEqual(int(occupied.sum()), 5, "only the two clusters hold data")
+        self.assertGreater(int((~occupied).sum()), 0, "the gap must remain as empty cells")
+
+    def test_equal_width_bins_are_evenly_spaced(self):
+        # The whole point: consumers space cells by their labels, so the labels
+        # must march uniformly rather than jump across a dropped bin.
+        widths = np.diff(self._bimodal(n_bins=30).df_agg_wide.columns.to_numpy())
+        self.assertTrue(np.allclose(widths, widths[0], atol=1e-3))
+
+    def test_the_data_itself_is_unchanged(self):
+        ga = self._bimodal(n_bins=30)
+        # Restoring empty bins must not add, drop or move any aggregated value.
+        self.assertEqual(int(ga.df_agg_wide.notna().to_numpy().sum()), 150)
+
+    def test_quantile_bins_emptied_by_min_n_vals_are_kept(self):
+        # min_n_vals_per_bin can empty a bin of any type, not just equal-width.
+        rng = np.random.RandomState(0)
+        x = pd.Series(rng.uniform(0, 10, 400), name='X')
+        y = pd.Series(rng.uniform(0, 10, 400), name='Y')
+        z = pd.Series(rng.randn(400), name='Z')
+        ga = GridAggregator(x=x, y=y, z=z, binning_type='quantiles', n_bins=10,
+                            min_n_vals_per_bin=5)
+        self.assertEqual(ga.df_agg_wide.shape, (10, 10))

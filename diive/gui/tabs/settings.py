@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.colormaps import colormap_combo
 from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.variable_delegate import (
     CREATED_ROLE,
@@ -59,13 +60,19 @@ class _ColorSwatch(QPushButton):
     def __init__(self, get_hex, set_hex) -> None:
         super().__init__()
         self._get, self._set = get_hex, set_hex
+        self.setObjectName("colorswatch")
         self.setFixedSize(46, 22)
         self.clicked.connect(self._pick)
         self.refresh()
 
     def refresh(self) -> None:
+        # Scoped to this widget's objectName: a stylesheet applies to the widget
+        # AND its children, and the colour dialog below is parented to the
+        # swatch, so an unscoped rule would paint the dialog's own buttons
+        # (OK/Cancel/Pick Screen Color) in the swatch colour.
         self.setStyleSheet(
-            f"background: {self._get()}; border: 1px solid #607D8B; border-radius: 4px;")
+            f"QPushButton#colorswatch {{ background: {self._get()};"
+            f" border: 1px solid #607D8B; border-radius: 4px; }}")
 
     def _pick(self) -> None:
         chosen = QColorDialog.getColor(QColor(self._get()), self, "Pick colour")
@@ -98,6 +105,7 @@ class SettingsTab(DiiveTab):
         col.addWidget(self._pill_group())
         col.addWidget(self._ui_group())
         col.addWidget(self._timeseries_group())
+        col.addWidget(self._heatmap_group())
         col.addWidget(self._layout_group())
 
         reset = QPushButton("Reset to defaults")
@@ -170,6 +178,27 @@ class SettingsTab(DiiveTab):
         row.addStretch(1)
         return box
 
+    def _heatmap_group(self) -> QGroupBox:
+        box = QGroupBox("Heatmap colours")
+        form = QFormLayout(box)
+        self.cmap_combo = colormap_combo(theme.manager.heatmap_cmap)
+        self.cmap_combo.setToolTip(
+            "Colormap for the date/time heatmaps the tabs render as previews "
+            "(combine variables, derived variables, flux chain, gap-filling, "
+            "screening).\nThe Plot-menu heatmap tabs keep their own per-plot "
+            "colormap setting. Already-drawn heatmaps keep their colours until "
+            "they are redrawn.")
+        self.cmap_combo.currentTextChanged.connect(self._set_heatmap_cmap)
+        form.addRow("Preview heatmaps", self.cmap_combo)
+        return box
+
+    @staticmethod
+    def _set_heatmap_cmap(name: str) -> None:
+        name = name.strip()
+        if name:
+            theme.manager.heatmap_cmap = name
+            theme.manager.apply()
+
     def _layout_group(self) -> QGroupBox:
         box = QGroupBox("Layout")
         form = QFormLayout(box)
@@ -219,4 +248,10 @@ class SettingsTab(DiiveTab):
         self.width_spin.blockSignals(True)
         self.width_spin.setValue(theme.manager.list_width)
         self.width_spin.blockSignals(False)
+        # Only write back when it actually differs — the combo is editable, and
+        # setCurrentText while the user types would move their cursor.
+        if self.cmap_combo.currentText().strip() != theme.manager.heatmap_cmap:
+            self.cmap_combo.blockSignals(True)
+            self.cmap_combo.setCurrentText(theme.manager.heatmap_cmap)
+            self.cmap_combo.blockSignals(False)
         self.preview.viewport().update()

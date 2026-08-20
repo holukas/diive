@@ -14,7 +14,8 @@ thermal plume around the sampling volume. Since the OP-IRGA measures molar densi
 artificially lowers the measured CO2 concentration, resulting in a systematic, non-biological uptake
 (negative flux) bias, especially prevalent during high solar radiation and low wind conditions.
 
-The correction can be applied to CO2 fluxes (NEE, µmol m-2 s-1) and optionally to H2O fluxes (LE, W m-2).
+The correction applies to CO2 fluxes (NEE, µmol m-2 s-1) only. Whether a self-heating correction
+applies to the latent heat flux (LE) is unresolved in eddy covariance, so none is offered here.
 
 The method first calculates an unscaled flux correction term (FCT_UNSC) based on boundary-layer
 dynamics and instrument-specific thermal properties (e.g., sensible heat flux S or instrument
@@ -74,7 +75,6 @@ Abbreviations:
         fct_unsc_gf ... gap-filled unscaled flux correction term (flux units)
         fct ... flux correction term (flux units)
         sf ... scaling factor (unitless)
-        lv ... latent heat of vaporization (J µmol-1), in this units can be used for LE
 
     Other:
         OP ... open-path
@@ -93,16 +93,10 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize_scalar
 
-from diive.core.utils.console import console as _console, info, detail, warn
+from diive.core.utils.console import console as _console, info, detail, vspace, warn
 from diive.variables import dry_air_density, aerodynamic_resistance
 from diive.variables import DaytimeNighttimeFlag
 from diive.preprocessing.outlier_detection.hampel import HampelDaytimeNighttime
-
-pd.set_option('display.width', 2000)
-pd.set_option('display.max_columns', 14)
-pd.set_option('display.max_rows', 30)
-
-FluxType = Literal["CO2", "H2O"]
 
 
 @dataclass(frozen=True)
@@ -121,10 +115,14 @@ class ColumnConfig:
     dry_air_density: str = 'DRY_AIR_DENSITY'
     t_instr_surface: str = 'TS'
 
-    # Dynamic base names (will be prefixed/suffixed based on flux type)
     flux_corr_suffix: str = '_OP_CORR'
     fct_unsc: str = 'FCT_UNSC'
-    fct_unsc_gf: str = 'FCT_UNSC_gfRF'
+    # The suffix names the regressor that produced the column, as everywhere else in
+    # diive, and `ScopPhysics._gapfill()` looks the column up under *this* name in the
+    # gap-filler's output. So swapping the fixed XGBoost for another regressor raises
+    # KeyError here instead of quietly shipping a mislabelled column, which is what the
+    # previous 'FCT_UNSC_gfRF' did: an RF name on an XGBoost fill.
+    fct_unsc_gf: str = 'FCT_UNSC_gfXG'
     fct: str = 'FCT'
     sf: str = 'SF'
     s: str = 'S'  # Sensible heat from all key instrument surfaces (W m-2) (BUR08)
@@ -149,13 +147,20 @@ class ScopPhysics:
       velocity to model heat transfer efficiency.
     * **Thermal Conductivity**: Computes temperature-dependent air thermal conductivity
       required for sensible heat flux modeling.
-    * **Gap-Filling**: Employs a hybrid approach using Random Forest and Mean Diurnal
-      Variation (MDV) to ensure a continuous record of the correction term.
+    * **Gap-Filling**: Fills gaps in the correction term with XGBoost on engineered
+      features (lags, rolling windows, timestamp features) to ensure a continuous
+      record. There is no Mean Diurnal Variation (MDV) stage here; MDV is used by
+      `ScopApplicator` for the scaling factor.
     * **Outlier Detection**: Uses Hampel filtering to remove physical artifacts from
       aerodynamic resistance and unscaled flux terms.
 
     Key Outputs:
     * **FCT_UNSC**: The unscaled flux correction term in µmol m-2 s-1.
+    * **FCT_UNSC_gfXG**: The gap-filled unscaled flux correction term, the same data
+      as the `.fct_unsc_gf` attribute and under the same name. The `_gfXG` suffix
+      names the regressor. Renamed in v0.91.0 from `FCT_UNSC_gfRF`, a leftover from
+      an earlier Random Forest implementation; code indexing the old name must be
+      updated.
     * **S**: Modeled sensible heat flux from instrument surfaces (W m-2).
     * **TS**: Estimated instrument surface temperature (°C).
 
@@ -169,7 +174,6 @@ class ScopPhysics:
     """
 
     def __init__(self,
-                 flux_type: FluxType,
                  ta: pd.Series,
                  gas_density: pd.Series,
                  rho_a: pd.Series,
@@ -183,7 +187,6 @@ class ScopPhysics:
                  remove_outliers_method: Literal["fast", "separate"] = "fast"):
         """
         Args:
-            flux_type: "CO2" or "H2O"
             ta: series, air temperature (°C)
             gas_density: series, molar density of the gas (µmol m-3)
             rho_a: series, air density (kg m-3)
@@ -197,7 +200,6 @@ class ScopPhysics:
             remove_outliers_method: str, method to remove outliers from the data
                 Used for removing outliers in 'ra' and 'fct_unsc'.
         """
-        self.flux_type = flux_type
         self.ta = ta
         self.gas_density = gas_density
         self.rho_a = rho_a
@@ -226,9 +228,6 @@ class ScopPhysics:
 
         # Calculate thermal conductivity of air (required for BUR08) (k_air) (W m-1 K-1)
         self.k_air = self._calc_air_thermal_conductivity(ta=self.ta)
-
-        # Calculate latent heat of vaporization (required for LE only) (J µmol-1)
-        self.lv = self._calc_latent_heat_vaporization_j_umol(ta=self.ta)
 
         # Calculated in .run()
         self.ts = pd.Series(name=self.cols.t_instr_surface)  # Bulk instrument surface temperature (BUR06, JAR09)
@@ -260,7 +259,6 @@ class ScopPhysics:
             self.swin_pot.name: self.swin_pot,
             self.k_air.name: self.k_air,
             self.daytime.name: self.daytime,
-            self.lv.name: self.lv
         }
         return pd.DataFrame.from_dict(frame)
 
@@ -275,6 +273,13 @@ class ScopPhysics:
             self.fct_unsc = self._flux_correction_term_unscaled_jar09_bur06(ts=self.ts)
         elif correction_method_base == "BUR08":
             self.fct_unsc, self.S = self._flux_correction_term_unscaled_bur08()
+        else:
+            # Without this the chain just falls through, leaving fct_unsc as the
+            # empty placeholder from __init__: run() completes without a word and
+            # every consumer downstream sees an empty correction.
+            raise ValueError(
+                f"Unknown correction_method_base '{correction_method_base}'. "
+                f"Expected one of: 'JAR09', 'BUR06', 'BUR08'.")
 
         self.fct_unsc.name = self.cols.fct_unsc
 
@@ -290,14 +295,14 @@ class ScopPhysics:
     def stats(self):
         """
         Prints a diagnostic summary of the physics calculation.
-        Focuses on Data Coverage (Hybrid Gap-Filling), Instrument Heating,
+        Focuses on Data Coverage (Gap-Filling), Instrument Heating,
         and Correction Magnitude.
         """
         _console.print(f"\n{'=' * 65}")
-        _console.print(f"SCOP PHYSICS DIAGNOSTICS ({self.flux_type})")
+        _console.print("SCOP PHYSICS DIAGNOSTICS (CO2)")
         _console.print(f"{'=' * 65}")
 
-        # --- 1. DATA COVERAGE (Hybrid RF + MDV) ---
+        # --- 1. DATA COVERAGE (XGBoost gap-filling) ---
         n_total = len(self.ta)
         n_raw = self.fct_unsc.count()
         n_final = self.fct_unsc_gf.count()
@@ -308,7 +313,7 @@ class ScopPhysics:
         _console.print(f"   Total Timestamps       : {n_total:,}")
         _console.print(f"   Raw Physics Calculated : {n_raw:,}  ({n_raw / n_total:>6.1%})")
         _console.print(f"   Final Gap-Filled (GF)  : {n_final:,}  ({n_final / n_total:>6.1%})")
-        _console.print(f"   -> Imputed (RF + MDV)  : {n_filled:,}  ({n_filled / n_total:>6.1%})")
+        _console.print(f"   -> Gap-filled (XGBoost): {n_filled:,}  ({n_filled / n_total:>6.1%})")
 
         # --- 2. HEATING EFFECT (Delta T) ---
         # The core physical assumption is that Ts > Ta due to radiation.
@@ -387,7 +392,15 @@ class ScopPhysics:
             self.u.name: self.u,
             self.ustar.name: self.ustar
         }
-        df_input = pd.DataFrame.from_dict(frame).dropna()
+        # Drop rows missing a *driver*, never rows missing the target: the records
+        # with no FCT_UNSC are precisely the gaps to be filled. A blanket dropna()
+        # deleted them from the frame, so XGBoost reported "Filling 0 missing
+        # records", returned the input unchanged, and the message below blamed
+        # "insufficient drivers". It also made the lag/rolling features span the
+        # removed rows, reaching across arbitrary time jumps.
+        df_input = pd.DataFrame.from_dict(frame)
+        drivers = [c for c in df_input.columns if c != self.cols.fct_unsc]
+        df_input = df_input.dropna(subset=drivers)
 
         # Engineer features: temporal lags + rolling stats for diurnal/synoptic patterns
         engineer = FeatureEngineer(
@@ -420,9 +433,10 @@ class ScopPhysics:
                 if isinstance(metric_value, (int, float)):
                     info(f"      {metric_name}: {metric_value:.4f}")
 
-        # Get gap-filled result (XGBoost creates column with _gfXG suffix)
-        gf_col = f"{self.cols.fct_unsc}_gfXG"
-        fct_gf = xgb.gapfilling_df_[gf_col].copy()
+        # One name for the lookup and the output: XGBoostTS names its gap-filled column
+        # '{target}_gfXG', which is what ColumnConfig.fct_unsc_gf spells out, so the
+        # emitted column and the returned series cannot disagree (see ColumnConfig).
+        fct_gf = xgb.gapfilling_df_[self.cols.fct_unsc_gf].copy()
         fct_result = fct_gf.reindex(self.ta.index)
 
         # Report remaining gaps
@@ -455,34 +469,9 @@ class ScopPhysics:
         k_air.name = "AIR_THERMAL_CONDUCTIVITY"
         return k_air
 
-    import pandas as pd
-
-    @staticmethod
-    def _calc_latent_heat_vaporization_j_umol(ta: pd.Series) -> pd.Series:
-        """
-        Calculates Latent Heat of Vaporization in [J µmol-1].
-
-        Needed for the correction of the latent heat flux LE.
-
-        Formula derivation:
-        1. Lv [J/kg]  = (2.501 - 0.00237 * Ta) * 10^6
-        2. Mw [kg/mol] = 0.018015
-        3. Lv [J/µmol] = Lv [J/kg] * Mw * 10^-6
-
-        (The 10^6 and 10^-6 cancel out).
-        """
-        # Molar mass of water (kg/mol)
-        MW_WATER = 0.01801528
-
-        # Calculate directly in J / µmol
-        lv_j_umol = (2.501 - 0.00237 * ta) * MW_WATER
-        lv_j_umol.name = "LATENT_HEAT_VAPORIZATION_J_UMOL"
-
-        return lv_j_umol
-
     def _remove_outliers(self, series: pd.Series):
         ham = HampelDaytimeNighttime(
-            series=series, n_sigma_dt=5, n_sigma_nt=5, use_differencing=True,
+            series=series, n_sigma_daytime=5, n_sigma_nighttime=5, use_differencing=True,
             window_length=48 * 5, showplot=True, verbose=True,
             lat=self.lat, lon=self.lon, utc_offset=self.utc_offset)
         ham.calc(repeat=False)
@@ -611,7 +600,19 @@ class ScopPhysics:
         # Calculate unscaled flux correction term
         # self.gas_density is in [µmol m-3]
         # Result fct_unsc is in [µmol m-2 s-1]
-        fct_unsc = (S / (self.rho_a * self.c_p)) * (self.gas_density / (self.ta + 273.15))
+        #
+        # The (1 + 1.6077 rho_v/rho_d) factor is part of the correction, not an
+        # extra applied only by BUR06/JAR09: in Burba et al. (2008) the surface
+        # heat fluxes are *added to the ambient sensible heat flux* (their Method
+        # 4, S = rho*Cp*w'T'a + Sbot + Stop + 0.15*Sspar) and the total S enters
+        # the WPL equation (1), where the sensible-heat term carries that factor.
+        # Their poster gives the already-WPL-corrected form used here verbatim:
+        #   Fc_new = Fct + (Sbot + Stop + Sspar)/(rho*Cp) * (qc/Ta) * (1 + 1.6077 rho_v/rho_d)
+        # Omitting it made the choice of correction_method_base silently change
+        # two things at once - the surface-temperature model and whether the
+        # dilution factor applied at all (~1% at typical humidity).
+        h2o_dilution = 1 + 1.6077 * (self.rho_v / self.rho_d)
+        fct_unsc = (S / (self.rho_a * self.c_p)) * (self.gas_density / (self.ta + 273.15)) * h2o_dilution
 
         # print(f"Ts (BUR08), mean = {fct_unsc.mean():.2f}")
         return fct_unsc, S
@@ -619,8 +620,45 @@ class ScopPhysics:
     def _flux_correction_term_unscaled_jar09_bur06(self, ts: pd.Series) -> pd.Series:
         """
         Calculate unscaled flux correction term.
-        Equation (8) in Burba et al. (2006).
+        Equation (8) in Burba et al. (2006), without the retained fraction ``fr``.
         Used by JAR09 and BUR06.
+
+        Burba et al. (2006) Eq. 8 is::
+
+            Fc_new = Fc + fr * (Ts - Ta) * qc / (ra * (Ta + 273.15)) * (1 + 1.6077 rho_v/rho_d)
+
+        Two deliberate departures from that paper, both absorbed into the scaling factor
+        that :class:`ScopOptimizer` fits against a reference instrument:
+
+        1. **``fr`` is not computed.** In the paper it is the fraction of the instrument's
+           sensible heat retained in the optical path, from boundary-layer thicknesses
+           (their Eqs. 12-16; ~0.06 for a vertical LI-7500 on this dataset). A near-constant
+           factor is exactly what a fitted scaling factor absorbs, so omitting it costs
+           nothing here.
+        2. **``ra`` is the bulk canopy resistance** ``u / ustar**2`` (Kittler et al. 2017,
+           after Stull 1988), not the paper's per-element forced-convection resistances
+           ``ra ~ 7.4 * sqrt(d / U)`` for the can and the ball (their Eqs. 10/11).
+
+        Departure 2 is **not** absorbed, and that is worth knowing before trusting the
+        wind-speed dependence of this correction. The paper's ``fr/ra`` is nearly flat in
+        wind speed, because the U-dependence of ``fr`` and of ``ra`` largely cancel; the
+        bulk ``ustar**2/u`` is not. Measured on the bundled CH-LAE record (n=27331,
+        U 0.2-11.9 m/s), the ratio of the two forms varies by a factor of ~30 across
+        USTAR classes -- which the per-class scaling factor does absorb, since it fits one
+        constant per class -- but still spreads by a factor of ~4.8 (p10 to p90) *within*
+        each of the 20 USTAR classes, and a per-class constant cannot absorb that.
+
+        This is not simply an error: Burba et al. (2006) Sect. 5.2 explicitly sanctions
+        solving their Eq. 9 for the ``fr/ra`` ratio empirically against a closed-path
+        reference "in place of the Eqs. 9-16", which is what this implementation does. But
+        Sect. 5.2 asks for that ratio "for different wind speeds and directions", i.e. as a
+        function, and USTAR classes are only a partial proxy for wind speed -- hence the
+        residual spread above. Their Eqs. 10-16 also assume a near-vertical instrument with
+        laminar boundary layers and no flow obstruction, which Sect. 5.1 cautions about, so
+        the paper's own form is not automatically the better choice for a given site.
+
+        Recorded as finding L76; deciding it needs the reference-instrument comparison, not
+        a code change.
 
         Args:
             ts: series, instrument surface temperature (°C)
@@ -673,10 +711,18 @@ class ScopPhysics:
 
         return ts
 
-    def plot_diel_cycles(self):
+    def plot_diel_cycles(self, showplot: bool = True) -> plt.Figure:
         """
         Plots the mean diurnal cycles.
         Auto-detects if BUR08 surfaces exist and plots them individually.
+
+        Args:
+            showplot: if True, call plt.show() to display the figure interactively.
+                Set to False in non-interactive environments (Sphinx Gallery, headless
+                testing) or when the caller wants to close the figure itself.
+
+        Returns:
+            matplotlib Figure.
         """
         import matplotlib.pyplot as plt
         import matplotlib.gridspec as gridspec
@@ -743,7 +789,7 @@ class ScopPhysics:
                 ax = axes[i]
                 col_name = var.get('col')
                 if col_name is None:
-                    ax.axis('off');
+                    ax.axis('off')
                     continue
 
                 # --- SPECIAL HANDLING FOR BUR08 SURFACES (PANEL 3) ---
@@ -788,8 +834,11 @@ class ScopPhysics:
 
                 if series.min() < 0 < series.max(): ax.axhline(0, lw=1, color='k')
 
-            fig.suptitle(f"Physics Drivers ({self.flux_type})", fontsize=16, fontweight='bold', y=1.02)
-            plt.show()
+            fig.suptitle("Physics Drivers (CO2)", fontsize=16, fontweight='bold', y=1.02)
+            if showplot:
+                plt.show()
+
+        return fig
 
 
 class ScopOptimizer:
@@ -803,9 +852,6 @@ class ScopOptimizer:
     nighttime conditions.
 
     Core Functionality:
-    * **Unit Synchronization**: Automatically converts unscaled correction terms
-      to match flux units (e.g., converting molar density shifts to Watts for
-      H2O fluxes).
     * **Circular Block Bootstrapping**: Preserves temporal auto-correlation in
       eddy covariance data by resampling contiguous blocks of time-series indices
       during optimization.
@@ -829,40 +875,25 @@ class ScopOptimizer:
         correction workflow using ScopPhysics, ScopOptimizer, and ScopApplicator classes.
     """
 
+    # A class with fewer complete records than this is not fitted; its records
+    # fall back to a neighbouring class's scaling factor (reported by `run()`
+    # and listed in `skipped_classes`).
+    MIN_ROWS_PER_CLASS = 10
+
     def __init__(self,
-                 flux_type: FluxType,
                  class_var: pd.Series,
                  n_classes: int,
                  fct_unsc: pd.Series,
                  daytime: pd.Series,
                  n_bootstrap_runs: int,
                  flux_openpath: pd.Series,
-                 flux_closedpath: pd.Series,
-                 latent_heat_vaporization: Optional[pd.Series] = None):
-        """
-                Args:
-                    flux_type: "CO2" or "H2O"
-                    latent_heat_vaporization: Series in [J / µmol].
-                                              Required if flux_type="H2O" to convert
-                                              correction term to Watts.
-                """
-
-        self.flux_type = flux_type
+                 flux_closedpath: pd.Series):
         self.n_classes = n_classes
         self.n_bootstrap = n_bootstrap_runs
         self.cols = ColumnConfig()
 
-        # UNIT MATCHING
-        # fct_unsc is always [µmol m-2 s-1]
-        # If H2O, fluxes (LE) are in [W m-2]. Must convert FCT to W.
-        if self.flux_type == "H2O":
-            if latent_heat_vaporization is None:
-                raise ValueError("latent_heat_vaporization required for H2O flux optimization")
-            # [µmol m-2 s-1] * [J / µmol] = [J m-2 s-1] = [W m-2]
-            _fct_for_opt = fct_unsc * latent_heat_vaporization
-        else:
-            # CO2: [µmol m-2 s-1] matches [µmol m-2 s-1]. No change.
-            _fct_for_opt = fct_unsc
+        # Units match without conversion: fct_unsc and the CO2 fluxes are both
+        # in [µmol m-2 s-1].
 
         # Combine inputs into a single DataFrame for easier grouping
         self.df = pd.DataFrame({
@@ -874,6 +905,7 @@ class ScopOptimizer:
         })
 
         self.scaling_factors_df = pd.DataFrame()
+        self.skipped_classes = []
 
     def run(self) -> pd.DataFrame:
         """
@@ -881,6 +913,7 @@ class ScopOptimizer:
         Uses list accumulation for speed instead of DataFrame.loc assignment.
         """
         results = []
+        skipped = []
 
         # Group by daytime
         for daytime, day_group in self.df.groupby(self.cols.daytime):
@@ -901,7 +934,12 @@ class ScopOptimizer:
                 # Drop NaNs upfront for this bin
                 # (We only need rows where all vars are present)
                 valid_bin = bin_group.dropna()
-                if len(valid_bin) < 10:
+                if len(valid_bin) < self.MIN_ROWS_PER_CLASS:
+                    # Say so: a skipped class gets no scaling factor of its own, and
+                    # _assign_scaling_factors then resolves its records to a
+                    # neighbouring regime's factor via merge_asof(direction=
+                    # 'backward'). Silently, that reads as a class that was fitted.
+                    skipped.append((daytime, bin_id, len(valid_bin), len(bin_group)))
                     continue
 
                 # Prepare numpy arrays (for speed)
@@ -952,6 +990,14 @@ class ScopOptimizer:
 
                 detail(f"Finished group {bin_id} (Daytime {daytime}): Median SF = {np.median(factors):.3f}")
 
+        if skipped:
+            warn(f"{len(skipped)} of {len(skipped) + len(results)} classes had fewer than "
+                 f"{self.MIN_ROWS_PER_CLASS} complete records and got no scaling factor of "
+                 f"their own; their records take a neighbouring class's factor:")
+            for daytime, bin_id, n_valid, n_total in skipped:
+                warn(f"  daytime={daytime} class={bin_id}: {n_valid} complete of {n_total} records")
+        self.skipped_classes = skipped
+
         # Create dataframe
         self.scaling_factors_df = pd.DataFrame(results)
         return self.scaling_factors_df
@@ -1001,10 +1047,19 @@ class ScopOptimizer:
         # Trim to the exact original length n (since num_blocks * block_size >= n)
         return indices_circular[:n]
 
-    def plot(self):
-        """Plots optimized scaling factors with confidence intervals."""
+    def plot(self, showplot: bool = True) -> Optional[plt.Figure]:
+        """Plots optimized scaling factors with confidence intervals.
+
+        Args:
+            showplot: if True, call plt.show() to display the figure interactively.
+                Set to False in non-interactive environments (Sphinx Gallery, headless
+                testing) or when the caller wants to close the figure itself.
+
+        Returns:
+            matplotlib Figure, or None if there are no fitted scaling factors to plot.
+        """
         if self.scaling_factors_df.empty:
-            return
+            return None
 
         info("Plotting Scaling Factors...")
         plot_df = self.scaling_factors_df.copy()
@@ -1041,7 +1096,10 @@ class ScopOptimizer:
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
 
-        plt.show()
+        if showplot:
+            plt.show()
+
+        return fig
 
     def stats(self):
         """
@@ -1058,12 +1116,12 @@ class ScopOptimizer:
         def print_sep(char='-', length=75):
             _console.print(char * length)
 
-        _console.print("\n")
+        vspace("\n")
         print_sep('=', 75)
         _console.print(f"{'SCALING FACTOR OPTIMIZATION REPORT':^75}")
         print_sep('=', 75)
 
-        _console.print(f"Flux Type      : {self.flux_type}")
+        _console.print("Flux Type      : CO2")
         _console.print(f"Bootstrap Runs : {self.n_bootstrap}")
         _console.print(f"Total Bins     : {len(df)}")
         print_sep('-', 75)
@@ -1082,7 +1140,7 @@ class ScopOptimizer:
 
             _console.print(f"{period:<15} | {median_sf:>10.3f} | {mean_iqr:>22.3f} | {mean_n:>8.0f}")
 
-        _console.print("\n")
+        vspace("\n")
 
         # --- 2. DETAILED BIN REPORT ---
         _console.print(f"{'2. DETAILED BIN BREAKDOWN':<40}")
@@ -1118,10 +1176,10 @@ class ScopOptimizer:
                                 f"{subset.loc[idx, 'SF_MEDIAN']:>16.3f} | "
                                 f"{ci_str:^16} | "
                                 f"{subset.loc[idx, 'SOS_MEDIAN']:>10.2f}")
-            _console.print("")  # Spacer between day/night
+            vspace()  # Spacer between day/night
 
         print_sep('=', 75)
-        _console.print("\n")
+        vspace("\n")
 
     def get(self) -> pd.DataFrame:
         """Return the fitted scaling-factors DataFrame."""
@@ -1150,8 +1208,19 @@ class ScopApplicator:
       and diel cycles.
 
     Key Outputs:
-    * **Final Corrected Flux**: The corrected NEE (CO2) or LE (H2O) series.
+    * **Final Corrected Flux**: The corrected NEE (CO2) series.
     * **FCT**: The final applied correction term in physical units.
+
+    Column names:
+        The names of the `fct_unsc` and `daytime` input series are not part of the
+        contract — both are renamed to the class's own column names (`ColumnConfig`)
+        on input, so a correction term straight from `ScopPhysics` is accepted whether
+        or not it was gap-filled. The correction term is renamed to the neutral
+        `ColumnConfig.fct_unsc` ('FCT_UNSC') rather than to `.fct_unsc_gf`
+        ('FCT_UNSC_gfXG'): this class does not gap-fill anything, so a `_gf` name in its
+        results dataframe would claim a fill that may never have happened. The
+        `flux_openpath` and `classvar` names *are* kept and appear in the results
+        dataframe.
 
     See Also:
         ScopPhysics : Calculate unscaled flux correction term.
@@ -1163,41 +1232,54 @@ class ScopApplicator:
     """
 
     def __init__(self,
-                 flux_type: FluxType,
                  fct_unsc: pd.Series,
                  scaling_factors_df: pd.DataFrame,
                  flux_openpath: pd.Series,
                  classvar: pd.Series,
-                 daytime: pd.Series,
-                 latent_heat_vaporization: Optional[pd.Series] = None):
+                 daytime: pd.Series):
         """
         Args:
-            flux_type: "CO2" or "H2O"
-            latent_heat_vaporization: Series of Lambda (J/mmol or J/kg depending on inputs).
-                                      Required ONLY if flux_type="H2O" and fluxes are in W m-2
-                                      but correction is in molar units.
+            fct_unsc: series, unscaled flux correction term (flux units), as produced by
+                `ScopPhysics` — either `.fct_unsc` (ungapfilled) or `.fct_unsc_gf`.
+                Its name is ignored; it is renamed to `ColumnConfig.fct_unsc` internally
+                and appears under that name in the results dataframe, whichever of the two
+                was passed.
+            scaling_factors_df: dataframe of fitted scaling factors from `ScopOptimizer.get()`,
+                carrying the columns 'DAYTIME', 'GROUP_CLASSVAR', 'GROUP_CLASSVAR_MIN' and
+                'SF_MEDIAN'.
+            flux_openpath: series, uncorrected open-path flux (µmol m-2 s-1). Its name is
+                kept and appears in the results dataframe.
+            classvar: series, environmental class variable the scaling factors were binned
+                by (e.g. USTAR). Its name is kept and appears in the results dataframe and
+                in the reports.
+            daytime: series, day/night flag (daytime=1, nighttime=0). Its name is ignored;
+                it is renamed to `ColumnConfig.daytime` internally.
         """
-        self.flux_type = flux_type
-        self.fct_unsc = fct_unsc.copy()
+        self.cols = ColumnConfig()
+
+        # The applicator works in its own column names throughout: run(), stats() and the
+        # dashboard all read self.cols.fct_unsc and self.cols.daytime. Renaming the two
+        # inputs here is what makes any legally named series acceptable — ScopPhysics
+        # produces 'FCT_UNSC' without gap-filling and 'FCT_UNSC_gfXG' with it, and a
+        # day/night flag may carry any name; all three used to raise KeyError, one in run()
+        # and one in the merge_asof of _assign_scaling_factors().
+        # The target of that rename is the neutral fct_unsc, not fct_unsc_gf: this class
+        # accepts either input and gap-fills neither, so naming its own column '..._gfXG'
+        # credited a fill that may never have run.
+        self.fct_unsc = fct_unsc.copy().rename(self.cols.fct_unsc)
         self.scaling_factors_df = scaling_factors_df.copy()
         self.flux_openpath = flux_openpath.copy()
         self.classvar = classvar.copy()
-        self.daytime = daytime.copy()
-        self.latent_heat_vaporization = latent_heat_vaporization
+        self.daytime = daytime.copy().rename(self.cols.daytime)
 
-        self.cols = ColumnConfig()
-
-        # Determine output column name
-        prefix = 'LE' if self.flux_type == 'H2O' else 'NEE'
-        self.col_flux_corr = f"{prefix}{self.cols.flux_corr_suffix}"
+        self.col_flux_corr = f"NEE{self.cols.flux_corr_suffix}"
+        # Informational flag (not consumed by FlagQCF): 1 = correction applied,
+        # 0 = measured flux carried through uncorrected, NaN = no measured flux.
+        self.col_flux_corr_flag = f"FLAG_{self.col_flux_corr}_ISCORRECTED"
 
         frame = {self.fct_unsc.name: self.fct_unsc, self.flux_openpath.name: self.flux_openpath,
                  self.classvar.name: self.classvar, self.daytime.name: self.daytime}
         self.df = pd.DataFrame(frame, index=self.flux_openpath.index)
-
-        # Add Lv if needed for H2O conversion
-        if self.latent_heat_vaporization is not None:
-            self.df['Lv'] = self.latent_heat_vaporization
 
     def get_results(self) -> pd.DataFrame:
         """Return the corrected results DataFrame."""
@@ -1211,18 +1293,22 @@ class ScopApplicator:
 
         # Calculate final flux correction term
         # Corrected OP = uncorrected OP + (FCT_unscaled * ScalingFactor)
-        fct_molar = self.df[self.cols.fct_unsc_gf] * self.df[self.cols.sf]
+        self.df[self.cols.fct] = self.df[self.cols.fct_unsc] * self.df[self.cols.sf]
 
-        # Apply unit conversion if H2O (Watts)
-        if self.flux_type == "H2O" and 'Lv' in self.df.columns:
-            # [µmol m-2 s-1] * [J / µmol] = [J m-2 s-1] = [W m-2]
-            self.df[self.cols.fct] = fct_molar * self.df['Lv']
-        else:
-            # CO2 (or H2O if already molar)
-            self.df[self.cols.fct] = fct_molar
+        # Apply correction. A record with a measured flux but no correction term is
+        # carried through *uncorrected* rather than deleted: `flux + NaN` used to
+        # propagate, so a missing correction silently removed a real measurement
+        # from the deliverable. The flag says which is which, so nobody has to
+        # guess whether a value was corrected.
+        applied = self.df[self.cols.fct].notna()
+        self.df[self.col_flux_corr] = self.df[self.flux_openpath.name] + self.df[self.cols.fct].fillna(0)
+        self.df[self.col_flux_corr_flag] = applied.astype(int).where(
+            self.df[self.flux_openpath.name].notna())
 
-        # Apply correction
-        self.df[self.col_flux_corr] = self.df[self.flux_openpath.name] + self.df[self.cols.fct]
+        n_carried = int((self.df[self.flux_openpath.name].notna() & ~applied).sum())
+        if n_carried:
+            warn(f"{n_carried} records have a measured flux but no correction term; they are "
+                 f"carried through uncorrected and flagged 0 in '{self.col_flux_corr_flag}'.")
         # self.df[self.cols.fct] = self.df[self.cols.fct_unsc_gf] * self.df[self.cols.sf]
         # self.df[self.cols.flux_corr_suffix] = self.df[self.flux_openpath.name] + self.df[self.cols.fct]
 
@@ -1432,11 +1518,11 @@ class ScopApplicator:
             _console.print(char * length)
 
         # ================= REPORT =================
-        _console.print("\n")
+        vspace("\n")
         print_sep('=', 75)
         _console.print(f"{'FLUX CORRECTION REPORT':^75}")
         print_sep('=', 75)
-        _console.print(f"Flux Type      : {self.flux_type}")
+        _console.print("Flux Type      : CO2")
         _console.print(f"Total Records  : {n_total:,}")
         print_sep('-', 75)
 
@@ -1452,7 +1538,7 @@ class ScopApplicator:
 
         _console.print(f"\n   Median Scaling Factor (Day)     : {mean_sf_day:.3f}")
         _console.print(f"   Median Scaling Factor (Night)   : {mean_sf_night:.3f}")
-        _console.print("\n")
+        vspace("\n")
 
         # SECTION B: BUDGET IMPACT
         _console.print(f"{'2. CORRECTION IMPACT (Budget)':<40} {'(Units: Sum)':>34}")
@@ -1468,7 +1554,7 @@ class ScopApplicator:
             rmse = np.sqrt((resid ** 2).mean())
             slope, _ = np.polyfit(df_active[cp_col].fillna(0), df_active[col_corr].fillna(0), 1)
 
-            _console.print("\n")
+            vspace("\n")
             _console.print(f"{'3. ACCURACY vs REFERENCE':<40}")
             print_sep('.', 75)
             _console.print(f"   Reference Sum                   : {sum_ref:>15,.0f}")
@@ -1477,11 +1563,24 @@ class ScopApplicator:
             _console.print(f"   Slope (m)                       : {slope:>15.3f}")
 
         print_sep('=', 75)
-        _console.print("\n")
+        vspace("\n")
 
-    def plot_dashboard(self, flux_closedpath: Optional[pd.Series] = None):
+    def plot_dashboard(self, flux_closedpath: Optional[pd.Series] = None,
+                       showplot: bool = True) -> Optional[plt.Figure]:
         """
         Generates a master dashboard with INCREASED FONT SIZES for better readability.
+
+        Args:
+            flux_closedpath: optional series, closed-path reference flux, added as a
+                comparison line and used for the residual panels.
+            showplot: if True, call plt.show() to display the figure interactively.
+                Set to False in non-interactive environments (Sphinx Gallery, headless
+                testing) or when the caller wants to close the figure itself. The
+                dashboard is 24x20 inches, so a script that draws it in a loop should
+                close the returned figure.
+
+        Returns:
+            matplotlib Figure, or None if `run()` has not been called yet.
         """
 
         info("Generating Comprehensive Flux Dashboard (Large Font Edition)...")
@@ -1489,7 +1588,7 @@ class ScopApplicator:
         # --- 1. DATA PREPARATION ---
         if self.col_flux_corr not in self.df.columns:
             warn(f"Warning: '{self.col_flux_corr}' not found. Run .run() first.")
-            return
+            return None
 
         plot_df = self.df.copy()
 
@@ -1610,7 +1709,7 @@ class ScopApplicator:
             # SECTION C: DIEL CYCLES (Rows 2 & 3)
             # =================================================================
             diel_vars = [
-                {'col': self.cols.fct_unsc_gf, 'title': r'C1. Unscaled Corr. ($FCT_{unsc}$)', 'unit': r'$\mu mol$'},
+                {'col': self.cols.fct_unsc, 'title': r'C1. Unscaled Corr. ($FCT_{unsc}$)', 'unit': r'$\mu mol$'},
                 {'col': self.cols.sf, 'title': r'C2. Scaling Factor ($\xi$)', 'unit': '-'},
                 {'col': self.cols.fct, 'title': 'C3. Final Correction Term', 'unit': r'$\mu mol$'},
                 {'col': None},
@@ -1672,4 +1771,7 @@ class ScopApplicator:
             cbar.set_ticklabels(['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'])
             cbar.outline.set_visible(False)
 
-            plt.show()
+            if showplot:
+                plt.show()
+
+        return fig

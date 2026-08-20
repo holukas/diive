@@ -1,7 +1,7 @@
 """
-=================
+=====================================
 Decoupling Analysis with Sorting Bins
-=================
+=====================================
 
 Stratified binning to reveal how radiation response changes across temperature ranges.
 

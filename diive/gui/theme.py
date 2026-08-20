@@ -120,6 +120,12 @@ DEFAULT_TIMESERIES_COLORS: list[str] = [
 #: Shared width (px) of the variable list panel, identical across all tabs.
 DEFAULT_LIST_WIDTH = 240
 
+#: Colormap used by the date/time heatmaps the tabs render as previews (combine
+#: variables, derived variables, flux chain, gap-filling, screening). Matches
+#: the library default of `HeatmapDateTime.plot`. The Plot-menu heatmap tabs
+#: have their own per-plot colormap setting and ignore this.
+DEFAULT_HEATMAP_CMAP = "RdYlBu_r"
+
 
 def build_qss(t: dict[str, str]) -> str:
     """Build the application stylesheet from a token dict.
@@ -321,6 +327,7 @@ class ThemeManager(QObject):
         self.new_pill = list(DEFAULT_NEW_PILL)
         self.ts_colors = list(DEFAULT_TIMESERIES_COLORS)
         self.list_width = DEFAULT_LIST_WIDTH
+        self.heatmap_cmap = DEFAULT_HEATMAP_CMAP
         self.tokens = dict(STUDIO_TOKENS)
         self.typography = dict(STUDIO_TYPOGRAPHY)
         if not silent:
@@ -371,6 +378,7 @@ class ThemeManager(QObject):
             "new_pill": list(self.new_pill),
             "ts_colors": list(self.ts_colors),
             "list_width": self.list_width,
+            "heatmap_cmap": self.heatmap_cmap,
         }
 
     #: Tokens that define the look's structure (not user-editable in the UI);
@@ -400,6 +408,8 @@ class ThemeManager(QObject):
             self.ts_colors = list(data["ts_colors"])
         if "list_width" in data:
             self.list_width = int(data["list_width"])
+        if data.get("heatmap_cmap"):
+            self.heatmap_cmap = str(data["heatmap_cmap"])
 
 
 #: Singleton used across the GUI.

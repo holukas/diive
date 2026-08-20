@@ -1,8 +1,8 @@
-# DIIVE Examples
+# diive Examples
 
-Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
+Executable examples demonstrating how to use diive for time series processing, gap-filling, quality control, and visualization.
 
-**124 examples across 10 organized folders by functional domain.**
+**113 examples across 10 organized folders by functional domain.**
 
 ## Structure
 
@@ -31,7 +31,10 @@ examples/
 │   ├── plot_timeseries_rangetool.py
 │   ├── plot_shifted_distribution.py
 │   ├── plot_treering_temperature.py
-│   └── plot_treering_line_temperature.py
+│   ├── plot_treering_line_temperature.py
+│   ├── plot_waterfall.py
+│   ├── plot_windrose_basic.py
+│   └── plot_compound_extremes.py
 ├── times/                 # Timestamp handling (7 examples)
 │   ├── times_timestamp_sanitizer.py
 │   ├── times_keep_daterange.py
@@ -59,7 +62,7 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (27 examples)
+├── flux/                  # Eddy covariance flux processing (18 examples)
 │   ├── fluxprocessingchain/
 │   │   ├── fluxprocessingchain_level2.py
 │   │   ├── fluxprocessingchain_runchain.py
@@ -81,16 +84,6 @@ examples/
 │   │   ├── flux_ustar_mp_detection.py
 │   │   ├── flux_ustar_vekuri_detection.py
 │   │   └── flux_ustar_method_comparison.py
-│   └── hires/             # High-resolution analysis (9 examples)
-│       ├── flux_fluxdetectionlimit.py
-│       ├── flux_lag.py
-│       ├── flux_lag_pwb.py
-│       ├── flux_lag_pwbopt.py
-│       ├── flux_lag_pwb_batch.py
-│       ├── flux_lag_pwb_batch_cli.py
-│       ├── flux_apply_tlag_cli.py
-│       ├── flux_detect_remove_tui_demo.py
-│       └── flux_windrotation.py
 ├── gapfilling/            # Gap-filling methods (12 examples)
 │   ├── gapfill_interpolate_generous.py
 │   ├── gapfill_interpolate_conservative.py
@@ -110,7 +103,7 @@ examples/
 │   ├── io_read_multiple_files_with_multidatafilereader.py
 │   ├── io_read_single_file_with_readfiletype.py
 │   └── io_extract.py
-└── preprocessing/         # Data quality & corrections (21 examples)
+└── preprocessing/         # Data quality & corrections (19 examples)
     ├── corrections/       # Offset & bias corrections (7 examples)
     │   ├── correction_relativehumidity_offset.py
     │   ├── correction_radiation_offset.py
@@ -125,12 +118,10 @@ examples/
     │   ├── outlier_localsd.py
     │   ├── outlier_lof.py
     │   └── ...
-    └── qaqc/              # Quality flags & EddyPro QC (5 examples)
+    └── qaqc/              # Quality flags & EddyPro QC (3 examples)
         ├── qc_overall_flag.py
         ├── qc_eddypro_flags.py
-        ├── qaqc_detect_timestamp_shifts.py
-        ├── meteoscreening_complete_workflow.py
-        └── meteoscreening_stepwise_workflow.py
+        └── qaqc_detect_timestamp_shifts.py
 ```
 
 ## Quick Start
@@ -148,7 +139,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs the headless-safe suite (121 scripts) in parallel with 8 workers, reporting execution time and any errors. Three examples are excluded from the runner: the two database-backed meteoscreening workflows and the interactive TUI demo.
+This runs the headless-safe suite (113 scripts) in parallel with up to 12 workers, reporting execution time and any errors. Every example in `examples/` is registered; the database-backed meteoscreening workflows and the interactive TUI demo that used to be excluded no longer exist as example scripts.
 
 ## Finding Examples
 
@@ -166,7 +157,7 @@ Browse by topic:
 - **events/README.md** — Marking and overlaying time-stamped events
 - **features/README.md** — Variable creation, unit conversions, derived properties
 - **fits/README.md** — Binned curve fitting with confidence and prediction bands
-- **flux/README.md** — Multi-level flux processing (L2-L4.2), NEE partitioning, quality filtering, high-res analysis
+- **flux/README.md** — Multi-level flux processing (L2-L4.2), NEE partitioning, quality filtering, USTAR detection
 - **gapfilling/README.md** — Linear, Random Forest, XGBoost, MDS methods
 - **io/README.md** — Parquet file I/O, EddyPro CSV reading, binary value extraction
 - **preprocessing/corrections/README.md** — Offset corrections, value clipping
@@ -183,11 +174,11 @@ Browse by topic:
 | **Events** | 1 | Instant/period event markers, 0/1 flag columns, plot overlays, custom category palette |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
-| **Flux** | 27 | Time lag analysis, processing chain (4), NEE partitioning into GPP/RECO (5), HQ filtering, USTAR detection (3), self-heating (2), uncertainty, PWB batch detection (CLI + API), PWB detect-remove (apply CLI + TUI demo), high-res analysis |
-| **Gapfilling** | 12 | Linear interpolation, Random Forest (4 variants), XGBoost (3 variants), MDS (2), SW_IN physics+XGBoost, comparison |
+| **Flux** | 18 | Time lag analysis, processing chain (4), NEE partitioning into GPP/RECO (5), HQ filtering, USTAR detection (3), self-heating (2), uncertainty |
+| **Gapfilling** | 12 | Linear interpolation (2), Random Forest (4 variants), XGBoost (2 variants), MDS (2), SW_IN physics+XGBoost, comparison |
 | **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
-| **Preprocessing** | 21 | Corrections (7), outlier detection (9), QA/QC (5) |
-| **TOTAL** | **124** | |
+| **Preprocessing** | 19 | Corrections (7), outlier detection (9), QA/QC (3) |
+| **TOTAL** | **113** | |
 
 ## Running Options
 
@@ -200,7 +191,6 @@ uv run python examples/run_all_examples.py
 
 # Run examples by category
 uv run python examples/visualization/plot_heatmap_datetime_basic.py
-uv run python examples/flux/hires/flux_lag.py
 ```
 
 ## Documentation & Guides

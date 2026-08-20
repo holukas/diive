@@ -153,12 +153,12 @@ class TimeLagAnalysisTab(DiiveTab):
         self.lag_window_max.setToolTip("Upper bound of the reference acceptable lag window (s).")
         form.addRow("Window max (s)", self.lag_window_max)
 
-        self.hist_startbin = self._spin(0, -100, 100)
-        self.hist_startbin.setToolTip("First histogram bin to display/analyse.")
-        form.addRow("Histogram start bin", self.hist_startbin)
-        self.hist_endbin = self._spin(10, -100, 100)
-        self.hist_endbin.setToolTip("Last histogram bin to display/analyse.")
-        form.addRow("Histogram end bin", self.hist_endbin)
+        self.hist_start = self._dspin(0.0, -100, 100, 2, 0.05)
+        self.hist_start.setToolTip("Lowest lag kept for display/analysis (s).")
+        form.addRow("Histogram start (s)", self.hist_start)
+        self.hist_end = self._dspin(10.0, -100, 100, 2, 0.05)
+        self.hist_end.setToolTip("Highest lag kept for display/analysis (s).")
+        form.addRow("Histogram end (s)", self.hist_end)
 
         self.gradient_threshold = self._dspin(0.15, 0.0, 1.0, 2, 0.01)
         self.gradient_threshold.setToolTip(
@@ -249,8 +249,8 @@ class TimeLagAnalysisTab(DiiveTab):
             ignore_fringe_bins=[self.fringe_low.value(), self.fringe_high.value()],
             lag_window_min=self.lag_window_min.value(),
             lag_window_max=self.lag_window_max.value(),
-            histogram_startbin=self.hist_startbin.value(),
-            histogram_endbin=self.hist_endbin.value(),
+            histogram_start_seconds=self.hist_start.value(),
+            histogram_end_seconds=self.hist_end.value(),
             gradient_threshold=self.gradient_threshold.value(),
             zoom_margin=[self.zoom_before.value(), self.zoom_after.value()],
         )
@@ -274,8 +274,8 @@ class TimeLagAnalysisTab(DiiveTab):
                 "fringe_high": self.fringe_high,
                 "lag_window_min": self.lag_window_min,
                 "lag_window_max": self.lag_window_max,
-                "hist_startbin": self.hist_startbin,
-                "hist_endbin": self.hist_endbin,
+                "hist_start": self.hist_start,
+                "hist_end": self.hist_end,
                 "gradient_threshold": self.gradient_threshold,
                 "zoom_before": self.zoom_before, "zoom_after": self.zoom_after}
 

@@ -12,10 +12,12 @@ Load and merge multiple EddyPro CSV files using pre-defined filetype.
 # Locate multiple files matching a pattern in a directory.
 
 from pathlib import Path
+
+import diive
 from diive.core.io.filereader import MultiDataFileReader, search_files
 
 # Resolve example data directory relative to this script
-data_dir = Path(__file__).parent.parent.parent / "diive" / "configs" / "exampledata" / "EDDYPRO-FLUXNET-CSV-30MIN_multiple"
+data_dir = Path(diive.__file__).parent / "configs" / "exampledata" / "EDDYPRO-FLUXNET-CSV-30MIN_multiple"
 filepaths = search_files(
     searchdirs=str(data_dir),
     pattern='eddypro_CH-HON_FR-*_fluxnet_*_adv.csv'

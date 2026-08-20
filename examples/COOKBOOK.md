@@ -1,4 +1,4 @@
-# DIIVE Cookbook
+# diive Cookbook
 
 Six essential workflows, each in minimal working code.
 Start here, then follow the links to full examples.
@@ -72,8 +72,8 @@ detector.flag_outliers_hampel_test(window_length=7 * 48, n_sigma_daytime=4.5,
                                    n_sigma_nighttime=4.5, showplot=False, verbose=False)
 detector.addflag()
 
-detector.flag_outliers_localsd_test(n_sd=[3.5, 3.5], winsize=[24, 24],
-                                    separate_daytime_nighttime=True,
+detector.flag_outliers_localsd_test(n_sd=3.5, winsize=24,
+                                    separate_day_night=True,
                                     showplot=False, verbose=False)
 detector.addflag()
 
@@ -245,6 +245,5 @@ Full examples: [visualization/plot_heatmap_datetime_basic.py](visualization/plot
 | Complete example listing | [README.md](README.md) |
 | Gap-filling method comparison | [gapfilling/gapfill_comparison.py](gapfilling/gapfill_comparison.py) |
 | Outlier detection method comparison | [preprocessing/outlier_detection/outlier_stepwise.py](preprocessing/outlier_detection/outlier_stepwise.py) |
-| High-resolution (10 Hz) analysis | [flux/hires/flux_windrotation.py](flux/hires/flux_windrotation.py) |
 | Detect timestamp clock errors | [preprocessing/qaqc/qaqc_detect_timestamp_shifts.py](preprocessing/qaqc/qaqc_detect_timestamp_shifts.py) |
 | Optimize gap-filling hyperparameters | [gapfilling/gapfill_optimize_randomforest.py](gapfilling/gapfill_optimize_randomforest.py) |

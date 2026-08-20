@@ -6,17 +6,17 @@ Supports multiple decomposition methods:
 - Classical (moving average): Simple, fast, assumes stationarity
 - Harmonic (Fourier): Frequency-domain analysis, periodic signals
 
-All functions preserve NaN locations and handle quality weighting.
+All functions preserve NaN locations.
 """
 
 import numpy as np
 import pandas as pd
 import warnings
-from typing import Dict, Tuple, Optional, List
+from typing import Dict, Optional, List
 from statsmodels.tsa.seasonal import STL, seasonal_decompose
-from scipy import signal, fft as scipy_fft
+from scipy import signal
 
-from diive.core.utils.console import detail
+from diive.core.utils.console import detail, info
 
 
 def stl_decompose(
@@ -28,7 +28,6 @@ def stl_decompose(
     trend_deg: int = 1,
     seasonal_jump: int = 1,
     trend_jump: int = 1,
-    weights: Optional[np.ndarray] = None,
     verbose: bool = False
 ) -> Dict[str, pd.Series]:
     """
@@ -36,6 +35,10 @@ def stl_decompose(
 
     Robust decomposition for non-stationary time series with gaps.
     Uses iterative Loess smoothing to separate seasonal, trend, and residual components.
+
+    Gaps are linearly interpolated for the fit (statsmodels' STL cannot fit around
+    them) and masked back out of the result, so the returned components are NaN
+    wherever the input was.
 
     Args:
         series (pd.Series): Input time series (may contain NaN).
@@ -46,8 +49,6 @@ def stl_decompose(
         trend_deg (int): Loess polynomial degree for trend component (0, 1). Default 1.
         seasonal_jump (int): Jump size for seasonal fitting (speed optimization). Default 1.
         trend_jump (int): Jump size for trend fitting (speed optimization). Default 1.
-        weights (np.ndarray, optional): Quality weights (0–1) for each observation.
-                                        Higher = more influential. If None, all equal weight.
         verbose (bool): Print decomposition details. Default False.
 
     Returns:
@@ -55,21 +56,28 @@ def stl_decompose(
             - 'seasonal': pd.Series, seasonal component
             - 'trend': pd.Series, trend component
             - 'residual': pd.Series, residual (noise + anomalies)
-            - 'weights': np.ndarray, weights used in fitting
-            - 'iterations': int, number of inner loop iterations
+            - 'n_interpolated': int, records interpolated for the fit and masked
+              back out of the components
+
+    Raises:
+        ValueError: If the series is all-NaN, or seasonal < 2, or trend < 3.
 
     Notes:
         - Preserves original series index and NaN locations
-        - Handles edge cases: short series, all-NaN sections, single period
         - seasonal must be >= 2
         - trend must be >= 3
+        - Observation weights are not supported: statsmodels' STL takes none. Its
+          `robust` flag down-weights outliers internally.
+        - No iteration count is returned: statsmodels' STL does not report one.
+          The removed 'iterations' key held `DecomposeResult.nobs`, an observation
+          count (a shape tuple), never an iteration count.
     """
     # Input validation
     if len(series) < 2 * seasonal:
         warnings.warn(
             f"Series length ({len(series)}) < 2 * seasonal ({2 * seasonal}). "
             "STL may produce unreliable results.",
-            UserWarning
+            UserWarning, stacklevel=2
         )
 
     if seasonal < 2:
@@ -89,21 +97,17 @@ def stl_decompose(
         trend = trend if trend % 2 == 1 else trend + 1
     stl_seasonal_smoother = 7
 
-    # Handle weights
-    if weights is not None:
-        if len(weights) != len(series):
-            raise ValueError(f"weights length ({len(weights)}) != series length ({len(series)})")
-        weights = np.asarray(weights, dtype=float)
-    else:
-        weights = np.ones(len(series), dtype=float)
-
-    # Standardize weight range to [0.1, 1.0] for numerical stability
-    # (STL's robust fitting expects non-zero weights)
-    if weights.max() > weights.min():
-        weights_norm = 0.1 + 0.9 * (weights - weights.min()) / (weights.max() - weights.min())
-    else:
-        # All weights equal, normalize to 1.0
-        weights_norm = np.ones_like(weights)
+    # statsmodels' STL has no NaN handling: it propagates rather than raising, so
+    # a single missing value used to make all three components all-NaN. Fit on a
+    # linearly interpolated copy, then mask the gaps back out below - a gap in the
+    # input is a gap in the output, and no interpolated value is ever returned.
+    gaps = series.isna()
+    n_gaps = int(gaps.sum())
+    if n_gaps == len(series):
+        raise ValueError("Series contains no valid values.")
+    if n_gaps:
+        info(f"Interpolating {n_gaps} of {len(series)} records to fit STL "
+             f"(gaps are restored in the returned components).")
 
     try:
         # STL works better with integer-indexed series; convert DatetimeIndex to numeric if needed
@@ -111,6 +115,10 @@ def stl_decompose(
         if isinstance(series_for_stl.index, pd.DatetimeIndex):
             # Create new index starting from 0
             series_for_stl.index = np.arange(len(series_for_stl))
+        if n_gaps:
+            # limit_direction='both' also covers leading/trailing gaps, which plain
+            # interpolation leaves in place - one of them is enough to poison the fit.
+            series_for_stl = series_for_stl.interpolate(method='linear', limit_direction='both')
 
         # Build STL kwargs with available parameters
         stl_kwargs = {
@@ -132,8 +140,7 @@ def stl_decompose(
 
         stl_result = STL(series_for_stl, **stl_kwargs)
         # statsmodels STL.fit() takes no observation weights; its `robust` flag
-        # handles outlier down-weighting internally. (Quality-weighted fitting is
-        # provided separately via quality_weighted_decompose.)
+        # handles outlier down-weighting internally.
         decomp = stl_result.fit()
 
         # Restore original index to decomposition results
@@ -141,20 +148,25 @@ def stl_decompose(
         decomp.trend.index = series.index
         decomp.resid.index = series.index
 
+        seasonal, trend_comp, residual = decomp.seasonal, decomp.trend, decomp.resid
+        if n_gaps:
+            seasonal = seasonal.where(~gaps)
+            trend_comp = trend_comp.where(~gaps)
+            residual = residual.where(~gaps)
+
         if verbose:
             detail(f"STL decomposition: period={period}, seasonal={stl_seasonal_smoother}, "
-                   f"trend={trend}, robust={robust}, iterations={decomp.nobs}", verbose=verbose)
+                   f"trend={trend}, robust={robust}", verbose=verbose)
 
         return {
-            'seasonal': decomp.seasonal,
-            'trend': decomp.trend,
-            'residual': decomp.resid,
-            'weights': weights,
-            'iterations': decomp.nobs if hasattr(decomp, 'nobs') else None
+            'seasonal': seasonal,
+            'trend': trend_comp,
+            'residual': residual,
+            'n_interpolated': n_gaps
         }
 
     except Exception as e:
-        raise RuntimeError(f"STL decomposition failed: {str(e)}")
+        raise RuntimeError(f"STL decomposition failed: {str(e)}") from e
 
 
 def classical_decompose(
@@ -184,19 +196,26 @@ def classical_decompose(
             - 'residual': pd.Series, residual component
 
     Notes:
-        - First (period-1)//2 and last (period-1)//2 observations get NaN for trend
+        - First (period-1)//2 and last (period-1)//2 observations get NaN for trend,
+          and so does the residual. This is deliberate: the trend is a centred moving
+          average, so those records have no window. Extrapolating them
+          (``extrapolate_trend='freq'``) is available in statsmodels but not enabled,
+          because an extrapolated edge is indistinguishable from a measured one.
         - Missing values in input may propagate through output
     """
     if period < 2:
         raise ValueError(f"period must be >= 2, got {period}")
 
     try:
-        # Try with extrapolate parameter first (newer statsmodels versions)
-        try:
-            decomp = seasonal_decompose(series, model=model, period=period, extrapolate='freq')
-        except TypeError:
-            # Fall back to without extrapolate for older statsmodels versions
-            decomp = seasonal_decompose(series, model=model, period=period)
+        # NaN trend edges are the intended contract here, so no extrapolation is
+        # requested. This used to pass `extrapolate='freq'` inside a try/except
+        # TypeError; the parameter is spelled `extrapolate_trend`, so the call raised
+        # on every statsmodels version and the fallback below ran every time. Enabling
+        # it would fill the (period-1)//2 records at each end with a least-squares
+        # extrapolation indistinguishable from a measured trend, and shift
+        # `seasonality_strength` — a change nobody asked for, since the misspelled
+        # name was an internal literal and never a caller's argument.
+        decomp = seasonal_decompose(series, model=model, period=period)
 
         if verbose:
             detail(f"Classical decomposition: period={period}, model={model}", verbose=verbose)
@@ -208,7 +227,7 @@ def classical_decompose(
         }
 
     except Exception as e:
-        raise RuntimeError(f"Classical decomposition failed: {str(e)}")
+        raise RuntimeError(f"Classical decomposition failed: {str(e)}") from e
 
 
 def harmonic_decompose(
@@ -238,17 +257,25 @@ def harmonic_decompose(
                 - 'phase': float, phase in radians
                 - 'period': float, period in observations
                 - 'frequency': float, normalized frequency (0–1)
-            - 'frequencies': np.ndarray, frequency bins
-            - 'amplitudes': np.ndarray, amplitude at each frequency
+            - 'frequencies': np.ndarray, frequency bins (DC excluded)
+            - 'amplitudes': np.ndarray, amplitude at each frequency, corrected for
+              the window's coherent gain so it is the amplitude of the signal, not
+              of the windowed signal
             - 'phases': np.ndarray, phase at each frequency
             - 'spectrum': np.ndarray, power spectral density
             - 'reconstructed': pd.Series, signal reconstructed from top harmonics
             - 'residual': pd.Series, reconstruction error
 
+        ``frequencies``, ``amplitudes``, ``phases`` and ``spectrum`` are the same
+        length and pair element-wise.
+
     Notes:
         - NaN values are removed before FFT (series shortened)
         - Window function reduces spectral leakage
-        - Top n_harmonics selected by power (largest amplitude first)
+        - The n_harmonics strongest spectral *peaks* are selected, not the strongest
+          bins, so a windowed component's leakage cannot be returned as a component
+          of its own. Fewer than n_harmonics are returned when the spectrum holds
+          fewer peaks.
     """
     # Remove NaN
     valid_idx = series.notna()
@@ -258,10 +285,7 @@ def harmonic_decompose(
         raise ValueError(f"Series must have >= 4 valid values, got {len(series_clean)}")
 
     # Apply window
-    try:
-        window_func = signal.get_window(window, len(series_clean))
-    except ValueError:
-        window_func = signal.hamming(len(series_clean))
+    window_func = signal.get_window(window, len(series_clean))
 
     series_windowed = series_clean * window_func
 
@@ -269,11 +293,26 @@ def harmonic_decompose(
     n = len(series_windowed)
     frequencies = np.fft.rfftfreq(n)
     fft_vals = np.fft.rfft(series_windowed) / n
-    amplitudes = 2 * np.abs(fft_vals[1:])  # Exclude DC component, double for one-sided spectrum
+    # Divide by the window's coherent gain (its mean). A window scales the signal
+    # down - the default hamming has a mean of ~0.54 - so without this the
+    # reconstruction comes out at that fraction of the signal and the "residual"
+    # is dominated by the missing rest rather than by reconstruction error.
+    coherent_gain = float(np.mean(window_func))
+    amplitudes = 2 * np.abs(fft_vals[1:]) / coherent_gain  # one-sided, DC excluded
     powers = amplitudes ** 2
 
-    # Find top harmonics by power
-    top_idx = np.argsort(-powers)[:n_harmonics]
+    # Find top harmonics among the spectral *peaks*. Taking the strongest bins
+    # instead returns one component several times: a window spreads a tone over
+    # neighbouring bins, and the leakage shoulder of a strong component outranks a
+    # genuine weaker one (hamming, two components at periods 50 and 25: picked 53
+    # and 50, i.e. period 50 twice, and missed 25 entirely). A leakage shoulder
+    # sits on the flank of its peak, so it is not a local maximum.
+    peak_idx, _ = signal.find_peaks(powers)
+    if peak_idx.size:
+        top_idx = peak_idx[np.argsort(-powers[peak_idx])][:n_harmonics]
+    else:
+        # Monotonic spectrum (very short series): fall back to the strongest bins.
+        top_idx = np.argsort(-powers)[:n_harmonics]
     top_idx_sorted = np.sort(top_idx)  # Sort by frequency for reconstruction
 
     harmonics = []
@@ -306,61 +345,16 @@ def harmonic_decompose(
 
     return {
         'harmonics': harmonics,
-        'frequencies': frequencies,
+        # Drop the DC bin so 'frequencies' pairs element-wise with the arrays
+        # beside it. It used to be the full rfftfreq output, one longer than
+        # amplitudes/phases/spectrum, so plotting one against the other raised.
+        'frequencies': frequencies[1:],
         'amplitudes': amplitudes,
         'phases': np.angle(fft_vals[1:]),
         'spectrum': powers,
         'reconstructed': reconstructed_series,
         'residual': series[valid_idx] - reconstructed_series
     }
-
-
-def quality_weighted_decompose(
-    series: pd.Series,
-    quality: pd.Series,
-    method: str = 'stl',
-    **kwargs
-) -> Dict[str, pd.Series]:
-    """
-    Decomposition with quality weighting.
-
-    Incorporates quality flags during decomposition (not pre-filtering).
-    High-quality observations influence the fit more; low-quality values
-    are preserved in output with lower influence on trend/seasonal.
-
-    Args:
-        series (pd.Series): Input time series.
-        quality (pd.Series): Quality flags (0–1), higher = better.
-                            Same index as series.
-        method (str): Decomposition method ('stl', 'classical', 'harmonic'). Default 'stl'.
-        **kwargs: Additional arguments passed to method function.
-
-    Returns:
-        Same structure as method-specific function, with 'quality_weights' added.
-
-    Notes:
-        - Quality values outside [0, 1] are clipped
-        - All-zero quality creates uniform weights
-        - Harmonic decomposition: quality used for ranking, not fitting
-    """
-    # Validate quality
-    if len(quality) != len(series):
-        raise ValueError(f"quality length ({len(quality)}) != series length ({len(series)})")
-
-    quality_vals = quality.to_numpy().astype(float)
-    quality_vals = np.clip(quality_vals, 0, 1)
-
-    if method == 'stl':
-        result = stl_decompose(series, weights=quality_vals, **kwargs)
-    elif method == 'classical':
-        result = classical_decompose(series, **kwargs)
-    elif method == 'harmonic':
-        result = harmonic_decompose(series, **kwargs)
-    else:
-        raise ValueError(f"Unknown method: {method}")
-
-    result['quality_weights'] = quality_vals
-    return result
 
 
 def reconstruct_from_components(
@@ -388,7 +382,8 @@ def reconstruct_from_components(
 
     Notes:
         - Uses original index from trend (assumes all components have same index)
-        - NaN values in input are preserved in output
+        - NaN in a component that is used is preserved in the output; a component
+          left out of `components_to_use` does not affect it
     """
     if components_to_use is None:
         components_to_use = ['trend', 'seasonal', 'residual']
@@ -416,9 +411,11 @@ def reconstruct_from_components(
     else:
         raise ValueError(f"Unknown model: {model}")
 
-    # Preserve NaN from trend
-    result[trend.isna()] = np.nan
-
+    # No explicit NaN mask: a gap in a component that is used propagates through
+    # the arithmetic above on its own. Masking with `trend.isna()` regardless of
+    # `components_to_use` blanked a trend-excluding reconstruction wherever the
+    # trend is NaN by design - the (period-1)//2 edges of a classical
+    # decomposition - although the seasonal component is defined there.
     return result
 
 
@@ -447,7 +444,16 @@ def detect_seasonality(
             - 'all_periods': list of (period, power) tuples, ranked
             - 'spectral_density': np.ndarray, power spectrum
             - 'frequencies': np.ndarray, frequency bins
-            - 'strength': float (0–1), seasonality strength (seasonal var / total var)
+            - 'strength': float (0–1), the share of periodogram power sitting in the
+              detected peaks: sum(power at peaks) / sum(power over all periods). This
+              is a power ratio, not a variance ratio — it does not measure the same
+              thing as `seasonality_strength` in `analysis/seasonaltrend.py`, which
+              works on the decomposed components.
+
+    Raises:
+        ValueError: If no candidate period falls in [2, max_period] — typically a
+            series too short for the range asked for. Detection reports nothing
+            rather than a default period.
 
     Notes:
         - Period range: 2 to min(max_period, len(series) // 2)
@@ -462,7 +468,7 @@ def detect_seasonality(
         warnings.warn(
             f"Series very short ({len(series_clean)} values). "
             "Seasonality detection unreliable.",
-            UserWarning
+            UserWarning, stacklevel=2
         )
 
     # Periodogram
@@ -488,29 +494,32 @@ def detect_seasonality(
                 powers_by_period.append(power[i])
 
     if not periods:
-        # Fallback if no valid periods found
-        primary_period = 365
-        secondary_periods = [7, 30]
-        strength = 0.0
-    else:
-        # Find peaks (local maxima in power)
-        peaks, _ = signal.find_peaks(powers_by_period)
-        if len(peaks) > 0:
-            peak_powers = [(periods[p], powers_by_period[p]) for p in peaks]
-            peak_powers.sort(key=lambda x: -x[1])  # Sort by power descending
-            primary_period = peak_powers[0][0]
-            secondary_periods = [p for p, _ in peak_powers[1:top_n]]
-        else:
-            # No peaks, use max power
-            max_idx = np.argmax(powers_by_period)
-            primary_period = periods[max_idx]
-            secondary_periods = []
+        # There is nothing to report. Returning a plausible-looking 365 / [7, 30] /
+        # 0.0 here made a failed detection indistinguishable from a real result,
+        # and the caller then decomposed at a period the data cannot support.
+        raise ValueError(
+            f"No candidate period found in [2, {max_period}] for a series of "
+            f"{n} valid values. Pass the period explicitly (`seasonal_period`) "
+            f"instead of relying on detection.")
 
-        # Estimate seasonality strength
-        # Simple estimate: variance in seasonal range vs total variance
-        seasonal_power = np.sum([powers_by_period[i] for i in peaks]) if peaks.size > 0 else 0
-        total_power = np.sum(powers_by_period)
-        strength = float(seasonal_power / total_power) if total_power > 0 else 0.0
+    # Find peaks (local maxima in power)
+    peaks, _ = signal.find_peaks(powers_by_period)
+    if len(peaks) > 0:
+        peak_powers = [(periods[p], powers_by_period[p]) for p in peaks]
+        peak_powers.sort(key=lambda x: -x[1])  # Sort by power descending
+        primary_period = peak_powers[0][0]
+        secondary_periods = [p for p, _ in peak_powers[1:top_n]]
+    else:
+        # No peaks, use max power
+        max_idx = np.argmax(powers_by_period)
+        primary_period = periods[max_idx]
+        secondary_periods = []
+
+    # Estimate seasonality strength
+    # Simple estimate: variance in seasonal range vs total variance
+    seasonal_power = np.sum([powers_by_period[i] for i in peaks]) if peaks.size > 0 else 0
+    total_power = np.sum(powers_by_period)
+    strength = float(seasonal_power / total_power) if total_power > 0 else 0.0
 
     if verbose:
         msg = f"Seasonality detection: primary_period={primary_period}, strength={strength:.3f}"
@@ -518,7 +527,7 @@ def detect_seasonality(
             msg += f", secondary periods: {secondary_periods}"
         detail(msg, verbose=verbose)
 
-    all_periods = list(zip(periods, powers_by_period))
+    all_periods = list(zip(periods, powers_by_period, strict=False))
     all_periods.sort(key=lambda x: -x[1])
 
     return {

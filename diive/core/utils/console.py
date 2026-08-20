@@ -142,14 +142,42 @@ def remove_console_sink(mirror) -> None:
     console.remove_mirror(mirror)
 
 
-def _vlevel(verbose: int | bool) -> int:
-    """Normalize bool or int to an int verbosity level."""
+# Verbosity used by a helper call that does not pass `verbose=` itself. Most of
+# the library threads a `verbose` argument through, but plenty of functions have
+# no verbosity parameter at all and still want to emit a debug line; without a
+# module default those lines could never print, whatever the caller did, because
+# the old per-helper default (VERBOSE_PROGRESS) sat *below* `detail`'s own
+# min_level (VERBOSE_DEBUG). Set it with `set_verbosity()`.
+_default_verbose: int = VERBOSE_PROGRESS
+
+
+def set_verbosity(level: int | bool) -> None:
+    """Set the verbosity used by helper calls that do not pass ``verbose=``.
+
+    Args:
+        level: One of ``VERBOSE_SILENT`` (0), ``VERBOSE_ERROR`` (1),
+            ``VERBOSE_PROGRESS`` (2, the default) or ``VERBOSE_DEBUG`` (3).
+            ``VERBOSE_DEBUG`` is what makes ``detail()`` lines appear.
+    """
+    global _default_verbose
+    _default_verbose = _vlevel(level)
+
+
+def get_verbosity() -> int:
+    """Return the verbosity applied to helper calls that do not pass ``verbose=``."""
+    return _default_verbose
+
+
+def _vlevel(verbose: int | bool | None) -> int:
+    """Normalize bool, int or None (= the module default) to an int verbosity level."""
+    if verbose is None:
+        return _default_verbose
     if isinstance(verbose, bool):
         return VERBOSE_PROGRESS if verbose else VERBOSE_SILENT
     return int(verbose)
 
 
-def rule(title: str = '', *, verbose: int | bool = VERBOSE_PROGRESS,
+def rule(title: str = '', *, verbose: int | bool | None = None,
          min_level: int = VERBOSE_PROGRESS) -> None:
     """Print a horizontal rule with an optional centred title."""
     if _vlevel(verbose) >= min_level:
@@ -160,36 +188,50 @@ def rule(title: str = '', *, verbose: int | bool = VERBOSE_PROGRESS,
             console.rule(styled)
 
 
-def info(msg: str, *, verbose: int | bool = VERBOSE_PROGRESS,
+def info(msg: str, *, verbose: int | bool | None = None,
          min_level: int = VERBOSE_PROGRESS) -> None:
     """Print an informational line (cyan bullet)."""
     if _vlevel(verbose) >= min_level:
         console.print(f"  [cyan]>[/cyan] {msg}")
 
 
-def success(msg: str, *, verbose: int | bool = VERBOSE_PROGRESS,
+def success(msg: str, *, verbose: int | bool | None = None,
             min_level: int = VERBOSE_PROGRESS) -> None:
     """Print a success line (green check)."""
     if _vlevel(verbose) >= min_level:
         console.print(f"  [green]v[/green] {msg}")
 
 
-def warn(msg: str, *, verbose: int | bool = VERBOSE_PROGRESS,
+def warn(msg: str, *, verbose: int | bool | None = None,
          min_level: int = VERBOSE_ERROR) -> None:
     """Print a warning line (yellow exclamation)."""
     if _vlevel(verbose) >= min_level:
         console.print(f"  [yellow]![/yellow] {msg}")
 
 
-def error(msg: str, *, verbose: int | bool = VERBOSE_PROGRESS,
+def error(msg: str, *, verbose: int | bool | None = None,
           min_level: int = VERBOSE_ERROR) -> None:
     """Print an error line (bold red cross)."""
     if _vlevel(verbose) >= min_level:
         console.print(f"  [bold red]x[/bold red] {msg}")
 
 
-def detail(msg: str, *, verbose: int | bool = VERBOSE_PROGRESS,
+def detail(msg: str, *, verbose: int | bool | None = None,
            min_level: int = VERBOSE_DEBUG) -> None:
     """Print a dim detail line (only at VERBOSE_DEBUG level by default)."""
     if _vlevel(verbose) >= min_level:
         console.print(f"  [dim]{msg}[/dim]")
+
+
+def vspace(text: str = "", *, verbose: int | bool | None = None,
+           min_level: int = VERBOSE_PROGRESS) -> None:
+    """Print a blank separator line in a terminal / GUI log, nothing in Jupyter.
+
+    A blank line cleanly separates report phases in a terminal, but in Jupyter
+    every ``console.print`` is a separate display block with its own margin, so
+    an empty print becomes a full empty block of dead vertical space. Suppress
+    it there to keep notebook output dense. ``text`` lets a caller reproduce a
+    wider terminal gap (e.g. ``"\\n"``); it is still dropped in Jupyter.
+    """
+    if _vlevel(verbose) >= min_level and not _is_jupyter():
+        console.print(text)

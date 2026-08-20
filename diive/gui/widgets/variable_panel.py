@@ -156,8 +156,7 @@ class VariablePanel(QWidget):
         theme.manager.changed.connect(self._on_theme_changed)
         # Re-sort + repaint when metadata changes anywhere: favorites float to
         # the top, so toggling one must re-order the list, not just repaint it.
-        metadata_store.manager.changed.connect(
-            lambda: self._apply_filter(self.search.text()))
+        metadata_store.manager.changed.connect(self._on_metadata_changed)
 
     def _show_context_menu(self, pos) -> None:
         """Right-click menu: rename, delete, favorite + tag editing (all tabs)."""
@@ -230,6 +229,19 @@ class VariablePanel(QWidget):
     def _on_theme_changed(self) -> None:
         self.setFixedWidth(theme.manager.list_width)
         self.list.viewport().update()
+
+    def _on_metadata_changed(self) -> None:
+        """Re-sort + repaint after any metadata edit anywhere in the app.
+
+        Deliberately a bound method rather than the lambda this used to be.
+        `metadata_store.manager` is a process-wide singleton, and Qt only severs
+        a connection when it can see the receiver die -- which it can for a bound
+        method of a QObject, but not for a lambda. Every closed tab therefore left
+        a dangling lambda on the singleton that kept firing and raised
+        "Internal C++ object (QLineEdit) already deleted" on the next metadata
+        edit, an exception PySide6 swallows.
+        """
+        self._apply_filter(self.search.text())
 
     # --- population ---
     def set_variables(self, names, created: set | None = None) -> None:

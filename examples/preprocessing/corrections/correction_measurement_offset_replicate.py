@@ -1,7 +1,7 @@
 """
-========================================
+=========================================
 Correct Measurement Offset from Replicate
-========================================
+=========================================
 
 Detect and correct constant offset between a measurement and a reference
 replicate. Uses brute-force search to find the offset that minimizes

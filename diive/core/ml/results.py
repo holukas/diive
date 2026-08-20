@@ -36,22 +36,21 @@ class GapFillingResult:
             scattered gaps), not extrapolation. None for MDS.
         feature_importances: SHAP importances from the gap-filling model. None for MDS.
         feature_importances_traintest: SHAP importances from the train/test model. None for MDS.
+        feature_importances_reduction: SHAP importances measured during feature
+            reduction, over the feature set as it stood *before* anything was
+            dropped and including the ``.RANDOM`` benchmark column the threshold is
+            derived from. This is the only view carrying the benchmark itself, so it
+            is what to inspect to see why a feature was kept or dropped.
+            None unless ``reduce_features`` ran.
         model: Trained sklearn/XGBoost regressor. None for MDS.
         accepted_features: Feature names kept after SHAP-based reduction. None if not run.
         rejected_features: Feature names removed after SHAP-based reduction. None if not run.
 
-    Example::
-
-        rf = dv.gapfilling.RandomForestTS(input_df=engineered, target_col='NEE_f')
-        rf.run()
-        r = rf.results
-
-        r.gapfilled          # gap-filled Series
-        r.flag               # flag Series
-        r.scores['r2']       # gap-filling R²
-        r.scores_traintest['rmse']
-        r.feature_importances
-        r.model.feature_importances_
+    Example:
+        >>> import diive as dv
+        >>> df = dv.load_exampledata_parquet()[['NEE_CUT_REF_f', 'Tair_f', 'Rg_f']]
+        >>> rf = dv.gapfilling.RandomForestTS(input_df=df, target_col='NEE_CUT_REF_f')
+        >>> rf.run()  # then rf.results -> .gapfilled, .flag, .scores['r2'], .model
     """
 
     gapfilled: pd.Series
@@ -61,6 +60,7 @@ class GapFillingResult:
     scores_traintest: Optional[dict] = None
     feature_importances: Optional[pd.DataFrame] = None
     feature_importances_traintest: Optional[pd.DataFrame] = None
+    feature_importances_reduction: Optional[pd.DataFrame] = None
     model: Optional[object] = None
     accepted_features: Optional[list] = None
     rejected_features: Optional[list] = None

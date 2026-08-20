@@ -18,7 +18,6 @@ import diive.core.dfun.frames as frames
 from diive.core.plotting.plotfuncs import quickplot
 from diive.core.utils.console import detail
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.analysis.histogram import Histogram
 from diive.variables import DaytimeNighttimeFlag
 
 
@@ -146,10 +145,14 @@ def remove_relativehumidity_offset(series: Series,
 
     # print(f"Removing RH offset from {series.name} ...")
     outname = series.name
-    series.name = "input_data"
+    # Renamed copy, not an in-place rename: the label is only needed so the
+    # quickplot panels distinguish input from output, and renaming the parameter
+    # would leave the caller's own series called "input_data". Same pattern as
+    # _nighttime_zero_offset below.
+    work = series.rename("input_data")
 
     # Detect series data that exceeds 100% relative humidity
-    _series_exceeds = series.loc[series > 100]
+    _series_exceeds = work.loc[work > 100]
     _series_exceeds = _series_exceeds.rename("input_data_exceeds_100")
     exceeds_ix = _series_exceeds.index
 
@@ -157,7 +160,7 @@ def remove_relativehumidity_offset(series: Series,
     _daily_mean_above_100 = frames.aggregated_as_hires(aggregate_series=_series_exceeds,
                                                        to_freq='D',
                                                        to_agg='mean',
-                                                       hires_timestamp=series.index,
+                                                       hires_timestamp=work.index,
                                                        interpolate_missing_vals=True)
 
     # Calculate and gap-fill offset values
@@ -174,7 +177,7 @@ def remove_relativehumidity_offset(series: Series,
     #       (RH must not be larger than 100% but 130% were measured)
     #       130 - (+30) = 100
     # Corrected RH is most likely not *exactly* 100%, but closer to it.
-    _series_corr = series.sub(_offset)
+    _series_corr = work.sub(_offset)
 
     # Set maximum to 100
     series_corr_max100 = _series_corr.copy()
@@ -184,7 +187,7 @@ def remove_relativehumidity_offset(series: Series,
 
     # Plot
     if showplot:
-        quickplot([series, _series_exceeds,
+        quickplot([work, _series_exceeds,
                    _daily_mean_above_100, _offset, _series_corr, series_corr_max100],
                   subplots=True,
                   showplot=showplot, hline=100,
@@ -332,11 +335,16 @@ def remove_nighttime_zero_offset(series: Series,
                                     clamp_negatives=clamp_negatives)
 
     if showplot:
-        quickplot([result.input, result.corrected_by_offset,
-                   result.corrected, result.offset],
+        # Named per stage: the raw and the final series otherwise share the variable
+        # name, which makes the panels ambiguous about which stage they show.
+        varname = result.input.name
+        quickplot([result.input.rename(f"{varname} (measured)"),
+                   result.corrected_by_offset.rename("after offset subtraction"),
+                   result.corrected.rename("after nighttime zeroing + clamping"),
+                   result.offset.rename("daily offset")],
                   subplots=True,
                   showplot=showplot,
-                  title=f"Removing nighttime zero-offset from {result.input.name}")
+                  title=f"Removing nighttime zero-offset from {varname}")
 
     return result.corrected
 
@@ -402,7 +410,9 @@ class WindDirOffset:
             hist_ref_years: List of years for building reference histogram, e.g. "[2021, 2022]"
             offset_start: Minimum offset in degrees to shift winddir
             offset_end: Maximum offset in degrees to shift winddir
-            hist_n_bins: Number of bins for building histograms
+            hist_n_bins: Number of bins for building histograms. The bins always
+                span the full compass circle [0, 360), so the default 360 gives
+                one bin per degree and e.g. 36 gives one per 10 degrees.
         """
         self.winddir = winddir
         self.hist_ref_years = hist_ref_years
@@ -464,25 +474,46 @@ class WindDirOffset:
                 s_year_shifted = s_year.copy()
                 s_year_shifted += shift
                 s_year_shifted = self._correct_degrees(s=s_year_shifted)
-                histo_shifted = Histogram(series=s_year_shifted, method='n_bins', n_bins=360)
-                results_shifted = histo_shifted.results
-                corr_abs = abs(results_shifted['COUNTS'].corr(self.ref_results['COUNTS']))
+                # hist_n_bins, not a hardcoded 360: with the two histograms built
+                # at different bin counts their COUNTS series had different
+                # lengths, and .corr() silently aligned them on the RangeIndex and
+                # correlated the overlap only.
+                counts_shifted = self._wind_histogram(s_year_shifted)
+                corr_abs = abs(pd.Series(counts_shifted).corr(pd.Series(self.ref_results)))
                 shiftdf_year.loc[len(shiftdf_year)] = [shift, corr_abs]
             shiftdict[year] = shiftdf_year
         return shiftdict
 
-    def _correct_degrees(self, s: Series):
-        """Correct degree values that go below zero or above 360"""
-        _locs_above360 = s >= 360
-        s[_locs_above360] -= 360
-        _locs_belowzero = s < 0
-        s[_locs_belowzero] += 360
-        return s
+    @staticmethod
+    def _correct_degrees(s: Series) -> Series:
+        """Wrap degree values back onto the compass circle [0, 360).
+
+        Wind direction is circular: 360 deg is the same direction as 0 deg. The
+        modulo handles any shift magnitude (the previous single add/subtract only
+        covered one wrap, so an offset range wider than +/-360 came out wrong) and
+        maps an exact 360 to 0, keeping the domain half-open.
+        """
+        return s % 360
+
+    def _wind_histogram(self, s: Series) -> np.ndarray:
+        """Direction counts per bin over the full circle.
+
+        The bin edges are fixed at ``linspace(0, 360, hist_n_bins + 1)`` rather
+        than derived from the data. Both matter:
+
+        - The offsets are chosen by correlating this histogram against the
+          reference *bin by bin*, which is only meaningful if bin i covers the
+          same directions in both. Data-derived edges (numpy's default for an
+          integer ``bins``) differ between years and after every shift.
+        - The domain is the half-open [0, 360) the compass actually has, so the
+          wrap at north is not a discontinuity in the binning.
+        """
+        edges = np.linspace(0, 360, self.hist_n_bins + 1)
+        counts, _ = np.histogram(s.dropna().to_numpy(), bins=edges)
+        return counts
 
     def _reference_histogram(self):
         """Calculate reference histogram"""
         select_years = self.winddir.index.year.isin(self.hist_ref_years)
-        ref_s = self.winddir[select_years]
-        ref_histo = Histogram(series=ref_s, method='n_bins', n_bins=self.hist_n_bins)
-        ref_results = ref_histo.results
-        return ref_results
+        ref_s = self._correct_degrees(self.winddir[select_years])
+        return self._wind_histogram(ref_s)

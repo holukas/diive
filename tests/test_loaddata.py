@@ -1,9 +1,12 @@
+import tempfile
 import unittest
+from pathlib import Path
 
 import pandas as pd
 from pandas import DataFrame
 
 import diive.configs.exampledata as ed
+from diive.core.io.filereader import MultiDataFileReader
 
 
 class TestLoadFiletypes(unittest.TestCase):
@@ -211,6 +214,71 @@ class TestLoadFiletypes(unittest.TestCase):
         self.assertEqual(data_df.index.freqstr, '30min')
         self.assertAlmostEqual(data_df['NEE_CUT_REF_f'].sum(), -82192.81800000001, places=3)
         self.assertAlmostEqual(data_df.sum().sum(), 328832896.8160001, places=1)
+
+
+class TestMultiDataFileReaderEmptyFiles(unittest.TestCase):
+    """Check how MultiDataFileReader handles empty files"""
+
+    EXAMPLE_FILE = Path(ed.DIR_PATH) / \
+                   'exampledata_DIIVE-CSV-30MIN_CH-DAV_FP2022.5_2022.07_ID20230206154316_30MIN.diive.csv'
+
+    def setUp(self):
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.tempdir = Path(self._tempdir.name)
+
+    def tearDown(self):
+        self._tempdir.cleanup()
+
+    def _make_empty_file(self, filename: str) -> Path:
+        filepath = self.tempdir / filename
+        filepath.write_text('')
+        return filepath
+
+    def test_all_files_empty(self):
+        """All given files are empty: clear error instead of AttributeError"""
+        filepaths = [self._make_empty_file('empty1.csv'), self._make_empty_file('empty2.csv')]
+        with self.assertRaises(ValueError) as ctx:
+            MultiDataFileReader(filepaths=filepaths, filetype='DIIVE-CSV-30MIN')
+        self.assertIn('all 2 given files are empty', str(ctx.exception))
+
+    def test_no_files_given(self):
+        """Empty file list: clear error instead of AttributeError"""
+        with self.assertRaises(ValueError) as ctx:
+            MultiDataFileReader(filepaths=[], filetype='DIIVE-CSV-30MIN')
+        self.assertIn('`filepaths` is empty', str(ctx.exception))
+
+    def test_some_files_empty(self):
+        """Empty files are skipped, data from non-empty files is kept"""
+        filepaths = [self.EXAMPLE_FILE, self._make_empty_file('empty1.csv')]
+        reader = MultiDataFileReader(filepaths=filepaths, filetype='DIIVE-CSV-30MIN')
+        data_df = reader.data_df
+        self.assertEqual(type(data_df), DataFrame)
+        self.assertEqual(len(data_df.columns), 101)
+        self.assertEqual(len(data_df), 1488)
+        self.assertEqual(len(reader.metadata_df), 102)
+        self.assertEqual(data_df.index[0], pd.Timestamp('2022-07-01 00:15:00'))
+        self.assertEqual(data_df.index[-1], pd.Timestamp('2022-07-31 23:45:00'))
+        self.assertEqual(data_df.index.name, 'TIMESTAMP_MIDDLE')
+        self.assertEqual(data_df.index.freqstr, '30min')
+
+    def test_property_guards_test_their_own_frame(self):
+        """Each property's emptiness guard reports on its own frame, not the other one"""
+        reader = MultiDataFileReader(filepaths=[self.EXAMPLE_FILE], filetype='DIIVE-CSV-30MIN')
+
+        # Missing metadata must be reported by metadata_df, not silently returned
+        reader._metadata_df = None
+        with self.assertRaises(ValueError) as ctx:
+            _ = reader.metadata_df
+        self.assertIn('metadata', str(ctx.exception))
+        self.assertEqual(type(reader.data_df), DataFrame)  # data is still there
+
+        # Missing data must not make metadata_df raise
+        reader._metadata_df = reader.data_df  # any DataFrame
+        reader._data_df = None
+        with self.assertRaises(ValueError) as ctx:
+            _ = reader.data_df
+        self.assertIn('data', str(ctx.exception))
+        self.assertEqual(type(reader.metadata_df), DataFrame)
 
 
 if __name__ == '__main__':

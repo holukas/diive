@@ -168,7 +168,7 @@ class FormatMeteoForFluxnetUpload:
         return df
 
 def _example_FormatMeteoForEddyProFluxProcessing_dataFromParquetFile():
-    from diive.core.io.files import load_parquet, save_parquet
+    from diive.core.io.files import load_parquet
 
     # Name of the variables in the original data file
     SW_IN = 'SW_IN_T1_47_1_gfXG'

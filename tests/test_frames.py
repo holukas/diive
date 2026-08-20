@@ -3,7 +3,8 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from diive.core.dfun.frames import keep_records_where
+from diive.core.dfun.frames import (keep_records_where, sort_multiindex_columns_names,
+                                    transform_yearmonth_matrix_to_longform)
 
 
 class TestKeepRecordsWhere(unittest.TestCase):
@@ -64,6 +65,33 @@ class TestKeepRecordsWhere(unittest.TestCase):
         # Boundaries 12 and 15 excluded -> nothing in between
         self.assertEqual(len(out), 0)
 
+    def test_open_bound_stays_open_for_all_inclusive(self):
+        # An unset bound is open regardless of 'inclusive'. Substituting the
+        # observed min/max instead of infinity made an exclusive setting drop the
+        # extreme record of the open side.
+        df = pd.DataFrame({'NEE': [1.0, 2.0, 3.0, 4.0, 5.0],
+                           'TA': [10.0, 20.0, 30.0, 40.0, 50.0]})
+        # Open below: TA=10 must survive in every case.
+        expected_open_lower = {'both': [1.0, 2.0, 3.0, 4.0],
+                               'neither': [1.0, 2.0, 3.0],
+                               'left': [1.0, 2.0, 3.0],
+                               'right': [1.0, 2.0, 3.0, 4.0]}
+        for inclusive, expected in expected_open_lower.items():
+            with self.subTest(bound='open lower', inclusive=inclusive):
+                out = keep_records_where(df, target='NEE', condition_var='TA',
+                                         upper=40, inclusive=inclusive, set_to_nan=False)
+                self.assertEqual(out.tolist(), expected)
+        # Open above: TA=50 must survive in every case.
+        expected_open_upper = {'both': [2.0, 3.0, 4.0, 5.0],
+                               'neither': [3.0, 4.0, 5.0],
+                               'left': [2.0, 3.0, 4.0, 5.0],
+                               'right': [3.0, 4.0, 5.0]}
+        for inclusive, expected in expected_open_upper.items():
+            with self.subTest(bound='open upper', inclusive=inclusive):
+                out = keep_records_where(df, target='NEE', condition_var='TA',
+                                         lower=20, inclusive=inclusive, set_to_nan=False)
+                self.assertEqual(out.tolist(), expected)
+
     def test_missing_column_raises(self):
         with self.assertRaises(ValueError):
             keep_records_where(self.df, target='NEE', condition_var='NOPE', lower=0)
@@ -80,3 +108,150 @@ class TestKeepRecordsWhere(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestNoCallerMutation(unittest.TestCase):
+    """Helpers that return a dataframe must not also modify the one passed in.
+
+    Both of these added their column to the caller's dataframe and returned
+    that same object, so they looked pure but were not.
+    """
+
+    @staticmethod
+    def _df():
+        idx = pd.date_range('2024-01-01', periods=10, freq='30min', name='TIMESTAMP_MIDDLE')
+        return pd.DataFrame({'TA': np.arange(10.0), 'SW_IN': np.arange(10.0)}, index=idx)
+
+    def test_add_continuous_record_number_leaves_caller_alone(self):
+        from diive.core.dfun.frames import add_continuous_record_number
+        df = self._df()
+        before = list(df.columns)
+        out = add_continuous_record_number(df=df, verbose=0)
+        self.assertEqual(list(df.columns), before)
+        self.assertIsNot(out, df)
+        self.assertIn('.RECORDNUMBER', out.columns)
+        self.assertEqual(out['.RECORDNUMBER'].iloc[0], 1)
+        self.assertEqual(out['.RECORDNUMBER'].iloc[-1], len(df))
+
+    def test_lagged_variants_leaves_caller_alone(self):
+        from diive.variables import lagged_variants
+        df = self._df()
+        before = list(df.columns)
+        out = lagged_variants(df=df, lag=[-1, 1], verbose=0)
+        self.assertEqual(list(df.columns), before)
+        self.assertIsNot(out, df)
+        self.assertIn('.TA-1', out.columns)
+
+
+class TestYearMonthMatrixToLongform(unittest.TestCase):
+    """Any year-index/month-column matrix must convert, not only the YEAR/MONTH one."""
+
+    @staticmethod
+    def _matrix():
+        # Documented input: years as index, months as columns.
+        return pd.DataFrame(np.arange(24.0).reshape(2, 12),
+                            index=[1997, 1998], columns=range(1, 13))
+
+    def _assert_matches_matrix(self, series, matrixdf):
+        first = f'{matrixdf.index[0]}-{matrixdf.columns[0]:02d}-01'
+        last = f'{matrixdf.index[-1]}-{matrixdf.columns[-1]:02d}-01'
+        self.assertEqual(len(series), matrixdf.size)
+        self.assertEqual(series.index.freqstr, 'MS')
+        self.assertEqual(series.loc[first], matrixdf.iloc[0, 0])
+        self.assertEqual(series.loc[last], matrixdf.iloc[-1, -1])
+
+    def test_unnamed_axes(self):
+        matrixdf = self._matrix()
+        out = transform_yearmonth_matrix_to_longform(matrixdf=matrixdf, z_var_name='TA')
+        self.assertEqual(out.name, 'TA')
+        self._assert_matches_matrix(out, matrixdf)
+
+    def test_other_axis_names(self):
+        matrixdf = self._matrix().rename_axis(index='year', columns='month')
+        out = transform_yearmonth_matrix_to_longform(matrixdf=matrixdf)
+        self.assertEqual(out.name, 'VALUE')
+        self._assert_matches_matrix(out, matrixdf)
+
+    def test_axis_names_not_changed_for_caller(self):
+        matrixdf = self._matrix().rename_axis(index='year', columns='month')
+        transform_yearmonth_matrix_to_longform(matrixdf=matrixdf)
+        self.assertEqual(matrixdf.index.name, 'year')
+        self.assertEqual(matrixdf.columns.name, 'month')
+
+    def test_roundtrip_from_resample_to_monthly_agg_matrix(self):
+        from diive.core.times.resampling import resample_to_monthly_agg_matrix
+        idx = pd.date_range('2020-01-01', '2021-12-31', freq='D', name='TIMESTAMP_MIDDLE')
+        series = pd.Series(np.arange(len(idx), dtype=float), index=idx, name='TA')
+        matrixdf = resample_to_monthly_agg_matrix(series=series, agg='mean')
+        out = transform_yearmonth_matrix_to_longform(matrixdf=matrixdf, z_var_name='TA')
+        self._assert_matches_matrix(out, matrixdf)
+        self.assertAlmostEqual(out.sum(), matrixdf.sum().sum(), places=9)
+
+    def test_noncontiguous_months(self):
+        """A matrix that skips months must convert, not raise.
+
+        The month columns are used to build a monthly timestamp, so with months
+        missing the timestamps skipped, `pd.infer_freq` returned None and the 'MS'
+        check rejected the matrix. Reachable from the documented producer: a
+        seasonal record yields exactly such a matrix. The docstring's own example
+        (months 1-3 across three years) hit the same path.
+        """
+        from diive.core.times.resampling import resample_to_monthly_agg_matrix
+        # Seasonal record: June-August of 2018, 2019, 2020, daily values.
+        idx = pd.DatetimeIndex([ts for ts in pd.date_range('2018-01-01', '2020-12-31', freq='D')
+                                if ts.month in (6, 7, 8)], name='TIMESTAMP_MIDDLE')
+        series = pd.Series(np.arange(len(idx), dtype=float), index=idx, name='TA')
+        matrixdf = resample_to_monthly_agg_matrix(series=series, agg='mean')
+        self.assertEqual(list(matrixdf.columns), [6, 7, 8])  # non-contiguous
+
+        out = transform_yearmonth_matrix_to_longform(matrixdf=matrixdf, z_var_name='TA')
+        # Gap-free monthly series across the full span, months outside the season NaN.
+        self.assertEqual(out.index.freqstr, 'MS')
+        self.assertEqual(len(out), 36)
+        self.assertEqual(out.index[0], pd.Timestamp('2018-01-01'))
+        self.assertEqual(out.index[-1], pd.Timestamp('2020-12-01'))
+        self.assertEqual(out.notna().sum(), matrixdf.size)
+        self.assertTrue(np.isnan(out.loc['2018-01-01']))
+        self.assertEqual(out.loc['2018-06-01'], matrixdf.loc[2018, 6])
+        self.assertEqual(out.loc['2020-08-01'], matrixdf.loc[2020, 8])
+        self.assertAlmostEqual(out.sum(), matrixdf.sum().sum(), places=9)
+
+    def test_noncontiguous_months_docstring_example(self):
+        matrixdf = pd.DataFrame([[2.0, 9.0, 5.0], [10.0, 1.0, 19.0], [8.0, 22.0, 13.0]],
+                                index=[1997, 1998, 1999], columns=[1, 2, 3])
+        out = transform_yearmonth_matrix_to_longform(matrixdf=matrixdf)
+        self.assertEqual(out.index.freqstr, 'MS')
+        self.assertEqual(len(out), 36)
+        self.assertEqual(out.loc['1997-01-01'], 2.0)
+        self.assertEqual(out.loc['1999-03-01'], 13.0)
+        self.assertAlmostEqual(out.sum(), matrixdf.sum().sum(), places=9)
+
+
+class TestSortMultiindexColumnsNames(unittest.TestCase):
+    """Columns moved to the top must keep their sorted order, not end up reversed."""
+
+    @staticmethod
+    def _df(varnames):
+        cols = pd.MultiIndex.from_tuples([(v, 'units') for v in varnames])
+        return pd.DataFrame(np.zeros((2, len(varnames))), columns=cols)
+
+    @staticmethod
+    def _varnames(df):
+        return [col[0] for col in df.columns]
+
+    def test_dot_vars_ascending_at_top(self):
+        # Only caller (MultiDataFileReader) passes priority_vars=None, so this is
+        # the block that is actually exercised.
+        df = self._df(['b', '.c', 'a', '.a', '.b'])
+        out = sort_multiindex_columns_names(df=df, priority_vars=None)
+        self.assertEqual(self._varnames(out), ['.a', '.b', '.c', 'a', 'b'])
+
+    def test_priority_vars_ascending_below_dot_vars(self):
+        df = self._df(['b', 'x', '.a', 'y', 'a'])
+        out = sort_multiindex_columns_names(df=df, priority_vars=['x', 'y'])
+        self.assertEqual(self._varnames(out), ['.a', 'x', 'y', 'a', 'b'])
+
+    def test_no_columns_lost(self):
+        varnames = ['b', '.c', 'a', '.a', 'x']
+        out = sort_multiindex_columns_names(df=self._df(varnames), priority_vars=['x'])
+        self.assertEqual(sorted(self._varnames(out)), sorted(varnames))

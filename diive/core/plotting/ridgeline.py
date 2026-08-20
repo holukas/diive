@@ -23,12 +23,24 @@ class RidgeLinePlot:
         - https://scikit-learn.org/stable/modules/density.html#kernel-density
 
     See Also:
-        examples/visualization/ridgeline.py — Ridge line plots with kernel density estimation
+        examples/visualization/plot_ridgeline_basic.py — Ridge line plots with kernel density estimation
     """
 
     def __init__(self, series: pd.Series):
-        """Set up a ridgeline plot for *series* (one stacked density per group/year). See :meth:`plot`."""
-        self.series = series
+        """Set up a ridgeline plot for *series* (one stacked density per group/year). See :meth:`plot`.
+
+        Missing values are dropped up front: the kernel density estimator rejects
+        NaN, so any gappy series would otherwise raise. Dropping here (rather than
+        per group) also means a group left without a single valid value gets no
+        ridge at all, instead of failing at fit time.
+
+        Raises:
+            ValueError: If *series* has no valid values, i.e. there is nothing to plot.
+        """
+        self.series = series.dropna()
+        if self.series.empty:
+            raise ValueError(f"RidgeLinePlot: series '{series.name}' has no valid "
+                             f"(non-missing) values, there is nothing to plot.")
 
         self.xlim = None
         self.ylim = None

@@ -6,8 +6,19 @@ success/failure with detailed error messages and execution times.
 
 Usage:
     python examples/run_all_examples.py
+
+Runs each example with ``MPLBACKEND=Agg`` so matplotlib writes figures without
+opening a window. Eighteen examples call ``plt.show()``, which blocks until a
+window is closed; unattended that meant each one burned the full 120 s timeout
+and was reported as a failure it had not earned. Set ``MPLBACKEND`` yourself to
+override — e.g. ``MPLBACKEND=QtAgg`` to watch the plots appear — but then the
+run needs someone to close each window.
+
+Examples are otherwise left to use the machine as they see fit; see
+``_child_env`` for why capping their thread count made the suite slower.
 """
 
+import os
 import subprocess
 import sys
 import time
@@ -131,14 +142,6 @@ EXAMPLE_FILES = [
     'flux/lowres/flux_ustar_vekuri_detection.py',
     'flux/lowres/flux_ustar_method_comparison.py',
     # Flux - High-resolution analysis
-    'flux/hires/flux_fluxdetectionlimit.py',
-    'flux/hires/flux_lag.py',
-    'flux/hires/flux_lag_pwb.py',
-    'flux/hires/flux_lag_pwbopt.py',
-    'flux/hires/flux_lag_pwb_batch.py',
-    'flux/hires/flux_lag_pwb_batch_cli.py',
-    'flux/hires/flux_apply_tlag_cli.py',
-    'flux/hires/flux_windrotation.py',
     # Gap-filling
     'gapfilling/gapfill_interpolate_generous.py',
     'gapfilling/gapfill_interpolate_conservative.py',
@@ -154,7 +157,88 @@ EXAMPLE_FILES = [
     'gapfilling/gapfill_swin.py',
 ]
 
-MAX_WORKERS = 8  # Number of parallel workers
+# Examples are submitted in the order listed above, on purpose. Scheduling the
+# known-heavy ones first (longest-processing-time first, the usual answer to a
+# long tail) measured worse: the heavy examples are the multi-threaded ones, so
+# starting a dozen of them together left each with a fraction of the cores and
+# they all finished late -- gapfill_swin took 19.78 s when spread out and 144 s
+# when front-loaded. Interleaved with the cheap examples they get the machine
+# more or less to themselves.
+MAX_WORKERS = min(12, os.cpu_count() or 4)  # Number of parallel workers
+TIMEOUT = 240  # Seconds per example
+
+
+def _child_env():
+    """Environment for an example: non-interactive plots.
+
+    A caller-set MPLBACKEND wins, so the plots can still be watched on purpose.
+
+    Deliberately does NOT cap the child's thread count. Handing each worker
+    ``cpu_count // MAX_WORKERS`` threads looks like the fix for the
+    oversubscription of a dozen examples that each pass ``n_jobs=-1``, and it is
+    not: measured over the whole suite it was far worse. The examples that ask
+    for every core genuinely scale on them (GridSearchCV, XGBoost, the SHAP
+    pass), and at two threads each they slowed by 5-9x -- e.g.
+    ``gapfill_optimize_xgboost`` 38 s -> 190 s -- which costs more than the
+    contention it avoids, because the light examples are dominated by imports
+    and leave cores idle anyway. If you revisit this, measure the suite total,
+    not one example.
+    """
+    return {**os.environ, 'MPLBACKEND': os.environ.get('MPLBACKEND', 'Agg')}
+
+
+def _kill_tree(proc):
+    """Kill the example and anything it spawned.
+
+    ``Popen.kill()`` only ends the direct child. Two things routinely sit below
+    it: the virtualenv launcher re-execs the real interpreter, and ``n_jobs=-1``
+    spawns joblib worker processes. Killing only the top process leaves those
+    running at full tilt for the rest of the suite, stealing the CPU that the
+    remaining examples are being timed on.
+    """
+    if sys.platform == 'win32':
+        subprocess.run(['taskkill', '/F', '/T', '/PID', str(proc.pid)],
+                       capture_output=True)
+    else:
+        import signal
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+    proc.kill()
+
+
+def _error_tail(error, n_lines=1):
+    """Last non-empty lines of a captured traceback -- i.e. the exception itself.
+
+    Reporting the *first* line instead summarised every traceback as
+    ``Traceback (most recent call last):``, identical for every failure and
+    carrying no information at all. What matters is at the other end.
+    """
+    lines = [line.rstrip() for line in (error or '').splitlines() if line.strip()]
+    return lines[-n_lines:] if lines else ['Unknown error']
+
+
+def _exit_code_str(returncode):
+    """Exit code, plus its hex form when the OS rather than Python ended the run.
+
+    An example that raises exits 1 and leaves a traceback. One the OS takes out
+    leaves nothing, and then the code is the only evidence there is: on Windows
+    an NTSTATUS (0xC0000005 access violation, 0xC0000017 no memory), elsewhere
+    the negated signal number (-9 = SIGKILL, the out-of-memory killer).
+    """
+    if returncode is None:
+        return 'None'
+    if sys.platform == 'win32':
+        # Windows hands back the raw DWORD, so a crash shows up as a large
+        # positive number, not a negative one -- 3221225477, say, which means
+        # nothing until it is read as hex.
+        if returncode < 0 or returncode > 255:
+            return f'{returncode} (0x{returncode & 0xFFFFFFFF:08X})'
+        return str(returncode)
+    if returncode < 0:
+        return f'{returncode} (signal {-returncode})'
+    return str(returncode)
 
 
 def run_example(example_file, examples_dir):
@@ -171,12 +255,30 @@ def run_example(example_file, examples_dir):
         }
 
     try:
-        result = subprocess.run(
+        popen_kwargs = {} if sys.platform == 'win32' else {'start_new_session': True}
+        proc = subprocess.Popen(
             [sys.executable, str(example_path)],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=120
+            # A byte the locale codec cannot decode used to kill the reader thread
+            # outright (UnicodeDecodeError in `_readerthread`), losing that example's
+            # entire captured output while the run still reported PASS off the return
+            # code. Replace the byte instead: this output is diagnostic, and a mangled
+            # character beats a discarded traceback. The child's own encoding is left
+            # alone deliberately, so an example printing a genuinely non-cp1252 string
+            # still shows up as the Windows console problem it is.
+            errors='replace',
+            env=_child_env(),
+            **popen_kwargs
         )
+        try:
+            stdout, stderr = proc.communicate(timeout=TIMEOUT)
+        except subprocess.TimeoutExpired:
+            _kill_tree(proc)
+            stdout, stderr = proc.communicate()
+            raise
+        result = subprocess.CompletedProcess(proc.args, proc.returncode, stdout, stderr)
         elapsed = time.time() - start_time
 
         if result.returncode == 0:
@@ -192,6 +294,7 @@ def run_example(example_file, examples_dir):
                 'file': example_file,
                 'status': 'fail',
                 'error': error_msg,
+                'returncode': result.returncode,
                 'time': elapsed
             }
 
@@ -200,7 +303,7 @@ def run_example(example_file, examples_dir):
         return {
             'file': example_file,
             'status': 'timeout',
-            'error': 'Timeout (exceeded 60 seconds)',
+            'error': f'Timeout (exceeded {TIMEOUT} seconds)',
             'time': elapsed
         }
     except Exception as e:
@@ -245,8 +348,9 @@ def run_all_examples():
                 results['passed'].append((example_file, elapsed))
             elif status == 'fail':
                 print(f"[FAIL] {example_file:<40} ({elapsed:6.2f}s) [{completed:2d}/{len(EXAMPLE_FILES)} {progress:5.1f}%]")
-                error_line = result['error'].split('\n')[0][:60]
-                print(f"       Error: {error_line}")
+                print(f"       Exit code: {_exit_code_str(result.get('returncode'))}")
+                for error_line in _error_tail(result['error']):
+                    print(f"       Error: {error_line[:120]}")
                 results['failed'].append((example_file, result['error'], elapsed))
             elif status == 'timeout':
                 print(f"[TIMEOUT] {example_file:<38} ({elapsed:6.2f}s) [{completed:2d}/{len(EXAMPLE_FILES)} {progress:5.1f}%]")
@@ -283,8 +387,8 @@ def run_all_examples():
         for example_file, error, elapsed in results['failed']:
             print(f"   {example_file:<50} {elapsed:6.2f}s")
             if error and error != "File not found":
-                error_line = error.split('\n')[0][:80]
-                print(f"     {error_line}")
+                for error_line in _error_tail(error, n_lines=5):
+                    print(f"     {error_line[:160]}")
         print("\nRun individual examples for full error details:")
         for example_file, _, _ in results['failed']:
             print(f"   python examples/{example_file}")

@@ -243,8 +243,18 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
             off = np.append(-np.arange(t_window / 2.0 * nperday),
                             np.arange(t_window / 2.0 * nperday - 1) + 1)
             _offset_cache[t_window] = off
+        # Trim to the record, do NOT clip: ONEFlux narrows the window bounds
+        # (`common.c:2525-2533`: `if (window_start < 0) window_start = 0;` /
+        # `if (window_end > end_window) window_end = end_window;` and then loops
+        # `window_current < window_end`), and its diurnal method skips
+        # out-of-range positions outright (`:2630`). Either way a real record
+        # enters a fill at most once. Clipping instead folded every out-of-range
+        # offset onto record 0 (or n-1), so near the ends of the record the edge
+        # value was counted hundreds of times in the mean, the SD and the count -
+        # and the cascade's largest window is +/- 427 days, which reaches that
+        # bias more than a year deep into each end.
         w = index + off
-        np.clip(w, 0, n - 1, out=w)
+        w = w[(w >= 0) & (w < n)]
         return w.astype(int)
 
     def fill_at(index, sel, m, tw):

@@ -1,7 +1,7 @@
 """
 Quality flags extracted from and calculated based on EddyPro output files.
 
-DIIVE uses a standard quality flag format across all functions:
+diive uses a standard quality flag format across all functions:
     - 0 = good quality (passes test)
     - 1 = soft warning (marginal, may indicate issues)
     - 2 = bad quality / hard fail (fails test)
@@ -13,10 +13,10 @@ EddyPro output files use different flag formats depending on the test type and f
 
 This module provides functions to:
     1. Extract test flags from EddyPro FluxNet and full output files
-    2. Convert EddyPro flag formats to DIIVE standard format
+    2. Convert EddyPro flag formats to diive standard format
     3. Calculate new quality flags by applying thresholds to raw data
 
-All functions return flags in DIIVE standard format (0=good, 1=soft warning, 2=bad)
+All functions return flags in diive standard format (0=good, 1=soft warning, 2=bad)
 to ensure consistency across the library.
 """
 import numpy as np
@@ -30,10 +30,10 @@ from diive.preprocessing.qaqc.flags import restrict_application
 
 def _extract_and_convert_flag_from_multidigit(df: DataFrame, column_name: str,
                                               position: int, is_hard_flag: bool = True) -> Series:
-    """Extract a single flag from a multi-digit integer column and convert to DIIVE format.
+    """Extract a single flag from a multi-digit integer column and convert to diive format.
 
     Helper function for extracting individual test results from multi-digit flag codes
-    (e.g., EddyPro VM97 codes) and converting to DIIVE standard format.
+    (e.g., EddyPro VM97 codes) and converting to diive standard format.
 
     Args:
         df: DataFrame containing the multi-digit flag column.
@@ -46,7 +46,13 @@ def _extract_and_convert_flag_from_multidigit(df: DataFrame, column_name: str,
     """
     flag = df[column_name].copy()
     flag = flag.apply(pd.to_numeric, errors='coerce').astype(float)
+    # A negative code is not a valid EddyPro flag, and the digit is read out of the
+    # string form, where the minus sign shifts every position: -9999 becomes
+    # '-9999.0', whose character 6 is '0', i.e. a junk sentinel read as "good".
+    # Treat negatives as missing, like NaN below.
+    flag = flag.where(flag >= 0)
     flag = flag.fillna(899999999)  # 9 = missing flag (use multi-digit value to ensure proper string extraction)
+    flag = flag.replace(0, 800000000)  # 0 = no flag raised (use multi-digit value, see above)
     flag = flag.astype(str)
     flag = flag.str[int(position)]
     flag = flag.apply(pd.to_numeric, errors='coerce')  # Use coerce to handle non-numeric characters like '.'
@@ -116,10 +122,10 @@ def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
                                                  flux: str,
                                                  idstr: str = None,
                                                  nshwcol: str = None) -> Series:
-    """Extract wind steadiness flag from EddyPro output and convert to DIIVE format.
+    """Extract wind steadiness flag from EddyPro output and convert to diive format.
 
     Extracts the wind steadiness test flag from EddyPro FluxNet output and converts
-    it to DIIVE standard format (0=good, 2=bad).
+    it to diive standard format (0=good, 2=bad).
 
     From the EddyPro description:
         "This test assesses whether the along-wind and crosswind components of the wind vector undergo
@@ -133,7 +139,7 @@ def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
         idstr: An optional identifier string to append to the flag name.
 
     Returns:
-        A series containing the quality flag in DIIVE format, where 0=good values, 2=bad values.
+        A series containing the quality flag in diive format, where 0=good values, 2=bad values.
 
     See Also:
         See examples/preprocessing/qaqc/qc_eddypro_flags.py for a complete working example.
@@ -161,10 +167,10 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
                                       idstr: str = None,
                                       application_dates: list or None = None,
                                       aoacol: str = None) -> Series:
-    """Extract angle of attack flag from EddyPro output and convert to DIIVE format.
+    """Extract angle of attack flag from EddyPro output and convert to diive format.
 
     Extracts the angle of attack test flag from EddyPro FluxNet output and converts
-    it to DIIVE standard format (0=good, 2=bad). The angle of attack test evaluates
+    it to diive standard format (0=good, 2=bad). The angle of attack test evaluates
     whether the wind vector relative to the sonic anemometer orientation is within
     acceptable limits.
 
@@ -179,7 +185,7 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
             Format: [['2022-01-01', '2022-12-31'], ...] for selective time periods.
 
     Returns:
-        A series containing the quality flag in DIIVE format, where 0=good values, 2=bad values.
+        A series containing the quality flag in diive format, where 0=good values, 2=bad values.
 
     See Also:
         See examples/preprocessing/qaqc/qc_eddypro_flags.py for a complete working example.
@@ -230,7 +236,7 @@ def flags_vm97_eddypro_fluxnetfile_tests(
     data. These VM97 tests evaluate the quality and reliability of the raw measurements
     before flux calculation. EddyPro FluxNet files store multiple raw data tests in a
     single multi-digit integer (e.g., 80100010). This function extracts individual test
-    results from each digit position and converts them to DIIVE standard format.
+    results from each digit position and converts them to diive standard format.
 
     The VM97 integer encodes 8 different quality tests in an 8-digit code:
     - Position 0: Always 8 (constant, no meaning)
@@ -243,7 +249,7 @@ def flags_vm97_eddypro_fluxnetfile_tests(
     - Position 7: Discontinuities (hard flag)
     - Position 8: Discontinuities (soft flag)
 
-    Hard flags (_HF_) are converted from EddyPro format (1=bad) to DIIVE format (2=bad).
+    Hard flags (_HF_) are converted from EddyPro format (1=bad) to diive format (2=bad).
     Soft flags (_SF_) retain value 1 to indicate marginal/warning conditions.
 
     Args:
@@ -261,7 +267,7 @@ def flags_vm97_eddypro_fluxnetfile_tests(
         discont_sf: Extract discontinuities soft flag test (position 8).
 
     Returns:
-        A dataframe containing selected quality flag columns in DIIVE format
+        A dataframe containing selected quality flag columns in diive format
         (0=good, 1=soft warning, 2=bad).
 
     See Also:
@@ -376,7 +382,7 @@ def flag_fluxbasevar_completeness_eddypro_test(df: DataFrame, flux: str,
         idstr: An optional identifier string to append to the flag name.
 
     Returns:
-        A pandas Series containing the completeness flag in DIIVE format
+        A pandas Series containing the completeness flag in diive format
         (0=good, 1=ok, 2=bad).
 
     See Also:
@@ -460,8 +466,11 @@ def flag_ssitc_eddypro_test(df: DataFrame, flux: str, setflag_timeperiod: dict =
     characteristics criteria (Mauder & Foken, 2004). This test assesses whether conditions
     are sufficiently stationary for reliable flux measurements during the averaging period.
 
-    The SSITC test flag is extracted from EddyPro FluxNet output and converted to DIIVE
-    standard format (0=good, 2=bad).
+    The SSITC test flag is taken from EddyPro FluxNet output unchanged: EddyPro's values
+    0/1/2 already coincide with the diive standard format (0=good, 1=soft warning, 2=bad),
+    so no conversion is needed. In particular, EddyPro's intermediate quality 1 stays a
+    diive *soft* flag, i.e. such records pass `FlagQCF` as marginal rather than being
+    rejected. Use `setflag_timeperiod` to promote 1 to 2 for chosen periods.
 
     Args:
         df: A DataFrame containing EddyPro FluxNet or full output data.
@@ -474,8 +483,8 @@ def flag_ssitc_eddypro_test(df: DataFrame, flux: str, setflag_timeperiod: dict =
         idstr: An optional identifier string to append to the flag name.
 
     Returns:
-        A pandas Series containing the SSITC quality flag in DIIVE format
-        (0=good, 2=bad).
+        A pandas Series containing the SSITC quality flag in diive format, with the
+        EddyPro values passed through (0=good, 1=soft warning, 2=bad).
 
     See Also:
         See examples/preprocessing/qaqc/qc_eddypro_flags.py for a complete working example.

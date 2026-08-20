@@ -11,6 +11,7 @@ import tempfile
 import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
+from matplotlib import colormaps
 from matplotlib.collections import LineCollection
 from matplotlib.colors import Normalize
 from bokeh.layouts import column
@@ -22,6 +23,7 @@ from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
 from diive.core.plotting.styles.format import FormatStyle
+from diive.core.utils.console import warn
 
 # Material Design palette, matching diive's plotting conventions (CLAUDE.md):
 # blue 500 for lines, blue-grey shades for ink/gridlines/reference.
@@ -29,6 +31,18 @@ _COLOR_LINE = '#2196F3'  # blue 500 — the series line/markers
 _COLOR_INK = '#455A64'   # blue-grey 700 — text, spines, ticks, legend edge
 _COLOR_GRID = '#B0BEC5'  # blue-grey 200 — subtle gridlines
 _COLOR_ZERO = '#90A4AE'  # blue-grey 300 — zero reference line
+_COLOR_NOCOLOR = '#90A4AE'  # blue-grey 300 — measured, but no colour value to show
+
+
+def _display_name(series: Series) -> str:
+    """Name used for the Bokeh labels, with a fallback for an unnamed Series.
+
+    An unnamed Series is legitimate input — `plot()` draws it — but Bokeh raises
+    `ValueError: legend_label value must be a string` on `legend_label=None`, and
+    an f-string of a missing name renders the literal "None" as a plot title. The
+    fallback is the name Bokeh already gives the data column.
+    """
+    return str(series.name) if series.name is not None else 'value'
 
 
 # output_notebook()
@@ -67,9 +81,13 @@ class TimeSeries:
             color_series: Optional second series whose values colour the line (and
                 markers) via a colormap instead of a single colour — e.g. colour a
                 flux line by air temperature. Aligned to `series`' index; segments
-                are coloured by the mean of their endpoints' values. When given,
-                `plot()`'s `cmap`/`color_vmin`/`color_vmax`/`show_colorbar`/
-                `color_label` apply and the scalar `color` argument is ignored.
+                are coloured by the mean of their endpoints' values; a segment whose
+                colour value is missing is drawn in a neutral grey, since the data
+                itself was measured. When given, `plot()`'s `cmap`/`color_vmin`/
+                `color_vmax`/`show_colorbar`/`color_label` apply and the scalar
+                `color` argument is ignored — unless alignment leaves fewer than two
+                colour values, in which case `plot()` warns and falls back to a plain
+                line drawn in `color`.
 
         See Also:
             plot : Render the time series with matplotlib styling options
@@ -83,7 +101,8 @@ class TimeSeries:
                              if color_series is not None else None)
         self.color_name = color_series.name if color_series is not None else None
 
-    def plot_interactive(self, height: int = 600, width: int = 1200, save_to_file: bool = False):
+    def plot_interactive(self, height: int = 600, width: int = 1200, save_to_file: bool = False,
+                         showplot: bool = True):
         """
         Render interactive time series plot using Bokeh.
 
@@ -94,6 +113,10 @@ class TimeSeries:
             height: Plot height in pixels (default: 600)
             width: Plot width in pixels (default: 1200)
             save_to_file: Save plot to HTML file (default: False, display in browser only)
+            showplot: Open the plot in a browser (default: True). Set False to build
+                the figure without displaying it, e.g. to embed it in a Bokeh layout
+                or to write it out yourself. Note that the HTML file is written by
+                the display step, so `save_to_file=True, showplot=False` writes nothing.
 
         Tools Available:
             - Hover: Display date and value on mouse over
@@ -105,18 +128,25 @@ class TimeSeries:
             - Undo/Redo: Undo and redo zoom/pan operations
             - Save: Export plot as PNG image
 
+        Returns:
+            The Bokeh `figure`, so it can be embedded or saved by the caller.
+
         Example:
-            >>> ts = dv.plotting.TimeSeries(series=data)
-            >>> ts.plot_interactive(height=800, width=1600)  # Larger interactive plot
+            >>> import diive as dv, pandas as pd
+            >>> idx = pd.date_range('2024-06-01', periods=3, freq='30min')
+            >>> ts = dv.plotting.TimeSeries(series=pd.Series([1.0, 2.0, 1.5], index=idx, name='TA'))
+            >>> ts.plot_interactive(height=800, width=1600)  # opens a browser tab
         """
+        name = _display_name(self.series)
+
         # Handle file output: temp file if not saving, named file if saving
         if save_to_file:
-            output_file(filename=f"{self.series.name}_interactive.html", title=self.series.name)
+            output_file(filename=f"{name}_interactive.html", title=name)
         else:
             # Use temporary directory so file is automatically cleaned up
             temp_dir = tempfile.gettempdir()
             temp_file = os.path.join(temp_dir, f"bokeh_{id(self)}.html")
-            output_file(filename=temp_file, title=self.series.name)
+            output_file(filename=temp_file, title=name)
 
         # Bokeh needs dataframe
         df = pd.DataFrame()
@@ -130,7 +160,7 @@ class TimeSeries:
         # Modern scientific Bokeh styling
         p = figure(height=height,
                    width=width,
-                   title=f"{self.series.name}",
+                   title=name,
                    tools=[
                        HoverTool(
                            tooltips=[('Date', '@date{%F %T}'),
@@ -153,11 +183,11 @@ class TimeSeries:
 
         # Modern line styling (publication-ready)
         p.line(x='date', y='value', line_width=2.0, source=source, color=_COLOR_LINE, alpha=0.95,
-               legend_label=self.series.name)
+               legend_label=name)
         p.scatter(x='date', y='value', size=4, source=source, color=_COLOR_LINE, alpha=0.6)
 
         # Modern axis styling
-        p.yaxis.axis_label = self.series.name
+        p.yaxis.axis_label = name
         p.xaxis.axis_label = self.series.index.name
 
         # Modern typography and aesthetics
@@ -214,10 +244,13 @@ class TimeSeries:
         #           formatters={'@DateTime': 'datetime'})
 
         # Show plot
-        show(p)
+        if showplot:
+            show(p)
+        return p
 
     def plot_rangetool(self, height: int = 300, width: int = 900, overview_height: int = 130,
-                       init_range: float = 0.25, save_to_file: bool = False):
+                       init_range: float = 0.25, save_to_file: bool = False,
+                       showplot: bool = True):
         """
         Render an interactive Bokeh plot with a RangeTool overview.
 
@@ -238,16 +271,28 @@ class TimeSeries:
                 measured from the start (default: 0.25 = first quarter).
             save_to_file: Save to a named HTML file instead of a temp file
                 (default: False, opens in browser only).
+            showplot: Open the plot in a browser (default: True). Set False to build
+                the layout without displaying it, e.g. to embed it or to write it out
+                yourself. Note that the HTML file is written by the display step, so
+                `save_to_file=True, showplot=False` writes nothing.
+
+        Returns:
+            The Bokeh `column(detail, overview)` layout, so it can be embedded or
+            saved by the caller.
 
         Example:
-            >>> ts = dv.plotting.TimeSeries(series=data)
-            >>> ts.plot_rangetool(init_range=0.1)  # start zoomed to the first 10%
+            >>> import diive as dv, pandas as pd
+            >>> idx = pd.date_range('2024-06-01', periods=3, freq='30min')
+            >>> ts = dv.plotting.TimeSeries(series=pd.Series([1.0, 2.0, 1.5], index=idx, name='TA'))
+            >>> ts.plot_rangetool(init_range=0.1)  # opens a browser tab, zoomed to the first 10%
         """
+        name = _display_name(self.series)
+
         if save_to_file:
-            output_file(filename=f"{self.series.name}_rangetool.html", title=self.series.name)
+            output_file(filename=f"{name}_rangetool.html", title=name)
         else:
             temp_file = os.path.join(tempfile.gettempdir(), f"bokeh_rangetool_{id(self)}.html")
-            output_file(filename=temp_file, title=self.series.name)
+            output_file(filename=temp_file, title=name)
 
         df = pd.DataFrame({'date': pd.to_datetime(self.series.index), 'value': self.series.to_numpy()})
         source = ColumnDataSource(df)
@@ -263,9 +308,9 @@ class TimeSeries:
         detail = figure(height=height, width=width, x_axis_type='datetime', x_axis_location='above',
                         window_axis='x', x_range=(x_start, x_end), tools='xpan,xwheel_zoom,reset',
                         toolbar_location='right', background_fill_color='#FAFAFA',
-                        border_fill_color='white', title=f"{self.series.name}")
+                        border_fill_color='white', title=name)
         detail.line('date', 'value', source=source, line_width=2.0, color=_COLOR_LINE, alpha=0.95)
-        detail.yaxis.axis_label = self.series.name
+        detail.yaxis.axis_label = name
         detail.xaxis.axis_label = self.series.index.name
 
         # Overview panel (bottom): the full series with its own (full-range) y-axis,
@@ -292,7 +337,10 @@ class TimeSeries:
             p.grid.grid_line_color = _COLOR_GRID
             p.grid.grid_line_alpha = 0.3
 
-        show(column(detail, overview))
+        layout = column(detail, overview)
+        if showplot:
+            show(layout)
+        return layout
 
     def _plot_colored_line(self, color_vals, cmap, color_vmin, color_vmax,
                            linewidth, alpha, marker, markersize,
@@ -301,8 +349,10 @@ class TimeSeries:
 
         Each segment between consecutive samples is coloured by the mean of its
         endpoints' colour values; segments touching a NaN in the data (a gap) are
-        dropped so the line breaks rather than bridging. A `LineCollection` does
-        not autoscale the axes, so x/y limits are set explicitly.
+        dropped so the line breaks rather than bridging. Segments whose *colour*
+        value is missing are still measured data, so they are drawn in a neutral
+        grey. A `LineCollection` does not autoscale the axes, so the data are fed
+        to the axes' data limits and the view is rescaled from there.
         """
         x = mdates.date2num(self.series.index)
         y = self.series.to_numpy(dtype=float)
@@ -315,6 +365,16 @@ class TimeSeries:
         vmin = color_vmin if color_vmin is not None else np.nanmin(color_vals)
         vmax = color_vmax if color_vmax is not None else np.nanmax(color_vals)
         norm = Normalize(vmin=vmin, vmax=vmax)
+
+        # A missing colour value means "measured, but the colour driver has a gap
+        # here". matplotlib's default "bad" colour is (0, 0, 0, 0) — and because
+        # an all-zero bad colour also makes `Colormap.__call__` discard the
+        # collection alpha, those records were painted fully transparent and read
+        # as missing data. Paint them a neutral grey so they stay visible while
+        # plainly not being a value on the colour scale.
+        cmap = (colormaps[cmap] if isinstance(cmap, str) else cmap).copy()
+        cmap.set_bad(_COLOR_NOCOLOR)
+
         lc = LineCollection(segments, cmap=cmap, norm=norm)
         lc.set_array(seg_c)
         lc.set_linewidth(linewidth)
@@ -326,13 +386,18 @@ class TimeSeries:
             self.ax.scatter(x, y, c=color_vals, cmap=cmap, norm=norm,
                             s=markersize ** 2, edgecolors='none', alpha=alpha, zorder=100)
 
-        # LineCollection does not autoscale; set limits from the data.
-        self.ax.set_xlim(np.nanmin(x), np.nanmax(x))
-        finite = np.isfinite(y)
+        # A LineCollection does not rescale the view by itself, but setting the
+        # limits outright would discard whatever else the caller already drew on
+        # these axes (and override limits they set deliberately). Grow the data
+        # limits instead and let matplotlib rescale, which unions with the other
+        # artists. `add_collection` already contributes the segments; the finite
+        # points are added explicitly so a measured record that no *segment*
+        # touches (isolated between gaps) still counts, as it does on the plain
+        # path.
+        finite = np.isfinite(x) & np.isfinite(y)
         if finite.any():
-            ymin, ymax = float(np.min(y[finite])), float(np.max(y[finite]))
-            pad = (ymax - ymin) * 0.05 or 1.0
-            self.ax.set_ylim(ymin - pad, ymax + pad)
+            self.ax.update_datalim(np.column_stack([x[finite], y[finite]]))
+        self.ax.autoscale_view()
         self.ax.xaxis_date()
 
         if show_colorbar:
@@ -353,13 +418,23 @@ class TimeSeries:
         the line itself and stay here. Can be called multiple times on the same
         object to draw on different axes with different styling.
 
+        Drawing is **additive**: a second call on the *same* axes appends its line
+        to whatever is already there rather than replacing it, and with a
+        `color_series` it appends a second colorbar, which shrinks the main axes.
+        That is what makes overlaying several series on one axes work; to re-draw
+        instead of overlay, clear the axes first (`ax.clear()`) or pass a fresh one.
+
         Args:
             ax: Matplotlib axes to plot on. If None, creates a new figure and displays it.
+                Existing artists and any limits the caller set are kept — the series is
+                drawn on top and the view grows to fit both.
             format_style: A :class:`~diive.plotting.FormatStyle` describing the chrome
                 (title, labels, units, fonts, colours, grid, legend). When None the
                 diive house style is used.
             color: Line color (default: Material Design blue #2196F3). Ignored when
-                a `color_series` was given (the line is then colormap-coloured).
+                a `color_series` was given (the line is then colormap-coloured) —
+                except when that series aligns to fewer than two values, where the
+                plot falls back to a plain line in this colour and warns.
             linewidth: Line width in points (default: 2.2).
             alpha: Line/marker opacity, 0-1 (default: 0.95).
             marker: If True, draw a point marker at each observation (default: False).
@@ -375,10 +450,10 @@ class TimeSeries:
             so callers can apply further styling.
 
         Example:
-            >>> ts = dv.plotting.TimeSeries(series=data)
-            >>> ax = ts.plot(ax=ax1, color='#2196F3')  # Plot on axis
-            >>> style = dv.plotting.FormatStyle(title='Custom', yunits='(°C)')
-            >>> ts.plot(format_style=style)  # New figure with a shared style
+            >>> import diive as dv, pandas as pd, matplotlib.pyplot as plt
+            >>> idx = pd.date_range('2024-06-01', periods=3, freq='30min')
+            >>> ts = dv.plotting.TimeSeries(series=pd.Series([1.0, 2.0, 1.5], index=idx, name='TA'))
+            >>> ax = ts.plot(ax=plt.subplots()[1], format_style=dv.plotting.FormatStyle(yunits='(°C)'))
         """
         # Chrome comes only from the caller-supplied style.
         style = format_style or FormatStyle()
@@ -407,6 +482,18 @@ class TimeSeries:
                                     linewidth, alpha, marker, markersize,
                                     show_colorbar, color_label)
         else:
+            if color_vals is not None:
+                # Say so: this branch turns cmap/show_colorbar/color_label into
+                # no-ops, and a non-overlapping index (the usual cause) is
+                # invisible in the resulting plain line.
+                warn(f"Cannot colour '{self.varname}' by '{self.color_name}': only "
+                     f"{int(np.isfinite(color_vals).sum())} of {len(color_vals)} records "
+                     f"have a colour value after aligning to the index of '{self.varname}'. "
+                     f"The likely cause is that the two series share no (or almost no) "
+                     f"timestamps, e.g. TIMESTAMP_END vs TIMESTAMP_MIDDLE or a differently "
+                     f"resampled driver. Drawing a plain line instead -> cmap, color_vmin, "
+                     f"color_vmax, show_colorbar and color_label have no effect here, and "
+                     f"the scalar color argument is used.")
             # NaNs are kept (unless drop_gaps=True) so the line breaks at gaps
             # instead of bridging them.
             self.ax.plot(self.series.index,
@@ -428,7 +515,11 @@ class TimeSeries:
 
         if self.showplot:
             self.fig.patch.set_facecolor('white')
-            self.fig.tight_layout(pad=1.2)
+            # No tight_layout(): `pf.create_ax` builds the figure with
+            # layout='constrained', which already spaces it and keeps doing so on
+            # every redraw. Switching engines here warned on an ordinary plot and
+            # raised outright once a colorbar existed, so the default colour-by
+            # plot (`ax=None`, `show_colorbar=True`) could not be drawn at all.
             self.fig.show()
 
         return self.ax

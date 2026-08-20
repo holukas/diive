@@ -10,7 +10,6 @@ quadrants. Visualizes the output of
 Part of the diive library: https://github.com/holukas/diive
 """
 
-import matplotlib.pyplot as plt
 import pandas as pd
 from pandas import Series
 
@@ -71,6 +70,7 @@ class CompoundExtremesPlot:
         See Also:
             CompoundExtremesPlot.from_compound_extremes : build directly from a
                 :class:`~diive.analysis.compoundextremes.CompoundExtremes` instance.
+
             examples/visualization/plot_compound_extremes.py : worked examples.
         """
         self.xname = str(x.name) if x.name is not None else 'var1'
@@ -205,7 +205,7 @@ class CompoundExtremesPlot:
                        marker=st['marker'], alpha=alpha, edgecolors=edgecolor,
                        label=st['label'], zorder=3)
             if annotate and key in annotate_categories:
-                for xv, yv, lab in zip(sub['_x'], sub['_y'], sub['_label']):
+                for xv, yv, lab in zip(sub['_x'], sub['_y'], sub['_label'], strict=False):
                     if lab:
                         ax.annotate(lab, (xv, yv), textcoords='offset points',
                                     xytext=annotate_offset, fontsize=annotate_fontsize,

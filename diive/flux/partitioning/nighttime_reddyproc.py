@@ -258,7 +258,7 @@ def _regr_e0_from_short_term(nee_night: np.ndarray, ta: np.ndarray,
     valid_all = ~np.isnan(nee_night) & ~np.isnan(ta)
     ta_k_all = ta + 273.15
     los, his = _window_slices(day_counter, E0_WINDOW_HALF, E0_STEP)
-    for lo, hi in zip(los, his):
+    for lo, hi in zip(los, his, strict=True):
         m = valid_all[lo:hi]
         if int(m.sum()) <= E0_MIN_ENTRIES:
             continue
@@ -307,7 +307,7 @@ def _regr_rref(nee_night: np.ndarray, ta: np.ndarray, day_counter: np.ndarray,
     valid_all = ~np.isnan(nee_night) & ~np.isnan(ta)
     ta_k_all = ta + 273.15
     los, his = _window_slices(day_counter, RREF_WINDOW_HALF, RREF_STEP)
-    for lo, hi in zip(los, his):
+    for lo, hi in zip(los, his, strict=True):
         m = valid_all[lo:hi]
         if int(m.sum()) <= RREF_MIN_ENTRIES:
             continue
@@ -399,12 +399,13 @@ class NighttimePartitioningReddyProc:
     Example: ``examples/flux/partitioning/partitioning_nighttime_reddyproc.py``
 
     Example:
-        >>> part = NighttimePartitioningReddyProc(
-        ...     nee=df['NEE_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
-        ...     nee_f=df['NEE_f'], ta_f=df['Tair_f'],
+        >>> import diive as dv
+        >>> df = dv.load_exampledata_parquet()
+        >>> part = dv.flux.NighttimePartitioningReddyProc(
+        ...     nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
+        ...     nee_f=df['NEE_CUT_REF_f'], ta_f=df['Tair_f'],
         ...     lat=46.815, lon=9.855, utc_offset=1)
-        >>> part.run()
-        >>> results = part.results   # DataFrame with RECO_NT_RP, GPP_NT_RP, ...
+        >>> part.run()  # then part.results -> DataFrame with RECO_NT_RP, GPP_NT_RP, ...
     """
 
     def __init__(self,

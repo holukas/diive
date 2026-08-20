@@ -72,6 +72,11 @@ the above. Once a project is open, **Ctrl+S (File ▸ Save project)** updates it
 place, and the window title shows the project name. diive reopens your most recent
 project automatically the next time you launch it.
 
+A saved setting can only come back if what it points at still exists. On the
+partitioning and uncertainty tabs, a saved column pick whose column is no longer in
+the data leaves that dropdown on its current value and says so in the tab's status
+line, so check those controls before running.
+
 ### Saving just the data
 
 **File ▸ Export data as…** writes only the current dataset, including any features
@@ -542,8 +547,10 @@ line and the scatter update on **Run**.
 - **Resolution.** Classify **monthly** or **daily** periods.
 - **Standardize by.** *Deseasonalized* (recommended) compares each month/day against
   the same time of year across all years, so the normal seasonal cycle does not count
-  as "extreme". *Whole-record* uses one average over everything (simpler, but summer
-  months tend to flag).
+  as "extreme". It therefore needs **at least two years** of data — with a single
+  year every period is compared against itself, no z-score can be computed, and the
+  run stops with a message saying so. *Whole-record* uses one average over everything
+  (simpler, works on one year, but summer months tend to flag).
 - **Category labels.** Rename the single-variable categories (default *Air* / *Soil*)
   to match your drivers; they appear in the legend and point labels.
 - **Copy Python** copies a runnable script that reproduces the classification and plot.
@@ -894,7 +901,9 @@ two variables, rename, inspect metadata, and calculate derived variables. It als
 Add a common **prefix and/or suffix** to **all** variables at once, for example to
 tag every column with a site code (`CH-DAV_…`) or a year (`…_2024`). Type a prefix
 and/or suffix; the table **previews** the old → new names (changed ones in bold)
-before anything happens. **Apply rename** commits it to the loaded dataset.
+before anything happens. **Apply rename** commits it to the loaded dataset. A rename
+that would give two variables the same name is refused with a warning and nothing
+changes — one of the two would otherwise lose its values and its history.
 
 To rename just **one** variable, **double-click its name** in the table (the same
 as the right-click **Rename…** on any variable list). Renaming is non-destructive to
@@ -966,13 +975,16 @@ date/time heatmaps side by side.
      heatmap 1 (a) and heatmap 2 (b).
    - **Fill gaps of a with b** — keep heatmap 1 and fill only its gaps with the
      matching values from heatmap 2.
-3. **Keep overlapping data points only** (arithmetic methods): when ticked, a
-   result is kept only where *both* variables have a value; when unticked, a
-   missing value is treated as the operation's identity (0 for add/subtract, 1 for
-   multiply/divide) so one-sided records survive. (It is disabled for *Fill gaps*,
-   which is always a union.)
+3. The arithmetic methods keep a result **only where both variables have a
+   value** — combining two variables is defined only where both were measured, so
+   a record present in just one of them is dropped. The status line reports what
+   that costs, split by which variable was missing, e.g. *"250 record(s) dropped
+   where only one variable was available (100 only NEE, 150 only RECO)"*. A large
+   one-sided count usually means the two variables cover different periods rather
+   than that the data are bad. If you want "take b where a is missing", that is
+   what **Fill gaps of a with b** does — and it says so.
 4. **Heatmap 3** previews the combined result and updates live as you change the
-   method or the overlap option.
+   method.
 5. Edit the **Name** (a default is suggested) and click **Add … to dataset** to
    append the new column. **Copy Python** yields a runnable script.
 
@@ -994,11 +1006,14 @@ Inputs must be in the stated units (°C and %); diive does not check them.
 Calculate **potential shortwave-incoming radiation** (`SW_IN_POT`, in W m⁻²), also
 under the Variables menu's **Calculate** section. This one takes **no input columns** —
 potential radiation follows from the timestamps and the site's position alone — so
-there is no variable list to drag from. Set **Latitude**, **Longitude** and **UTC
-offset** under **Site coordinates**, then click **Calculate**.
+there is no variable list to drag from. Check the **Site coordinates** box, then click
+**Calculate**.
 
-The coordinates are seeded from **Settings ▸ Project settings** and follow it as you
-edit there. With no site configured the tab refuses to calculate and says so. Every
+**Latitude**, **Longitude** and **UTC offset** are shown read-only: they mirror
+**Settings ▸ Project settings** and update as you edit them there. To change them, go
+to Project settings — the coordinates have one home, so an edited copy here could
+silently produce a curve for a different site than the rest of the project runs on.
+With no site configured the tab refuses to calculate and says so. Every
 value it returns is a function of the coordinates, so an unconfigured site would hand
 back the curve for latitude 0, longitude 0 at UTC — which looks perfectly reasonable
 and is wrong for your site. Set the project's location first.
@@ -1132,9 +1147,13 @@ red ✗ marker showing whether the chosen column exists):
   uncertainty).
 
 Set the **site coordinates** (latitude, and for the methods that need them,
-longitude and UTC offset; all default from **Settings ▸ Project settings**). For the
-daytime methods, the **VPD is in kPa** toggle says whether your VPD column is in kPa
-(the diive convention, default) or hPa.
+longitude and UTC offset; all default from **Settings ▸ Project settings**). The site
+has to be filled in there first: a method that needs coordinates **refuses to run**
+while Project settings is empty, and says why in the status line. Left to their
+defaults the boxes read 0 / 0 / 0, so the run would partition at latitude 0,
+longitude 0 on UTC and return plausible-looking GPP and RECO for the wrong place. For
+the daytime methods, the **VPD is in kPa** toggle says whether your VPD column is in
+kPa (the diive convention, default) or hPa.
 
 Click **Run partitioning** (it runs in the background; the daytime methods can take
 a while, roughly tens of seconds per year). The preview shows daily-mean NEE, GPP,

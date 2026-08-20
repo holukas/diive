@@ -14,7 +14,7 @@ import pandas as pd
 from joblib import Parallel, delayed
 from typing import Dict, List, Optional, Tuple
 
-from diive.core.utils.console import info, detail
+from diive.core.utils.console import info, detail, warn
 
 
 def _bootstrap_window_worker(
@@ -23,6 +23,7 @@ def _bootstrap_window_worker(
     detector_class: type,
     detector_kwargs: dict,
     n_iter: int,
+    seed: Optional[int] = None,
 ) -> tuple:
     """
     Bootstrap all iterations for one window (module-level for picklability).
@@ -30,19 +31,33 @@ def _bootstrap_window_worker(
     Fast path: if the detector exposes ``bootstrap_annual_samples`` it is built once on the
     window and resamples internally on pre-extracted arrays (no per-iteration DataFrame copy
     or detector reconstruction). Otherwise falls back to the generic resample-and-detect loop.
+
+    ``seed`` must already be derived per year by the caller. Both paths were previously
+    unseeded, so VUT and CUT thresholds differed between runs. A single shared seed would
+    be worse than none: every window would draw the same resample positions, correlating
+    years that are supposed to be independent draws. None keeps the old random behaviour.
     """
     if hasattr(detector_class, 'bootstrap_annual_samples'):
         try:
             detector = detector_class(df_window, verbose=0, **detector_kwargs)
-            samples = [float(s) for s in detector.bootstrap_annual_samples(n_iter)
+            samples = [float(s) for s in
+                       detector.bootstrap_annual_samples(n_iter, rng=np.random.default_rng(seed))
                        if s is not None and not np.isnan(s)]
-        except Exception:
-            samples = []
-        return year, samples
+        except Exception as err:
+            # Carry the reason out rather than swallowing it: an empty sample list
+            # is indistinguishable between "too few records", "a mistyped column
+            # name" and "the detection genuinely found nothing", and the caller
+            # reports NaN thresholds either way.
+            return year, [], f"{type(err).__name__}: {err}"
+        return year, samples, None
 
     samples = []
-    for _ in range(n_iter):
-        df_boot = df_window.sample(n=len(df_window), replace=True)
+    last_err = None
+    for i in range(n_iter):
+        # Offset by the iteration so the draws differ from each other, as the fast path's
+        # single Generator does across its own iterations.
+        df_boot = df_window.sample(n=len(df_window), replace=True,
+                                   random_state=None if seed is None else seed + i)
         try:
             detector = detector_class(df_boot, verbose=0, **detector_kwargs)
             detector.detect()
@@ -50,13 +65,14 @@ def _bootstrap_window_worker(
             threshold = annual.get('threshold')
             if threshold is not None and not np.isnan(threshold):
                 samples.append(float(threshold))
-        except Exception:
+        except Exception as err:
+            last_err = f"{type(err).__name__}: {err}"
             continue
-    return year, samples
+    return year, samples, (last_err if not samples else None)
 
 
 class UstarBootstrapThresholds:
-    """
+    r"""
     Multi-year bootstrap USTAR threshold estimation — VUT and CUT.
 
     Wrapper around any USTAR detection class that implements detect() and
@@ -65,11 +81,11 @@ class UstarBootstrapThresholds:
     of annual thresholds is then summarized two ways, following the FLUXNET /
     ONEFlux convention:
 
-    - **VUT (Variable U\\* Threshold)** — one threshold *per year*. Returned by
+    - **VUT (Variable U\* Threshold)** — one threshold *per year*. Returned by
       :meth:`run` / :meth:`get_vut_thresholds` (the ``annual_stats_`` table):
       each year's row holds the requested percentiles of that year's bootstrap
       distribution, so the threshold varies year to year.
-    - **CUT (Constant U\\* Threshold)** — one threshold for the *whole record*.
+    - **CUT (Constant U\* Threshold)** — one threshold for the *whole record*.
       Returned by :meth:`get_cut_threshold`: all bootstrap samples from every
       year are pooled into a single distribution and the percentiles taken once,
       giving one constant threshold applied uniformly to every year.
@@ -114,31 +130,32 @@ class UstarBootstrapThresholds:
         1 = sequential; -1 = use all available CPUs; N = use N processes.
         Uses joblib/loky backend, which works correctly on Windows without
         requiring an if __name__ == '__main__' guard in scripts.
+    random_state : int or None, default=42
+        Seed for the bootstrap resampling, so the same input gives the same VUT and CUT
+        thresholds. Pass None for a fresh draw on every run. The seed is derived per
+        window year, so results do not depend on ``n_jobs`` or on the order in which
+        windows finish, and separate years remain independent draws — a single shared
+        seed would make every window resample the same positions.
     verbose : int, default=0
         Verbosity: 0=silent, 1=progress per year.
 
     Attributes
     ----------
-    annual_stats_ : pd.DataFrame
+    annual_stats\_ : pd.DataFrame
         Per-year (VUT) bootstrap percentile thresholds. Also returned by
         :meth:`get_vut_thresholds`.
         Index: year (int), columns: p16, p50, p84 (or custom percentiles).
-    years_ : list of int
+    years\_ : list of int
         Calendar years present in the input data.
 
     Examples
     --------
     >>> import diive as dv
     >>> df = dv.load_exampledata_parquet_lae()
-    >>> boot = dv.UstarBootstrapThresholds(
-    ...     df,
-    ...     detector_class=dv.UstarMovingPointDetection,
-    ...     n_iter=100,
-    ...     percentiles=(16, 50, 84),
-    ... )
-    >>> annual = boot.run()
-    >>> cut = boot.get_cut_threshold()
-    >>> print(boot.summary())
+    >>> boot = dv.flux.UstarBootstrapThresholds(
+    ...     df, detector_class=dv.flux.UstarMovingPointDetection,
+    ...     n_iter=100, percentiles=(16, 50, 84))
+    >>> annual = boot.run()  # then boot.get_cut_threshold() / boot.summary()
 
     See Also
     --------
@@ -154,9 +171,16 @@ class UstarBootstrapThresholds:
         n_iter: int = 100,
         percentiles: Tuple[int, ...] = (16, 50, 84),
         n_jobs: int = 1,
+        random_state: Optional[int] = 42,
         verbose: int = 0,
     ):
-        """Set up multi-year bootstrap USTAR threshold detection. See the class docstring."""
+        """Set up multi-year bootstrap USTAR threshold detection. See the class docstring.
+
+        ``random_state`` seeds the resampling, so the same input gives the same VUT and
+        CUT thresholds; pass None for the old per-run variation. The seed is derived per
+        window year, so the result does not depend on ``n_jobs`` or on the order windows
+        finish in, and separate years still draw independently.
+        """
         if df is None or df.empty:
             raise ValueError("Input DataFrame cannot be None or empty")
         if not isinstance(df.index, pd.DatetimeIndex):
@@ -169,6 +193,7 @@ class UstarBootstrapThresholds:
         self.n_iter = n_iter
         self.percentiles = sorted(percentiles)
         self.n_jobs = n_jobs
+        self.random_state = random_state
         self.verbose = verbose
 
         self.years_: List[int] = sorted(self.df.index.year.unique().tolist())
@@ -178,6 +203,14 @@ class UstarBootstrapThresholds:
         self._window_years_: Dict[int, List[int]] = {}
         self.annual_stats_: Optional[pd.DataFrame] = None
         self._all_samples_: Optional[List[float]] = None
+
+    def _seed_for(self, year: int) -> Optional[int]:
+        """Per-year bootstrap seed, or None when seeding is off.
+
+        Derived from the year rather than shared, so each window is an independent draw
+        and the result is identical whether the windows run serially or in parallel.
+        """
+        return None if self.random_state is None else int(self.random_state) + int(year)
 
     def _get_window_years(self, year_idx: int) -> List[int]:
         """
@@ -222,9 +255,13 @@ class UstarBootstrapThresholds:
         # only a handful of windows costs more (process startup + DataFrame pickling) than it
         # saves. Run sequentially below this point regardless of the requested n_jobs.
         if n_workers > 1 and len(self.years_) <= 3:
-            if self.verbose >= 1:
-                detail(f"  {len(self.years_)} window(s): running sequentially "
-                       f"(too few to amortize process-pool overhead)")
+            # `verbose=` is required, not decoration: detail() defaults to
+            # verbose=VERBOSE_PROGRESS (2) while its own min_level is
+            # VERBOSE_DEBUG (3), so a bare detail() can never print at any
+            # setting - the `verbose >= 1` guard around it was hiding that.
+            detail(f"  {len(self.years_)} window(s): running sequentially "
+                   f"(too few to amortize process-pool overhead)",
+                   verbose=self.verbose)
             n_workers = 1
 
         if self.verbose >= 1:
@@ -255,17 +292,21 @@ class UstarBootstrapThresholds:
                     win_str = '/'.join(str(y) for y in windows[year])
                     info(f"  {year} [window: {win_str}] ({len(df_window)} records)...")
 
-                _, samples = _bootstrap_window_worker(
-                    year, df_window, self.detector_class, self.detector_kwargs, self.n_iter
+                _, samples, err = _bootstrap_window_worker(
+                    year, df_window, self.detector_class, self.detector_kwargs, self.n_iter,
+                    self._seed_for(year)
                 )
                 self._raw_samples_[year] = samples
 
-                if self.verbose >= 1:
-                    if samples:
+                if samples:
+                    if self.verbose >= 1:
                         p50 = float(np.percentile(samples, 50))
-                        detail(f"    p50={p50:.4f} m/s ({len(samples)}/{self.n_iter} ok)")
-                    else:
-                        detail(f"    no valid thresholds")
+                        info(f"    p50={p50:.4f} m/s ({len(samples)}/{self.n_iter} ok)")
+                else:
+                    # A window that yields nothing becomes a NaN threshold, so say
+                    # so at ERROR level (always visible) with the reason attached.
+                    warn(f"  {year}: no valid thresholds"
+                         + (f" - {err}" if err else " (detection found none)"))
 
         else:
             # Parallel execution via joblib/loky (Windows-safe, no __main__ guard needed)
@@ -274,18 +315,22 @@ class UstarBootstrapThresholds:
 
             results = Parallel(n_jobs=n_workers)(
                 delayed(_bootstrap_window_worker)(
-                    year, df_windows[year], self.detector_class, self.detector_kwargs, self.n_iter
+                    year, df_windows[year], self.detector_class, self.detector_kwargs, self.n_iter,
+                    self._seed_for(year)
                 )
                 for year in self.years_
             )
 
-            for year, samples in results:
+            for year, samples, err in results:
                 self._raw_samples_[year] = samples
-                if self.verbose >= 1:
-                    win_str = '/'.join(str(y) for y in windows[year])
-                    n_ok = len(samples)
-                    p50 = float(np.percentile(samples, 50)) if samples else float('nan')
-                    info(f"  {year} [window: {win_str}]  p50={p50:.4f} m/s ({n_ok}/{self.n_iter} ok)")
+                win_str = '/'.join(str(y) for y in windows[year])
+                if not samples:
+                    warn(f"  {year} [window: {win_str}]: no valid thresholds"
+                         + (f" - {err}" if err else " (detection found none)"))
+                elif self.verbose >= 1:
+                    p50 = float(np.percentile(samples, 50))
+                    info(f"  {year} [window: {win_str}]  p50={p50:.4f} m/s "
+                         f"({len(samples)}/{self.n_iter} ok)")
 
         # Compute per-year percentiles
         rows = []

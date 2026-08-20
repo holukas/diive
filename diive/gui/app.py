@@ -406,6 +406,8 @@ class MainWindow(QMainWindow):
             action.triggered.connect(slot)
             return action
 
+        _menu_tab_act = self._menu_tab_action  # shorthand, used throughout below
+
         file_menu = add_menu("&File")
         file_menu.addAction(_act("&Open data file...", self._open_file, "Ctrl+O"))
         file_menu.addAction(_act("Open &project...", self._open_project, "Ctrl+Shift+O"))
@@ -419,22 +421,12 @@ class MainWindow(QMainWindow):
         # a "Database ▸" submenu — it's just another data source/sink.
         db_submenu = studio_menu(self)
         for label in MENU_TABS.get("Database", {}):
-            act = QAction(menu_icon(label), label.replace("&", "&&"), self)
-            act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))
-            db_submenu.addAction(act)
+            db_submenu.addAction(_menu_tab_act(label))
         db_action = file_menu.addMenu(db_submenu)
         db_action.setText("&Database")
         db_action.setIcon(menu_icon("Database"))
         file_menu.addSeparator()
         file_menu.addAction(_act("E&xit", self.close, "Ctrl+Q"))
-
-        def _menu_tab_act(label):
-            """A QAction that opens the Data menu-tab with the given label."""
-            # Escape '&' so Qt doesn't read it as a mnemonic marker (would render
-            # "Gaps & coverage" as an underlined "Gaps _coverage").
-            act = QAction(menu_icon(label), label.replace("&", "&&"), self)
-            act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))
-            return act
 
         data_menu = add_menu("&Data")
         # Date-range subselection paired with its reset.
@@ -495,20 +487,14 @@ class MainWindow(QMainWindow):
                 menu = add_menu("&Cleaning")
                 menu.addSection("Outliers")
                 for label in group:
-                    act = QAction(menu_icon(label), label.replace("&", "&&"), self)
-                    act.triggered.connect(
-                        lambda _checked, lab=label: self._open_menu_tab(lab))
-                    menu.addAction(act)
+                    menu.addAction(_menu_tab_act(label))
                     # Set the stepwise screening (multi-method) apart from the
                     # single-method outlier filters below it.
                     if label == "Stepwise screening":
                         menu.addSeparator()
                 menu.addSection("Corrections")
                 for label in MENU_TABS.get("Corrections", {}):
-                    act = QAction(menu_icon(label), label.replace("&", "&&"), self)
-                    act.triggered.connect(
-                        lambda _checked, lab=label: self._open_menu_tab(lab))
-                    menu.addAction(act)
+                    menu.addAction(_menu_tab_act(label))
                 continue
             menu = add_menu(f"&{menu_name}")
             for label in group:
@@ -518,12 +504,7 @@ class MainWindow(QMainWindow):
                 # Set the random-uncertainty tool apart from the partitioning tabs.
                 if menu_name == "Flux" and label == "Random uncertainty (PAS20)":
                     menu.addSeparator()
-                # Escape '&' so Qt doesn't read it as a mnemonic marker (would
-                # render "Gaps & coverage" as an underlined "Gaps _coverage").
-                act = QAction(menu_icon(label), label.replace("&", "&&"), self)
-                act.triggered.connect(
-                    lambda _checked, lab=label: self._open_menu_tab(lab))
-                menu.addAction(act)
+                menu.addAction(_menu_tab_act(label))
                 # Set the full processing chain apart from the standalone tools.
                 if menu_name == "Flux" and label == "Flux processing chain":
                     menu.addSeparator()
@@ -539,6 +520,32 @@ class MainWindow(QMainWindow):
         help_menu.addAction(_act("diive on &PyPI", self._view_on_pypi))
         help_menu.addSeparator()
         help_menu.addAction(_act("&About", self._about))
+
+    def _menu_tab_action(self, label: str) -> QAction:
+        """A QAction that opens the menu tab with the given label.
+
+        The label rides on the action's `data()` and the slot is a *bound
+        method*, deliberately: PySide6 keeps only a weak reference to a bound
+        method's receiver, while a `lambda` is held inside the connection on
+        Qt's C++ side, where Python's collector cannot follow it. Since these
+        actions are parented to the window, a `self`-capturing lambda closed the
+        loop window -> QAction -> connection -> lambda -> window with no link
+        Python can see, and no `MainWindow` was ever collected (measured: 4
+        built, dropped, `gc.collect()` -> 4 still live).
+        """
+        from diive.gui.icons import menu_icon
+        # Escape '&' so Qt doesn't read it as a mnemonic marker (would render
+        # "Gaps & coverage" as an underlined "Gaps _coverage").
+        act = QAction(menu_icon(label), label.replace("&", "&&"), self)
+        act.setData(label)
+        act.triggered.connect(self._on_menu_tab_action)
+        return act
+
+    def _on_menu_tab_action(self, _checked: bool = False) -> None:
+        """Open the menu tab named by the sending action's `data()`."""
+        act = self.sender()
+        if act is not None:
+            self._open_menu_tab(act.data())
 
     def _data_for(self, tab):
         """Dataset a tab should receive: the active (range/subset-narrowed)
@@ -695,7 +702,7 @@ class MainWindow(QMainWindow):
         idx = self._tabwidget.addTab(tab.widget(), title)
         self._tabwidget.tabBar().setTabButton(
             idx, QTabBar.ButtonPosition.RightSide,
-            self._make_close_button(tab.widget()))
+            self._make_close_button())
         if self._studio_tabs:  # favicon-style glyph on the pill (match the label)
             from diive.gui.icons import menu_icon
             self._tabwidget.setTabIcon(idx, menu_icon(label))
@@ -790,6 +797,18 @@ class MainWindow(QMainWindow):
             self._tabs.remove(tab)
         self._pinned.discard(tab)
         self._tabwidget.removeTab(index)
+        # `removeTab` only detaches the page -- it never deletes it, and nothing
+        # on the Python side collects it either: a tab's own child widgets hold
+        # references back to the `DiiveTab` from C++ (a `CopyPythonButton` keeps
+        # `self._code` in the button's `__dict__`, and every `lambda: self._x()`
+        # connected to a child's signal lives in the connection), and Python's
+        # collector cannot see through Qt's C++ side to break that cycle. So the
+        # closed tab's whole widget tree stays alive for the rest of the session
+        # -- measured 511 widgets per open/close of the flux-chain tab, never
+        # released -- and `app.setStyleSheet` re-polishes every one of them on
+        # each theme change. Deleting the page here is what actually frees them.
+        widget.setParent(None)
+        widget.deleteLater()
         if self._tabwidget.count() == 0:
             return
         target = max(0, index - 1)
@@ -797,8 +816,8 @@ class MainWindow(QMainWindow):
             target = 0  # Overview
         self._tabwidget.setCurrentIndex(target)
 
-    def _make_close_button(self, widget) -> QToolButton:
-        """A small, clearly visible "×" close button bound to `widget`'s tab."""
+    def _make_close_button(self) -> QToolButton:
+        """A small, clearly visible "×" close button for a tab."""
         from diive.gui.icons import close_icon
         btn = QToolButton()
         btn.setObjectName("tabclose")
@@ -807,8 +826,22 @@ class MainWindow(QMainWindow):
         btn.setIconSize(QSize(12, 12))
         btn.setFixedSize(18, 18)
         btn.setToolTip("Close tab")
-        btn.clicked.connect(lambda: self._close_widget(widget))
+        # Bound method, not `lambda: self._close_widget(widget)`: the button is
+        # owned by the tab bar (a child of this window), so a lambda capturing
+        # `self` would be held inside the C++ connection and keep the whole
+        # window alive forever (see `_menu_tab_action`). The tab is looked up
+        # from the sender instead.
+        btn.clicked.connect(self._on_close_button)
         return btn
+
+    def _on_close_button(self, _checked: bool = False) -> None:
+        """Close the tab whose close button was clicked."""
+        bar = self._tabwidget.tabBar()
+        btn = self.sender()
+        for i in range(bar.count()):
+            if bar.tabButton(i, QTabBar.ButtonPosition.RightSide) is btn:
+                self._on_tab_close(i)
+                return
 
     def _close_widget(self, widget) -> None:
         """Close the tab currently hosting `widget` (its index may have moved)."""
@@ -830,8 +863,20 @@ class MainWindow(QMainWindow):
         menu = studio_menu(self)
         pinned = tab in self._pinned
         label = "Unpin tab (follow data)" if pinned else "Pin tab (freeze data)"
-        menu.addAction(label).triggered.connect(lambda: self._toggle_pin(tab))
+        # The menu is parented to this window, so its action outlives the click;
+        # the tab travels on the action's `data()` and the slot is a bound method
+        # (a `self`-capturing lambda would pin the window — see
+        # `_menu_tab_action`).
+        act = menu.addAction(label)
+        act.setData(tab)
+        act.triggered.connect(self._on_toggle_pin_action)
         menu.exec(bar.mapToGlobal(pos))
+
+    def _on_toggle_pin_action(self, _checked: bool = False) -> None:
+        """Pin/unpin the tab carried by the sending action's `data()`."""
+        act = self.sender()
+        if act is not None:
+            self._toggle_pin(act.data())
 
     def _toggle_pin(self, tab) -> None:
         """Freeze a tab on its current dataset, or unfreeze and re-sync it.
@@ -895,8 +940,13 @@ class MainWindow(QMainWindow):
         """
         if new_df is None or new_df.empty or self._full_data is None:
             return
-        for col in new_df.columns:
-            self._full_data[col] = new_df[col]  # aligns on index
+        # Rebind instead of mutating in place (`assign` aligns on index just the
+        # same): with no active range `_data` *is* `_full_data`, the very frame
+        # already pushed to every tab, so an in-place column write leaked new
+        # columns into pinned tabs that `_push_data` deliberately skips. Column
+        # drops rebind too, so the freeze now holds in both directions.
+        self._full_data = self._full_data.assign(
+            **{str(c): new_df[c] for c in new_df.columns})
         self._created |= {str(c) for c in new_df.columns}
         # While a variable subset is active, a freshly created column would be
         # filtered out (it isn't in the subset) and silently invisible — so add
@@ -1028,17 +1078,22 @@ class MainWindow(QMainWindow):
                 if self._var_subset is not None and col in self._var_subset:
                     self._var_subset.remove(col)
                 changed = True
+        # Collected, then assigned in one rebind — an in-place write would reach
+        # pinned tabs holding the same frame (see `_add_features`).
+        additions = {}
         for col, series in desired.items():
             if col not in self._full_data.columns \
                     or not self._full_data[col].equals(series):
                 is_new = col not in self._full_data.columns
-                self._full_data[col] = series
+                additions[col] = series
                 self._created.add(col)
                 if is_new:
                     added.append(col)
                     if self._var_subset is not None and col not in self._var_subset:
                         self._var_subset.append(col)
                 changed = True
+        if additions:
+            self._full_data = self._full_data.assign(**additions)
         self._event_columns = set(desired)
         if added:
             metadata_store.manager.store.record_original(
@@ -1099,6 +1154,17 @@ class MainWindow(QMainWindow):
             return
         mapping = {o: n for o, n in mapping.items() if o in self._full_data.columns}
         if not mapping:
+            return
+        # Guard the bulk path the way `_rename_one_variable` guards the single
+        # one: a colliding mapping would give the frame duplicate column labels
+        # and make the library store reject the rename.
+        renamed = [mapping.get(c, c) for c in self._full_data.columns]
+        clashes = sorted({c for c in renamed if renamed.count(c) > 1})
+        if clashes:
+            QMessageBox.warning(
+                self, "Rename variables",
+                "The rename would produce duplicate variable names:\n\n"
+                f"{', '.join(clashes)}")
             return
         self._full_data = self._full_data.rename(columns=mapping)
         self._created = {mapping.get(c, c) for c in self._created}
@@ -1367,6 +1433,17 @@ class MainWindow(QMainWindow):
         # Clear the current workspace before loading, so the project's saved tabs
         # replace it (and stale tabs don't get the incoming data push).
         self._close_all_menu_tabs()
+        # Restore the project's events *before* the data swap: `_set_data` builds
+        # every event's 0/1 column on the incoming index, so loading them after it
+        # first materialised the outgoing session's events on the new data and
+        # then replaced them. Signals are blocked so this load can't sync columns
+        # onto the outgoing dataset; `changed` is re-emitted below (once the data
+        # is in place) for the menu toggle and the Overview overlays.
+        events.manager.blockSignals(True)
+        try:
+            events.manager.load_dict(project.extras.get("events") or {})
+        finally:
+            events.manager.blockSignals(False)
         # Load the data clean (no config tags), then overlay the project's full
         # metadata (origin/parent/provenance/tags/notes) authoritatively.
         self._set_data(project.data, source=project.name, persist_metadata=False)
@@ -1375,9 +1452,11 @@ class MainWindow(QMainWindow):
         rng = project.extras.get("range")
         self._range = (pd.Timestamp(rng[0]), pd.Timestamp(rng[1])) if rng else None
         self._var_subset = list(project.extras.get("var_subset") or []) or None
-        # Restore the project's events (rebuilds their 0/1 columns via changed →
-        # _sync_event_columns; matches the EVENT_ columns the parquet carries).
-        events.manager.load_dict(project.extras.get("events") or {})
+        # The events themselves are already loaded (above, before the data swap);
+        # this only announces them, so the menu toggle picks up the project's
+        # visibility and the Overview draws the overlays. Their 0/1 columns were
+        # built by `_set_data`, matching the EVENT_ columns the parquet carries.
+        events.manager.changed.emit()
         self._project_dir, self._project_name = Path(folder), project.name
         self._last_project_dir = str(Path(folder).parent)
         self._last_project = str(Path(folder))

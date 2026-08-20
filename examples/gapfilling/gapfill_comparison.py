@@ -273,4 +273,4 @@ axes[3].set_title('XGBoost\nGap-Filled', fontsize=11, fontweight='bold')
 fig.suptitle('Gap-Filling Method Comparison', fontsize=13, fontweight='bold', y=1.00)
 plt.show()
 
-print("✓ Gap-filling method comparison complete.")
+print("[OK] Gap-filling method comparison complete.")

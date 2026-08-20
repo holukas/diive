@@ -340,12 +340,12 @@ class StepwiseMeteoScreeningDb:
 
     def flag_outliers_localsd_test(self, n_sd: float | list = 7, winsize: int | list = None,
                                    showplot: bool = False, constant_sd: bool = False,
-                                   separate_daytime_nighttime: bool = False,
+                                   separate_day_night: bool = False,
                                    verbose: bool = False, repeat: bool = True):
         """Identify outliers based on standard deviation in a rolling window"""
         for field in self.fields:
             self.outlier_detection[field].flag_outliers_localsd_test(
-                n_sd=n_sd, winsize=winsize, separate_daytime_nighttime=separate_daytime_nighttime,
+                n_sd=n_sd, winsize=winsize, separate_day_night=separate_day_night,
                 constant_sd=constant_sd, showplot=showplot,
                 verbose=verbose, repeat=repeat)
 
@@ -360,13 +360,13 @@ class StepwiseMeteoScreeningDb:
 
     def flag_outliers_zscore_test(self,
                                   thres_zscore: float = 4,
-                                  separate_daytime_nighttime: bool = False,
+                                  separate_day_night: bool = False,
                                   showplot: bool = False,
                                   plottitle: str = None,
                                   verbose: bool = False,
                                   repeat: bool = True,
                                   idstr: str = None):
-        """
+        r"""
         Flag outliers using z-score threshold (global or separate day/night).
 
         Applies z-score detection to identify values deviating from the mean by more than
@@ -374,7 +374,7 @@ class StepwiseMeteoScreeningDb:
         or separately for daytime and nighttime periods.
 
         Global mode: Computes mean and standard deviation across entire time series, then
-        flags any value where |z| > threshold. Simple and fast, but ignores time-of-day
+        flags any value where \|z\| > threshold. Simple and fast, but ignores time-of-day
         variation in signal characteristics.
 
         Day/Night mode: Computes separate mean/std for daytime and nighttime records.
@@ -385,10 +385,10 @@ class StepwiseMeteoScreeningDb:
         Parameters
         ----------
         thres_zscore : float, default 4
-            Z-score threshold for flagging. Typical range: 2.5-5. Values where |z| > threshold
+            Z-score threshold for flagging. Typical range: 2.5-5. Values where \|z\| > threshold
             are flagged as outliers. Lower values (2.5-3) more aggressive; higher values (4-5)
             more conservative.
-        separate_daytime_nighttime : bool, default False
+        separate_day_night : bool, default False
             If False, apply single threshold across all records (global mode).
             If True, apply separate thresholds to daytime and nighttime records.
             Day/night boundaries are derived from the site location (``site_lat``,
@@ -409,7 +409,7 @@ class StepwiseMeteoScreeningDb:
         for field in self.fields:
             self.outlier_detection[field].flag_outliers_zscore_test(
                 thres_zscore=thres_zscore,
-                separate_daytime_nighttime=separate_daytime_nighttime,
+                separate_day_night=separate_day_night,
                 showplot=showplot,
                 plottitle=plottitle,
                 verbose=verbose,
@@ -431,7 +431,7 @@ class StepwiseMeteoScreeningDb:
     def flag_outliers_hampel_test(self, window_length: int = 13, n_sigma: float = 5.5,
                                   n_sigma_daytime: float = None, n_sigma_nighttime: float = None,
                                   k: float = 1.4826, use_differencing: bool = True,
-                                  separate_daytime_nighttime: bool = False, showplot: bool = False,
+                                  separate_day_night: bool = False, showplot: bool = False,
                                   verbose: bool = False, repeat: bool = True):
         """Identify outliers in a sliding window based on the Hampel filter (global or separate day/night).
 
@@ -442,14 +442,14 @@ class StepwiseMeteoScreeningDb:
         n_sigma : float, default 5.5
             Threshold multiplier for global mode (number of MADs above median)
         n_sigma_daytime : float, optional
-            Threshold for daytime data (when separate_daytime_nighttime=True)
+            Threshold for daytime data (when separate_day_night=True)
         n_sigma_nighttime : float, optional
-            Threshold for nighttime data (when separate_daytime_nighttime=True)
+            Threshold for nighttime data (when separate_day_night=True)
         k : float, default 1.4826
             Scaling factor for MAD (median absolute deviation)
         use_differencing : bool, default True
             If True, apply Hampel filter to differenced series (rate of change)
-        separate_daytime_nighttime : bool, default False
+        separate_day_night : bool, default False
             If False, apply single threshold globally across all records.
             If True, apply separate thresholds for daytime and nighttime data.
         showplot : bool, default False
@@ -463,7 +463,7 @@ class StepwiseMeteoScreeningDb:
             self.outlier_detection[field].flag_outliers_hampel_test(
                 window_length=window_length, n_sigma=n_sigma, n_sigma_daytime=n_sigma_daytime,
                 n_sigma_nighttime=n_sigma_nighttime,
-                k=k, use_differencing=use_differencing, separate_daytime_nighttime=separate_daytime_nighttime,
+                k=k, use_differencing=use_differencing, separate_day_night=separate_day_night,
                 showplot=showplot, verbose=verbose, repeat=repeat)
 
     def flag_outliers_trim_low_test(self, trim_daytime: bool = False, trim_nighttime: bool = False,
@@ -478,24 +478,27 @@ class StepwiseMeteoScreeningDb:
                                                                       verbose=verbose)
 
     def flag_outliers_abslim_test(self, minval: float = None, maxval: float = None,
-                                  separate_daytime_nighttime: bool = False,
-                                  daytime_minmax: list = None, nighttime_minmax: list = None,
+                                  separate_day_night: bool = False,
+                                  minval_daytime: float = None, maxval_daytime: float = None,
+                                  minval_nighttime: float = None, maxval_nighttime: float = None,
                                   showplot: bool = False, verbose: bool = False):
         """Identify outliers based on absolute limits (global or separate day/night).
 
         Parameters
         ----------
         minval : float, optional
-            Minimum acceptable value (global mode). Required if separate_daytime_nighttime=False.
+            Minimum acceptable value. Applies to both periods unless overridden.
         maxval : float, optional
-            Maximum acceptable value (global mode). Required if separate_daytime_nighttime=False.
-        separate_daytime_nighttime : bool, default False
+            Maximum acceptable value. Applies to both periods unless overridden.
+        separate_day_night : bool, default False
             If False, apply single threshold globally across all records.
             If True, apply separate thresholds for daytime and nighttime data.
-        daytime_minmax : [min, max], optional
-            Acceptable range during daytime (required if separate_daytime_nighttime=True).
-        nighttime_minmax : [min, max], optional
-            Acceptable range during nighttime (required if separate_daytime_nighttime=True).
+        minval_daytime, maxval_daytime : float, optional
+            Override minval/maxval for daytime records. Setting either turns
+            separate_day_night on.
+        minval_nighttime, maxval_nighttime : float, optional
+            Override minval/maxval for nighttime records. Setting either turns
+            separate_day_night on.
         showplot : bool, default False
             If True, display visualization of flagged outliers
         verbose : bool, default False
@@ -504,14 +507,16 @@ class StepwiseMeteoScreeningDb:
         for field in self.fields:
             self.outlier_detection[field].flag_outliers_abslim_test(minval=minval,
                                                                     maxval=maxval,
-                                                                    separate_daytime_nighttime=separate_daytime_nighttime,
-                                                                    daytime_minmax=daytime_minmax,
-                                                                    nighttime_minmax=nighttime_minmax,
+                                                                    separate_day_night=separate_day_night,
+                                                                    minval_daytime=minval_daytime,
+                                                                    maxval_daytime=maxval_daytime,
+                                                                    minval_nighttime=minval_nighttime,
+                                                                    maxval_nighttime=maxval_nighttime,
                                                                     showplot=showplot,
                                                                     verbose=verbose)
 
     def flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = 'auto',
-                               separate_daytime_nighttime: bool = False,
+                               separate_day_night: bool = False,
                                showplot: bool = False, verbose: bool = False, repeat: bool = True,
                                n_jobs: int = 1):
         """Local outlier factor detection (global or separate day/night).
@@ -525,7 +530,7 @@ class StepwiseMeteoScreeningDb:
             Number of neighbors for LOF calculation; auto-calculated if None
         contamination : float or 'auto', default 'auto'
             Expected fraction of outliers (float 0-1) or 'auto' for automatic detection
-        separate_daytime_nighttime : bool, default False
+        separate_day_night : bool, default False
             If False, apply single LOF globally across all records.
             If True, apply separate LOF detection for daytime and nighttime data.
         showplot : bool, default False
@@ -541,7 +546,7 @@ class StepwiseMeteoScreeningDb:
             self.outlier_detection[field].flag_outliers_lof_test(
                 n_neighbors=n_neighbors,
                 contamination=contamination,
-                separate_daytime_nighttime=separate_daytime_nighttime,
+                separate_day_night=separate_day_night,
                 showplot=showplot,
                 verbose=verbose,
                 repeat=repeat,
@@ -718,7 +723,7 @@ class StepwiseMeteoScreeningDb:
 
         This also converts the timestamp to TIMESTAMP_MIDDLE.
         """
-        offset = to_offset(pd.Timedelta(f'{targetfreq}s'))
+        offset = to_offset(pd.Timedelta(seconds=targetfreq))
         data_detailed = data_detailed.asfreq(offset.freqstr)
         data_detailed = TimestampSanitizer(data=data_detailed).get()
         return data_detailed
@@ -752,10 +757,12 @@ class StepwiseMeteoScreeningDb:
             # Add missing timestamp indexes at start of data
             start = groupdf.index[0] - pd.Timedelta(seconds=freq)
 
-            # Create hires timestamp index between start and end dates
+            # Create hires timestamp index between start and end dates.
+            # The frequencies come from detect_freq_groups and are floats (seconds),
+            # so they are passed as a Timedelta rather than built into a string.
             hires_ix = pd.date_range(start=start,
                                      end=groupdf.index[-1],
-                                     freq=f'{targetfreq}S')
+                                     freq=pd.Timedelta(seconds=targetfreq))
 
             # If target freq is e.g. 60S (1MIN) and current freq is 600S (10MIN)
             # then the 600S records are valid for ten 60S records, whereby
@@ -765,7 +772,7 @@ class StepwiseMeteoScreeningDb:
 
             # The timestamp is TIMESTAMP_END, therefore 'backfill'
             cur_upsampleddf = groupdf.reindex(hires_ix)
-            cur_upsampleddf = cur_upsampleddf.fillna(method='backfill', limit=limit)
+            cur_upsampleddf = cur_upsampleddf.bfill(limit=limit)
 
             # Delete first timestamp index, outside limit
             cur_upsampleddf = cur_upsampleddf.iloc[1:].copy()

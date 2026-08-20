@@ -1,7 +1,7 @@
 """
-=========================
+==========================
 Compound Extreme Detection
-=========================
+==========================
 
 Classify time periods (months or days) into compound-extreme categories from the
 standardized anomalies (z-scores) of two driver variables, using

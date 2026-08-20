@@ -44,11 +44,11 @@ lof_dtnt = dv.outliers.LocalOutlierFactor(
     series=s_noise,
     n_neighbors=20,
     contamination=0.05,
-    separate_daytime_nighttime=True,
+    separate_day_night=True,
     lat=47.286417,
     lon=7.733750,
     utc_offset=1,
-    showplot=False,
+    showplot=True,
     verbose=1,
     n_jobs=-1
 )
@@ -75,8 +75,8 @@ lof_global = dv.outliers.LocalOutlierFactor(
     series=s_noise,
     n_neighbors=20,
     contamination=0.05,
-    separate_daytime_nighttime=False,
-    showplot=False,
+    separate_day_night=False,
+    showplot=True,
     verbose=1,
     n_jobs=-1
 )

@@ -13,16 +13,10 @@ regressor interface.
 import pandas as pd
 from pandas import DataFrame
 from sklearn.model_selection import train_test_split, TimeSeriesSplit, GridSearchCV
-from itertools import product
-from joblib import Parallel, delayed
 
 import diive.core.dfun.frames as fr
 from diive.core.utils.console import console as _console, info, rule, success, error
-from diive.gapfilling.scores import prediction_scores
-
-pd.set_option('display.max_rows', 50)
-pd.set_option('display.max_columns', 12)
-pd.set_option('display.width', 1000)
+from diive.core.ml.scores import prediction_scores
 
 
 class OptimizeParamsTS:
@@ -55,7 +49,8 @@ class OptimizeParamsTS:
             target_col: Column name of target variable
             regressor_class: Regressor class (not instance), e.g. RandomForestRegressor,
                            XGBRegressor, or any sklearn-compatible regressor
-            **model_params: Parameter ranges to test as lists, e.g.:
+            **model_params: Parameter ranges to test as lists, e.g.::
+
                 {
                     'n_estimators': [10, 50, 100, 200],
                     'max_depth': [5, 10, 15, None],
@@ -68,23 +63,25 @@ class OptimizeParamsTS:
             report_optimization(top_n=5): Print comprehensive report with recommendations
 
         Examples:
-            # Random Forest optimization
-            from sklearn.ensemble import RandomForestRegressor
-            opt = OptimizeParamsTS(df=df, target_col='NEE',
-                                   regressor_class=RandomForestRegressor,
-                                   n_estimators=[10, 50, 100],
-                                   max_depth=[5, 10, 15])
-            opt.optimize()
-            opt.report_optimization()
+            ::
 
-            # XGBoost optimization
-            import xgboost as xgb
-            opt = OptimizeParamsTS(df=df, target_col='NEE',
-                                   regressor_class=xgb.XGBRegressor,
-                                   n_estimators=[50, 100, 200],
-                                   max_depth=[3, 6, 9])
-            opt.optimize()
-            opt.report_optimization()
+                # Random Forest optimization
+                from sklearn.ensemble import RandomForestRegressor
+                opt = OptimizeParamsTS(df=df, target_col='NEE',
+                                       regressor_class=RandomForestRegressor,
+                                       n_estimators=[10, 50, 100],
+                                       max_depth=[5, 10, 15])
+                opt.optimize()
+                opt.report_optimization()
+
+                # XGBoost optimization
+                import xgboost as xgb
+                opt = OptimizeParamsTS(df=df, target_col='NEE',
+                                       regressor_class=xgb.XGBRegressor,
+                                       n_estimators=[50, 100, 200],
+                                       max_depth=[3, 6, 9])
+                opt.optimize()
+                opt.report_optimization()
 
         See: https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html
              https://xgboost.readthedocs.io/en/stable/python/python_intro.html
@@ -306,7 +303,7 @@ class OptimizeParamsTS:
         numeric_param_cols_temp = []
         numeric_param_names_temp = []
 
-        for param_col, param_name in zip(param_cols, param_names):
+        for param_col, param_name in zip(param_cols, param_names, strict=False):
             param_vals = cv_results[param_col].values.copy()
             unique_vals = cv_results[param_col].unique()
 
@@ -368,7 +365,7 @@ class OptimizeParamsTS:
         numeric_param_cols = []
         numeric_param_names = []
 
-        for param_col, param_name in zip(param_cols, param_names):
+        for param_col, param_name in zip(param_cols, param_names, strict=False):
             param_vals = cv_results[param_col].values.copy()
 
             # Try pure numeric conversion first
@@ -410,13 +407,13 @@ class OptimizeParamsTS:
         ax.set_title('Parameter Importance Analysis', fontweight='bold')
         ax.grid(axis='x', alpha=0.3)
 
-        for i, (bar, val) in enumerate(zip(bars, sorted_importances)):
+        for i, (bar, val) in enumerate(zip(bars, sorted_importances, strict=True)):
             ax.text(val, bar.get_y() + bar.get_height()/2, f'{val:.3f}',
                    va='center', ha='left', fontsize=9, fontweight='bold')
 
         # 3+. Parameter Slices for numeric parameters (dynamic grid layout)
         # Use pre-filtered parameters from first pass (already excludes single-value params)
-        for idx, (param_col, param_name) in enumerate(zip(numeric_param_cols_temp, numeric_param_names_temp)):
+        for idx, (param_col, param_name) in enumerate(zip(numeric_param_cols_temp, numeric_param_names_temp, strict=False)):
             # Map to subplot position: first slice starts at row 1, 2 columns
             ax_row = 1 + idx // 2
             ax_col = idx % 2
@@ -525,7 +522,7 @@ class OptimizeParamsTS:
         dimensions = []
         data_normalized = []
 
-        for param_col, param_name in zip(param_cols, param_names):
+        for param_col, param_name in zip(param_cols, param_names, strict=False):
             vals = cv_results[param_col].values.copy()
 
             # Skip categorical parameters for parallel coordinates
@@ -557,7 +554,7 @@ class OptimizeParamsTS:
         colors_norm = (test_scores - test_scores.min()) / (test_scores.max() - test_scores.min() + 1e-10)
         colormap = plt.cm.RdYlBu  # Red (low) -> Yellow (medium) -> Blue (high)
 
-        for i, (row_data, color_val) in enumerate(zip(zip(*data_normalized), colors_norm)):
+        for i, (row_data, color_val) in enumerate(zip(zip(*data_normalized, strict=False), colors_norm, strict=False)):
             color = colormap(color_val)
             ax.plot(range(num_dims), row_data, color=color, alpha=0.3, linewidth=1)
 

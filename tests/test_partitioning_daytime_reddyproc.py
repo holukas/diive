@@ -20,6 +20,13 @@ class TestDaytimePartitioningReddyProc(unittest.TestCase):
             nee=cls.df['NEE_CUT_REF_orig'], ta=cls.df['Tair_f'],
             vpd=cls.df['VPD_f'], sw_in=cls.df['Rg_f'],
             lat=cls.lat, lon=cls.lon, utc_offset=cls.utc_offset, verbose=0).run()
+        # A short slice for the two plumbing tests below (wrapper delegation and
+        # the kPa/hPa equivalence). Neither needs a full year, and the per-window
+        # LRC fit costs superlinearly in record count: measured on this fixture,
+        # one month is 6 s against 227 s for the year. One month still fits 14
+        # windows, so a dropped unit conversion or a wrapper that lost rows or
+        # renamed a column cannot hide in it.
+        cls.short = cls.df.loc['2017-06-01':'2017-06-30']
 
     def _run(self):
         return self.part
@@ -71,27 +78,36 @@ class TestDaytimePartitioningReddyProc(unittest.TestCase):
         self.assertGreater(np.corrcoef(res['RECO_DT_RP'][mr], reco_ref[mr])[0, 1], 0.6)
 
     def test_vpd_units_handling(self):
-        # Passing VPD already in hPa (vpd_in_kpa=False) with a /10 series must
-        # reproduce the default kPa path.
+        # Passing VPD already in hPa (vpd_in_kpa=False) with a *10 series must
+        # reproduce the default kPa path. Both paths run on the short slice, so
+        # the comparison is like-for-like.
         from diive.flux.partitioning import DaytimePartitioningReddyProc
-        res_hpa = DaytimePartitioningReddyProc(
-            nee=self.df['NEE_CUT_REF_orig'], ta=self.df['Tair_f'],
-            vpd=self.df['VPD_f'] * 10.0, sw_in=self.df['Rg_f'],
-            lat=self.lat, lon=self.lon, utc_offset=self.utc_offset,
-            vpd_in_kpa=False, verbose=0).run().results
-        a = res_hpa['GPP_DT_RP'].to_numpy()
-        b = self._run().results['GPP_DT_RP'].to_numpy()
+        short = self.short
+
+        def _gpp(vpd, vpd_in_kpa):
+            return DaytimePartitioningReddyProc(
+                nee=short['NEE_CUT_REF_orig'], ta=short['Tair_f'],
+                vpd=vpd, sw_in=short['Rg_f'],
+                lat=self.lat, lon=self.lon, utc_offset=self.utc_offset,
+                vpd_in_kpa=vpd_in_kpa, verbose=0).run().results['GPP_DT_RP'].to_numpy()
+
+        a = _gpp(short['VPD_f'] * 10.0, False)
+        b = _gpp(short['VPD_f'], True)
         m = np.isfinite(a) & np.isfinite(b)
+        # Guard against a vacuous pass: allclose over an empty selection succeeds.
+        self.assertGreater(int(m.sum()), 0)
         np.testing.assert_allclose(a[m], b[m], rtol=1e-9, atol=1e-9)
 
     def test_functional_wrapper(self):
         from diive.flux.partitioning import partition_nee_daytime_reddyproc
+        short = self.short
         res = partition_nee_daytime_reddyproc(
-            nee=self.df['NEE_CUT_REF_orig'], ta=self.df['Tair_f'],
-            vpd=self.df['VPD_f'], sw_in=self.df['Rg_f'],
+            nee=short['NEE_CUT_REF_orig'], ta=short['Tair_f'],
+            vpd=short['VPD_f'], sw_in=short['Rg_f'],
             lat=self.lat, lon=self.lon, utc_offset=self.utc_offset, verbose=0)
-        self.assertEqual(len(res), len(self.df))
+        self.assertEqual(len(res), len(short))
         self.assertIn('GPP_DT_RP', res.columns)
+        self.assertTrue(res.index.equals(short.index))
 
     def test_requires_datetime_index(self):
         from diive.flux.partitioning import DaytimePartitioningReddyProc

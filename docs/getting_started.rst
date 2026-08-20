@@ -4,163 +4,202 @@
 Getting Started
 ===============
 
-Welcome to DIIVE! This guide introduces the core concepts and shows you how to get started with the library.
+This guide introduces the core concepts of diive and shows the workflows most users
+start with: quality control, gap-filling, plotting and time series analysis.
+
+``import diive as dv`` gives access to ten domain namespaces: ``dv.outliers``,
+``dv.gapfilling``, ``dv.flux``, ``dv.analysis``, ``dv.plotting``, ``dv.times``,
+``dv.variables``, ``dv.corrections``, ``dv.qaqc`` and ``dv.events``. A few utilities
+such as the example-data loaders sit directly on ``dv``. Every code sample below runs
+against the bundled example data.
 
 Core Concepts
 =============
 
 **Feature Engineering**
-   DIIVE's feature engineering pipeline automatically creates 8 types of features from your data:
-   lag features, rolling statistics, differencing, EMA, polynomial terms, STL decomposition, timestamps, and record numbers.
-   This produces rich features for machine learning models.
+   The feature engineering pipeline builds 8 types of features from your data:
+   lag features, rolling statistics, differencing, EMA, polynomial terms, STL
+   decomposition, timestamp components and a record number. The result feeds the
+   machine learning gap-fillers.
 
 **Gap-Filling**
-   Gap-filling uses machine learning or statistical methods to estimate missing values in time series data.
-   DIIVE supports Random Forest, XGBoost, and meteorological matching approaches.
+   Gap-filling estimates missing values in a time series. diive provides Random
+   Forest, XGBoost, the MDS meteorological-similarity method and linear interpolation.
 
 **Quality Control & Outlier Detection**
-   Before analyzing data, outliers and bad measurements must be removed or flagged.
-   DIIVE provides 10+ methods including Hampel filters, z-scores, and Local Outlier Factor.
+   Outliers and bad measurements are flagged before analysis. diive has more than ten
+   detection methods, including Hampel filters, z-scores, local standard deviation and
+   Local Outlier Factor. Every detector returns both a flag series and a filtered
+   series, so nothing is deleted silently.
 
 **Flux Processing Chain**
-   For eddy covariance data, DIIVE implements a multi-level workflow following standardized protocols:
-   Levels 2-4.1 handle quality flags, storage correction, USTAR filtering, and gap-filling.
+   For eddy covariance data, diive implements the Swiss FluxNet post-processing
+   workflow: Level 2 (quality flags), Level 3.1 (storage correction), Level 3.2
+   (outlier removal), Level 3.3 (u* filtering), Level 4.1 (gap-filling) and
+   Level 4.2 (NEE partitioning into GPP and RECO).
 
 Your First Analysis
 ===================
 
-Here's a minimal example to get you started:
+A minimal end-to-end run: load data, remove outliers, engineer features, gap-fill,
+plot.
 
 .. code-block:: python
 
-   import diive as dv
    import matplotlib.pyplot as plt
 
-   # 1. Load example data
-   df = dv.load_exampledata_parquet(data_id='TLL')
-   print(f"Loaded {len(df)} records")
-   print(df.columns.tolist())
+   import diive as dv
 
-   # 2. Detect outliers
-   detector = dv.AbsoluteLimits(
-       dfin=df,
-       col='NEE',
-       lim_lower=-20,
-       lim_upper=10,
-   )
-   detector.flag_outliers()
-   clean_data = detector.get_flagged_data()
+   # 1. Load the bundled example data (CH-DAV, 2013-2022, 30-minute records)
+   df = dv.load_exampledata_parquet()
+   df = df.loc['2020'].copy()
+   print(f"{len(df)} records, {len(df.columns)} variables")
 
-   # 3. Create engineered features for ML
-   engineer = dv.FeatureEngineer(
+   # 2. Flag implausible values in the CO2 flux and remove them
+   detector = dv.outliers.AbsoluteLimits(series=df['NEE_CUT_REF_orig'], minval=-20, maxval=10)
+   detector.calc()
+   print(f"{(detector.flag == 2).sum()} records flagged as outliers")
+
+   # 3. Build features for the gap-filling model
+   model_df = df[['Tair_f', 'VPD_f', 'Rg_f']].copy()
+   model_df['NEE'] = detector.filteredseries
+   engineer = dv.gapfilling.FeatureEngineer(
        target_col='NEE',
-       features_lag=[-1, 1],
-       features_rolling=[12, 24],
-       features_diff=[1],
-       features_ema=[6, 24],
+       features_lag=[-1, -1],
+       features_rolling=[12],
+       vectorize_timestamps=True,
    )
-   df_engineered = engineer.fit_transform(df)
+   df_engineered = engineer.fit_transform(model_df)
 
-   # 4. Train gap-filling model
-   model = dv.RandomForestTS(
+   # 4. Train a Random Forest and fill the gaps
+   model = dv.gapfilling.RandomForestTS(
        input_df=df_engineered,
        target_col='NEE',
-       n_estimators=100,
+       verbose=0,
+       n_estimators=20,
+       random_state=42,
+       n_jobs=-1,
+       shap_max_rows=500,
    )
-   model.trainmodel()
-   model.fillgaps()
-   gapfilled = model.get_gapfilled_target()
+   model.trainmodel(showplot_scores=False, showplot_importance=False)
+   model.fillgaps(showplot_scores=False, showplot_importance=False)
+   gapfilled = model.results.gapfilled
+   print(f"R2 on the held-out test set: {model.scores_traintest_['r2']:.3f}")
 
-   # 5. Visualize results
-   plot = dv.TimeSeries(
-       series=[df['NEE'], gapfilled],
-       labels=['Original', 'Gap-filled'],
-   )
-   plot.plot()
+   # 5. Plot the result
+   fig, ax = plt.subplots(figsize=(12, 4))
+   dv.plotting.TimeSeries(series=gapfilled).plot(ax=ax)
    plt.show()
+
+``n_estimators=20`` keeps the sample fast. Use a few hundred trees for real work.
 
 Working with Data
 =================
 
 **Loading Data**
 
-Load example data for testing:
+The example datasets ship with the package and take no arguments:
 
 .. code-block:: python
 
    import diive as dv
 
-   # Available datasets: 'TLL', 'CH-AWI', 'CH-CHA', etc.
-   df = dv.load_exampledata_parquet(data_id='TLL')
+   # CH-DAV eddy covariance fluxes and meteo, 2013-2022, 30-minute records
+   df = dv.load_exampledata_parquet()
+   print(df.shape)
+   print(df.index.name, df.index.min(), df.index.max())
 
-Load your own data:
+   # CH-LAE flux processing chain data, 2016-2017
+   df_lae = dv.load_exampledata_parquet_lae()
 
-.. code-block:: python
+More loaders for specific file formats (EddyPro, FLUXNET, TOA5, ICOS, generic CSV)
+live in ``diive.configs.exampledata``.
 
-   import pandas as pd
-
-   df = pd.read_csv('mydata.csv', index_col=0, parse_dates=True)
-   # Ensure datetime index
-   assert pd.api.types.is_datetime64_any_dtype(df.index)
+For your own data, ``dv.load_parquet`` reads a parquet file and ``dv.ReadFileType``
+reads the supported text formats. Anything pandas can read works too, as long as the
+result ends up with a datetime index.
 
 **Data Structure**
 
-DIIVE expects a pandas DataFrame with a datetime index:
+diive expects a pandas DataFrame with a datetime index named following the diive
+convention (``TIMESTAMP_MIDDLE``, ``TIMESTAMP_START`` or ``TIMESTAMP_END``).
+``TimestampSanitizer`` checks the naming, detects the time resolution, removes
+duplicates and fills date gaps with NaN rows:
 
 .. code-block:: python
 
-   # Good structure
-   assert df.index.name == 'datetime'  # or similar
-   assert pd.api.types.is_datetime64_any_dtype(df.index)
+   import numpy as np
+   import pandas as pd
 
-   # View data
-   print(df.head())
-   #                        NEE   TA   RH  SW_IN
-   # datetime
-   # 2020-01-01 00:00:00 -0.50  5.2  0.85  0.0
-   # 2020-01-01 01:00:00 -0.45  4.8  0.87  0.0
-   # ...
+   import diive as dv
+
+   index = pd.date_range('2020-01-01 00:15:00', periods=48 * 30, freq='30min',
+                         name='TIMESTAMP_MIDDLE')
+   df = pd.DataFrame({'TA': np.random.normal(5, 3, len(index))}, index=index)
+
+   sanitizer = dv.times.TimestampSanitizer(data=df, nominal_freq='30min', verbose=False)
+   df = sanitizer.get()
+   print(sanitizer.get_status())
 
 Common Workflows
 ================
 
 **Workflow 1: Quality Control**
 
-Remove outliers before analysis:
+Outlier detectors take a Series, not a DataFrame. Call ``.calc()``, then read the
+results from ``.flag`` (0 = fine, 2 = outlier, NaN = no test possible) and
+``.filteredseries`` (the input with flagged records set to NaN). Chain tests by
+feeding the filtered series of one detector into the next:
 
 .. code-block:: python
 
    import diive as dv
 
-   df = dv.load_exampledata_parquet(data_id='TLL')
+   df = dv.load_exampledata_parquet()
+   series = df.loc['2020', 'NEE_CUT_REF_orig']
 
-   # Step 1: Absolute limits
-   detector = dv.AbsoluteLimits(dfin=df, col='NEE', lim_lower=-20, lim_upper=10)
-   detector.flag_outliers()
-   df = detector.get_flagged_data()
+   # Step 1: absolute limits
+   abslim = dv.outliers.AbsoluteLimits(series=series, minval=-20, maxval=10)
+   abslim.calc()
 
-   # Step 2: Hampel filter for spikes
-   detector = dv.Hampel(dfin=df, col='NEE', site_lat=47.286, site_lon=7.734)
-   detector.flag_outliers_hampel_test(n_sigma=5.5)
-   df = detector.get_flagged_data()
+   # Step 2: Hampel filter for spikes, applied to what the first test left behind
+   hampel = dv.outliers.Hampel(
+       series=abslim.filteredseries,
+       lat=46.815,
+       lon=9.855,
+       utc_offset=1,
+       n_sigma=5.5,
+       window_length=48 * 13,
+   )
+   hampel.calc(repeat=True)
 
-   # Continue with clean data
-   print(f"Removed {detector.n_flagged_total} outliers")
+   cleaned = hampel.filteredseries
+   n_removed = series.notna().sum() - cleaned.notna().sum()
+   print(f"{n_removed} of {series.notna().sum()} measured records removed")
+
+``Hampel`` separates daytime and nighttime by default, which is why it needs ``lat``,
+``lon`` and ``utc_offset``. For one threshold over all records, pass
+``separate_day_night=False``.
+
+For longer chains with a combined quality flag, use ``StepwiseOutlierDetection``
+from ``diive.preprocessing.outlier_detection`` together with ``dv.qaqc.FlagQCF``.
 
 **Workflow 2: Gap-Filling**
 
-Fill missing values with machine learning:
+Engineer the features once and reuse them across models:
 
 .. code-block:: python
 
    import diive as dv
 
-   df = dv.load_exampledata_parquet(data_id='TLL')
+   TARGET = 'NEE_CUT_REF_orig'
 
-   # Create features once, reuse across models
-   engineer = dv.FeatureEngineer(
-       target_col='NEE',
-       features_lag=[-1, 1],
+   df = dv.load_exampledata_parquet()
+   df = df.loc['2020', [TARGET, 'Tair_f', 'VPD_f', 'Rg_f']].copy()
+
+   engineer = dv.gapfilling.FeatureEngineer(
+       target_col=TARGET,
+       features_lag=[-2, -1],
        features_rolling=[12, 24],
        features_diff=[1],
        features_ema=[6, 24],
@@ -168,132 +207,154 @@ Fill missing values with machine learning:
    )
    df_engineered = engineer.fit_transform(df)
 
-   # Try Random Forest
-   rf_model = dv.RandomForestTS(
-       input_df=df_engineered,
-       target_col='NEE',
-       n_estimators=100,
-   )
-   rf_model.trainmodel()
-   rf_model.fillgaps()
-   rf_gapfilled = rf_model.get_gapfilled_target()
+   rf = dv.gapfilling.RandomForestTS(
+       input_df=df_engineered, target_col=TARGET, verbose=0,
+       n_estimators=20, random_state=42, n_jobs=-1, shap_max_rows=500)
+   rf.run(showplot_scores=False, showplot_importance=False)
 
-   # Try XGBoost
-   xgb_model = dv.XGBoostTS(
-       input_df=df_engineered,
-       target_col='NEE',
-       n_estimators=100,
-   )
-   xgb_model.trainmodel()
-   xgb_model.fillgaps()
-   xgb_gapfilled = xgb_model.get_gapfilled_target()
+   xgb = dv.gapfilling.XGBoostTS(
+       input_df=df_engineered, target_col=TARGET, verbose=0,
+       n_estimators=20, random_state=42, n_jobs=-1, shap_max_rows=500)
+   xgb.run(showplot_scores=False, showplot_importance=False)
 
-   # Compare results
-   print(f"RF R²: {rf_model.r2_test_pred:.3f}")
-   print(f"XGB R²: {xgb_model.r2_test_pred:.3f}")
+   print(f"Random Forest R2 (held-out): {rf.results.scores_traintest['r2']:.3f}")
+   print(f"XGBoost R2 (held-out):       {xgb.results.scores_traintest['r2']:.3f}")
+
+   gapfilled = rf.results.gapfilled
+   flag = rf.results.flag  # 0 = observed, 1 = gap-filled, 2 = fallback
+   print(f"{(flag > 0).sum()} of {len(flag)} records filled")
+
+``.run()`` is shorthand for ``.trainmodel()`` followed by ``.fillgaps()``. Results are
+collected in ``.results``: the gap-filled series, the flag, the in-sample scores
+(``.scores``), the held-out scores (``.scores_traintest``), the SHAP feature
+importances and the trained model.
+
+``.scores_traintest`` comes from a random split of the complete rows, not a temporal
+block. That is the right test for gap-filling, where gaps sit scattered among observed
+records.
 
 **Workflow 3: Visualization**
 
-Create publication-ready plots:
+Plot classes are two-phase. The constructor takes data and computation parameters, and
+``plot()`` takes the axes and all styling. Chrome such as title, labels, units, font
+sizes and grid goes through ``FormatStyle``:
 
 .. code-block:: python
 
-   import diive as dv
    import matplotlib.pyplot as plt
 
-   df = dv.load_exampledata_parquet(data_id='TLL')
+   import diive as dv
 
-   # Time series plot
-   plot = dv.TimeSeries(series=[df['NEE']], labels=['NEE'], figsize=(12, 4))
-   plot.plot()
+   df = dv.load_exampledata_parquet()
+   df = df.loc['2020'].copy()
+
+   # Time series
+   fig, ax = plt.subplots(figsize=(12, 4))
+   dv.plotting.TimeSeries(series=df['Tair_f']).plot(
+       ax=ax, format_style=dv.plotting.FormatStyle(title='Air temperature', yunits='(degC)'))
    plt.show()
 
-   # Heatmap (daily pattern)
-   plot = dv.HeatmapDateTime(
-       series=df['TA'],
-       label='Temperature',
-       figsize=(14, 6),
-   )
-   plot.plot()
+   # Heatmap: one row per date, one column per time of day
+   fig, ax = plt.subplots(figsize=(6, 9))
+   dv.plotting.HeatmapDateTime(series=df['Tair_f']).plot(ax=ax)
    plt.show()
 
-   # Diel cycle (average daily pattern)
-   plot = dv.DielCycle(
-       series=df['LE'],
-       label='Latent Heat Flux',
-   )
-   plot.plot()
+   # Diel cycle: median with interquartile band, one curve per month
+   fig, ax = plt.subplots(figsize=(9, 5))
+   dv.plotting.DielCycle(series=df['LE_f']).plot(
+       ax=ax, agg='median', band='iqr', each_month=True)
    plt.show()
+
+Because ``plot()`` accepts an ``ax``, the same object can be drawn several times with
+different styling, and diive plots can be placed into your own matplotlib figures.
 
 **Workflow 4: Time Series Analysis**
 
-Decompose trends and seasonality:
+Split a series into trend, seasonal and residual components:
 
 .. code-block:: python
 
    import diive as dv
 
-   df = dv.load_exampledata_parquet(data_id='TLL')
+   df = dv.load_exampledata_parquet()
+   series = df.loc['2020', 'Tair_f']
 
-   # STL decomposition (Trend, Seasonal, Residual)
-   decomposer = dv.SeasonalTrendDecomposition(
-       series=df['TA'],
-       periods=48,  # 2 days for 30-min data
-   )
-   trend, seasonal, residual = decomposer.decompose()
+   # A seasonal period of 48 records is one day at 30-minute resolution
+   stl = dv.analysis.SeasonalTrendDecomposition(series=series, method='stl',
+                                                seasonal_period=48)
 
-   # Plot decomposition
-   decomposer.plot()
+   trend = stl.trend
+   seasonal = stl.seasonal
+   residual = stl.residual
 
-Example Gallery
-===============
+   print(stl.summary())
+   print(f"Seasonality strength: {stl.seasonality_strength:.3f}")
 
-For more examples, browse the :ref:`Example Gallery <auto_examples/index>`:
+The components are computed on first access and cached. ``detrend()`` and
+``deseasonalize()`` return the series with one component removed.
 
-- **Visualization:** Time series, heatmaps, histograms, diel cycles, and more
-- **Gap-Filling:** Random Forest, XGBoost, MDS, linear interpolation
-- **Outlier Detection:** Hampel, z-score, Local Outlier Factor, step-wise orchestration
-- **Analysis:** Correlation, decomposition, trend analysis, harmonic analysis
-- **Flux Processing:** Multi-level quality control and gap-filling
+Examples
+========
+
+The repository ships runnable example scripts under
+`examples/ <https://github.com/holukas/diive/tree/main/examples>`__, grouped by topic:
+
+- **visualization**: time series, heatmaps, histograms, diel cycles, ridgelines, wind roses
+- **gapfilling**: Random Forest, XGBoost, MDS, linear interpolation, long-term filling
+- **preprocessing**: outlier detection, corrections, stepwise screening
+- **flux**: processing chain, u* threshold detection, NEE partitioning, uncertainty
+- **analysis**: correlation, decomposition, gap statistics, harmonic analysis
+- **times**, **features**, **fits**, **io**, **events**: supporting tools
+
+`examples/CATALOG.md <https://github.com/holukas/diive/blob/main/examples/CATALOG.md>`_
+lists all of them. The same scripts are rendered as a gallery in the built
+documentation.
 
 API Reference
 =============
 
-For detailed API documentation, see the :ref:`API Reference <api_reference>`.
+See the :ref:`API Reference <api_reference>` for the full list of exported symbols,
+with one page per namespace:
 
-Key Classes:
-   - :py:class:`diive.core.ml.FeatureEngineer` — Feature creation pipeline
-   - :py:class:`diive.pkgs.gapfilling.RandomForestTS` — Random Forest gap-filling
-   - :py:class:`diive.pkgs.gapfilling.XGBoostTS` — XGBoost gap-filling
-   - :py:class:`diive.pkgs.preprocessing.outlierdetection.AbsoluteLimits` — Simple threshold outlier detection
-   - :py:class:`diive.pkgs.preprocessing.outlierdetection.Hampel` — Robust spike detection
-   - :py:class:`diive.core.plotting.TimeSeries` — Time series visualization
+- :ref:`dv.outliers <api_outliers>`: detection methods, including ``AbsoluteLimits`` and ``Hampel``
+- :ref:`dv.gapfilling <api_gapfilling>`: ``FeatureEngineer``, ``RandomForestTS``, ``XGBoostTS``, ``FluxMDS``
+- :ref:`dv.plotting <api_plotting>`: ``TimeSeries``, ``HeatmapDateTime``, ``DielCycle``, ``FormatStyle``
+- :ref:`dv.analysis <api_analysis>`: ``SeasonalTrendDecomposition``, ``GapStats``, ``Histogram``
+- :ref:`dv.flux <api_flux>`: processing chain, u* filtering, partitioning, uncertainty
+- :ref:`dv.times <api_times>`: ``TimestampSanitizer``, ``DetectFrequency``, resampling
+- :ref:`dv.variables <api_variables>`, :ref:`dv.corrections <api_corrections>`,
+  :ref:`dv.qaqc <api_qaqc>`, :ref:`dv.events <api_events>`
 
 Helpful Resources
 =================
 
-- :ref:`FAQ <faq>` — Common questions and troubleshooting
-- :ref:`Contributing <contributing>` — How to contribute and development setup
-- `GitHub Issues <https://github.com/holukas/diive/issues>`_ — Report bugs and request features
-- `DIIVE GitHub <https://github.com/holukas/diive>`_ — Source code and repository
+- :ref:`FAQ <faq>`: common questions and troubleshooting
+- :ref:`Contributing <contributing>`: how to contribute and set up a development environment
+- `GitHub Issues <https://github.com/holukas/diive/issues>`_: bug reports and feature requests
+- `diive on GitHub <https://github.com/holukas/diive>`_: source code
 
 Tips
 ====
 
-1. **Use FeatureEngineer once** — Create features once and reuse them with multiple gap-filling models.
+1. **Sanitize the timestamp first.** Almost every diive workflow assumes a regular,
+   correctly named datetime index.
 
-2. **Start simple** — Begin with absolute limits for outlier detection, then refine.
+2. **Engineer features once.** The same engineered DataFrame can feed several
+   gap-filling models, which makes model comparison cheap and fair.
 
-3. **Validate on examples** — Test your workflows on the provided example data first.
+3. **Start simple.** Absolute limits catch the obvious problems. Add the
+   statistics-based detectors afterwards and check what each one removes.
 
-4. **Check docstrings** — Most classes have detailed docstrings with parameters explained.
+4. **Read the docstrings.** Parameters, expected units and the day/night arguments are
+   documented on each class. Units are not validated at runtime.
 
-5. **Explore examples** — The :ref:`Example Gallery <auto_examples/index>` has 94+ working examples covering all features.
+5. **Copy from the examples.** The scripts under ``examples/`` are kept runnable
+   against the current API.
 
 Next Steps
 ==========
 
-- Start with a simple quality control workflow
-- Explore the :ref:`Example Gallery <auto_examples/index>` for your use case
-- Read the :ref:`API Reference <api_reference>` for detailed documentation
-- Check the :ref:`FAQ <faq>` for common issues
+- Run the quality control workflow above on one of your own variables
+- Browse `examples/ <https://github.com/holukas/diive/tree/main/examples>`__ for your use case
+- Read the :ref:`API Reference <api_reference>` for the full symbol list
+- Check the :ref:`FAQ <faq>` if something does not behave as expected

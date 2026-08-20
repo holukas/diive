@@ -37,7 +37,7 @@ class FindOptimumRange:
                  define_optimum: Literal['min', 'max'] = 'max',
                  threshold: float = 0.95,
                  prominence_threshold: float = 1.0):
-        """
+        r"""
         Find x range for optimum y.
 
         Bins x data and aggregates y values per bin, then applies rolling aggregation
@@ -60,7 +60,7 @@ class FindOptimumRange:
                 curve range from the peak (default: 0.95). Must be in (0, 1).
             prominence_threshold: Minimum peak prominence (in units of curve std) required
                 to consider the optimum meaningful. The peak prominence is
-                |peak - curve_mean| / curve_std. Results below this value set
+                \|peak - curve_mean\| / curve_std. Results below this value set
                 `is_optimum_prominent=False` (default: 1.0).
 
         Properties:
@@ -311,7 +311,7 @@ class FindOptimumRange:
         ax.set_xlim(0, np.sum(data, axis=1).max())
         ax.margins(y=0.02)  # remove default ~5% padding above/below bar group
 
-        for i, (colname, color) in enumerate(zip(category_names, category_colors)):
+        for i, (colname, color) in enumerate(zip(category_names, category_colors, strict=False)):
             widths = data[:, i]
             starts = data_cum[:, i] - widths
             rects = ax.barh(year_labels, widths, left=starts, height=0.65,
@@ -319,7 +319,7 @@ class FindOptimumRange:
 
             r, g, b, *_ = mcolors.to_rgba(color)
             text_color = 'white' if 0.299 * r + 0.587 * g + 0.114 * b < 0.5 else 'black'
-            for rect, width in zip(rects, widths):
+            for rect, width in zip(rects, widths, strict=True):
                 ax.text(rect.get_x() + rect.get_width() / 2,
                         rect.get_y() + rect.get_height() / 2,
                         f"{width:.1f}",

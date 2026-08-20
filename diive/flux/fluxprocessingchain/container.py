@@ -16,6 +16,9 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 
 if TYPE_CHECKING:
+    # Type-checking only: gap_stats() imports GapStats inside the function so
+    # this module does not pull diive.analysis in at runtime.
+    from diive.analysis.gapfinder import GapStats
     from diive.flux.lowres.quality_flags import FluxQualityFlagsEddyPro
     from diive.flux.lowres.storage_correction import (
         FluxStorageCorrectionSinglePointEddyPro,
@@ -1085,10 +1088,6 @@ class FluxLevelData:
                 units='umol m-2 s-1',
             )
         """
-        import numpy as np
-        import matplotlib.pyplot as plt
-        import matplotlib.gridspec as gridspec
-        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 
         cols = self.gapfilled_cols()
         if not cols:
@@ -1254,6 +1253,59 @@ class FluxLevelData:
 
         return out
 
+    def nongapfilled_cols(self) -> dict[str, dict[str, str]]:
+        """
+        Return the measured target column each L4.1 method gap-filled.
+
+        The symmetric twin of :meth:`gapfilled_cols`: same keys, but the column
+        holding the flux *before* gap-filling. Several methods usually share one
+        target — they all fill the same QCF-filtered series.
+
+        Returns:
+            Nested dict ``{method: {ustar_scenario: column_name}}``.
+            Keys present only when that method has been run.
+
+        Example::
+
+            data.nongapfilled_cols()
+            # {'rf': {'CUT_50': 'NEE_L3.1_L3.3_CUT_50_QCF'}}
+        """
+        out: dict[str, dict[str, str]] = {}
+        for method, scenarios in self.levels.level41_methods().items():
+            out[method] = {scen: inst.target_col for scen, inst in scenarios.items()}
+        return out
+
+    def merged_df(self, verbose: int | bool | None = None) -> pd.DataFrame:
+        """
+        Return the full input data with every column the chain produced.
+
+        Combines ``full_df`` (the untouched input) with the columns ``fpc_df``
+        added along the way — flags, QCF, gap-filled series, partitioning
+        output. Nothing in the input is overwritten; the chain only adds
+        columns. This is the export path: one dataframe holding input and
+        results together.
+
+        Args:
+            verbose: Verbosity for the console listing of added columns.
+
+        Returns:
+            DataFrame with ``full_df``'s columns first, then the new ones.
+
+        Example::
+
+            df = data.merged_df()
+            dv.save_parquet(data=df, filename='chain_results', outpath='.')
+        """
+        from diive.core.utils.console import info
+
+        new_cols = [c for c in self.fpc_df.columns if c not in self.full_df.columns]
+        info("New variables from the flux processing chain:", verbose=verbose)
+        for c in new_cols:
+            info(f"  {c}", verbose=verbose)
+        info("No variables in the input data were overwritten, only new variables added.",
+             verbose=verbose)
+        return pd.concat([self.full_df, self.fpc_df[new_cols]], axis=1)
+
     def partitioned_cols(self) -> dict[str, dict[str, list[str]]]:
         """
         Return the L4.2 partitioning output columns per variant and USTAR scenario.
@@ -1324,13 +1376,10 @@ def add_driver(
             its index does not match ``data.full_df.index``, or a column
             with the resolved name already exists in ``full_df``.
 
-    Example::
-
-        from diive.flux.fluxprocessingchain import add_driver
-        from diive.variables import calc_vpd_from_ta_rh
-
-        vpd = calc_vpd_from_ta_rh(ta=data.full_df['TA'], rh=data.full_df['RH'])
-        data = add_driver(data, vpd, name='VPD_kPa')
+    Example:
+        >>> import diive as dv
+        >>> vpd = dv.variables.calc_vpd_from_ta_rh(ta=data.full_df['TA'], rh=data.full_df['RH'])
+        >>> data = dv.flux.add_driver(data, vpd, name='VPD_kPa')
     """
     col_name = name if name is not None else (
         str(series.name) if series.name is not None else None

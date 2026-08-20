@@ -10,9 +10,9 @@ This module provides two z-score-based outlier detection approaches:
 Quality flags:
   - flag=0: Value within acceptable range (valid)
   - flag=2: Value detected as outlier (removed)
-  - NaN: Original missing data preserved
+  - NaN: Record missing in the input, so no test could be performed
 
-See examples/preprocessing/outlier_detection/zscore.py for working examples.
+See examples/preprocessing/outlier_detection/outlier_zscore.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
@@ -23,44 +23,46 @@ from pandas import Series, DatetimeIndex
 
 import diive.core.funcs.funcs as funcs
 from diive.core.base.flagbase import FlagBase
-from diive.core.utils.console import detail
+from diive.core.utils.console import VERBOSE_PROGRESS, detail
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
+from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags, reject_legacy_params
 
 
 @ConsoleOutputDecorator()
 class zScore(FlagBase):
-    """Detect outliers using z-score with flexible threshold modes.
+    r"""Detect outliers using z-score with flexible threshold modes.
 
     Supports two modes:
 
-    1. **Global Mode (separate_daytime_nighttime=False):**
+    1. **Global Mode (separate_day_night=False):**
        Single z-score threshold applied to entire time series. Fast and simple.
 
-    2. **Daytime/Nighttime Mode (separate_daytime_nighttime=True):**
+    2. **Daytime/Nighttime Mode (separate_day_night=True):**
        Separate z-score thresholds for daytime and nighttime. Useful when
        data characteristics vary significantly between day and night.
 
     **Algorithm:**
+
     - In global mode: Calculates z-score for entire series, flags values > threshold
     - In day/night mode: Calculates z-scores separately for daytime and nighttime periods,
       applies appropriate threshold to each period
-    - Marks records with |z-score| > threshold as outliers (flag=2)
+    - Marks records with \|z-score\| > threshold as outliers (flag=2)
 
     **Quality Flags:**
+
     - 0: Value within acceptable range (valid)
     - 2: Value detected as outlier (removed)
-    - NaN: Original missing data
+    - NaN: Record missing in the input, so no test could be performed
 
     Example:
-        See `examples/preprocessing/outlier_detection/zscore.py` for complete examples.
+        See `examples/preprocessing/outlier_detection/outlier_zscore.py` for complete examples.
     """
 
     flagid = 'OUTLIER_ZSCORE'
 
     def __init__(self,
                  series: Series,
-                 separate_daytime_nighttime: bool = False,
+                 separate_day_night: bool = False,
                  lat: float = None,
                  lon: float = None,
                  utc_offset: int = None,
@@ -70,39 +72,41 @@ class zScore(FlagBase):
                  thres_zscore_nighttime: float = None,
                  showplot: bool = False,
                  plottitle: str = None,
-                 verbose: bool = False):
+                 verbose: bool = False,
+                 **legacy):
         """Initialize z-score outlier detector.
 
         Args:
             series: Time series in which outliers are identified.
-            separate_daytime_nighttime: If True, use separate thresholds for day/night;
+            separate_day_night: If True, use separate thresholds for day/night;
                 if False, use single global threshold. Default False.
-            lat: Latitude of location as float (required if separate_daytime_nighttime=True).
+            lat: Latitude of location as float (required if separate_day_night=True).
                 Example: 46.583056. Used to detect daytime/nighttime.
-            lon: Longitude of location as float (required if separate_daytime_nighttime=True).
+            lon: Longitude of location as float (required if separate_day_night=True).
                 Example: 9.790639. Used to detect daytime/nighttime.
-            utc_offset: UTC offset of timestamp_index (required if separate_daytime_nighttime=True).
+            utc_offset: UTC offset of timestamp_index (required if separate_day_night=True).
                 Example: 1 for UTC+01:00. Used to detect daytime/nighttime.
             idstr: Identifier, added as suffix to output variable names.
             thres_zscore: Z-score threshold for outlier detection (default 4).
                 Values with |z-score| > threshold are flagged as outliers. Used for:
-                * **Global mode (separate_daytime_nighttime=False):** Applied to all records.
+                * **Global mode (separate_day_night=False):** Applied to all records.
                 * **Day/Night mode:** Default for both daytime and nighttime (can be overridden).
             thres_zscore_daytime: Override ``thres_zscore`` for daytime records only.
-                Only used if ``separate_daytime_nighttime=True``. If None, uses ``thres_zscore``.
+                Only used if ``separate_day_night=True``. If None, uses ``thres_zscore``.
             thres_zscore_nighttime: Override ``thres_zscore`` for nighttime records only.
-                Only used if ``separate_daytime_nighttime=True``. If None, uses ``thres_zscore``.
+                Only used if ``separate_day_night=True``. If None, uses ``thres_zscore``.
             showplot: Show plot with removed data points.
             plottitle: Optional title for the plot.
             verbose: More text output to console if True.
         """
+        reject_legacy_params(legacy, 'zScore')
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
 
         # Validate inputs
         if thres_zscore <= 0:
             raise ValueError('thres_zscore must be positive.')
 
-        self.separate_daytime_nighttime = separate_daytime_nighttime
+        self.separate_day_night = separate_day_night
         self.showplot = showplot
         self.plottitle = plottitle
         self.verbose = verbose
@@ -123,11 +127,11 @@ class zScore(FlagBase):
         self.last_upper_bound = None
         self.last_lower_bound = None
 
-        if separate_daytime_nighttime:
+        if separate_day_night:
             # Day/night mode
             if lat is None or lon is None or utc_offset is None:
                 raise ValueError(
-                    'lat, lon, and utc_offset are required when separate_daytime_nighttime=True'
+                    'lat, lon, and utc_offset are required when separate_day_night=True'
                 )
 
             # Detect daytime and nighttime
@@ -147,7 +151,7 @@ class zScore(FlagBase):
             self.run_flagtests, repeat=repeat, progress_callback=progress_callback)
         if self.showplot:
             self.defaultplot(n_iterations=n_iterations)
-            if self.separate_daytime_nighttime:
+            if self.separate_day_night:
                 title = (f"z-score filter daytime/nighttime: {self.series.name}, "
                          f"n_iterations = {n_iterations}, "
                          f"n_outliers = {self.series[self.overall_flag == 2].count()}")
@@ -156,7 +160,7 @@ class zScore(FlagBase):
 
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
-        if self.separate_daytime_nighttime:
+        if self.separate_day_night:
             return self._flagtests_daytime_nighttime(iteration)
         else:
             return self._flagtests_global(iteration)
@@ -184,7 +188,7 @@ class zScore(FlagBase):
         n_outliers = len(rejected)
 
         if self.verbose:
-            detail(f"ITERATION#{iteration}: Total found outliers: {len(rejected)} values", verbose=self.verbose)
+            detail(f"ITERATION#{iteration}: Total found outliers: {len(rejected)} values", verbose=self.verbose, min_level=VERBOSE_PROGRESS)
 
         return ok, rejected, n_outliers
 
@@ -238,7 +242,7 @@ class zScore(FlagBase):
             detail(f"ITERATION#{iteration}: Total found outliers: "
                    f"{n_outliers} (daytime+nighttime), "
                    f"{len(_rejected_dt)} (daytime), "
-                   f"{len(_rejected_nt)} (nighttime)", verbose=self.verbose)
+                   f"{len(_rejected_nt)} (nighttime)", verbose=self.verbose, min_level=VERBOSE_PROGRESS)
 
         return ok, rejected, n_outliers
 
@@ -264,7 +268,7 @@ class zScoreRolling(FlagBase):
         useful for non-stationary time series.
 
         Example:
-            See `examples/preprocessing/outlier_detection/zscore.py` for complete examples.
+            See `examples/preprocessing/outlier_detection/outlier_zscore.py` for complete examples.
 
         Args:
             series: Time series in which outliers are identified.
@@ -343,6 +347,6 @@ class zScoreRolling(FlagBase):
         n_outliers = len(rejected)
 
         if self.verbose:
-            detail(f"ITERATION#{iteration}: Total found outliers: {len(rejected)} values", verbose=self.verbose)
+            detail(f"ITERATION#{iteration}: Total found outliers: {len(rejected)} values", verbose=self.verbose, min_level=VERBOSE_PROGRESS)
 
         return ok, rejected, n_outliers

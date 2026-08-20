@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from diive.gui.widgets.colormaps import COLORMAPS as _COLORMAPS
 from diive.gui.widgets.drop_combo import DropComboBox as _DropComboBox
 
 #: Sentinel entry meaning "no colour-by variable" in the colour-by dropdown.
@@ -124,15 +125,6 @@ _YEARMONTH_AGGS = ["mean", "median", "sum", "min", "max", "std"]
 #: explicit edges, so it is omitted here) and aggregation functions.
 _XYZ_BINNING_TYPES = ["quantiles", "equal_width"]
 _XYZ_AGGFUNCS = ["mean", "median", "min", "max", "sum", "count"]
-
-#: Curated colormaps offered in the heatmap dropdown (it stays editable, so any
-#: valid matplotlib name can also be typed). Diverging first (the diive
-#: default), then perceptually-uniform sequential, then a few classics.
-_COLORMAPS = [
-    "RdYlBu_r", "RdYlBu", "RdBu_r", "coolwarm", "Spectral", "Spectral_r",
-    "viridis", "plasma", "inferno", "magma", "cividis", "turbo",
-    "YlOrRd", "YlGnBu", "Greys", "jet",
-]
 
 #: NaN-cell colour choices (also editable so any colour name/hex can be typed).
 _BAD_COLORS = ["grey", "white", "black", "lightgrey", "#FAFAFA", "none"]
@@ -686,7 +678,7 @@ class PlotSettingsPanel(QScrollArea):
         form.addRow(hint)
         labels = ("X (driver)", "Y (driver)", "Z (flux)")
         for label, combo in zip(labels, self._build_role_combos(
-                labels, none_ok=(False, False, False))):
+                labels, none_ok=(False, False, False)), strict=False):
             form.addRow(label, combo)
         self._col.addWidget(roles)
 
@@ -694,7 +686,8 @@ class PlotSettingsPanel(QScrollArea):
         form = QFormLayout(binning)
         self.gridsize = self._spin(11, 2, 100, form, "Grid size")
         self.normalize_axes = self._check("Normalize (pctile)", form)
-        self.mincnt = self._spin(0, 0, 1000, form, "Min count")
+        # Floor is 1, not 0: mincnt=0 hands empty cells to the reducer (HexbinPlot rejects it).
+        self.mincnt = self._spin(1, 1, 1000, form, "Min count")
         self._col.addWidget(binning)
 
         colors = QGroupBox("Colors")
@@ -762,7 +755,7 @@ class PlotSettingsPanel(QScrollArea):
         form.addRow(hint)
         labels = ("X (driver)", "Y (driver)", "Z (value)")
         for label, combo in zip(labels, self._build_role_combos(
-                labels, none_ok=(False, False, False))):
+                labels, none_ok=(False, False, False)), strict=False):
             form.addRow(label, combo)
         self._col.addWidget(roles)
 
@@ -879,7 +872,7 @@ class PlotSettingsPanel(QScrollArea):
         re-emitting ``xyz_changed``. No-op for plot types without role combos."""
         if getattr(self, "_role_combos", None) is None:
             return
-        for combo, name, none_ok in zip(self._role_combos, (x, y, z), self._role_none_ok):
+        for combo, name, none_ok in zip(self._role_combos, (x, y, z), self._role_none_ok, strict=False):
             combo.blockSignals(True)
             i = combo.findText(name) if name else -1
             combo.setCurrentIndex(i if i >= 0 else (0 if none_ok else combo.currentIndex()))
@@ -891,7 +884,7 @@ class PlotSettingsPanel(QScrollArea):
         if getattr(self, "_role_combos", None) is None:
             return
         names = [str(n) for n in names]
-        for combo, none_ok in zip(self._role_combos, self._role_none_ok):
+        for combo, none_ok in zip(self._role_combos, self._role_none_ok, strict=False):
             cur = combo.currentText()
             combo.blockSignals(True)
             combo.clear()
@@ -1181,7 +1174,7 @@ class PlotSettingsPanel(QScrollArea):
         self.sd_show_yaxis = self._check("Show y-axis", form, checked=False)
         self._col.addWidget(disp)
 
-        self._build_format_group(fields=["title", "xlabel", "fonts"])
+        self._build_format_group(fields=["title", "xlabel", "fonts", "show_grid"])
 
     def _dateedit(self, form, label) -> QLineEdit:
         edit = QLineEdit()
@@ -1452,7 +1445,7 @@ class PlotSettingsPanel(QScrollArea):
             self.fmt_ticks_fs = self._fontspin(form, "Tick font")
         if "show_grid" in fields:
             grid_default = self._plot_type not in (
-                HEATMAP, HEATMAP_YEARMONTH, HEATMAP_XYZ, HEXBIN)
+                HEATMAP, HEATMAP_YEARMONTH, HEATMAP_XYZ, HEXBIN, SHIFTEDDIST)
             self.fmt_grid = self._check("Show grid", form, checked=grid_default)
         if "show_legend" in fields:
             self.fmt_legend = self._check("Show legend", form, checked=True)
@@ -1576,7 +1569,7 @@ class PlotSettingsPanel(QScrollArea):
     def apply_state(self, values) -> None:
         """Re-apply a snapshot from :meth:`state` onto the controls."""
         from diive.gui.widgets.state_utils import set_widget_value
-        for w, v in zip(self._state_widgets(), values or []):
+        for w, v in zip(self._state_widgets(), values or [], strict=False):
             set_widget_value(w, v)
 
     def values(self) -> dict:

@@ -140,7 +140,14 @@ class TestDriverAnalysisTemporal(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        target, drivers = _synthetic(months=4)
+        # months=2 (same as the static class), NOT more: the temporal level costs
+        # superlinearly in row count, because every stage ends in a TreeSHAP pass
+        # over the full matrix and a bigger sample also deepens the forest
+        # (min_samples_leaf=3). Measured on this fixture: 2 months 27 s, 4 months
+        # 207 s -- 2x the data for 7.5x the time. The lag span is nearly free by
+        # comparison (-6..0 vs -2..0 differs by 2 s), so it stays wide enough to
+        # exercise lagged_variants and the (driver, lag) attribution.
+        target, drivers = _synthetic(months=2)
         cls.da = DriverAnalysis(target=target, drivers=drivers, model=_fast_rf(),
                                 lags=list(range(-6, 1)), verbose=0
                                 ).run(levels=('static', 'temporal'))
@@ -166,6 +173,59 @@ class TestDriverAnalysisTemporal(unittest.TestCase):
         for col in ['dominant_lag', 'timescale', 'scale_dependence', 'regime_dependence']:
             self.assertIn(col, conv.columns)
         self.assertEqual(self.da.results.levels_run, ['static', 'temporal'])
+
+
+class TestDeseasonalizeKeepsGaps(unittest.TestCase):
+    """STL deseasonalization must not invent values for missing records."""
+
+    def test_stl_components_mask_the_input_gaps(self):
+        from diive.analysis.driveranalysis.driveranalysis import _stl_components
+        target, _ = _synthetic(months=1)
+        target.iloc[200:400] = np.nan
+        trend, seasonal, resid = _stl_components(target, period=48)
+        for comp in (trend, seasonal, resid):
+            # The gap stays a gap ...
+            self.assertEqual(int(comp.iloc[200:400].notna().sum()), 0)
+            # ... and every measured record is still decomposed.
+            self.assertEqual(int(comp.drop(comp.index[200:400]).isna().sum()), 0)
+
+    def test_deseasonalize_does_not_add_rows_to_the_model_matrix(self):
+        # Interpolated values reaching the matrix would be scored as if they
+        # were measurements -- including in the chronological hold-out.
+        target, drivers = _synthetic(months=1)
+        target.iloc[200:400] = np.nan
+        da = DriverAnalysis(target=target, drivers=drivers, model=_fast_rf(),
+                            deseasonalize=True, verbose=0)
+        self.assertEqual(int(da.target.isna().sum()), 200)
+        _X, y = da._build_matrix(da.drivers_df, da.target)
+        self.assertEqual(len(y), len(target) - 200)
+
+
+class TestPerSubmodelNoiseFloor(unittest.TestCase):
+    """Layer-2 relevance is judged against the floor of the fit that produced it."""
+
+    def test_regime_relevance_uses_each_regimes_own_floor(self):
+        target, drivers = _synthetic(months=1)
+        da = DriverAnalysis(target=target, drivers=drivers, model=_fast_rf(), verbose=0)
+        # Two regimes with different noise scales; in each, TA clears its own
+        # model's floor, so its relevance does not actually differ across them.
+        da._random_baseline = 1.0
+        da._result.stratified = pd.DataFrame({'day': {'TA': 3.0}, 'night': {'TA': 0.6}})
+        da._stratified_baselines = {'day': 2.0, 'night': 0.4}
+        fields = da._temporal_fields('TA', freq_min=30.0)
+        self.assertFalse(fields['regime_dependence'])
+        # Against the headline model's floor alone the same two numbers read
+        # yes / weak, i.e. a regime dependence that is an artefact of comparing
+        # subset importances to a floor fitted on the whole record.
+        self.assertEqual(da._relevance(3.0, 1.0), 'yes')
+        self.assertEqual(da._relevance(0.6, 1.0), 'weak')
+
+    def test_stratified_records_a_floor_per_regime(self):
+        target, drivers = _synthetic(months=1)
+        da = DriverAnalysis(target=target, drivers=drivers, model=_fast_rf(), verbose=0)
+        st = da.stratified(by='daynight')
+        self.assertEqual(set(da._stratified_baselines), set(st.columns))
+        self.assertTrue(all(v > 0 for v in da._stratified_baselines.values()))
 
 
 class TestDriverAnalysisValidation(unittest.TestCase):

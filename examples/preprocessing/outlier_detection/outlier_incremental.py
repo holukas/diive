@@ -52,7 +52,7 @@ print(f"  Range: {s_noise.min():.2f} to {s_noise.max():.2f}°C")
 zsi = dv.outliers.zScoreIncrements(
     series=s_noise,
     thres_zscore=3,
-    showplot=False,
+    showplot=True,
     verbose=1
 )
 zsi.calc(repeat=True)

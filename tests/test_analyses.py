@@ -394,6 +394,366 @@ class TestAnalyses(unittest.TestCase):
         with self.assertRaises(ValueError):
             CompoundExtremes(var1=vpd.rename('X'), var2=swc.rename('X'))
 
+    def test_sstats_degenerate_input(self):
+        """sstats must not raise on series with no valid values.
+
+        An all-NaN series is ordinary (a variable with no data in the selected
+        period). It used to raise ZeroDivisionError, and an empty series raised
+        IndexError.
+        """
+        import numpy as np
+        import pandas as pd
+        from diive.core.dfun.stats import sstats
+
+        idx = pd.date_range('2024-01-01', periods=10, freq='30min', name='TIMESTAMP_MIDDLE')
+
+        empty = sstats(pd.Series([], dtype=float, name='X', index=pd.DatetimeIndex([])))
+        self.assertEqual(empty.loc['NOV', 'X'], 0)
+        self.assertTrue(pd.isna(empty.loc['STARTDATE', 'X']))
+        self.assertTrue(pd.isna(empty.loc['OUTLIER_PERC', 'X']))
+
+        allnan = sstats(pd.Series([np.nan] * 10, name='X', index=idx))
+        self.assertEqual(allnan.loc['NOV', 'X'], 0)
+        self.assertTrue(pd.isna(allnan.loc['OUTLIER_PERC', 'X']))
+        # The index still has records, so the date range stays reportable.
+        self.assertFalse(pd.isna(allnan.loc['STARTDATE', 'X']))
+
+        # A populated series is unaffected.
+        normal = sstats(pd.Series(np.arange(10, dtype=float), name='X', index=idx))
+        self.assertEqual(normal.loc['NOV', 'X'], 10)
+        self.assertEqual(normal.loc['OUTLIER_PERC', 'X'], 0.0)
+
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestHarmonicAmplitudesAreTrueAmplitudes(unittest.TestCase):
+    """A reported amplitude must be the signal's, not the windowed signal's.
+
+    Both `harmonic_analysis` and `harmonic_decompose` multiply by a window before
+    the FFT. A window scales the signal down (hamming's mean is ~0.54), so without
+    dividing by that coherent gain every amplitude is a fraction of the truth and
+    a reconstruction built from them is short by the rest.
+    """
+
+    AMPLITUDE = 3.0
+    PERIOD = 50
+    N = 1000
+
+    def _cosine(self):
+        import numpy as np
+        import pandas as pd
+        t = np.arange(self.N)
+        return pd.Series(self.AMPLITUDE * np.cos(2 * np.pi * t / self.PERIOD),
+                         index=pd.date_range('2020-01-01', periods=self.N, freq='D'))
+
+    def test_harmonic_analysis_recovers_the_amplitude_for_any_window(self):
+        from diive.analysis.harmonic import harmonic_analysis
+        for window in ('boxcar', 'hamming', 'hann', 'blackman'):
+            with self.subTest(window=window):
+                h = harmonic_analysis(self._cosine(), period=self.PERIOD,
+                                      n_harmonics=1, window=window)['harmonics'][0]
+                self.assertAlmostEqual(h['amplitude'], self.AMPLITUDE, places=6)
+
+    def test_harmonic_analysis_reads_the_bin_it_reports(self):
+        # The harmonic used to be read one bin high: amplitudes/phases/power have
+        # DC stripped, but they were indexed with the full-rfft bin number. A tone
+        # sitting exactly on its bin came back with amplitude 0.
+        from diive.analysis.harmonic import harmonic_analysis
+        h = harmonic_analysis(self._cosine(), period=self.PERIOD, n_harmonics=1,
+                              window='boxcar')['harmonics'][0]
+        self.assertAlmostEqual(h['actual_frequency'], h['target_frequency'], places=9)
+
+    def test_harmonic_decompose_recovers_the_amplitude(self):
+        from diive.core.times.decomposition_utils import harmonic_decompose
+        for window in ('boxcar', 'hamming'):
+            with self.subTest(window=window):
+                res = harmonic_decompose(self._cosine(), n_harmonics=1, window=window)
+                self.assertAlmostEqual(res['harmonics'][0]['amplitude'],
+                                       self.AMPLITUDE, places=6)
+
+    def test_harmonic_decompose_arrays_pair_element_wise(self):
+        # 'frequencies' used to be the full rfftfreq output, one longer than the
+        # arrays it is documented to pair with, so plotting one against the other
+        # raised.
+        from diive.core.times.decomposition_utils import harmonic_decompose
+        res = harmonic_decompose(self._cosine(), n_harmonics=2)
+        lengths = {k: len(res[k]) for k in
+                   ('frequencies', 'amplitudes', 'phases', 'spectrum')}
+        self.assertEqual(len(set(lengths.values())), 1, lengths)
+
+    def test_reconstruction_is_not_short_by_the_window(self):
+        from diive.core.times.decomposition_utils import harmonic_decompose
+        res = harmonic_decompose(self._cosine(), n_harmonics=1, window='boxcar')
+        self.assertAlmostEqual(float(res['reconstructed'].max()),
+                               self.AMPLITUDE, places=3)
+        # The residual is reconstruction error, not the amplitude the window ate.
+        self.assertLess(float(res['residual'].std()), 0.01 * self.AMPLITUDE)
+
+
+class TestDeadHarmonicFunctionsAreGone(unittest.TestCase):
+    """Removed: no caller in the library, the GUI, the tests or the examples.
+
+    The GUI spectrogram tab calls `dv.analysis.spectrogram`, which goes straight
+    to `scipy.signal.spectrogram` - it never used any of these.
+    """
+
+    def test_they_are_not_importable(self):
+        import diive.analysis.harmonic as h
+        for name in ('reconstruct_harmonics', 'periodogram', 'fft_decompose',
+                     'multi_scale_harmonics'):
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(h, name))
+
+    def test_the_live_ones_remain(self):
+        import diive as dv
+        self.assertTrue(callable(dv.analysis.harmonic_analysis))
+        self.assertTrue(callable(dv.analysis.spectrogram))
+
+
+class TestStratifiedAnalysisKeepsItsData(unittest.TestCase):
+    """Records and z bins must only be lost for reasons the caller can see."""
+
+    @staticmethod
+    def _frame(n=2000, seed=0):
+        import numpy as np
+        import pandas as pd
+        rng = np.random.RandomState(seed)
+        idx = pd.date_range('2020-01-01', periods=n, freq='30min')
+        return pd.DataFrame({'z': rng.uniform(0, 30, n),
+                             'x': rng.uniform(0, 800, n),
+                             'y': rng.uniform(0, 2, n)}, index=idx)
+
+    def test_gaps_in_other_columns_do_not_remove_records(self):
+        # The documented input is "a dataframe with variables", so a working
+        # dataframe is the obvious thing to pass. Listwise deletion across all of
+        # its columns used to cut thousands of rows down to a handful.
+        import numpy as np
+        from diive.analysis.decoupling import StratifiedAnalysis
+        df = self._frame()
+        df['unrelated'] = np.nan
+        df.iloc[:50, df.columns.get_loc('unrelated')] = 1.0
+        sa = StratifiedAnalysis(df=df, zvar='z', xvar='x', yvar='y',
+                                n_bins_z=4, n_bins_x=3)
+        self.assertEqual(sa.n_records_used, len(df))
+        self.assertEqual(len(sa.df), len(df))
+
+    def test_gaps_in_the_analysis_variables_are_dropped_and_counted(self):
+        import numpy as np
+        from diive.analysis.decoupling import StratifiedAnalysis
+        df = self._frame()
+        df.iloc[:120, df.columns.get_loc('y')] = np.nan
+        sa = StratifiedAnalysis(df=df, zvar='z', xvar='x', yvar='y',
+                                n_bins_z=4, n_bins_x=3)
+        self.assertEqual(sa.n_records_input, len(df))
+        self.assertEqual(sa.n_records_used, len(df) - 120)
+
+
+    def test_z_bins_whose_labels_round_alike_are_kept_apart(self):
+        # z spans 0.1, so at 60 quantile bins the medians are ~0.0017 apart -- far
+        # below the two-decimal label. Colliding labels used to overwrite each
+        # other in `binaggs`, and the plot blamed the loss on "not generated".
+        import numpy as np
+        import pandas as pd
+        from diive.analysis.decoupling import StratifiedAnalysis
+        rng = np.random.RandomState(1)
+        n = 6000
+        df = pd.DataFrame({'z': np.linspace(0, 0.1, n),
+                           'x': rng.uniform(0, 800, n),
+                           'y': rng.uniform(0, 2, n)},
+                          index=pd.date_range('2020-01-01', periods=n, freq='30min'))
+        sa = StratifiedAnalysis(df=df, zvar='z', xvar='x', yvar='y',
+                                n_bins_z=60, n_bins_x=3).run()
+        self.assertEqual(len(sa.binaggs), 60)
+        self.assertEqual(len(set(sa.binaggs.keys())), 60)
+
+
+class TestHarmonicDecomposePicksDistinctComponents(unittest.TestCase):
+    """A window's leakage must not be returned as a component of its own."""
+
+    @staticmethod
+    def _two_components():
+        import numpy as np
+        import pandas as pd
+        t = np.arange(1000)
+        return pd.Series(3.0 * np.cos(2 * np.pi * t / 50) + 1.0 * np.cos(2 * np.pi * t / 25),
+                         index=pd.date_range('2020-01-01', periods=1000, freq='D'))
+
+    def test_both_components_are_found_under_every_window(self):
+        # Selecting the strongest *bins* returned period 50 twice under hamming
+        # (its leakage shoulder at 53 outranked the genuine weaker component at
+        # 25), so the reconstruction double-counted one component and missed the
+        # other. The strongest *peaks* are the components themselves.
+        from diive.core.times.decomposition_utils import harmonic_decompose
+        for window in ('boxcar', 'hamming', 'hann', 'blackman'):
+            with self.subTest(window=window):
+                res = harmonic_decompose(self._two_components(), n_harmonics=2, window=window)
+                found = sorted(round(h['period']) for h in res['harmonics'])
+                self.assertEqual(found, [25, 50])
+                amps = {round(h['period']): h['amplitude'] for h in res['harmonics']}
+                self.assertAlmostEqual(amps[50], 3.0, delta=0.1)
+                self.assertAlmostEqual(amps[25], 1.0, delta=0.1)
+
+    def test_the_reconstruction_follows_the_signal(self):
+        from diive.core.times.decomposition_utils import harmonic_decompose
+        series = self._two_components()
+        res = harmonic_decompose(series, n_harmonics=2, window='hamming')
+        self.assertLess(res['residual'].abs().max(), 0.2)
+
+
+class TestCompoundExtremesSaysWhenItCannotClassify(unittest.TestCase):
+    """An empty result must not read like "no extremes occurred".
+
+    With the documented defaults (agg='monthly', standardize_by='season') a single
+    year gives every calendar-month group one member, so std (ddof=1) is NaN, every
+    period is dropped, and `results` came back empty with `counts` all zeros - the
+    same output as a record that genuinely holds no extremes.
+    """
+
+    @staticmethod
+    def _data(years):
+        from diive.configs.exampledata import load_exampledata_parquet
+        df = load_exampledata_parquet()
+        sub = df.loc[years]
+        return sub['Tair_f'].copy(), sub['VPD_f'].copy()
+
+    def test_a_single_year_raises_and_names_the_way_out(self):
+        from diive.analysis.compoundextremes import CompoundExtremes
+        ta, vpd = self._data('2018')
+        with self.assertRaises(ValueError) as ctx:
+            CompoundExtremes(var1=ta, var2=vpd)  # standardize_by='season' by default
+        msg = str(ctx.exception)
+        self.assertIn('two years', msg)
+        self.assertIn("standardize_by='record'", msg)
+
+    def test_the_named_way_out_works_on_the_same_data(self):
+        from diive.analysis.compoundextremes import CompoundExtremes
+        ta, vpd = self._data('2018')
+        ce = CompoundExtremes(var1=ta, var2=vpd, standardize_by='record')
+        self.assertEqual(len(ce.results), 12)
+        self.assertEqual(int(ce.counts.sum()), 12)
+
+    def test_enough_years_still_classify_normally(self):
+        from diive.analysis.compoundextremes import CompoundExtremes
+        ta, vpd = self._data(slice('2018', '2022'))
+        ce = CompoundExtremes(var1=ta, var2=vpd)
+        self.assertEqual(len(ce.results), 60)  # 5 years x 12 months
+
+    def test_partial_losses_are_reported_but_do_not_raise(self):
+        # 13 months: January has two members, the other months one, so 11 periods
+        # drop out and 2 survive. That must be said, not swallowed.
+        from diive.core.utils.console import console
+        from diive.analysis.compoundextremes import CompoundExtremes
+        ta, vpd = self._data(slice('2018-01-01', '2019-01-31'))
+        with console.capture() as cap:
+            ce = CompoundExtremes(var1=ta, var2=vpd)
+        self.assertEqual(len(ce.results), 2)
+        self.assertIn('could not be classified', cap.get())
+
+
+class TestReconstructionOnlyHonoursTheComponentsItUses(unittest.TestCase):
+    """L57: the trend's NaN must not reach a trend-excluding reconstruction.
+
+    A classical decomposition leaves the trend NaN at the (period-1)//2 records at
+    each end by design, while the seasonal component is defined everywhere. The
+    unconditional `result[trend.isna()] = np.nan` blanked those records in a
+    seasonal-only reconstruction too, and disagreed with `detrend()`, which sums
+    the same two components directly.
+    """
+
+    @staticmethod
+    def _decomp():
+        import numpy as np
+        import pandas as pd
+        from diive.analysis.seasonaltrend import SeasonalTrendDecomposition
+        t = np.arange(400)
+        series = pd.Series(5.0 * np.sin(2 * np.pi * t / 31) + 10.0 + t * 0.01,
+                           index=pd.date_range('2015-01-01', periods=400, freq='D'))
+        return SeasonalTrendDecomposition(series, method='classical', seasonal_period=31)
+
+    def test_a_seasonal_only_reconstruction_keeps_every_record(self):
+        std = self._decomp()
+        self.assertEqual(int(std.trend.isna().sum()), 30)  # NaN by design
+        self.assertEqual(int(std.seasonal.isna().sum()), 0)
+        recon = std.reconstruct(keep_components=['seasonal'])
+        self.assertEqual(int(recon.isna().sum()), 0)
+        self.assertLess((recon - std.seasonal).abs().max(), 1e-12)
+
+    def test_it_agrees_with_detrend(self):
+        import pandas as pd
+        std = self._decomp()
+        recon = std.reconstruct(keep_components=['seasonal', 'residual'])
+        pd.testing.assert_series_equal(recon, std.detrend())
+
+    def test_a_used_component_still_carries_its_gaps_over(self):
+        std = self._decomp()
+        # The trend is used here, so its NaN belongs in the output.
+        self.assertEqual(int(std.reconstruct(keep_components=['trend']).isna().sum()), 30)
+        full = std.reconstruct()
+        self.assertEqual(int(full.isna().sum()), 30)
+        measured = full.dropna()
+        self.assertLess((measured - std.series.loc[measured.index]).abs().max(), 1e-9)
+
+
+class TestClassicalDecomposeRequestsNoExtrapolation(unittest.TestCase):
+    """L87: the trend edges are NaN on purpose, and the code must say so.
+
+    `classical_decompose` used to pass `extrapolate='freq'` inside a
+    `try/except TypeError`. The statsmodels parameter is `extrapolate_trend`, so the
+    call raised on every version and the no-extrapolation fallback ran every time --
+    a dead branch that read as if extrapolation were happening. The behaviour it
+    silently produced is the one we want, so the fix removed the branch rather than
+    switching extrapolation on: filling those records would invent trend values and
+    move `seasonality_strength`.
+    """
+
+    @staticmethod
+    def _series(n=400, period=31):
+        import numpy as np
+        import pandas as pd
+        t = np.arange(n)
+        return pd.Series(5.0 * np.sin(2 * np.pi * t / period) + 10.0 + t * 0.01,
+                         index=pd.date_range('2015-01-01', periods=n, freq='D')), period
+
+    def test_trend_edges_stay_nan(self):
+        from diive.core.times.decomposition_utils import classical_decompose
+        series, period = self._series()
+        out = classical_decompose(series, period=period)
+        expected = 2 * ((period - 1) // 2)
+        self.assertEqual(int(out['trend'].isna().sum()), expected)
+        self.assertEqual(int(out['residual'].isna().sum()), expected)
+        # The seasonal component is defined everywhere; only the moving average is not.
+        self.assertEqual(int(out['seasonal'].isna().sum()), 0)
+
+    def test_interior_trend_is_a_centred_moving_average(self):
+        """Pins the values, so enabling extrapolation later cannot pass unnoticed."""
+        import numpy as np
+        from diive.core.times.decomposition_utils import classical_decompose
+        series, period = self._series()
+        out = classical_decompose(series, period=period)
+        half = (period - 1) // 2
+        interior = out['trend'].iloc[half:-half]
+        self.assertEqual(int(interior.isna().sum()), 0)
+        manual = series.rolling(window=period, center=True).mean().iloc[half:-half]
+        np.testing.assert_allclose(interior.to_numpy(), manual.to_numpy(), rtol=1e-9)
+
+
+class TestStlReturnsNoFakeIterationCount(unittest.TestCase):
+    """L60: 'iterations' held `DecomposeResult.nobs`, an observation count.
+
+    On the installed statsmodels that property returns a *shape tuple*, so the key
+    documented as "number of inner loop iterations" carried `(n,)`. statsmodels'
+    STL reports no iteration count, so none is returned.
+    """
+
+    def test_the_result_carries_only_keys_it_can_fill(self):
+        import numpy as np
+        import pandas as pd
+        from diive.core.times.decomposition_utils import stl_decompose
+        t = np.arange(600)
+        series = pd.Series(5.0 * np.sin(2 * np.pi * t / 30) + t * 0.01,
+                           index=pd.date_range('2015-01-01', periods=600, freq='D'))
+        res = stl_decompose(series, seasonal=30, trend=61, robust=False)
+        self.assertEqual(set(res), {'seasonal', 'trend', 'residual', 'n_interpolated'})
+        self.assertNotIn('iterations', res)

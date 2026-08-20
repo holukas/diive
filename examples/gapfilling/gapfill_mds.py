@@ -1,7 +1,7 @@
 """
-===================================
+====================================
 Marginal Distribution Sampling (MDS)
-===================================
+====================================
 
 Gap-fill time series using Marginal Distribution Sampling.
 
@@ -13,6 +13,7 @@ Best for: Ecosystem flux gap-filling when ML training data is unavailable or whe
 physical similarity-based reconstruction is preferred over statistical learning.
 
 References:
+
 - Reichstein et al. (2005). On the separation of net ecosystem exchange into
   assimilation and ecosystem respiration. Global Change Biology, 11(9), 1424-1439.
   https://doi.org/10.1111/j.1365-2486.2005.001002.x

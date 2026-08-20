@@ -15,7 +15,7 @@ from diive.gapfilling.interpolate import linear_interpolation
 from diive.gapfilling.mds import FluxMDS
 from diive.gapfilling.randomforest_ts import RandomForestTS, QuickFillRFTS, OptimizeParamsRFTS
 from diive.gapfilling.xgboost_ts import XGBoostTS
-from diive.gapfilling.scores import prediction_scores
+from diive.core.ml.scores import prediction_scores
 from diive.gapfilling.longterm import LongTermGapFillingRandomForestTS, LongTermGapFillingXGBoostTS
 from diive.gapfilling.swin import SWINGapFillerXGBoost
 

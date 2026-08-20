@@ -18,15 +18,11 @@ Typical workflow:
     4. Use reporting methods for diagnostics: report_qcf_flags(), report_qcf_evolution()
 
 Example:
-    >>> qcf = FlagQCF(
-    ...     df=data_with_flags,
-    ...     series=flux_series,
-    ...     outname='NEE',
-    ...     swinpot=sw_in_pot  # Optional: enables daytime/nighttime separation
-    ... )
+    >>> import diive as dv, pandas as pd
+    >>> df = pd.DataFrame({'NEE': [1.0, 2.0], 'FLAG_TEST1_L41_NEE_TEST': [0, 2]},
+    ...                   index=pd.date_range('2024-06-01', periods=2, freq='30min'))
+    >>> qcf = dv.qaqc.FlagQCF(df=df, target_col='NEE', idstr='_L41')
     >>> qcf.calculate(daytime_accept_qcf_below=2, nighttime_accept_qcf_below=2)
-    >>> quality_controlled_flux = qcf.filteredseries  # NaN for rejected values
-    >>> highest_quality_flux = qcf.filteredseries_hq  # NaN for any QCF > 0
 """
 
 import matplotlib.gridspec as gridspec
@@ -56,7 +52,8 @@ class FlagQCF:
     Flags: 0=pass, 1=soft (minor), 2=hard (critical). Sums add flag *values*, so
     sumsoftflags == soft count but sumhardflags == 2 x hard count.
 
-    QCF:
+    QCF::
+
         0: no flags
         1: 1-3 soft flags, no hard flags
         2: >3 soft flags OR >=1 hard flag OR rejected by day/night logic
@@ -103,12 +100,10 @@ class FlagQCF:
             KeyError: If target_col or swinpot_col column not found in DataFrame.
 
         Example:
-            >>> qcf = FlagQCF(
-            ...     df=data,  # Must contain FLAG_TEST1_L41_NEE_TEST, FLAG_TEST2_L41_NEE_TEST, etc.
-            ...     target_col='NEE',  # Column name of variable to check
-            ...     swinpot_col='SW_IN_POT',  # Optional: for daytime/nighttime separation
-            ...     idstr='_L41'  # Identifies flags as FLAG_*_L41_NEE_TEST pattern
-            ... )
+            >>> import diive as dv, pandas as pd
+            >>> df = pd.DataFrame({'NEE': [1.0, 2.0], 'FLAG_TEST1_L41_NEE_TEST': [0, 2]},
+            ...                   index=pd.date_range('2024-06-01', periods=2, freq='30min'))
+            >>> qcf = dv.qaqc.FlagQCF(df=df, target_col='NEE', idstr='_L41')
         """
         if target_col not in df.columns:
             raise KeyError(f"Column '{target_col}' not found in DataFrame")
@@ -170,7 +165,7 @@ class FlagQCF:
 
     @property
     def flags(self) -> DataFrame:
-        """Return dataframe containing all test flags and calculated QCF results.
+        r"""Return dataframe containing all test flags and calculated QCF results.
 
         Returns:
             DataFrame with original test flags plus calculated QCF columns:
@@ -178,8 +173,8 @@ class FlagQCF:
                 - SUM*_FLAGS: Sum of all flag values (soft sum + hard sum)
                 - SUM*_HARDFLAGS: Sum of hard-flag values (2 x hard-flag count)
                 - SUM*_SOFTFLAGS: Sum of soft-flag values (== soft-flag count)
-                - *_QCF: Quality-controlled series (NaN for QCF=2)
-                - *_QCF0: Highest-quality series (NaN for QCF>0)
+                - \*_QCF: Quality-controlled series (NaN for QCF=2)
+                - \*_QCF0: Highest-quality series (NaN for QCF>0)
         """
         if not isinstance(self._flags_df, DataFrame):
             raise Exception('Results for flags are empty')
@@ -219,7 +214,9 @@ class FlagQCF:
             2 = Poor quality (critical issues or too many soft flags)
 
         Returns:
-            Series with QCF values (0, 1, 2, or NaN if no flags available).
+            Series with QCF values (0, 1 or 2). Never NaN: a record for which no test
+            raised a flag - including one where every test flag is NaN - has flag sums
+            of zero and therefore QCF=0.
         """
         return self.flags[self.flagqcfcol]
 
@@ -293,9 +290,9 @@ class FlagQCF:
 
         Shows which tests are raising flags and their impact.
         """
-        _console.print(f"\n\n{'═' * 100}")
+        _console.print(f"\n\n{'=' * 100}")
         _console.print(f"  INDIVIDUAL TEST FLAG STATISTICS: {self.series_name}")
-        _console.print(f"{'═' * 100}")
+        _console.print(f"{'=' * 100}")
 
         flagcols = identify_flagcols(df=self.flags, seriescol=self.series_name)
 
@@ -309,14 +306,14 @@ class FlagQCF:
         _console.print(f"\n  Total test flags: {len(test_flagcols)}")
 
         # === REPORT 1: FLAGS WITH MISSING VALUES ===
-        _console.print(f"\n\n  ┌─ REPORT 1A: ALL RECORDS (INCLUDING MISSING VALUES)")
-        _console.print(f"  │")
+        _console.print(f"\n\n  +- REPORT 1A: ALL RECORDS (INCLUDING MISSING VALUES)")
+        _console.print(f"  |")
         for col in test_flagcols:
             self._flagstats_dt_nt(col=col, df=self.flags)
 
         # === REPORT 2: FLAGS FOR AVAILABLE RECORDS ===
-        _console.print(f"\n  ┌─ REPORT 1B: AVAILABLE RECORDS ONLY (EXCLUDING MISSING VALUES)")
-        _console.print(f"  │")
+        _console.print(f"\n  +- REPORT 1B: AVAILABLE RECORDS ONLY (EXCLUDING MISSING VALUES)")
+        _console.print(f"  |")
         _df = self.flags.copy()
         ix_missing_vals = _df[self.series_name].isnull()
         _df = _df[~ix_missing_vals].copy()
@@ -324,28 +321,28 @@ class FlagQCF:
             self._flagstats_dt_nt(col=col, df=_df)
 
         # === SUMMARY ===
-        _console.print(f"\n{'═' * 100}\n")
+        _console.print(f"\n{'=' * 100}\n")
 
     def _flagstats_dt_nt(self, col: str, df: DataFrame):
         """Print flag statistics overall, daytime, and nighttime (if available)."""
         # Extract test name from column
         test_name = col.replace('FLAG_', '').replace('_TEST', '')
-        _console.print(f"\n  ├─ {test_name}")
-        _console.print(f"  │  {'Period':<15} │ {'Pass (0)':<15} │ {'Warn (1)':<15} │ {'Fail (2)':<15} │ {'Missing':<12}")
-        _console.print(f"  │  {'-' * 85}")
+        _console.print(f"\n  +- {test_name}")
+        _console.print(f"  |  {'Period':<15} | {'Pass (0)':<15} | {'Warn (1)':<15} | {'Fail (2)':<15} | {'Missing':<12}")
+        _console.print(f"  |  {'-' * 85}")
 
         flag = df[col]
-        self._flagstats(flag=flag, prefix="OVERALL", indent="  │  ")
+        self._flagstats(flag=flag, prefix="OVERALL", indent="  |  ")
 
         if isinstance(self.daytime, Series):
             flag = df[col].loc[self.daytime == 1]
             if len(flag) > 0:
-                self._flagstats(flag=flag, prefix="DAYTIME", indent="  │  ")
+                self._flagstats(flag=flag, prefix="DAYTIME", indent="  |  ")
 
         if isinstance(self.nighttime, Series):
             flag = df[col].loc[self.nighttime == 1]
             if len(flag) > 0:
-                self._flagstats(flag=flag, prefix="NIGHTTIME", indent="  │  ")
+                self._flagstats(flag=flag, prefix="NIGHTTIME", indent="  |  ")
 
     def report_qcf_evolution(self):
         """Print how QCF evolves as tests are applied sequentially.
@@ -558,7 +555,7 @@ class FlagQCF:
         fail_str = f"{n_fail:>5} ({perc_fail:>5.1f}%)"
         miss_str = f"{flagmissing:>4} ({perc_miss:>5.1f}%)"
 
-        _console.print(f"{indent}{prefix:<15} │ {pass_str:<15} │ {warn_str:<15} │ {fail_str:<15} │ {miss_str:<12}")
+        _console.print(f"{indent}{prefix:<15} | {pass_str:<15} | {warn_str:<15} | {fail_str:<15} | {miss_str:<12}")
 
     def report_qcf_series(self):
         """Print comprehensive summary statistics for quality-controlled series.
@@ -637,7 +634,8 @@ class FlagQCF:
     def _calculate_flag_qcf(self, df: DataFrame) -> DataFrame:
         """Calculate QCF flag (0/1/2) using hierarchical decision rules and apply day/night thresholds."""
 
-        # QCF is NaN if no flag is available
+        # Initialize the column; every record is assigned below, since the flag sums are
+        # zero (not NaN) where no flag was raised, which the next rule turns into QCF=0.
         df[self.flagqcfcol] = np.nan
 
         # QCF is 0 if all flags show zero

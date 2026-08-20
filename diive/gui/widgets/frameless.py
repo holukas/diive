@@ -17,6 +17,8 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
+import weakref
+
 from PySide6.QtCore import QEvent, QObject, Qt
 
 
@@ -27,7 +29,13 @@ class FramelessResizeHelper(QObject):
 
     def __init__(self, window, grip) -> None:
         super().__init__(grip)
-        self._window = window
+        # Weak, because the helper is parented to the grip, which is a child of
+        # the window: a strong reference closes a window -> grip -> helper ->
+        # window cycle. PySide6 traverses the Qt parent/child tree, so the cycle
+        # is collectable -- but only by a cyclic-GC pass, so dropping the last
+        # reference to the window would not free it there and then. With the
+        # weakref, refcounting alone does.
+        self._window = weakref.ref(window)
         self._grip = grip
         grip.setMouseTracking(True)
         grip.installEventFilter(self)
@@ -80,7 +88,8 @@ class FramelessResizeHelper(QObject):
               and event.button() == Qt.MouseButton.LeftButton):
             edges = self._edges(event.position().toPoint())
             if edges.value:
-                handle = self._window.windowHandle()
+                window = self._window()
+                handle = window.windowHandle() if window is not None else None
                 if handle is not None:
                     handle.startSystemResize(edges)
                     return True

@@ -55,8 +55,10 @@ def rank_drivers(
         the target is constant/all-NaN or no candidate qualifies.
 
     Example:
-        >>> ranked = rank_drivers(df, target='NEE', method='pearson', max_lag=4)
-        >>> ranked.head()  # strongest drivers first
+        >>> import diive as dv, pandas as pd, numpy as np
+        >>> idx = pd.date_range('2024-06-01', periods=200, freq='30min')
+        >>> df = pd.DataFrame({'NEE': np.sin(np.arange(200.)), 'TA': np.arange(200.)}, index=idx)
+        >>> ranked = dv.analysis.rank_drivers(df, target='NEE', method='pearson', max_lag=4)
     """
     if target not in df.columns:
         raise ValueError(f"target '{target}' not in df columns.")
@@ -182,6 +184,7 @@ class DailyCorrelation:
 
         Returns:
             dict with:
+
             - count: number of valid (non-NaN) days
             - median: median correlation
             - mean: mean correlation
@@ -194,6 +197,7 @@ class DailyCorrelation:
             - kurtosis: distribution kurtosis (heavy/light tails)
             - normality_statistic: Shapiro-Wilk test statistic
             - normality_pvalue: p-value (>0.05 suggests normal distribution)
+
             All float fields are NaN when no valid days exist.
         """
         daycorrs_clean = self.daycorrs_.dropna()

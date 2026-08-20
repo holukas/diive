@@ -89,6 +89,22 @@ class TestGapFilling(unittest.TestCase):
         self.assertEqual(counts[1028], 99)     # method 1, 28 d
         self.assertEqual(counts[2014], 156)    # method 2 (SWIN only), 14 d
 
+        # `.results` returns the same GapFillingResult type as the ML fillers,
+        # but MDS is not a regressor: it has no held-out split, no SHAP and no
+        # model object, so those fields stay None. Asserted on the run above
+        # rather than in a second MDS run, which is not cheap.
+        from diive.core.ml.results import GapFillingResult
+        res = mds.results
+        self.assertIsInstance(res, GapFillingResult)
+        self.assertEqual(int(res.gapfilled.isna().sum()), 0)
+        self.assertIn('r2', res.scores)
+        for ml_only in ('scores_traintest', 'feature_importances',
+                        'feature_importances_traintest',
+                        'feature_importances_reduction', 'model',
+                        'accepted_features', 'rejected_features'):
+            with self.subTest(field=ml_only):
+                self.assertIsNone(getattr(res, ml_only))
+
     def test_gapfilling_longterm_randomforest(self):
         from diive.configs.exampledata import load_exampledata_parquet
         from diive.gapfilling.longterm import LongTermGapFillingRandomForestTS
@@ -183,6 +199,46 @@ class TestGapFilling(unittest.TestCase):
         self.assertEqual(series_gapfilled.isnull().sum(), 7856)
         self.assertEqual(series.isnull().sum(), 11412)
 
+    def test_linear_interpolation_verbose_reports_the_limit(self):
+        """The verbose gap-analysis header must show the limit, not the literal.
+
+        The header used to sit in a plain (non-f) inner literal, so `{limit}` was
+        never interpolated and the report read `Gap Analysis (limit={limit})`.
+        Both the normal and the nothing-to-fill code path print this header.
+        """
+        import re
+        import pandas as pd
+        from diive.gapfilling import interpolate as interpolate_module
+        from diive.gapfilling.interpolate import linear_interpolation
+
+        # Capture on the console object `interpolate` itself holds, not on whatever
+        # `diive.core.utils.console.console` currently points at. The module binds it by
+        # name at import time, and `refresh_console()` rebinds the global to a NEW object
+        # (its own docstring says so) — so after tests/test_console.py has run, importing
+        # the name here captured a different console and this test saw empty output.
+        console = interpolate_module._console
+
+        idx = pd.date_range('2022-06-01', periods=20, freq='30min', name='TIMESTAMP_END')
+        series = pd.Series(np.arange(20.0), index=idx, name='TA')
+        series.iloc[[5, 6]] = np.nan  # a 2-record gap
+
+        def _report(limit):
+            # Rich wraps the padded header at the console width, so compare on
+            # whitespace-normalised text.
+            with console.capture() as captured:
+                linear_interpolation(series=series, limit=limit, verbose=True)
+            return re.sub(r'\s+', ' ', captured.get())
+
+        # Normal path: the gap is within the limit, so it gets filled.
+        out = _report(3)
+        self.assertIn('Gap Analysis (limit=3)', out)
+        self.assertNotIn('limit={limit}', out)
+
+        # Nothing-to-fill path: same header, printed before the early return.
+        out = _report(1)
+        self.assertIn('Gap Analysis (limit=1)', out)
+        self.assertNotIn('limit={limit}', out)
+
     def test_observed_preserved_when_feature_missing(self):
         """Observed targets must never be overwritten/mis-flagged when a feature
         is missing at that row (driver gap not aligned with the target gap)."""
@@ -228,8 +284,10 @@ class TestGapFilling(unittest.TestCase):
 
         # Seed both the train/test split and the regressor: without random_state
         # the split is redrawn every run and the scores below drift.
+        # interpolate_short_gaps=None pins the model-only path this test asserts
+        # (every daytime gap flag 1, not flag 4), independent of the class default.
         g = SWINGapFillerXGBoost(series=swin_gappy, lat=lat, lon=lon, utc_offset=utc,
-                                 random_state=42, verbose=0)
+                                 interpolate_short_gaps=None, random_state=42, verbose=0)
         g.run()
         gf = g.results.gapfilled
         self.assertEqual(int(gf.isna().sum()), 0)   # complete after gap-filling
@@ -264,6 +322,36 @@ class TestGapFilling(unittest.TestCase):
         self.assertTrue((flag[daytime_gaps] == 1).all())
         self.assertTrue((flag[gaps & (pot < 0.001)] == 3).all())
 
+        # daytime_model_ exposes the model that did the filling, so a caller can
+        # validate against data it never saw. Reconstructing the held-out score from
+        # its test set must reproduce scores_traintest — that is what proves the
+        # exposed test set is the one the model was actually scored on.
+        dtm = g.daytime_model_
+        self.assertIsNotNone(dtm)
+        test_df = dtm.traintest_details_['test_df']
+        y = test_df[dtm.target_col].values
+        p = dtm.model_.predict(test_df.drop(columns=dtm.target_col))
+        rmse = float(np.sqrt(((p - y) ** 2).mean()))
+        self.assertAlmostEqual(rmse, g.results.scores_traintest['rmse'], places=4)
+
+    def test_swin_gapfiller_daytime_model_absent_without_gaps(self):
+        """No daytime gaps means no daytime model, and daytime_model_ says so."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad
+        lat, lon, utc = 47.0, 8.0, 1
+        idx = pd.date_range('2022-06-01', '2022-06-10 23:30', freq='30min', name='TIMESTAMP_END')
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        swin = (pot * 0.8).clip(lower=0)
+        swin.name = 'SW_IN'
+
+        g = SWINGapFillerXGBoost(series=swin, lat=lat, lon=lon, utc_offset=utc, verbose=0)
+        # Accessing it before run() is a caller error, not a silent None.
+        with self.assertRaises(RuntimeError):
+            _ = g.daytime_model_
+        g.run()
+        self.assertIsNone(g.daytime_model_)
+
     def test_swin_gapfiller_interpolate_short_gaps(self):
         """Short-gap interpolation must beat the model, and never bridge a night."""
         import pandas as pd
@@ -283,9 +371,14 @@ class TestGapFilling(unittest.TestCase):
         gappy = truth.copy()
         gappy[rng.rand(len(truth)) < 0.15] = np.nan  # scattered short gaps
 
+        # correct_nighttime_offset=False keeps observed records equal to truth (the
+        # default correction subtracts a nonzero nighttime bias from the whole
+        # series, shifting observed values too — checked at the end of this test).
         common = dict(series=gappy, lat=lat, lon=lon, utc_offset=utc,
-                      random_state=42, verbose=0)
-        model_only = SWINGapFillerXGBoost(**common).run().results
+                      correct_nighttime_offset=False, random_state=42, verbose=0)
+        # interpolate_short_gaps=None pins the baseline as genuinely model-only,
+        # independent of the class default.
+        model_only = SWINGapFillerXGBoost(interpolate_short_gaps=None, **common).run().results
         with_interp = SWINGapFillerXGBoost(interpolate_short_gaps=16, **common).run().results
 
         flag = with_interp.flag
@@ -313,6 +406,73 @@ class TestGapFilling(unittest.TestCase):
         # Observed records stay untouched.
         obs = gappy.notna()
         self.assertTrue(np.allclose(with_interp.gapfilled[obs], truth[obs]))
+
+    def test_swin_gapfiller_short_gap_interpolation_at_day_edges(self):
+        """Short-gap interpolation near dawn/dusk: anchored gaps in, unanchored out."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad
+
+        def above_floor(pot, day):
+            """Positions of the above-floor (clearness-index-valid) records of one day."""
+            above = (pot >= SWINGapFillerXGBoost.KT_MIN_SWINPOT).to_numpy()
+            sel = np.flatnonzero(pot.index.normalize() == pd.Timestamp(day))
+            return [i for i in sel if above[i]]
+
+        lat, lon, utc = 46.8153, 9.8559, 1  # CH-DAV
+        idx = pd.date_range('2022-06-01', '2022-06-06 23:30', freq='30min',
+                            name='TIMESTAMP_END')
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        swin = (pot * (0.7 + 0.05 * np.sin(np.arange(len(idx)) / 40))).clip(lower=0)
+        swin.name = 'SW_IN'
+
+        d3 = above_floor(pot, '2022-06-03')
+        d4 = above_floor(pot, '2022-06-04')
+        d5 = above_floor(pot, '2022-06-05')
+        # Four identical 2-record daytime gaps, differing only in where they sit.
+        dawn = d3[1:3]        # right after the day's first above-floor record
+        midday = d3[len(d3) // 2:len(d3) // 2 + 2]
+        edge_dawn = d4[0:2]   # ON the day's first above-floor record
+        edge_dusk = d5[-2:]   # ON the day's last above-floor record
+
+        gappy = swin.copy()
+        for pos in (dawn, midday, edge_dawn, edge_dusk):
+            gappy.iloc[pos] = np.nan
+
+        common = dict(lat=lat, lon=lon, utc_offset=utc, correct_nighttime_offset=False,
+                      interpolate_short_gaps=2, random_state=42, n_estimators=10,
+                      verbose=0)
+        flag = SWINGapFillerXGBoost(series=gappy, **common).run().results.flag
+
+        # A gap adjacent to the day's first above-floor record still has an observed
+        # record on each side within its day, so the record limit must be measured
+        # over that gap alone — not merged into the neighbouring night, whose NaN run
+        # in clearness-index space is hundreds of records long.
+        self.assertTrue((flag.iloc[dawn] == 4).all())
+        self.assertTrue((flag.iloc[midday] == 4).all())
+        # A gap ON the day's first/last above-floor record has no anchor on its dark
+        # side, so interpolation must decline it and leave it to the model.
+        self.assertTrue((flag.iloc[edge_dawn] == 1).all())
+        self.assertTrue((flag.iloc[edge_dusk] == 1).all())
+
+        # The gap-length count is also what keeps interpolation from reaching across
+        # a dark band that falls INSIDE a calendar day, which happens when solar noon
+        # is near calendar midnight (a site near the date line, or a wrong
+        # utc_offset). Per-day interpolation alone would happily anchor across it.
+        lat2, lon2, utc2 = 47.0, 0.0, 11
+        pot2 = potrad(timestamp_index=idx, lat=lat2, lon=lon2, utc_offset=utc2)
+        swin2 = (pot2 * 0.7).clip(lower=0)
+        swin2.name = 'SW_IN'
+        dom = above_floor(pot2, '2022-06-03')
+        split = next(k for k in range(1, len(dom)) if dom[k] != dom[k - 1] + 1)
+        across = dom[split:split + 2]  # first records after the day's dark band
+        gappy2 = swin2.copy()
+        gappy2.iloc[across] = np.nan
+        flag2 = SWINGapFillerXGBoost(series=gappy2, lat=lat2, lon=lon2, utc_offset=utc2,
+                                     correct_nighttime_offset=False,
+                                     interpolate_short_gaps=2, random_state=42,
+                                     n_estimators=10, verbose=0).run().results.flag
+        self.assertTrue((flag2.iloc[across] != 4).all())
 
     def test_swin_gapfiller_fallback_flag(self):
         """A context-driver gap must surface as flag 2, not hide inside flag 1."""
@@ -369,7 +529,8 @@ class TestGapFilling(unittest.TestCase):
 
         def _run(series):
             # verbose=1 gates the messages under test. interpolate_short_gaps stays at
-            # its default (None) — the setting the messages used to be wired to.
+            # its default ('auto', so enabled here — no context_df) — the setting the
+            # messages used to be wrongly wired to.
             rec = _Recorder()
             add_console_sink(rec)
             try:
@@ -400,6 +561,162 @@ class TestGapFilling(unittest.TestCase):
         g, out = _run(night_gaps_only)
         self.assertIsNone(g.results.model)             # no daytime gap -> no model
         self.assertIn('XGBoost step skipped', out)
+
+    def test_swin_gapfiller_context_driver_gaps_stay_local(self):
+        """A missing driver value must disqualify its own record only, never its neighbours."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad
+        lat, lon, utc = 47.0, 8.0, 1
+        idx = pd.date_range('2022-06-01', '2022-06-30 23:30', freq='30min', name='TIMESTAMP_END')
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        rng = np.random.RandomState(0)
+        swin = (pot * (0.7 + 0.3 * rng.rand(len(idx)))).clip(lower=0)
+        swin.name = 'SW_IN'
+        swin_gappy = swin.copy()
+        swin_gappy[rng.rand(len(idx)) < 0.3] = np.nan
+
+        # A second radiation sensor — the input this class is built around. Its own
+        # gaps are isolated single daytime records, so every neighbour still has a
+        # driver value of its own and only the gap record itself is unfillable.
+        ppfd = (swin * 2.1).rename('PPFD')
+        daytime = pot >= 0.001
+        day_pos = np.flatnonzero(daytime.to_numpy())
+        ppfd.iloc[day_pos[20::30]] = np.nan  # ~1 isolated gap/day, none at the series start
+
+        # interpolate_short_gaps=None pins the model/fallback split this test asserts,
+        # independent of the class default; otherwise these single-record daytime gaps
+        # could be interpolated to flag 4 instead of surfacing as fallback (flag 2).
+        common = dict(series=swin_gappy, lat=lat, lon=lon, utc_offset=utc,
+                      context_df=ppfd.to_frame(), interpolate_short_gaps=None,
+                      random_state=42, verbose=0, n_estimators=10)
+        flag = SWINGapFillerXGBoost(**common).run().results.flag
+
+        driver_missing = ppfd.isna()
+        fallback = flag == 2
+        self.assertGreater(int(fallback.sum()), 0)   # the branch is reachable ...
+        # ... but only where the driver is missing at that very timestamp. This is
+        # the regression: a record holding a perfectly good driver value must not be
+        # demoted to the timestamp-only fallback because a NEIGHBOUR has a gap.
+        self.assertTrue(driver_missing[fallback].all())
+        # Conversely, a daytime gap with no driver value has nothing else to fall
+        # back on, so it must be flagged 2 rather than silently pass as flag 1.
+        gaps = swin_gappy.isna()
+        self.assertTrue((flag[gaps & daytime & driver_missing] == 2).all())
+
+        # Proof the data above is diagnostic: the old default features_lag=[-2, 2]
+        # smears every driver gap into a 5-record hole in the feature matrix, so
+        # records with their own driver value present do end up on the fallback.
+        with_lags = SWINGapFillerXGBoost(feature_kwargs={'features_lag': [-2, 2]},
+                                         **common).run().results.flag
+        lag_fallback = with_lags == 2
+        self.assertGreater(int((lag_fallback & ~driver_missing).sum()), 0)
+        self.assertGreater(int(lag_fallback.sum()), int(fallback.sum()))
+
+    def test_swin_gapfiller_default_feature_set(self):
+        """Without context drivers the defaults give SW_IN_POT + timestamps + record number."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad
+        lat, lon, utc = 47.0, 8.0, 1
+        idx = pd.date_range('2022-06-01', '2022-06-30 23:30', freq='30min', name='TIMESTAMP_END')
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        rng = np.random.RandomState(0)
+        swin = (pot * (0.7 + 0.3 * rng.rand(len(idx)))).clip(lower=0)
+        swin.name = 'SW_IN'
+        swin[rng.rand(len(idx)) < 0.3] = np.nan
+
+        g = SWINGapFillerXGBoost(series=swin, lat=lat, lon=lon, utc_offset=utc,
+                                 random_state=42, verbose=0, n_estimators=10).run()
+
+        # feature_importances is indexed by the feature names the model was given.
+        features = set(g.results.feature_importances.index)
+        self.assertEqual(features, {
+            'SW_IN_POT', '.RECORDNUMBER',
+            '.DOY_SIN', '.DOY_COS', '.HOUR_SIN', '.HOUR_COS',
+            '.SEASON_SIN', '.SEASON_COS', '.WEEK_SIN', '.WEEK_COS',
+            '.MONTH_SIN', '.MONTH_COS',
+            '.YEAR', '.YEARDOY', '.YEARWEEK', '.YEARMONTH',
+        })
+
+    def test_swin_gapfiller_add_record_number(self):
+        """add_record_number=False drops .RECORDNUMBER and touches nothing else."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad
+        lat, lon, utc = 47.0, 8.0, 1
+        idx = pd.date_range('2022-06-01', '2022-06-30 23:30', freq='30min', name='TIMESTAMP_END')
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        rng = np.random.RandomState(0)
+        swin = (pot * (0.7 + 0.3 * rng.rand(len(idx)))).clip(lower=0)
+        swin.name = 'SW_IN'
+        swin[rng.rand(len(idx)) < 0.3] = np.nan
+
+        common = dict(series=swin, lat=lat, lon=lon, utc_offset=utc,
+                      random_state=42, verbose=0, n_estimators=10)
+        on = set(SWINGapFillerXGBoost(**common).run().results.feature_importances.index)
+        off = set(SWINGapFillerXGBoost(
+            feature_kwargs={'add_continuous_record_number': False},
+            **common).run().results.feature_importances.index)
+
+        self.assertIn('.RECORDNUMBER', on)
+        self.assertEqual(on - off, {'.RECORDNUMBER'})
+
+    def test_swin_gapfiller_interpolate_auto_follows_context(self):
+        """'auto' enables short-gap interpolation only when there is no context driver."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+
+        idx = pd.date_range('2022-06-01', periods=2000, freq='30min', name='TIMESTAMP_END')
+        swin = pd.Series(np.linspace(0, 500, len(idx)), index=idx, name='SW_IN')
+        ctx = pd.DataFrame({'PPFD': np.linspace(0, 900, len(idx))}, index=idx)
+        common = dict(series=swin, lat=47.0, lon=8.0, utc_offset=1)
+
+        # No context: the model is climatology-bound, so interpolation earns its keep.
+        self.assertEqual(SWINGapFillerXGBoost(**common).interpolate_short_gaps, 2)
+        # Context present: the driver resolves short gaps better than interpolation.
+        self.assertIsNone(
+            SWINGapFillerXGBoost(context_df=ctx, **common).interpolate_short_gaps)
+        # Explicit settings always win over 'auto'.
+        self.assertEqual(
+            SWINGapFillerXGBoost(interpolate_short_gaps=5, **common).interpolate_short_gaps, 5)
+        self.assertIsNone(
+            SWINGapFillerXGBoost(interpolate_short_gaps=None, **common).interpolate_short_gaps)
+        with self.assertRaises(ValueError):
+            SWINGapFillerXGBoost(interpolate_short_gaps=0, **common)
+
+    def test_swin_gapfiller_rolling_ema_skip_swinpot(self):
+        """Rolling and EMA features are for context drivers; SW_IN_POT is excluded."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad
+        lat, lon, utc = 47.0, 8.0, 1
+        idx = pd.date_range('2022-06-01', '2022-06-30 23:30', freq='30min', name='TIMESTAMP_END')
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        rng = np.random.RandomState(0)
+        swin = (pot * (0.7 + 0.3 * rng.rand(len(idx)))).clip(lower=0)
+        swin.name = 'SW_IN'
+        swin[rng.rand(len(idx)) < 0.3] = np.nan
+        ta = pd.Series(15 + 10 * np.sin(np.arange(len(idx)) * 2 * np.pi / 48),
+                       index=idx, name='TA')
+
+        g = SWINGapFillerXGBoost(series=swin, lat=lat, lon=lon, utc_offset=utc,
+                                 context_df=ta.to_frame(), random_state=42, verbose=0,
+                                 n_estimators=10).run()
+        features = set(g.results.feature_importances.index)
+
+        # The context driver measures sky state, so smoothing it is worth features.
+        for f in ['.TA_MEAN4', '.TA_SD4', '.TA_ROLLMEDIAN4', '.TA_MEAN48', '.TA_EMA6', '.TA_EMA24']:
+            self.assertIn(f, features)
+
+        # SW_IN_POT is a deterministic function of the timestamp, so its rolling and
+        # EMA variants are that same function again — cost without information.
+        self.assertEqual(sorted(f for f in features if f.startswith('.SW_IN_POT')), [])
+        self.assertIn('SW_IN_POT', features)  # ... the raw curve is still the top driver
+
+        # No lag features by default: a lag is NaN whenever a neighbour is missing,
+        # which is what pushes otherwise-fillable records onto the fallback.
+        self.assertEqual(sorted(f for f in features if f.startswith(('.TA-', '.TA+'))), [])
 
     def test_gapfilling_randomforest(self):
         """Fill gaps using random forest"""
@@ -700,9 +1017,15 @@ class TestGapFilling(unittest.TestCase):
         scores = xgbts.scores_
         gapfilled = xgbts.get_gapfilled_target()
 
-        # Verify results are reasonable
+        # Verify results are reasonable. The bound was 3.0, tuned to a harmonic
+        # reconstruction built from the strongest FFT *bins*; since L73 it is built
+        # from the strongest *peaks*, so a component's leakage skirt no longer
+        # contributes extra bins and the reconstruction carries slightly less of the
+        # signal's energy (this 3-tree model: mae 2.79 -> 3.01, r2 0.53 -> 0.47).
+        # Distinct components are what the decomposition documents; a marginally
+        # weaker reconstruction feature is the price.
         self.assertGreater(scores['mae'], 0.5)
-        self.assertLess(scores['mae'], 3.0)
+        self.assertLess(scores['mae'], 3.5)
         self.assertGreater(len(gapfilled), 0)
 
     def test_shap_treeexplainer_xgboost(self):
@@ -733,5 +1056,289 @@ class TestGapFilling(unittest.TestCase):
         self.assertGreater(importances[0], importances[2])
 
 
+class TestPredictionScores(unittest.TestCase):
+    """`dv.gapfilling.prediction_scores` — the metric dict every gap-filler reports."""
+
+    METRICS = ('mae', 'medae', 'mse', 'rmse', 'mape', 'maxe', 'r2')
+
+    def test_returns_all_seven_metrics(self):
+        from diive.core.ml.scores import prediction_scores
+        scores = prediction_scores(predictions=np.array([1.0, 2.0]),
+                                   targets=np.array([1.1, 2.1]))
+        self.assertEqual(set(scores), set(self.METRICS))
+
+    def test_perfect_prediction(self):
+        from diive.core.ml.scores import prediction_scores
+        values = np.array([1.0, 5.0, -3.0, 7.5])
+        scores = prediction_scores(predictions=values, targets=values)
+        for metric in ('mae', 'medae', 'mse', 'rmse', 'mape', 'maxe'):
+            with self.subTest(metric=metric):
+                self.assertAlmostEqual(scores[metric], 0.0, places=12)
+        self.assertAlmostEqual(scores['r2'], 1.0, places=12)
+
+    def test_known_values(self):
+        from diive.core.ml.scores import prediction_scores
+        # Errors are -0.5, +0.2, -0.6, +0.1 -> hand-checkable.
+        predictions = np.array([1.0, 2.0, 3.0, 4.0])
+        targets = np.array([1.5, 1.8, 3.6, 3.9])
+        scores = prediction_scores(predictions=predictions, targets=targets)
+        self.assertAlmostEqual(scores['mae'], 0.35, places=10)
+        self.assertAlmostEqual(scores['mse'], 0.165, places=10)
+        self.assertAlmostEqual(scores['rmse'], float(np.sqrt(0.165)), places=10)
+        self.assertAlmostEqual(scores['maxe'], 0.6, places=10)
+        self.assertAlmostEqual(scores['medae'], 0.35, places=10)
+
+    def test_argument_order_is_honoured(self):
+        # r2 and mape are asymmetric in (true, predicted): swapping the two
+        # changes them. This pins that `targets` really is treated as the truth
+        # inside, which a symmetric-only check (mae/rmse) could never catch.
+        from diive.core.ml.scores import prediction_scores
+        predictions = np.array([1.0, 2.0, 3.0, 4.0])
+        targets = np.array([1.5, 1.8, 3.6, 3.9])
+        forward = prediction_scores(predictions=predictions, targets=targets)
+        swapped = prediction_scores(predictions=targets, targets=predictions)
+        self.assertAlmostEqual(forward['r2'], 0.853333, places=6)
+        self.assertAlmostEqual(forward['mape'], 0.159188, places=6)
+        self.assertNotAlmostEqual(forward['r2'], swapped['r2'], places=6)
+        self.assertNotAlmostEqual(forward['mape'], swapped['mape'], places=6)
+        # The symmetric metrics are unaffected either way.
+        for metric in ('mae', 'mse', 'rmse', 'maxe', 'medae'):
+            with self.subTest(metric=metric):
+                self.assertAlmostEqual(forward[metric], swapped[metric], places=12)
+
+    def test_worse_predictions_score_worse(self):
+        from diive.core.ml.scores import prediction_scores
+        targets = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        good = prediction_scores(predictions=targets + 0.1, targets=targets)
+        bad = prediction_scores(predictions=targets + 2.0, targets=targets)
+        self.assertGreater(good['r2'], bad['r2'])
+        self.assertLess(good['rmse'], bad['rmse'])
+
+
+class TestGapFillingResult(unittest.TestCase):
+    """The `.results` contract shared by every gap-filler.
+
+    `GapFillingResult` is the documented return type of `.results`, and no
+    non-GUI test constructed or inspected one.
+    """
+
+    @staticmethod
+    def _frame(n: int = 600, gap: slice = slice(100, 160)):
+        """Small frame with a known gap; the target is a clean function of TA/SW_IN."""
+        import pandas as pd
+        idx = pd.date_range('2021-01-01', periods=n, freq='30min',
+                            name='TIMESTAMP_MIDDLE')
+        rng = np.random.RandomState(0)
+        ta = 15 + 8 * np.sin(2 * np.pi * np.arange(n) / 48) + rng.randn(n)
+        sw = np.clip(500 * np.sin(2 * np.pi * ((np.arange(n) % 48) - 12) / 48), 0, None)
+        target = -0.02 * sw - 0.08 * ta + rng.randn(n) * 0.5
+        df = pd.DataFrame({'NEE': target, 'TA': ta, 'SW_IN': sw}, index=idx)
+        df.iloc[gap, df.columns.get_loc('NEE')] = np.nan
+        return df
+
+    @staticmethod
+    def _fitted(df, **kwargs):
+        """A tiny fitted RandomForestTS.
+
+        showplot_* default to True on trainmodel/fillgaps, which blocks on a
+        real backend -- always pass them False from a test.
+        """
+        model = RandomForestTS(input_df=df, target_col='NEE', verbose=0,
+                               n_estimators=3, min_samples_leaf=5,
+                               random_state=42, n_jobs=1, **kwargs)
+        model.run(showplot_scores=False, showplot_importance=False)
+        return model
+
+    def test_dataclass_defaults(self):
+        import pandas as pd
+        from diive.core.ml.results import GapFillingResult
+        # Only four fields are required; every other output is optional so the
+        # non-ML fillers (MDS) can return the same type.
+        result = GapFillingResult(gapfilled=pd.Series([1.0]), flag=pd.Series([0]),
+                                  scores={'r2': 1.0}, gapfilling_df=pd.DataFrame())
+        for optional in ('scores_traintest', 'feature_importances',
+                         'feature_importances_traintest',
+                         'feature_importances_reduction', 'model',
+                         'accepted_features', 'rejected_features'):
+            with self.subTest(field=optional):
+                self.assertIsNone(getattr(result, optional))
+
+    def test_results_before_run_raises(self):
+        df = self._frame()
+        model = RandomForestTS(input_df=df, target_col='NEE', verbose=0,
+                               n_estimators=3, random_state=42, n_jobs=1)
+        with self.assertRaises(Exception):
+            _ = model.results
+
+    def test_gapfilled_and_flag(self):
+        from diive.core.ml.results import GapFillingResult
+        df = self._frame()
+        result = self._fitted(df).results
+
+        self.assertIsInstance(result, GapFillingResult)
+        # Gap-filling leaves no gaps, and keeps the input index.
+        self.assertEqual(int(result.gapfilled.isna().sum()), 0)
+        self.assertTrue(result.gapfilled.index.equals(df.index))
+        # 0 = observed, 1 = gap-filled, 2 = fallback.
+        self.assertTrue(set(result.flag.dropna().unique()) <= {0, 1, 2})
+        # Both states are present: 60 records were blanked, the rest observed.
+        self.assertEqual(int((result.flag == 1).sum()), 60)
+        self.assertEqual(int((result.flag == 0).sum()), len(df) - 60)
+        # Observed records must come back untouched -- filling must not overwrite
+        # measured data.
+        observed = result.flag == 0
+        np.testing.assert_allclose(result.gapfilled[observed].to_numpy(),
+                                   df['NEE'][observed].to_numpy())
+
+    def test_scores_are_present_for_ml(self):
+        result = self._fitted(self._frame()).results
+        metrics = {'mae', 'medae', 'mse', 'rmse', 'mape', 'maxe', 'r2'}
+        self.assertEqual(set(result.scores), metrics)
+        # scores_traintest is the held-out estimate; ML fillers always have it.
+        self.assertIsNotNone(result.scores_traintest)
+        self.assertEqual(set(result.scores_traintest), metrics)
+
+    def test_model_and_importances_present_for_ml(self):
+        from pandas import DataFrame
+        from sklearn.ensemble import RandomForestRegressor
+        result = self._fitted(self._frame()).results
+        self.assertIsInstance(result.model, RandomForestRegressor)
+        self.assertIsInstance(result.feature_importances, DataFrame)
+        self.assertEqual(list(result.feature_importances.columns),
+                         ['SHAP_IMPORTANCE', 'SHAP_SD'])
+
+    def test_reduction_fields_are_none_unless_reduction_ran(self):
+        result = self._fitted(self._frame()).results
+        self.assertIsNone(result.feature_importances_reduction)
+        self.assertIsNone(result.accepted_features)
+        self.assertIsNone(result.rejected_features)
+
+    def test_reduction_fields_populated_when_reduction_ran(self):
+        from pandas import DataFrame
+        df = self._frame()
+        model = RandomForestTS(input_df=df, target_col='NEE', verbose=0,
+                               n_estimators=3, min_samples_leaf=5,
+                               random_state=42, n_jobs=1)
+        model.reduce_features(shap_threshold_factor=0.5)
+        model.run(showplot_scores=False, showplot_importance=False)
+        result = model.results
+        # The reduction view is the only one carrying the .RANDOM benchmark the
+        # threshold is derived from.
+        self.assertIsInstance(result.feature_importances_reduction, DataFrame)
+        self.assertIn('.RANDOM', result.feature_importances_reduction.index)
+        self.assertIsNotNone(result.accepted_features)
+
+    def test_legacy_result_is_the_gapfilling_frame(self):
+        from pandas import DataFrame
+        model = self._fitted(self._frame())
+        # `.result` (singular) predates `.results` and stays available.
+        self.assertIsInstance(model.result, DataFrame)
+        self.assertTrue(model.result.equals(model.results.gapfilling_df))
+
+
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestStlFeaturesOnGappyColumns(unittest.TestCase):
+    """A gappy driver must still get STL features - or say why not.
+
+    `_stl_features` used to skip any column holding a single NaN, and said so only
+    at DEBUG level. Real flux drivers essentially always have gaps, so asking for
+    STL features at the default verbosity produced none of them, silently. The skip
+    existed because `stl_decompose` could not fit around a gap (L47); it can now.
+    """
+
+    TARGET = 'NEE_CUT_REF_orig'
+    GAPPY = 'TA_GAPPY'
+
+    @classmethod
+    def setUpClass(cls):
+        import numpy as np
+        from diive.configs.exampledata import load_exampledata_parquet
+        df = load_exampledata_parquet().loc['2021', [cls.TARGET, 'Tair_f', 'Rg_f']].copy()
+        df[cls.GAPPY] = df['Tair_f']
+        df.iloc[100:400, df.columns.get_loc(cls.GAPPY)] = np.nan
+        cls.df = df
+
+    def _engineer(self, method):
+        import warnings
+        from diive.core.ml.feature_engineer import FeatureEngineer
+        engineer = FeatureEngineer(
+            target_col=self.TARGET, features_lag=None, features_rolling=None,
+            features_rolling_stats=None, features_diff=None, features_ema=None,
+            features_poly_degree=None, features_stl=True, features_stl_method=method,
+            features_stl_seasonal_period=48, features_stl_components=['trend'],
+            vectorize_timestamps=False, add_continuous_record_number=False,
+            sanitize_timestamp=False)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            return engineer.fit_transform(self.df)
+
+    def test_a_gappy_column_gets_its_stl_features(self):
+        for method in ('stl', 'harmonic'):
+            with self.subTest(method=method):
+                out = self._engineer(method)
+                self.assertIn(f'.{self.GAPPY}_STL_TREND', out.columns)
+
+    def test_the_features_cost_no_records_the_column_had_not_lost_already(self):
+        # The components are NaN exactly where the source column is. Were they NaN
+        # anywhere else, those records would drop out of the model matrix - the
+        # feature would cost more than it is worth.
+        for method in ('stl', 'harmonic'):
+            with self.subTest(method=method):
+                out = self._engineer(method)
+                feature = out[f'.{self.GAPPY}_STL_TREND']
+                source = out[self.GAPPY]
+                self.assertEqual(int((source.notna() & feature.isna()).sum()), 0)
+
+    def test_classical_cannot_and_says_so(self):
+        # statsmodels' classical decomposition genuinely cannot handle gaps. The
+        # column is skipped - but visibly, and only that column.
+        from diive.core.utils.console import console
+        with console.capture() as captured:
+            out = self._engineer('classical')
+        self.assertNotIn(f'.{self.GAPPY}_STL_TREND', out.columns)
+        self.assertIn('.Tair_f_STL_TREND', out.columns)
+        self.assertIn(self.GAPPY, captured.get())
+
+
+class TestEngineeredColumnsAreNotReEngineered(unittest.TestCase):
+    """No stage takes an already-engineered ('.'-prefixed) column as a source.
+
+    The rolling stages used to have no such filter while differencing, EMA,
+    polynomial and STL did, so running the engineer on a frame that already held
+    engineered columns - what the GUI's feature-engineering tab produces, since
+    its output is merged into the dataset - emitted names outside the
+    `.{col}_TYPE{detail}` convention (`..TA_POL2_MEAN4`) from the rolling stages
+    only, and grew the feature count quadratically across repeat runs.
+    """
+
+    def _frame(self):
+        import pandas as pd
+        idx = pd.date_range('2022-06-01', periods=200, freq='30min', name='TIMESTAMP_END')
+        rng = np.random.RandomState(0)
+        return pd.DataFrame({'NEE': rng.normal(size=200), 'TA': rng.normal(size=200)}, index=idx)
+
+    def _engineer(self):
+        from diive.core.ml.feature_engineer import FeatureEngineer
+        return FeatureEngineer(
+            target_col='NEE', features_rolling=[4], features_rolling_stats=['median'],
+            features_diff=[1], features_ema=[6], features_poly_degree=2)
+
+    def test_a_second_run_adds_nothing(self):
+        engineer = self._engineer()
+        first = engineer.fit_transform(self._frame())
+        second = engineer.fit_transform(first)
+        added = [c for c in second.columns if c not in first.columns]
+        self.assertEqual(added, [])
+        self.assertEqual([c for c in second.columns if c.startswith('..')], [])
+
+    def test_the_feature_set_of_a_plain_frame_is_unchanged(self):
+        # The filter only ever drops '.'-prefixed sources, so a raw driver frame -
+        # every library path (flux chain L4.1, SWIN, driver analysis) - keeps
+        # exactly the features it had. Guards against the filter over-reaching.
+        out = self._engineer().fit_transform(self._frame())
+        self.assertEqual(
+            sorted(c for c in out.columns if c.startswith('.')),
+            ['.TA_DIFF1', '.TA_EMA6', '.TA_MEAN4', '.TA_POL2', '.TA_ROLLMEDIAN4', '.TA_SD4'])

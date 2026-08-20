@@ -24,6 +24,7 @@ detecting measurement quality issues, and identifying anomalous days.
 # that would be hidden by single overall correlation values.
 #
 # **Use cases:**
+#
 # 1. Quality check: Observed radiation should be highly correlated with
 #    potential radiation (physics-based). Low daily correlations suggest
 #    sensor issues or timestamp problems.

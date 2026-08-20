@@ -325,9 +325,15 @@ class JointUncertaintyTab(DiiveTab):
         return {"controls": save_controls(self._controls())}
 
     def restore_state(self, state: dict) -> None:
-        from diive.gui.widgets.state_utils import restore_controls
-        restore_controls(self._controls(), state.get("controls"))
+        from diive.gui.widgets.state_utils import restore_controls, unrestored_message
+        unrestored = restore_controls(self._controls(), state.get("controls"))
         self._refresh_availability()
+        if unrestored:
+            # A silently kept divisor preset would change the published number
+            # (1σ ÷2 vs IQR ÷1.349), so say so instead of falling back quietly.
+            labels = {s["key"]: s["label"] for s in _INPUTS}
+            labels["divisor_combo"] = "Scenario percentiles"
+            self.status.setText(unrestored_message(unrestored, labels))
 
     # --- run -----------------------------------------------------------
     def _python_code(self) -> str | None:

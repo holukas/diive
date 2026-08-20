@@ -2,7 +2,7 @@
 
 ## Overview
 
-The example dataset is a **10-year record of eddy covariance measurements** from the Davos site (CH-DAV), a mixed Alpine forest ecosystem in Switzerland. This dataset is included with DIIVE for demonstration purposes and is used throughout the examples.
+The example dataset is a **10-year record of eddy covariance measurements** from the Davos site (CH-DAV), a mixed Alpine forest ecosystem in Switzerland. This dataset is included with diive for demonstration purposes and is used throughout the examples.
 
 ## Dataset Characteristics
 

@@ -30,7 +30,7 @@ class DielCycle:
                 The index must contain date and time info.
 
         See Also:
-            examples/visualization/dielcycle.py — Diurnal cycle analysis and visualization
+            examples/visualization/plot_dielcycle.py — Diurnal cycle analysis and visualization
         """
         self.series = series
 

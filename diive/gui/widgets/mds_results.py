@@ -19,7 +19,6 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -275,7 +274,7 @@ class MdsResultsPanel(QScrollArea):
         ax.set_ylabel("Records", fontsize=_PLOT_FONT)
         ax.tick_params(labelsize=_PLOT_FONT)
         # Value labels on top of each bar.
-        for bar, cnt in zip(bars, counts):
+        for bar, cnt in zip(bars, counts, strict=False):
             ax.annotate(f"{cnt:,}", (bar.get_x() + bar.get_width() / 2, bar.get_height()),
                         ha="center", va="bottom", fontsize=_PLOT_FONT - 1, color="#455A64",
                         xytext=(0, 1), textcoords="offset points")

@@ -146,8 +146,6 @@ See: [preprocessing/corrections/README.md](preprocessing/corrections/README.md)
 | [**qc_overall_flag.py**](preprocessing/qaqc/qc_overall_flag.py) | Combine multiple test flags into overall QCF (0=good, 1=marginal, 2=poor) |
 | [**qc_eddypro_flags.py**](preprocessing/qaqc/qc_eddypro_flags.py) | Extract EddyPro quality flags (VM97 tests, signal strength, completeness) |
 | [**qaqc_detect_timestamp_shifts.py**](preprocessing/qaqc/qaqc_detect_timestamp_shifts.py) | Detect clock/timestamp errors via radiation phase analysis: FFT phase shift, cross-correlation, and noon-shift peak detection |
-| [**meteoscreening_stepwise_workflow.py**](preprocessing/qaqc/meteoscreening_stepwise_workflow.py) | Stepwise meteorological screening: multi-stage outlier detection, corrections, and resampling with `StepwiseMeteoScreeningDb` (requires database) |
-| [**meteoscreening_complete_workflow.py**](preprocessing/qaqc/meteoscreening_complete_workflow.py) | End-to-end QC workflow: database download, multi-stage screening, 30-min resampling, and upload (requires InfluxDB connection) |
 
 See: [preprocessing/outlier_detection/README.md](preprocessing/outlier_detection/README.md) and [preprocessing/qaqc/README.md](preprocessing/qaqc/README.md)
 
@@ -207,20 +205,6 @@ See: [features/README.md](features/README.md)
 | [**flux_ustar_mp_detection.py**](flux/lowres/flux_ustar_mp_detection.py) | Moving Point (MP) USTAR detection (Papale et al. 2006) |
 | [**flux_ustar_vekuri_detection.py**](flux/lowres/flux_ustar_vekuri_detection.py) | Simplified quantile-based USTAR detection (Vekuri method) |
 | [**flux_ustar_method_comparison.py**](flux/lowres/flux_ustar_method_comparison.py) | Compare ONEFlux and Vekuri USTAR detection methods |
-
-### High-Resolution (10 Hz) Analysis
-
-| Example | Description |
-|---------|-------------|
-| [**flux_lag.py**](flux/hires/flux_lag.py) | Time lag detection via covariance analysis |
-| [**flux_lag_pwb.py**](flux/hires/flux_lag_pwb.py) | PWB time lag detection: pre-whitening with block-bootstrap (Vitale et al. 2024), high-flux vs. low-flux comparison |
-| [**flux_lag_pwbopt.py**](flux/hires/flux_lag_pwbopt.py) | PWBOPT batch pipeline: multi-period PWB with S1/S2/S3 selection and strategy comparison; supports real EddyPro-rotated files |
-| [**flux_lag_pwb_batch.py**](flux/hires/flux_lag_pwb_batch.py) | PwbBatchDetection API demo: parallel PWB across many EddyPro files with live Rich progress display, PWBOPT post-processing (standard + pre-filtered), and batch summary figures |
-| [**flux_lag_pwb_batch_cli.py**](flux/hires/flux_lag_pwb_batch_cli.py) | CLI demo: drive PwbBatchDetection from the command line via `python -m diive.flux.hires.lag_pwb`; shows all available flags |
-| [**flux_apply_tlag_cli.py**](flux/hires/flux_apply_tlag_cli.py) | `TlagApplier` CLI demo (`diive-tlag-apply-batch`): apply PWBOPT-detected lags from a `tlag_results.csv` to raw EC files, shifting each scalar by `round(tlag_s · hz)` rows |
-| [**flux_detect_remove_tui_demo.py**](flux/hires/flux_detect_remove_tui_demo.py) | Launches the `diive-tlag-pwb-detect-remove` Textual TUI in demo mode (no input data); interactive, not part of `run_all_examples.py` |
-| [**flux_windrotation.py**](flux/hires/flux_windrotation.py) | Wind rotation and coordinate transformation |
-| [**flux_fluxdetectionlimit.py**](flux/hires/flux_fluxdetectionlimit.py) | Flux detection limit and measurement sensitivity |
 
 See: [flux/README.md](flux/README.md)
 

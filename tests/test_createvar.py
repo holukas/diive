@@ -271,3 +271,263 @@ class TestCreateVar(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestLaggedVariantsSingleColumn(unittest.TestCase):
+    """A one-column dataframe used to come back with no lags and no warning."""
+
+    @staticmethod
+    def _df(cols):
+        idx = pd.date_range('2024-01-01', periods=10, freq='30min', name='TIMESTAMP_MIDDLE')
+        return pd.DataFrame({c: np.arange(10.0) for c in cols}, index=idx)
+
+    def test_single_column_is_lagged(self):
+        from diive.variables import lagged_variants
+        out = lagged_variants(df=self._df(['TA']), lag=[-2, 1], verbose=0)
+        self.assertEqual(list(out.columns), ['TA', '.TA-2', '.TA-1', '.TA+1'])
+
+    def test_single_column_matches_the_same_column_among_others(self):
+        from diive.variables import lagged_variants
+        # Excluding the second column leaves exactly one column to lag, which is
+        # the case that always worked. A lone column must behave identically.
+        alone = lagged_variants(df=self._df(['TA']), lag=[-2, 1], verbose=0)
+        among = lagged_variants(df=self._df(['TA', 'X']), lag=[-2, 1],
+                                exclude_cols=['X'], verbose=0)
+        lagcols = ['.TA-2', '.TA-1', '.TA+1']
+        self.assertEqual([c for c in among.columns if c.startswith('.')], lagcols)
+        for c in lagcols:
+            self.assertTrue(alone[c].equals(among[c]), f'{c} differs')
+
+    def test_single_excluded_column_still_raises(self):
+        from diive.variables import lagged_variants
+        # Nothing left to lag: this is the case the guard was written for.
+        with self.assertRaises(Exception):
+            lagged_variants(df=self._df(['TA']), lag=[-2, 1], exclude_cols=['TA'], verbose=0)
+
+
+class TestClassifyVariable(unittest.TestCase):
+    """`classify_variable` decides every variable pill colour in the GUI, and is
+    the library's authoritative "what kind of column is this"."""
+
+    def test_recognised_names_map_to_kind_and_category(self):
+        from diive.variables import classify_variable
+        from diive.variables.classification import (
+            CATEGORY_CARBON, CATEGORY_METEO, CATEGORY_NITROGEN,
+            CATEGORY_RADIATION, CATEGORY_SOIL, CATEGORY_WATER)
+        cases = {
+            'NEE_CUT_REF_f': ('NEE', CATEGORY_CARBON),
+            'GPP_DT_CUT_REF': ('GPP', CATEGORY_CARBON),
+            'Reco_NT_CUT_REF': ('Reco', CATEGORY_CARBON),
+            'FCH4': ('FCH4', CATEGORY_CARBON),
+            'FN2O_1_1_1': ('FN2O', CATEGORY_NITROGEN),
+            'FH2O': ('FH2O', CATEGORY_WATER),
+            'LE_f': ('LE', CATEGORY_WATER),
+            'ET_1_1_1': ('ET', CATEGORY_WATER),
+            'Rg_f': ('Rg', CATEGORY_RADIATION),
+            'SW_IN_T1_2_1': ('SW_IN', CATEGORY_RADIATION),
+            'PPFD_IN': ('PPFD', CATEGORY_RADIATION),
+            'PAR_1_1_1': ('PAR', CATEGORY_RADIATION),
+            'LW_IN_1_1_1': ('LW', CATEGORY_RADIATION),
+            'Tair_f': ('TA', CATEGORY_METEO),
+            'TA_T1_2_1': ('TA', CATEGORY_METEO),
+            'VPD_f': ('VPD', CATEGORY_METEO),
+            'SWC_GF1_0.05_1': ('SWC', CATEGORY_SOIL),
+        }
+        for name, (kind, category) in cases.items():
+            with self.subTest(name=name):
+                result = classify_variable(name)
+                self.assertIsNotNone(result, f"{name} should be classified")
+                self.assertEqual((result.kind, result.category), (kind, category))
+
+    def test_fc_does_not_swallow_fch4(self):
+        from diive.variables import classify_variable
+        # FC is the CO2 flux; a plain "FC" prefix rule would also catch FCH4
+        # (methane), so FC is matched on a word boundary.
+        self.assertEqual(classify_variable('FC').kind, 'FC')
+        self.assertEqual(classify_variable('FC_1_1_1').kind, 'FC')
+        self.assertEqual(classify_variable('FCH4').kind, 'FCH4')
+        self.assertEqual(classify_variable('FCH4_1_1_1').kind, 'FCH4')
+
+    def test_bare_ta_is_exact_matched(self):
+        from diive.variables import classify_variable
+        # A "TA" prefix rule would also catch TARGET / TAU, so bare TA is exact.
+        self.assertEqual(classify_variable('TA').kind, 'TA')
+        self.assertIsNone(classify_variable('TARGET'))
+        self.assertIsNone(classify_variable('TAU'))
+
+    def test_unrecognised_names_return_none(self):
+        from diive.variables import classify_variable
+        for name in ('H', 'USTAR', 'RANDOM_COLUMN', ''):
+            with self.subTest(name=name):
+                self.assertIsNone(classify_variable(name))
+        # Non-string input is tolerated rather than raising.
+        self.assertIsNone(classify_variable(None))
+        self.assertIsNone(classify_variable(3.14))
+
+    def test_result_is_a_named_tuple(self):
+        from diive.variables import VariableClass, classify_variable
+        result = classify_variable('NEE_CUT_REF_f')
+        self.assertIsInstance(result, VariableClass)
+        # Usable both by field and by position.
+        kind, category = result
+        self.assertEqual((kind, category), (result.kind, result.category))
+
+
+class TestAutoPickColumn(unittest.TestCase):
+    """Name-based seeding for the GUI's variable pickers."""
+
+    COLUMNS = ['TIMESTAMP', 'TA_T1_2_1', 'SW_IN_T1_2_1', 'SW_IN_POT',
+               'SW_OUT_T1_2_1', 'VPD_f', 'NEE_CUT_REF_f']
+
+    def test_first_match_wins(self):
+        from diive.variables import auto_pick_column
+        self.assertEqual(auto_pick_column(self.COLUMNS, 'SW_IN'), 'SW_IN_T1_2_1')
+        self.assertEqual(auto_pick_column(self.COLUMNS, 'VPD'), 'VPD_f')
+
+    def test_prefer_ranks_a_match_first(self):
+        from diive.variables import auto_pick_column
+        # Without prefer, the plain SW_IN column wins by position; with it, the
+        # POT column is promoted.
+        self.assertEqual(auto_pick_column(self.COLUMNS, 'SW_IN', prefer='POT'),
+                         'SW_IN_POT')
+
+    def test_avoid_excludes_columns(self):
+        from diive.variables import auto_pick_column
+        self.assertEqual(auto_pick_column(self.COLUMNS, 'SW_IN', avoid='POT'),
+                         'SW_IN_T1_2_1')
+        # avoid also applies to the preferred pass.
+        self.assertEqual(
+            auto_pick_column(self.COLUMNS, 'SW_IN', prefer='POT', avoid='POT'),
+            'SW_IN_T1_2_1')
+
+    def test_no_match_returns_empty_string(self):
+        from diive.variables import auto_pick_column
+        self.assertEqual(auto_pick_column(self.COLUMNS, 'CH4'), '')
+        self.assertEqual(auto_pick_column([], 'TA'), '')
+
+    def test_matching_is_against_the_uppercased_column(self):
+        from diive.variables import auto_pick_column
+        # The needle is compared to the upper-cased name, so a lower-case column
+        # still matches an upper-case needle.
+        self.assertEqual(auto_pick_column(['tair_f'], 'TAIR'), 'tair_f')
+
+
+class TestCombineVariables(unittest.TestCase):
+    """`combine_variables` backs the GUI's Combine-variables tab."""
+
+    def setUp(self):
+        self.idx = pd.date_range('2021-01-01', periods=4, freq='30min',
+                                 name='TIMESTAMP_MIDDLE')
+        self.a = pd.Series([1.0, 2.0, np.nan, 4.0], index=self.idx, name='A')
+        self.b = pd.Series([10.0, np.nan, 30.0, 40.0], index=self.idx, name='B')
+
+    def test_arithmetic_methods(self):
+        from diive.variables import combine_variables
+        expected = {
+            'add': [11.0, np.nan, np.nan, 44.0],
+            'subtract': [-9.0, np.nan, np.nan, -36.0],
+            'multiply': [10.0, np.nan, np.nan, 160.0],
+            'divide': [0.1, np.nan, np.nan, 0.1],
+        }
+        for method, values in expected.items():
+            with self.subTest(method=method):
+                out = combine_variables(self.a, self.b, method=method)
+                np.testing.assert_allclose(out.to_numpy(), values)
+
+    def test_a_one_sided_record_is_always_nan(self):
+        from diive.variables import combine_variables
+        # There is no option to substitute the operation's identity for a missing
+        # operand. It used to exist and read as "keep the one-sided record", but
+        # it returned -B for subtract and 1/B for divide: a plausible number with
+        # the wrong sign. A combination is defined only where both were measured.
+        for method in ('add', 'subtract', 'multiply', 'divide'):
+            with self.subTest(method=method):
+                out = combine_variables(self.a, self.b, method=method)
+                one_sided = self.a.notna() ^ self.b.notna()
+                self.assertTrue(one_sided.any(), "fixture must have one-sided records")
+                self.assertTrue(out[one_sided].isna().all())
+                # ...and the overlap is untouched.
+                both = self.a.notna() & self.b.notna()
+                self.assertTrue(out[both].notna().all())
+
+    def test_the_identity_fill_option_is_gone(self):
+        from diive.variables import combine_variables
+        with self.assertRaises(TypeError):
+            combine_variables(self.a, self.b, method='subtract', keep_overlap_only=False)
+
+    def test_fillgaps_keeps_series1_and_fills_only_its_gaps(self):
+        from diive.variables import combine_variables
+        out = combine_variables(self.a, self.b, method='fillgaps')
+        # Position 2 is A's gap -> takes B's 30.0; every other record keeps A.
+        np.testing.assert_allclose(out.to_numpy(), [1.0, 2.0, 30.0, 4.0])
+
+    def test_fillgaps_is_the_way_to_span_the_union(self):
+        from diive.variables import combine_variables
+        # The arithmetic methods are overlap-only; "take B where A is missing" has
+        # its own method, which says so plainly and still spans the union.
+        out = combine_variables(self.a, self.b, method='fillgaps')
+        covered = self.a.notna() | self.b.notna()
+        self.assertTrue(out[covered].notna().all())
+
+    def test_result_index_is_the_union(self):
+        from diive.variables import combine_variables
+        later = pd.Series([5.0], name='B',
+                          index=pd.date_range('2021-01-02', periods=1, freq='30min',
+                                              name='TIMESTAMP_MIDDLE'))
+        out = combine_variables(self.a, later, method='add')
+        self.assertEqual(len(out), len(self.a) + 1)
+
+    def test_default_and_custom_names(self):
+        from diive.variables import combine_variables
+        self.assertEqual(combine_variables(self.a, self.b, method='add').name,
+                         'A_ADD_B')
+        self.assertEqual(
+            combine_variables(self.a, self.b, method='add', name='MY_SUM').name,
+            'MY_SUM')
+
+    def test_unknown_method_raises_and_lists_the_choices(self):
+        from diive.variables import combine_variables
+        with self.assertRaises(ValueError) as ctx:
+            combine_variables(self.a, self.b, method='exponentiate')
+        message = str(ctx.exception)
+        self.assertIn('exponentiate', message)
+        self.assertIn('fillgaps', message)
+
+
+class TestDaytimeNighttimeFlagFromSwinpot(unittest.TestCase):
+    """The standalone flag function (the `DaytimeNighttimeFlag` class is covered
+    by TestCreateVar.test_daytime_nighttime_flag)."""
+
+    def setUp(self):
+        self.idx = pd.date_range('2021-06-01', periods=5, freq='30min',
+                                 name='TIMESTAMP_MIDDLE')
+        self.swinpot = pd.Series([0.0, 10.0, 20.0, 100.0, 19.999],
+                                 index=self.idx, name='SW_IN_POT')
+
+    def test_threshold_is_inclusive_for_daytime(self):
+        from diive.variables import daytime_nighttime_flag_from_swinpot
+        daytime, nighttime = daytime_nighttime_flag_from_swinpot(
+            self.swinpot, nighttime_threshold=20)
+        # >= threshold is daytime, so exactly 20.0 counts as day.
+        np.testing.assert_allclose(daytime.to_numpy(), [0, 0, 1, 1, 0])
+        np.testing.assert_allclose(nighttime.to_numpy(), [1, 1, 0, 0, 1])
+
+    def test_flags_are_complementary(self):
+        from diive.variables import daytime_nighttime_flag_from_swinpot
+        daytime, nighttime = daytime_nighttime_flag_from_swinpot(self.swinpot)
+        np.testing.assert_allclose((daytime + nighttime).to_numpy(), 1.0)
+
+    def test_threshold_changes_the_split(self):
+        from diive.variables import daytime_nighttime_flag_from_swinpot
+        low, _ = daytime_nighttime_flag_from_swinpot(self.swinpot, nighttime_threshold=5)
+        high, _ = daytime_nighttime_flag_from_swinpot(self.swinpot, nighttime_threshold=50)
+        self.assertEqual(int(low.sum()), 4)
+        self.assertEqual(int(high.sum()), 1)
+
+    def test_output_column_names_are_configurable(self):
+        from diive.variables import daytime_nighttime_flag_from_swinpot
+        daytime, nighttime = daytime_nighttime_flag_from_swinpot(
+            self.swinpot, daytime_col='IS_DAY', nighttime_col='IS_NIGHT')
+        self.assertEqual(daytime.name, 'IS_DAY')
+        self.assertEqual(nighttime.name, 'IS_NIGHT')
+        self.assertTrue(daytime.index.equals(self.swinpot.index))

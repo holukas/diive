@@ -32,7 +32,7 @@ from pandas import DataFrame, Series
 from diive.analysis.driveranalysis.ale import (
     AleCurve, Ale2DResult, accumulated_local_effects, accumulated_local_effects_2d,
 )
-from diive.core.utils.console import info, warn, success, rule, detail, error
+from diive.core.utils.console import info, warn, success, rule, detail
 
 # Material Design palette (CLAUDE.md plotting conventions).
 _MD = {
@@ -75,6 +75,12 @@ def _stl_components(series: Series, period: int, robust: bool = True):
     which statsmodels cannot do for sub-daily (e.g. 30-min) eddy-covariance data.
     Passing ``period`` explicitly (records per seasonal cycle — a daily cycle by
     default) makes STL reliable here.
+
+    Gaps are interpolated *only* so STL can run (statsmodels has no NaN handling)
+    and are masked back out of all three components before returning: a gap in
+    the input is a gap in the output. Letting the interpolated values escape
+    would feed fabricated observations to every downstream model — including the
+    chronological hold-out that scores it.
     """
     from statsmodels.tsa.seasonal import STL
     s = series.interpolate(limit_direction='both').dropna()
@@ -82,9 +88,14 @@ def _stl_components(series: Series, period: int, robust: bool = True):
         raise ValueError(f"series too short ({len(s)}) for STL period {period}")
     res = STL(s.to_numpy(), period=period, robust=robust).fit()
     idx = s.index
-    return (pd.Series(res.trend, index=idx, name=series.name),
-            pd.Series(res.seasonal, index=idx, name=series.name),
-            pd.Series(res.resid, index=idx, name=series.name))
+    was_gap = series.reindex(idx).isna().to_numpy()
+
+    def _component(values) -> Series:
+        out = pd.Series(values, index=idx, name=series.name)
+        out[was_gap] = np.nan
+        return out
+
+    return _component(res.trend), _component(res.seasonal), _component(res.resid)
 
 
 def _mean_abs_shap(model, X: DataFrame) -> Series:
@@ -164,7 +175,8 @@ class DriverAnalysis:
         lags: Lags in records to test per driver for :meth:`lagged_importance`,
             e.g. ``list(range(-48, 1))``. ``None`` disables the lagged analysis.
         deseasonalize: STL-deseasonalize target and drivers up front (recommended
-            before causal methods).
+            before causal methods). Gaps survive the decomposition as gaps, so
+            deseasonalizing never adds rows to the modeling matrix.
         test_size: Held-out fraction for out-of-sample scoring.
         time_aware_split: Use a chronological holdout (no shuffling). Leave True.
         n_bootstrap: ``>0`` enables bootstrap stability of SHAP rankings.
@@ -261,6 +273,10 @@ class DriverAnalysis:
         self._X_attrib = None   # matrix ALE perturbs over (also incl. .RANDOM)
         self._random_baseline = None     # mean|SHAP| of .RANDOM = the noise floor
         self._stratified_directions = None  # {regime: {driver: ALE direction}}
+        # Per-submodel noise floors: each Layer-2 fit sees a different subset, so
+        # each carries its own .RANDOM value. {scale: floor} / {regime: floor}.
+        self._scale_baselines = {}
+        self._stratified_baselines = {}
         self._result = DriverAnalysisResult(model=None, model_scores={},
                                             drivers=self.driver_names)
 
@@ -606,6 +622,7 @@ class DriverAnalysis:
         raw importance suggests.
         """
         cols = {}  # column name (scale) -> per-driver importance Series
+        baselines = {}  # column name (scale) -> that fit's own .RANDOM floor
         # (a) STL components: attribute drivers to the slow trend, the recurring
         # seasonal cycle, and the fast residual separately. A driver that only
         # matters for one component acts on that timescale.
@@ -620,8 +637,9 @@ class DriverAnalysis:
             for comp_name, comp in components:
                 comp = comp.reindex(self.target.index)
                 comp.name = self.target.name
-                imp, _ = self._fit_importance(self.drivers_df, comp)
+                imp, baseline, _ = self._fit_importance(self.drivers_df, comp)
                 cols[comp_name] = imp
+                baselines[comp_name] = baseline
 
         # (b) Temporal aggregations: re-attribute at coarser resolutions. A driver
         # that's weak half-hourly but strong monthly responds slowly. Whenever any
@@ -643,12 +661,14 @@ class DriverAnalysis:
             if len(t.dropna()) < 20:  # too few rows to fit a meaningful model
                 detail(f"Scale '{scale}' has too few rows; skipped.", verbose=self.verbose)
                 continue
-            imp, _ = self._fit_importance(d_df, t)
+            imp, baseline, _ = self._fit_importance(d_df, t)
             cols[scale] = imp
+            baselines[scale] = baseline
 
         out = DataFrame(cols)  # rows = drivers, columns = scales
         out.index.name = 'driver'
         self._result.scale_resolved = out
+        self._scale_baselines = baselines
         return out
 
     def stratified(self, by: Union[str, Series] = 'season') -> DataFrame:
@@ -660,7 +680,7 @@ class DriverAnalysis:
                 across regimes flags context-dependence / nonstationarity.
         """
         regimes = self._regime_labels(by)
-        cols, directions = {}, {}
+        cols, directions, baselines = {}, {}, {}
         # Fit a separate model within each regime (season, day/night, ...). If a
         # driver's relevance or ALE *direction* flips between regimes, its effect
         # is context-dependent — caught later as regime_dependence in the verdict.
@@ -672,8 +692,9 @@ class DriverAnalysis:
                 detail(f"Regime '{label}' too small ({int(mask.sum())} rows); skipped.",
                        verbose=self.verbose)
                 continue
-            imp, model_X = self._fit_importance(d_df, t, return_model=True)
+            imp, baseline, model_X = self._fit_importance(d_df, t, return_model=True)
             cols[str(label)] = imp
+            baselines[str(label)] = baseline
             # Also record each driver's ALE shape within this regime, so we can
             # later detect a sign flip across regimes.
             model, X_attrib = model_X
@@ -691,6 +712,7 @@ class DriverAnalysis:
         out.index.name = 'driver'
         self._result.stratified = out
         self._stratified_directions = directions
+        self._stratified_baselines = baselines
         return out
 
     def _regime_labels(self, by: Union[str, Series]) -> Series:
@@ -735,7 +757,7 @@ class DriverAnalysis:
             t = self.target.loc[block.index]
             if len(t.dropna()) < 50:
                 continue
-            imp, _ = self._fit_importance(block, t)
+            imp, _baseline, _ = self._fit_importance(block, t)
             rows[start] = imp
         out = DataFrame(rows).T
         out.index.name = 'window_start'
@@ -748,19 +770,25 @@ class DriverAnalysis:
 
         The workhorse of Layer 2: the lagged, scale-resolved, stratified, and
         rolling analyses all reduce to "transform the data, then call this". Each
-        gets its OWN model (the headline model is for Layer 1 only). Returns a
-        per-driver importance Series, and optionally (model, X) so the caller can
-        compute ALE on the same fitted model.
+        gets its OWN model (the headline model is for Layer 1 only). Returns
+        ``(importance, random_baseline, extras)``, where ``extras`` is
+        ``(model, X)`` when ``return_model``.
+
+        The baseline comes back with the importances because it belongs to *this*
+        fit: every submodel sees a different subset with its own noise scale, so
+        its ``.RANDOM`` column is the only floor its importances can be judged
+        against. See ``_temporal_fields``.
 
         Note: this fit is for attribution, not scoring — it uses all rows (no
         holdout), which is fine because we never report its accuracy."""
         X, y = self._build_matrix(drivers_df, target, add_random=True)
         model = self._new_model()
         model.fit(X, y)
-        imp, _ = self._shap_per_driver(model, X)
+        imp, random_val = self._shap_per_driver(model, X)
         if return_model:
-            return imp, (model, X)  # X keeps .RANDOM (model was fitted with it)
-        return imp, None
+            # X keeps .RANDOM (model was fitted with it)
+            return imp, random_val, (model, X)
+        return imp, random_val, None
 
     # ----------------------------------------- Layer 3: causal (opt-in)
     def granger(self) -> DataFrame:
@@ -891,21 +919,34 @@ class DriverAnalysis:
             out['dominant_lag'] = dom
             out['timescale'] = self._timescale(dom, freq_min)
         # Scale dependence = relevance differs across STL components / aggregations.
+        # Each scale/regime is judged against the floor of the model that produced
+        # it, not against the headline model's: those submodels are fitted on
+        # different subsets, so their noise scales differ and a shared floor would
+        # compare importances that are not on the same scale.
         sr = self._result.scale_resolved
         if sr is not None and d in sr.index:
-            rels = [self._relevance(v, self._random_baseline or 0.0)
-                    for v in sr.loc[d].dropna()]
+            rels = self._relevances_vs_own_floor(sr.loc[d], self._scale_baselines)
             out['scale_dependence'] = len(set(rels)) > 1
         # Regime dependence = relevance OR ALE direction differs across regimes.
         st = self._result.stratified
         if st is not None and d in st.index:
-            rels = [self._relevance(v, self._random_baseline or 0.0)
-                    for v in st.loc[d].dropna()]
+            rels = self._relevances_vs_own_floor(st.loc[d], self._stratified_baselines)
             dirs = ([v for v in self._stratified_directions.values()]
                     if self._stratified_directions else [])
             driver_dirs = {dd.get(d) for dd in dirs if dd.get(d) in ('+', '-')}
             out['regime_dependence'] = (len(set(rels)) > 1) or (len(driver_dirs) > 1)
         return out
+
+    def _relevances_vs_own_floor(self, row: Series, baselines: dict) -> list:
+        """Relevance of one driver's per-submodel importances, each vs its own floor.
+
+        ``baselines`` maps the row's column labels (scales, regimes) to the
+        ``.RANDOM`` value of the fit that produced that column. A column with no
+        recorded floor falls back to the headline model's.
+        """
+        fallback = self._random_baseline or 0.0
+        return [self._relevance(v, baselines.get(col, fallback))
+                for col, v in row.dropna().items()]
 
     @staticmethod
     def _timescale(lag: int, freq_min: float) -> str:
@@ -1112,7 +1153,6 @@ class DriverAnalysis:
 
     def plot_importance(self, ax=None, title: str = None, showplot: bool = False):
         """Horizontal SHAP importance bars, colored by relevance vs ``.RANDOM``."""
-        import matplotlib.pyplot as plt
         shap_df = self._result.shap_importance
         if shap_df is None:
             self.shap()
@@ -1194,7 +1234,6 @@ class DriverAnalysis:
         Green = relevant, grey = weak, red = not relevant; direction glyphs (+/-)
         annotate signed methods. Divergence across a row is the scientific signal.
         """
-        import matplotlib.pyplot as plt
         from matplotlib.colors import ListedColormap, BoundaryNorm
         conv = self._result.convergence
         if conv is None:

@@ -246,13 +246,19 @@ def analyze_highest_quality_flux(flux: Series,
     flag = hampel.get_flag()
     s_filtered = hampel.filteredseries
 
-    # Calculate summary statistics
+    # Calculate summary statistics. Rates are per *measured* record: a record with
+    # no value was never a candidate for being an outlier, so counting it in the
+    # denominator understates the outlier rate (and, before the flag carried NaN
+    # there, it was also counted as valid).
     n_total = len(flux)
-    n_valid = (flag == 0).sum()
-    n_outliers = (flag == 2).sum()
-    pct_outliers = (n_outliers / n_total * 100) if n_total > 0 else 0
+    n_measured = int(flux.notna().sum())
+    n_valid = int((flag == 0).sum())
+    n_outliers = int((flag == 2).sum())
+    pct_outliers = (n_outliers / n_measured * 100) if n_measured > 0 else 0
+    pct_valid = (n_valid / n_measured * 100) if n_measured > 0 else 0
 
     summary['total_records'] = n_total
+    summary['measured_records'] = n_measured
     summary['valid_records'] = n_valid
     summary['outliers_found'] = n_outliers
     summary['outlier_pct'] = pct_outliers
@@ -262,8 +268,9 @@ def analyze_highest_quality_flux(flux: Series,
 
     info(f"\n>>> Outlier Detection Summary:")
     info(f">>> Total records:     {n_total}")
-    info(f">>> Valid records:     {n_valid} ({100-pct_outliers:.1f}%)")
-    info(f">>> Outliers detected: {n_outliers} ({pct_outliers:.1f}%)")
+    info(f">>> Measured records:  {n_measured}")
+    info(f">>> Valid records:     {n_valid} ({pct_valid:.1f}% of measured)")
+    info(f">>> Outliers detected: {n_outliers} ({pct_outliers:.1f}% of measured)")
 
     # Process daytime and nighttime separately for statistics
     for d, timeofday in enumerate(['DAYTIME', 'NIGHTTIME']):

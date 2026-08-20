@@ -74,6 +74,7 @@ from diive.gui.widgets.stepwise_cards import (
 from diive.gui.widgets.sub_tabs import SubTabs
 from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.variable_panel import VariablePanel
+from diive.gui.widgets.weak_slot import weak_slot
 from diive.preprocessing.corrections import apply_corrections
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 from diive.preprocessing.outlier_detection.codegen import stepwise_to_code
@@ -132,6 +133,7 @@ class ScreeningTabBase(DiiveTab):
         self._corrected = None                # corrected series (or None)
         self._result_df = None                # columns pending "Add"
         self._run_id = 0                       # guards against stale worker results
+        self._running = False                  # a chain run is in flight
         self._step_cards: list[StepCard] = []
         self._sig = _StepwiseSignals()
         self._sig.run_done.connect(self._on_done)
@@ -149,7 +151,7 @@ class ScreeningTabBase(DiiveTab):
 
         # Left: the shared variable list (identical to every other tab).
         self.varpanel = VariablePanel()
-        self.varpanel.selected.connect(lambda name, _ctrl: self._select(name))
+        self.varpanel.selected.connect(self._select)
         layout.addWidget(self.varpanel)
 
         # Centre: the segmented inspector (Outliers / Corrections / Report) —
@@ -233,7 +235,7 @@ class ScreeningTabBase(DiiveTab):
             b = QPushButton(label)
             b.setCheckable(True)
             b.setCursor(Qt.PointingHandCursor)
-            b.clicked.connect(lambda _c=False, idx=i: self._set_inspector_page(idx))
+            b.clicked.connect(weak_slot(self._set_inspector_page, i))
             seg.addWidget(b)
             self._seg_btns.append(b)
         self._apply_segment_style()
@@ -307,7 +309,7 @@ class ScreeningTabBase(DiiveTab):
         self.run_outliers_btn.setToolTip(
             "Run the outlier chain on the selected variable and compute the QCF. "
             "Edits to the steps apply only when you run.")
-        self.run_outliers_btn.clicked.connect(lambda: self._run())
+        self.run_outliers_btn.clicked.connect(self._run)
         theme.set_button_role(self.run_outliers_btn, "confirm")
         outer.addWidget(self.run_outliers_btn)
         return page
@@ -366,7 +368,7 @@ class ScreeningTabBase(DiiveTab):
         self.run_corrections_btn.setToolTip(
             "Apply the corrections to the QCF-filtered series (or the raw series "
             "when no outlier chain has been run).")
-        self.run_corrections_btn.clicked.connect(lambda: self._recompute_corrections())
+        self.run_corrections_btn.clicked.connect(self._recompute_corrections)
         theme.set_button_role(self.run_corrections_btn, "confirm")
         outer.addWidget(self.run_corrections_btn)
         return page
@@ -403,7 +405,7 @@ class ScreeningTabBase(DiiveTab):
             "Overlay the selected step's upper/lower detection band on the "
             "original series (methods with a single envelope only).")
         # The band overlay only affects the Series page.
-        self.limits_cb.toggled.connect(lambda *_: self._refresh_preview(pages=(0,)))
+        self.limits_cb.toggled.connect(weak_slot(self._refresh_preview, (0,)))
         bar.addWidget(self.limits_cb)
 
         bar.addStretch(1)
@@ -494,12 +496,12 @@ class ScreeningTabBase(DiiveTab):
             n = len(removed[i]) if removed is not None else None
             card = StepCard(i, step, removed=n, selected=(i == self._selected_step),
                             enabled=step.get("enabled", True))
-            card.clicked.connect(lambda idx=i: self._select_step(idx))
-            card.edit.connect(lambda idx=i: self._edit_step(idx))
-            card.delete.connect(lambda idx=i: self._delete_step(idx))
-            card.move_left.connect(lambda idx=i: self._move_step(idx, -1))
-            card.move_right.connect(lambda idx=i: self._move_step(idx, 1))
-            card.toggle.connect(lambda on, idx=i: self._toggle_step(idx, on))
+            card.clicked.connect(weak_slot(self._select_step, i))
+            card.edit.connect(weak_slot(self._edit_step, i))
+            card.delete.connect(weak_slot(self._delete_step, i))
+            card.move_left.connect(weak_slot(self._move_step, i, -1))
+            card.move_right.connect(weak_slot(self._move_step, i, 1))
+            card.toggle.connect(weak_slot(self._toggle_step, i))
             self._strip.addWidget(card)
             self._step_cards.append(card)
         add = AddStepCard()
@@ -614,6 +616,10 @@ class ScreeningTabBase(DiiveTab):
         (on a user pick) or keeps the current one (on a data reload)."""
         self._var = name
         self.varpanel.set_panels([name])
+        # Invalidate any run still in flight: clearing the stored results below is not
+        # enough, because a worker started on the previous variable still carries the
+        # matching run_id and its handler would adopt the result onto this one.
+        self._run_id += 1
         # Nothing is computed until the user clicks Run — only the raw series.
         self._payload = None
         self._corrected = None
@@ -707,6 +713,12 @@ class ScreeningTabBase(DiiveTab):
     def _run(self) -> None:
         if self._df is None or self._var is None:
             return
+        # One chain run at a time (the same guard `WorkerRunner` gives the other
+        # tabs). The run id already discards a superseded *result*, but without
+        # this every extra click also started another CPU-heavy thread that ran
+        # to completion for nothing.
+        if self._running:
+            return
         # Bump the run id so any in-flight worker's result is ignored on arrival
         # (results can land out of order under rapid edits).
         self._run_id += 1
@@ -726,6 +738,7 @@ class ScreeningTabBase(DiiveTab):
         self.status.setText("Running chain…")
         self.add_btn.setEnabled(False)
         self.copy_btn.setEnabled(False)
+        self._running = True
         threading.Thread(
             target=self._worker,
             args=(self._df, self._var, list(self._steps), self._coords(),
@@ -781,6 +794,7 @@ class ScreeningTabBase(DiiveTab):
         self._sig.run_done.emit(payload)
 
     def _on_done(self, payload: dict) -> None:
+        self._running = False  # cleared here, so the guard covers the whole run
         # Ignore a stale result from a superseded run (out-of-order completion).
         if payload.get("run_id") != self._run_id:
             return
@@ -813,6 +827,7 @@ class ScreeningTabBase(DiiveTab):
         self._refresh_preview()
 
     def _on_failed(self, data) -> None:
+        self._running = False  # cleared here, so the guard covers the whole run
         run_id, msg = data
         if run_id != self._run_id:
             return  # a superseded run failed; the latest run governs the UI
@@ -1029,7 +1044,7 @@ class ScreeningTabBase(DiiveTab):
         ax = canvas.new_axes(1)[0]
         try:
             dv.plotting.HeatmapDateTime(cleaned).plot(
-                ax=ax, fig=canvas.fig,
+                ax=ax, fig=canvas.fig, cmap=theme.manager.heatmap_cmap,
                 format_style=dv.plotting.FormatStyle(
                     title="cleaned", axlabel_fontsize=8, ticks_fontsize=7),
                 cb_digits_after_comma="auto", cb_labelsize=7)

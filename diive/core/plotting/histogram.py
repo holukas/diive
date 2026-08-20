@@ -10,7 +10,7 @@ import math
 import warnings
 
 import numpy as np
-import pandas as pd
+from matplotlib import rcParams
 
 import diive.core.plotting.plotfuncs as pf
 from diive.core.funcs.funcs import zscore, val_from_zscore
@@ -18,8 +18,6 @@ from diive.core.plotting.styles.format import FormatStyle
 
 # pd.options.display.width = None
 # pd.options.display.max_columns = None
-pd.set_option('display.max_rows', 50)
-pd.set_option('display.max_columns', 50)
 
 from pandas import Series
 
@@ -32,8 +30,16 @@ class HistogramPlot:
     Args:
         series: Series to plot
         method: Binning method (e.g., 'n_bins')
-        n_bins: Number of bins for histogram (int or list)
-        ignore_fringe_bins: Whether to ignore fringe bins
+        n_bins: Number of bins for histogram. An int (or None for the matplotlib
+            default) lets the edges follow this series' own range; a sequence is
+            used as the explicit bin edges. Passing the same sequence to two
+            histograms is how a shared bin grid is pinned, so that bin *i* means
+            the same interval in both (values outside the sequence are not binned).
+        ignore_fringe_bins: List of two integers ``[i, j]``: the first *i* and the
+            last *j* bins are dropped from the plot. The edges are derived from the
+            full series first, so the bins that remain are the same intervals the
+            untrimmed histogram would have shown, and records falling into a dropped
+            bin are not plotted. Default False (keep all bins).
 
     Call `plot()` to render with styling options (title, labels, display options).
 
@@ -59,13 +65,49 @@ class HistogramPlot:
         self.method = method
         self.n_bins = n_bins
         self.ignore_fringe_bins = ignore_fringe_bins
-        self.first_date = series.index[0]
-        self.last_date = series.index[-1]
+        # An empty series has no first/last record to report. Guarding here rather
+        # than raising is what keeps the outlier detectors' own diagnostic plot
+        # alive: it histograms the retained subset, which is empty whenever a test
+        # rejects every record. `plot` draws an honest "no data" axes for it.
+        self.first_date = series.index[0] if len(series.index) else None
+        self.last_date = series.index[-1] if len(series.index) else None
 
         self.fig = None
         self.ax = None
         self.counts = None
         self.edges = None
+
+    def _trimmed_edges(self):
+        """Return the bin edges with the fringe bins removed.
+
+        Same semantics as :meth:`diive.analysis.Histogram._ignore_fringe_bins`:
+        the edges come from the *full* series, then the first `i` and last `j`
+        bins are dropped, so the bins that survive are the ones the untrimmed
+        histogram would have shown. Re-binning on the trimmed edge array (rather
+        than slicing the counts afterwards) keeps one `ax.hist` call, which is
+        what draws the bars and their labels.
+        """
+        n_first, n_last = self.ignore_fringe_bins[0], self.ignore_fringe_bins[1]
+        # `bins=None` is matplotlib's "use the rcParam", which numpy does not know.
+        bins = self.n_bins if self.n_bins is not None else rcParams['hist.bins']
+        edges = np.histogram_bin_edges(self.s.dropna().to_numpy(), bins=bins)
+        # len()-based stop so that n_last == 0 trims nothing from the end.
+        kept = edges[n_first:len(edges) - n_last]
+        if len(kept) < 2:
+            raise ValueError(f"ignore_fringe_bins={self.ignore_fringe_bins} removes all "
+                             f"{len(edges) - 1} bins of {self.s.name}, "
+                             f"nothing would be left to plot.")
+        return kept
+
+    def _default_title(self):
+        """Default title: the variable and the period it covers.
+
+        An empty series has no period, so state that instead of printing a
+        `None to None` range that reads like a real date span.
+        """
+        if self.first_date is None:
+            return f"{self.s.name} (no records)"
+        return f"{self.s.name} (between {self.first_date} and {self.last_date})"
 
     def get_fig(self):
         """Return the matplotlib Figure (available after :meth:`plot`)."""
@@ -114,10 +156,27 @@ class HistogramPlot:
         self.ax = ax
         self.fig, self.ax, showplot = pf.setup_figax(ax=self.ax, figsize=(16, 9))
 
+        # A series without a single valid value has nothing to bin: `ax.hist`
+        # autodetects the range and dies on `[nan, nan]`. Say so on the axes
+        # instead -- this is reached from the outlier detectors' own diagnostic
+        # plot, where a traceback would kill the detector run over one empty panel.
+        if self.s.dropna().empty:
+            self.ax.text(0.5, 0.5, f"{self.s.name}: no data",
+                         size=16, color="black", transform=self.ax.transAxes,
+                         horizontalalignment='center', verticalalignment='center')
+            style.apply(ax=self.ax, default_title=self._default_title(),
+                        default_xlabel="", default_ylabel="Counts")
+            if showplot:
+                self.fig.show()
+            return
+
         # Plot histogram
+        bins = self.n_bins
+        if self.ignore_fringe_bins:
+            bins = self._trimmed_edges()
         self.counts, self.edges, bars = self.ax.hist(
             x=self.s,
-            bins=self.n_bins,
+            bins=bins,
             rwidth=0.95,
             color="#78909c"
         )
@@ -135,15 +194,21 @@ class HistogramPlot:
 
         # Distribution overlays: a KDE fit line plus dashed mean/median markers.
         # Each carries its value in the label so the shared legend reads as a
-        # small stats panel. The KDE density is scaled by N * bin_width so it
-        # sits on the same counts axis as the bars.
+        # small stats panel. The bars are counts, so the expected bar height at x
+        # is N * density(x) * (width of the bin containing x) -- the width has to
+        # be looked up per bin, because `bins` may be an explicit non-uniform
+        # edge list and a single bin width would then misscale every other bin.
         if show_kde or show_mean or show_median:
             vals = self.s.dropna().to_numpy()
-            bin_width = self.edges[1] - self.edges[0]
-            if show_kde and vals.size > 1 and bin_width > 0:
+            bin_widths = np.diff(self.edges)
+            if show_kde and vals.size > 1 and bin_widths.size and bin_widths.min() > 0:
                 from scipy.stats import gaussian_kde
                 xvals = np.linspace(self.edges[0], self.edges[-1], 200)
-                yvals = gaussian_kde(vals)(xvals) * self.counts.sum() * bin_width
+                # Index of the bin each sample point falls in (last bin is closed
+                # on the right, matching np.histogram).
+                ix_bin = np.clip(np.searchsorted(self.edges, xvals, side='right') - 1,
+                                 0, bin_widths.size - 1)
+                yvals = gaussian_kde(vals)(xvals) * self.counts.sum() * bin_widths[ix_bin]
                 self.ax.plot(xvals, yvals, color="#5E35B1", linewidth=2,
                              zorder=500, label="KDE")
             if show_mean and vals.size:
@@ -157,17 +222,23 @@ class HistogramPlot:
 
         if show_info:
             info_txt = f"method: {self.method}"
-            info_txt += f"\nn_bins: {self.n_bins}" if self.method == 'n_bins' else info_txt
-            if highlight_peak:
-                info_txt += f"\nPEAK between {self.edges[ix_max]:.02f} and {self.edges[ix_max + 1]:.02f}" if self.method == 'n_bins' else info_txt
+            if self.method == 'n_bins':
+                info_txt += f"\nn_bins: {self.n_bins}"
+            # Otherwise the box claims a bin count the plot does not show.
+            if self.ignore_fringe_bins:
+                info_txt += f"\nignore_fringe_bins: {self.ignore_fringe_bins}"
+            if highlight_peak and self.method == 'n_bins':
+                info_txt += f"\nPEAK between {self.edges[ix_max]:.02f} and {self.edges[ix_max + 1]:.02f}"
 
             self.ax.text(0.05, 0.95, info_txt,
                          size=16, color="black", backgroundcolor='None', transform=self.ax.transAxes,
                          alpha=1, horizontalalignment='left', verticalalignment='top', zorder=999)
 
-        # z-scores
-        if show_zscores:
-            zscores = zscore(series=self.s, absolute=False)
+        # z-scores. A constant series has zero standard deviation, so every z-score
+        # is NaN and there is no z-axis range to lay out. Only the overlay is
+        # dropped -- the histogram of a constant series is still worth showing.
+        zscores = zscore(series=self.s, absolute=False) if show_zscores else None
+        if show_zscores and np.isfinite(zscores).any():
             self.axx = self.ax.twiny()
             self.axx.set_xlim(self.ax.get_xlim()[0], self.ax.get_xlim()[1])
             self.axx.grid(False)
@@ -191,7 +262,7 @@ class HistogramPlot:
                 axx_ticks_pos.append(val)
             self.axx.set_xticks(axx_ticks_pos)
             if show_zscore_values:
-                axx_zscores = [f"{z}\n{v:.01f}" for z, v in zip(axx_zscores, axx_ticks_pos)]
+                axx_zscores = [f"{z}\n{v:.01f}" for z, v in zip(axx_zscores, axx_ticks_pos, strict=False)]
                 self.axx.set_xticklabels(axx_zscores)
             else:
                 self.axx.set_xticklabels(axx_zscores)
@@ -200,7 +271,7 @@ class HistogramPlot:
             self.axx.set_xlabel("z-score", color='#AB47BC', fontsize=16)
 
         # Shared formatting layer: title/x-label/y-label/fonts/grid.
-        style.apply(ax=self.ax, default_title=f"{self.s.name} (between {self.first_date} and {self.last_date})",
+        style.apply(ax=self.ax, default_title=self._default_title(),
                     default_xlabel="", default_ylabel="Counts")
 
         self.ax.locator_params(axis='both', nbins=10)

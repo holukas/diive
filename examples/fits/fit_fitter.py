@@ -1,7 +1,7 @@
 """
-===========================
+==============================
 Curve Fitting with BinFitterCP
-===========================
+==============================
 
 Demonstrates binned curve fitting with polynomial functions and confidence intervals.
 BinFitterCP is useful for analyzing driver-response relationships in ecosystem data

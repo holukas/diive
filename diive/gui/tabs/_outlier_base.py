@@ -65,9 +65,11 @@ class _OutlierSignals(QObject):
     run done/failed plumbing lives in :class:`WorkerRunner`; this carries only
     the live-progress and feature-emit signals."""
     features_created = Signal(object)
-    # (iteration, n_outliers, cleaned_series, bounds) — progress bar + live plot;
-    # bounds is (lower, upper) data-unit Series for this iteration, or None.
-    progress = Signal(int, int, object, object)
+    # (iteration, n_outliers, cleaned_series, bounds, is_daytime) — progress bar +
+    # live plot; bounds is (lower, upper) data-unit Series for this iteration, or
+    # None; is_daytime is the run's daytime mask (or None), carried here because
+    # the worker must not write it into the tab itself.
+    progress = Signal(int, int, object, object, object)
 
 
 class BaseOutlierTab(DiiveTab):
@@ -147,7 +149,7 @@ class BaseOutlierTab(DiiveTab):
         tcol.addWidget(self._list_header("Target", "click to set target"))
         self.varpanel = VariablePanel()
         self.varpanel.list.setToolTip("Click a variable to set it as the detection target.")
-        self.varpanel.selected.connect(lambda name, _ctrl: self._select(name))
+        self.varpanel.selected.connect(self._select)
         tcol.addWidget(self.varpanel, stretch=1)
         layout.addLayout(tcol)
 
@@ -458,15 +460,15 @@ class BaseOutlierTab(DiiveTab):
         Emits ``progress`` per iteration (the GUI thread renders it); raises on
         error (the runner forwards to :meth:`_on_failed`)."""
         h = self._make_detector(series, kwargs)
-        # Daytime mask is computed in __init__; expose it for live colouring
-        # before run() starts firing progress callbacks.
-        self._live_is_daytime = getattr(h, "is_daytime", None) if separate else None
+        # Daytime mask is computed in __init__; it travels with every progress
+        # emission so the GUI thread (not this one) stores it for live colouring.
+        is_daytime = getattr(h, "is_daytime", None) if separate else None
 
         def cb(it, n, s):
             # Read the iteration's data-unit detection band off the detector.
             lo, hi = h.last_lower_bound, h.last_upper_bound
             bounds = (lo.copy(), hi.copy()) if lo is not None and hi is not None else None
-            self._sig.progress.emit(it, n, s, bounds)
+            self._sig.progress.emit(it, n, s, bounds, is_daytime)
 
         h.run(repeat=repeat, progress_callback=cb)
         cleaned = h.filteredseries.copy()
@@ -485,12 +487,13 @@ class BaseOutlierTab(DiiveTab):
                 operation=f"{self.title} flag", params=kwargs,
                 tags=["flag", tag]),
         }
-        # Day/night split of the outliers (only when separation was on).
-        is_daytime = getattr(h, "is_daytime", None) if separate else None
         return {
             "var": series.name, "cleaned": cleaned, "flag": flag,
             "result": result, "n_outliers": int((flag == 2).sum()),
             "is_daytime": is_daytime,
+            # Index the run was started on; _on_done compares it against the
+            # dataset it finds to detect a change that happened meanwhile.
+            "index": series.index,
         }
 
     def _worker(self, series, kwargs: dict, repeat: bool,
@@ -502,11 +505,15 @@ class BaseOutlierTab(DiiveTab):
         except Exception as err:
             self._on_failed(str(err))
 
-    def _on_progress(self, iteration: int, n_outliers: int, cleaned, bounds) -> None:
+    def _on_progress(self, iteration: int, n_outliers: int, cleaned, bounds,
+                     is_daytime=None) -> None:
         """Fill the bar as repeated iterations remove outliers. Total iterations
         aren't known ahead of time, so progress is measured against the first
         iteration's outlier count (the most that ever get removed at once).
-        Accumulates this iteration's detection band and live-updates the panels."""
+        Accumulates this iteration's detection band and live-updates the panels.
+        Also stores the run's daytime mask (it arrives with every progress
+        emission) — the worker computes it but must not write tab state."""
+        self._live_is_daytime = is_daytime
         self._n_iter = iteration
         if n_outliers > 0 and self._first_n is None:
             self._first_n = n_outliers
@@ -660,6 +667,18 @@ class BaseOutlierTab(DiiveTab):
     def _on_done(self, payload: dict) -> None:
         self.run_btn.setEnabled(True)
         self.progress.finish()
+        # Detection runs off-thread, so the dataset can change before it finishes
+        # (a variable renamed or deleted, the date range narrowed, another dataset
+        # loaded). The result then belongs to a frame that no longer exists:
+        # indexing the new frame with the old name raises, and a re-indexed frame
+        # would be drawn against this run's flag/cleaned arrays. Adopt nothing.
+        var = payload["var"]
+        if (self._df is None or var not in self._df.columns
+                or not self._df.index.equals(payload["index"])):
+            self.status.setText(
+                f"The dataset changed while detecting outliers in '{var}', so the "
+                f"result no longer matches it and was discarded. Detect again.")
+            return
         self._result_df = payload["result"]
         self._last_payload = payload  # for re-render when the limit toggle changes
         self._update_hero(payload)
@@ -686,11 +705,12 @@ class BaseOutlierTab(DiiveTab):
 
     def _rerender_last(self) -> None:
         """Re-draw the last completed run when the limit-lines toggle changes.
-        Ignored while a run is in progress (the live view already reflects it) or
-        before any run."""
+        Ignored while a run is in progress (the live view already reflects it),
+        before any run, or once the dataset changed under the stored result."""
         p = self._last_payload
         if (p is None or not self.run_btn.isEnabled()
-                or self._df is None or p["var"] not in self._df.columns):
+                or self._df is None or p["var"] not in self._df.columns
+                or not self._df.index.equals(p["index"])):
             return
         self._draw(self._df[p["var"]], flag=p["flag"], cleaned=p["cleaned"],
                    n_outliers=p["n_outliers"], is_daytime=p["is_daytime"],

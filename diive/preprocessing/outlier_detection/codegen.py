@@ -133,7 +133,7 @@ def _render_call(class_path: str, kwargs: dict, defaults: dict, repeat: bool,
     lines.append(").run()" if repeat else ").run(repeat=False)")
     lines += ["",
               "cleaned = h.filteredseries  # outliers set to NaN",
-              "flag = h.overall_flag       # 0 = ok, 2 = outlier"]
+              "flag = h.overall_flag       # 0 = ok, 2 = outlier, NaN = input missing"]
     return "\n".join(lines) + "\n"
 
 

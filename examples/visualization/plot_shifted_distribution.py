@@ -1,7 +1,7 @@
 """
-========================
+=========================
 Shifted Distribution Plot
-========================
+=========================
 
 Compare how a variable's distribution has shifted between a reference and a
 comparison period. Zone boundaries are derived automatically from the reference

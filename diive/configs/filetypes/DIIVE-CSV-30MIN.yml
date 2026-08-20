@@ -1,6 +1,6 @@
 GENERAL:
   NAME: "DIIVE-CSV-30MIN"
-  DESCRIPTION: "Default DIIVE format with 2-row header (variable name, units) and 1-column full timestamp."
+  DESCRIPTION: "Default diive format with 2-row header (variable name, units) and 1-column full timestamp."
   TAGS: [ "DIIVE" ]
 
 FILE:

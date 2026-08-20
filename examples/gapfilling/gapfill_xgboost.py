@@ -103,7 +103,12 @@ xgbts = dv.gapfilling.XGBoostTS(
     max_depth=6,
     learning_rate=0.1,
     early_stopping_rounds=10,
-    n_jobs=-1
+    n_jobs=-1,
+    # Explain a 5000-row sample instead of every row. TreeSHAP costs time linear
+    # in the number of rows and mean |SHAP| converges long before the full record,
+    # so the ranking (and therefore the reduction below) is unchanged; the sample
+    # is seeded, so the result stays reproducible.
+    shap_max_rows=5000,
 )
 
 # Feature reduction using SHAP importance
@@ -171,4 +176,4 @@ dv.plotting.Cumulative(
     end_year=2020
 ).plot()
 
-print("✓ XGBoost gap-filling complete.")
+print("[OK] XGBoost gap-filling complete.")

@@ -35,7 +35,7 @@ series_corr_max = dv.corrections.setto_threshold(
     series=series.copy(),
     threshold=3.0,
     type='max',
-    showplot=False
+    showplot=True
 )
 
 print("\nAfter max threshold 3.0:")
@@ -54,7 +54,7 @@ series_corr_min = dv.corrections.setto_threshold(
     series=series.copy(),
     threshold=1.0,
     type='min',
-    showplot=False
+    showplot=True
 )
 
 print("\nAfter min threshold 1.0:")
