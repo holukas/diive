@@ -61,6 +61,13 @@ db = [
 [project.scripts]
 diive-gui = "diive.gui._cli:_gui_main"
 
+# Shown in the sidebar of the PyPI project page.
+[project.urls]
+Homepage = "https://github.com/holukas/diive"
+Documentation = "https://diive.readthedocs.io/"
+Changelog = "https://github.com/holukas/diive/blob/main/CHANGELOG.md"
+Issues = "https://github.com/holukas/diive/issues"
+
 [tool.uv]
 python-preference = "managed"
 
