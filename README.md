@@ -49,13 +49,13 @@ uv sync --all-extras --all-groups    # everything: all extras AND all groups
 **`uv sync --all-extras` alone is not everything.** The optional pieces are split across two uv
 mechanisms, and `--all-extras` reaches only the first:
 
-| Kind | Name | Pulls in | Install |
-|---|---|---|---|
-| extra | `gui` | PySide6 desktop GUI (`diive-gui`) | `uv sync --extra gui` |
-| extra | `gui3d` | PyVista/VTK 3-D surface tabs, `trimesh` glTF export | `uv sync --extra gui3d` |
-| extra + group | `db` | `influxdb-client`, the InfluxDB read/write engine | `uv sync --group db` |
-| group | `dev` | test, lint and notebook tooling | synced by default |
-| group | `build` | PyInstaller, for the standalone Windows app | `uv sync --group build` |
+| Kind          | Name    | Pulls in                                            | Install                 |
+|---------------|---------|-----------------------------------------------------|-------------------------|
+| extra         | `gui`   | PySide6 desktop GUI (`diive-gui`)                   | `uv sync --extra gui`   |
+| extra         | `gui3d` | PyVista/VTK 3-D surface tabs, `trimesh` glTF export | `uv sync --extra gui3d` |
+| extra + group | `db`    | `influxdb-client`, the InfluxDB read/write engine   | `uv sync --group db`    |
+| group         | `dev`   | test, lint and notebook tooling                     | synced by default       |
+| group         | `build` | PyInstaller, for the standalone Windows app         | `uv sync --group build` |
 
 `db` is deliberately both. Working *on* diive, use the group — `uv sync --group db`. Depending on
 diive from another project, ask for the extra — `diive[db]` — because a dependency group is local to
@@ -76,7 +76,7 @@ uv run diive-gui
 ```python
 import diive as dv
 
-df = dv.load_exampledata_parquet()   # bundled multi-year 30-min eddy covariance record
+df = dv.load_exampledata_parquet()  # bundled multi-year 30-min eddy covariance record
 
 dv.plotting.TimeSeries(series=df['NEE_CUT_REF_f']).plot()
 dv.plotting.HeatmapDateTime(series=df['NEE_CUT_REF_f']).plot()
@@ -84,25 +84,26 @@ dv.plotting.HeatmapDateTime(series=df['NEE_CUT_REF_f']).plot()
 
 Plots follow a two-phase pattern throughout: the constructor takes the data, `.plot()` takes the styling.
 
-From here, the [cookbook](examples/COOKBOOK.md) walks through six minimal workflows — load data, clean timestamps, remove
+From here, the [cookbook](examples/COOKBOOK.md) walks through six minimal workflows — load data, clean timestamps,
+remove
 outliers, gap-fill, run the flux chain, visualize.
 
 ## What's in it
 
 `import diive as dv` exposes ten domain namespaces. Each row links to runnable examples for that area:
 
-| Namespace | Covers | Examples |
-|---|---|---|
-| `dv.plotting` | 18 plot types: time series, heatmaps, diel cycle, cumulative, ridgeline, scatter, hexbin, wind rose, tree ring, 3-D surface, ... | [visualization/](examples/visualization/README.md) |
-| `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, linear interpolation, long-term variants, `FeatureEngineer` | [gapfilling/](examples/gapfilling/README.md) |
-| `dv.flux` | Flux processing chain (L2–L4.2), NEE partitioning, USTAR filtering, uncertainty | [flux/](examples/flux/README.md) |
-| `dv.outliers` | Nine detection methods (Hampel, z-score variants, local SD, LOF, absolute limits, ...) | [outlier_detection/](examples/preprocessing/outlier_detection/README.md) |
-| `dv.corrections` | Offset corrections (measurement, radiation, humidity, wind direction), thresholds, missing values | [corrections/](examples/preprocessing/corrections/README.md) |
-| `dv.qaqc` | `FlagQCF` quality flags, EddyPro flag handling, meteo screening | [qaqc/](examples/preprocessing/qaqc/README.md) |
-| `dv.analysis` | Seasonal-trend decomposition, lagged correlation, grid aggregation, gap statistics, spectral analysis | [analysis/](examples/analysis/README.md) |
-| `dv.times` | Timestamp sanitization, frequency detection, resampling, date-range handling | [times/](examples/times/README.md) |
-| `dv.variables` | Derived variables (VPD, potential radiation, day/night flags, air properties), feature engineering | [features/](examples/features/README.md) |
-| `dv.events` | Time-stamped event markers, 0/1 flag columns, plot overlays | [events/](examples/events/README.md) |
+| Namespace        | Covers                                                                                                                           | Examples                                                                 |
+|------------------|----------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------|
+| `dv.plotting`    | 18 plot types: time series, heatmaps, diel cycle, cumulative, ridgeline, scatter, hexbin, wind rose, tree ring, 3-D surface, ... | [visualization/](examples/visualization/README.md)                       |
+| `dv.gapfilling`  | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, linear interpolation, long-term variants, `FeatureEngineer`    | [gapfilling/](examples/gapfilling/README.md)                             |
+| `dv.flux`        | Flux processing chain (L2–L4.2), NEE partitioning, USTAR filtering, uncertainty                                                  | [flux/](examples/flux/README.md)                                         |
+| `dv.outliers`    | Nine detection methods (Hampel, z-score variants, local SD, LOF, absolute limits, ...)                                           | [outlier_detection/](examples/preprocessing/outlier_detection/README.md) |
+| `dv.corrections` | Offset corrections (measurement, radiation, humidity, wind direction), thresholds, missing values                                | [corrections/](examples/preprocessing/corrections/README.md)             |
+| `dv.qaqc`        | `FlagQCF` quality flags, EddyPro flag handling, meteo screening                                                                  | [qaqc/](examples/preprocessing/qaqc/README.md)                           |
+| `dv.analysis`    | Seasonal-trend decomposition, lagged correlation, grid aggregation, gap statistics, spectral analysis                            | [analysis/](examples/analysis/README.md)                                 |
+| `dv.times`       | Timestamp sanitization, frequency detection, resampling, date-range handling                                                     | [times/](examples/times/README.md)                                       |
+| `dv.variables`   | Derived variables (VPD, potential radiation, day/night flags, air properties), feature engineering                               | [features/](examples/features/README.md)                                 |
+| `dv.events`      | Time-stamped event markers, 0/1 flag columns, plot overlays                                                                      | [events/](examples/events/README.md)                                     |
 
 I/O helpers are top-level (`dv.load_parquet`, `dv.save_parquet`, `dv.ReadFileType`) — see [io/](examples/io/README.md).
 For the authoritative symbol list, check `diive.__all__` and each namespace's `__all__`.
@@ -110,7 +111,8 @@ For the authoritative symbol list, check `diive.__all__` and each namespace's `_
 ## Highlights
 
 **Flux processing chain** — post-processing from quality flags through gap-filling and NEE partitioning (Levels 2 to
-4.2), following [Swiss FluxNet standards](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/).
+4.2),
+following [Swiss FluxNet standards](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/).
 Either `run_chain(data, config)` for the standard workflow, or composable per-level callables when you need every
 detector, hyperparameter and diagnostic flag. → [examples/flux/fluxprocessingchain/](examples/flux/fluxprocessingchain/)
 
@@ -125,21 +127,26 @@ training. An 8-stage feature engineer feeds them all. → [examples/gapfilling/]
 guided processing chain, per-variable metadata with full provenance, and portable `.diive` project folders.
 → [GUI manual](diive/gui/MANUAL.md)
 
+![The diive desktop GUI showing the Overview tab: variable list, summary statistics, and linked time series, heatmap, cumulative, diel cycle and distribution panels](images/diive-gui_v0.91.0_20260820.png)
+
+*The Overview tab in diive-gui v0.91.0, showing ten years of half-hourly data. Selecting a variable on the left redraws
+every panel; zooming one of the date panels recomputes stats and panels for the visible range.*
+
 ## Documentation
 
-| Where | What |
-|---|---|
-| [diive.readthedocs.io](https://diive.readthedocs.io/) | Hosted docs: API reference and example gallery |
-| [OVERVIEW.md](OVERVIEW.md) | How the pieces fit together: library, GUI, docs, packaging |
-| [examples/COOKBOOK.md](examples/COOKBOOK.md) | Six minimal workflows — the place to start |
-| [examples/CATALOG.md](examples/CATALOG.md) | All 113 examples, indexed by use case |
-| [examples/EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md) | The bundled 37-variable dataset |
-| [diive/gui/MANUAL.md](diive/gui/MANUAL.md) | Desktop GUI user manual |
-| [diive/gui/README.md](diive/gui/README.md) | GUI architecture, for developers |
-| [notebooks/README.md](notebooks/README.md) | Jupyter workflows, including the InfluxDB database |
-| [packaging/README.md](packaging/README.md) | Building the standalone Windows app |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, coding standards, testing |
-| [CHANGELOG.md](CHANGELOG.md) | Version history |
+| Where                                                      | What                                                       |
+|------------------------------------------------------------|------------------------------------------------------------|
+| [diive.readthedocs.io](https://diive.readthedocs.io/)      | Hosted docs: API reference and example gallery             |
+| [OVERVIEW.md](OVERVIEW.md)                                 | How the pieces fit together: library, GUI, docs, packaging |
+| [examples/COOKBOOK.md](examples/COOKBOOK.md)               | Six minimal workflows — the place to start                 |
+| [examples/CATALOG.md](examples/CATALOG.md)                 | All 113 examples, indexed by use case                      |
+| [examples/EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md) | The bundled 37-variable dataset                            |
+| [diive/gui/MANUAL.md](diive/gui/MANUAL.md)                 | Desktop GUI user manual                                    |
+| [diive/gui/README.md](diive/gui/README.md)                 | GUI architecture, for developers                           |
+| [notebooks/README.md](notebooks/README.md)                 | Jupyter workflows, including the InfluxDB database         |
+| [packaging/README.md](packaging/README.md)                 | Building the standalone Windows app                        |
+| [CONTRIBUTING.md](CONTRIBUTING.md)                         | Development setup, coding standards, testing               |
+| [CHANGELOG.md](CHANGELOG.md)                               | Version history                                            |
 
 Examples run as plain scripts:
 

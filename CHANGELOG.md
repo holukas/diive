@@ -18,6 +18,10 @@
   and improved features. It is an important milestone towards a 1.0 release, but it is still a
   work-in-progress
 
+![diive](images/diive-gui_v0.91.0_20260820.png)
+
+*The new desktop application, showing the Overview tab for ten years of half-hourly NEE at CH-DAV.*
+
 ### Important
 
 - Raw high-frequency data processing has moved to the separate [dyco](https://github.com/holukas/dyco) package, because
