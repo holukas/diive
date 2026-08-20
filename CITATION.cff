@@ -10,7 +10,7 @@ version: "0.91.0"
 # Concept DOI: always resolves to the newest release, so this line does not
 # change per release. Zenodo also mints a version-specific DOI on publication.
 doi: 10.5281/zenodo.10884017
-# date-released: set on release day, same date as the CHANGELOG entry (YYYY-MM-DD)
+date-released: "2026-08-20"
 license: GPL-3.0
 url: "https://github.com/holukas/diive"
 repository-code: "https://github.com/holukas/diive"
