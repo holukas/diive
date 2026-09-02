@@ -14,6 +14,19 @@
   the correlation `Series` per field again, as its docstring states — it had been handed the
   `DailyCorrelation` object, so a caller doing `result[field].dropna()` failed too
   (`diive/preprocessing/qaqc/meteoscreening.py`)
+- `notebooks/DatabaseInfluxStepwiseMeteoScreening.ipynb` used the removed keyword
+  `separate_daytime_nighttime` in four live cells (Hampel, z-score, local SD, local outlier
+  factor), so running the shipped template raised. Renamed to `separate_day_night`, in those
+  four calls and in the four markdown cells that describe them
+- The same notebook named the day/night limit parameters `daytime_minmax` / `nighttime_minmax`,
+  which do not exist. `AbsoluteLimits` takes `minval_daytime`, `maxval_daytime`,
+  `minval_nighttime` and `maxval_nighttime`, and setting any of them turns the split on
+
+### Changes
+
+- The meteoscreening notebook template is now version `10` (2 September 2026). Notebooks
+  derived from it record the version they came from, so the two fixes above need a new number
+  rather than a silent edit of version `9`
 
 ## v0.91.0 | 20 August 2026
 
