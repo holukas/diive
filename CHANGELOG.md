@@ -24,9 +24,22 @@
 
 ### Changes
 
-- The meteoscreening notebook template is now version `10` (2 September 2026). Notebooks
-  derived from it record the version they came from, so the two fixes above need a new number
-  rather than a silent edit of version `9`
+- The meteoscreening notebook template is now version `11` (2 September 2026), reorganised so
+  that it is easier to work through:
+    - Every outlier method is three cells: a short description, the test, then `mscr.addflag()`
+      on its own. The test can be re-run with different settings and its preview inspected as
+      often as needed, and only the `addflag()` cell commits the flag.
+    - The `if SHOW_PARAM_HELP: help(...)` cells are gone, and with them the `SHOW_PARAM_HELP`
+      setting. Each description ends by naming the class to call `help()` on.
+    - The prose is general. It no longer names individual variables or gives site-specific
+      advice, and the method descriptions are shorter.
+    - `showplot_outlier_detection_cleaned()` replaces a hand-written loop over
+      `mscr.outlier_detection`, which was the only method of `StepwiseMeteoScreeningDb` the
+      template did not use. All of them are now covered.
+    - `dv.__version__` replaces the `importlib.metadata` import, the two *Inspect downloaded
+      data* cells are one, and the unavailable-variable and timestamp checks are shorter.
+    - Version `10` (2 September 2026) was the intermediate step that carried the two fixes
+      above. Notebooks derived from the template record the version they came from.
 
 ## v0.91.0 | 20 August 2026
 
