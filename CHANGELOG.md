@@ -38,6 +38,11 @@
       template did not use. All of them are now covered.
     - `dv.__version__` replaces the `importlib.metadata` import, the two *Inspect downloaded
       data* cells are one, and the unavailable-variable and timestamp checks are shorter.
+    - Two notes were added. `interactive=True` on `showplot_orig()`, `showplot_cleaned()` and
+      `showplot_outlier_detection_cleaned()` opens a Bokeh plot in the browser. And outlier
+      detection can be skipped when the raw plot shows nothing to remove, in which case the
+      `QCF` section is skipped too, because `finalize_outlier_detection()` raises when no test
+      has run.
     - Version `10` (2 September 2026) was the intermediate step that carried the two fixes
       above. Notebooks derived from the template record the version they came from.
 
