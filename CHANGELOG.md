@@ -2,6 +2,19 @@
 
 ![diive](images/logo_diive1_256px.png)
 
+## Unreleased
+
+### Bugfixes
+
+- `StepwiseMeteoScreeningDb.analysis_potential_radiation_correlation()` raised
+  `TypeError: DailyCorrelation.__init__() got an unexpected keyword argument 'showplot'`.
+  `daily_correlation` became an alias for the class `DailyCorrelation` in `v0.91.0`, whose
+  constructor takes only `s1`, `s2` and `mincorr`; this call site still passed `showplot`.
+  The plot is now drawn by calling `.plot()` after construction, and the returned dict holds
+  the correlation `Series` per field again, as its docstring states — it had been handed the
+  `DailyCorrelation` object, so a caller doing `result[field].dropna()` failed too
+  (`diive/preprocessing/qaqc/meteoscreening.py`)
+
 ## v0.91.0 | 20 August 2026
 
 ### Highlights

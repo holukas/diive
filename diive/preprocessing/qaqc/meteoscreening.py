@@ -624,14 +624,18 @@ class StepwiseMeteoScreeningDb:
                              lon=self.site_lon,
                              utc_offset=utc_offset)
 
-            # Calculate daily correlation between potential and measured observation
+            # Calculate daily correlation between potential and measured observation.
+            # daily_correlation is the class DailyCorrelation, which does not plot from
+            # its constructor, so showplot is honoured by calling plot() afterwards. The
+            # dict holds the correlation Series, not the object, as documented above.
             daycorrs = daily_correlation(
                 s1=series,
                 s2=swinpot,
-                mincorr=mincorr,
-                showplot=showplot
+                mincorr=mincorr
             )
-            daily_correlations[field] = daycorrs
+            if showplot:
+                daycorrs.plot()
+            daily_correlations[field] = daycorrs.correlations
 
         return daily_correlations
 
