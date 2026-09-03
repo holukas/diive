@@ -867,12 +867,14 @@ class StepwiseMeteoScreeningDb:
             counts_perc = (counts / n_vals) * 100
             if counts_perc > 0.2:  # At least 0.2% of the data must have this resolution to be considered
                 used_freqs.append(freq)
-                detail(f"  Found time resolution {freq} (seconds) with {counts} records "
-                       f"({counts_perc:.2f}% of total records).")
+                info(f"  Found time resolution {freq} (seconds) with {counts} records "
+                     f"({counts_perc:.2f}% of total records).")
             else:
                 rejected_freqs.append(freq)
-                detail(f"  Found time resolution {freq} (seconds) with {counts} records "
-                       f"({counts_perc:.2f}% of total records). --> Frequency will be ignored, too few records.")
+                # info, not detail: this is the only report of a resolution group being discarded,
+                # and the records it names are dropped from the screening.
+                info(f"  Found time resolution {freq} (seconds) with {counts} records "
+                     f"({counts_perc:.2f}% of total records). --> Frequency will be ignored, too few records.")
         info(f"The following frequencies will be used: {used_freqs} (seconds)")
         targetfreq = min(used_freqs)
         if len(used_freqs) > 1:

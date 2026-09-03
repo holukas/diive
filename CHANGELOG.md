@@ -21,6 +21,21 @@
 - The same notebook named the day/night limit parameters `daytime_minmax` / `nighttime_minmax`,
   which do not exist. `AbsoluteLimits` takes `minval_daytime`, `maxval_daytime`,
   `minval_nighttime` and `maxval_nighttime`, and setting any of them turns the split on
+- `FlagQCF.report_qcf_series()` printed a QCF flag distribution whose three shares added up to
+  more than 100%. Section `[3]` is headed *for measured records*, but the counts were taken over
+  every record while the percentages divided by the number of measured ones. Missing records carry
+  `QCF=2`, so `QCF=2` reported the gaps plus the rejected records and disagreed with
+  *Rejected by QC* in section `[2]` — on a 1MIN record with 28,661 gaps and 149 rejected records it
+  read `28810 (1.16%)` against `149 (0.01%)` two lines above, and the distribution summed to
+  101.15%. The counts are now restricted to measured records, so `[3]` agrees with `[2]` and the
+  shares sum to 100% (`diive/preprocessing/qaqc/qcf.py`)
+- `StepwiseMeteoScreeningDb` announced the time resolutions it had found and then listed none of
+  them. `_validate_n_grouprecords()` printed the `Found frequencies:` header with `info()` but
+  every per-resolution line with `detail()`, which sits below the default verbosity, so the output
+  ran `Found 2 unique frequencies ...` / `Found frequencies:` / `The following frequencies will be
+  used: [60.0] (seconds)` with nothing in between. Those lines are the only report of a resolution
+  group being **discarded** by the 0.2% rule, and the records in it are dropped from the screening,
+  so they are now printed with `info()` (`diive/preprocessing/qaqc/meteoscreening.py`)
 
 ### Changes
 
