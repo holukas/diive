@@ -2,64 +2,41 @@
 
 ![diive](images/logo_diive1_256px.png)
 
-## v0.91.1 | unreleased
+## v0.91.1 | 19 September 2026
 
 ### Bugfixes
 
-- `StepwiseMeteoScreeningDb.analysis_potential_radiation_correlation()` raised
-  `TypeError: DailyCorrelation.__init__() got an unexpected keyword argument 'showplot'`.
-  `daily_correlation` became an alias for the class `DailyCorrelation` in `v0.91.0`, whose
-  constructor takes only `s1`, `s2` and `mincorr`; this call site still passed `showplot`.
-  The plot is now drawn by calling `.plot()` after construction, and the returned dict holds
-  the correlation `Series` per field again, as its docstring states — it had been handed the
-  `DailyCorrelation` object, so a caller doing `result[field].dropna()` failed too
-  (`diive/preprocessing/qaqc/meteoscreening.py`)
-- `notebooks/DatabaseInfluxStepwiseMeteoScreening.ipynb` used the removed keyword
-  `separate_daytime_nighttime` in four live cells (Hampel, z-score, local SD, local outlier
-  factor), so running the shipped template raised. Renamed to `separate_day_night`, in those
-  four calls and in the four markdown cells that describe them
-- The same notebook named the day/night limit parameters `daytime_minmax` / `nighttime_minmax`,
-  which do not exist. `AbsoluteLimits` takes `minval_daytime`, `maxval_daytime`,
-  `minval_nighttime` and `maxval_nighttime`, and setting any of them turns the split on
-- `FlagQCF.report_qcf_series()` printed a QCF flag distribution whose three shares added up to
-  more than 100%. Section `[3]` is headed *for measured records*, but the counts were taken over
-  every record while the percentages divided by the number of measured ones. Missing records carry
-  `QCF=2`, so `QCF=2` reported the gaps plus the rejected records and disagreed with
-  *Rejected by QC* in section `[2]` — on a 1MIN record with 28,661 gaps and 149 rejected records it
-  read `28810 (1.16%)` against `149 (0.01%)` two lines above, and the distribution summed to
-  101.15%. The counts are now restricted to measured records, so `[3]` agrees with `[2]` and the
-  shares sum to 100% (`diive/preprocessing/qaqc/qcf.py`)
-- `StepwiseMeteoScreeningDb` announced the time resolutions it had found and then listed none of
-  them. `_validate_n_grouprecords()` printed the `Found frequencies:` header with `info()` but
-  every per-resolution line with `detail()`, which sits below the default verbosity, so the output
-  ran `Found 2 unique frequencies ...` / `Found frequencies:` / `The following frequencies will be
-  used: [60.0] (seconds)` with nothing in between. Those lines are the only report of a resolution
-  group being **discarded** by the 0.2% rule, and the records in it are dropped from the screening,
-  so they are now printed with `info()` (`diive/preprocessing/qaqc/meteoscreening.py`)
+A small release with bugfixes for meteo screening and a cleaner meteoscreening notebook
+template.
+
+### Bugfixes
+
+- **Potential radiation correlation:** `StepwiseMeteoScreeningDb.analysis_potential_radiation_correlation()`
+  failed with a `TypeError` about `showplot`. It works again and returns one correlation series
+  per field, as documented (`diive/preprocessing/qaqc/meteoscreening.py`).
+- **QCF report:** the flag distribution printed by `FlagQCF.report_qcf_series()` counted missing
+  records as `QCF=2`, so its shares added up to more than 100%. It now counts measured records
+  only (`diive/preprocessing/qaqc/qcf.py`).
+- **Time resolutions report:** `StepwiseMeteoScreeningDb` printed the header *Found frequencies:*
+  but not the list below it. The list is now shown. It also names any resolution group that is
+  dropped from the screening (`diive/preprocessing/qaqc/meteoscreening.py`).
+- **Notebook parameter names:** the meteoscreening notebook still used parameter names removed
+  in v0.91.0 and failed when run. It now uses `separate_day_night` and the `AbsoluteLimits` limits
+  `minval_daytime`, `maxval_daytime`, `minval_nighttime` and `maxval_nighttime`
+  (`notebooks/DatabaseInfluxStepwiseMeteoScreening.ipynb`).
 
 ### Changes
 
-- The meteoscreening notebook template is now version `11` (2 September 2026), reorganised so
-  that it is easier to work through:
-    - Every outlier method is three cells: a short description, the test, then `mscr.addflag()`
-      on its own. The test can be re-run with different settings and its preview inspected as
-      often as needed, and only the `addflag()` cell commits the flag.
-    - The `if SHOW_PARAM_HELP: help(...)` cells are gone, and with them the `SHOW_PARAM_HELP`
-      setting. Each description ends by naming the class to call `help()` on.
-    - The prose is general. It no longer names individual variables or gives site-specific
-      advice, and the method descriptions are shorter.
-    - `showplot_outlier_detection_cleaned()` replaces a hand-written loop over
-      `mscr.outlier_detection`, which was the only method of `StepwiseMeteoScreeningDb` the
-      template did not use. All of them are now covered.
-    - `dv.__version__` replaces the `importlib.metadata` import, the two *Inspect downloaded
-      data* cells are one, and the unavailable-variable and timestamp checks are shorter.
-    - Two notes were added. `interactive=True` on `showplot_orig()`, `showplot_cleaned()` and
-      `showplot_outlier_detection_cleaned()` opens a Bokeh plot in the browser. And outlier
-      detection can be skipped when the raw plot shows nothing to remove, in which case the
-      `QCF` section is skipped too, because `finalize_outlier_detection()` raises when no test
-      has run.
-    - Version `10` (2 September 2026) was the intermediate step that carried the two fixes
-      above. Notebooks derived from the template record the version they came from.
+- **Meteoscreening notebook template v11**
+  (`notebooks/DatabaseInfluxStepwiseMeteoScreening.ipynb`):
+    - Each outlier method now has three cells: a description, the test, and `mscr.addflag()`.
+      You can re-run the test as often as needed. Only `addflag()` commits the flag.
+    - The descriptions are shorter and general, with no site-specific advice. The
+      `SHOW_PARAM_HELP` cells are removed. Each description names the class to pass to `help()`.
+    - New notes: `interactive=True` opens a Bokeh plot in the browser, and outlier detection
+      (and the QCF section) can be skipped when the data need no cleaning.
+    - Smaller cleanups: the notebook uses `showplot_outlier_detection_cleaned()` and
+      `dv.__version__`, and has fewer setup cells.
 
 ## v0.91.0 | 20 August 2026
 

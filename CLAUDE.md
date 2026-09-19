@@ -483,4 +483,4 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 
 ---
 
-**Last Updated:** 2026-08-15 | **Version:** v0.91.0 | **Package Manager:** `uv`
+**Last Updated:** 2026-09-19 | **Version:** v0.91.1 | **Package Manager:** `uv`
