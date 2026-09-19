@@ -117,3 +117,11 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Qt widget setup is written one-line-per-widget on purpose (setRange(); setValue()).
 "diive/gui/**" = ["E702"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/notebooks",
+    "/images",
+    "/CODE_REVIEW_FINDINGS.md",
+    "/COVERAGE_GAPS.md",
+]
