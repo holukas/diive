@@ -78,7 +78,7 @@ try:
     __version__ = version("diive")
 except PackageNotFoundError:
     # Package not installed (e.g. running from a source tree without an install).
-    __version__ = "0.91.0"
+    __version__ = "0.91.1"
 
 __all__ = [
     '__version__',

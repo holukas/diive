@@ -2,6 +2,42 @@
 
 ![diive](images/logo_diive1_256px.png)
 
+## v0.91.1 | 19 September 2026
+
+### Bugfixes
+
+A small release with bugfixes for meteo screening and a cleaner meteoscreening notebook
+template.
+
+### Bugfixes
+
+- **Potential radiation correlation:** `StepwiseMeteoScreeningDb.analysis_potential_radiation_correlation()`
+  failed with a `TypeError` about `showplot`. It works again and returns one correlation series
+  per field, as documented (`diive/preprocessing/qaqc/meteoscreening.py`).
+- **QCF report:** the flag distribution printed by `FlagQCF.report_qcf_series()` counted missing
+  records as `QCF=2`, so its shares added up to more than 100%. It now counts measured records
+  only (`diive/preprocessing/qaqc/qcf.py`).
+- **Time resolutions report:** `StepwiseMeteoScreeningDb` printed the header *Found frequencies:*
+  but not the list below it. The list is now shown. It also names any resolution group that is
+  dropped from the screening (`diive/preprocessing/qaqc/meteoscreening.py`).
+- **Notebook parameter names:** the meteoscreening notebook still used parameter names removed
+  in v0.91.0 and failed when run. It now uses `separate_day_night` and the `AbsoluteLimits` limits
+  `minval_daytime`, `maxval_daytime`, `minval_nighttime` and `maxval_nighttime`
+  (`notebooks/DatabaseInfluxStepwiseMeteoScreening.ipynb`).
+
+### Changes
+
+- **Meteoscreening notebook template v11**
+  (`notebooks/DatabaseInfluxStepwiseMeteoScreening.ipynb`):
+    - Each outlier method now has three cells: a description, the test, and `mscr.addflag()`.
+      You can re-run the test as often as needed. Only `addflag()` commits the flag.
+    - The descriptions are shorter and general, with no site-specific advice. The
+      `SHOW_PARAM_HELP` cells are removed. Each description names the class to pass to `help()`.
+    - New notes: `interactive=True` opens a Bokeh plot in the browser, and outlier detection
+      (and the QCF section) can be skipped when the data need no cleaning.
+    - Smaller cleanups: the notebook uses `showplot_outlier_detection_cleaned()` and
+      `dv.__version__`, and has fewer setup cells.
+
 ## v0.91.0 | 20 August 2026
 
 ### Highlights

@@ -607,9 +607,14 @@ class FlagQCF:
         _console.print(f"    |__ Rejected by QC (QCF >= 2):      {n_rejected:>4} ({perc_rejected:>6.2f}% of measured)")
 
         # === QCF FLAG DISTRIBUTION ===
-        n_qcf0 = (qcf_flags == 0).sum()
-        n_qcf1 = (qcf_flags == 1).sum()
-        n_qcf2 = (qcf_flags == 2).sum()
+        # Counted on MEASURED records only, which is what the heading below says and what section
+        # [2] reports. Missing records carry QCF=2, so counting them here made QCF=2 the sum of the
+        # gaps and the rejected records - disagreeing with "Rejected by QC" in [2] - while the
+        # percentages divided by n_measured, so the three shares added up to more than 100%.
+        measured_qcf = qcf_flags[series.notna()]
+        n_qcf0 = (measured_qcf == 0).sum()
+        n_qcf1 = (measured_qcf == 1).sum()
+        n_qcf2 = (measured_qcf == 2).sum()
 
         perc_qcf0 = (n_qcf0 / n_measured * 100) if n_measured > 0 else 0
         perc_qcf1 = (n_qcf1 / n_measured * 100) if n_measured > 0 else 0
