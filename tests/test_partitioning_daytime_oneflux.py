@@ -123,6 +123,35 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
                 nee=bad, ta=bad, sw_in=bad, ta_f=bad, sw_in_f=bad, vpd=bad,
                 verbose=0)
 
+    def test_hourly_windows_land_on_their_own_records(self):
+        # The window anchors are record indices, so they depend on the records
+        # per day. Assuming 48 (half-hourly) for hourly input puts each window
+        # at twice its true position: the windows of the first half of the year
+        # get stretched over the whole year and those of the second half fall
+        # off the end of the record. Both symptoms are asserted here, because
+        # the results stay gap-free either way.
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        hourly = self.df[['NEE_CUT_REF_orig', 'Tair_orig', 'Rg_orig',
+                          'Tair_f', 'Rg_f', 'VPD_f']].resample('1h').mean()
+        res = DaytimePartitioningOneFlux(
+            nee=hourly['NEE_CUT_REF_orig'], ta=hourly['Tair_orig'],
+            sw_in=hourly['Rg_orig'], ta_f=hourly['Tair_f'],
+            sw_in_f=hourly['Rg_f'], vpd=hourly['VPD_f'], verbose=0).run().results
+
+        # Parameters are reported at each window's central record. Windows step
+        # by WINSIZE / 2 = 2 days; not every one is accepted, so the half-hourly
+        # run of the same year sets the scale. Anchoring on 48 records per day
+        # would lose every window past midsummer.
+        anchors = res['RREF_DT_OF'].dropna().index
+        anchors_hh = self.part.results['RREF_DT_OF'].dropna().index
+        self.assertGreater(len(anchors), 0.8 * len(anchors_hh))
+        spacing_days = np.median(np.diff(anchors.to_numpy()).astype(
+            'timedelta64[h]').astype(float)) / 24.0
+        self.assertAlmostEqual(spacing_days, 2.0, delta=0.3)
+
+        # The last window still has to sit inside the record, not past its end.
+        self.assertGreater(anchors[-1], res.index[int(0.95 * len(res))])
+
     def test_results_before_run_raises(self):
         from diive.flux.partitioning import DaytimePartitioningOneFlux
         part = DaytimePartitioningOneFlux(

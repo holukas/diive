@@ -401,7 +401,10 @@ def _estimate_parasets(D, nperday, verbose=1):
         day_begin2 = (i - 2) * WINSIZE / 2.0 if i > 1 else 0
         day_end2 = (i + 2) * WINSIZE / 2.0 + WINSIZE if i < n_parasets - 2 else float(np.max(julday))
 
-        central = int((day_begin + WINSIZE / 2.0) * 48.0)
+        # ONEFlux hardcodes 48 here because it duplicates hourly years to a
+        # half-hourly grid first (library.create_data_structures); diive keeps
+        # the input resolution, so the anchor uses the record count per day.
+        central = int((day_begin + WINSIZE / 2.0) * float(nperday))
         ind_rows = np.array([central, central, central], dtype=float)
 
         measured = (nee_fqc == 0)
@@ -816,6 +819,15 @@ class DaytimePartitioningOneFlux:
     ONEFlux does: measured Rg/TA classify records and feed the internal NEE
     uncertainty look-up, while the gap-filled drivers feed the fits and the
     flux prediction.
+
+    Input resolution: half-hourly and hourly data are both partitioned at their
+    own resolution. ONEFlux instead duplicates an hourly year onto a half-hourly
+    grid before partitioning, which is why its window anchors can assume 48
+    records per day. diive derives the records per day from the timestamps, so
+    hourly results stay on the hourly grid. For an hourly site this is a
+    deliberate deviation: the duplicated grid feeds every record twice into the
+    window fits, so results are close to, but not bit-identical with, a native
+    ONEFlux run.
 
     Example: ``examples/flux/partitioning/partitioning_daytime_oneflux.py``
 
