@@ -243,7 +243,8 @@ def _reanalyse_rref(nee_night: np.ndarray, tair: np.ndarray, tair_f: np.ndarray,
             continue
 
         idx = np.where(mask)[0]
-        mid = int(round(idx.mean()))
+        # Truncate, as ONEFlux does (`int(numpy.average(idx))`).
+        mid = int(idx.mean())
         reco_average = nee_night[mask].mean()
         # E0 is fixed -> respiration is linear in Rref: nee = b * lloyd_fac.
         lloyd_fac = lloyd_taylor(tair[mask], rref=1.0, e0=e0)
@@ -292,12 +293,20 @@ def _partition_one_year(nee: np.ndarray, tair: np.ndarray, sw_in: np.ndarray,
     # --- Day/night flag and nighttime NEE ---
     if lat is not None and np.isfinite(lat):
         sunrise, sunset = sunrise_sunset(doy, lat)
-        daylight = (hr > sunrise) & (hr < sunset)
+        # Compare in float32: ONEFlux stores hr, sunrise and sunset in FLOAT_PREC
+        # columns. On day 80 sunrise is 5.99999990 in float64 but exactly 6.0 in
+        # float32, which decides whether the 06:00 record is night.
+        hr32 = hr.astype(np.float32)
+        daylight = (hr32 > sunrise.astype(np.float32)) & (hr32 < sunset.astype(np.float32))
     else:
         daylight = np.zeros(n, dtype=bool)
 
+    # A missing SW_IN counts as below the threshold: ONEFlux stores it as the
+    # -9999 sentinel, and -9999 < 10, so the record stays eligible as night as
+    # long as the sunrise/sunset flag says so.
     with np.errstate(invalid='ignore'):
-        night_mask = (sw_in < DAY_MIN_SW_IN) & (~daylight)
+        rg_below = np.isnan(sw_in) | (sw_in < DAY_MIN_SW_IN)
+    night_mask = rg_below & (~daylight)
     nee_night = np.where(night_mask, nee, np.nan)
     out['NEE_NIGHT_OF'] = nee_night
 
@@ -398,6 +407,19 @@ class NighttimePartitioningOneFlux:
     (Reichstein et al. 2005). Each calendar year in the input is partitioned
     independently.
 
+    Timestamps: the input index is diive's TIMESTAMP_MIDDLE and the results are
+    returned on it. Internally, as in ONEFlux, the hour and day of year used for
+    the sunrise/sunset test and the fitting windows are those of the period END,
+    and the year's last record, whose END falls on 1 January, is counted as day
+    366 (367 in a leap year). A record with missing ``sw_in`` stays eligible as
+    night, as the ONEFlux -9999 sentinel does; the sunrise/sunset test then
+    decides.
+
+    Measured agreement, CH-DAV 2016 half-hourly against a native ONEFlux 1.3.7
+    run: the same nighttime records are used, RECO agrees to an RMSE of 0.0003
+    umol m-2 s-1 (max 0.003) and E0 to 0.05 K. The remainder is float64 fitting
+    here against float32 in ONEFlux.
+
     Example: ``examples/flux/partitioning/partitioning_nighttime_oneflux.py``
 
     Example:
@@ -453,9 +475,16 @@ class NighttimePartitioningOneFlux:
         """Run the partitioning and populate :attr:`results`."""
         df = self._inputs
         index = df.index
-        doy_all = index.dayofyear.to_numpy()
-        hr_all = (index.hour + index.minute / 60.0).to_numpy()
         years = index.year.to_numpy()
+
+        # The index is diive's TIMESTAMP_MIDDLE and the results stay on it. For
+        # the sunrise/sunset test and the day-of-year windows ONEFlux uses the
+        # hour and day of the period END, so derive those from the period end,
+        # as the daytime ONEFlux port does.
+        dt_min = np.median(np.diff(index.values).astype('timedelta64[m]').astype(float))
+        end = index + pd.Timedelta(minutes=int(dt_min / 2))
+        doy_all = end.dayofyear.to_numpy().astype(float)
+        hr_all = (end.hour + end.minute / 60.0).to_numpy()
 
         cols = ['NEE_NIGHT_OF', 'RECO_NT_OF', 'RECO_NT_OF_ROB', 'GPP_NT_OF', 'GPP_NT_OF_ROB',
                 'RREF_NT_OF', 'E0_NT_OF']
@@ -467,13 +496,20 @@ class NighttimePartitioningOneFlux:
 
         for year in np.unique(years):
             ymask = years == year
+            doy = doy_all[ymask]
+            # The END timestamp of a year's last record already belongs to the
+            # next year, so its day of year wraps to 1. ONEFlux repairs the same
+            # wrap in library.create_data_structures (365 -> 366, 366 -> 367).
+            if doy.size > 1 and doy[-1] == 1 and doy[-2] in (365.0, 366.0):
+                doy = doy.copy()
+                doy[-1] = doy[-2] + 1
             year_out = _partition_one_year(
                 nee=df['nee'].to_numpy()[ymask],
                 tair=df['ta'].to_numpy()[ymask],
                 sw_in=df['sw_in'].to_numpy()[ymask],
                 nee_f=df['nee_f'].to_numpy()[ymask],
                 tair_f=df['ta_f'].to_numpy()[ymask],
-                doy=doy_all[ymask],
+                doy=doy,
                 hr=hr_all[ymask],
                 lat=self.lat,
                 verbose=self.verbose,
