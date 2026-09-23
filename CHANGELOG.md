@@ -6,6 +6,21 @@
 
 ### Bugfixes
 
+- **Nighttime partitioning (ONEFlux), agreement with ONEFlux:** results change. The port read the
+  hour of each record from diive's TIMESTAMP_MIDDLE, where ONEFlux uses the end of the period. This
+  shifted which records counted as night, and on CH-DAV 2016 put E0 about 7 K away from ONEFlux. The
+  index and the results stay on TIMESTAMP_MIDDLE; only the internal hour and day of year now come
+  from the period end, as in the daytime port. Three smaller differences were fixed with it:
+    - A record with missing SW_IN is no longer dropped from the nighttime data. ONEFlux keeps it
+      and lets the sunrise/sunset test decide.
+    - The sunrise/sunset test is done in float32, as in ONEFlux, which changes the result for one
+      record a year.
+    - The last record of each year is no longer given day 1 of the year, and the Rref window
+      centre is truncated rather than rounded.
+
+  RECO now agrees with a native ONEFlux run to an RMSE of 0.0003 µmol m⁻² s⁻¹
+  (`diive/flux/partitioning/nighttime_oneflux.py`).
+
 - **Daytime partitioning (ONEFlux), hourly data:** `DaytimePartitioningOneFlux` assumed 48 records
   per day when placing its fitting windows. With hourly data every window landed at twice its true
   position, and windows after midsummer fell off the end of the record, without a warning. The
