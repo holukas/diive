@@ -537,6 +537,18 @@ Suggested fix: use `-np.inf` / `np.inf` for the unset side instead of the observ
 > edges was understated by nearly half. Interior fills are bit-identical, which is why the
 > "~5e-7 vs native ONEFlux" validation never caught it. Covered by three tests in
 > `test_uncertainty.py`; mutation-checked.
+>
+> **Revised 2026-09-23: true for the C tool only.** The check above read ONEFlux's C code
+> (`gf_mds`, the MDS gap-filler's reference), which does trim. The cascade has a second caller,
+> the daytime-partitioning uncertainty, and *its* reference is ONEFlux's Python
+> `daytime.uncert_via_gapFill`, which clips (`numpy.clip(w, 0, n - 1, out=w)` in each of its six
+> loops, `daytime.py:2097` ff.), almost certainly reproducing the PV-Wave original it was
+> validated against. `mds_gapfill_cascade` now takes `edge='trim'|'clip'`: trim stays the
+> default and `FluxMDS` is bitwise unchanged; `daytime_oneflux` passes `'clip'`. On CH-DAV 2016
+> that changed the uncertainty of 172 records, all within 336 records of the year end. Clipping
+> is still the statistical defect described here; the daytime port reproduces it because it is
+> what generated FLUXNET2015 daytime output. `test_mds_clip_folds_the_window_onto_the_edge_record`
+> and `test_uncertainty_lookup_clips_at_the_record_edges` cover it; mutation-checked.
 
 `diive/gapfilling/similarity.py:240-248`
 

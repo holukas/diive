@@ -2,6 +2,28 @@
 
 ![diive](images/logo_diive1_256px.png)
 
+## Unreleased
+
+### Bugfixes
+
+- **Daytime partitioning (ONEFlux), hourly data:** `DaytimePartitioningOneFlux` assumed 48 records
+  per day when placing its fitting windows. With hourly data every window landed at twice its true
+  position, and windows after midsummer fell off the end of the record, without a warning. The
+  records per day now come from the timestamps
+  (`diive/flux/partitioning/daytime_oneflux.py`).
+- **Daytime partitioning (ONEFlux), agreement with ONEFlux:** the port fitted 7 fewer windows than
+  ONEFlux on CH-DAV 2016, and annual GPP came out 5.8% higher. Three differences were fixed:
+    - The table of fitted parameters is now float32, as in ONEFlux. This decides which windows
+      are accepted, because ONEFlux's check for an alpha still at its starting value never
+      triggers in float32.
+    - The NEE uncertainty used to weight the fits now handles the start and end of the record
+      as ONEFlux's Python daytime code does.
+    - The last record of each year is no longer given day 1 of the year.
+
+  Both sides now fit the same 143 windows, GPP agrees at r = 0.9998 and annual GPP within 0.2%
+  (`diive/flux/partitioning/daytime_oneflux.py`, `diive/gapfilling/similarity.py`).
+  `FluxMDS` gap-filling results are unchanged.
+
 ## v0.91.1 | 19 September 2026
 
 ### Bugfixes
