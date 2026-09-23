@@ -221,7 +221,9 @@ def test_method4_neighbour_window_is_symmetric():
 # near the start of a record every out-of-range offset collapsed onto record 0
 # and that one value entered the mean, the SD and the count hundreds of times.
 # ONEFlux narrows the window bounds instead (`common.c:2525-2533`) and its
-# diurnal method skips out-of-range positions outright (`:2630`).
+# diurnal method skips out-of-range positions outright (`:2630`). That C tool is
+# the MDS gap-filler's reference, so trimming is the default. ONEFlux's Python
+# daytime partitioning does clip, so the daytime port opts into `edge='clip'`.
 
 _NPERDAY = 48
 
@@ -238,12 +240,12 @@ def _mds_synthetic():
     return n, hr, swin, ta, vpd, series
 
 
-def _mds_fill(gap_position):
+def _mds_fill(gap_position, **kwargs):
     from diive.gapfilling.similarity import mds_gapfill_cascade
     n, hr, swin, ta, vpd, series = _mds_synthetic()
     tofill = series.copy()
     tofill[gap_position] = np.nan
-    return n, mds_gapfill_cascade(tofill, swin, ta, vpd, hr, _NPERDAY)
+    return n, mds_gapfill_cascade(tofill, swin, ta, vpd, hr, _NPERDAY, **kwargs)
 
 
 def test_mds_count_never_exceeds_the_records_in_range():
@@ -268,3 +270,19 @@ def test_mds_interior_gap_is_unaffected():
     _, res = _mds_fill(960)
     assert np.isfinite(res['filled'][960])
     assert int(res['count'][960]) == 271
+
+
+def test_mds_clip_folds_the_window_onto_the_edge_record():
+    # edge='clip' reproduces ONEFlux's Python daytime.uncert_via_gapFill: at the
+    # start of the record the folded offsets all land on record 0, so the count
+    # exceeds the records the window can actually reach.
+    n, res = _mds_fill(2, edge='clip')
+    half = res['time_window'][2] * _NPERDAY / 2.0
+    in_range = min(n, int(2 + half))
+    assert int(res['count'][2]) > in_range
+
+    # Away from the edges nothing is folded, so clip and trim agree exactly.
+    _, trimmed = _mds_fill(960)
+    _, clipped = _mds_fill(960, edge='clip')
+    assert clipped['filled'][960] == trimmed['filled'][960]
+    assert int(clipped['count'][960]) == int(trimmed['count'][960])

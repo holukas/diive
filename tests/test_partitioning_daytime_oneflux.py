@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -151,6 +152,77 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
 
         # The last window still has to sit inside the record, not past its end.
         self.assertGreater(anchors[-1], res.index[int(0.95 * len(res))])
+
+    def test_uncertainty_lookup_clips_at_the_record_edges(self):
+        # The weights come from ONEFlux's Python daytime.uncert_via_gapFill,
+        # which clips its look-up window onto record 0 / n-1. The MDS gap-filler
+        # trims instead, so this port has to ask the shared cascade for 'clip'.
+        from diive.flux.partitioning import daytime_oneflux as mod
+        seen = {}
+
+        def spy(*args, **kwargs):
+            seen.update(kwargs)
+            return {'sd': np.full(len(args[0]), np.nan)}
+
+        arr = np.zeros(10, dtype=np.float32)
+        with mock.patch.object(mod, 'mds_gapfill_cascade', side_effect=spy):
+            mod._uncert_via_gapfill(arr, arr, arr, arr, arr, 48)
+        self.assertEqual(seen.get('edge'), 'clip')
+
+    def test_alpha_left_at_the_starting_guess_is_accepted(self):
+        # ONEFlux reads alpha back from its float32 parameter table, and
+        # float32(0.01) != 0.01, so its guard against an alpha that never left
+        # the starting guess never fires. The port must accept the same windows.
+        from diive.flux.partitioning.daytime_oneflux import _check_parameters
+        row = np.zeros(10, dtype=np.float32)
+        row[:5] = [0.01, 30.0, 0.1, 5.0, 150.0]  # alpha, beta, k, rref, e0
+        self.assertEqual(_check_parameters(row), 1)
+
+    def test_parameter_table_is_float32(self):
+        # The accept test above only matches ONEFlux if the table it reads
+        # really is float32, as ONEFlux's FLOAT_PREC table is.
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        from diive.flux.partitioning import daytime_oneflux as mod
+        real = mod._check_parameters
+        dtypes = []
+
+        def spy(p):
+            dtypes.append(np.asarray(p).dtype)
+            return real(p)
+
+        short = self.short
+        with mock.patch.object(mod, '_check_parameters', side_effect=spy):
+            DaytimePartitioningOneFlux(
+                nee=short['NEE_CUT_REF_orig'], ta=short['Tair_orig'],
+                sw_in=short['Rg_orig'], ta_f=short['Tair_f'],
+                sw_in_f=short['Rg_f'], vpd=short['VPD_f'], verbose=0).run()
+        self.assertGreater(len(dtypes), 0)
+        self.assertTrue(all(d == np.float32 for d in dtypes))
+
+    def test_last_record_of_the_year_is_not_dated_january(self):
+        # With a MIDDLE-stamped index the year's last record ends at 00:00 on
+        # 1 January, so its day of year wraps to 1 and it would be pooled into
+        # the January windows. ONEFlux repairs the wrap to 366 (367 in a leap
+        # year); the partitioning itself is stubbed out, only its input matters.
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        from diive.flux.partitioning import daytime_oneflux as mod
+        cols = ['RECO_DT_OF', 'GPP_DT_OF', 'SE_GPP_DT_OF', 'ALPHA_DT_OF',
+                'BETA_DT_OF', 'K_DT_OF', 'RREF_DT_OF', 'E0_DT_OF']
+        seen = {}
+
+        def stub(**kwargs):
+            seen['julday'] = np.asarray(kwargs['julday'])
+            return {c: np.full(len(kwargs['julday']), np.nan) for c in cols}
+
+        with mock.patch.object(mod, '_partition_one_year', side_effect=stub):
+            DaytimePartitioningOneFlux(
+                nee=self.df['NEE_CUT_REF_orig'], ta=self.df['Tair_orig'],
+                sw_in=self.df['Rg_orig'], ta_f=self.df['Tair_f'],
+                sw_in_f=self.df['Rg_f'], vpd=self.df['VPD_f'], verbose=0).run()
+        julday = seen['julday']
+        self.assertEqual(julday[-2], 365)  # 2017 is not a leap year
+        self.assertEqual(julday[-1], 366)
+        self.assertEqual(julday[0], 1)
 
     def test_results_before_run_raises(self):
         from diive.flux.partitioning import DaytimePartitioningOneFlux
