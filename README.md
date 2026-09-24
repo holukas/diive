@@ -37,6 +37,7 @@ pip install diive                 # core library
 pip install 'diive[gui]'          # + desktop GUI, then launch with: diive-gui
 pip install 'diive[gui,gui3d]'    # + 3-D surface views (PyVista/VTK)
 pip install 'diive[db]'           # + InfluxDB read/write
+pip install 'diive[gui,gui3d,db]' # all of the above
 ```
 
 ### From a clone, with `uv`
@@ -167,7 +168,7 @@ the latest release, so include the version number in your citation.
 @software{diive2026,
   author = {Hörtnagl, Lukas},
   title = {diive: Python library for time series processing},
-  version = {0.91.1},
+  version = {0.91.2},
   year = {2026},
   doi = {10.5281/zenodo.10884017}
 }
