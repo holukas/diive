@@ -993,7 +993,7 @@ def test_overview_layout_stable_on_zoom(window):
     # computed at the tiny pre-show size stays collapsed). After a resize the
     # bottom panels should have a sensible (non-collapsed) width.
     fig.set_size_inches(20, 11)
-    overview.canvas._on_resize(None)
+    overview.canvas._solve_layout()
     QApplication.processEvents()
     bottom_widths = [a.get_position().width for a in fig.axes
                      if a.get_position().y0 < 0.45]
@@ -1098,6 +1098,26 @@ def test_overview_time_series_dates_and_markers(window):
     assert main.get_marker() in (None, "None")
     assert list(isolated.get_xdata()) == [idx[101]]
     assert isolated.get_marker() == "o"
+
+
+def test_canvas_resize_relayout_is_debounced(app):
+    # The first resize after a render solves the layout at once (the render may
+    # have run at a pre-show size); a burst of later resizes solves only once,
+    # when the timer fires after the size has settled.
+    from diive.gui.widgets.mpl_canvas import MplCanvas
+    canvas = MplCanvas()
+    solves = []
+    canvas._solve_layout = lambda: solves.append(1)
+    canvas.new_axes(1)
+    canvas._on_resize(None)
+    assert solves == [1]
+    assert not canvas._relayout_timer.isActive()
+    for _ in range(5):
+        canvas._on_resize(None)
+    assert solves == [1]
+    assert canvas._relayout_timer.isActive()
+    canvas._relayout_timer.timeout.emit()
+    assert solves == [1, 1]
 
 
 def test_save_dpi_spinbox(app):

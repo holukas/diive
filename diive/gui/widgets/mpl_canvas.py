@@ -20,7 +20,7 @@ from matplotlib.backends.backend_qtagg import (
     NavigationToolbar2QT,
 )
 from matplotlib.figure import Figure
-from PySide6.QtCore import QEvent
+from PySide6.QtCore import QEvent, QTimer
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QAbstractScrollArea,
@@ -32,6 +32,10 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+
+#: Quiet time after the last resize event before the layout is re-solved.
+_RELAYOUT_DELAY_MS = 120
 
 
 class _SaveDpiToolbar(NavigationToolbar2QT):
@@ -138,6 +142,11 @@ class MplCanvas(QWidget):
         # so panels adapt to the real widget size. Pan/zoom doesn't resize, so
         # it stays frozen -- see draw()/_on_resize.
         self._canvas.mpl_connect("resize_event", self._on_resize)
+        self._fresh_layout = True  # no resize since the last render yet
+        self._relayout_timer = QTimer(self)
+        self._relayout_timer.setSingleShot(True)
+        self._relayout_timer.setInterval(_RELAYOUT_DELAY_MS)
+        self._relayout_timer.timeout.connect(self._relayout)
 
         # The matplotlib canvas accepts wheel events, so a wheel over a plot
         # embedded in a scroll area (e.g. the results dashboards) would not
@@ -219,17 +228,40 @@ class MplCanvas(QWidget):
             self._toolbar.push_current()
 
     def _on_resize(self, _event) -> None:
-        """Re-solve the constrained layout for the new size, then re-freeze.
+        """Re-solve the constrained layout for the new size (see `_relayout`).
+
+        The first resize after a render solves at once: a render often happens
+        before the canvas has its real size (pre-show, or in a hidden tab), and
+        that layout would show collapsed until the next solve. Later resizes
+        (dragging the window edge or a splitter) are debounced, so the solve runs
+        once when the size settles instead of on every resize event; until then
+        the frozen layout scales with the canvas.
+        """
+        if not self.auto_layout:
+            return  # the plot manages its own layout (e.g. ridgeline)
+        if self._fresh_layout:
+            self._fresh_layout = False
+            self._solve_layout()
+            return
+        self._relayout_timer.start()
+
+    def _relayout(self) -> None:
+        """Debounced resize: solve the layout at the settled size and repaint."""
+        if not self.auto_layout:
+            return
+        self._solve_layout()
+        self._canvas.draw_idle()
+
+    def _solve_layout(self) -> None:
+        """Re-solve the constrained layout for the current size, then re-freeze.
 
         `draw()` freezes the layout so interactive pan/zoom stays stable, but a
         layout frozen at the initial (pre-show) canvas size would not match the
         real widget size. A resize is exactly when re-solving is wanted (and
         pan/zoom never resizes), so here we briefly re-enable the constrained
         engine, solve at the new size with `draw_without_rendering()`, then turn
-        it off again -- leaving correct, frozen positions for the resize repaint.
+        it off again -- leaving correct, frozen positions for the next repaint.
         """
-        if not self.auto_layout:
-            return  # the plot manages its own layout (e.g. ridgeline)
         self.fig.set_layout_engine("constrained")
         try:
             # Two passes: constrained layout solves iteratively, and a single
@@ -252,6 +284,7 @@ class MplCanvas(QWidget):
         """
         self.fig.clear()
         self.fig.set_layout_engine("constrained")
+        self._fresh_layout = True
 
     def draw(self) -> None:
         """Repaint synchronously, then freeze the computed layout.

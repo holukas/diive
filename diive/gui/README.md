@@ -505,5 +505,7 @@ panel only renders.
   layout engine off (`set_layout_engine("none")`) once the panels are placed; each new render re-enables it via
   `MplCanvas.reset_layout()` (call that, not `fig.clear()`, when building panels directly — e.g. the Overview's gridspec).
   **But** the first render happens at the tiny pre-show canvas size, so the frozen layout must adapt when the widget gets
-  its real size: `_on_resize` (on `resize_event`) briefly re-enables constrained, solves via `draw_without_rendering()`,
-  and re-freezes. Pan/zoom never resizes, so it stays frozen there. Forgetting the resize half leaves panels collapsed.
+  its real size: `_solve_layout` briefly re-enables constrained, solves via `draw_without_rendering()`, and re-freezes.
+  `_on_resize` (on `resize_event`) runs it at once for the first resize after a render and debounces the rest
+  (`_RELAYOUT_DELAY_MS`), so dragging a window edge or splitter solves once when the size settles. Pan/zoom never
+  resizes, so it stays frozen there. Forgetting the resize half leaves panels collapsed.
