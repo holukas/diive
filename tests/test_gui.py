@@ -2966,8 +2966,7 @@ def test_seasonal_trend_tab(app):
     tab = SeasonalTrendTab()
     tab.widget()
     tab.on_data_loaded(df)
-    for _ in range(80):
-        QApplication.processEvents()
+    _wait_for_worker(tab)
 
     # Decomposition view: STL ran (regression — it used to always raise) and the
     # four component panels drew.
@@ -2991,8 +2990,7 @@ def test_seasonal_trend_tab(app):
     tab.view.setCurrentText("Decomposition")
     tab.method.setCurrentText("Classical")
     tab.update_btn.click()
-    for _ in range(60):
-        QApplication.processEvents()
+    _wait_for_worker(tab)
     assert tab._decomp is not None
     # A crashed re-render would leave the one-panel anomaly chart up and keep the
     # STL result in `_decomp`, so check the four panels are back and the Classical
@@ -3007,8 +3005,7 @@ def test_seasonal_trend_short_data_graceful(window):
     # must show a friendly message (not crash), and the anomaly view still works.
     window._open_menu_tab("Seasonal trend & anomalies")
     tab = window._menu_tab_list[-1]
-    for _ in range(60):
-        QApplication.processEvents()
+    _wait_for_worker(tab)
     assert tab._decomp is None
     msgs = [t.get_text() for a in tab.canvas.fig.axes for t in a.texts]
     assert any("2 years" in m for m in msgs)

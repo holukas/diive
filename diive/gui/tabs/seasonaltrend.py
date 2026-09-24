@@ -61,6 +61,7 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
         self._decomp = None      # dict: observed/trend/seasonal/residual + strength
         self._decomp_error = None
         self._yearly = None      # one value per year (for the anomaly view)
+        self._method_label = ""  # method the shown decomposition used
         self._loading_ctrls = False  # guard programmatic control updates
 
     def _build_right(self) -> QWidget:
@@ -138,7 +139,9 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
             self._on_select(t)
 
     def _on_view_changed(self, _text: str) -> None:
-        if self._target is not None:
+        # While a compute runs, the stored result may belong to the previous
+        # variable; the new result is drawn in the chosen view when it lands.
+        if self._target is not None and not self._computing():
             self._render()
 
     # --- codegen -------------------------------------------------------
@@ -156,30 +159,33 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
     def _on_ref_changed(self, _value: int) -> None:
         # Cheap: only the anomaly view depends on the reference period.
         if not self._loading_ctrls and self._yearly is not None \
-                and self.view.currentText() == _VIEW_ANOM:
+                and self.view.currentText() == _VIEW_ANOM and not self._computing():
             self._render()
 
-    def _compute(self) -> None:
+    def _compute_request(self) -> tuple:
+        return (self._df[self._target], self._target, self.method.currentText(),
+                self.robust.isChecked())
+
+    @staticmethod
+    def _compute_payload(series, target, method_label, robust):
         # All maths is the library's; the tab only reads results back.
-        series = self._df[self._target]
         daily = dv.times.resample_to_daily_agg(series, agg="mean").dropna()
-        method = self.method.currentText().lower()
         jump = max(1, round(_PERIOD_DAYS / 30))  # speed up STL Loess
         # Annual decomposition needs at least two cycles of daily data; on a
         # short record it cannot run -> keep the (independent) anomaly view alive
         # and show a message in the decomposition view.
-        self._decomp = None
-        self._decomp_error = None
+        decomp = None
+        decomp_error = None
         if len(daily) < 2 * _PERIOD_DAYS:
-            self._decomp_error = (
+            decomp_error = (
                 f"Need ~2 years of data for an annual decomposition "
                 f"(have {len(daily)} days).")
         else:
             try:
                 std = dv.analysis.SeasonalTrendDecomposition(
-                    daily, method=method, seasonal_period=_PERIOD_DAYS,
-                    robust=self.robust.isChecked(), seasonal_jump=jump, trend_jump=jump)
-                self._decomp = {
+                    daily, method=method_label.lower(), seasonal_period=_PERIOD_DAYS,
+                    robust=robust, seasonal_jump=jump, trend_jump=jump)
+                decomp = {
                     "observed": daily,
                     "trend": std.trend,
                     "seasonal": std.seasonal,
@@ -187,15 +193,22 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
                     "strength": std.seasonality_strength,
                 }
             except Exception as err:
-                self._decomp_error = str(err)
+                decomp_error = str(err)
 
-        # Yearly means drive the anomaly view; seed the reference period to the
-        # full record on (re)compute.
+        # Yearly means drive the anomaly view.
         yearly = series.resample("YE").mean()
         yearly.index = yearly.index.year
         yearly = yearly.dropna()
-        yearly.name = self._target
-        self._yearly = yearly
+        yearly.name = target
+        return {"decomp": decomp, "decomp_error": decomp_error,
+                "yearly": yearly, "method_label": method_label}
+
+    def _render_payload(self, payload) -> None:
+        self._decomp = payload["decomp"]
+        self._decomp_error = payload["decomp_error"]
+        self._method_label = payload["method_label"]
+        yearly = self._yearly = payload["yearly"]
+        # Seed the reference period to the full record on (re)compute.
         if len(yearly):
             self._loading_ctrls = True
             lo, hi = int(yearly.index.min()), int(yearly.index.max())
@@ -215,7 +228,7 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
         n_years = self._yearly.index.nunique() if self._yearly is not None else 0
         cards = [
             ("Variable", self._target or "—"),
-            ("Method", self.method.currentText()),
+            ("Method", self._method_label),
             ("Seasonality", f"{d['strength']:.2f}" if d else "—"),
             ("Trend change", f"{change:+.2f}" if change is not None else "—"),
             ("Years", _fmt(n_years)),
