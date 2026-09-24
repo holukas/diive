@@ -3028,8 +3028,7 @@ def test_spectrogram_tab(window):
 
     window._open_menu_tab("Spectrogram")
     tab = window._menu_tab_list[-1]
-    for _ in range(60):
-        QApplication.processEvents()
+    _wait_for_worker(tab)
 
     assert tab._target == "NEE_CUT_REF_f"
     assert tab._spec is not None
@@ -3046,14 +3045,28 @@ def test_spectrogram_tab(window):
     before = tab._spec["power"].shape
     tab.nperseg.setValue(128)
     tab.update_btn.click()
-    for _ in range(40):
-        QApplication.processEvents()
+    _wait_for_worker(tab)
     assert tab._spec["power"].shape != before
 
-    # Max cycles/day is a live re-render (y-limit only).
+    # Max cycles/day and the colormap restyle the drawn mesh in place: y-limit
+    # and colormap change, no new mesh is built.
+    mesh = tab._mesh
+    assert mesh is not None
     tab.max_freq.setValue(2.0)
     QApplication.processEvents()
     assert round(tab.canvas.fig.axes[0].get_ylim()[1], 1) == 2.0
+    tab.cmap.setCurrentText("magma")
+    QApplication.processEvents()
+    assert tab._mesh is mesh and mesh.axes in tab.canvas.fig.axes
+    assert mesh.get_cmap().name == "magma"
+    assert round(mesh.axes.get_ylim()[1], 1) == 2.0
+
+    # A new variable is drawn with the current view settings.
+    tab._on_select("Tair_f")
+    _wait_for_worker(tab)
+    assert tab._mesh is not mesh
+    assert tab._mesh.get_cmap().name == "magma"
+    assert round(tab._mesh.axes.get_ylim()[1], 1) == 2.0
 
     # Single-instance.
     window._open_menu_tab("Spectrogram")
