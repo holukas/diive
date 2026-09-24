@@ -10,6 +10,11 @@
   port computed RECO and GPP at the missing-value code −9999 and returned large, meaningless
   values without a warning. RECO is now NaN where the gap-filled air temperature is missing, and
   GPP where the gap-filled SW_IN or VPD is missing (`diive/flux/partitioning/daytime_oneflux.py`).
+- **Daytime partitioning (ONEFlux), fit precision:** the fits evaluated their models on the float32
+  drivers directly, where ONEFlux widens them to float64 first. In windows where the VPD
+  sensitivity converges to zero, that small difference could send the model cascade down another
+  branch than ONEFlux takes. The fits now widen the drivers as ONEFlux does, which brings the
+  results closer to ONEFlux (`diive/flux/partitioning/daytime_oneflux.py`).
 
 - **Nighttime partitioning (ONEFlux), agreement with ONEFlux:** results change. The port read the
   hour of each record from diive's TIMESTAMP_MIDDLE, where ONEFlux uses the end of the period. This
