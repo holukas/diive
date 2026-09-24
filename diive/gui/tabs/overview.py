@@ -14,6 +14,7 @@ from __future__ import annotations
 from html import escape
 
 import matplotlib.dates as mdates
+import numpy as np
 import pandas as pd
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
@@ -28,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 import diive as dv
+from diive.core.plotting.plotfuncs import decimate_line
 from diive.gui import events as events_store
 from diive.gui import metadata_store
 from diive.gui import theme
@@ -111,6 +113,11 @@ _TS_COLOR = "#22303C"     # near-black ink — time series (lets the heatmap car
 _DAILY_COLOR = "#26A69A"  # teal 400 — daily mean (line + SD band)
 # Above this many records the time-series panel draws no per-record markers.
 _MARKER_MAX_POINTS = 5000
+# A long time series is drawn thinned (`decimate_line`) to this many columns
+# per pixel of figure width, which is at least two per pixel of the panel.
+# At one per pixel the dense stretches show light streaks; at two the drawn
+# line matches the full one.
+_TS_COLUMNS_PER_PIXEL = 2
 # Quiet time after the last pan/zoom step before the diel cycle and histogram
 # are recomputed for the visible window.
 _ZOOM_SETTLE_MS = 150
@@ -569,6 +576,10 @@ class OverviewTab(DiiveTab):
         self._heatmap_ax = None
         self._heatmap_ylim = None
         self._syncing_zoom = False
+        # The time-series line when it is drawn thinned, and its full record
+        # (date numbers, values); see _thin_time_series.
+        self._ts_line = None
+        self._ts_xy = None
 
         root = QWidget()
         outer = QVBoxLayout(root)
@@ -599,6 +610,7 @@ class OverviewTab(DiiveTab):
         self._zoom_debounce = Debouncer(self.canvas, self._refresh_zoom_summaries,
                                         ms=_ZOOM_SETTLE_MS)
         self.canvas.mpl_connect("draw_event", self._on_canvas_draw)
+        self.canvas.mpl_connect("resize_event", self._on_canvas_resize)
         right_lay.addWidget(self.canvas, stretch=1)
 
         splitter.addWidget(self.varpanel)
@@ -682,6 +694,7 @@ class OverviewTab(DiiveTab):
 
     def _render_figure(self, series, name: str) -> None:
         self._zoom_debounce.cancel()  # its axes are about to be replaced
+        self._ts_line = self._ts_xy = None
         fig = self.canvas.fig
         # Clear + re-enable constrained layout (canvas.draw() freezes it after,
         # so zoom/pan don't reflow the panels).
@@ -749,6 +762,7 @@ class OverviewTab(DiiveTab):
             if x1 > x0:
                 shared_x_ax.set_xlim(x0, x1 + (x1 - x0) * 0.03)
             shared_x_ax.callbacks.connect("xlim_changed", self._on_zoom)
+        self._thin_time_series()
         self.canvas.draw()
 
     def focus_on(self, start, end) -> None:
@@ -874,9 +888,13 @@ class OverviewTab(DiiveTab):
         (2) Clip the heatmap to the same date range — its date axis is the y-axis
             (same matplotlib date-number units as the line panels' x-axis), so
             the hour-of-day x-axis is deliberately left untouched.
+        (3) Re-thin the time-series line for the new window (`_thin_time_series`).
         """
         if self._zoom_series is None or self._syncing_zoom:
             return
+        # Re-thin the time series for the new window now, before the repaint,
+        # so a pan never shows a stretch drawn at the old resolution.
+        self._thin_time_series()
         x0, x1 = shared_ax.get_xlim()
         lo, hi = min(x0, x1), max(x0, x1)
         if self._heatmap_ax is not None and self._heatmap_ylim is not None:
@@ -919,6 +937,23 @@ class OverviewTab(DiiveTab):
             self._syncing_zoom = False
         self.canvas.draw_idle()
 
+    def _thin_time_series(self) -> None:
+        """Point the time-series line at the samples that matter in its view.
+
+        A dense line of 175k records costs most of a pan step to draw, yet at
+        panel size most of it overlaps. `decimate_line` keeps each screen
+        column's first, last, lowest and highest value, so the drawn line looks
+        the same and no spike is lost. The hover reads the full record from
+        the line's ``_diive_hover_xy`` instead (see widgets/hover.py).
+        """
+        line = self._ts_line
+        if line is None or line.axes is None:
+            return
+        x, y = self._ts_xy
+        lo, hi = sorted(line.axes.get_xlim())
+        n_columns = int(self.canvas.fig.bbox.width * _TS_COLUMNS_PER_PIXEL)
+        line.set_data(*decimate_line(x, y, lo, hi, n_columns))
+
     def _on_canvas_draw(self, _event) -> None:
         """Restart a pending summary refresh once a repaint has finished.
 
@@ -930,6 +965,10 @@ class OverviewTab(DiiveTab):
         if self._zoom_debounce.pending():
             self._zoom_debounce.trigger()
 
+    def _on_canvas_resize(self, _event) -> None:
+        """A wider canvas needs more columns for the thinned time series."""
+        self._thin_time_series()
+
     def _draw_panel(self, ax, series, plot_type: str) -> None:
         try:
             if plot_type == "Time series":
@@ -938,10 +977,20 @@ class OverviewTab(DiiveTab):
                 # A value with a gap on both sides has no line segment, so it keeps
                 # a marker to stay visible.
                 long_series = len(series) > _MARKER_MAX_POINTS
+                n_lines = len(ax.lines)
                 dv.plotting.TimeSeries(series).plot(
                     ax=ax, color=_TS_COLOR, linewidth=0.7,
                     marker=not long_series, markersize=2.5)
                 if long_series:
+                    # Drawn thinned for its view (see _thin_time_series); the
+                    # full record stays on the line for the hover. Needs
+                    # ascending time, which a sanitized index has.
+                    line = ax.lines[n_lines]
+                    x = np.asarray(line.get_xdata(orig=False), dtype=float)
+                    y = np.asarray(line.get_ydata(orig=False), dtype=float)
+                    if np.all(np.diff(x) > 0):
+                        line._diive_hover_xy = (x, y)
+                        self._ts_line, self._ts_xy = line, (x, y)
                     valid = series.notna()
                     isolated = series[valid & ~valid.shift(1, fill_value=False)
                                       & ~valid.shift(-1, fill_value=False)]

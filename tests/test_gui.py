@@ -1142,6 +1142,41 @@ def test_overview_time_series_dates_and_markers(window):
     assert isolated.get_marker() == "o"
 
 
+def test_overview_time_series_drawn_thinned_but_hover_reads_every_record(window):
+    # A long series is drawn thinned for its view, keeping every column's
+    # extremes, while the hover still snaps to any record of the full series.
+    import types
+    import numpy as np
+    overview = window._tabs[0]
+    overview._on_select("NEE_CUT_REF_f")
+    QApplication.processEvents()
+    series = overview._df["NEE_CUT_REF_f"]
+    ts_ax, line = overview._shared_x_ax, overview._ts_line
+    assert line is not None and line in ts_ax.get_lines()
+    full_x, full_y = line._diive_hover_xy
+    assert len(full_y) == len(series)
+    np.testing.assert_array_equal(full_y, series.to_numpy(float))
+    drawn_y = np.asarray(line.get_ydata(orig=False), float)
+    assert len(drawn_y) < len(series)
+    assert np.nanmax(drawn_y) == series.max() and np.nanmin(drawn_y) == series.min()
+
+    # Hover on a record the thinned line left out: exact value and time.
+    drawn_x = set(np.asarray(line.get_xdata(orig=False), float))
+    i = next(k for k in range(5000, len(full_x)) if full_x[k] not in drawn_x
+             and np.isfinite(full_y[k]))
+    px, py = ts_ax.transData.transform((full_x[i], full_y[i]))
+    ev = types.SimpleNamespace(inaxes=ts_ax, xdata=full_x[i], ydata=full_y[i], x=px, y=py)
+    hx, hy, text, _ = overview.canvas.hover._value_at(ts_ax, ev)
+    assert (hx, hy) == (full_x[i], full_y[i])
+    assert series.index[i].strftime("%Y-%m-%d %H:%M") in text
+
+    # Zoomed in to a few days, the line holds every record of the window again.
+    ts_ax.set_xlim(full_x[i] - 2, full_x[i] + 2)
+    x_now = np.asarray(line.get_xdata(orig=False), float)
+    in_window = full_x[(full_x >= full_x[i] - 2) & (full_x <= full_x[i] + 2)]
+    assert set(in_window) <= set(x_now) and len(x_now) <= len(in_window) + 2
+
+
 def test_data_push_skips_hidden_tabs_until_shown(window):
     # A data change reaches only the visible tab; a hidden one catches up once,
     # with the current data, when it is shown.
