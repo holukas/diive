@@ -799,9 +799,14 @@ def _partition_one_year(nee, ta, sw_in, ta_f, sw_in_f, vpd, julday, hr, nperday,
     with np.errstate(invalid='ignore'):
         se_gpp = np.sqrt(var_gpp)
 
-    out['RECO_DT_OF'] = np.where(reco > NAN, reco, np.nan)
-    out['GPP_DT_OF'] = np.where(gpp > NAN, gpp, np.nan)
-    out['SE_GPP_DT_OF'] = np.where(se_gpp > NAN, se_gpp, np.nan)
+    # A missing gap-filled driver arrives here as the -9999 sentinel, which the
+    # models turn into a finite but meaningless flux (RECO at -9999 degC).
+    # ONEFlux reads a missing driver as NaN, which propagates through the same
+    # formulas, so blank the records whose drivers the flux depends on.
+    ta_ok, rg_ok, vpd_ok = _notnan(ta_f), _notnan(sw_in_f), _notnan(vpd)
+    out['RECO_DT_OF'] = np.where((reco > NAN) & ta_ok, reco, np.nan)
+    out['GPP_DT_OF'] = np.where((gpp > NAN) & rg_ok & vpd_ok, gpp, np.nan)
+    out['SE_GPP_DT_OF'] = np.where((se_gpp > NAN) & ta_ok & rg_ok & vpd_ok, se_gpp, np.nan)
 
     # report fitted parameters at their source central records (like ONEFlux)
     for r, p in zip(ind_ok, params_ok, strict=False):

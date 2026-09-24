@@ -178,6 +178,29 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
         row[:5] = [0.01, 30.0, 0.1, 5.0, 150.0]  # alpha, beta, k, rref, e0
         self.assertEqual(_check_parameters(row), 1)
 
+    def test_missing_gap_filled_driver_gives_nan_not_a_value(self):
+        # A missing gap-filled driver used to reach the models as -9999 and come
+        # back as a finite flux (RECO near 1000 at -9999 degC). RECO needs TA,
+        # GPP needs SW_IN and VPD; each must be NaN where its driver is missing.
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        short = self.short.copy()
+        no_ta = (short.index >= '2017-06-10') & (short.index < '2017-06-11')
+        no_rg = (short.index >= '2017-06-20') & (short.index < '2017-06-21')
+        short.loc[no_ta, ['Tair_f', 'Tair_orig']] = np.nan
+        short.loc[no_rg, ['Rg_f', 'Rg_orig']] = np.nan
+        res = DaytimePartitioningOneFlux(
+            nee=short['NEE_CUT_REF_orig'], ta=short['Tair_orig'],
+            sw_in=short['Rg_orig'], ta_f=short['Tair_f'],
+            sw_in_f=short['Rg_f'], vpd=short['VPD_f'], verbose=0).run().results
+        self.assertTrue(res.loc[no_ta, 'RECO_DT_OF'].isna().all())
+        self.assertTrue(res.loc[no_rg, 'GPP_DT_OF'].isna().all())
+        self.assertTrue(res.loc[no_rg, 'SE_GPP_DT_OF'].isna().all())
+        # A missing light driver does not stop RECO, and nothing else is blank.
+        self.assertTrue(res.loc[no_rg, 'RECO_DT_OF'].notna().all())
+        rest = ~(no_ta | no_rg)
+        self.assertTrue(res.loc[rest, ['RECO_DT_OF', 'GPP_DT_OF']].notna().all().all())
+        self.assertLess(res['RECO_DT_OF'].max(), 50)
+
     def test_parameter_table_is_float32(self):
         # The accept test above only matches ONEFlux if the table it reads
         # really is float32, as ONEFlux's FLOAT_PREC table is.
