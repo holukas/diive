@@ -92,21 +92,55 @@ class HeatmapDateTime(HeatmapBase):
         self.series = self._setup_timestamp(series=self.series)
 
         # Data for plotting
-        # Pivot through an internal value key, not the series name: a series actually
-        # named DATE or TIME would otherwise be overwritten by the helper columns below,
-        # and the heatmap would silently show the timestamp parts instead of the data.
-        self.plotdf = self.series.rename('_values').to_frame()
-        self.plotdf['DATE'] = self.plotdf.index.date
-        self.plotdf['TIME'] = self.plotdf.index.time
-        self.plotdf = self.plotdf.reset_index(drop=True, inplace=False)
+        grid = self._date_time_grid(self.series)
+        if grid is not None:
+            self.plotdf = grid if self.ax_orientation == "vertical" else grid.T
+        else:
+            # Pivot through an internal value key, not the series name: a series
+            # actually named DATE or TIME would otherwise be overwritten by the
+            # helper columns below, and the heatmap would silently show the
+            # timestamp parts instead of the data.
+            self.plotdf = self.series.rename('_values').to_frame()
+            self.plotdf['DATE'] = self.plotdf.index.date
+            self.plotdf['TIME'] = self.plotdf.index.time
+            self.plotdf = self.plotdf.reset_index(drop=True, inplace=False)
 
-        if self.ax_orientation == "vertical":
-            self.plotdf = self.plotdf.pivot(index='DATE', columns='TIME', values='_values')
-        elif self.ax_orientation == "horizontal":
-            self.plotdf = self.plotdf.pivot(index='TIME', columns='DATE', values='_values')
+            if self.ax_orientation == "vertical":
+                self.plotdf = self.plotdf.pivot(index='DATE', columns='TIME', values='_values')
+            elif self.ax_orientation == "horizontal":
+                self.plotdf = self.plotdf.pivot(index='TIME', columns='DATE', values='_values')
 
         # Extend
         self.x, self.y, self.z = self._set_bounds()
+
+    @staticmethod
+    def _date_time_grid(series: Series) -> pd.DataFrame | None:
+        """The DATE x TIME frame that ``pivot`` builds, without its slow path.
+
+        ``pivot`` over ``index.date``/``index.time`` creates a Python date and
+        time object for every record (175 000 for ten years of half-hourly
+        data) and then groups on those objects. Grouping on the integer day
+        and time-of-day instead, and creating objects only for the distinct
+        dates and times, gives the same frame several times faster.
+
+        Returns *None* when this shortcut does not apply (a time-zone-aware
+        index, where wall-clock time is not the offset from midnight on a DST
+        day, or non-float values, where ``pivot`` may keep an integer dtype),
+        so the caller pivots as before.
+        """
+        idx = series.index
+        if getattr(idx, 'tz', None) is not None or series.dtype.kind != 'f':
+            return None
+        day = idx.normalize().to_numpy()
+        date_codes, day_starts = pd.factorize(day, sort=True)
+        time_codes, offsets = pd.factorize(idx.to_numpy() - day, sort=True)
+        values = np.full((len(day_starts), len(offsets)), np.nan)
+        values[date_codes, time_codes] = series.to_numpy()
+        dates = pd.DatetimeIndex(day_starts).date
+        times = (pd.Timestamp(0) + pd.TimedeltaIndex(offsets)).time
+        return pd.DataFrame(values,
+                            index=pd.Index(dates, name='DATE'),
+                            columns=pd.Index(times, name='TIME'))
 
     @staticmethod
     def _time_to_hours(time_values) -> np.ndarray:

@@ -549,6 +549,30 @@ class TestPlotClasses(unittest.TestCase):
                 for key in ("xticks", "yticks", "cbar"):
                     self.assertEqual(image[key], mesh[key], msg=key)
 
+    def test_heatmap_datetime_grid_equals_the_date_time_pivot(self):
+        """The shortcut grid must be exactly the frame `pivot` builds.
+
+        Covers a partial first and last day, gaps, a 10-min step and a
+        microsecond-resolution index, in both orientations.
+        """
+        import numpy as np
+        import pandas as pd
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        rng = np.random.default_rng(5)
+        values = rng.normal(size=5000)
+        values[rng.integers(0, 5000, 400)] = np.nan
+        series = pd.Series(values, index=pd.date_range(
+            "2021-03-27 07:10", periods=5000, freq="10min", unit="us", name="TIMESTAMP_END"))
+        for orientation in ("vertical", "horizontal"):
+            with self.subTest(orientation=orientation):
+                hm = HeatmapDateTime(series, ax_orientation=orientation)
+                ref = hm.series.rename('_values').to_frame()
+                ref['DATE'] = ref.index.date
+                ref['TIME'] = ref.index.time
+                keys = ('DATE', 'TIME') if orientation == "vertical" else ('TIME', 'DATE')
+                ref = ref.reset_index(drop=True).pivot(index=keys[0], columns=keys[1], values='_values')
+                pd.testing.assert_frame_equal(hm.get_plot_data(), ref, check_exact=True)
+
     def test_heatmap_datetime_as_image_falls_back_to_the_mesh_on_an_uneven_grid(self):
         from matplotlib.collections import QuadMesh
         from diive.core.plotting.heatmap_datetime import HeatmapDateTime
