@@ -62,7 +62,14 @@ diive/
 └── gui/                      # PySide6 desktop GUI (optional 'gui' extra)
 examples/                      # 113 runnable examples
 tests/                        # Unit tests
+devnotes/                     # Internal working documents (not shipped, not in the Sphinx docs)
 ```
+
+**`devnotes/` holds the internal working documents.** They are not user documentation: they are excluded from the sdist (`pyproject.toml`) and sit outside `docs/`, so Sphinx never builds them. Each tracks items with a status box (`[ ]` open, `[x]` fixed with its commit, `[-]` won't fix, with the reason), a file anchor and the evidence. Update the matching entry when you fix something it lists, and add new findings there rather than in the repo root. Current documents:
+
+- `CODE_REVIEW_FINDINGS.md` — bugs from the code-review rounds (entries `L1`…, `S1`–`S5`).
+- `COVERAGE_GAPS.md` — functions still missing an example or a test.
+- `GUI_PERFORMANCE.md` — measured GUI slow spots, what was done about them, and rejected approaches. Re-measure with `devnotes/gui_timing_pass.py`.
 
 **[CRITICAL] Keep `diive/__init__.py` lazy.** The ten domain namespaces (and `diive.io`'s `binary` / `formats`) resolve on first attribute access via a module-level `__getattr__` (PEP 562). Adding a plain `from diive import <namespace>` back to either file re-imports sklearn/xgboost/shap/statsmodels on `import diive` and costs ~1.4 s (2.35 s -> 0.96 s was the win). New namespaces go in `_LAZY_SUBMODULES` plus the `TYPE_CHECKING` block, **and** in `packaging/diive_gui.spec`'s `hiddenimports` — PyInstaller cannot follow a `__getattr__`, and the GUI reaches most namespaces attribute-style (`dv.plotting.*`). `import diive` (~1.9 s) also runs before the GUI splash can show, since `diive.gui` sits inside the package; its largest costs are `sstats` pulling in `scipy.stats` and the example-data module pulling in pandas.
 
