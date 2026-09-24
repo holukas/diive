@@ -25,6 +25,13 @@ the parts that differ:
       ``_render_payload(payload)`` draws the result on the GUI thread.
       Overriding ``_compute_payload`` opts in. Only the newest request's
       result is drawn; a failure goes to ``_render_error``.
+    - in a worker process, for library code that holds the GIL for long
+      stretches and so freezes the window even from a thread: the worker
+      path plus ``use_process = True``. ``_compute_payload`` then runs in the
+      shared worker process (:class:`ProcessLatestRunner`), so it must stay
+      a staticmethod (it is pickled by name) and the request and the
+      payload must pickle; send only the series the payload needs, not the
+      whole frame.
 
   * optionally a preferred default (``default_var`` / ``_default_variable``) and
     extra per-tab state (``_init_state``).
@@ -57,7 +64,7 @@ from diive.gui.tabs.overview import _StatCard
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
-from diive.gui.widgets.worker import LatestRunner
+from diive.gui.widgets.worker import LatestRunner, ProcessLatestRunner
 
 
 class SingleVariableExplorerTab(DiiveTab):
@@ -76,6 +83,10 @@ class SingleVariableExplorerTab(DiiveTab):
     #: Make the variable list a drag source (drag a name onto a drop target,
     #: e.g. the X/Y/Z fields of the coordinate-surface tab). Off by default.
     list_draggable = False
+    #: Run ``_compute_payload`` in the shared worker process instead of on a
+    #: thread (worker path only). Worth it when the library call holds the
+    #: GIL; the first job pays for starting the process.
+    use_process = False
 
     # --- build ---------------------------------------------------------
     def build(self) -> QWidget:
@@ -86,7 +97,8 @@ class SingleVariableExplorerTab(DiiveTab):
         root = QWidget()
         self._root = root
         if self._uses_worker():
-            self._runner = LatestRunner()
+            self._runner = (ProcessLatestRunner() if self.use_process
+                            else LatestRunner())
             self._runner.done.connect(self._on_payload)
             self._runner.failed.connect(self._on_payload_failed)
             self._runner.settled.connect(self._end_busy)

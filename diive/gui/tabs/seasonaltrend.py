@@ -13,6 +13,10 @@ and `dv.plotting.LongtermAnomaliesYear` for the anomaly bars. This tab only
 collects the options, lays out the panels, and renders — no statistics of its
 own (strict GUI<->library separation).
 
+The decomposition runs in the shared worker process (`use_process`), not on a
+thread: statsmodels' STL fit holds the GIL for most of its run, which froze
+the window even from a worker thread.
+
 Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
@@ -56,6 +60,8 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
     title = "Seasonal trend & anomalies"
     #: Strong seasonal cycle + clear warming trend make this a good default demo.
     default_var = _DEFAULT_VAR
+    #: STL holds the GIL, so a worker thread would still freeze the window.
+    use_process = True
 
     def _init_state(self) -> None:
         self._decomp = None      # dict: observed/trend/seasonal/residual + strength
@@ -168,6 +174,7 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
 
     @staticmethod
     def _compute_payload(series, target, method_label, robust):
+        # Runs in the worker process, which imports this module to find it.
         # All maths is the library's; the tab only reads results back.
         daily = dv.times.resample_to_daily_agg(series, agg="mean").dropna()
         jump = max(1, round(_PERIOD_DAYS / 30))  # speed up STL Loess

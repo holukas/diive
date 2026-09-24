@@ -80,6 +80,22 @@ def app():
     yield QApplication.instance() or QApplication([])
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _worker_process():
+    """Stop the shared worker process after this module's tests.
+
+    Tabs with ``use_process`` (Seasonal trend) compute in one worker process
+    that stays alive between jobs, so the module pays for spawning it once.
+    Nothing stops it in the tests themselves (the app does it on quit), so it
+    is stopped here, and no child process may outlive the module.
+    """
+    yield
+    import multiprocessing
+    from diive.gui.widgets.worker import shutdown_process_pool
+    shutdown_process_pool()
+    assert multiprocessing.active_children() == []
+
+
 @pytest.fixture(scope="module")
 def example_year():
     # One year of the example data: 10x fewer rows than the full record, so the
@@ -3470,6 +3486,182 @@ def test_seasonal_trend_short_data_graceful(window):
     assert not any("2 years" in m for m in msgs)  # decomposition message gone
     assert tab.canvas.fig.axes[0].patches  # anomaly bars drawn
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+
+
+def _record_seasonal_renders(tab):
+    """Replace the tab's render with a recorder of which variable each drawn
+    result belongs to (the yearly series carries the target's name)."""
+    drawn = []
+    tab._render_payload = lambda payload: drawn.append(payload["yearly"].name)
+    return drawn
+
+
+def test_process_runner_uses_one_reused_worker_process(app):
+    # Jobs run in a separate process that is started once and then reused.
+    # Stdlib functions stand in for payloads: they pickle by name.
+    import operator
+    import os
+    from types import SimpleNamespace
+    from diive.gui.widgets.worker import ProcessLatestRunner
+
+    runner = ProcessLatestRunner()
+    done, failed = [], []
+    runner.done.connect(done.append)
+    runner.failed.connect(failed.append)
+    waitable = SimpleNamespace(_runner=runner)
+
+    runner.submit(os.getpid)
+    _wait_for_worker(waitable)
+    runner.submit(os.getpid)
+    _wait_for_worker(waitable)
+    assert len(done) == 2 and done[0] == done[1] != os.getpid()
+
+    # Newest request wins: the first job runs to its end, the middle request
+    # is replaced before it starts, and only the last result is delivered.
+    done.clear()
+    runner.submit(eval, "__import__('time').sleep(0.3) or 'first'")
+    runner.submit(eval, "'middle'")
+    runner.submit(eval, "'last'")
+    _wait_for_worker(waitable)
+    assert done == ["last"]
+
+    # A payload's exception comes back as `failed` with its message.
+    runner.submit(operator.truediv, 1, 0)
+    _wait_for_worker(waitable)
+    assert failed == ["division by zero"]
+
+    # A job function that cannot be pickled fails instead of hanging.
+    failed.clear()
+    runner.submit(lambda: 1)
+    _wait_for_worker(waitable)
+    assert len(failed) == 1 and "local object" in failed[0]
+
+
+def test_seasonal_trend_draws_only_the_newest_selection(window):
+    # STL holds the GIL, so the tab computes in the worker process.
+    from diive.gui.widgets.worker import ProcessLatestRunner
+
+    window._open_menu_tab("Seasonal trend & anomalies")
+    tab = window._menu_tab_list[-1]
+    assert isinstance(tab._runner, ProcessLatestRunner)
+    _wait_for_worker(tab)
+    drawn = _record_seasonal_renders(tab)
+    names = [str(c) for c in window._data.select_dtypes("number").columns
+             if str(c) != "Tair_f"][:3]
+    for name in names:
+        tab._on_select(name)
+    assert tab._runner.is_busy
+    _wait_for_worker(tab)
+    # The first job was already running and finished, but its result was
+    # stale by then; the middle request never ran.
+    assert drawn == [names[-1]]
+    assert tab._target == names[-1]
+    assert not tab._root.testAttribute(Qt.WidgetAttribute.WA_SetCursor)
+
+
+def test_seasonal_trend_shows_a_worker_process_failure(window, monkeypatch):
+    # The payload raises in the worker process (no DatetimeIndex); the
+    # message must still reach the canvas.
+    from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
+
+    monkeypatch.setattr(
+        SeasonalTrendTab, "_compute_request",
+        lambda self: (pd.Series([1.0, 2.0], name="x"), "x", "STL", False))
+    window._open_menu_tab("Seasonal trend & anomalies")
+    tab = window._menu_tab_list[-1]
+    _wait_for_worker(tab)
+    msgs = [t.get_text() for a in tab.canvas.fig.axes for t in a.texts]
+    assert any("Cannot compute" in m and "DatetimeIndex" in m for m in msgs)
+    assert not tab._root.testAttribute(Qt.WidgetAttribute.WA_SetCursor)
+
+
+def test_seasonal_trend_closed_mid_run_ignores_the_late_result(window):
+    window._open_menu_tab("Seasonal trend & anomalies")
+    tab = window._menu_tab_list[-1]
+    assert tab._runner.is_busy  # the default variable is still computing
+    drawn = _record_seasonal_renders(tab)
+    window._on_tab_close(window._tabwidget.indexOf(tab.widget()))
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert not shiboken6.isValid(tab._root)
+    _wait_for_worker(tab)
+    assert drawn == []
+
+    # Reopening gets a new tab that computes in the same worker process.
+    window._open_menu_tab("Seasonal trend & anomalies")
+    tab = window._menu_tab_list[-1]
+    _wait_for_worker(tab)
+    assert tab._yearly.name == "Tair_f"
+
+
+def test_seasonal_trend_data_push_cancels_the_running_job(window):
+    window._open_menu_tab("Seasonal trend & anomalies")
+    tab = window._menu_tab_list[-1]
+    _wait_for_worker(tab)
+    drawn = _record_seasonal_renders(tab)
+    other = next(str(c) for c in window._data.select_dtypes("number").columns
+                 if str(c) != "Tair_f")
+    tab._on_select(other)
+    assert tab._runner.is_busy
+    # The new frame reselects the default; the job for `other` is dropped.
+    tab.on_data_loaded(window._data.iloc[:500])
+    _wait_for_worker(tab)
+    assert drawn == ["Tair_f"]
+
+
+def test_seasonal_trend_save_restore(window):
+    from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
+
+    window._open_menu_tab("Seasonal trend & anomalies")
+    tab = window._menu_tab_list[-1]
+    _wait_for_worker(tab)
+    other = next(str(c) for c in window._data.select_dtypes("number").columns
+                 if str(c) != "Tair_f")
+    tab.method.setCurrentText("Classical")
+    tab.robust.setChecked(True)
+    tab._on_select(other)
+    _wait_for_worker(tab)
+    state = tab.save_state()
+
+    tab2 = SeasonalTrendTab()
+    tab2.widget()
+    tab2.on_data_loaded(window._data)
+    _wait_for_worker(tab2)
+    tab2.restore_state(state)
+    _wait_for_worker(tab2)
+    assert tab2._target == other
+    assert tab2.method.currentText() == "Classical"
+    assert tab2.robust.isChecked()
+    assert tab2._yearly.name == other and tab2._method_label == "Classical"
+
+
+def test_worker_process_shutdown_drops_a_running_job_quietly(app):
+    # On quit the app stops the worker at once instead of waiting for the job;
+    # the dropped job ends as `failed("CancelledError")`, and the next job
+    # starts a fresh worker.
+    import os
+    from types import SimpleNamespace
+    from diive.gui.widgets.worker import ProcessLatestRunner, shutdown_process_pool
+
+    runner = ProcessLatestRunner()
+    done, failed = [], []
+    runner.done.connect(done.append)
+    runner.failed.connect(failed.append)
+    waitable = SimpleNamespace(_runner=runner)
+    runner.submit(os.getpid)
+    _wait_for_worker(waitable)
+    first_pid = done[0]
+
+    runner.submit(eval, "__import__('time').sleep(60)")
+    time.sleep(0.5)  # let the job reach the worker
+    t0 = time.monotonic()
+    shutdown_process_pool()
+    _wait_for_worker(waitable, timeout=10)
+    assert time.monotonic() - t0 < 10
+    assert failed == ["CancelledError"]
+
+    runner.submit(os.getpid)
+    _wait_for_worker(waitable)
+    assert done[-1] not in (first_pid, os.getpid())
 
 
 def test_spectrogram_tab(window):
