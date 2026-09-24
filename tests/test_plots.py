@@ -180,6 +180,120 @@ class TestPlots(unittest.TestCase):
 
         np.testing.assert_array_equal(render(False), render(True))
 
+    @staticmethod
+    def _legend_bounds(build, plain, zoom=None):
+        """Draw a figure made by `build(ax)` and return its legend's bounds.
+
+        With `plain`, the legend is turned back into a matplotlib `Legend`
+        first, so its 'best' search runs matplotlib's own code.
+        """
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from matplotlib.legend import Legend
+        fig = Figure(figsize=(6, 4), dpi=100)
+        FigureCanvasAgg(fig)
+        ax = fig.add_subplot()
+        build(ax)
+        legend = ax.get_legend()
+        if plain:
+            legend.__class__ = Legend
+        if zoom:
+            ax.set_xlim(*zoom)
+        fig.canvas.draw()
+        return legend.get_window_extent().bounds
+
+    def test_scatter_legend_best_lands_where_matplotlib_puts_it(self):
+        # The 'best' search of a large scatter tests the points as one array.
+        # It must pick the same place matplotlib picks, with and without the
+        # binned line, colour-coded, and after a zoom moves the data.
+        from diive.core.plotting import plotfuncs as pf
+        from diive.core.plotting.scatter import ScatterXY
+        n = pf._LEGEND_BEST_MAX_POINTS + 5000
+        x, y = self._scatter_xy(n)
+        cases = [
+            (lambda ax: ScatterXY(x=x, y=y).plot(ax=ax), None),
+            (lambda ax: ScatterXY(x=x, y=y, nbins=10).plot(ax=ax), None),
+            (lambda ax: ScatterXY(x=x, y=y, nbins=10, binagg='mean').plot(ax=ax), None),
+            (lambda ax: ScatterXY(x=x, y=y, z=x.copy()).plot(ax=ax, show_colorbar=False), None),
+            (lambda ax: ScatterXY(x=x, y=y).plot(ax=ax), (10, 30)),
+            (lambda ax: ScatterXY(x=x.iloc[:300], y=y.iloc[:300]).plot(ax=ax), None),
+        ]
+        seen = set()
+        for build, zoom in cases:
+            ours = self._legend_bounds(build, plain=False, zoom=zoom)
+            theirs = self._legend_bounds(build, plain=True, zoom=zoom)
+            self.assertEqual(ours, theirs)
+            seen.add(ours)
+        # The cases exercise more than one location.
+        self.assertGreater(len(seen), 1)
+
+    def test_array_legend_data_mirrors_matplotlib(self):
+        # _ArrayOffsetsLegend copies matplotlib's private _auto_legend_data
+        # for large collections. Compare the two on an axes holding every kind
+        # of artist the search looks at, so a change in matplotlib shows here.
+        import numpy as np
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from matplotlib.legend import Legend
+        from matplotlib.patches import Circle
+        from diive.core.plotting import plotfuncs as pf
+        rng = np.random.default_rng(1)
+        n = pf._LEGEND_BEST_MAX_POINTS + 1
+        fig = Figure()
+        FigureCanvasAgg(fig)
+        ax = fig.add_subplot()
+        ax.scatter(rng.random(n), rng.random(n), label='points')
+        ax.scatter([0.2, np.nan], [0.3, 0.4])
+        ax.plot([0, 1], [0, 1], label='line')
+        ax.bar([0.5], [0.5], width=0.1)
+        ax.add_patch(Circle((0.3, 0.7), 0.1))
+        ax.fill_between([0, 0.5, 1], [0, 0.1, 0], [0.2, 0.3, 0.2])
+        ax.text(0.8, 0.2, 'note')
+        pf.default_legend(ax=ax)
+        legend = ax.get_legend()
+        self.assertIsInstance(legend, pf._ArrayOffsetsLegend)
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+
+        bboxes, lines, offsets = legend._auto_legend_data(renderer)
+        ref_bboxes, ref_lines, ref_offsets = Legend._auto_legend_data(legend, renderer)
+        self.assertEqual([b.bounds for b in bboxes], [b.bounds for b in ref_bboxes])
+        self.assertEqual(len(lines), len(ref_lines))
+        for path, ref in zip(lines, ref_lines):
+            np.testing.assert_array_equal(path.vertices, ref.vertices)
+        self.assertIsInstance(offsets, np.ndarray)
+        np.testing.assert_array_equal(offsets, np.asarray(ref_offsets))
+
+    def test_array_legend_data_is_used_only_for_large_collections(self):
+        import types
+        import numpy as np
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from diive.core.plotting import plotfuncs as pf
+
+        def calls_for(n):
+            fig = Figure()
+            FigureCanvasAgg(fig)
+            ax = fig.add_subplot()
+            ax.scatter(np.linspace(0, 1, n), np.linspace(0, 1, n), label='points')
+            pf.default_legend(ax=ax)
+            legend = ax.get_legend()
+            calls = []
+            arrays = legend._auto_legend_data_arrays
+
+            def spy(self, renderer):
+                calls.append(1)
+                return arrays(renderer)
+
+            legend._auto_legend_data_arrays = types.MethodType(spy, legend)
+            fig.canvas.draw()
+            return len(calls)
+
+        # Matplotlib still asks the legend for its search data (if it stops,
+        # the override is dead code and large scatters are slow again).
+        self.assertGreater(calls_for(pf._LEGEND_BEST_MAX_POINTS + 1), 0)
+        self.assertEqual(calls_for(pf._LEGEND_BEST_MAX_POINTS), 0)
+
     def test_timeseries_title_and_markersize(self):
         # On a caller ax, an explicit title is honored and marker size applied.
         import pandas as pd

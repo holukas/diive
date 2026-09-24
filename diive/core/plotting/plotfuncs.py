@@ -15,6 +15,11 @@ import matplotlib.gridspec as gridspec
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt, _pylab_helpers, dates as mdates
+from matplotlib.collections import Collection, PolyCollection
+from matplotlib.legend import Legend
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch, Rectangle
+from matplotlib.text import Text
 from pandas import DataFrame, Series
 
 import diive.core.plotting.styles.LightTheme as theme
@@ -356,6 +361,73 @@ def nice_date_ticks(ax, minticks: int = 3, maxticks: int = 9, which: Literal['x'
     return None
 
 
+#: A collection with more points than this is left out of matplotlib's own
+#: 'best' search and tested as one array instead (see _ArrayOffsetsLegend).
+_LEGEND_BEST_MAX_POINTS = 10_000
+
+
+class _ArrayOffsetsLegend(Legend):
+    """A `Legend` whose ``loc='best'`` search stays fast for large scatters.
+
+    To place a legend at 'best', matplotlib tests up to nine candidate
+    positions against the data, twice per draw. ``_auto_legend_data`` collects
+    the points of every collection into a Python list with one small array
+    per point, and each candidate turns that list back into an array to count
+    the points it would cover. For 175,000 points one search takes a tenth
+    of a second or more.
+
+    When the axes holds a collection with more than
+    ``_LEGEND_BEST_MAX_POINTS`` points, this class gathers the same data but
+    keeps the points as one array, which the candidates count without any
+    conversion. Every artist is treated as matplotlib treats it and the same
+    points are counted, so the legend lands where matplotlib puts it and
+    still moves away from the data after a zoom or pan. Below the limit
+    matplotlib's own method runs unchanged.
+
+    ``_auto_legend_data`` is private, but the search has no public hook. The
+    copy below follows matplotlib 3.10; a test compares it with matplotlib's
+    method so a change there is noticed. If a private name it uses is gone,
+    matplotlib's method runs instead.
+    """
+
+    def _auto_legend_data(self, renderer):
+        try:
+            if any(len(c.get_offsets()) > _LEGEND_BEST_MAX_POINTS
+                   for c in self.parent.collections
+                   if not isinstance(c, PolyCollection)):
+                return self._auto_legend_data_arrays(renderer)
+        except AttributeError:
+            pass
+        return super()._auto_legend_data(renderer)
+
+    def _auto_legend_data_arrays(self, renderer):
+        # Mirrors Legend._auto_legend_data, except for the offsets.
+        bboxes = []
+        lines = []
+        offsets = []
+        for artist in self.parent._children:
+            if isinstance(artist, Line2D):
+                lines.append(
+                    artist.get_transform().transform_path(artist.get_path()))
+            elif isinstance(artist, Rectangle):
+                bboxes.append(
+                    artist.get_bbox().transformed(artist.get_data_transform()))
+            elif isinstance(artist, Patch):
+                lines.append(
+                    artist.get_transform().transform_path(artist.get_path()))
+            elif isinstance(artist, PolyCollection):
+                lines.extend(artist.get_transform().transform_path(path)
+                             for path in artist.get_paths())
+            elif isinstance(artist, Collection):
+                _, offset_trf, hoffsets, _ = artist._prepare_points()
+                if len(hoffsets):
+                    offsets.append(offset_trf.transform(hoffsets))
+            elif isinstance(artist, Text):
+                bboxes.append(artist.get_window_extent(renderer))
+        offsets = np.concatenate(offsets) if offsets else np.empty((0, 2))
+        return bboxes, lines, offsets
+
+
 def default_legend(ax,
                    loc: int or str = 0,
                    facecolor='None',
@@ -392,6 +464,10 @@ def default_legend(ax,
 
     for text in legend.get_texts():
         text.set_color(textcolor)
+
+    # Same legend, but its 'best' search no longer slows down on large scatters.
+    if type(legend) is Legend:
+        legend.__class__ = _ArrayOffsetsLegend
 
 
 def default_grid(ax):
