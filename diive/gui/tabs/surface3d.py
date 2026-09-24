@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 
 import diive as dv
 from diive.gui.tabs._explorer_base import SingleVariableExplorerTab
+from diive.gui.widgets.debounce import Debouncer
 from diive.gui.widgets.pyvista_canvas import (
     INSTALL_HINT,
     Pyvista3DCanvas,
@@ -257,7 +258,7 @@ class Surface3DTab(SingleVariableExplorerTab):
                              "the window width for the rolling aggregators "
                              "(1 = full daily detail, no binning). Larger = "
                              "broader, smoother relief.")
-        self.ybin.valueChanged.connect(self._rerender_view)
+        self.ybin.valueChanged.connect(self._rerender_debounce.trigger)
         form.addRow("Y cell (days)", self.ybin)
 
         self.ybin_agg = QComboBox()
@@ -267,7 +268,7 @@ class Surface3DTab(SingleVariableExplorerTab):
             "and lower spikes, max keeps peaks tall with a wider base, min for "
             "troughs. Rolling mean/median keep full daily resolution instead, "
             "smoothing each day over a centred window (gaps preserved).")
-        self.ybin_agg.currentTextChanged.connect(self._rerender_view)
+        self.ybin_agg.currentTextChanged.connect(self._rerender_debounce.trigger)
         form.addRow("Cell aggregator", self.ybin_agg)
 
     def _init_state(self) -> None:
@@ -334,6 +335,10 @@ class Surface3DTab(SingleVariableExplorerTab):
         lay.setSpacing(8)
 
         lay.addWidget(list_header("Controls", self._controls_hint))
+        # Every spinbox/combo below rebuilds the mesh and re-renders; holding an
+        # arrow or typing a value would do that per step, so those controls
+        # re-render once their value settles. Checkboxes stay immediate.
+        self._rerender_debounce = Debouncer(col, self._rerender_view)
         # Subclass hook: extra controls above the relief form (e.g. the X/Y/Z
         # picker in the coordinate-surface variant). No-op here.
         self._build_top_controls(lay)
@@ -357,7 +362,7 @@ class Surface3DTab(SingleVariableExplorerTab):
         self.cmap.addItems(["Spectral_r", "terrain", "viridis", "turbo", "magma",
                             "plasma", "cividis", "RdYlBu_r"])
         self.cmap.setCurrentText("RdYlBu_r")
-        self.cmap.currentTextChanged.connect(self._rerender_view)
+        self.cmap.currentTextChanged.connect(self._rerender_debounce.trigger)
         form.addRow("Colormap", self.cmap)
 
         self.exag = QDoubleSpinBox()
@@ -366,7 +371,7 @@ class Surface3DTab(SingleVariableExplorerTab):
         self.exag.setValue(0.2)
         self.exag.setToolTip("Height of the relief relative to the base "
                              "(0 = flat, larger = more dramatic).")
-        self.exag.valueChanged.connect(self._rerender_view)
+        self.exag.valueChanged.connect(self._rerender_debounce.trigger)
         form.addRow("Vertical exaggeration", self.exag)
 
         self.opacity = QDoubleSpinBox()
@@ -374,7 +379,7 @@ class Surface3DTab(SingleVariableExplorerTab):
         self.opacity.setSingleStep(0.05)
         self.opacity.setValue(1.0)  # opaque by default — no transparency
         self.opacity.setToolTip("Surface opacity (1 = solid, lower = see-through).")
-        self.opacity.valueChanged.connect(self._rerender_view)
+        self.opacity.valueChanged.connect(self._rerender_debounce.trigger)
         form.addRow("Opacity", self.opacity)
 
         self.ystretch = QDoubleSpinBox()
@@ -384,7 +389,7 @@ class Surface3DTab(SingleVariableExplorerTab):
         self.ystretch.setToolTip("Width of the date axis relative to the "
                                  "time-of-day axis (larger = wider, more "
                                  "landscape-like; 1 = square base).")
-        self.ystretch.valueChanged.connect(self._rerender_view)
+        self.ystretch.valueChanged.connect(self._rerender_debounce.trigger)
         form.addRow("Y stretch", self.ystretch)
 
         # Subclass hook: data-prep controls that sit between Y stretch and Smooth
@@ -397,7 +402,7 @@ class Surface3DTab(SingleVariableExplorerTab):
         self.smoothing.setToolTip("Round the surface into rolling hills by "
                                   "subdividing + relaxing the mesh (0 = off). "
                                   "Higher = smoother but heavier.")
-        self.smoothing.valueChanged.connect(self._rerender_view)
+        self.smoothing.valueChanged.connect(self._rerender_debounce.trigger)
         form.addRow("Smooth terrain", self.smoothing)
 
         # Optional cast shadows from an overhead spotlight. Off = flat, evenly
@@ -416,7 +421,7 @@ class Surface3DTab(SingleVariableExplorerTab):
         self.shadow_len.setValue(1)
         self.shadow_len.setToolTip("Shadow length: 1 = short (high light), "
                                    "10 = long (low light).")
-        self.shadow_len.valueChanged.connect(self._rerender_view)
+        self.shadow_len.valueChanged.connect(self._rerender_debounce.trigger)
         form.addRow("Shadow length", self.shadow_len)
 
         lay.addLayout(form)
@@ -920,6 +925,7 @@ class Surface3DTab(SingleVariableExplorerTab):
         return grid.x_hours, y_days, z, self._target, self._target
 
     def _compute(self) -> None:
+        self._rerender_debounce.cancel()  # this render uses the current values
         if self.canvas is None:
             return
         data = self._grid_data()

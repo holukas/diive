@@ -1188,6 +1188,36 @@ def test_overview_zoom_recomputes_summaries_once_settled(window):
     assert diel_ax.get_lines()[0] is not diel_line
 
 
+def test_appearance_width_spin_applies_theme_once_settled(app):
+    from PySide6.QtCore import QObject
+    from diive.gui import theme
+    from diive.gui.tabs.settings import SettingsTab
+
+    class _Counter(QObject):
+        count = 0
+
+        def hit(self):
+            self.count += 1
+
+    saved = theme.manager.list_width
+    settings = SettingsTab()
+    settings.widget()
+    counter = _Counter()
+    theme.manager.changed.connect(counter.hit)
+    try:
+        start = settings.width_spin.value()
+        for step in (10, 20, 30):
+            settings.width_spin.setValue(start + step)
+        assert theme.manager.list_width == start + 30  # the value is set at once
+        assert counter.count == 0  # but the app-wide restyle waits
+        settings._apply_debounce.flush()
+        assert counter.count == 1
+    finally:
+        theme.manager.changed.disconnect(counter.hit)
+        theme.manager.list_width = saved
+        theme.manager.apply()
+
+
 def test_canvas_resize_relayout_is_debounced(app):
     # The first resize after a render solves the layout at once (the render may
     # have run at a pre-show size); a burst of later resizes solves only once,
@@ -2753,6 +2783,7 @@ def test_gap_dashboard_tab(window):
 
     # Raising the long-gap threshold lists fewer gaps (library recompute).
     tab.threshold.setValue(tab.threshold.value() * 4)
+    tab._threshold_debounce.flush()  # the recompute waits for the value to settle
     for _ in range(50):
         QApplication.processEvents()
     assert tab.table.rowCount() < n_rows

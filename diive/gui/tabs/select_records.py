@@ -40,6 +40,7 @@ from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.overview import HeroBand
 from diive.gui.widgets.copy_button import CopyPythonButton
+from diive.gui.widgets.debounce import Debouncer
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel
@@ -202,8 +203,11 @@ class SelectRecordsTab(DiiveTab):
         # Live updates of the band/markers as the operation is edited.
         for w in (self.cond_combo, self.inclusive, self.mode):
             w.currentIndexChanged.connect(self._refresh_preview)
+        # The bounds change on every spin step or typed digit, and the preview
+        # redraws two full-length panels, so it waits until the value settles.
+        self._preview_debounce = Debouncer(box, self._refresh_preview)
         for w in (self.lower, self.upper):
-            w.valueChanged.connect(self._refresh_preview)
+            w.valueChanged.connect(self._preview_debounce.trigger)
         for w in (self.use_lower, self.use_upper):
             w.toggled.connect(self._refresh_preview)
 
@@ -521,6 +525,7 @@ class SelectRecordsTab(DiiveTab):
         the editable [lower, upper] band on top (current operation's in-range
         records marked), the target below (the surviving working series in blue
         over a faint full-record reference)."""
+        self._preview_debounce.cancel()  # this refresh covers a pending one
         if self._df is None or self._target is None:
             return
         cond = self.cond_combo.currentText()
