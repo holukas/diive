@@ -715,6 +715,54 @@ class TestPlotClasses(unittest.TestCase):
                                float(self.series.sum()), places=3)
         plt.close(fig)
 
+    def test_cumulative_fill_draws_what_fill_between_draws(self):
+        """Gap-free: pixel for pixel the `fill_between` shading it replaces."""
+        import numpy as np
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from diive.core.plotting.cumulative import Cumulative
+
+        def render(old: bool):
+            fig = Figure(figsize=(6, 3), dpi=100)
+            FigureCanvasAgg(fig)
+            ax = fig.add_subplot()
+            cum = Cumulative(self.series.to_frame())
+            if old:
+                cum._fill_to_zero = lambda s, color: cum.ax.fill_between(
+                    s.index, s.to_numpy(), 0, color=color, alpha=0.12,
+                    edgecolor='none', zorder=1)
+            cum.plot(ax=ax, showplot=False, fill=True)
+            fig.canvas.draw()
+            return np.asarray(fig.canvas.buffer_rgba()).copy()
+
+        np.testing.assert_array_equal(render(old=False), render(old=True))
+
+    def test_cumulative_fill_breaks_where_the_curve_breaks(self):
+        """One path, one closed outline per unbroken stretch, down to zero."""
+        import numpy as np
+        from matplotlib.path import Path
+        from diive.core.plotting.cumulative import Cumulative
+        series = self.series.copy()
+        series.iloc[100:130] = np.nan   # a gap
+        series.iloc[500] = np.nan       # a single missing record
+        series.iloc[502] = np.nan       # ... leaving one isolated value
+        fig, ax = plt.subplots()
+        cum = Cumulative(series.to_frame())
+        cum.plot(ax=ax, showplot=False, fill=True)
+        self.assertEqual(len(ax.collections), 1)
+        self.assertEqual(len(ax.collections[0].get_paths()), 1)
+        path = ax.collections[0].get_paths()[0]
+        starts = np.flatnonzero(path.codes == Path.MOVETO)
+        self.assertEqual(len(starts), 4)  # [0:100), [130:500), [501], [503:]
+        self.assertEqual(int((path.codes == Path.CLOSEPOLY).sum()), 4)
+        curve = cum.cumulative.iloc[:, 0]
+        on_curve = path.vertices[path.codes == Path.LINETO]
+        # Every valid point of the curve is on the outline, plus the point
+        # where each stretch returns to zero.
+        self.assertEqual(len(on_curve), int(curve.notna().sum()) + 4)
+        self.assertTrue(np.isin(curve.dropna().to_numpy(), on_curve[:, 1]).all())
+        plt.close(fig)
+
     def test_cumulative_year_draws_one_line_per_year(self):
         from diive.core.plotting.cumulative import CumulativeYear
         fig, ax = plt.subplots()
