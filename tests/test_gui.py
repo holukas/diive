@@ -4205,6 +4205,35 @@ def test_initial_load_reads_in_the_background(window, tmp_path):
             _destroy_window(win)
 
 
+def test_open_data_preview_reads_only_the_first_rows(app, monkeypatch, tmp_path):
+    """The parquet preview reads the first record batch, not the whole file,
+    and releases the file afterwards (an open handle locks it on Windows)."""
+    from PySide6.QtWidgets import QDialogButtonBox
+
+    from diive.gui.widgets import open_data_dialog as odd
+
+    index = pd.date_range("2021-01-01 00:30", periods=1000, freq="30min",
+                          name="TIMESTAMP_END")
+    path = tmp_path / "data.parquet"
+    pd.DataFrame({"A": range(1000)}, index=index).to_parquet(path, row_group_size=100)
+    full_reads = []
+    monkeypatch.setattr(odd.dv, "load_parquet", lambda **k: full_reads.append(k))
+
+    dlg = odd.OpenDataDialog()
+    try:
+        dlg._paths = [str(path)]
+        dlg.ft_combo.setCurrentIndex(dlg.ft_combo.findData(odd._PARQUET_CHOICE))
+
+        assert full_reads == []
+        assert dlg.preview.rowCount() == odd._PREVIEW_ROWS
+        assert dlg.preview.horizontalHeaderItem(0).text() == "TIMESTAMP_END"
+        assert dlg.preview.item(0, 1).text() == "0"
+        assert dlg.buttons.button(QDialogButtonBox.StandardButton.Ok).isEnabled()
+        path.unlink()  # not held open by the preview
+    finally:
+        shiboken6.delete(dlg)
+
+
 def test_metadata_namespace_migrates_legacy_flat_config():
     from diive.gui.app import _namespace_metadata
     # Legacy flat {name: [tags]} migrates under the first dataset key.

@@ -20,7 +20,8 @@ gaps); same-named variables are extended, new ones are added.
 
 No default filetype is assumed (there are many) -- the user picks explicitly,
 except for ``.parquet`` which is unambiguous and preselected. The preview reads
-only a few rows (`data_nrows`) so switching filetypes stays fast.
+only a few rows (`data_nrows`, or the first record batch of a parquet file) so
+switching filetypes stays fast.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -67,15 +68,33 @@ _last_choice: str | None = None
 def _read(filepath: str, choice: str, nrows: int | None):
     """Read a file with the chosen filetype via the library.
 
-    `nrows` limits rows for a fast preview (None = full file).
+    `nrows` limits rows for a fast preview (None = full file). A parquet preview
+    reads only the first record batch instead of the whole file, and shows the
+    timestamps as stored (the full load sanitises them and converts to
+    TIMESTAMP_MIDDLE).
     """
     if choice == _PARQUET_CHOICE:
-        df = dv.load_parquet(filepath=filepath)
-        return df.head(nrows) if nrows else df
+        if nrows:
+            return _read_parquet_head(filepath, nrows)
+        return dv.load_parquet(filepath=filepath)
     df, _meta = dv.ReadFileType(
         filepath=filepath, filetype=choice, data_nrows=nrows,
     ).get_filedata()
     return df
+
+
+def _read_parquet_head(filepath: str, nrows: int):
+    """The first `nrows` rows of a parquet file, without reading the rest."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    # Closed on exit: an open handle would lock the file on Windows.
+    with pq.ParquetFile(filepath) as pf:
+        batch = next(pf.iter_batches(batch_size=nrows), None)
+        # The batch carries the file's pandas metadata, so the index comes back.
+        table = (pa.Table.from_batches([batch]) if batch is not None
+                 else pf.schema_arrow.empty_table())
+    return table.to_pandas()
 
 
 def _read_many(filepaths: list[str], choice: str, progress_callback=None):
@@ -321,7 +340,8 @@ class OpenDataDialog(QDialog):
         cols = [str(c) for c in df.columns]
         nrows = min(len(df), _PREVIEW_ROWS)
         self.preview.setColumnCount(len(cols) + 1)
-        self.preview.setHorizontalHeaderLabels(["TIMESTAMP", *cols])
+        # The index's own name, e.g. TIMESTAMP_END for a raw parquet preview.
+        self.preview.setHorizontalHeaderLabels([str(df.index.name or "TIMESTAMP"), *cols])
         self.preview.setRowCount(nrows)
         for r in range(nrows):
             self.preview.setItem(r, 0, QTableWidgetItem(str(df.index[r])))
