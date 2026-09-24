@@ -1066,6 +1066,28 @@ def test_hover_value_lookup(app, example_year):
     assert marker2 is False
     assert f"{float(vals[5, 10]):.4g}" in text2
 
+    # The same heatmap drawn as an image reads the same cell and value.
+    canvas2i = MplCanvas()
+    ax2i = canvas2i.new_axes(1)[0]
+    dv.plotting.HeatmapDateTime(series).plot(
+        ax=ax2i, fig=canvas2i.fig, cb_digits_after_comma="auto", as_image=True)
+    canvas2i.draw()
+    text2i = canvas2i.hover._value_at(ax2i, ev2)[2]
+    assert text2i == text2
+
+    # A line drawn thinned answers from the full record it carries.
+    canvas4 = MplCanvas()
+    ax4 = canvas4.new_axes(1)[0]
+    dv.plotting.TimeSeries(series).plot(ax=ax4)
+    thin = ax4.get_lines()[0]
+    thin._diive_hover_xy = (x, y)
+    thin.set_data(x[::50], y[::50])  # sample 5001 is no longer drawn
+    canvas4.draw()
+    px4, py4 = ax4.transData.transform((x[i + 1], y[i + 1]))
+    ev4 = types.SimpleNamespace(inaxes=ax4, xdata=x[i + 1], ydata=y[i + 1], x=px4, y=py4)
+    hx4, hy4, _, _ = canvas4.hover._value_at(ax4, ev4)
+    assert (hx4, hy4) == (x[i + 1], y[i + 1])
+
     # Scatter panel: snaps to the nearest point and reports x, y (+ z when the
     # points are colour-coded).
     canvas3 = MplCanvas()

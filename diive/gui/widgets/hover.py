@@ -8,9 +8,11 @@ the value under the cursor as the mouse moves over a plot:
 - **Line panels** (time series, cumulative, diel cycle, daily mean): snaps to
   the nearest sample along x (`argmin` over |x - cursor|, so it is correct even
   for non-monotonic lines like the per-month diel cycle) and shows its x (date or
-  time-of-day) and value, with a marker.
-- **Heatmaps** (`pcolormesh`): reads the cell under the cursor from the grid and
-  shows its two axis values and the cell value.
+  time-of-day) and value, with a marker. A line drawn thinned (fewer points
+  than the record) can carry its full samples as ``_diive_hover_xy = (x, y)``;
+  the hover then snaps to those, so it still reports every record.
+- **Heatmaps** (`pcolormesh` or `imshow`): reads the cell under the cursor from
+  the grid and shows its two axis values and the cell value.
 
 It renders by **blitting** (cache the background once per draw, then redraw just
 the annotation), so it never triggers a full repaint per mouse move. This is
@@ -31,6 +33,7 @@ from matplotlib.dates import (
     DateLocator,
     num2date,
 )
+from matplotlib.image import AxesImage
 
 #: Tooltip / marker ink (blue-grey 800), matching the GUI's neutral accents.
 _INK = "#37474F"
@@ -50,7 +53,7 @@ class HoverAnnotator:
         self._bg = None                    # cached background for blitting
         self._annotations: dict = {}       # ax -> annotation artist
         self._markers: dict = {}           # ax -> marker Line2D
-        self._mesh_cache: dict = {}        # id(QuadMesh) -> (xb, yb, values)
+        self._mesh_cache: dict = {}        # id(QuadMesh/AxesImage) -> (xb, yb, values)
         self._visible = False
         self._enabled = True
 
@@ -145,12 +148,17 @@ class HoverAnnotator:
     def _value_at(self, ax, event):
         """Return ``(x, y, text, show_marker)`` for the artist under the cursor.
 
-        Tries a heatmap (`QuadMesh`) first, then line artists; returns ``None``
-        when there is nothing to report (e.g. cursor in a gap).
+        Tries a heatmap (`QuadMesh` or `AxesImage`) first, then line artists;
+        returns ``None`` when there is nothing to report (e.g. cursor in a gap).
         """
         for coll in ax.collections:
             if isinstance(coll, QuadMesh):
                 return self._heatmap_value(ax, coll, event)
+        for image in ax.get_images():
+            # A 2-D array is a colour-mapped grid; RGB(A) pictures carry no value.
+            if (isinstance(image, AxesImage) and image.get_visible()
+                    and np.ndim(image.get_array()) == 2):
+                return self._heatmap_value(ax, image, event)
         # Scatter points (ax.scatter -> PathCollection) take priority over a
         # binned trend line, but only when the cursor is near a point; otherwise
         # fall through so the line still answers.
@@ -196,10 +204,15 @@ class HoverAnnotator:
     def _line_value(self, ax, lines, event):
         best = None  # (pixel_dist_sq, x, y)
         for line in lines:
-            # orig=False returns the unit-converted floats matplotlib actually
-            # plots (e.g. date ordinals), matching event.xdata and transData.
-            x = np.asarray(line.get_xdata(orig=False), dtype=float)
-            y = np.asarray(line.get_ydata(orig=False), dtype=float)
+            full = getattr(line, "_diive_hover_xy", None)
+            if full is not None:
+                x, y = full  # a thinned line's full record, already as floats
+            else:
+                # orig=False returns the unit-converted floats matplotlib
+                # actually plots (e.g. date ordinals), matching event.xdata
+                # and transData.
+                x = np.asarray(line.get_xdata(orig=False), dtype=float)
+                y = np.asarray(line.get_ydata(orig=False), dtype=float)
             if x.size == 0:
                 continue
             # Nearest sample in x. argmin handles non-monotonic lines (e.g. the
@@ -222,10 +235,13 @@ class HoverAnnotator:
         _, bx, by = best
         return bx, by, f"{self._fmt_axis(ax.xaxis, bx)}\n{by:.4g}", True
 
-    def _heatmap_value(self, ax, mesh, event):
+    def _heatmap_value(self, ax, grid_artist, event):
         if event.ydata is None:
             return None
-        xb, yb, values = self._mesh_grid(mesh)
+        if isinstance(grid_artist, AxesImage):
+            xb, yb, values = self._image_grid(grid_artist)
+        else:
+            xb, yb, values = self._mesh_grid(grid_artist)
         col = _cell_index(xb, event.xdata)
         row = _cell_index(yb, event.ydata)
         if col is None or row is None:
@@ -251,6 +267,27 @@ class HoverAnnotator:
         values = values.reshape(rows, cols).filled(np.nan).astype(float)
         result = (xb, yb, values)
         self._mesh_cache[id(mesh)] = result
+        return result
+
+    def _image_grid(self, image: AxesImage):
+        """Cell-boundary arrays + 2-D value grid for an image (cached per draw).
+
+        An image's cells are evenly spaced across its extent. With
+        ``origin='upper'`` row 0 sits at the top, so the row boundaries run
+        downwards (`_cell_index` handles descending boundaries)."""
+        cached = self._mesh_cache.get(id(image))
+        if cached is not None:
+            return cached
+        values = np.ma.asarray(image.get_array()).filled(np.nan).astype(float)
+        rows, cols = values.shape[:2]
+        left, right, bottom, top = image.get_extent()
+        xb = np.linspace(left, right, cols + 1)
+        if image.origin == "upper":
+            yb = np.linspace(top, bottom, rows + 1)
+        else:
+            yb = np.linspace(bottom, top, rows + 1)
+        result = (xb, yb, values)
+        self._mesh_cache[id(image)] = result
         return result
 
     def _fmt_axis(self, axis, value: float) -> str:
