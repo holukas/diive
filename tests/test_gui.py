@@ -1360,6 +1360,56 @@ def test_overview_event_overlays_sit_above_the_heatmap(window):
         events.manager.clear()
 
 
+def test_overview_lays_out_at_laptop_size_and_after_resizes(window):
+    # At a laptop-sized canvas the lower panels and the heatmap keep a usable
+    # size instead of collapsing, and shrinking and growing the canvas again
+    # restores them. The diel legend falls back to coloured month names when
+    # its panel is too narrow for the full legend.
+    import warnings
+    from matplotlib.legend import Legend
+    overview = window._tabs[0]
+    canvas = overview.canvas
+
+    def settle():
+        QApplication.sendPostedEvents()
+        QApplication.processEvents()
+        if canvas._relayout_timer.isActive():
+            canvas._relayout_timer.timeout.emit()
+        QApplication.processEvents()
+
+    def panels():
+        canvas.fig.canvas.draw()
+        return {ax.get_title(): (round(ax.bbox.width), round(ax.bbox.height))
+                for ax in canvas.fig.axes if ax.get_title()}
+
+    def diel_legends_shown():
+        return [lg.get_visible() for lg in overview._diel_ax.get_children()
+                if isinstance(lg, Legend)]
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        canvas._canvas.setFixedSize(1100, 700)
+        settle()
+        overview._on_select("NEE_CUT_REF_f")
+        overview.varpanel.flush_pending()
+        settle()
+        boxes = panels()
+        assert len(boxes) == 7
+        assert all(w >= 100 and h >= 100 for w, h in boxes.values()), boxes
+        assert diel_legends_shown() == [False, True]
+
+        canvas._canvas.setFixedSize(900, 600)
+        settle()
+        boxes = panels()
+        assert all(w >= 70 for w, _ in boxes.values()), boxes
+        canvas._canvas.setFixedSize(1600, 1000)
+        settle()
+        boxes = panels()
+        assert all(w >= 180 for w, _ in boxes.values()), boxes
+        assert diel_legends_shown() == [True, False]
+    assert not [w for w in caught if "collapsed" in str(w.message)]
+
+
 def test_data_push_skips_hidden_tabs_until_shown(window):
     # A data change reaches only the visible tab; a hidden one catches up once,
     # with the current data, when it is shown.

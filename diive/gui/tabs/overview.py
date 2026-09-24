@@ -16,6 +16,8 @@ from html import escape
 import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
+from matplotlib.artist import Artist
+from matplotlib.ticker import Locator, MaxNLocator, ScalarFormatter
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
     QApplication,
@@ -107,6 +109,10 @@ _MAX_XTICKS = 5
 # four-label spacing that actually fits.
 _YEAR_STEPS = [1, 2, 3, 4, 5, 10, 20, 40, 50, 100]
 
+# A narrower panel gets fewer date ticks than _MAX_XTICKS: one label ("2016")
+# plus the gap to the next takes about this many font sizes.
+_DATE_TICK_EMS = 3.2
+
 # Refined, mutually distinct line colours so each panel reads at a glance and
 # looks professional (the bright Material blue read as garish).
 _TS_COLOR = "#22303C"     # near-black ink — time series (lets the heatmap carry the colour)
@@ -123,6 +129,147 @@ _TS_COLUMNS_PER_PIXEL = 2
 _ZOOM_SETTLE_MS = 150
 # The diel cycle now draws one auto-coloured line per month (no single colour).
 _ZERO_COLOR = "#90A4AE"   # blue-grey 300 — zero reference line
+
+# Why the decorations below are kept inside their panels: constrained layout
+# makes the margins "submerged" under the time series (which spans the five
+# lower columns) equal, so the widest decoration of any lower panel is added
+# between every pair of lower panels, four or five times over. A legend or a
+# long tick label that sticks out of one small panel therefore costs the whole
+# row its width, and as the panels shrink it sticks out further, until the
+# layout collapses. So the legends stay out of the layout and shrink or hide
+# with their panel (`_compact_legend`), and tick counts follow the panel size.
+_LEGEND_FONTSIZE = 8
+# Hour-of-day ticks (diel cycle, heatmap) step by the first of these that
+# leaves each label about this many font sizes of room.
+_HOUR_STEPS = (3, 6, 12)
+_HOUR_TICK_EMS = 2.2
+
+
+class _FittedDateLocator(mdates.AutoDateLocator):
+    """`AutoDateLocator` whose tick cap also follows the narrowest linked panel.
+
+    The linked datetime panels share one locator, so the cap comes from the
+    narrowest axes that shares this x-axis. Evaluated at draw time, so it
+    follows resizes."""
+
+    def get_locator(self, dmin, dmax):
+        ax = self.axis.axes
+        width = min(a.bbox.width for a in ax.get_shared_x_axes().get_siblings(ax))
+        room = 1 + width / (_DATE_TICK_EMS * _FONT_SIZE * ax.figure.dpi / 72)
+        # At least 3: with 2, a one-year range finds no month interval that
+        # fits and AutoDateLocator warns and falls back to its own choice.
+        self.maxticks = dict.fromkeys(self._freqs,
+                                      int(min(_MAX_XTICKS, max(3, room))))
+        return super().get_locator(dmin, dmax)
+
+
+class _HourLocator(Locator):
+    """Hour-of-day ticks every 3, 6 or 12 hours, the finest the axis has room for.
+
+    Only interior ticks are placed, so no label hangs over the axis ends.
+    Evaluated at draw time, so the step follows the panel's current size."""
+
+    def __call__(self):
+        lo, hi = sorted(self.axis.get_view_interval())
+        ax = self.axis.axes
+        length = ax.bbox.width if self.axis is ax.xaxis else ax.bbox.height
+        room = length / (_HOUR_TICK_EMS * _FONT_SIZE * ax.figure.dpi / 72)
+        ticks = np.array([])
+        for step in _HOUR_STEPS:
+            ticks = np.arange(np.floor(lo / step) * step + step, hi, step)
+            if len(ticks) <= room:
+                break
+        return self.raise_if_exceeds(ticks)
+
+
+class _CompactFormatter(ScalarFormatter):
+    """Tick labels in thousands or millions ("−80k") once the ticks reach 10,000,
+    so a cumulative sum or a count axis doesn't need a wide label margin.
+    Smaller values are formatted as usual."""
+
+    def _unit(self):
+        big = max((abs(v) for v in self.locs), default=0.0)
+        for divisor, suffix in ((1e6, "M"), (1e3, "k")):
+            if big >= 10 * divisor:
+                return divisor, suffix
+        return None
+
+    def __call__(self, x, pos=None):
+        unit = self._unit()
+        if unit is None:
+            return super().__call__(x, pos)
+        if x == 0:
+            return "0"
+        return self.fix_minus(f"{x / unit[0]:g}{unit[1]}")
+
+    def get_offset(self):
+        return "" if self._unit() else super().get_offset()
+
+
+class _LegendFitGuard(Artist):
+    """Shows the first of a panel's alternative legends that fits inside it,
+    or none.
+
+    Drawn just before the legends (lowest zorder), so the check uses the panel
+    size of the draw in progress, whatever resize or layout solve came before
+    it. Draws nothing itself and stays out of the layout."""
+
+    def __init__(self, legends) -> None:
+        super().__init__()
+        self._legends = legends
+        self._sizes = {}  # figure dpi -> [(width, height)] per legend
+        self.set_zorder(-1e9)
+        self.set_in_layout(False)
+
+    def draw(self, renderer) -> None:
+        # A legend's size depends only on its text and the dpi. Measuring it
+        # also runs the "best" placement search, so it is done once per dpi
+        # rather than on every pan repaint.
+        dpi = self.axes.figure.dpi
+        if dpi not in self._sizes:
+            self._sizes[dpi] = [
+                (b.width, b.height) for b in
+                (legend.get_window_extent(renderer) for legend in self._legends)]
+        panel = self.axes.bbox
+        shown = False
+        for legend, (width, height) in zip(self._legends, self._sizes[dpi]):
+            fits = bool(not shown and width <= panel.width
+                        and height <= panel.height)
+            if fits != legend.get_visible():
+                legend.set_visible(fits)
+            shown = shown or fits
+
+
+def _compact_legend(ax, ncol: int) -> None:
+    """Rebuild the panel's legend in a compact form that stays inside the panel.
+
+    Keeps the entries and text colour of the legend the plot class drew, with a
+    smaller font and tighter spacing. A narrower panel falls back to the entry
+    names alone, each in its line's colour, and a panel too small for either
+    shows no legend (`_LegendFitGuard`). Both are left out of the layout."""
+    old = ax.get_legend()
+    if old is None:
+        return
+    texts = old.get_texts()
+    color = texts[0].get_color() if texts else None
+    handles, labels = ax.get_legend_handles_labels()
+    old.remove()
+    style = dict(loc="best", ncol=ncol, fontsize=_LEGEND_FONTSIZE, frameon=False,
+                 columnspacing=0.8, labelspacing=0.3, borderaxespad=0.3)
+    full = ax.legend(handles, labels, handlelength=1.2, handletextpad=0.4,
+                     **style)
+    if color is not None:
+        for text in full.get_texts():
+            text.set_color(color)
+    # Keep it as a plain artist; the next ax.legend() replaces the axes legend.
+    ax.add_artist(full)
+    names = ax.legend(handles, labels, handlelength=0, handletextpad=0,
+                      labelcolor="linecolor", **style)
+    for handle in names.legend_handles:
+        handle.set_visible(False)
+    for legend in (full, names):
+        legend.set_in_layout(False)
+    ax.add_artist(_LegendFitGuard([full, names]))
 
 
 def _fmt(value) -> str:
@@ -848,6 +995,17 @@ class OverviewTab(DiiveTab):
             ax.autoscale(enable=True, axis="x")
         if plot_type in _DATETIME_X_PANELS:
             self._thin_date_ticks(ax)
+        # Tick counts that follow the panel size, and short labels for large
+        # values, so no tick label widens the layout (see the note above
+        # _LEGEND_FONTSIZE).
+        if plot_type in ("Diel cycle", "Heatmap (date/time)"):
+            ax.xaxis.set_major_locator(_HourLocator())
+            ax.xaxis.set_major_formatter(ScalarFormatter())
+        elif plot_type == "Histogram":
+            ax.xaxis.set_major_locator(MaxNLocator(nbins="auto"))
+            ax.xaxis.set_major_formatter(_CompactFormatter())
+        if plot_type != "Heatmap (date/time)":
+            ax.yaxis.set_major_formatter(_CompactFormatter())
 
     @staticmethod
     def _thin_date_ticks(ax) -> None:
@@ -857,9 +1015,10 @@ class OverviewTab(DiiveTab):
         locators. The formatter is bound to the locator it was built with, so the
         two are always replaced together. Zooming is unaffected: the locator
         re-picks its interval from the visible range, so a zoomed-in view
-        relabels itself in months or days.
+        relabels itself in months or days. A narrow panel gets fewer ticks
+        (`_FittedDateLocator`).
         """
-        locator = mdates.AutoDateLocator(maxticks=_MAX_XTICKS, minticks=2)
+        locator = _FittedDateLocator(maxticks=_MAX_XTICKS, minticks=2)
         locator.intervald[mdates.YEARLY] = list(_YEAR_STEPS)
         ax.xaxis.set_major_locator(locator)
         ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
@@ -1017,6 +1176,7 @@ class OverviewTab(DiiveTab):
                         show_legend=True, legend_ncol=legend_ncol,
                         legend_fontsize=_FONT_SIZE),
                     each_month=True, linewidth=1.1)
+                _compact_legend(ax, legend_ncol)
                 ax.axhline(0, color=_ZERO_COLOR, linestyle="--", linewidth=1.0,
                            alpha=0.6, zorder=1)
             elif plot_type == "Daily mean":
@@ -1040,6 +1200,7 @@ class OverviewTab(DiiveTab):
                     show_zscore_values=False, show_info=False,
                     show_counts=False, highlight_peak=True,
                     show_kde=True, show_mean=True, show_median=True)
+                _compact_legend(ax, 1)
             elif plot_type == "Waterfall":
                 # Daily contributions building a running total (NEE convention:
                 # uptake negative). Connectors/annotation read fine at panel size.
