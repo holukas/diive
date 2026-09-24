@@ -4077,6 +4077,43 @@ def test_project_restores_per_tab_state(window, tmp_path, monkeypatch):
     assert window._tabwidget.tabText(cur) == "Time series 1"
 
 
+def test_project_open_renders_the_overview_once(window, tmp_path, monkeypatch):
+    """Opening a project renders the Overview once, events included.
+
+    Announcing the project's events used to run this window's own handler,
+    which rendered the Overview synchronously; that draw flushed the render the
+    data push had queued, and the next push queued a third.
+    """
+    from diive.events import Event
+    from diive.gui import events
+    from diive.gui.tabs.overview import OverviewTab
+
+    events.manager.add(Event("Proj", window._full_data.index.min()))
+    events.manager.set_visible(False)
+    folder = tmp_path / "P.diive"
+    assert window._write_project(folder, "P")
+    events.manager.set_visible(True)
+    for _ in range(3):
+        QApplication.processEvents()  # drain renders the edits above queued
+
+    renders = []
+    real_render = OverviewTab._render_figure
+
+    def counting_render(self, *args, **kwargs):
+        renders.append(args[1])
+        return real_render(self, *args, **kwargs)
+
+    monkeypatch.setattr(OverviewTab, "_render_figure", counting_render)
+    assert window._load_project_folder(folder)
+    for _ in range(3):
+        QApplication.processEvents()
+
+    assert len(renders) == 1
+    assert "EVENT_Proj" in window._full_data.columns
+    assert not window._show_events_act.isChecked()  # the project's visibility
+    events.manager.clear()
+
+
 def test_project_save_runs_on_the_worker_and_blocks_reentry(window, tmp_path, monkeypatch):
     """Ctrl+S writes on the worker thread; the load/save menu entries stay
     disabled until the GUI thread has handled the result, and the file holds

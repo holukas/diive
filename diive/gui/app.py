@@ -1097,14 +1097,18 @@ class MainWindow(QMainWindow):
     def _on_events_changed(self) -> None:
         """React to any event edit: keep the menu toggle in sync and reconcile
         each event's 0/1 flag column against the dataset."""
-        if self._show_events_act.isChecked() != events.manager.visible:
-            self._show_events_act.blockSignals(True)
-            self._show_events_act.setChecked(events.manager.visible)
-            self._show_events_act.blockSignals(False)
+        self._sync_events_toggle()
         # A column add/edit/delete re-renders the Overview through the data push;
         # a visibility-only toggle changes no column, so refresh it explicitly.
         if not self._sync_event_columns():
             self._refresh_overview_events()
+
+    def _sync_events_toggle(self) -> None:
+        """Match the "Show events on plots" menu toggle to the event store."""
+        if self._show_events_act.isChecked() != events.manager.visible:
+            self._show_events_act.blockSignals(True)
+            self._show_events_act.setChecked(events.manager.visible)
+            self._show_events_act.blockSignals(False)
 
     def _on_event_categories_changed(self) -> None:
         """Recolour the Overview's event overlays after a category-palette edit."""
@@ -1666,10 +1670,18 @@ class MainWindow(QMainWindow):
         self._range = (pd.Timestamp(rng[0]), pd.Timestamp(rng[1])) if rng else None
         self._var_subset = list(project.extras.get("var_subset") or []) or None
         # The events themselves are already loaded (above, before the data swap);
-        # this only announces them, so the menu toggle picks up the project's
-        # visibility and the Overview draws the overlays. Their 0/1 columns were
-        # built by `_set_data`, matching the EVENT_ columns the parquet carries.
-        events.manager.changed.emit()
+        # this only announces them to other listeners. Their 0/1 columns were
+        # built by `_set_data`, matching the EVENT_ columns the parquet carries,
+        # and the `_apply_range` push below redraws the Overview with the
+        # overlays. So this window's own handler is left out: it would render
+        # the Overview synchronously on top of that push (and its draw flushed
+        # the render already queued), three renders for one project open.
+        events.manager.changed.disconnect(self._on_events_changed)
+        try:
+            events.manager.changed.emit()
+        finally:
+            events.manager.changed.connect(self._on_events_changed)
+        self._sync_events_toggle()
         self._project_dir, self._project_name = Path(folder), project.name
         self._last_project_dir = str(Path(folder).parent)
         self._last_project = str(Path(folder))
