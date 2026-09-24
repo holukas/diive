@@ -181,6 +181,143 @@ class TestPlots(unittest.TestCase):
         np.testing.assert_array_equal(render(False), render(True))
 
     @staticmethod
+    def _coloured_scatter(n=10_000, figsize=(5, 4), dpi=100, **plot_kw):
+        """A dense colour-coded ScatterXY on its own Agg figure."""
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from diive.core.plotting.scatter import ScatterXY
+        x, y = TestPlots._scatter_xy(n)
+        z = (y - x).rename("DIFF")
+        fig = Figure(figsize=figsize, dpi=dpi)
+        FigureCanvasAgg(fig)
+        ax = fig.add_subplot()
+        ScatterXY(x=x, y=y, z=z).plot(ax=ax, **plot_kw)
+        return fig, ax
+
+    def test_scatter_coloured_draws_only_the_markers_that_show(self):
+        # Markers fully covered by opaque markers drawn after them never reach
+        # the renderer; the rest keep their order. Outside the draw the
+        # collection still holds every point.
+        import numpy as np
+        from matplotlib.collections import PathCollection
+        n = 10_000
+        fig, ax = self._coloured_scatter(n)
+        coll = ax.collections[0]
+        self.assertIsInstance(coll, PathCollection)
+        sent = []
+        renderer = fig.canvas.get_renderer()
+        draw_collection = renderer.draw_path_collection
+
+        def record(gc, master, paths, transforms, offsets, *args):
+            sent.append(np.array(offsets))
+            return draw_collection(gc, master, paths, transforms, offsets, *args)
+
+        renderer.draw_path_collection = record
+        fig.canvas.draw()
+        drawn = sent[0]
+        self.assertLess(len(drawn), n // 2)
+        # Same per-point path, drawn in data order.
+        position = {tuple(p): i for i, p in enumerate(np.asarray(coll.get_offsets()))}
+        order = [position[tuple(p)] for p in drawn]
+        self.assertTrue(np.all(np.diff(order) > 0))
+        self.assertEqual(order[-1], n - 1)
+        for values in (coll.get_offsets(), coll.get_array(), coll.get_facecolor()):
+            self.assertEqual(len(values), n)
+
+    def test_scatter_coloured_image_matches_drawing_every_marker(self):
+        # Leaving the hidden markers out must not change one pixel, whatever
+        # the size, opacity, colour limits, view, dpi or later restyling.
+        import io
+        import numpy as np
+        import matplotlib as mpl
+        from matplotlib.collections import PathCollection
+
+        def zoom(ax, coll):
+            ax.set_xlim(5, 12)
+            ax.set_ylim(0, 8)
+
+        def restyle(ax, coll):
+            coll.set_cmap("plasma")
+            coll.set_clim(-5, 5)
+            coll.set_array(np.asarray(coll.get_array())[::-1].copy())
+
+        def edges(ax, coll):
+            coll.set_edgecolor("k")
+            coll.set_linewidth(0.5)
+
+        def no_edges(ax, coll):
+            coll.set_linewidth(0)
+
+        cases = [
+            ({}, {}, None, None),
+            ({}, dict(markersize=200), None, None),
+            ({}, dict(markersize=8), None, None),
+            ({}, dict(alpha=0.5), None, None),
+            ({}, dict(vmin=-2, vmax=2, cmap=mpl.colormaps["RdYlBu"].with_extremes(
+                under="k", over="m")), None, None),
+            ({}, {}, zoom, None),
+            ({}, {}, restyle, None),
+            ({}, {}, edges, None),
+            ({}, {}, no_edges, None),
+            ({}, {}, None, 150),
+            (dict(figsize=(4.37, 3.13), dpi=137), {}, None, None),
+        ]
+        for fig_kw, plot_kw, change, savedpi in cases:
+            images = []
+            for plain in (False, True):
+                fig, ax = self._coloured_scatter(**fig_kw, **plot_kw)
+                coll = ax.collections[0]
+                if plain:
+                    coll.__class__ = PathCollection
+                if change:
+                    change(ax, coll)
+                if savedpi:
+                    buf = io.BytesIO()
+                    fig.savefig(buf, format="rgba", dpi=savedpi)
+                    images.append(np.frombuffer(buf.getvalue(), np.uint8))
+                else:
+                    fig.canvas.draw()
+                    images.append(np.asarray(fig.canvas.buffer_rgba()).copy())
+            with self.subTest(fig=fig_kw, plot=plot_kw, change=change, savedpi=savedpi):
+                np.testing.assert_array_equal(images[0], images[1])
+
+    def test_scatter_coloured_vector_output_keeps_every_marker(self):
+        # Only the Agg raster is thinned; an SVG gets every marker.
+        import io
+        n = 2_000
+        fig, ax = self._coloured_scatter(n)
+        buf = io.StringIO()
+        fig.savefig(buf, format="svg")
+        self.assertGreaterEqual(buf.getvalue().count("<use "), n)
+
+    def test_hidden_markers_needs_a_later_opaque_cover(self):
+        import numpy as np
+        from diive.core.plotting.scatter import _hidden_markers
+        centre = np.array([[50.2, 50.3]])
+        angles = np.linspace(0, 2 * np.pi, 16, endpoint=False)
+        ring = centre + 5 * np.column_stack([np.cos(angles), np.sin(angles)])
+        xy = np.vstack([centre, ring, [[np.nan, 50.0], [500.0, 50.0]]])
+        clip = (20.0, 20.0, 80.0, 80.0)
+
+        opaque = np.ones(len(xy), dtype=bool)
+        hidden = _hidden_markers(xy, opaque, radius=15, linewidth=1, clip=clip)
+        self.assertTrue(hidden[0])       # under the ring drawn after it
+        self.assertFalse(hidden[16])     # the last ring marker is on top
+        self.assertTrue(hidden[17])      # no position, nothing drawn
+        self.assertTrue(hidden[18])      # outside the clip area
+
+        # A translucent ring shows the marker through it.
+        opaque[1:17] = False
+        hidden = _hidden_markers(xy, opaque, radius=15, linewidth=1, clip=clip)
+        self.assertFalse(hidden[0])
+
+        # Drawn before the ring, the centre marker covers nothing of it.
+        xy_first = np.vstack([ring, centre])
+        hidden = _hidden_markers(xy_first, np.ones(17, dtype=bool), radius=15,
+                                 linewidth=1, clip=clip)
+        self.assertFalse(hidden[-1])
+
+    @staticmethod
     def _legend_bounds(build, plain, zoom=None):
         """Draw a figure made by `build(ax)` and return its legend's bounds.
 
