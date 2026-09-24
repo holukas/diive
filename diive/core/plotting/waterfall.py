@@ -18,6 +18,25 @@ import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.styles.format import FormatStyle
 
 
+# On a date axis matplotlib runs every path of a collection through the unit
+# converter, one Python call per path, on every draw: ~45 ms per redraw for
+# ten years of daily bars, and the same again for the connectors. The waterfall
+# builds its vertices in date numbers already, so that conversion is the
+# identity and can be skipped.
+class _BarsCollection(PolyCollection):
+    """The waterfall bars; vertices are date numbers already."""
+
+    def have_units(self):
+        return False
+
+
+class _ConnectorsCollection(LineCollection):
+    """The waterfall connectors; vertices are date numbers already."""
+
+    def have_units(self):
+        return False
+
+
 class WaterfallPlot:
     """Plot a financial-style waterfall chart of sequential contributions to a running total.
 
@@ -194,8 +213,8 @@ class WaterfallPlot:
         # Same corner order as a bar's Rectangle.
         verts = np.stack([np.column_stack([left, bottoms]), np.column_stack([right, bottoms]),
                           np.column_stack([right, tops]), np.column_stack([left, tops])], axis=1)
-        bars = PolyCollection(verts, facecolors=colors.values, edgecolors='none',
-                              zorder=10, label='_nolegend_', gid='waterfall_bars')
+        bars = _BarsCollection(verts, facecolors=colors.values, edgecolors='none',
+                               zorder=10, label='_nolegend_', gid='waterfall_bars')
         # ax.bar makes each bar's bottom a sticky edge, so y autoscaling adds no
         # margin past a bottom that is the data limit; keep that.
         bars.sticky_edges.y.extend(bottoms)
@@ -207,7 +226,7 @@ class WaterfallPlot:
             yc = self.cumulative.to_numpy(dtype=float)
             segments = np.stack([np.column_stack([xc[:-1], yc[:-1]]),
                                  np.column_stack([xc[1:], yc[:-1]])], axis=1)
-            self.ax.add_collection(LineCollection(
+            self.ax.add_collection(_ConnectorsCollection(
                 segments, colors=theme.COLOR_LINE_ZERO, linewidths=theme.LINEWIDTH_SPINES,
                 alpha=0.4, capstyle='projecting', zorder=9, label='_nolegend_',
                 gid='waterfall_connectors'))

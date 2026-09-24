@@ -287,5 +287,43 @@ class TestWaterfallZeroContribution(unittest.TestCase):
         self.assertEqual(colors, [self.RELEASE] * 5)
 
 
+class TestWaterfallCollectionsSkipUnitConversion(unittest.TestCase):
+    """The bars and connectors skip matplotlib's per-path unit conversion.
+
+    Their vertices are date numbers already, so the conversion is the identity:
+    the drawing must be pixel for pixel what plain collections give.
+    """
+
+    @staticmethod
+    def _render(monkeypatch_plain: bool) -> np.ndarray:
+        import diive.core.plotting.waterfall as waterfall
+        from matplotlib.collections import LineCollection, PolyCollection
+        saved = waterfall._BarsCollection, waterfall._ConnectorsCollection
+        if monkeypatch_plain:
+            waterfall._BarsCollection, waterfall._ConnectorsCollection = PolyCollection, LineCollection
+        try:
+            fig, ax = plt.subplots(figsize=(6, 3), dpi=100)
+            WaterfallPlot(_series(with_outage=True), resample='D').plot(ax=ax, showplot=False)
+            fig.canvas.draw()
+            pixels = np.asarray(fig.canvas.buffer_rgba()).copy()
+            plt.close(fig)
+        finally:
+            waterfall._BarsCollection, waterfall._ConnectorsCollection = saved
+        return pixels
+
+    def test_still_the_documented_collection_types(self):
+        from matplotlib.collections import LineCollection, PolyCollection
+        fig, ax = plt.subplots()
+        WaterfallPlot(_series(with_outage=False), resample='D').plot(ax=ax, showplot=False)
+        by_gid = {c.get_gid(): c for c in ax.collections}
+        plt.close(fig)
+        self.assertIsInstance(by_gid['waterfall_bars'], PolyCollection)
+        self.assertIsInstance(by_gid['waterfall_connectors'], LineCollection)
+        self.assertFalse(by_gid['waterfall_bars'].have_units())
+
+    def test_draws_the_same_pixels_as_plain_collections(self):
+        np.testing.assert_array_equal(self._render(False), self._render(True))
+
+
 if __name__ == '__main__':
     unittest.main()
