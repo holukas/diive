@@ -58,6 +58,10 @@
 - **Random uncertainty plot:** `RandomUncertaintyPAS20.showplot_random_uncertainty` passed its axes
   to the `ScatterXY` constructor, which takes none, so the plot raised `TypeError`. The axes now go
   to `plot()` (`diive/flux/lowres/uncertainty.py`).
+- **Event overlays on heatmaps:** `dv.events.overlay_events(axis='y')` drew its lines and bands
+  below the cells of a `HeatmapDateTime`, so they never showed there, in the GUI Overview or in
+  library use. The overlays now start one level above the highest image or mesh on the axes; line
+  panels are unchanged (`diive/events/event.py`).
 
 ### Changes
 
@@ -111,6 +115,15 @@
   the `PathCollection` in `ax.collections`; each marker now sits on the nearest pixel centre, up to
   half a pixel from its exact position. This speeds up the Driver explorer and the Scatter XY plot
   tab; the GUI hover caches scatter pixel positions per draw (`diive/core/plotting/scatter.py`).
+- **Legend placement, speed:** `default_legend`, and so every `FormatStyle` legend, hands
+  matplotlib's `loc='best'` search the points of a large collection (over 10,000) as one array
+  instead of a list of small arrays per point. The legend lands exactly where it did and still
+  moves on zoom (`diive/core/plotting/plotfuncs.py`).
+- **GUI Overview, narrow windows:** the figure lays out at laptop sizes and recovers after the
+  window shrinks and grows again; before, the lower panels collapsed below about 1440x900. The
+  diel and distribution legends are smaller and give way to coloured month names or no legend in
+  a narrow panel, hour and date ticks follow the panel width, the distribution axis shows round
+  ticks, and tick values of 10,000 or more are shortened to k/M (`diive/gui/tabs/overview.py`).
 
 - **Daytime partitioning (ONEFlux), new option `reject_alpha_at_start`:** ONEFlux 1.3.7 is meant to
   reject a fitting window whose alpha never moved off its starting value, but a float32 comparison
