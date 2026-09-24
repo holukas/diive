@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Literal
 
 import matplotlib.gridspec as gridspec
+import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt, _pylab_helpers, dates as mdates
 from pandas import DataFrame, Series
@@ -19,6 +20,78 @@ from pandas import DataFrame, Series
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.times.times import current_datetime
 from diive.core.utils.console import info
+
+
+def decimate_line(x: np.ndarray, y: np.ndarray, xmin: float, xmax: float,
+                  n_bins: int) -> tuple[np.ndarray, np.ndarray]:
+    """Thin a long line to the samples that decide how it looks on screen.
+
+    The range ``[xmin, xmax]`` is cut into ``n_bins`` equal-width columns and
+    each column keeps only its first, last, lowest and highest valid sample
+    (the M4 rule of Jugel et al. 2014). With at least one column per pixel,
+    a line drawn through those samples covers the same pixels as the full
+    line, so spikes and extremes are never lost. Every returned value is a
+    real sample. The nearest sample outside the range on each side is kept
+    too, so the line runs on to the axes edge.
+
+    Gaps survive: a NaN is inserted between two kept samples whenever the
+    original record has a missing value between them, so the drawn line
+    breaks where the full line breaks.
+
+    Args:
+        x: Sample positions, sorted ascending (e.g. date numbers).
+        y: Sample values; NaN marks a missing record.
+        xmin, xmax: Visible x-range.
+        n_bins: Number of columns, e.g. the axes width in pixels.
+
+    Returns:
+        ``(x, y)`` arrays of the kept samples, in order. When the visible slice
+        is already short (at most four samples per column) it is returned
+        unthinned.
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    lo = max(int(np.searchsorted(x, xmin, side='left')) - 1, 0)
+    hi = min(int(np.searchsorted(x, xmax, side='right')) + 1, x.size)
+    xs, ys = x[lo:hi], y[lo:hi]
+    if n_bins < 1 or xmax <= xmin or xs.size <= 4 * n_bins:
+        return xs, ys
+
+    # Work on the valid samples only; `broken` marks a valid sample whose
+    # predecessor in the record is missing, i.e. where the full line breaks.
+    pos = np.flatnonzero(~np.isnan(ys))
+    if pos.size == 0:
+        return xs[:0], ys[:0]
+    xv, yv = xs[pos], ys[pos]
+    broken = np.r_[False, np.diff(pos) > 1]
+    n = xv.size
+
+    # Column of every sample. The two edge samples outside the range land in
+    # columns -1 and n_bins of their own. x is sorted, so the columns are too.
+    col = np.floor((xv - xmin) / (xmax - xmin) * n_bins)
+    col = np.clip(col, -1, n_bins).astype(np.int64)
+    # One group per unbroken stretch of line inside one column, so each
+    # stretch keeps its own vertical extent.
+    starts = np.flatnonzero(np.r_[True, (col[1:] != col[:-1]) | broken[1:]])
+    ends = np.r_[starts[1:], n] - 1
+    counts = ends - starts + 1
+
+    idx = np.arange(n)
+    group_min = np.repeat(np.minimum.reduceat(yv, starts), counts)
+    group_max = np.repeat(np.maximum.reduceat(yv, starts), counts)
+    at_min = np.minimum.reduceat(np.where(yv == group_min, idx, n), starts)
+    at_max = np.minimum.reduceat(np.where(yv == group_max, idx, n), starts)
+    keep = np.unique(np.concatenate([starts, ends, at_min, at_max]))
+
+    xd, yd = xv[keep], yv[keep]
+    # A break strictly after one kept sample and up to the next splits them.
+    breaks_up_to = np.cumsum(broken)
+    gap = breaks_up_to[keep[1:]] - breaks_up_to[keep[:-1]] > 0
+    if gap.any():
+        at = np.flatnonzero(gap) + 1
+        xd = np.insert(xd, at, xd[at - 1])
+        yd = np.insert(yd, at, np.nan)
+    return xd, yd
 
 
 def annotate_end_value(ax: plt.Axes, x, y, text: str, color: str,

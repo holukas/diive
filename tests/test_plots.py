@@ -374,6 +374,97 @@ class TestPlotfuncsHelpers(unittest.TestCase):
         self.assertEqual(len(set(results.values())), 1)
 
 
+class TestDecimateLine(unittest.TestCase):
+    """`decimate_line` must thin a line without changing what it shows."""
+
+    @staticmethod
+    def _gappy_walk(n: int = 60_000, seed: int = 1):
+        import numpy as np
+        rng = np.random.default_rng(seed)
+        x = np.arange(n, dtype=float) / 48.0  # half-hourly, in days
+        y = np.cumsum(rng.normal(size=n)) + rng.normal(scale=5.0, size=n)
+        y[rng.integers(0, n, 40)] += 80.0  # isolated spikes
+        y[10_000:10_500] = np.nan          # a long gap
+        y[rng.integers(0, n, 3_000)] = np.nan  # scattered single gaps
+        return x, y
+
+    def test_keeps_only_real_samples_in_order(self):
+        import numpy as np
+        from diive.core.plotting.plotfuncs import decimate_line
+        x, y = self._gappy_walk()
+        xd, yd = decimate_line(x, y, x[0], x[-1], 400)
+        self.assertLess(xd.size, x.size / 3)  # gappy: every short run keeps its ends
+        valid = ~np.isnan(yd)
+        pos = np.searchsorted(x, xd[valid])
+        np.testing.assert_array_equal(x[pos], xd[valid])
+        np.testing.assert_array_equal(y[pos], yd[valid])
+        self.assertTrue(np.all(np.diff(pos) > 0), msg="samples out of order or repeated")
+
+    def test_every_column_keeps_its_extremes(self):
+        import numpy as np
+        from diive.core.plotting.plotfuncs import decimate_line
+        x, y = self._gappy_walk()
+        xmin, xmax, n_bins = x[5_000], x[40_000], 300
+        xd, yd = decimate_line(x, y, xmin, xmax, n_bins)
+        col = np.floor((x - xmin) / (xmax - xmin) * n_bins)
+        cold = np.floor((xd - xmin) / (xmax - xmin) * n_bins)
+        for c in range(n_bins):
+            full = y[(col == c) & ~np.isnan(y)]
+            if full.size == 0:
+                continue
+            kept = yd[(cold == c) & ~np.isnan(yd)]
+            self.assertEqual(kept.min(), full.min(), msg=f"column {c} lost its minimum")
+            self.assertEqual(kept.max(), full.max(), msg=f"column {c} lost its maximum")
+
+    def test_breaks_exactly_where_the_record_has_a_gap(self):
+        import numpy as np
+        from diive.core.plotting.plotfuncs import decimate_line
+        x, y = self._gappy_walk()
+        xd, yd = decimate_line(x, y, x[0], x[-1], 400)
+        # Between two consecutive kept samples, the output breaks (NaN) if and
+        # only if the full record has a missing value between them.
+        kept = np.flatnonzero(~np.isnan(yd))
+        pos = np.searchsorted(x, xd[kept])
+        missing = np.cumsum(np.isnan(y))
+        for a, b, pa, pb in zip(kept[:-1], kept[1:], pos[:-1], pos[1:], strict=True):
+            broken_out = b - a > 1
+            broken_full = missing[pb - 1] - missing[pa] > 0
+            self.assertEqual(broken_out, broken_full, msg=f"records {pa}..{pb}")
+
+    def test_short_slice_is_returned_whole_with_one_sample_beyond_each_edge(self):
+        import numpy as np
+        from diive.core.plotting.plotfuncs import decimate_line
+        x, y = self._gappy_walk()
+        xd, yd = decimate_line(x, y, x[100] + 0.001, x[200] - 0.001, 1000)
+        np.testing.assert_array_equal(xd, x[100:201])
+        np.testing.assert_array_equal(yd, y[100:201])
+
+    def test_drawn_line_looks_the_same(self):
+        """At two columns per pixel the thinned line covers the same pixels."""
+        import numpy as np
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from diive.core.plotting.plotfuncs import decimate_line
+        x, y = self._gappy_walk()
+
+        def render(xs, ys):
+            fig = Figure(figsize=(8, 3), dpi=100)
+            FigureCanvasAgg(fig)
+            ax = fig.add_axes((0, 0, 1, 1))
+            ax.plot(xs, ys, color="black", linewidth=0.7)
+            ax.set_xlim(x[0], x[-1])
+            ax.set_ylim(np.nanmin(y), np.nanmax(y))
+            ax.axis("off")
+            fig.canvas.draw()
+            return np.asarray(fig.canvas.buffer_rgba())[..., 0].astype(int)
+
+        full = render(x, y)
+        thin = render(*decimate_line(x, y, x[0], x[-1], 2 * 800))
+        ink_ratio = (255 - thin).sum() / (255 - full).sum()
+        self.assertGreater(ink_ratio, 0.97)
+        self.assertLess(np.mean(np.abs(full - thin) > 96), 0.01)
+
+
 def _synthetic_series(years: int = 3, name: str = "TA", start: str = "2019-01-01"):
     """Deterministic hourly series with an annual and a diel cycle.
 
