@@ -231,6 +231,26 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
         self.assertTrue(res.loc[rest, ['RECO_DT_OF', 'GPP_DT_OF']].notna().all().all())
         self.assertLess(res['RECO_DT_OF'].max(), 50)
 
+    def test_models_are_evaluated_on_drivers_widened_to_float64(self):
+        # ONEFlux stores drivers as float32 but widens them to float64 before
+        # evaluating a model. Evaluated in float32, the residuals differ by ~1e-7,
+        # enough to flip the sign of a VPD sensitivity k that converges to zero,
+        # and the model cascade branches on that sign.
+        from diive.flux.partitioning.daytime_oneflux import _build_predict, TREF, T0, VPD0
+        rng = np.random.default_rng(1)
+        ind = {'rg': rng.uniform(5, 900, 200).astype(np.float32),
+               'ta': rng.uniform(-5, 30, 200).astype(np.float32),
+               'vpd': rng.uniform(0, 25, 200).astype(np.float32),
+               'e0': np.full(200, 211.7, dtype=np.float32)}
+        par = np.array([0.047, 29.9, 0.03, 5.9])
+        got = _build_predict('HLRC_LloydVPD', ind)(par)
+
+        rg, ta, vpd, e0 = (ind[k].astype(np.float64) for k in ('rg', 'ta', 'vpd', 'e0'))
+        m = np.minimum(np.exp(-1.0 * par[2] * (vpd - VPD0)), 1.0)
+        tfac = np.exp(e0 * ((1.0 / (TREF - T0)) - (1.0 / (ta - T0))))
+        want = -1.0 * par[0] * par[1] * m * rg / (par[0] * rg + par[1] * m) + par[3] * tfac
+        np.testing.assert_allclose(got, want, rtol=1e-13, atol=0)
+
     def test_parameter_table_is_float32(self):
         # The accept test above only matches ONEFlux if the table it reads
         # really is float32, as ONEFlux's FLOAT_PREC table is.

@@ -174,19 +174,28 @@ def _build_predict(lts_func, ind):
     deterministic ``exp`` is bit-for-bit identical to recomputing it each call,
     but removes the dominant per-evaluation cost (the non-VPD models become
     ``exp``-free in the residual loop).
+
+    The drivers are stored as float32, as in ONEFlux, but ONEFlux widens them to
+    float64 before evaluating a model (``.astype(DOUBLE_PREC)`` in
+    ``nlinlts2``). Doing the same matters: computed in float32, the residuals
+    differ by about 1e-7, which is enough to flip the sign of a VPD sensitivity
+    ``k`` that converges to zero, and the model cascade branches on that sign.
     """
+    def f8(key):
+        return np.asarray(ind[key], dtype=np.float64)
+
     if lts_func == "LloydTemp":
         # E0 is a fitted parameter here, so only the temperature offset is fixed.
-        tdiff = (1.0 / (TREF - T0)) - (1.0 / (ind['ta'] - T0))
+        tdiff = (1.0 / (TREF - T0)) - (1.0 / (f8('ta') - T0))
 
         def predict(par):
             return par[0] * np.exp(par[1] * tdiff)
         return predict
 
-    ta, e0 = ind['ta'], ind['e0']
-    rg = ind.get('rg')  # absent for LloydT_E0fix (respiration only)
+    ta, e0 = f8('ta'), f8('e0')
+    rg = f8('rg') if 'rg' in ind else None  # absent for LloydT_E0fix (respiration only)
     tfac = np.exp(e0 * ((1.0 / (TREF - T0)) - (1.0 / (ta - T0))))  # E0 fixed
-    vpdm = ind['vpd'] - VPD0 if 'vpd' in ind else None
+    vpdm = f8('vpd') - VPD0 if 'vpd' in ind else None
     alpha_fix = ind.get('alpha')
 
     if lts_func == "HLRC_Lloyd":
@@ -866,15 +875,19 @@ class DaytimePartitioningOneFlux:
     ONEFlux run.
 
     Measured agreement, CH-DAV 2016 half-hourly against a native ONEFlux 1.3.7
-    run on the same arrays: the same 143 windows are fitted, all but three of
-    them agree on RRef, beta and alpha to better than 1%, and all but one on E0
-    to better than 0.1 K (the exception is off by 0.23 K). Per record, GPP r = 0.9998 (RMSE 0.098 umol m-2 s-1), RECO r = 0.9989
-    (RMSE 0.116); annual sums differ by -0.19% (GPP) and -0.37% (RECO). What is
-    left is two ill-conditioned windows (late May, late June) where the
-    least-squares search settles on a different local optimum, trading alpha
-    against RRef; they carry the 82 records (0.5%) whose GPP differs by more than
-    0.5 umol m-2 s-1. Agreement at this level depends on the SciPy and NumPy
-    versions on both sides, so treat these numbers as indicative.
+    run on the same arrays: the same 143 windows are fitted, all but four of
+    them agree on RRef, beta and alpha to better than 1%, and E0 agrees to
+    0.002 K. Per record, GPP r = 0.9999 (RMSE 0.061 umol m-2 s-1), RECO
+    r = 0.9996 (RMSE 0.068); annual sums differ by -0.06% (GPP) and -0.14%
+    (RECO).
+
+    What is left is not a port difference. In a few windows the VPD sensitivity
+    ``k`` converges to zero, and the model cascade branches on its sign, which
+    is then decided by rounding. ONEFlux itself takes a different path in such
+    windows when only its NumPy/SciPy versions change: with a gappy CH-DAV 2016
+    year, 6 windows differed between two ONEFlux runs (NumPy 1.24/SciPy 1.10 vs
+    NumPy 1.26/SciPy 1.17) and its annual GPP moved by 0.7%, more than diive
+    differs from either run.
 
     Example: ``examples/flux/partitioning/partitioning_daytime_oneflux.py``
 
