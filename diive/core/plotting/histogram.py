@@ -21,6 +21,35 @@ from diive.core.plotting.styles.format import FormatStyle
 
 from pandas import Series
 
+#: Beyond this many bandwidths from a sample, its Gaussian kernel term
+#: exp(-d**2 / 2) underflows to 0.0 in float64, so leaving it out of the sum
+#: changes nothing.
+_KDE_KERNEL_REACH = 38.6
+
+
+def _gaussian_kde(vals: np.ndarray, xvals: np.ndarray) -> np.ndarray:
+    """Evaluate scipy's Gaussian KDE of `vals` at `xvals`, from every sample.
+
+    Same density as ``scipy.stats.gaussian_kde(vals)(xvals)``: the bandwidth is
+    taken from scipy (Scott's rule), and every sample contributes. Two things
+    make it much faster on long records without changing the result beyond
+    floating-point rounding: repeated values are summed once with their count
+    as the weight (measured data are rounded, so 175k half-hourly records hold
+    as few as 8k distinct values), and each point only sums the samples within
+    reach of its kernel (see `_KDE_KERNEL_REACH`).
+    """
+    from scipy.stats import gaussian_kde
+    h = float(np.sqrt(gaussian_kde(vals).covariance[0, 0]))
+    uniq, counts = np.unique(vals, return_counts=True)
+    counts = counts.astype(float)
+    lo = np.searchsorted(uniq, xvals - _KDE_KERNEL_REACH * h, side='left')
+    hi = np.searchsorted(uniq, xvals + _KDE_KERNEL_REACH * h, side='right')
+    density = np.empty(len(xvals))
+    for i, x in enumerate(xvals):
+        d = (x - uniq[lo[i]:hi[i]]) / h
+        density[i] = np.exp(-0.5 * d * d) @ counts[lo[i]:hi[i]]
+    return density / (vals.size * h * np.sqrt(2.0 * np.pi))
+
 
 class HistogramPlot:
     """Histogram plot with optional z-score overlay and peak highlighting.
@@ -202,13 +231,12 @@ class HistogramPlot:
             vals = self.s.dropna().to_numpy()
             bin_widths = np.diff(self.edges)
             if show_kde and vals.size > 1 and bin_widths.size and bin_widths.min() > 0:
-                from scipy.stats import gaussian_kde
                 xvals = np.linspace(self.edges[0], self.edges[-1], 200)
                 # Index of the bin each sample point falls in (last bin is closed
                 # on the right, matching np.histogram).
                 ix_bin = np.clip(np.searchsorted(self.edges, xvals, side='right') - 1,
                                  0, bin_widths.size - 1)
-                yvals = gaussian_kde(vals)(xvals) * self.counts.sum() * bin_widths[ix_bin]
+                yvals = _gaussian_kde(vals, xvals) * self.counts.sum() * bin_widths[ix_bin]
                 self.ax.plot(xvals, yvals, color="#5E35B1", linewidth=2,
                              zorder=500, label="KDE")
             if show_mean and vals.size:
