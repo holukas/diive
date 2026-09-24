@@ -1498,6 +1498,94 @@ def test_canvas_leaves_an_empty_figure_and_a_stale_idle_draw_alone(app):
     assert draws == [1]
 
 
+def _shown_line_canvas():
+    """A shown MplCanvas with one rendered line plot, plus a list that records
+    the widget size of every real (Agg) render of its figure canvas."""
+    from diive.gui.widgets.mpl_canvas import MplCanvas
+    canvas = MplCanvas(show_toolbar=False)
+    # A slow test run must not let the settle timer fire mid-burst.
+    canvas._relayout_timer.setInterval(60_000)
+    canvas.resize(500, 350)
+    canvas.show()
+    ax = canvas.new_axes(1)[0]
+    ax.plot(range(50), color="black", linewidth=3)
+    canvas.draw()
+    QApplication.processEvents()
+    fc = canvas._canvas
+    renders = []
+    orig_draw = fc.draw
+    fc.draw = lambda: (renders.append((fc.width(), fc.height())), orig_draw())[1]
+    return canvas, fc, renders
+
+
+def _pump():
+    for _ in range(3):
+        QApplication.sendPostedEvents()
+        QApplication.processEvents()
+
+
+def test_canvas_resize_burst_renders_once_when_settled(app):
+    # The first resize after a render still renders at once (it may be the
+    # first real size), later resizes paint the last frame scaled, and one
+    # render at the settled size follows when the timer fires.
+    canvas, fc, renders = _shown_line_canvas()
+    try:
+        w0, h0 = fc.width(), fc.height()
+        fc.resize(w0 + 40, h0 + 20)
+        _pump()
+        assert renders == [(w0 + 40, h0 + 20)]
+        assert not canvas._relayout_timer.isActive()
+
+        renderer = fc.renderer
+        for i in range(1, 6):
+            fc.resize(w0 + 40 + 10 * i, h0 + 20 + 5 * i)
+            _pump()
+        assert renders == [(w0 + 40, h0 + 20)]  # nothing rendered per event
+        assert canvas._relayout_timer.isActive()
+        # The paint shows the scaled last frame (the black line), not an
+        # empty or mismatched Agg buffer, and nothing replaced that buffer.
+        shot = fc.grab().toImage()
+        assert any(shot.pixelColor(x, y).lightness() < 60
+                   for x in range(0, shot.width(), 4)
+                   for y in range(0, shot.height(), 4))
+        assert fc.renderer is renderer
+        # The hover leaves the stale background alone until the settle render.
+        canvas.hover._visible = True
+        canvas.hover._hide()
+        assert fc.renderer is renderer
+
+        canvas._relayout_timer.timeout.emit()
+        _pump()
+        final = (fc.width(), fc.height())
+        assert renders == [(w0 + 40, h0 + 20), final]
+        assert (fc.renderer.width, fc.renderer.height) == (
+            round(final[0] * fc.device_pixel_ratio),
+            round(final[1] * fc.device_pixel_ratio))
+        assert fc._last_frame is None
+        assert canvas.hover._bg_matches()  # re-cached for the settled size
+    finally:
+        canvas.close()
+
+
+def test_canvas_resize_renders_on_paint_if_the_settle_never_comes(app):
+    # A deferred resize must not leave the canvas stale for good: with the
+    # settle timer stopped, the next paint renders at the current size.
+    canvas, fc, renders = _shown_line_canvas()
+    try:
+        w0, h0 = fc.width(), fc.height()
+        fc.resize(w0 + 30, h0 + 30)
+        _pump()
+        fc.resize(w0 + 60, h0 + 60)
+        _pump()
+        assert len(renders) == 1 and fc._last_frame is not None
+        canvas._relayout_timer.stop()
+        fc.grab()
+        assert renders[-1] == (w0 + 60, h0 + 60)
+        assert fc._last_frame is None
+    finally:
+        canvas.close()
+
+
 def test_save_dpi_spinbox(app):
     # The canvas exposes a Save-DPI spinbox (default 150) whose value the
     # Save action passes through to savefig.
