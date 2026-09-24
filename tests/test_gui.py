@@ -3381,6 +3381,51 @@ def test_splash_screen(app):
     dlg.accept()
 
 
+def test_launch_shows_splash_before_importing_the_main_window():
+    """`launch` paints the splash first, then imports `diive.gui.app`.
+
+    That import is most of the startup time, so a splash made inside `run` only
+    appeared once it was over. A stand-in `diive.gui.app` records what `run`
+    receives. Fresh interpreter, since this session imported the real module.
+    """
+    import pathlib
+    import subprocess
+
+    code = """
+import importlib.abc, importlib.util, sys
+import diive.gui.splash as sp
+order = []
+_orig = sp.create_splash
+def create_splash(app):
+    order.append("splash")
+    return _orig(app)
+sp.create_splash = create_splash
+def run(app, splash):
+    order.append("run: splash visible" if splash.isVisible() else "run: no splash")
+    return 0
+class StandIn(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    def find_spec(self, name, path, target=None):
+        if name == "diive.gui.app":
+            return importlib.util.spec_from_loader(name, self)
+    def create_module(self, spec):
+        return None
+    def exec_module(self, module):
+        order.append("import diive.gui.app")
+        module.run = run
+sys.meta_path.insert(0, StandIn())
+import diive.gui
+assert diive.gui.launch() == 0
+print(order)
+"""
+    root = pathlib.Path(__file__).resolve().parent.parent
+    env = dict(os.environ, PYTHONPATH=str(root), QT_QPA_PLATFORM="offscreen")
+    out = subprocess.run([sys.executable, "-c", code], env=env, cwd=root,
+                         capture_output=True, text=True, timeout=120)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip().splitlines()[-1] == str(
+        ["splash", "import diive.gui.app", "run: splash visible"])
+
+
 def test_appearance_singleton(window):
     window._open_menu_tab("Appearance")
     window._open_menu_tab("Appearance")

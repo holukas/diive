@@ -10,7 +10,6 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -1637,30 +1636,20 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
-def run() -> int:
-    """Boot the QApplication, show the main window, run the event loop."""
-    # Windows groups a Python process under python.exe in the taskbar (and uses
-    # its icon) unless the app declares its own AppUserModelID first.
-    if sys.platform == "win32":
-        try:
-            import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("diive.gui")
-        except Exception:
-            pass
+def run(app: QApplication | None = None, splash=None) -> int:
+    """Boot the QApplication, show the main window, run the event loop.
 
-    app = QApplication.instance() or QApplication(sys.argv)
-    app.setOrganizationName("diive")
-    app.setApplicationName("diive-gui")
-    # Fusion style honours stylesheet item-selection colours consistently
-    # (the native Windows style ignores them in combo-box popups).
-    app.setStyle("Fusion")
-    # Strip the native frame/shadow from every combo-box popup (black bars on the
-    # frameless translucent window) — one app-wide filter covers all dropdowns.
-    from diive.gui.widgets.combo import install_combo_popup_fix
-    install_combo_popup_fix(app)
-    from diive.gui.splash import app_icon
-    icon = app_icon()  # taskbar / window icon (splash motif)
-    app.setWindowIcon(icon)
+    `launch` passes an `app` and an already painted `splash` so the splash
+    appears before this module is imported; called bare, both are made here.
+    """
+    from diive.gui.splash import create_splash, show_message
+    if app is None:
+        from diive.gui import _create_application
+        app = _create_application()
+    if splash is None:
+        splash = create_splash(app)
+        splash.show()
+    icon = app.windowIcon()
 
     # Restore saved preferences before building the window.
     cfg = config.load_config()
@@ -1673,9 +1662,6 @@ def run() -> int:
     odd._last_choice = cfg.get("last_filetype")
 
     # Splash while the window builds (it auto-loads the example dataset).
-    from diive.gui.splash import create_splash, show_message
-    splash = create_splash(app)
-    splash.show()
     show_message(splash, "Loading…")
     app.processEvents()  # paint the splash before the (blocking) window build
 
