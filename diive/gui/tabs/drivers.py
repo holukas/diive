@@ -66,6 +66,7 @@ class DriverExplorerTab(SingleVariableExplorerTab):
 
     def _init_state(self) -> None:
         self._ranked = None    # DataFrame from rank_drivers
+        self._method_label = ""  # method the shown ranking was computed with
         self._filling = False  # guard table-selection echo during repopulation
 
     def _build_right(self) -> QWidget:
@@ -141,11 +142,21 @@ class DriverExplorerTab(SingleVariableExplorerTab):
         if t and self._df is not None and t in self._df.columns:
             self._on_select(t)
 
-    def _compute(self) -> None:
-        # Ranking is the library's; the tab only reads the result back.
-        method = self.method.currentText().lower()
-        self._ranked = dv.analysis.rank_drivers(
-            self._df, target=self._target, method=method, max_lag=self.max_lag.value())
+    def _compute_request(self) -> tuple:
+        return (self._df, self._target, self.method.currentText(),
+                self.max_lag.value())
+
+    @staticmethod
+    def _compute_payload(df, target, method_label, max_lag):
+        # Ranking is the library's; the tab only reads the result back. A large
+        # max lag can take minutes, hence the worker thread.
+        ranked = dv.analysis.rank_drivers(
+            df, target=target, method=method_label.lower(), max_lag=max_lag)
+        return {"ranked": ranked, "method_label": method_label}
+
+    def _render_payload(self, payload) -> None:
+        self._ranked = payload["ranked"]
+        self._method_label = payload["method_label"]
         self._fill_stats()
         self._fill_table()
 
@@ -168,7 +179,7 @@ class DriverExplorerTab(SingleVariableExplorerTab):
             ("Top driver", top_name),
             ("Top r", top_r),
             ("Drivers ranked", _fmt(0 if res is None else len(res))),
-            ("Method", self.method.currentText()),
+            ("Method", self._method_label),
             ("Target coverage", f"{target_cov:.0f}%"),
         ]
         self._set_stat_cards(cards)
@@ -209,7 +220,9 @@ class DriverExplorerTab(SingleVariableExplorerTab):
 
     # --- click-to-scatter ----------------------------------------------
     def _on_driver_selected(self) -> None:
-        if self._filling or self._ranked is None:
+        # While a ranking computes, `_target` already names the new variable
+        # but the table still lists the old one's drivers: don't mix the two.
+        if self._filling or self._ranked is None or self._computing():
             return
         rows = self.table.selectionModel().selectedRows()
         if not rows:

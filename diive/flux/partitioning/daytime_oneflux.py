@@ -174,19 +174,28 @@ def _build_predict(lts_func, ind):
     deterministic ``exp`` is bit-for-bit identical to recomputing it each call,
     but removes the dominant per-evaluation cost (the non-VPD models become
     ``exp``-free in the residual loop).
+
+    The drivers are stored as float32, as in ONEFlux, but ONEFlux widens them to
+    float64 before evaluating a model (``.astype(DOUBLE_PREC)`` in
+    ``nlinlts2``). Doing the same matters: computed in float32, the residuals
+    differ by about 1e-7, which is enough to flip the sign of a VPD sensitivity
+    ``k`` that converges to zero, and the model cascade branches on that sign.
     """
+    def f8(key):
+        return np.asarray(ind[key], dtype=np.float64)
+
     if lts_func == "LloydTemp":
         # E0 is a fitted parameter here, so only the temperature offset is fixed.
-        tdiff = (1.0 / (TREF - T0)) - (1.0 / (ind['ta'] - T0))
+        tdiff = (1.0 / (TREF - T0)) - (1.0 / (f8('ta') - T0))
 
         def predict(par):
             return par[0] * np.exp(par[1] * tdiff)
         return predict
 
-    ta, e0 = ind['ta'], ind['e0']
-    rg = ind.get('rg')  # absent for LloydT_E0fix (respiration only)
+    ta, e0 = f8('ta'), f8('e0')
+    rg = f8('rg') if 'rg' in ind else None  # absent for LloydT_E0fix (respiration only)
     tfac = np.exp(e0 * ((1.0 / (TREF - T0)) - (1.0 / (ta - T0))))  # E0 fixed
-    vpdm = ind['vpd'] - VPD0 if 'vpd' in ind else None
+    vpdm = f8('vpd') - VPD0 if 'vpd' in ind else None
     alpha_fix = ind.get('alpha')
 
     if lts_func == "HLRC_Lloyd":
@@ -308,12 +317,24 @@ def _fit(lts_func, dep, indeps, npara, xguess, mprior, sigm, sigd):
     return res
 
 
-def _check_parameters(p):
+def _check_parameters(p, reject_alpha_at_start=False):
     """Port of library.check_parameters. p = [alpha,beta,k,rref,e0,*se...]."""
+    # Widen to float64 before comparing. ONEFlux passes a row of its float32
+    # `params` table and compares it against the Python floats in `fguess`,
+    # which under NumPy 1.x promotes to float64; NumPy 2 would instead demote
+    # the Python float to float32 (NEP 50). The difference decides the last
+    # condition below, `p[0] != FGUESS0[0]`: float32(0.01) != 0.01 in float64,
+    # so a window whose alpha never left the starting guess still passes.
+    # That is a bug in ONEFlux (its comment and the PV-Wave original reject
+    # such a window); `reject_alpha_at_start` compares in float32 instead,
+    # which is what the check was written to do.
+    alpha_start = np.float32(FGUESS0[0]) if reject_alpha_at_start else FGUESS0[0]
+    alpha = np.float32(p[0]) if reject_alpha_at_start else np.float64(p[0])
+    p = np.asarray(p, dtype=np.float64)
     is_ok = 0
     if (p[0] >= 0) and (p[0] < 0.22) and (p[1] >= 0) and (p[1] < 250) \
             and (p[2] >= 0) and (p[3] > 0) and (p[4] >= 50) and (p[4] <= 400) \
-            and (p[0] != FGUESS0[0]):
+            and (alpha != alpha_start):
         is_ok = 1
     if (p[1] > 100) and (p[1] < p[6]):
         is_ok = 0
@@ -354,6 +375,14 @@ def _uncert_via_gapfill(nee, rg, ta, vpd, hr, nperday, longest_marginal_gap=60):
     variant uses ``min_samples=10`` (ONEFlux ``>9``) and predicts at every record
     (``fill_all``). The cascade preserves the input float32 dtype for the
     tolerance comparisons, so this keeps ONEFlux FLOAT_PREC boundary behaviour.
+
+    ``edge='clip'`` because this port's reference is ONEFlux's own Python
+    ``daytime.uncert_via_gapFill``, which clips the look-up window onto record 0
+    / n-1 rather than trimming it. The MDS gap-filler keeps the cascade default
+    (``'trim'``): its reference is the C ``gf_mds`` tool, which narrows the
+    window bounds instead. Clipping costs nothing away from the record ends; on
+    CH-DAV 2016 it changed the uncertainty of 172 of 17568 records, all of them
+    within 336 records of the trailing edge.
     """
     def to_nan(x):
         x = np.asarray(x)
@@ -364,6 +393,7 @@ def _uncert_via_gapfill(nee, rg, ta, vpd, hr, nperday, longest_marginal_gap=60):
         to_nan(nee), to_nan(rg), to_nan(ta), to_nan(vpd), np.asarray(hr), nperday,
         min_samples=10, swin_tol=(20.0, _RG_TOL), ta_tol=_TA_TOL, vpd_tol=_VPD_TOL,
         ddof=1, fill_all=True, longest_marginal_gap=longest_marginal_gap,
+        edge='clip',
     )
     sd = res['sd']
     return np.where(np.isfinite(sd), sd, NAN)
@@ -372,7 +402,7 @@ def _uncert_via_gapfill(nee, rg, ta, vpd, hr, nperday, longest_marginal_gap=60):
 # --------------------------------------------------------------------------- #
 # Stage B: per-window parameter estimation (port of daytime.estimate_parasets)
 # --------------------------------------------------------------------------- #
-def _estimate_parasets(D, nperday, verbose=1):
+def _estimate_parasets(D, nperday, verbose=1, reject_alpha_at_start=False):
     """Per-window LRC parameter estimation.
 
     ``D`` holds the year's arrays: nee_f, nee_fqc, tair_f, rg_f, vpd_f, rg_meas
@@ -401,7 +431,10 @@ def _estimate_parasets(D, nperday, verbose=1):
         day_begin2 = (i - 2) * WINSIZE / 2.0 if i > 1 else 0
         day_end2 = (i + 2) * WINSIZE / 2.0 + WINSIZE if i < n_parasets - 2 else float(np.max(julday))
 
-        central = int((day_begin + WINSIZE / 2.0) * 48.0)
+        # ONEFlux hardcodes 48 here because it duplicates hourly years to a
+        # half-hourly grid first (library.create_data_structures); diive keeps
+        # the input resolution, so the anchor uses the record count per day.
+        central = int((day_begin + WINSIZE / 2.0) * float(nperday))
         ind_rows = np.array([central, central, central], dtype=float)
 
         measured = (nee_fqc == 0)
@@ -455,7 +488,16 @@ def _estimate_parasets(D, nperday, verbose=1):
             # ONEFlux stores the fixed E0 driver column as float32.
             e0_arr_d = np.full(int(subd_m.sum()), e0, dtype=np.float32)
 
-            pj = np.zeros((3, 10))
+            # ONEFlux keeps the per-window parameter table in FLOAT_PREC
+            # (`estimate_parasets`: `params = numpy.zeros(..., dtype=FLOAT_PREC)`)
+            # and every branch test, the accept test and the carry-over of alpha
+            # and E0 to the next window read it back from there. Storing it in
+            # float64 instead is not a rounding detail: `check_parameters` ends
+            # in `params[0] != fguess[0]`, meant to reject a window whose alpha
+            # never moved off the 0.01 starting guess, and float32(0.01) is not
+            # equal to the Python float 0.01 - so in ONEFlux that guard never
+            # fires and those windows are accepted.
+            pj = np.zeros((3, 10), dtype=np.float32)
             indj = np.tile(ind_rows, (3, 1))
             rmse = np.zeros(3)
             wm = np.zeros(3, dtype=int)
@@ -573,12 +615,12 @@ def _estimate_parasets(D, nperday, verbose=1):
                     jtj[j] = 0
                     jtj[j, 0, 0] = np.asarray(r['cov_matrix']).flatten()[0]
 
-                if _check_parameters(pj[j]) == 0:
+                if _check_parameters(pj[j], reject_alpha_at_start) == 0:
                     rmse[j] = 9999.0
             # end for j
 
             jmin = int(np.where(rmse == np.min(np.abs(rmse)))[0][0])
-            if _check_parameters(pj[jmin]) == 1:
+            if _check_parameters(pj[jmin], reject_alpha_at_start) == 1:
                 params_ok.append(pj[jmin].copy())
                 ind_ok.append(indj[jmin].copy())
                 whichmodel_ok.append(int(wm[jmin]))
@@ -736,7 +778,7 @@ def _compute_var(n, tair_f, rg_f, vpd_f, params_ok, central, whichmodel, jtj_ok,
 # Orchestrator (one calendar year)
 # --------------------------------------------------------------------------- #
 def _partition_one_year(nee, ta, sw_in, ta_f, sw_in_f, vpd, julday, hr, nperday,
-                        verbose=1):
+                        verbose=1, reject_alpha_at_start=False):
     """Run the ONEFlux daytime partitioning for one year of -9999-sentinel arrays."""
     n = nee.size
     out = {c: np.full(n, np.nan) for c in
@@ -755,7 +797,8 @@ def _partition_one_year(nee, ta, sw_in, ta_f, sw_in_f, vpd, julday, hr, nperday,
     )
 
     # Stage B: per-window parameters
-    params_ok, ind_ok, whichmodel, jtj_ok, rescor = _estimate_parasets(D, nperday, verbose)
+    params_ok, ind_ok, whichmodel, jtj_ok, rescor = _estimate_parasets(
+        D, nperday, verbose, reject_alpha_at_start)
     if not params_ok:
         warn("Daytime partitioning (ONEFlux): no light-response curve could be "
              "fitted; year left unpartitioned.", verbose=verbose)
@@ -771,9 +814,14 @@ def _partition_one_year(nee, ta, sw_in, ta_f, sw_in_f, vpd, julday, hr, nperday,
     with np.errstate(invalid='ignore'):
         se_gpp = np.sqrt(var_gpp)
 
-    out['RECO_DT_OF'] = np.where(reco > NAN, reco, np.nan)
-    out['GPP_DT_OF'] = np.where(gpp > NAN, gpp, np.nan)
-    out['SE_GPP_DT_OF'] = np.where(se_gpp > NAN, se_gpp, np.nan)
+    # A missing gap-filled driver arrives here as the -9999 sentinel, which the
+    # models turn into a finite but meaningless flux (RECO at -9999 degC).
+    # ONEFlux reads a missing driver as NaN, which propagates through the same
+    # formulas, so blank the records whose drivers the flux depends on.
+    ta_ok, rg_ok, vpd_ok = _notnan(ta_f), _notnan(sw_in_f), _notnan(vpd)
+    out['RECO_DT_OF'] = np.where((reco > NAN) & ta_ok, reco, np.nan)
+    out['GPP_DT_OF'] = np.where((gpp > NAN) & rg_ok & vpd_ok, gpp, np.nan)
+    out['SE_GPP_DT_OF'] = np.where((se_gpp > NAN) & ta_ok & rg_ok & vpd_ok, se_gpp, np.nan)
 
     # report fitted parameters at their source central records (like ONEFlux)
     for r, p in zip(ind_ok, params_ok, strict=False):
@@ -817,6 +865,30 @@ class DaytimePartitioningOneFlux:
     uncertainty look-up, while the gap-filled drivers feed the fits and the
     flux prediction.
 
+    Input resolution: half-hourly and hourly data are both partitioned at their
+    own resolution. ONEFlux instead duplicates an hourly year onto a half-hourly
+    grid before partitioning, which is why its window anchors can assume 48
+    records per day. diive derives the records per day from the timestamps, so
+    hourly results stay on the hourly grid. For an hourly site this is a
+    deliberate deviation: the duplicated grid feeds every record twice into the
+    window fits, so results are close to, but not bit-identical with, a native
+    ONEFlux run.
+
+    Measured agreement, CH-DAV 2016 half-hourly against a native ONEFlux 1.3.7
+    run on the same arrays: the same 143 windows are fitted, all but four of
+    them agree on RRef, beta and alpha to better than 1%, and E0 agrees to
+    0.002 K. Per record, GPP r = 0.9999 (RMSE 0.061 umol m-2 s-1), RECO
+    r = 0.9996 (RMSE 0.068); annual sums differ by -0.06% (GPP) and -0.14%
+    (RECO).
+
+    What is left is not a port difference. In a few windows the VPD sensitivity
+    ``k`` converges to zero, and the model cascade branches on its sign, which
+    is then decided by rounding. ONEFlux itself takes a different path in such
+    windows when only its NumPy/SciPy versions change: with a gappy CH-DAV 2016
+    year, 6 windows differed between two ONEFlux runs (NumPy 1.24/SciPy 1.10 vs
+    NumPy 1.26/SciPy 1.17) and its annual GPP moved by 0.7%, more than diive
+    differs from either run.
+
     Example: ``examples/flux/partitioning/partitioning_daytime_oneflux.py``
 
     Example:
@@ -836,6 +908,7 @@ class DaytimePartitioningOneFlux:
                  sw_in_f: Series,
                  vpd: Series,
                  vpd_in_kpa: bool = True,
+                 reject_alpha_at_start: bool = False,
                  verbose: int = 2):
         """
         Args:
@@ -858,11 +931,19 @@ class DaytimePartitioningOneFlux:
                 ``vpd`` is already in hPa.
             vpd_in_kpa: If True (default), ``vpd`` is in kPa and multiplied by 10
                 to hPa internally.
+            reject_alpha_at_start: ONEFlux's window check is meant to reject a
+                window whose alpha never moved off its starting value of 0.01,
+                but in ONEFlux 1.3.7 the check compares a float32 against a
+                float64 and never fires. False (default) reproduces ONEFlux, so
+                the results match its output. True applies the check as ONEFlux's
+                own comment intends. On CH-DAV 2016 that rejects 7 more windows
+                and raises annual GPP by 5.7%, in ONEFlux and here alike.
             verbose: Console verbosity level (0 silent, 1 warnings, 2 progress
                 + report, 3 debug). Default 2.
         """
         self._inputs = self._validate(nee, ta, sw_in, ta_f, sw_in_f, vpd)
         self.vpd_in_kpa = bool(vpd_in_kpa)
+        self.reject_alpha_at_start = bool(reject_alpha_at_start)
         self.verbose = verbose
         self._results: DataFrame | None = None
 
@@ -908,6 +989,14 @@ class DaytimePartitioningOneFlux:
 
         for year in np.unique(years):
             ym = years == year
+            julday = julday_all[ym]
+            # The END timestamp of a year's last record already belongs to the
+            # next year, so its day-of-year wraps to 1 and the record would be
+            # pooled into the January windows. ONEFlux repairs the same wrap in
+            # library.create_data_structures (365 -> 366, 366 -> 367).
+            if julday.size > 1 and julday[-1] == 1 and julday[-2] in (365.0, 366.0):
+                julday = julday.copy()
+                julday[-1] = julday[-2] + 1
             out = _partition_one_year(
                 nee=_to_sentinel(df['nee'].to_numpy()[ym]),
                 ta=_to_sentinel(df['ta'].to_numpy()[ym]),
@@ -915,8 +1004,8 @@ class DaytimePartitioningOneFlux:
                 ta_f=_to_sentinel(df['ta_f'].to_numpy()[ym]),
                 sw_in_f=_to_sentinel(df['sw_in_f'].to_numpy()[ym]),
                 vpd=_to_sentinel(df['vpd'].to_numpy()[ym] * vpd_factor),
-                julday=julday_all[ym], hr=hr_all[ym], nperday=nperday,
-                verbose=self.verbose)
+                julday=julday, hr=hr_all[ym], nperday=nperday,
+                verbose=self.verbose, reject_alpha_at_start=self.reject_alpha_at_start)
             for col in cols:
                 result.loc[ym, col] = out[col]
 
@@ -963,6 +1052,7 @@ class DaytimePartitioningOneFlux:
 def partition_nee_daytime_oneflux(nee: Series, ta: Series, sw_in: Series,
                                   ta_f: Series, sw_in_f: Series, vpd: Series,
                                   vpd_in_kpa: bool = True,
+                                  reject_alpha_at_start: bool = False,
                                   verbose: int = 2) -> DataFrame:
     """Functional wrapper around :class:`DaytimePartitioningOneFlux`.
 
@@ -973,4 +1063,5 @@ def partition_nee_daytime_oneflux(nee: Series, ta: Series, sw_in: Series,
     """
     return DaytimePartitioningOneFlux(
         nee=nee, ta=ta, sw_in=sw_in, ta_f=ta_f, sw_in_f=sw_in_f, vpd=vpd,
-        vpd_in_kpa=vpd_in_kpa, verbose=verbose).run().results
+        vpd_in_kpa=vpd_in_kpa, reject_alpha_at_start=reject_alpha_at_start,
+        verbose=verbose).run().results

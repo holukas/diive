@@ -151,6 +151,7 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
                         sym_mean: bool = False,
                         fill_all: bool = False,
                         longest_marginal_gap: int = 60,
+                        edge: str = 'trim',
                         progress_callback=None):
     """Faithful ONEFlux MDS marginal-distribution-sampling cascade.
 
@@ -181,6 +182,12 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
             otherwise only at missing ``tofill`` records (gap-filling mode).
         longest_marginal_gap: leading/trailing gaps longer than this many days
             are left unfilled (ONEFlux ``longestMarginalgap``).
+        edge: how a look-up window that runs past the start or the end of the
+            record is handled, matching the caller's own ONEFlux reference:
+            ``'trim'`` drops the out-of-range offsets (the C ``gf_mds`` tool),
+            ``'clip'`` folds them onto record 0 / n-1 so the edge record enters
+            the mean, SD and count repeatedly (the Python
+            ``daytime.uncert_via_gapFill``).
         progress_callback: optional ``callable(gaps_filled, total_gaps, quality)``
             invoked during/after each cascade pass (gap counts + the current
             1/2/3 quality), for a progress bar.
@@ -193,8 +200,8 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
     # Preserve the input dtype for the tolerance comparisons: callers that store
     # float32 (ONEFlux FLOAT_PREC, e.g. the daytime-partitioning uncertainty)
     # get float32 boundary behaviour matching native ONEFlux, while the float64
-    # MDS gap-filler keeps full precision. The mean/SD reduction is always done
-    # in float64 (matching ONEFlux's scipy ``tmean``/``tstd``).
+    # MDS gap-filler keeps full precision. The mean/SD reduction runs in the
+    # input dtype for the same reason (see ``fill_at``).
     tofill = np.asarray(tofill)
     swin = np.asarray(swin)
     ta = np.asarray(ta)
@@ -243,23 +250,32 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
             off = np.append(-np.arange(t_window / 2.0 * nperday),
                             np.arange(t_window / 2.0 * nperday - 1) + 1)
             _offset_cache[t_window] = off
-        # Trim to the record, do NOT clip: ONEFlux narrows the window bounds
-        # (`common.c:2525-2533`: `if (window_start < 0) window_start = 0;` /
-        # `if (window_end > end_window) window_end = end_window;` and then loops
-        # `window_current < window_end`), and its diurnal method skips
-        # out-of-range positions outright (`:2630`). Either way a real record
-        # enters a fill at most once. Clipping instead folded every out-of-range
-        # offset onto record 0 (or n-1), so near the ends of the record the edge
-        # value was counted hundreds of times in the mean, the SD and the count -
-        # and the cascade's largest window is +/- 427 days, which reaches that
-        # bias more than a year deep into each end.
         w = index + off
-        w = w[(w >= 0) & (w < n)]
+        if edge == 'clip':
+            # Fold out-of-range offsets onto record 0 / n-1, so the edge record
+            # enters the mean, SD and count once per folded offset. This is what
+            # ONEFlux's own Python `daytime.uncert_via_gapFill` does
+            # (`numpy.clip(w, 0, n - 1, out=w)` in each of its six loops), and
+            # the daytime-partitioning uncertainty is measured against that.
+            w = np.clip(w, 0, n - 1)
+        else:
+            # Trim to the record: ONEFlux's C `gf_mds` tool narrows the window
+            # bounds instead (`common.c:2525-2533`: `if (window_start < 0)
+            # window_start = 0;` / `if (window_end > end_window) window_end =
+            # end_window;` and then loops `window_current < window_end`), and its
+            # diurnal method skips out-of-range positions outright (`:2630`).
+            # Either way a real record enters a fill at most once. This is the
+            # MDS gap-filler's reference, so it stays the default.
+            w = w[(w >= 0) & (w < n)]
         return w.astype(int)
 
     def fill_at(index, sel, m, tw):
         # Reduce in the input dtype: float32 callers (daytime uncertainty) match
         # ONEFlux's float32 tmean/tstd; the float64 MDS gap-filler stays f8.
+        # This cannot be made bitwise-exact against a reference run, because
+        # scipy's tstd has changed how it accumulates between versions (recent
+        # ones stay in the input dtype, older ones cast to float64 first). The
+        # spread either way is under one float32 ulp of the result.
         vals = tofill[sel]
         # Symmetric mean (Vekuri 2023): split the similar samples by whether the
         # candidate's SWIN is above/below the target's, average the two sub-means

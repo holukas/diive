@@ -66,14 +66,14 @@ class SurfaceXYZTab(Surface3DTab):
         self.nbins.setToolTip("Number of equal-width X and Y bins the scattered "
                               "points are gridded into (finer = more, smaller "
                               "cells).")
-        self.nbins.valueChanged.connect(self._rerender_view)
+        self.nbins.valueChanged.connect(self._rerender_debounce.trigger)
         form.addRow("Bins (X/Y)", self.nbins)
 
         self.agg = QComboBox()
         self.agg.addItems(list(_XYZ_AGGS))
         self.agg.setToolTip("How the Z values that fall in each X/Y cell are "
                             "combined into the cell's height/colour.")
-        self.agg.currentTextChanged.connect(self._rerender_view)
+        self.agg.currentTextChanged.connect(self._rerender_debounce.trigger)
         form.addRow("Z aggregator", self.agg)
 
     # --- selection / data flow -----------------------------------------

@@ -63,6 +63,7 @@ class SpectrogramTab(SingleVariableExplorerTab):
         self._valid_index = None    # timestamps of the non-NaN samples
         self._rec_per_day = 1.0
         self._error = None
+        self._mesh = None           # the drawn QuadMesh, restyled in place
 
     def _build_right(self) -> QWidget:
         right = QWidget()
@@ -157,9 +158,19 @@ class SpectrogramTab(SingleVariableExplorerTab):
             self._on_select(t)
 
     def _on_view_changed(self, _v=None) -> None:
-        # Frequency limit / colormap are cheap -> re-render without recomputing.
-        if self._spec is not None:
-            self._render()
+        # Frequency limit / colormap only restyle the drawn mesh; no recompute
+        # and no new mesh. While a compute runs the shown mesh is about to be
+        # replaced, and the new one picks the settings up when it is drawn.
+        if self._computing():
+            return
+        mesh = self._mesh
+        if mesh is None or mesh.axes is None or mesh.axes not in self.canvas.fig.axes:
+            if self._spec is not None:
+                self._render()
+            return
+        mesh.axes.set_ylim(0, self.max_freq.value())
+        mesh.set_cmap(self.cmap.currentText())  # the colorbar follows the mesh
+        self.canvas.draw()
 
     # --- codegen -------------------------------------------------------
     def _python_code(self) -> str | None:
@@ -174,30 +185,40 @@ class SpectrogramTab(SingleVariableExplorerTab):
             max_cycles_per_day=self.max_freq.value(),
             cmap=self.cmap.currentText())
 
-    def _compute(self) -> None:
-        series = self._df[self._target]
-        valid = series.dropna()
-        self._valid_index = valid.index
+    def _compute_request(self) -> tuple:
+        nperseg = self.nperseg.value()
+        return (self._df[self._target], nperseg,
+                int(nperseg * self.overlap.value() / 100),
+                self.window.currentText())
+
+    @staticmethod
+    def _compute_payload(series, nperseg, noverlap, window):
         # Records per day from the index spacing -> frequency in cycles/day.
-        delta = pd.Series(self._df.index).diff().median()
-        self._rec_per_day = (
+        delta = pd.Series(series.index).diff().median()
+        rec_per_day = (
             pd.Timedelta("1D") / delta
             if pd.notna(delta) and delta > pd.Timedelta(0) else 1.0)
-        nperseg = self.nperseg.value()
-        noverlap = int(nperseg * self.overlap.value() / 100)
-        self._spec = None
-        self._error = None
+        spec = None
+        error = None
         try:
             # The transform itself is the library's; the tab only reads it back.
-            self._spec = dv.analysis.spectrogram(
-                series, nperseg=nperseg, noverlap=noverlap,
-                window=self.window.currentText())
+            spec = dv.analysis.spectrogram(
+                series, nperseg=nperseg, noverlap=noverlap, window=window)
         except Exception as err:
-            self._error = str(err)
+            error = str(err)
+        return {"spec": spec, "error": error, "rec_per_day": rec_per_day,
+                "valid_index": series.dropna().index}
+
+    def _render_payload(self, payload) -> None:
+        self._spec = payload["spec"]
+        self._error = payload["error"]
+        self._rec_per_day = payload["rec_per_day"]
+        self._valid_index = payload["valid_index"]
         self._render()
 
     # --- rendering -----------------------------------------------------
     def _render(self) -> None:
+        self._mesh = None
         if self._spec is None:
             self.canvas.show_message(self._error or "No spectrogram")
             return
@@ -222,5 +243,6 @@ class SpectrogramTab(SingleVariableExplorerTab):
             cb = self.canvas.fig.colorbar(mesh, ax=ax, fraction=0.025, pad=0.01)
             cb.set_label("Power (dB)")
             self.canvas.draw()
+            self._mesh = mesh
         except Exception as err:
             self.canvas.show_message(f"Cannot plot:\n{err}")

@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -125,6 +126,72 @@ class TestNighttimePartitioningOneFlux(unittest.TestCase):
         with self.assertRaises(TypeError):
             NighttimePartitioningOneFlux(nee=bad, ta=bad, sw_in=bad, nee_f=bad,
                                   ta_f=bad, lat=self.lat, verbose=0)
+
+    def _run_on(self, df):
+        from diive.flux.partitioning import NighttimePartitioningOneFlux
+        return NighttimePartitioningOneFlux(
+            nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
+            nee_f=df['NEE_CUT_REF_f'], ta_f=df['Tair_f'], lat=self.lat,
+            verbose=0).run().results
+
+    def test_hour_and_day_come_from_the_period_end(self):
+        # The index stays MIDDLE, but ONEFlux takes the hour and day of year of
+        # the period END, and repairs the year's last record, whose END falls on
+        # 1 January, to 366 (367 in a leap year).
+        from diive.flux.partitioning import nighttime_oneflux as mod
+        seen = []
+
+        def stub(**kwargs):
+            seen.append((np.asarray(kwargs['doy']), np.asarray(kwargs['hr'])))
+            n = len(kwargs['hr'])
+            return {c: np.full(n, np.nan) for c in (
+                'NEE_NIGHT_OF', 'RECO_NT_OF', 'RECO_NT_OF_ROB', 'GPP_NT_OF',
+                'GPP_NT_OF_ROB', 'RREF_NT_OF', 'E0_NT_OF')}
+
+        with mock.patch.object(mod, '_partition_one_year', side_effect=stub):
+            self._run_on(self.df)
+        doy, hr = seen[0]  # 2017; the first record is 00:15 MIDDLE
+        self.assertEqual(hr[0], 0.5)
+        self.assertTrue(np.all(np.mod(hr, 0.5) == 0))
+        self.assertEqual(doy[0], 1)
+        self.assertEqual(doy[-2], 365)
+        self.assertEqual(doy[-1], 366)
+
+    def test_missing_sw_in_does_not_exclude_night_records(self):
+        # ONEFlux stores a missing SW_IN as -9999, which passes its `< 10`
+        # night test; only the sunrise/sunset flag decides then. Blank SW_IN on
+        # measured records around midnight, which are night on any day.
+        df = self.df.copy()
+        midnight = (df.index.hour == 0) & df['NEE_CUT_REF_orig'].notna()
+        df.loc[midnight, 'Rg_orig'] = np.nan
+        res = self._run_on(df)
+        self.assertGreater(int(midnight.sum()), 0)
+        self.assertTrue(res.loc[midnight, 'NEE_NIGHT_OF'].notna().all())
+
+    def test_equinox_sunrise_record_counts_as_night(self):
+        # ONEFlux compares the hour against sunrise/sunset in float32. On day 80
+        # sunrise is 5.99999990 in float64 but exactly 6.0 in float32, so the
+        # record ending 06:00 is not after sunrise and counts as night.
+        df = self.df.copy()
+        t = pd.Timestamp('2017-03-21 05:45')  # END 06:00 on day 80
+        df.loc[t, 'NEE_CUT_REF_orig'] = 1.5
+        df.loc[t, 'Rg_orig'] = 0.0
+        res = self._run_on(df)
+        self.assertEqual(res.loc[t, 'NEE_NIGHT_OF'], 1.5)
+
+    def test_rref_knot_uses_the_truncated_window_midpoint(self):
+        # ONEFlux places each window's Rref at int(mean(indices)), a truncation.
+        # Two windows of four records each: knot at index 1 and index 5, so
+        # index 2 is interpolated between the two (2.2). Rounding would put the
+        # knot on index 2 itself (2.0).
+        from diive.flux.partitioning.nighttime_oneflux import _reanalyse_rref
+        julday_dec = np.array([2, 3, 4, 5, 12, 13, 14, 15], dtype=float)
+        nee_night = np.array([1.8, 2.2, 1.9, 2.1, 3.8, 4.2, 3.9, 4.1])
+        tair = np.full(8, 15.0)  # Lloyd-Taylor factor is exactly 1 at TREF
+        _, _, rref = _reanalyse_rref(nee_night, tair, tair, julday_dec,
+                                     e0=200.0, step=10, window=10)
+        self.assertAlmostEqual(rref[1], 2.0)
+        self.assertAlmostEqual(rref[2], 2.2)
 
     def test_results_before_run_raises(self):
         from diive.flux.partitioning import NighttimePartitioningOneFlux

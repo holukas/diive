@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.debounce import Debouncer
 from diive.gui.widgets.colormaps import colormap_combo
 from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.variable_delegate import (
@@ -89,6 +90,10 @@ class SettingsTab(DiiveTab):
         self._swatches: list[_ColorSwatch] = []
 
         root = QWidget()
+        # The width spinbox and the editable colormap field change on every step
+        # or keystroke; restyling the whole app each time stalls, so the value is
+        # set at once and the app-wide apply() waits until input settles.
+        self._apply_debounce = Debouncer(root, theme.manager.apply)
         root_lay = QVBoxLayout(root)
         root_lay.setContentsMargins(0, 0, 0, 0)
         root_lay.setSpacing(0)
@@ -192,12 +197,11 @@ class SettingsTab(DiiveTab):
         form.addRow("Preview heatmaps", self.cmap_combo)
         return box
 
-    @staticmethod
-    def _set_heatmap_cmap(name: str) -> None:
+    def _set_heatmap_cmap(self, name: str) -> None:
         name = name.strip()
         if name:
             theme.manager.heatmap_cmap = name
-            theme.manager.apply()
+            self._apply_debounce.trigger()
 
     def _layout_group(self) -> QGroupBox:
         box = QGroupBox("Layout")
@@ -211,10 +215,9 @@ class SettingsTab(DiiveTab):
         form.addRow("Variable list width", self.width_spin)
         return box
 
-    @staticmethod
-    def _set_list_width(value: int) -> None:
+    def _set_list_width(self, value: int) -> None:
         theme.manager.list_width = value
-        theme.manager.apply()
+        self._apply_debounce.trigger()
 
     def _swatch(self, get_hex, set_hex) -> _ColorSwatch:
         sw = _ColorSwatch(get_hex, set_hex)

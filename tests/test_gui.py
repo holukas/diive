@@ -15,6 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import gc
 import sys
 import threading
+import time
 import traceback
 
 import pandas as pd
@@ -77,6 +78,22 @@ def slot_exceptions():
 @pytest.fixture(scope="module")
 def app():
     yield QApplication.instance() or QApplication([])
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _worker_process():
+    """Stop the shared worker process after this module's tests.
+
+    Tabs with ``use_process`` (Seasonal trend) compute in one worker process
+    that stays alive between jobs, so the module pays for spawning it once.
+    Nothing stops it in the tests themselves (the app does it on quit), so it
+    is stopped here, and no child process may outlive the module.
+    """
+    yield
+    import multiprocessing
+    from diive.gui.widgets.worker import shutdown_process_pool
+    shutdown_process_pool()
+    assert multiprocessing.active_children() == []
 
 
 @pytest.fixture(scope="module")
@@ -178,6 +195,25 @@ def _axes_replaced(canvas, previous):
     ids) so a recycled address cannot fake a match.
     """
     return all(ax not in canvas.fig.axes for ax in previous)
+
+
+def _wait_for_worker(tab, timeout: float = 120.0) -> None:
+    """Pump the event loop until the tab's background compute has been drawn.
+
+    Tabs that compute on a `LatestRunner` return from a selection at once and
+    draw the result when the worker thread hands it back, so a fixed number of
+    `processEvents()` calls no longer guarantees the result is there.
+    `is_busy` stays True until the result has been delivered on the GUI thread
+    (see `WorkerRunner`), so once it reads False the render has run.
+    """
+    deadline = time.monotonic() + timeout
+    while tab._runner.is_busy:
+        if time.monotonic() > deadline:
+            raise AssertionError(f"{type(tab).__name__}: worker still busy "
+                                 f"after {timeout:.0f} s")
+        QApplication.processEvents()
+        time.sleep(0.005)
+    QApplication.processEvents()
 
 
 def test_default_tabs(window):
@@ -342,6 +378,51 @@ def test_multi_instance_plot_tabs(window):
     assert "Heatmap date/time 1" in _tabs(window)
     assert "Heatmap date/time 2" in _tabs(window)
     assert "Time series 1" in _tabs(window)
+
+
+def test_menu_tabs_are_registered_lazily():
+    """Every menu tab is a `LazyTab` in the tabs package and resolves to a tab.
+
+    The string paths are only checked when a tab is opened, so a typo would
+    otherwise surface as a menu entry that crashes. The package check matters
+    for the frozen build: the PyInstaller spec bundles `diive.gui.tabs` whole,
+    because it cannot follow the string imports.
+    """
+    import pathlib
+
+    from diive.gui.registry import MENU_TAB_CLASSES, TABS_PACKAGE, LazyTab
+    from diive.gui.tabs.base import DiiveTab
+
+    for label, factory in MENU_TAB_CLASSES.items():
+        assert isinstance(factory, LazyTab), label
+        assert factory.module.startswith(TABS_PACKAGE + "."), label
+        assert issubclass(factory.load(), DiiveTab), label
+
+    spec = pathlib.Path(__file__).resolve().parent.parent / "packaging" / "diive_gui.spec"
+    if spec.exists():
+        assert f'collect_submodules("{TABS_PACKAGE}")' in spec.read_text(encoding="utf-8")
+
+
+def test_gui_app_import_leaves_the_ml_stack_unloaded():
+    """Importing the main window must not import the tab modules' heavy deps.
+
+    The registry used to import all ~45 tab modules, which pulled in xgboost,
+    scikit-learn, statsmodels and the flux chain before the splash could hide.
+    Run in a fresh interpreter: this test session has imported all of them.
+    """
+    import pathlib
+    import subprocess
+
+    heavy = ["xgboost", "sklearn", "statsmodels", "shap", "diive.flux",
+             "diive.gapfilling"]
+    code = ("import sys, diive.gui.app; "
+            f"print([m for m in {heavy!r} if m in sys.modules])")
+    root = pathlib.Path(__file__).resolve().parent.parent
+    env = dict(os.environ, PYTHONPATH=str(root))
+    out = subprocess.run([sys.executable, "-c", code], env=env, cwd=root,
+                         capture_output=True, text=True, timeout=120)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip().splitlines()[-1] == "[]"
 
 
 def test_close_tab_focuses_previous_not_log(window):
@@ -993,7 +1074,7 @@ def test_overview_layout_stable_on_zoom(window):
     # computed at the tiny pre-show size stays collapsed). After a resize the
     # bottom panels should have a sensible (non-collapsed) width.
     fig.set_size_inches(20, 11)
-    overview.canvas._on_resize(None)
+    overview.canvas._solve_layout()
     QApplication.processEvents()
     bottom_widths = [a.get_position().width for a in fig.axes
                      if a.get_position().y0 < 0.45]
@@ -1046,6 +1127,28 @@ def test_hover_value_lookup(app, example_year):
     assert marker2 is False
     assert f"{float(vals[5, 10]):.4g}" in text2
 
+    # The same heatmap drawn as an image reads the same cell and value.
+    canvas2i = MplCanvas()
+    ax2i = canvas2i.new_axes(1)[0]
+    dv.plotting.HeatmapDateTime(series).plot(
+        ax=ax2i, fig=canvas2i.fig, cb_digits_after_comma="auto", as_image=True)
+    canvas2i.draw()
+    text2i = canvas2i.hover._value_at(ax2i, ev2)[2]
+    assert text2i == text2
+
+    # A line drawn thinned answers from the full record it carries.
+    canvas4 = MplCanvas()
+    ax4 = canvas4.new_axes(1)[0]
+    dv.plotting.TimeSeries(series).plot(ax=ax4)
+    thin = ax4.get_lines()[0]
+    thin._diive_hover_xy = (x, y)
+    thin.set_data(x[::50], y[::50])  # sample 5001 is no longer drawn
+    canvas4.draw()
+    px4, py4 = ax4.transData.transform((x[i + 1], y[i + 1]))
+    ev4 = types.SimpleNamespace(inaxes=ax4, xdata=x[i + 1], ydata=y[i + 1], x=px4, y=py4)
+    hx4, hy4, _, _ = canvas4.hover._value_at(ax4, ev4)
+    assert (hx4, hy4) == (x[i + 1], y[i + 1])
+
     # Scatter panel: snaps to the nearest point and reports x, y (+ z when the
     # points are colour-coded).
     canvas3 = MplCanvas()
@@ -1054,8 +1157,8 @@ def test_hover_value_lookup(app, example_year):
     y3 = example_year["NEE_CUT_REF_f"]
     dv.plotting.ScatterXY(x=x3, y=y3, z=x3.copy()).plot(ax=ax3, show_colorbar=True)
     canvas3.draw()
-    coll = next(c for c in ax3.collections
-                if c.__class__.__name__ == "PathCollection")
+    from matplotlib.collections import PathCollection
+    coll = next(c for c in ax3.collections if isinstance(c, PathCollection))
     offs = np.asarray(coll.get_offsets(), float)
     j = len(offs) // 2
     pj = ax3.transData.transform(offs[j])
@@ -1068,6 +1171,577 @@ def test_hover_value_lookup(app, example_year):
     ev_far = types.SimpleNamespace(inaxes=ax3, xdata=offs[j, 0], ydata=offs[j, 1],
                                    x=pj[0] + 500, y=pj[1] + 500)
     assert canvas3.hover._scatter_value(ax3, coll, ev_far) is None
+
+
+def test_hover_scatter_picks_the_nearest_point_from_a_per_draw_cache(app, example_year):
+    # The scatter lookup searches pixel positions cached per draw and sorted by
+    # x. It must answer exactly what a search over every point answers, and a
+    # redraw (pan/zoom/resize) must drop the cached positions.
+    import types
+    import numpy as np
+    from diive.gui.widgets.hover import _SCATTER_PICK_RADIUS
+    from diive.gui.widgets.mpl_canvas import MplCanvas
+
+    canvas = MplCanvas()
+    ax = canvas.new_axes(1)[0]
+    dv.plotting.ScatterXY(x=example_year["Tair_f"],
+                          y=example_year["NEE_CUT_REF_f"]).plot(ax=ax)
+    canvas.draw()
+    coll = ax.collections[0]
+    offs = np.asarray(coll.get_offsets(), float)
+    hover = canvas.hover
+
+    def brute_force(ev):
+        pix = ax.transData.transform(offs)
+        d2 = (pix[:, 0] - ev.x) ** 2 + (pix[:, 1] - ev.y) ** 2
+        i = int(np.argmin(d2))
+        return None if d2[i] > _SCATTER_PICK_RADIUS ** 2 else tuple(offs[i])
+
+    rng = np.random.default_rng(1)
+    bbox = ax.bbox
+    events = []
+    for px, py in zip(rng.uniform(bbox.x0, bbox.x1, 300), rng.uniform(bbox.y0, bbox.y1, 300)):
+        xd, yd = ax.transData.inverted().transform((px, py))
+        events.append(types.SimpleNamespace(inaxes=ax, xdata=xd, ydata=yd, x=px, y=py))
+    answered = 0
+    for ev in events:
+        hit = hover._scatter_value(ax, coll, ev)
+        expected = brute_force(ev)
+        if expected is None:
+            assert hit is None
+        else:
+            answered += 1
+            assert (hit[0], hit[1]) == expected
+    assert answered > 50  # the sample really exercised the hit path
+    assert id(coll) in hover._scatter_cache
+
+    # A zoom changes every pixel position: the draw clears the cache and the
+    # next lookup answers for the new view.
+    x0, x1 = ax.get_xlim()
+    ax.set_xlim(x0, x0 + (x1 - x0) / 4)
+    canvas.draw()
+    assert hover._scatter_cache == {}
+    j = int(np.argmin(np.abs(offs[:, 0] - (x0 + (x1 - x0) / 8))))
+    pj = ax.transData.transform(offs[j])
+    ev = types.SimpleNamespace(inaxes=ax, xdata=offs[j, 0], ydata=offs[j, 1], x=pj[0], y=pj[1])
+    hx, hy, _, _ = hover._scatter_value(ax, coll, ev)
+    assert (hx, hy) == brute_force(ev)
+
+
+def test_overview_time_series_dates_and_markers(window):
+    # The time series keeps its dated tick labels without a redraw hook, after
+    # the render and after a zoom (the diel cycle is redrawn on zoom).
+    overview = window._tabs[0]
+    overview._on_select("NEE_CUT_REF_f")
+    QApplication.processEvents()
+    ts_ax = overview._shared_x_ax
+    x0, x1 = ts_ax.get_xlim()
+    for lim in (None, (x0 + (x1 - x0) * 0.3, x0 + (x1 - x0) * 0.6)):
+        if lim is not None:
+            ts_ax.set_xlim(*lim)
+        overview.canvas.draw()
+        ticks = ts_ax.xaxis.get_major_ticks()
+        assert ticks and all(t.label1.get_visible() for t in ticks)
+
+    # A long record draws no per-record markers, but a value with a gap on
+    # both sides still gets one, since it has no line segment to show it.
+    import numpy as np
+    from matplotlib.figure import Figure
+    idx = pd.date_range("2021-01-01", periods=6000, freq="30min")
+    series = pd.Series(np.linspace(1.0, 2.0, len(idx)), index=idx, name="X")
+    series.iloc[[100, 102]] = np.nan
+    ax = Figure().add_subplot()
+    overview._draw_panel(ax, series, "Time series")
+    main, isolated = ax.get_lines()
+    assert main.get_marker() in (None, "None")
+    assert list(isolated.get_xdata()) == [idx[101]]
+    assert isolated.get_marker() == "o"
+
+
+def test_overview_time_series_drawn_thinned_but_hover_reads_every_record(window):
+    # A long series is drawn thinned for its view, keeping every column's
+    # extremes, while the hover still snaps to any record of the full series.
+    import types
+    import numpy as np
+    overview = window._tabs[0]
+    overview._on_select("NEE_CUT_REF_f")
+    QApplication.processEvents()
+    series = overview._df["NEE_CUT_REF_f"]
+    ts_ax, line = overview._shared_x_ax, overview._ts_line
+    assert line is not None and line in ts_ax.get_lines()
+    full_x, full_y = line._diive_hover_xy
+    assert len(full_y) == len(series)
+    np.testing.assert_array_equal(full_y, series.to_numpy(float))
+    drawn_y = np.asarray(line.get_ydata(orig=False), float)
+    assert len(drawn_y) < len(series)
+    assert np.nanmax(drawn_y) == series.max() and np.nanmin(drawn_y) == series.min()
+
+    # Hover on a record the thinned line left out: exact value and time.
+    drawn_x = set(np.asarray(line.get_xdata(orig=False), float))
+    i = next(k for k in range(5000, len(full_x)) if full_x[k] not in drawn_x
+             and np.isfinite(full_y[k]))
+    px, py = ts_ax.transData.transform((full_x[i], full_y[i]))
+    ev = types.SimpleNamespace(inaxes=ts_ax, xdata=full_x[i], ydata=full_y[i], x=px, y=py)
+    hx, hy, text, _ = overview.canvas.hover._value_at(ts_ax, ev)
+    assert (hx, hy) == (full_x[i], full_y[i])
+    assert series.index[i].strftime("%Y-%m-%d %H:%M") in text
+
+    # Zoomed in to a few days, the line holds every record of the window again.
+    ts_ax.set_xlim(full_x[i] - 2, full_x[i] + 2)
+    x_now = np.asarray(line.get_xdata(orig=False), float)
+    in_window = full_x[(full_x >= full_x[i] - 2) & (full_x <= full_x[i] + 2)]
+    assert set(in_window) <= set(x_now) and len(x_now) <= len(in_window) + 2
+
+
+def test_overview_heatmap_is_an_image_with_hover_clamp_and_events(window):
+    # The Overview heatmap is drawn as an image: hover reads its cells, zoom
+    # clamps its date axis to the data, and event overlays still land on it.
+    import types
+    import numpy as np
+    from matplotlib.collections import QuadMesh
+    from matplotlib.image import AxesImage
+    from diive.events import Event
+    from diive.gui import events
+    overview = window._tabs[0]
+    overview._on_select("Tair_f")
+    QApplication.processEvents()
+    hm = overview._heatmap_ax
+    image = hm.get_images()[0]
+    assert isinstance(image, AxesImage)
+    assert not any(isinstance(c, QuadMesh) for c in hm.collections)
+
+    grid = overview._df["Tair_f"]
+    xb, yb, vals = overview.canvas.hover._image_grid(image)
+    ev = types.SimpleNamespace(inaxes=hm, xdata=0.5 * (xb[10] + xb[11]),
+                               ydata=0.5 * (yb[40] + yb[41]), x=0, y=0)
+    _, _, text, marker = overview.canvas.hover._value_at(hm, ev)
+    assert marker is False and f"{vals[40, 10]:.4g}" in text
+    # Row 40 is the 41st day of the record, column 10 its 05:00-05:30 slot.
+    day = grid.index.normalize().unique()[40]
+    assert day.strftime("%Y-%m-%d") in text
+
+    # Zooming past the end of the record clamps the heatmap to the data.
+    ts_ax = overview._shared_x_ax
+    lo, hi = overview._heatmap_ylim
+    ts_ax.set_xlim(hi - 20, hi + 200)
+    assert hm.get_ylim() == (hi - 20, hi)
+
+    # A period event draws its band on the heatmap's date axis.
+    start = grid.index.min() + pd.Timedelta("20D")
+    events.manager.add(Event("Graze", start, start + pd.Timedelta("3D"), category="grazing"))
+    try:
+        overview.refresh_events()
+        hm = overview._heatmap_ax
+        import matplotlib.dates as mdates
+        spans = [p for p in hm.patches if abs(p.get_y() - mdates.date2num(start)) < 1e-6]
+        assert spans, "no event band on the heatmap"
+    finally:
+        events.manager.clear()
+
+
+def test_overview_event_overlays_sit_above_the_heatmap(window):
+    # The heatmap image is drawn at a high zorder; the event overlays must be
+    # drawn above it, not hidden under it, while the line panels keep theirs.
+    import matplotlib.dates as mdates
+    import numpy as np
+    from diive.events import Event
+    from diive.gui import events
+    overview = window._tabs[0]
+    overview._on_select("Tair_f")
+    overview.varpanel.flush_pending()
+    index = overview._df.index
+    when = index[len(index) // 2].normalize()
+    events.manager.add(Event("Swap", when, color="#00FF00"))
+    try:
+        overview.refresh_events()
+        hm = overview._heatmap_ax
+        image = hm.get_images()[0]
+        marks = [ln for ln in hm.lines if ln.get_color() == "#00FF00"]
+        assert marks and all(ln.get_zorder() > image.get_zorder() for ln in marks)
+        ts_marks = [ln for ln in overview._shared_x_ax.lines
+                    if ln.get_color() == "#00FF00"]
+        assert ts_marks and all(ln.get_zorder() == 3 for ln in ts_marks)
+
+        # And the line shows in the rendered heatmap.
+        fig = overview.canvas.fig
+        fig.canvas.draw()
+        buf = np.asarray(fig.canvas.buffer_rgba())[:, :, :3].astype(int)
+        _, py = hm.transData.transform((0, mdates.date2num(when)))
+        row = buf.shape[0] - int(round(py))
+        x0, x1 = (int(v) for v in hm.bbox.intervalx)
+        band = buf[row - 2:row + 3, x0 + 2:x1 - 2].reshape(-1, 3)
+        green = (band[:, 1] > 200) & (band[:, 0] < 60) & (band[:, 2] < 60)
+        assert green.sum() > 10
+    finally:
+        events.manager.clear()
+
+
+def test_overview_lays_out_at_laptop_size_and_after_resizes(window):
+    # At a laptop-sized canvas the lower panels and the heatmap keep a usable
+    # size instead of collapsing, and shrinking and growing the canvas again
+    # restores them. The diel legend falls back to coloured month names when
+    # its panel is too narrow for the full legend.
+    import warnings
+    from matplotlib.legend import Legend
+    overview = window._tabs[0]
+    canvas = overview.canvas
+
+    def settle():
+        QApplication.sendPostedEvents()
+        QApplication.processEvents()
+        if canvas._relayout_timer.isActive():
+            canvas._relayout_timer.timeout.emit()
+        QApplication.processEvents()
+
+    def panels():
+        canvas.fig.canvas.draw()
+        return {ax.get_title(): (round(ax.bbox.width), round(ax.bbox.height))
+                for ax in canvas.fig.axes if ax.get_title()}
+
+    def diel_legends_shown():
+        return [lg.get_visible() for lg in overview._diel_ax.get_children()
+                if isinstance(lg, Legend)]
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        canvas._canvas.setFixedSize(1100, 700)
+        settle()
+        overview._on_select("NEE_CUT_REF_f")
+        overview.varpanel.flush_pending()
+        settle()
+        boxes = panels()
+        assert len(boxes) == 7
+        assert all(w >= 100 and h >= 100 for w, h in boxes.values()), boxes
+        assert diel_legends_shown() == [False, True]
+
+        canvas._canvas.setFixedSize(900, 600)
+        settle()
+        boxes = panels()
+        assert all(w >= 70 for w, _ in boxes.values()), boxes
+        canvas._canvas.setFixedSize(1600, 1000)
+        settle()
+        boxes = panels()
+        assert all(w >= 180 for w, _ in boxes.values()), boxes
+        assert diel_legends_shown() == [True, False]
+    assert not [w for w in caught if "collapsed" in str(w.message)]
+
+
+def test_data_push_skips_hidden_tabs_until_shown(window):
+    # A data change reaches only the visible tab; a hidden one catches up once,
+    # with the current data, when it is shown.
+    window._open_menu_tab("Time series")
+    plot_tab = window._menu_tab_list[-1]
+    received = []
+    original = plot_tab.on_data_loaded
+    plot_tab.on_data_loaded = lambda df, created=None: (received.append(df), original(df, created))
+    window._tabwidget.setCurrentIndex(0)
+    QApplication.processEvents()
+
+    window._apply_range()
+    window._apply_range()
+    assert received == []
+    assert plot_tab._data_stale
+
+    window._tabwidget.setCurrentWidget(plot_tab.widget())
+    assert len(received) == 1 and received[0] is window._data
+    assert not plot_tab._data_stale
+
+    # Pinning a stale tab first brings it up to date, so it freezes on the
+    # data it would show now.
+    window._tabwidget.setCurrentIndex(0)
+    window._apply_range()
+    window._toggle_pin(plot_tab)
+    assert len(received) == 2 and not plot_tab._data_stale
+    QApplication.processEvents()
+
+
+def test_run_with_loading_renders_latest_request_once(app):
+    from diive.gui.widgets.variable_panel import VariablePanel
+    panel = VariablePanel()
+    calls = []
+    for name in ("A", "B", "C"):
+        panel.run_with_loading(name, lambda n=name: calls.append(n))
+    assert calls == []
+    QApplication.processEvents()
+    assert calls == ["C"]
+    assert QApplication.overrideCursor() is None
+    # flush_pending runs a queued render at once; the timer then has nothing left.
+    panel.run_with_loading("D", lambda: calls.append("D"))
+    panel.flush_pending()
+    QApplication.processEvents()
+    assert calls == ["C", "D"]
+    assert QApplication.overrideCursor() is None
+
+
+def test_debouncer_runs_once_after_a_burst(app):
+    from PySide6.QtCore import QObject
+    from diive.gui.widgets.debounce import Debouncer
+    runs = []
+
+    class _Owner(QObject):
+        def slot(self):
+            runs.append(1)
+
+    owner = _Owner()
+    deb = Debouncer(owner, owner.slot, ms=10_000)
+    for value in range(5):
+        deb.trigger(value)  # signal arguments are ignored
+    assert runs == [] and deb.pending()
+    deb.flush()
+    assert runs == [1] and not deb.pending()
+    deb.flush()  # nothing pending: no second run
+    deb.trigger()
+    deb.cancel()
+    assert runs == [1] and not deb.pending()
+
+
+def test_overview_zoom_recomputes_summaries_once_settled(window):
+    # Pan/zoom steps only move the heatmap; the diel cycle and histogram are
+    # rebuilt for the visible window once the view settles.
+    overview = window._tabs[0]
+    overview._on_select("NEE_CUT_REF_f")
+    QApplication.processEvents()
+    ts_ax, diel_ax = overview._shared_x_ax, overview._diel_ax
+    diel_line = diel_ax.get_lines()[0]
+    heat_ylim = overview._heatmap_ax.get_ylim()
+    x0, x1 = ts_ax.get_xlim()
+    for frac in (0.1, 0.2, 0.3):
+        ts_ax.set_xlim(x0 + (x1 - x0) * frac, x0 + (x1 - x0) * (frac + 0.2))
+    assert overview._heatmap_ax.get_ylim() != heat_ylim
+    assert diel_ax.get_lines()[0] is diel_line
+    assert overview._zoom_debounce.pending()
+    overview._zoom_debounce.flush()
+    assert diel_ax.get_lines()[0] is not diel_line
+
+
+def test_overview_pan_repaint_restarts_the_settle_wait(window, monkeypatch):
+    # A repaint slower than the settle time must not let the pending summary
+    # refresh run between two pan steps: each finished repaint restarts it.
+    overview = window._tabs[0]
+    overview._on_select("NEE_CUT_REF_f")
+    QApplication.processEvents()
+    ts_ax = overview._shared_x_ax
+    x0, x1 = ts_ax.get_xlim()
+    restarts = []
+    original = overview._zoom_debounce.trigger
+    monkeypatch.setattr(overview._zoom_debounce, "trigger",
+                        lambda *a: (restarts.append(1), original()))
+    ts_ax.set_xlim(x0 + (x1 - x0) * 0.2, x0 + (x1 - x0) * 0.5)
+    assert restarts == [1] and overview._zoom_debounce.pending()
+    overview.canvas._canvas.draw()
+    assert restarts == [1, 1] and overview._zoom_debounce.pending()
+    overview._zoom_debounce.flush()
+    overview.canvas._canvas.draw()  # nothing pending: no restart
+    assert restarts == [1, 1] and not overview._zoom_debounce.pending()
+
+
+def test_overview_select_draws_the_figure_once_when_the_hero_resizes(window, monkeypatch):
+    # The hero band above the figure can change height per variable. The
+    # canvas must take its new size before the figure is drawn, so a select
+    # costs one figure draw, not a draw plus a relayout and a second draw.
+    from matplotlib.figure import Figure
+    overview = window._tabs[0]
+    overview._on_select("NEE_CUT_REF_f")
+    QApplication.processEvents()
+    height_before = overview.canvas.height()
+    hero, set_variable = overview.hero, overview.hero.set_variable
+
+    def taller_for_this_variable(name, series):
+        set_variable(name, series)
+        hero.setMinimumHeight(hero.height() + 60)
+
+    monkeypatch.setattr(hero, "set_variable", taller_for_this_variable)
+    draws = []
+    original = Figure.draw
+    monkeypatch.setattr(Figure, "draw", lambda fig, r: (draws.append(1), original(fig, r))[1])
+    overview._on_select("Tair_f")
+    QApplication.processEvents()
+    QApplication.processEvents()
+    assert overview.canvas.height() < height_before
+    assert overview._current == "Tair_f"
+    assert len(draws) == 1
+
+
+def test_combine_cmap_redraws_only_for_known_names(app):
+    import numpy as np
+    from diive.gui.tabs.combine_variables import CombineVariablesTab
+    ix = pd.date_range("2023-01-01", periods=480, freq="30min", name="TIMESTAMP_MIDDLE")
+    df = pd.DataFrame({"A": pd.Series(np.arange(480, dtype=float), index=ix)})
+    tab = CombineVariablesTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._assign(1, "A")
+    QApplication.processEvents()
+
+    def cmap_name():
+        return tab.slot1.canvas.fig.axes[0].collections[0].cmap.name
+
+    tab.cmap_combo.setCurrentText("vir")  # half-typed: wait for a pause
+    assert cmap_name() != "vir" and tab._cmap_debounce.pending()
+    tab.cmap_combo.setCurrentText("viridis")  # a known name: redraw at once
+    assert cmap_name() == "viridis" and not tab._cmap_debounce.pending()
+
+
+def test_appearance_width_spin_applies_theme_once_settled(app):
+    from PySide6.QtCore import QObject
+    from diive.gui import theme
+    from diive.gui.tabs.settings import SettingsTab
+
+    class _Counter(QObject):
+        count = 0
+
+        def hit(self):
+            self.count += 1
+
+    saved = theme.manager.list_width
+    settings = SettingsTab()
+    settings.widget()
+    counter = _Counter()
+    theme.manager.changed.connect(counter.hit)
+    try:
+        start = settings.width_spin.value()
+        for step in (10, 20, 30):
+            settings.width_spin.setValue(start + step)
+        assert theme.manager.list_width == start + 30  # the value is set at once
+        assert counter.count == 0  # but the app-wide restyle waits
+        settings._apply_debounce.flush()
+        assert counter.count == 1
+    finally:
+        theme.manager.changed.disconnect(counter.hit)
+        theme.manager.list_width = saved
+        theme.manager.apply()
+
+
+def test_canvas_resize_relayout_is_debounced(app):
+    # The first resize after a render solves the layout at once (the render may
+    # have run at a pre-show size); a burst of later resizes solves only once,
+    # when the timer fires after the size has settled.
+    from diive.gui.widgets.mpl_canvas import MplCanvas
+    canvas = MplCanvas()
+    solves = []
+    canvas._solve_layout = lambda: solves.append(1)
+    canvas.new_axes(1)
+    canvas._on_resize(None)
+    assert solves == [1]
+    assert not canvas._relayout_timer.isActive()
+    for _ in range(5):
+        canvas._on_resize(None)
+    assert solves == [1]
+    assert canvas._relayout_timer.isActive()
+    canvas._relayout_timer.timeout.emit()
+    assert solves == [1, 1]
+
+
+def test_canvas_leaves_an_empty_figure_and_a_stale_idle_draw_alone(app):
+    # A resize while the figure is cleared for a new render has nothing to lay
+    # out, and keeps the "first resize after a render" solve for later. An idle
+    # draw queued before a synchronous draw() would only repeat that draw.
+    from matplotlib.figure import Figure
+    from diive.gui.widgets.mpl_canvas import MplCanvas
+    canvas = MplCanvas()
+    solves = []
+    canvas._solve_layout = lambda: solves.append(1)
+    canvas.reset_layout()
+    canvas._on_resize(None)
+    assert solves == [] and canvas._fresh_layout
+    canvas.fig.add_subplot()
+    canvas._on_resize(None)
+    assert solves == [1]
+
+    draws = []
+    canvas.fig.draw = lambda r: (draws.append(1), Figure.draw(canvas.fig, r))[1]
+    canvas.draw_idle()
+    canvas.draw()
+    QApplication.processEvents()
+    assert draws == [1]
+
+
+def _shown_line_canvas():
+    """A shown MplCanvas with one rendered line plot, plus a list that records
+    the widget size of every real (Agg) render of its figure canvas."""
+    from diive.gui.widgets.mpl_canvas import MplCanvas
+    canvas = MplCanvas(show_toolbar=False)
+    # A slow test run must not let the settle timer fire mid-burst.
+    canvas._relayout_timer.setInterval(60_000)
+    canvas.resize(500, 350)
+    canvas.show()
+    ax = canvas.new_axes(1)[0]
+    ax.plot(range(50), color="black", linewidth=3)
+    canvas.draw()
+    QApplication.processEvents()
+    fc = canvas._canvas
+    renders = []
+    orig_draw = fc.draw
+    fc.draw = lambda: (renders.append((fc.width(), fc.height())), orig_draw())[1]
+    return canvas, fc, renders
+
+
+def _pump():
+    for _ in range(3):
+        QApplication.sendPostedEvents()
+        QApplication.processEvents()
+
+
+def test_canvas_resize_burst_renders_once_when_settled(app):
+    # The first resize after a render still renders at once (it may be the
+    # first real size), later resizes paint the last frame scaled, and one
+    # render at the settled size follows when the timer fires.
+    canvas, fc, renders = _shown_line_canvas()
+    try:
+        w0, h0 = fc.width(), fc.height()
+        fc.resize(w0 + 40, h0 + 20)
+        _pump()
+        assert renders == [(w0 + 40, h0 + 20)]
+        assert not canvas._relayout_timer.isActive()
+
+        renderer = fc.renderer
+        for i in range(1, 6):
+            fc.resize(w0 + 40 + 10 * i, h0 + 20 + 5 * i)
+            _pump()
+        assert renders == [(w0 + 40, h0 + 20)]  # nothing rendered per event
+        assert canvas._relayout_timer.isActive()
+        # The paint shows the scaled last frame (the black line), not an
+        # empty or mismatched Agg buffer, and nothing replaced that buffer.
+        shot = fc.grab().toImage()
+        assert any(shot.pixelColor(x, y).lightness() < 60
+                   for x in range(0, shot.width(), 4)
+                   for y in range(0, shot.height(), 4))
+        assert fc.renderer is renderer
+        # The hover leaves the stale background alone until the settle render.
+        canvas.hover._visible = True
+        canvas.hover._hide()
+        assert fc.renderer is renderer
+
+        canvas._relayout_timer.timeout.emit()
+        _pump()
+        final = (fc.width(), fc.height())
+        assert renders == [(w0 + 40, h0 + 20), final]
+        assert (fc.renderer.width, fc.renderer.height) == (
+            round(final[0] * fc.device_pixel_ratio),
+            round(final[1] * fc.device_pixel_ratio))
+        assert fc._last_frame is None
+        assert canvas.hover._bg_matches()  # re-cached for the settled size
+    finally:
+        canvas.close()
+
+
+def test_canvas_resize_renders_on_paint_if_the_settle_never_comes(app):
+    # A deferred resize must not leave the canvas stale for good: with the
+    # settle timer stopped, the next paint renders at the current size.
+    canvas, fc, renders = _shown_line_canvas()
+    try:
+        w0, h0 = fc.width(), fc.height()
+        fc.resize(w0 + 30, h0 + 30)
+        _pump()
+        fc.resize(w0 + 60, h0 + 60)
+        _pump()
+        assert len(renders) == 1 and fc._last_frame is not None
+        canvas._relayout_timer.stop()
+        fc.grab()
+        assert renders[-1] == (w0 + 60, h0 + 60)
+        assert fc._last_frame is None
+    finally:
+        canvas.close()
 
 
 def test_save_dpi_spinbox(app):
@@ -2615,6 +3289,7 @@ def test_gap_dashboard_tab(window):
 
     # Raising the long-gap threshold lists fewer gaps (library recompute).
     tab.threshold.setValue(tab.threshold.value() * 4)
+    tab._threshold_debounce.flush()  # the recompute waits for the value to settle
     for _ in range(50):
         QApplication.processEvents()
     assert tab.table.rowCount() < n_rows
@@ -2630,8 +3305,7 @@ def test_driver_explorer_tab(window):
 
     window._open_menu_tab("Driver explorer")
     tab = window._menu_tab_list[-1]
-    for _ in range(60):
-        QApplication.processEvents()
+    _wait_for_worker(tab)
 
     # Opens on a flux target, ranks the other variables, shows the top scatter.
     assert tab._target == "NEE_CUT_REF_f"
@@ -2647,8 +3321,7 @@ def test_driver_explorer_tab(window):
     # Lag scan applies on the button and can pick non-zero lags.
     tab.max_lag.setValue(6)
     tab.rank_btn.click()
-    for _ in range(60):
-        QApplication.processEvents()
+    _wait_for_worker(tab)
     assert int(tab._ranked["BEST_LAG"].abs().max()) <= 6
     assert (tab._ranked["BEST_LAG"] != 0).any()
 
@@ -2663,6 +3336,91 @@ def test_driver_explorer_tab(window):
     assert _tabs(window).count("Driver explorer") == 1
 
 
+def _gate_driver_ranking(monkeypatch):
+    """Make the Driver explorer's first ranking wait for `gate.set()`, so a test
+    can act while a compute is in flight. Returns (gate, targets ranked)."""
+    from diive.gui.tabs.drivers import DriverExplorerTab
+
+    real = DriverExplorerTab._compute_payload
+    gate = threading.Event()
+    ranked = []
+
+    def gated(df, target, method_label, max_lag):
+        ranked.append(target)
+        if len(ranked) == 1:
+            gate.wait(30)
+        return real(df, target, method_label, max_lag)
+
+    monkeypatch.setattr(DriverExplorerTab, "_compute_payload", staticmethod(gated))
+    return gate, ranked
+
+
+def test_driver_explorer_draws_only_the_newest_selection(window, monkeypatch):
+    # The ranking runs on a worker thread. Clicking through variables while it
+    # runs must end with the last one's ranking drawn, never an older one's.
+    from diive.gui.widgets.variable_delegate import LOADING_ROLE, NAME_ROLE
+
+    gate, ranked = _gate_driver_ranking(monkeypatch)
+    window._open_menu_tab("Driver explorer")
+    tab = window._menu_tab_list[-1]
+    first = tab._target
+    others = [str(c) for c in window._data.select_dtypes("number").columns
+              if str(c) != first][:2]
+    tab._on_select(others[0])
+    tab._on_select(others[1])
+
+    # The GUI thread is free and shows the busy cue on the newest selection.
+    assert tab._runner.is_busy
+    assert tab._root.testAttribute(Qt.WidgetAttribute.WA_SetCursor)
+    items = [tab.varpanel.list.item(i) for i in range(tab.varpanel.list.count())]
+    loading = [it.data(NAME_ROLE) for it in items if it.data(LOADING_ROLE)]
+    assert loading == [others[1]]
+
+    gate.set()
+    _wait_for_worker(tab)
+    assert ranked == [first, others[1]]  # the middle request never ran
+    assert tab._target == others[1]
+    drivers = set(tab._ranked["DRIVER"])
+    assert others[1] not in drivers and first in drivers  # ranking of the newest target
+    # Busy cue and cursor are gone once the result is drawn.
+    assert not any(it.data(LOADING_ROLE) for it in items)
+    assert not tab._root.testAttribute(Qt.WidgetAttribute.WA_SetCursor)
+
+
+def test_driver_explorer_shows_a_worker_failure_on_the_canvas(window, monkeypatch):
+    from diive.gui.tabs.drivers import DriverExplorerTab
+
+    def broken(*_request):
+        raise ValueError("ranking exploded")
+
+    monkeypatch.setattr(DriverExplorerTab, "_compute_payload", staticmethod(broken))
+    window._open_menu_tab("Driver explorer")
+    tab = window._menu_tab_list[-1]
+    _wait_for_worker(tab)
+    msgs = [t.get_text() for a in tab.canvas.fig.axes for t in a.texts]
+    assert any("ranking exploded" in m for m in msgs)
+    assert not tab._root.testAttribute(Qt.WidgetAttribute.WA_SetCursor)
+
+
+def test_driver_explorer_closed_mid_run_ignores_the_late_result(window, monkeypatch):
+    # Closing the tab deletes its widgets while the ranking still runs. The tab
+    # object itself is kept alive here (the worst case: its handlers are still
+    # connected), so the late result must be dropped without touching them.
+    gate, _ranked = _gate_driver_ranking(monkeypatch)
+    window._open_menu_tab("Driver explorer")
+    tab = window._menu_tab_list[-1]
+    assert tab._runner.is_busy
+    drawn = []
+    tab._render_payload = drawn.append
+    window._on_tab_close(window._tabwidget.indexOf(tab.widget()))
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert not shiboken6.isValid(tab._root)
+
+    gate.set()
+    _wait_for_worker(tab)
+    assert drawn == []  # nothing rendered into the deleted widgets
+
+
 def test_seasonal_trend_tab(app):
     # Needs several years (annual STL needs >= 2 cycles), so build a standalone
     # tab with multi-year data instead of the one-year `window` fixture.
@@ -2674,8 +3432,7 @@ def test_seasonal_trend_tab(app):
     tab = SeasonalTrendTab()
     tab.widget()
     tab.on_data_loaded(df)
-    for _ in range(80):
-        QApplication.processEvents()
+    _wait_for_worker(tab)
 
     # Decomposition view: STL ran (regression — it used to always raise) and the
     # four component panels drew.
@@ -2699,8 +3456,7 @@ def test_seasonal_trend_tab(app):
     tab.view.setCurrentText("Decomposition")
     tab.method.setCurrentText("Classical")
     tab.update_btn.click()
-    for _ in range(60):
-        QApplication.processEvents()
+    _wait_for_worker(tab)
     assert tab._decomp is not None
     # A crashed re-render would leave the one-panel anomaly chart up and keep the
     # STL result in `_decomp`, so check the four panels are back and the Classical
@@ -2715,8 +3471,7 @@ def test_seasonal_trend_short_data_graceful(window):
     # must show a friendly message (not crash), and the anomaly view still works.
     window._open_menu_tab("Seasonal trend & anomalies")
     tab = window._menu_tab_list[-1]
-    for _ in range(60):
-        QApplication.processEvents()
+    _wait_for_worker(tab)
     assert tab._decomp is None
     msgs = [t.get_text() for a in tab.canvas.fig.axes for t in a.texts]
     assert any("2 years" in m for m in msgs)
@@ -2733,14 +3488,189 @@ def test_seasonal_trend_short_data_graceful(window):
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
 
+def _record_seasonal_renders(tab):
+    """Replace the tab's render with a recorder of which variable each drawn
+    result belongs to (the yearly series carries the target's name)."""
+    drawn = []
+    tab._render_payload = lambda payload: drawn.append(payload["yearly"].name)
+    return drawn
+
+
+def test_process_runner_uses_one_reused_worker_process(app):
+    # Jobs run in a separate process that is started once and then reused.
+    # Stdlib functions stand in for payloads: they pickle by name.
+    import operator
+    import os
+    from types import SimpleNamespace
+    from diive.gui.widgets.worker import ProcessLatestRunner
+
+    runner = ProcessLatestRunner()
+    done, failed = [], []
+    runner.done.connect(done.append)
+    runner.failed.connect(failed.append)
+    waitable = SimpleNamespace(_runner=runner)
+
+    runner.submit(os.getpid)
+    _wait_for_worker(waitable)
+    runner.submit(os.getpid)
+    _wait_for_worker(waitable)
+    assert len(done) == 2 and done[0] == done[1] != os.getpid()
+
+    # Newest request wins: the first job runs to its end, the middle request
+    # is replaced before it starts, and only the last result is delivered.
+    done.clear()
+    runner.submit(eval, "__import__('time').sleep(0.3) or 'first'")
+    runner.submit(eval, "'middle'")
+    runner.submit(eval, "'last'")
+    _wait_for_worker(waitable)
+    assert done == ["last"]
+
+    # A payload's exception comes back as `failed` with its message.
+    runner.submit(operator.truediv, 1, 0)
+    _wait_for_worker(waitable)
+    assert failed == ["division by zero"]
+
+    # A job function that cannot be pickled fails instead of hanging.
+    failed.clear()
+    runner.submit(lambda: 1)
+    _wait_for_worker(waitable)
+    assert len(failed) == 1 and "local object" in failed[0]
+
+
+def test_seasonal_trend_draws_only_the_newest_selection(window):
+    # STL holds the GIL, so the tab computes in the worker process.
+    from diive.gui.widgets.worker import ProcessLatestRunner
+
+    window._open_menu_tab("Seasonal trend & anomalies")
+    tab = window._menu_tab_list[-1]
+    assert isinstance(tab._runner, ProcessLatestRunner)
+    _wait_for_worker(tab)
+    drawn = _record_seasonal_renders(tab)
+    names = [str(c) for c in window._data.select_dtypes("number").columns
+             if str(c) != "Tair_f"][:3]
+    for name in names:
+        tab._on_select(name)
+    assert tab._runner.is_busy
+    _wait_for_worker(tab)
+    # The first job was already running and finished, but its result was
+    # stale by then; the middle request never ran.
+    assert drawn == [names[-1]]
+    assert tab._target == names[-1]
+    assert not tab._root.testAttribute(Qt.WidgetAttribute.WA_SetCursor)
+
+
+def test_seasonal_trend_shows_a_worker_process_failure(window, monkeypatch):
+    # The payload raises in the worker process (no DatetimeIndex); the
+    # message must still reach the canvas.
+    from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
+
+    monkeypatch.setattr(
+        SeasonalTrendTab, "_compute_request",
+        lambda self: (pd.Series([1.0, 2.0], name="x"), "x", "STL", False))
+    window._open_menu_tab("Seasonal trend & anomalies")
+    tab = window._menu_tab_list[-1]
+    _wait_for_worker(tab)
+    msgs = [t.get_text() for a in tab.canvas.fig.axes for t in a.texts]
+    assert any("Cannot compute" in m and "DatetimeIndex" in m for m in msgs)
+    assert not tab._root.testAttribute(Qt.WidgetAttribute.WA_SetCursor)
+
+
+def test_seasonal_trend_closed_mid_run_ignores_the_late_result(window):
+    window._open_menu_tab("Seasonal trend & anomalies")
+    tab = window._menu_tab_list[-1]
+    assert tab._runner.is_busy  # the default variable is still computing
+    drawn = _record_seasonal_renders(tab)
+    window._on_tab_close(window._tabwidget.indexOf(tab.widget()))
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert not shiboken6.isValid(tab._root)
+    _wait_for_worker(tab)
+    assert drawn == []
+
+    # Reopening gets a new tab that computes in the same worker process.
+    window._open_menu_tab("Seasonal trend & anomalies")
+    tab = window._menu_tab_list[-1]
+    _wait_for_worker(tab)
+    assert tab._yearly.name == "Tair_f"
+
+
+def test_seasonal_trend_data_push_cancels_the_running_job(window):
+    window._open_menu_tab("Seasonal trend & anomalies")
+    tab = window._menu_tab_list[-1]
+    _wait_for_worker(tab)
+    drawn = _record_seasonal_renders(tab)
+    other = next(str(c) for c in window._data.select_dtypes("number").columns
+                 if str(c) != "Tair_f")
+    tab._on_select(other)
+    assert tab._runner.is_busy
+    # The new frame reselects the default; the job for `other` is dropped.
+    tab.on_data_loaded(window._data.iloc[:500])
+    _wait_for_worker(tab)
+    assert drawn == ["Tair_f"]
+
+
+def test_seasonal_trend_save_restore(window):
+    from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
+
+    window._open_menu_tab("Seasonal trend & anomalies")
+    tab = window._menu_tab_list[-1]
+    _wait_for_worker(tab)
+    other = next(str(c) for c in window._data.select_dtypes("number").columns
+                 if str(c) != "Tair_f")
+    tab.method.setCurrentText("Classical")
+    tab.robust.setChecked(True)
+    tab._on_select(other)
+    _wait_for_worker(tab)
+    state = tab.save_state()
+
+    tab2 = SeasonalTrendTab()
+    tab2.widget()
+    tab2.on_data_loaded(window._data)
+    _wait_for_worker(tab2)
+    tab2.restore_state(state)
+    _wait_for_worker(tab2)
+    assert tab2._target == other
+    assert tab2.method.currentText() == "Classical"
+    assert tab2.robust.isChecked()
+    assert tab2._yearly.name == other and tab2._method_label == "Classical"
+
+
+def test_worker_process_shutdown_drops_a_running_job_quietly(app):
+    # On quit the app stops the worker at once instead of waiting for the job;
+    # the dropped job ends as `failed("CancelledError")`, and the next job
+    # starts a fresh worker.
+    import os
+    from types import SimpleNamespace
+    from diive.gui.widgets.worker import ProcessLatestRunner, shutdown_process_pool
+
+    runner = ProcessLatestRunner()
+    done, failed = [], []
+    runner.done.connect(done.append)
+    runner.failed.connect(failed.append)
+    waitable = SimpleNamespace(_runner=runner)
+    runner.submit(os.getpid)
+    _wait_for_worker(waitable)
+    first_pid = done[0]
+
+    runner.submit(eval, "__import__('time').sleep(60)")
+    time.sleep(0.5)  # let the job reach the worker
+    t0 = time.monotonic()
+    shutdown_process_pool()
+    _wait_for_worker(waitable, timeout=10)
+    assert time.monotonic() - t0 < 10
+    assert failed == ["CancelledError"]
+
+    runner.submit(os.getpid)
+    _wait_for_worker(waitable)
+    assert done[-1] not in (first_pid, os.getpid())
+
+
 def test_spectrogram_tab(window):
     from diive.gui.icons import menu_icon
     assert not menu_icon("Spectrogram").isNull()
 
     window._open_menu_tab("Spectrogram")
     tab = window._menu_tab_list[-1]
-    for _ in range(60):
-        QApplication.processEvents()
+    _wait_for_worker(tab)
 
     assert tab._target == "NEE_CUT_REF_f"
     assert tab._spec is not None
@@ -2757,18 +3687,60 @@ def test_spectrogram_tab(window):
     before = tab._spec["power"].shape
     tab.nperseg.setValue(128)
     tab.update_btn.click()
-    for _ in range(40):
-        QApplication.processEvents()
+    _wait_for_worker(tab)
     assert tab._spec["power"].shape != before
 
-    # Max cycles/day is a live re-render (y-limit only).
+    # Max cycles/day and the colormap restyle the drawn mesh in place: y-limit
+    # and colormap change, no new mesh is built.
+    mesh = tab._mesh
+    assert mesh is not None
     tab.max_freq.setValue(2.0)
     QApplication.processEvents()
     assert round(tab.canvas.fig.axes[0].get_ylim()[1], 1) == 2.0
+    tab.cmap.setCurrentText("magma")
+    QApplication.processEvents()
+    assert tab._mesh is mesh and mesh.axes in tab.canvas.fig.axes
+    assert mesh.get_cmap().name == "magma"
+    assert round(mesh.axes.get_ylim()[1], 1) == 2.0
+
+    # A new variable is drawn with the current view settings.
+    tab._on_select("Tair_f")
+    _wait_for_worker(tab)
+    assert tab._mesh is not mesh
+    assert tab._mesh.get_cmap().name == "magma"
+    assert round(tab._mesh.axes.get_ylim()[1], 1) == 2.0
 
     # Single-instance.
     window._open_menu_tab("Spectrogram")
     assert _tabs(window).count("Spectrogram") == 1
+
+
+def test_data_profile_tab_profiles_on_a_worker(window):
+    window._open_menu_tab("Data profile")
+    tab = window._menu_tab_list[-1]
+    _wait_for_worker(tab)
+    ncols = window._data.shape[1]
+    assert tab.table.rowCount() == ncols
+    assert tab.stats_layout.count() - 1 == 8  # dataset cards (minus stretch)
+    assert tab.count_lbl.text() == f"{ncols} variables"
+    assert not tab._root.testAttribute(Qt.WidgetAttribute.WA_SetCursor)
+
+    # Two pushes in a row: only the newer frame's profile is drawn.
+    df = window._data
+    tab.on_data_loaded(df)
+    assert tab.count_lbl.text() == "Profiling…"
+    tab.on_data_loaded(df.iloc[:, :5])
+    _wait_for_worker(tab)
+    assert tab.table.rowCount() == 5
+    assert {tab.table.item(r, 0).text() for r in range(5)} == {str(c) for c in df.columns[:5]}
+
+    # The filter still applies to the redrawn table and survives save/restore.
+    needle = str(df.columns[0])
+    tab.restore_state({"filter": needle})
+    assert tab.save_state() == {"filter": needle}
+    for r in range(5):
+        name = tab.table.item(r, 0).text()
+        assert tab.table.isRowHidden(r) == (needle.lower() not in name.lower())
 
 
 def test_histogram_tab(window):
@@ -2829,6 +3801,51 @@ def test_splash_screen(app):
                if l.pixmap() is not None and not l.pixmap().isNull()]
     assert has_art  # the splash pixmap is shown
     dlg.accept()
+
+
+def test_launch_shows_splash_before_importing_the_main_window():
+    """`launch` paints the splash first, then imports `diive.gui.app`.
+
+    That import is most of the startup time, so a splash made inside `run` only
+    appeared once it was over. A stand-in `diive.gui.app` records what `run`
+    receives. Fresh interpreter, since this session imported the real module.
+    """
+    import pathlib
+    import subprocess
+
+    code = """
+import importlib.abc, importlib.util, sys
+import diive.gui.splash as sp
+order = []
+_orig = sp.create_splash
+def create_splash(app):
+    order.append("splash")
+    return _orig(app)
+sp.create_splash = create_splash
+def run(app, splash):
+    order.append("run: splash visible" if splash.isVisible() else "run: no splash")
+    return 0
+class StandIn(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    def find_spec(self, name, path, target=None):
+        if name == "diive.gui.app":
+            return importlib.util.spec_from_loader(name, self)
+    def create_module(self, spec):
+        return None
+    def exec_module(self, module):
+        order.append("import diive.gui.app")
+        module.run = run
+sys.meta_path.insert(0, StandIn())
+import diive.gui
+assert diive.gui.launch() == 0
+print(order)
+"""
+    root = pathlib.Path(__file__).resolve().parent.parent
+    env = dict(os.environ, PYTHONPATH=str(root), QT_QPA_PLATFORM="offscreen")
+    out = subprocess.run([sys.executable, "-c", code], env=env, cwd=root,
+                         capture_output=True, text=True, timeout=120)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip().splitlines()[-1] == str(
+        ["splash", "import diive.gui.app", "run: splash visible"])
 
 
 def test_appearance_singleton(window):
@@ -2903,6 +3920,9 @@ def test_select_variables_tab_updates_overview(window):
     assert sel.selected.names() == [names[5], names[1]]
 
     sel._confirm()  # what the Confirm button does
+    QApplication.processEvents()
+    # The Overview is hidden behind the picker, so it catches up when shown.
+    tw.setCurrentIndex(0)
     QApplication.processEvents()
     overview = window._tabs[0]
     assert overview.varpanel.names() == [names[5], names[1]]
@@ -3208,6 +4228,7 @@ def test_project_save_and_open(window, tmp_path, monkeypatch):
     monkeypatch.setattr(QFileDialog, "getExistingDirectory",
                         staticmethod(lambda *a, **k: str(folder)))
     window._open_project()
+    window._wait_for_io()  # the read runs on the worker thread
     QApplication.processEvents()
 
     assert window._project_name == "Proj"
@@ -3277,6 +4298,7 @@ def test_project_load_does_not_materialise_previous_events(window, tmp_path, mon
     monkeypatch.setattr(QFileDialog, "getExistingDirectory",
                         staticmethod(lambda *a, **k: str(folder)))
     window._open_project()
+    window._wait_for_io()  # the read runs on the worker thread
     QApplication.processEvents()
     del window._sync_event_columns  # restore the bound method
 
@@ -3421,6 +4443,7 @@ def test_project_saves_and_restores_open_tabs(window, tmp_path, monkeypatch):
     monkeypatch.setattr(QFileDialog, "getExistingDirectory",
                         staticmethod(lambda *a, **k: str(folder)))
     window._open_project()
+    window._wait_for_io()  # the read runs on the worker thread
     QApplication.processEvents()
 
     restored = {t._menu_label for t in window._menu_tab_list}
@@ -3459,6 +4482,7 @@ def test_project_restores_per_tab_state(window, tmp_path, monkeypatch):
     monkeypatch.setattr(QFileDialog, "getExistingDirectory",
                         staticmethod(lambda *a, **k: str(folder)))
     window._open_project()
+    window._wait_for_io()  # the read runs on the worker thread
     QApplication.processEvents()
 
     drv2 = next(t for t in window._menu_tab_list if t._menu_label == "Driver explorer")
@@ -3473,6 +4497,200 @@ def test_project_restores_per_tab_state(window, tmp_path, monkeypatch):
     # The previously-active tab regains focus (not just landing on Overview).
     cur = window._tabwidget.currentIndex()
     assert window._tabwidget.tabText(cur) == "Time series 1"
+
+
+def test_project_open_renders_the_overview_once(window, tmp_path, monkeypatch):
+    """Opening a project renders the Overview once, events included.
+
+    Announcing the project's events used to run this window's own handler,
+    which rendered the Overview synchronously; that draw flushed the render the
+    data push had queued, and the next push queued a third.
+    """
+    from diive.events import Event
+    from diive.gui import events
+    from diive.gui.tabs.overview import OverviewTab
+
+    events.manager.add(Event("Proj", window._full_data.index.min()))
+    events.manager.set_visible(False)
+    folder = tmp_path / "P.diive"
+    assert window._write_project(folder, "P")
+    events.manager.set_visible(True)
+    for _ in range(3):
+        QApplication.processEvents()  # drain renders the edits above queued
+
+    renders = []
+    real_render = OverviewTab._render_figure
+
+    def counting_render(self, *args, **kwargs):
+        renders.append(args[1])
+        return real_render(self, *args, **kwargs)
+
+    monkeypatch.setattr(OverviewTab, "_render_figure", counting_render)
+    assert window._load_project_folder(folder)
+    for _ in range(3):
+        QApplication.processEvents()
+
+    assert len(renders) == 1
+    assert "EVENT_Proj" in window._full_data.columns
+    assert not window._show_events_act.isChecked()  # the project's visibility
+    events.manager.clear()
+
+
+def test_project_save_runs_on_the_worker_and_blocks_reentry(window, tmp_path, monkeypatch):
+    """Ctrl+S writes on the worker thread; the load/save menu entries stay
+    disabled until the GUI thread has handled the result, and the file holds
+    the state from the moment Save was chosen."""
+    from diive.core.io import project as projmod
+    from diive.gui import metadata_store
+
+    gate = threading.Event()
+    saved = []
+    real_save = projmod.save_project
+
+    def gated_save(folder, project):
+        assert threading.current_thread() is not threading.main_thread()
+        gate.wait(10)
+        saved.append(project)
+        return real_save(folder, project)
+
+    monkeypatch.setattr(projmod, "save_project", gated_save)
+    folder = tmp_path / "P.diive"
+    window._project_dir, window._project_name = folder, "P"
+    var = str(window._data.columns[0])
+
+    window._save_project()
+    try:
+        assert window._io.is_running
+        assert window._io_actions and not any(a.isEnabled() for a in window._io_actions)
+        assert not window._run_io("again", lambda: None, (), print, print)
+        metadata_store.manager.add_user_tag(var, "late")  # an edit after Save
+    finally:
+        gate.set()
+    window._wait_for_io()
+
+    assert all(a.isEnabled() for a in window._io_actions)
+    assert projmod.is_project(folder)
+    assert "late" not in saved[0].metadata.get(var).tags
+    assert "late" in metadata_store.manager.store.get(var).tags
+
+
+def test_save_project_as_adopts_the_folder_once_written(window, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QDialog
+
+    from diive.gui.widgets import save_project_dialog
+
+    class _Dialog:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+
+        def values(self):
+            return "Saved", str(tmp_path)
+
+    monkeypatch.setattr(save_project_dialog, "SaveProjectDialog", _Dialog)
+    window._save_project_as()
+    assert window._project_dir is None  # not before the write has landed
+    window._wait_for_io()
+    assert window._project_dir == tmp_path / "Saved.diive"
+    assert window._project_name == "Saved"
+    assert window._last_project == str(tmp_path / "Saved.diive")
+
+
+def test_open_project_failure_keeps_the_current_data(window, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+    from diive.core.io import project as projmod
+
+    folder = tmp_path / "Broken.diive"
+    folder.mkdir()
+    (folder / projmod.MARKER_FILE).write_text("{}", encoding="utf-8")
+    (folder / projmod.MANIFEST_FILE).write_text("not json", encoding="utf-8")
+    errors = []
+    monkeypatch.setattr(QMessageBox, "critical",
+                        staticmethod(lambda *a, **k: errors.append(a[1])))
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory",
+                        staticmethod(lambda *a, **k: str(folder)))
+    before = window._full_data
+
+    window._open_project()
+    window._wait_for_io()
+
+    assert errors == ["Open failed"]
+    assert window._full_data is before
+    assert window._project_dir is None
+    assert all(a.isEnabled() for a in window._io_actions)
+
+
+@pytest.mark.parametrize("suffix", [".csv", ".parquet"])
+def test_export_writes_on_the_worker(window, tmp_path, monkeypatch, suffix):
+    from PySide6.QtWidgets import QFileDialog
+
+    out = tmp_path / f"data{suffix}"
+    selected = "CSV (*.csv)" if suffix == ".csv" else "Parquet (*.parquet)"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName",
+                        staticmethod(lambda *a, **k: (str(out), selected)))
+    window._save_file()
+    assert window._io.is_running  # the write is off the GUI thread
+    window._wait_for_io()
+
+    if suffix == ".csv":
+        back = pd.read_csv(out, index_col=0)
+    else:
+        back = pd.read_parquet(out)
+    assert back.index.name == window._data.index.name
+    assert len(back) == len(window._data)
+    assert [str(c) for c in back.columns] == [str(c) for c in window._data.columns]
+
+
+def test_initial_load_reads_in_the_background(window, tmp_path):
+    """The launch's first load reads on the worker (the splash keeps spinning)
+    and calls back once the data is shown; for the example and a last project."""
+    from diive.gui.app import MainWindow
+
+    window._write_project(tmp_path / "Proj.diive", "Proj")
+    for config, expect_project in (({}, None),
+                                   ({"last_project": str(tmp_path / "Proj.diive")}, "Proj")):
+        win = MainWindow(config=config, autoload=False)
+        try:
+            finished = []
+            win._initial_load(on_finished=lambda: finished.append(win._data is not None))
+            assert win._data is None and win._io.is_running
+            win._wait_for_io()
+            assert finished == [True]
+            assert win._project_name == expect_project
+        finally:
+            _destroy_window(win)
+
+
+def test_open_data_preview_reads_only_the_first_rows(app, monkeypatch, tmp_path):
+    """The parquet preview reads the first record batch, not the whole file,
+    and releases the file afterwards (an open handle locks it on Windows)."""
+    from PySide6.QtWidgets import QDialogButtonBox
+
+    from diive.gui.widgets import open_data_dialog as odd
+
+    index = pd.date_range("2021-01-01 00:30", periods=1000, freq="30min",
+                          name="TIMESTAMP_END")
+    path = tmp_path / "data.parquet"
+    pd.DataFrame({"A": range(1000)}, index=index).to_parquet(path, row_group_size=100)
+    full_reads = []
+    monkeypatch.setattr(odd.dv, "load_parquet", lambda **k: full_reads.append(k))
+
+    dlg = odd.OpenDataDialog()
+    try:
+        dlg._paths = [str(path)]
+        dlg.ft_combo.setCurrentIndex(dlg.ft_combo.findData(odd._PARQUET_CHOICE))
+
+        assert full_reads == []
+        assert dlg.preview.rowCount() == odd._PREVIEW_ROWS
+        assert dlg.preview.horizontalHeaderItem(0).text() == "TIMESTAMP_END"
+        assert dlg.preview.item(0, 1).text() == "0"
+        assert dlg.buttons.button(QDialogButtonBox.StandardButton.Ok).isEnabled()
+        path.unlink()  # not held open by the preview
+    finally:
+        shiboken6.delete(dlg)
 
 
 def test_metadata_namespace_migrates_legacy_flat_config():
@@ -3671,6 +4889,63 @@ def test_worker_runner_reports_running_until_result_is_handled(app):
     QApplication.processEvents()
     assert failed == ["TimeoutError"]
     assert not runner.is_running
+
+
+def test_latest_runner_delivers_only_the_newest_request(app):
+    """A burst of requests while a job runs must leave one queued job (the
+    last), and only that job's outcome may be delivered; `cancel` discards a
+    running job's result but still reports the runner as settled."""
+    from diive.gui.widgets.worker import LatestRunner
+
+    gate = threading.Event()
+    ran = []
+
+    def job(name, block=False):
+        ran.append(name)
+        if block:
+            gate.wait(30)
+        return name
+
+    runner = LatestRunner()
+    done, failed, settled = [], [], []
+    runner.done.connect(done.append)
+    runner.failed.connect(failed.append)
+    runner.settled.connect(lambda: settled.append(True))
+
+    def wait_idle():
+        deadline = time.monotonic() + 30
+        while runner.is_busy and time.monotonic() < deadline:
+            QApplication.processEvents()
+            time.sleep(0.005)
+        assert not runner.is_busy
+
+    runner.submit(job, "first", block=True)
+    runner.submit(job, "second")
+    runner.submit(job, "third")
+    assert runner.is_busy
+    gate.set()
+    wait_idle()
+    assert ran == ["first", "third"]  # "second" was replaced before it ran
+    assert done == ["third"]           # "first" finished, but was stale
+    assert failed == [] and len(settled) == 1
+
+    # Cancelled while running: no result, but the owner still hears `settled`.
+    gate.clear()
+    done.clear()
+    settled.clear()
+    runner.submit(job, "cancelled", block=True)
+    runner.cancel()
+    gate.set()
+    wait_idle()
+    assert done == [] and len(settled) == 1
+
+    # A failure of the newest request goes to `failed`.
+    def boom():
+        raise ValueError("bad input")
+
+    runner.submit(boom)
+    wait_idle()
+    assert failed == ["bad input"]
 
 
 def test_outlier_compute_payload_writes_no_tab_state(window):

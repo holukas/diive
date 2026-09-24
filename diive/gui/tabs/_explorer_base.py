@@ -13,8 +13,26 @@ A concrete tab subclasses :class:`SingleVariableExplorerTab` and supplies only
 the parts that differ:
 
   * ``_build_right()`` — the right-hand widget (its own controls + canvas/table),
-  * ``_compute()`` — read the selected variable from ``self._df[self._target]``,
-    call the library, store results, render (runs via ``run_with_loading``),
+  * how to compute and render, in one of two ways:
+
+    - synchronous: ``_compute()`` reads ``self._df[self._target]``, calls the
+      library, stores results and renders, all on the GUI thread (deferred one
+      tick by ``run_with_loading`` so the busy cue paints first);
+    - on a worker thread, for computations slow enough to freeze the window:
+      ``_compute_request()`` snapshots the inputs on the GUI thread,
+      ``_compute_payload(*request)`` (a pure staticmethod: no Qt, no
+      matplotlib) runs the library on a :class:`LatestRunner`, and
+      ``_render_payload(payload)`` draws the result on the GUI thread.
+      Overriding ``_compute_payload`` opts in. Only the newest request's
+      result is drawn; a failure goes to ``_render_error``.
+    - in a worker process, for library code that holds the GIL for long
+      stretches and so freezes the window even from a thread: the worker
+      path plus ``use_process = True``. ``_compute_payload`` then runs in the
+      shared worker process (:class:`ProcessLatestRunner`), so it must stay
+      a staticmethod (it is pickled by name) and the request and the
+      payload must pickle; send only the series the payload needs, not the
+      whole frame.
+
   * optionally a preferred default (``default_var`` / ``_default_variable``) and
     extra per-tab state (``_init_state``).
 
@@ -29,6 +47,7 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import pandas as pd
+import shiboken6
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
@@ -45,6 +64,7 @@ from diive.gui.tabs.overview import _StatCard
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
+from diive.gui.widgets.worker import LatestRunner, ProcessLatestRunner
 
 
 class SingleVariableExplorerTab(DiiveTab):
@@ -63,6 +83,10 @@ class SingleVariableExplorerTab(DiiveTab):
     #: Make the variable list a drag source (drag a name onto a drop target,
     #: e.g. the X/Y/Z fields of the coordinate-surface tab). Off by default.
     list_draggable = False
+    #: Run ``_compute_payload`` in the shared worker process instead of on a
+    #: thread (worker path only). Worth it when the library call holds the
+    #: GIL; the first job pays for starting the process.
+    use_process = False
 
     # --- build ---------------------------------------------------------
     def build(self) -> QWidget:
@@ -71,6 +95,13 @@ class SingleVariableExplorerTab(DiiveTab):
         self._init_state()
 
         root = QWidget()
+        self._root = root
+        if self._uses_worker():
+            self._runner = (ProcessLatestRunner() if self.use_process
+                            else LatestRunner())
+            self._runner.done.connect(self._on_payload)
+            self._runner.failed.connect(self._on_payload_failed)
+            self._runner.settled.connect(self._end_busy)
         outer = QVBoxLayout(root)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -126,8 +157,32 @@ class SingleVariableExplorerTab(DiiveTab):
 
     def _compute(self) -> None:
         """Read ``self._df[self._target]``, call the library, store results and
-        render (subclass hook). Runs behind the variable-panel busy indicator."""
+        render (subclass hook). Runs behind the variable-panel busy indicator.
+        Not used by a tab that overrides ``_compute_payload``."""
         raise NotImplementedError
+
+    def _compute_request(self) -> tuple:
+        """Snapshot everything ``_compute_payload`` needs (subclass hook, worker
+        path). Runs on the GUI thread, so it may read widgets; the worker must
+        not. Returns the positional arguments for ``_compute_payload``."""
+        raise NotImplementedError
+
+    @staticmethod
+    def _compute_payload(*request):
+        """Run the library on a worker thread and return the result (subclass
+        hook, worker path). Overriding it moves the tab's compute off the GUI
+        thread. Must be pure: no Qt, no matplotlib, no ``self``."""
+        raise NotImplementedError
+
+    def _render_payload(self, payload) -> None:
+        """Store and draw the newest result on the GUI thread (subclass hook,
+        worker path)."""
+        raise NotImplementedError
+
+    def _render_error(self, message: str) -> None:
+        """Show a worker failure on the canvas (worker path). A tab without a
+        ``canvas`` overrides this."""
+        self.canvas.show_message(f"Cannot compute:\n{message}")
 
     def _default_variable(self, df) -> str | None:
         """Variable to auto-select on load. Default: ``default_var`` if present
@@ -145,6 +200,9 @@ class SingleVariableExplorerTab(DiiveTab):
     # --- data flow -----------------------------------------------------
     def on_data_loaded(self, df, created: set | None = None) -> None:
         self._df = df
+        if self._uses_worker():
+            # A result still computing belongs to the old frame: never draw it.
+            self._runner.cancel()
         self.varpanel.set_variables(df.columns, created)
         default = self._default_variable(df)
         if default is not None:
@@ -155,13 +213,52 @@ class SingleVariableExplorerTab(DiiveTab):
             return
         self._target = name
         self.varpanel.set_panels([name])
-        self.varpanel.run_with_loading(name, self._compute)
+        self._start_compute()
 
     def _recompute(self) -> None:
-        """Re-run :meth:`_compute` on the current target (for Update/Rank-style
+        """Re-run the compute on the current target (for Update/Rank-style
         buttons whose settings apply on click rather than on selection)."""
         if self._target is not None and self._df is not None:
+            self._start_compute()
+
+    # --- compute dispatch ----------------------------------------------
+    def _uses_worker(self) -> bool:
+        return (type(self)._compute_payload
+                is not SingleVariableExplorerTab._compute_payload)
+
+    def _computing(self) -> bool:
+        """True while a worker compute is running or queued. The shown result
+        is then about to be replaced (and may belong to another variable), so
+        view-only controls skip re-rendering it."""
+        return self._uses_worker() and self._runner.is_busy
+
+    def _start_compute(self) -> None:
+        if not self._uses_worker():
             self.varpanel.run_with_loading(self._target, self._compute)
+            return
+        self.varpanel.set_loading(self._target)
+        # A widget cursor, not the app-wide override: the window stays usable
+        # during the run, and a cursor on a deleted widget cannot get stuck.
+        self._root.setCursor(Qt.CursorShape.BusyCursor)
+        self._runner.submit(self._compute_payload, *self._compute_request())
+
+    def _alive(self) -> bool:
+        # A tab closed mid-run has its widgets deleted (`deleteLater`) while the
+        # job's outcome is still queued for delivery.
+        return shiboken6.isValid(self._root)
+
+    def _end_busy(self) -> None:
+        if self._alive():
+            self.varpanel.clear_loading()
+            self._root.unsetCursor()
+
+    def _on_payload(self, payload) -> None:
+        if self._alive():
+            self._render_payload(payload)
+
+    def _on_payload_failed(self, message: str) -> None:
+        if self._alive():
+            self._render_error(message)
 
     # --- stats strip (opt-in) ------------------------------------------
     def _build_stats_strip(self) -> QWidget:

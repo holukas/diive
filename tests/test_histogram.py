@@ -94,6 +94,26 @@ class TestHistogramKde(unittest.TestCase):
         expected = gaussian_kde(vals)(x) * hist.counts.sum() * (edges[1] - edges[0])
         np.testing.assert_allclose(y, expected, rtol=1e-12, atol=0.0)
 
+    def test_kde_equals_scipy_on_rounded_heavy_tailed_data(self):
+        """The fast evaluation must give scipy's density at every point.
+
+        Rounded values (many repeats, summed once with a count) and a heavy
+        tail (points far beyond the kernel reach of most samples) exercise both
+        shortcuts; the result may differ from scipy by rounding only.
+        """
+        from scipy.stats import gaussian_kde
+
+        from diive.core.plotting.histogram import _gaussian_kde
+
+        rng = np.random.default_rng(3)
+        vals = np.round(np.concatenate([rng.standard_t(2, 20_000) * 3.0,
+                                        rng.normal(40.0, 0.5, 50)]), 2)
+        x = np.linspace(vals.min(), vals.max(), 200)
+        self.assertLess(np.unique(vals).size, vals.size / 2,
+                        msg="fixture must hold repeated values")
+        np.testing.assert_allclose(_gaussian_kde(vals, x), gaussian_kde(vals)(x),
+                                   rtol=1e-9, atol=0.0)
+
     def test_kde_defined_over_the_whole_edge_range(self):
         """Sample points on the closing edge stay inside the last bin."""
         series = _series()

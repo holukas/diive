@@ -13,6 +13,11 @@ import sys
 
 def _gui_main() -> None:
     import argparse
+    import multiprocessing
+
+    # Before argparse: in a frozen build a worker process arrives here with
+    # multiprocessing's own arguments, which the parser would reject.
+    multiprocessing.freeze_support()
 
     p = argparse.ArgumentParser(
         prog="diive-gui",

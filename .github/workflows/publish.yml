@@ -1,0 +1,63 @@
+# Publish diive to PyPI when a version tag (v0.91.2, ...) is pushed.
+#
+# Uses PyPI trusted publishing (OIDC): no API token is stored anywhere. The
+# PyPI project must list this repository, this workflow file (publish.yml) and
+# the environment "pypi" as a trusted publisher.
+#
+# Tests are not run here: the suite is Windows-tuned (exact float assertions)
+# and runs locally before a release.
+
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      # A tag that disagrees with pyproject.toml would publish the wrong
+      # version number, and PyPI never lets a version be re-uploaded.
+      - name: Check tag matches package version
+        run: |
+          python - <<'EOF'
+          import os, re, sys, tomllib
+          tag = os.environ["GITHUB_REF_NAME"].removeprefix("v")
+          with open("pyproject.toml", "rb") as f:
+              pyproject = tomllib.load(f)["project"]["version"]
+          init = open("diive/__init__.py", encoding="utf-8").read()
+          fallback = re.search(r'__version__ = "([^"]+)"', init).group(1)
+          print(f"tag={tag} pyproject={pyproject} __init__ fallback={fallback}")
+          if not tag == pyproject == fallback:
+              sys.exit("Version mismatch: update pyproject.toml and diive/__init__.py before tagging.")
+          EOF
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/diive/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

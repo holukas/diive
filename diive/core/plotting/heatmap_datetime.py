@@ -92,21 +92,55 @@ class HeatmapDateTime(HeatmapBase):
         self.series = self._setup_timestamp(series=self.series)
 
         # Data for plotting
-        # Pivot through an internal value key, not the series name: a series actually
-        # named DATE or TIME would otherwise be overwritten by the helper columns below,
-        # and the heatmap would silently show the timestamp parts instead of the data.
-        self.plotdf = self.series.rename('_values').to_frame()
-        self.plotdf['DATE'] = self.plotdf.index.date
-        self.plotdf['TIME'] = self.plotdf.index.time
-        self.plotdf = self.plotdf.reset_index(drop=True, inplace=False)
+        grid = self._date_time_grid(self.series)
+        if grid is not None:
+            self.plotdf = grid if self.ax_orientation == "vertical" else grid.T
+        else:
+            # Pivot through an internal value key, not the series name: a series
+            # actually named DATE or TIME would otherwise be overwritten by the
+            # helper columns below, and the heatmap would silently show the
+            # timestamp parts instead of the data.
+            self.plotdf = self.series.rename('_values').to_frame()
+            self.plotdf['DATE'] = self.plotdf.index.date
+            self.plotdf['TIME'] = self.plotdf.index.time
+            self.plotdf = self.plotdf.reset_index(drop=True, inplace=False)
 
-        if self.ax_orientation == "vertical":
-            self.plotdf = self.plotdf.pivot(index='DATE', columns='TIME', values='_values')
-        elif self.ax_orientation == "horizontal":
-            self.plotdf = self.plotdf.pivot(index='TIME', columns='DATE', values='_values')
+            if self.ax_orientation == "vertical":
+                self.plotdf = self.plotdf.pivot(index='DATE', columns='TIME', values='_values')
+            elif self.ax_orientation == "horizontal":
+                self.plotdf = self.plotdf.pivot(index='TIME', columns='DATE', values='_values')
 
         # Extend
         self.x, self.y, self.z = self._set_bounds()
+
+    @staticmethod
+    def _date_time_grid(series: Series) -> pd.DataFrame | None:
+        """The DATE x TIME frame that ``pivot`` builds, without its slow path.
+
+        ``pivot`` over ``index.date``/``index.time`` creates a Python date and
+        time object for every record (175 000 for ten years of half-hourly
+        data) and then groups on those objects. Grouping on the integer day
+        and time-of-day instead, and creating objects only for the distinct
+        dates and times, gives the same frame several times faster.
+
+        Returns *None* when this shortcut does not apply (a time-zone-aware
+        index, where wall-clock time is not the offset from midnight on a DST
+        day, or non-float values, where ``pivot`` may keep an integer dtype),
+        so the caller pivots as before.
+        """
+        idx = series.index
+        if getattr(idx, 'tz', None) is not None or series.dtype.kind != 'f':
+            return None
+        day = idx.normalize().to_numpy()
+        date_codes, day_starts = pd.factorize(day, sort=True)
+        time_codes, offsets = pd.factorize(idx.to_numpy() - day, sort=True)
+        values = np.full((len(day_starts), len(offsets)), np.nan)
+        values[date_codes, time_codes] = series.to_numpy()
+        dates = pd.DatetimeIndex(day_starts).date
+        times = (pd.Timestamp(0) + pd.TimedeltaIndex(offsets)).time
+        return pd.DataFrame(values,
+                            index=pd.Index(dates, name='DATE'),
+                            columns=pd.Index(times, name='TIME'))
 
     @staticmethod
     def _time_to_hours(time_values) -> np.ndarray:
@@ -218,7 +252,8 @@ class HeatmapDateTime(HeatmapBase):
              show_values: bool = False,
              show_values_fontsize: float = None,
              show_values_n_dec_places: int = 0,
-             show_values_max_cells: int | None = SHOW_VALUES_MAX_CELLS):
+             show_values_max_cells: int | None = SHOW_VALUES_MAX_CELLS,
+             as_image: bool = False):
         """Render HeatmapDateTime with matplotlib styling (Phase 2 of two-phase design).
 
         All styling and presentation parameters go here. Can be called multiple times
@@ -256,6 +291,14 @@ class HeatmapDateTime(HeatmapBase):
                 One year of half-hourly data is 17 520 cells, where one label per
                 cell is unreadable and slows down every later redraw. Raise it,
                 or pass None for no limit, to label such a grid anyway.
+            as_image: Draw the grid as one image (``imshow``) instead of one
+                quad per cell (``pcolormesh``, the default). A long record then
+                draws and redraws many times faster, which matters in an
+                interactive window that is panned or zoomed. It looks the same;
+                where one pixel covers several days, the two methods can show a
+                different one of those days. The heatmap's artist is then an
+                ``AxesImage`` instead of a ``QuadMesh``. Falls back to the mesh
+                if the grid is not evenly spaced. Defaults to *False*.
 
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
@@ -296,8 +339,10 @@ class HeatmapDateTime(HeatmapBase):
             show_values_max_cells=show_values_max_cells
         )
 
-        # Domain-specific rendering (pcolormesh + formatting)
-        p = self.plot_pcolormesh()
+        # Domain-specific rendering (pcolormesh or image + formatting)
+        p = self.plot_image() if as_image else None
+        if p is None:
+            p = self.plot_pcolormesh()
         ticks_time, ticklabels_time = self._set_ticks()
 
         if self.ax_orientation == "vertical":

@@ -65,6 +65,372 @@ class TestPlots(unittest.TestCase):
         self.assertTrue(ax.collections)
         plt.close(fig)
 
+    @staticmethod
+    def _scatter_xy(n=500):
+        import numpy as np
+        import pandas as pd
+        rng = np.random.default_rng(3)
+        idx = pd.date_range("2021-01-01", periods=n, freq="30min")
+        x = pd.Series(rng.normal(10, 5, n), index=idx, name="TA")
+        y = pd.Series(0.5 * x.to_numpy() + rng.normal(0, 2, n), index=idx, name="NEE")
+        return x, y
+
+    @staticmethod
+    def _record_draw_calls(fig):
+        """Draw `fig` and return the number of points each renderer call drew."""
+        import types
+        renderer = fig.canvas.get_renderer()
+        calls = {"markers": [], "collection": []}
+        draw_markers, draw_collection = renderer.draw_markers, renderer.draw_path_collection
+
+        def markers(self, gc, marker_path, marker_trans, path, trans, rgbFace=None):
+            calls["markers"].append(len(path.vertices))
+            return draw_markers(gc, marker_path, marker_trans, path, trans, rgbFace)
+
+        def collection(self, gc, master, paths, transforms, offsets, *args):
+            calls["collection"].append(len(offsets))
+            return draw_collection(gc, master, paths, transforms, offsets, *args)
+
+        # RendererAgg binds these per instance; the canvas reuses this one.
+        renderer.draw_markers = types.MethodType(markers, renderer)
+        renderer.draw_path_collection = types.MethodType(collection, renderer)
+        fig.canvas.draw()
+        return calls
+
+    def test_scatter_uncoloured_points_draw_as_one_stamped_marker(self):
+        # Hollow markers go through draw_markers (one marker rasterized once,
+        # stamped at every point) rather than stroking each marker on its own,
+        # and the artist is still the PathCollection that ax.scatter returned.
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.collections import PathCollection
+        from matplotlib.colors import to_rgba
+        from matplotlib.figure import Figure
+        from diive.core.plotting.scatter import ScatterXY
+        x, y = self._scatter_xy()
+        fig = Figure()
+        FigureCanvasAgg(fig)
+        ax = fig.add_subplot()
+        ScatterXY(x=x, y=y).plot(ax=ax, markersize=30, alpha=0.5)
+        coll = ax.collections[0]
+        self.assertIsInstance(coll, PathCollection)
+        calls = self._record_draw_calls(fig)
+        self.assertIn(len(x), calls["markers"])
+        self.assertNotIn(len(x), calls["collection"])
+        # The face stays 'none' outside the draw, as ax.scatter set it.
+        self.assertEqual(len(coll.get_facecolor()), 0)
+        self.assertEqual(tuple(coll.get_edgecolor()[0]), to_rgba("#607D8B", 0.5))
+        self.assertAlmostEqual(coll.get_sizes()[0], 30)
+        self.assertEqual(coll.get_label(), "NEE")
+        # The legend entry is a scatter handle of the same marker size.
+        handle = ax.get_legend().legend_handles[0]
+        self.assertIsInstance(handle, PathCollection)
+        self.assertAlmostEqual(handle.get_sizes()[0], 30)
+
+        # A colour-coded scatter has one colour per point, so it keeps the
+        # per-point path.
+        fig = Figure()
+        FigureCanvasAgg(fig)
+        ax = fig.add_subplot()
+        ScatterXY(x=x, y=y, z=x.copy()).plot(ax=ax)
+        calls = self._record_draw_calls(fig)
+        self.assertIn(len(x), calls["collection"])
+        self.assertNotIn(len(x), calls["markers"])
+
+    def test_scatter_fast_path_differs_only_by_the_pixel_snap(self):
+        # draw_markers centres each marker on the nearest pixel. Re-rendering
+        # the slow way with every marker moved to that pixel centre must give
+        # the same image, pixel for pixel: the snap is the only difference.
+        import types
+        import numpy as np
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from matplotlib.transforms import IdentityTransform
+        from diive.core.plotting import scatter as scmod
+        x, y = self._scatter_xy()
+
+        def render(snap_reference):
+            fig = Figure(figsize=(6, 4), dpi=100)
+            FigureCanvasAgg(fig)
+            ax = fig.add_subplot()
+            scmod.ScatterXY(x=x, y=y, nbins=8).plot(ax=ax)
+            if snap_reference:
+                renderer = fig.canvas.get_renderer()
+                fast = renderer.draw_markers
+                height = renderer.height
+
+                def reference(self, gc, marker_path, marker_trans, path, trans, rgbFace=None):
+                    # Only the hollow scatter (points and legend handle) passes
+                    # a fully transparent face; ticks and the binned line don't.
+                    if rgbFace is None or rgbFace[3] != 0:
+                        return fast(gc, marker_path, marker_trans, path, trans, rgbFace)
+                    pts = trans.transform(path.vertices)
+                    # Agg: pixel column floor(x + 0.5), row floor(h - y + 0.5),
+                    # marker drawn at that pixel's centre.
+                    px = np.floor(pts[:, 0] + 0.5) + 0.5
+                    py = height - (np.floor(height - pts[:, 1] + 0.5) + 0.5)
+                    self.draw_path_collection(
+                        gc, marker_trans, [marker_path], np.zeros((0, 3, 3)),
+                        np.column_stack([px, py]), IdentityTransform(),
+                        np.zeros((0, 4)), [gc.get_rgb()], [gc.get_linewidth()],
+                        [gc.get_dashes()], [gc.get_antialiased()], [None], "screen")
+
+                renderer.draw_markers = types.MethodType(reference, renderer)
+            fig.canvas.draw()
+            return np.asarray(fig.canvas.buffer_rgba()).copy()
+
+        np.testing.assert_array_equal(render(False), render(True))
+
+    @staticmethod
+    def _coloured_scatter(n=10_000, figsize=(5, 4), dpi=100, **plot_kw):
+        """A dense colour-coded ScatterXY on its own Agg figure."""
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from diive.core.plotting.scatter import ScatterXY
+        x, y = TestPlots._scatter_xy(n)
+        z = (y - x).rename("DIFF")
+        fig = Figure(figsize=figsize, dpi=dpi)
+        FigureCanvasAgg(fig)
+        ax = fig.add_subplot()
+        ScatterXY(x=x, y=y, z=z).plot(ax=ax, **plot_kw)
+        return fig, ax
+
+    def test_scatter_coloured_draws_only_the_markers_that_show(self):
+        # Markers fully covered by opaque markers drawn after them never reach
+        # the renderer; the rest keep their order. Outside the draw the
+        # collection still holds every point.
+        import numpy as np
+        from matplotlib.collections import PathCollection
+        n = 10_000
+        fig, ax = self._coloured_scatter(n)
+        coll = ax.collections[0]
+        self.assertIsInstance(coll, PathCollection)
+        sent = []
+        renderer = fig.canvas.get_renderer()
+        draw_collection = renderer.draw_path_collection
+
+        def record(gc, master, paths, transforms, offsets, *args):
+            sent.append(np.array(offsets))
+            return draw_collection(gc, master, paths, transforms, offsets, *args)
+
+        renderer.draw_path_collection = record
+        fig.canvas.draw()
+        drawn = sent[0]
+        self.assertLess(len(drawn), n // 2)
+        # Same per-point path, drawn in data order.
+        position = {tuple(p): i for i, p in enumerate(np.asarray(coll.get_offsets()))}
+        order = [position[tuple(p)] for p in drawn]
+        self.assertTrue(np.all(np.diff(order) > 0))
+        self.assertEqual(order[-1], n - 1)
+        for values in (coll.get_offsets(), coll.get_array(), coll.get_facecolor()):
+            self.assertEqual(len(values), n)
+
+    def test_scatter_coloured_image_matches_drawing_every_marker(self):
+        # Leaving the hidden markers out must not change one pixel, whatever
+        # the size, opacity, colour limits, view, dpi or later restyling.
+        import io
+        import numpy as np
+        import matplotlib as mpl
+        from matplotlib.collections import PathCollection
+
+        def zoom(ax, coll):
+            ax.set_xlim(5, 12)
+            ax.set_ylim(0, 8)
+
+        def restyle(ax, coll):
+            coll.set_cmap("plasma")
+            coll.set_clim(-5, 5)
+            coll.set_array(np.asarray(coll.get_array())[::-1].copy())
+
+        def edges(ax, coll):
+            coll.set_edgecolor("k")
+            coll.set_linewidth(0.5)
+
+        def no_edges(ax, coll):
+            coll.set_linewidth(0)
+
+        cases = [
+            ({}, {}, None, None),
+            ({}, dict(markersize=200), None, None),
+            ({}, dict(markersize=8), None, None),
+            ({}, dict(alpha=0.5), None, None),
+            ({}, dict(vmin=-2, vmax=2, cmap=mpl.colormaps["RdYlBu"].with_extremes(
+                under="k", over="m")), None, None),
+            ({}, {}, zoom, None),
+            ({}, {}, restyle, None),
+            ({}, {}, edges, None),
+            ({}, {}, no_edges, None),
+            ({}, {}, None, 150),
+            (dict(figsize=(4.37, 3.13), dpi=137), {}, None, None),
+        ]
+        for fig_kw, plot_kw, change, savedpi in cases:
+            images = []
+            for plain in (False, True):
+                fig, ax = self._coloured_scatter(**fig_kw, **plot_kw)
+                coll = ax.collections[0]
+                if plain:
+                    coll.__class__ = PathCollection
+                if change:
+                    change(ax, coll)
+                if savedpi:
+                    buf = io.BytesIO()
+                    fig.savefig(buf, format="rgba", dpi=savedpi)
+                    images.append(np.frombuffer(buf.getvalue(), np.uint8))
+                else:
+                    fig.canvas.draw()
+                    images.append(np.asarray(fig.canvas.buffer_rgba()).copy())
+            with self.subTest(fig=fig_kw, plot=plot_kw, change=change, savedpi=savedpi):
+                np.testing.assert_array_equal(images[0], images[1])
+
+    def test_scatter_coloured_vector_output_keeps_every_marker(self):
+        # Only the Agg raster is thinned; an SVG gets every marker.
+        import io
+        n = 2_000
+        fig, ax = self._coloured_scatter(n)
+        buf = io.StringIO()
+        fig.savefig(buf, format="svg")
+        self.assertGreaterEqual(buf.getvalue().count("<use "), n)
+
+    def test_hidden_markers_needs_a_later_opaque_cover(self):
+        import numpy as np
+        from diive.core.plotting.scatter import _hidden_markers
+        centre = np.array([[50.2, 50.3]])
+        angles = np.linspace(0, 2 * np.pi, 16, endpoint=False)
+        ring = centre + 5 * np.column_stack([np.cos(angles), np.sin(angles)])
+        xy = np.vstack([centre, ring, [[np.nan, 50.0], [500.0, 50.0]]])
+        clip = (20.0, 20.0, 80.0, 80.0)
+
+        opaque = np.ones(len(xy), dtype=bool)
+        hidden = _hidden_markers(xy, opaque, radius=15, linewidth=1, clip=clip)
+        self.assertTrue(hidden[0])       # under the ring drawn after it
+        self.assertFalse(hidden[16])     # the last ring marker is on top
+        self.assertTrue(hidden[17])      # no position, nothing drawn
+        self.assertTrue(hidden[18])      # outside the clip area
+
+        # A translucent ring shows the marker through it.
+        opaque[1:17] = False
+        hidden = _hidden_markers(xy, opaque, radius=15, linewidth=1, clip=clip)
+        self.assertFalse(hidden[0])
+
+        # Drawn before the ring, the centre marker covers nothing of it.
+        xy_first = np.vstack([ring, centre])
+        hidden = _hidden_markers(xy_first, np.ones(17, dtype=bool), radius=15,
+                                 linewidth=1, clip=clip)
+        self.assertFalse(hidden[-1])
+
+    @staticmethod
+    def _legend_bounds(build, plain, zoom=None):
+        """Draw a figure made by `build(ax)` and return its legend's bounds.
+
+        With `plain`, the legend is turned back into a matplotlib `Legend`
+        first, so its 'best' search runs matplotlib's own code.
+        """
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from matplotlib.legend import Legend
+        fig = Figure(figsize=(6, 4), dpi=100)
+        FigureCanvasAgg(fig)
+        ax = fig.add_subplot()
+        build(ax)
+        legend = ax.get_legend()
+        if plain:
+            legend.__class__ = Legend
+        if zoom:
+            ax.set_xlim(*zoom)
+        fig.canvas.draw()
+        return legend.get_window_extent().bounds
+
+    def test_scatter_legend_best_lands_where_matplotlib_puts_it(self):
+        # The 'best' search of a large scatter tests the points as one array.
+        # It must pick the same place matplotlib picks, with and without the
+        # binned line, colour-coded, and after a zoom moves the data.
+        from diive.core.plotting import plotfuncs as pf
+        from diive.core.plotting.scatter import ScatterXY
+        n = pf._LEGEND_BEST_MAX_POINTS + 5000
+        x, y = self._scatter_xy(n)
+        cases = [
+            (lambda ax: ScatterXY(x=x, y=y).plot(ax=ax), None),
+            (lambda ax: ScatterXY(x=x, y=y, nbins=10).plot(ax=ax), None),
+            (lambda ax: ScatterXY(x=x, y=y, nbins=10, binagg='mean').plot(ax=ax), None),
+            (lambda ax: ScatterXY(x=x, y=y, z=x.copy()).plot(ax=ax, show_colorbar=False), None),
+            (lambda ax: ScatterXY(x=x, y=y).plot(ax=ax), (10, 30)),
+            (lambda ax: ScatterXY(x=x.iloc[:300], y=y.iloc[:300]).plot(ax=ax), None),
+        ]
+        seen = set()
+        for build, zoom in cases:
+            ours = self._legend_bounds(build, plain=False, zoom=zoom)
+            theirs = self._legend_bounds(build, plain=True, zoom=zoom)
+            self.assertEqual(ours, theirs)
+            seen.add(ours)
+        # The cases exercise more than one location.
+        self.assertGreater(len(seen), 1)
+
+    def test_array_legend_data_mirrors_matplotlib(self):
+        # _ArrayOffsetsLegend copies matplotlib's private _auto_legend_data
+        # for large collections. Compare the two on an axes holding every kind
+        # of artist the search looks at, so a change in matplotlib shows here.
+        import numpy as np
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from matplotlib.legend import Legend
+        from matplotlib.patches import Circle
+        from diive.core.plotting import plotfuncs as pf
+        rng = np.random.default_rng(1)
+        n = pf._LEGEND_BEST_MAX_POINTS + 1
+        fig = Figure()
+        FigureCanvasAgg(fig)
+        ax = fig.add_subplot()
+        ax.scatter(rng.random(n), rng.random(n), label='points')
+        ax.scatter([0.2, np.nan], [0.3, 0.4])
+        ax.plot([0, 1], [0, 1], label='line')
+        ax.bar([0.5], [0.5], width=0.1)
+        ax.add_patch(Circle((0.3, 0.7), 0.1))
+        ax.fill_between([0, 0.5, 1], [0, 0.1, 0], [0.2, 0.3, 0.2])
+        ax.text(0.8, 0.2, 'note')
+        pf.default_legend(ax=ax)
+        legend = ax.get_legend()
+        self.assertIsInstance(legend, pf._ArrayOffsetsLegend)
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+
+        bboxes, lines, offsets = legend._auto_legend_data(renderer)
+        ref_bboxes, ref_lines, ref_offsets = Legend._auto_legend_data(legend, renderer)
+        self.assertEqual([b.bounds for b in bboxes], [b.bounds for b in ref_bboxes])
+        self.assertEqual(len(lines), len(ref_lines))
+        for path, ref in zip(lines, ref_lines):
+            np.testing.assert_array_equal(path.vertices, ref.vertices)
+        self.assertIsInstance(offsets, np.ndarray)
+        np.testing.assert_array_equal(offsets, np.asarray(ref_offsets))
+
+    def test_array_legend_data_is_used_only_for_large_collections(self):
+        import types
+        import numpy as np
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from diive.core.plotting import plotfuncs as pf
+
+        def calls_for(n):
+            fig = Figure()
+            FigureCanvasAgg(fig)
+            ax = fig.add_subplot()
+            ax.scatter(np.linspace(0, 1, n), np.linspace(0, 1, n), label='points')
+            pf.default_legend(ax=ax)
+            legend = ax.get_legend()
+            calls = []
+            arrays = legend._auto_legend_data_arrays
+
+            def spy(self, renderer):
+                calls.append(1)
+                return arrays(renderer)
+
+            legend._auto_legend_data_arrays = types.MethodType(spy, legend)
+            fig.canvas.draw()
+            return len(calls)
+
+        # Matplotlib still asks the legend for its search data (if it stops,
+        # the override is dead code and large scatters are slow again).
+        self.assertGreater(calls_for(pf._LEGEND_BEST_MAX_POINTS + 1), 0)
+        self.assertEqual(calls_for(pf._LEGEND_BEST_MAX_POINTS), 0)
+
     def test_timeseries_title_and_markersize(self):
         # On a caller ax, an explicit title is honored and marker size applied.
         import pandas as pd
@@ -255,6 +621,29 @@ class TestPlots(unittest.TestCase):
         self.assertIsNotNone(ax.get_legend())
         plt.close(fig)
 
+    def test_dielcycle_leaves_linked_neighbours_labelled(self):
+        """Drawing a diel cycle must not hide another panel's shared-x tick labels.
+
+        It used to plot through pandas, which hides the x tick labels of every
+        non-bottom axes in the figure that shares its x-axis (and swaps in a
+        minor locator), blanking the dates of the GUI Overview's time series.
+        """
+        import matplotlib.ticker as mticker
+        import pandas as pd
+        from diive.core.plotting.dielcycle import DielCycle
+        idx = pd.date_range("2021-01-01", periods=48 * 60, freq="30min")
+        s = pd.Series([i % 48 for i in range(len(idx))], index=idx, name="ser", dtype=float)
+        fig = plt.figure()
+        gs = fig.add_gridspec(2, 2)
+        top = fig.add_subplot(gs[0, :])
+        top.plot(idx, s.to_numpy())
+        fig.add_subplot(gs[1, 0], sharex=top)
+        DielCycle(s).plot(ax=fig.add_subplot(gs[1, 1]))
+        fig.canvas.draw()
+        self.assertTrue(all(t.label1.get_visible() for t in top.xaxis.get_major_ticks()))
+        self.assertIsInstance(top.xaxis.get_minor_locator(), mticker.NullLocator)
+        plt.close(fig)
+
     def test_quickplot_keeps_same_named_series(self):
         """A list of same-named series must give one panel each, not one panel total.
 
@@ -351,6 +740,97 @@ class TestPlotfuncsHelpers(unittest.TestCase):
         self.assertEqual(len(set(results.values())), 1)
 
 
+class TestDecimateLine(unittest.TestCase):
+    """`decimate_line` must thin a line without changing what it shows."""
+
+    @staticmethod
+    def _gappy_walk(n: int = 60_000, seed: int = 1):
+        import numpy as np
+        rng = np.random.default_rng(seed)
+        x = np.arange(n, dtype=float) / 48.0  # half-hourly, in days
+        y = np.cumsum(rng.normal(size=n)) + rng.normal(scale=5.0, size=n)
+        y[rng.integers(0, n, 40)] += 80.0  # isolated spikes
+        y[10_000:10_500] = np.nan          # a long gap
+        y[rng.integers(0, n, 3_000)] = np.nan  # scattered single gaps
+        return x, y
+
+    def test_keeps_only_real_samples_in_order(self):
+        import numpy as np
+        from diive.core.plotting.plotfuncs import decimate_line
+        x, y = self._gappy_walk()
+        xd, yd = decimate_line(x, y, x[0], x[-1], 400)
+        self.assertLess(xd.size, x.size / 3)  # gappy: every short run keeps its ends
+        valid = ~np.isnan(yd)
+        pos = np.searchsorted(x, xd[valid])
+        np.testing.assert_array_equal(x[pos], xd[valid])
+        np.testing.assert_array_equal(y[pos], yd[valid])
+        self.assertTrue(np.all(np.diff(pos) > 0), msg="samples out of order or repeated")
+
+    def test_every_column_keeps_its_extremes(self):
+        import numpy as np
+        from diive.core.plotting.plotfuncs import decimate_line
+        x, y = self._gappy_walk()
+        xmin, xmax, n_bins = x[5_000], x[40_000], 300
+        xd, yd = decimate_line(x, y, xmin, xmax, n_bins)
+        col = np.floor((x - xmin) / (xmax - xmin) * n_bins)
+        cold = np.floor((xd - xmin) / (xmax - xmin) * n_bins)
+        for c in range(n_bins):
+            full = y[(col == c) & ~np.isnan(y)]
+            if full.size == 0:
+                continue
+            kept = yd[(cold == c) & ~np.isnan(yd)]
+            self.assertEqual(kept.min(), full.min(), msg=f"column {c} lost its minimum")
+            self.assertEqual(kept.max(), full.max(), msg=f"column {c} lost its maximum")
+
+    def test_breaks_exactly_where_the_record_has_a_gap(self):
+        import numpy as np
+        from diive.core.plotting.plotfuncs import decimate_line
+        x, y = self._gappy_walk()
+        xd, yd = decimate_line(x, y, x[0], x[-1], 400)
+        # Between two consecutive kept samples, the output breaks (NaN) if and
+        # only if the full record has a missing value between them.
+        kept = np.flatnonzero(~np.isnan(yd))
+        pos = np.searchsorted(x, xd[kept])
+        missing = np.cumsum(np.isnan(y))
+        for a, b, pa, pb in zip(kept[:-1], kept[1:], pos[:-1], pos[1:], strict=True):
+            broken_out = b - a > 1
+            broken_full = missing[pb - 1] - missing[pa] > 0
+            self.assertEqual(broken_out, broken_full, msg=f"records {pa}..{pb}")
+
+    def test_short_slice_is_returned_whole_with_one_sample_beyond_each_edge(self):
+        import numpy as np
+        from diive.core.plotting.plotfuncs import decimate_line
+        x, y = self._gappy_walk()
+        xd, yd = decimate_line(x, y, x[100] + 0.001, x[200] - 0.001, 1000)
+        np.testing.assert_array_equal(xd, x[100:201])
+        np.testing.assert_array_equal(yd, y[100:201])
+
+    def test_drawn_line_looks_the_same(self):
+        """At two columns per pixel the thinned line covers the same pixels."""
+        import numpy as np
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from diive.core.plotting.plotfuncs import decimate_line
+        x, y = self._gappy_walk()
+
+        def render(xs, ys):
+            fig = Figure(figsize=(8, 3), dpi=100)
+            FigureCanvasAgg(fig)
+            ax = fig.add_axes((0, 0, 1, 1))
+            ax.plot(xs, ys, color="black", linewidth=0.7)
+            ax.set_xlim(x[0], x[-1])
+            ax.set_ylim(np.nanmin(y), np.nanmax(y))
+            ax.axis("off")
+            fig.canvas.draw()
+            return np.asarray(fig.canvas.buffer_rgba())[..., 0].astype(int)
+
+        full = render(x, y)
+        thin = render(*decimate_line(x, y, x[0], x[-1], 2 * 800))
+        ink_ratio = (255 - thin).sum() / (255 - full).sum()
+        self.assertGreater(ink_ratio, 0.97)
+        self.assertLess(np.mean(np.abs(full - thin) > 96), 0.01)
+
+
 def _synthetic_series(years: int = 3, name: str = "TA", start: str = "2019-01-01"):
     """Deterministic hourly series with an annual and a diel cycle.
 
@@ -398,6 +878,78 @@ class TestPlotClasses(unittest.TestCase):
                 self.assertEqual(ax.get_ylabel(), ylabel)
                 self.assertEqual(len(ax.collections), 1)  # one QuadMesh
                 plt.close(fig)
+
+    def test_heatmap_datetime_as_image_matches_the_mesh(self):
+        """`as_image=True` draws the same cells and chrome as the default mesh.
+
+        Same values in the same cell layout, same axis limits (the date axis in
+        date numbers), same tick labels and colorbar, in both orientations.
+        """
+        import numpy as np
+        from matplotlib.collections import QuadMesh
+        from matplotlib.image import AxesImage
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        for orientation in ("vertical", "horizontal"):
+            with self.subTest(orientation=orientation):
+                drawn = {}
+                for as_image in (False, True):
+                    fig, ax = plt.subplots()
+                    HeatmapDateTime(self.series, ax_orientation=orientation).plot(
+                        ax=ax, fig=fig, as_image=as_image)
+                    fig.canvas.draw()
+                    artist = (ax.get_images() or ax.collections)[0]
+                    drawn[as_image] = dict(
+                        type=type(artist),
+                        values=np.ma.filled(artist.get_array(), np.nan).reshape(-1),
+                        xlim=ax.get_xlim(), ylim=ax.get_ylim(),
+                        xticks=[t.get_text() for t in ax.get_xticklabels()],
+                        yticks=[t.get_text() for t in ax.get_yticklabels()],
+                        cbar=[t.get_text() for t in fig.axes[1].get_yticklabels()])
+                    plt.close(fig)
+                mesh, image = drawn[False], drawn[True]
+                self.assertIs(mesh["type"], QuadMesh)
+                self.assertIs(image["type"], AxesImage)
+                np.testing.assert_array_equal(image["values"], mesh["values"])
+                np.testing.assert_allclose(image["xlim"], mesh["xlim"])
+                np.testing.assert_allclose(image["ylim"], mesh["ylim"])
+                for key in ("xticks", "yticks", "cbar"):
+                    self.assertEqual(image[key], mesh[key], msg=key)
+
+    def test_heatmap_datetime_grid_equals_the_date_time_pivot(self):
+        """The shortcut grid must be exactly the frame `pivot` builds.
+
+        Covers a partial first and last day, gaps, a 10-min step and a
+        microsecond-resolution index, in both orientations.
+        """
+        import numpy as np
+        import pandas as pd
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        rng = np.random.default_rng(5)
+        values = rng.normal(size=5000)
+        values[rng.integers(0, 5000, 400)] = np.nan
+        series = pd.Series(values, index=pd.date_range(
+            "2021-03-27 07:10", periods=5000, freq="10min", unit="us", name="TIMESTAMP_END"))
+        for orientation in ("vertical", "horizontal"):
+            with self.subTest(orientation=orientation):
+                hm = HeatmapDateTime(series, ax_orientation=orientation)
+                ref = hm.series.rename('_values').to_frame()
+                ref['DATE'] = ref.index.date
+                ref['TIME'] = ref.index.time
+                keys = ('DATE', 'TIME') if orientation == "vertical" else ('TIME', 'DATE')
+                ref = ref.reset_index(drop=True).pivot(index=keys[0], columns=keys[1], values='_values')
+                pd.testing.assert_frame_equal(hm.get_plot_data(), ref, check_exact=True)
+
+    def test_heatmap_datetime_as_image_falls_back_to_the_mesh_on_an_uneven_grid(self):
+        from matplotlib.collections import QuadMesh
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        hm = HeatmapDateTime(self.series.head(24 * 5))
+        hm.x = hm.x.copy()
+        hm.x[1] += 0.25  # one uneven time step: no image can hold that grid
+        fig, ax = plt.subplots()
+        hm.plot(ax=ax, fig=fig, as_image=True)
+        self.assertEqual(ax.get_images(), [])
+        self.assertIsInstance(ax.collections[0], QuadMesh)
+        plt.close(fig)
 
     def test_heatmap_datetime_show_values_annotates_cells(self):
         from diive.core.plotting.heatmap_datetime import HeatmapDateTime
@@ -529,6 +1081,54 @@ class TestPlotClasses(unittest.TestCase):
                                float(self.series.sum()), places=3)
         plt.close(fig)
 
+    def test_cumulative_fill_draws_what_fill_between_draws(self):
+        """Gap-free: pixel for pixel the `fill_between` shading it replaces."""
+        import numpy as np
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from diive.core.plotting.cumulative import Cumulative
+
+        def render(old: bool):
+            fig = Figure(figsize=(6, 3), dpi=100)
+            FigureCanvasAgg(fig)
+            ax = fig.add_subplot()
+            cum = Cumulative(self.series.to_frame())
+            if old:
+                cum._fill_to_zero = lambda s, color: cum.ax.fill_between(
+                    s.index, s.to_numpy(), 0, color=color, alpha=0.12,
+                    edgecolor='none', zorder=1)
+            cum.plot(ax=ax, showplot=False, fill=True)
+            fig.canvas.draw()
+            return np.asarray(fig.canvas.buffer_rgba()).copy()
+
+        np.testing.assert_array_equal(render(old=False), render(old=True))
+
+    def test_cumulative_fill_breaks_where_the_curve_breaks(self):
+        """One path, one closed outline per unbroken stretch, down to zero."""
+        import numpy as np
+        from matplotlib.path import Path
+        from diive.core.plotting.cumulative import Cumulative
+        series = self.series.copy()
+        series.iloc[100:130] = np.nan   # a gap
+        series.iloc[500] = np.nan       # a single missing record
+        series.iloc[502] = np.nan       # ... leaving one isolated value
+        fig, ax = plt.subplots()
+        cum = Cumulative(series.to_frame())
+        cum.plot(ax=ax, showplot=False, fill=True)
+        self.assertEqual(len(ax.collections), 1)
+        self.assertEqual(len(ax.collections[0].get_paths()), 1)
+        path = ax.collections[0].get_paths()[0]
+        starts = np.flatnonzero(path.codes == Path.MOVETO)
+        self.assertEqual(len(starts), 4)  # [0:100), [130:500), [501], [503:]
+        self.assertEqual(int((path.codes == Path.CLOSEPOLY).sum()), 4)
+        curve = cum.cumulative.iloc[:, 0]
+        on_curve = path.vertices[path.codes == Path.LINETO]
+        # Every valid point of the curve is on the outline, plus the point
+        # where each stretch returns to zero.
+        self.assertEqual(len(on_curve), int(curve.notna().sum()) + 4)
+        self.assertTrue(np.isin(curve.dropna().to_numpy(), on_curve[:, 1]).all())
+        plt.close(fig)
+
     def test_cumulative_year_draws_one_line_per_year(self):
         from diive.core.plotting.cumulative import CumulativeYear
         fig, ax = plt.subplots()
@@ -544,10 +1144,12 @@ class TestPlotClasses(unittest.TestCase):
         monthly = self.series.resample("ME").sum()
         fig, ax = plt.subplots()
         WaterfallPlot(self.series, resample="ME", agg="sum").plot(ax=ax, showplot=False)
-        self.assertEqual(len(ax.patches), len(monthly))
+        bars = next(c for c in ax.collections if c.get_gid() == "waterfall_bars")
+        corners = [p.vertices[:4] for p in bars.get_paths()]
+        self.assertEqual(len(corners), len(monthly))
         # The running budget closes on the series total.
-        tops = [p.get_y() + p.get_height() for p in ax.patches]
-        bottoms = [p.get_y() for p in ax.patches]
+        tops = [c[2, 1] for c in corners]
+        bottoms = [c[0, 1] for c in corners]
         final = tops[-1] if abs(tops[-1]) > abs(bottoms[-1]) else bottoms[-1]
         self.assertAlmostEqual(final, float(monthly.sum()), places=3)
         plt.close(fig)
@@ -563,7 +1165,8 @@ class TestPlotClasses(unittest.TestCase):
         fig, ax = plt.subplots()
         WaterfallPlot(series, resample="ME", agg="sum").plot(
             ax=ax, showplot=False, color_uptake="#111111", color_release="#EEEEEE")
-        colors = {p.get_facecolor()[:3] for p in ax.patches}
+        bars = next(c for c in ax.collections if c.get_gid() == "waterfall_bars")
+        colors = {tuple(fc[:3]) for fc in bars.get_facecolor()}
         self.assertEqual(len(colors), 2, "both uptake and release colours expected")
         plt.close(fig)
 

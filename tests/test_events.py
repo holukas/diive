@@ -103,3 +103,47 @@ def test_overlay_y_axis_for_heatmap(index):
     overlay_events(ax, [Event("Fert", "2021-01-05")], axis="y", show_labels=False)
     assert len(ax.lines) == 1
     plt.close(fig)
+
+
+@pytest.mark.parametrize("as_image", [True, False])
+def test_overlay_is_drawn_on_top_of_a_heatmap(index, as_image):
+    """The heatmap cells sit at zorder 99; the overlay must still show on them."""
+    import matplotlib.dates as mdates
+    import numpy as np
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.figure import Figure
+
+    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+
+    series = pd.Series(np.sin(np.arange(len(index)) / 10.0),
+                       index=index.rename("TIMESTAMP_MIDDLE"), name="X")
+    fig = Figure(figsize=(4, 6), dpi=100)
+    FigureCanvasAgg(fig)
+    ax = fig.add_subplot()
+    HeatmapDateTime(series).plot(ax=ax, fig=fig, as_image=as_image)
+    heatmap_z = max(a.get_zorder() for a in [*ax.images, *ax.collections])
+    overlay_events(ax, [Event("Fert", "2021-01-12", color="#00FF00"),
+                        Event("Graze", "2021-01-20", "2021-01-22")],
+                   axis="y", show_labels=True, line_alpha=1.0, linewidth=3)
+    assert min(line.get_zorder() for line in ax.lines) > heatmap_z
+    assert min(p.get_zorder() for p in ax.patches) > heatmap_z
+    assert min(t.get_zorder() for t in ax.texts) > heatmap_z
+
+    # The instant event's line is visible in the rendered pixels.
+    fig.canvas.draw()
+    buf = np.asarray(fig.canvas.buffer_rgba())
+    px, py = ax.transData.transform(
+        (np.mean(ax.get_xlim()), mdates.date2num(pd.Timestamp("2021-01-12"))))
+    row = buf.shape[0] - int(round(py))
+    pixels = buf[row - 1:row + 2, int(px), :3]
+    assert any(tuple(p) == (0, 255, 0) for p in pixels)
+
+
+def test_overlay_keeps_low_zorder_on_line_panels(index):
+    fig, ax = plt.subplots()
+    ax.plot(index, range(len(index)))
+    overlay_events(ax, [Event("Graze", "2021-01-10", "2021-01-12")], axis="x")
+    assert ax.patches[-1].get_zorder() == 2
+    assert ax.lines[-1].get_zorder() == 3
+    assert ax.texts[-1].get_zorder() == 4
+    plt.close(fig)

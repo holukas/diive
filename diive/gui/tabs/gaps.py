@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 import diive as dv
 from diive.gui.tabs._explorer_base import SingleVariableExplorerTab
 from diive.gui.tabs.overview import _fmt
+from diive.gui.widgets.debounce import Debouncer
 from diive.gui.widgets.mpl_canvas import MplCanvas
 
 _MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -99,7 +100,10 @@ class GapDashboardTab(SingleVariableExplorerTab):
         self.threshold.setToolTip(
             "Gaps with at least this many missing records are listed as 'long "
             "gaps' (GapStats.long_gap_records).")
-        self.threshold.valueChanged.connect(self._on_threshold)
+        # Recompute (gap table + both panels) once the value settles, not on
+        # every spin step or typed digit.
+        self._threshold_debounce = Debouncer(self.threshold, self._on_threshold)
+        self.threshold.valueChanged.connect(self._threshold_debounce.trigger)
         lay.addWidget(self.threshold)
         lay.addStretch(1)
         return bar
@@ -140,11 +144,12 @@ class GapDashboardTab(SingleVariableExplorerTab):
         missing = df.isna().sum()
         return str(missing.idxmax()) if missing.max() > 0 else str(df.columns[0])
 
-    def _on_threshold(self, _value: int) -> None:
+    def _on_threshold(self) -> None:
         self._recompute()
 
     def _compute(self) -> None:
         # All gap logic is the library's; the tab only reads results back.
+        self._threshold_debounce.cancel()  # this run reads the current threshold
         series = self._df[self._target]
         self._gs = dv.analysis.GapStats(series, long_gap_records=self.threshold.value())
         self._fill_stats()

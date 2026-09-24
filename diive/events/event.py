@@ -30,6 +30,8 @@ from dataclasses import dataclass
 
 import matplotlib.dates as mdates
 import pandas as pd
+from matplotlib.collections import QuadMesh
+from matplotlib.image import AxesImage
 
 #: Default colours for generic categories (Material Design 400-level), so events
 #: read clearly without the caller having to pick a colour. Events can mean
@@ -213,7 +215,8 @@ def overlay_events(ax, events, *, axis: str = "x", show_labels: bool = True,
     date/time heatmap, where the date is the y-axis (``axis='y'``).
 
     This only *adds* artists; it never clears or rescales the axes, so it composes
-    on top of an already-rendered plot.
+    on top of an already-rendered plot. The overlays are drawn above any image or
+    mesh already on the axes, so they stay visible on an opaque heatmap.
 
     Args:
         ax: Target axes (already drawn).
@@ -232,6 +235,12 @@ def overlay_events(ax, events, *, axis: str = "x", show_labels: bool = True,
     if not events:
         return
     vertical = axis == "x"  # draw against the x-axis (time runs horizontally)
+    # Spans at z, lines at z + 1, labels at z + 2. The diive heatmaps draw their
+    # cells at zorder 99, so a fixed low zorder would hide every overlay under
+    # them; start above the highest image or mesh on the axes instead. Line
+    # panels have neither and keep the plain 2/3/4.
+    z = max([2] + [a.get_zorder() + 1 for a in ax.get_children()
+                   if isinstance(a, (AxesImage, QuadMesh))])
     for i, ev in enumerate(events):
         color = ev.resolved_color(i, colors=colors)
         s = mdates.date2num(ev.start)
@@ -239,40 +248,42 @@ def overlay_events(ax, events, *, axis: str = "x", show_labels: bool = True,
             e = mdates.date2num(ev.end)
             if vertical:
                 ax.axvspan(s, e, facecolor=color, alpha=span_alpha,
-                           edgecolor="none", zorder=2)
-                ax.axvline(s, color=color, alpha=line_alpha, lw=linewidth, zorder=3)
+                           edgecolor="none", zorder=z)
+                ax.axvline(s, color=color, alpha=line_alpha, lw=linewidth,
+                           zorder=z + 1)
                 ax.axvline(e, color=color, alpha=line_alpha * 0.6, lw=linewidth,
-                           ls=":", zorder=3)
+                           ls=":", zorder=z + 1)
             else:
                 ax.axhspan(s, e, facecolor=color, alpha=span_alpha,
-                           edgecolor="none", zorder=2)
-                ax.axhline(s, color=color, alpha=line_alpha, lw=linewidth, zorder=3)
+                           edgecolor="none", zorder=z)
+                ax.axhline(s, color=color, alpha=line_alpha, lw=linewidth,
+                           zorder=z + 1)
                 ax.axhline(e, color=color, alpha=line_alpha * 0.6, lw=linewidth,
-                           ls=":", zorder=3)
+                           ls=":", zorder=z + 1)
         else:
             if vertical:
                 ax.axvline(s, color=color, alpha=line_alpha, lw=linewidth,
-                           ls="--", zorder=3)
+                           ls="--", zorder=z + 1)
             else:
                 ax.axhline(s, color=color, alpha=line_alpha, lw=linewidth,
-                           ls="--", zorder=3)
+                           ls="--", zorder=z + 1)
         if show_labels and ev.name:
-            _label_event(ax, s, ev, color, vertical, label_fontsize)
+            _label_event(ax, s, ev, color, vertical, label_fontsize, z + 2)
 
 
 def _label_event(ax, pos: float, ev: Event, color: str, vertical: bool,
-                 fontsize: int) -> None:
+                 fontsize: int, zorder: float) -> None:
     """Place a small name tag at the start of an event, anchored to the axes edge
     so it stays visible as the data is zoomed/panned."""
     if vertical:
         ax.annotate(
             ev.name, xy=(pos, 1.0), xycoords=("data", "axes fraction"),
             xytext=(2, -2), textcoords="offset points", rotation=90,
-            ha="left", va="top", fontsize=fontsize, color=color, zorder=4,
+            ha="left", va="top", fontsize=fontsize, color=color, zorder=zorder,
             clip_on=True)
     else:
         ax.annotate(
             ev.name, xy=(0.0, pos), xycoords=("axes fraction", "data"),
             xytext=(2, 2), textcoords="offset points",
-            ha="left", va="bottom", fontsize=fontsize, color=color, zorder=4,
+            ha="left", va="bottom", fontsize=fontsize, color=color, zorder=zorder,
             clip_on=True)

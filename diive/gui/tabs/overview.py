@@ -14,9 +14,13 @@ from __future__ import annotations
 from html import escape
 
 import matplotlib.dates as mdates
+import numpy as np
 import pandas as pd
-from PySide6.QtCore import Qt
+from matplotlib.artist import Artist
+from matplotlib.ticker import Locator, MaxNLocator, ScalarFormatter
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -27,10 +31,12 @@ from PySide6.QtWidgets import (
 )
 
 import diive as dv
+from diive.core.plotting.plotfuncs import decimate_line
 from diive.gui import events as events_store
 from diive.gui import metadata_store
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.debounce import Debouncer
 from diive.gui.widgets.flow_layout import FlowLayout
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.tab_chrome import build_titlebar
@@ -103,12 +109,167 @@ _MAX_XTICKS = 5
 # four-label spacing that actually fits.
 _YEAR_STEPS = [1, 2, 3, 4, 5, 10, 20, 40, 50, 100]
 
+# A narrower panel gets fewer date ticks than _MAX_XTICKS: one label ("2016")
+# plus the gap to the next takes about this many font sizes.
+_DATE_TICK_EMS = 3.2
+
 # Refined, mutually distinct line colours so each panel reads at a glance and
 # looks professional (the bright Material blue read as garish).
 _TS_COLOR = "#22303C"     # near-black ink — time series (lets the heatmap carry the colour)
 _DAILY_COLOR = "#26A69A"  # teal 400 — daily mean (line + SD band)
+# Above this many records the time-series panel draws no per-record markers.
+_MARKER_MAX_POINTS = 5000
+# A long time series is drawn thinned (`decimate_line`) to this many columns
+# per pixel of figure width, which is at least two per pixel of the panel.
+# At one per pixel the dense stretches show light streaks; at two the drawn
+# line matches the full one.
+_TS_COLUMNS_PER_PIXEL = 2
+# Quiet time after the last pan/zoom step before the diel cycle and histogram
+# are recomputed for the visible window.
+_ZOOM_SETTLE_MS = 150
 # The diel cycle now draws one auto-coloured line per month (no single colour).
 _ZERO_COLOR = "#90A4AE"   # blue-grey 300 — zero reference line
+
+# Why the decorations below are kept inside their panels: constrained layout
+# makes the margins "submerged" under the time series (which spans the five
+# lower columns) equal, so the widest decoration of any lower panel is added
+# between every pair of lower panels, four or five times over. A legend or a
+# long tick label that sticks out of one small panel therefore costs the whole
+# row its width, and as the panels shrink it sticks out further, until the
+# layout collapses. So the legends stay out of the layout and shrink or hide
+# with their panel (`_compact_legend`), and tick counts follow the panel size.
+_LEGEND_FONTSIZE = 8
+# Hour-of-day ticks (diel cycle, heatmap) step by the first of these that
+# leaves each label about this many font sizes of room.
+_HOUR_STEPS = (3, 6, 12)
+_HOUR_TICK_EMS = 2.2
+
+
+class _FittedDateLocator(mdates.AutoDateLocator):
+    """`AutoDateLocator` whose tick cap also follows the narrowest linked panel.
+
+    The linked datetime panels share one locator, so the cap comes from the
+    narrowest axes that shares this x-axis. Evaluated at draw time, so it
+    follows resizes."""
+
+    def get_locator(self, dmin, dmax):
+        ax = self.axis.axes
+        width = min(a.bbox.width for a in ax.get_shared_x_axes().get_siblings(ax))
+        room = 1 + width / (_DATE_TICK_EMS * _FONT_SIZE * ax.figure.dpi / 72)
+        # At least 3: with 2, a one-year range finds no month interval that
+        # fits and AutoDateLocator warns and falls back to its own choice.
+        self.maxticks = dict.fromkeys(self._freqs,
+                                      int(min(_MAX_XTICKS, max(3, room))))
+        return super().get_locator(dmin, dmax)
+
+
+class _HourLocator(Locator):
+    """Hour-of-day ticks every 3, 6 or 12 hours, the finest the axis has room for.
+
+    Only interior ticks are placed, so no label hangs over the axis ends.
+    Evaluated at draw time, so the step follows the panel's current size."""
+
+    def __call__(self):
+        lo, hi = sorted(self.axis.get_view_interval())
+        ax = self.axis.axes
+        length = ax.bbox.width if self.axis is ax.xaxis else ax.bbox.height
+        room = length / (_HOUR_TICK_EMS * _FONT_SIZE * ax.figure.dpi / 72)
+        ticks = np.array([])
+        for step in _HOUR_STEPS:
+            ticks = np.arange(np.floor(lo / step) * step + step, hi, step)
+            if len(ticks) <= room:
+                break
+        return self.raise_if_exceeds(ticks)
+
+
+class _CompactFormatter(ScalarFormatter):
+    """Tick labels in thousands or millions ("−80k") once the ticks reach 10,000,
+    so a cumulative sum or a count axis doesn't need a wide label margin.
+    Smaller values are formatted as usual."""
+
+    def _unit(self):
+        big = max((abs(v) for v in self.locs), default=0.0)
+        for divisor, suffix in ((1e6, "M"), (1e3, "k")):
+            if big >= 10 * divisor:
+                return divisor, suffix
+        return None
+
+    def __call__(self, x, pos=None):
+        unit = self._unit()
+        if unit is None:
+            return super().__call__(x, pos)
+        if x == 0:
+            return "0"
+        return self.fix_minus(f"{x / unit[0]:g}{unit[1]}")
+
+    def get_offset(self):
+        return "" if self._unit() else super().get_offset()
+
+
+class _LegendFitGuard(Artist):
+    """Shows the first of a panel's alternative legends that fits inside it,
+    or none.
+
+    Drawn just before the legends (lowest zorder), so the check uses the panel
+    size of the draw in progress, whatever resize or layout solve came before
+    it. Draws nothing itself and stays out of the layout."""
+
+    def __init__(self, legends) -> None:
+        super().__init__()
+        self._legends = legends
+        self._sizes = {}  # figure dpi -> [(width, height)] per legend
+        self.set_zorder(-1e9)
+        self.set_in_layout(False)
+
+    def draw(self, renderer) -> None:
+        # A legend's size depends only on its text and the dpi. Measuring it
+        # also runs the "best" placement search, so it is done once per dpi
+        # rather than on every pan repaint.
+        dpi = self.axes.figure.dpi
+        if dpi not in self._sizes:
+            self._sizes[dpi] = [
+                (b.width, b.height) for b in
+                (legend.get_window_extent(renderer) for legend in self._legends)]
+        panel = self.axes.bbox
+        shown = False
+        for legend, (width, height) in zip(self._legends, self._sizes[dpi]):
+            fits = bool(not shown and width <= panel.width
+                        and height <= panel.height)
+            if fits != legend.get_visible():
+                legend.set_visible(fits)
+            shown = shown or fits
+
+
+def _compact_legend(ax, ncol: int) -> None:
+    """Rebuild the panel's legend in a compact form that stays inside the panel.
+
+    Keeps the entries and text colour of the legend the plot class drew, with a
+    smaller font and tighter spacing. A narrower panel falls back to the entry
+    names alone, each in its line's colour, and a panel too small for either
+    shows no legend (`_LegendFitGuard`). Both are left out of the layout."""
+    old = ax.get_legend()
+    if old is None:
+        return
+    texts = old.get_texts()
+    color = texts[0].get_color() if texts else None
+    handles, labels = ax.get_legend_handles_labels()
+    old.remove()
+    style = dict(loc="best", ncol=ncol, fontsize=_LEGEND_FONTSIZE, frameon=False,
+                 columnspacing=0.8, labelspacing=0.3, borderaxespad=0.3)
+    full = ax.legend(handles, labels, handlelength=1.2, handletextpad=0.4,
+                     **style)
+    if color is not None:
+        for text in full.get_texts():
+            text.set_color(color)
+    # Keep it as a plain artist; the next ax.legend() replaces the axes legend.
+    ax.add_artist(full)
+    names = ax.legend(handles, labels, handlelength=0, handletextpad=0,
+                      labelcolor="linecolor", **style)
+    for handle in names.legend_handles:
+        handle.set_visible(False)
+    for legend in (full, names):
+        legend.set_in_layout(False)
+    ax.add_artist(_LegendFitGuard([full, names]))
 
 
 def _fmt(value) -> str:
@@ -562,6 +723,10 @@ class OverviewTab(DiiveTab):
         self._heatmap_ax = None
         self._heatmap_ylim = None
         self._syncing_zoom = False
+        # The time-series line when it is drawn thinned, and its full record
+        # (date numbers, values); see _thin_time_series.
+        self._ts_line = None
+        self._ts_xy = None
 
         root = QWidget()
         outer = QVBoxLayout(root)
@@ -589,9 +754,10 @@ class OverviewTab(DiiveTab):
         self.hero = _HeroBand()
         right_lay.addWidget(self.hero)
         self.canvas = MplCanvas()
-        # matplotlib hides the time-series x tick labels because it shares its
-        # x-axis with the panels below it; re-reveal them after every draw.
-        self.canvas.fig.canvas.mpl_connect("draw_event", self._reveal_ts_xlabels)
+        self._zoom_debounce = Debouncer(self.canvas, self._refresh_zoom_summaries,
+                                        ms=_ZOOM_SETTLE_MS)
+        self.canvas.mpl_connect("draw_event", self._on_canvas_draw)
+        self.canvas.mpl_connect("resize_event", self._on_canvas_resize)
         right_lay.addWidget(self.canvas, stretch=1)
 
         splitter.addWidget(self.varpanel)
@@ -674,10 +840,18 @@ class OverviewTab(DiiveTab):
         self.varpanel.run_with_loading(name, _render)
 
     def _render_figure(self, series, name: str) -> None:
+        self._zoom_debounce.cancel()  # its axes are about to be replaced
+        self._ts_line = self._ts_xy = None
         fig = self.canvas.fig
         # Clear + re-enable constrained layout (canvas.draw() freezes it after,
         # so zoom/pan don't reflow the panels).
         self.canvas.reset_layout()
+        # The hero band above may just have changed height (its stats wrap
+        # differently per variable). Settle the canvas size now, while the
+        # figure is empty, so the layout is solved once, at the final size.
+        # Otherwise the resize arrives after the draw and solves the full
+        # figure again, plus a second full draw.
+        QApplication.sendPostedEvents(None, QEvent.Type.LayoutRequest)
         # Pack the panels tighter (less whitespace between them, esp. the three
         # lower panels) while keeping room for tick labels.
         engine = fig.get_layout_engine()
@@ -735,6 +909,7 @@ class OverviewTab(DiiveTab):
             if x1 > x0:
                 shared_x_ax.set_xlim(x0, x1 + (x1 - x0) * 0.03)
             shared_x_ax.callbacks.connect("xlim_changed", self._on_zoom)
+        self._thin_time_series()
         self.canvas.draw()
 
     def focus_on(self, start, end) -> None:
@@ -743,6 +918,9 @@ class OverviewTab(DiiveTab):
         ``end`` may be ``None`` (instant) — a small symmetric window is opened
         around the instant. The existing ``xlim_changed`` sync then recomputes the
         diel cycle and clips the heatmap to match. No-op if nothing is plotted."""
+        # A render still queued (e.g. this tab was stale and just caught up on
+        # being shown) would replace the axes and drop the zoom, so run it first.
+        self.varpanel.flush_pending()
         ax = getattr(self, "_shared_x_ax", None)
         if ax is None:
             return
@@ -752,25 +930,6 @@ class OverviewTab(DiiveTab):
         pad = span * 0.5 if span > 0 else 5.0  # ±5 days around an instant
         ax.set_xlim(lo - pad, hi + pad)
         self.canvas.draw_idle()
-
-    def _reveal_ts_xlabels(self, _event) -> None:
-        """Re-show the time-series x tick labels after a draw.
-
-        The time series shares its x-axis with the panels below it, so matplotlib
-        (treating it as a non-bottom shared subplot) hides its tick labels and
-        re-hides them whenever the ticks regenerate (zoom/pan). Re-reveal them so
-        the main plot stays dated. A same-view redraw keeps the ticks, so the
-        follow-up draw settles; the visibility guard prevents a redraw loop."""
-        ax = getattr(self, "_shared_x_ax", None)
-        if ax is None:
-            return
-        changed = False
-        for tick in ax.xaxis.get_major_ticks():
-            if not tick.label1.get_visible():
-                tick.label1.set_visible(True)
-                changed = True
-        if changed:
-            self.canvas.draw_idle()
 
     def _overlay_events(self, panel_axes: dict) -> None:
         """Draw the configured events onto the datetime panels + heatmap."""
@@ -836,6 +995,17 @@ class OverviewTab(DiiveTab):
             ax.autoscale(enable=True, axis="x")
         if plot_type in _DATETIME_X_PANELS:
             self._thin_date_ticks(ax)
+        # Tick counts that follow the panel size, and short labels for large
+        # values, so no tick label widens the layout (see the note above
+        # _LEGEND_FONTSIZE).
+        if plot_type in ("Diel cycle", "Heatmap (date/time)"):
+            ax.xaxis.set_major_locator(_HourLocator())
+            ax.xaxis.set_major_formatter(ScalarFormatter())
+        elif plot_type == "Histogram":
+            ax.xaxis.set_major_locator(MaxNLocator(nbins="auto"))
+            ax.xaxis.set_major_formatter(_CompactFormatter())
+        if plot_type != "Heatmap (date/time)":
+            ax.yaxis.set_major_formatter(_CompactFormatter())
 
     @staticmethod
     def _thin_date_ticks(ax) -> None:
@@ -845,9 +1015,10 @@ class OverviewTab(DiiveTab):
         locators. The formatter is bound to the locator it was built with, so the
         two are always replaced together. Zooming is unaffected: the locator
         re-picks its interval from the visible range, so a zoomed-in view
-        relabels itself in months or days.
+        relabels itself in months or days. A narrow panel gets fewer ticks
+        (`_FittedDateLocator`).
         """
-        locator = mdates.AutoDateLocator(maxticks=_MAX_XTICKS, minticks=2)
+        locator = _FittedDateLocator(maxticks=_MAX_XTICKS, minticks=2)
         locator.intervald[mdates.YEARLY] = list(_YEAR_STEPS)
         ax.xaxis.set_major_locator(locator)
         ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
@@ -871,50 +1042,121 @@ class OverviewTab(DiiveTab):
 
         (1) Recompute the diel cycle and the histogram from only the data in the
             visible window (their x-axes aren't datetime, so they don't follow the
-            shared zoom automatically).
+            shared zoom automatically), once the view has settled
+            (`_refresh_zoom_summaries`).
         (2) Clip the heatmap to the same date range — its date axis is the y-axis
             (same matplotlib date-number units as the line panels' x-axis), so
             the hour-of-day x-axis is deliberately left untouched.
+        (3) Re-thin the time-series line for the new window (`_thin_time_series`).
         """
         if self._zoom_series is None or self._syncing_zoom:
             return
+        # Re-thin the time series for the new window now, before the repaint,
+        # so a pan never shows a stretch drawn at the old resolution.
+        self._thin_time_series()
         x0, x1 = shared_ax.get_xlim()
         lo, hi = min(x0, x1), max(x0, x1)
-        self._syncing_zoom = True
-        try:
-            if self._heatmap_ax is not None and self._heatmap_ylim is not None:
-                # Clamp to the heatmap's own date span so zooming past the data
-                # doesn't add empty margins.
-                ylo = max(lo, self._heatmap_ylim[0])
-                yhi = min(hi, self._heatmap_ylim[1])
-                if yhi > ylo:
-                    self._heatmap_ax.set_ylim(ylo, yhi)
-            # The diel cycle and histogram both summarise the visible window, so
-            # recompute them on the zoomed sub-range.
-            if self._diel_ax is not None or self._hist_ax is not None:
-                start = pd.Timestamp(mdates.num2date(lo)).tz_localize(None)
-                end = pd.Timestamp(mdates.num2date(hi)).tz_localize(None)
-                sub = dv.times.keep_daterange(self._zoom_series, start=start, end=end)
-                for ax, ptype in ((self._diel_ax, "Diel cycle"),
-                                  (self._hist_ax, "Histogram")):
-                    if ax is None:
-                        continue
-                    ax.clear()
-                    self._draw_panel(ax, sub, ptype)
-                    self._style_panel(ax, ptype)
-                    self._panel_fonts(ax)
-        finally:
-            self._syncing_zoom = False
+        if self._heatmap_ax is not None and self._heatmap_ylim is not None:
+            # Clamp to the heatmap's own date span so zooming past the data
+            # doesn't add empty margins.
+            ylo = max(lo, self._heatmap_ylim[0])
+            yhi = min(hi, self._heatmap_ylim[1])
+            if yhi > ylo:
+                self._heatmap_ax.set_ylim(ylo, yhi)
+        # A pan drag changes the limits on every mouse move; rebuilding the diel
+        # cycle and histogram (incl. its KDE) each time made panning stutter, so
+        # they follow once the view has settled.
+        if self._diel_ax is not None or self._hist_ax is not None:
+            self._zoom_debounce.trigger()
         # Repaint without re-freezing the layout (draw() would flip the layout
         # engine and could abort an in-progress resize re-solve).
         self.canvas.draw_idle()
 
+    def _refresh_zoom_summaries(self) -> None:
+        """Recompute the diel cycle and histogram for the visible date window."""
+        ax_x = getattr(self, "_shared_x_ax", None)
+        if self._zoom_series is None or ax_x is None:
+            return
+        x0, x1 = ax_x.get_xlim()
+        lo, hi = min(x0, x1), max(x0, x1)
+        start = pd.Timestamp(mdates.num2date(lo)).tz_localize(None)
+        end = pd.Timestamp(mdates.num2date(hi)).tz_localize(None)
+        sub = dv.times.keep_daterange(self._zoom_series, start=start, end=end)
+        self._syncing_zoom = True
+        try:
+            for ax, ptype in ((self._diel_ax, "Diel cycle"),
+                              (self._hist_ax, "Histogram")):
+                if ax is None:
+                    continue
+                ax.clear()
+                self._draw_panel(ax, sub, ptype)
+                self._style_panel(ax, ptype)
+                self._panel_fonts(ax)
+        finally:
+            self._syncing_zoom = False
+        self.canvas.draw_idle()
+
+    def _thin_time_series(self) -> None:
+        """Point the time-series line at the samples that matter in its view.
+
+        A dense line of 175k records costs most of a pan step to draw, yet at
+        panel size most of it overlaps. `decimate_line` keeps each screen
+        column's first, last, lowest and highest value, so the drawn line looks
+        the same and no spike is lost. The hover reads the full record from
+        the line's ``_diive_hover_xy`` instead (see widgets/hover.py).
+        """
+        line = self._ts_line
+        if line is None or line.axes is None:
+            return
+        x, y = self._ts_xy
+        lo, hi = sorted(line.axes.get_xlim())
+        n_columns = int(self.canvas.fig.bbox.width * _TS_COLUMNS_PER_PIXEL)
+        line.set_data(*decimate_line(x, y, lo, hi, n_columns))
+
+    def _on_canvas_draw(self, _event) -> None:
+        """Restart a pending summary refresh once a repaint has finished.
+
+        A pan repaint can take longer than the settle time, so the wait started
+        by the limit change would run out during the repaint itself and the
+        summaries were rebuilt between two pan steps. Counting the quiet time
+        from the end of the repaint keeps them for when the view has settled.
+        """
+        if self._zoom_debounce.pending():
+            self._zoom_debounce.trigger()
+
+    def _on_canvas_resize(self, _event) -> None:
+        """A wider canvas needs more columns for the thinned time series."""
+        self._thin_time_series()
+
     def _draw_panel(self, ax, series, plot_type: str) -> None:
         try:
             if plot_type == "Time series":
+                # A marker per record costs ~110 ms per draw on 175k records and
+                # merges into the line at that density, so long series drop it.
+                # A value with a gap on both sides has no line segment, so it keeps
+                # a marker to stay visible.
+                long_series = len(series) > _MARKER_MAX_POINTS
+                n_lines = len(ax.lines)
                 dv.plotting.TimeSeries(series).plot(
                     ax=ax, color=_TS_COLOR, linewidth=0.7,
-                    marker=True, markersize=2.5)
+                    marker=not long_series, markersize=2.5)
+                if long_series:
+                    # Drawn thinned for its view (see _thin_time_series); the
+                    # full record stays on the line for the hover. Needs
+                    # ascending time, which a sanitized index has.
+                    line = ax.lines[n_lines]
+                    x = np.asarray(line.get_xdata(orig=False), dtype=float)
+                    y = np.asarray(line.get_ydata(orig=False), dtype=float)
+                    if np.all(np.diff(x) > 0):
+                        line._diive_hover_xy = (x, y)
+                        self._ts_line, self._ts_xy = line, (x, y)
+                    valid = series.notna()
+                    isolated = series[valid & ~valid.shift(1, fill_value=False)
+                                      & ~valid.shift(-1, fill_value=False)]
+                    if not isolated.empty:
+                        ax.plot(isolated.index, isolated.to_numpy(), ls="none",
+                                marker="o", markersize=2.5, markeredgecolor="none",
+                                color=_TS_COLOR, alpha=0.95, zorder=99)
                 # Zero reference line only when the data straddles zero (e.g.
                 # fluxes) — pointless for all-positive variables far from zero.
                 smin, smax = series.min(), series.max()
@@ -934,6 +1176,7 @@ class OverviewTab(DiiveTab):
                         show_legend=True, legend_ncol=legend_ncol,
                         legend_fontsize=_FONT_SIZE),
                     each_month=True, linewidth=1.1)
+                _compact_legend(ax, legend_ncol)
                 ax.axhline(0, color=_ZERO_COLOR, linestyle="--", linewidth=1.0,
                            alpha=0.6, zorder=1)
             elif plot_type == "Daily mean":
@@ -957,14 +1200,18 @@ class OverviewTab(DiiveTab):
                     show_zscore_values=False, show_info=False,
                     show_counts=False, highlight_peak=True,
                     show_kde=True, show_mean=True, show_median=True)
+                _compact_legend(ax, 1)
             elif plot_type == "Waterfall":
                 # Daily contributions building a running total (NEE convention:
                 # uptake negative). Connectors/annotation read fine at panel size.
                 dv.plotting.WaterfallPlot(series, resample="D", agg="sum").plot(
                     ax=ax, showplot=False)
             elif plot_type == "Heatmap (date/time)":
+                # An image draws the 175k cells of ten years several times
+                # faster than a mesh, and the heatmap repaints on every pan step.
                 dv.plotting.HeatmapDateTime(series).plot(
-                    ax=ax, fig=self.canvas.fig, cb_digits_after_comma="auto")
+                    ax=ax, fig=self.canvas.fig, cb_digits_after_comma="auto",
+                    as_image=True)
         except Exception as err:
             ax.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",
                     wrap=True, transform=ax.transAxes)

@@ -2,6 +2,47 @@
 
 ![diive](images/logo_diive1_256px.png)
 
+## v0.91.2 | 24 September 2026
+
+The ONEFlux partitioning ports now agree more closely with ONEFlux, and the desktop GUI is
+faster.
+
+### New features
+
+- **Daytime partitioning (ONEFlux):** the new option `reject_alpha_at_start=True` applies a window
+  check that ONEFlux intends but never runs. The default still matches ONEFlux output.
+- **Plotting:** `HeatmapDateTime.plot(as_image=True)` draws the heatmap as an image, and
+  `decimate_line` thins long lines for faster drawing.
+
+### Changes
+
+- **Faster plots:** `WaterfallPlot`, `ScatterXY`, `Cumulative`, `HistogramPlot`,
+  `HeatmapDateTime` and legends on large datasets draw faster. `WaterfallPlot` bars are now in
+  `ax.collections` instead of `ax.patches`.
+- **Faster GUI:** the GUI starts faster, and only the visible tab updates when the data change.
+  Projects, exports and several analysis tabs load and compute in the background. The Overview
+  also fits smaller windows.
+- **GUI from a script:** starting the GUI from your own script now needs a main guard, see the
+  user manual.
+
+### Packaging
+
+- New releases are published to PyPI automatically.
+- The source distribution no longer includes notebooks and images.
+
+### Bugfixes
+
+- **Daytime partitioning (ONEFlux):** results change and now match ONEFlux closely (annual GPP
+  within 0.1% on CH-DAV 2016). Hourly data are handled correctly, and RECO and GPP are NaN where
+  a gap-filled driver is missing.
+- **Nighttime partitioning (ONEFlux):** results change and now match ONEFlux closely (RECO RMSE
+  0.0003 µmol m⁻² s⁻¹ on CH-DAV 2016).
+- **`DielCycle.plot`** no longer hides the x tick labels of other axes that share its x-axis.
+  Extra keyword arguments now go to matplotlib instead of pandas.
+- **`RandomUncertaintyPAS20.showplot_random_uncertainty`** no longer raises a `TypeError`.
+- **`dv.events.overlay_events(axis='y')`** draws events above heatmap cells instead of hiding
+  them below.
+
 ## v0.91.1 | 19 September 2026
 
 ### Bugfixes

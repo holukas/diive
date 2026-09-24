@@ -14,6 +14,19 @@ pip install 'diive[gui]'     # or: uv sync --extra gui
 diive-gui
 ```
 
+To start the GUI from your own Python script, put the call under a main guard:
+
+```python
+from diive.gui import launch
+
+if __name__ == "__main__":
+    launch()
+```
+
+Some tabs compute in a separate background process, which re-imports your script
+when it starts. Without the guard, that process would run the script again and open
+a second window.
+
 For the optional **Database** tabs (read/write an InfluxDB), also install the
 `db` dependency group: `uv sync --group db` (or `pip install influxdb-client`).
 Without it the Database tabs show a short install notice instead of failing.
@@ -21,7 +34,9 @@ Without it the Database tabs show a short install notice instead of failing.
 A splash screen with a loading spinner appears while the app starts. diive then
 **reopens the project you had open last**. If you haven't saved one yet, the
 bundled example dataset (CH-DAV, 37 variables) loads automatically so you can try
-everything right away. You can see the splash again any time via **Help ▸ About**.
+everything right away. The data loads in the background; the open, save and export
+entries in the **File** menu stay disabled until it is shown. You can see the splash
+again any time via **Help ▸ About**.
 
 ---
 
@@ -71,6 +86,11 @@ writes a `<name>.diive` folder containing:
 the above. Once a project is open, **Ctrl+S (File ▸ Save project)** updates it in
 place, and the window title shows the project name. diive reopens your most recent
 project automatically the next time you launch it.
+
+Opening, saving, and exporting run in the background, so the window stays usable.
+While one runs, the header says what is happening and the open, save, and export
+entries are disabled until it finishes. A save writes the data as it was when you
+chose **Save**.
 
 A saved setting can only come back if what it points at still exists. On the
 partitioning and uncertainty tabs, a saved column pick whose column is no longer in
@@ -150,8 +170,11 @@ The first tab, focused on every load. Click a variable to see, for that variable
   percentiles, and more). **Hover** any one for a short description of what it is.
 
 The datetime panels (time series, cumulative, daily mean, waterfall) share an x-axis,
-so panning or zooming one zooms them all to the same period; the diel cycle and
-heatmap live in their own domains and stay put.
+so panning or zooming one zooms them all to the same period. The heatmap follows the
+zoomed dates right away; the diel cycle and the distribution are recomputed for the
+visible period once you stop panning. In a narrow window the smaller panels shorten
+their legends (coloured month names, or no legend) and tick labels so the figure
+stays readable.
 
 ---
 
@@ -177,6 +200,8 @@ Selecting variables works the same way across the per-variable types:
   figure. Zooming one panel zooms them all; the **Home** button resets to the full
   view. Set **Save DPI** (next to the toolbar) before saving for a
   higher-resolution image than the screen.
+- While you drag the window edge or a divider, a plot stretches its last picture and
+  redraws properly a moment after you stop.
 
 **Settings (middle column).** Between the variable list and the plot is a panel of
 controls. Adjust as many as you like, then click **Update plot** (just below the tab
@@ -522,6 +547,8 @@ target-vs-driver scatter.
   lag.
 - Changing the method or max lag takes effect on **Rank drivers**; picking a new
   target updates immediately.
+- The ranking runs in the background, so the window stays usable during a long lag
+  scan. If you click through targets quickly, only the last one is shown.
 - **Copy Python** (top-right) copies a script that reproduces the ranking and the
   top-driver scatter.
 
@@ -575,6 +602,9 @@ two boxes.
   years update immediately.
 - The decomposition needs at least about 2 years of data (the anomaly view works
   with fewer).
+- The decomposition runs in a separate background process, so the window stays
+  usable even with **Robust** on. The first one after launch takes about 2 s longer
+  while that process starts.
 - **Copy Python** (top-right) copies a script for the current **View**
   (decomposition or yearly anomalies).
 
@@ -590,6 +620,8 @@ in the growing season. An explanation is shown above the plot.
   These apply on **Update**.
 - **Max cycles/day** sets how far up the frequency axis to look, and **Colormap**
   changes the colours. Both update immediately.
+- The spectrogram is computed in the background; only the last variable you pick
+  is drawn.
 - **Copy Python** (top-right) copies a script that reproduces the spectrogram.
 
 ---

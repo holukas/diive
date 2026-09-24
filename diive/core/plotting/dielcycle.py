@@ -184,12 +184,14 @@ class DielCycle:
             # registered categories may not include exact hour boundaries (e.g. when
             # timestamps are at :15/:45 offsets), causing set_xticks to fail.
             x_decimal = [t.hour + t.minute / 60 + t.second / 3600 for t in central.index]
-            central_numeric = central.copy()
-            central_numeric.index = x_decimal
-            central_numeric.plot(ax=self.ax, label=f'{monthstr}', color=color, zorder=99,
-                                 lw=linewidth,
-                                 marker='o' if marker else None, markersize=markersize,
-                                 **kwargs)
+            # ax.plot, not pandas' Series.plot: pandas scans the whole figure and
+            # hides the x tick labels of any axes that shares its x with another,
+            # so drawing into a figure with linked panels (the GUI Overview)
+            # blanked a neighbouring panel's dates.
+            self.ax.plot(x_decimal, central.to_numpy(), label=f'{monthstr}', color=color,
+                         zorder=99, lw=linewidth,
+                         marker='o' if marker else None, markersize=markersize,
+                         **kwargs)
 
             if lower is not None:
                 self.ax.fill_between(x_decimal,

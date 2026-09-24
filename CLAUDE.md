@@ -1,6 +1,6 @@
 # CLAUDE.md - diive Development Guide
 
-See `CHANGELOG.md` for version history.
+Version history: `CHANGELOG.md`. Per-symbol detail lives in the docstrings; this file keeps only rules, decisions and traps the code does not make obvious.
 
 ## Behavioral Guidelines
 
@@ -14,473 +14,157 @@ See `CHANGELOG.md` for version history.
 
 **Goal-driven execution:** For multi-step tasks, state a plan with verifiable success criteria before coding.
 
-## Quick Start
+## Environment
+
+Python 3.12-3.13, `uv`. Minimum pins in `pyproject.toml`.
 
 ```bash
 uv sync                              # core + dev
-uv sync --all-extras --all-groups    # everything: all extras (GUI, 3D) + all groups (InfluxDB, dev, build)
+uv sync --all-extras --all-groups    # everything (extras gui/gui3d/db + groups dev/db/build)
 uv run pytest tests/test_gapfilling.py -v
-uv run python script.py
-uv run pytest tests/ -v
-uv add package_name
 ```
 
-## Development Environment
+`--all-extras` alone is not everything: `db` (`influxdb-client`) is **both** an extra and a group, on purpose. Working on diive, use `uv sync --group db`. The extra exists for projects that depend on diive, because a dependency group never reaches published metadata. The group is `db = ["diive[db]"]`, so the pin lives only in the extra. `influxdb-client` is imported lazily.
 
-**Python:** 3.12-3.13 | **Package Manager:** `uv`
+## Repository rules
 
-**Key dependencies (minimum pins):** pandas 3.0+, numpy 2.2+, scikit-learn 1.6+, xgboost 3.0+, matplotlib 3.10+, statsmodels 0.14+, pyarrow 19.0+
+**`devnotes/`** holds internal working documents (excluded from the sdist, outside `docs/`): `CODE_REVIEW_FINDINGS.md` (entries `L1`…, `S1`–`S5`), `COVERAGE_GAPS.md`, `GUI_PERFORMANCE.md` (re-measure with `devnotes/gui_timing_pass.py`). Items carry a status box (`[ ]` open, `[x]` fixed with its commit, `[-]` won't fix, with reason), a file anchor and evidence. Update the matching entry when you fix something it lists; add new findings there, not in the repo root.
 
-**Optional dependencies** split across two uv mechanisms (so `--all-extras` alone is *not* "everything"):
+**[CRITICAL] Keep `diive/__init__.py` lazy.** Namespaces (and `diive.io`'s `binary`/`formats`) resolve via PEP 562 `__getattr__`. A plain `from diive import <namespace>` re-imports sklearn/xgboost/shap/statsmodels on `import diive` (~1.4 s). New namespaces go in `_LAZY_SUBMODULES`, the `TYPE_CHECKING` block, **and** `packaging/diive_gui.spec`'s `hiddenimports` (PyInstaller cannot follow `__getattr__`).
 
-| Kind | Name | Pulls in | Install |
-|---|---|---|---|
-| extra | `gui` | PySide6 desktop GUI | `uv sync --extra gui` |
-| extra | `gui3d` | PyVista/VTK 3D surface tab (+ `trimesh` for glTF/`.glb` export) | `uv sync --extra gui3d` |
-| extra + group | `db` | `influxdb-client` (backs diive's InfluxDB engine, `diive/core/io/db/influx`) | `uv sync --group db` |
-| group | `dev` | test/lint/notebook tooling (synced by default) | — |
+**[CRITICAL] `core/` must not import from `gapfilling/`, `flux/` or `preprocessing/`.** Their `__init__`s pull in the ML stack, and it caused a real import cycle (why `prediction_scores` lives in `core/ml/scores.py`). If one leaf function is genuinely needed, import it inside the function (see `aggregated_as_hires` in `core/dfun/frames.py`).
 
-`db` is **both** an extra and a dependency group, deliberately. Working *on* diive, use the group (`uv sync --group db`) — that is the documented opt-in and what the personal/local InfluxDB workflow expects. The extra exists for projects that *depend* on diive: a dependency group is local to the project declaring it and never reaches the published metadata, so a consumer — including one wiring diive up through a uv path/editable source — cannot request `--group db` and must ask for `diive[db]` instead. The group is defined as `db = ["diive[db]"]`, so the version pin lives only in the extra. Install all of the above at once with `uv sync --all-extras --all-groups`. The InfluxDB download/upload/delete engine lives in `diive/core/io/db/influx` (`InfluxIO`); `influxdb-client` is imported lazily, so the default `uv sync` never pulls it in.
+Raw 10/20 Hz tooling moved to [dyco](https://github.com/holukas/dyco); diive starts at averaged flux data.
 
-## Project Structure
+## Flux partitioning and uncertainty (faithful ports — do not "fix")
 
-```
-diive/
-├── core/ml/                  # Feature engineering, ML base classes
-├── core/plotting/            # Visualization types
-├── core/times/               # Timestamp handling
-├── core/io/                  # File I/O
-├── core/metadata/            # Per-variable tag + provenance model (GUI-backing)
-├── gapfilling/               # Gap-filling (RF, XGBoost, MDS)
-├── flux/                     # Flux processing (lowres, chain, partitioning)
-├── preprocessing/            # Wrapper for domain-based preprocessing modules
-├── corrections/              # Offset/gain removal, value corrections
-├── outliers/                 # 10+ outlier detection methods
-├── qaqc/                     # Quality control flags and screening
-├── analysis/                 # Time series analysis
-├── variables/                # Feature engineering and calculations
-└── gui/                      # PySide6 desktop GUI (optional 'gui' extra)
-examples/                      # 113 runnable examples
-tests/                        # Unit tests
-```
+Four NEE partitioning ports coexist via suffixes `*_NT_OF`, `*_NT_RP`, `*_DT_RP`, `*_DT_OF` (ONEFlux / REddyProc, nighttime / daytime), wired into the chain as Level 4.2. Parity numbers and implementation detail are in each module's docstring.
 
-**[CRITICAL] Keep `diive/__init__.py` lazy.** The ten domain namespaces (and `diive.io`'s `binary` / `formats`) resolve on first attribute access via a module-level `__getattr__` (PEP 562). Adding a plain `from diive import <namespace>` back to either file re-imports sklearn/xgboost/shap/statsmodels on `import diive` and costs ~1.4 s (2.35 s -> 0.96 s was the win). New namespaces go in `_LAZY_SUBMODULES` plus the `TYPE_CHECKING` block, **and** in `packaging/diive_gui.spec`'s `hiddenimports` — PyInstaller cannot follow a `__getattr__`, and the GUI reaches most namespaces attribute-style (`dv.plotting.*`).
+- **`*_DT_OF` reproduces a real ONEFlux 1.3.7 bug by default** (alpha-at-starting-guess guard never fires under float32). `reject_alpha_at_start=True` applies the intended check; the L4.2 chain and GUI use the default.
+- **The remaining `*_DT_OF` vs ONEFlux residual is ONEFlux's own non-reproducibility**: where `k` ≈ 0 its sign is decided by rounding, and ONEFlux under two NumPy/SciPy versions differs by more than diive differs from either. Don't chase it further.
+- The float32/float64 choices in the ONEFlux ports are deliberate parity decisions, documented at each site. Don't normalise dtypes.
+- REddyProc ports and ONEFlux nighttime `sunrise_sunset` keep their own potential-radiation routines for parity; everything else uses `dv.variables.potrad` (ONEFlux `get_rpot` port, period mean).
 
-**[CRITICAL] `core/` must not import from `gapfilling/`, `flux/` or `preprocessing/`.** Those packages' `__init__` files pull in the ML stack, so one such import drags it into every low-level consumer — and it caused a real cycle (`core.ml.common` -> `gapfilling.scores` -> `gapfilling/__init__` -> `randomforest_ts` -> back), which stayed hidden only because `diive/__init__` imported `gapfilling` first. `prediction_scores` now lives in `core/ml/scores.py` for this reason. Where a single leaf function is genuinely needed, import it inside the function (see `aggregated_as_hires` in `core/dfun/frames.py`).
+**MDS cascade** (`gapfilling/similarity.py::mds_gapfill_cascade`) has exactly two callers: `FluxMDS` and the `*_DT_OF` NEE uncertainty. **Edge handling differs on purpose**: `FluxMDS` uses `edge='trim'` (C `gf_mds` reference), the daytime uncertainty `edge='clip'` (ONEFlux Python reference, which produced FLUXNET2015). Don't unify them. The cascade is dtype-preserving.
 
-## Public API Overview
+**`RandomUncertaintyPAS20` is not an MDS caller.** It shares only the similarity tolerances, with its own window loop, so cascade changes don't reach it. Its cumulative is NaN-safe quadrature, not an object-dtype `ufloat` cumsum (one NaN must not poison the tail).
 
-`import diive as dv` exposes 10 domain namespaces. Authoritative per-symbol detail lives in the code docstrings — this table is a discovery index, not a spec.
+**Units for these ports are stated in docstrings, not validated** (VPD in kPa by default via `vpd_in_kpa=True`). Don't add unit-guessing warnings or EddyPro-specific hints; the caller owns units.
 
-| Namespace | Contents |
-|---|---|
-| `dv.outliers` | `AbsoluteLimits`, `Hampel`, `LocalSD`, `LocalOutlierFactor`, `zScore`, `zScoreRolling`, `zScoreIncrements`, `TrimLow`, `ManualRemoval`, + `*DaytimeNighttime` / `*AllData` names (see the day/night convention below — some are wrappers, some plain aliases) |
-| `dv.events` | `Event` (instant or period marker; `resolved_color(i, colors=)`), `event_to_flag` (→ 0/1 column on an index), `overlay_events` (`axis='x'` value-vs-time / `axis='y'` heatmap; `colors=` override map), `make_event_flag_name`, `CATEGORY_COLORS` |
-| `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`, `FeatureEngineer`, `GapFillingResult`, `prediction_scores`, `linear_interpolation` |
-| `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `TimeLagAnalysis`, ustar classes, plus **NEE→GPP+RECO partitioning** and **uncertainty** — see the two sub-sections below |
-| `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `CompoundExtremes`, `harmonic_analysis`, `spectrogram`, `percentiles101`, `rank_drivers`, `profile_dataframe`, `dataframe_overview`, `count_gaps` |
-| `dv.analysis.experimental` | **(provisional)** `DriverAnalysis`, `DriverAnalysisResult`, `AleCurve`, `Ale2DResult`, `accumulated_local_effects`, `accumulated_local_effects_2d`, `ExperimentalWarning` |
-| `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `ShiftedDistributionPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot`, `DateTimeSurface` (+ `datetime_surface_grid`), `WaterfallPlot`, `CompoundExtremesPlot`, `WindRosePlot`, `FormatStyle` — see **Plotting** below |
-| `dv.times` | `TimestampSanitizer`, `DetectFrequency`, `keep_daterange`, `insert_timestamp`, `format_timestamp`, `validate_timestamp_column_name`, `resample_to_daily_agg`, `resample_to_monthly_agg_matrix`, `timestamp_infer_freq_*` |
-| `dv.variables` | `DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot`, `TimeSince`, `potrad` (+ codegen `potrad_to_code`), `calc_vpd_from_ta_rh` (+ codegen `calc_vpd_from_ta_rh_to_code`), `aerodynamic_resistance`, `dry_air_density`, `et_from_le`, `latent_heat_of_vaporization`, `air_temp_from_sonic_temp`, `lagged_variants`, `classify_variable`, `combine_variables` (+ codegen `combine_variables_to_code`), noise helpers |
-| `dv.corrections` | `MeasurementOffsetFromReplicate`, `WindDirOffset`, `remove_nighttime_zero_offset` (corr key stays `'radiation_zero_offset'`; `clamp_negatives=True` default), `nighttime_zero_offset_diagnostics`, `NighttimeZeroOffsetResult`, `remove_relativehumidity_offset`, `set_exact_values_to_missing`, `setto_threshold`, `setto_value`, `apply_corrections` |
-| `dv.qaqc` | `FlagQCF`, `StepwiseMeteoScreeningDb`, `MEASUREMENTS`/`Measurement`, `CORRECTIONS`/`CorrectionSpec`, `corrections_for_measurement(code)`, `detect_measurement(varname)`, `measurement_label`, `correction_spec` |
+## Gap-filling
 
-Top-level (no namespace): `load_exampledata_parquet`, `load_exampledata_parquet_lae`, `load_parquet`, `load_parquet_many` (with `progress_callback`), `save_parquet` (`enforce_diive_format=True`), `to_diive_format`, `ReadFileType`, `search_files`, `sstats`, `keep_vars`, `keep_records_where` (+ codegen `select_records_to_code`; both in `diive/core/dfun/frames.py`), `transform_yearmonth_matrix_to_longform` (reindexes onto the full year × month lattice, so it accepts a seasonal matrix from `resample_to_monthly_agg_matrix` and **always returns a full-year span** — a partial year is padded to 12 months with NaN), `get_encoded_value_from_int`, `get_encoded_value_series`
+**[VALIDATION — expect this question]** ML held-out scores (`scores_traintest_`) come from a **random** split of complete rows, not a temporal/block split. This is correct for gap-filling: gaps are interspersed with observed data and filled from same-timestamp drivers, so a random hold-out reproduces the task. A block split measures transferability to an unseen period instead. Do **not** frame this as "long gaps belong to MDS": MDS degrades on long gaps, driver-based ML often handles them better.
 
-### NEE→GPP+RECO partitioning (`diive.flux.partitioning`)
+**[SWIN — expect these questions]** `SWINGapFillerXGBoost` is its own class because the nighttime zero-offset correction is partly a gap-fill (it sets every nighttime record to zero), so correction and fill must run in one place, in order, sharing `nighttime_threshold=0.001`. Without `context_df` it can only reproduce a **climatology** (all features are functions of the timestamp); no timestamp-derived feature raises that ceiling. A second radiation sensor via `context_df` breaks it. Measurements and defaults are in the class docstring; example `examples/gapfilling/gapfill_swin.py`.
 
-Four **faithful ports**, distinguished by a token after the `_NT` (nighttime) / `_DT` (daytime) suffix — `_OF` ONEFlux / `_RP` REddyProc — so all coexist in one dataframe:
+**`FeatureEngineer`** names features `.{col}_TYPE{detail}` (e.g. `.Tair_f_POL2`); all per-column stages skip `.`-prefixed columns. Guard that filter with `str(c)` (unnamed Series give non-string labels). New stage: param in `__init__`, `_stagename_features()`, call from `_create_features()`.
 
-| Class / function | Suffix | Notes |
-|---|---|---|
-| `NighttimePartitioningOneFlux` / `partition_nee_nighttime_oneflux` | `*_NT_OF` | ONEFlux Reichstein 2005, per-calendar-year, incl. robust `*_NT_OF_ROB`; helpers `lloyd_taylor`, `sunrise_sunset` |
-| `NighttimePartitioningReddyProc` / `partition_nee_nighttime_reddyproc` | `*_NT_RP` | REddyProc `sMRFluxPartition`, **whole-record single E0**, signature adds `lon`/`utc_offset`, potential-radiation day/night split, Kelvin Lloyd-Taylor, no robust variant; helpers `lloyd_taylor_kelvin`, `potential_radiation`; reproduces ReddyProc columns 1:1, RECO r≈0.997 on CH-DAV |
-| `DaytimePartitioningReddyProc` / `partition_nee_daytime_reddyproc` | `*_DT_RP` | REddyProc `partitionNEEGL` / Lasslop 2010 LRC. `nee` measured + `ta`/`vpd`/`sw_in` gap-filled + `lat`/`lon`/`utc_offset`, optional `nee_sd`, `vpd_in_kpa=True`; emits fitted `K`/`BETA`/`ALPHA`/`RREF`/`E0_DT_RP`. RECO r≈0.999, GPP r≈0.9999 vs a fresh ReddyProc run; bootstrap `*_SD`/CUT_16/84 not yet emitted |
-| `DaytimePartitioningOneFlux` / `partition_nee_daytime_oneflux` | `*_DT_OF` | ONEFlux `flux_part_gl2010` / Lasslop 2010 FLUXNET2015. **Day/night split is measured-`Rg`≤4/>4, NO solar geometry.** `nee`/`ta`/`sw_in` measured + `ta_f`/`sw_in_f`/`vpd` filled, `vpd_in_kpa=True`; emits `SE_GPP_DT_OF` + central `ALPHA`/`BETA`/`K`/`RREF`/`E0_DT_OF`. float32 working arrays (FLOAT_PREC); RECO r≈0.999, GPP r≈0.9999 vs native ONEFlux; ~22s/year |
+**`DetectFrequency`** runs at the front of nearly every workflow. Verify any change leaves the *detected frequency* unmoved on the bundled datasets, not just the reported percentage.
 
-All four wire into the chain as **Level 4.2** (`run_level42_nighttime_oneflux` / `_nighttime_reddyproc` / `_daytime_reddyproc` / `_daytime_oneflux`): one partitioning per USTAR scenario, columns merged into `fpc_df` with the scenario label appended (`RECO_NT_OF_CUT_50`); meteo drivers from `data.full_df`, coords from `data.meta`; nighttime variants read gap-filled NEE from a selectable L4.1 method (`gapfill_method='mds'` default), daytime use measured NEE only. Exposed on `run_chain` via `FluxConfig.partition_*`, with `partitioned_cols()` lookup and `levels.level42_*`.
+## Flux Processing Chain
 
-### Uncertainty (`diive.flux.lowres`)
+L2 → L3.1 → L3.2 → L3.3 → L4.1 → L4.2 (optional). `run_chain(data, FluxConfig)` for the standard pipeline; composable `run_level*` for custom ones (`FluxConfig` is only for `run_chain`). Per-level signatures intentionally differ. Example: `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py`.
 
-- **`RandomUncertaintyPAS20`** (`uncertainty.py`) — Pastorello 2020 / faithful ONEFlux `randunc` port. 4-method hierarchical cascade (first to succeed wins) emitting `{flux}_RANDUNC` + `WINDOW_N_VALS_METHOD1..4`: (1) std of >5 meteo-similar measured fluxes in ±7d/±1h (the only *direct* measurement). **It shares only the similarity *tolerances* with MDS** (`TA_TOLERANCE`, `VPD_TOLERANCE`, `swin_tolerance` from `gapfilling.similarity`), NOT the cascade: its window is its own `np.searchsorted` loop, so `mds_gapfill_cascade` changes do not reach it. Verified 2026-08-17 when the MDS edge-trimming fix was checked against it — that fix applies to `FluxMDS` and `daytime_oneflux` only, and PAS20 already truncated at record edges rather than folding onto record 0/n-1; (2, ONEFlux) median of method-1 uncertainties of ±20%-similar fluxes (floor 2 µmol) in ±14d; (3)&(4) diive extensions (whole-record / nearest-magnitude) so every record gets a value. `.run(progress_callback=)`; `.randunc_series`/`.randunc_results`/`.randunc_results_cumulatives`. Hot loops are vectorised numpy (~35x faster, bit-identical). Cumulative = quadrature `sqrt((randunc**2).cumsum())`, NaN-safe (NOT an object-dtype `ufloat` cumsum — one NaN must not poison the tail). Codegen `randunc_to_code` (`codegen.py`). Takes `vpd_in_kpa=True`.
-- **`JointUncertaintyPAS20`** / `joint_uncertainty_pas20` — faithful ONEFlux `compute_join`. Combines random uncertainty with scenario-ensemble percentile spread in quadrature per record: `JOINTUNC = √(RANDUNC² + ((upper−lower)/divisor)²)`. `divisor` = `JOINT_DIVISOR_1SIGMA=2.0` for NEE 16th/84th USTAR scenarios, `JOINT_DIVISOR_IQR=1.349` for LE/H 25th/75th. NaN in any input → NaN. Default name strips trailing `_RANDUNC`→`_JOINTUNC`. Cumulative: random independent → quadrature; scenario choice fully correlated → running spread `(cumsum(upper)−cumsum(lower))/divisor`, combined in quadrature. Codegen `jointunc_to_code`.
-
-## Core Concepts
-
-### Feature Engineering (8-stage)
-
-1. Lag features  2. Rolling stats  3. Differencing (1st/2nd order)  4. EMA  5. Polynomial  6. STL decomposition  7. Timestamps  8. Record number
-
-`FeatureEngineer` class, fed into gap-filling models. Naming `.{col}_TYPE{detail}` (e.g. `.Tair_f_POL2`). `FeatureEngineer(target_col='_target_', ...)` — `target_col` is a required placeholder; any string not in the feature list works.
-
-**All six per-column stages skip already-engineered (`.`-prefixed) columns.** The two rolling stages used not to, so feeding the engineer its own output produced malformed double-dot columns (`..TA_POL2_MEAN4`) outside the naming convention. This changes nothing for any library caller — the rolling stages receive `df[original_input_features]`, so within one run they never see the lag features created before them, and no library path passes an engineered column in. Guard the filter with `str(c)`: a frame can carry a non-string column label when a caller passes unnamed Series.
-
-### Potential Radiation (`dv.variables`)
-
-One implementation: `potrad(timestamp_index, lat, lon, utc_offset)`, a faithful port of ONEFlux's `get_rpot` — the routine that produces the `SW_IN_POT` column of FLUXNET/AmeriFlux/ICOS products. Solar const 1376; Spencer 1971 declination/eccentricity; NOAA solar-noon shift (equation of time); returns a **period mean**, not an instantaneous value. FLUXNET parity, RMSE 0.53 W/m2 vs real FLUXNET2015 `SW_IN_POT`. It backs `DaytimeNighttimeFlag`, the flux chain's `SW_IN_POT`, USTAR threshold detection, `SWINGapFillerXGBoost`, long-term gap-filling, `DetectTimestampShifts`, and meteo screening. The REddyProc partitioning ports (`nighttime_reddyproc.py`/`daytime_reddyproc.py`) and ONEFlux nighttime partitioning's `sunrise_sunset` deliberately keep their own potential-radiation/day-night routines, for parity with their own reference implementations.
-
-### Gap-Filling Methods
-
-| Method | Training | Features | Use case |
-|---|---|---|---|
-| Random Forest | Yes | 8-stage engineered | Interpretable, robust |
-| XGBoost | Yes | 8-stage engineered | Non-linear, efficient |
-| SWINGapFillerXGBoost | Yes | SW_IN_POT + timestamps (+ opt. `context_df` drivers) | SW_IN w/ nighttime constraint; `nighttime_threshold=0.001` matches `remove_nighttime_zero_offset`. **Why its own class** (below); **Climatology ceiling** (below); ships its own XGBoost + FeatureEngineer defaults (`_XGB_DEFAULTS`/`_FE_DEFAULTS`); lags off by default, SW_IN_POT excluded from rolling/EMA |
-| MDS | No | Meteorological similarity | Faithful ONEFlux port; no overfitting |
-| Linear Interp. | No | None | Small gaps only |
-
-**MDS faithful ONEFlux port** (`FluxMDS`, `diive/gapfilling/mds.py`): the cascade lives once in `diive/gapfilling/similarity.py::mds_gapfill_cascade` (6-stage expanding-window, ported from `uncert_via_gapFill`, fills r≈0.9997 vs native ONEFlux), plus `meteo_similar_mask`, `mds_quality_from`, `mds_granular_flag`. The **same cascade** backs daytime-partitioning NEE uncertainty (`daytime_oneflux._uncert_via_gapfill`) — those two are its **only** callers, `RandomUncertaintyPAS20` is not one of them (see its entry above) — so it is **dtype-preserving**: float32 caller gets f4 boundary behaviour, float64 (MDS) full precision. `avg_min_n_vals` default 2 (uncertainty path uses 10); SD is N-1; `sym_mean` is the optional Vekuri (2023) variant. Public flag `FLAG_*_gfMDS_ISFILLED` is **granular** `method*1000 + time_window` (0=measured; method 1/2/3 = ALL/SWIN/MDC); faithful 1/2/3 quality kept in `.PREDICTIONS_QUALITY`. `FluxMDS` and `RandomUncertaintyPAS20` both take **`vpd_in_kpa=True`** (converted to hPa internally for the 5-hPa/0.5-kPa tolerance — pass `False` for hPa). For these ports, required units are **stated in docstrings, not validated** — don't add unit-guessing warnings or EddyPro-specific hints to the library (caller owns units).
-
-**[Why SWIN has its own class — expect this question]** Not just the day/night split: SW_IN needs corrections no other target needs, and the nighttime zero-offset correction (`correct_nighttime_offset=True`, via `remove_nighttime_zero_offset`) *is* partly a gap-fill — it sets every nighttime record to exactly zero, filling the nighttime gaps as a side effect. Correction and fill are one operation for this variable and must run in one place, in order, before the model sees the daytime subset (which also means both share the same `nighttime_threshold=0.001` split). That's the reason it isn't just `XGBoostTS` with `SW_IN_POT` as a driver.
-
-**[SWIN climatology ceiling — expect this question]** `SWINGapFillerXGBoost` with no `context_df` feeds the daytime model only features that are deterministic functions of the timestamp (SW_IN_POT, timestamp features, record number), so it can only reproduce a climatology — the expected SW_IN for that time-of-day/year — and **cannot recover whether a gap was cloudy or clear**. No timestamp-derived feature (lag/rolling/EMA of SW_IN_POT) raises this ceiling; measuring proves it (CH-DAV: 15 features vs 29 features both ~138 W/m2 daytime-gap RMSE). Two things do break it: (a) a **second radiation measurement** (pyranometer/PPFD/nearby station) via `context_df` — directly carries sky state, worth ~5x everything else (CH-DAV 138 -> 26); (b) `interpolate_short_gaps` for 1-2h gaps, which uses the target's own neighbours (the model never sees them — the feature engineer excludes the target). **Defaults:** `correct_nighttime_offset=True` is ON; `interpolate_short_gaps='auto'`, `features_lag=[]` (a lag of a gappy context driver demotes fillable records to the flag-2 timestamp-only fallback), SW_IN_POT excluded from rolling/EMA. `'auto'` picks the branch that measured better in each case: a 2-record limit with no `context_df`, disabled once a `context_df` is given — interpolation overwrites model fills on the gaps it covers, which *helps* under the ceiling (CH-DAV 125 -> 77 daytime-gap RMSE at `=2`) but *hurts* with a strong near-complete `context_df` sensor (context-only 13.5 vs context+interp 66). It keys off whether `context_df` was passed at all, not off driver quality — pass an explicit int (or `None`) to override. Full detail in the class docstring; worked example `examples/gapfilling/gapfill_swin.py`.
-
-**SWIN defaults & knobs.** `SWINGapFillerXGBoost` ships two class-constant default blocks, both overridable: `_XGB_DEFAULTS` (`n_estimators=3000`, `max_depth=6`, `early_stopping_rounds=20`, `random_state=42`) merged under `**kwargs` — early stopping is **not optional** (without it all 3000 trees are built for ~no RMSE gain, 110.1 -> 110.6, and a 3-7x slower SHAP pass), and `random_state` is pinned so a fill is reproducible; and `_FE_DEFAULTS` (the FeatureEngineer settings) overridden via a single **`feature_kwargs: dict`**, which reaches *every* FeatureEngineer argument incl. the diff/polynomial/STL stages (off by default). Note `add_continuous_record_number` (the FeatureEngineer name) inside `feature_kwargs`. There are **no top-level `features_*`/`add_record_number` parameters** — passing a FeatureEngineer argument as a top-level keyword raises `TypeError` (it would otherwise land in `**kwargs` and be silently ignored by XGBRegressor); `target_col`/`verbose` in `feature_kwargs` are rejected (`_FE_RESERVED`). SHAP is capped at `_SHAP_MAX_ROWS=10_000` rows.
-
-**Results:** all gap-filling classes expose `.results` (after `.run()`) → `GapFillingResult`: `gapfilled` (Series), `flag` (0=observed, 1=gap-filled, 2=fallback), `scores['r2']`, `feature_importances` (SHAP, ML only), `feature_importances_reduction` (the SHAP table *before* reduction dropped anything, incl. the `.RANDOM` benchmark column the threshold comes from — the only view carrying it; `None` unless `reduce_features` ran), `model` (ML only). Legacy `.result` (raw DataFrame) still available.
-
-**[VALIDATION — expect this question often]** The ML gap-fillers' held-out scores (`scores_traintest_`) come from a **random** train/test split (`test_size`, default 25%) of the *complete* rows, **not** a temporal/block split. This is **correct and intentional for gap-filling**: the model predicts each gap from driver values at that timestamp, gaps are interspersed with observed data, so a random hold-out reproduces exactly the gap-filling task. A temporal/block split answers a *different* question (transferability to an unseen period) and conflates fill skill with regime change. (Do **not** frame this as "long gaps belong to MDS" — wrong: MDS degrades on long gaps, driver-based ML often handles them better.) Documented at the split in `common.py.__init__`, on `scores_traintest_`, in GUI `test_size`/HELD-OUT TEST tooltips, and `MANUAL.md`. `scores_` is the in-sample (optimistically biased) counterpart.
-
-**Console report:** `MlRegressorGapFillingBase` emits a Rich coloured report at `verbose>=2` (all ML gap-fillers inherit it): phase banners, a Configuration table (regressor + every hyperparameter), data/split summary, held-out + in-sample score tables, feature-importance tables, a feature-reduction table (SHAP vs random benchmark with accept/reject), and a gap-fill summary. Default `verbose=0` silent; step-chatter at DEBUG(3). GUI runs at `verbose=2` → streams into the Log tab. **Keep console strings cp1252-safe** (Windows stdout): ASCII `->`, not `→`. **Tee:** `_TeeConsole` overrides only `print`/`log`, not `rule` (Rich's `rule()` renders via `self.print`, so a `rule` override double-forwards to mirrors).
-
-ML classes (RF/XGB) expose `plot_feature_importances(ax=None, traintest=False, max_features=None, …)` (two-phase SHAP bar plot, on `MlRegressorGapFillingBase`). The structured `feature_importances_` DataFrame (`SHAP_IMPORTANCE`/`SHAP_SD`) is the data behind it. **`shap_max_rows`** (on `MlRegressorGapFillingBase` + `XGBoostTS`, default `None` = explain every row) caps the rows SHAP explains via a seeded subsample; TreeSHAP cost is linear in rows and mean |SHAP| converges early (87k rows -> 10k: identical ranking, Kendall tau 1.000, importances within 2%, ~8x faster). Predictions and scores are untouched, but `reduce_features` selects on these values, so a cap makes selection depend on the subsample (deterministic given `random_state`).
-
-### Timestamp Sanitization
-
-```python
-sanitizer = dv.times.TimestampSanitizer(df, nominal_freq='30min', verbose=True)
-clean_df = sanitizer.get()
-status = sanitizer.get_status()  # rows removed/added, detection method
-```
-
-`DetectFrequency` divides the modal-interval count by the number of **intervals** (`len(df) - 1`), not rows — so a clean 2-row series is detectable and `frequency_percent_matching` / `confidence` are exact rather than parsed back out of a `'{:.0f}% occurrence'` string (99.9% used to report as 100.0, indistinguishable from a perfect record). A 1-row index returns `'-not-enough-datarows-'` and raises the class's own `RuntimeError` instead of `KeyError: 0`. The public 2-tuple and its display string are unchanged. This is load-bearing — it runs at the front of nearly every diive workflow — so verify any change here leaves the *detected frequency* unmoved on the bundled datasets, not just the reported percentage.
-
-## Flux Processing Chain (Swiss FluxNet Workflow)
-
-6-level EC post-processing: L2 (quality flags) → L3.1 (storage correction) → L3.2 (outlier removal) → L3.3 (USTAR filtering) → L4.1 (gap-filling) → L4.2 (NEE→GPP+RECO partitioning, optional). Each level is a pure function — never mutate input.
-
-**Single-call driver** — `run_chain(data, FluxConfig)` for the standard FLUXNET pipeline:
-
-```python
-from diive.flux.fluxprocessingchain import FluxConfig, init_flux_data, run_chain
-cfg = FluxConfig(
-    fluxcol='FC', ustar_thresholds=[0.18], ustar_labels=['CUT_50'],
-    outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,
-    gapfilling_features=['TA', 'SW_IN', 'VPD_kPa'],
-    level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
-    mds_swin='SW_IN', mds_ta='TA', mds_vpd='VPD_kPa',
-)
-data = init_flux_data(df, fluxcol='FC', site_lat=46.6, site_lon=9.8, utc_offset=1)
-data = run_chain(data, cfg)
-```
-
-**Composable per-level callables** — for custom L3.2 pipelines or feature engineering:
-
-```python
-from diive.flux.fluxprocessingchain import (
-    init_flux_data, run_level2, run_level31, run_level33_constant_ustar, run_level41_mds)
-data = init_flux_data(df, fluxcol='FC', site_lat=46.6, site_lon=9.8, utc_offset=1)
-data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None}, ...)
-data = run_level31(data, gapfill_storage_term=True)
-data = run_level33_constant_ustar(data, thresholds=[0.30])  # labels auto-gen as CUT_0
-data = run_level41_mds(data, swin='SW_IN', ta='TA', vpd='VPD_kPa')
-final_df = data.fpc_df
-```
-
-**Per-level signatures intentionally differ** (per-test dicts at L2, booleans at L3.1, pre-built object at L3.2, parallel lists at L3.3, built engineer + kwargs at L4.1). `FluxConfig` is consumed only by `run_chain`, never by `run_level*`. Per-level `run_level*`, `make_level32_detector`, and codegen `chain_to_code`/`level2_to_code`…`level41_to_code`/`level42_to_code` live in `diive.flux.fluxprocessingchain`.
-
-**Container fields:**
-
-| Field | Type | Description |
-|---|---|---|
-| `data.fpc_df` | `DataFrame` | Working dataframe; grows as levels append columns. Use for results/export. |
-| `data.full_df` | `DataFrame` | Full input (+ day/night flags). Read-only source for L2, L3.1, L4.1 drivers. |
-| `data.filteredseries` | `Series\|None` | QCF-filtered flux from most recent level |
-| `data.meta` | `FluxMeta` (frozen) | Site coords, fluxcol, swinpot_col, QCF thresholds |
-| `data.levels` | `LevelResults` | Typed bag of per-level outputs |
-| `data.summary()` | `str` | Per-level data availability (day/night breakdown) |
-| `data.gapfilled_cols()` / `data.partitioned_cols()` | `dict` | Gap-filled / L4.2 output columns per method & scenario |
-| `data.gap_stats(level='L33')` | `dict[str, GapStats]` | On-demand gap analysis |
-| `data.plot_cumulative_comparison(...)` / `data.plot_gapfilled_heatmaps(...)` | `None` | Method-comparison plots (`showplot=False` headless) |
-| `data.levels.level41_methods()` | `dict` | Short keys `'mds'`/`'rf'`/`'xgb'` |
-
-Key `data.levels` fields: `level2`, `level2_qcf`, `level31`, `level31_qcf`, `level32`, `level32_qcf`, `level33`, `level33_qcf`, `level41_mds/rf/xgb` (dicts keyed by ustar_scenario for L3.3+). **Flag naming:** `FLAG_..._TEST` (individual tests, 0/1/2) and `FLAG_..._QCF` (level-overall) are both consumed by `FlagQCF`; `FLAG_..._ISFILLED` is **informational only**, NOT consumed by QCF. L3.1 introduces no new test — its QCF re-aggregates L2 flags on the storage-corrected target.
-
-**Architecture notes:**
-
-- L3.2 is multi-call/stateful: `make_level32_detector(data)` → multiple `flag_outliers_*` + `addflag()` pairs → `run_level32(data, outlier_detector=sod)`. `run_level32` validates the detector is wired to the *current* `data` snapshot; rejects detectors with no committed flags or an uncommitted last test.
-- `run_level41_rf`/`run_level41_xgb` take a pre-built `FeatureEngineer`.
-- `finalize_level2/31/33()` are no-ops w/ `DeprecationWarning`.
-- `LevelResults` isn't `frozen=True` but treat as immutable — every level rebuilds it via `dataclasses.replace`. Don't mutate fields or `level41_*` keys in place.
-- `add_driver(data, series, name=None)` puts a Series into `data.full_df` (where L4.1 reads), not `fpc_df`; validates index/name/collision.
-- **Re-runs cascade.** Re-running L2/L3.1/L3.2/L3.3 drops the previous run's `fpc_df` columns + downstream `LevelResults` before fresh output (`levels/_rerun.py`); re-running level N invalidates N and every later level. Columns tracked in `data.added_columns`. L4.1 is per-method (`'L4.1_mds'`/`'_rf'`/`'_xgb'`) and additive — each drops only its own previous columns.
-
-**Critical pitfalls:**
-
-- MDS requires exact units: W/m² (radiation), °C (temp), **kPa (VPD)** — stated in docstrings, not validated (caller's responsibility).
-- USTAR filtering applies ONLY to CO2/CH4/N2O; for H/LE use `thresholds=[0], threshold_labels=['CUT_NONE']`. `run_level33_constant_ustar` raises on a non-zero threshold for an energy-flux basevar (`H2O`, `T_SONIC`, lowercase variants).
-- **[DELIBERATE DEVIATION from ONEFlux — do not "fix"]** u\* filtering is `ustar >= threshold` and nothing more. ONEFlux additionally discards the first record *above* the threshold following a period below it (the flushed sub-canopy CO2 burst; Pastorello 2020, `nee_proc/src/dataset.c`). **diive keeps that record**, favouring data availability, and leaves the trade-off to the user. Recorded as L74 in `CODE_REVIEW_FINDINGS.md` and in the `FlagMultipleConstantUstarThresholds` docstring. What diive *does* follow: a record whose u\* is missing is rejected, exactly as ONEFlux does (missing u\* is `INVALID_VALUE` = -9999, below every threshold).
-- L3.2 and L3.3 require L3.1; L3.3 also requires L3.2 (`run_level33_*` raises if `level32_qcf` is None). For H/LE call `run_level31(data, set_storage_to_zero=True)`. `run_chain` runs L3.2 unconditionally; to skip it use the composable API.
-- L4.1 features and MDS driver columns must exist in `data.full_df`, not `fpc_df`. Use `add_driver()`.
-- `init_flux_data` raises if `df` already contains `SW_IN_POT`/`DAYTIME`/`NIGHTTIME` (reserved).
-- `nighttime_accept_qcf_below` (was `nighttimetime_...` before v0.91.0 — typo fixed).
-- Default `daytime_accept_qcf_below=1` is stricter than FLUXNET's `2`; QCF=0 pass, =1 soft warn, =2 hard fail.
-- L3.3 has three composable entry points: `run_level33_constant_ustar` (scalar threshold(s)), `run_level33_variable_ustar` (time-varying Series, `threshold_series={label: Series}`), `run_level33_ustar_detection` (in-pipeline bootstrap). The two paths use **different** flagger classes — `FlagMultipleConstantUstarThresholds` and `FlagMultipleVariableUstarThresholds` respectively — and either can land in `data.levels.level33`; both are on `dv.flux`. Detector `mode=`: `'cut'` (constant pooled → `CUT_16/50/84`) or `'vut'` (per-year → `VUT_16/50/84`); CUT and VUT mutually exclusive. diive's VUT is smoothed over a 3-year window (`UstarBootstrapThresholds`); a year with no threshold falls back to its CUT value. `run_chain` only does CUT detection (`FluxConfig(ustar_detection_mode='bootstrap', ...)`); VUT is composable-only. `threshold_labels` (constant path) optional — auto-generates `CUT_0`, `CUT_1`, … (positional, NOT percentile); pass explicit `['CUT_16','CUT_50','CUT_84']` for percentile thresholds. Length/uniqueness validated; substring overlap (`CUT_5` in `CUT_50`) rejected.
-- `run_level33_ustar_detection` raises if `detector_kwargs` contains `nee_col`/`ta_col`/`ustar_col`/`swin_col` (set internally).
-- `run_level41_*` warns (`UserWarning`) when a re-run would overwrite stored scenarios.
-
-**Example:** `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py`
+- Each level is a pure function; never mutate input. Treat `LevelResults` as immutable (rebuilt via `dataclasses.replace`).
+- Re-running level N drops N and every later level (`levels/_rerun.py`); L4.1 is per-method and additive.
+- L4.1 features and MDS drivers must be in `data.full_df`, not `fpc_df` — use `add_driver()`.
+- `FLAG_*_ISFILLED` is informational only, not consumed by `FlagQCF`.
+- USTAR filtering applies only to CO2/CH4/N2O; for H/LE use `thresholds=[0], threshold_labels=['CUT_NONE']` and `run_level31(data, set_storage_to_zero=True)`.
+- **[DELIBERATE DEVIATION from ONEFlux — do not "fix"]** u\* filtering is `ustar >= threshold` only. ONEFlux also drops the first record above the threshold after a period below it; diive keeps it (L74). Missing u\* is rejected, as in ONEFlux.
+- Auto-generated threshold labels `CUT_0`, `CUT_1`, … are positional, not percentiles. `run_chain` only does CUT detection; VUT is composable-only.
+- Default `daytime_accept_qcf_below=1` is stricter than FLUXNET's `2`.
 
 ## Desktop GUI (`diive.gui`)
 
-PySide6 desktop app, optional dependency (`gui` extra, lazy-imported). Launch: `uv sync --extra gui` then `diive-gui`. File map: `diive/gui/README.md`. Standalone Windows build: `packaging/build_gui.ps1` (see `packaging/README.md`).
+PySide6, optional `gui` extra, launch `diive-gui`. **File map and per-tab detail: `diive/gui/README.md`.** User manual: `diive/gui/MANUAL.md`. Windows build: `packaging/README.md`.
 
-**[CRITICAL] Strict GUI ↔ library separation.** `diive/gui/` contains ONLY GUI code — Qt widgets, layout, rendering glue, event handling, presentation (colors/labels/styling). ALL algorithms and domain logic live in the main library; the GUI *calls* them, never reimplements them. Dependency arrow points one way: `gui` → library, never reverse (no other module imports `diive.gui`). If a GUI piece is reusable, is domain knowledge, or is an algorithm, it belongs in the library — **notify the user and propose the move** rather than putting it in `gui/`.
+**[CRITICAL] Strict GUI ↔ library separation.** `diive/gui/` holds only GUI code (widgets, layout, rendering glue, events, presentation). All algorithms and domain logic live in the library; the GUI calls them. Nothing outside `gui/` imports `diive.gui`. If a GUI piece is reusable, domain knowledge or an algorithm, **tell the user and propose moving it** to the library.
 
-### Architecture principles (these are the load-bearing patterns)
+### Patterns to follow
 
-- **Theme: `gui/theme.py`.** `ThemeManager` singleton (`theme.manager`) holds live editable colours (`tokens`/`pills`/`new_pill`/`ts_colors`), builds the stylesheet via `build_qss(tokens)`, emits `changed`, `apply()` re-applies app-wide. Edited via the **Appearance** tab. Single design — **Studio** (clean/minimal, `icons.py` thin-line glyphs, frameless rounded window via `widgets/header_bar.py`). `STUDIO_TOKENS`/`STUDIO_TYPOGRAPHY`; structural tokens (`CANVAS`/`INK`/`RADIUS`) re-pinned from `STUDIO_TOKENS` in `load_dict` so a stale persisted config (incl. removed "Classic") can't shadow them. Which *variable name* maps to which pill kind stays in the library: `dv.variables.classify_variable` (add a kind = rule there + colour in `theme.DEFAULT_PILL_STYLE`).
-- **Shared variable list: `widgets/variable_panel.py` (`VariablePanel`).** Every tab's left-hand list MUST be this component (filter + `VariableList` + `VariableDelegate` pills + fzf-style fuzzy filtering). Filter is subsequence-gated, *scored* (`_fuzzy_score`) and reorders best-match-first; clearing restores dataset order (`ORDER_ROLE`). Width is a shared setting (`theme.manager.list_width`) — don't set per-tab widths. `run_with_loading(name, fn)` paints a static busy cue before matplotlib's synchronous render freezes the loop. Also exposes `scroll_to(name)`, `clear_filter()`.
-- **Registry-driven tabs.** `MainWindow` iterates `registry.TAB_CLASSES` (always-on: Overview, Log) and knows nothing about concrete tabs. Add a feature area = write a `DiiveTab` (`title` + `build()`) and register it.
-- **Menu tabs are multi-instance.** `registry.MENU_TABS` factories open a NEW numbered instance each time (tracked in `_menu_tab_list`, `_next_menu_index` reuses smallest free number). `registry.SINGLE_INSTANCE_TABS` instead focus the existing one — **nine tabs of two kinds**: those editing one app-wide singleton, where a second copy would show conflicting state (`Appearance` → `theme.manager`, `Project settings` → `site.manager`, `Metadata explorer` → the "Edit metadata…" relay target, and the three Database tabs → the single InfluxDB handle), and the single-variable explorers (`Driver explorer`, `Gaps & coverage`, `Spectrogram`), where a duplicate would just re-run the same heavy compute on the same data. Always-on tabs have no close button; on close, focus falls to the tab left of the closed one but never Log (jumps to Overview).
-- **Tab UX.** Movable, renamable (left double-click → `_rename_tab`), custom "×" (`icons.close_icon`); `tabBarDoubleClicked` fires for any button so an `eventFilter` records the double-click button (ignore middle/right). Studio tabs are Firefox-style pills. **Per-tab pin/freeze:** right-click a menu tab → Pin; pinned tabs (`_pinned`) skipped by `_push_data` (keep their dataset, cheap CoW), show a pin glyph. Overview/Log never pinnable. **Freezing depends on every writer rebinding rather than mutating** — `_add_features` and `_sync_event_columns` used to assign columns in place, which a pinned tab's frame saw anyway; both now go through `assign`, matching the drop path. A new writer that does `df[col] = ...` silently un-freezes every pinned tab.
-
-### Shared templates (reuse these — don't hand-roll layout/flow)
-
-- **`widgets/worker.py` (`WorkerRunner`)** — `QObject` with `done(object)`/`failed(str)` + `is_running` guard; owns daemon-thread spawn + exception→`failed`. The outcome crosses back to the GUI thread on a private queued signal and **`is_running` clears there, immediately before `done`/`failed` fires** — it used to clear on the worker thread first, leaving a window where the guard read False while the result was still unhandled. So the flag stays True for that extra hop; every call site uses it only as "skip while a run is in flight", which is unaffected. A tab that hand-rolls its own `threading.Thread` gets **none** of this and needs its own guard (`_screening_base` does). Tab keeps `self._runner`, connects signals, calls `self._runner.run(self._compute_payload, *args)` where `_compute_payload` is a **pure** function (no Qt/threading). The outlier/correction/ustar tabs keep a thin synchronous `_worker(*args)` shim because their tests drive it directly.
-- **`widgets/dual_variable_picker.py` (`DualVariablePicker`)** — click-to-add/remove available↔selected (two `VariablePanel`s, pick order kept). `set_variables`/`set_selected`/`selected_names`/`select`/`deselect`/`select_all`/`clear` + `changed`. Used by Select variables and XGBoost feature picker.
-- **`widgets/sub_tabs.py` (`SubTabs`)** — segmented pill buttons over a `QStackedWidget` (only active page takes space). `add_page`/`set_page`/`current_index`/`set_label` (count badges)/`changed`; `add_corner_widget`/`add_corner_separator`. Used by the ML gap-filling template.
-- **`tabs/_explorer_base.py` (`SingleVariableExplorerTab`)** — base for "pick one variable left, compute view right" tabs (Driver explorer, Gaps & coverage, Seasonal trend, Spectrogram, 3D surface). Owns the split skeleton, `select → run_with_loading → _compute`, default-variable picking (`default_var`/`default_numeric_only`, override `_default_variable`), `_recompute()`, opt-in stats strip, opt-in variable-list header (set `list_title`/`list_hint`; default None = no header), opt-in draggable list (`list_draggable`, for tabs that drag names onto drop targets, e.g. the X/Y/Z surface). Concrete tab overrides only `_build_right()` + `_compute()`; selected var is always `self._target`.
-- **`widgets/tab_chrome.py`** — `build_titlebar(title, *trailing)` and `list_header(title, hint)`. Presentation only.
-- **`tabs/_ml_gapfilling_base.py` (`MlGapFillingTab`)** — full XGBoost-style layout/flow as a reusable template for every ML gap-filler. Concrete tab overrides a small hook surface: class attrs `title`/`method_name`/`method_chip_*`, methods `_model_class()`/`_build_model_box()`/`_method_kwargs()`/`_method_controls()`/`_codegen(...)`. Base supplies Model/Results `SubTabs`, title bar (Copy Python far-right, Run/Add as corner widgets), three-list target/feature picker, shared SHAP feature-reduction box, performance hero, heatmaps + SHAP table, Results dashboard, worker/emit flow. Adding a method ≈ ~140-line subclass + a codegen wrapper + registry entry. Subclasses: `tabs/gapfilling.py` (XGBoost), `tabs/gapfilling_randomforest.py` (Random Forest).
-- **`tabs/_outlier_base.py` (`BaseOutlierTab`)** — one subclass per `dv.outliers` detector. See **Outlier tabs** below for the detector contract.
-- **`tabs/_correction_base.py` (`BaseCorrectionTab`)** — one tab per correction; routes through library `apply_corrections`/`corrections_to_code`. Subclass sets `corr_key`/`method_suffix`/`method_chip_*`/`needs_coords`/`suited_for` and implements `_add_method_rows`/`_current_kwargs`/`_validate`/`_method_controls`. Output `{var}_{method_suffix}` with MODIFIED provenance.
-- **`tabs/_partitioning_base.py` (`BasePartitioningTab`)** — one tab per partitioning port. Declarative: subclass lists `inputs` (auto-seeded combos w/ ✓/✗ markers; `needle` may be a list of alternatives; `optional` inputs stay `(none)` unless matched), coords needed (`needs_lat`/`needs_lon`/`needs_utc`), `has_vpd_unit`, `reco_col`/`gpp_col`/`method_suffix`, and implements `_build_partitioner(series_map, coords, vpd_in_kpa)`. Base runs `.run()` on a worker, previews daily-mean GPP/RECO/NEE + cumulative, emits `*_NT_OF`/`*_NT_RP`/`*_DT_RP`/`*_DT_OF` via `featuresCreated` (DERIVED).
-
-### Tab inventory (file → purpose; non-obvious gotchas only)
-
-Each tab is a `DiiveTab`; full widget detail lives in the code. Tab signals live on a `QObject` helper (`DiiveTab` is a plain ABC). When lazily creating a menu tab, call `tab.widget()` *before* connecting `featuresCreated` (`build()` sets it).
-
-- **Overview** (`tabs/overview.py`) — first tab, focused on every load. 3×6 GridSpec (`_PANELS`) + `sstats` ribbon. **Linked zoom:** three datetime panels share x; `xlim_changed` recomputes the diel cycle on the zoomed range and clips the heatmap. Repaint via `draw_idle()` (the deliberate exception to "use `draw()`"); `_on_resize` runs two constrained-layout passes. `on_data_loaded` diffs `created`, clears the fuzzy filter, `scroll_to`s + auto-selects new columns. Holds no subset state.
-- **Hover tooltip** — `MplCanvas` attaches `HoverAnnotator` (`widgets/hover.py`); lines snap via `argmin` on `get_xdata(orig=False)` (unit-converted floats, NOT raw datetimes); `pcolormesh` (heatmap) reads `get_coordinates()`/`get_array()`; scatter `PathCollection` snaps to the nearest point within `_SCATTER_PICK_RADIUS` and shows x/y(/z). Per-axis tag `_diive_hover_intlabel` formats an integer axis (year/month heatmap) as `Month 5`/`Year 2018` instead of misreading it as a clock time. Blits.
-- **Plot menu = one closable `PlottingTab(plot_type, title)` per method** (no single Plotting tab), `registry.MENU_TABS["Plot"]`. Menu glyphs via `gui/icons.py::menu_icon(label)`. Add a method = factory + branch in `plotting._draw_one` + controls in `plot_settings`. Comparison types pick panels (Ctrl+click, incl. time series **and diel cycle**); **every X/Y/Z role-picked type — Scatter, Wind rose, Hexbin, Heatmap x/y/z — assigns roles via dropdowns** (drag a variable onto a field or pick from the complete list) (`_ROLE_DROPDOWN_TYPES`, shared `_build_role_combos(labels, none_ok=)`/`set_xyz`/`xyz_values`; list draggable → `_DropComboBox` drop targets; list-click is a no-op). Scatter/Wind-rose make the colour role optional (`none_ok=(F,F,T)`); Hexbin/Heatmap-xyz require all three (`none_ok=(F,F,F)`). **`Update plot` sits below the header, left-aligned, dirty-gated** (enabled by `settings.changed`/`xyz_changed`, disabled at each render); the plot updates ONLY on click — no live re-render even for variable/role selection. **Every** plot tab has a title-bar **Copy Python** button (`_python_code` dispatches per type to library codegen: `scatter_to_code` in `scatter.py`, all others in `core/plotting/codegen.py`; no-op while role picks incomplete; multi-panel tabs emit the active panel). Preserve-pan/zoom (`preserve_view`) only re-applies a limit that still **overlaps** the new data (`_ranges_overlap`), so flipping a heatmap's orientation doesn't scroll the view off the data. Ridgeline/wind rose/tree ring/shifted distribution single-figure (own gridspec/polar axes, `canvas.auto_layout=False`); the wind rose's per-sector table sits in a **horizontal** splitter to the right of the canvas. GUI-only passes: Axes group (`_axes`→`_apply_axes`; grid lives only in Format's `show_grid`), Reverse colormap, export DPI (`_SaveDpiToolbar`, default 150). Diel-cycle stacked panels share **one** auto-column legend (drawn on panel 0).
-- **Data flow** — `File` menu via `OpenDataDialog` (parquet → `dv.load_parquet`, else `dv.ReadFileType`; multi → `MultiDataFileReader`/`load_parquet_many` w/ per-file progress via `progress_callback`). `MainWindow` pushes via `on_data_loaded(df, created)`. **Save as parquet** → `dv.save_parquet`; `app.to_diive_parquet_frame` enforces single-level columns + valid `TIMESTAMP_*` index name. **Load mode "Add to current"** (`_add_dataset`, offered only when data is loaded) *extends* the record, non-destructively: unions the timestamp index (new periods appended) then `combine_first` so existing (non-null) values always win — new data only fills new rows/gaps. Same-named columns are extended in place (documented via `record_derived` "Extended with data from …", **not** flagged NEW); genuinely new columns get an `original` baseline + the NEW flag (`_created`). A **Label** prefixes all incoming columns → all-new names (side-by-side run comparison). This is distinct from `_add_features` (feature-engineering merge: same index, assign-in-place, all columns flagged NEW).
-- **Date-range subselection** (`Data` menu) — non-destructive: `_full_data` full, `_data` narrowed to `_range` via `dv.times.keep_daterange`. Engineered features merge into `_full_data` (survive a reset).
-- **Select variables** (`tabs/variable_selector.py`, single-instance) — `DualVariablePicker` → `_apply_var_subset` app-wide via `dv.keep_vars` (pinned tabs skipped). Persisted in `extras["var_subset"]`; picker opts into full record (`wants_full_data`).
-- **Select records by condition** (`tabs/select_records.py`, multi-instance) — filter a target by a condition var's range; operations stack (Undo/Reset). All range logic is `dv.keep_records_where` (remove → `invert=True`); working series = `target.where(keep_mask)`, synchronous. **Add** → `{target}_SEL` (DERIVED); **Copy Python** → `select_records_to_code`.
-- **Combine variables** (`tabs/combine_variables.py`, multi-instance) — drag a var onto heatmap 1 + another onto heatmap 2 (`_HeatmapSlot` drop targets; heatmap 3 = read-only result), pick a method (`multiply`/`add`/`subtract`/`divide`/`fillgaps`). All maths is `dv.variables.combine_variables`. The arithmetic methods are **always overlap-only** — NaN wherever either input is missing — and the status line reports how many records that costs, split by which variable was missing. There is deliberately no identity-fill option (it returned `-B` for subtract and `1/B` for divide, and even for add/multiply a one-sided "sum" is just the other variable mislabelled); substituting a value for a gap is a gap-filling decision, and `fillgaps` (= `series1.combine_first(series2)`) is the method that states it. **Add** → `{name}` (DERIVED, parents v1/v2); **Copy Python** → `combine_variables_to_code`. Heatmaps use compact fonts + `cb_digits_after_comma="auto"`.
-- **Derived-variable tabs** (`tabs/_derived_variable_base.py` `BaseDerivedVariableTab`) — one tab per single-formula derived variable (the thermodynamic/radiation family). Three-column layout (draggable `VariablePanel` | Settings | stacked preview heatmaps) like the correction/partitioning tabs; input fields are drop-target `ColumnPicker` combos (`DropComboBox` — drag a var from the list onto a field or pick it). **Synchronous** (calcs are instant, so no worker/coords, unlike `BasePartitioningTab`) but computed **only on the Calculate button** (input heatmaps refresh on field change; the result heatmap + Add wait for Calculate). Subclass sets `inputs` (ColumnPicker specs; optional `short` titles its preview heatmap), `default_name`/`out_unit`/`method_tags`, and implements `_compute(df, picks)` (library fn) + `_code(picks, name)` (codegen). Base previews one date/time heatmap per input plus the result, emits `{name}` (DERIVED, parent = first input). `inputs` **may be empty** for a coords-only formula — the base then hides the variable list (`self.varpanel is None`) and the input box. `_plot_result(series)` is the result-render hook (default = the single heatmap); public `TITLE_FONTSIZE`/`FONT_SIZE` keep a custom figure on the panel look. Subclasses (both Variables ▸ **Calculate**, multi-instance): **VPD (TA + RH)** (`tabs/derived_vpd.py`) — VPD kPa from TA+RH via `dv.variables.calc_vpd_from_ta_rh`; previews TA/RH/VPD, emits `VPD_kPa`, **Copy Python** → `calc_vpd_from_ta_rh_to_code`. **Potential radiation** (`tabs/derived_potrad.py`) — `inputs = []`; `SW_IN_POT` W/m2 from `df.index` + site coords via `dv.variables.potrad`. Coords box seeded from `site.manager` (mirrors `_correction_base`); `_compute` raises when `site.manager.configured` is False (an unset site would silently return the (0,0)-at-UTC curve). Overrides `_plot_result` → 2×2 gridspec (per-month diel cycles over the full time series on the left; heatmap right, spanning both rows). Emits `SW_IN_POT` (DERIVED, no parent), **Copy Python** → `potrad_to_code`. Safe despite `init_flux_data`'s reserved-name check — the flux chain tab drops `_RESERVED` columns first.
-- **Rename variables** (`tabs/rename_variables.py`, single-instance) — prefix/suffix to all; **Apply** → `MainWindow._rename_variables` (renames `_full_data`, remaps `created`, `MetadataStore.rename`). Any variable list's right-click also offers Rename…/Delete… via `metadata_store.manager` relays.
-- **Flux processing chain** (`tabs/fluxchain.py`, single-instance) — guided Input→L2→…→L4.1 on the **composable per-level** path (deliberately not `run_chain`/`FluxConfig`, so L3.2 stays a real stepwise chain w/ its own QCF surface). Horizontal `PipelineRail` (`widgets/flux_pipeline_rail.py`, GUI-only) of `StageCard`s; clicking swaps controls into a `QStackedWidget`. **Levels run incrementally** — each page's run button gates on its predecessor (`_update_level_buttons`/`self._reached`); re-running an earlier level cascades deeper state away. Right column: `qcf.screening_report()` panel. **L2** per-test column pickers seeded to EddyPro-FLUXNET names, threaded through library per-test `'col'` override; default names + VM97 sub-test list are library domain knowledge (`diive.flux.fluxprocessingchain.level2_test_inputs(...)`, `VM97_SUBTESTS`); GUI derives `fluxbasevar` via `detect_fluxbasevar`. Other levels mirror via `_refresh_levels_info` (Input USTAR picker, `diive.flux.fluxprocessingchain.level31_storage_col`). **L3.3 two modes** (constant / detection w/ CUT vs VUT). **L4.1** ticks rf/xgb/mds (additive). **Shared Random seed** (default 42) always passed to rf/xgb (`random_state`) + emitted — without it output drifts; `_level41_cfg` omits kwargs equal to library defaults. Needs EddyPro-FLUXNET input (`load_exampledata_parquet_lae_level1_30MIN`). Codegen in `flux/fluxprocessingchain/codegen.py`.
-- **USTAR detection** (`tabs/ustar_detection.py`, single-instance) — standalone moving-point (Papale 2006); single seasonal (`UstarMovingPointDetection`) or multi-year bootstrap (`UstarBootstrapThresholds`) for VUT+CUT. Worker thread.
-- **NEE partitioning tabs** (`Flux` menu, single-instance each) — one per port via `BasePartitioningTab`: Nighttime ONEFlux/REddyProc, Daytime REddyProc/ONEFlux (`*_NT_OF`/`*_NT_RP`/`*_DT_RP`/`*_DT_OF`).
-- **Random uncertainty (PAS20)** (`tabs/uncertainty_randunc.py`, single-instance) — standalone `DiiveTab` (single output). 3-panel preview; the measured-vs-uncertainty scatter is **method-1 records only** (`WINDOW_N_VALS_METHOD1>=6`) so fallbacks don't streak. Progress bar via `RandomUncertaintyPAS20.run(progress_callback=)`. **Add** → `{flux}_RANDUNC`; **Copy Python** → `randunc_to_code`.
-- **Joint uncertainty (PAS20)** (`tabs/uncertainty_jointunc.py`) — combines a `{flux}_RANDUNC` (run random first) with scenario spread via `JointUncertaintyPAS20`. Scenario combo → divisor + auto-pick needles biased toward the randunc column's flux base (`_scenario_prefer()`). **Add** → `{base}_JOINTUNC`; **Copy Python** → `jointunc_to_code`.
-- **Feature engineering** (`Data ▸ Feature engineering`, closable) — runs `FeatureEngineer`, emits via `featuresCreated`; new columns get a pink ✦ NEW pill.
-- **MDS gap-filling** (`tabs/gapfilling_mds.py`, single-instance) — NOT an `MlGapFillingTab` subclass (no SHAP/held-out split/reduction); shares only chrome. Fixed three-driver picker (SWIN/TA/VPD). Flag granular `method*1000 + time_window`. Codegen `mds_gapfill_to_code`. Results = `MdsResultsPanel`; `FluxMDS.quality_breakdown()` + `mds_quality_description()` are library domain knowledge. Progress bar via `FluxMDS.run(progress_callback=)`.
-- **XGBoost / Random Forest gap-filling** (`Gap-filling` menu, single-instance) — `MlGapFillingTab` subclasses (XGB `*_gfXG` lilac, RF `*_gfRF` green). XGB `random_state=-1`=none (reseeds); RF `max_depth=0`=unlimited, `n_jobs=-1`. **No feature-engineering settings** (use that tab first). Model sub-tab = QHBoxLayout (**NOT a splitter** — a splitter over-allocates). Results sub-tab = `GapFillResultsPanel`; reduction `k` passed via `update(..., shap_threshold_factor=)`. Emits `*_gf*` + `FLAG_*_ISFILLED` (DERIVED).
-- **Gaps & coverage** (`tabs/gaps.py`, single-instance) — `GapStats` (`.summary`/`.long_gaps`/`plot_*`/`gap_at(timestamp)`). Clickable both ways, `_syncing` guard. (Its `plot_*` use `ax.figure.colorbar` so they embed — now a library-wide convention, see **Plotting**.)
-- **Driver explorer** (`tabs/drivers.py`, single-instance) — `dv.analysis.rank_drivers(...)` → `[DRIVER, CORR, ABS_CORR, BEST_LAG, N]`; `ScatterXY` shifted by `BEST_LAG`.
-- **Compound extremes** (`tabs/compound_extremes.py`) — synchronous. `dv.analysis.CompoundExtremes` → `CompoundExtremesPlot.from_compound_extremes(ce)`. **Copy Python** → `compound_extremes_to_code`. No columns emitted.
-- **Seasonal-trend & anomalies** (`tabs/seasonaltrend.py`, single-instance) — `resample_to_daily_agg` → `SeasonalTrendDecomposition` (period 365) → `LongtermAnomaliesYear`. **Library bug fixed:** STL wrapper (`core/times/decomposition_utils.py::stl_decompose`) never passed `period` and called `STL.fit(weights=...)` (unsupported) — now passes `period` + small odd smoother, `fit()` no weights. The result dict no longer carries `'iterations'`: it returned `DecomposeResult.nobs`, a shape tuple, where a count was documented, and statsmodels exposes no iteration count to report honestly. `reconstruct_from_components` also no longer forces the trend's NaN onto reconstructions that exclude the trend — that silently dropped the trend's edge records (30 of 400 at period 31) and disagreed with `detrend()` on the same request.
-- **Spectrogram** (`tabs/spectrogram.py`, single-instance) — `dv.analysis.spectrogram` mapped onto calendar-time × cycles-per-day (segment centres → real timestamps via non-NaN index, correct across gaps).
-- **3D surface** (`tabs/surface3d.py`, single-instance, optional **`gui3d`** extra = `pyvista`+`pyvistaqt`+`trimesh`) — date×time-of-day grid (`dv.plotting.datetime_surface_grid` → `DateTimeSurface`) as a PyVista relief; vertical controls column + list header. Two **Style**s: extruded heatmap (default; doubled "staircase" `StructuredGrid` from `_extruded_grid` — cell tops + step-risers, open underneath, coloured by **cell data** from `_staircase_cell_values` so each top/riser is one flat colour with no blending, a riser taking the *taller* neighbour's value; NaN dropped via `threshold`) or smooth interpolated surface (opt. `subdivide`+`smooth_taubin`). Y stretch (≤100) widens the date axis; **Cell aggregator** = block `_bin_rows` (mean/median/max/min) **or** rolling `_roll_rows` (centred window, full res, gaps kept); plus exaggeration, opacity, colormap. Lighting flat by default; optional **Shadows** (off by default) = overhead spotlight + `enable_shadows`. **Camera:** `set_view(vector, viewup, tight=)` (+ `_fit_tight` viewport-maximise) backs the preset buttons in `_VIEWS` (Isometric/Top/Front/Back/Left/Right + Front 20°/Side 20°); `frame_default` (loose sphere fit) is kept for rotation-safe framing (orbit). Two timer animations share **Speed**: **Orbit** (`orbit_step`) and **Flyover** (`fly_to`, look-point sweeps the record, camera trails in X-span units); stop on `on_interaction_start` or preset. On load/new variable → tight Isometric (`_VIEWS[0]`); settings tweaks keep the view via `_framed_target`. Shadow map re-bakes once the canvas is realised (`Pyvista3DCanvas.on_first_show`) since a pre-realisation render mis-bakes. **Export:** VR `.glb` (`_build_export_surface` → per-cell boxes `_extruded_box_geometry` for extruded / UV sheet for smooth, **emissive** texture so PowerPoint/Quest don't wash the colours, saturation-boosted `_EXPORT_SATURATION`, binary via `trimesh`) and 3-D-print `.stl` (`_printable_solid`, watertight + base plate). Copy Python → `datetime_surface_to_code` (matplotlib, runs without the extra). Shadow mapping is GPU-driver-dependent (best-effort, wrapped).
-- **3D surface (X/Y/Z)** (`tabs/surfacexyz.py`, optional **`gui3d`** extra) — coordinate-surface sibling; `SurfaceXYZTab` **subclasses** `Surface3DTab` and overrides only the data source (all relief controls, camera presets, orbit/flyover, glTF/STL export, mesh/render pipeline inherited). Renders **Z over chosen X/Y** vars instead of the calendar grid: X/Y/Z `ColumnPicker` (`_build_top_controls`; drag from the list — enabled by the base's opt-in `SingleVariableExplorerTab.list_draggable` → draggable `VariablePanel` → text-mime drop onto `DropComboBox`), gridded by `dv.analysis.GridAggregator` (equal-width, Z per cell) in `_grid_data` → `df_agg_wide` (Y-index × X-cols) → shared `_render_surface`. Extra controls **Bins (X/Y)** + **Z aggregator**. Empty bins stay empty: `_drop_gap_risers = True` so `_staircase_cell_values` bridges only two measured cells (no base-drape at measured↔missing edges; the date/time tab keeps it `False` since it's dense). The `_compute` split (`_grid_data()` hook + `_render_surface()`) and control hooks (`_build_top_controls`/`_add_data_rows`/`_controls_hint`) live on `Surface3DTab`. Copy Python → `surface_xyz_to_code`. Registered in `MENU_TABS["Plot"]` (multi-instance).
-- **Outlier tabs** (Cleaning menu, Outliers section) — `BaseOutlierTab` subclasses, one per detector. Each keeps original + cleaned (`{var}_{METHOD_SUFFIX}`) + flag (`FLAG_{var}_OUTLIER_{flagid}_TEST` 0/2 — flag id from the *library* class, can differ from suffix, e.g. `ZSCOREINCREMENTS` col but `..._INCRZ_TEST`).
-  - **Detector contract:** `_worker` requires `.run(repeat, progress_callback)` (→ `.calc(...)`), `.filteredseries`, `.overall_flag`, `.last_lower_bound`/`.last_upper_bound` (band in data units; `None` when there's no single envelope), `.is_daytime`. Adding a tab = verify/extend the library class to this contract, don't reimplement detection. Class flags `supports_daynight`/`supports_repeat`/`band_center_label` gate optional UI. `ManualRemoval`/`TrimLow`/`zScoreIncrements` have no band; `TrimLow`'s day/night split is opt-in (`trim_daytime`/`trim_nighttime`, method rows prefixed `trim_…`; coords validated only when split requested; constructor `series, lower_limit, trim_daytime, trim_nighttime, lat, lon, utc_offset, …`).
-- **Correction tabs** (Cleaning menu, Corrections section) — `BaseCorrectionTab` subclasses, one per correction. All independently available for any variable (`suited_for` is a hint, not a lock). Hooks: `_apply(series, kwargs, coords) -> (corrected, extra)`, `_hero_metrics`, `_render_result`, `_status_text`. The **nighttime-offset** tab is the rich one: coords + **Clamp negatives** checkbox (default on) + 4-panel diagnostic + below-zero hero; same `clamp_negatives` mirrored on the stepwise screening panel.
-- **Screening tabs** (`tabs/_screening_base.py` `ScreeningTabBase`) — the full stepwise-screening machinery (variable list + segmented Outliers/Corrections/Report inspector + method-card chain via `widgets/stepwise_cards.py` + `StepwiseOutlierDetection`→`FlagQCF` worker + `apply_corrections` + preview + save/restore) shared by two thin subclasses. Variants override three seams: data source (it's `self._df`/`self._var`-centric, so feed a synthetic frame), `_inspector_pages` (extra page), `_emit_frame` (emitted columns). **Stepwise screening** (`tabs/stepwise.py`, Cleaning menu, Outliers section) is the base unchanged. **Meteo screening (database)** (`tabs/meteo_screening.py`, File ▸ Database submenu, single-instance) feeds a synthetic frame from the staged DB `data_detailed`, adds a **Resample** page (target defaults to the working dataset's `DetectFrequency` resolution; no-op when source==target via `resample_series_to_freq`), and `_emit_frame` resamples the screened (+corrected) series + `convert_series_timestamp_to_middle` (END→MIDDLE alignment), with collision rename, overlap guard, DB-origin + all-tags provenance, and a **download-vs-project timezone** mismatch warning. It reuses `StepwiseOutlierDetection`, **not** `StepwiseMeteoScreeningDb` (which stays a library/notebook API). `FlagQCF` day/night needs SW_IN_POT (off here); the shared preview shows the hi-res screening, not the resampled result.
-- **Database tabs** (File ▸ Database submenu) — over `diive.core.io.db` (`InfluxDBBackend` adapter → `InfluxIO` engine; optional `db` group, `influxdb_available()` gates). **Database connection** + **Database explorer** single-instance; **Meteo screening (database)** (see above). `gui/db.py` `DbConnectionManager` (`db.manager`) holds the live backend + config-dir path (path persisted, never the token), `changed` (header pill + explorer refresh), `screeningRequested` (explorer→screening hand-off via `MainWindow._send_to_meteo_screening`). Explorer: drill bucket→data_version→measurement→field→**field overview** (all tags + first/last record); **download a field** for a date range on worker threads — **UTC offset defaults to the project timezone** (DB stores UTC; a mismatch silently shifts the merge — visible note + screening-tab warning), **Match dataset time range** (shifts END↔MIDDLE by half a period), **chunked download with a live-updating plot** + shared `widgets/progress_bar.py` `ProgressBar`, request caching (plot + screening reuse one download). The whole download/screen/resample/merge pipeline works in **TIMESTAMP_END** (DB native) then converts to **TIMESTAMP_MIDDLE** for the diive working frame.
-
-### Persistence, metadata, projects, events
-
-- **Per-variable metadata** — library's `diive.core.metadata` (`VariableMetadata`, `ProvenanceEntry`, `MetadataStore`, `provenance_attr`, `ATTRS_KEY`, `MAX_DESCRIPTION_WORDS=50`), headless. GUI holds it app-wide in `gui/metadata_store.py` (`manager` singleton). Each var: origin (`original`/`modified`/`derived`), parent links, ordered provenance, ≤50-word description, tags w/ source (only `USER` tags persist). Operations emit provenance via `df.attrs[ATTRS_KEY]`; `MainWindow._add_features` consumes it (`store.from_attrs`). `record_derived` makes a new column **inherit its parent's full provenance** (a *copied* snapshot, not shared). `MetadataStore.rename(mapping)` re-keys + rewrites links. **Tolerant deserialization** (`from_dict` accepts aliased/missing name + dict-or-list tags; `load_dict` skips malformed). **Metadata explorer** tab (single-instance) does full editing; other tabs' right-click **Edit metadata…** → `manager.request_edit` → `MainWindow._edit_metadata`. **Persistence is namespaced by dataset:** `config.variable_metadata` is `{dataset_key(source): {...}}`. `_set_data(persist_metadata=False)` loads clean (example auto-load uses it).
-- **Persisted prefs** — `gui/config.py` saves JSON (`QStandardPaths`) on close/launch: theme, site, geometry, filetype, events, metadata. Best-effort.
-- **Project settings** — `gui/site.py` `SiteManager` singleton (`site.manager`): author/description/site metadata + `configured`. Tab `tabs/site.py` (`ProjectSettingsTab`; `SiteDetailsTab` alias, single-instance). Values only, passed to library functions taking `lat`/`lon`/`utc_offset`. Right side = notes wall (`widgets/notes_wall.py`; mirrors `state()` into `site.manager.notes` via plain attribute set — no `changed` — to avoid a rebuild loop).
-- **Events** — `gui/events.py` `EventManager` (`events.manager`); model is the library's `dv.events`. **Add event…** dialog result method is `make_event()`, NOT `event()` (which overrides `QDialog.event`). Events tab `tabs/events.py` (reflowing cards; Manage categories… — last category undeletable). `_sync_event_columns` (on `changed`) reconciles `EVENT_<name>` 0/1 columns. Overview overlays via `overlay_events(axis='x'/'y')`. Category colour overrides via `Event.resolved_color(i, colors=)` / `overlay_events(..., colors=events.manager.categories)`.
-- **Projects** — a `<name>.diive` folder (`__diive__` marker, `project.json`, `data.parquet`). Format is library's `diive.core.io.project` — serializes the **full** `MetadataStore` + an opaque `extras` dict (library never imports GUI types). GUI (`File ▸ Save project` Ctrl+S / Save as… / Open…) puts site, range, `created`, open tabs (label/title/pinned + each `save_state()`). Every `DiiveTab` has `save_state()`/`restore_state()` (default no-op) capturing *inputs only* (via `widgets/state_utils`); heavy results re-compute. Wrapped in try/except. `_open_project` loads clean then overlays `store.load_dict`; a plain load clears `_project_dir` so Ctrl+S can't overwrite a project with unrelated data.
-- **Output console** — `Log` tab mirrors diive's Rich output; library tees to any sink via `add_console_sink` (`diive.core.utils.console`); panel only renders.
-- **Splash / startup** — `gui/splash.py` `QPainter`-drawn spinner. `run()` builds `MainWindow(cfg, autoload=False)` then defers the load via `QTimer.singleShot(0, …)` → `window._initial_load()` (else a blocking constructor load freezes the spinner). Tests build `MainWindow()` (`autoload=True`, synchronous). `_initial_load()` reopens `config.last_project` (if still a diive project) else the bundled example.
+- **Reuse the templates, don't hand-roll:** `VariablePanel` for every left-hand list; `WorkerRunner`/`LatestRunner`/`ProcessLatestRunner` (`widgets/worker.py`) for background work with a **pure** `_compute_payload`; `Debouncer` for per-keystroke controls; and the tab bases `_explorer_base`, `_ml_gapfilling_base`, `_outlier_base`, `_correction_base`, `_partitioning_base`, `_derived_variable_base`, `_screening_base`.
+- **Registry-driven tabs.** Menu tabs are `LazyTab` factories imported on first open, so `import diive.gui.app` pulls in no ML stack. A menu tab must live in `diive.gui.tabs`. When creating one lazily, call `tab.widget()` before connecting `featuresCreated`.
+- **Hidden tabs are not pushed to** (marked `_data_stale`). Make a tab current before reaching into it.
+- **Pinned tabs rely on every writer rebinding, not mutating.** A new `df[col] = ...` on the shared frame silently un-freezes every pinned tab; use `assign`.
+- **Outlier tabs** need the library detector to meet the contract: `.run(repeat, progress_callback)`, `.filteredseries`, `.overall_flag`, `.last_lower_bound`/`.last_upper_bound`, `.is_daytime`. Extend the library class; don't reimplement detection.
+- **Keep console strings cp1252-safe** (ASCII `->`, not `→`).
 
 ### PySide6 gotchas (already handled — don't reintroduce)
 
-- **Retain tab instances** (`MainWindow._tabs`). Qt owns the QWidgets, but the Python `DiiveTab` objects hold the signal slots; if GC'd their signals go inert (symptom: clicks stop working after startup).
-- **A stylesheet touching `QListWidget::item` disables per-item `setBackground`/`setForeground`.** Row colouring goes through `QStyledItemDelegate` (`VariableDelegate`), not item roles.
-- **Matplotlib's Qt toolbar recolours icons from the widget palette.** `MplCanvas` sets a light palette *before* building the toolbar (else white-on-white on dark themes).
-- **Use synchronous `canvas.draw()`, not `draw_idle()`,** after a user action so the canvas repaints immediately. (Overview zoom is the deliberate exception — see its note.)
-- **Share axes for comparison panels** via `subplots(..., sharex=True, sharey=True)`.
-- **A widget with its own stylesheet detaches its tooltips from the app-wide `QToolTip` rule** — append `theme.manager.tooltip_qss()`. The appended string must be **all-selector QSS** — `setStyleSheet("color:x;background:y;" + tooltip_qss())` silently drops the `QToolTip` block; wrap bare props in a selector first: `setStyleSheet("QLabel { color:x; background:y; }" + tooltip_qss())`. (Reference: Overview stat items, event cards.) For tables, put no `color:` on `::item` so per-item `setForeground` paints.
-- **A widget's stylesheet also styles a dialog parented to that widget.** A colour swatch styled with a bare `QPushButton { background: … }` rule repainted every button inside the `QColorDialog` it opened (OK/Cancel/Pick Screen Color) in the picked colour. Scope such a rule to the widget's own `objectName` — `QPushButton#colorswatch { … }` (`tabs/settings.py::_ColorSwatch`, `tabs/combine_variables.py::_ColorButton`).
-- **A `QPainter` on a paint device that carries a `devicePixelRatio` applies that transform itself** — do NOT `p.scale(dpr, dpr)` on top of it. `icons.py::_canvas` did, drawing every 16-unit glyph `dpr` times too large so it ran off its icon box (the tab "×" and every menu glyph). It is a no-op at 100% display scaling and only appears on a scaled 4K screen, so verify icon changes at `dpr` 1.0/1.5/2.0, not just at 1.0 — the ink's bounding box as a *fraction* of the icon box must be identical at all three (`test_icon_glyphs_are_identical_at_every_device_pixel_ratio`).
-- **[CRITICAL] Qt swallows an exception raised inside a slot it invokes.** PySide6 routes it to `sys.excepthook` and the triggering call returns normally, so a test that drives a widget *through a signal* (`setChecked`, `setCurrentIndex`, `.click()`, `emit()`) and then only checks that nothing broke **passes even when the slot crashed**. `tests/test_gui.py` has an autouse `slot_exceptions` fixture that captures `sys.excepthook`/`threading.excepthook` and fails the test at teardown — keep it, and do not write a GUI test whose only evidence is the absence of a traceback. Note a *stale figure* satisfies "the canvas shows no error", so assert a concrete post-condition (`_axes_replaced()`, a value, a column) instead. Installing that fixture immediately exposed 168 swallowed `RuntimeError`s that 44 tests had been passing over.
-- **Never connect a lambda to a process-wide singleton signal.** Qt disconnects a receiver only when it can see it die, which it can for a bound method of a `QObject` and cannot for a lambda. `VariablePanel` connected a lambda to `metadata_store.manager.changed`, so every closed tab left a permanently-firing dead slot raising `RuntimeError: Internal C++ object already deleted` on the next metadata edit anywhere in the app. Use a bound method (`self._on_metadata_changed`) for `theme.manager`, `metadata_store.manager`, `site.manager`, `events.manager` and `db.manager`.
-- **[CRITICAL] Never connect a `self`-capturing lambda to your own child widget either.** The rule above is the same defect against a singleton; this is the general form, and it leaks rather than misfires. PySide6 holds a connected **bound method**'s receiver only weakly, but a **lambda** is owned by the connection object, which lives on the C++ side where Python's collector cannot walk it. So `owner -> child widget -> connection -> closure -> owner` is a cycle with no visible Python link and `gc.collect()` can never break it. Measured: **no `MainWindow` was ever collected** (menu-action lambdas, L147) and **28 of 41 tab classes leaked on drop** (L106) — and because every leaked window and tab stays subscribed to the app-wide singletons, `theme.manager.apply()` fanned out into all of them (0.65 s behind three leaked flux-chain tabs, 0.000 s after). Use a plain bound method; when the slot needs arguments the signal does not carry, use **`gui/widgets/weak_slot.py`'s `weak_slot(method, *args)`** (holds the method's object weakly, truncates signal args to the target's arity the way Qt does) or park the payload on the emitter — `act.setData(label)` read back via `sender().data()` is what `MainWindow._menu_tab_action` does. Two corollaries learned the hard way: a **parent/child** cycle is *not* this bug (PySide6 traverses the Qt parent/child tree, so the collector breaks it — two weakrefs were written against such cycles and reverted, L105 and `CopyPythonButton._provider`), and matplotlib's `CallbackRegistry` has the identical asymmetry (`mpl_connect` holds lambdas strongly, bound methods weakly).
-- **Freeing a widget can surface a crash the leak was hiding.** `QScrollArea.setWidget` (and any container swap) destroys the old child on the C++ side while its Python wrapper lives on; collecting that wrapper in the same pass that frees its owner puts a virtual call on a half-finalized object — an **access violation inside `gc.collect()`**, not an exception, so the `slot_exceptions` fixture cannot catch it. `EventsTab` did exactly this once L106 made it collectable. Take the old widget back and delete it deliberately (`takeWidget()` + `setParent(None)` + `deleteLater()`, as `corrections_panel.py` does) whenever a Python `QWidget` subclass with a virtual override is replaced.
-- **Window must fit the screen work area.** Startup uses `show_filling_workarea()` (sized to `availableGeometry`), NOT `showMaximized()` — a frameless maximize covers the taskbar and clips the active tab's bottom. It also lowers the window minimum size: the Overview's height-for-width `_HeroBand` reports a tall single-column *minimum* (its min-width height) that otherwise forces the window taller than the screen. Restored geometry is also pulled back on-screen via `_clamp_to_screen`.
-
-## High-Frequency Raw Data (moved out)
-
-Raw 10/20 Hz tooling — wind rotation, Reynolds decomposition, flux detection limit, and the
-PWB time-lag detection/removal toolchain with its CLIs — is no longer part of diive. It lives in
-[dyco](https://github.com/holukas/dyco). diive starts at averaged (e.g. 30-min) flux data;
-`dv.flux.TimeLagAnalysis` reads EddyPro's `*_TLAG_ACTUAL` columns and is a lowres tool, not a
-raw-data one.
+- **Retain tab instances** (`MainWindow._tabs`); a GC'd `DiiveTab` makes its signals go inert.
+- **A stylesheet touching `QListWidget::item` disables per-item colours** — colour rows via `VariableDelegate`.
+- **Use synchronous `canvas.draw()`** after user actions (Overview zoom's `draw_idle()` is the deliberate exception).
+- **A widget with its own stylesheet loses app-wide tooltip styling** — append `theme.manager.tooltip_qss()`, and wrap bare properties in a selector first (`"QLabel { color:x; }" + tooltip_qss()`), else the `QToolTip` block is dropped.
+- **A widget's stylesheet also styles dialogs parented to it** — scope rules to its `objectName` (`QPushButton#colorswatch`).
+- **Don't `p.scale(dpr, dpr)` on a `QPainter`** whose device carries a `devicePixelRatio`; verify icon changes at dpr 1.0/1.5/2.0.
+- **[CRITICAL] Qt swallows exceptions raised in slots.** Keep the autouse `slot_exceptions` fixture in `tests/test_gui.py`, and assert a concrete post-condition (a value, a column, `_axes_replaced()`), never just "no traceback" — a stale figure passes that.
+- **[CRITICAL] Never connect a `self`-capturing lambda to a signal** — neither a singleton's (`theme`/`metadata_store`/`site`/`events`/`db` managers: dead slots fire after close) nor your own child widget's (uncollectable cycle; leaked every `MainWindow` and 28 of 41 tabs). Use a bound method, `widgets/weak_slot.py`'s `weak_slot(method, *args)`, or `act.setData()` + `sender().data()`. Parent/child cycles are *not* this bug. matplotlib's `mpl_connect` has the same asymmetry.
+- **Replacing a container's child** (`QScrollArea.setWidget` etc.) can crash inside `gc.collect()`. Take the old widget back and delete it deliberately (`takeWidget()` + `setParent(None)` + `deleteLater()`).
+- **Window must fit the work area:** `show_filling_workarea()`, not `showMaximized()` (a frameless maximize covers the taskbar).
 
 ## Outlier Detection & QC
 
-- **Single:** `dv.outliers.Hampel(series).run()`
-- **Chained:** `StepwiseOutlierDetection()` — **not** on `dv.outliers`; import from `diive.preprocessing.outlier_detection`
-- **Corrections:** `dv.corrections.MeasurementOffsetFromReplicate()`, `remove_nighttime_zero_offset()`, `setto_*()`
-- **QCF aggregation:** `dv.qaqc.FlagQCF()` → 0 (good) / 1 (marginal) / 2 (poor)
-- **Full pipeline:** `dv.qaqc.StepwiseMeteoScreeningDb()` — corrections → outlier detection → quality flags
-- **Timestamp shift:** three methods comparing measured vs theoretical radiation (requires clear days)
+`StepwiseOutlierDetection` is **not** on `dv.outliers`; import from `diive.preprocessing.outlier_detection`.
 
-**[CONVENTION] Day/night threshold parameters.** Every day/night-capable outlier method follows one shape — **new ones MUST match it:**
+**[CONVENTION] Day/night thresholds.** New day/night-capable methods MUST match:
 
-1. **The switch is always `separate_day_night`.** No other spelling. Defaults are per-method: `Hampel` is `True`, everything else `False`.
-2. **A single global knob (`n_sigma`, `thres_zscore`, `n_sd`, `minval`/`maxval`, …) is the source of truth**, and applies to *both* periods. Per-period overrides are named `{knob}_daytime` / `{knob}_nighttime`, **default to `None`, never a literal**, and fall back to the global: `self.x_daytime = x_daytime if x_daytime is not None else x`. Defaulting to a literal (the old `Hampel` bug: `n_sigma_daytime=5.5`) silently shadows the global knob. Verify that changing the global value alone changes the result. No lists (`n_sd=[day, night]`), no packed pairs (`daytime_minmax=[min, max]`) — those were removed in v0.91.0.
-3. **Separation is NOT a no-op when day and night thresholds are equal** — except for `AbsoluteLimits`. Whether it changes anything depends on where the method's statistic comes from:
-   - *Pointwise* (`AbsoluteLimits`): each record is compared against a fixed limit, so equal limits give flag-for-flag identical results to no separation. Only here.
-   - *Subset-derived* (`zScore`, `LocalSD`, `LocalOutlierFactor`, `Hampel`): the mean/SD, rolling window or k-neighbourhood is computed **within each period**, so splitting changes the statistic itself. Measured on one series with identical thresholds both sides: `zScore` 5 -> 10 flagged, `LocalSD` 4 -> 10, `LOF` 29 -> 30. Do not tell users the toggle is inert without per-period values.
-4. **A GUI exposing the feature should expose *per-period* thresholds** (seeded from the global value, then independently editable), not just the toggle. The Hampel tab (`gui/tabs/outliers.py`) is the reference: separate sigma fields + red/blue day/night markers + a day/night count in the status line.
-5. **A removed parameter name must say what replaced it.** Detectors take `**legacy` and call `reject_legacy_params` (`outlier_detection/common.py`), which maps an old name to its replacement and still raises the normal unexpected-keyword error for anything else, so a typo cannot pass silently through `**kwargs`. A rename that keeps the *name* and only changes the accepted *type* needs its own guard — see `_reject_list_params` in `localsd.py`.
+1. The switch is always `separate_day_night` (default `True` only for `Hampel`).
+2. One global knob (`n_sigma`, `n_sd`, …) is the source of truth. Per-period overrides are `{knob}_daytime`/`{knob}_nighttime`, **default `None`** (never a literal, which shadows the global), falling back to the global. No lists or packed pairs.
+3. Separation is not a no-op with equal thresholds, except for pointwise `AbsoluteLimits`: subset-derived methods (`zScore`, `LocalSD`, `LOF`, `Hampel`) compute their statistic per period.
+4. A GUI exposing it should expose per-period thresholds (reference: Hampel tab).
+5. A removed parameter must say what replaced it: take `**legacy` and call `reject_legacy_params`.
 
-**Deliberate exceptions.** `TrimLow` keeps `trim_daytime` / `trim_nighttime`: those select *which period to trim*, not different thresholds. `LocalOutlierFactor` has the switch but no per-period knobs, because none existed and inventing `contamination_daytime` would be speculative.
-
-**The `*DaytimeNighttime` names are not all the same kind of thing.** `AbsoluteLimitsDaytimeNighttime` and `LocalOutlierFactorDaytimeNighttime` are wrappers that default the switch on (wrappers, not subclasses — `@ConsoleOutputDecorator()` replaces the decorated class with a function, so `isinstance` raises and subclassing is impossible). `HampelDaytimeNighttime` and `LocalOutlierFactorAllData` are plain aliases whose names already match their base class default.
+Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to trim; `LocalOutlierFactor` has no per-period knobs. `*DaytimeNighttime` names are wrappers (not subclasses — `@ConsoleOutputDecorator` returns a function) or plain aliases.
 
 ## Coding Standards
 
-- **Input validation** — only at system boundaries (user input, external data). Trust internal code.
-- **Error handling** — let exceptions propagate unless you can recover.
-- **Comments** — only WHY, not WHAT. Hidden constraints, workarounds, non-obvious logic.
-
-### Console Output & Verbosity
-
-**All production output uses Rich console helpers** from `diive/core/utils/console.py`. **NO `print()` in production code** (allowed in `examples/*/`, docstrings, `__main__`, `_cli_main()`).
-
-```python
-from diive.core.utils.console import console as _console, info, detail, warn, success, rule
-```
-
-| Function | Level | Use case |
-|---|---|---|
-| `rule(title)` | PROGRESS (2) | Section headers |
-| `info(msg)` | PROGRESS (2) | Key progress, results |
-| `success(msg)` | PROGRESS (2) | Operation completion |
-| `warn(msg)` | ERROR (1) | Warnings (always visible) |
-| `error(msg)` | ERROR (1) | Errors (always visible) |
-| `detail(msg)` | DEBUG (3) | Inner-loop details |
-| `_console.print(msg)` | None | User-facing formatted reports |
-
-Levels: `VERBOSE_SILENT=0`, `VERBOSE_ERROR=1`, `VERBOSE_PROGRESS=2` (default), `VERBOSE_DEBUG=3`. All helpers accept `verbose=`; omitting it uses the module default, settable with `dv.set_verbosity(level)` / read with `dv.get_verbosity()`.
-
-**[CRITICAL] Always pass `verbose=` when the caller has one.** A bare `detail(msg)` resolves to the module default (PROGRESS), which is *below* `detail`'s own `min_level` (DEBUG), so it prints only after `set_verbosity(VERBOSE_DEBUG)`. The old advice — "when using `if self.verbose >= N:` guards, call helpers WITHOUT `verbose=` inside the block" — is what produced 25 debug lines that could never print at any setting (L29/L75): the guard reads as if it controls visibility while the call silently refuses. Inside such a guard, still pass `verbose=self.verbose`. **Do NOT:** use `print()`, create separate `Console` instances, use `logging` for general output, mix `print()` and Rich in one file.
-
-### Examples (Sphinx Gallery format)
-
-Use `# %%` cell markers. No file I/O (API only). Single year of data. Disable `showplot=True`. **Checklist for new examples:** 1. Register in `examples/run_all_examples.py` + `examples/CATALOG.md`. 2. Add category README description. 3. Reference in source docstring "Example" section. 4. Update `examples/README.md` file count. 5. Note in CHANGELOG.md. 6. Verify it runs.
+- Validate input only at system boundaries. Let exceptions propagate unless you can recover. Comments explain WHY, not WHAT.
+- **Console output:** use the Rich helpers from `diive/core/utils/console.py` (`rule`/`info`/`success` at PROGRESS, `warn`/`error` at ERROR, `detail` at DEBUG, `_console.print` for reports). **No `print()` in production code** (allowed in examples, docstrings, `__main__`, `_cli_main()`), no separate `Console`, no `logging` for general output.
+- **[CRITICAL] Always pass `verbose=` when the caller has one**, even inside an `if self.verbose >= N:` guard. A bare `detail(msg)` resolves to the module default (PROGRESS), below `detail`'s own DEBUG level, so it never prints.
+- **Module docstring:** `MODULE_NAME: DESCRIPTIVE_TITLE`, `===` underline, one-line scope, then `Part of the diive library: https://github.com/holukas/diive`.
+- **Written text** (docs, comments, commit messages, examples): use the `/llm-detox` skill.
+- **Examples** (Sphinx Gallery): `# %%` cells, no file I/O, one year of data, no `showplot=True`. New example: register in `examples/run_all_examples.py` + `examples/CATALOG.md`, category README, source docstring "Example" section, `examples/README.md` count, CHANGELOG, verify it runs.
 
 ## Plotting
 
-**Two-phase pattern.** Phase 1 `__init__()` — data + computation params ONLY (no `ax`, title, labels, colors, limits). Phase 2 `plot(ax=None, ...)` — all styling + rendering; `ax=None` creates a new figure; can be called multiple times w/ different styles/axes.
-
-```python
-scatter = dv.plotting.ScatterXY(x=df['A'], y=df['B'])
-scatter.plot(ax=axes[0], title='Linear')
-scatter.plot(ax=axes[1], title='Log', ylim='auto')
-```
-
-**Conventions:**
-- **Colors:** Material Design. Default line and bar palette is **500-level** — blue `#2196F3`, red `#F44336`, amber `#FFC107` — with blue-grey `#455A64` (700) for ink, text and spines. **The 300/500 split is a two-panel rule, not a package-wide one:** where a bar/line panel shares a figure with a shaded-background panel, the bars take the lighter 300 shade (`#64B5F6` / `#E57373` / `#FFD54F`) and the background fills take the matching 500 shade, so the two panels don't clash. `analysis/optimumrange.py` is the reference and the only implementation. A single-panel plot picks one level and stays there: 500 for lines throughout, 400 or 500 for bar fills (`bar.py` 400, `waterfall.py` 500). Don't "correct" a 400/500 bar fill to 300 on the strength of this bullet — that was a misreading of it (L145).
-- **Bar labels:** `va='center_baseline'` (not `va='center'`) for digit-only strings inside bars.
-- **Label contrast:** `text_color = 'white' if 0.299*r + 0.587*g + 0.114*b < 0.5 else 'black'`
-- **Dynamic height:** `height = max(1.5, n_years * 0.38)` inches for multi-year panels.
-- **[CRITICAL] Colorbars:** any function that accepts an `ax` must use `ax.figure.colorbar(...)` (or `fig.colorbar` where `fig` is already resolved from that `ax`), **never `plt.colorbar`** — pyplot targets its own current figure, which in the GUI is not the canvas figure, so the colorbar lands elsewhere and matplotlib warns `Adding colorbar to a different Figure`. Same for `plt.tight_layout()` → `fig.tight_layout()`. A function that creates its own figure via `plt.subplots` and takes no `ax` is unaffected. This bit `ScatterXY` and `DetectTimestampShifts.plot_radiation_fingerprint`; verify a fix by passing an axes belonging to a bare `Figure()` (not created through pyplot) and asserting no warning.
-
-**`FormatStyle`** (`diive/core/plotting/styles/format.py`) is the **only** way to set plot **chrome** (title/labels/units/fontsizes/weights/colors/grid/legend/zeroline) — pass `plot(format_style=FormatStyle(...))`. `None` fields resolve to the `LightTheme` standard block, so a bare `FormatStyle()` **is** the house style; editing those constants restyles every plot. Old flat chrome kwargs (`title`/`xlabel`/`ylabel`/`series_units`/...) were **removed** from every `plot()` (v0.91.0 breaking change). Use `.merged(**overrides)` to vary one field. Data-render args (`color`/`cmap`/`marker`/`vmin`/`vmax`) and colorbar args (`cb_*`, `zlabel`) stay direct `plot()` kwargs. The matplotlib work is `FormatStyle.apply(ax, default_title=, default_xlabel=, default_ylabel=, zeroline_data=)`. Chrome-only conversion for the multi-axes `RidgeLinePlot` and polar `TreeRingPlot`. GUI plot-settings panel has one shared **Format** section read via `_format_values()` → `values()["_format"]` → `FormatStyle(**...)`.
-
-**Per-plot data-render notes:**
-- **`DielCycle.plot`** takes `agg` (`mean`/`median`/`min`/`max`/`p25`/`p75`), `band` (`none`/`sd`/`se`/`iqr`/`minmax`), `each_month`, `cmap` (per-month palette), `marker`/`markersize`. Aggregates are computed on demand by `diel_cycle(..., mean=/std=/median=/quantiles=/minmax=)`. Deprecated `mean=`/`std=` kept (std=False→band='none'). `scatter_to_code` is the scatter codegen.
-- **`ScatterXY`** uses internal unique column keys (`_x`/`_y`/`_z`) so the same variable can fill two roles (e.g. colour-by-X) without `pd.concat` collapsing duplicate-named columns into a frame. **`GridAggregator` and the two date/time pivots now do the same** (`_x`/`_y`/`_z` and `_values` respectively), and for the same reason: keying a working frame by the caller's Series names means a shared name silently replaces one role with another's data (a wrong axis, no warning) or crashes the groupby. Use an internal key whenever a frame is built from caller-supplied Series — including the helper columns of a pivot, since a variable can legitimately be named `DATE` or `TIME`.
-- **`RidgeLinePlot`** sets the gridspec `hspace` (overlap) at creation, *before* adding subplots — a later `gs.update(hspace=)` is a silent no-op for an embedded GUI figure (not in pyplot's `Gcf`).
+- **Two-phase pattern:** `__init__()` takes data and computation params only; `plot(ax=None, ...)` does all styling and can be called repeatedly.
+- **`FormatStyle`** is the only way to set chrome (title/labels/fontsizes/grid/legend…). The old flat chrome kwargs were removed in v0.91.0. Data-render (`color`/`cmap`/`vmin`…) and colorbar (`cb_*`) args stay direct `plot()` kwargs.
+- **[CRITICAL] Functions taking `ax` use `ax.figure.colorbar(...)` / `fig.tight_layout()`, never `plt.colorbar` / `plt.tight_layout()`** — pyplot targets a different figure in the GUI. Verify with an axes from a bare `Figure()`.
+- **Colours:** Material Design; 500-level lines/bars (`#2196F3`, `#F44336`, `#FFC107`), `#455A64` ink. The 300-bar/500-background split applies only to a bar panel sharing a figure with a shaded panel (`analysis/optimumrange.py`). Don't "correct" 400/500 bar fills to 300 (L145).
+- Bar labels `va='center_baseline'`; label contrast `'white' if 0.299*r + 0.587*g + 0.114*b < 0.5 else 'black'`; multi-year panel height `max(1.5, n_years * 0.38)`.
+- **Use internal column keys** (`_x`/`_y`/`_z`, `_values`) when building a frame from caller-supplied Series; a shared name silently swaps one role's data for another's.
+- Don't replace `_ArrayOffsetsLegend` (fast `loc='best'` on large collections) with a subsample or fixed `loc`. Find scatter collections with `isinstance(c, PathCollection)`, never by class name.
+- `RidgeLinePlot` must set gridspec `hspace` at creation; a later `gs.update()` is a no-op for embedded figures.
 
 ## Development Workflow
 
-**[CRITICAL] NEVER COMMIT CHANGES.** User stages and commits exclusively.
+**[CRITICAL] NEVER COMMIT CHANGES.** The user stages and commits exclusively.
 
-**[CRITICAL] NEVER RUN EXAMPLE SUITE.** 113 examples, several of them minutes long — the reason is
-cost, not correctness. Only test individual examples:
+**[CRITICAL] NEVER RUN THE EXAMPLE SUITE** (113 examples, several minutes each). Run single examples with `MPLBACKEND=Agg` — 16 end in a bare `plt.show()` that blocks headless:
+
 ```bash
 MPLBACKEND=Agg uv run python examples/gapfilling/gapfill_randomforest.py
 ```
 
-**Pass `MPLBACKEND=Agg` when running one unattended.** 16 examples end in a bare `plt.show()`, which
-blocks until a window is closed — headless that looks exactly like a slow example, not a stuck one
-(the giveaway is an output file whose size stops changing). `run_all_examples.py` now forces `Agg`
-itself, so the 120 s timeouts it used to report against those 16 were spurious failures, not real
-ones; a caller-set `MPLBACKEND` still wins if you want to watch the plots.
+**Do NOT:** run `uv` commands without explicit approval, skip pre-commit hooks (`--no-verify`), force-push to main/master, include Claude as co-author.
 
 **Commit message style:** one-line title (< 50 chars) + bullet points.
 
-**Do NOT:** run `uv` commands without explicit approval, skip pre-commit hooks (`--no-verify`), force-push to main/master, include Claude as co-author.
+**Release:** bump the version in `pyproject.toml` **and** the fallback `__version__` in `diive/__init__.py`, then push a `vX.Y.Z` tag. `.github/workflows/publish.yml` checks that all three versions match, builds the package and publishes it to PyPI (trusted publishing). Docs build on Read the Docs from `.readthedocs.yml`.
 
 ## Testing
 
 ```bash
-pytest tests/test_gapfilling.py -v              # Gap-filling
-pytest tests/test_fluxprocessingchain.py -v     # Flux chain
-pytest tests/test_gui.py -v                      # Desktop GUI (offscreen, needs 'gui' extra)
-pytest tests/ -v                                 # All
+pytest tests/test_gapfilling.py -v
+pytest tests/test_fluxprocessingchain.py -v
+pytest tests/test_gui.py -v        # offscreen, needs 'gui' extra
+pytest tests/ -v
 ```
 
-- Use flexible assertion ranges (`assertGreater/assertLess`) for SHAP variability.
+- SHAP importance fluctuates ±5-10%: use flexible ranges (`assertGreater/assertLess`).
 - Don't mock databases in integration tests.
-
-## Module Docstring Format
-
-```python
-"""
-MODULE_NAME: DESCRIPTIVE_TITLE
-================================
-
-Brief one-line description of scope and purpose.
-
-Part of the diive library: https://github.com/holukas/diive
-"""
-```
-
-## Text Writing Standards
-
-Use `/llm-detox` skill for all written content (documentation, comments, commit messages, examples).
-
-## Known Issues & Workarounds
-
-| Issue | Workaround |
-|---|---|
-| SHAP importance fluctuates ±5-10% | Flexible ranges in tests (`assertGreater/Less`) |
-| Feature reduction too strict | Reduce `shap_threshold_factor` (default 0.5) |
-| Unicode on Windows (arrow chars) | Use ASCII (>, ->) in examples |
-
-## Common Workflows
-
-**Add feature engineering stage:** 1. Add param to `FeatureEngineer.__init__()`. 2. Implement `_stagename_features()`. 3. Call from `_create_features()`. 4. Naming `.{col}_TYPE{detail}` (e.g. `.Tair_f_POL2`).
-
-**Debug SHAP importance:** 1. Check `.RANDOM` baseline included. 2. Verify threshold calculation. 3. Inspect feature counts before/after reduction.
-
-## Quick Reference
-
-| Task | Command |
-|---|---|
-| Install | `uv sync` |
-| Run test | `uv run pytest tests/ -v` |
-| Run example | `uv run python examples/gapfilling/gapfill_randomforest.py` |
-| Add package | `uv add package_name` |
-| List packages | `uv pip list` |
-| Check version | `uv run python -c "import diive; print(diive.__version__)"` |
-| Run all examples | `python examples/run_all_examples.py` |
+- GUI tests wait with `_wait_for_worker(tab)` / `_wait_for_io()`.
 
 ---
 
-**Last Updated:** 2026-09-19 | **Version:** v0.91.1 | **Package Manager:** `uv`
+**Last Updated:** 2026-09-24 | **Version:** v0.91.2
