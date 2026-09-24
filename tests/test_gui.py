@@ -1169,6 +1169,25 @@ def test_debouncer_runs_once_after_a_burst(app):
     assert runs == [1] and not deb.pending()
 
 
+def test_overview_zoom_recomputes_summaries_once_settled(window):
+    # Pan/zoom steps only move the heatmap; the diel cycle and histogram are
+    # rebuilt for the visible window once the view settles.
+    overview = window._tabs[0]
+    overview._on_select("NEE_CUT_REF_f")
+    QApplication.processEvents()
+    ts_ax, diel_ax = overview._shared_x_ax, overview._diel_ax
+    diel_line = diel_ax.get_lines()[0]
+    heat_ylim = overview._heatmap_ax.get_ylim()
+    x0, x1 = ts_ax.get_xlim()
+    for frac in (0.1, 0.2, 0.3):
+        ts_ax.set_xlim(x0 + (x1 - x0) * frac, x0 + (x1 - x0) * (frac + 0.2))
+    assert overview._heatmap_ax.get_ylim() != heat_ylim
+    assert diel_ax.get_lines()[0] is diel_line
+    assert overview._zoom_debounce.pending()
+    overview._zoom_debounce.flush()
+    assert diel_ax.get_lines()[0] is not diel_line
+
+
 def test_canvas_resize_relayout_is_debounced(app):
     # The first resize after a render solves the layout at once (the render may
     # have run at a pre-show size); a burst of later resizes solves only once,

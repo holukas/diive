@@ -31,6 +31,7 @@ from diive.gui import events as events_store
 from diive.gui import metadata_store
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.debounce import Debouncer
 from diive.gui.widgets.flow_layout import FlowLayout
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.tab_chrome import build_titlebar
@@ -109,6 +110,9 @@ _TS_COLOR = "#22303C"     # near-black ink — time series (lets the heatmap car
 _DAILY_COLOR = "#26A69A"  # teal 400 — daily mean (line + SD band)
 # Above this many records the time-series panel draws no per-record markers.
 _MARKER_MAX_POINTS = 5000
+# Quiet time after the last pan/zoom step before the diel cycle and histogram
+# are recomputed for the visible window.
+_ZOOM_SETTLE_MS = 150
 # The diel cycle now draws one auto-coloured line per month (no single colour).
 _ZERO_COLOR = "#90A4AE"   # blue-grey 300 — zero reference line
 
@@ -591,6 +595,8 @@ class OverviewTab(DiiveTab):
         self.hero = _HeroBand()
         right_lay.addWidget(self.hero)
         self.canvas = MplCanvas()
+        self._zoom_debounce = Debouncer(self.canvas, self._refresh_zoom_summaries,
+                                        ms=_ZOOM_SETTLE_MS)
         right_lay.addWidget(self.canvas, stretch=1)
 
         splitter.addWidget(self.varpanel)
@@ -673,6 +679,7 @@ class OverviewTab(DiiveTab):
         self.varpanel.run_with_loading(name, _render)
 
     def _render_figure(self, series, name: str) -> None:
+        self._zoom_debounce.cancel()  # its axes are about to be replaced
         fig = self.canvas.fig
         # Clear + re-enable constrained layout (canvas.draw() freezes it after,
         # so zoom/pan don't reflow the panels).
@@ -854,7 +861,8 @@ class OverviewTab(DiiveTab):
 
         (1) Recompute the diel cycle and the histogram from only the data in the
             visible window (their x-axes aren't datetime, so they don't follow the
-            shared zoom automatically).
+            shared zoom automatically), once the view has settled
+            (`_refresh_zoom_summaries`).
         (2) Clip the heatmap to the same date range — its date axis is the y-axis
             (same matplotlib date-number units as the line panels' x-axis), so
             the hour-of-day x-axis is deliberately left untouched.
@@ -863,33 +871,44 @@ class OverviewTab(DiiveTab):
             return
         x0, x1 = shared_ax.get_xlim()
         lo, hi = min(x0, x1), max(x0, x1)
-        self._syncing_zoom = True
-        try:
-            if self._heatmap_ax is not None and self._heatmap_ylim is not None:
-                # Clamp to the heatmap's own date span so zooming past the data
-                # doesn't add empty margins.
-                ylo = max(lo, self._heatmap_ylim[0])
-                yhi = min(hi, self._heatmap_ylim[1])
-                if yhi > ylo:
-                    self._heatmap_ax.set_ylim(ylo, yhi)
-            # The diel cycle and histogram both summarise the visible window, so
-            # recompute them on the zoomed sub-range.
-            if self._diel_ax is not None or self._hist_ax is not None:
-                start = pd.Timestamp(mdates.num2date(lo)).tz_localize(None)
-                end = pd.Timestamp(mdates.num2date(hi)).tz_localize(None)
-                sub = dv.times.keep_daterange(self._zoom_series, start=start, end=end)
-                for ax, ptype in ((self._diel_ax, "Diel cycle"),
-                                  (self._hist_ax, "Histogram")):
-                    if ax is None:
-                        continue
-                    ax.clear()
-                    self._draw_panel(ax, sub, ptype)
-                    self._style_panel(ax, ptype)
-                    self._panel_fonts(ax)
-        finally:
-            self._syncing_zoom = False
+        if self._heatmap_ax is not None and self._heatmap_ylim is not None:
+            # Clamp to the heatmap's own date span so zooming past the data
+            # doesn't add empty margins.
+            ylo = max(lo, self._heatmap_ylim[0])
+            yhi = min(hi, self._heatmap_ylim[1])
+            if yhi > ylo:
+                self._heatmap_ax.set_ylim(ylo, yhi)
+        # A pan drag changes the limits on every mouse move; rebuilding the diel
+        # cycle and histogram (incl. its KDE) each time made panning stutter, so
+        # they follow once the view has settled.
+        if self._diel_ax is not None or self._hist_ax is not None:
+            self._zoom_debounce.trigger()
         # Repaint without re-freezing the layout (draw() would flip the layout
         # engine and could abort an in-progress resize re-solve).
+        self.canvas.draw_idle()
+
+    def _refresh_zoom_summaries(self) -> None:
+        """Recompute the diel cycle and histogram for the visible date window."""
+        ax_x = getattr(self, "_shared_x_ax", None)
+        if self._zoom_series is None or ax_x is None:
+            return
+        x0, x1 = ax_x.get_xlim()
+        lo, hi = min(x0, x1), max(x0, x1)
+        start = pd.Timestamp(mdates.num2date(lo)).tz_localize(None)
+        end = pd.Timestamp(mdates.num2date(hi)).tz_localize(None)
+        sub = dv.times.keep_daterange(self._zoom_series, start=start, end=end)
+        self._syncing_zoom = True
+        try:
+            for ax, ptype in ((self._diel_ax, "Diel cycle"),
+                              (self._hist_ax, "Histogram")):
+                if ax is None:
+                    continue
+                ax.clear()
+                self._draw_panel(ax, sub, ptype)
+                self._style_panel(ax, ptype)
+                self._panel_fonts(ax)
+        finally:
+            self._syncing_zoom = False
         self.canvas.draw_idle()
 
     def _draw_panel(self, ax, series, plot_type: str) -> None:
