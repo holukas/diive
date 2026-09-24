@@ -544,10 +544,12 @@ class TestPlotClasses(unittest.TestCase):
         monthly = self.series.resample("ME").sum()
         fig, ax = plt.subplots()
         WaterfallPlot(self.series, resample="ME", agg="sum").plot(ax=ax, showplot=False)
-        self.assertEqual(len(ax.patches), len(monthly))
+        bars = next(c for c in ax.collections if c.get_gid() == "waterfall_bars")
+        corners = [p.vertices[:4] for p in bars.get_paths()]
+        self.assertEqual(len(corners), len(monthly))
         # The running budget closes on the series total.
-        tops = [p.get_y() + p.get_height() for p in ax.patches]
-        bottoms = [p.get_y() for p in ax.patches]
+        tops = [c[2, 1] for c in corners]
+        bottoms = [c[0, 1] for c in corners]
         final = tops[-1] if abs(tops[-1]) > abs(bottoms[-1]) else bottoms[-1]
         self.assertAlmostEqual(final, float(monthly.sum()), places=3)
         plt.close(fig)
@@ -563,7 +565,8 @@ class TestPlotClasses(unittest.TestCase):
         fig, ax = plt.subplots()
         WaterfallPlot(series, resample="ME", agg="sum").plot(
             ax=ax, showplot=False, color_uptake="#111111", color_release="#EEEEEE")
-        colors = {p.get_facecolor()[:3] for p in ax.patches}
+        bars = next(c for c in ax.collections if c.get_gid() == "waterfall_bars")
+        colors = {tuple(fc[:3]) for fc in bars.get_facecolor()}
         self.assertEqual(len(colors), 2, "both uptake and release colours expected")
         plt.close(fig)
 

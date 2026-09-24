@@ -18,12 +18,25 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.colors import to_hex
+from matplotlib.colors import to_hex, to_rgba
 
 from diive.core.plotting.waterfall import WaterfallPlot
 
 # Days 11-13 of the synthetic month hold no measurements at all.
 OUTAGE_DAYS = [pd.Timestamp('2020-01-11'), pd.Timestamp('2020-01-12'), pd.Timestamp('2020-01-13')]
+
+
+def _bars(ax):
+    """Return the waterfall bars on `ax` as ``(bottoms, heights, collection)``.
+
+    The bars are one PolyCollection; the collection is None when none was drawn.
+    """
+    coll = next((c for c in ax.collections if c.get_gid() == 'waterfall_bars'), None)
+    if coll is None:
+        return np.empty(0), np.empty(0), None
+    corners = np.array([p.vertices[:4] for p in coll.get_paths()])
+    bottoms = corners[:, 0, 1]
+    return bottoms, corners[:, 2, 1] - bottoms, coll
 
 
 def _series(with_outage: bool) -> pd.Series:
@@ -107,7 +120,7 @@ class TestWaterfallGapFree(unittest.TestCase):
         wf = WaterfallPlot(_series(with_outage=True), resample='D', agg='sum')
         ax = wf.plot(showplot=False)
         self.assertIsNotNone(ax)
-        self.assertEqual(len(ax.patches), 27)
+        self.assertEqual(len(_bars(ax)[1]), 27)
 
 
 class TestWaterfallNoData(unittest.TestCase):
@@ -124,7 +137,7 @@ class TestWaterfallNoData(unittest.TestCase):
         series = pd.Series(np.nan, index=pd.date_range('2020-01-01', periods=48, freq='30min'),
                            name='FLUX')
         ax = self._plot(series, resample='D', agg='sum')
-        self.assertEqual(len(ax.patches), 0)
+        self.assertEqual(len(_bars(ax)[1]), 0)
         self.assertEqual([t.get_text() for t in ax.texts], ['FLUX: no data'])
 
     def test_all_nan_series_says_no_data_without_resampling(self):
@@ -132,14 +145,14 @@ class TestWaterfallNoData(unittest.TestCase):
         series = pd.Series(np.nan, index=pd.date_range('2020-01-01', periods=48, freq='30min'),
                            name='FLUX')
         ax = self._plot(series, resample=None)
-        self.assertEqual(len(ax.patches), 0)
+        self.assertEqual(len(_bars(ax)[1]), 0)
         self.assertEqual([t.get_text() for t in ax.texts], ['FLUX: no data'])
 
     def test_empty_series_says_no_data(self):
         """An empty series has no periods either."""
         series = pd.Series(dtype=float, index=pd.DatetimeIndex([]), name='FLUX')
         ax = self._plot(series, resample='D', agg='sum')
-        self.assertEqual(len(ax.patches), 0)
+        self.assertEqual(len(_bars(ax)[1]), 0)
         self.assertEqual([t.get_text() for t in ax.texts], ['FLUX: no data'])
 
     def test_unnamed_all_nan_series_says_no_data(self):
@@ -153,6 +166,7 @@ class TestWaterfallNoData(unittest.TestCase):
         series = pd.Series(np.nan, index=pd.date_range('2020-01-01', periods=48, freq='30min'),
                            name='FLUX')
         ax = self._plot(series, resample='D', agg='sum')
+        self.assertEqual(len(ax.collections), 0)
         self.assertEqual(len(ax.lines), 0)
         self.assertFalse(ax.xaxis.get_tick_params()['labelbottom'])
 
@@ -162,8 +176,9 @@ class TestWaterfallNoData(unittest.TestCase):
                            name='FLUX')
         series.iloc[10] = 2.5
         ax = self._plot(series, resample='D', agg='sum')
-        self.assertEqual(len(ax.patches), 1)
-        self.assertAlmostEqual(ax.patches[0].get_height(), 2.5, places=9)
+        heights = _bars(ax)[1]
+        self.assertEqual(len(heights), 1)
+        self.assertAlmostEqual(heights[0], 2.5, places=9)
         self.assertIn('2', [t.get_text() for t in ax.texts])
 
 
@@ -179,12 +194,14 @@ class TestWaterfallOrdinarySeriesUnaffected(unittest.TestCase):
         fig, ax = plt.subplots()
         WaterfallPlot(series, resample='D', agg='sum').plot(ax=ax, showplot=False)
 
-        self.assertEqual(len(ax.patches), 27)
-        np.testing.assert_allclose([p.get_height() for p in ax.patches], expected.values)
-        np.testing.assert_allclose([p.get_y() for p in ax.patches],
-                                   expected.cumsum().shift(1).fillna(0.0).values)
-        # 26 connectors between the 27 bars, plus the end-of-series marker.
-        self.assertEqual(len(ax.lines), 27)
+        bottoms, heights, _ = _bars(ax)
+        self.assertEqual(len(heights), 27)
+        np.testing.assert_allclose(heights, expected.values)
+        np.testing.assert_allclose(bottoms, expected.cumsum().shift(1).fillna(0.0).values)
+        # 26 connectors between the 27 bars, and the end-of-series marker.
+        connectors = next(c for c in ax.collections if c.get_gid() == 'waterfall_connectors')
+        self.assertEqual(len(connectors.get_segments()), 26)
+        self.assertEqual(len(ax.lines), 1)
         np.testing.assert_allclose(ax.lines[-1].get_ydata(), [expected.sum()])
         self.assertIn(f"{expected.sum():.0f}", [t.get_text() for t in ax.texts])
 
@@ -203,7 +220,7 @@ class TestWaterfallZeroContribution(unittest.TestCase):
     def _facecolors(series, **kwargs):
         fig, ax = plt.subplots()
         WaterfallPlot(series, resample=None, **kwargs).plot(ax=ax, showplot=False)
-        colors = [to_hex(p.get_facecolor()) for p in ax.patches]
+        colors = [to_hex(c) for c in _bars(ax)[2].get_facecolor()]
         plt.close(fig)
         return colors
 
@@ -242,7 +259,10 @@ class TestWaterfallZeroContribution(unittest.TestCase):
             WaterfallPlot(series, resample=None).plot(ax=ax, showplot=False)
             fig.canvas.draw()
             before = np.asarray(fig.canvas.buffer_rgba()).copy()
-            ax.patches[bar_index].set_facecolor('#00FF00')
+            coll = _bars(ax)[2]
+            facecolors = coll.get_facecolor().copy()
+            facecolors[bar_index] = to_rgba('#00FF00')
+            coll.set_facecolor(facecolors)
             fig.canvas.draw()
             after = np.asarray(fig.canvas.buffer_rgba()).copy()
             plt.close(fig)
@@ -262,7 +282,7 @@ class TestWaterfallZeroContribution(unittest.TestCase):
 
         fig, ax = plt.subplots()
         wf.plot(ax=ax, showplot=False)
-        colors = [to_hex(p.get_facecolor()) for p in ax.patches]
+        colors = [to_hex(c) for c in _bars(ax)[2].get_facecolor()]
         plt.close(fig)
         self.assertEqual(colors, [self.RELEASE] * 5)
 

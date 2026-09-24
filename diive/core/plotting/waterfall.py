@@ -8,6 +8,9 @@ e.g. daily CO2 uptake/release building up a seasonal or annual flux budget.
 Part of the diive library: https://github.com/holukas/diive
 """
 
+import matplotlib.dates as mdates
+import numpy as np
+from matplotlib.collections import LineCollection, PolyCollection
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
@@ -138,7 +141,9 @@ class WaterfallPlot:
             show_connectors: Draw thin lines linking consecutive bars.
 
         Returns:
-            The matplotlib axis.
+            The matplotlib axis. The bars are one ``PolyCollection`` (gid
+            ``'waterfall_bars'``) and the connectors one ``LineCollection`` (gid
+            ``'waterfall_connectors'``), both in ``ax.collections``.
         """
         # Fold the legacy series_units onto the (copied) style so old call sites keep
         # working without mutating a caller-supplied FormatStyle.
@@ -179,17 +184,34 @@ class WaterfallPlot:
             spacing_days = self.contributions.index.to_series().diff().dt.total_seconds().median() / 86400
             bar_width = (spacing_days if spacing_days and spacing_days > 0 else 1.0) * 0.8
 
-        self.ax.bar(self.contributions.index, self.contributions.values,
-                    bottom=self.bar_bottoms.values,
-                    width=bar_width, color=colors.values, edgecolor='none',
-                    zorder=10, label='_nolegend_')
+        # Bars and connectors are one collection each, not one artist per period:
+        # ten years of daily bars are ~3650 patches plus ~3650 lines, which took
+        # 3.1 s to build and 0.56 s per redraw (0.05 s / 0.11 s as collections).
+        x = mdates.date2num(self.contributions.index)
+        bottoms = self.bar_bottoms.to_numpy(dtype=float)
+        tops = bottoms + self.contributions.to_numpy(dtype=float)
+        left, right = x - bar_width / 2, x + bar_width / 2
+        # Same corner order as a bar's Rectangle.
+        verts = np.stack([np.column_stack([left, bottoms]), np.column_stack([right, bottoms]),
+                          np.column_stack([right, tops]), np.column_stack([left, tops])], axis=1)
+        bars = PolyCollection(verts, facecolors=colors.values, edgecolors='none',
+                              zorder=10, label='_nolegend_', gid='waterfall_bars')
+        # ax.bar makes each bar's bottom a sticky edge, so y autoscaling adds no
+        # margin past a bottom that is the data limit; keep that.
+        bars.sticky_edges.y.extend(bottoms)
+        self.ax.add_collection(bars)
 
         # Connectors run from each bar's running total to the next bar's start.
         if show_connectors and len(self.cumulative) > 1:
-            for x0, x1, y in zip(self.cumulative.index[:-1], self.cumulative.index[1:],
-                                 self.cumulative.values[:-1], strict=True):
-                self.ax.plot([x0, x1], [y, y], color=theme.COLOR_LINE_ZERO,
-                             lw=theme.LINEWIDTH_SPINES, alpha=0.4, zorder=9)
+            xc = mdates.date2num(self.cumulative.index)
+            yc = self.cumulative.to_numpy(dtype=float)
+            segments = np.stack([np.column_stack([xc[:-1], yc[:-1]]),
+                                 np.column_stack([xc[1:], yc[:-1]])], axis=1)
+            self.ax.add_collection(LineCollection(
+                segments, colors=theme.COLOR_LINE_ZERO, linewidths=theme.LINEWIDTH_SPINES,
+                alpha=0.4, capstyle='projecting', zorder=9, label='_nolegend_',
+                gid='waterfall_connectors'))
+        self.ax.autoscale_view()
 
         # Mark the final running total (annotation is placed after _apply_format,
         # once the y-limits are final, so the label stays inside the axes).
