@@ -181,6 +181,25 @@ def _axes_replaced(canvas, previous):
     return all(ax not in canvas.fig.axes for ax in previous)
 
 
+def _wait_for_worker(tab, timeout: float = 120.0) -> None:
+    """Pump the event loop until the tab's background compute has been drawn.
+
+    Tabs that compute on a `LatestRunner` return from a selection at once and
+    draw the result when the worker thread hands it back, so a fixed number of
+    `processEvents()` calls no longer guarantees the result is there.
+    `is_busy` stays True until the result has been delivered on the GUI thread
+    (see `WorkerRunner`), so once it reads False the render has run.
+    """
+    deadline = time.monotonic() + timeout
+    while tab._runner.is_busy:
+        if time.monotonic() > deadline:
+            raise AssertionError(f"{type(tab).__name__}: worker still busy "
+                                 f"after {timeout:.0f} s")
+        QApplication.processEvents()
+        time.sleep(0.005)
+    QApplication.processEvents()
+
+
 def test_default_tabs(window):
     assert _tabs(window) == ["Overview", "Log"]
 
@@ -2820,8 +2839,7 @@ def test_driver_explorer_tab(window):
 
     window._open_menu_tab("Driver explorer")
     tab = window._menu_tab_list[-1]
-    for _ in range(60):
-        QApplication.processEvents()
+    _wait_for_worker(tab)
 
     # Opens on a flux target, ranks the other variables, shows the top scatter.
     assert tab._target == "NEE_CUT_REF_f"
@@ -2837,8 +2855,7 @@ def test_driver_explorer_tab(window):
     # Lag scan applies on the button and can pick non-zero lags.
     tab.max_lag.setValue(6)
     tab.rank_btn.click()
-    for _ in range(60):
-        QApplication.processEvents()
+    _wait_for_worker(tab)
     assert int(tab._ranked["BEST_LAG"].abs().max()) <= 6
     assert (tab._ranked["BEST_LAG"] != 0).any()
 
@@ -2851,6 +2868,91 @@ def test_driver_explorer_tab(window):
     # Single-instance: re-opening focuses the existing tab.
     window._open_menu_tab("Driver explorer")
     assert _tabs(window).count("Driver explorer") == 1
+
+
+def _gate_driver_ranking(monkeypatch):
+    """Make the Driver explorer's first ranking wait for `gate.set()`, so a test
+    can act while a compute is in flight. Returns (gate, targets ranked)."""
+    from diive.gui.tabs.drivers import DriverExplorerTab
+
+    real = DriverExplorerTab._compute_payload
+    gate = threading.Event()
+    ranked = []
+
+    def gated(df, target, method_label, max_lag):
+        ranked.append(target)
+        if len(ranked) == 1:
+            gate.wait(30)
+        return real(df, target, method_label, max_lag)
+
+    monkeypatch.setattr(DriverExplorerTab, "_compute_payload", staticmethod(gated))
+    return gate, ranked
+
+
+def test_driver_explorer_draws_only_the_newest_selection(window, monkeypatch):
+    # The ranking runs on a worker thread. Clicking through variables while it
+    # runs must end with the last one's ranking drawn, never an older one's.
+    from diive.gui.widgets.variable_delegate import LOADING_ROLE, NAME_ROLE
+
+    gate, ranked = _gate_driver_ranking(monkeypatch)
+    window._open_menu_tab("Driver explorer")
+    tab = window._menu_tab_list[-1]
+    first = tab._target
+    others = [str(c) for c in window._data.select_dtypes("number").columns
+              if str(c) != first][:2]
+    tab._on_select(others[0])
+    tab._on_select(others[1])
+
+    # The GUI thread is free and shows the busy cue on the newest selection.
+    assert tab._runner.is_busy
+    assert tab._root.testAttribute(Qt.WidgetAttribute.WA_SetCursor)
+    items = [tab.varpanel.list.item(i) for i in range(tab.varpanel.list.count())]
+    loading = [it.data(NAME_ROLE) for it in items if it.data(LOADING_ROLE)]
+    assert loading == [others[1]]
+
+    gate.set()
+    _wait_for_worker(tab)
+    assert ranked == [first, others[1]]  # the middle request never ran
+    assert tab._target == others[1]
+    drivers = set(tab._ranked["DRIVER"])
+    assert others[1] not in drivers and first in drivers  # ranking of the newest target
+    # Busy cue and cursor are gone once the result is drawn.
+    assert not any(it.data(LOADING_ROLE) for it in items)
+    assert not tab._root.testAttribute(Qt.WidgetAttribute.WA_SetCursor)
+
+
+def test_driver_explorer_shows_a_worker_failure_on_the_canvas(window, monkeypatch):
+    from diive.gui.tabs.drivers import DriverExplorerTab
+
+    def broken(*_request):
+        raise ValueError("ranking exploded")
+
+    monkeypatch.setattr(DriverExplorerTab, "_compute_payload", staticmethod(broken))
+    window._open_menu_tab("Driver explorer")
+    tab = window._menu_tab_list[-1]
+    _wait_for_worker(tab)
+    msgs = [t.get_text() for a in tab.canvas.fig.axes for t in a.texts]
+    assert any("ranking exploded" in m for m in msgs)
+    assert not tab._root.testAttribute(Qt.WidgetAttribute.WA_SetCursor)
+
+
+def test_driver_explorer_closed_mid_run_ignores_the_late_result(window, monkeypatch):
+    # Closing the tab deletes its widgets while the ranking still runs. The tab
+    # object itself is kept alive here (the worst case: its handlers are still
+    # connected), so the late result must be dropped without touching them.
+    gate, _ranked = _gate_driver_ranking(monkeypatch)
+    window._open_menu_tab("Driver explorer")
+    tab = window._menu_tab_list[-1]
+    assert tab._runner.is_busy
+    drawn = []
+    tab._render_payload = drawn.append
+    window._on_tab_close(window._tabwidget.indexOf(tab.widget()))
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert not shiboken6.isValid(tab._root)
+
+    gate.set()
+    _wait_for_worker(tab)
+    assert drawn == []  # nothing rendered into the deleted widgets
 
 
 def test_seasonal_trend_tab(app):
