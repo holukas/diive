@@ -337,7 +337,9 @@ class ScatterXY:
             `PathCollection` subclass that draws all markers from one cached
             marker, which is much faster for large records; each marker then
             sits on the nearest pixel centre, up to half a pixel from its
-            exact position.
+            exact position. With ``z`` it is a `PathCollection` subclass that,
+            in raster output, leaves out the markers that opaque markers drawn
+            after them cover completely; the image is unchanged.
 
         See Also:
             examples/visualization/plot_scatter_xy_basic.py — Scatter plot variations with 2D and 3D coloring
