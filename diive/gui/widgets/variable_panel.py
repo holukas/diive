@@ -121,6 +121,7 @@ class VariablePanel(QWidget):
     def __init__(self, parent=None, clearable: bool = False,
                  draggable: bool = False) -> None:
         super().__init__(parent)
+        self._pending_fn = None  # render queued by run_with_loading, not yet run
         self.setObjectName("varpanel")  # white pane bg via QSS (search/list keep theirs)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -317,19 +318,33 @@ class VariablePanel(QWidget):
         indicator is painted *before* `fn` runs: `set_loading` + a forced
         repaint show it, a wait cursor signals the app is busy, and `fn` is
         deferred one tick so that paint lands first.
+
+        Calls made while a run is still queued replace its `fn` instead of
+        queueing another, so a burst (several data pushes, fast clicks) renders
+        once, for the latest request.
         """
         self.set_loading(name)
         self.list.viewport().repaint()  # paint the busy frame before fn blocks
+        already_queued = self._pending_fn is not None
+        self._pending_fn = fn
+        if already_queued:
+            return
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        QTimer.singleShot(0, self.flush_pending)
 
-        def _go() -> None:
-            try:
-                fn()
-            finally:
-                self.clear_loading()
-                QApplication.restoreOverrideCursor()
+    def flush_pending(self) -> None:
+        """Run the render queued by `run_with_loading` now, if there is one.
 
-        QTimer.singleShot(0, _go)
+        For callers that must act on the finished render straight away (e.g.
+        zooming it); the queued timer then finds nothing left to do."""
+        fn, self._pending_fn = self._pending_fn, None
+        if fn is None:
+            return
+        try:
+            fn()
+        finally:
+            self.clear_loading()
+            QApplication.restoreOverrideCursor()
 
     # --- filtering ---
     def _apply_filter(self, text: str) -> None:

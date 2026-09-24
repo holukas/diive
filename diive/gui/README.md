@@ -409,11 +409,15 @@ load — so a stale `.diive` folder still opens with whatever metadata is recove
 (separator-insensitive subsequence), and width are identical everywhere. Its width is a shared appearance setting
 (`theme.manager.list_width`, editable in Appearance). `run_with_loading(name, fn)` shows a busy indicator on the clicked
 variable + wait cursor while `fn` (a synchronous matplotlib render) runs — a static cue, since the render blocks the
-event loop (true animation would need off-thread Agg rendering).
+event loop (true animation would need off-thread Agg rendering). A call made while a run is still queued replaces its
+`fn`, so a burst of pushes or clicks renders once, for the latest request; `flush_pending()` runs a queued render at
+once for a caller that must act on the result (the Overview's `focus_on`).
 
 **Variable list stays in sync:** every data change (file load, feature add) goes through `MainWindow._push_data()`,
-which calls `on_data_loaded(df, created)` on all active tabs. A menu tab gets the current data on open and is then
-subscribed; on close it's removed so it can't go stale.
+which calls `on_data_loaded(df, created)` on the visible tab only (`_deliver`). Every other tab is marked
+`_data_stale` and catches up when shown (`currentChanged` -> `_on_current_tab_changed`), so hidden tabs don't
+re-render on every change. A menu tab gets the current data on open and is then subscribed; on close it's removed.
+Pinning a stale tab first brings it up to date.
 
 **Rename / delete a variable (any tab):** the `VariablePanel` right-click menu offers **Rename…** and **Delete…**
 everywhere — both route through `metadata_store.manager` (`request_rename`/`request_delete` → `renameRequested`/

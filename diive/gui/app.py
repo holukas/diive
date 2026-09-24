@@ -224,6 +224,7 @@ class MainWindow(QMainWindow):
         for i in range(self._tabwidget.count()):
             bar.setTabButton(i, QTabBar.ButtonPosition.RightSide, None)
         self._tabwidget.tabCloseRequested.connect(self._on_tab_close)
+        self._tabwidget.currentChanged.connect(self._on_current_tab_changed)
         # Rename only on a *left* double-click. tabBarDoubleClicked fires for any
         # button, so an event filter records the last double-click button and the
         # rename slot ignores middle/right ones.
@@ -560,7 +561,28 @@ class MainWindow(QMainWindow):
         for tab in self._tabs:
             if tab in self._pinned:
                 continue  # frozen: keep its own dataset
+            self._deliver(tab)
+
+    def _deliver(self, tab) -> None:
+        """Push the current dataset to `tab` if it is the visible tab; otherwise
+        mark it stale so it catches up when shown (`_on_current_tab_changed`).
+
+        Most tabs re-render or recompute on a push, so pushing to hidden ones made
+        every data change cost one render per open tab (39 s with 62 tabs open).
+        """
+        if tab.widget() is self._tabwidget.currentWidget():
+            tab._data_stale = False
             tab.on_data_loaded(self._data_for(tab), self._created)
+        else:
+            tab._data_stale = True
+
+    def _on_current_tab_changed(self, index: int) -> None:
+        """Bring a stale tab up to date as it is shown."""
+        widget = self._tabwidget.widget(index)
+        tab = next((t for t in self._tabs if t.widget() is widget), None)
+        if tab is not None and getattr(tab, "_data_stale", False) \
+                and tab not in self._pinned and self._data is not None:
+            self._deliver(tab)
 
     def _set_data(self, df, source: str, persist_metadata: bool = True) -> None:
         """Set a freshly loaded dataset, reset created features + range, push.
@@ -888,8 +910,13 @@ class MainWindow(QMainWindow):
         if tab in self._pinned:
             self._pinned.discard(tab)
             if self._data is not None:  # catch up to the current dataset
-                tab.on_data_loaded(self._data_for(tab), self._created)
+                self._deliver(tab)
         else:
+            # A stale tab freezes on the data it would show now, as it did when
+            # every push reached it.
+            if getattr(tab, "_data_stale", False) and self._data is not None:
+                tab._data_stale = False
+                tab.on_data_loaded(self._data_for(tab), self._created)
             self._pinned.add(tab)
         self._refresh_tab_icon(tab)
 
@@ -1031,15 +1058,22 @@ class MainWindow(QMainWindow):
         # A column add/edit/delete re-renders the Overview through the data push;
         # a visibility-only toggle changes no column, so refresh it explicitly.
         if not self._sync_event_columns():
-            overview = self._tabs[0]
-            if hasattr(overview, "refresh_events"):
-                overview.refresh_events()
+            self._refresh_overview_events()
 
     def _on_event_categories_changed(self) -> None:
         """Recolour the Overview's event overlays after a category-palette edit."""
+        self._refresh_overview_events()
+
+    def _refresh_overview_events(self) -> None:
+        """Redraw the Overview's event overlays, or leave that to its catch-up
+        render when it is not the visible tab."""
         overview = self._tabs[0]
-        if hasattr(overview, "refresh_events"):
+        if not hasattr(overview, "refresh_events"):
+            return
+        if overview.widget() is self._tabwidget.currentWidget():
             overview.refresh_events()
+        elif self._data is not None:
+            overview._data_stale = True
 
     def _focus_event_on_overview(self, start, end) -> None:
         """Switch to the Overview and zoom its time axis onto an event window."""

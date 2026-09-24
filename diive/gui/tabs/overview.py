@@ -742,6 +742,9 @@ class OverviewTab(DiiveTab):
         ``end`` may be ``None`` (instant) — a small symmetric window is opened
         around the instant. The existing ``xlim_changed`` sync then recomputes the
         diel cycle and clips the heatmap to match. No-op if nothing is plotted."""
+        # A render still queued (e.g. this tab was stale and just caught up on
+        # being shown) would replace the axes and drop the zoom, so run it first.
+        self.varpanel.flush_pending()
         ax = getattr(self, "_shared_x_ax", None)
         if ax is None:
             return

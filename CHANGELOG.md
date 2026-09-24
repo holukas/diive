@@ -68,6 +68,11 @@
   than 5000 records; a value with a gap on both sides still gets one. Resizing a plot canvas
   re-solves the layout once the size has settled instead of on every resize event
   (`diive/gui/tabs/overview.py`, `diive/gui/widgets/mpl_canvas.py`).
+- **GUI, data changes with many tabs open:** a data change (date range, variable subset, new or
+  renamed column, event edit) now reaches only the visible tab. The other tabs refresh when you
+  switch to them. Before, every open tab re-rendered at once, which took 39 s with 62 tabs open.
+  Renders requested in quick succession on one variable list now run once, for the latest request
+  (`diive/gui/app.py`, `diive/gui/widgets/variable_panel.py`).
 
 - **Daytime partitioning (ONEFlux), new option `reject_alpha_at_start`:** ONEFlux 1.3.7 is meant to
   reject a fitting window whose alpha never moved off its starting value, but a float32 comparison

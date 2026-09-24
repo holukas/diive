@@ -1100,6 +1100,53 @@ def test_overview_time_series_dates_and_markers(window):
     assert isolated.get_marker() == "o"
 
 
+def test_data_push_skips_hidden_tabs_until_shown(window):
+    # A data change reaches only the visible tab; a hidden one catches up once,
+    # with the current data, when it is shown.
+    window._open_menu_tab("Time series")
+    plot_tab = window._menu_tab_list[-1]
+    received = []
+    original = plot_tab.on_data_loaded
+    plot_tab.on_data_loaded = lambda df, created=None: (received.append(df), original(df, created))
+    window._tabwidget.setCurrentIndex(0)
+    QApplication.processEvents()
+
+    window._apply_range()
+    window._apply_range()
+    assert received == []
+    assert plot_tab._data_stale
+
+    window._tabwidget.setCurrentWidget(plot_tab.widget())
+    assert len(received) == 1 and received[0] is window._data
+    assert not plot_tab._data_stale
+
+    # Pinning a stale tab first brings it up to date, so it freezes on the
+    # data it would show now.
+    window._tabwidget.setCurrentIndex(0)
+    window._apply_range()
+    window._toggle_pin(plot_tab)
+    assert len(received) == 2 and not plot_tab._data_stale
+    QApplication.processEvents()
+
+
+def test_run_with_loading_renders_latest_request_once(app):
+    from diive.gui.widgets.variable_panel import VariablePanel
+    panel = VariablePanel()
+    calls = []
+    for name in ("A", "B", "C"):
+        panel.run_with_loading(name, lambda n=name: calls.append(n))
+    assert calls == []
+    QApplication.processEvents()
+    assert calls == ["C"]
+    assert QApplication.overrideCursor() is None
+    # flush_pending runs a queued render at once; the timer then has nothing left.
+    panel.run_with_loading("D", lambda: calls.append("D"))
+    panel.flush_pending()
+    QApplication.processEvents()
+    assert calls == ["C", "D"]
+    assert QApplication.overrideCursor() is None
+
+
 def test_canvas_resize_relayout_is_debounced(app):
     # The first resize after a render solves the layout at once (the render may
     # have run at a pre-show size); a burst of later resizes solves only once,
@@ -2953,6 +3000,9 @@ def test_select_variables_tab_updates_overview(window):
     assert sel.selected.names() == [names[5], names[1]]
 
     sel._confirm()  # what the Confirm button does
+    QApplication.processEvents()
+    # The Overview is hidden behind the picker, so it catches up when shown.
+    tw.setCurrentIndex(0)
     QApplication.processEvents()
     overview = window._tabs[0]
     assert overview.varpanel.names() == [names[5], names[1]]
