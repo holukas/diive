@@ -43,7 +43,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`); window opens filling the screen work area via `show_filling_workarea()` — **not** `showMaximized()`, which on a frameless window covers the taskbar and clips the active tab |
 | `splash.py` | Startup splash + **Help ▸ About** dialog (`QPainter`-drawn waves + wordmark/version/tagline/credits); `AUTHOR` + `SUPPORTERS` |
 | `build_manual.py` | Renders `MANUAL.md` → `MANUAL.html` (the styled manual **Help ▸ User manual** opens). Dependency-free; run `python -m diive.gui.build_manual` after editing the Markdown. `MANUAL.html` is generated — don't hand-edit |
-| `registry.py` | `TAB_CLASSES` (always-on), `MENU_TABS` (menu-opened factories), `SINGLE_INSTANCE_TABS` |
+| `registry.py` | `TAB_CLASSES` (always-on), `MENU_TABS` (menu-opened `LazyTab` factories: the tab module is imported on first open), `SINGLE_INSTANCE_TABS` |
 | `_cli.py` | Backs the `diive-gui` console script declared in `pyproject.toml` |
 | `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df, created)` — the extension point |
 | `tabs/_explorer_base.py` | `SingleVariableExplorerTab` — template for the "pick one variable left, compute a view right" tabs (Driver explorer, Gaps & coverage, Seasonal trend, Spectrogram, 3D surface). Owns the split skeleton, `select → run_with_loading → _compute`, default-variable picking, opt-in stats strip / list header / draggable list. Subclasses override only `_build_right()` + `_compute()` |

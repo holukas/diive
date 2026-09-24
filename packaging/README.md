@@ -79,7 +79,9 @@ for dev iteration.)
 PyInstaller's static analysis can miss dynamically-imported modules. If the exe
 crashes with `ModuleNotFoundError` or a missing-data-file error, add the
 offending package to the `_collect` list in `diive_gui.spec` (or a specific name
-to `hiddenimports`) and rebuild. Test by clicking through **every tab and menu**
+to `hiddenimports`) and rebuild. The GUI registry imports menu tabs by string on
+first open, so the spec bundles all of `diive.gui.tabs` via
+`collect_submodules("diive.gui.tabs")`; a new menu tab must live in that package. Test by clicking through **every tab and menu**
 once — that exercises the lazy imports.
 
 ## Known build quirks (already handled / expected)

@@ -79,6 +79,27 @@
   zooming the Overview moves the heatmap at once and recomputes the diel cycle and histogram once
   the view has settled. Combine variables redraws at once for a known colormap name and waits
   while one is half-typed (`diive/gui/widgets/debounce.py`).
+- **GUI Overview, rendering:** clicking a variable draws the figure once, the heatmap is drawn as an
+  image and a long time series is drawn thinned to the screen width (every drawn point is a real
+  record, extremes and gaps are kept, and the hover still reads every record). Panning no longer
+  rebuilds the diel cycle and histogram between steps. New library options:
+  `HeatmapDateTime.plot(as_image=True)`, and `decimate_line` in `diive/core/plotting/plotfuncs.py`.
+  `HistogramPlot`'s KDE evaluates faster with the same density from all points; `HeatmapDateTime`
+  builds its grid faster and `WaterfallPlot` redraws faster. `Cumulative(fill=True)` shades its area
+  as one path: on gappy series this is much faster and shows the fill colour instead of grey
+  streaks; a legend placed with `loc='best'` can land elsewhere.
+- **GUI, analysis tabs:** the Driver explorer, Seasonal trend & anomalies, Spectrogram and Data
+  profile tabs compute on a background thread. Clicking through variables quickly draws only the last
+  selection, and a failure is shown on the canvas. The Spectrogram's max cycles/day and colormap
+  controls restyle the drawn spectrogram instead of rebuilding it (`LatestRunner` in
+  `diive/gui/widgets/worker.py`).
+- **GUI, startup and files:** menu tabs are imported the first time they are opened, so the main
+  window no longer loads xgboost, scikit-learn, statsmodels or the flux chain at startup, and the
+  splash appears before the main window is imported. Project open and save, data export and the
+  startup load read and write their files on a background thread; meanwhile the load and save
+  entries are disabled and the header shows what is happening. Opening a project renders the
+  Overview once instead of three times. The Open data preview reads only the first rows of a
+  parquet file, and shows the timestamps as stored.
 
 - **Daytime partitioning (ONEFlux), new option `reject_alpha_at_start`:** ONEFlux 1.3.7 is meant to
   reject a fitting window whose alpha never moved off its starting value, but a float32 comparison

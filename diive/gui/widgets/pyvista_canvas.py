@@ -52,7 +52,7 @@ class Pyvista3DCanvas(QWidget):
                 "3-D plotting needs the 'gui3d' extra. Install:\n" + INSTALL_HINT)
 
         # Imported here (not at module top) so the module loads in a plain
-        # 'gui' install; the registry imports the tab unconditionally.
+        # 'gui' install, where the 3D tabs can still be imported.
         import pyvista as pv
         from pyvistaqt import QtInteractor
 
