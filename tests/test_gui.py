@@ -1157,6 +1157,61 @@ def test_hover_value_lookup(app, example_year):
     assert canvas3.hover._scatter_value(ax3, coll, ev_far) is None
 
 
+def test_hover_scatter_picks_the_nearest_point_from_a_per_draw_cache(app, example_year):
+    # The scatter lookup searches pixel positions cached per draw and sorted by
+    # x. It must answer exactly what a search over every point answers, and a
+    # redraw (pan/zoom/resize) must drop the cached positions.
+    import types
+    import numpy as np
+    from diive.gui.widgets.hover import _SCATTER_PICK_RADIUS
+    from diive.gui.widgets.mpl_canvas import MplCanvas
+
+    canvas = MplCanvas()
+    ax = canvas.new_axes(1)[0]
+    dv.plotting.ScatterXY(x=example_year["Tair_f"],
+                          y=example_year["NEE_CUT_REF_f"]).plot(ax=ax)
+    canvas.draw()
+    coll = ax.collections[0]
+    offs = np.asarray(coll.get_offsets(), float)
+    hover = canvas.hover
+
+    def brute_force(ev):
+        pix = ax.transData.transform(offs)
+        d2 = (pix[:, 0] - ev.x) ** 2 + (pix[:, 1] - ev.y) ** 2
+        i = int(np.argmin(d2))
+        return None if d2[i] > _SCATTER_PICK_RADIUS ** 2 else tuple(offs[i])
+
+    rng = np.random.default_rng(1)
+    bbox = ax.bbox
+    events = []
+    for px, py in zip(rng.uniform(bbox.x0, bbox.x1, 300), rng.uniform(bbox.y0, bbox.y1, 300)):
+        xd, yd = ax.transData.inverted().transform((px, py))
+        events.append(types.SimpleNamespace(inaxes=ax, xdata=xd, ydata=yd, x=px, y=py))
+    answered = 0
+    for ev in events:
+        hit = hover._scatter_value(ax, coll, ev)
+        expected = brute_force(ev)
+        if expected is None:
+            assert hit is None
+        else:
+            answered += 1
+            assert (hit[0], hit[1]) == expected
+    assert answered > 50  # the sample really exercised the hit path
+    assert id(coll) in hover._scatter_cache
+
+    # A zoom changes every pixel position: the draw clears the cache and the
+    # next lookup answers for the new view.
+    x0, x1 = ax.get_xlim()
+    ax.set_xlim(x0, x0 + (x1 - x0) / 4)
+    canvas.draw()
+    assert hover._scatter_cache == {}
+    j = int(np.argmin(np.abs(offs[:, 0] - (x0 + (x1 - x0) / 8))))
+    pj = ax.transData.transform(offs[j])
+    ev = types.SimpleNamespace(inaxes=ax, xdata=offs[j, 0], ydata=offs[j, 1], x=pj[0], y=pj[1])
+    hx, hy, _, _ = hover._scatter_value(ax, coll, ev)
+    assert (hx, hy) == brute_force(ev)
+
+
 def test_overview_time_series_dates_and_markers(window):
     # The time series keeps its dated tick labels without a redraw hook, after
     # the render and after a zoom (the diel cycle is redrawn on zoom).

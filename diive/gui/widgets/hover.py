@@ -55,6 +55,7 @@ class HoverAnnotator:
         self._annotations: dict = {}       # ax -> annotation artist
         self._markers: dict = {}           # ax -> marker Line2D
         self._mesh_cache: dict = {}        # id(QuadMesh/AxesImage) -> (xb, yb, values)
+        self._scatter_cache: dict = {}     # id(PathCollection) -> _ScatterPixels
         self._visible = False
         self._enabled = True
 
@@ -70,6 +71,7 @@ class HoverAnnotator:
         self._annotations.clear()
         self._markers.clear()
         self._mesh_cache.clear()
+        self._scatter_cache.clear()
         self._bg = self._canvas.copy_from_bbox(self.fig.bbox)
         self._bg_size = tuple(self.fig.bbox.size)
         self._visible = False
@@ -191,16 +193,23 @@ class HoverAnnotator:
         Shows the point's x and y, plus its colour value (z) when the scatter is
         colour-coded. Returns ``None`` when no point is within the pick radius.
         """
-        offsets = np.asarray(coll.get_offsets(), dtype=float)  # (N, 2) data coords
-        if offsets.size == 0:
+        offsets, px, py, order = self._scatter_pixels(ax, coll)
+        if px.size == 0:
             return None
-        pix = ax.transData.transform(offsets)  # -> pixels, matching event.x/y
-        dx = pix[:, 0] - event.x
-        dy = pix[:, 1] - event.y
+        # Only points within the pick radius in x can be within it in 2-D, and
+        # px is sorted, so two binary searches bound the candidates.
+        lo = int(np.searchsorted(px, event.x - _SCATTER_PICK_RADIUS, side="left"))
+        hi = int(np.searchsorted(px, event.x + _SCATTER_PICK_RADIUS, side="right"))
+        if hi <= lo:
+            return None
+        dx = px[lo:hi] - event.x
+        dy = py[lo:hi] - event.y
         d2 = dx * dx + dy * dy
-        idx = int(np.argmin(d2))
-        if d2[idx] > _SCATTER_PICK_RADIUS ** 2:
+        d2[~np.isfinite(d2)] = np.inf
+        k = int(np.argmin(d2))
+        if d2[k] > _SCATTER_PICK_RADIUS ** 2:
             return None
+        idx = int(order[lo + k])
         xd, yd = offsets[idx]
         text = (f"x: {self._fmt_axis(ax.xaxis, xd)}\n"
                 f"y: {self._fmt_axis(ax.yaxis, yd)}")
@@ -211,6 +220,31 @@ class HoverAnnotator:
             if arr.size == offsets.shape[0] and np.isfinite(arr[idx]):
                 text += f"\nz: {arr[idx]:.4g}"
         return xd, yd, text, True
+
+    def _scatter_pixels(self, ax, coll):
+        """A scatter's offsets and their pixel positions, sorted by pixel x.
+
+        Returns ``(offsets, px, py, order)``: ``offsets`` in data coordinates,
+        ``px``/``py`` the pixel positions in ascending ``px``, and ``order``
+        mapping each sorted position back to its row in ``offsets``.
+        Transforming every point is the expensive part of a lookup (175,000
+        points on the Driver explorer), and the pixel positions only change
+        when the figure is redrawn, so the result is kept until the next draw.
+        """
+        cached = self._scatter_cache.get(id(coll))
+        if cached is not None and cached[0] is coll:
+            return cached[1]
+        offsets = np.asarray(coll.get_offsets(), dtype=float)  # (N, 2) data coords
+        if offsets.size == 0:
+            empty = np.empty(0)
+            result = (offsets, empty, empty, np.empty(0, dtype=int))
+        else:
+            pix = ax.transData.transform(offsets)  # -> pixels, matching event.x/y
+            order = np.argsort(pix[:, 0], kind="stable")  # NaN x sorts last
+            result = (offsets, pix[order, 0], pix[order, 1], order)
+        # Keep the collection itself so a recycled id() can't serve stale data.
+        self._scatter_cache[id(coll)] = (coll, result)
+        return result
 
     def _line_value(self, ax, lines, event):
         best = None  # (pixel_dist_sq, x, y)
