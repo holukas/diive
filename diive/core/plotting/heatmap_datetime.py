@@ -218,7 +218,8 @@ class HeatmapDateTime(HeatmapBase):
              show_values: bool = False,
              show_values_fontsize: float = None,
              show_values_n_dec_places: int = 0,
-             show_values_max_cells: int | None = SHOW_VALUES_MAX_CELLS):
+             show_values_max_cells: int | None = SHOW_VALUES_MAX_CELLS,
+             as_image: bool = False):
         """Render HeatmapDateTime with matplotlib styling (Phase 2 of two-phase design).
 
         All styling and presentation parameters go here. Can be called multiple times
@@ -256,6 +257,14 @@ class HeatmapDateTime(HeatmapBase):
                 One year of half-hourly data is 17 520 cells, where one label per
                 cell is unreadable and slows down every later redraw. Raise it,
                 or pass None for no limit, to label such a grid anyway.
+            as_image: Draw the grid as one image (``imshow``) instead of one
+                quad per cell (``pcolormesh``, the default). A long record then
+                draws and redraws many times faster, which matters in an
+                interactive window that is panned or zoomed. It looks the same;
+                where one pixel covers several days, the two methods can show a
+                different one of those days. The heatmap's artist is then an
+                ``AxesImage`` instead of a ``QuadMesh``. Falls back to the mesh
+                if the grid is not evenly spaced. Defaults to *False*.
 
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
@@ -296,8 +305,10 @@ class HeatmapDateTime(HeatmapBase):
             show_values_max_cells=show_values_max_cells
         )
 
-        # Domain-specific rendering (pcolormesh + formatting)
-        p = self.plot_pcolormesh()
+        # Domain-specific rendering (pcolormesh or image + formatting)
+        p = self.plot_image() if as_image else None
+        if p is None:
+            p = self.plot_pcolormesh()
         ticks_time, ticklabels_time = self._set_ticks()
 
         if self.ax_orientation == "vertical":

@@ -12,11 +12,13 @@ data into ``self.x``, ``self.y``, and ``self.z`` arrays before calling
 ``plot_pcolormesh``.
 """
 import copy
+import datetime
 import math
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from matplotlib import dates as mdates
 from matplotlib import pyplot as plt
 
 from diive.core.io.files import verify_dir
@@ -205,6 +207,44 @@ class HeatmapBase:
                                linewidths=1, cmap=cmap,
                                vmin=self.vmin, vmax=self.vmax,
                                shading=shading, zorder=99)
+        return p
+
+    def plot_image(self):
+        """Renders ``self.x``, ``self.y``, ``self.z`` as an image (``imshow``).
+
+        The same cells as :meth:`plot_pcolormesh`, drawn as one image instead
+        of one quad per cell, which makes drawing a large grid many times
+        cheaper (ten years of half-hourly data are 175 000 cells). Only a
+        regular grid can be an image, so ``x`` and ``y`` must be evenly spaced
+        cell boundaries; ``datetime.date`` boundaries are converted to date
+        numbers and the axis is set up as a date axis, as ``pcolormesh`` does.
+
+        On screen the two agree: where one pixel covers several cells, each
+        method shows one of them and they can pick a different one.
+
+        Returns:
+            matplotlib.image.AxesImage or None: The image, or *None* when the
+            grid is not evenly spaced (nothing is drawn then).
+        """
+        bounds = {}
+        dates = {}
+        for name, b in (('x', self.x), ('y', self.y)):
+            dates[name] = len(b) > 0 and isinstance(b[0], datetime.date)
+            b = mdates.date2num(b) if dates[name] else np.asarray(b, dtype=float)
+            steps = np.diff(b)
+            if b.size < 2 or not np.allclose(steps, steps[0], rtol=1e-9, atol=0.0):
+                return None
+            bounds[name] = b
+        cmap, z = self.set_cmap(cmap=self.cmap, color_bad=self.color_bad, z=self.z)
+        x, y = bounds['x'], bounds['y']
+        p = self.ax.imshow(z, extent=(x[0], x[-1], y[0], y[-1]), origin='lower',
+                           aspect='auto', interpolation='nearest',
+                           interpolation_stage='data', cmap=cmap,
+                           vmin=self.vmin, vmax=self.vmax, zorder=99)
+        if dates['x']:
+            self.ax.xaxis_date()
+        if dates['y']:
+            self.ax.yaxis_date()
         return p
 
     def plot(self,

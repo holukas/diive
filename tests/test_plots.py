@@ -422,6 +422,54 @@ class TestPlotClasses(unittest.TestCase):
                 self.assertEqual(len(ax.collections), 1)  # one QuadMesh
                 plt.close(fig)
 
+    def test_heatmap_datetime_as_image_matches_the_mesh(self):
+        """`as_image=True` draws the same cells and chrome as the default mesh.
+
+        Same values in the same cell layout, same axis limits (the date axis in
+        date numbers), same tick labels and colorbar, in both orientations.
+        """
+        import numpy as np
+        from matplotlib.collections import QuadMesh
+        from matplotlib.image import AxesImage
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        for orientation in ("vertical", "horizontal"):
+            with self.subTest(orientation=orientation):
+                drawn = {}
+                for as_image in (False, True):
+                    fig, ax = plt.subplots()
+                    HeatmapDateTime(self.series, ax_orientation=orientation).plot(
+                        ax=ax, fig=fig, as_image=as_image)
+                    fig.canvas.draw()
+                    artist = (ax.get_images() or ax.collections)[0]
+                    drawn[as_image] = dict(
+                        type=type(artist),
+                        values=np.ma.filled(artist.get_array(), np.nan).reshape(-1),
+                        xlim=ax.get_xlim(), ylim=ax.get_ylim(),
+                        xticks=[t.get_text() for t in ax.get_xticklabels()],
+                        yticks=[t.get_text() for t in ax.get_yticklabels()],
+                        cbar=[t.get_text() for t in fig.axes[1].get_yticklabels()])
+                    plt.close(fig)
+                mesh, image = drawn[False], drawn[True]
+                self.assertIs(mesh["type"], QuadMesh)
+                self.assertIs(image["type"], AxesImage)
+                np.testing.assert_array_equal(image["values"], mesh["values"])
+                np.testing.assert_allclose(image["xlim"], mesh["xlim"])
+                np.testing.assert_allclose(image["ylim"], mesh["ylim"])
+                for key in ("xticks", "yticks", "cbar"):
+                    self.assertEqual(image[key], mesh[key], msg=key)
+
+    def test_heatmap_datetime_as_image_falls_back_to_the_mesh_on_an_uneven_grid(self):
+        from matplotlib.collections import QuadMesh
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        hm = HeatmapDateTime(self.series.head(24 * 5))
+        hm.x = hm.x.copy()
+        hm.x[1] += 0.25  # one uneven time step: no image can hold that grid
+        fig, ax = plt.subplots()
+        hm.plot(ax=ax, fig=fig, as_image=True)
+        self.assertEqual(ax.get_images(), [])
+        self.assertIsInstance(ax.collections[0], QuadMesh)
+        plt.close(fig)
+
     def test_heatmap_datetime_show_values_annotates_cells(self):
         from diive.core.plotting.heatmap_datetime import HeatmapDateTime
         short = self.series.head(24 * 5)
