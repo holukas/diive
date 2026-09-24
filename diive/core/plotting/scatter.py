@@ -9,12 +9,56 @@ Part of the diive library: https://github.com/holukas/diive
 from typing import Literal
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+from matplotlib.collections import PathCollection
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
 from diive.core.dfun.stats import q25, q75
 from diive.core.plotting.styles.format import FormatStyle
+
+#: A single fully transparent face. The Agg, PDF and PS renderers skip a face
+#: whose alpha is zero and SVG writes it as ``fill-opacity: 0``, so drawing
+#: with it paints exactly what no face paints.
+_NO_FACE = np.zeros((1, 4))
+
+
+class _HollowMarkerCollection(PathCollection):
+    """A `PathCollection` of unfilled markers that keeps matplotlib's fast path.
+
+    ``Collection.draw`` renders a collection whose points share one path,
+    size, face colour and edge colour through ``renderer.draw_markers``, which
+    rasterizes the marker once and stamps it at every point. It only takes
+    that path when the collection has exactly one face colour, and an unfilled
+    marker (``c='none'``) has none, so a hollow scatter falls back to stroking
+    every marker on its own. For 175,000 points that is seconds per draw.
+
+    This class hands ``draw`` one fully transparent face colour for the
+    duration of the call. The collection is otherwise an ordinary
+    `PathCollection`: ``get_facecolor()`` still reports no face, and the
+    legend handler, ``ax.collections`` and anything reading the offsets or
+    sizes see what ``ax.scatter`` returned.
+
+    The one visible change is the one ``draw_markers`` always makes: each
+    marker is centred on the nearest pixel instead of at its exact sub-pixel
+    position, so a marker can sit up to half a pixel from where the slow
+    path put it.
+    """
+
+    def draw(self, renderer):
+        # Settle the colours first: the first update after creation resets
+        # the face to 'none' and would undo the swap below.
+        self.update_scalarmappable()
+        if len(self._facecolors) or not self.get_visible():
+            super().draw(renderer)
+            return
+        facecolors = self._facecolors
+        self._facecolors = _NO_FACE
+        try:
+            super().draw(renderer)
+        finally:
+            self._facecolors = facecolors
 
 
 class ScatterXY:
@@ -48,6 +92,14 @@ class ScatterXY:
             - Confidence intervals: Show IQR (median) or std (mean) per bin
 
         Call `plot()` to render with styling options (labels, limits, title, colormap).
+
+        Artists:
+            The points are the first `PathCollection` in ``ax.collections``,
+            as ``ax.scatter`` returns it. Without ``z`` the collection is a
+            `PathCollection` subclass that draws all markers from one cached
+            marker, which is much faster for large records; each marker then
+            sits on the nearest pixel centre, up to half a pixel from its
+            exact position.
 
         See Also:
             examples/visualization/plot_scatter_xy_basic.py — Scatter plot variations with 2D and 3D coloring
@@ -169,14 +221,16 @@ class ScatterXY:
                 cbar = ax.figure.colorbar(scatter, ax=ax)
                 cbar.set_label(zlabel if zlabel else self.zname, fontsize=12)
         else:
-            ax.scatter(x=self.xy_df[self._xc],
-                       y=self.xy_df[self._yc],
-                       c='none',
-                       s=markersize,
-                       alpha=alpha,
-                       marker='o',
-                       edgecolors='#607D8B',
-                       label=self.yname)
+            points = ax.scatter(x=self.xy_df[self._xc],
+                                y=self.xy_df[self._yc],
+                                c='none',
+                                s=markersize,
+                                alpha=alpha,
+                                marker='o',
+                                edgecolors='#607D8B',
+                                label=self.yname)
+            # Same collection, drawn through draw_markers (see the class).
+            points.__class__ = _HollowMarkerCollection
 
         if self.nbins > 0:
 

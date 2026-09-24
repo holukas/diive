@@ -65,6 +65,121 @@ class TestPlots(unittest.TestCase):
         self.assertTrue(ax.collections)
         plt.close(fig)
 
+    @staticmethod
+    def _scatter_xy(n=500):
+        import numpy as np
+        import pandas as pd
+        rng = np.random.default_rng(3)
+        idx = pd.date_range("2021-01-01", periods=n, freq="30min")
+        x = pd.Series(rng.normal(10, 5, n), index=idx, name="TA")
+        y = pd.Series(0.5 * x.to_numpy() + rng.normal(0, 2, n), index=idx, name="NEE")
+        return x, y
+
+    @staticmethod
+    def _record_draw_calls(fig):
+        """Draw `fig` and return the number of points each renderer call drew."""
+        import types
+        renderer = fig.canvas.get_renderer()
+        calls = {"markers": [], "collection": []}
+        draw_markers, draw_collection = renderer.draw_markers, renderer.draw_path_collection
+
+        def markers(self, gc, marker_path, marker_trans, path, trans, rgbFace=None):
+            calls["markers"].append(len(path.vertices))
+            return draw_markers(gc, marker_path, marker_trans, path, trans, rgbFace)
+
+        def collection(self, gc, master, paths, transforms, offsets, *args):
+            calls["collection"].append(len(offsets))
+            return draw_collection(gc, master, paths, transforms, offsets, *args)
+
+        # RendererAgg binds these per instance; the canvas reuses this one.
+        renderer.draw_markers = types.MethodType(markers, renderer)
+        renderer.draw_path_collection = types.MethodType(collection, renderer)
+        fig.canvas.draw()
+        return calls
+
+    def test_scatter_uncoloured_points_draw_as_one_stamped_marker(self):
+        # Hollow markers go through draw_markers (one marker rasterized once,
+        # stamped at every point) rather than stroking each marker on its own,
+        # and the artist is still the PathCollection that ax.scatter returned.
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.collections import PathCollection
+        from matplotlib.colors import to_rgba
+        from matplotlib.figure import Figure
+        from diive.core.plotting.scatter import ScatterXY
+        x, y = self._scatter_xy()
+        fig = Figure()
+        FigureCanvasAgg(fig)
+        ax = fig.add_subplot()
+        ScatterXY(x=x, y=y).plot(ax=ax, markersize=30, alpha=0.5)
+        coll = ax.collections[0]
+        self.assertIsInstance(coll, PathCollection)
+        calls = self._record_draw_calls(fig)
+        self.assertIn(len(x), calls["markers"])
+        self.assertNotIn(len(x), calls["collection"])
+        # The face stays 'none' outside the draw, as ax.scatter set it.
+        self.assertEqual(len(coll.get_facecolor()), 0)
+        self.assertEqual(tuple(coll.get_edgecolor()[0]), to_rgba("#607D8B", 0.5))
+        self.assertAlmostEqual(coll.get_sizes()[0], 30)
+        self.assertEqual(coll.get_label(), "NEE")
+        # The legend entry is a scatter handle of the same marker size.
+        handle = ax.get_legend().legend_handles[0]
+        self.assertIsInstance(handle, PathCollection)
+        self.assertAlmostEqual(handle.get_sizes()[0], 30)
+
+        # A colour-coded scatter has one colour per point, so it keeps the
+        # per-point path.
+        fig = Figure()
+        FigureCanvasAgg(fig)
+        ax = fig.add_subplot()
+        ScatterXY(x=x, y=y, z=x.copy()).plot(ax=ax)
+        calls = self._record_draw_calls(fig)
+        self.assertIn(len(x), calls["collection"])
+        self.assertNotIn(len(x), calls["markers"])
+
+    def test_scatter_fast_path_differs_only_by_the_pixel_snap(self):
+        # draw_markers centres each marker on the nearest pixel. Re-rendering
+        # the slow way with every marker moved to that pixel centre must give
+        # the same image, pixel for pixel: the snap is the only difference.
+        import types
+        import numpy as np
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from matplotlib.transforms import IdentityTransform
+        from diive.core.plotting import scatter as scmod
+        x, y = self._scatter_xy()
+
+        def render(snap_reference):
+            fig = Figure(figsize=(6, 4), dpi=100)
+            FigureCanvasAgg(fig)
+            ax = fig.add_subplot()
+            scmod.ScatterXY(x=x, y=y, nbins=8).plot(ax=ax)
+            if snap_reference:
+                renderer = fig.canvas.get_renderer()
+                fast = renderer.draw_markers
+                height = renderer.height
+
+                def reference(self, gc, marker_path, marker_trans, path, trans, rgbFace=None):
+                    # Only the hollow scatter (points and legend handle) passes
+                    # a fully transparent face; ticks and the binned line don't.
+                    if rgbFace is None or rgbFace[3] != 0:
+                        return fast(gc, marker_path, marker_trans, path, trans, rgbFace)
+                    pts = trans.transform(path.vertices)
+                    # Agg: pixel column floor(x + 0.5), row floor(h - y + 0.5),
+                    # marker drawn at that pixel's centre.
+                    px = np.floor(pts[:, 0] + 0.5) + 0.5
+                    py = height - (np.floor(height - pts[:, 1] + 0.5) + 0.5)
+                    self.draw_path_collection(
+                        gc, marker_trans, [marker_path], np.zeros((0, 3, 3)),
+                        np.column_stack([px, py]), IdentityTransform(),
+                        np.zeros((0, 4)), [gc.get_rgb()], [gc.get_linewidth()],
+                        [gc.get_dashes()], [gc.get_antialiased()], [None], "screen")
+
+                renderer.draw_markers = types.MethodType(reference, renderer)
+            fig.canvas.draw()
+            return np.asarray(fig.canvas.buffer_rgba()).copy()
+
+        np.testing.assert_array_equal(render(False), render(True))
+
     def test_timeseries_title_and_markersize(self):
         # On a caller ax, an explicit title is honored and marker size applied.
         import pandas as pd
