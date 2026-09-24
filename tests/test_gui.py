@@ -1323,6 +1323,43 @@ def test_overview_heatmap_is_an_image_with_hover_clamp_and_events(window):
         events.manager.clear()
 
 
+def test_overview_event_overlays_sit_above_the_heatmap(window):
+    # The heatmap image is drawn at a high zorder; the event overlays must be
+    # drawn above it, not hidden under it, while the line panels keep theirs.
+    import matplotlib.dates as mdates
+    import numpy as np
+    from diive.events import Event
+    from diive.gui import events
+    overview = window._tabs[0]
+    overview._on_select("Tair_f")
+    overview.varpanel.flush_pending()
+    index = overview._df.index
+    when = index[len(index) // 2].normalize()
+    events.manager.add(Event("Swap", when, color="#00FF00"))
+    try:
+        overview.refresh_events()
+        hm = overview._heatmap_ax
+        image = hm.get_images()[0]
+        marks = [ln for ln in hm.lines if ln.get_color() == "#00FF00"]
+        assert marks and all(ln.get_zorder() > image.get_zorder() for ln in marks)
+        ts_marks = [ln for ln in overview._shared_x_ax.lines
+                    if ln.get_color() == "#00FF00"]
+        assert ts_marks and all(ln.get_zorder() == 3 for ln in ts_marks)
+
+        # And the line shows in the rendered heatmap.
+        fig = overview.canvas.fig
+        fig.canvas.draw()
+        buf = np.asarray(fig.canvas.buffer_rgba())[:, :, :3].astype(int)
+        _, py = hm.transData.transform((0, mdates.date2num(when)))
+        row = buf.shape[0] - int(round(py))
+        x0, x1 = (int(v) for v in hm.bbox.intervalx)
+        band = buf[row - 2:row + 3, x0 + 2:x1 - 2].reshape(-1, 3)
+        green = (band[:, 1] > 200) & (band[:, 0] < 60) & (band[:, 2] < 60)
+        assert green.sum() > 10
+    finally:
+        events.manager.clear()
+
+
 def test_data_push_skips_hidden_tabs_until_shown(window):
     # A data change reaches only the visible tab; a hidden one catches up once,
     # with the current data, when it is shown.
