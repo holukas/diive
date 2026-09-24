@@ -1141,8 +1141,8 @@ def test_hover_value_lookup(app, example_year):
     y3 = example_year["NEE_CUT_REF_f"]
     dv.plotting.ScatterXY(x=x3, y=y3, z=x3.copy()).plot(ax=ax3, show_colorbar=True)
     canvas3.draw()
-    coll = next(c for c in ax3.collections
-                if c.__class__.__name__ == "PathCollection")
+    from matplotlib.collections import PathCollection
+    coll = next(c for c in ax3.collections if isinstance(c, PathCollection))
     offs = np.asarray(coll.get_offsets(), float)
     j = len(offs) // 2
     pj = ax3.transData.transform(offs[j])
