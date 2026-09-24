@@ -6,6 +6,11 @@
 
 ### Bugfixes
 
+- **Daytime partitioning (ONEFlux), missing drivers:** where a gap-filled driver was missing, the
+  port computed RECO and GPP at the missing-value code −9999 and returned large, meaningless
+  values without a warning. RECO is now NaN where the gap-filled air temperature is missing, and
+  GPP where the gap-filled SW_IN or VPD is missing (`diive/flux/partitioning/daytime_oneflux.py`).
+
 - **Nighttime partitioning (ONEFlux), agreement with ONEFlux:** results change. The port read the
   hour of each record from diive's TIMESTAMP_MIDDLE, where ONEFlux uses the end of the period. This
   shifted which records counted as night, and on CH-DAV 2016 put E0 about 7 K away from ONEFlux. The
@@ -38,6 +43,33 @@
   Both sides now fit the same 143 windows, GPP agrees at r = 0.9998 and annual GPP within 0.2%
   (`diive/flux/partitioning/daytime_oneflux.py`, `diive/gapfilling/similarity.py`).
   `FluxMDS` gap-filling results are unchanged.
+
+- **Diel cycle plot, linked panels:** `DielCycle.plot` drew through pandas, which hides the x tick
+  labels of every other axes in the figure that shares its x-axis, and adds a minor tick locator to
+  that axis. In the GUI Overview this blanked the dates of the time series, which the Overview then
+  re-showed with a second full draw on every render and zoom step. It now draws with matplotlib
+  directly; the plot itself looks the same. Keyword arguments passed through `**kwargs` now go to
+  matplotlib's `Axes.plot` instead of pandas (`diive/core/plotting/dielcycle.py`).
+
+### Changes
+
+- **Waterfall plot, speed:** `WaterfallPlot` now draws its bars as one `PolyCollection` and its
+  connectors as one `LineCollection` instead of one artist per period. The image is unchanged
+  pixel for pixel. For ten years of daily bars, building the plot drops from 3.1 s to 0.05 s and a
+  redraw from 0.56 s to 0.11 s. Code that read the bars from `ax.patches` finds them in
+  `ax.collections` (gid `'waterfall_bars'` and `'waterfall_connectors'`)
+  (`diive/core/plotting/waterfall.py`).
+- **GUI Overview, speed:** the time-series panel draws no per-record markers for series longer
+  than 5000 records; a value with a gap on both sides still gets one. Resizing a plot canvas
+  re-solves the layout once the size has settled instead of on every resize event
+  (`diive/gui/tabs/overview.py`, `diive/gui/widgets/mpl_canvas.py`).
+
+- **Daytime partitioning (ONEFlux), new option `reject_alpha_at_start`:** ONEFlux 1.3.7 is meant to
+  reject a fitting window whose alpha never moved off its starting value, but a float32 comparison
+  stops that check from ever working. diive reproduces ONEFlux by default, so its results keep
+  matching ONEFlux output. `reject_alpha_at_start=True` applies the check as intended; on CH-DAV
+  2016 this raises annual daytime GPP by 5.7%, in ONEFlux and in diive alike
+  (`DaytimePartitioningOneFlux`, `partition_nee_daytime_oneflux`).
 
 ## v0.91.1 | 19 September 2026
 
