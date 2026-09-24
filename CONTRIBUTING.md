@@ -107,7 +107,7 @@ uv run pytest tests/ --ignore=tests/test_gui.py --cov=diive --cov-report=term-mi
 Omitting `diive/gui` from the *report* is not the same thing — it hides those
 lines but still counts the coverage `test_gui.py` contributes elsewhere.
 
-[COVERAGE_GAPS.md](COVERAGE_GAPS.md) tracks what is still uncovered and why —
+[devnotes/COVERAGE_GAPS.md](devnotes/COVERAGE_GAPS.md) tracks what is still uncovered and why —
 worth a look before writing new tests, so you pick something that matters.
 
 The suite runs real models on real data (gap-filling, the flux processing chain,
