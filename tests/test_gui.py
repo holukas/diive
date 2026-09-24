@@ -1177,6 +1177,52 @@ def test_overview_time_series_drawn_thinned_but_hover_reads_every_record(window)
     assert set(in_window) <= set(x_now) and len(x_now) <= len(in_window) + 2
 
 
+def test_overview_heatmap_is_an_image_with_hover_clamp_and_events(window):
+    # The Overview heatmap is drawn as an image: hover reads its cells, zoom
+    # clamps its date axis to the data, and event overlays still land on it.
+    import types
+    import numpy as np
+    from matplotlib.collections import QuadMesh
+    from matplotlib.image import AxesImage
+    from diive.events import Event
+    from diive.gui import events
+    overview = window._tabs[0]
+    overview._on_select("Tair_f")
+    QApplication.processEvents()
+    hm = overview._heatmap_ax
+    image = hm.get_images()[0]
+    assert isinstance(image, AxesImage)
+    assert not any(isinstance(c, QuadMesh) for c in hm.collections)
+
+    grid = overview._df["Tair_f"]
+    xb, yb, vals = overview.canvas.hover._image_grid(image)
+    ev = types.SimpleNamespace(inaxes=hm, xdata=0.5 * (xb[10] + xb[11]),
+                               ydata=0.5 * (yb[40] + yb[41]), x=0, y=0)
+    _, _, text, marker = overview.canvas.hover._value_at(hm, ev)
+    assert marker is False and f"{vals[40, 10]:.4g}" in text
+    # Row 40 is the 41st day of the record, column 10 its 05:00-05:30 slot.
+    day = grid.index.normalize().unique()[40]
+    assert day.strftime("%Y-%m-%d") in text
+
+    # Zooming past the end of the record clamps the heatmap to the data.
+    ts_ax = overview._shared_x_ax
+    lo, hi = overview._heatmap_ylim
+    ts_ax.set_xlim(hi - 20, hi + 200)
+    assert hm.get_ylim() == (hi - 20, hi)
+
+    # A period event draws its band on the heatmap's date axis.
+    start = grid.index.min() + pd.Timedelta("20D")
+    events.manager.add(Event("Graze", start, start + pd.Timedelta("3D"), category="grazing"))
+    try:
+        overview.refresh_events()
+        hm = overview._heatmap_ax
+        import matplotlib.dates as mdates
+        spans = [p for p in hm.patches if abs(p.get_y() - mdates.date2num(start)) < 1e-6]
+        assert spans, "no event band on the heatmap"
+    finally:
+        events.manager.clear()
+
+
 def test_data_push_skips_hidden_tabs_until_shown(window):
     # A data change reaches only the visible tab; a hidden one catches up once,
     # with the current data, when it is shown.

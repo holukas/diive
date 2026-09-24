@@ -1046,8 +1046,11 @@ class OverviewTab(DiiveTab):
                 dv.plotting.WaterfallPlot(series, resample="D", agg="sum").plot(
                     ax=ax, showplot=False)
             elif plot_type == "Heatmap (date/time)":
+                # An image draws the 175k cells of ten years several times
+                # faster than a mesh, and the heatmap repaints on every pan step.
                 dv.plotting.HeatmapDateTime(series).plot(
-                    ax=ax, fig=self.canvas.fig, cb_digits_after_comma="auto")
+                    ax=ax, fig=self.canvas.fig, cb_digits_after_comma="auto",
+                    as_image=True)
         except Exception as err:
             ax.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",
                     wrap=True, transform=ax.transAxes)
