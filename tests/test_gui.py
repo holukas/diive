@@ -1070,6 +1070,36 @@ def test_hover_value_lookup(app, example_year):
     assert canvas3.hover._scatter_value(ax3, coll, ev_far) is None
 
 
+def test_overview_time_series_dates_and_markers(window):
+    # The time series keeps its dated tick labels without a redraw hook, after
+    # the render and after a zoom (the diel cycle is redrawn on zoom).
+    overview = window._tabs[0]
+    overview._on_select("NEE_CUT_REF_f")
+    QApplication.processEvents()
+    ts_ax = overview._shared_x_ax
+    x0, x1 = ts_ax.get_xlim()
+    for lim in (None, (x0 + (x1 - x0) * 0.3, x0 + (x1 - x0) * 0.6)):
+        if lim is not None:
+            ts_ax.set_xlim(*lim)
+        overview.canvas.draw()
+        ticks = ts_ax.xaxis.get_major_ticks()
+        assert ticks and all(t.label1.get_visible() for t in ticks)
+
+    # A long record draws no per-record markers, but a value with a gap on
+    # both sides still gets one, since it has no line segment to show it.
+    import numpy as np
+    from matplotlib.figure import Figure
+    idx = pd.date_range("2021-01-01", periods=6000, freq="30min")
+    series = pd.Series(np.linspace(1.0, 2.0, len(idx)), index=idx, name="X")
+    series.iloc[[100, 102]] = np.nan
+    ax = Figure().add_subplot()
+    overview._draw_panel(ax, series, "Time series")
+    main, isolated = ax.get_lines()
+    assert main.get_marker() in (None, "None")
+    assert list(isolated.get_xdata()) == [idx[101]]
+    assert isolated.get_marker() == "o"
+
+
 def test_save_dpi_spinbox(app):
     # The canvas exposes a Save-DPI spinbox (default 150) whose value the
     # Save action passes through to savefig.

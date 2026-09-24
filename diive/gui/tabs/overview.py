@@ -107,6 +107,8 @@ _YEAR_STEPS = [1, 2, 3, 4, 5, 10, 20, 40, 50, 100]
 # looks professional (the bright Material blue read as garish).
 _TS_COLOR = "#22303C"     # near-black ink — time series (lets the heatmap carry the colour)
 _DAILY_COLOR = "#26A69A"  # teal 400 — daily mean (line + SD band)
+# Above this many records the time-series panel draws no per-record markers.
+_MARKER_MAX_POINTS = 5000
 # The diel cycle now draws one auto-coloured line per month (no single colour).
 _ZERO_COLOR = "#90A4AE"   # blue-grey 300 — zero reference line
 
@@ -890,9 +892,22 @@ class OverviewTab(DiiveTab):
     def _draw_panel(self, ax, series, plot_type: str) -> None:
         try:
             if plot_type == "Time series":
+                # A marker per record costs ~110 ms per draw on 175k records and
+                # merges into the line at that density, so long series drop it.
+                # A value with a gap on both sides has no line segment, so it keeps
+                # a marker to stay visible.
+                long_series = len(series) > _MARKER_MAX_POINTS
                 dv.plotting.TimeSeries(series).plot(
                     ax=ax, color=_TS_COLOR, linewidth=0.7,
-                    marker=True, markersize=2.5)
+                    marker=not long_series, markersize=2.5)
+                if long_series:
+                    valid = series.notna()
+                    isolated = series[valid & ~valid.shift(1, fill_value=False)
+                                      & ~valid.shift(-1, fill_value=False)]
+                    if not isolated.empty:
+                        ax.plot(isolated.index, isolated.to_numpy(), ls="none",
+                                marker="o", markersize=2.5, markeredgecolor="none",
+                                color=_TS_COLOR, alpha=0.95, zorder=99)
                 # Zero reference line only when the data straddles zero (e.g.
                 # fluxes) — pointless for all-positive variables far from zero.
                 smin, smax = series.min(), series.max()
