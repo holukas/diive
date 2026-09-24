@@ -100,6 +100,14 @@
   entries are disabled and the header shows what is happening. Opening a project renders the
   Overview once instead of three times. The Open data preview reads only the first rows of a
   parquet file, and shows the timestamps as stored.
+- **GUI, resizing plots:** dragging the window edge or a splitter no longer re-renders the figure
+  on every resize step. The canvas shows its last frame scaled and renders once, at the final
+  size, when the size has settled (`diive/gui/widgets/mpl_canvas.py`).
+- **Scatter plot, speed:** `ScatterXY` without a colour variable draws its hollow markers from one
+  cached marker, the fast path matplotlib already uses for filled scatters. The points are still
+  the `PathCollection` in `ax.collections`; each marker now sits on the nearest pixel centre, up to
+  half a pixel from its exact position. This speeds up the Driver explorer and the Scatter XY plot
+  tab; the GUI hover caches scatter pixel positions per draw (`diive/core/plotting/scatter.py`).
 
 - **Daytime partitioning (ONEFlux), new option `reject_alpha_at_start`:** ONEFlux 1.3.7 is meant to
   reject a fitting window whose alpha never moved off its starting value, but a float32 comparison
