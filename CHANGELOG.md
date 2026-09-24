@@ -55,6 +55,9 @@
   re-showed with a second full draw on every render and zoom step. It now draws with matplotlib
   directly; the plot itself looks the same. Keyword arguments passed through `**kwargs` now go to
   matplotlib's `Axes.plot` instead of pandas (`diive/core/plotting/dielcycle.py`).
+- **Random uncertainty plot:** `RandomUncertaintyPAS20.showplot_random_uncertainty` passed its axes
+  to the `ScatterXY` constructor, which takes none, so the plot raised `TypeError`. The axes now go
+  to `plot()` (`diive/flux/lowres/uncertainty.py`).
 
 ### Changes
 

@@ -431,7 +431,7 @@ class RandomUncertaintyPAS20:
         ax_orig.grid(True, alpha=0.3, linestyle=':')
 
         # Scatter (measured, method 1)
-        ScatterXY(x=_df[self.fluxcol], y=_df[self.randunccol], ax=ax_scatter).plot()
+        ScatterXY(x=_df[self.fluxcol], y=_df[self.randunccol]).plot(ax=ax_scatter)
         ax_scatter.set_title(f"Measured {self.fluxcol} vs. Method 1 Uncertainty\n(Flux-Uncertainty Relationship)",
                             fontsize=10, fontweight='bold')
         ax_scatter.set_xlabel(f'{self.fluxcol} (μmol CO₂ m⁻² s⁻¹)', fontsize=9)

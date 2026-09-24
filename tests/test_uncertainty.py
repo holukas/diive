@@ -58,6 +58,36 @@ def test_cumulative_uncertainty_nan_does_not_poison():
     assert (unc_cum.dropna().diff().dropna() >= -1e-9).all()
 
 
+def test_random_uncertainty_plot_draws_the_scatter():
+    # The diagnostic plot passed `ax=` to the ScatterXY constructor, which has no
+    # such argument, so it raised TypeError before drawing anything.
+    import warnings
+
+    import matplotlib.pyplot as plt
+    from matplotlib.collections import PathCollection
+
+    ru = dv.flux.RandomUncertaintyPAS20(
+        _subset(), 'NEE_CUT_REF_orig', 'NEE_CUT_REF_f', 'Tair_f', 'VPD_f', 'Rg_f')
+    ru.run()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)  # fig.show() on a non-GUI backend
+        ru.showplot_random_uncertainty()
+    fig = plt.gcf()
+    try:
+        ax_scatter = fig.axes[2]
+        res = ru.randunc_results
+        method1 = res.loc[res['WINDOW_N_VALS_METHOD1'] >= 5,
+                          [ru.fluxcol, ru.randunccol]].dropna()
+        points = [c for c in ax_scatter.collections if isinstance(c, PathCollection)]
+        assert len(points) == 1
+        assert len(points[0].get_offsets()) == len(method1) > 0
+        # The method's own chrome is set after plot(), so it wins over the defaults.
+        assert ax_scatter.get_title().startswith(f"Measured {ru.fluxcol} vs. Method 1")
+        assert ax_scatter.get_xlabel().startswith(ru.fluxcol)
+    finally:
+        plt.close(fig)
+
+
 def _joint_subset():
     """A month with a measured NEE, its gap-filled REF and the 16th/84th USTAR
     percentile scenario fluxes — the joint-uncertainty inputs."""
