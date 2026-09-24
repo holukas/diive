@@ -1188,6 +1188,26 @@ def test_overview_zoom_recomputes_summaries_once_settled(window):
     assert diel_ax.get_lines()[0] is not diel_line
 
 
+def test_combine_cmap_redraws_only_for_known_names(app):
+    import numpy as np
+    from diive.gui.tabs.combine_variables import CombineVariablesTab
+    ix = pd.date_range("2023-01-01", periods=480, freq="30min", name="TIMESTAMP_MIDDLE")
+    df = pd.DataFrame({"A": pd.Series(np.arange(480, dtype=float), index=ix)})
+    tab = CombineVariablesTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._assign(1, "A")
+    QApplication.processEvents()
+
+    def cmap_name():
+        return tab.slot1.canvas.fig.axes[0].collections[0].cmap.name
+
+    tab.cmap_combo.setCurrentText("vir")  # half-typed: wait for a pause
+    assert cmap_name() != "vir" and tab._cmap_debounce.pending()
+    tab.cmap_combo.setCurrentText("viridis")  # a known name: redraw at once
+    assert cmap_name() == "viridis" and not tab._cmap_debounce.pending()
+
+
 def test_appearance_width_spin_applies_theme_once_settled(app):
     from PySide6.QtCore import QObject
     from diive.gui import theme

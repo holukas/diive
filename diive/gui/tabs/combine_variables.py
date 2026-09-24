@@ -18,6 +18,7 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import pandas as pd
+from matplotlib import colormaps as mpl_colormaps
 from matplotlib.colors import ListedColormap
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QColor
@@ -41,6 +42,7 @@ from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.colormaps import colormap_combo
 from diive.gui.widgets.copy_button import CopyPythonButton
+from diive.gui.widgets.debounce import Debouncer
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel, lock_panel_handle
@@ -348,7 +350,8 @@ class CombineVariablesTab(DiiveTab):
             "Colormap for all three heatmaps. Defaults to the app-wide setting "
             "in the Appearance tab.")
         self.cmap_combo.setMaximumWidth(160)
-        self.cmap_combo.currentTextChanged.connect(self._on_cmap_changed)
+        self.cmap_combo.currentTextChanged.connect(self._on_cmap_text)
+        self._cmap_debounce = Debouncer(self.cmap_combo, self._on_cmap_changed)
         row.addWidget(self.cmap_combo)
 
         # Exact-zero highlight: only meaningful for the difference, where zero
@@ -398,13 +401,23 @@ class CombineVariablesTab(DiiveTab):
     def _cmap(self) -> str:
         return self.cmap_combo.currentText().strip() or theme.manager.heatmap_cmap
 
-    def _on_cmap_changed(self, _text: str) -> None:
-        """Redraw every assigned heatmap with the newly picked colormap.
+    def _on_cmap_text(self, text: str) -> None:
+        """Redraw at once for a known colormap name; wait for typing to pause
+        otherwise.
 
-        The combo is editable, so a half-typed name reaches this slot too;
-        matplotlib rejects it and the slot shows the error, which is what the
-        source slots already do for any unplottable input.
+        The combo is editable, so every keystroke lands here, and redrawing three
+        heatmaps per keystroke stalls the tab. A half-typed name is redrawn only
+        once typing pauses; matplotlib then rejects it and the slots show the
+        error, which is what they already do for any unplottable input.
         """
+        if text.strip() in mpl_colormaps:
+            self._cmap_debounce.cancel()
+            self._on_cmap_changed()
+        else:
+            self._cmap_debounce.trigger()
+
+    def _on_cmap_changed(self) -> None:
+        """Redraw every assigned heatmap with the current colormap."""
         cmap = self._cmap()
         for slot_no in (1, 2):
             var = self._vars[slot_no]

@@ -73,6 +73,12 @@
   switch to them. Before, every open tab re-rendered at once, which took 39 s with 62 tabs open.
   Renders requested in quick succession on one variable list now run once, for the latest request
   (`diive/gui/app.py`, `diive/gui/widgets/variable_panel.py`).
+- **GUI, controls that recompute on every change:** spin boxes and editable fields that trigger a
+  slow recompute now wait until the value has settled: the Appearance tab's list width and
+  colormap, the 3D surface controls, the Select-records bounds and the Gaps threshold. Panning or
+  zooming the Overview moves the heatmap at once and recomputes the diel cycle and histogram once
+  the view has settled. Combine variables redraws at once for a known colormap name and waits
+  while one is half-typed (`diive/gui/widgets/debounce.py`).
 
 - **Daytime partitioning (ONEFlux), new option `reject_alpha_at_start`:** ONEFlux 1.3.7 is meant to
   reject a fitting window whose alpha never moved off its starting value, but a float32 comparison
