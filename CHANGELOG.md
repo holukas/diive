@@ -2,145 +2,46 @@
 
 ![diive](images/logo_diive1_256px.png)
 
-## Unreleased
+## v0.91.2 | 24 September 2026
 
-### Bugfixes
+The ONEFlux partitioning ports now agree more closely with ONEFlux, and the desktop GUI is
+faster.
 
-- **Daytime partitioning (ONEFlux), missing drivers:** where a gap-filled driver was missing, the
-  port computed RECO and GPP at the missing-value code −9999 and returned large, meaningless
-  values without a warning. RECO is now NaN where the gap-filled air temperature is missing, and
-  GPP where the gap-filled SW_IN or VPD is missing (`diive/flux/partitioning/daytime_oneflux.py`).
-- **Daytime partitioning (ONEFlux), fit precision:** the fits evaluated their models on the float32
-  drivers directly, where ONEFlux widens them to float64 first. In windows where the VPD
-  sensitivity converges to zero, that small difference could send the model cascade down another
-  branch than ONEFlux takes. The fits now widen the drivers as ONEFlux does, which brings the
-  results closer to ONEFlux (`diive/flux/partitioning/daytime_oneflux.py`).
+### New features
 
-- **Nighttime partitioning (ONEFlux), agreement with ONEFlux:** results change. The port read the
-  hour of each record from diive's TIMESTAMP_MIDDLE, where ONEFlux uses the end of the period. This
-  shifted which records counted as night, and on CH-DAV 2016 put E0 about 7 K away from ONEFlux. The
-  index and the results stay on TIMESTAMP_MIDDLE; only the internal hour and day of year now come
-  from the period end, as in the daytime port. Three smaller differences were fixed with it:
-    - A record with missing SW_IN is no longer dropped from the nighttime data. ONEFlux keeps it
-      and lets the sunrise/sunset test decide.
-    - The sunrise/sunset test is done in float32, as in ONEFlux, which changes the result for one
-      record a year.
-    - The last record of each year is no longer given day 1 of the year, and the Rref window
-      centre is truncated rather than rounded.
-
-  RECO now agrees with a native ONEFlux run to an RMSE of 0.0003 µmol m⁻² s⁻¹
-  (`diive/flux/partitioning/nighttime_oneflux.py`).
-
-- **Daytime partitioning (ONEFlux), hourly data:** `DaytimePartitioningOneFlux` assumed 48 records
-  per day when placing its fitting windows. With hourly data every window landed at twice its true
-  position, and windows after midsummer fell off the end of the record, without a warning. The
-  records per day now come from the timestamps
-  (`diive/flux/partitioning/daytime_oneflux.py`).
-- **Daytime partitioning (ONEFlux), agreement with ONEFlux:** the port fitted 7 fewer windows than
-  ONEFlux on CH-DAV 2016, and annual GPP came out 5.8% higher. Three differences were fixed:
-    - The table of fitted parameters is now float32, as in ONEFlux. This decides which windows
-      are accepted, because ONEFlux's check for an alpha still at its starting value never
-      triggers in float32.
-    - The NEE uncertainty used to weight the fits now handles the start and end of the record
-      as ONEFlux's Python daytime code does.
-    - The last record of each year is no longer given day 1 of the year.
-
-  Both sides now fit the same 143 windows, GPP agrees at r = 0.9998 and annual GPP within 0.2%
-  (`diive/flux/partitioning/daytime_oneflux.py`, `diive/gapfilling/similarity.py`).
-  `FluxMDS` gap-filling results are unchanged.
-
-- **Diel cycle plot, linked panels:** `DielCycle.plot` drew through pandas, which hides the x tick
-  labels of every other axes in the figure that shares its x-axis, and adds a minor tick locator to
-  that axis. In the GUI Overview this blanked the dates of the time series, which the Overview then
-  re-showed with a second full draw on every render and zoom step. It now draws with matplotlib
-  directly; the plot itself looks the same. Keyword arguments passed through `**kwargs` now go to
-  matplotlib's `Axes.plot` instead of pandas (`diive/core/plotting/dielcycle.py`).
-- **Random uncertainty plot:** `RandomUncertaintyPAS20.showplot_random_uncertainty` passed its axes
-  to the `ScatterXY` constructor, which takes none, so the plot raised `TypeError`. The axes now go
-  to `plot()` (`diive/flux/lowres/uncertainty.py`).
-- **Event overlays on heatmaps:** `dv.events.overlay_events(axis='y')` drew its lines and bands
-  below the cells of a `HeatmapDateTime`, so they never showed there, in the GUI Overview or in
-  library use. The overlays now start one level above the highest image or mesh on the axes; line
-  panels are unchanged (`diive/events/event.py`).
+- **Daytime partitioning (ONEFlux):** the new option `reject_alpha_at_start=True` applies a window
+  check that ONEFlux intends but never runs. The default still matches ONEFlux output.
+- **Plotting:** `HeatmapDateTime.plot(as_image=True)` draws the heatmap as an image, and
+  `decimate_line` thins long lines for faster drawing.
 
 ### Changes
 
-- **Waterfall plot, speed:** `WaterfallPlot` now draws its bars as one `PolyCollection` and its
-  connectors as one `LineCollection` instead of one artist per period. The image is unchanged
-  pixel for pixel. For ten years of daily bars, building the plot drops from 3.1 s to 0.05 s and a
-  redraw from 0.56 s to 0.11 s. Code that read the bars from `ax.patches` finds them in
-  `ax.collections` (gid `'waterfall_bars'` and `'waterfall_connectors'`)
-  (`diive/core/plotting/waterfall.py`).
-- **GUI Overview, speed:** the time-series panel draws no per-record markers for series longer
-  than 5000 records; a value with a gap on both sides still gets one. Resizing a plot canvas
-  re-solves the layout once the size has settled instead of on every resize event
-  (`diive/gui/tabs/overview.py`, `diive/gui/widgets/mpl_canvas.py`).
-- **GUI, data changes with many tabs open:** a data change (date range, variable subset, new or
-  renamed column, event edit) now reaches only the visible tab. The other tabs refresh when you
-  switch to them. Before, every open tab re-rendered at once, which took 39 s with 62 tabs open.
-  Renders requested in quick succession on one variable list now run once, for the latest request
-  (`diive/gui/app.py`, `diive/gui/widgets/variable_panel.py`).
-- **GUI, controls that recompute on every change:** spin boxes and editable fields that trigger a
-  slow recompute now wait until the value has settled: the Appearance tab's list width and
-  colormap, the 3D surface controls, the Select-records bounds and the Gaps threshold. Panning or
-  zooming the Overview moves the heatmap at once and recomputes the diel cycle and histogram once
-  the view has settled. Combine variables redraws at once for a known colormap name and waits
-  while one is half-typed (`diive/gui/widgets/debounce.py`).
-- **GUI Overview, rendering:** clicking a variable draws the figure once, the heatmap is drawn as an
-  image and a long time series is drawn thinned to the screen width (every drawn point is a real
-  record, extremes and gaps are kept, and the hover still reads every record). Panning no longer
-  rebuilds the diel cycle and histogram between steps. New library options:
-  `HeatmapDateTime.plot(as_image=True)`, and `decimate_line` in `diive/core/plotting/plotfuncs.py`.
-  `HistogramPlot`'s KDE evaluates faster with the same density from all points; `HeatmapDateTime`
-  builds its grid faster and `WaterfallPlot` redraws faster. `Cumulative(fill=True)` shades its area
-  as one path: on gappy series this is much faster and shows the fill colour instead of grey
-  streaks; a legend placed with `loc='best'` can land elsewhere.
-- **GUI, analysis tabs:** the Driver explorer, Seasonal trend & anomalies, Spectrogram and Data
-  profile tabs compute on a background thread. Clicking through variables quickly draws only the last
-  selection, and a failure is shown on the canvas. The Spectrogram's max cycles/day and colormap
-  controls restyle the drawn spectrogram instead of rebuilding it (`LatestRunner` in
-  `diive/gui/widgets/worker.py`).
-- **GUI, startup and files:** menu tabs are imported the first time they are opened, so the main
-  window no longer loads xgboost, scikit-learn, statsmodels or the flux chain at startup, and the
-  splash appears before the main window is imported. Project open and save, data export and the
-  startup load read and write their files on a background thread; meanwhile the load and save
-  entries are disabled and the header shows what is happening. Opening a project renders the
-  Overview once instead of three times. The Open data preview reads only the first rows of a
-  parquet file, and shows the timestamps as stored.
-- **GUI, resizing plots:** dragging the window edge or a splitter no longer re-renders the figure
-  on every resize step. The canvas shows its last frame scaled and renders once, at the final
-  size, when the size has settled (`diive/gui/widgets/mpl_canvas.py`).
-- **Scatter plot, speed:** `ScatterXY` without a colour variable draws its hollow markers from one
-  cached marker, the fast path matplotlib already uses for filled scatters. The points are still
-  the `PathCollection` in `ax.collections`; each marker now sits on the nearest pixel centre, up to
-  half a pixel from its exact position. This speeds up the Driver explorer and the Scatter XY plot
-  tab; the GUI hover caches scatter pixel positions per draw (`diive/core/plotting/scatter.py`).
-- **Legend placement, speed:** `default_legend`, and so every `FormatStyle` legend, hands
-  matplotlib's `loc='best'` search the points of a large collection (over 10,000) as one array
-  instead of a list of small arrays per point. The legend lands exactly where it did and still
-  moves on zoom (`diive/core/plotting/plotfuncs.py`).
-- **Colour-coded scatter, speed:** `ScatterXY` with a colour variable leaves out, under Agg (PNG and
-  the GUI), the markers that opaque markers drawn after them cover completely. The image is
-  identical pixel for pixel and vector output keeps every marker. The points are now a
-  `PathCollection` subclass, so check them with `isinstance`, not the class name
-  (`diive/core/plotting/scatter.py`).
-- **GUI, Seasonal trend & anomalies:** the tab computes in a separate worker process. statsmodels'
-  STL fit holds the GIL, so on a background thread it still froze the window, briefly for a normal
-  fit and for the whole run with Robust on. The worker starts on first use (about 2 s once) and is
-  reused. `SingleVariableExplorerTab.use_process` lets other tabs opt in; the packaged app calls
-  `multiprocessing.freeze_support()` at startup (`diive/gui/widgets/worker.py`).
-- **GUI Overview, narrow windows:** the figure lays out at laptop sizes and recovers after the
-  window shrinks and grows again; before, the lower panels collapsed below about 1440x900. The
-  diel and distribution legends are smaller and give way to coloured month names or no legend in
-  a narrow panel, hour and date ticks follow the panel width, the distribution axis shows round
-  ticks, and tick values of 10,000 or more are shortened to k/M (`diive/gui/tabs/overview.py`).
+- **Faster plots:** `WaterfallPlot`, `ScatterXY`, `Cumulative`, `HistogramPlot`,
+  `HeatmapDateTime` and legends on large datasets draw faster. `WaterfallPlot` bars are now in
+  `ax.collections` instead of `ax.patches`.
+- **Faster GUI:** the GUI starts faster, and only the visible tab updates when the data change.
+  Projects, exports and several analysis tabs load and compute in the background. The Overview
+  also fits smaller windows.
+- **GUI from a script:** starting the GUI from your own script now needs a main guard, see the
+  user manual.
 
-- **Daytime partitioning (ONEFlux), new option `reject_alpha_at_start`:** ONEFlux 1.3.7 is meant to
-  reject a fitting window whose alpha never moved off its starting value, but a float32 comparison
-  stops that check from ever working. diive reproduces ONEFlux by default, so its results keep
-  matching ONEFlux output. `reject_alpha_at_start=True` applies the check as intended; on CH-DAV
-  2016 this raises annual daytime GPP by 5.7%, in ONEFlux and in diive alike
-  (`DaytimePartitioningOneFlux`, `partition_nee_daytime_oneflux`).
+### Packaging
+
+- New releases are published to PyPI automatically.
+- The source distribution no longer includes notebooks and images.
+
+### Bugfixes
+
+- **Daytime partitioning (ONEFlux):** results change and now match ONEFlux closely (annual GPP
+  within 0.1% on CH-DAV 2016). Hourly data are handled correctly, and RECO and GPP are NaN where
+  a gap-filled driver is missing.
+- **Nighttime partitioning (ONEFlux):** results change and now match ONEFlux closely (RECO RMSE
+  0.0003 µmol m⁻² s⁻¹ on CH-DAV 2016).
+- **`DielCycle.plot`** no longer hides the x tick labels of other axes that share its x-axis.
+  Extra keyword arguments now go to matplotlib instead of pandas.
+- **`RandomUncertaintyPAS20.showplot_random_uncertainty`** no longer raises a `TypeError`.
+- **`dv.events.overlay_events(axis='y')`** draws events above heatmap cells instead of hiding
+  them below.
 
 ## v0.91.1 | 19 September 2026
 

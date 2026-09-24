@@ -6,11 +6,11 @@ authors:
   given-names: "Lukas"
   orcid: "https://orcid.org/0000-0002-5569-0761"
 title: "diive"
-version: "0.91.1"
+version: "0.91.2"
 # Concept DOI: always resolves to the newest release, so this line does not
 # change per release. Zenodo also mints a version-specific DOI on publication.
 doi: 10.5281/zenodo.10884017
-date-released: "2026-09-19"
+date-released: "2026-09-24"
 license: GPL-3.0
 url: "https://github.com/holukas/diive"
 repository-code: "https://github.com/holukas/diive"
