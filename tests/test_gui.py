@@ -1278,6 +1278,30 @@ def test_canvas_resize_relayout_is_debounced(app):
     assert solves == [1, 1]
 
 
+def test_canvas_leaves_an_empty_figure_and_a_stale_idle_draw_alone(app):
+    # A resize while the figure is cleared for a new render has nothing to lay
+    # out, and keeps the "first resize after a render" solve for later. An idle
+    # draw queued before a synchronous draw() would only repeat that draw.
+    from matplotlib.figure import Figure
+    from diive.gui.widgets.mpl_canvas import MplCanvas
+    canvas = MplCanvas()
+    solves = []
+    canvas._solve_layout = lambda: solves.append(1)
+    canvas.reset_layout()
+    canvas._on_resize(None)
+    assert solves == [] and canvas._fresh_layout
+    canvas.fig.add_subplot()
+    canvas._on_resize(None)
+    assert solves == [1]
+
+    draws = []
+    canvas.fig.draw = lambda r: (draws.append(1), Figure.draw(canvas.fig, r))[1]
+    canvas.draw_idle()
+    canvas.draw()
+    QApplication.processEvents()
+    assert draws == [1]
+
+
 def test_save_dpi_spinbox(app):
     # The canvas exposes a Save-DPI spinbox (default 150) whose value the
     # Save action passes through to savefig.

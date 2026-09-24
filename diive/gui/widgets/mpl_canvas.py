@@ -177,6 +177,13 @@ class MplCanvas(QWidget):
         """Current DPI selected for figure export (read by the Save action)."""
         return self._dpi_spin.value()
 
+    def mpl_connect(self, event: str, callback):
+        """Connect `callback` to a matplotlib canvas event (e.g. 'draw_event').
+
+        matplotlib holds a bound method weakly, so connecting one does not keep
+        its owner alive; a lambda would be held strongly."""
+        return self._canvas.mpl_connect(event, callback)
+
     def new_axes(self, n: int = 1, orientation: str = "horizontal",
                  sharex: bool = False, sharey: bool = False) -> list[Axes]:
         """Clear the figure and return a fresh strip of `n` axes.
@@ -239,6 +246,10 @@ class MplCanvas(QWidget):
         """
         if not self.auto_layout:
             return  # the plot manages its own layout (e.g. ridgeline)
+        if not self.fig.axes:
+            # Cleared for a render that is being built: nothing to lay out,
+            # and the render's own draw() solves the layout at this size.
+            return
         if self._fresh_layout:
             self._fresh_layout = False
             self._solve_layout()
@@ -300,6 +311,11 @@ class MplCanvas(QWidget):
         it via `reset_layout()`.
         """
         self._canvas.draw()
+        # An idle draw queued before this one (e.g. by a resize while the
+        # figure was being built) would only render the same figure again, a
+        # full second draw. matplotlib skips a queued idle draw once its
+        # pending flag is cleared.
+        self._canvas._draw_pending = False
         if self.auto_layout:
             self.fig.set_layout_engine("none")
         self._canvas.flush_events()
