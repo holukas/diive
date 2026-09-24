@@ -364,6 +364,51 @@ def test_multi_instance_plot_tabs(window):
     assert "Time series 1" in _tabs(window)
 
 
+def test_menu_tabs_are_registered_lazily():
+    """Every menu tab is a `LazyTab` in the tabs package and resolves to a tab.
+
+    The string paths are only checked when a tab is opened, so a typo would
+    otherwise surface as a menu entry that crashes. The package check matters
+    for the frozen build: the PyInstaller spec bundles `diive.gui.tabs` whole,
+    because it cannot follow the string imports.
+    """
+    import pathlib
+
+    from diive.gui.registry import MENU_TAB_CLASSES, TABS_PACKAGE, LazyTab
+    from diive.gui.tabs.base import DiiveTab
+
+    for label, factory in MENU_TAB_CLASSES.items():
+        assert isinstance(factory, LazyTab), label
+        assert factory.module.startswith(TABS_PACKAGE + "."), label
+        assert issubclass(factory.load(), DiiveTab), label
+
+    spec = pathlib.Path(__file__).resolve().parent.parent / "packaging" / "diive_gui.spec"
+    if spec.exists():
+        assert f'collect_submodules("{TABS_PACKAGE}")' in spec.read_text(encoding="utf-8")
+
+
+def test_gui_app_import_leaves_the_ml_stack_unloaded():
+    """Importing the main window must not import the tab modules' heavy deps.
+
+    The registry used to import all ~45 tab modules, which pulled in xgboost,
+    scikit-learn, statsmodels and the flux chain before the splash could hide.
+    Run in a fresh interpreter: this test session has imported all of them.
+    """
+    import pathlib
+    import subprocess
+
+    heavy = ["xgboost", "sklearn", "statsmodels", "shap", "diive.flux",
+             "diive.gapfilling"]
+    code = ("import sys, diive.gui.app; "
+            f"print([m for m in {heavy!r} if m in sys.modules])")
+    root = pathlib.Path(__file__).resolve().parent.parent
+    env = dict(os.environ, PYTHONPATH=str(root))
+    out = subprocess.run([sys.executable, "-c", code], env=env, cwd=root,
+                         capture_output=True, text=True, timeout=120)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip().splitlines()[-1] == "[]"
+
+
 def test_close_tab_focuses_previous_not_log(window):
     tw = window._tabwidget
     # Layout: Overview(0), Log(1), then menu tabs appended after.

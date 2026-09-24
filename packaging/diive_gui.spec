@@ -19,6 +19,7 @@ from PyInstaller.utils.hooks import (
     collect_all,
     collect_data_files,
     collect_dynamic_libs,
+    collect_submodules,
 )
 
 # Embedded EXE/taskbar icon (relative to this spec via PyInstaller's SPECPATH).
@@ -67,6 +68,12 @@ hiddenimports += [
     "diive.times",
     "diive.variables",
 ]
+
+# The GUI's menu tabs are registered by module path and imported on first open
+# (diive/gui/registry.py, `LazyTab`), so startup doesn't pay for xgboost/sklearn/
+# the flux chain. Static analysis cannot see those string imports; bundle every
+# module of the tabs package instead. A new menu tab must live in this package.
+hiddenimports += collect_submodules("diive.gui.tabs")
 
 # --- heavy / dynamically-imported third-party packages -------------------
 # These use lazy/plugin-style imports or ship compiled binaries & data that
