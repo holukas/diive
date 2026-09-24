@@ -1147,6 +1147,28 @@ def test_run_with_loading_renders_latest_request_once(app):
     assert QApplication.overrideCursor() is None
 
 
+def test_debouncer_runs_once_after_a_burst(app):
+    from PySide6.QtCore import QObject
+    from diive.gui.widgets.debounce import Debouncer
+    runs = []
+
+    class _Owner(QObject):
+        def slot(self):
+            runs.append(1)
+
+    owner = _Owner()
+    deb = Debouncer(owner, owner.slot, ms=10_000)
+    for value in range(5):
+        deb.trigger(value)  # signal arguments are ignored
+    assert runs == [] and deb.pending()
+    deb.flush()
+    assert runs == [1] and not deb.pending()
+    deb.flush()  # nothing pending: no second run
+    deb.trigger()
+    deb.cancel()
+    assert runs == [1] and not deb.pending()
+
+
 def test_canvas_resize_relayout_is_debounced(app):
     # The first resize after a render solves the layout at once (the render may
     # have run at a pre-show size); a burst of later resizes solves only once,

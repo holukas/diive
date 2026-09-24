@@ -126,6 +126,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `widgets/sub_tabs.py` | `SubTabs` — standardized in-tab sub-navigation (segmented pills over a `QStackedWidget`) for output-heavy tabs; `add_page`/`set_page`/`changed`, `add_corner_widget` (action buttons by the pills) + `add_corner_separator` (faded `_CornerSeparator` divider) |
 | `widgets/state_utils.py` | `save_controls`/`restore_controls` — serialize a tab's standard Qt controls by stable key for `save_state`/`restore_state` |
 | `widgets/weak_slot.py` | `weak_slot(method, *args)` — a connectable slot that binds extra arguments a signal does not carry while holding the method's object only weakly. Use it instead of `lambda: self._run_level(idx)`: PySide6 keeps a plain bound method weakly, but a lambda is owned by the C++ connection and pins the whole tab (L106) |
+| `widgets/debounce.py` | `Debouncer(parent, slot, ms=250)` — runs a slow slot once a control's value has settled. Connect the control's change signal to `trigger` (arguments ignored); `flush()` runs a pending slot now, `cancel()` drops it. Used by the Overview pan/zoom summaries, the Appearance width/colormap, the 3D surface spin/combo controls, the Select-records bounds and the Gaps threshold. |
 
 **Adding a tab:** always-on tabs (Overview, Log) go in `TAB_CLASSES`. Menu-opened tabs go in `registry.MENU_TABS`
 (grouped by menu; values are factories) — they open as **new numbered instances** each time (Heatmap 1, 2, 3 ...), all
