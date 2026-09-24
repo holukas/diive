@@ -3073,6 +3073,34 @@ def test_spectrogram_tab(window):
     assert _tabs(window).count("Spectrogram") == 1
 
 
+def test_data_profile_tab_profiles_on_a_worker(window):
+    window._open_menu_tab("Data profile")
+    tab = window._menu_tab_list[-1]
+    _wait_for_worker(tab)
+    ncols = window._data.shape[1]
+    assert tab.table.rowCount() == ncols
+    assert tab.stats_layout.count() - 1 == 8  # dataset cards (minus stretch)
+    assert tab.count_lbl.text() == f"{ncols} variables"
+    assert not tab._root.testAttribute(Qt.WidgetAttribute.WA_SetCursor)
+
+    # Two pushes in a row: only the newer frame's profile is drawn.
+    df = window._data
+    tab.on_data_loaded(df)
+    assert tab.count_lbl.text() == "Profiling…"
+    tab.on_data_loaded(df.iloc[:, :5])
+    _wait_for_worker(tab)
+    assert tab.table.rowCount() == 5
+    assert {tab.table.item(r, 0).text() for r in range(5)} == {str(c) for c in df.columns[:5]}
+
+    # The filter still applies to the redrawn table and survives save/restore.
+    needle = str(df.columns[0])
+    tab.restore_state({"filter": needle})
+    assert tab.save_state() == {"filter": needle}
+    for r in range(5):
+        name = tab.table.item(r, 0).text()
+        assert tab.table.isRowHidden(r) == (needle.lower() not in name.lower())
+
+
 def test_histogram_tab(window):
     from diive.gui.icons import menu_icon
     assert not menu_icon("Histogram").isNull()

@@ -10,7 +10,8 @@ number of gaps, unique values, zeros, whether it's constant, and the numeric
 summaries (mean/SD/min/median/max).
 
 All profiling is the library's `dv.analysis.profile_dataframe` /
-`dv.analysis.dataframe_overview`; this tab only arranges the results into
+`dv.analysis.dataframe_overview`, run on a worker thread (`LatestRunner`) so a
+data push does not freeze the window; this tab only arranges the results into
 widgets and adds the missing-% colour tint (strict GUI<->library separation).
 
 Part of the diive library: https://github.com/holukas/diive
@@ -18,6 +19,7 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import pandas as pd
+import shiboken6
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
@@ -40,6 +42,7 @@ from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.drivers import _NumItem
 from diive.gui.tabs.overview import _StatCard, _fmt
 from diive.gui.widgets.tab_chrome import build_titlebar
+from diive.gui.widgets.worker import LatestRunner
 
 #: Table columns: (header, profile-key, numeric?, align-right?).
 _COLUMNS = [
@@ -122,7 +125,13 @@ class ProfileTab(DiiveTab):
         self._df = None
         self._profile = None   # DataFrame from profile_dataframe
 
+        self._runner = LatestRunner()
+        self._runner.done.connect(self._on_profiled)
+        self._runner.failed.connect(self._on_profile_failed)
+        self._runner.settled.connect(self._end_busy)
+
         root = QWidget()
+        self._root = root
         outer = QVBoxLayout(root)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -211,15 +220,44 @@ class ProfileTab(DiiveTab):
     def on_data_loaded(self, df, created: set | None = None) -> None:
         self._df = df
         if df is None or df.shape[1] == 0:
+            self._runner.cancel()  # a profile still computing is for old data
             self._profile = None
             self.table.setRowCount(0)
             self._fill_stats(None)
+            self._apply_filter()
             return
+        # Profiling the whole frame runs on a worker; the table and cards keep
+        # showing the previous profile until the new one lands.
+        self.count_lbl.setText("Profiling…")
+        self._root.setCursor(Qt.CursorShape.BusyCursor)
+        self._runner.submit(self._profile_payload, df)
+
+    @staticmethod
+    def _profile_payload(df):
         # Profiling is the library's; the tab only reads the results back.
-        self._profile = dv.analysis.profile_dataframe(df)
-        self._fill_stats(dv.analysis.dataframe_overview(df))
+        return (dv.analysis.profile_dataframe(df),
+                dv.analysis.dataframe_overview(df))
+
+    def _alive(self) -> bool:
+        # A tab closed mid-run has its widgets deleted while the result is
+        # still queued for delivery.
+        return shiboken6.isValid(self._root)
+
+    def _end_busy(self) -> None:
+        if self._alive():
+            self._root.unsetCursor()
+
+    def _on_profiled(self, payload) -> None:
+        if not self._alive():
+            return
+        self._profile, overview = payload
+        self._fill_stats(overview)
         self._fill_table()
         self._apply_filter()
+
+    def _on_profile_failed(self, message: str) -> None:
+        if self._alive():
+            self.count_lbl.setText(f"Profiling failed: {message}")
 
     def _fill_stats(self, ov: dict | None) -> None:
         while self.stats_layout.count() > 1:  # keep the trailing stretch
