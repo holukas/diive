@@ -70,6 +70,11 @@ uv run pytest tests/ -v
 uv run diive-gui
 ```
 
+### Standalone Windows app
+
+To build `diive-gui.exe` for users without Python, run `.\packaging\build_gui.ps1 -Clean` in
+PowerShell after installing the `build` group. Details: [packaging/README.md](packaging/README.md).
+
 [CONTRIBUTING.md](CONTRIBUTING.md) has the rest of the development setup.
 
 ## Quick start
