@@ -14,6 +14,19 @@ pip install 'diive[gui]'     # or: uv sync --extra gui
 diive-gui
 ```
 
+To start the GUI from your own Python script, put the call under a main guard:
+
+```python
+from diive.gui import launch
+
+if __name__ == "__main__":
+    launch()
+```
+
+Some tabs compute in a separate background process, which re-imports your script
+when it starts. Without the guard, that process would run the script again and open
+a second window.
+
 For the optional **Database** tabs (read/write an InfluxDB), also install the
 `db` dependency group: `uv sync --group db` (or `pip install influxdb-client`).
 Without it the Database tabs show a short install notice instead of failing.
