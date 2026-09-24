@@ -119,6 +119,16 @@
   matplotlib's `loc='best'` search the points of a large collection (over 10,000) as one array
   instead of a list of small arrays per point. The legend lands exactly where it did and still
   moves on zoom (`diive/core/plotting/plotfuncs.py`).
+- **Colour-coded scatter, speed:** `ScatterXY` with a colour variable leaves out, under Agg (PNG and
+  the GUI), the markers that opaque markers drawn after them cover completely. The image is
+  identical pixel for pixel and vector output keeps every marker. The points are now a
+  `PathCollection` subclass, so check them with `isinstance`, not the class name
+  (`diive/core/plotting/scatter.py`).
+- **GUI, Seasonal trend & anomalies:** the tab computes in a separate worker process. statsmodels'
+  STL fit holds the GIL, so on a background thread it still froze the window, briefly for a normal
+  fit and for the whole run with Robust on. The worker starts on first use (about 2 s once) and is
+  reused. `SingleVariableExplorerTab.use_process` lets other tabs opt in; the packaged app calls
+  `multiprocessing.freeze_support()` at startup (`diive/gui/widgets/worker.py`).
 - **GUI Overview, narrow windows:** the figure lays out at laptop sizes and recovers after the
   window shrinks and grows again; before, the lower panels collapsed below about 1440x900. The
   diel and distribution legends are smaller and give way to coloured month names or no legend in

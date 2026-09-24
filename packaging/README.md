@@ -81,7 +81,12 @@ crashes with `ModuleNotFoundError` or a missing-data-file error, add the
 offending package to the `_collect` list in `diive_gui.spec` (or a specific name
 to `hiddenimports`) and rebuild. The GUI registry imports menu tabs by string on
 first open, so the spec bundles all of `diive.gui.tabs` via
-`collect_submodules("diive.gui.tabs")`; a new menu tab must live in that package. Test by clicking through **every tab and menu**
+`collect_submodules("diive.gui.tabs")`; a new menu tab must live in that package.
+The GUI runs some computes in a `spawn` worker process, so the entry script
+(`launch_diive_gui.py`) calls `multiprocessing.freeze_support()` before importing
+diive (`launch()` and the CLI do too). In a built exe, check that the Seasonal trend
+tab opens no second window, that one extra `diive-gui.exe` appears while it is in
+use, and that quitting removes both processes. Test by clicking through **every tab and menu**
 once — that exercises the lazy imports.
 
 ## Known build quirks (already handled / expected)

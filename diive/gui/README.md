@@ -46,8 +46,8 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `registry.py` | `TAB_CLASSES` (always-on), `MENU_TABS` (menu-opened `LazyTab` factories: the tab module is imported on first open), `SINGLE_INSTANCE_TABS` |
 | `_cli.py` | Backs the `diive-gui` console script declared in `pyproject.toml` |
 | `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df, created)` — the extension point |
-| `tabs/_explorer_base.py` | `SingleVariableExplorerTab` — template for the "pick one variable left, compute a view right" tabs (Driver explorer, Gaps & coverage, Seasonal trend, Spectrogram, 3D surface). Owns the split skeleton, `select → run_with_loading → _compute`, default-variable picking, opt-in stats strip / list header / draggable list. Subclasses override only `_build_right()` + `_compute()` |
-| `widgets/worker.py` | `WorkerRunner` — the shared background-thread runner (`done(object)` / `failed(str)` + an `is_running` guard). Takes the hand-rolled "spawn a daemon thread, marshal the result back" idiom out of every result-producing tab; the tab supplies a **pure** `_compute_payload` function |
+| `tabs/_explorer_base.py` | `SingleVariableExplorerTab` — template for the "pick one variable left, compute a view right" tabs (Driver explorer, Gaps & coverage, Seasonal trend, Spectrogram, 3D surface). Owns the split skeleton, `select → run_with_loading → _compute`, default-variable picking, opt-in stats strip / list header / draggable list. Subclasses override `_build_right()` + `_compute()`, or opt into the worker path: `_compute_request()` (GUI thread) → pure staticmethod `_compute_payload(*request)` on a `LatestRunner` → `_render_payload(payload)` (GUI thread); `use_process = True` runs the payload in the shared worker process (`ProcessLatestRunner`) for computes that hold the GIL |
+| `widgets/worker.py` | `WorkerRunner` — the shared background-thread runner (`done(object)` / `failed(str)` + an `is_running` guard). Takes the hand-rolled "spawn a daemon thread, marshal the result back" idiom out of every result-producing tab; the tab supplies a **pure** `_compute_payload` function. `LatestRunner` wraps it for per-selection views (newest request wins, stale results dropped, `cancel()`, `settled`); `ProcessLatestRunner` sends each job to one reused `spawn` worker process (`process_pool()` / `shutdown_process_pool()`, stopped on `aboutToQuit`) |
 | `widgets/tab_chrome.py` | `build_titlebar(title, *trailing)` and `list_header(title, hint)` — the tab chrome that was copy-pasted across the correction / ML gap-filling / partitioning templates. Presentation only |
 | `tabs/overview.py` | Overview tab (first/default): 3×6 panel figure (tall time series top, full-height date/time heatmap right, bottom strip of cumulative/diel/daily/histogram/waterfall; varname in the figure suptitle; datetime panels share an x-axis) + a compact borderless **metrics ribbon** (`_StatItem`, `dv.sstats` + `SSTATS_DESCRIPTIONS` tooltips); panels via `_PANELS`. Exposes `_StatCard` for the Gaps/Drivers/Seasonal tabs, and `HeroBand` (slim method-chip + on-demand `(name, value, tooltip)` metric strip) — the shared hero used by the correction/outlier/uncertainty/select-records/partitioning/ustar/compound tabs (`set_metrics`/`clear`) |
 | `tabs/variable_selector.py` | **Select variables** tab — dual-list picker (available ↔ selected); `subsetSelected` → `MainWindow._apply_var_subset` (app-wide narrowing via `dv.keep_vars`). Opts into `_full_data` (`wants_full_data`) so it can always pick from every column |
@@ -222,15 +222,15 @@ overrides the toolbar's Save to export `savefig` at that DPI, so saved images ar
 **Data flow:** **File ▸ Open data file…** shows `OpenDataDialog` — pick one or more files, choose the filetype, and
 preview the first parsed rows before loading (parquet via `dv.load_parquet`, other formats via `dv.ReadFileType`).
 Selecting multiple files merges them (`MultiDataFileReader`, or `combine_first` for parquet). All reading is library
-work, the dialog only orchestrates it. `MainWindow` holds the current DataFrame and pushes it to every tab via
-`DiiveTab.on_data_loaded(df, created)`; tabs that present data override that hook to refresh. Example data auto-loads on
+work, the dialog only orchestrates it. `MainWindow` holds the current DataFrame and pushes it to the visible tab via
+`DiiveTab.on_data_loaded(df, created)` (hidden tabs are marked stale and catch up when shown); tabs that present data override that hook to refresh. Example data auto-loads on
 startup. **File ▸ Export data as…** (`_save_file`) writes parquet **or** CSV — the save-dialog filter picks the format,
 though an explicit `.csv`/`.parquet` extension the user types wins. Parquet goes through `to_diive_parquet_frame`
 (single-level columns + valid `TIMESTAMP_*` index name) via `dv.save_parquet`; CSV is a plain `to_csv` with the same
 timestamp-name guarantee.
 
 **Date-range subselection (`Data` menu):** non-destructive. `MainWindow` keeps the whole loaded record in `_full_data`;
-`_data` (pushed to every tab) is `_full_data` optionally narrowed to `_range=(start,end)` via `dv.times.keep_daterange`.
+`_data` (pushed to the tabs) is `_full_data` optionally narrowed to `_range=(start,end)` via `dv.times.keep_daterange`.
 **Data ▸ Select date range…** opens `DateRangeDialog` (from/to pickers seeded and clamped to the data span); **Data ▸
 Reset to full range** clears the window. `_apply_range()` re-derives `_data`, retitles the window with the active
 window, enables/disables the reset action, and re-pushes. Engineered features merge into `_full_data`, so they survive a
@@ -442,13 +442,13 @@ incl. middle-click — is ignored). `tabBarDoubleClicked` fires for any button, 
 the double-click button and `_rename_tab` ignores middle/right ones. **Right-click a menu tab → Pin** freezes it on its current dataset: pinned tabs
 (`MainWindow._pinned`) are skipped by `_push_data` (cheap — references + pandas Copy-on-Write) and show a pin glyph
 (`icons.pin_icon`); unpin re-syncs. Overview/Log are never pinnable. The app/taskbar icon is drawn from the splash
-motif (`splash.app_icon`); a Windows AppUserModelID is set in `run()` so the taskbar uses it.
+motif (`splash.app_icon`); a Windows AppUserModelID is set in `_create_application()` (`gui/__init__.py`) so the taskbar uses it. `launch()` creates the app and paints the splash before importing `diive.gui.app`; menu tabs are imported on first open (`registry.LazyTab`); the startup load reads its data on a worker thread.
 
 **Hover tooltip (`HoverAnnotator`):** `MplCanvas` attaches one in its constructor; it works on every figure rendered into the
 canvas (Overview, plotting tabs) with no per-tab wiring. On mouse-move it shows a small box with the value under the cursor:
 **line** artists snap to the nearest sample along x (`np.searchsorted` on the unit-converted floats — use `get_xdata(orig=False)`,
 not the raw datetimes — so it stays O(log n) on large series) and show a marker; **`pcolormesh`** heatmaps read the cell from the
-grid (`get_coordinates()` + reshaped `get_array()`, cached per draw). It renders by **blitting** (cache the background on
+grid (`get_coordinates()` + reshaped `get_array()`, cached per draw), and 2-D **`AxesImage`** heatmaps (the Overview's) from their extent and array. A line thinned for drawing carries its full record in `_diive_hover_xy`, which the hover reads instead. Scatter pixel positions are cached per draw (sorted by x) for the 2-D nearest-point pick. It renders by **blitting** (cache the background on
 `draw_event`, redraw just the annotation on move), so it never forces a full repaint. Pure presentation — no data/domain logic —
 so it lives in the GUI. A **"Hover values"** checkbox in the canvas's bottom row (next to the navigation toolbar) toggles it
 (`hover.set_enabled`); the toolbar's own x/y coordinate readout is disabled (`coordinates=False`) since the tooltip replaces it.
@@ -513,4 +513,4 @@ panel only renders.
   its real size: `_solve_layout` briefly re-enables constrained, solves via `draw_without_rendering()`, and re-freezes.
   `_on_resize` (on `resize_event`) runs it at once for the first resize after a render and debounces the rest
   (`_RELAYOUT_DELAY_MS`), so dragging a window edge or splitter solves once when the size settles. Pan/zoom never
-  resizes, so it stays frozen there. Forgetting the resize half leaves panels collapsed.
+  resizes, so it stays frozen there. Forgetting the resize half leaves panels collapsed. The render is deferred too: the figure canvas (`_ResizeDeferringCanvas`) drops matplotlib's per-event redraw during a resize of a visible canvas and paints the last frame scaled until the settle render; the hover skips blitting while its background's size differs from the figure's.
