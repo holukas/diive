@@ -255,6 +255,29 @@ class TestPlots(unittest.TestCase):
         self.assertIsNotNone(ax.get_legend())
         plt.close(fig)
 
+    def test_dielcycle_leaves_linked_neighbours_labelled(self):
+        """Drawing a diel cycle must not hide another panel's shared-x tick labels.
+
+        It used to plot through pandas, which hides the x tick labels of every
+        non-bottom axes in the figure that shares its x-axis (and swaps in a
+        minor locator), blanking the dates of the GUI Overview's time series.
+        """
+        import matplotlib.ticker as mticker
+        import pandas as pd
+        from diive.core.plotting.dielcycle import DielCycle
+        idx = pd.date_range("2021-01-01", periods=48 * 60, freq="30min")
+        s = pd.Series([i % 48 for i in range(len(idx))], index=idx, name="ser", dtype=float)
+        fig = plt.figure()
+        gs = fig.add_gridspec(2, 2)
+        top = fig.add_subplot(gs[0, :])
+        top.plot(idx, s.to_numpy())
+        fig.add_subplot(gs[1, 0], sharex=top)
+        DielCycle(s).plot(ax=fig.add_subplot(gs[1, 1]))
+        fig.canvas.draw()
+        self.assertTrue(all(t.label1.get_visible() for t in top.xaxis.get_major_ticks()))
+        self.assertIsInstance(top.xaxis.get_minor_locator(), mticker.NullLocator)
+        plt.close(fig)
+
     def test_quickplot_keeps_same_named_series(self):
         """A list of same-named series must give one panel each, not one panel total.
 

@@ -589,9 +589,6 @@ class OverviewTab(DiiveTab):
         self.hero = _HeroBand()
         right_lay.addWidget(self.hero)
         self.canvas = MplCanvas()
-        # matplotlib hides the time-series x tick labels because it shares its
-        # x-axis with the panels below it; re-reveal them after every draw.
-        self.canvas.fig.canvas.mpl_connect("draw_event", self._reveal_ts_xlabels)
         right_lay.addWidget(self.canvas, stretch=1)
 
         splitter.addWidget(self.varpanel)
@@ -752,25 +749,6 @@ class OverviewTab(DiiveTab):
         pad = span * 0.5 if span > 0 else 5.0  # ±5 days around an instant
         ax.set_xlim(lo - pad, hi + pad)
         self.canvas.draw_idle()
-
-    def _reveal_ts_xlabels(self, _event) -> None:
-        """Re-show the time-series x tick labels after a draw.
-
-        The time series shares its x-axis with the panels below it, so matplotlib
-        (treating it as a non-bottom shared subplot) hides its tick labels and
-        re-hides them whenever the ticks regenerate (zoom/pan). Re-reveal them so
-        the main plot stays dated. A same-view redraw keeps the ticks, so the
-        follow-up draw settles; the visibility guard prevents a redraw loop."""
-        ax = getattr(self, "_shared_x_ax", None)
-        if ax is None:
-            return
-        changed = False
-        for tick in ax.xaxis.get_major_ticks():
-            if not tick.label1.get_visible():
-                tick.label1.set_visible(True)
-                changed = True
-        if changed:
-            self.canvas.draw_idle()
 
     def _overlay_events(self, panel_axes: dict) -> None:
         """Draw the configured events onto the datetime panels + heatmap."""
