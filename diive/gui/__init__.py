@@ -75,6 +75,12 @@ def _create_application():
 
 def launch() -> int:
     """Start the diive desktop GUI. Returns the Qt exit code."""
+    # In a frozen app, a worker process (see `widgets/worker.py`) is this
+    # executable started again: become that worker and exit instead of opening
+    # a second window. A no-op when not frozen. The packaged entry script
+    # calls it too, earlier; this covers other frozen entry points.
+    import multiprocessing
+    multiprocessing.freeze_support()
     _require_pyside6()
     from diive.gui.splash import create_splash, show_message
 

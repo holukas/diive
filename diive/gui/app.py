@@ -55,7 +55,7 @@ from diive.core.io.files import ALLOWED_TIMESTAMP_NAMES
 from diive.gui.widgets.daterange_dialog import DateRangeDialog
 from diive.gui.widgets.menu import studio_menu
 from diive.gui.widgets.open_data_dialog import OpenDataDialog
-from diive.gui.widgets.worker import WorkerRunner
+from diive.gui.widgets.worker import WorkerRunner, shutdown_process_pool
 
 #: Source name of the bundled example dataset (also its title-bar label).
 _EXAMPLE_SOURCE = "example data (CH-DAV)"
@@ -1847,6 +1847,9 @@ def run(app: QApplication | None = None, splash=None) -> int:
         splash = create_splash(app)
         splash.show()
     icon = app.windowIcon()
+    # Stop the shared worker process on quit. Left to itself, Python's exit
+    # would wait for a job still running in it before closing.
+    app.aboutToQuit.connect(shutdown_process_pool)
 
     # Restore saved preferences before building the window.
     cfg = config.load_config()

@@ -73,6 +73,9 @@ hiddenimports += [
 # (diive/gui/registry.py, `LazyTab`), so startup doesn't pay for xgboost/sklearn/
 # the flux chain. Static analysis cannot see those string imports; bundle every
 # module of the tabs package instead. A new menu tab must live in this package.
+# This also covers the worker process (diive/gui/widgets/worker.py): it finds a
+# job function such as SeasonalTrendTab._compute_payload by importing its module
+# by name, so a tab that opts into `use_process` needs no extra entry here.
 hiddenimports += collect_submodules("diive.gui.tabs")
 
 # --- heavy / dynamically-imported third-party packages -------------------
