@@ -10,12 +10,14 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
+import copy
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 
 import pandas as pd
 
-from PySide6.QtCore import QByteArray, QEvent, QRectF, QSize, Qt, QTimer
+from PySide6.QtCore import QByteArray, QEvent, QEventLoop, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -52,6 +54,10 @@ from diive.core.io.files import ALLOWED_TIMESTAMP_NAMES
 from diive.gui.widgets.daterange_dialog import DateRangeDialog
 from diive.gui.widgets.menu import studio_menu
 from diive.gui.widgets.open_data_dialog import OpenDataDialog
+from diive.gui.widgets.worker import WorkerRunner
+
+#: Source name of the bundled example dataset (also its title-bar label).
+_EXAMPLE_SOURCE = "example data (CH-DAV)"
 
 
 def _namespace_metadata(raw: dict, key: str) -> dict:
@@ -78,6 +84,31 @@ def _namespace_metadata(raw: dict, key: str) -> dict:
     else:
         userdata = {"tags": raw, "descriptions": {}}  # legacy flat name->tags
     return {key: userdata}
+
+
+def _read_startup_data(last_project):
+    """Read the last project, or the bundled example if that fails (worker side).
+
+    Returns ``("project", DiiveProject)`` or ``("example", DataFrame)``. File
+    reading only, so it runs off the GUI thread while the splash spins.
+    """
+    if last_project:
+        from diive.core.io.project import load_project
+        try:
+            return "project", load_project(last_project)
+        except Exception:
+            pass  # an unreadable last project falls back to the example
+    return "example", diive.load_exampledata_parquet()
+
+
+def _export_data(data, path: Path, ts_name: str, is_csv: bool) -> None:
+    """Write `data` as CSV or diive-format parquet (worker side)."""
+    if is_csv:
+        data.to_csv(path, index_label=ts_name)
+    else:
+        diive.save_parquet(
+            filename=path.stem, data=data, outpath=str(path.parent),
+            enforce_diive_format=True, timestamp_name=ts_name)
 
 
 class _StudioTabBar(QTabBar):
@@ -198,6 +229,16 @@ class MainWindow(QMainWindow):
         self._last_project_dir: str = self._config.get("last_project_dir") or ""
         self._last_project: str = self._config.get("last_project") or ""
         self._menu_tab_list: list = []  # open menu-activated tabs (multi-instance)
+        # File reads/writes (project open/save, export, startup load) run on this
+        # worker; the GUI-thread follow-up for the job in flight sits in
+        # `_io_then`. `_io_actions` (the menu entries that start or replace a
+        # load/save) are disabled while a job runs.
+        self._io = WorkerRunner(self)
+        self._io.done.connect(self._on_io_done)
+        self._io.failed.connect(self._on_io_failed)
+        self._io_then: tuple | None = None
+        self._io_actions: list = []
+        self._startup_done = None  # `run()`'s callback for the deferred first load
 
         self._tabs = []
         self._header = None  # set only in Studio chrome (None => native)
@@ -406,16 +447,22 @@ class MainWindow(QMainWindow):
             action.triggered.connect(slot)
             return action
 
+        def _io_act(text, slot, shortcut=None):
+            """An action that loads or saves data: disabled while a file job runs."""
+            action = _act(text, slot, shortcut)
+            self._io_actions.append(action)
+            return action
+
         _menu_tab_act = self._menu_tab_action  # shorthand, used throughout below
 
         file_menu = add_menu("&File")
-        file_menu.addAction(_act("&Open data file...", self._open_file, "Ctrl+O"))
-        file_menu.addAction(_act("Open &project...", self._open_project, "Ctrl+Shift+O"))
+        file_menu.addAction(_io_act("&Open data file...", self._open_file, "Ctrl+O"))
+        file_menu.addAction(_io_act("Open &project...", self._open_project, "Ctrl+Shift+O"))
         file_menu.addSeparator()
-        file_menu.addAction(_act("&Save project", self._save_project, "Ctrl+S"))
-        file_menu.addAction(_act("Save project &as...", self._save_project_as, "Ctrl+Shift+S"))
+        file_menu.addAction(_io_act("&Save project", self._save_project, "Ctrl+S"))
+        file_menu.addAction(_io_act("Save project &as...", self._save_project_as, "Ctrl+Shift+S"))
         file_menu.addSeparator()
-        file_menu.addAction(_act("&Export data as...", self._save_file))
+        file_menu.addAction(_io_act("&Export data as...", self._save_file))
         file_menu.addSeparator()
         # Database I/O (InfluxDB) folded in from its own former top-level menu as
         # a "Database ▸" submenu — it's just another data source/sink.
@@ -510,7 +557,7 @@ class MainWindow(QMainWindow):
                     menu.addSeparator()
 
         help_menu = add_menu("&Help")
-        help_menu.addAction(_act("Load &example data", self._load_example))
+        help_menu.addAction(_io_act("Load &example data", self._load_example))
         help_menu.addSeparator()
         help_menu.addAction(_act("&User manual", self._user_manual))
         help_menu.addAction(_act("&Changelog", self._changelog))
@@ -1232,7 +1279,7 @@ class MainWindow(QMainWindow):
     def _load_example(self) -> None:
         df = diive.load_exampledata_parquet()
         # The bundled example always opens clean — no persisted tags/notes.
-        self._set_data(df, source="example data (CH-DAV)", persist_metadata=False)
+        self._set_data(df, source=_EXAMPLE_SOURCE, persist_metadata=False)
 
     def _open_file(self) -> None:
         dlg = OpenDataDialog(self, can_add=self._full_data is not None)
@@ -1324,30 +1371,83 @@ class MainWindow(QMainWindow):
         # The chosen filter wins, but honour an explicit extension the user typed.
         is_csv = (p.suffix.lower() == ".csv"
                   or (p.suffix.lower() != ".parquet" and "csv" in selected.lower()))
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            if is_csv:
-                data = self._data.copy()
-                data.index.name = ts_name
-                if p.suffix.lower() != ".csv":
-                    p = p.with_suffix(".csv")
-                data.to_csv(p)
-            else:
-                diive.save_parquet(
-                    filename=p.stem, data=self._data, outpath=str(p.parent),
-                    enforce_diive_format=True, timestamp_name=ts_name)
-        except Exception as err:
+        if is_csv and p.suffix.lower() != ".csv":
+            p = p.with_suffix(".csv")
+        name = f"{p.stem}{'.csv' if is_csv else '.parquet'}"
+        # Written on the worker thread. `_data` is passed as is: writers rebind
+        # the dataset rather than mutate it (see `_add_features`), so the file
+        # gets the data as it was when Export was chosen.
+        self._run_io(f"Exporting {name}…", _export_data,
+                     (self._data, p, ts_name, is_csv),
+                     on_done=partial(self._on_exported, name),
+                     on_failed=self._on_export_failed)
+
+    def _on_exported(self, name: str, _result=None) -> None:
+        success(f"Exported {name}")
+
+    def _on_export_failed(self, message: str) -> None:
+        QMessageBox.critical(self, "Export failed", f"Could not export:\n{message}")
+
+    # --- file jobs (read/write on a worker thread) -----------------------
+    def _run_io(self, busy: str, fn, args: tuple, on_done, on_failed) -> bool:
+        """Run the file read/write `fn(*args)` on the worker thread.
+
+        Only the file access runs there. `on_done(result)` or
+        `on_failed(message)` then runs on the GUI thread, which is where every
+        state change happens. While the job runs, the load/save menu entries are
+        disabled and the header shows `busy`. Returns False, starting nothing,
+        if a job is already running.
+        """
+        if self._io.is_running:
+            return False
+        self._io_then = (on_done, on_failed)
+        self._set_io_busy(busy)
+        self._io.run(fn, *args)
+        return True
+
+    def _on_io_done(self, result) -> None:
+        on_done, _ = self._io_then
+        self._io_then = None
+        self._set_io_busy(None)
+        on_done(result)
+
+    def _on_io_failed(self, message: str) -> None:
+        _, on_failed = self._io_then
+        self._io_then = None
+        self._set_io_busy(None)
+        on_failed(message)
+
+    def _set_io_busy(self, text: str | None) -> None:
+        """Busy cursor + a note in the header while a file job runs."""
+        for action in self._io_actions:
+            action.setEnabled(text is None)
+        if text is not None:
+            QApplication.setOverrideCursor(Qt.CursorShape.BusyCursor)
+        else:
             QApplication.restoreOverrideCursor()
-            QMessageBox.critical(self, "Export failed", f"Could not export:\n{err}")
-            return
-        QApplication.restoreOverrideCursor()
-        success(f"Exported {p.stem}{'.csv' if is_csv else '.parquet'}")
+        if self._header is not None:
+            title = self.windowTitle()
+            self._header.set_title(f"{title} — {text}" if text else title)
+
+    def _wait_for_io(self) -> None:
+        """Return once the file job in flight, if any, has been handled.
+
+        Pumps events, holding back user input, at the caller's loop level. Not
+        a nested `QEventLoop`: at level 0 (tests) that would also run pending
+        `deleteLater`s, which the rest of the code never sees happen there.
+        Used before the window closes, so a save is never cut off by the process
+        exiting, and by tests that start a job and then check its result.
+        """
+        flags = (QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
+                 | QEventLoop.ProcessEventsFlag.WaitForMoreEvents)
+        while self._io.is_running:
+            QApplication.processEvents(flags)
 
     # --- projects ------------------------------------------------------
     def _save_project(self) -> None:
         """Ctrl+S: update the open project in place, or prompt if none is open."""
         if self._project_dir is not None:
-            self._write_project(self._project_dir, self._project_name)
+            self._write_project_async(self._project_dir, self._project_name)
         else:
             self._save_project_as()
 
@@ -1375,20 +1475,22 @@ class MainWindow(QMainWindow):
                 != QMessageBox.StandardButton.Yes:
             return
         self._last_project_dir = location
-        if self._write_project(folder, name):
-            self._project_dir, self._project_name = folder, name
-            self._last_project = str(folder)
-            self._source = name
-            self._apply_range()  # refresh title with the project name
+        self._write_project_async(folder, name, adopt=True)
 
     def _log_tab(self):
         """The always-on Log tab, located by type (order-independent)."""
         from diive.gui.tabs.log import LogTab
         return next((t for t in self._tabs if isinstance(t, LogTab)), None)
 
-    def _write_project(self, folder, name: str) -> bool:
-        """Write the current data + metadata + site/range into `folder`."""
-        from diive.core.io.project import DiiveProject, save_project
+    def _project_snapshot(self, name: str):
+        """The current data + metadata + site/range/tabs as a `DiiveProject`.
+
+        Built on the GUI thread. The metadata is deep-copied so a save running on
+        the worker writes this moment's state even if the user edits on. The
+        data needs no copy: writers rebind `_full_data` rather than mutate it
+        (see `_add_features`).
+        """
+        from diive.core.io.project import DiiveProject
         extras = {
             "site": site.manager.as_dict(),
             "events": events.manager.as_dict(),
@@ -1403,9 +1505,18 @@ class MainWindow(QMainWindow):
             "active_tab": self._tabwidget.tabText(self._tabwidget.currentIndex()),
             "log": self._log_tab().save_state() if self._log_tab() else None,
         }
-        project = DiiveProject(
+        return DiiveProject(
             name=name, data=self._full_data,
-            metadata=metadata_store.manager.store, extras=extras)
+            metadata=copy.deepcopy(metadata_store.manager.store), extras=extras)
+
+    def _write_project(self, folder, name: str) -> bool:
+        """Write the current state into `folder`, blocking until done.
+
+        For callers that need the file on disk straight away (tests, scripts);
+        the File menu saves through `_write_project_async`.
+        """
+        from diive.core.io.project import save_project
+        project = self._project_snapshot(name)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             save_project(folder, project)
@@ -1417,18 +1528,77 @@ class MainWindow(QMainWindow):
         success(f"Saved project '{name}'")
         return True
 
-    def _initial_load(self) -> None:
+    def _write_project_async(self, folder, name: str, adopt: bool = False) -> bool:
+        """Save the project with the file write on the worker thread.
+
+        `adopt` (Save as) makes the saved folder the open project, once the
+        write has succeeded.
+        """
+        from diive.core.io.project import save_project
+        return self._run_io(
+            f"Saving project '{name}'…", save_project,
+            (folder, self._project_snapshot(name)),
+            on_done=partial(self._on_project_saved, Path(folder), name, adopt),
+            on_failed=self._on_project_save_failed)
+
+    def _on_project_saved(self, folder: Path, name: str, adopt: bool,
+                          _result=None) -> None:
+        if adopt:
+            self._project_dir, self._project_name = folder, name
+            self._last_project = str(folder)
+            self._source = name
+            self._apply_range()  # refresh title with the project name
+        success(f"Saved project '{name}'")
+
+    def _on_project_save_failed(self, message: str) -> None:
+        QMessageBox.critical(self, "Save failed", f"Could not save project:\n{message}")
+
+    def _initial_load(self, on_finished=None) -> None:
         """Startup load: reopen the last project if it still exists, else the
-        bundled example data."""
+        bundled example data.
+
+        Without `on_finished` (the constructor's autoload, used by tests) this
+        blocks until the data is shown. With it (the real launch) the file is
+        read on the worker thread so the splash keeps spinning, and
+        `on_finished()` runs once the data is in place.
+        """
         from diive.core.io.project import is_project
         last = self._last_project
-        if last and is_project(last) and self._load_project_folder(last, announce=False):
+        last = last if last and is_project(last) else None
+        if on_finished is None:
+            if last and self._load_project_folder(last, announce=False):
+                return
+            self._load_example()
             return
-        self._load_example()
+        self._startup_done = on_finished
+        self._run_io("Loading…", _read_startup_data, (last,),
+                     on_done=partial(self._on_startup_read, last),
+                     on_failed=self._on_startup_failed)
+
+    def _on_startup_read(self, folder, result) -> None:
+        kind, payload = result
+        try:
+            if kind == "project":
+                self._apply_project(folder, payload)
+            else:
+                # The bundled example always opens clean — no persisted tags/notes.
+                self._set_data(payload, source=_EXAMPLE_SOURCE, persist_metadata=False)
+        finally:
+            self._finish_startup_load()
+
+    def _on_startup_failed(self, message: str) -> None:
+        self._finish_startup_load()
+        QMessageBox.critical(self, "Load failed",
+                             f"Could not load the startup data:\n{message}")
+
+    def _finish_startup_load(self) -> None:
+        done, self._startup_done = self._startup_done, None
+        if done is not None:
+            done()
 
     def _open_project(self) -> None:
-        """Pick a diive project folder and open it."""
-        from diive.core.io.project import is_project
+        """Pick a diive project folder and open it (read on the worker thread)."""
+        from diive.core.io.project import is_project, load_project
         start = self._last_project_dir or str(Path.home())
         folder = QFileDialog.getExistingDirectory(self, "Open diive project", start)
         if not folder:
@@ -1438,13 +1608,19 @@ class MainWindow(QMainWindow):
                 self, "Open project",
                 "That folder is not a diive project (no '__diive__' marker).")
             return
-        self._load_project_folder(folder)
+        self._run_io(f"Opening project '{Path(folder).name}'…", load_project, (folder,),
+                     on_done=partial(self._apply_project, folder),
+                     on_failed=self._on_project_open_failed)
+
+    def _on_project_open_failed(self, message: str) -> None:
+        QMessageBox.critical(self, "Open failed", f"Could not open project:\n{message}")
 
     def _load_project_folder(self, folder, announce: bool = True) -> bool:
-        """Load a project from `folder`, restoring data + metadata + site + range.
+        """Load a project from `folder`, blocking until it is shown.
 
-        `announce=False` (startup) suppresses the error dialog and just reports
-        failure so the caller can fall back to the example data.
+        `announce=False` suppresses the error dialog and just reports failure so
+        the caller can fall back to the example data. The File menu opens
+        projects through `_open_project`, which reads on the worker thread.
         """
         from diive.core.io.project import load_project
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
@@ -1457,7 +1633,11 @@ class MainWindow(QMainWindow):
                                      f"Could not open project:\n{err}")
             return False
         QApplication.restoreOverrideCursor()
+        self._apply_project(folder, project)
+        return True
 
+    def _apply_project(self, folder, project) -> None:
+        """Restore data + metadata + site + range + tabs from a read project."""
         # Restore site details first (so day/night-aware tabs see them on push).
         site_d = project.extras.get("site")
         if site_d:
@@ -1509,7 +1689,6 @@ class MainWindow(QMainWindow):
                 pass
         self._restore_active_tab(project.extras.get("active_tab"))
         success(f"Opened project '{project.name}'")
-        return True
 
     def _restore_active_tab(self, title) -> None:
         """Focus the tab the user had active when the project was saved."""
@@ -1600,6 +1779,9 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         """Persist preferences (theme, window geometry, last filetype) on exit."""
         from diive.gui.widgets import open_data_dialog as odd
+        # Let a running save finish (and its outcome register) before the
+        # window and, at app exit, the worker's daemon thread go away.
+        self._wait_for_io()
         # Stop reacting to the app-wide event store once closed (the singleton
         # outlives the window; a stale window must not react to later edits).
         try:
@@ -1671,12 +1853,15 @@ def run(app: QApplication | None = None, splash=None) -> int:
     window.show_filling_workarea()
     splash.raise_()
 
-    # Defer the data load (last project or example) onto the event loop so the
-    # splash's spinner actually animates during it, instead of freezing behind a
-    # blocking load in the constructor. The Overview also defers its first render
-    # a tick, so pump a few times to drain those before dropping the splash.
+    # Defer the data load (last project or example) onto the event loop and read
+    # the file on the worker thread, so the splash's spinner animates during it
+    # instead of freezing behind a blocking load in the constructor. The
+    # Overview also defers its first render a tick, so pump a few times to drain
+    # those before dropping the splash.
+    def _start_load() -> None:
+        window._initial_load(on_finished=_finish_startup)
+
     def _finish_startup() -> None:
-        window._initial_load()
         for _ in range(3):
             app.processEvents()
         splash.finish(window)
@@ -1686,5 +1871,5 @@ def run(app: QApplication | None = None, splash=None) -> int:
         # default taskbar icon. Re-applying once the handle is live fixes it.
         window.setWindowIcon(icon)
 
-    QTimer.singleShot(0, _finish_startup)
+    QTimer.singleShot(0, _start_load)
     return app.exec()

@@ -3806,6 +3806,7 @@ def test_project_save_and_open(window, tmp_path, monkeypatch):
     monkeypatch.setattr(QFileDialog, "getExistingDirectory",
                         staticmethod(lambda *a, **k: str(folder)))
     window._open_project()
+    window._wait_for_io()  # the read runs on the worker thread
     QApplication.processEvents()
 
     assert window._project_name == "Proj"
@@ -3875,6 +3876,7 @@ def test_project_load_does_not_materialise_previous_events(window, tmp_path, mon
     monkeypatch.setattr(QFileDialog, "getExistingDirectory",
                         staticmethod(lambda *a, **k: str(folder)))
     window._open_project()
+    window._wait_for_io()  # the read runs on the worker thread
     QApplication.processEvents()
     del window._sync_event_columns  # restore the bound method
 
@@ -4019,6 +4021,7 @@ def test_project_saves_and_restores_open_tabs(window, tmp_path, monkeypatch):
     monkeypatch.setattr(QFileDialog, "getExistingDirectory",
                         staticmethod(lambda *a, **k: str(folder)))
     window._open_project()
+    window._wait_for_io()  # the read runs on the worker thread
     QApplication.processEvents()
 
     restored = {t._menu_label for t in window._menu_tab_list}
@@ -4057,6 +4060,7 @@ def test_project_restores_per_tab_state(window, tmp_path, monkeypatch):
     monkeypatch.setattr(QFileDialog, "getExistingDirectory",
                         staticmethod(lambda *a, **k: str(folder)))
     window._open_project()
+    window._wait_for_io()  # the read runs on the worker thread
     QApplication.processEvents()
 
     drv2 = next(t for t in window._menu_tab_list if t._menu_label == "Driver explorer")
@@ -4071,6 +4075,134 @@ def test_project_restores_per_tab_state(window, tmp_path, monkeypatch):
     # The previously-active tab regains focus (not just landing on Overview).
     cur = window._tabwidget.currentIndex()
     assert window._tabwidget.tabText(cur) == "Time series 1"
+
+
+def test_project_save_runs_on_the_worker_and_blocks_reentry(window, tmp_path, monkeypatch):
+    """Ctrl+S writes on the worker thread; the load/save menu entries stay
+    disabled until the GUI thread has handled the result, and the file holds
+    the state from the moment Save was chosen."""
+    from diive.core.io import project as projmod
+    from diive.gui import metadata_store
+
+    gate = threading.Event()
+    saved = []
+    real_save = projmod.save_project
+
+    def gated_save(folder, project):
+        assert threading.current_thread() is not threading.main_thread()
+        gate.wait(10)
+        saved.append(project)
+        return real_save(folder, project)
+
+    monkeypatch.setattr(projmod, "save_project", gated_save)
+    folder = tmp_path / "P.diive"
+    window._project_dir, window._project_name = folder, "P"
+    var = str(window._data.columns[0])
+
+    window._save_project()
+    try:
+        assert window._io.is_running
+        assert window._io_actions and not any(a.isEnabled() for a in window._io_actions)
+        assert not window._run_io("again", lambda: None, (), print, print)
+        metadata_store.manager.add_user_tag(var, "late")  # an edit after Save
+    finally:
+        gate.set()
+    window._wait_for_io()
+
+    assert all(a.isEnabled() for a in window._io_actions)
+    assert projmod.is_project(folder)
+    assert "late" not in saved[0].metadata.get(var).tags
+    assert "late" in metadata_store.manager.store.get(var).tags
+
+
+def test_save_project_as_adopts_the_folder_once_written(window, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QDialog
+
+    from diive.gui.widgets import save_project_dialog
+
+    class _Dialog:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+
+        def values(self):
+            return "Saved", str(tmp_path)
+
+    monkeypatch.setattr(save_project_dialog, "SaveProjectDialog", _Dialog)
+    window._save_project_as()
+    assert window._project_dir is None  # not before the write has landed
+    window._wait_for_io()
+    assert window._project_dir == tmp_path / "Saved.diive"
+    assert window._project_name == "Saved"
+    assert window._last_project == str(tmp_path / "Saved.diive")
+
+
+def test_open_project_failure_keeps_the_current_data(window, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+    from diive.core.io import project as projmod
+
+    folder = tmp_path / "Broken.diive"
+    folder.mkdir()
+    (folder / projmod.MARKER_FILE).write_text("{}", encoding="utf-8")
+    (folder / projmod.MANIFEST_FILE).write_text("not json", encoding="utf-8")
+    errors = []
+    monkeypatch.setattr(QMessageBox, "critical",
+                        staticmethod(lambda *a, **k: errors.append(a[1])))
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory",
+                        staticmethod(lambda *a, **k: str(folder)))
+    before = window._full_data
+
+    window._open_project()
+    window._wait_for_io()
+
+    assert errors == ["Open failed"]
+    assert window._full_data is before
+    assert window._project_dir is None
+    assert all(a.isEnabled() for a in window._io_actions)
+
+
+@pytest.mark.parametrize("suffix", [".csv", ".parquet"])
+def test_export_writes_on_the_worker(window, tmp_path, monkeypatch, suffix):
+    from PySide6.QtWidgets import QFileDialog
+
+    out = tmp_path / f"data{suffix}"
+    selected = "CSV (*.csv)" if suffix == ".csv" else "Parquet (*.parquet)"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName",
+                        staticmethod(lambda *a, **k: (str(out), selected)))
+    window._save_file()
+    assert window._io.is_running  # the write is off the GUI thread
+    window._wait_for_io()
+
+    if suffix == ".csv":
+        back = pd.read_csv(out, index_col=0)
+    else:
+        back = pd.read_parquet(out)
+    assert back.index.name == window._data.index.name
+    assert len(back) == len(window._data)
+    assert [str(c) for c in back.columns] == [str(c) for c in window._data.columns]
+
+
+def test_initial_load_reads_in_the_background(window, tmp_path):
+    """The launch's first load reads on the worker (the splash keeps spinning)
+    and calls back once the data is shown; for the example and a last project."""
+    from diive.gui.app import MainWindow
+
+    window._write_project(tmp_path / "Proj.diive", "Proj")
+    for config, expect_project in (({}, None),
+                                   ({"last_project": str(tmp_path / "Proj.diive")}, "Proj")):
+        win = MainWindow(config=config, autoload=False)
+        try:
+            finished = []
+            win._initial_load(on_finished=lambda: finished.append(win._data is not None))
+            assert win._data is None and win._io.is_running
+            win._wait_for_io()
+            assert finished == [True]
+            assert win._project_name == expect_project
+        finally:
+            _destroy_window(win)
 
 
 def test_metadata_namespace_migrates_legacy_flat_config():
