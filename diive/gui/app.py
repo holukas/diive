@@ -11,6 +11,7 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import copy
+import time
 from datetime import datetime
 from functools import partial
 from pathlib import Path
@@ -1438,14 +1439,16 @@ class MainWindow(QMainWindow):
 
         Pumps events, holding back user input, at the caller's loop level. Not
         a nested `QEventLoop`: at level 0 (tests) that would also run pending
-        `deleteLater`s, which the rest of the code never sees happen there.
+        `deleteLater`s, which the rest of the code never sees happen there. It
+        polls rather than passing `WaitForMoreEvents`: with that flag a full
+        test run once hung for good in a test waiting here.
         Used before the window closes, so a save is never cut off by the process
         exiting, and by tests that start a job and then check its result.
         """
-        flags = (QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
-                 | QEventLoop.ProcessEventsFlag.WaitForMoreEvents)
         while self._io.is_running:
-            QApplication.processEvents(flags)
+            QApplication.processEvents(
+                QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents)
+            time.sleep(0.005)
 
     # --- projects ------------------------------------------------------
     def _save_project(self) -> None:
