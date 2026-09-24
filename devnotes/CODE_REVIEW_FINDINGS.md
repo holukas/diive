@@ -133,7 +133,7 @@ was the API-visible half of L49 and had gone unrecorded. The catalog and README 
 
 ---
 
-# Triage index — all 159 findings by severity
+# Triage index — all 160 findings by severity
 
 The detailed entries below stay grouped by review round and module. This index is the **fix order**.
 
@@ -288,10 +288,11 @@ self-announcing and nobody publishes one; a plausible-looking wrong number gets 
 | ~~L91~~ | ~~`hexbin.py` accepts, documents and forwards `show_less_xticklabels`, and nothing applies it~~ (done 2026-08-15) | `core/plotting/hexbin.py:272` |
 | ~~L95~~ | ~~`ScopPhysics.fct_unsc_gf` is `'FCT_UNSC_gfRF'` though the fill is XGBoost~~ (done 2026-08-15) — the suffix was hardcoded twice, which is why it drifted; now one string | `flux/lowres/selfheating.py` |
 
-## S5 — Cosmetic / dead / latent (45)
+## S5 — Cosmetic / dead / latent (46)
 
 | ID | Finding | Where |
 |---|---|---|
+| L152 | A multi-panel plot tab re-enables **Update plot** right after its own render: re-applying a panel's saved settings emits `changed` (open, read not reproduced) | `gui/tabs/plotting.py:683` |
 | ~~L147~~ | ~~**Menu-action lambdas capture `self`** — the actual, sole reason no `MainWindow` is ever collected (L105's real cause)~~ (done 2026-08-16) — all 7 lambdas out of `app.py`; **4 windows live -> 0**. ~55 remain elsewhere in `gui/`, mostly rescued by L106; the unrescued ones are listed in the entry | `gui/app.py:423` |
 | ~~L150~~ | ~~`plotfuncs.non_numeric_error(ax)` takes an `ax` and draws with `plt.text` — dead code, zero callers, so latent~~ (done 2026-08-17) — fails **silently**, no warning to notice | `core/plotting/plotfuncs.py:172` |
 | ~~L131~~ | ~~Histogram info box appends itself — the text is printed up to four times~~ (done 2026-08-17) — latent in-repo: every call site passes `method='n_bins'` or `show_info=False` | `core/plotting/histogram.py:160` |
@@ -4512,3 +4513,23 @@ Consequence is L105's, undiminished: every leaked window stays subscribed to `th
 into all of them (`theme.manager.apply()`: 2.15 s behind one window, 21 s behind thirty). Harmless in
 the shipped single-window app; it is the test suite and any embed-diive-in-a-bigger-app scenario that
 pay.
+
+# Round 6 — found during the GUI performance work (2026-09-24)
+
+**[ ] L152. A multi-panel plot tab re-enables *Update plot* right after its own render**
+
+`gui/tabs/plotting.py:683-692`, `gui/widgets/plot_settings.py:1569`
+
+`_render` disables the button (`self.update_btn.setEnabled(False)`, "a render applies the current
+settings"), then, for each panel, re-applies that panel's saved settings with
+`self.settings.apply_state(...)` and finally re-applies the active panel's. `apply_state` sets the
+widgets through `set_widget_value` without blocking their signals, so whenever a panel's saved
+values differ from what the controls showed, the controls emit, `settings.changed` fires, and
+`_mark_dirty` enables the button again. The user then sees *Update plot* active although nothing is
+pending, and clicking it re-renders for no change.
+
+Read, not reproduced: it needs a multi-panel tab (time series, diel cycle or cumulative stacked)
+whose panels carry different settings. Fix shape: block the settings panel's signals (or a
+re-entrancy flag checked by `_mark_dirty`) while `_render` re-applies panel state, and disable the
+button after that loop rather than before it. Spotted by a review agent during the GUI performance
+work (see `devnotes/GUI_PERFORMANCE.md`).
