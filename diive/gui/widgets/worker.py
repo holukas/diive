@@ -33,6 +33,12 @@ guard could start a second run and get interleaved results.
 ``_Signals`` objects this replaces did (a cross-thread queued emit), so a
 caller's slots see no change — only the boilerplate is centralised.
 
+:class:`LatestRunner` wraps a :class:`WorkerRunner` for views that recompute
+on every selection: instead of refusing a new job while one runs, it keeps the
+newest request queued, runs it when the current job ends, and delivers only
+the outcome of the newest request. An older result is dropped, so it can never
+be drawn over a newer selection.
+
 Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
@@ -106,3 +112,81 @@ class WorkerRunner(QObject):
             # has an empty str(), which would leave a bare "Failed: " in the
             # status line; fall back to the type name so it says something.
             self.failed.emit(str(payload) or type(payload).__name__)
+
+
+class LatestRunner(QObject):
+    """Runs one job at a time and delivers only the newest request's outcome.
+
+    ``submit`` starts a job at once when idle. While a job runs, it replaces the
+    queued request instead (a burst of selections leaves one queued job, the
+    last), which starts when the running job ends. A running job cannot be
+    stopped, so its result is simply discarded when a newer request exists.
+    ``cancel`` discards the running job's result and the queued request.
+
+    Signals, all on the GUI thread:
+
+      * ``done(object)`` / ``failed(str)`` — the newest request's outcome.
+      * ``settled`` — nothing is running or queued any more. Emitted after
+        ``done``/``failed`` (so a busy cue stays up while the owner draws the
+        result), and also when a discarded result arrives with nothing queued.
+    """
+
+    done = Signal(object)
+    failed = Signal(str)
+    settled = Signal()
+
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        # Deliberately parentless: while a job runs, its thread holds the inner
+        # runner, which must outlive this object (and its owner) until it has
+        # emitted. A Qt child would be deleted with us, and its emit would then
+        # raise on the worker thread.
+        self._runner = WorkerRunner()
+        self._runner.done.connect(self._on_done)
+        self._runner.failed.connect(self._on_failed)
+        self._seq = 0            # id of the newest request
+        self._running_seq = None
+        self._queued = None      # (seq, fn, args, kwargs) waiting for the runner
+
+    @property
+    def is_busy(self) -> bool:
+        """True while a job is running or queued."""
+        return self._runner.is_running or self._queued is not None
+
+    def submit(self, fn, *args, **kwargs) -> None:
+        """Request ``fn(*args, **kwargs)`` on a worker thread; newest request wins."""
+        self._seq += 1
+        job = (self._seq, fn, args, kwargs)
+        if self._runner.is_running:
+            self._queued = job
+        else:
+            self._start(job)
+
+    def cancel(self) -> None:
+        """Drop the queued request and discard the running job's result."""
+        self._seq += 1
+        self._queued = None
+
+    def _start(self, job) -> None:
+        self._queued = None
+        self._running_seq, fn, args, kwargs = job
+        self._runner.run(fn, *args, **kwargs)
+
+    def _on_done(self, payload) -> None:
+        self._settle(True, payload)
+
+    def _on_failed(self, message: str) -> None:
+        self._settle(False, message)
+
+    def _settle(self, ok: bool, value) -> None:
+        seq, self._running_seq = self._running_seq, None
+        if self._queued is not None:
+            self._start(self._queued)  # the finished job is stale by definition
+            return
+        if seq == self._seq:  # else it was cancelled while it ran
+            if ok:
+                self.done.emit(value)
+            else:
+                self.failed.emit(value)
+        if not self.is_busy:  # a done/failed handler may have submitted again
+            self.settled.emit()

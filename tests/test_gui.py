@@ -15,6 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import gc
 import sys
 import threading
+import time
 import traceback
 
 import pandas as pd
@@ -3863,6 +3864,63 @@ def test_worker_runner_reports_running_until_result_is_handled(app):
     QApplication.processEvents()
     assert failed == ["TimeoutError"]
     assert not runner.is_running
+
+
+def test_latest_runner_delivers_only_the_newest_request(app):
+    """A burst of requests while a job runs must leave one queued job (the
+    last), and only that job's outcome may be delivered; `cancel` discards a
+    running job's result but still reports the runner as settled."""
+    from diive.gui.widgets.worker import LatestRunner
+
+    gate = threading.Event()
+    ran = []
+
+    def job(name, block=False):
+        ran.append(name)
+        if block:
+            gate.wait(30)
+        return name
+
+    runner = LatestRunner()
+    done, failed, settled = [], [], []
+    runner.done.connect(done.append)
+    runner.failed.connect(failed.append)
+    runner.settled.connect(lambda: settled.append(True))
+
+    def wait_idle():
+        deadline = time.monotonic() + 30
+        while runner.is_busy and time.monotonic() < deadline:
+            QApplication.processEvents()
+            time.sleep(0.005)
+        assert not runner.is_busy
+
+    runner.submit(job, "first", block=True)
+    runner.submit(job, "second")
+    runner.submit(job, "third")
+    assert runner.is_busy
+    gate.set()
+    wait_idle()
+    assert ran == ["first", "third"]  # "second" was replaced before it ran
+    assert done == ["third"]           # "first" finished, but was stale
+    assert failed == [] and len(settled) == 1
+
+    # Cancelled while running: no result, but the owner still hears `settled`.
+    gate.clear()
+    done.clear()
+    settled.clear()
+    runner.submit(job, "cancelled", block=True)
+    runner.cancel()
+    gate.set()
+    wait_idle()
+    assert done == [] and len(settled) == 1
+
+    # A failure of the newest request goes to `failed`.
+    def boom():
+        raise ValueError("bad input")
+
+    runner.submit(boom)
+    wait_idle()
+    assert failed == ["bad input"]
 
 
 def test_outlier_compute_payload_writes_no_tab_state(window):
