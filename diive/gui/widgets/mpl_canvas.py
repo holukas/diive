@@ -20,8 +20,8 @@ from matplotlib.backends.backend_qtagg import (
     NavigationToolbar2QT,
 )
 from matplotlib.figure import Figure
-from PySide6.QtCore import QEvent, QTimer
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import QEvent, QRectF, QTimer
+from PySide6.QtGui import QColor, QImage, QPainter, QPalette
 from PySide6.QtWidgets import (
     QAbstractScrollArea,
     QApplication,
@@ -34,8 +34,99 @@ from PySide6.QtWidgets import (
 )
 
 
-#: Quiet time after the last resize event before the layout is re-solved.
+#: Quiet time after the last resize event before the layout is re-solved and
+#: the figure rendered at the new size.
 _RELAYOUT_DELAY_MS = 120
+
+
+class _ResizeDeferringCanvas(FigureCanvasQTAgg):
+    """`FigureCanvasQTAgg` that can hold back the render a resize queues.
+
+    matplotlib's `resizeEvent` ends in `draw_idle()`, a full Agg render per
+    resize event, so dragging a window edge or a splitter re-renders the whole
+    figure on every step. The owning `MplCanvas` decides per event, from its
+    resize_event callback, whether that render can wait until the size has
+    settled. If so, `defer_resize_draw()` drops it, and until the settle render
+    the canvas paints its last frame scaled to the new size.
+
+    That frame is a copy taken at the first deferred resize, not the live Agg
+    buffer: `get_renderer()` replaces the buffer with a blank one as soon as
+    anything asks for a renderer at the new size.
+    """
+
+    # Class-level defaults, so the overrides below work even when matplotlib's
+    # __init__ reaches them before this class could set instance attributes.
+    _resizing = False       # inside resizeEvent
+    _defer_draw = False     # skip the draw_idle() that ends this resizeEvent
+    _last_frame = None      # QImage painted while the settle render is pending
+    _settle_timer = None    # the owner's timer; active until the size settles
+
+    def set_settle_timer(self, timer: QTimer) -> None:
+        """The owner's settle timer; the scaled frame is painted only while it runs."""
+        self._settle_timer = timer
+
+    def settling(self) -> bool:
+        """True while a deferred settle render is still to come."""
+        return self._settle_timer is not None and self._settle_timer.isActive()
+
+    def defer_resize_draw(self) -> None:
+        """Skip the render of the resize event being handled.
+
+        Call from a resize_event callback; the settle timer renders once
+        instead. With nothing rendered yet there is no frame to show, so the
+        render goes ahead."""
+        if not self._resizing:
+            return
+        if self._last_frame is None:
+            self._last_frame = self._snapshot()
+        self._defer_draw = self._last_frame is not None
+
+    def _snapshot(self) -> QImage | None:
+        renderer = getattr(self, "renderer", None)
+        if renderer is None:
+            return None
+        w, h = int(renderer.width), int(renderer.height)
+        if w <= 0 or h <= 0:
+            return None
+        image = QImage(renderer.buffer_rgba(), w, h, 4 * w,
+                       QImage.Format.Format_RGBA8888).copy()
+        image.setDevicePixelRatio(self.device_pixel_ratio)
+        return image
+
+    def resizeEvent(self, event):
+        self._resizing = True
+        self._defer_draw = False
+        try:
+            super().resizeEvent(event)
+        finally:
+            self._resizing = False
+            self._defer_draw = False
+
+    def draw_idle(self):
+        if self._resizing and self._defer_draw:
+            return  # the settle timer renders at the final size
+        super().draw_idle()
+
+    def draw(self):
+        super().draw()
+        self._last_frame = None  # the buffer matches the widget size again
+
+    def paintEvent(self, event):
+        if self._last_frame is not None and not self._draw_pending:
+            if self.settling():
+                painter = QPainter(self)
+                try:
+                    painter.setRenderHint(
+                        QPainter.RenderHint.SmoothPixmapTransform)
+                    painter.drawImage(QRectF(self.rect()), self._last_frame)
+                finally:
+                    painter.end()
+                return
+            # The settle render will not come (its timer was stopped). Render
+            # now: the Agg buffer does not match the widget size, and copying
+            # it would paint a blank or misplaced image.
+            self._draw_pending = True
+        super().paintEvent(event)
 
 
 class _SaveDpiToolbar(NavigationToolbar2QT):
@@ -98,7 +189,7 @@ class MplCanvas(QWidget):
         self.auto_layout = True
 
         self.fig = Figure(layout="constrained", facecolor="white")
-        self._canvas = FigureCanvasQTAgg(self.fig)
+        self._canvas = _ResizeDeferringCanvas(self.fig)
         # coordinates=False drops the toolbar's x/y readout label (not needed
         # here -- the hover tooltip shows values instead).
         # DPI spinbox for figure export; the toolbar's Save reads it (see
@@ -147,6 +238,7 @@ class MplCanvas(QWidget):
         self._relayout_timer.setSingleShot(True)
         self._relayout_timer.setInterval(_RELAYOUT_DELAY_MS)
         self._relayout_timer.timeout.connect(self._relayout)
+        self._canvas.set_settle_timer(self._relayout_timer)
 
         # The matplotlib canvas accepts wheel events, so a wheel over a plot
         # embedded in a scroll area (e.g. the results dashboards) would not
@@ -235,32 +327,35 @@ class MplCanvas(QWidget):
             self._toolbar.push_current()
 
     def _on_resize(self, _event) -> None:
-        """Re-solve the constrained layout for the new size (see `_relayout`).
+        """Re-solve the layout and re-render for the new size (see `_relayout`).
 
-        The first resize after a render solves at once: a render often happens
-        before the canvas has its real size (pre-show, or in a hidden tab), and
-        that layout would show collapsed until the next solve. Later resizes
-        (dragging the window edge or a splitter) are debounced, so the solve runs
-        once when the size settles instead of on every resize event; until then
-        the frozen layout scales with the canvas.
+        The first resize after a render solves the layout and renders at once:
+        a render often happens before the canvas has its real size (pre-show,
+        or in a hidden tab), and that layout would show collapsed until the
+        next solve. Later resizes (dragging the window edge or a splitter) are
+        debounced: the solve and the render run once, when the size settles,
+        instead of on every resize event. Until then a visible canvas paints
+        its last frame scaled to the new size. A hidden canvas renders at once
+        as before: Qt delivers its resize only when it is shown, as one event.
         """
-        if not self.auto_layout:
-            return  # the plot manages its own layout (e.g. ridgeline)
         if not self.fig.axes:
             # Cleared for a render that is being built: nothing to lay out,
             # and the render's own draw() solves the layout at this size.
             return
         if self._fresh_layout:
             self._fresh_layout = False
-            self._solve_layout()
-            return
+            if self.auto_layout:  # else the plot manages its own layout
+                self._solve_layout()
+            return  # matplotlib's queued draw renders the new size at once
         self._relayout_timer.start()
+        if self._canvas.isVisible():
+            self._canvas.defer_resize_draw()
 
     def _relayout(self) -> None:
-        """Debounced resize: solve the layout at the settled size and repaint."""
-        if not self.auto_layout:
-            return
-        self._solve_layout()
+        """Debounced resize: solve the layout at the settled size and render."""
+        self._relayout_timer.stop()  # also when a test emits the timeout
+        if self.auto_layout and self.fig.axes:
+            self._solve_layout()
         self._canvas.draw_idle()
 
     def _solve_layout(self) -> None:
@@ -296,6 +391,9 @@ class MplCanvas(QWidget):
         self.fig.clear()
         self.fig.set_layout_engine("constrained")
         self._fresh_layout = True
+        # A pending settle belongs to the old figure; the new render solves
+        # and draws at the current size itself.
+        self._relayout_timer.stop()
 
     def draw(self) -> None:
         """Repaint synchronously, then freeze the computed layout.

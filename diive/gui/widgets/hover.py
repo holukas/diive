@@ -51,6 +51,7 @@ class HoverAnnotator:
         self.fig = mpl_canvas.fig
         self._canvas = mpl_canvas._canvas  # FigureCanvasQTAgg
         self._bg = None                    # cached background for blitting
+        self._bg_size = None               # figure size the background was taken at
         self._annotations: dict = {}       # ax -> annotation artist
         self._markers: dict = {}           # ax -> marker Line2D
         self._mesh_cache: dict = {}        # id(QuadMesh/AxesImage) -> (xb, yb, values)
@@ -70,7 +71,17 @@ class HoverAnnotator:
         self._markers.clear()
         self._mesh_cache.clear()
         self._bg = self._canvas.copy_from_bbox(self.fig.bbox)
+        self._bg_size = tuple(self.fig.bbox.size)
         self._visible = False
+
+    def _bg_matches(self) -> bool:
+        """True when the cached background has the figure's current size.
+
+        While a resize settles the canvas defers its render (see
+        `MplCanvas._on_resize`), so the figure is already larger or smaller
+        than the last draw. Blitting then would ask for a renderer at the new
+        size, which replaces the rendered buffer with a blank one."""
+        return self._bg is not None and self._bg_size == tuple(self.fig.bbox.size)
 
     def _annotation_for(self, ax):
         ann = self._annotations.get(ax)
@@ -109,7 +120,7 @@ class HoverAnnotator:
         if not self._enabled:
             return
         ax = event.inaxes
-        if ax is None or self._bg is None or event.xdata is None:
+        if ax is None or not self._bg_matches() or event.xdata is None:
             self._hide()
             return
         hit = self._value_at(ax, event)
@@ -139,7 +150,7 @@ class HoverAnnotator:
             ann.set_visible(False)
         for marker in self._markers.values():
             marker.set_visible(False)
-        if self._visible and self._bg is not None:
+        if self._visible and self._bg_matches():
             self._canvas.restore_region(self._bg)
             self._canvas.blit(self.fig.bbox)
         self._visible = False
