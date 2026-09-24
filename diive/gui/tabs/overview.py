@@ -15,8 +15,9 @@ from html import escape
 
 import matplotlib.dates as mdates
 import pandas as pd
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -597,6 +598,7 @@ class OverviewTab(DiiveTab):
         self.canvas = MplCanvas()
         self._zoom_debounce = Debouncer(self.canvas, self._refresh_zoom_summaries,
                                         ms=_ZOOM_SETTLE_MS)
+        self.canvas.mpl_connect("draw_event", self._on_canvas_draw)
         right_lay.addWidget(self.canvas, stretch=1)
 
         splitter.addWidget(self.varpanel)
@@ -684,6 +686,12 @@ class OverviewTab(DiiveTab):
         # Clear + re-enable constrained layout (canvas.draw() freezes it after,
         # so zoom/pan don't reflow the panels).
         self.canvas.reset_layout()
+        # The hero band above may just have changed height (its stats wrap
+        # differently per variable). Settle the canvas size now, while the
+        # figure is empty, so the layout is solved once, at the final size.
+        # Otherwise the resize arrives after the draw and solves the full
+        # figure again, plus a second full draw.
+        QApplication.sendPostedEvents(None, QEvent.Type.LayoutRequest)
         # Pack the panels tighter (less whitespace between them, esp. the three
         # lower panels) while keeping room for tick labels.
         engine = fig.get_layout_engine()
@@ -910,6 +918,17 @@ class OverviewTab(DiiveTab):
         finally:
             self._syncing_zoom = False
         self.canvas.draw_idle()
+
+    def _on_canvas_draw(self, _event) -> None:
+        """Restart a pending summary refresh once a repaint has finished.
+
+        A pan repaint can take longer than the settle time, so the wait started
+        by the limit change would run out during the repaint itself and the
+        summaries were rebuilt between two pan steps. Counting the quiet time
+        from the end of the repaint keeps them for when the view has settled.
+        """
+        if self._zoom_debounce.pending():
+            self._zoom_debounce.trigger()
 
     def _draw_panel(self, ax, series, plot_type: str) -> None:
         try:

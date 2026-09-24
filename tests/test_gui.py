@@ -1230,6 +1230,54 @@ def test_overview_zoom_recomputes_summaries_once_settled(window):
     assert diel_ax.get_lines()[0] is not diel_line
 
 
+def test_overview_pan_repaint_restarts_the_settle_wait(window, monkeypatch):
+    # A repaint slower than the settle time must not let the pending summary
+    # refresh run between two pan steps: each finished repaint restarts it.
+    overview = window._tabs[0]
+    overview._on_select("NEE_CUT_REF_f")
+    QApplication.processEvents()
+    ts_ax = overview._shared_x_ax
+    x0, x1 = ts_ax.get_xlim()
+    restarts = []
+    original = overview._zoom_debounce.trigger
+    monkeypatch.setattr(overview._zoom_debounce, "trigger",
+                        lambda *a: (restarts.append(1), original()))
+    ts_ax.set_xlim(x0 + (x1 - x0) * 0.2, x0 + (x1 - x0) * 0.5)
+    assert restarts == [1] and overview._zoom_debounce.pending()
+    overview.canvas._canvas.draw()
+    assert restarts == [1, 1] and overview._zoom_debounce.pending()
+    overview._zoom_debounce.flush()
+    overview.canvas._canvas.draw()  # nothing pending: no restart
+    assert restarts == [1, 1] and not overview._zoom_debounce.pending()
+
+
+def test_overview_select_draws_the_figure_once_when_the_hero_resizes(window, monkeypatch):
+    # The hero band above the figure can change height per variable. The
+    # canvas must take its new size before the figure is drawn, so a select
+    # costs one figure draw, not a draw plus a relayout and a second draw.
+    from matplotlib.figure import Figure
+    overview = window._tabs[0]
+    overview._on_select("NEE_CUT_REF_f")
+    QApplication.processEvents()
+    height_before = overview.canvas.height()
+    hero, set_variable = overview.hero, overview.hero.set_variable
+
+    def taller_for_this_variable(name, series):
+        set_variable(name, series)
+        hero.setMinimumHeight(hero.height() + 60)
+
+    monkeypatch.setattr(hero, "set_variable", taller_for_this_variable)
+    draws = []
+    original = Figure.draw
+    monkeypatch.setattr(Figure, "draw", lambda fig, r: (draws.append(1), original(fig, r))[1])
+    overview._on_select("Tair_f")
+    QApplication.processEvents()
+    QApplication.processEvents()
+    assert overview.canvas.height() < height_before
+    assert overview._current == "Tair_f"
+    assert len(draws) == 1
+
+
 def test_combine_cmap_redraws_only_for_known_names(app):
     import numpy as np
     from diive.gui.tabs.combine_variables import CombineVariablesTab
