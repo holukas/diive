@@ -178,6 +178,36 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
         row[:5] = [0.01, 30.0, 0.1, 5.0, 150.0]  # alpha, beta, k, rref, e0
         self.assertEqual(_check_parameters(row), 1)
 
+    def test_switch_rejects_alpha_left_at_the_starting_guess(self):
+        # The same window with the switch on: the check works as ONEFlux's own
+        # comment intends. A fitted alpha still passes.
+        from diive.flux.partitioning.daytime_oneflux import _check_parameters
+        row = np.zeros(10, dtype=np.float32)
+        row[:5] = [0.01, 30.0, 0.1, 5.0, 150.0]
+        self.assertEqual(_check_parameters(row, reject_alpha_at_start=True), 0)
+        row[0] = 0.02
+        self.assertEqual(_check_parameters(row, reject_alpha_at_start=True), 1)
+
+    def test_switch_reaches_the_window_check(self):
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        from diive.flux.partitioning import daytime_oneflux as mod
+        real = mod._check_parameters
+        seen = []
+
+        def spy(p, reject_alpha_at_start=False):
+            seen.append(reject_alpha_at_start)
+            return real(p, reject_alpha_at_start)
+
+        short = self.short
+        with mock.patch.object(mod, '_check_parameters', side_effect=spy):
+            DaytimePartitioningOneFlux(
+                nee=short['NEE_CUT_REF_orig'], ta=short['Tair_orig'],
+                sw_in=short['Rg_orig'], ta_f=short['Tair_f'],
+                sw_in_f=short['Rg_f'], vpd=short['VPD_f'],
+                reject_alpha_at_start=True, verbose=0).run()
+        self.assertGreater(len(seen), 0)
+        self.assertTrue(all(seen))
+
     def test_missing_gap_filled_driver_gives_nan_not_a_value(self):
         # A missing gap-filled driver used to reach the models as -9999 and come
         # back as a finite flux (RECO near 1000 at -9999 degC). RECO needs TA,
@@ -209,9 +239,9 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
         real = mod._check_parameters
         dtypes = []
 
-        def spy(p):
+        def spy(p, reject_alpha_at_start=False):
             dtypes.append(np.asarray(p).dtype)
-            return real(p)
+            return real(p, reject_alpha_at_start)
 
         short = self.short
         with mock.patch.object(mod, '_check_parameters', side_effect=spy):

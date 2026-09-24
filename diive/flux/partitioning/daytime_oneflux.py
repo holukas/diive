@@ -308,7 +308,7 @@ def _fit(lts_func, dep, indeps, npara, xguess, mprior, sigm, sigd):
     return res
 
 
-def _check_parameters(p):
+def _check_parameters(p, reject_alpha_at_start=False):
     """Port of library.check_parameters. p = [alpha,beta,k,rref,e0,*se...]."""
     # Widen to float64 before comparing. ONEFlux passes a row of its float32
     # `params` table and compares it against the Python floats in `fguess`,
@@ -316,11 +316,16 @@ def _check_parameters(p):
     # the Python float to float32 (NEP 50). The difference decides the last
     # condition below, `p[0] != FGUESS0[0]`: float32(0.01) != 0.01 in float64,
     # so a window whose alpha never left the starting guess still passes.
+    # That is a bug in ONEFlux (its comment and the PV-Wave original reject
+    # such a window); `reject_alpha_at_start` compares in float32 instead,
+    # which is what the check was written to do.
+    alpha_start = np.float32(FGUESS0[0]) if reject_alpha_at_start else FGUESS0[0]
+    alpha = np.float32(p[0]) if reject_alpha_at_start else np.float64(p[0])
     p = np.asarray(p, dtype=np.float64)
     is_ok = 0
     if (p[0] >= 0) and (p[0] < 0.22) and (p[1] >= 0) and (p[1] < 250) \
             and (p[2] >= 0) and (p[3] > 0) and (p[4] >= 50) and (p[4] <= 400) \
-            and (p[0] != FGUESS0[0]):
+            and (alpha != alpha_start):
         is_ok = 1
     if (p[1] > 100) and (p[1] < p[6]):
         is_ok = 0
@@ -388,7 +393,7 @@ def _uncert_via_gapfill(nee, rg, ta, vpd, hr, nperday, longest_marginal_gap=60):
 # --------------------------------------------------------------------------- #
 # Stage B: per-window parameter estimation (port of daytime.estimate_parasets)
 # --------------------------------------------------------------------------- #
-def _estimate_parasets(D, nperday, verbose=1):
+def _estimate_parasets(D, nperday, verbose=1, reject_alpha_at_start=False):
     """Per-window LRC parameter estimation.
 
     ``D`` holds the year's arrays: nee_f, nee_fqc, tair_f, rg_f, vpd_f, rg_meas
@@ -601,12 +606,12 @@ def _estimate_parasets(D, nperday, verbose=1):
                     jtj[j] = 0
                     jtj[j, 0, 0] = np.asarray(r['cov_matrix']).flatten()[0]
 
-                if _check_parameters(pj[j]) == 0:
+                if _check_parameters(pj[j], reject_alpha_at_start) == 0:
                     rmse[j] = 9999.0
             # end for j
 
             jmin = int(np.where(rmse == np.min(np.abs(rmse)))[0][0])
-            if _check_parameters(pj[jmin]) == 1:
+            if _check_parameters(pj[jmin], reject_alpha_at_start) == 1:
                 params_ok.append(pj[jmin].copy())
                 ind_ok.append(indj[jmin].copy())
                 whichmodel_ok.append(int(wm[jmin]))
@@ -764,7 +769,7 @@ def _compute_var(n, tair_f, rg_f, vpd_f, params_ok, central, whichmodel, jtj_ok,
 # Orchestrator (one calendar year)
 # --------------------------------------------------------------------------- #
 def _partition_one_year(nee, ta, sw_in, ta_f, sw_in_f, vpd, julday, hr, nperday,
-                        verbose=1):
+                        verbose=1, reject_alpha_at_start=False):
     """Run the ONEFlux daytime partitioning for one year of -9999-sentinel arrays."""
     n = nee.size
     out = {c: np.full(n, np.nan) for c in
@@ -783,7 +788,8 @@ def _partition_one_year(nee, ta, sw_in, ta_f, sw_in_f, vpd, julday, hr, nperday,
     )
 
     # Stage B: per-window parameters
-    params_ok, ind_ok, whichmodel, jtj_ok, rescor = _estimate_parasets(D, nperday, verbose)
+    params_ok, ind_ok, whichmodel, jtj_ok, rescor = _estimate_parasets(
+        D, nperday, verbose, reject_alpha_at_start)
     if not params_ok:
         warn("Daytime partitioning (ONEFlux): no light-response curve could be "
              "fitted; year left unpartitioned.", verbose=verbose)
@@ -889,6 +895,7 @@ class DaytimePartitioningOneFlux:
                  sw_in_f: Series,
                  vpd: Series,
                  vpd_in_kpa: bool = True,
+                 reject_alpha_at_start: bool = False,
                  verbose: int = 2):
         """
         Args:
@@ -911,11 +918,19 @@ class DaytimePartitioningOneFlux:
                 ``vpd`` is already in hPa.
             vpd_in_kpa: If True (default), ``vpd`` is in kPa and multiplied by 10
                 to hPa internally.
+            reject_alpha_at_start: ONEFlux's window check is meant to reject a
+                window whose alpha never moved off its starting value of 0.01,
+                but in ONEFlux 1.3.7 the check compares a float32 against a
+                float64 and never fires. False (default) reproduces ONEFlux, so
+                the results match its output. True applies the check as ONEFlux's
+                own comment intends. On CH-DAV 2016 that rejects 7 more windows
+                and raises annual GPP by 5.7%, in ONEFlux and here alike.
             verbose: Console verbosity level (0 silent, 1 warnings, 2 progress
                 + report, 3 debug). Default 2.
         """
         self._inputs = self._validate(nee, ta, sw_in, ta_f, sw_in_f, vpd)
         self.vpd_in_kpa = bool(vpd_in_kpa)
+        self.reject_alpha_at_start = bool(reject_alpha_at_start)
         self.verbose = verbose
         self._results: DataFrame | None = None
 
@@ -977,7 +992,7 @@ class DaytimePartitioningOneFlux:
                 sw_in_f=_to_sentinel(df['sw_in_f'].to_numpy()[ym]),
                 vpd=_to_sentinel(df['vpd'].to_numpy()[ym] * vpd_factor),
                 julday=julday, hr=hr_all[ym], nperday=nperday,
-                verbose=self.verbose)
+                verbose=self.verbose, reject_alpha_at_start=self.reject_alpha_at_start)
             for col in cols:
                 result.loc[ym, col] = out[col]
 
@@ -1024,6 +1039,7 @@ class DaytimePartitioningOneFlux:
 def partition_nee_daytime_oneflux(nee: Series, ta: Series, sw_in: Series,
                                   ta_f: Series, sw_in_f: Series, vpd: Series,
                                   vpd_in_kpa: bool = True,
+                                  reject_alpha_at_start: bool = False,
                                   verbose: int = 2) -> DataFrame:
     """Functional wrapper around :class:`DaytimePartitioningOneFlux`.
 
@@ -1034,4 +1050,5 @@ def partition_nee_daytime_oneflux(nee: Series, ta: Series, sw_in: Series,
     """
     return DaytimePartitioningOneFlux(
         nee=nee, ta=ta, sw_in=sw_in, ta_f=ta_f, sw_in_f=sw_in_f, vpd=vpd,
-        vpd_in_kpa=vpd_in_kpa, verbose=verbose).run().results
+        vpd_in_kpa=vpd_in_kpa, reject_alpha_at_start=reject_alpha_at_start,
+        verbose=verbose).run().results
