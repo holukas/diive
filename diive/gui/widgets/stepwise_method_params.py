@@ -192,33 +192,34 @@ class LocalSDParams(_StepParams):
             self.n_sd_nt.setValue(self.n_sd.value())
 
     def kwargs(self) -> dict:
-        win = self.winsize.value() or None
+        kw = dict(n_sd=self.n_sd.value(), winsize=self.winsize.value() or None,
+                  constant_sd=self.constant_cb.isChecked(),
+                  separate_day_night=self.dn_cb.isChecked(),
+                  **self._repeat_kwargs())
         if self.dn_cb.isChecked():
-            # LocalSD takes list [daytime, nighttime] for the per-period split.
-            n_sd = [self.n_sd_dt.value(), self.n_sd_nt.value()]
-            winsize = [win, win] if win is not None else None
-        else:
-            n_sd = self.n_sd.value()
-            winsize = win
-        return dict(n_sd=n_sd, winsize=winsize, constant_sd=self.constant_cb.isChecked(),
-                    separate_day_night=self.dn_cb.isChecked(),
-                    **self._repeat_kwargs())
+            kw.update(n_sd_daytime=self.n_sd_dt.value(),
+                      n_sd_nighttime=self.n_sd_nt.value())
+        return kw
 
     def load(self, kwargs: dict) -> None:
         self.constant_cb.setChecked(bool(kwargs.get("constant_sd", False)))
-        dn = bool(kwargs.get("separate_day_night", False))
-        self.dn_cb.setChecked(dn)
         n_sd = kwargs.get("n_sd", self.n_sd.value())
         win = kwargs.get("winsize", 0)
-        if dn and isinstance(n_sd, (list, tuple)):
-            self.n_sd_dt.setValue(float(n_sd[0]))
-            self.n_sd_nt.setValue(float(n_sd[1]))
-            win0 = win[0] if isinstance(win, (list, tuple)) and win else win
-            self.winsize.setValue(int(win0) if win0 else 0)
-        else:
-            val = n_sd[0] if isinstance(n_sd, (list, tuple)) else n_sd
-            self.n_sd.setValue(float(val))
-            self.winsize.setValue(int(win) if isinstance(win, int) and win else 0)
+        # Projects saved before v0.91.2 store [daytime, nighttime] lists here.
+        if isinstance(n_sd, (list, tuple)):
+            kwargs = {**kwargs, "n_sd_daytime": n_sd[0], "n_sd_nighttime": n_sd[1]}
+            n_sd = n_sd[0]
+        if isinstance(win, (list, tuple)):
+            win = win[0] if win else 0
+        self.n_sd.setValue(float(n_sd))
+        self.winsize.setValue(int(win) if win else 0)
+        # Set the toggle first (it seeds the per-period spins from the global
+        # value), then overwrite with the saved per-period thresholds.
+        self.dn_cb.setChecked(bool(kwargs.get("separate_day_night", False)))
+        if kwargs.get("n_sd_daytime") is not None:
+            self.n_sd_dt.setValue(float(kwargs["n_sd_daytime"]))
+        if kwargs.get("n_sd_nighttime") is not None:
+            self.n_sd_nt.setValue(float(kwargs["n_sd_nighttime"]))
         self.repeat_cb.setChecked(bool(kwargs.get("repeat", True)))
 
 
@@ -305,7 +306,8 @@ class LOFParams(_StepParams):
         form.addRow("Contamination (0=auto)", self.contamination)
         self.dn_cb = QCheckBox("Separate daytime / nighttime")
         form.addRow(self.dn_cb)
-        self._add_repeat(form)
+        # A repeated pass flags the contamination fraction again each time.
+        self._add_repeat(form, default=False)
 
     def kwargs(self) -> dict:
         return dict(
@@ -321,7 +323,7 @@ class LOFParams(_StepParams):
         cont = kwargs.get("contamination")
         self.contamination.setValue(float(cont) if cont else 0.0)
         self.dn_cb.setChecked(bool(kwargs.get("separate_day_night", False)))
-        self.repeat_cb.setChecked(bool(kwargs.get("repeat", True)))
+        self.repeat_cb.setChecked(bool(kwargs.get("repeat", False)))
 
 
 class MissingValsParams(_StepParams):
