@@ -38,8 +38,8 @@ import diive.core.plotting.styles.LightTheme as theme
 from diive.core.base.flagbase import FlagBase
 from diive.core.plotting.plotfuncs import default_format, default_legend
 from diive.core.utils.console import VERBOSE_PROGRESS, detail
-from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags, reject_legacy_params
+from diive.preprocessing.outlier_detection.common import (create_daytime_nighttime_flags, reject_legacy_params,
+                                                          window_to_records)
 
 
 def _reject_list_params(**params) -> None:
@@ -58,7 +58,6 @@ def _reject_list_params(**params) -> None:
             )
 
 
-@ConsoleOutputDecorator()
 class LocalSD(FlagBase):
     """Identifies outliers using rolling window standard deviation.
 
@@ -78,6 +77,20 @@ class LocalSD(FlagBase):
         flagid (str): The identifier for this flagging method, 'OUTLIER_LOCALSD'.
 
     Example:
+        ``winsize`` is a record count (48 is one day of 30-minute data) or a time span:
+
+        >>> import diive as dv
+        >>> s = dv.load_exampledata_parquet()['NEE_CUT_REF_orig'].loc['2022-07']
+        >>> lsd = dv.outliers.LocalSD(series=s, n_sd=4, winsize=48).run()
+        >>> cleaned = lsd.filteredseries
+        >>> lsd = dv.outliers.LocalSD(series=s, n_sd=4, winsize='1D').run()
+
+        Separate daytime and nighttime, stricter at night (needs the site location):
+
+        >>> lsd = dv.outliers.LocalSD(series=s, n_sd=4, winsize=48, separate_day_night=True,
+        ...                           n_sd_daytime=4, n_sd_nighttime=3,
+        ...                           lat=46.815, lon=9.856, utc_offset=1).run()
+
         See `examples/preprocessing/outlier_detection/outlier_localsd.py` for complete examples.
     """
     flagid = 'OUTLIER_LOCALSD'
@@ -88,9 +101,9 @@ class LocalSD(FlagBase):
                  n_sd: float = 7,
                  n_sd_daytime: float = None,
                  n_sd_nighttime: float = None,
-                 winsize: int = None,
-                 winsize_daytime: int = None,
-                 winsize_nighttime: int = None,
+                 winsize: int | str = None,
+                 winsize_daytime: int | str = None,
+                 winsize_nighttime: int | str = None,
                  constant_sd: bool = False,
                  separate_day_night: bool = False,
                  lat: float = None,
@@ -106,14 +119,25 @@ class LocalSD(FlagBase):
             series (Series): The pandas time series data to analyze.
             idstr (str, optional): A unique identifier for this instance.
                 Defaults to None.
-            n_sd (float | list, optional): The number of standard deviations
-                (multiplier) to define the outlier threshold. If
-                `separate_day_night` is True, this must be a list
-                [day_sd, night_sd]. Defaults to 7.
-            winsize (int | list, optional): The rolling window size for
-                median/SD calculation. If `separate_day_night` is True,
-                this must be a list [day_win, night_win]. If None, defaults
-                to 5% of the series length. Defaults to None.
+            n_sd (float, optional): The number of standard deviations
+                (multiplier) to define the outlier threshold. With
+                `separate_day_night`, used for both periods unless overridden.
+                Defaults to 7.
+            n_sd_daytime, n_sd_nighttime (float, optional): Override `n_sd`
+                for daytime or nighttime records. None uses `n_sd`.
+            winsize (int or str, optional): The rolling window size for
+                median/SD calculation, as a record count or as a time span such
+                as ``'7D'``. A time span is converted to records at the series'
+                frequency (``'1D'`` is 48 records of 30-min data, 144 of 10-min
+                data) and must be a whole multiple of it. With
+                `separate_day_night`, used for both periods unless overridden;
+                the window then counts records of that period only, so ``'7D'``
+                (1008 records of 10-min data) covers more than seven calendar
+                days of daytime or nighttime data. If None, defaults to 5% of
+                the series length. Defaults to None.
+            winsize_daytime, winsize_nighttime (int or str, optional): Override
+                `winsize` for daytime or nighttime records, converted like
+                `winsize`. None uses `winsize`.
             constant_sd (bool, optional): If True, uses the standard deviation
                 of the *entire* series. If False (default), uses a *rolling*
                 standard deviation based on `winsize`. Defaults to False.
@@ -133,8 +157,8 @@ class LocalSD(FlagBase):
 
         Attributes:
             series (Series): The input time series.
-            n_sd (float | list): Standard deviation multiplier.
-            winsize (int | list): Rolling window size.
+            n_sd (float): Standard deviation multiplier.
+            winsize (int): Rolling window size in records (time spans converted).
             constant_sd (bool): Flag for constant vs. rolling SD.
             separate_day_night (bool): Flag for day/night mode.
             flag_daytime (Series): Boolean flags for daytime (if enabled).
@@ -157,6 +181,13 @@ class LocalSD(FlagBase):
         self.showplot = showplot
         self.verbose = verbose
 
+        # Time spans are converted here, from the full series: a daytime or
+        # nighttime subset has no regular frequency to convert with.
+        winsize = window_to_records(winsize, self.series, name='winsize', verbose=self.verbose)
+        winsize_daytime = window_to_records(winsize_daytime, self.series, name='winsize_daytime',
+                                            verbose=self.verbose)
+        winsize_nighttime = window_to_records(winsize_nighttime, self.series, name='winsize_nighttime',
+                                              verbose=self.verbose)
         self.winsize = int(len(self.series) / 20) if winsize is None else winsize
 
         # Per-period overrides default to None and fall back to the global value,

@@ -190,6 +190,18 @@ class TestOutlierDetection(unittest.TestCase):
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1396)
 
+    def test_hampel_int_nighttime_float_daytime_threshold(self):
+        """An int nighttime threshold used to make the threshold Series int64,
+        which then rejected the float daytime value with a TypeError."""
+        s = ed.load_exampledata_parquet()['Tair_f'].loc['2018-07']
+        kwargs = dict(series=s, window_length=48 * 3, separate_day_night=True,
+                      lat=47.286417, lon=7.733750, utc_offset=1)
+        ham_int = HampelDaytimeNighttime(n_sigma_daytime=5.5, n_sigma_nighttime=4, **kwargs)
+        ham_int.calc(repeat=False)
+        ham_float = HampelDaytimeNighttime(n_sigma_daytime=5.5, n_sigma_nighttime=4.0, **kwargs)
+        ham_float.calc(repeat=False)
+        pd.testing.assert_series_equal(ham_int.get_flag(), ham_float.get_flag())
+
     def test_hampel_filter_daytime_nighttime_doublediff(self):
         df = ed.load_exampledata_parquet()
         s = df['Tair_f'].copy()
@@ -845,3 +857,160 @@ class TestRenamedParamsRejected(unittest.TestCase):
         with self.assertRaises(TypeError) as ctx:
             zScore(series=self._series(), thres_zscoer=4)
         self.assertIn('unexpected keyword argument', str(ctx.exception))
+
+
+class TestStepwiseOutlierDetection(unittest.TestCase):
+    COORDS = dict(site_lat=47.286417, site_lon=7.733750, utc_offset=1)
+
+    def _sod(self, n=500):
+        from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+        index = pd.date_range('2022-06-01 00:15', periods=n, freq='30min', name='TIMESTAMP_MIDDLE')
+        values = 10 + np.random.default_rng(1).normal(0, 1, n)
+        values[20] = 100
+        df = pd.DataFrame({'TA': values}, index=index)
+        return StepwiseOutlierDetection(dfin=df, col='TA', **self.COORDS)
+
+    def test_addflag_twice_is_a_noop(self):
+        sod = self._sod()
+        sod.flag_outliers_abslim_test(minval=0, maxval=50)
+        sod.addflag()
+        sod.addflag()
+        self.assertEqual(list(sod.flags.columns), ['FLAG_TA_OUTLIER_ABSLIM_TEST'])
+        # A re-run is still added under a new name.
+        sod.flag_outliers_abslim_test(minval=0, maxval=40)
+        sod.addflag()
+        self.assertEqual(len(sod.flags.columns), 2)
+
+    def test_lof_auto_neighbors_below_200_records(self):
+        sod = self._sod(n=150)
+        sod.flag_outliers_lof_test(repeat=False)
+        self.assertEqual(len(sod.last_flag), 150)
+
+    def test_rebase_series_keeps_committed_removals(self):
+        sod = self._sod()
+        sod.flag_outliers_abslim_test(minval=0, maxval=50)
+        sod.addflag()
+        corrected = sod.series_hires_orig.clip(upper=12).rename('corrected')
+        sod.rebase_series(corrected)
+        cleaned = sod.series_hires_cleaned
+        self.assertEqual(cleaned.name, 'TA')
+        self.assertTrue(np.isnan(cleaned.iloc[20]))
+        self.assertEqual(cleaned.isna().sum(), 1)
+        self.assertLessEqual(cleaned.max(), 12)
+
+    def test_zscore_per_period_threshold_is_passed_through(self):
+        sod = self._sod()
+        sod.flag_outliers_zscore_test(thres_zscore=100, thres_zscore_daytime=2,
+                                      separate_day_night=True, repeat=False)
+        n_default = int((sod.last_flag == 2).sum())
+        sod.flag_outliers_zscore_test(thres_zscore=100, separate_day_night=True, repeat=False)
+        self.assertGreater(n_default, int((sod.last_flag == 2).sum()))
+
+
+class TestTimeSpanWindows(unittest.TestCase):
+    """A rolling window given as a time span must flag exactly what the
+    equivalent record count flags. 10-minute and 1-minute data convert the same
+    span to different counts, which a unit mix-up would not survive."""
+
+    COORDS = dict(lat=47.478333, lon=8.364389, utc_offset=1)
+
+    @staticmethod
+    def _spiky(freq: str, days: int = 3) -> pd.Series:
+        idx = pd.date_range('2022-06-01', periods=int(pd.Timedelta(f'{days}D') / pd.Timedelta(freq)),
+                            freq=freq, name='TIMESTAMP_MIDDLE')
+        rng = np.random.default_rng(7)
+        values = 15 + 5 * np.sin(np.arange(len(idx)) * 2 * np.pi / (len(idx) / days))
+        values = values + rng.normal(0, 0.3, len(idx))
+        values[rng.choice(len(idx), 20, replace=False)] += rng.choice([-1, 1], 20) * 15
+        return pd.Series(values, index=idx, name='TA')
+
+    def _assert_same_flags(self, make, span: str, records: int, attr: str):
+        """`make(window)` builds a detector; span and records must agree."""
+        by_span = make(span)
+        by_records = make(records)
+        self.assertEqual(getattr(by_span, attr), records)
+        by_span.calc(repeat=False)
+        by_records.calc(repeat=False)
+        self.assertGreater(int((by_records.overall_flag == 2).sum()), 0)
+        pd.testing.assert_series_equal(by_span.overall_flag, by_records.overall_flag)
+
+    def test_hampel(self):
+        from diive.preprocessing.outlier_detection.hampel import Hampel
+        for freq, records in [('10min', 72), ('1min', 720)]:
+            for separate in (False, True):
+                with self.subTest(freq=freq, separate_day_night=separate):
+                    s = self._spiky(freq)
+                    self._assert_same_flags(
+                        lambda w: Hampel(series=s, window_length=w, separate_day_night=separate,
+                                         **self.COORDS),
+                        span='12h', records=records, attr='window_length')
+
+    def test_localsd(self):
+        for freq, records in [('10min', 72), ('1min', 720)]:
+            s = self._spiky(freq)
+            with self.subTest(freq=freq):
+                self._assert_same_flags(lambda w: LocalSD(series=s, n_sd=3, winsize=w),
+                                        span='12h', records=records, attr='winsize')
+            with self.subTest(freq=freq, period='nighttime override'):
+                # Day/night subsets have no regular frequency, so the per-period
+                # span is converted from the full series.
+                self._assert_same_flags(
+                    lambda w: LocalSD(series=s, n_sd=3, winsize=records * 2, winsize_nighttime=w,
+                                      separate_day_night=True, **self.COORDS),
+                    span='12h', records=records, attr='winsize_nighttime')
+
+    def test_zscore_rolling(self):
+        for freq, records in [('10min', 72), ('1min', 720)]:
+            with self.subTest(freq=freq):
+                s = self._spiky(freq)
+                self._assert_same_flags(lambda w: zScoreRolling(series=s, thres_zscore=3, winsize=w),
+                                        span='12h', records=records, attr='winsize')
+
+    def test_span_not_a_multiple_of_the_frequency_raises(self):
+        from diive.preprocessing.outlier_detection.hampel import Hampel
+        s = self._spiky('10min')
+        for make in (lambda: Hampel(series=s, window_length='25min', separate_day_night=False),
+                     lambda: LocalSD(series=s, winsize='25min'),
+                     lambda: LocalSD(series=s, winsize=72, winsize_daytime='25min'),
+                     lambda: zScoreRolling(series=s, winsize='25min')):
+            with self.assertRaisesRegex(ValueError, 'whole multiple'):
+                make()
+
+    def test_zscore_rolling_minimum_applies_to_converted_span(self):
+        with self.assertRaisesRegex(ValueError, 'at least 3 records'):
+            zScoreRolling(series=self._spiky('10min'), winsize='20min')
+
+    def test_index_without_fixed_frequency_raises(self):
+        from diive.preprocessing.outlier_detection.common import window_to_records
+        irregular = pd.Series(0.0, index=pd.DatetimeIndex(
+            ['2022-06-01 00:00', '2022-06-01 00:07', '2022-06-01 00:30', '2022-06-01 01:10']))
+        with self.assertRaisesRegex(ValueError, 'no regular frequency'):
+            window_to_records('1h', irregular)
+        # A calendar frequency survives FlagBase but has no fixed duration.
+        monthly = pd.Series(np.arange(24, dtype=float),
+                            index=pd.date_range('2020-01-01', periods=24, freq='MS'))
+        with self.assertRaisesRegex(ValueError, 'calendar frequency'):
+            LocalSD(series=monthly, winsize='90D')
+
+    def test_int_windows_pass_through_unchanged(self):
+        from diive.preprocessing.outlier_detection.common import window_to_records
+        s = self._spiky('10min')
+        self.assertEqual(window_to_records(37, s), 37)
+        self.assertIsNone(window_to_records(None, s))
+        self.assertEqual(LocalSD(series=s).winsize, int(len(s) / 20))
+
+    def test_stepwise_wrappers_pass_the_span_through(self):
+        from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+        s = self._spiky('10min')
+        sod = StepwiseOutlierDetection(dfin=s.to_frame(), col='TA', site_lat=self.COORDS['lat'],
+                                       site_lon=self.COORDS['lon'], utc_offset=1)
+        results = {}
+        for window in ('12h', 72):
+            sod.flag_outliers_hampel_test(window_length=window, separate_day_night=False, repeat=False)
+            hampel = sod.last_flag
+            sod.flag_outliers_localsd_test(n_sd=3, winsize=window, repeat=False)
+            localsd = sod.last_flag
+            sod.flag_outliers_zscore_rolling_test(thres_zscore=3, winsize=window, repeat=False)
+            results[window] = (hampel, localsd, sod.last_flag)
+        for by_span, by_records in zip(results['12h'], results[72]):
+            pd.testing.assert_series_equal(by_span, by_records)

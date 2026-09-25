@@ -31,11 +31,10 @@ from pandas import DatetimeIndex, Series
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import VERBOSE_PROGRESS, detail, warn
-from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags, reject_legacy_params
+from diive.preprocessing.outlier_detection.common import (create_daytime_nighttime_flags, reject_legacy_params,
+                                                          window_to_records)
 
 
-@ConsoleOutputDecorator()
 class Hampel(FlagBase):
     """Robust outlier detection using the Hampel filter (Median Absolute Deviation).
 
@@ -50,6 +49,23 @@ class Hampel(FlagBase):
     Optional double-differencing (Papale et al. 2006) removes trends before detection.
 
     Example:
+        Daytime and nighttime are separate by default and need the site location.
+        ``window_length`` is a record count (48 * 7 is one week of 30-minute data)
+        or a time span:
+
+        >>> import diive as dv
+        >>> s = dv.load_exampledata_parquet()['NEE_CUT_REF_orig'].loc['2022-07']
+        >>> ham = dv.outliers.Hampel(series=s, window_length=48 * 7,
+        ...                          n_sigma_daytime=5.5, n_sigma_nighttime=4,
+        ...                          lat=46.815, lon=9.856, utc_offset=1).run()
+        >>> cleaned = ham.filteredseries
+
+        One threshold for all records:
+
+        >>> ham = dv.outliers.Hampel(series=s, window_length=48 * 7, n_sigma=5.5,
+        ...                          separate_day_night=False).run()
+        >>> ham = dv.outliers.Hampel(series=s, window_length='7D', separate_day_night=False).run()
+
         See `examples/preprocessing/outlier_detection/outlier_hampel.py` for complete examples.
     """
 
@@ -60,7 +76,7 @@ class Hampel(FlagBase):
                  lat: float = None,
                  lon: float = None,
                  utc_offset: int = None,
-                 window_length: int = 48 * 13,
+                 window_length: int | str = 48 * 13,
                  n_sigma: float = 5.5,
                  n_sigma_daytime: float = None,
                  n_sigma_nighttime: float = None,
@@ -91,12 +107,15 @@ class Hampel(FlagBase):
             lat (float): Latitude of the site (Required if ``separate_day_night=True``).
             lon (float): Longitude of the site (Required if ``separate_day_night=True``).
             utc_offset (int): UTC offset in hours (Required if ``separate_day_night=True``).
-            window_length (int): The size of the sliding window centered on the point,
-                expressed as a record count (not a duration). Default is
-                ``48 * 13 = 624`` records, which equals **13 days at the
-                half-hourly (30-min) sampling rate** typical of eddy-covariance
-                data — matching the Papale et al. 2006 spike-detection window.
-                Scale for other sampling rates (e.g. ``24 * 13`` for hourly).
+            window_length (int or str): The size of the sliding window centered on
+                the point, as a record count or as a time span such as ``'13D'``.
+                A time span is converted to records at the series' frequency
+                (``'13D'`` is 624 records of 30-min data, 1872 of 10-min data) and
+                must be a whole multiple of it. Default is ``48 * 13 = 624``
+                records, which equals **13 days at the half-hourly (30-min)
+                sampling rate** typical of eddy-covariance data — matching the
+                Papale et al. 2006 spike-detection window. For other sampling
+                rates pass ``'13D'`` or scale the count (e.g. ``24 * 13`` for hourly).
             n_sigma (float): The number of standard deviations for the threshold.
                 Default is 5.5. Used for:
                 * **Global mode (separate_day_night=False):** Applied to all records.
@@ -133,7 +152,8 @@ class Hampel(FlagBase):
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = showplot
         self.verbose = verbose
-        self.window_length = window_length
+        self.window_length = window_to_records(window_length, self.series, name='window_length',
+                                               verbose=self.verbose)
         self.n_sigma = n_sigma
         # Per-period overrides default to None and fall back to the global value,
         # so changing n_sigma alone still affects both periods.
@@ -294,7 +314,9 @@ class Hampel(FlagBase):
         if self.separate_day_night:
             # Create a series of thresholds matching the data index
             # Default to nighttime threshold
-            thresholds = pd.Series(data=self.n_sigma_nighttime, index=s_to_test.index)
+            # float: an int nighttime value would make the Series int64, which
+            # cannot then take a float daytime value (TypeError).
+            thresholds = pd.Series(data=self.n_sigma_nighttime, index=s_to_test.index, dtype=float)
             # Overwrite daytime indices with daytime threshold
             current_daytime = self.is_daytime.reindex(s_to_test.index, fill_value=False)
             thresholds.loc[current_daytime] = self.n_sigma_daytime

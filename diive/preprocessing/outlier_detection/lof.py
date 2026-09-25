@@ -35,7 +35,6 @@ from sklearn.neighbors import LocalOutlierFactor as SKLocalOutlierFactor
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import VERBOSE_PROGRESS, detail
-from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags, reject_legacy_params
 
 
@@ -108,9 +107,25 @@ def suggest_lof_params(series: Series) -> dict:
     return dict(n_neighbors=max(1, n_neighbors), contamination="auto")
 
 
-@ConsoleOutputDecorator()
 class LocalOutlierFactor(FlagBase):
-    """Flag outliers using the scikit-learn Local Outlier Factor. See :meth:`__init__`."""
+    """Flag outliers using the scikit-learn Local Outlier Factor. See :meth:`__init__`.
+
+    Example:
+        With a float ``contamination`` every pass flags that fraction again, so
+        run a single pass with ``repeat=False``:
+
+        >>> import diive as dv
+        >>> s = dv.load_exampledata_parquet()['NEE_CUT_REF_orig'].loc['2022-07']
+        >>> lof = dv.outliers.LocalOutlierFactor(series=s, n_neighbors=20,
+        ...                                      contamination=0.01).run(repeat=False)
+        >>> cleaned = lof.filteredseries
+
+        Separate daytime and nighttime (needs the site location):
+
+        >>> lof = dv.outliers.LocalOutlierFactor(series=s, n_neighbors=20, contamination=0.01,
+        ...                                      separate_day_night=True,
+        ...                                      lat=46.815, lon=9.856, utc_offset=1).run(repeat=False)
+    """
 
     flagid = "OUTLIER_LOF"
 
@@ -190,7 +205,9 @@ class LocalOutlierFactor(FlagBase):
 
         Args:
             repeat: If *True*, the outlier detection is repeated until all
-                outliers are removed.
+                outliers are removed. With a numeric *contamination*, each pass
+                flags that fraction of the remaining records again, so use
+                *repeat=False* in that case.
             progress_callback: Optional ``callable(iteration, n_outliers,
                 filteredseries)`` invoked after each iteration (e.g. to drive a
                 progress bar / live-update the cleaned series).
@@ -313,8 +330,6 @@ def LocalOutlierFactorDaytimeNighttime(*args, separate_day_night: bool = True, *
     warning -- and made this name identical to ``LocalOutlierFactorAllData``,
     which means the opposite.
 
-    A wrapper function rather than a subclass because ``ConsoleOutputDecorator``
-    replaces the decorated class with a function, which cannot be subclassed.
     Separating requires ``lat`` / ``lon`` / ``utc_offset``.
     """
     return LocalOutlierFactor(*args, separate_day_night=separate_day_night, **kwargs)

@@ -27,11 +27,9 @@ from pandas import Series, DatetimeIndex
 from diive.core.dfun.stats import double_diff_absolute
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import detail
-from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.preprocessing.outlier_detection.zscore import zScore
 
 
-@ConsoleOutputDecorator()
 class zScoreIncrements(FlagBase):
     """Identify outliers based on z-score of record increments.
 
@@ -47,6 +45,11 @@ class zScoreIncrements(FlagBase):
     to isolated spikes while allowing gradual changes.
 
     Example:
+        >>> import diive as dv
+        >>> s = dv.load_exampledata_parquet()['NEE_CUT_REF_orig'].loc['2022-07']
+        >>> zi = dv.outliers.zScoreIncrements(series=s, thres_zscore=4).run()
+        >>> cleaned = zi.filteredseries
+
         See `examples/preprocessing/outlier_detection/outlier_incremental.py` for complete examples.
     """
 

@@ -26,11 +26,9 @@ from pandas import Series, DatetimeIndex
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import VERBOSE_PROGRESS, detail
-from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags, reject_legacy_params
 
 
-@ConsoleOutputDecorator()
 class AbsoluteLimits(FlagBase):
     """Outlier detection using absolute value limits.
 
@@ -57,6 +55,18 @@ class AbsoluteLimits(FlagBase):
     - NaN: Record missing in the input, so no test could be performed
 
     Example:
+        >>> import diive as dv
+        >>> s = dv.load_exampledata_parquet()['Tair_f'].loc['2022-07']
+        >>> al = dv.outliers.AbsoluteLimits(series=s, minval=-10, maxval=30).run()
+        >>> cleaned = al.filteredseries
+
+        Separate limits for daytime and nighttime need the site location:
+
+        >>> al = dv.outliers.AbsoluteLimits(series=s, separate_day_night=True,
+        ...                                 minval_daytime=0, maxval_daytime=30,
+        ...                                 minval_nighttime=-5, maxval_nighttime=20,
+        ...                                 lat=46.815, lon=9.856, utc_offset=1).run()
+
         See `examples/preprocessing/outlier_detection/outlier_absolutelimits.py` for complete examples.
     """
 
@@ -283,8 +293,6 @@ def AbsoluteLimitsDaytimeNighttime(*args, separate_day_night: bool = True, **kwa
     what it says therefore applied one set of limits to the whole series,
     with no error or warning.
 
-    A wrapper function rather than a subclass because ``ConsoleOutputDecorator``
-    replaces the decorated class with a function, which cannot be subclassed.
     Pass ``minval`` / ``maxval`` to cover both periods, and the
     ``*_daytime`` / ``*_nighttime`` overrides to differ, plus ``lat`` /
     ``lon`` / ``utc_offset``.

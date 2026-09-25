@@ -60,13 +60,26 @@ from pandas import DatetimeIndex, Series
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import detail
-from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
 
 
-@ConsoleOutputDecorator()
 class TrimLow(FlagBase):
-    """Flag the lowest values (and an equal count of the highest) as outliers. See :meth:`__init__`."""
+    """Flag the lowest values (and an equal count of the highest) as outliers. See :meth:`__init__`.
+
+    Example:
+        Trim the whole series:
+
+        >>> import diive as dv
+        >>> s = dv.load_exampledata_parquet()['NEE_CUT_REF_orig'].loc['2022-07']
+        >>> tl = dv.outliers.TrimLow(series=s, lower_limit=-20).run()
+        >>> cleaned = tl.filteredseries
+
+        Trim only nighttime records, against their own distribution (needs the site
+        location):
+
+        >>> tl = dv.outliers.TrimLow(series=s, lower_limit=0, trim_nighttime=True,
+        ...                          lat=46.815, lon=9.856, utc_offset=1).run()
+    """
 
     flagid = 'OUTLIER_TRIMLOW'
 
