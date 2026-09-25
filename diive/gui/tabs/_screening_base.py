@@ -13,9 +13,15 @@ the data the previous steps already cleaned, so spikes are peeled off
 progressively. The overall QCF is computed separately from the accumulated
 per-test flags.
 
-Subclasses customise three seams: the data source (the base is `self._df` /
+Subclasses customise these seams: the data source (the base is `self._df` /
 `self._var`-centric, so a variant can feed a synthetic frame), an optional extra
-inspector page (`_inspector_pages`), and the emitted columns (`_emit_frame`).
+inspector page (`_inspector_pages`), the emitted columns (`_emit_frame`), and the
+screening itself: `_chain_input` + `_run_chain` (the worker's outlier chain and
+QCF), `_compute_corrected` (the corrections), and `_raw_series` /
+`_display_lines` / `_display_heatmap` (what the preview plots), and
+`_code_provider` (the Copy Python script). The base implementations are the
+plain Stepwise screening path; the database variant overrides them to run
+`StepwiseMeteoScreeningDb`.
 
 Layout: the shared variable list on the left, a segmented inspector in the centre
 (Outliers / Corrections / Report — only the active page takes space; each of the
@@ -33,7 +39,8 @@ relevant Run button is clicked.
 The per-method parameter widgets and the cards are the shared
 `widgets/stepwise_method_params.py` / `widgets/stepwise_cards.py` registries (a
 step is a `{"method", "kwargs"}` dict). All detection, QCF, and the reproducible
-script (`stepwise_to_code`) are library work; this tab only collects parameters,
+script (`stepwise_to_code` in the base, `meteoscreening_to_code` in the
+database variant) are library work; this tab only collects parameters,
 runs them on a worker thread, previews, and emits columns.
 
 Part of the diive library: https://github.com/holukas/diive
@@ -66,6 +73,7 @@ from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.corrections_panel import CorrectionsPanel
 from diive.gui.widgets.mpl_canvas import MplCanvas
+from diive.gui.widgets.project_offset import project_utc_offset
 from diive.gui.widgets.stepwise_cards import (
     AddStepCard,
     StepCard,
@@ -656,11 +664,10 @@ class ScreeningTabBase(DiiveTab):
     # --- run (rebuild + replay on a worker thread) ---
     @staticmethod
     def _coords() -> dict:
+        """Site coordinates and UTC offset from Project settings (0 when unset)."""
         m = site.manager
-        if m.configured:
-            return dict(site_lat=m.latitude, site_lon=m.longitude,
-                        utc_offset=m.utc_offset)
-        return dict(site_lat=0.0, site_lon=0.0, utc_offset=0)
+        lat, lon = (m.latitude, m.longitude) if m.configured else (0.0, 0.0)
+        return dict(site_lat=lat, site_lon=lon, utc_offset=project_utc_offset())
 
     def _base_series(self):
         """The series the corrections start from: the QCF-filtered series after
@@ -688,20 +695,13 @@ class ScreeningTabBase(DiiveTab):
         to refresh afterwards (a fresh run refreshes all; a correction edit only
         the Series page)."""
         corrs = self.corrections_panel.corrections()
-        base = self._base_series()
         applied = True
-        if not corrs or base is None:
+        try:
+            self._corrected = self._compute_corrected(corrs)
+        except Exception as err:
             self._corrected = None
-        else:
-            coords = self._coords()
-            try:
-                self._corrected = apply_corrections(
-                    base, corrs, lat=coords["site_lat"], lon=coords["site_lon"],
-                    utc_offset=coords["utc_offset"])
-            except Exception as err:
-                self._corrected = None
-                self.status.setText(f"Correction failed: {err}")
-                applied = False  # keep the pending dot so the user can retry
+            self.status.setText(f"Correction failed: {err}")
+            applied = False  # keep the pending dot so the user can retry
         if applied:
             self._corr_dirty = False
         self._build_result()
@@ -709,6 +709,25 @@ class ScreeningTabBase(DiiveTab):
                                 and not self._result_df.empty)
         self.copy_btn.setEnabled(self._code_provider() is not None)
         self._refresh_run_buttons()
+
+    def _compute_corrected(self, corrs: list[dict]):
+        """The corrected series for *corrs* (the corrections panel's list), or
+        None when there is nothing to correct. Raises on a failed correction.
+
+        Seam: the base corrects :meth:`_base_series` with ``apply_corrections``;
+        the database variant hands the list to the library class instead."""
+        base = self._base_series()
+        if not corrs or base is None:
+            return None
+        coords = self._coords()
+        return apply_corrections(
+            base, corrs, lat=coords["site_lat"], lon=coords["site_lon"],
+            utc_offset=coords["utc_offset"])
+
+    def _chain_input(self):
+        """What the worker screens, handed to :meth:`_run_chain` as ``source``
+        (snapshotted on the GUI thread). Seam: the base passes the working frame."""
+        return self._df
 
     def _run(self) -> None:
         if self._df is None or self._var is None:
@@ -741,57 +760,82 @@ class ScreeningTabBase(DiiveTab):
         self._running = True
         threading.Thread(
             target=self._worker,
-            args=(self._df, self._var, list(self._steps), self._coords(),
+            args=(self._chain_input(), self._var, list(self._steps), self._coords(),
                   site.manager.configured, run_id),
             daemon=True).start()
 
     def _worker(self, df, var, steps, coords, configured, run_id) -> None:
         try:
-            # output_middle_timestamp=False keeps the input index so the emitted
-            # columns align to the app dataframe on merge.
-            det = StepwiseOutlierDetection(dfin=df[[var]], col=var,
-                                           output_middle_timestamp=False, **coords)
-            removed = []  # per-step Index of newly-removed timestamps
-            bounds = []   # per-step (lower, upper) detection band (or (None, None))
-            prev = det.series_hires_orig
-            for step in steps:
-                # Skip toggled-off steps; keep aligned placeholders so the
-                # removed/bounds lists index 1:1 with the cards.
-                if not step.get("enabled", True):
-                    removed.append(prev.index[:0])
-                    bounds.append((None, None))
-                    continue
-                getattr(det, step["method"])(**step.get("kwargs", {}))
-                bounds.append(det.last_bounds)
-                det.addflag()
-                # Snapshot: addflag mutates the detector's cleaned series in
-                # place, so prev must be a copy or later steps would alias (and
-                # mutate) it, making their per-step diff come out empty.
-                clean = det.series_hires_cleaned.copy()
-                newly = prev[prev.notna() & clean.reindex(prev.index).isna()].index
-                removed.append(newly)
-                prev = clean
-            # Overall QCF from the accumulated test flags (aligned on the orig index).
-            qcf_input = pd.concat([det.series_hires_orig.to_frame(var), det.flags], axis=1)
-            # SW_IN_POT (from site coords) enables the QCF day/night split and the
-            # day/night breakdown in the screening report; skip if site unset.
-            swinpot_col = None
-            if configured:
-                qcf_input[_SWINPOT_COL] = dv.variables.potrad(
-                    qcf_input.index, coords["site_lat"], coords["site_lon"],
-                    coords["utc_offset"])
-                swinpot_col = _SWINPOT_COL
-            qcf = FlagQCF(df=qcf_input, target_col=var, idstr="STEPWISE",
-                          swinpot_col=swinpot_col)
-            qcf.calculate()
-            _, report = qcf.screening_report()
-            payload = {"var": var, "detector": det, "removed": removed,
-                       "bounds": bounds, "qcf": qcf, "report": report,
-                       "run_id": run_id}
+            payload = self._run_chain(df, var, steps, coords, configured)
         except Exception as err:
             self._sig.run_failed.emit((run_id, str(err)))
             return
+        payload["run_id"] = run_id
         self._sig.run_done.emit(payload)
+
+    @staticmethod
+    def _run_chain(df, var, steps, coords, configured) -> dict:
+        """Run the outlier chain and the QCF on a worker thread; pure (no Qt).
+
+        Returns the payload the tab renders: ``var``, ``detector`` (with
+        ``series_hires_orig``, ``series_hires_cleaned`` and ``flags``),
+        ``removed`` and ``bounds`` (one entry per step, disabled steps included),
+        ``qcf`` (a calculated ``FlagQCF``) and ``report``. Seam: the database
+        variant runs the chain through ``StepwiseMeteoScreeningDb``."""
+        # output_middle_timestamp=False keeps the input index so the emitted
+        # columns align to the app dataframe on merge.
+        det = StepwiseOutlierDetection(dfin=df[[var]], col=var,
+                                       output_middle_timestamp=False, **coords)
+        removed, bounds = ScreeningTabBase._run_steps(det, det, steps)
+        # Overall QCF from the accumulated test flags (aligned on the orig index).
+        qcf_input = pd.concat([det.series_hires_orig.to_frame(var), det.flags], axis=1)
+        # SW_IN_POT (from site coords) enables the QCF day/night split and the
+        # day/night breakdown in the screening report; skip if site unset.
+        swinpot_col = None
+        if configured:
+            qcf_input[_SWINPOT_COL] = dv.variables.potrad(
+                qcf_input.index, coords["site_lat"], coords["site_lon"],
+                coords["utc_offset"])
+            swinpot_col = _SWINPOT_COL
+        qcf = FlagQCF(df=qcf_input, target_col=var, idstr="STEPWISE",
+                      swinpot_col=swinpot_col)
+        qcf.calculate()
+        _, report = qcf.screening_report()
+        return {"var": var, "detector": det, "removed": removed,
+                "bounds": bounds, "qcf": qcf, "report": report}
+
+    @staticmethod
+    def _run_steps(runner, det, steps) -> tuple[list, list]:
+        """Run *steps* in order and return the per-step ``(removed, bounds)``.
+
+        Each enabled step calls ``getattr(runner, method)(**kwargs)`` and then
+        ``runner.addflag()``; *det* is the ``StepwiseOutlierDetection`` whose
+        cleaned series and ``last_bounds`` show the result (the detector itself,
+        or the one inside the library class that *runner* is).
+        ``removed`` holds the index of the records each step newly removed and
+        ``bounds`` its ``(lower, upper)`` detection band (``(None, None)`` if it
+        has none); both index 1:1 with the steps, disabled ones included."""
+        removed = []  # per-step Index of newly-removed timestamps
+        bounds = []   # per-step (lower, upper) detection band (or (None, None))
+        prev = det.series_hires_orig
+        for step in steps:
+            # Skip toggled-off steps; keep aligned placeholders so the
+            # removed/bounds lists index 1:1 with the cards.
+            if not step.get("enabled", True):
+                removed.append(prev.index[:0])
+                bounds.append((None, None))
+                continue
+            getattr(runner, step["method"])(**step.get("kwargs", {}))
+            bounds.append(det.last_bounds)
+            runner.addflag()
+            # Snapshot: addflag mutates the detector's cleaned series in
+            # place, so prev must be a copy or later steps would alias (and
+            # mutate) it, making their per-step diff come out empty.
+            clean = det.series_hires_cleaned.copy()
+            newly = prev[prev.notna() & clean.reindex(prev.index).isna()].index
+            removed.append(newly)
+            prev = clean
+        return removed, bounds
 
     def _on_done(self, payload: dict) -> None:
         self._running = False  # cleared here, so the guard covers the whole run
@@ -964,21 +1008,40 @@ class ScreeningTabBase(DiiveTab):
             self._draw_qcf(canvas)
         self._page_dirty[idx] = False
 
+    def _raw_series(self):
+        """The active variable's unscreened series (None if none). Seam: the
+        base reads the working frame."""
+        if self._var is None or self._df is None:
+            return None
+        return self._df[self._var]
+
+    def _display_lines(self, data):
+        """*data* ready for a line plot. Seam: the base plots the data as they
+        are; the database variant leaves out empty grid slots."""
+        return data
+
+    def _display_heatmap(self, data):
+        """*data* ready for a date/time heatmap. Seam: the base plots the data
+        as they are; the database variant spreads coarse records over their
+        period."""
+        return data
+
     def _draw_series(self, canvas) -> None:
         """Series page: original + removals (selected step's, else cumulative)
         with the optional detection band, and the cleaned (+ corrected) series
         below. Before any run it shows the raw series (+ corrected overlay)."""
         if self._payload is None:
-            series = (self._df[self._var]
-                      if self._var is not None and self._df is not None else None)
+            series = self._raw_series()
             if series is None:
                 canvas.show_message("Select a variable to screen.")
                 return
             ax = canvas.new_axes(1)[0]
-            ax.plot(series.index, series.to_numpy(), color=_C_RAW, lw=0.5,
+            shown = self._display_lines(series)
+            ax.plot(shown.index, shown.to_numpy(), color=_C_RAW, lw=0.5,
                     alpha=0.85, label="original")
             if self._corrected is not None:
-                ax.plot(self._corrected.index, self._corrected.to_numpy(),
+                corrected = self._display_lines(self._corrected)
+                ax.plot(corrected.index, corrected.to_numpy(),
                         color=_C_CORRECTED, lw=0.7, alpha=0.9, label="corrected")
                 ax.legend(loc="best", fontsize=7, framealpha=0.9)
                 ax.set_title(f"{series.name} — original + corrected", fontsize=9)
@@ -997,8 +1060,9 @@ class ScreeningTabBase(DiiveTab):
         ax_ts, ax_clean = canvas.new_axes(2, orientation="vertical", sharex=True)
 
         # 1) Original + removals (selected step's, else cumulative).
-        ax_ts.plot(orig.index, orig.to_numpy(), color=_C_RAW, lw=0.5, alpha=0.8,
-                   label="original", zorder=1)
+        orig_shown = self._display_lines(orig)
+        ax_ts.plot(orig_shown.index, orig_shown.to_numpy(), color=_C_RAW, lw=0.5,
+                   alpha=0.8, label="original", zorder=1)
         if 0 <= sel < len(removed):
             idx = removed[sel]
             extra = f"step {sel + 1} removals ({len(idx)})"
@@ -1015,6 +1079,7 @@ class ScreeningTabBase(DiiveTab):
             if 0 <= band_step < len(bounds):
                 lo, hi = bounds[band_step]
                 if lo is not None and hi is not None:
+                    lo, hi = self._display_lines(lo), self._display_lines(hi)
                     ax_ts.plot(lo.index, lo.to_numpy(), color=_C_LIMIT, lw=0.7,
                                linestyle="--", alpha=0.8, label="limits", zorder=4)
                     ax_ts.plot(hi.index, hi.to_numpy(), color=_C_LIMIT, lw=0.7,
@@ -1023,10 +1088,12 @@ class ScreeningTabBase(DiiveTab):
         ax_ts.legend(loc="best", fontsize=7, framealpha=0.9)
 
         # 2) Cleaned series (+ corrected overlay when corrections are active).
-        ax_clean.plot(cleaned.index, cleaned.to_numpy(), color=_C_CLEANED, lw=0.7,
-                      label="cleaned")
+        cleaned_shown = self._display_lines(cleaned)
+        ax_clean.plot(cleaned_shown.index, cleaned_shown.to_numpy(), color=_C_CLEANED,
+                      lw=0.7, label="cleaned")
         if self._corrected is not None:
-            ax_clean.plot(self._corrected.index, self._corrected.to_numpy(),
+            corrected = self._display_lines(self._corrected)
+            ax_clean.plot(corrected.index, corrected.to_numpy(),
                           color=_C_CORRECTED, lw=0.7, alpha=0.9, label="corrected")
             ax_clean.legend(loc="best", fontsize=7, framealpha=0.9)
             ax_clean.set_title("cleaned + corrected", fontsize=9)
@@ -1040,7 +1107,7 @@ class ScreeningTabBase(DiiveTab):
         if self._payload is None:
             canvas.show_message("Run a chain to see the cleaned-series heatmap.")
             return
-        cleaned = self._payload["detector"].series_hires_cleaned
+        cleaned = self._display_heatmap(self._payload["detector"].series_hires_cleaned)
         ax = canvas.new_axes(1)[0]
         try:
             dv.plotting.HeatmapDateTime(cleaned).plot(
@@ -1063,7 +1130,7 @@ class ScreeningTabBase(DiiveTab):
         flag = self._payload["qcf"].flagqcf
         ax_qcf_heat, ax_hist = canvas.new_axes(2)
         try:
-            dv.plotting.HeatmapDateTime(flag.rename("QCF")).plot(
+            dv.plotting.HeatmapDateTime(self._display_heatmap(flag).rename("QCF")).plot(
                 ax=ax_qcf_heat, fig=canvas.fig, vmin=0, vmax=2,
                 format_style=dv.plotting.FormatStyle(
                     title="QCF (0/1/2)", axlabel_fontsize=8, ticks_fontsize=7),

@@ -5,14 +5,15 @@ GUI.WIDGETS.STEPWISE_METHOD_PARAMS: PARAM WIDGETS FOR THE STEPWISE OUTLIER CHAIN
 One small widget per ``StepwiseOutlierDetection.flag_*`` method, collecting that
 method's parameters and producing a ``{"method": str, "kwargs": dict}`` *step* —
 the shape the library's ``level32_to_code`` consumes and the shape a stepwise
-chain (flux L3.2 tab, standalone stepwise tab) feeds to the detector.
+chain (flux L3.2 tab, Stepwise screening tab, Meteo screening tab) feeds to the
+detector. The Meteo screening tab calls the steps on ``StepwiseMeteoScreeningDb``.
 
 GUI-only: these are widgets, labels, and tooltips. The method *names* and their
 parameter *meanings* are the library's (`StepwiseOutlierDetection`); detection
 itself runs in the library. The day/night split needs no coordinates here — the
-detector is built with the site coordinates, so a step only carries
-``separate_day_night`` (plus per-period thresholds where the method has
-them).
+tab gives the detector the site coordinates (the Meteo screening tab applies them
+at run time), so a step only carries ``separate_day_night`` (plus per-period
+thresholds where the method has them).
 
 Add a method = add a ``_StepParams`` subclass and list it in ``STEP_METHODS``.
 
@@ -326,6 +327,79 @@ class LOFParams(_StepParams):
         self.repeat_cb.setChecked(bool(kwargs.get("repeat", False)))
 
 
+#: Range of the limit spin boxes: wide enough for any meteo or flux unit.
+_LIMIT_RANGE = 1e12
+#: Default limits: wide enough to flag nothing until set for the variable.
+_LIMIT_DEFAULT = 10_000.0
+
+
+class AbsLimParams(_StepParams):
+    method = "flag_outliers_abslim_test"
+    label = "Absolute limits"
+    supports_daynight = True
+
+    def _build(self, form: QFormLayout) -> None:
+        self.minval = self._limit(-_LIMIT_DEFAULT, "Lowest accepted value (variable units); "
+                                  "records below it are flagged.")
+        self.maxval = self._limit(_LIMIT_DEFAULT, "Highest accepted value (variable units); "
+                                  "records above it are flagged.")
+        form.addRow("Minimum (global)", self.minval)
+        form.addRow("Maximum (global)", self.maxval)
+        self.dn_cb = QCheckBox("Separate daytime / nighttime")
+        form.addRow(self.dn_cb)
+        self.min_dt = self._limit(-_LIMIT_DEFAULT, "Lowest accepted value for daytime records.")
+        self.max_dt = self._limit(_LIMIT_DEFAULT, "Highest accepted value for daytime records.")
+        self.min_nt = self._limit(-_LIMIT_DEFAULT, "Lowest accepted value for nighttime records.")
+        self.max_nt = self._limit(_LIMIT_DEFAULT, "Highest accepted value for nighttime records.")
+        form.addRow("Daytime min", self.min_dt)
+        form.addRow("Daytime max", self.max_dt)
+        form.addRow("Nighttime min", self.min_nt)
+        form.addRow("Nighttime max", self.max_nt)
+        for sp in self._period_spins():
+            sp.setEnabled(False)
+        self.dn_cb.toggled.connect(self._toggle_dn)
+        # No repeat: a fixed range flags the same records on every pass.
+
+    @staticmethod
+    def _limit(default: float, tip: str) -> QDoubleSpinBox:
+        sp = _fspin(default, -_LIMIT_RANGE, _LIMIT_RANGE, step=1.0, decimals=4)
+        sp.setToolTip(tip)
+        return sp
+
+    def _period_spins(self) -> tuple:
+        return self.min_dt, self.max_dt, self.min_nt, self.max_nt
+
+    def _toggle_dn(self, on: bool) -> None:
+        for sp in self._period_spins():
+            sp.setEnabled(on)
+        if on:  # seed per-period from the global values (convention)
+            self.min_dt.setValue(self.minval.value())
+            self.min_nt.setValue(self.minval.value())
+            self.max_dt.setValue(self.maxval.value())
+            self.max_nt.setValue(self.maxval.value())
+
+    def kwargs(self) -> dict:
+        kw = dict(minval=self.minval.value(), maxval=self.maxval.value(),
+                  separate_day_night=self.dn_cb.isChecked())
+        if self.dn_cb.isChecked():
+            kw.update(minval_daytime=self.min_dt.value(), maxval_daytime=self.max_dt.value(),
+                      minval_nighttime=self.min_nt.value(),
+                      maxval_nighttime=self.max_nt.value())
+        return kw
+
+    def load(self, kwargs: dict) -> None:
+        for key, sp in (("minval", self.minval), ("maxval", self.maxval)):
+            if kwargs.get(key) is not None:
+                sp.setValue(float(kwargs[key]))
+        # Set the toggle first (it seeds the per-period spins from the global
+        # values), then overwrite with the saved per-period limits.
+        self.dn_cb.setChecked(bool(kwargs.get("separate_day_night", False)))
+        for key, sp in (("minval_daytime", self.min_dt), ("maxval_daytime", self.max_dt),
+                        ("minval_nighttime", self.min_nt), ("maxval_nighttime", self.max_nt)):
+            if kwargs.get(key) is not None:
+                sp.setValue(float(kwargs[key]))
+
+
 class MissingValsParams(_StepParams):
     method = "flag_missingvals_test"
     label = "Missing values"
@@ -347,6 +421,7 @@ STEP_METHODS: list[type[_StepParams]] = [
     ZScoreRollingParams,
     IncrementsParams,
     LOFParams,
+    AbsLimParams,
     MissingValsParams,
 ]
 

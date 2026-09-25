@@ -2,10 +2,10 @@
 GUI.WIDGETS.STEPWISE_CARDS: METHOD CARDS FOR THE STEPWISE OUTLIER CHAIN
 ======================================================================
 
-The stepwise screening tab builds its outlier chain as a row of draggable,
-editable **method cards** instead of a flat list. Each card shows one step
+The stepwise screening tab builds its outlier chain as a vertical list of
+editable **method cards**. Each card shows one step
 (method + a compact parameter summary + how many points it removed once run) and
-carries inline controls: reorder (◀ ▶), edit (re-open the param form seeded with
+carries inline controls: reorder (▲ ▼), edit (re-open the param form seeded with
 the step's current kwargs), and delete. A trailing dashed *＋ Add step* ghost
 card opens the same editor with no preset.
 

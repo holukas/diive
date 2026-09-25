@@ -2133,6 +2133,590 @@ def test_stepwise_screening_runs_one_chain_at_a_time(app):
     release.set()
 
 
+def test_stepwise_screening_tab_keeps_the_base_path(app):
+    """The Stepwise screening tab runs the base implementation of every seam the
+    Meteo tab overrides, and its worker still screens the working frame itself
+    (a StepwiseOutlierDetection on the input index), not the library class."""
+    from diive.gui.tabs._screening_base import ScreeningTabBase
+    from diive.gui.tabs.stepwise import StepwiseScreeningTab
+    from diive.gui.widgets.stepwise_method_params import ZScoreParams
+    from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+
+    for seam in ("_chain_input", "_run_chain", "_compute_corrected", "_raw_series",
+                 "_display_lines", "_display_heatmap", "_emit_frame"):
+        assert getattr(StepwiseScreeningTab, seam) is getattr(ScreeningTabBase, seam), seam
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-01-01", periods=48 * 5, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.05)
+    df.index.name = "TIMESTAMP_END"
+    tab = StepwiseScreeningTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._select("observed_value")
+    tab._steps = [ZScoreParams().step()]
+    assert tab._chain_input() is tab._df
+    tab._worker(tab._chain_input(), "observed_value", tab._steps, tab._coords(), False,
+                tab._run_id)
+    QApplication.processEvents()
+    assert isinstance(tab._payload["detector"], StepwiseOutlierDetection)
+    assert "mscr" not in tab._payload
+    assert tab._payload["detector"].series_hires_orig.index.equals(df.index)
+    assert tab._result_df.index.equals(df.index)
+
+
+def _meteo_download(segments, field="TA_T1_2_1", spikes=()):
+    """A database download (data_detailed frame) of *segments* [(freq, span), ...]
+    one after the other, TIMESTAMP_END index and tag columns, as the Database
+    explorer hands it over."""
+    import numpy as np
+    from diive.core.io.db.influx.common import TAGS
+
+    parts, t = [], pd.Timestamp("2021-07-01 00:00")
+    for freq, span in segments:
+        idx = pd.date_range(t + pd.Timedelta(freq), t + pd.Timedelta(span), freq=freq)
+        part = pd.DataFrame(dict(site="CH-XYZ", varname=field, units="degC",
+                                 raw_varname="TA_raw", raw_units="degC", hpos="T1",
+                                 vpos="2", repl="1", data_raw_freq=freq, freq=freq,
+                                 filegroup="meteo", config_filetype="TEST",
+                                 data_version="raw", gain="1", offset="0"), index=idx)
+        parts.append(part)
+        t = idx[-1]
+    df = pd.concat(parts)
+    hour = df.index.hour.to_numpy() + df.index.minute.to_numpy() / 60
+    df[field] = (15 + 5 * np.sin(2 * np.pi * (hour - 9) / 24)
+                 + np.random.default_rng(42).normal(0, 0.2, len(df)))
+    for ts in spikes:
+        df.loc[pd.Timestamp(ts), field] = 80.0
+    df.index = pd.DatetimeIndex(df.index.to_numpy(), name="TIMESTAMP_END")
+    return df[[c for c in TAGS if c in df.columns] + [field]]
+
+
+def _staged_meteo_tab(frame, field="TA_T1_2_1"):
+    """A Meteo screening tab with a 30-min working dataset and *frame* staged."""
+    from diive.gui import site
+    from diive.gui.tabs.meteo_screening import MeteoScreeningTab
+
+    site.manager.update(name="X", latitude=47.29, longitude=7.73, elevation=0.0,
+                        utc_offset=1)
+    dataset = pd.DataFrame(
+        {"x": 1.0}, index=pd.date_range("2021-06-30 00:15", "2021-07-10 23:45",
+                                        freq="30min", name="TIMESTAMP_MIDDLE"))
+    tab = MeteoScreeningTab()
+    tab.widget()
+    tab.on_data_loaded(dataset)
+    tab.load_staged({"data_detailed": {field: frame}, "field": field,
+                     "measurement": "TA", "bucket": "ch-xyz_raw",
+                     "data_version": "raw", "utc_offset": 1})
+    _wait_for_worker(tab)
+    return tab
+
+
+def _run_meteo_chain(tab, steps):
+    """Run *steps* through the tab's worker synchronously (as the stepwise tests do)."""
+    tab._steps = steps
+    tab._worker(tab._chain_input(), tab._var, tab._steps, tab._coords(), True, tab._run_id)
+    QApplication.processEvents()
+
+
+@pytest.mark.parametrize("segments, n_records, resolutions", [
+    ([("10min", "2D")], 288, "10min"),
+    ([("10min", "2D"), ("1min", "1D")], 288 + 1440, "10min and 1min"),
+])
+def test_meteo_screening_tab_end_to_end(app, segments, n_records, resolutions):
+    """Stage a download, run a chain with absolute limits, correct, resample and
+    add: the tab runs StepwiseMeteoScreeningDb and every record is kept."""
+    from diive.core.metadata import ATTRS_KEY
+    from diive.gui.widgets.stepwise_method_params import AbsLimParams, HampelParams
+    from diive.preprocessing.qaqc.meteoscreening import StepwiseMeteoScreeningDb
+
+    field = "TA_T1_2_1"
+    spikes = ["2021-07-01 13:00", "2021-07-02 02:00"]
+    frame = _meteo_download(segments, spikes=spikes)
+    tab = _staged_meteo_tab(frame)
+
+    # Status line: records and resolutions from the library, not grid slots.
+    assert isinstance(tab._mscr, StepwiseMeteoScreeningDb)
+    assert f"({n_records} records at {resolutions}," in tab.status.text()
+    assert tab._var == field and list(tab._df.columns) == [field]
+    assert tab._df[field].notna().sum() == n_records
+
+    lim = AbsLimParams()
+    lim.maxval.setValue(50.0)
+    hampel = HampelParams()
+    hampel.window.setValue(48)
+    hampel.dn_cb.setChecked(True)
+    _run_meteo_chain(tab, [lim.step(), hampel.step()])
+
+    payload = tab._payload
+    assert payload is not None and payload["mscr"] is not tab._mscr  # a copy was screened
+    removed = payload["removed"]
+    assert len(removed) == 2
+    # Absolute limits removed exactly the two planted spikes (at their END - grid/2).
+    grid_half = pd.Timedelta(tab._df.index.freq) / 2
+    assert sorted(removed[0] + grid_half) == [pd.Timestamp(t) for t in spikes]
+    # The QCF counts records, not grid slots.
+    qcf = payload["qcf"]
+    assert int(qcf.flagqcf.notna().sum()) == n_records
+    assert "STEPWISE SCREENING REPORT" in tab.report_text.toPlainText()
+    if len(segments) > 1:
+        assert payload["bounds"][1] == (None, None)  # Hampel ran per resolution period
+    # Per-step highlight + limit lines + the lazy heatmap pages all render.
+    tab.limits_cb.setChecked(True)
+    for i in (0, 1):
+        tab._select_step(i)
+        tab._select_step(i)
+    for page in (1, 2, 0):
+        tab._preview_tabs.set_page(page)
+        QApplication.processEvents()
+    for canvas in tab._page_canvases:
+        assert canvas.fig.axes
+        assert not [t for a in canvas.fig.axes for t in a.texts
+                    if "Cannot plot" in t.get_text()]
+
+    # Corrections go through the library class; empty grid slots stay empty.
+    row = tab.corrections_panel._rows["setto_max"]
+    row.enable.setChecked(True)
+    row.threshold.setValue(19.0)
+    tab.run_corrections_btn.click()
+    QApplication.processEvents()
+    corrected = tab._corrected
+    assert corrected is not None and corrected.max() == 19.0
+    assert int(corrected.notna().sum()) == n_records - int((qcf.flagqcf == 2).sum())
+
+    emitted = {}
+    tab.featuresCreated.connect(lambda d: emitted.update(df=d))
+    tab._freq.setCurrentText("30min")
+    tab._agg.setCurrentText("mean")
+    tab._mincounts.setValue(0.5)  # a period missing one 10-min record keeps 2/3
+    assert tab.add_btn.isEnabled()
+    tab.add_btn.click()
+    out = emitted["df"]
+    assert list(out.columns) == [field]
+    assert out.index.name == "TIMESTAMP_MIDDLE" and out.index.freqstr == "30min"
+    assert out.index[0] == pd.Timestamp("2021-07-01 00:15")
+    assert out[field].max() <= 19.0
+    # Every period of the download is filled, the coarse era included.
+    assert int(out[field].notna().sum()) == len(out)
+    history = out.attrs[ATTRS_KEY][field]
+    # The download's tags, not the ones resample() rewrote.
+    assert history["params"]["freq"] == ("10min" if len(segments) == 1 else "10min,1min")
+    assert history["params"]["data_version"] == "raw"
+
+
+def test_meteo_screening_tab_failed_load_clears_previous_field(app):
+    """A download the library cannot screen shows the error in the status line
+    and leaves nothing of the previous field behind."""
+    from diive.gui.widgets.stepwise_method_params import ZScoreParams
+
+    tab = _staged_meteo_tab(_meteo_download([("10min", "2D")]))
+    _run_meteo_chain(tab, [ZScoreParams().step()])
+    assert tab._payload is not None and tab.add_btn.isEnabled()
+
+    # Too few records to screen: the library refuses to build the screening.
+    bad = _meteo_download([("10min", "10min")])
+    tab.load_staged({"data_detailed": {"TA_T1_2_1": bad}, "field": "TA_T1_2_1",
+                     "utc_offset": 1})
+    _wait_for_worker(tab)
+    assert tab.status.text().startswith("Could not load TA_T1_2_1 for screening:")
+    assert tab._mscr is None and tab._df is None and tab._var is None
+    assert tab._payload is None and tab._result_df is None and tab._corrected is None
+    assert tab.varpanel.list.count() == 0
+    assert not tab.add_btn.isEnabled()
+    assert tab.qcf_label.text() == "QCF: run to compute."
+    assert tab.report_text.toPlainText() == ""
+    assert [t.get_text() for a in tab.canvas.fig.axes for t in a.texts] == \
+        ["Select a variable to screen."]
+    tab._run()  # nothing to run, and no error
+    assert tab._payload is None
+
+
+def test_meteo_screening_tab_state_round_trip(app):
+    """save_state / restore_state keep the chain and the measurement. The
+    corrections rows are covered by test_meteo_screening_restores_saved_corrections."""
+    from diive.gui.tabs.meteo_screening import MeteoScreeningTab
+    from diive.gui.widgets.stepwise_method_params import AbsLimParams
+
+    tab = _staged_meteo_tab(_meteo_download([("10min", "2D")]))
+    tab._steps = [AbsLimParams().step()]
+    row = tab.corrections_panel._rows["setto_min"]
+    row.enable.setChecked(True)
+    row.threshold.setValue(5.0)
+    state = tab.save_state()
+
+    fresh = MeteoScreeningTab()
+    fresh.widget()
+    fresh.restore_state(state)
+    assert fresh._steps == tab._steps
+    assert fresh.corrections_panel.measurement() == "TA"
+
+
+def test_meteo_screening_copy_python_renders_the_library_script(app):
+    """Copy Python renders a StepwiseMeteoScreeningDb script with the staged
+    download, the chain, the corrections and the resample settings."""
+    from diive.gui.widgets.stepwise_method_params import AbsLimParams
+
+    tab = _staged_meteo_tab(_meteo_download([("10min", "2D")]))
+    lim = AbsLimParams()
+    lim.maxval.setValue(50.0)
+    tab._steps = [lim.step()]
+    row = tab.corrections_panel._rows["setto_max"]
+    row.enable.setChecked(True)
+    row.threshold.setValue(19.0)
+    tab._freq.setCurrentText("1h")
+    tab._agg.setCurrentText("mean")
+    tab._mincounts.setValue(0.5)
+
+    code = tab._code_provider()
+    compile(code, "<copy-python>", "exec")
+    assert "StepwiseOutlierDetection" not in code
+    for needle in ("dv.qaqc.StepwiseMeteoScreeningDb(", "dbc.download(",
+                   "bucket='ch-xyz_raw'", "measurements=['TA']", "fields=['TA_T1_2_1']",
+                   # The records' END range; stop is excluded, so one step later.
+                   "start='2021-07-01 00:10:00'", "stop='2021-07-03 00:10:00'",
+                   "timezone_offset_to_utc_hours=1,", "data_version='raw'",
+                   "site='CH-XYZ'", "site_lat=47.29", "site_lon=7.73", "utc_offset=1,",
+                   "mscr.flag_outliers_abslim_test(", "maxval=50.0", "mscr.addflag()",
+                   "mscr.finalize_outlier_detection()",
+                   "{'key': 'setto_max', 'kwargs': {'threshold': 19.0}}",
+                   "mscr.resample(to_freqstr='1h', agg='mean', mincounts_perc=0.5)"):
+        assert needle in code, needle
+
+
+def test_meteo_screening_follows_site_coordinates(app):
+    """Coordinates edited in Project settings after the download apply to the
+    next run and correction; results computed with the old ones are cleared.
+    An edit that leaves the screening coordinates alone keeps the results."""
+    from diive.gui import site
+    from diive.gui.widgets.stepwise_method_params import ZScoreParams
+
+    field = "TA_T1_2_1"
+    tab = _staged_meteo_tab(_meteo_download([("10min", "2D")]))
+    try:
+        _run_meteo_chain(tab, [ZScoreParams().step()])
+        assert tab._payload["mscr"].site_lat == 47.29
+
+        # Name only: nothing the screening computed is stale.
+        site.manager.update(name="renamed", latitude=47.29, longitude=7.73,
+                            elevation=0.0, utc_offset=1)
+        assert tab._payload is not None
+
+        # The project's UTC offset: the screening uses it, so the results are
+        # stale, and the staged data (downloaded in UTC+01:00) need re-sending.
+        site.manager.update(name="X", latitude=47.29, longitude=7.73,
+                            elevation=0.0, utc_offset=2)
+        assert tab._coords()["utc_offset"] == 2
+        assert tab._payload is None
+        assert "send the field again" in tab.status.text()
+        site.manager.update(name="X", latitude=47.29, longitude=7.73,
+                            elevation=0.0, utc_offset=1)
+        _run_meteo_chain(tab, tab._steps)
+        assert tab._payload["mscr"].utc_offset == 1
+
+        site.manager.update(name="X", latitude=-33.9, longitude=18.4, elevation=0.0,
+                            utc_offset=1)
+        assert tab._payload is None and tab._result_df is None
+        assert tab._chain_dirty and not tab.add_btn.isEnabled()
+        assert tab.status.text().startswith("Site coordinates changed")
+
+        _run_meteo_chain(tab, tab._steps)
+        mscr = tab._payload["mscr"]
+        assert (mscr.site_lat, mscr.site_lon, mscr.utc_offset) == (-33.9, 18.4, 1)
+        assert mscr.outlier_detection[field].site_lat == -33.9
+        assert "site_lat=-33.9" in tab._code_provider()
+
+        # Corrections without a run use the new coordinates too.
+        site.manager.update(name="X", latitude=46.0, longitude=8.0, elevation=0.0,
+                            utc_offset=1)
+        assert tab._payload is None
+        row = tab.corrections_panel._rows["setto_max"]
+        row.enable.setChecked(True)
+        row.threshold.setValue(19.0)
+        tab.run_corrections_btn.click()
+        QApplication.processEvents()
+        assert tab._corrected is not None and tab._corrected.max() == 19.0
+        assert (tab._mscr_work.site_lat, tab._mscr_work.site_lon) == (46.0, 8.0)
+    finally:
+        site.manager.update(name="X", latitude=47.29, longitude=7.73, elevation=0.0,
+                            utc_offset=1)
+
+
+def test_meteo_screening_uses_project_utc_offset(app):
+    """The screening, Copy Python and the state use the project's UTC offset;
+    while it is not set, 0 is used and the status line warns. A saved offset
+    from an older project is ignored on restore."""
+    from diive.gui import site
+    from diive.gui.tabs.meteo_screening import MeteoScreeningTab
+    from diive.gui.widgets.project_offset import NOT_SET_WARNING
+    from diive.gui.widgets.stepwise_method_params import AbsLimParams
+
+    tab = _staged_meteo_tab(_meteo_download([("10min", "2D")]))
+    try:
+        assert NOT_SET_WARNING not in tab.status.text()
+        _run_meteo_chain(tab, [AbsLimParams().step()])
+        assert tab._payload["mscr"].utc_offset == 1
+        assert "utc_offset=1," in tab._code_provider()
+
+        state = tab.save_state()
+        assert "utc_offset" not in state
+        fresh = MeteoScreeningTab()
+        fresh.widget()
+        fresh.restore_state({**state, "utc_offset": 5})  # older project
+        assert fresh._coords()["utc_offset"] == 1
+
+        site.manager.configured = False
+        site.manager.changed.emit()
+        _run_meteo_chain(tab, tab._steps)
+        assert tab._payload["mscr"].utc_offset == 0
+        assert NOT_SET_WARNING in tab.status.text()
+        assert "utc_offset=0," in tab._code_provider()
+    finally:
+        site.manager.update(name="X", latitude=47.29, longitude=7.73, elevation=0.0,
+                            utc_offset=1)
+
+
+def test_database_explorer_downloads_in_project_utc_offset(app, monkeypatch):
+    """The Database explorer shows the project's UTC offset read-only, seeds the
+    pickers in it and passes it to the download and the screening hand-off.
+    While it is not set, the note and the download status warn and 0 is used."""
+    from diive.gui import db, site
+    from diive.gui.tabs.database_explorer import DatabaseExplorerTab
+    from diive.gui.widgets.project_offset import NOT_SET_WARNING, ProjectUtcOffset
+
+    calls, handed = [], []
+    frame = _meteo_download([("10min", "1D")])
+
+    class _Backend:
+        def download_detailed_chunked(self, *args):
+            calls.append(args)
+            return {"TA_T1_2_1": frame}
+
+    def _download(tab):
+        tab._on_download()
+        status = tab._status.text()
+        while tab._download_runner.is_running:
+            QApplication.processEvents()
+            time.sleep(0.005)
+        QApplication.processEvents()
+        return status
+
+    site.manager.update(name="X", latitude=47.29, longitude=7.73, elevation=0.0,
+                        utc_offset=1)
+    monkeypatch.setattr(db.manager, "request_screening", handed.append)
+    tab = DatabaseExplorerTab()
+    tab.widget()
+    try:
+        assert isinstance(tab._utc_offset, ProjectUtcOffset)
+        assert tab._utc_offset.text() == "UTC+01:00"
+        assert tab._utc_offset.warning_mark.isHidden()
+        assert "UTC+01:00" in tab._tz_note.text()
+        tab._bucket, tab._measurement = "ch-xyz_raw", "TA"
+        tab._field, tab._data_version = "TA_T1_2_1", "raw"
+        tab._seed_download_range("2021-07-01 00:00:00", "2021-07-03 00:00:00")
+        assert tab._start_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss") == \
+            "2021-07-01 01:00:00"                        # UTC shown in UTC+01:00
+        monkeypatch.setattr(db.manager, "backend", _Backend())
+        status = _download(tab)
+        assert NOT_SET_WARNING not in status
+        assert calls[-1][6] == 1                         # utc_offset
+        tab._hand_off({"TA_T1_2_1": frame})
+        assert handed[-1]["utc_offset"] == 1
+
+        site.manager.configured = False
+        site.manager.changed.emit()
+        assert tab._utc_offset.text() == "not set"
+        assert not tab._utc_offset.warning_mark.isHidden()
+        assert tab._tz_note.text() == NOT_SET_WARNING
+        assert tab._start_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss") == \
+            "2021-07-01 00:00:00"                        # re-seeded in UTC
+        status = _download(tab)
+        assert NOT_SET_WARNING in status
+        assert calls[-1][6] == 0
+    finally:
+        site.manager.update(name="X", latitude=47.29, longitude=7.73, elevation=0.0,
+                            utc_offset=1)
+
+
+def _set_screening_corrections(panel):
+    """Enable two corrections with non-default parameters on *panel* (TA or SW)."""
+    rmax = panel._rows["setto_max"]
+    rmax.enable.setChecked(True)
+    rmax.threshold.setValue(19.0)
+    rval = panel._rows["setto_value"]
+    rval.enable.setChecked(True)
+    rval.dates.setText("2021-07-01 06:00..2021-07-01 08:00")
+    rval.value.setValue(-1.5)
+
+
+def test_stepwise_screening_restores_saved_corrections(app):
+    """Saved correction rows survive restore_state on a fresh tab, both before
+    any data arrives and after a push that auto-detected another measurement
+    (the project-open order). The panel's set_state used to switch the
+    measurement after taking over the saved rows, and the rebuild overwrote
+    them with the fresh panel's defaults."""
+    import numpy as np
+    from diive.gui import site
+    from diive.gui.tabs.stepwise import StepwiseScreeningTab
+
+    site.manager.update(name="X", latitude=47.29, longitude=7.73, elevation=0.0,
+                        utc_offset=1)
+    idx = pd.date_range("2021-07-01 00:30", periods=48 * 5, freq="30min",
+                        name="TIMESTAMP_END")
+    hour = idx.hour.to_numpy() + idx.minute.to_numpy() / 60
+    ta = 15 + 5 * np.sin(2 * np.pi * (hour - 9) / 24)
+    # First column is not TA: a fresh tab auto-selects it on the push.
+    df = pd.DataFrame({"x": 1.0, "TA_T1_2_1": ta}, index=idx)
+
+    tab = StepwiseScreeningTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._select("TA_T1_2_1")
+    _set_screening_corrections(tab.corrections_panel)
+    tab.run_corrections_btn.click()
+    saved_corrs = tab.corrections_panel.corrections()
+    assert [c["key"] for c in saved_corrs] == ["setto_max", "setto_value"]
+    assert tab._corrected is not None and tab._corrected.max() == 19.0
+    state = tab.save_state()
+
+    # Direct restore, no data yet.
+    fresh = StepwiseScreeningTab()
+    fresh.widget()
+    fresh.restore_state(state)
+    assert fresh.corrections_panel.get_state() == state["corrections"]
+    assert fresh.corrections_panel.corrections() == saved_corrs
+
+    # Project-open order: data pushed first (measurement detected from "x").
+    fresh = StepwiseScreeningTab()
+    fresh.widget()
+    fresh.on_data_loaded(df)
+    assert fresh.corrections_panel.measurement() != "TA"
+    fresh.restore_state(state)
+    assert fresh.corrections_panel.measurement() == "TA"
+    assert fresh.meas_combo.currentData() == "TA"
+    assert fresh.corrections_panel.get_state() == state["corrections"]
+    assert fresh.corrections_panel.corrections() == saved_corrs
+    assert fresh._var == "TA_T1_2_1"
+    pd.testing.assert_series_equal(fresh._corrected, tab._corrected)
+
+
+def test_meteo_screening_restores_saved_corrections(app):
+    """Saved correction rows survive restore_state on a fresh Meteo screening
+    tab, and apply once the field is staged again."""
+    from diive.gui.tabs.meteo_screening import MeteoScreeningTab
+
+    frame = _meteo_download([("10min", "2D")])
+    tab = _staged_meteo_tab(frame)
+    _set_screening_corrections(tab.corrections_panel)
+    tab.run_corrections_btn.click()
+    QApplication.processEvents()
+    saved_corrs = tab.corrections_panel.corrections()
+    assert [c["key"] for c in saved_corrs] == ["setto_max", "setto_value"]
+    assert tab._corrected is not None and tab._corrected.max() == 19.0
+    state = tab.save_state()
+
+    fresh = MeteoScreeningTab()
+    fresh.widget()
+    fresh.restore_state(state)
+    assert fresh.corrections_panel.get_state() == state["corrections"]
+    assert fresh.corrections_panel.corrections() == saved_corrs
+
+    # The staged download is not part of the project; stage it again and run.
+    fresh.on_data_loaded(pd.DataFrame(
+        {"x": 1.0}, index=pd.date_range("2021-06-30 00:15", "2021-07-10 23:45",
+                                        freq="30min", name="TIMESTAMP_MIDDLE")))
+    fresh.load_staged({"data_detailed": {"TA_T1_2_1": frame}, "field": "TA_T1_2_1",
+                       "measurement": "TA", "bucket": "ch-xyz_raw",
+                       "data_version": "raw", "utc_offset": 1})
+    _wait_for_worker(fresh)
+    assert fresh.corrections_panel.corrections() == saved_corrs
+    fresh.run_corrections_btn.click()
+    QApplication.processEvents()
+    pd.testing.assert_series_equal(fresh._corrected, tab._corrected)
+
+
+def test_project_round_trip_keeps_screening_corrections(window, tmp_path):
+    """A project saved with a Stepwise screening tab reopens with its
+    correction rows and the corrected series, through MainWindow's open path."""
+    window._open_menu_tab("Stepwise screening")
+    tab = window._menu_tab_list[-1]
+    tab._select("Tair_f")
+    assert tab.corrections_panel.measurement() == "TA"
+    panel = tab.corrections_panel
+    rmax = panel._rows["setto_max"]
+    rmax.enable.setChecked(True)
+    rmax.threshold.setValue(19.0)
+    rmiss = panel._rows["set_exact_to_missing"]
+    rmiss.enable.setChecked(True)
+    rmiss.values.setText("0, -9999")
+    tab.run_corrections_btn.click()
+    saved_state = panel.get_state()
+    saved_corrs = panel.corrections()
+    assert tab._corrected is not None and tab._corrected.max() == 19.0
+
+    folder = tmp_path / "P.diive"
+    assert window._write_project(folder, "P")
+    assert window._load_project_folder(folder)
+    QApplication.processEvents()
+
+    restored = next(t for t in window._menu_tab_list
+                    if t._menu_label == "Stepwise screening")
+    assert restored is not tab
+    assert restored.corrections_panel.get_state() == saved_state
+    assert restored.corrections_panel.corrections() == saved_corrs
+    assert restored._var == "Tair_f"
+    pd.testing.assert_series_equal(restored._corrected, tab._corrected)
+
+
+def test_abslim_step_in_the_picker(app):
+    """Absolute limits is offered in the step picker; its per-period limits are
+    seeded from the global ones and round-trip through the editor; it runs."""
+    from diive.gui.tabs.stepwise import StepwiseScreeningTab
+    from diive.gui.widgets.stepwise_cards import StepEditorDialog
+    from diive.gui.widgets.stepwise_method_params import (
+        STEP_METHOD_BY_KEY,
+        AbsLimParams,
+        method_labels,
+    )
+
+    assert ("flag_outliers_abslim_test", "Absolute limits") in method_labels()
+    assert STEP_METHOD_BY_KEY["flag_outliers_abslim_test"] is AbsLimParams
+
+    p = AbsLimParams()
+    assert p.kwargs() == dict(minval=-10_000.0, maxval=10_000.0, separate_day_night=False)
+    p.minval.setValue(-5.0)
+    p.maxval.setValue(30.0)
+    assert not p.min_dt.isEnabled()
+    p.dn_cb.setChecked(True)  # seeds all four per-period limits
+    assert (p.min_dt.value(), p.max_dt.value(), p.min_nt.value(), p.max_nt.value()) == \
+        (-5.0, 30.0, -5.0, 30.0)
+    p.max_nt.setValue(20.0)
+    step = p.step()
+    assert step["kwargs"]["maxval_nighttime"] == 20.0
+    assert step["kwargs"]["separate_day_night"] is True
+
+    dlg = StepEditorDialog(step=step)
+    assert dlg.method.currentData() == "flag_outliers_abslim_test"
+    assert dlg.step() == step
+    dlg.deleteLater()
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-06-01", periods=48 * 5, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.0)
+    df.index.name = "TIMESTAMP_END"
+    df.loc[df.index[[10, 100]], "observed_value"] = 500.0
+    tab = StepwiseScreeningTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._select("observed_value")
+    glob = AbsLimParams()
+    glob.maxval.setValue(100.0)
+    tab._steps = [glob.step(), step]
+    tab._worker(df, "observed_value", tab._steps, tab._coords(), True, tab._run_id)
+    QApplication.processEvents()
+    assert list(tab._payload["removed"][0]) == list(df.index[[10, 100]])
+    assert len(tab._step_cards) == 2
+
+
 def test_correction_tabs(app):
     # The standalone correction tabs (RF/XGB-style shared template): each is one
     # correction on a selected variable, producing a corrected column + provenance,
@@ -2209,6 +2793,150 @@ def test_correction_tabs(app):
     miss._run()                                      # no values entered
     assert miss._result_df is None
     assert "value" in miss.status.text().lower()
+
+
+def _project_site(utc_offset: int | None):
+    """Configure Project settings with *utc_offset*, or leave them unset (None)."""
+    from diive.gui import site
+    site.manager.update(author="t", description="", name="X", latitude=47.4,
+                        longitude=8.5, elevation=500, utc_offset=utc_offset or 0)
+    if utc_offset is None:
+        site.manager.configured = False
+        site.manager.changed.emit()
+
+
+def test_correction_tab_uses_project_utc_offset(app):
+    """The radiation correction shows the project's offset (read-only), passes it
+    to the library and the script, stops saving it, and drops a pending result
+    when the offset changes."""
+    from diive.gui.tabs.corrections_nighttime_offset import NighttimeZeroOffsetTab
+    from diive.gui.widgets.project_offset import ProjectUtcOffset
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-06-01", periods=48 * 5, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.0)
+    df = df.rename(columns={"observed_value": "SW_IN_T1_2_1"})
+    df.index.name = "TIMESTAMP_END"
+    try:
+        _project_site(2)
+        tab = NighttimeZeroOffsetTab()
+        tab.widget()
+        tab.on_data_loaded(df)
+        tab._select("SW_IN_T1_2_1")
+        assert isinstance(tab.utc, ProjectUtcOffset)
+        assert tab.utc.text() == "UTC+02:00" and not tab.utc.warning_mark.isVisibleTo(tab.utc)
+        assert tab._coords()[2] == 2
+        assert "utc_offset=2" in tab._python_code()
+        state = tab.save_state()
+        assert "utc" not in state["controls"]
+        # An older project's saved offset is ignored.
+        tab.restore_state({"var": "SW_IN_T1_2_1", "controls": {**state["controls"], "utc": 7}})
+        assert tab._coords()[2] == 2
+
+        tab._worker(df["SW_IN_T1_2_1"], tab._current_kwargs(), *tab._coords())
+        QApplication.processEvents()
+        assert tab._result_df is not None and tab.add_btn.isEnabled()
+        _project_site(3)
+        assert tab._result_df is None and not tab.add_btn.isEnabled()
+        assert "UTC offset changed" in tab.status.text()
+
+        _project_site(None)
+        assert tab.utc.text() == "not set" and tab.utc.warning_mark.isVisibleTo(tab.utc)
+        assert tab._coords()[2] == 0
+    finally:
+        _project_site(None)
+
+
+def test_outlier_tabs_use_project_utc_offset(app):
+    """Outlier tabs pass the project's offset to the detector and the script, warn
+    when it is not set, and ignore an offset saved by an older project."""
+    from diive.gui.tabs.outliers import HampelOutlierTab
+    from diive.gui.tabs.outliers_trim import TrimLowOutlierTab
+    from diive.gui.widgets.project_offset import NOT_SET_WARNING
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-06-01", periods=48 * 5, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.05)
+    df.index.name = "TIMESTAMP_END"
+    try:
+        _project_site(2)
+        tab = HampelOutlierTab()
+        tab.widget()
+        tab.on_data_loaded(df)
+        tab._select("observed_value")
+        tab.daynight_cb.setChecked(True)
+        assert tab.utc.text() == "UTC+02:00"
+        kwargs = tab._current_kwargs()
+        assert kwargs["utc_offset"] == 2
+        assert "utc_offset=2" in tab._python_code()
+        state = tab.save_state()
+        assert "utc" not in state["controls"]
+        tab.restore_state({"var": "observed_value",
+                           "controls": {**state["controls"], "utc": 7}})
+        assert tab._current_kwargs()["utc_offset"] == 2
+
+        # A pending result made with another offset is dropped on a change.
+        tab._worker(df["observed_value"], kwargs, False, True)
+        QApplication.processEvents()
+        assert tab._result_df is not None
+        _project_site(1)
+        assert tab._result_df is None and not tab.add_btn.isEnabled()
+
+        # Not set: the trim-low day/night split runs with 0 and warns.
+        _project_site(None)
+        trim = TrimLowOutlierTab()
+        trim.widget()
+        trim.on_data_loaded(df)
+        trim._select("observed_value")
+        trim.trim_daytime.setChecked(True)
+        assert trim.trim_utc.text() == "not set"
+        kw = trim._current_kwargs()
+        assert kw["utc_offset"] == 0
+        assert "trim_utc" not in trim.save_state()["controls"]
+        trim._worker(df["observed_value"], kw, False)
+        QApplication.processEvents()
+        assert trim._result_df is not None
+        assert NOT_SET_WARNING in trim.status.text()
+    finally:
+        _project_site(None)
+
+
+def test_stepwise_screening_uses_project_utc_offset(app):
+    """Stepwise screening screens and scripts with the project's offset, clears a
+    result when the offset changes, and warns when it is not set."""
+    from diive.gui.tabs.stepwise import StepwiseScreeningTab
+    from diive.gui.widgets.project_offset import NOT_SET_WARNING
+    from diive.gui.widgets.stepwise_method_params import ZScoreParams
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-06-01", periods=48 * 5, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.05)
+    df.index.name = "TIMESTAMP_END"
+    try:
+        _project_site(2)
+        tab = StepwiseScreeningTab()
+        tab.widget()
+        tab.on_data_loaded(df)
+        tab._select("observed_value")
+        tab._steps = [ZScoreParams().step()]
+        assert tab._coords()["utc_offset"] == 2
+        assert "utc_offset=2" in tab._code_provider()
+        tab._worker(df, "observed_value", tab._steps, tab._coords(), True, tab._run_id)
+        QApplication.processEvents()
+        assert tab._payload is not None
+        assert NOT_SET_WARNING not in tab.status.text()
+
+        _project_site(3)
+        assert tab._payload is None and tab._chain_dirty
+        assert "UTC offset" in tab.status.text()
+
+        _project_site(None)
+        tab._worker(df, "observed_value", tab._steps, tab._coords(), False, tab._run_id)
+        QApplication.processEvents()
+        assert tab._payload is not None
+        assert NOT_SET_WARNING in tab.status.text()
+    finally:
+        _project_site(None)
 
 
 def test_derived_variable_vpd_tab(app):
@@ -5645,6 +6373,129 @@ def test_partitioning_tabs_refuse_to_run_without_site_coords(app, example_year):
         assert not tab._coords_missing()
     finally:
         site.manager.configured = saved
+
+
+def test_partitioning_tab_uses_project_utc_offset(app):
+    # The offset is read-only and comes from Project settings: the tab shows it
+    # (or a warning when unset), runs and generates code with it, ignores an
+    # offset saved by an older project, and blocks adding a result computed
+    # before the settings changed.
+    import numpy as np
+    from diive.gui import site
+    from diive.gui.tabs.partitioning_nighttime_reddyproc import (
+        NighttimePartitioningReddyProcTab,
+    )
+    from diive.gui.widgets.project_offset import ProjectUtcOffset
+
+    idx = pd.date_range("2024-06-01", periods=48 * 5, freq="30min",
+                        name="TIMESTAMP_MIDDLE")
+    cols = {"nee": "NEE_orig", "ta": "TA_orig", "sw_in": "SW_IN_orig",
+            "nee_f": "NEE_f", "ta_f": "TA_f"}
+    df = pd.DataFrame({c: np.arange(len(idx), dtype=float) for c in cols.values()},
+                      index=idx)
+    snap = site.manager.as_dict()
+    try:
+        site.manager.configured = False
+        tab = NighttimePartitioningReddyProcTab()
+        tab.widget()
+        assert isinstance(tab.utc, ProjectUtcOffset)
+        assert tab.utc.text() == "not set" and not tab.utc.warning_mark.isHidden()
+
+        site.manager.update(name="X", latitude=46.8, longitude=9.8, elevation=0.0,
+                            utc_offset=2)
+        assert tab.utc.text() == "UTC+02:00" and tab.utc.warning_mark.isHidden()
+        tab.on_data_loaded(df)
+        for key, col in cols.items():
+            tab.picker.combos()[key].setCurrentText(col)
+        calls = []
+        tab._runner.run = lambda fn, *args: calls.append(args)
+        tab._run()
+        assert calls and calls[0][1]["utc_offset"] == 2   # coords -> library class
+        assert "utc_offset=2," in tab._python_code()
+
+        state = tab.save_state()
+        assert "utc" not in state["controls"]
+        state["controls"]["utc"] = 5                      # an older project's offset
+        tab.restore_state(state)
+        assert tab.utc.value() == 2
+
+        tab._results = pd.DataFrame({"RECO_NT_RP": [1.0]})
+        tab.add_btn.setEnabled(True)
+        site.manager.update(name="X", latitude=46.8, longitude=9.8, elevation=0.0,
+                            utc_offset=1)
+        assert not tab.add_btn.isEnabled()
+        assert "Project settings changed" in tab.status.text()
+    finally:
+        site.manager.load_dict(snap)
+
+
+def test_potrad_tab_uses_project_utc_offset(app):
+    # SW_IN_POT uses the project offset; changing it stales the result.
+    from diive.gui import site
+    from diive.gui.tabs.derived_potrad import PotradTab
+
+    idx = pd.date_range("2024-06-01", periods=48 * 3, freq="30min",
+                        name="TIMESTAMP_MIDDLE")
+    df = pd.DataFrame({"TA": 15.0}, index=idx)
+    snap = site.manager.as_dict()
+    try:
+        site.manager.update(name="X", latitude=46.8, longitude=9.8559, elevation=0.0,
+                            utc_offset=2)
+        tab = PotradTab()
+        tab.widget()
+        tab.on_data_loaded(df)
+        assert tab.utc.text() == "UTC+02:00"
+        tab._calculate()
+        expected = dv.variables.potrad(df.index, lat=46.8, lon=9.8559, utc_offset=2)
+        pd.testing.assert_series_equal(tab._result, expected)
+        assert "utc_offset=2" in tab._python_code()
+
+        site.manager.update(name="X", latitude=46.8, longitude=9.8559, elevation=0.0,
+                            utc_offset=1)
+        assert tab._result is None and not tab.add_btn.isEnabled()
+    finally:
+        site.manager.load_dict(snap)
+
+
+def test_flux_chain_tab_uses_project_utc_offset(app):
+    # init_flux_data and the generated script get the project offset; unset
+    # shows the warning in the run status; an old saved offset is ignored.
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    from diive.gui import site
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.project_offset import NOT_SET_WARNING
+
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07-01":"2024-07-03"]
+    snap = site.manager.as_dict()
+    try:
+        site.manager.update(name="X", latitude=47.4, longitude=8.4, elevation=0.0,
+                            utc_offset=2)
+        tab = FluxChainTab()
+        tab.widget()
+        tab.on_data_loaded(df)
+        assert tab.utc_offset.text() == "UTC+02:00"
+        assert tab._init_kwargs()["utc_offset"] == 2
+        assert "utc_offset=2" in tab._code()
+
+        state = tab.save_state()
+        assert "utc_offset" not in state["controls"]
+        state["controls"]["utc_offset"] = 5
+        tab.restore_state(state)
+        assert tab._init_kwargs()["utc_offset"] == 2
+
+        site.manager.configured = False
+        assert tab._init_kwargs()["utc_offset"] == 0
+        started = []
+        tab._level_worker = lambda plan, base, df: started.append(plan)  # no real run
+        tab._run_level(0)
+        for _ in range(100):
+            if started:
+                break
+            time.sleep(0.01)
+        assert started and started[0]["init_kwargs"]["utc_offset"] == 0
+        assert NOT_SET_WARNING in tab.summary.toPlainText()
+    finally:
+        site.manager.load_dict(snap)
 
 
 def test_combine_variables_tab_reports_records_lost_to_one_sided_gaps(app):

@@ -3,8 +3,8 @@ GUI.TABS.OVERVIEW: SELECTED-VARIABLE OVERVIEW
 =============================================
 
 The first tab, shown when a dataset is loaded. Pick a variable on the left
-(full-height list); the right column shows a multi-panel figure with a strip of
-KPI-style stat cards (`dv.sstats`) directly below it. Figure panels are easy to
+(full-height list); the right column shows a hero band (identity + all summary
+stats from `dv.sstats`) above a multi-panel figure. Figure panels are easy to
 extend (`_PANELS`).
 
 Part of the diive library: https://github.com/holukas/diive

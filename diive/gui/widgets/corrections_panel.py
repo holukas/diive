@@ -310,10 +310,12 @@ class CorrectionsPanel(QWidget):
         return {"measurement": self._measurement, "rows": state}
 
     def set_state(self, st: dict) -> None:
-        self._saved = dict(st.get("rows") or {})
+        saved = dict(st.get("rows") or {})
+        # Switch the measurement before taking over the saved rows: its rebuild
+        # snapshots the live rows (defaults on a fresh panel) into _saved, which
+        # would overwrite the rows being restored.
         self.set_measurement(st.get("measurement"))
-        # set_measurement rebuilds and applies _saved; if the measurement was
-        # unchanged it won't rebuild, so apply directly.
+        self._saved = saved
         for key, row in self._rows.items():
-            if key in self._saved:
-                row.set_state(self._saved[key])
+            if key in saved:
+                row.set_state(saved[key])
