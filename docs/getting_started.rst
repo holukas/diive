@@ -27,7 +27,7 @@ Core Concepts
    Forest, XGBoost, the MDS meteorological-similarity method and linear interpolation.
 
 **Quality Control & Outlier Detection**
-   Outliers and bad measurements are flagged before analysis. diive has more than ten
+   Outliers and bad measurements are flagged before analysis. diive has nine
    detection methods, including Hampel filters, z-scores, local standard deviation and
    Local Outlier Factor. Every detector returns both a flag series and a filtered
    series, so nothing is deleted silently.

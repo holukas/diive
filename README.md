@@ -98,20 +98,20 @@ outliers, gap-fill, run the flux chain, visualize.
 
 `import diive as dv` exposes ten domain namespaces. Each row links to runnable examples for that area:
 
-| Namespace        | Covers                                                                                                                           | Examples                                                                 |
-|------------------|----------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------|
-| `dv.plotting`    | 18 plot types: time series, heatmaps, diel cycle, cumulative, ridgeline, scatter, hexbin, wind rose, tree ring, 3-D surface, ... | [visualization/](examples/visualization/README.md)                       |
-| `dv.gapfilling`  | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, linear interpolation, long-term variants, `FeatureEngineer`    | [gapfilling/](examples/gapfilling/README.md)                             |
-| `dv.flux`        | Flux processing chain (L2–L4.2), NEE partitioning, USTAR filtering, uncertainty                                                  | [flux/](examples/flux/README.md)                                         |
-| `dv.outliers`    | Nine detection methods (Hampel, z-score variants, local SD, LOF, absolute limits, ...)                                           | [outlier_detection/](examples/preprocessing/outlier_detection/README.md) |
-| `dv.corrections` | Offset corrections (measurement, radiation, humidity, wind direction), thresholds, missing values                                | [corrections/](examples/preprocessing/corrections/README.md)             |
-| `dv.qaqc`        | `FlagQCF` quality flags, EddyPro flag handling, meteo screening                                                                  | [qaqc/](examples/preprocessing/qaqc/README.md)                           |
-| `dv.analysis`    | Seasonal-trend decomposition, lagged correlation, grid aggregation, gap statistics, spectral analysis                            | [analysis/](examples/analysis/README.md)                                 |
-| `dv.times`       | Timestamp sanitization, frequency detection, resampling, date-range handling                                                     | [times/](examples/times/README.md)                                       |
-| `dv.variables`   | Derived variables (VPD, potential radiation, day/night flags, air properties), feature engineering                               | [features/](examples/features/README.md)                                 |
-| `dv.events`      | Time-stamped event markers, 0/1 flag columns, plot overlays                                                                      | [events/](examples/events/README.md)                                     |
+| Namespace        | Covers                                                                                                                           | Examples                                                                  |
+|------------------|----------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| `dv.plotting`    | 18 plot types: time series, heatmaps, diel cycle, cumulative, ridgeline, scatter, hexbin, wind rose, tree ring, 3-D surface, ... | [visualization/](examples/visualization/README.rst)                       |
+| `dv.gapfilling`  | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, linear interpolation, long-term variants, `FeatureEngineer`    | [gapfilling/](examples/gapfilling/README.rst)                             |
+| `dv.flux`        | Flux processing chain (L2–L4.2), NEE partitioning, USTAR filtering, uncertainty                                                  | [flux/](examples/flux/README.rst)                                         |
+| `dv.outliers`    | Nine detection methods (Hampel, z-score variants, local SD, LOF, absolute limits, ...)                                           | [outlier_detection/](examples/preprocessing/outlier_detection/README.rst) |
+| `dv.corrections` | Offset corrections (measurement, radiation, humidity, wind direction), thresholds, missing values                                | [corrections/](examples/preprocessing/corrections/README.rst)             |
+| `dv.qaqc`        | `FlagQCF` quality flags, EddyPro flag handling, meteo screening                                                                  | [qaqc/](examples/preprocessing/qaqc/README.rst)                           |
+| `dv.analysis`    | Seasonal-trend decomposition, lagged correlation, grid aggregation, gap statistics, spectral analysis                            | [analysis/](examples/analysis/README.rst)                                 |
+| `dv.times`       | Timestamp sanitization, frequency detection, resampling, date-range handling                                                     | [times/](examples/times/README.rst)                                       |
+| `dv.variables`   | Derived variables (VPD, potential radiation, day/night flags, air properties), feature engineering                               | [features/](examples/features/README.rst)                                 |
+| `dv.events`      | Time-stamped event markers, 0/1 flag columns, plot overlays                                                                      | [events/](examples/events/README.rst)                                     |
 
-I/O helpers are top-level (`dv.load_parquet`, `dv.save_parquet`, `dv.ReadFileType`) — see [io/](examples/io/README.md).
+I/O helpers are top-level (`dv.load_parquet`, `dv.save_parquet`, `dv.ReadFileType`) — see [io/](examples/io/README.rst).
 For the authoritative symbol list, check `diive.__all__` and each namespace's `__all__`.
 
 ## Highlights
@@ -127,7 +127,7 @@ implementation: nighttime and daytime (Reichstein 2005, Lasslop 2010) × ONEFlux
 so all four coexist in one dataframe. → [examples/flux/partitioning/](examples/flux/partitioning/)
 
 **Gap-filling** — Random Forest and XGBoost with SHAP-based feature reduction, plus a faithful MDS port that needs no
-training. An 8-stage feature engineer feeds them all. → [examples/gapfilling/](examples/gapfilling/README.md)
+training. An 8-stage feature engineer feeds them all. → [examples/gapfilling/](examples/gapfilling/README.rst)
 
 **Desktop GUI** — the same library code behind an interactive app: plotting, cleaning, gap-filling and flux tabs, a
 guided processing chain, per-variable metadata with full provenance, and portable `.diive` project folders.

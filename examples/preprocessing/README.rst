@@ -18,7 +18,8 @@ absolute limits, Hampel, local standard deviation, z-score variants, local outli
 trimming and manual removal, plus chaining several methods with ``StepwiseOutlierDetection``.
 
 **Quality control** (``qaqc/``, 3 examples) — aggregate the individual test flags into one overall
-quality flag with ``FlagQCF``, and screen meteorological data.
+quality flag with ``FlagQCF``, read the EddyPro quality flags, and detect timestamp shifts by
+comparing measured with potential shortwave radiation.
 
 Running Examples
 ----------------

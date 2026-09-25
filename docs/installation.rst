@@ -47,22 +47,8 @@ For development and contributing to diive, clone the repository and use uv:
 
    git clone https://github.com/holukas/diive.git
    cd diive
-   uv sync                       # Install all dependencies
+   uv sync                       # Install diive (editable) and the dev tools
    uv run pytest tests/          # Run tests
-   uv run python -m pip install -e .  # Install in editable mode
-
-Option 4: Development Setup with conda (Legacy)
-------------------------------------------------
-
-If you prefer conda, use the provided environment file:
-
-.. code-block:: bash
-
-   git clone https://github.com/holukas/diive.git
-   cd diive
-   conda env create -f environment.yml
-   conda activate diive
-   pip install -e .
 
 Verifying Installation
 ======================
@@ -72,7 +58,7 @@ Check that diive is installed correctly:
 .. code-block:: python
 
    import diive as dv
-   print(dv.__version__)  # Should print 0.91.0 or later
+   print(dv.__version__)
 
 Verify with a simple example:
 
@@ -81,7 +67,7 @@ Verify with a simple example:
    import diive as dv
 
    # Load example data
-   df = dv.load_exampledata_parquet(data_id='TLL')
+   df = dv.load_exampledata_parquet()
    print(f"Loaded {len(df)} records")
    print(df.head())
 
@@ -90,12 +76,12 @@ Key Dependencies
 
 diive depends on:
 
-- **Data processing:** pandas, numpy, pyarrow
-- **Machine learning:** scikit-learn, xgboost, prophet
+- **Data processing:** pandas, numpy, pyarrow, pyyaml
+- **Machine learning:** scikit-learn, xgboost
 - **Visualization:** matplotlib, seaborn, bokeh
-- **Statistical analysis:** scipy, statsmodels, scikit-optimize
-- **Interpretability:** shap, eli5, yellowbrick
-- **Time series:** sktime, pymannkendall
+- **Statistics:** statsmodels, uncertainties
+- **Interpretability:** shap, yellowbrick
+- **Console output:** rich
 
 All dependencies are automatically installed with diive.
 
@@ -174,13 +160,6 @@ Troubleshooting
 **ImportError: No module named 'diive'**
    Make sure diive is installed (see above) and your Python environment is activated.
 
-**EnvironmentError: Conda environment not found**
-   If using conda, activate the environment first:
-
-   .. code-block:: bash
-
-      conda activate diive
-
 **Version mismatch in XGBoost**
    Some systems may have XGBoost version conflicts. Install a compatible version:
 
@@ -211,7 +190,7 @@ For development installations, pull the latest changes:
 
    cd diive
    git pull
-   pip install -e .
+   uv sync
 
 Next Steps
 ==========

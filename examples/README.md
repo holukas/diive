@@ -143,7 +143,7 @@ This runs the headless-safe suite (113 scripts) in parallel with up to 12 worker
 
 ## Finding Examples
 
-Each category folder has a **README.md** with:
+Each category folder has a **README.rst** with:
 - Brief description of examples in that folder
 - List of files with what each demonstrates
 - Links to relevant documentation
@@ -151,18 +151,18 @@ Each category folder has a **README.md** with:
 
 Browse by topic:
 
-- **visualization/README.md** — Heatmaps, scatter, timeseries, wind rose, tree-ring, and more
-- **times/README.md** — Timestamp validation and regularization
-- **analysis/README.md** — Correlation, decomposition, gap detection, spectral analysis
-- **events/README.md** — Marking and overlaying time-stamped events
-- **features/README.md** — Variable creation, unit conversions, derived properties
-- **fits/README.md** — Binned curve fitting with confidence and prediction bands
-- **flux/README.md** — Multi-level flux processing (L2-L4.2), NEE partitioning, quality filtering, USTAR detection
-- **gapfilling/README.md** — Linear, Random Forest, XGBoost, MDS methods
-- **io/README.md** — Parquet file I/O, EddyPro CSV reading, binary value extraction
-- **preprocessing/corrections/README.md** — Offset corrections, value clipping
-- **preprocessing/outlier_detection/README.md** — 9 outlier detection methods
-- **preprocessing/qaqc/README.md** — Quality flags, EddyPro integration
+- **[visualization/README.rst](visualization/README.rst)** — Heatmaps, scatter, timeseries, wind rose, tree-ring, and more
+- **[times/README.rst](times/README.rst)** — Timestamp validation and regularization
+- **[analysis/README.rst](analysis/README.rst)** — Correlation, decomposition, gap detection, spectral analysis
+- **[events/README.rst](events/README.rst)** — Marking and overlaying time-stamped events
+- **[features/README.rst](features/README.rst)** — Variable creation, unit conversions, derived properties
+- **[fits/README.rst](fits/README.rst)** — Binned curve fitting with confidence and prediction bands
+- **[flux/README.rst](flux/README.rst)** — Multi-level flux processing (L2-L4.2), NEE partitioning, quality filtering, USTAR detection
+- **[gapfilling/README.rst](gapfilling/README.rst)** — Linear, Random Forest, XGBoost, MDS methods
+- **[io/README.rst](io/README.rst)** — Parquet file I/O, EddyPro CSV reading, binary value extraction
+- **[preprocessing/corrections/README.rst](preprocessing/corrections/README.rst)** — Offset corrections, value clipping
+- **[preprocessing/outlier_detection/README.rst](preprocessing/outlier_detection/README.rst)** — 9 outlier detection methods
+- **[preprocessing/qaqc/README.rst](preprocessing/qaqc/README.rst)** — Quality flags, EddyPro integration
 
 ## Example Coverage
 
@@ -203,7 +203,7 @@ uv run python examples/visualization/plot_heatmap_datetime_basic.py
 
 When adding new examples:
 1. Place in the appropriate functional domain folder (`visualization/`, `analysis/`, `gapfilling/`, etc.)
-2. Add file reference to the category's **README.md**
+2. Add file reference to the category's **README.rst**
 3. Add file path to `run_all_examples.py` in the correct section
 4. Update **CATALOG.md** if introducing a new use case
 5. Ensure example runs in <60 seconds

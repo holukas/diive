@@ -76,11 +76,13 @@ Use Cases
    import numpy as np
    import diive as dv
 
-   # Instrument malfunction 2024-01-15 to 2024-01-17.
-   # Each entry in *dates* is either a single timestamp or a [start, end] range.
+   # Instrument malfunction from 2024-01-15 through 2024-01-17.
+   # Each entry in *dates* is either a single timestamp or a [start, end] range,
+   # both ends included. A bare date covers the whole day, so this range runs
+   # to the last record of 2024-01-17.
    corrected = dv.corrections.setto_value(
        series=df['CO2'],
-       dates=[['2024-01-15 00:00:00', '2024-01-17 00:00:00']],
+       dates=[['2024-01-15', '2024-01-17']],
        value=np.nan,
        verbose=1
    )

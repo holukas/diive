@@ -10,8 +10,8 @@ diive is a Python library for time series processing and analysis with focus on 
 
 - **Feature engineering** — 8-stage composable pipeline for ML preparation
 - **Gap-filling** — Multiple ML methods (Random Forest, XGBoost) and meteorological matching
-- **Quality control** — 10+ outlier detection algorithms and data validation
-- **Flux processing** — Multi-level workflow (Levels 2-4.1) for eddy covariance data
+- **Quality control** — Nine outlier detection methods and data validation
+- **Flux processing** — Multi-level workflow (Levels 2-4.2) for eddy covariance data
 - **Visualization** — 14+ specialized plot types for time series analysis
 - **Analysis** — Correlation, decomposition, seasonal trends, and more
 
@@ -59,7 +59,7 @@ Features
    - Heatmaps (datetime and regular)
    - Hexbin density plots
    - Diel cycles and cumulative curves
-   - Histograms and quantile plots
+   - Histograms and distribution-shift plots
    - Custom scatter and ridge plots
 
 📈 **Analysis**
@@ -93,7 +93,7 @@ For development, clone the repository and install with uv:
    uv sync                    # Install dependencies
    uv run pytest tests/       # Run tests
 
-See :doc:`installation` for more options (conda, poetry, etc.).
+See :doc:`installation` for more options.
 
 Quick Example
 =============

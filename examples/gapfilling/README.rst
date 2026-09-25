@@ -24,7 +24,7 @@ Linear interpolation is fast but works only for small gaps. Random Forest and XG
      - General purpose, handles nonlinear patterns
    * - XGBoost
      - Yes
-     - High accuracy, best for large datasets
+     - Gradient boosting, handles nonlinear patterns
    * - MDS
      - No
      - When you lack training data
@@ -56,7 +56,7 @@ Training-based, interpretable, robust to outliers. Four versions: basic, long-te
 XGBoost
 ~~~~~~~
 
-Gradient boosting. Often more accurate than Random Forest but requires more tuning.
+Gradient boosting. Has more hyperparameters to tune than Random Forest.
 
 - **gapfill_xgboost.py** — Basic XGBoost with default hyperparameters
 - **gapfill_optimize_xgboost.py** — Hyperparameter tuning via grid search
@@ -92,7 +92,7 @@ When to Use Each Method
 
    filled = dv.gapfilling.linear_interpolation(series=df['NEE'], limit=1)
 
-**Random Forest or XGBoost:** You have training data and want good accuracy without excessive tuning. Start with Random Forest for interpretability; switch to XGBoost if you need better accuracy on a specific dataset.
+**Random Forest or XGBoost:** You have drivers measured during the gaps and enough complete records to train on. Start with Random Forest; try XGBoost and compare the held-out scores on your dataset.
 
 .. code-block:: python
 

@@ -47,7 +47,7 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 | [**plot_windrose_basic.py**](visualization/plot_windrose_basic.py) | Wind rose: a variable aggregated into wind-direction sectors (mean/median/min/max/sum/std/count) drawn as polar bars, with a per-sector results table |
 | [**plot_compound_extremes.py**](visualization/plot_compound_extremes.py) | `CompoundExtremesPlot`: quadrant scatter of two z-scores coloured/marked by compound-extreme category with threshold lines (Wang et al., Fig. 2); from a fitted analysis, custom styling, or pre-classified data |
 
-See: [visualization/README.md](visualization/README.md)
+See: [visualization/README.rst](visualization/README.rst)
 
 ---
 
@@ -70,7 +70,7 @@ See: [visualization/README.md](visualization/README.md)
 | [**analysis_harmonic.py**](analysis/analysis_harmonic.py) | `harmonic_analysis` + `spectrogram`: diel/annual cycles, window effect, time-frequency map |
 | [**analysis_compound_extremes.py**](analysis/analysis_compound_extremes.py) | `CompoundExtremes` + `CompoundExtremesPlot`: classify months/days into none/air/soil/compound dry-hot extremes from VPD & SWC z-scores |
 
-See: [analysis/README.md](analysis/README.md)
+See: [analysis/README.rst](analysis/README.rst)
 
 ---
 
@@ -80,7 +80,7 @@ See: [analysis/README.md](analysis/README.md)
 |---------|-------------|
 | [**events_event.py**](events/events_event.py) | Create instant/period `Event`s, encode them as 0/1 data columns with `event_to_flag`, overlay them on plots with `overlay_events`, and apply a custom category palette |
 
-See: [events/README.md](events/README.md)
+See: [events/README.rst](events/README.rst)
 
 ---
 
@@ -96,7 +96,7 @@ See: [events/README.md](events/README.md)
 | [**times_temporal_matrices.py**](times/times_temporal_matrices.py) | Convert time series to year × month matrix for heatmap visualization |
 | [**times_statistics.py**](times/times_statistics.py) | Quick statistical profiling and data quality assessment |
 
-See: [times/README.md](times/README.md)
+See: [times/README.rst](times/README.rst)
 
 ---
 
@@ -119,7 +119,7 @@ See: [times/README.md](times/README.md)
 | [**correction_setto_value.py**](preprocessing/corrections/correction_setto_value.py) | Replace values in time periods with constant (malfunction times) |
 | [**correction_setto_threshold.py**](preprocessing/corrections/correction_setto_threshold.py) | Clip values to physically realistic min/max bounds |
 
-See: [preprocessing/corrections/README.md](preprocessing/corrections/README.md)
+See: [preprocessing/corrections/README.rst](preprocessing/corrections/README.rst)
 
 ---
 
@@ -147,7 +147,7 @@ See: [preprocessing/corrections/README.md](preprocessing/corrections/README.md)
 | [**qc_eddypro_flags.py**](preprocessing/qaqc/qc_eddypro_flags.py) | Extract EddyPro quality flags (VM97 tests, signal strength, completeness) |
 | [**qaqc_detect_timestamp_shifts.py**](preprocessing/qaqc/qaqc_detect_timestamp_shifts.py) | Detect clock/timestamp errors via radiation phase analysis: FFT phase shift, cross-correlation, and noon-shift peak detection |
 
-See: [preprocessing/outlier_detection/README.md](preprocessing/outlier_detection/README.md) and [preprocessing/qaqc/README.md](preprocessing/qaqc/README.md)
+See: [preprocessing/outlier_detection/README.rst](preprocessing/outlier_detection/README.rst) and [preprocessing/qaqc/README.rst](preprocessing/qaqc/README.rst)
 
 ---
 
@@ -167,7 +167,7 @@ See: [preprocessing/outlier_detection/README.md](preprocessing/outlier_detection
 | [**feature_timesince.py**](features/feature_timesince.py) | Time-since-event features |
 | [**feature_noise.py**](features/feature_noise.py) | Synthetic noise generation |
 
-See: [features/README.md](features/README.md)
+See: [features/README.rst](features/README.rst)
 
 ---
 
@@ -178,8 +178,8 @@ See: [features/README.md](features/README.md)
 | Example | Description |
 |---------|-------------|
 | [**fluxprocessingchain_level2.py**](flux/fluxprocessingchain/fluxprocessingchain_level2.py) | Level 2 in isolation — load a real EddyPro FLUXNET output file, `init_flux_data`, `run_level2`; expand EddyPro quality diagnostics into per-test flags + one overall QCF. `level2_test_inputs` (column each test reads), QCF-filtered vs. high-quality (QCF=0) series, accept-threshold effect. The smallest standalone entry into the chain |
-| [**fluxprocessingchain_runchain.py**](flux/fluxprocessingchain/fluxprocessingchain_runchain.py) | Single-call `run_chain(data, FluxConfig)` — minimal config drives the full L2→L4.1 pipeline with sensible defaults. Shows the easy path; for full control over per-detector / per-model knobs use the composable example below |
-| [**fluxprocessingchain_composable.py**](flux/fluxprocessingchain/fluxprocessingchain_composable.py) | Full L2→L4.1 pipeline using composable level callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; `gap_stats()` after L3.3; `plot_gapfilled_heatmaps()` and `plot_cumulative_comparison()` after L4.1 |
+| [**fluxprocessingchain_runchain.py**](flux/fluxprocessingchain/fluxprocessingchain_runchain.py) | Single-call `run_chain(data, FluxConfig)` — minimal config drives the full L2→L4.2 pipeline with sensible defaults. Shows the easy path; for full control over per-detector / per-model knobs use the composable example below |
+| [**fluxprocessingchain_composable.py**](flux/fluxprocessingchain/fluxprocessingchain_composable.py) | Full L2→L4.2 pipeline using composable level callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; `gap_stats()` after L3.3; `plot_gapfilled_heatmaps()` and `plot_cumulative_comparison()` after L4.1 |
 | [**fluxprocessingchain_partitioning.py**](flux/fluxprocessingchain/fluxprocessingchain_partitioning.py) | Level 4.2 NEE→GPP+RECO partitioning wired into the chain; all four variants (`run_level42_nighttime_oneflux` / `_nighttime_reddyproc` / `_daytime_reddyproc` / `_daytime_oneflux`) via `run_chain`, one fit per USTAR scenario; `partitioned_cols()` to discover the `*_NT_OF` / `*_NT_RP` / `*_DT_RP` / `*_DT_OF` output columns |
 
 ### NEE Partitioning (GPP / RECO)
@@ -206,7 +206,7 @@ See: [features/README.md](features/README.md)
 | [**flux_ustar_vekuri_detection.py**](flux/lowres/flux_ustar_vekuri_detection.py) | Simplified quantile-based USTAR detection (Vekuri method) |
 | [**flux_ustar_method_comparison.py**](flux/lowres/flux_ustar_method_comparison.py) | Compare ONEFlux and Vekuri USTAR detection methods |
 
-See: [flux/README.md](flux/README.md)
+See: [flux/README.rst](flux/README.rst)
 
 ---
 
@@ -227,7 +227,7 @@ See: [flux/README.md](flux/README.md)
 | [**gapfill_comparison.py**](gapfilling/gapfill_comparison.py) | Compare all methods side-by-side | Mixed |
 | [**gapfill_swin.py**](gapfilling/gapfill_swin.py) | SW_IN physics + XGBoost (nighttime zero, daytime ML) | Yes |
 
-See: [gapfilling/README.md](gapfilling/README.md)
+See: [gapfilling/README.rst](gapfilling/README.rst)
 
 ---
 
@@ -238,7 +238,7 @@ See: [gapfilling/README.md](gapfilling/README.md)
 | [**fit_binfittercp.py**](fits/fit_binfittercp.py) | Binned curve fitting with confidence/prediction intervals, result exploration |
 | [**fit_fitter.py**](fits/fit_fitter.py) | Ecosystem driver-response fitting, NEE-VPD relationship, uncertainty quantification |
 
-See: [fits/README.md](fits/README.md)
+See: [fits/README.rst](fits/README.rst)
 
 ---
 
@@ -252,4 +252,4 @@ See: [fits/README.md](fits/README.md)
 | [**io_read_single_file_with_readfiletype.py**](io/io_read_single_file_with_readfiletype.py) | Read single EddyPro CSV with pre-defined filetype configuration |
 | [**io_extract.py**](io/io_extract.py) | Binary value extraction, bit-level data manipulation |
 
-See: [io/README.md](io/README.md)
+See: [io/README.rst](io/README.rst)

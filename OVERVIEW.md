@@ -94,10 +94,10 @@ that feed it.
 The tree is written against the ten-namespace API and builds without warnings in HTML,
 PDF and EPUB. `api_reference.rst` documents the ten namespaces; the generated API and
 gallery trees are build output and are gitignored. A build executes every example:
-`conf.py` runs sphinx-gallery with `plot_gallery: True` over all 113 scripts, which is
-what puts figures and captured console output on each example page. Two known gaps:
-`installation.rst` names only Python 3.12 where `pyproject.toml` allows 3.12 and 3.13,
-and the desktop GUI appears only in `faq.rst`.
+`conf.py` passes `execute_gallery` to sphinx-gallery's `plot_gallery` and runs all 113
+scripts, which is what puts figures and captured console output on each example page.
+`execute_gallery` is on by default; set `DIIVE_DOCS_GALLERY=0` to skip the examples for a
+fast local build.
 
 ## Repository layout (top level)
 
