@@ -35,6 +35,7 @@ from diive.core.base.identify import identify_flagcols
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 from diive.core.utils.console import console as _console, detail
+from diive.preprocessing.qaqc.flags import MissingValues
 from diive.variables import daytime_nighttime_flag_from_swinpot
 
 
@@ -59,6 +60,12 @@ class FlagQCF:
         2: >3 soft flags OR >=1 hard flag OR rejected by day/night logic
            (code tests sumhardflags >= 2, i.e. 2 x count, so one hard flag suffices)
 
+    Rows that are not records: where a missing-values flag (``MissingValues``,
+    ``FLAG_*_MISSING_TEST``) is NaN and the target value is NaN, the row is an
+    empty slot rather than a record (mixed-resolution meteo screening puts
+    coarse records on a finer grid). A measured value is always a record. Such rows get QCF and flag sums NaN and are left out of every count
+    in the reports. Without such NaN nothing changes.
+
     Data Access:
         - flagqcf: Overall QCF flag for each record
         - filteredseries: Data with QCF=2 records set to NaN (general use)
@@ -78,16 +85,18 @@ class FlagQCF:
         """Initialize QCF calculator.
 
         Args:
-            df: DataFrame containing individual test flag columns following pattern
-                FLAG_*_{idstr}_{target_col}_TEST (e.g., FLAG_TEST1_L41_NEE_TEST). Values must be 0/1/2.
+            df: DataFrame containing individual test flag columns (e.g.
+                FLAG_TEST1_L41_NEE_TEST). Values must be 0/1/2. Every column that
+                starts with FLAG_, ends with _TEST or _QCF and contains the target
+                name (for fluxes also related names, e.g. FC for NEE; see
+                ``identify_flagcols``) is used, whatever its idstr.
             target_col: Column name of the target variable to calculate QCF for (e.g., 'NEE' or 'FC').
                 This name must appear in flag column names for proper identification.
             outname: Output name for QCF flag columns. If None, uses target_col name.
-            idstr: ID string identifier that appears in flag column names. This string
-                is used to identify which flags belong together and to name output
-                columns. Examples: '_L41', '_L41_FC', '_L4.1'. If None, auto-detected
-                from flag columns. All FLAG_*_{idstr}_{target_col}_TEST columns are identified
-                and used for QCF calculation.
+            idstr: ID string for the output column names, e.g. '_L41' gives
+                FLAG_L41_NEE_QCF. It does not select the flag columns. With
+                ``ustar_scenarios`` it also names the current USTAR scenario.
+                If None, the output names carry no ID string.
             swinpot_col: Column name of solar potential radiation for daytime/nighttime
                 separation. If provided, enables separate acceptance thresholds for day/night.
             nighttime_threshold: Solar radiation threshold (W/m²) below which records
@@ -143,6 +152,17 @@ class FlagQCF:
 
         flagcols = identify_flagcols(df=df, seriescol=target_col, exclude_ustar_ids=exclude_ustar_ids)
         self._flags_df = df[flagcols].copy()
+
+        # MissingValues flags every row 0 or 2, so a NaN there together with a
+        # missing value marks a row that was never a record (an empty slot between
+        # coarse records on a finer grid). Such rows must not be counted or rated
+        # as good. A measured value is always a record, whatever its missing flag,
+        # so its hard flags still apply.
+        missingcols = [c for c in flagcols if str(c).endswith(f"_{MissingValues.flagid}_TEST")]
+        if missingcols:
+            self._is_record = df[missingcols].notna().any(axis=1) | df[target_col].notna()
+        else:
+            self._is_record = pd.Series(True, index=df.index)
 
         # Detect daytime and nighttime
         if self.swinpot_data is not None:
@@ -214,9 +234,10 @@ class FlagQCF:
             2 = Poor quality (critical issues or too many soft flags)
 
         Returns:
-            Series with QCF values (0, 1 or 2). Never NaN: a record for which no test
-            raised a flag - including one where every test flag is NaN - has flag sums
-            of zero and therefore QCF=0.
+            Series with QCF values (0, 1 or 2). A record for which no test raised a
+            flag - including one where every test flag is NaN - has flag sums of zero
+            and therefore QCF=0. NaN only for rows that are not records (missing-values
+            flag and value NaN, see the class docstring).
         """
         return self.flags[self.flagqcfcol]
 
@@ -261,6 +282,10 @@ class FlagQCF:
         self.nighttime_accept_qcf_below = nighttime_accept_qcf_below
         self._flags_df = self._calculate_flagsums(df=self._flags_df)
         self._flags_df = self._calculate_flag_qcf(df=self._flags_df)
+        # Guarded: pandas upcasts on an assignment even when the mask selects nothing.
+        if not self._is_record.all():
+            self._flags_df.loc[~self._is_record, [self.flagqcfcol, self.sumflagscol,
+                                                  self.sumhardflagscol, self.sumsoftflagscol]] = np.nan
         self._add_series()
         self._calculate_series_qcf()
 
@@ -309,12 +334,12 @@ class FlagQCF:
         _console.print(f"\n\n  +- REPORT 1A: ALL RECORDS (INCLUDING MISSING VALUES)")
         _console.print(f"  |")
         for col in test_flagcols:
-            self._flagstats_dt_nt(col=col, df=self.flags)
+            self._flagstats_dt_nt(col=col, df=self.flags[self._is_record])
 
         # === REPORT 2: FLAGS FOR AVAILABLE RECORDS ===
         _console.print(f"\n  +- REPORT 1B: AVAILABLE RECORDS ONLY (EXCLUDING MISSING VALUES)")
         _console.print(f"  |")
-        _df = self.flags.copy()
+        _df = self.flags[self._is_record].copy()
         ix_missing_vals = _df[self.series_name].isnull()
         _df = _df[~ix_missing_vals].copy()
         for col in test_flagcols:
@@ -366,7 +391,7 @@ class FlagQCF:
         flagcols = [c for c in flagcols if str(c).startswith('FLAG_') and (str(c).endswith('_TEST'))]
         allflags_df = self.flags[flagcols].copy()
 
-        ix_missing_vals = self.df[self.series_name].isnull()
+        ix_missing_vals = self.df[self.series_name].isnull() | ~self._is_record
         allflags_df = allflags_df[~ix_missing_vals].copy()  # Ignore missing values
 
         n_vals = len(allflags_df)
@@ -436,13 +461,13 @@ class FlagQCF:
         test_cols = [c for c in identify_flagcols(df=self.flags, seriescol=self.series_name)
                      if str(c).startswith('FLAG_') and str(c).endswith('_TEST')]
         target = self.df[self.series_name]
-        ix_measured = target.notna()
+        ix_measured = target.notna() & self._is_record
 
-        periods = [("OVERALL", pd.Series(True, index=self.df.index))]
+        periods = [("OVERALL", self._is_record)]
         if isinstance(self.daytime, Series):
-            periods.append(("DAYTIME", self.daytime == 1))
+            periods.append(("DAYTIME", (self.daytime == 1) & self._is_record))
         if isinstance(self.nighttime, Series):
-            periods.append(("NIGHTTIME", self.nighttime == 1))
+            periods.append(("NIGHTTIME", (self.nighttime == 1) & self._is_record))
 
         # Cumulative QCF after each test prefix (measured records only), mirroring
         # report_qcf_evolution so day/night accept thresholds are honoured.
@@ -573,9 +598,10 @@ class FlagQCF:
         _console.print(f"QCF QUALITY CONTROL REPORT: {self.series_name}")
         _console.print(f"{'=' * 70}")
 
-        series = self.flags[self.series_name]
-        seriesqcf = self.flags[self.filteredseriescol]
-        qcf_flags = self.flags[self.flagqcfcol]
+        records = self.flags[self._is_record]
+        series = records[self.series_name]
+        seriesqcf = records[self.filteredseriescol]
+        qcf_flags = records[self.flagqcfcol]
 
         # === TIME PERIOD ===
         start = series.index[0].strftime('%Y-%m-%d %H:%M')
@@ -588,6 +614,8 @@ class FlagQCF:
         _console.print(f"    Duration: {duration_days} days ({len(series)} records)")
 
         # === DATA AVAILABILITY STAGES ===
+        # Rows that are not records were dropped above, so this counts records, not
+        # grid slots, although the label below still says "all time slots".
         n_potential = len(series)
         n_measured = len(series.dropna())
         n_missed = n_potential - n_measured
@@ -701,7 +729,8 @@ class FlagQCF:
         df[self.sumflagscol] = sumflags
         return df
 
-    def showplot_qcf_heatmaps(self, maxabsval: float = None, figsize: tuple = (18, 8)):
+    def showplot_qcf_heatmaps(self, maxabsval: float = None, figsize: tuple = (18, 8),
+                              flags: DataFrame = None):
         """Display 4-panel heatmap showing data before/after QC and flag distribution.
 
         Panels (left to right):
@@ -716,7 +745,10 @@ class FlagQCF:
             maxabsval: Max absolute value for colorbar symmetry. If None, auto-scales.
                 Useful for comparing multiple panels with same scale.
             figsize: Figure dimensions (width, height) in inches. Default (18, 8).
+            flags: Frame to draw instead of ``flags``, with the same index and
+                columns, e.g. a copy prepared for display. Default ``flags``.
         """
+        flags = self.flags if flags is None else flags
         fig = plt.figure(facecolor='white', figsize=figsize)
         gs = gridspec.GridSpec(1, 4)  # rows, cols
         gs.update(wspace=0.4, hspace=0, left=0.03, right=0.97, top=0.9, bottom=0.1)
@@ -728,14 +760,14 @@ class FlagQCF:
         # Heatmaps
         vmin = -maxabsval if maxabsval else None
         vmax = maxabsval if maxabsval else None
-        HeatmapDateTime(series=self.flags[self.series_name]).plot(ax=ax_before, vmin=vmin, vmax=vmax,
-                                                                  cb_digits_after_comma=0)
-        HeatmapDateTime(series=self.flags[self.filteredseriescol]).plot(ax=ax_after, vmin=vmin, vmax=vmax,
-                                                                        cb_digits_after_comma=0)
-        HeatmapDateTime(series=self.flags[self.sumflagscol]).plot(ax=ax_flagsum,
-                                                                  cb_digits_after_comma=0)
-        HeatmapDateTime(series=self.flags[self.flagqcfcol]).plot(ax=ax_flag,
-                                                                 cb_digits_after_comma=0)
+        HeatmapDateTime(series=flags[self.series_name]).plot(ax=ax_before, vmin=vmin, vmax=vmax,
+                                                             cb_digits_after_comma=0)
+        HeatmapDateTime(series=flags[self.filteredseriescol]).plot(ax=ax_after, vmin=vmin, vmax=vmax,
+                                                                   cb_digits_after_comma=0)
+        HeatmapDateTime(series=flags[self.sumflagscol]).plot(ax=ax_flagsum,
+                                                             cb_digits_after_comma=0)
+        HeatmapDateTime(series=flags[self.flagqcfcol]).plot(ax=ax_flag,
+                                                            cb_digits_after_comma=0)
         plt.setp(ax_after.get_yticklabels(), visible=False)
         plt.setp(ax_flagsum.get_yticklabels(), visible=False)
         plt.setp(ax_flag.get_yticklabels(), visible=False)
@@ -745,7 +777,7 @@ class FlagQCF:
 
         fig.show()
 
-    def showplot_qcf_timeseries(self, figsize=(16, 20)):
+    def showplot_qcf_timeseries(self, figsize=(16, 20), flags: DataFrame = None):
         """Display all QCF data columns as individual time series subplots.
 
         Creates subplots for: original series, test flags, flag sums, and QCF flag.
@@ -753,6 +785,9 @@ class FlagQCF:
 
         Args:
             figsize: Figure dimensions (width, height) in inches. Default (16, 20).
+            flags: Frame to draw instead of ``flags``, e.g. a copy prepared for
+                display. Default ``flags``.
         """
-        self.flags.plot(subplots=True, figsize=figsize)
+        flags = self.flags if flags is None else flags
+        flags.plot(subplots=True, figsize=figsize)
         plt.show()
