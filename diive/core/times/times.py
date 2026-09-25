@@ -1531,7 +1531,7 @@ def insert_timestamp(
              verbose=verbose)
 
     # Interval of data records
-    timedelta = pd.to_timedelta(timestamp_freq)
+    timedelta = pd.Timedelta(to_offset(timestamp_freq).nanos, unit='ns')
     timedelta_half = timedelta / 2
 
     # Data has MIDDLE timestamp
@@ -1740,7 +1740,8 @@ def convert_series_timestamp_to_middle(data: Union[Series, DataFrame], verbose: 
         if verbose:
             info("Convert to middle-of-period: OK (already middle)", verbose=verbose)
     else:
-        timedelta = pd.to_timedelta(timestamp_freq) / 2
+        # A Day offset has no to_timedelta conversion in pandas 3.
+        timedelta = pd.Timedelta(timestamp_freq.nanos, unit='ns') / 2
         if timestamp_name_before == 'TIMESTAMP_END':
             data.index = data.index - pd.Timedelta(timedelta)
         elif timestamp_name_before == 'TIMESTAMP_START':

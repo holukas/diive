@@ -146,8 +146,9 @@ def resample_series_to_freq(series: Series,
     if not series.index.freq:
         raise NotImplementedError("Error during resampling: Irregular timestamps are not supported.")
 
-    # Requested frequency must be larger than data freq
-    if current_freq > requested_freq:
+    # Requested frequency must be larger than data freq. Compared as durations:
+    # pandas 3 cannot compare a Day offset with a Minute one (TypeError).
+    if pd.Timedelta(current_freq.nanos, unit='ns') > pd.Timedelta(requested_freq.nanos, unit='ns'):
         raise NotImplementedError(
             f"Error during resampling: "
             f"Upsampling not allowed. "
@@ -163,7 +164,7 @@ def resample_series_to_freq(series: Series,
         info(f"Data already at {to_freqstr} resolution; no resampling needed.")
         out = convert_series_timestamp_to_middle(data=series.copy())
         if output_timestamp_shows == 'end':
-            out.index = out.index + pd.to_timedelta(current_freq) / 2
+            out.index = out.index + pd.Timedelta(current_freq.nanos, unit='ns') / 2
             out.index.name = 'TIMESTAMP_END'
         return out
 
@@ -201,7 +202,7 @@ def resample_series_to_freq(series: Series,
     # index, and a database upload deletes old values only across that index.
     agg_ser = agg_ser.where(agg_counts_ser >= mincounts)
 
-    # Re-assign 30MIN resolution as freq
+    # Re-assign the target frequency as freq
     agg_ser = agg_ser.asfreq(to_freqstr)
 
     # Sanitize resampled timestamp index

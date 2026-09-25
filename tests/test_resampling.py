@@ -47,6 +47,32 @@ class TestResampleToFreq(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             resample_series_to_freq(s, '10min')
 
+    def test_10min_to_1D_mean_and_sum(self):
+        # pandas 3 cannot compare a Day offset with a Minute one; the upsampling
+        # check must not raise a TypeError for daily targets.
+        s = self._hires()
+        out = resample_series_to_freq(s, '1D', agg='mean', mincounts_perc=0.9)
+        self.assertEqual(len(out), 3)
+        self.assertEqual(out.index[0], pd.Timestamp('2022-06-02 00:00:00'))
+        self.assertAlmostEqual(out.iloc[0], 71.5)  # mean of 0..143
+        out = resample_series_to_freq(s, '1D', agg='sum', mincounts_perc=0.9)
+        self.assertAlmostEqual(out.iloc[0], float(sum(range(144))))
+
+    def test_upsampling_daily_rejected(self):
+        idx = pd.date_range('2022-06-02', periods=10, freq='1D', name='TIMESTAMP_END')
+        s = pd.Series(np.arange(10, dtype=float), index=idx, name='TA')
+        with self.assertRaises(NotImplementedError):
+            resample_series_to_freq(s, '30min')
+
+    def test_daily_to_1D_is_noop(self):
+        # A Day offset has no to_timedelta conversion in pandas 3.
+        idx = pd.date_range('2022-06-02', periods=10, freq='1D', name='TIMESTAMP_END')
+        s = pd.Series(np.arange(10, dtype=float), index=idx, name='TA')
+        out = resample_series_to_freq(s, '1D')
+        self.assertEqual(out.index.name, 'TIMESTAMP_END')
+        self.assertTrue(out.index.equals(idx))
+        self.assertTrue(out.equals(s))
+
     def test_same_resolution_is_noop(self):
         # Processed 30MIN data "resampled" to 30min: no aggregation, values kept.
         s = self._hires(freq='30min')
