@@ -18,7 +18,6 @@ import diive.core.plotting.plotfuncs as pf
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import detail
-from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.variables import daytime_nighttime_flag_from_swinpot
 
 
@@ -102,7 +101,6 @@ class FlagMultipleConstantUstarThresholds:
             self._results[flag.name] = flag.copy()
 
 
-@ConsoleOutputDecorator()
 class FlagSingleConstantUstarThreshold(FlagBase):
     """Flag records below a single constant USTAR threshold. See :meth:`__init__`."""
 
@@ -254,7 +252,6 @@ class FlagMultipleVariableUstarThresholds:
             self._results[flag.name] = flag.copy()
 
 
-@ConsoleOutputDecorator()
 class UstarThresholdConstantScenarios:
     """
     Check impact of different constant USTAR thresholds on available data

@@ -384,7 +384,6 @@ class HeatmapDateTime(HeatmapBase):
             self.fig.show()
 
 
-# @ConsoleOutputDecorator(spacing=False)
 class HeatmapYearMonth(HeatmapBase):
     """
     A class for plotting heatmaps of time series data aggregated by year and month.

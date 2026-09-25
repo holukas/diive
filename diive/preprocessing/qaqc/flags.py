@@ -13,7 +13,6 @@ from pandas import Series, DatetimeIndex
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import info
-from diive.core.utils.prints import ConsoleOutputDecorator
 
 
 def restrict_application(flag: Series, flagname: str, application_dates: list or None = None,
@@ -50,7 +49,6 @@ def restrict_application(flag: Series, flagname: str, application_dates: list or
     return restricted_flag
 
 
-@ConsoleOutputDecorator()
 class MissingValues(FlagBase):
     """
     Generate flag that indicates missing records in data

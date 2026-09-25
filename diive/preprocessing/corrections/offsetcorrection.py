@@ -17,7 +17,6 @@ from pandas import Series, DataFrame
 import diive.core.dfun.frames as frames
 from diive.core.plotting.plotfuncs import quickplot
 from diive.core.utils.console import detail
-from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.variables import DaytimeNighttimeFlag
 
 
@@ -125,7 +124,6 @@ class MeasurementOffsetFromReplicate:
     #         plt.show()
 
 
-@ConsoleOutputDecorator()
 def remove_relativehumidity_offset(series: Series,
                                    showplot: bool = False) -> Series:
     """Correct relative humidity offset > 100%
@@ -295,7 +293,6 @@ def _nighttime_zero_offset(series: Series,
     )
 
 
-@ConsoleOutputDecorator()
 def remove_nighttime_zero_offset(series: Series,
                                  lat: float,
                                  lon: float,
