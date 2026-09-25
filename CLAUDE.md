@@ -114,7 +114,7 @@ PySide6, optional `gui` extra, launch `diive-gui`. **File map and per-tab detail
 4. A GUI exposing it should expose per-period thresholds (reference: Hampel tab).
 5. A removed parameter must say what replaced it: take `**legacy` and call `reject_legacy_params`.
 
-Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to trim; `LocalOutlierFactor` has no per-period knobs. `*DaytimeNighttime` names are wrappers (not subclasses — `@ConsoleOutputDecorator` returns a function) or plain aliases.
+Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to trim; `LocalOutlierFactor` has no per-period knobs. `*DaytimeNighttime` names are wrappers or plain aliases.
 
 ## Coding Standards
 
@@ -167,4 +167,4 @@ pytest tests/ -v
 
 ---
 
-**Last Updated:** 2026-09-24 | **Version:** v0.91.2
+**Last Updated:** 2026-09-25 | **Version:** v0.91.3

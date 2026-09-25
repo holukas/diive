@@ -4533,3 +4533,45 @@ whose panels carry different settings. Fix shape: block the settings panel's sig
 re-entrancy flag checked by `_mark_dirty`) while `_render` re-applies panel state, and disable the
 button after that loop rather than before it. Spotted by a review agent during the GUI performance
 work (see `devnotes/GUI_PERFORMANCE.md`).
+
+# Round 7 — meteoscreening review (2026-09-25)
+
+Review of `StepwiseMeteoScreeningDb` (`preprocessing/qaqc/meteoscreening.py`), the code it calls
+and `notebooks/DatabaseInfluxStepwiseMeteoScreening.ipynb`, done before calling the workflow
+production ready. Every finding below was **[reproduced]** with a scratch script, and all were fixed
+on 2026-09-25 unless marked open. Tests added in `test_meteoscreening.py`, `test_resampling.py`,
+`test_time.py` and `test_outlierdetection.py`.
+
+| ID | Tier | Finding | Where | Status |
+|---|---|---|---|---|
+| L153 | S1 | Resampling data that already have the target resolution returned the screening's MIDDLE timestamps, so 30-min data would be uploaded half a period early | `core/times/resampling.py` | [x] |
+| L154 | S1 | Mixed resolutions: back-filled coarse records were summed once per fine slot, so `agg='sum'` gave e.g. 30 mm instead of 3 mm per 30 min | `meteoscreening.py` `resample()` | [x] |
+| L155 | S2 | `detect_freq_groups` left records next to a timestamp gap without a group, and `_filter_data` dropped them without a message (one missing 10-min record also removed both neighbours) | `core/times/times.py` | [x], dropped records are now reported |
+| L156 | S2 | Corrections applied before `finalize_outlier_detection()` were discarded, and outlier tests never saw corrected data | `meteoscreening.py` | [x] |
+| L157 | S2 | Resampling dropped rejected edge intervals, so the pre-upload delete (first to last uploaded row) left older screened values at the edges of the period | `core/times/resampling.py` | [x], edge intervals kept as NaN |
+| L158 | S2 | Notebook: Run All screened with example settings (LOF, trim low, absolute limits for air temperature) and then uploaded with delete; trim low removed 51% of a test month | notebook | [x], examples commented out |
+| L159 | S4 | Manual removal dates matched the internal MIDDLE timestamps, while users see END timestamps from the database; a single END timestamp removed nothing | `meteoscreening.py` | [x], dates are END |
+| L160 | S4 | `daytime_accept_qcf_below`/`nighttime_accept_qcf_below` had no effect (no SW_IN_POT passed to `FlagQCF`) | `meteoscreening.py` | [x] |
+| L161 | S4 | Tags that are missing in part of the downloaded tables were uploaded as the text `"nan"` | `meteoscreening.py` `_extract_tags` | [x] |
+| L162 | S3 | GUI stepwise screening, Local SD with day/night: passed `n_sd=[day, night]` lists, which `LocalSD` rejects since v0.91.0 (TypeError) | `gui/widgets/stepwise_method_params.py` | [x], old saved projects still load |
+| L163 | S3 | `fields` given as a string was split into characters | `meteoscreening.py` | [x] |
+| L164 | S3 | LOF automatic `n_neighbors = len/200` was 0 below 200 records | stepwise LOF wrapper | [x] |
+| L165 | S5 | A second `finalize_outlier_detection()` left the first run's QCF columns in `data_detailed` | `meteoscreening.py` | [x] |
+| L166 | S5 | `addflag()` twice added the same flag twice | `stepwiseoutlierdetection.py` | [x], now a warning |
+| L167 | S5 | `__init__` added a `FREQ_AUTO_SEC` column to the caller's DataFrames | `meteoscreening.py` | [x] |
+| L168 | S5 | LocalSD/zScore wrappers typed `n_sd`/`winsize` as lists and did not pass the per-period overrides through; correction plots could not be switched off | `meteoscreening.py`, `stepwiseoutlierdetection.py` | [x] |
+| L169 | S4 | With a day/night split, `FlagQCF`'s QCF evolution report combined a subset with the full-length day/night series, which cleared the index frequency of frames sharing that index (pandas 3); `resample()` then failed with "Irregular timestamps". The flux chain passes SW_IN_POT to `FlagQCF` too, not verified whether it was affected | `preprocessing/qaqc/qcf.py` | [x] |
+| L170 | S4 | `correction_setto_value` dates referred to the internal MIDDLE timestamps, so END dates from the database were off by half a period | `meteoscreening.py` | [x], dates are END |
+| L171 | S3 | `Hampel` raised a `TypeError` for a whole-number nighttime threshold combined with a decimal daytime one (e.g. `n_sigma_daytime=5.5, n_sigma_nighttime=4`) | `outlier_detection/hampel.py` | [x] |
+| L172 | S4 | `setto_value`: a bare date matched only midnight and a bare-date range stopped at midnight of the end day, against its docstring | `corrections/setto.py` | [x], now label slicing as in `ManualRemoval` |
+| L173 | S4 | The nine outlier classes are documented on RTD as functions (`@ConsoleOutputDecorator` returns a function), so their `__init__` docstrings, incl. the argument lists and the `remove_dates` format, do not appear; "See `__init__()`" on `TrimLow`, `LocalOutlierFactor` and `zScoreRolling` points to nothing. The class docstrings now carry examples | `core/utils/prints.py` decorator | [x], decorator removed: it only printed `running <name> ...` and ignored `verbose=` |
+| L174 | S4 | LOF with a fixed `contamination` flags that fraction again on every pass, so the wrapper default `repeat=True` removed 448 of 576 synthetic records. The notebook and the docstring examples use `repeat=False` | `meteoscreening.py`, `stepwiseoutlierdetection.py` | [x], LOF wrappers and the GUI stepwise LOF default to `repeat=False` |
+| L175 | S4 | `StepwiseMeteoScreeningDb.flag_outliers_hampel_test` defaults to `window_length=13` records, while `StepwiseOutlierDetection` and `Hampel` default to 624 (13 days of 30-min data); probably meant as 13 days. The notebook passes its own window | `meteoscreening.py` | [ ] open, default change needs a decision |
+| L176 | S2 | The pre-upload delete did not filter on `site`, so in a bucket shared by several sites an upload deleted that variable for all of them in the period | `core/io/db/influx/influxio.py` | [x] |
+| L177 | S2 | Mixed resolutions: manual removal (and `correction_setto_value`) of a coarse record removes only one of its back-filled fine copies, so the value still enters the aggregate (1 of 10 slots for a 10-min record in 1-min data). | `meteoscreening.py` `_end_dates_to_middle` | [x], coarse records are no longer copied onto the fine grid (each record sits at its END slot only) |
+| L178 | S2 | Mixed resolutions: difference-based tests see the back-filled copies as zero differences, so Hampel with `use_differencing=True` rejected 294 of 2880 slots of clean 10-min data with the notebook settings. A design issue of back-filling, not of Hampel | `meteoscreening.py` `_harmonize_timeresolution` | [x], same redesign as L177; resampling is time-weighted by record duration |
+
+Notes: the notebook statements on the increments z-score (it does not compare across gaps) and on
+`finalize_outlier_detection()` (it does not raise without tests) were wrong and are corrected.
+`remove_nighttime_zero_offset` setting missing nighttime records to zero is deliberate and was
+left unchanged.

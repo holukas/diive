@@ -2,6 +2,55 @@
 
 ![diive](images/logo_diive1_256px.png)
 
+## v0.91.3 | Unreleased
+
+### Changes
+
+- **Meteo screening dates:** `StepwiseMeteoScreeningDb` manual removal and `correction_setto_value`
+  now take dates as they appear in the database (end of each period).
+- **Time-span windows:** Hampel, Local SD and rolling z-score (and their stepwise and meteo
+  screening methods) also accept the window as a time span, e.g. `'7D'`, so a setting means the
+  same duration at any data resolution.
+- **Meteo screening options:** the Local SD and z-score tests accept separate daytime and nighttime
+  thresholds, and the correction plots can be switched off with `showplot=False`. The QCF accept
+  thresholds of `finalize_outlier_detection()` now take effect.
+- **Documentation:** the meteo screening methods and the outlier classes now show usage examples,
+  e.g. all date formats for manual removal.
+- **Console output:** outlier tests, corrections and resampling no longer print a
+  `running <name> ...` line. The outlier classes are plain classes now, so `isinstance` and
+  subclassing work, and their arguments show in the documentation.
+- **Local outlier factor:** in stepwise screening (library and GUI), `repeat` now defaults to
+  `False`. Each pass flags the `contamination` fraction again, so repeating kept removing valid
+  data.
+- **Meteo screening notebook v12:** Run All no longer screens and uploads with example settings,
+  method descriptions are shorter and link to the documentation.
+
+### Bugfixes
+
+- **Meteo screening, timestamps:** data that already had the target resolution kept the internal
+  middle-of-period timestamps after resampling and would be uploaded half a period early.
+- **Meteo screening, sums:** with mixed time resolutions, `resample(agg='sum')` counted coarse
+  records several times.
+- **Meteo screening, mixed time resolutions:** coarse records are no longer copied onto the finer
+  grid. Manual removal and `correction_setto_value` now remove whole coarse records, and tests
+  based on differences no longer reject valid coarse records. Resampling weights each record by
+  the time it covers, so results are unchanged.
+- **Meteo screening, gaps:** records next to a gap in the timestamp were dropped.
+- **Meteo screening, upload:** screening again could leave older screened values at the start or
+  end of the period in the database.
+- **Database upload:** the delete before an upload now only removes data of the uploaded site, not
+  that variable for every site in a shared bucket.
+- **Meteo screening, corrections:** corrections made before `finalize_outlier_detection()` were
+  lost.
+- **GUI, Stepwise screening:** Local SD with separate daytime and nighttime failed with a
+  `TypeError`.
+- **`Hampel`:** a whole-number nighttime threshold combined with a decimal daytime threshold
+  raised a `TypeError`.
+- **`setto_value`:** a bare date now covers the whole day, as documented.
+- Smaller fixes in `StepwiseMeteoScreeningDb`: `fields` as a single string, repeated `addflag()` and
+  `finalize_outlier_detection()` calls, LOF on fewer than 200 records, and missing tags uploaded
+  as the text "nan".
+
 ## v0.91.2 | 24 September 2026
 
 The ONEFlux partitioning ports now agree more closely with ONEFlux, and the desktop GUI is
