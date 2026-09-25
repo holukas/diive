@@ -26,7 +26,7 @@ Install the latest released version using pip:
 Option 2: Using uv (Modern, Fast)
 ----------------------------------
 
-`uv <https://docs.astral.sh/uv/>`_ is a modern Python package installer that's 5-10x faster than pip:
+`uv <https://docs.astral.sh/uv/>`_ is a Python package and project manager:
 
 .. code-block:: bash
 

@@ -41,8 +41,8 @@ Features
    Automated pipeline: lags, rolling stats, differencing, EMA, polynomial terms, STL, timestamps, record number.
 
 🤖 **Gap-Filling**
-   - Random Forest (R² 0.60-0.80)
-   - XGBoost (R² 0.65-0.85)
+   - Random Forest
+   - XGBoost
    - Meteorological matching
    - Linear interpolation
 
