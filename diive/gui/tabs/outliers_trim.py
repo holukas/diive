@@ -11,7 +11,8 @@ outliers set to NaN), and the **flag**.
 By default the whole series is trimmed and **no coordinates are needed**. The
 optional **Trim daytime only** / **Trim nighttime only** checkboxes restrict (and
 split) the trim to those periods, each screened against its own distribution —
-only then are site coordinates used (and enabled). This is TrimLow's own
+only then are latitude and longitude used (and enabled, seeded from Project
+settings). The UTC offset is always the read-only project offset. This is TrimLow's own
 method-specific day/night model, not the standard "separate thresholds" toggle, so
 the shared day/night box is disabled (`supports_daynight = False`) and the
 trim-side checkboxes + coordinates live in the method rows. The symmetric
@@ -23,11 +24,13 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-from PySide6.QtWidgets import QCheckBox, QDoubleSpinBox, QFormLayout, QSpinBox
+import shiboken6
+from PySide6.QtWidgets import QCheckBox, QDoubleSpinBox, QFormLayout
 
 import diive as dv
 from diive.gui import site
 from diive.gui.tabs._outlier_base import BaseOutlierTab
+from diive.gui.widgets.project_offset import ProjectUtcOffset
 from diive.preprocessing.outlier_detection.codegen import trimlow_to_code
 
 # Wide enough for real flux/meteo values (negative, large magnitudes).
@@ -96,12 +99,11 @@ class TrimLowOutlierTab(BaseOutlierTab):
         self.trim_lon.setToolTip("Site longitude in decimal degrees (east positive); "
                                  "used to split day from night.")
         form.addRow("Longitude", self.trim_lon)
-        self.trim_utc = QSpinBox()
-        self.trim_utc.setRange(-12, 14)
-        self.trim_utc.setToolTip("UTC offset (hours) of the timestamps; used to align "
-                                 "solar position for the day/night split.")
-        form.addRow("UTC offset (h)", self.trim_utc)
-        self._coord_widgets = (self.trim_lat, self.trim_lon, self.trim_utc)
+        # Read-only, from Project settings; not in _coord_widgets so its
+        # "not set" warning stays visible.
+        self.trim_utc = ProjectUtcOffset()
+        form.addRow("UTC offset", self.trim_utc)
+        self._coord_widgets = (self.trim_lat, self.trim_lon)
         self._sync_coord_enabled()  # disabled until a day/night box is ticked
 
     def _sync_coord_enabled(self, *_args) -> None:
@@ -117,19 +119,21 @@ class TrimLowOutlierTab(BaseOutlierTab):
         self._limit_touched = True
 
     def _seed_trim_site(self) -> None:
-        """Prefill lat/lon/UTC from the app-wide Project settings, if configured."""
+        """Prefill lat/lon from the app-wide Project settings, if configured."""
         m = site.manager
         if not m.configured:
             return
         self.trim_lat.setValue(m.latitude)
         self.trim_lon.setValue(m.longitude)
-        self.trim_utc.setValue(m.utc_offset)
 
     def _on_site_changed(self) -> None:
         # Keep coordinates in sync with edits to the project's site details, but
         # only while a day/night split (which uses them) is selected.
+        if not shiboken6.isValid(self.status):
+            return  # site.manager outlives the tab: its widgets may be deleted
         if self.trim_daytime.isChecked() or self.trim_nighttime.isChecked():
             self._seed_trim_site()
+        self._drop_result_if_offset_changed()
 
     def _select(self, name: str) -> None:
         super()._select(name)
@@ -149,8 +153,7 @@ class TrimLowOutlierTab(BaseOutlierTab):
                 "lower_limit": self.lower_limit,
                 "trim_daytime": self.trim_daytime,
                 "trim_nighttime": self.trim_nighttime,
-                "trim_lat": self.trim_lat, "trim_lon": self.trim_lon,
-                "trim_utc": self.trim_utc}
+                "trim_lat": self.trim_lat, "trim_lon": self.trim_lon}
 
     def _current_kwargs(self) -> dict:
         kwargs = dict(

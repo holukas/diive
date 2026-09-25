@@ -87,6 +87,11 @@ from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.feature_picker import FeaturePicker
 from diive.gui.widgets.flux_pipeline_rail import PipelineRail
 from diive.gui.widgets.mpl_canvas import MplCanvas
+from diive.gui.widgets.project_offset import (
+    NOT_SET_WARNING,
+    ProjectUtcOffset,
+    project_utc_offset_is_set,
+)
 from diive.gui.widgets.stepwise_method_params import STEP_METHOD_BY_KEY, method_labels
 from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.weak_slot import weak_slot
@@ -348,10 +353,10 @@ class FluxChainTab(DiiveTab):
         form.addRow("Latitude", self.site_lat)
         self.site_lon = self._dspin(8.49, -180, 180, 4)
         form.addRow("Longitude", self.site_lon)
-        self.utc_offset = QSpinBox()
-        self.utc_offset.setRange(-12, 14)
-        self.utc_offset.setValue(1)
-        form.addRow("UTC offset (h)", self.utc_offset)
+        # Read-only: the offset has one home, Project settings.
+        self.utc_offset = ProjectUtcOffset()
+        self.utc_offset.changed.connect(self._on_project_offset_changed)
+        form.addRow("UTC offset", self.utc_offset)
         self.nighttime_threshold = self._dspin(20.0, 0, 200, 1)
         form.addRow("Night threshold (W m⁻²)", self.nighttime_threshold)
         self.day_qcf = QComboBox()
@@ -1116,7 +1121,7 @@ class FluxChainTab(DiiveTab):
             docs.update(param_docs(src))
         for param, widget in (
             ("fluxcol", self.fluxcol), ("site_lat", self.site_lat),
-            ("site_lon", self.site_lon), ("utc_offset", self.utc_offset),
+            ("site_lon", self.site_lon),
             ("nighttime_threshold", self.nighttime_threshold),
             ("daytime_accept_qcf_below", self.day_qcf),
             ("nighttime_accept_qcf_below", self.night_qcf),
@@ -1148,7 +1153,7 @@ class FluxChainTab(DiiveTab):
     def _fx_controls(self) -> dict:
         return {"fluxcol": self.fluxcol, "ustarcol": self.ustarcol,
                 "site_lat": self.site_lat,
-                "site_lon": self.site_lon, "utc_offset": self.utc_offset,
+                "site_lon": self.site_lon,
                 "nighttime_threshold": self.nighttime_threshold,
                 "day_qcf": self.day_qcf, "night_qcf": self.night_qcf,
                 "signal_strength_col": self.signal_strength_col,
@@ -1428,7 +1433,8 @@ class FluxChainTab(DiiveTab):
         if not self._confirm_discard(self._level_to_stage(deepest)):
             return
         self._set_running(True)
-        self.summary.setPlainText(f"Running Level 2 → Level {deepest}…")
+        self.summary.setPlainText(
+            self._with_offset_warning(f"Running Level 2 → Level {deepest}…"))
         threading.Thread(
             target=self._worker, args=(self._df, ik, l2, l31, steps, l33, l41),
             daemon=True).start()
@@ -1458,7 +1464,9 @@ class FluxChainTab(DiiveTab):
         if not self._confirm_discard(idx):
             return  # user declined to discard downstream results
         self._set_running(True)
-        self.summary.setPlainText(f"Running {_STAGES[idx][0]} — {_STAGES[idx][1]}…")
+        msg = f"Running {_STAGES[idx][0]} — {_STAGES[idx][1]}…"
+        # Only initialization reads the offset; later levels inherit its result.
+        self.summary.setPlainText(self._with_offset_warning(msg) if idx == 0 else msg)
         threading.Thread(target=self._level_worker, args=(plan, self._data, self._df),
                          daemon=True).start()
 
@@ -1554,6 +1562,21 @@ class FluxChainTab(DiiveTab):
         self.rail.set_reached_through(idx)
         self._render_stage(idx, data)
         self._update_report(idx, data)
+        if not project_utc_offset_is_set():
+            self.summary.appendPlainText(NOT_SET_WARNING)
+
+    @staticmethod
+    def _with_offset_warning(msg: str) -> str:
+        """Append the not-set warning when the project has no UTC offset."""
+        return msg if project_utc_offset_is_set() else f"{msg}\n{NOT_SET_WARNING}"
+
+    def _on_project_offset_changed(self) -> None:
+        """Chain results were initialized with the old offset (SW_IN_POT and
+        the day/night split); say so. Re-running is left to the user."""
+        if self._reached >= 0 and not self._running:
+            self.summary.setPlainText(
+                "Project settings changed after the chain was initialized. Run it "
+                "again from Input to use the new UTC offset.")
 
     @staticmethod
     def _level_qcf(idx: int, data):

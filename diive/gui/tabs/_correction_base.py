@@ -23,6 +23,7 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import pandas as pd
+import shiboken6
 from matplotlib.lines import Line2D
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import (
@@ -32,7 +33,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -43,6 +43,7 @@ from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.overview import HeroBand
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
+from diive.gui.widgets.project_offset import ProjectUtcOffset
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel
 from diive.gui.widgets.worker import WorkerRunner
@@ -203,12 +204,10 @@ class BaseCorrectionTab(DiiveTab):
             self.lon = QDoubleSpinBox(); self.lon.setRange(-180.0, 180.0); self.lon.setDecimals(4)
             self.lon.setToolTip("Site longitude in decimal degrees (east positive); "
                                 "used to split day from night.")
-            self.utc = QSpinBox(); self.utc.setRange(-12, 14)
-            self.utc.setToolTip("UTC offset (hours) of the timestamps; used to align "
-                                "solar position for the day/night split.")
+            self.utc = ProjectUtcOffset()
             cf.addRow("Latitude", self.lat)
             cf.addRow("Longitude", self.lon)
-            cf.addRow("UTC offset (h)", self.utc)
+            cf.addRow("UTC offset", self.utc)
             note = QLabel("Coordinates default from Settings ▸ Project settings.")
             note.setWordWrap(True)
             note.setStyleSheet(f"color: {_C_MUTED};")
@@ -267,10 +266,21 @@ class BaseCorrectionTab(DiiveTab):
             return
         self.lat.setValue(m.latitude)
         self.lon.setValue(m.longitude)
-        self.utc.setValue(m.utc_offset)
 
     def _on_site_changed(self) -> None:
+        # site.manager outlives the tab: its widgets may already be deleted.
+        if not shiboken6.isValid(self.status):
+            return
         self._seed_site()
+        # A pending result computed with another UTC offset would be added with
+        # a shifted day/night split: drop it, the user runs again.
+        p = self._last_payload
+        if (self._result_df is not None and p is not None
+                and p.get("utc") is not None and p["utc"] != self.utc.value()):
+            self._result_df = None
+            self.add_btn.setEnabled(False)
+            self.status.setText("The project's UTC offset changed: run the "
+                                "correction again.")
 
     def _coords(self) -> tuple[float | None, float | None, int | None]:
         if not self.needs_coords:
@@ -282,14 +292,14 @@ class BaseCorrectionTab(DiiveTab):
         from diive.gui.widgets.state_utils import save_controls
         controls = dict(self._method_controls())
         if self.needs_coords:
-            controls.update(lat=self.lat, lon=self.lon, utc=self.utc)
+            controls.update(lat=self.lat, lon=self.lon)
         return {"var": self._var, "controls": save_controls(controls)}
 
     def restore_state(self, state: dict) -> None:
         from diive.gui.widgets.state_utils import restore_controls
         controls = dict(self._method_controls())
         if self.needs_coords:
-            controls.update(lat=self.lat, lon=self.lon, utc=self.utc)
+            controls.update(lat=self.lat, lon=self.lon)
         restore_controls(controls, state.get("controls"))
         var = state.get("var")
         if var and self._df is not None and var in self._df.columns:
@@ -387,7 +397,8 @@ class BaseCorrectionTab(DiiveTab):
         }
         n_changed = int(self._changed_mask(series, corrected).sum())
         return {"var": series.name, "corrected": corrected,
-                "result": result, "n_changed": n_changed, "extra": extra}
+                "result": result, "n_changed": n_changed, "extra": extra,
+                "utc": utc}
 
     def _worker(self, series, kwargs: dict, lat, lon, utc) -> None:
         """Synchronous compute + dispatch — tests call this directly; the GUI runs

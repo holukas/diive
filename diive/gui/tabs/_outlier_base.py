@@ -21,6 +21,7 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import pandas as pd
+import shiboken6
 from matplotlib.lines import Line2D
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import (
@@ -31,7 +32,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -43,6 +43,12 @@ from diive.gui.tabs.overview import HeroBand
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.progress_bar import ProgressBar
+from diive.gui.widgets.project_offset import (
+    NOT_SET_WARNING,
+    ProjectUtcOffset,
+    project_utc_offset,
+    project_utc_offset_is_set,
+)
 from diive.gui.widgets.tab_chrome import build_titlebar, list_header
 from diive.gui.widgets.variable_panel import VariablePanel
 from diive.gui.widgets.worker import WorkerRunner
@@ -276,15 +282,15 @@ class BaseOutlierTab(DiiveTab):
             self.lon = QDoubleSpinBox(); self.lon.setRange(-180.0, 180.0); self.lon.setDecimals(4)
             self.lon.setToolTip("Site longitude in decimal degrees (east positive); used "
                                 "to split day from night.")
-            self.utc = QSpinBox(); self.utc.setRange(-12, 14)
-            self.utc.setToolTip("UTC offset (hours) of the timestamps; used to align solar "
-                                "position for the day/night split.")
-            self._dn_widgets = threshold_widgets + (self.lat, self.lon, self.utc)
+            # Read-only: the offset comes from Project settings. Kept out of
+            # _dn_widgets so its "not set" warning stays visible.
+            self.utc = ProjectUtcOffset()
+            self._dn_widgets = threshold_widgets + (self.lat, self.lon)
             for w in self._dn_widgets:
                 w.setEnabled(False)
             dn.addRow("Latitude", self.lat)
             dn.addRow("Longitude", self.lon)
-            dn.addRow("UTC offset (h)", self.utc)
+            dn.addRow("UTC offset", self.utc)
             dn_note = QLabel("Coordinates default from Settings ▸ Project settings.")
             dn_note.setWordWrap(True)
             dn_note.setStyleSheet(f"color: {_C_MUTED};")
@@ -351,7 +357,7 @@ class BaseOutlierTab(DiiveTab):
             self._seed_site()
 
     def _seed_site(self) -> None:
-        """Prefill lat/lon/UTC from the app-wide Site details, if configured."""
+        """Prefill lat/lon from the app-wide Site details, if configured."""
         if not self.supports_daynight:
             return
         m = site.manager
@@ -359,12 +365,29 @@ class BaseOutlierTab(DiiveTab):
             return
         self.lat.setValue(m.latitude)
         self.lon.setValue(m.longitude)
-        self.utc.setValue(m.utc_offset)
 
     def _on_site_changed(self) -> None:
+        # site.manager outlives the tab: its widgets may already be deleted.
+        if not shiboken6.isValid(self.status):
+            return
         # Keep the fields in sync if the site is edited while day/night is on.
         if self.daynight_cb.isChecked():
             self._seed_site()
+        self._drop_result_if_offset_changed()
+
+    def _drop_result_if_offset_changed(self) -> None:
+        """Discard a pending result whose day/night split used another UTC offset
+        than the project's current one; the user detects again."""
+        p = self._last_payload
+        if (self._result_df is None or p is None
+                or not shiboken6.isValid(self.status)):
+            return
+        used = p.get("kwargs", {}).get("utc_offset")
+        if used is None or used == project_utc_offset():
+            return
+        self._result_df = None
+        self.add_btn.setEnabled(False)
+        self.status.setText("The project's UTC offset changed: detect outliers again.")
 
     # --- state (save/restore inputs with a project) ---
     def _state_controls(self) -> dict:
@@ -373,7 +396,7 @@ class BaseOutlierTab(DiiveTab):
                     "limits": self.limits_cb}
         if self.supports_daynight:
             controls.update(daynight=self.daynight_cb, lat=self.lat,
-                            lon=self.lon, utc=self.utc)
+                            lon=self.lon)
         return controls
 
     def save_state(self) -> dict:
@@ -491,6 +514,7 @@ class BaseOutlierTab(DiiveTab):
             "var": series.name, "cleaned": cleaned, "flag": flag,
             "result": result, "n_outliers": int((flag == 2).sum()),
             "is_daytime": is_daytime,
+            "kwargs": kwargs,
             # Index the run was started on; _on_done compares it against the
             # dataset it finds to detect a change that happened meanwhile.
             "index": series.index,
@@ -695,7 +719,9 @@ class BaseOutlierTab(DiiveTab):
         self.status.setText(
             f"{n} outliers flagged{split} over {iters} iteration{'' if iters == 1 else 's'}. "
             f"'Add' keeps {payload['cleaned'].name} and the flag "
-            f"(original '{payload['var']}' is unchanged).")
+            f"(original '{payload['var']}' is unchanged)."
+            + (f" {NOT_SET_WARNING}" if "utc_offset" in payload.get("kwargs", {})
+               and not project_utc_offset_is_set() else ""))
         self.add_btn.setEnabled(True)
 
     def _on_failed(self, msg: str) -> None:

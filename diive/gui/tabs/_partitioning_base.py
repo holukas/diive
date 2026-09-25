@@ -6,7 +6,8 @@ Common machinery for the GUI's NEE -> GPP + RECO partitioning tabs (the four
 faithful ports: nighttime ONEFlux / REddyProc, daytime ONEFlux / REddyProc):
 a per-input column picker (one combo per required series, auto-seeded to the
 standard name with an availability marker), the site coordinates (latitude /
-longitude / UTC offset, seeded from Project settings), an optional VPD-unit
+longitude seeded from Project settings; the UTC offset shown read-only from
+Project settings), an optional VPD-unit
 toggle, a worker thread that runs the library partitioner, a result plot
 (measured NEE + partitioned GPP + RECO), and "Add results to dataset".
 
@@ -30,7 +31,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QLabel,
     QPushButton,
-    QSpinBox,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -45,6 +45,7 @@ from diive.gui.widgets.column_picker import ColumnPicker
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.progress_bar import ProgressBar
+from diive.gui.widgets.project_offset import ProjectUtcOffset
 from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.worker import WorkerRunner
 
@@ -87,8 +88,8 @@ class BasePartitioningTab(DiiveTab):
     def _coords_missing(self) -> bool:
         """Refuse to run without a configured site, and say why.
 
-        The lat/lon/UTC spin boxes default to 0/0/0, and `_seed_site` leaves them
-        there when the site is unset — so an unguarded run would silently
+        The lat/lon spin boxes default to 0/0 and the project UTC offset to 0,
+        and `_seed_site` leaves them there when the site is unset — so an unguarded run would silently
         partition at (0, 0) on UTC and return plausible-looking GPP/RECO. Mirrors
         the guard in the outlier and correction tabs.
         """
@@ -202,10 +203,9 @@ class BasePartitioningTab(DiiveTab):
             else:
                 self.lon = None
             if self.needs_utc:
-                self.utc = QSpinBox()
-                self.utc.setRange(-12, 14)
-                self.utc.setToolTip("UTC offset (hours) of the timestamps.")
-                sf.addRow("UTC offset (h)", self.utc)
+                # Read-only: the offset has one home, Project settings.
+                self.utc = ProjectUtcOffset()
+                sf.addRow("UTC offset", self.utc)
             else:
                 self.utc = None
             note = QLabel("Defaults from Settings ▸ Project settings.")
@@ -254,11 +254,15 @@ class BasePartitioningTab(DiiveTab):
             self.lat.setValue(m.latitude)
         if self.lon is not None:
             self.lon.setValue(m.longitude)
-        if self.utc is not None:
-            self.utc.setValue(m.utc_offset)
 
     def _on_site_changed(self) -> None:
         self._seed_site()
+        # A result computed before the change used the old coordinates / UTC
+        # offset: keep the preview but don't let it be added.
+        if self._results is not None and self.needs_coords:
+            self.add_btn.setEnabled(False)
+            self.status.setText("Project settings changed after this run. Run the "
+                                "partitioning again to use them.")
 
     # --- data ----------------------------------------------------------
     def on_data_loaded(self, df, created: set | None = None) -> None:
@@ -274,8 +278,8 @@ class BasePartitioningTab(DiiveTab):
             controls["lat"] = self.lat
         if self.lon is not None:
             controls["lon"] = self.lon
-        if self.utc is not None:
-            controls["utc"] = self.utc
+        # No "utc": the offset comes from Project settings, so a value saved by
+        # an older project is ignored on restore.
         if self.vpd_kpa_cb is not None:
             controls["vpd_kpa"] = self.vpd_kpa_cb
         return controls
