@@ -714,6 +714,53 @@ class TestMiscCodegen(CodegenTestCase):
         self.assertIsInstance(code, str)
 
 
+class TestMeteoScreeningCodegen(CodegenTestCase):
+    """``meteoscreening_to_code``. Running the script on data is tested in
+    ``tests/test_meteoscreening.py``."""
+
+    _STEPS = [{"method": "flag_outliers_hampel_test",
+               "kwargs": {"window_length": 13, "n_sigma": 4.0, "separate_day_night": False}},
+              {"method": "flag_missingvals_test", "kwargs": {}},
+              {"method": "flag_outliers_zscore_test", "kwargs": {"thres_zscore": 3},
+               "enabled": False}]
+    _COORDS = dict(field="TA", site="ch-xyz", site_lat=46.6, site_lon=9.8, utc_offset=1)
+
+    def test_download_steps_corrections_resample(self):
+        from diive.preprocessing.qaqc.codegen import meteoscreening_to_code
+        code = self.check(
+            meteoscreening_to_code(
+                self._STEPS, **self._COORDS,
+                download={"bucket": "b", "measurement": "TA", "start": "2024-01-01 00:10:00",
+                          "stop": "2024-01-02 00:10:00", "dirconf": "C:/configs"},
+                corrections=[{"key": "radiation_zero_offset", "kwargs": {}}],
+                to_freqstr="1h", agg="sum", mincounts_perc=0.5),
+            "dv.qaqc.StepwiseMeteoScreeningDb(", "dbc = InfluxIO(dirconf='C:/configs')",
+            "timezone_offset_to_utc_hours=1,", "mscr.finalize_outlier_detection()",
+            "mscr.set_corrections([", "{'key': 'radiation_zero_offset', 'kwargs': {}},",
+            "mscr.resample(to_freqstr='1h', agg='sum', mincounts_perc=0.5)")
+        # Defaults dropped, disabled step skipped, one addflag() per test.
+        self.assertIn("    n_sigma=4.0,\n    separate_day_night=False,", code)
+        self.assertNotIn("window_length", code)
+        self.assertIn("mscr.flag_missingvals_test()", code)
+        self.assertNotIn("zscore", code)
+        self.assertEqual(code.count("mscr.addflag()"), 2)
+        self.assertNotIn("data_version", code)
+        self.assertNotIn("PLACEHOLDER", code)
+
+    def test_placeholders(self):
+        from diive.preprocessing.qaqc.codegen import meteoscreening_to_code
+        code = self.check(meteoscreening_to_code(self._STEPS, **self._COORDS),
+                          "# PLACEHOLDER", "data_detailed = ...")
+        self.assertNotIn("import InfluxIO", code)
+        self.assertNotIn("dbc.download(", code)
+        self.assertNotIn("set_corrections", code)
+        code = meteoscreening_to_code(
+            self._STEPS, **self._COORDS,
+            download={"bucket": "b", "start": "2024-01-01", "stop": "2024-01-02"})
+        self.assertIn("dirconf='PATH/TO/DIRCONF')  # PLACEHOLDER", code)
+        self.assertNotIn("measurements=", code)
+
+
 # --- Completeness guard -----------------------------------------------------
 
 

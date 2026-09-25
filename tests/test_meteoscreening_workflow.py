@@ -17,15 +17,28 @@ The unit tests in ``test_meteoscreening.py``, ``test_resampling.py`` and
 ``test_time.py`` cover the pieces. This module exists because a timestamp shift
 (30-min data uploaded half a period early) passed all of them.
 
+The second half checks the mixed-resolution rules end to end, in both orders
+(10-min then 1-min, 1-min then 10-min): rolling-window and difference tests run
+per resolution period, the fine grid is the greatest common divisor of the
+resolutions, overlapping transitions are not counted twice, re-finalizing
+restores records, daily resampling, warnings for dates that match no record, and
+QCF reports that count records rather than empty grid slots.
+
 Part of the diive library: https://github.com/holukas/diive
 """
+import re
+import warnings
+from contextlib import contextmanager
 from dataclasses import dataclass, field as dc_field
+from functools import lru_cache
 
 import numpy as np
 import pandas as pd
 import pytest
 from pandas.tseries.frequencies import to_offset
 
+import diive.core.utils.console as console_module
+import diive.preprocessing.qaqc.qcf as qcf_module
 from diive.core.io.db.influx.common import TAGS
 from diive.core.io.db.influx.influxio import InfluxIO
 from diive.core.times.times import DetectFrequency
@@ -78,13 +91,34 @@ def _single(freq, **kw):
 
 # 10-min era, then 1-min era from END 2024-07-03 00:01. The manual removal of one
 # record hits the 10-min era, the range the 1-min era. The Hampel spikes are in the
-# 1-min era: a 10-min record sits between empty slots of the 1-min grid, so Hampel
-# on double differences leaves it unjudged (see Hampel._gap_flanking_records).
+# 1-min era. Hampel runs on each resolution period separately; its window of one
+# day of fine-grid slots (1440) is longer than the 10-min era (288 records).
 MIXED = dict(segments=[('10min', '2D'), ('1min', '2D')],
              abslim_spikes=['2024-07-01 13:00', '2024-07-04 02:00'],
              hampel_spikes=['2024-07-03 03:30', '2024-07-03 14:00'],
              manual_single='2024-07-01 20:00',
              manual_range=('2024-07-04 06:00', '2024-07-04 06:45'))
+
+# The reverse order: 1-min era, then 10-min era from END 2024-07-03 00:10. The
+# single manual removal hits the 1-min era, the range the 10-min era.
+MIXED_REV = dict(segments=[('1min', '2D'), ('10min', '2D')],
+                 abslim_spikes=['2024-07-01 13:00', '2024-07-04 02:00'],
+                 hampel_spikes=['2024-07-01 14:00', '2024-07-02 03:30'],
+                 manual_single='2024-07-01 20:00',
+                 manual_range=('2024-07-04 06:00', '2024-07-04 06:45'))
+
+ORDERS = ['10min_then_1min', '1min_then_10min']
+MIXED_BY_ORDER = {'10min_then_1min': MIXED, '1min_then_10min': MIXED_REV}
+
+# 10-min era, then 15-min era from END 2024-07-03 00:15. Half of the 15-min
+# records (END at :15 and :45) are not on a 10-min grid; the fine grid is 5 min,
+# the greatest common divisor of both resolutions. No Hampel: a record-count
+# window in fine-grid slots means different spans in the two eras.
+OFFGRID = dict(segments=[('10min', '2D'), ('15min', '2D')],
+               abslim_spikes=['2024-07-01 13:00', '2024-07-04 02:00'],
+               hampel_spikes=[], hampel=False,
+               manual_single='2024-07-01 20:00',
+               manual_range=('2024-07-04 06:00', '2024-07-04 06:45'))
 
 # 10-min era up to END 2024-07-02 12:10, then 1-min. The half hour (12:00, 12:30]
 # holds the 10-min record ending 12:10 and the five 1-min records ending 12:21 to
@@ -109,6 +143,10 @@ SCENARIOS = [
     Scenario(id='mixed_1min_10min_mean', agg='mean', **MIXED),
     Scenario(id='mixed_partial_period_mean', agg='mean', **PARTIAL),
     Scenario(id='mixed_partial_period_sum', agg='sum', **PARTIAL),
+    Scenario(id='mixed_1min_then_10min_mean', agg='mean', **MIXED_REV),
+    Scenario(id='mixed_1min_then_10min_sum', agg='sum', **MIXED_REV),
+    Scenario(id='mixed_10min_15min_mean', agg='mean', **OFFGRID),
+    Scenario(id='mixed_10min_15min_sum', agg='sum', **OFFGRID),
     _single('10min', id='gap_10min', missing=['2024-07-02 10:00']),
     _single('30min', id='gap_30min', missing=['2024-07-02 10:00']),
     _single('1min', id='rejected_edges_1min', edge_minutes=40),
@@ -230,13 +268,18 @@ def res(request) -> Result:
 # --- Independent reference computed on the raw records -----------------------------
 
 def _step(duration: pd.Series) -> pd.Timedelta:
-    """Fine grid step: the finest raw resolution."""
-    return duration.min()
+    """Fine grid step: the greatest common divisor of the raw resolutions and of
+    the distances between END timestamps. That is the finest resolution when all
+    records lie on its grid, and 5 min for 10-min then 15-min records."""
+    secs = np.concatenate([duration.dt.total_seconds().to_numpy(),
+                           (duration.index - duration.index[0]).total_seconds().to_numpy()])
+    return pd.Timedelta(seconds=int(np.gcd.reduce(secs.astype(np.int64))))
 
 
-def _weighted_aggregate(values: pd.Series, duration: pd.Series, agg: str) -> tuple[pd.Series, pd.Series]:
+def _weighted_aggregate(values: pd.Series, duration: pd.Series, agg: str,
+                        period: pd.Timedelta = P) -> tuple[pd.Series, pd.Series]:
     """Aggregate of *values* (raw END index, no NaN) per target period END T, over
-    the records with END in (T - 30min, T].
+    the records with END in (T - period, T].
 
     Each record weighs its own duration in fine-grid slots (10 for a 10-min record
     on a 1-min grid). mean = sum(w * v) / sum(w), sum = sum(v), coverage = sum(w)
@@ -247,13 +290,13 @@ def _weighted_aggregate(values: pd.Series, duration: pd.Series, agg: str) -> tup
     """
     step = _step(duration)
     w = duration.reindex(values.index) / step
-    period = values.index.ceil(P)
-    wsum = w.groupby(period).sum()
-    coverage = wsum / (P / step)
+    target = values.index.ceil(period)
+    wsum = w.groupby(target).sum()
+    coverage = wsum / (period / step)
     if agg == 'sum':
-        aggregate = values.groupby(period).sum()
+        aggregate = values.groupby(target).sum()
     else:
-        aggregate = (values * w).groupby(period).sum() / wsum
+        aggregate = (values * w).groupby(target).sum() / wsum
     return aggregate.where(coverage >= MINCOUNTS_PERC), coverage
 
 
@@ -460,18 +503,19 @@ def test_mixed_manual_removal_removes_whole_coarse_record(sid):
     assert np.isclose(r.out.loc[end.ceil(P), FIELD], want, rtol=1e-12)
 
 
-@pytest.mark.parametrize('segments', [[('1min', '4D')], [('10min', '2D'), ('1min', '2D')]],
-                         ids=['single_1min', 'mixed_10min_1min'])
+@pytest.mark.parametrize('segments', [[('1min', '4D')], [('10min', '2D'), ('1min', '2D')],
+                                      [('1min', '2D'), ('10min', '2D')]],
+                         ids=['single_1min', 'mixed_10min_1min', 'mixed_1min_10min'])
 def test_hampel_notebook_settings_on_clean_data(segments):
     """L178: Hampel on double differences with the notebook settings rejects
     almost nothing of clean data, also when the resolution changes.
 
-    Measured: 0 rejections for both. In the mixed case the 10-min records sit
-    between empty slots of the 1-min grid, so Hampel leaves them unjudged. With
-    coarse records back-filled onto the fine grid, runs of identical copies made
-    most differences zero and the same call rejected 1664 of the 3168 records.
-    The bound (0.2% of the records, 6 of the 3168 mixed records) leaves room for
-    noise while failing on anything like that.
+    Measured: 0 rejections in all three cases. In the mixed cases each resolution
+    period is tested on its own grid, so the 10-min records are judged against
+    each other. With coarse records back-filled onto the fine grid, runs of
+    identical copies made most differences zero and the same call rejected 1664
+    of the 3168 records. The bound (0.2% of the records, 6 of the 3168 mixed
+    records) leaves room for noise while failing on anything like that.
     """
     sc = Scenario(id='clean', segments=segments)
     raw, duration = _download_frame(sc)  # no spikes: _run plants them
@@ -531,3 +575,401 @@ def test_corrections_leave_empty_slots_empty():
         expected, _ = _weighted_aggregate(values, duration, agg)
         pd.testing.assert_series_equal(mscr.resampled_detailed[FIELD][FIELD], expected.reindex(target),
                                        check_names=False, check_freq=False, rtol=1e-9, atol=1e-9)
+
+
+# --- Mixed resolutions, round 2 ------------------------------------------------------
+
+def _frame(parts) -> pd.DataFrame:
+    """Download-shaped frame from ``[(END timestamps, raw freq, values), ...]``."""
+    frames = []
+    for ends, freq, values in parts:
+        part = pd.DataFrame(_tagvalues(freq), index=ends)
+        part[FIELD] = np.asarray(values, dtype=float)
+        frames.append(part)
+    df = pd.concat(frames)
+    df.index = pd.DatetimeIndex(df.index.to_numpy(), name='TIMESTAMP_END')
+    return df[TAGS + [FIELD]]
+
+
+def _part(df: pd.DataFrame, ends: pd.DatetimeIndex) -> pd.DataFrame:
+    """The records of *df* at *ends*, as a download of that part alone."""
+    part = df.loc[ends].copy()
+    part.index.name = 'TIMESTAMP_END'
+    return part
+
+
+def _slots(mscr: StepwiseMeteoScreeningDb, ends: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    """TIMESTAMP_MIDDLE slots of the records ending at *ends* on the screening grid."""
+    return ends - pd.Timedelta(mscr.series_hires_orig[FIELD].index.freq) / 2
+
+
+class _Output:
+    """What diive printed while a ``_captured()`` block ran."""
+
+    def __init__(self):
+        self.lines: list[str] = []
+        self.pywarnings: list[str] = []
+
+    def print(self, *args, **kwargs):
+        self.lines.append(' '.join(str(a) for a in args))
+
+    def log(self, *args, **kwargs):
+        self.print(*args)
+
+    @property
+    def text(self) -> str:
+        return '\n'.join(self.lines)
+
+    @property
+    def warnings(self) -> list[str]:
+        """Lines printed by ``console.warn()``, plus Python warnings."""
+        return [line for line in self.lines if '[yellow]!' in line] + self.pywarnings
+
+
+@contextmanager
+def _captured():
+    """Record diive's console output. The helpers (``warn`` etc.) print to the
+    console module's current console, while ``qcf`` keeps the console it imported;
+    the two differ once ``refresh_console()`` ran (tests/test_console.py), so
+    mirror both."""
+    out = _Output()
+    consoles = list({id(c): c for c in (console_module.console, qcf_module._console)}.values())
+    for c in consoles:
+        c.add_mirror(out)
+    try:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            yield out
+        out.pywarnings.extend(str(w.message) for w in caught)
+    finally:
+        for c in consoles:
+            c.remove_mirror(out)
+
+
+# --- Item 1: rolling-window and difference tests run per resolution period ----------
+
+# 14 days of 10-min records and one day of 1-min records, in either order. White
+# noise (sd 0.2) around a level that steps from 10 to 13 seven days into the 10-min
+# era, and six +3.5 spikes in that era, each at least three days from the step. A
+# '7D' window around a spike sees one level, and every test below catches the
+# spikes in the 10-min records screened alone. A window stretched to the 1-min
+# grid's 10080 slots, counted in 10-min records, spans the step, and the spikes
+# vanish in its spread.
+LEVEL_STEP = 3.0
+LEVEL_SPIKE = 3.5
+LEVEL_SPIKE_DAYS = ['1D 03:00:00', '2D 13:00:00', '3D 22:00:00', '11D 02:00:00', '12D 12:00:00', '13D 20:00:00']
+
+PER_PERIOD_TESTS = {
+    'hampel_differencing_7D': lambda m: m.flag_outliers_hampel_test(**HAMPEL_NOTEBOOK),
+    'hampel_7D': lambda m: m.flag_outliers_hampel_test(
+        window_length='7D', n_sigma=5.5, use_differencing=False, separate_day_night=False,
+        repeat=True, showplot=False),
+    'zscore_increments': lambda m: m.flag_outliers_increments_zcore_test(
+        thres_zscore=5, repeat=False, showplot=False),
+    'localsd_7D': lambda m: m.flag_outliers_localsd_test(
+        n_sd=5.5, winsize='7D', separate_day_night=False, repeat=False, showplot=False),
+    'zscore_rolling_7D': lambda m: m.flag_outliers_zscore_rolling_test(
+        thres_zscore=4.5, winsize='7D', repeat=True, showplot=False),
+}
+
+
+@lru_cache(maxsize=None)
+def _level_step_data(order: str) -> tuple:
+    """Returns the mixed frame, the END timestamps of its 10-min and of its 1-min
+    records, and the END timestamps of the spikes. Callers must not modify the frame."""
+    segments = [('10min', 14), ('1min', 1)] if order == '10min_then_1min' else [('1min', 1), ('10min', 14)]
+    ends, t = {}, START
+    for freq, days in segments:
+        ends[freq] = pd.date_range(t + pd.Timedelta(freq), t + pd.Timedelta(days=days), freq=freq)
+        t = ends[freq][-1]
+    coarse, fine = ends['10min'], ends['1min']
+    spikes = pd.DatetimeIndex([coarse[0].normalize() + pd.Timedelta(d) for d in LEVEL_SPIKE_DAYS])
+    rng = np.random.default_rng(7)
+    parts = []
+    for freq, _ in segments:
+        e = ends[freq]
+        level = np.where(e > coarse[0] + pd.Timedelta('7D'), LEVEL_STEP, 0.0)
+        values = 10 + level + rng.normal(0, 0.2, len(e)) + np.where(e.isin(spikes), LEVEL_SPIKE, 0.0)
+        parts.append((e, freq, values))
+    return _frame(parts), coarse, fine, spikes
+
+
+@pytest.mark.parametrize('test', list(PER_PERIOD_TESTS))
+@pytest.mark.parametrize('order', ORDERS)
+def test_windowed_tests_run_per_resolution_period(order, test):
+    """Item 1: each resolution period is screened on its own grid, so the 10-min
+    records get exactly the flags they get when screened alone as 10-min data, and
+    the 1-min records those of the 1-min records alone. That covers both halves of
+    the fix: difference tests (Hampel with differencing, increments) judge coarse
+    records, and a time-span window ('7D') spans seven days in each era. The flag
+    is the pending test: addflag() removes what it rejected in both eras."""
+    df, coarse, fine, spikes = _level_step_data(order)
+    run = PER_PERIOD_TESTS[test]
+
+    def screened(frame):
+        m = _screening(frame)
+        m.start_outlier_detection()
+        run(m)
+        return m
+
+    def flags(m, ends):
+        return m.outlier_detection[FIELD].last_flag.reindex(_slots(m, ends)).to_numpy()
+
+    mixed = screened(df)
+    want_coarse = flags(screened(_part(df, coarse)), coarse)
+    want_fine = flags(screened(_part(df, fine)), fine)
+
+    # The test data are meaningful: screened alone, the 10-min spikes are caught.
+    n_caught = int((want_coarse[coarse.isin(spikes)] == 2).sum())
+    assert n_caught >= len(spikes) - 1, f'{test} catches only {n_caught} of {len(spikes)} spikes alone'
+
+    np.testing.assert_array_equal(flags(mixed, coarse), want_coarse,
+                                  err_msg=f'{test}: 10-min records flagged differently than alone')
+    np.testing.assert_array_equal(flags(mixed, fine), want_fine,
+                                  err_msg=f'{test}: 1-min records flagged differently than alone')
+
+    mixed.addflag()
+    cleaned = mixed.outlier_detection[FIELD].series_hires_cleaned
+    ends = coarse.append(fine)
+    rejected = np.concatenate([want_coarse, want_fine]) == 2
+    assert cleaned.reindex(_slots(mixed, ends[rejected])).isna().all()
+    assert cleaned.reindex(_slots(mixed, ends[~rejected])).notna().all()
+
+
+# --- Item 3: overlapping transition ----------------------------------------------
+
+def _overlap_frame(last_fine_end: str, first_coarse_end: str, last_coarse_end: str) -> pd.DataFrame:
+    """1-min records of value 0 from END 2024-07-01 00:01, then 10-min records of
+    value 10 whose first one overlaps the last 1-min records."""
+    fine = pd.date_range('2024-07-01 00:01', last_fine_end, freq='1min')
+    coarse = pd.date_range(first_coarse_end, last_coarse_end, freq='10min')
+    return _frame([(fine, '1min', np.zeros(len(fine))), (coarse, '10min', np.full(len(coarse), 10.0))])
+
+
+def _resampled_mean(df: pd.DataFrame, mincounts_perc: float) -> pd.Series:
+    mscr = _screening(df)
+    mscr.resample(to_freqstr=TARGET, agg='mean', mincounts_perc=mincounts_perc)
+    return mscr.resampled_detailed[FIELD][FIELD]
+
+
+def test_overlapping_transition_counts_time_once():
+    """Item 3: 1-min records up to END 00:05, then a 10-min record ending 00:10,
+    which covers (00:00, 00:10] and so overlaps five 1-min records. Only its
+    non-overlapping part (00:05, 00:10] counts: the half hour (00:00, 00:30] is
+    (5 * 0 + 5 * 10 + 20 * 10) / 30, exactly fully covered. Counting the whole
+    record gives (5 * 0 + 30 * 10) / 35 at 35/30 coverage."""
+    df = _overlap_frame('2024-07-02 00:05', '2024-07-02 00:10', '2024-07-03 00:00')
+    t = pd.Timestamp('2024-07-02 00:30')
+    for perc in (MINCOUNTS_PERC, 1.0):
+        out = _resampled_mean(df, mincounts_perc=perc)
+        assert np.isclose(out[t], 250 / 30, rtol=1e-12), f'mincounts_perc={perc}: {out[t]}'
+        # The periods around it hold one resolution only.
+        assert out[t - P] == 0 and out[t + P] == 10
+
+
+def test_overlapping_transition_coverage_at_most_full():
+    """Item 3: 1-min records up to END 00:33, then 10-min records at :05, :15, ...
+    The one ending 00:35 covers (00:25, 00:35], but only (00:33, 00:35] is new, so
+    the half hour (00:30, 01:00] holds 3 + 2 + 10 + 10 = 25 of 30 minutes, mean
+    (2 * 10 + 20 * 10) / 25. Counting the whole record covers it 33/30, more than
+    completely, and keeps it at mincounts_perc=0.9."""
+    df = _overlap_frame('2024-07-02 00:33', '2024-07-02 00:35', '2024-07-03 00:05')
+    t = pd.Timestamp('2024-07-02 01:00')
+    assert np.isnan(_resampled_mean(df, mincounts_perc=.9)[t])
+    assert np.isclose(_resampled_mean(df, mincounts_perc=.8)[t], 220 / 25, rtol=1e-12)
+
+
+# --- Items 4 and 5: finalize ---------------------------------------------------------
+
+STRICT = dict(daytime_accept_qcf_below=0)  # rejects every daytime record
+
+
+def _finalized(raw: pd.DataFrame, *finalize_kwargs) -> StepwiseMeteoScreeningDb:
+    """Flag the abslim spikes, correct, then finalize once per kwargs dict."""
+    mscr = _screening(raw)
+    mscr.start_outlier_detection()
+    mscr.flag_outliers_abslim_test(**ABSLIM, showplot=False)
+    mscr.addflag()
+    mscr.correction_setto_max_threshold(threshold=CAP, showplot=False)
+    for kwargs in finalize_kwargs:
+        mscr.finalize_outlier_detection(**kwargs)
+    return mscr
+
+
+def _spiked_download(order: str) -> tuple[pd.DataFrame, pd.Series, Scenario]:
+    sc = Scenario(id=f'finalize_{order}', **MIXED_BY_ORDER[order])
+    raw, duration = _download_frame(sc)
+    raw.loc[pd.DatetimeIndex(sc.abslim_spikes), FIELD] = ABSLIM_SPIKE
+    return raw, duration, sc
+
+
+@pytest.mark.parametrize('order', ORDERS)
+def test_refinalize_with_looser_thresholds_restores_records(order):
+    """Item 5: finalize starts from the corrected, unmasked series, so a looser run
+    after a stricter one gives what the looser run alone gives, corrections kept."""
+    raw, _, sc = _spiked_download(order)
+    strict = _finalized(raw, STRICT)
+    strict_then_loose = _finalized(raw, STRICT, {})
+    loose = _finalized(raw, {})
+
+    n_strict = int(strict.series_hires_cleaned[FIELD].notna().sum())
+    n_loose = int(loose.series_hires_cleaned[FIELD].notna().sum())
+    assert n_loose == len(raw) - len(sc.abslim_spikes)
+    assert n_strict < n_loose / 2, 'the strict run should remove the daytime records'
+
+    pd.testing.assert_series_equal(strict_then_loose.series_hires_cleaned[FIELD],
+                                   loose.series_hires_cleaned[FIELD])
+    pd.testing.assert_series_equal(strict_then_loose.outlier_detection_qcf[FIELD].flagqcf,
+                                   loose.outlier_detection_qcf[FIELD].flagqcf)
+    assert strict_then_loose.series_hires_cleaned[FIELD].max() <= CAP, 'correction lost'
+
+
+@pytest.mark.parametrize('order', ORDERS)
+def test_daytime_of_coarse_records_from_their_true_middle(order):
+    """Item 4: the QCF day/night split places each record at its true middle (END
+    minus half its own resolution), so the strict run rejects the same records as
+    each era screened alone at its own resolution."""
+    raw, duration, _ = _spiked_download(order)
+    mixed = _finalized(raw, STRICT)
+
+    def rejected(mscr, ends):
+        cleaned = mscr.series_hires_cleaned[FIELD].reindex(_slots(mscr, ends))
+        return ends[cleaned.isna().to_numpy()]
+
+    for freq in ('10min', '1min'):
+        ends = raw.index[(duration == pd.Timedelta(freq)).to_numpy()]
+        want = rejected(_finalized(_part(raw, ends), STRICT), ends)
+        got = rejected(mixed, ends)
+        assert len(want) > 0
+        assert got.equals(want), (f'{freq} era: rejected only in mixed {list(got.difference(want)[:5])}, '
+                                  f'only alone {list(want.difference(got)[:5])}')
+
+
+# --- Item 6: daily resampling ------------------------------------------------------
+
+@pytest.mark.parametrize('order', ORDERS)
+def test_resample_to_one_day(order):
+    """Item 6: a Day-based target works for mean and sum, time-weighted as for 30 min."""
+    r = _run(Scenario(id=f'daily_{order}', **MIXED_BY_ORDER[order]))
+    day = pd.Timedelta('1D')
+    kept = r.raw[FIELD].drop(r.rejected).clip(upper=CAP)
+    target = pd.date_range(r.raw.index[0].ceil(day), r.raw.index[-1].ceil(day), freq=day)
+    for agg in ('mean', 'sum'):
+        r.mscr.resample(to_freqstr='1D', agg=agg, mincounts_perc=MINCOUNTS_PERC)
+        out = r.mscr.resampled_detailed[FIELD]
+        assert out.index.name == 'TIMESTAMP_END'
+        assert (out.index.to_series().diff().dropna() == day).all()
+        assert (out['freq'] == '1D').all()
+        want, _ = _weighted_aggregate(kept, r.duration, agg, period=day)
+        pd.testing.assert_series_equal(out[FIELD], want.reindex(target), check_names=False,
+                                       check_freq=False, rtol=1e-9, atol=1e-9)
+
+
+# --- Item 7: dates that match no record ---------------------------------------------
+
+# END timestamps in the 10-min era of MIXED. 20:05 and the range both lie inside
+# the record ending 20:10.
+NO_RECORD = {
+    'inside_coarse_record': '2024-07-01 20:05',
+    'range_inside_coarse_record': ['2024-07-01 20:01', '2024-07-01 20:09'],
+    'outside_data': '2024-08-01 20:00',
+}
+
+
+@pytest.mark.parametrize('case', list(NO_RECORD))
+def test_date_matching_no_record_warns(case):
+    """Item 7: manual removal and set-to-value warn about an entry that matches no
+    record, and change nothing; an entry that matches a record does not warn."""
+    raw, _ = _download_frame(Scenario(id='dates', **MIXED))
+    entry = NO_RECORD[case]
+    first = entry if isinstance(entry, str) else entry[0]
+    mscr = _screening(raw)
+    mscr.start_outlier_detection()
+
+    with _captured() as out:
+        mscr.flag_manualremoval_test(remove_dates=[entry])
+    assert any(first in w for w in out.warnings), f'manual removal: no warning naming {first}'
+    assert not (mscr.outlier_detection[FIELD].last_flag == 2).any()
+
+    before = mscr.series_hires_cleaned[FIELD].copy()
+    with _captured() as out:
+        mscr.correction_setto_value(dates=[entry], value=3.7)
+    assert any(first in w for w in out.warnings), f'set to value: no warning naming {first}'
+    pd.testing.assert_series_equal(mscr.series_hires_cleaned[FIELD], before)
+
+    # Control: the record ending 20:10 exists.
+    with _captured() as out:
+        mscr.flag_manualremoval_test(remove_dates=['2024-07-01 20:10'])
+        mscr.correction_setto_value(dates=['2024-07-01 20:10'], value=3.7)
+    assert out.warnings == []
+    assert int((mscr.outlier_detection[FIELD].last_flag == 2).sum()) == 1
+
+
+# --- Item 8: QCF reports count records, not empty slots ------------------------------
+
+MISSING_1MIN = {'10min_then_1min': '2024-07-03 12:00', '1min_then_10min': '2024-07-02 12:00'}
+
+
+def _report_number(text: str, label: str) -> int:
+    m = re.search(rf'{label}[^:\n]*:\s*(\d+)', text)
+    assert m, f'{label!r} not in report'
+    return int(m.group(1))
+
+
+@pytest.mark.parametrize('order', ORDERS)
+def test_qcf_reports_count_records_not_empty_slots(order):
+    """Item 8: one 1-min record is missing from the download. The reports count it
+    as the only missing record; the empty slots of the fine grid within 10-min
+    records are no records at all: not potential, not missing, QCF NaN."""
+    missing_end = pd.Timestamp(MISSING_1MIN[order])
+    sc = Scenario(id=f'qcf_{order}', missing=[str(missing_end)], **MIXED_BY_ORDER[order])
+    raw, _ = _download_frame(sc)
+    raw.loc[pd.DatetimeIndex(sc.abslim_spikes), FIELD] = ABSLIM_SPIKE
+    n = len(raw)
+    mscr = _screening(raw)
+    mscr.start_outlier_detection()
+    mscr.flag_outliers_abslim_test(**ABSLIM, showplot=False)
+    mscr.addflag()
+    mscr.flag_missingvals_test()
+    mscr.finalize_outlier_detection()
+    qcf = mscr.outlier_detection_qcf[FIELD]
+
+    potential = _slots(mscr, raw.index.union([missing_end]))
+    empty = qcf.flags.index.difference(potential)
+    assert len(empty) > 0
+    flags = qcf.flags
+    assert flags[qcf.flagqcfcol].reindex(potential).notna().all()
+    # Rejected: the abslim spikes and the missing record.
+    assert flags[qcf.flagqcfcol].reindex(potential).eq(2).sum() == len(sc.abslim_spikes) + 1
+    for col in (qcf.flagqcfcol, qcf.sumflagscol, qcf.sumhardflagscol, qcf.sumsoftflagscol):
+        assert flags[col].reindex(empty).isna().all(), f'{col} not NaN at empty slots'
+    assert mscr.data_detailed[FIELD][qcf.flagqcfcol].reindex(empty).isna().all()
+
+    table, _ = qcf.screening_report()
+    overall = table[table['period'] == 'OVERALL']
+    assert (overall['n_potential'] == n + 1).all()
+    assert (overall['n_measured'] == n).all()
+    assert overall['n_rejected'].iloc[-1] == len(sc.abslim_spikes)
+    first = table.groupby('period')['n_potential'].first()
+    assert first['DAYTIME'] + first['NIGHTTIME'] == n + 1
+
+    with _captured() as out:
+        qcf.report_qcf_series()
+    assert _report_number(out.text, 'Potential records') == n + 1
+    assert _report_number(out.text, 'Measured records') == n
+    assert _report_number(out.text, 'Missing records') == 1
+
+    with _captured() as out:
+        qcf.report_qcf_evolution()
+    assert _report_number(out.text, 'Measured records') == n
+
+    # Report 1A (all records): the missing-values test passes n records, fails one,
+    # and has no NaN flag (an empty slot would be one).
+    with _captured() as out:
+        qcf.report_qcf_flags()
+    lines = out.text.splitlines()
+    start = next(i for i, line in enumerate(lines) if 'REPORT 1A' in line)
+    header = next(i for i in range(start, len(lines)) if lines[i].rstrip().endswith('_MISSING'))
+    row = next(lines[i] for i in range(header, len(lines)) if 'OVERALL' in lines[i])
+    n_pass, _, n_fail, n_nan = (int(x) for x in re.findall(r'(\d+) \(\s*[\d.]+%\)', row))
+    assert (n_pass, n_fail, n_nan) == (n, 1, 0), row
