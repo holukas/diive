@@ -9,7 +9,6 @@ from pandas.tseries.frequencies import to_offset
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import convert_series_timestamp_to_middle
 from diive.core.utils.console import info
-from diive.core.utils.prints import ConsoleOutputDecorator
 
 
 def resample_to_monthly_agg_matrix(series: pd.Series, agg: str, ranks: bool = False) -> pd.DataFrame:
@@ -90,7 +89,6 @@ def resample_to_daily_agg(series: Series,
     return agg_ser
 
 
-@ConsoleOutputDecorator()
 def resample_series_to_freq(series: Series,
                             to_freqstr: str = '30min',
                             agg: Literal['mean', 'sum'] = 'mean',
@@ -98,16 +96,18 @@ def resample_series_to_freq(series: Series,
                             output_timestamp_shows: Literal['middle', 'end'] = 'end') -> Series:
     """Downsample data to an arbitrary (lower) time resolution.
 
-    Input data must have timestamp showing the END of the time period.
-    Before resampling, the timestamp is converted to show the MIDDLE
-    of the time period. After resampling, the timestamp shows again the
-    END of the time period.
+    The index name gives the timestamp convention of the input
+    (TIMESTAMP_END, TIMESTAMP_MIDDLE or TIMESTAMP_START). Before resampling,
+    the timestamp is converted to show the MIDDLE of the time period. After
+    resampling, it shows the END of the time period, or the MIDDLE with
+    *output_timestamp_shows='middle'*.
 
     Using the selected aggregation method and while also considering the
     minimum required values in the aggregation time window.
 
     Args:
-        series: regular-frequency time series with a TIMESTAMP_END index.
+        series: regular-frequency time series whose index is named
+            TIMESTAMP_END, TIMESTAMP_MIDDLE or TIMESTAMP_START.
         to_freqstr: target pandas offset alias, e.g. '30min', '10min', '1h'.
             Must be a *lower* time resolution than the source (downsampling only).
         agg: aggregation method ('mean' or 'sum').
@@ -156,12 +156,15 @@ def resample_series_to_freq(series: Series,
 
     # Already at the target resolution (e.g. processed 30MIN data resampled to
     # 30min): aggregating would be a no-op, so just return the series in the
-    # requested timestamp convention.
+    # requested timestamp convention. The input may carry a MIDDLE or START
+    # timestamp (e.g. after TimestampSanitizer), so it has to be converted like
+    # the aggregating path does, not passed through under its own name.
     if current_freq == requested_freq:
         info(f"Data already at {to_freqstr} resolution; no resampling needed.")
-        out = series.copy()
-        if output_timestamp_shows == 'middle':
-            out = convert_series_timestamp_to_middle(data=out)
+        out = convert_series_timestamp_to_middle(data=series.copy())
+        if output_timestamp_shows == 'end':
+            out.index = out.index + pd.to_timedelta(current_freq) / 2
+            out.index.name = 'TIMESTAMP_END'
         return out
 
     _series = series.copy()
@@ -193,9 +196,10 @@ def resample_series_to_freq(series: Series,
     agg_counts_ser.index.name = 'TIMESTAMP_END'
     agg_ser.index.name = 'TIMESTAMP_END'
 
-    # Keep aggregates with enough values
-    filter_min = agg_counts_ser >= mincounts
-    agg_ser = agg_ser[filter_min].copy()
+    # Keep aggregates with enough values. Rejected intervals become NaN rather
+    # than being dropped: dropping them at the start or end would shorten the
+    # index, and a database upload deletes old values only across that index.
+    agg_ser = agg_ser.where(agg_counts_ser >= mincounts)
 
     # Re-assign 30MIN resolution as freq
     agg_ser = agg_ser.asfreq(to_freqstr)

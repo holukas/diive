@@ -53,6 +53,54 @@ class TestResampleToFreq(unittest.TestCase):
         out = resample_series_to_freq(s, '30min', agg='mean', mincounts_perc=0.9)
         self.assertEqual(len(out), len(s))
         self.assertTrue(out.equals(s))
+        self.assertEqual(out.index.name, 'TIMESTAMP_END')
+
+    @staticmethod
+    def _to_middle(s):
+        s = s.copy()
+        s.index = s.index - pd.Timedelta(s.index.freq) / 2
+        s.index.name = 'TIMESTAMP_MIDDLE'
+        return s
+
+    def test_same_resolution_middle_input_returns_end(self):
+        # Meteo screening hands over TIMESTAMP_MIDDLE data; uploading it under
+        # its middle timestamps would shift every value half a period early.
+        s_end = self._hires(freq='30min')
+        out = resample_series_to_freq(self._to_middle(s_end), '30min')
+        self.assertEqual(out.index.name, 'TIMESTAMP_END')
+        self.assertEqual(out.index[0], pd.Timestamp('2022-06-01 00:10:00'))
+        self.assertAlmostEqual(out.iloc[0], 0.0)
+        self.assertTrue(out.index.equals(s_end.index))
+        self.assertTrue(np.array_equal(out.to_numpy(), s_end.to_numpy()))
+
+    def test_same_resolution_middle_output(self):
+        s_end = self._hires(freq='30min')
+        for s in (s_end, self._to_middle(s_end)):
+            out = resample_series_to_freq(s, '30min', output_timestamp_shows='middle')
+            self.assertEqual(out.index.name, 'TIMESTAMP_MIDDLE')
+            self.assertEqual(out.index[0], pd.Timestamp('2022-06-01 00:10:00') - pd.Timedelta('15min'))
+
+    def test_middle_input_coarser_matches_end_input(self):
+        s_end = self._hires()
+        ref = resample_series_to_freq(s_end, '30min', agg='mean')
+        out = resample_series_to_freq(self._to_middle(s_end), '30min', agg='mean')
+        self.assertEqual(out.index.name, 'TIMESTAMP_END')
+        self.assertEqual(out.index[0], pd.Timestamp('2022-06-01 00:30:00'))
+        self.assertAlmostEqual(out.iloc[0], 1.0)
+        self.assertTrue(out.equals(ref))
+
+    def test_rejected_edge_intervals_kept_as_nan(self):
+        # Rejected intervals at the start/end stay in the index as NaN, like the
+        # ones in between, so a re-upload deletes old values across the full range.
+        s = self._hires()
+        s.iloc[:6] = np.nan
+        s.iloc[-6:] = np.nan
+        out = resample_series_to_freq(s, '30min', agg='mean', mincounts_perc=0.9)
+        full = resample_series_to_freq(self._hires(), '30min', agg='mean', mincounts_perc=0.9)
+        self.assertTrue(out.index.equals(full.index))
+        self.assertTrue(out.iloc[:2].isna().all())
+        self.assertTrue(out.iloc[-2:].isna().all())
+        self.assertAlmostEqual(out.iloc[2], full.iloc[2])
 
 
 class TestResampling(unittest.TestCase):

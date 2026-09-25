@@ -485,128 +485,106 @@ def format_timestamp_to_fluxnet_format(df: DataFrame, timestamp_col: str) -> Ser
 
 def detect_freq_groups(index: DatetimeIndex) -> Series:
     """
-    Analyze timestamp for records where the time resolution is absolutely certain
+    Assign each record to the time resolution (frequency group) it was recorded at
 
-    This function calculates the timedeltas (the time differences) between the current
-    timestamp and the timestamp of the record before and after. For data records where
-    the two differences are the same (in absolute terms) have an absolutely certain
-    timestamp.
-
-    The determined time resolution of each record is described in the newly created column
-    'FREQ_AUTO_SEC' in terms of seconds. The column is added to *df* and can be used to
+    Used for data whose time resolution changes over time, e.g. a sensor that logged
+    10MIN averages for a year and 1MIN averages afterwards. The result can be used to
     access the different time resolution groups separately during later processing.
 
-    Example:
+    The assignment works in three passes:
 
-                        TIMESTAMP_CURRENT   TIMESTAMP_PREV      TIMESTAMP_NEXT           DELTA_PREV  DELTA_NEXT  DELTA_DIFF
-    TIMESTAMP_CURRENT
-    2020-10-01 00:20:00 2020-10-01 00:20:00 2020-10-01 00:10:00 2020-10-01 00:30:00      -600.0       600.0         0.0
-    2020-10-01 00:30:00 2020-10-01 00:30:00 2020-10-01 00:20:00 2020-10-01 00:40:00      -600.0       600.0         0.0
-    2020-10-01 00:40:00 2020-10-01 00:40:00 2020-10-01 00:30:00 2020-10-01 00:50:00      -600.0       600.0         0.0
-    ...                                 ...                 ...                 ...         ...         ...         ...
-    2021-09-30 23:57:00 2021-09-30 23:57:00 2021-09-30 23:56:00 2021-09-30 23:58:00       -60.0        60.0         0.0
-    2021-09-30 23:58:00 2021-09-30 23:58:00 2021-09-30 23:57:00 2021-09-30 23:59:00       -60.0        60.0         0.0
-    2021-09-30 23:59:00 2021-09-30 23:59:00 2021-09-30 23:58:00 2021-10-01 00:00:00       -60.0        60.0         0.0
+    1. A record whose time differences to the previous and to the next record are
+       equal has an unambiguous resolution: that difference.
+    2. A record where the two differences differ sits next to a timestamp gap or at a
+       change of resolution. It gets the group of a neighbour from pass 1, on the side
+       where the difference to that neighbour equals the neighbour's resolution, or
+       else is an integer multiple of it (a gap of whole missing records). If both
+       sides qualify equally, the side of the record's own averaging period wins: the
+       previous record for TIMESTAMP_END (and unnamed) indexes, the next record for
+       TIMESTAMP_START.
+    3. A single record between two gaps of the same length (e.g. 10MIN data with the
+       records before and after it missing) has equal differences to both neighbours
+       and got the gap length in pass 1. It joins its neighbours' group when both have
+       the same resolution and the gaps are whole missing records of it.
 
-    The example shows a dataset that starts with 10MIN time resolution and ends with
-    1MIN time resolution. For each record, the previous and next timestamp are detected
-    and the delta between these two and the current timestamp are calculated. The sum
-    of DELTA_PREV and DELTA_NEXT will yield DELTA_DIFF = 0 if the time differences
-    were the same. DELTA_DIFF = 0 therefore describes locations where the time resolution
-    is certain.
+    Example: in regular 10MIN data with the record at 12:20 missing, the records at
+    12:10 and 12:30 have differences of 10 and 20 minutes to their neighbours. Both
+    are assigned to the 600 s group from their regular neighbour, so a single missing
+    record does not remove the records around it.
 
-    For 10MIN time records, the 'FREQ_AUTO_SEC' will be set to '600', for 1MIN records
-    to '60'. The first and last records of each frequency group are added during processing,
-    e.g., the timestamp '2020-10-01 00:10:00' is the first timestamp for the '600' group
-    although it is not part of the main index (main index starts one record later with
-    '2020-10-01 00:20:00' because '2020-10-01 00:10:00' does not have a value for
-    TIMESTAMP_PREV).
+    Example: 1MIN data up to 10:00 (TIMESTAMP_END), then 10MIN data from 10:10. The
+    record at 10:00 covers 09:59-10:00 and is assigned to the 60 s group, the record
+    at 10:10 to the 600 s group.
 
     Note:
         Sometimes there are transition periods between one time resolution and another.
         For example, when the time resolution changes from 10MIN to 1MIN, there might be
         several records in between that have neither 10MIN nor 1MIN, but e.g. 7S or 29MIN etc.
-        For these transitional records, the time resolution is not clear and therefore they
-        are discarded. This typically affects only a handful of records during the transition
-        period(s).
+        For these transitional records, the time resolution is not clear and they stay
+        unassigned (NaN). This typically affects only a handful of records during the
+        transition period(s).
 
     Args:
-        index: Time series dataframe
+        index: Sorted timestamp index.
 
     Returns:
-        df: Time series dataframe with the new column 'FREQ_AUTO_SEC' added
+        Series 'FREQ_AUTO_SEC' on *index* with the time resolution of each record in
+        seconds, NaN where the resolution could not be determined.
 
     :: Added in v0.43.0
     """
+    # Work in integer nanoseconds so the multiple-of check is exact also for
+    # sub-second resolutions. A difference of 0 marks "no neighbour on this side".
+    ns = index.as_unit('ns').asi8
+    diffs = np.diff(ns)
+    prev_d = np.concatenate([[0], diffs])
+    next_d = np.concatenate([diffs, [0]])
 
-    groups_ser = pd.Series(index=index, data=np.nan, name='FREQ_AUTO_SEC')
-    # index['FREQ_AUTO_SEC'] = np.nan
+    # Pass 1: equal spacing on both sides
+    group = np.where((prev_d == next_d) & (prev_d > 0), prev_d, 0)
 
-    # Analyse data for different time resolutions
-    timedeltas_df = pd.DataFrame()
-    timedeltas_df['TIMESTAMP_CURRENT'] = index
+    # Pass 2: records next to a gap or a change of resolution. Neighbour groups
+    # are taken from pass 1 only, so the result does not depend on the order in
+    # which ambiguous records are visited.
+    prev_group = np.concatenate([[0], group[:-1]])
+    next_group = np.concatenate([group[1:], [0]])
 
-    # Add previous and next timestamps
-    timedeltas_df['TIMESTAMP_PREV'] = timedeltas_df['TIMESTAMP_CURRENT'].shift(1)
-    timedeltas_df['TIMESTAMP_NEXT'] = timedeltas_df['TIMESTAMP_CURRENT'].shift(-1)
+    # A pass-1 record is backed by a run if a neighbour has the same group. A lone
+    # record between two equal gaps is not, and must not pull the records around
+    # it into its gap-sized group.
+    in_run = (group > 0) & ((group == prev_group) | (group == next_group))
+    prev_in_run = np.concatenate([[False], in_run[:-1]])
+    next_in_run = np.concatenate([in_run[1:], [False]])
 
-    # DELTA is the difference between the current and the previous/next timestamp,
-    # expressed as total seconds
-    timedeltas_df['DELTA_PREV'] = timedeltas_df['TIMESTAMP_PREV'].sub(timedeltas_df['TIMESTAMP_CURRENT'])
-    timedeltas_df['DELTA_NEXT'] = timedeltas_df['TIMESTAMP_NEXT'].sub(timedeltas_df['TIMESTAMP_CURRENT'])
-    timedeltas_df['DELTA_PREV'] = timedeltas_df['DELTA_PREV'].dt.total_seconds()
-    timedeltas_df['DELTA_NEXT'] = timedeltas_df['DELTA_NEXT'].dt.total_seconds()
+    def _score(d, g, g_in_run):
+        # 3/2 = spacing equals the neighbour's resolution (with/without a run),
+        # 1 = whole missing records in between, 0 = does not fit
+        valid = (d > 0) & (g > 0)
+        safe_g = np.where(valid, g, 1)
+        exact = valid & (d == g)
+        multiple = valid & (d % safe_g == 0)
+        return np.where(exact, np.where(g_in_run, 3, 2), np.where(multiple, 1, 0))
 
-    # The sum of DELTA_PREV and DELTA_NEXT can identify data records where
-    # the time resolution is unambiguous.
-    # For example: DELTA_PREV = -60, DELTA_NEXT = +60, DELTA_DIFF = 0
-    #   In this case the time differences of the current timestamp to
-    #   the previous and next timestamps are the same (in absolute terms)
-    #   and therefore yields the sum zero.
-    timedeltas_df['DELTA_DIFF'] = timedeltas_df['DELTA_PREV'] + timedeltas_df['DELTA_NEXT']
-    ix = timedeltas_df['DELTA_DIFF'] == 0
-    timedelta_unambiguous_df = timedeltas_df.loc[ix].copy()
-    timedelta_unambiguous_df = timedelta_unambiguous_df.set_index(timedelta_unambiguous_df['TIMESTAMP_CURRENT'])
+    prev_score = _score(prev_d, prev_group, prev_in_run)
+    next_score = _score(next_d, next_group, next_in_run)
 
-    # Count occurrences of respective DELTA
-    delta_counts_df = timedelta_unambiguous_df['DELTA_NEXT'].groupby(
-        timedelta_unambiguous_df['DELTA_NEXT']).count().sort_values(ascending=False)
-    delta_counts_df = pd.DataFrame(delta_counts_df)
-    delta_counts_df = delta_counts_df.rename(columns={"DELTA_NEXT": "COUNTS"})
+    # On a tie, take the side covered by the record's own averaging period
+    tie_to_next = index.name == 'TIMESTAMP_START'
+    take_next = (next_score > prev_score) | ((next_score == prev_score) & tie_to_next)
+    fallback = np.where(take_next, next_group, prev_group)
+    fallback = np.where(np.maximum(prev_score, next_score) > 0, fallback, 0)
 
-    # Calculate how much time is covered by each DELTA
-    delta_counts_df['DELTA_NEXT'] = delta_counts_df.index
-    delta_counts_df['DELTA_TOTAL_TIME'] = delta_counts_df['DELTA_NEXT'].multiply(delta_counts_df['COUNTS'])
-    delta_counts_df['TOTAL_TIME'] = delta_counts_df['DELTA_TOTAL_TIME'].sum()
-    delta_counts_df['%_DELTA_TOTAL_TIME'] = delta_counts_df['DELTA_TOTAL_TIME'] / delta_counts_df['TOTAL_TIME']
-    delta_counts_df['%_DELTA_TOTAL_TIME'] = delta_counts_df['%_DELTA_TOTAL_TIME'] * 100
+    group = np.where(group > 0, group, fallback)
 
-    # List of found time resolutions (unambiguous)
-    deltas = delta_counts_df['DELTA_NEXT'].to_list()
+    # Pass 3: lone pass-1 record between two equal gaps
+    prev_final = np.concatenate([[0], group[:-1]])
+    next_final = np.concatenate([group[1:], [0]])
+    lone = (group > 0) & ~in_run & (prev_final > 0) & (prev_final == next_final)
+    lone &= prev_d % np.where(lone, prev_final, 1) == 0
+    group = np.where(lone, prev_final, group)
 
-    # Detect first and last date for each delta
-    # First and last dates need to be included by using:
-    #   - 'TIMESTAMP_PREV' for first date
-    #   - 'TIMESTAMP_NEXT' for last date
-    for d in deltas:
-        this_delta = timedelta_unambiguous_df.loc[timedelta_unambiguous_df['DELTA_NEXT'] == d].copy()
-        this_delta = this_delta.set_index(this_delta['TIMESTAMP_CURRENT'])
-        first_date = this_delta['TIMESTAMP_PREV'].min()
-        last_date = this_delta['TIMESTAMP_NEXT'].max()
-
-        # Add first and last date to df
-        new_index = this_delta.index.union([first_date, last_date])
-        this_delta = this_delta.reindex(new_index)
-
-        groups_ser.loc[this_delta.index] = d
-
-        # freq = f"{int(d)}S"
-        # _index = pd.date_range(start=first_date, end=last_date, freq=freq)
-        # this_delta.reindex(_index)
-        delta_counts_df.loc[d, 'FIRST_DATE'] = first_date
-        delta_counts_df.loc[d, 'LAST_DATE'] = last_date
-
-    return groups_ser
+    group_sec = np.where(group > 0, group / 1e9, np.nan)
+    return pd.Series(index=index, data=group_sec, name='FREQ_AUTO_SEC')
 
 
 def sort_timestamp_ascending(data: Union[Series, DataFrame], verbose: bool = False) -> Union[Series, DataFrame]:

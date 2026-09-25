@@ -213,17 +213,23 @@ class TestTime(unittest.TestCase):
     def test_resampling_to_30MIN(self):
         df, metadata_df = ed.load_exampledata_GENERIC_CSV_HEADER_1ROW_TS_MIDDLE_FULL_1MIN_long()
         resampled_ta = resample_series_to_30MIN(series=df['TA_T1_2_1_Avg'])
-        self.assertEqual(resampled_ta.index[0], pd.Timestamp('2024-04-01 00:30:00'))
+        # The input starts at 23:59:30 (MIDDLE): that interval is too sparse and kept as NaN
+        self.assertEqual(resampled_ta.index[0], pd.Timestamp('2024-04-01 00:00:00'))
+        self.assertTrue(pd.isna(resampled_ta.iloc[0]))
+        self.assertEqual(resampled_ta.first_valid_index(), pd.Timestamp('2024-04-01 00:30:00'))
         self.assertEqual(resampled_ta.loc['2024-04-09 13:30:00'], 2.643333333333333)
         self.assertEqual(resampled_ta.loc['2024-04-09 14:00:00'], 2.5)
         self.assertEqual(resampled_ta.index.freqstr, '30min')
-        self.assertEqual(resampled_ta.sum(), 7984.021494252875)
+        self.assertAlmostEqual(resampled_ta.sum(), 7984.021494252875, places=6)
         resampled_swin = resample_series_to_30MIN(series=df['SW_IN_T1_1_1_Avg'])
-        self.assertEqual(resampled_swin.index[0], pd.Timestamp('2024-04-01 00:30:00'))
+        # The input starts at 23:59:30 (MIDDLE): that interval is too sparse and kept as NaN
+        self.assertEqual(resampled_swin.index[0], pd.Timestamp('2024-04-01 00:00:00'))
+        self.assertTrue(pd.isna(resampled_swin.iloc[0]))
+        self.assertEqual(resampled_swin.first_valid_index(), pd.Timestamp('2024-04-01 00:30:00'))
         self.assertEqual(resampled_swin.loc['2024-04-09 13:30:00'], 104.64)
         self.assertEqual(resampled_swin.loc['2024-04-09 14:00:00'], 87.08333333333333)
         self.assertEqual(resampled_swin.index.freqstr, '30min')
-        self.assertEqual(resampled_swin.sum(), 134375.59183908044)
+        self.assertAlmostEqual(resampled_swin.sum(), 134375.59183908044, places=6)
 
     def test_insert_timestamp(self):
         df, metadata_df = ed.load_exampledata_GENERIC_CSV_HEADER_1ROW_TS_MIDDLE_FULL_1MIN_long()
@@ -302,6 +308,64 @@ class TestTime(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             TimestampSanitizer(data=s, validate_naming=False, output_middle_timestamp=False,
                                regularize=True, verbose=False).get()
+
+
+class TestDetectFreqGroups(unittest.TestCase):
+    """Records next to a timestamp gap must keep the resolution of their regular
+    neighbour; meteo screening drops every record left without a group."""
+
+    @staticmethod
+    def _groups(ix):
+        from diive.core.times.times import detect_freq_groups
+        return detect_freq_groups(index=pd.DatetimeIndex(ix, name='TIMESTAMP_END'))
+
+    def test_single_missing_record_keeps_neighbours(self):
+        ix = pd.date_range('2024-06-01 00:10', periods=144, freq='10min')
+        missing = pd.Timestamp('2024-06-01 08:20')
+        g = self._groups(ix[ix != missing])
+        self.assertEqual(len(g), 143)
+        self.assertFalse(g.isna().any())
+        self.assertTrue((g == 600).all())
+
+    def test_1min_with_5min_gap_keeps_all_records(self):
+        ix = pd.date_range('2024-06-01 00:01', periods=600, freq='1min')
+        g = self._groups(ix.delete(range(100, 104)))
+        self.assertFalse(g.isna().any())
+        self.assertTrue((g == 60).all())
+
+    def test_lone_record_between_two_gaps(self):
+        ix = pd.date_range('2024-06-01 00:10', periods=144, freq='10min')
+        g = self._groups(ix.delete([50, 52]))
+        self.assertTrue((g == 600).all())
+
+    def test_1min_block_then_10min_block(self):
+        a = pd.date_range('2024-06-01 00:01', '2024-06-01 10:00', freq='1min')
+        b = pd.date_range('2024-06-01 10:10', '2024-06-02 10:00', freq='10min')
+        g = self._groups(a.append(b))
+        self.assertFalse(g.isna().any())
+        self.assertTrue((g.loc[:'2024-06-01 10:00'] == 60).all())
+        self.assertTrue((g.loc['2024-06-01 10:10':] == 600).all())
+        # TIMESTAMP_END: the record at 10:00 covers 09:59-10:00
+        self.assertEqual(g.loc['2024-06-01 10:00'], 60)
+
+    def test_10min_block_then_1min_block(self):
+        a = pd.date_range('2024-06-01 00:10', '2024-06-01 10:00', freq='10min')
+        b = pd.date_range('2024-06-01 10:01', '2024-06-02 10:00', freq='1min')
+        g = self._groups(a.append(b))
+        self.assertFalse(g.isna().any())
+        # TIMESTAMP_END: the record at 10:00 covers 09:50-10:00
+        self.assertTrue((g.loc[:'2024-06-01 10:00'] == 600).all())
+        self.assertTrue((g.loc['2024-06-01 10:01':] == 60).all())
+
+    def test_transitional_record_stays_unassigned(self):
+        a = pd.date_range('2024-06-01 00:10', '2024-06-01 10:00', freq='10min')
+        b = pd.date_range('2024-06-01 10:01', '2024-06-02 10:00', freq='1min')
+        odd = pd.DatetimeIndex(['2024-06-01 10:00:07'])
+        g = self._groups(a.append(odd).append(b))
+        self.assertEqual(g.isna().sum(), 1)
+        self.assertTrue(pd.isna(g.loc['2024-06-01 10:00:07']))
+        self.assertEqual(g.loc[pd.Timestamp('2024-06-01 10:00')], 600)
+        self.assertEqual(g.loc[pd.Timestamp('2024-06-01 10:01')], 60)
 
 
 class TestStlDecompose(unittest.TestCase):
