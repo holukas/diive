@@ -167,10 +167,6 @@ class LocalOutlierFactor(FlagBase):
                 unless in a joblib.parallel_backend context. -1 means using all processors.
                 (description taken from scikit, ref [1])
 
-        Returns:
-            Results dataframe via the @repeater wrapper function, dataframe contains
-            the filtered time series and flags from all iterations.
-
         """
         reject_legacy_params(legacy, 'LocalOutlierFactor')
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)

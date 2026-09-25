@@ -53,8 +53,8 @@ class StepwiseOutlierDetection:
     used to filter the time series.
 
     **Screening**
-    The stepwise meteoscreening allows to perform **step-by-step** outlier removal tests
-    on time series data. A preview plot after running a test is shown and the user can
+    The stepwise outlier detection runs **step-by-step** outlier tests on time
+    series data. A preview plot after running a test is shown and the user can
     decide if results are satisfactory or if the same test with different parameters
     should be re-run. Once results are satisfactory, the respective test flag is added
     to the data with `.addflag()`.
@@ -130,14 +130,14 @@ class StepwiseOutlierDetection:
 
     @property
     def series_hires_cleaned(self) -> Series:
-        """Return cleaned time series of field(s) as dict of Series"""
+        """Return the cleaned time series as a Series."""
         if not isinstance(self._series_hires_cleaned, Series):
             raise Exception(f"No hires quality-controlled data available.")
         return self._series_hires_cleaned
 
     @property
     def series_hires_orig(self) -> Series:
-        """Return original time series of field(s) as dict of Series"""
+        """Return the original time series as a Series."""
         if not isinstance(self._series_hires_orig, Series):
             raise Exception(f"No hires original data available.")
         return self._series_hires_orig
@@ -295,7 +295,7 @@ class StepwiseOutlierDetection:
         separate_day_night : bool, default False
             If False, apply single threshold across all records (global mode).
             If True, apply separate thresholds to daytime and nighttime records.
-            Requires lat, lon, utc_offset when True.
+            Day/night follows from lat, lon and utc_offset.
         thres_zscore_daytime : float, default None
             Override ``thres_zscore`` for daytime records (separate_day_night=True).
             If None, uses ``thres_zscore``.
@@ -303,11 +303,11 @@ class StepwiseOutlierDetection:
             Override ``thres_zscore`` for nighttime records (separate_day_night=True).
             If None, uses ``thres_zscore``.
         lat : float, default None
-            Site latitude in decimal degrees. Required when separate_day_night=True.
+            Site latitude in decimal degrees. If None, uses the instance's ``site_lat``.
         lon : float, default None
-            Site longitude in decimal degrees. Required when separate_day_night=True.
+            Site longitude in decimal degrees. If None, uses the instance's ``site_lon``.
         utc_offset : int, default None
-            UTC offset in hours. Required when separate_day_night=True.
+            UTC offset in hours. If None, uses the instance's ``utc_offset``.
         showplot : bool, default False
             If True, display outlier visualization.
         plottitle : str, default None
@@ -457,6 +457,37 @@ class StepwiseOutlierDetection:
         )
         flagtest.calc(repeat=False)
         self._record_last(flagtest)
+
+    def set_pending_flag(self, flag: Series) -> None:
+        """Make a flag computed outside this instance the most recent test.
+
+        `.addflag()` then adds it like the flag of any ``flag_*`` test. For a test
+        that has to run on another arrangement of the same records, e.g. per time
+        resolution in the meteo screening. `last_bounds` becomes ``(None, None)``.
+
+        Args:
+            flag: Test flag (0 ok, 2 rejected, NaN untested) on the index of
+                `series_hires_cleaned`, named like a test flag (``FLAG_..._TEST``).
+
+        Example:
+            >>> import numpy as np, pandas as pd
+            >>> from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+            >>> idx = pd.date_range('2024-07-01 00:15', periods=48, freq='30min', name='TIMESTAMP_MIDDLE')
+            >>> sod = StepwiseOutlierDetection(dfin=pd.DataFrame({'TA': np.arange(48.0)}, index=idx),
+            ...                                col='TA', site_lat=47.29, site_lon=7.73, utc_offset=1)
+            >>> flag = pd.Series(0.0, index=sod.series_hires_cleaned.index, name='FLAG_TA_OWN_TEST')
+            >>> flag.iloc[5] = 2
+            >>> sod.set_pending_flag(flag)
+            >>> sod.addflag()
+            >>> int(sod.series_hires_cleaned.isna().sum())
+            1
+        """
+        if not flag.index.equals(self._series_hires_cleaned.index):
+            raise ValueError("set_pending_flag: flag must have the same timestamp index "
+                             "as the series under outlier detection.")
+        self._last_flag = flag
+        self._last_flag_added = False
+        self._last_bounds = (None, None)
 
     def addflag(self):
         """Add flag of most recent test to data and update filtered series

@@ -246,8 +246,8 @@ class LocalSD(FlagBase):
                 progress bar / live-update the cleaned series).
 
         Returns:
-            pd.Series: A flag series (managed by the `FlagBase` parent class)
-            where outliers are marked with flag ID 2.
+            None. The flag, with outliers marked 2, is in ``overall_flag``
+            (managed by the `FlagBase` parent class).
         """
         self._overall_flag, n_iterations = self.repeat(
             self.run_flagtests, repeat=repeat, progress_callback=progress_callback)
@@ -295,10 +295,12 @@ class LocalSD(FlagBase):
                 output (e.g., "(daytime)"). Defaults to None.
 
         Returns:
-            tuple[pd.DatetimeIndex, pd.DatetimeIndex, int]:
+            tuple[pd.DatetimeIndex, pd.DatetimeIndex, int, pd.Series, pd.Series]:
                 - ok: DatetimeIndex of valid data points.
                 - rejected: DatetimeIndex of outlier data points.
                 - n_outliers: The count of rejected outliers.
+                - upper_limit: Upper threshold for each record of *s*.
+                - lower_limit: Lower threshold for each record of *s*.
         """
         rmedian = s.rolling(window=winsize, center=True, min_periods=3).median()
         if self.constant_sd:

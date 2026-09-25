@@ -7,8 +7,8 @@ self-contained, runnable diive snippet — so a point-and-click run stays
 reproducible.
 
 Default-valued kwargs are omitted from the rendered call (introspected from the
-``Hampel.__init__`` signature), so the snippet shows only the decisions that
-actually differ from the defaults.
+signature of each detector's ``__init__`` or of the ``StepwiseOutlierDetection``
+method), so the snippet shows only the decisions that differ from the defaults.
 
 This belongs in the library (not the GUI): it encodes the exact API call shape
 and must stay correct as that API evolves; the GUI only calls it.

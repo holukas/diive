@@ -1,7 +1,7 @@
 """
 Outlier detection using Z-score methods.
 
-This module provides two z-score-based outlier detection approaches:
+This module provides three z-score-based outlier detection approaches:
 
 - **Global:** Single z-score threshold for entire time series
 - **Daytime/Nighttime:** Separate z-score thresholds for different times of day

@@ -302,8 +302,9 @@ class Hampel(FlagBase):
         # difference. That is not a strict filter, it is an undefined one - the data
         # carry no scale to judge against - and substituting a tiny epsilon turns it
         # into a silent mass rejection of the signal itself. Windows that arise from
-        # upsampled coarse data, quantized readings or a stuck sensor hit this
-        # routinely. Such records are therefore left unflagged (NaN limits compare
+        # coarse data upsampled (e.g. back-filled) before it reaches this class,
+        # quantized readings or a stuck sensor hit this routinely; the meteo
+        # screening no longer upsamples coarse records. Such records are therefore left unflagged (NaN limits compare
         # False), and the count is reported rather than hidden.
         degenerate = rolling_mad == 0
         if degenerate.any():

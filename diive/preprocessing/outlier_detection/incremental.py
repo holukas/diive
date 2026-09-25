@@ -71,9 +71,6 @@ class zScoreIncrements(FlagBase):
                 Default 4 is conservative; lower values detect more outliers.
             showplot: If True, displays visualization of detected outliers.
             verbose: If True, prints iteration statistics to console.
-
-        Returns:
-            Flag series that combines flags from all iterations in one single flag.
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.verbose = False
@@ -155,7 +152,7 @@ class zScoreIncrements(FlagBase):
         n_outliers = len(rejected)
 
         if self.verbose:
-            detail(f"ITERATION#{iteration}: Total found outliers: {n_outliers} values (daytime+nighttime)",
+            detail(f"ITERATION#{iteration}: Total found outliers: {n_outliers} values",
                    verbose=self.verbose)
 
         return ok, rejected, n_outliers
