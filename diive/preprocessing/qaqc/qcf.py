@@ -660,14 +660,17 @@ class FlagQCF:
         ix = (df[self.sumsoftflagscol] <= 3) & (df[self.sumsoftflagscol] >= 1) & (df[self.sumhardflagscol] == 0)
         df.loc[ix, self.flagqcfcol] = 1
 
-        # Flag daytime values based on param
+        # Flag daytime values based on param. Reindexed first: report_qcf_evolution
+        # passes a subset of records, and letting `&` align a subset index against
+        # the full one clears the index freq of every frame sharing that index
+        # (pandas 3), which breaks later resampling.
         if isinstance(self.daytime, Series):
-            ix = (df[self.flagqcfcol] >= self.daytime_accept_qcf_below) & (self.daytime == 1)
+            ix = (df[self.flagqcfcol] >= self.daytime_accept_qcf_below) & (self.daytime.reindex(df.index) == 1)
             df.loc[ix, self.flagqcfcol] = 2
 
         # Flag nighttime values based on param
         if isinstance(self.nighttime, Series):
-            ix = (df[self.flagqcfcol] >= self.nighttime_accept_qcf_below) & (self.nighttime == 1)
+            ix = (df[self.flagqcfcol] >= self.nighttime_accept_qcf_below) & (self.nighttime.reindex(df.index) == 1)
             df.loc[ix, self.flagqcfcol] = 2
 
         # Daytime and nighttime flags are only calculated when swinpot is provided.

@@ -18,11 +18,10 @@ from pandas.tseries.frequencies import to_offset
 import diive.core.dfun.frames as frames
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-from diive.core.utils.console import info, detail
+from diive.core.utils.console import info, detail, warn
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
 from diive.core.plotting.styles.format import FormatStyle
 from diive.core.plotting.timeseries import TimeSeries
-from diive.core.times.resampling import resample_series_to_freq
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import detect_freq_groups
 from diive.analysis import daily_correlation
@@ -32,6 +31,8 @@ from diive.preprocessing.corrections import set_exact_values_to_missing, setto_t
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 from diive.preprocessing.qaqc.flags import MissingValues
 from diive.preprocessing.qaqc.qcf import FlagQCF
+
+_SWINPOT_COL = '_SW_IN_POT_METSCR'  # Temporary day/night input for the QCF
 
 
 class StepwiseMeteoScreeningDb:
@@ -91,15 +92,21 @@ class StepwiseMeteoScreeningDb:
     After quality-screening and corrections, data are resampled to 30MIN time resolution.
 
     **Handling different time resolutions**
-    One challenging aspect of the screening were the different time resolutions of the raw
-    data. In some cases, the time resolution changed from e.g. 10MIN for older data to 1MIN
-    for newer date. In cases of different time resolution, **the lower resolution is upsampled
-    to the higher resolution**, the emerging gaps are *back-filled* with available data.
-    Back-filling is used because the timestamp in the database always is TIMESTAMP_END, i.e.,
-    it gives the *end* of the averaging interval. The advantage of upsampling is that all
-    outlier detection routines can be applied to the whole dataset. Since data are resampled
-    to 30MIN after screening and since the TIMESTAMP_END is respected, the upsampling itself
-    has no impact on resulting aggregates.
+    The time resolution of the raw data can change, e.g. from 10MIN for older data to 1MIN
+    for newer data. All records are then placed on one grid at the finest resolution, each
+    **only at its own END timestamp** (the database timestamp is TIMESTAMP_END). A coarse
+    record is not copied onto the finer slots it covers: those slots stay empty through the
+    whole screening, and corrections do not fill them. Outlier tests run on this sparse
+    series; a window given as a record count counts grid slots, a window given as a time
+    span ('7D') is unaffected. `.flag_manualremoval_test()` and `.correction_setto_value()`
+    therefore act on whole records. `.resample()` weights each record by the time it
+    covers: a 10MIN record counts ten times as much as a 1MIN record in a mean, and once
+    in a sum.
+
+    **Timestamps**
+    Screening runs on TIMESTAMP_MIDDLE (converted from the database's TIMESTAMP_END).
+    `.flag_manualremoval_test()` and `.correction_setto_value()` take dates in the
+    database's TIMESTAMP_END convention.
 
     **Variables**
     The class allows the simultaneous quality-screening of multiple variables from one single
@@ -116,13 +123,47 @@ class StepwiseMeteoScreeningDb:
     approach, the stepwise screening can be easily adjusted to work with any type of data
     files. This adjustment will be done in one of the next updates.
 
+    Example:
+        ``data_detailed`` maps each variable to a DataFrame as downloaded from the
+        database: a TIMESTAMP_END index, the variable column and the tag columns.
+        Here four days of synthetic 10-minute air temperature with one spike:
+
+        >>> import numpy as np, pandas as pd
+        >>> import diive as dv
+        >>> from diive.core.io.db.influx.common import TAGS
+        >>> idx = pd.date_range('2024-07-01 00:10', periods=4 * 144, freq='10min',
+        ...                     name='TIMESTAMP_END')
+        >>> hour = idx.hour.to_numpy() + idx.minute.to_numpy() / 60
+        >>> ta = 15 + 5 * np.sin(2 * np.pi * (hour - 9) / 24)
+        >>> ta += np.random.default_rng(42).normal(0, 0.2, len(idx))
+        >>> ta[200] = 60  # spike at END timestamp 2024-07-02 09:30
+        >>> df = pd.DataFrame({'TA_T1_2_1': ta}, index=idx)
+        >>> df[TAGS] = '-'
+        >>> df[['site', 'varname', 'units', 'freq']] = ['CH-XYZ', 'TA_T1_2_1', 'degC', '10min']
+
+        Screen, keep the flag, remove flagged records and resample:
+
+        >>> mscr = dv.qaqc.StepwiseMeteoScreeningDb(
+        ...     data_detailed={'TA_T1_2_1': df}, fields='TA_T1_2_1', site='ch-xyz',
+        ...     site_lat=47.29, site_lon=7.73, utc_offset=1)
+        >>> mscr.start_outlier_detection()
+        >>> mscr.flag_outliers_abslim_test(minval=-30, maxval=50)
+        >>> mscr.addflag()
+        >>> mscr.finalize_outlier_detection()
+        >>> int(mscr.series_hires_cleaned['TA_T1_2_1'].isna().sum())
+        1
+        >>> mscr.resample(to_freqstr='30min', agg='mean')
+        >>> len(mscr.resampled_detailed['TA_T1_2_1'])
+        192
+
+        The method examples on this page continue from this ``mscr``.
     """
 
     def __init__(
             self,
             data_detailed: dict,
             # measurement: str,
-            fields: list or str,
+            fields: list | str,
             site: str,
             site_lat: float,
             site_lon: float,
@@ -130,9 +171,10 @@ class StepwiseMeteoScreeningDb:
     ):
         """Set up stepwise meteo screening. See the class docstring."""
         self.site = site
-        self._data_detailed = data_detailed.copy()
+        # Copy the frames too: validation adds columns and must not touch the caller's data.
+        self._data_detailed = {key: df.copy() for key, df in data_detailed.items()}
         # self.measurement = measurement
-        self.fields = fields if isinstance(fields, list) else list(fields)
+        self.fields = [fields] if isinstance(fields, str) else list(fields)
         self.site_lat = site_lat
         self.site_lon = site_lon
         self.utc_offset = utc_offset
@@ -198,11 +240,14 @@ class StepwiseMeteoScreeningDb:
 
     def start_outlier_detection(self):
         """Initiate step-wise outlier detection (sod) for each field.
-        Each field gets its own sod instance."""
+        Each field gets its own sod instance. Tests run on the current series, so
+        corrections applied before this call are what the tests see."""
         for field in self.fields:
             info(f"Starting step-wise outlier detection for variable {field} ...")
+            dfin = self.data_detailed[field].copy()
+            dfin[field] = self._series_hires_cleaned[field]
             self._outlier_detection[field] = StepwiseOutlierDetection(
-                dfin=self.data_detailed[field].copy(),
+                dfin=dfin,
                 col=field,
                 site_lat=self.site_lat,
                 site_lon=self.site_lon,
@@ -261,11 +306,12 @@ class StepwiseMeteoScreeningDb:
             ax_heatmap_resampled_after = fig.add_subplot(gs[0:3, 4], sharey=ax_heatmap_hires_before)
 
             # Time series
-            ax_orig.plot(series_orig.index, series_orig, label=f"{series_orig.name}", color="#78909C",
+            records_orig = self._plot_records(field, series_orig)
+            ax_orig.plot(records_orig.index, records_orig, label=f"{series_orig.name}", color="#78909C",
                          alpha=.5, markersize=2, markeredgecolor='none')
             ax_resampled.plot(series_resampled.index, series_resampled, label="resampled",
                               color="#FFA726", alpha=1, markersize=3, markeredgecolor='none')
-            ax_both.plot(series_orig.index, series_orig, label=f"{series_orig.name}", color="#78909C",
+            ax_both.plot(records_orig.index, records_orig, label=f"{series_orig.name}", color="#78909C",
                          alpha=.5, markersize=2, markeredgecolor='none')
             ax_both.plot(series_resampled.index, series_resampled, label="resampled",
                          color="#FFA726", alpha=1, markersize=3, markeredgecolor='none')
@@ -299,14 +345,25 @@ class StepwiseMeteoScreeningDb:
     def showplot_orig(self, interactive: bool = False):
         """Show original high-resolution data used as input"""
         for field in self.fields:
-            p = TimeSeries(series=self.series_hires_orig[field])
+            p = TimeSeries(series=self._plot_records(field, self.series_hires_orig[field]))
             p.plot() if not interactive else p.plot_interactive()
 
     def showplot_cleaned(self, interactive: bool = False):
         """Show *current* cleaned high-resolution data"""
         for field in self.fields:
-            p = TimeSeries(series=self.series_hires_cleaned[field])
+            p = TimeSeries(series=self._plot_records(field, self.series_hires_cleaned[field]))
             p.plot() if not interactive else p.plot_interactive()
+
+    def _plot_records(self, field: str, series: pd.Series) -> pd.Series:
+        """Return *series* ready for a line plot.
+
+        With more than one time resolution, coarse records sit between empty
+        grid slots and a line would not connect them, so only records are kept.
+        Single-resolution data keep their gaps as breaks in the line.
+        """
+        if self.data_detailed[field]['FREQ_AUTO_SEC'].nunique() > 1:
+            return series.dropna()
+        return series
 
     def report_outlier_detection_qcf_evolution(self):
         """Print the QCF flag-evolution report."""
@@ -324,34 +381,143 @@ class StepwiseMeteoScreeningDb:
             self.outlier_detection_qcf[field].report_qcf_series()
 
     def flag_missingvals_test(self, verbose: bool = False):
-        """Flag missing values and add flag to dataframe."""
+        """Flag missing values and add flag to dataframe.
+
+        Example:
+            ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example.
+            The flag goes straight into the data, no ``addflag()`` needed:
+
+            >>> mscr.flag_missingvals_test()
+        """
         for field in self.fields:
             flagtest = MissingValues(series=self.data_detailed[field][field].copy(), verbose=verbose)
             flagtest.calc(repeat=False)
             flag = flagtest.get_flag()
+            # Empty slots inside a coarse record's period are not missing data,
+            # only a real gap is; leave them unflagged so reports don't count them.
+            flag = flag.mask(self._inside_coarse_record(field))
             self._data_detailed[field][flag.name] = flag
 
     def flag_manualremoval_test(self, remove_dates: list, showplot: bool = False, verbose: bool = False):
-        """Flag specified records for removal"""
-        for field in self.fields:
-            self.outlier_detection[field].flag_manualremoval_test(remove_dates=remove_dates,
-                                                                  showplot=showplot,
-                                                                  verbose=verbose)
+        """Flag specified records for removal.
 
-    def flag_outliers_localsd_test(self, n_sd: float | list = 7, winsize: int | list = None,
+        Dates are in the database's TIMESTAMP_END convention, i.e. as the records
+        appear in the database, not as the TIMESTAMP_MIDDLE used during screening.
+        Each entry is a single date(time) string or a ``[start, end]`` list; a
+        bare date such as '2024-07-14' covers all records whose END timestamp is
+        on that day. See ``ManualRemoval`` for the format.
+
+        Example:
+            ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example
+            (10-minute data, END timestamps 2024-07-01 00:10 to 2024-07-05 00:00).
+            Each call replaces the previous result until ``addflag()`` keeps it.
+
+            A timestamp with time removes that one record. A bare date removes all
+            records whose END timestamp falls on that day (144 records here):
+
+            >>> mscr.flag_manualremoval_test(remove_dates=['2024-07-03 10:00'])
+            >>> mscr.flag_manualremoval_test(remove_dates=['2024-07-03'])
+
+            A range is a nested ``[start, end]`` list and includes both ends. With
+            times it covers 06:00 to 09:30 (22 records); with bare dates it covers
+            whole days, here all of 3 and 4 July (288 records):
+
+            >>> mscr.flag_manualremoval_test(remove_dates=[['2024-07-03 06:00', '2024-07-03 09:30']])
+            >>> mscr.flag_manualremoval_test(remove_dates=[['2024-07-03', '2024-07-04']])
+
+            A flat list of two strings means two single records, not a range:
+
+            >>> mscr.flag_manualremoval_test(remove_dates=['2024-07-03 06:00', '2024-07-03 09:30'])
+            >>> flag = mscr.outlier_detection['TA_T1_2_1'].last_flag
+            >>> int((flag == 2).sum())
+            2
+            >>> mscr.flag_manualremoval_test(remove_dates=[['2024-07-03 06:00', '2024-07-03 09:30']])
+            >>> flag = mscr.outlier_detection['TA_T1_2_1'].last_flag
+            >>> int((flag == 2).sum())
+            22
+
+            One list can mix all forms. Keep the result with ``addflag()``:
+
+            >>> mscr.flag_manualremoval_test(remove_dates=[
+            ...     '2024-07-03 10:00',                        # one record
+            ...     '2024-07-04',                              # whole day
+            ...     ['2024-07-03 06:00', '2024-07-03 09:30'],  # range with times
+            ...     ['2024-07-01', '2024-07-02'],              # range of whole days
+            ... ])
+            >>> mscr.addflag()
+        """
+        for field in self.fields:
+            sod = self.outlier_detection[field]
+            sod.flag_manualremoval_test(
+                remove_dates=self._end_dates_to_middle(index=sod.series_hires_cleaned.index,
+                                                       remove_dates=remove_dates),
+                showplot=showplot,
+                verbose=verbose)
+
+    @staticmethod
+    def _end_dates_to_middle(index: pd.DatetimeIndex, remove_dates: list) -> list:
+        """Translate TIMESTAMP_END date specs to ranges on the TIMESTAMP_MIDDLE *index*."""
+        # Match on END timestamps so a bare date or a range selects exactly the
+        # records the user sees in the database, then pass the matched records on
+        # as explicit MIDDLE ranges.
+        middle_by_end = pd.Series(index, index=index + pd.Timedelta(index.freq) / 2)
+        converted = []
+        for spec in remove_dates:
+            if isinstance(spec, str):
+                start = end = spec
+            elif isinstance(spec, (list, tuple)) and len(spec) == 2:
+                start, end = spec
+            else:
+                converted.append(spec)  # ManualRemoval reports the invalid entry
+                continue
+            matched = middle_by_end.loc[start:end]
+            if not matched.empty:
+                converted.append([str(matched.iloc[0]), str(matched.iloc[-1])])
+        return converted
+
+    def flag_outliers_localsd_test(self, n_sd: float = 7, winsize: int | str = None,
                                    showplot: bool = False, constant_sd: bool = False,
                                    separate_day_night: bool = False,
-                                   verbose: bool = False, repeat: bool = True):
-        """Identify outliers based on standard deviation in a rolling window"""
+                                   verbose: bool = False, repeat: bool = True,
+                                   n_sd_daytime: float = None, n_sd_nighttime: float = None,
+                                   winsize_daytime: int | str = None, winsize_nighttime: int | str = None):
+        """Identify outliers based on standard deviation in a rolling window.
+
+        With ``separate_day_night=True``, ``n_sd_daytime``/``n_sd_nighttime`` and
+        ``winsize_daytime``/``winsize_nighttime`` override ``n_sd`` and ``winsize``
+        for one period; ``None`` uses the global value. See ``LocalSD``.
+
+        Example:
+            ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example.
+            ``winsize`` is a record count (144 is one day of 10-minute data) or a time span:
+
+            >>> mscr.flag_outliers_localsd_test(n_sd=7, winsize=144)
+            >>> mscr.flag_outliers_localsd_test(n_sd=7, winsize='1D')
+
+            Separate daytime and nighttime, stricter at night:
+
+            >>> mscr.flag_outliers_localsd_test(n_sd=7, winsize=144, separate_day_night=True,
+            ...                                 n_sd_daytime=7, n_sd_nighttime=5)
+            >>> mscr.addflag()
+        """
         for field in self.fields:
             self.outlier_detection[field].flag_outliers_localsd_test(
                 n_sd=n_sd, winsize=winsize, separate_day_night=separate_day_night,
+                n_sd_daytime=n_sd_daytime, n_sd_nighttime=n_sd_nighttime,
+                winsize_daytime=winsize_daytime, winsize_nighttime=winsize_nighttime,
                 constant_sd=constant_sd, showplot=showplot,
                 verbose=verbose, repeat=repeat)
 
     def flag_outliers_increments_zcore_test(self, thres_zscore: int = 30, showplot: bool = False,
                                             verbose: bool = False, repeat: bool = True):
-        """Identify outliers based on the z-score of record increments"""
+        """Identify outliers based on the z-score of record increments
+
+        Example:
+            ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example:
+
+            >>> mscr.flag_outliers_increments_zcore_test(thres_zscore=30)
+            >>> mscr.addflag()
+        """
         for field in self.fields:
             self.outlier_detection[field].flag_outliers_increments_zcore_test(thres_zscore=thres_zscore,
                                                                               showplot=showplot,
@@ -361,6 +527,8 @@ class StepwiseMeteoScreeningDb:
     def flag_outliers_zscore_test(self,
                                   thres_zscore: float = 4,
                                   separate_day_night: bool = False,
+                                  thres_zscore_daytime: float = None,
+                                  thres_zscore_nighttime: float = None,
                                   showplot: bool = False,
                                   plottitle: str = None,
                                   verbose: bool = False,
@@ -393,6 +561,12 @@ class StepwiseMeteoScreeningDb:
             If True, apply separate thresholds to daytime and nighttime records.
             Day/night boundaries are derived from the site location (``site_lat``,
             ``site_lon``, ``utc_offset``) supplied when the class was initialized.
+        thres_zscore_daytime : float, default None
+            Override ``thres_zscore`` for daytime records (separate_day_night=True).
+            If None, uses ``thres_zscore``.
+        thres_zscore_nighttime : float, default None
+            Override ``thres_zscore`` for nighttime records (separate_day_night=True).
+            If None, uses ``thres_zscore``.
         showplot : bool, default False
             If True, display outlier visualization.
         plottitle : str, default None
@@ -405,11 +579,25 @@ class StepwiseMeteoScreeningDb:
             Useful for removing cascading outliers, but may over-filter.
         idstr : str, default None
             Optional identifier string for labeling output in verbose mode.
+
+        Examples
+        --------
+        ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example:
+
+        >>> mscr.flag_outliers_zscore_test(thres_zscore=4)
+
+        Separate daytime and nighttime, stricter at night:
+
+        >>> mscr.flag_outliers_zscore_test(separate_day_night=True,
+        ...                                thres_zscore_daytime=4, thres_zscore_nighttime=3)
+        >>> mscr.addflag()
         """
         for field in self.fields:
             self.outlier_detection[field].flag_outliers_zscore_test(
                 thres_zscore=thres_zscore,
                 separate_day_night=separate_day_night,
+                thres_zscore_daytime=thres_zscore_daytime,
+                thres_zscore_nighttime=thres_zscore_nighttime,
                 showplot=showplot,
                 plottitle=plottitle,
                 verbose=verbose,
@@ -418,8 +606,17 @@ class StepwiseMeteoScreeningDb:
             )
 
     def flag_outliers_zscore_rolling_test(self, thres_zscore: float = 4, showplot: bool = False, verbose: bool = False,
-                                          plottitle: str = None, repeat: bool = True, winsize: int = None):
-        """Identify outliers based on the z-score of records"""
+                                          plottitle: str = None, repeat: bool = True, winsize: int | str = None):
+        """Identify outliers based on the rolling z-score of records
+
+        Example:
+            ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example.
+            ``winsize`` is a record count (144 is one day of 10-minute data) or a time span:
+
+            >>> mscr.flag_outliers_zscore_rolling_test(thres_zscore=4, winsize=144)
+            >>> mscr.flag_outliers_zscore_rolling_test(thres_zscore=4, winsize='1D')
+            >>> mscr.addflag()
+        """
         for field in self.fields:
             self.outlier_detection[field].flag_outliers_zscore_rolling_test(thres_zscore=thres_zscore,
                                                                             showplot=showplot,
@@ -428,17 +625,19 @@ class StepwiseMeteoScreeningDb:
                                                                             repeat=repeat,
                                                                             winsize=winsize)
 
-    def flag_outliers_hampel_test(self, window_length: int = 13, n_sigma: float = 5.5,
+    def flag_outliers_hampel_test(self, window_length: int | str = 13, n_sigma: float = 5.5,
                                   n_sigma_daytime: float = None, n_sigma_nighttime: float = None,
                                   k: float = 1.4826, use_differencing: bool = True,
-                                  separate_day_night: bool = False, showplot: bool = False,
+                                  separate_day_night: bool = True, showplot: bool = False,
                                   verbose: bool = False, repeat: bool = True):
         """Identify outliers in a sliding window based on the Hampel filter (global or separate day/night).
 
         Parameters
         ----------
-        window_length : int, default 13
-            Size of the sliding window for median/MAD calculation
+        window_length : int or str, default 13
+            Size of the sliding window for median/MAD calculation, as a record
+            count or a time span such as ``'7D'`` (converted to records at the
+            data frequency, of which it must be a whole multiple)
         n_sigma : float, default 5.5
             Threshold multiplier for global mode (number of MADs above median)
         n_sigma_daytime : float, optional
@@ -449,7 +648,7 @@ class StepwiseMeteoScreeningDb:
             Scaling factor for MAD (median absolute deviation)
         use_differencing : bool, default True
             If True, apply Hampel filter to differenced series (rate of change)
-        separate_day_night : bool, default False
+        separate_day_night : bool, default True
             If False, apply single threshold globally across all records.
             If True, apply separate thresholds for daytime and nighttime data.
         showplot : bool, default False
@@ -458,6 +657,23 @@ class StepwiseMeteoScreeningDb:
             If True, print flagging statistics
         repeat : bool, default True
             If True, iteratively repeat detection until convergence
+
+        Examples
+        --------
+        ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example.
+        Daytime and nighttime are separate by default; ``window_length`` is a
+        record count (144 is one day of 10-minute data) or a time span:
+
+        >>> mscr.flag_outliers_hampel_test(window_length=144, n_sigma=5.5)
+        >>> mscr.flag_outliers_hampel_test(window_length='1D', n_sigma=5.5)
+
+        Stricter at night, or one threshold for all records:
+
+        >>> mscr.flag_outliers_hampel_test(window_length=144,
+        ...                                n_sigma_daytime=5.5, n_sigma_nighttime=4)
+        >>> mscr.flag_outliers_hampel_test(window_length=144, n_sigma=5.5,
+        ...                                separate_day_night=False)
+        >>> mscr.addflag()
         """
         for field in self.fields:
             self.outlier_detection[field].flag_outliers_hampel_test(
@@ -469,7 +685,15 @@ class StepwiseMeteoScreeningDb:
     def flag_outliers_trim_low_test(self, trim_daytime: bool = False, trim_nighttime: bool = False,
                                     lower_limit: float = None, showplot: bool = False, verbose: bool = False):
         """Flag values below a given absolute limit as outliers, then flag an
-        equal number of datapoints at the high end as outliers."""
+        equal number of datapoints at the high end as outliers.
+
+        Example:
+            ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example.
+            Trim nighttime values below 10 and as many of the highest nighttime values:
+
+            >>> mscr.flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=10)
+            >>> mscr.addflag()
+        """
         for field in self.fields:
             self.outlier_detection[field].flag_outliers_trim_low_test(trim_daytime=trim_daytime,
                                                                       trim_nighttime=trim_nighttime,
@@ -503,6 +727,19 @@ class StepwiseMeteoScreeningDb:
             If True, display visualization of flagged outliers
         verbose : bool, default False
             If True, print flagging statistics
+
+        Examples
+        --------
+        ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example:
+
+        >>> mscr.flag_outliers_abslim_test(minval=-30, maxval=50)
+
+        Separate limits for daytime and nighttime:
+
+        >>> mscr.flag_outliers_abslim_test(separate_day_night=True,
+        ...                                minval_daytime=-20, maxval_daytime=50,
+        ...                                minval_nighttime=-30, maxval_nighttime=35)
+        >>> mscr.addflag()
         """
         for field in self.fields:
             self.outlier_detection[field].flag_outliers_abslim_test(minval=minval,
@@ -517,7 +754,7 @@ class StepwiseMeteoScreeningDb:
 
     def flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = 'auto',
                                separate_day_night: bool = False,
-                               showplot: bool = False, verbose: bool = False, repeat: bool = True,
+                               showplot: bool = False, verbose: bool = False, repeat: bool = False,
                                n_jobs: int = 1):
         """Local outlier factor detection (global or separate day/night).
 
@@ -537,10 +774,23 @@ class StepwiseMeteoScreeningDb:
             If True, display visualization of detected outliers
         verbose : bool, default False
             If True, print detection statistics
-        repeat : bool, default True
-            If True, repeat detection iteratively until convergence
+        repeat : bool, default False
+            If True, repeat detection until no new outliers are found.
+            Each pass flags the ``contamination`` fraction of the remaining records
+            again, so repeating keeps removing valid data.
         n_jobs : int, default 1
             Number of parallel jobs (-1 uses all cores)
+
+        Examples
+        --------
+        ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example.
+        With a float ``contamination`` every pass flags that fraction again, so
+        run a single pass with ``repeat=False``:
+
+        >>> mscr.flag_outliers_lof_test(n_neighbors=20, contamination=0.01, repeat=False)
+        >>> mscr.flag_outliers_lof_test(n_neighbors=20, contamination=0.01, repeat=False,
+        ...                             separate_day_night=True)
+        >>> mscr.addflag()
         """
         for field in self.fields:
             self.outlier_detection[field].flag_outliers_lof_test(
@@ -553,47 +803,124 @@ class StepwiseMeteoScreeningDb:
                 n_jobs=n_jobs
             )
 
-    def correction_remove_nighttime_zero_offset(self):
-        """Remove nighttime offset from variables that should be zero at night (e.g. radiation)"""
-        for field in self.fields:
-            self._series_hires_cleaned[field] = \
-                remove_nighttime_zero_offset(series=self._series_hires_cleaned[field],
-                                             lat=self.site_lat, lon=self.site_lon,
-                                             utc_offset=self.utc_offset, showplot=True)
+    def _set_corrected(self, field: str, series: pd.Series):
+        """Store a corrected series; outlier tests run after this see the corrected values."""
+        # Some corrections write every slot (the nighttime zero offset sets all of
+        # the night to 0), but a slot without an original record must stay empty.
+        series = series.where(self._has_record(field))
+        self._series_hires_cleaned[field] = series
+        if field in self._outlier_detection:
+            self._outlier_detection[field].rebase_series(series)
 
-    def correction_setto_max_threshold(self, threshold: float):
-        """Set values above threshold to threshold"""
-        for field in self.fields:
-            self._series_hires_cleaned[field] = \
-                setto_threshold(series=self._series_hires_cleaned[field],
-                                threshold=threshold, type='max', showplot=True)
+    def _has_record(self, field: str) -> pd.Series:
+        """True for grid slots that hold an original record, False for empty slots."""
+        return self.data_detailed[field]['FREQ_AUTO_SEC'].notna()
 
-    def correction_set_exact_value_to_missing(self, values: list, verbose: int = 0):
-        """Set exact values to missing values"""
-        for field in self.fields:
-            self._series_hires_cleaned[field] = \
-                set_exact_values_to_missing(series=self._series_hires_cleaned[field],
-                                            values=values, showplot=True, verbose=verbose)
+    def _inside_coarse_record(self, field: str) -> pd.Series:
+        """True for empty grid slots that lie within the period of a coarse record."""
+        freq_sec = self.data_detailed[field]['FREQ_AUTO_SEC']
+        index = freq_sec.index
+        grid = pd.Timedelta(index.freq)
+        # A record at MIDDLE m with resolution f covers the slots whose MIDDLE is
+        # in (m + grid/2 - f, m]. Each empty slot looks at the next record.
+        start = pd.Series(index + grid / 2 - pd.to_timedelta(freq_sec, unit='s'), index=index)
+        next_start = start.where(freq_sec.notna()).bfill()
+        return freq_sec.isna() & (next_start < index)
 
-    def correction_setto_min_threshold(self, threshold: float):
-        """Set values below threshold to threshold"""
+    def correction_remove_nighttime_zero_offset(self, showplot: bool = True):
+        """Remove nighttime offset from variables that should be zero at night (e.g. radiation)
+
+        Example:
+            ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example;
+            in practice it would hold a radiation variable:
+
+            >>> mscr.correction_remove_nighttime_zero_offset(showplot=False)
+        """
         for field in self.fields:
-            self._series_hires_cleaned[field] = \
-                setto_threshold(series=self._series_hires_cleaned[field],
-                                threshold=threshold, type='min', showplot=True)
+            self._set_corrected(field, remove_nighttime_zero_offset(
+                series=self._series_hires_cleaned[field],
+                lat=self.site_lat, lon=self.site_lon,
+                utc_offset=self.utc_offset, showplot=showplot))
+
+    def correction_setto_max_threshold(self, threshold: float, showplot: bool = True):
+        """Set values above threshold to threshold
+
+        Example:
+            ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example:
+
+            >>> mscr.correction_setto_max_threshold(threshold=35, showplot=False)
+        """
+        for field in self.fields:
+            self._set_corrected(field, setto_threshold(
+                series=self._series_hires_cleaned[field],
+                threshold=threshold, type='max', showplot=showplot))
+
+    def correction_set_exact_value_to_missing(self, values: list, verbose: int = 0, showplot: bool = True):
+        """Set exact values to missing values
+
+        Example:
+            ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example.
+            Set records that are exactly -9999 or 0 to missing:
+
+            >>> mscr.correction_set_exact_value_to_missing(values=[-9999, 0], showplot=False)
+        """
+        for field in self.fields:
+            self._set_corrected(field, set_exact_values_to_missing(
+                series=self._series_hires_cleaned[field],
+                values=values, showplot=showplot, verbose=verbose))
+
+    def correction_setto_min_threshold(self, threshold: float, showplot: bool = True):
+        """Set values below threshold to threshold
+
+        Example:
+            ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example:
+
+            >>> mscr.correction_setto_min_threshold(threshold=-5, showplot=False)
+        """
+        for field in self.fields:
+            self._set_corrected(field, setto_threshold(
+                series=self._series_hires_cleaned[field],
+                threshold=threshold, type='min', showplot=showplot))
 
     def correction_setto_value(self, dates: list, value: float, verbose: int = 1):
-        """Set records within time range to value"""
-        for field in self.fields:
-            self._series_hires_cleaned[field] = \
-                setto_value(series=self._series_hires_cleaned[field],
-                            dates=dates, value=value, verbose=verbose)
+        """Set records within time range to value.
 
-    def correction_remove_relativehumidity_offset(self):
-        """Remove nighttime offset from all radiation data and set nighttime to zero"""
+        Dates are in the database's TIMESTAMP_END convention, as for
+        ``flag_manualremoval_test``.
+
+        Example:
+            ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example.
+            Dates are END timestamps and take the same forms as in
+            ``flag_manualremoval_test``: a timestamp is one record, a bare date is a
+            whole day, a nested ``[start, end]`` list is a range with both ends
+            included:
+
+            >>> mscr.correction_setto_value(dates=['2024-07-03 10:00'], value=0)
+            >>> mscr.correction_setto_value(dates=['2024-07-03'], value=0)
+            >>> mscr.correction_setto_value(dates=[['2024-07-03 06:00', '2024-07-03 09:30']], value=0)
+            >>> mscr.correction_setto_value(dates=[['2024-07-03', '2024-07-04']], value=0)
+
+            As there, a flat list of two strings is two single records, not a range.
+        """
         for field in self.fields:
-            self._series_hires_cleaned[field] = \
-                remove_relativehumidity_offset(series=self._series_hires_cleaned[field], showplot=True)
+            series = self._series_hires_cleaned[field]
+            self._set_corrected(field, setto_value(
+                series=series,
+                dates=self._end_dates_to_middle(index=series.index, remove_dates=dates),
+                value=value, verbose=verbose))
+
+    def correction_remove_relativehumidity_offset(self, showplot: bool = True):
+        """Remove the offset of relative humidity values above 100% and cap them at 100
+
+        Example:
+            ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example;
+            in practice it would hold relative humidity:
+
+            >>> mscr.correction_remove_relativehumidity_offset(showplot=False)
+        """
+        for field in self.fields:
+            self._set_corrected(field, remove_relativehumidity_offset(
+                series=self._series_hires_cleaned[field], showplot=showplot))
 
     def analysis_potential_radiation_correlation(self,
                                                  utc_offset: int,
@@ -613,6 +940,12 @@ class StepwiseMeteoScreeningDb:
         Returns:
             dict of series with correlations for each field and for each day
 
+        Example:
+            ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example:
+
+            >>> corr = mscr.analysis_potential_radiation_correlation(utc_offset=1, mincorr=0.7,
+            ...                                                      showplot=False)
+            >>> daily = corr['TA_T1_2_1']  # one correlation per day
         """
 
         daily_correlations = {}
@@ -645,14 +978,72 @@ class StepwiseMeteoScreeningDb:
                  mincounts_perc: float = .25):
 
         """Resample the screened series to the target frequency (default 30min,
-        but any lower resolution, e.g. '10min', '1h')."""
-        for field in self.fields:
+        but any lower resolution, e.g. '10min', '1h').
 
-            # Resample to the target resolution
-            series_resampled = resample_series_to_freq(series=self._series_hires_cleaned[field],
-                                                       to_freqstr=to_freqstr,
-                                                       agg=agg,
-                                                       mincounts_perc=mincounts_perc)
+        A target period ending at T collects the kept records whose END timestamp
+        is in (T - period, T]. Each record weighs the time it covers, i.e. its
+        original resolution: ``agg='mean'`` is the time-weighted mean,
+        ``agg='sum'`` adds each record once. ``mincounts_perc`` is the minimum
+        fraction of the period the kept records must cover, counted in slots of
+        the high-resolution grid and rounded down; if that minimum is below three
+        slots, one covered slot is enough (e.g. 10MIN data resampled to 30min).
+        Periods below the minimum are NaN, so the result spans the whole screened
+        range.
+
+        A coarse record is assigned whole to the period that contains its END
+        timestamp. This is exact when its resolution divides the target period.
+        When it does not, e.g. 20MIN records resampled to 30min, a record that
+        overlaps two periods is not split between them.
+
+        Example:
+            ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example.
+            The result, with updated tags, is in ``resampled_detailed``:
+
+            >>> mscr.resample(to_freqstr='30min', agg='mean')
+            >>> mscr.resampled_detailed['TA_T1_2_1'].index.freqstr
+            '30min'
+
+            Hourly sums (e.g. precipitation), each hour at least half covered:
+
+            >>> mscr.resample(to_freqstr='1h', agg='sum', mincounts_perc=0.5)
+        """
+        if agg not in ('mean', 'sum'):
+            raise ValueError(f"agg must be 'mean' or 'sum', not {agg!r}.")
+        # pandas 3 no longer reads the old minute alias ('30T').
+        if to_freqstr.endswith('T'):
+            to_freqstr = f"{to_freqstr[:-1]}min"
+        for field in self.fields:
+            series = self._series_hires_cleaned[field]
+            grid = series.index.freq
+            if to_offset(to_freqstr) < grid:
+                raise NotImplementedError(f"Upsampling not allowed: target frequency {to_freqstr} must be "
+                                          f"a lower time resolution than the data ({grid.freqstr}).")
+            info(f"Resampling {field} from {grid.freqstr} to {to_freqstr} ({agg}) ...")
+
+            # A kept record weighs the grid slots its original resolution covers
+            # (10 for a 10MIN record on a 1MIN grid); empty slots and rejected records weigh 0.
+            grid_sec = pd.Timedelta(grid).total_seconds()
+            weight = (self.data_detailed[field]['FREQ_AUTO_SEC'] / grid_sec).where(series.notna(), 0)
+
+            # The index is TIMESTAMP_MIDDLE, so label='right' puts each record into
+            # the period (T - to_freqstr, T] that contains its END timestamp.
+            periods = dict(rule=to_freqstr, label='right')
+            covered = weight.resample(**periods).sum()
+            if agg == 'mean':
+                series_resampled = (series * weight).resample(**periods).sum() / covered
+            else:
+                series_resampled = series.resample(**periods).sum()
+
+            # Same minimum rule as resample_series_to_freq (truncated, at least one
+            # slot below three), so periods are kept exactly as before this layout.
+            maxcounts = pd.Series(1, index=series.index).resample(**periods).count().max()
+            mincounts = int(maxcounts * mincounts_perc)
+            mincounts = 1 if mincounts < 3 else mincounts
+            series_resampled = series_resampled.where(covered >= mincounts)
+
+            series_resampled = series_resampled.asfreq(to_freqstr)
+            series_resampled.index.name = 'TIMESTAMP_END'
+            series_resampled = TimestampSanitizer(data=series_resampled, output_middle_timestamp=False).get()
 
             # Update tags with resampling info
             self._tags[field]['freq'] = to_freqstr
@@ -669,10 +1060,46 @@ class StepwiseMeteoScreeningDb:
 
     def finalize_outlier_detection(self,
                                    daytime_accept_qcf_below: int = 2,
-                                   nighttime_accept_qcf_below: int = 2) -> FlagQCF:
+                                   nighttime_accept_qcf_below: int = 2) -> None:
 
-        """Finalize outlier detection and aggregate the QCF flag."""
+        """Finalize outlier detection and aggregate the QCF flag.
+
+        Records with QCF=2 are removed from the current series. Corrections
+        applied before this call are kept; corrections applied afterwards work
+        on the filtered series. Calling it again after more tests replaces the
+        previous QCF results.
+
+        Args:
+            daytime_accept_qcf_below: Accept daytime records where QCF is below
+                this value. Default 2 keeps QCF=0 and QCF=1; 1 also rejects
+                QCF=1 (records with soft flags). Daytime and nighttime come from
+                potential radiation at the site (daytime above 20 W m-2).
+            nighttime_accept_qcf_below: Same for nighttime records.
+
+        Example:
+            ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example.
+            Add one or more flags, then aggregate them:
+
+            >>> mscr.flag_outliers_zscore_test(thres_zscore=4)
+            >>> mscr.addflag()
+            >>> mscr.finalize_outlier_detection()
+
+            Stricter at night, also rejecting nighttime records with QCF=1:
+
+            >>> mscr.finalize_outlier_detection(daytime_accept_qcf_below=2,
+            ...                                 nighttime_accept_qcf_below=1)
+        """
         for field in self.fields:
+            # A previous run's QCF columns would otherwise stay in data_detailed,
+            # since FlagQCF.get() only appends columns that are missing.
+            previous = self._outlier_detection_qcf.get(field)
+            if previous is not None:
+                self._data_detailed[field] = self.data_detailed[field].drop(
+                    columns=[previous.flagqcfcol, previous.sumflagscol, previous.sumhardflagscol,
+                             previous.sumsoftflagscol, previous.filteredseriescol,
+                             previous.filteredseriescol_hq],
+                    errors='ignore')
+
             # Detect new columns
             newcols = frames.detect_new_columns(df=self.outlier_detection[field].flags,
                                                 other=self.data_detailed[field])
@@ -682,20 +1109,25 @@ class StepwiseMeteoScreeningDb:
                 detail(f"++Added new column {col}.")
 
             # Calculate overall quality flag QCF. FlagQCF auto-detects all
-            # FLAG_*_TEST columns; idstr only names the output columns. No
-            # swinpot here, so the day/night QCF split is off (the outlier tests
-            # are still day/night-aware via the site coordinates).
-            qcf = FlagQCF(df=self.data_detailed[field],
+            # FLAG_*_TEST columns; idstr only names the output columns. Potential
+            # radiation is only passed so the day/night accept thresholds take
+            # effect; it is not kept in data_detailed.
+            swinpot = potrad(timestamp_index=self.data_detailed[field].index,
+                             lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset)
+            qcf = FlagQCF(df=self.data_detailed[field].assign(**{_SWINPOT_COL: swinpot}),
                           target_col=field,
                           idstr='METSCR',
-                          swinpot_col=None)
+                          swinpot_col=_SWINPOT_COL)
             qcf.calculate(daytime_accept_qcf_below=daytime_accept_qcf_below,
                           nighttime_accept_qcf_below=nighttime_accept_qcf_below)
-            self._data_detailed[field] = qcf.get()
+            self._data_detailed[field] = qcf.get().drop(columns=_SWINPOT_COL)
             self._outlier_detection_qcf[field] = qcf
 
-            # Update filtered series in meteoscreening instance
-            self._series_hires_cleaned[field] = self.outlier_detection_qcf[field].filteredseries
+            # Mask the current series instead of taking qcf.filteredseries, which
+            # holds the raw values and would drop corrections made before this.
+            self._series_hires_cleaned[field] = \
+                self._series_hires_cleaned[field].mask(qcf.flagqcf == 2).where(
+                    self._has_record(field)).rename(qcf.filteredseries.name)
 
     def addflag(self):
         """Add flag of most recent outlier test to data."""
@@ -709,12 +1141,12 @@ class StepwiseMeteoScreeningDb:
         self._check_units(data_detailed=data_detailed)
         self._check_fields(data_detailed=data_detailed)
 
-        # Harmonize different time resolutions (upsampling to highest freq)
+        # Harmonize different time resolutions (one grid at the highest freq)
         groups = self._make_timeres_groups(data_detailed=data_detailed)
         group_counts = self._count_group_records(group_series=groups[field])
         targetfreq, used_freqs, rejected_freqs = self._validate_n_grouprecords(group_counts=group_counts)
         data_detailed = self._filter_data(data_detailed=data_detailed, used_freqs=used_freqs)
-        data_detailed = self._harmonize_timeresolution(targetfreq=targetfreq, data_detailed=data_detailed,
+        data_detailed = self._harmonize_timeresolution(data_detailed=data_detailed,
                                                        timestamp_name=timestamp_name)
         data_detailed = self._sanitize_timestamp(targetfreq=targetfreq, data_detailed=data_detailed)
 
@@ -733,69 +1165,21 @@ class StepwiseMeteoScreeningDb:
         return data_detailed
 
     @staticmethod
-    def _harmonize_timeresolution(targetfreq, data_detailed, timestamp_name: str) -> DataFrame:
+    def _harmonize_timeresolution(data_detailed, timestamp_name: str) -> DataFrame:
         """
-        Create timestamp index of highest resolution and upsample
-        lower resolution data
+        Keep each record only at its own TIMESTAMP_END
 
-        Creates hires timestamp index between start and end date
-        for data where the time resolution is not in target freq.
-        For this purpose, the first date found in the data is not
-        completely correct, because a TIMESTAMP_END of e.g.
-        '2022-01-01 00:10' at 10MIN resolution is valid from
-        '2022-01-01 00:01' until '2022-01-01 00:10' in a 1MIN
-        timestamp index. The missing timestamp indexes are added
-        here.
+        The grid at the highest resolution is created afterwards in
+        `_sanitize_timestamp`. A record of a coarser resolution stays a single row
+        at its END timestamp; the grid slots before it that its averaging interval
+        covers stay empty (NaN in all columns, FREQ_AUTO_SEC included). Copying the
+        value onto those slots would make a record removable only in part and
+        would give difference-based outlier tests runs of zero increments.
+        `resample` weights each record by its FREQ_AUTO_SEC instead.
         """
-        upsampleddf = pd.DataFrame()  # Collects upsampled data
-        groups = data_detailed.groupby(data_detailed['FREQ_AUTO_SEC'])
-
-        # Loop over different time resolutions
-        for freq, groupdf in groups:
-
-            # No upsampling for target freq, simply merge
-            if freq == targetfreq:
-                upsampleddf = pd.concat([upsampleddf, groupdf], axis=0)
-                continue
-
-            # Add missing timestamp indexes at start of data
-            start = groupdf.index[0] - pd.Timedelta(seconds=freq)
-
-            # Create hires timestamp index between start and end dates.
-            # The frequencies come from detect_freq_groups and are floats (seconds),
-            # so they are passed as a Timedelta rather than built into a string.
-            hires_ix = pd.date_range(start=start,
-                                     end=groupdf.index[-1],
-                                     freq=pd.Timedelta(seconds=targetfreq))
-
-            # If target freq is e.g. 60S (1MIN) and current freq is 600S (10MIN)
-            # then the 600S records are valid for ten 60S records, whereby
-            # one original record is already available
-            # limit = (600 / 60) - 1 = 9 records to fill
-            limit = int((freq / targetfreq) - 1)
-
-            # The timestamp is TIMESTAMP_END, therefore 'backfill'
-            cur_upsampleddf = groupdf.reindex(hires_ix)
-            cur_upsampleddf = cur_upsampleddf.bfill(limit=limit)
-
-            # Delete first timestamp index, outside limit
-            cur_upsampleddf = cur_upsampleddf.iloc[1:].copy()
-
-            # Add to upsampled data
-            # upsampleddf = pd.concat([upsampleddf, cur_upsampleddf], axis=0)
-            # Better use .combine_first to avoid duplicates
-            upsampleddf = upsampleddf.combine_first(cur_upsampleddf)
-
-        # Sort timestamp index ascending
-        upsampleddf = upsampleddf.sort_index(ascending=True)
-        upsampleddf.index.name = timestamp_name
-
-        # upsampleddf.index.duplicated().sum()
-
-        # import matplotlib.pyplot as plt
-        # upsampleddf['TA_NABEL_T1_35_1'].plot()
-        # plt.show()
-        return upsampleddf
+        data_detailed = data_detailed.sort_index(ascending=True)
+        data_detailed.index.name = timestamp_name
+        return data_detailed
 
     @staticmethod
     def _extract_tags(data_detailed, field) -> dict:
@@ -804,10 +1188,12 @@ class StepwiseMeteoScreeningDb:
         tags_df = data_detailed.drop(columns=[field, 'FREQ_AUTO_SEC'])
         # tags_df.nunique()
         notags = tags_df.isnull().all(axis=1)
-        tags_df = tags_df[~notags]  # Drop rows where all tags are missing; this is the case due to upsampling
+        tags_df = tags_df[~notags]  # Drop empty grid slots, which hold no record and no tags
         tags_dict = {}
         for tag in tags_df.columns:
-            list_of_vals = list(tags_df[tag].unique())
+            # dropna: data merged from tables with different tag sets leaves a tag
+            # empty for some records, which must not end up as a literal 'nan'.
+            list_of_vals = list(tags_df[tag].dropna().unique())
             str_of_vals = ",".join([str(i) for i in list_of_vals])
             tags_dict[tag] = str_of_vals
         return tags_dict
@@ -878,11 +1264,17 @@ class StepwiseMeteoScreeningDb:
         info(f"The following frequencies will be used: {used_freqs} (seconds)")
         targetfreq = min(used_freqs)
         if len(used_freqs) > 1:
-            info(f"Note that there is more than one single time resolution and "
-                 f"all data will be upsampled to match the highest found time "
-                 f"resolution ({targetfreq}S).")
+            info(f"Note that there is more than one single time resolution. All records "
+                 f"are placed on a grid at the highest found time resolution "
+                 f"({targetfreq}S), each at its own END timestamp.")
         return targetfreq, used_freqs, rejected_freqs
 
     def _filter_data(self, data_detailed, used_freqs):
-        data_detailed = data_detailed.loc[data_detailed['FREQ_AUTO_SEC'].isin(used_freqs)]
-        return data_detailed
+        keep = data_detailed['FREQ_AUTO_SEC'].isin(used_freqs)
+        n_dropped = int((~keep).sum())
+        if n_dropped:
+            # Off-grid records and very small resolution groups are removed here;
+            # without this message the loss would be invisible.
+            warn(f"{n_dropped} records were removed because they do not belong to "
+                 f"a used time resolution {used_freqs} (seconds).")
+        return data_detailed.loc[keep]
