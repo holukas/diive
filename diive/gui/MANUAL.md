@@ -670,8 +670,9 @@ The **Preview** section holds two display options that don't change the result:
 - **Separate daytime / nighttime** *(optional).* Use **different** thresholds for
   day and night. That is the point of separating: with the same value for both, the
   result is identical to not separating. Set **Daytime n sigma** and **Nighttime n
-  sigma** (they start from the global value, then edit each); the coordinates
-  default from **Settings ▸ Project settings**. Day and night outliers are then
+  sigma** (they start from the global value, then edit each). Latitude and
+  longitude default from **Settings ▸ Project settings**; the UTC offset is shown
+  read-only from there. Day and night outliers are then
   drawn in red and blue, and the status line reports how many of each were found.
 
 **Detect outliers** runs the filter; the status line reports the total and the
@@ -763,7 +764,9 @@ kept set is not a single upper/lower envelope. Parameters:
   default) to trim the **whole series** against one distribution. Tick one or both
   to restrict the trim to those periods, each screened against its own distribution.
 - **Latitude / Longitude / UTC offset.** Used (and enabled) only when a day/night
-  box is ticked; seeded from **Settings ▸ Project settings**.
+  box is ticked; latitude and longitude are seeded from **Settings ▸ Project
+  settings**, the UTC offset is shown read-only from there (see
+  [Project settings](#projectsettings)).
 
 Adds `{var}_TRIMLOW` and its flag (`FLAG_{var}_OUTLIER_TRIMLOW_TEST`) to the
 variable list.
@@ -813,7 +816,8 @@ is shown so the plots stay large:
 
 - **Outliers.** The chain as a vertical list of **method cards** (each shows all its
   settings and how many points it removed; reorder with ▲▼, edit, or delete).
-  **＋ Add step** opens the method picker. The **Run outliers** button below the
+  **＋ Add step** opens the method picker (Hampel, Local SD, the z-score family,
+  Local outlier factor, Absolute limits, Missing values). The **Run outliers** button below the
   list applies the chain. Editing a step does *not* update the preview until you
   run (a `•` on the button marks unapplied edits).
 - **Corrections.** High-resolution corrections applied to the QCF-filtered series
@@ -830,6 +834,12 @@ is shown so the plots stay large:
 flag, the QCF-filtered series, and (if any corrections ran) the corrected series.
 **Copy Python** copies a reproducible script for the whole chain.
 
+Latitude, longitude and the UTC offset (used for the day/night split and some
+corrections) come from **Settings ▸ Project settings**. When you change them there,
+results computed with the old values are cleared; click **Run outliers** /
+**Run corrections** again. If the UTC offset is not set, the status line says so
+after a run (0 is used).
+
 **Corrections.** The **Corrections** section of the **Cleaning** menu has one tab per
 correction; they all share the same layout. **Click a variable** in the **Target**
 list on the left, set the options in the middle, and the right side previews the
@@ -845,7 +855,8 @@ For variables that should read **zero at night** (shortwave radiation, PPFD). Fo
 each day it works out the average of that day's nighttime values (the **offset**),
 subtracts it from all of the day's records, then forces the nighttime to zero. It
 needs the **site coordinates** (from **Settings ▸ Project settings**) to tell day
-from night; the latitude / longitude / UTC offset are shown and pre-filled.
+from night; the latitude and longitude are shown and pre-filled, the UTC offset is
+shown read-only from Project settings.
 
 - **Clamp negative values to zero** *(on by default).* After the offset is removed
   and the night zeroed, set any remaining negative values (daytime included) to zero
@@ -1179,11 +1190,13 @@ red ✗ marker showing whether the chosen column exists):
   uncertainty).
 
 Set the **site coordinates** (latitude, and for the methods that need them,
-longitude and UTC offset; all default from **Settings ▸ Project settings**). The site
+longitude; both default from **Settings ▸ Project settings**). The UTC offset is
+always the project's, shown read-only. The site
 has to be filled in there first: a method that needs coordinates **refuses to run**
 while Project settings is empty, and says why in the status line. Left to their
-defaults the boxes read 0 / 0 / 0, so the run would partition at latitude 0,
-longitude 0 on UTC and return plausible-looking GPP and RECO for the wrong place. For
+defaults, latitude and longitude read 0 / 0 and the UTC offset shows **not set**, so
+the run would partition at latitude 0, longitude 0 on UTC and return
+plausible-looking GPP and RECO for the wrong place. For
 the daytime methods, the **VPD is in kPa** toggle says whether your VPD column is in
 kPa (the diive convention, default) or hPa.
 
@@ -1450,10 +1463,10 @@ green **Connected** pill once a connection is live.
 
 > **Timezone — important.** The database always stores timestamps in **UTC**, but
 > you normally work in your station's local time (e.g. **UTC+1**, CET). The
-> download converts UTC to a **UTC offset** you choose, and that offset **must
-> match your dataset's timezone** or the merged data land at the wrong time. The
-> offset defaults to your **project timezone** (Project settings), and the tabs
-> warn you if it doesn't match.
+> download converts UTC to the **UTC offset from Project settings**, the same offset
+> every other tab uses, so downloaded data line up with your dataset. If no offset is
+> set there, the field shows **not set** with a red **!** and the download uses
+> UTC+00:00: set the offset in **Settings ▸ Project settings** first.
 
 ### Database connection
 
@@ -1472,9 +1485,9 @@ Browse what's in the database and pull data out.
 - **Drill down** through the columns: **bucket → data version → measurements →
   fields**. Selecting a field shows a **field overview** — every database tag it
   carries (units, gain, offset, …) plus the **first and last record** timestamps.
-- **Download & plot.** Pick a **start / end** range and a **UTC offset** (see the
-  timezone note above; a line under the controls always tells you the active
-  timezone), then **Download & plot**. **Match dataset time range** sets the range
+- **Download & plot.** Pick a **start / end** range (in the project's UTC offset,
+  see the timezone note above; a line under the controls always tells you the
+  active timezone), then **Download & plot**. **Match dataset time range** sets the range
   so the result lines up with your working dataset (accounting for the
   end-of-period ↔ middle-of-period convention). High-resolution downloads run in
   chunks with a **progress bar and a plot that fills in** as data arrive, and the
@@ -1485,14 +1498,25 @@ Browse what's in the database and pull data out.
 ### Meteo screening (database)
 
 The **full screening experience of the Stepwise screening tab** (outlier-test
-cards, corrections, QCF, the live preview, Copy Python — see
+cards, corrections, QCF, the live preview — see
 [Stepwise screening](#stepwisescreening)) applied to a high-resolution field from
-the database, **plus a Resample step**.
+the database, **plus a Resample step**. Here **Copy Python** copies a
+`StepwiseMeteoScreeningDb` script that downloads the field, screens it, applies
+the corrections and resamples it.
 
 - Receive a field from the explorer, screen it exactly as you would any variable
-  (chain outlier tests, apply corrections, check the QCF).
+  (chain outlier tests, apply corrections, check the QCF). Downloads that mix time
+  resolutions (e.g. 10-minute and 1-minute records in one field) are supported:
+  all records are kept.
+- **Status warnings.** Latitude, longitude and UTC offset come from **Settings ▸
+  Project settings** and apply to the next run; results computed with old values
+  are cleared. The status line warns when the UTC offset is **not set** (UTC+00:00
+  is used), and when the offset was **changed after the download**: the field
+  keeps the offset it was downloaded in, so send it again from the Database
+  explorer.
 - **Resample** (extra inspector page). The target resolution **defaults to your
-  working dataset's resolution**, detected automatically; the info line shows the
+  working dataset's resolution**, detected automatically (30 minutes if it cannot
+  be detected); the info line shows the
   source vs. target resolution and whether resampling is needed. **If the data are
   already at the target resolution, no resampling is done** (so already-30MIN data
   merge straight through).
@@ -1519,7 +1543,9 @@ Settings for the current project:
 
 Fill in and **Save**. The site coordinates and UTC offset are reused wherever diive
 needs them (the Hampel tab's daytime/nighttime split, the flux chain, and so on), so
-you don't retype them per tool. Everything here is **remembered between sessions**
+you don't retype them per tool. The **UTC offset is set only here**: every tab and
+the database download show it read-only. Where it is needed but not set, the tab
+shows **not set** with a red **!**, and its tooltip says to set it here first. Everything here is **remembered between sessions**
 and **saved with the project**, so it travels inside a `.diive` folder.
 
 **Notes wall.** The right side of the tab is a pinboard of **sticky notes** for
