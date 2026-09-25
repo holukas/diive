@@ -110,11 +110,18 @@ PySide6, optional `gui` extra, launch `diive-gui`. **File map and per-tab detail
 
 1. The switch is always `separate_day_night` (default `True` only for `Hampel`).
 2. One global knob (`n_sigma`, `n_sd`, …) is the source of truth. Per-period overrides are `{knob}_daytime`/`{knob}_nighttime`, **default `None`** (never a literal, which shadows the global), falling back to the global. No lists or packed pairs.
-3. Separation is not a no-op with equal thresholds, except for pointwise `AbsoluteLimits`: subset-derived methods (`zScore`, `LocalSD`, `LOF`, `Hampel`) compute their statistic per period.
+3. Separation is not a no-op with equal thresholds for subset-derived methods (`zScore`, `LocalSD`, `LOF`), which compute their statistic per period. It is a no-op for pointwise `AbsoluteLimits` and for `Hampel`, whose rolling median and MAD run on the whole series; only its threshold differs per period.
 4. A GUI exposing it should expose per-period thresholds (reference: Hampel tab).
 5. A removed parameter must say what replaced it: take `**legacy` and call `reject_legacy_params`.
 
 Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to trim; `LocalOutlierFactor` has no per-period knobs. `*DaytimeNighttime` names are wrappers or plain aliases.
+
+**[DESIGN — do not revert] Mixed time resolutions in `StepwiseMeteoScreeningDb`** (e.g. 10-min then 1-min records in one download). Findings L153–L198 in `devnotes/CODE_REVIEW_FINDINGS.md` (L192–L198: the GUI tab).
+- The grid is the common divisor of all resolutions and END offsets. Each record sits **only at its own END slot**; the slots in between are empty ("not a record") and must stay NaN through every step, including corrections (`_set_corrected` re-applies the mask). Never back-fill coarse records onto the fine grid: that made removals miss copies, sums count copies, and difference tests reject valid data.
+- Rolling-window and difference tests (Hampel, Local SD, rolling z-score, increments z-score) run **per resolution period** on the period's own grid (`_run_per_period` → `StepwiseOutlierDetection.set_pending_flag`), so `'7D'` means seven days everywhere. Global tests (z-score, LOF, absolute limits, trim low) run on all records at once.
+- `resample()` weights each record by the time it covers (overlap-capped); `mean` is time-weighted, `sum` counts each record once. For single-resolution data every path is bit-identical to the plain implementation; check that against HEAD after any change here.
+- `FlagQCF` treats a row as "not a record" only when the missing-values flag **and** the value are NaN. Plots use display-only copies (`_display_lines`, `_display_heatmap`).
+- Dates for manual removal and `correction_setto_value` are END timestamps, as users see them in the database.
 
 ## Coding Standards
 
@@ -123,7 +130,7 @@ Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to t
 - **[CRITICAL] Always pass `verbose=` when the caller has one**, even inside an `if self.verbose >= N:` guard. A bare `detail(msg)` resolves to the module default (PROGRESS), below `detail`'s own DEBUG level, so it never prints.
 - **Module docstring:** `MODULE_NAME: DESCRIPTIVE_TITLE`, `===` underline, one-line scope, then `Part of the diive library: https://github.com/holukas/diive`.
 - **Written text** (docs, comments, commit messages, examples): use the `/llm-detox` skill.
-- **Examples** (Sphinx Gallery): `# %%` cells, no file I/O, one year of data, no `showplot=True`. New example: register in `examples/run_all_examples.py` + `examples/CATALOG.md`, category README, source docstring "Example" section, `examples/README.md` count, CHANGELOG, verify it runs.
+- **Examples** (Sphinx Gallery): `# %%` cells, no file I/O, one year of data. `showplot=True` is fine: the gallery captures those figures (run examples unattended with `MPLBACKEND=Agg`). New example: register in `examples/run_all_examples.py` + `examples/CATALOG.md`, category README, source docstring "Example" section, `examples/README.md` count, CHANGELOG, verify it runs.
 
 ## Plotting
 
