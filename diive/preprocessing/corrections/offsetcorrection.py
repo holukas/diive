@@ -314,8 +314,9 @@ def remove_nighttime_zero_offset(series: Series,
         series: Data for the variable that is corrected
         lat: Latitude of the location where data were recorded
         lon: Longitude of the location where data were recorded
-        utc_offset: UTC offset of *timestamp_index*, e.g. 1 for UTC+01:00
-            The datetime index of the resulting Series will be in this timezone.
+        utc_offset: UTC offset of the timestamp index of *series*, e.g. 1 for
+            UTC+01:00. Used to find nighttime; the returned Series keeps the
+            index of *series*.
         showplot: Show plot
         clamp_negatives: If True (default), set remaining negative values (daytime
             included) to zero after the offset is removed, enforcing a physical

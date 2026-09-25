@@ -15,7 +15,7 @@ from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import info
 
 
-def restrict_application(flag: Series, flagname: str, application_dates: list or None = None,
+def restrict_application(flag: Series, flagname: str, application_dates: list | None = None,
                          verbose: bool = True, fill_value: float = np.nan):
     """Apply flag during certain time periods only.
 
@@ -23,6 +23,7 @@ def restrict_application(flag: Series, flagname: str, application_dates: list or
         flag: Pandas Series containing the flag values.
         flagname: Name of the flag.
         application_dates: List of dates or date ranges (as lists) when the flag should be applied.
+            None is the same as an empty list: no dates, so every value is *fill_value*.
         verbose: Whether to print information about the application dates.
         fill_value: Value to fill in for periods outside the application dates.
 
@@ -35,7 +36,7 @@ def restrict_application(flag: Series, flagname: str, application_dates: list or
     if verbose:
         info(f"{flagname}: will be applied on the following dates only: {application_dates}")
 
-    for date in application_dates:
+    for date in application_dates or []:
         if isinstance(date, str):
             # Neat solution: even though here only data for a single datetime
             # is removed, the >= and <= comparators are used to avoid an error
@@ -55,7 +56,7 @@ class MissingValues(FlagBase):
     ...
 
     Methods:
-        calc(self, min: float, max: float): Calculates flag
+        calc(repeat=False): Calculates flag
 
     After running calc, results can be accessed with:
         flag: Series

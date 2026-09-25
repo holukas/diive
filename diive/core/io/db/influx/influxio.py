@@ -65,6 +65,13 @@ class InfluxIO:
         return f"{sign}{hours:02d}:{minutes:02d}"
 
     def _add_timestamp_utc(self, timestamp_index, timezone_offset_to_utc_hours) -> pd.DatetimeIndex:
+        """Localize a naive timestamp index to a fixed UTC offset.
+
+        *timezone_offset_to_utc_hours* is the offset of the local timestamps to
+        UTC, e.g. 1 for CET (UTC+01:00, winter time) or -5 for UTC-05:00;
+        fractional hours are allowed (5.5 gives UTC+05:30). The timestamps keep
+        their values and get this offset, so InfluxDB can store them in UTC.
+        """
         # Needs to be in format '2022-05-27 00:00:00+01:00' for InfluxDB
         utc_str = self._format_utc_offset(timezone_offset_to_utc_hours)
         timestamp_index_utc = timestamp_index.tz_localize(utc_str)
@@ -85,7 +92,7 @@ class InfluxIO:
             var_df: contains measured variable data and tags (data_detailed)
             to_bucket: name of database bucket
             to_measurement: name of measurement, e.g. 'TA'
-            timezone_offset_to_utc_hours: e.g. 1, see docstring in `._add_timestamp_utc' for more details
+            timezone_offset_to_utc_hours: e.g. 1, see the docstring of ``_add_timestamp_utc`` for details
             delete_from_db_before_upload: data between the start and end dates of *var_df* are
                 deleted before uploading. The delete is limited to the same site, measurement,
                 variable name and data version as *var_df*, so *var_df* must hold exactly one
@@ -203,7 +210,7 @@ class InfluxIO:
                 with the string as the list element.
             verify_freq: checks if the downloaded data has the expected frequency, given
                 as str in the format of pandas frequency strings, e.g., '30min' for 30-minute
-                data. If the inferred frequency does not match, a warning is logged.
+                data. If the inferred frequency does not match, a warning is printed.
         """
         if isinstance(data_version, str):
             data_version = [data_version]
