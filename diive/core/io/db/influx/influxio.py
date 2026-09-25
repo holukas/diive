@@ -87,9 +87,10 @@ class InfluxIO:
             to_measurement: name of measurement, e.g. 'TA'
             timezone_offset_to_utc_hours: e.g. 1, see docstring in `._add_timestamp_utc' for more details
             delete_from_db_before_upload: data between the start and end dates of *var_df* are
-                deleted before uploading. All data with the same variable name are deleted.
-                Implemented to avoid duplicate uploads of the same data in cases where data
-                remained the same, but one of the tags has changed.
+                deleted before uploading. The delete is limited to the same site, measurement,
+                variable name and data version as *var_df*, so *var_df* must hold exactly one
+                ``site`` and one ``data_version``. Implemented to avoid duplicate uploads of the
+                same data in cases where data remained the same, but one of the tags has changed.
 
         Note:
             *var_df* must contain one data column (the variable) plus a column
@@ -125,10 +126,16 @@ class InfluxIO:
             if len(data_version) > 1:
                 raise ValueError('Multiple data versions not supported')
             data_version = data_version[0]
+            # Without the site, a bucket shared by several sites would lose this
+            # variable for every site in the uploaded period.
+            site = list(set(var_df['site'].tolist()))
+            if len(site) != 1:
+                raise ValueError(f"Exactly one site required for the delete before upload, found {site}.")
+            site = site[0]
             self.delete(bucket=to_bucket, measurements=[to_measurement],
                         start=start, stop=stop,
                         timezone_offset_to_utc_hours=timezone_offset_to_utc_hours,
-                        data_version=data_version, fields=field)
+                        data_version=data_version, fields=field, site=site)
 
         # Add timezone info to timestamp
         var_df.index = self._add_timestamp_utc(timestamp_index=var_df.index,
@@ -369,7 +376,8 @@ class InfluxIO:
                stop: str,
                timezone_offset_to_utc_hours: int | float,
                data_version: str,
-               fields: list | bool) -> None:
+               fields: list | bool,
+               site: str | None = None) -> None:
         """
         Delete data from bucket
 
@@ -398,6 +406,8 @@ class InfluxIO:
                 2 Jun 2024 12:00 CET should be deleted, then *timezone_offset_to_utc_hours=1*.
             data_version: version ID of the data that should be deleted,
                 e.g. 'meteoscreening_diive', 'raw', 'myID', ...
+            site: if given, only data with this ``site`` tag are deleted, e.g. 'CH-DAV'.
+                ``None`` (default) deletes regardless of site.
 
         Examples:
 
@@ -457,12 +467,14 @@ class InfluxIO:
 
             # Delete
             kwargs = dict(start=start_iso, stop=stop_iso, bucket=bucket)
+            site_str = f' AND site="{site}"' if site is not None else ''
             for measurement in measurements:
 
                 # Delete all variables (fields) in measurement
                 if fields and isinstance(fields, bool):
                     predicate_str = (f'_measurement="{measurement}" '
-                                     f'AND data_version="{data_version}"')
+                                     f'AND data_version="{data_version}"'
+                                     f'{site_str}')
                     delete_api.delete(predicate=predicate_str, **kwargs)
 
                 # Delete given variables (fields) in measurement
@@ -470,7 +482,8 @@ class InfluxIO:
                     for field in fields:
                         predicate_str = (f'_measurement="{measurement}" '
                                          f'AND varname="{field}" '
-                                         f'AND data_version="{data_version}"')
+                                         f'AND data_version="{data_version}"'
+                                         f'{site_str}')
                         delete_api.delete(predicate=predicate_str, **kwargs)
 
         # Report the measurements actually targeted, not the requested `True`,
@@ -489,7 +502,8 @@ class InfluxIO:
         else:
             fields_str = None
 
-        info(f"Deleted variables {fields_str} between {start_iso} and {stop_iso} "
+        site_msg = f" for site {site}" if site is not None else ""
+        info(f"Deleted variables {fields_str}{site_msg} between {start_iso} and {stop_iso} "
              f"from measurements {measurements_str} in bucket {bucket}.", verbose=self.verbose)
 
     def show_configs_unitmapper(self) -> dict:

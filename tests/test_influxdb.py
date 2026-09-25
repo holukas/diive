@@ -1,11 +1,12 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
 from diive.core.io.db.influx import fluxql
-from diive.core.io.db.influx.common import convert_ts_to_timezone
+from diive.core.io.db.influx.common import TAGS, convert_ts_to_timezone
 from diive.core.io.db.influx.config import get_conf_filetypes, read_configfile
 from diive.core.io.db.influx.influxio import InfluxIO
 
@@ -138,6 +139,75 @@ class TestInfluxConfig(unittest.TestCase):
             filetypes = get_conf_filetypes(folder=fg)
             self.assertIn("EXAMPLE_FILETYPE", filetypes)
             self.assertEqual(filetypes["EXAMPLE_FILETYPE"]["freq"], "30min")
+
+
+class TestInfluxDelete(unittest.TestCase):
+    """Delete predicates, recorded at the connection boundary (no database needed)."""
+
+    def setUp(self):
+        # Skip __init__: it reads config files and pings the server.
+        self.dbc = InfluxIO.__new__(InfluxIO)
+        self.dbc.conf_db = {}
+        self.dbc.verbose = 0
+        self.delete_api = MagicMock()
+        patchers = [patch("diive.core.io.db.influx.influxio.get_client", return_value=MagicMock()),
+                    patch("diive.core.io.db.influx.influxio.get_delete_api", return_value=self.delete_api)]
+        for p in patchers:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def _predicates(self):
+        return [c.kwargs["predicate"] for c in self.delete_api.delete.call_args_list]
+
+    def _delete(self, **kwargs):
+        self.dbc.delete(bucket="b", measurements=["TA"], start="2022-01-01 00:00:00",
+                        stop="2022-01-02 00:00:00", timezone_offset_to_utc_hours=1,
+                        data_version="v1", **kwargs)
+
+    def test_fields_list_without_site(self):
+        self._delete(fields=["TA_1", "TA_2"])
+        self.assertEqual(self._predicates(), [
+            '_measurement="TA" AND varname="TA_1" AND data_version="v1"',
+            '_measurement="TA" AND varname="TA_2" AND data_version="v1"'])
+
+    def test_fields_list_with_site(self):
+        self._delete(fields=["TA_1"], site="CH-DAV")
+        self.assertEqual(self._predicates(), [
+            '_measurement="TA" AND varname="TA_1" AND data_version="v1" AND site="CH-DAV"'])
+
+    def test_all_fields_without_site(self):
+        self._delete(fields=True)
+        self.assertEqual(self._predicates(), ['_measurement="TA" AND data_version="v1"'])
+
+    def test_all_fields_with_site(self):
+        self._delete(fields=True, site="CH-DAV")
+        self.assertEqual(self._predicates(),
+                         ['_measurement="TA" AND data_version="v1" AND site="CH-DAV"'])
+
+    def _var_df(self, sites):
+        idx = pd.date_range("2022-01-01 00:30", periods=len(sites), freq="30min")
+        df = pd.DataFrame({"TA_1": range(len(sites))}, index=idx)
+        for tag in TAGS:
+            df[tag] = "x"
+        df["site"] = sites
+        df["data_version"] = "v1"
+        return df
+
+    def test_upload_singlevar_deletes_only_own_site(self):
+        with patch.object(InfluxIO, "delete") as delete:
+            self.dbc.upload_singlevar(var_df=self._var_df(["CH-DAV", "CH-DAV"]), to_bucket="b",
+                                      to_measurement="TA", timezone_offset_to_utc_hours=1)
+        delete.assert_called_once()
+        self.assertEqual(delete.call_args.kwargs["site"], "CH-DAV")
+        self.assertEqual(delete.call_args.kwargs["fields"], ["TA_1"])
+        self.assertEqual(delete.call_args.kwargs["data_version"], "v1")
+
+    def test_upload_singlevar_rejects_multiple_sites(self):
+        with patch.object(InfluxIO, "delete") as delete:
+            with self.assertRaises(ValueError):
+                self.dbc.upload_singlevar(var_df=self._var_df(["CH-DAV", "CH-LAE"]), to_bucket="b",
+                                          to_measurement="TA", timezone_offset_to_utc_hours=1)
+        delete.assert_not_called()
 
 
 if __name__ == "__main__":
