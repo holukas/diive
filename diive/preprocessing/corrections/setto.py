@@ -13,10 +13,8 @@ from pandas import Series
 
 from diive.core.plotting.plotfuncs import quickplot
 from diive.core.utils.console import info, detail
-from diive.core.utils.prints import ConsoleOutputDecorator
 
 
-@ConsoleOutputDecorator()
 def set_exact_values_to_missing(series: Series,
                                 values: list,
                                 showplot: bool = False,
@@ -106,21 +104,18 @@ def setto_value(series: Series, dates: list, value: float = 0, verbose: int = 0)
     """
     series_corr = series.copy()
     for date in dates:
+        # Label slicing matches partial strings, so a bare date covers the whole
+        # day (a >= / <= comparison would stop at midnight), as in ManualRemoval.
+        # A timestamp that is not in the index selects nothing instead of raising.
         if isinstance(date, str):
-            # Neat solution: even though here only data for a single datetime
-            # is removed, the >= and <= comparators are used to avoid an error
-            # in case the datetime is not found in the flag.index
-            date = (series_corr.index >= date) & (series_corr.index <= date)
-            series_corr.loc[date] = value
+            series_corr.loc[date:date] = value
         elif isinstance(date, list):
-            _dates = (series_corr.index >= date[0]) & (series_corr.index <= date[1])
-            series_corr.loc[_dates] = value
+            series_corr.loc[date[0]:date[1]] = value
     if verbose > 0:
         info(f"Records in time range {dates} were set to value {value}.")
     return series_corr
 
 
-@ConsoleOutputDecorator()
 def setto_threshold(series: Series,
                     threshold: float,
                     type: str,
