@@ -8,51 +8,50 @@
 
 Library (also used by the notebook and the GUI):
 
-- **Meteo screening, mixed time resolutions:** data whose resolution changes, e.g. 10-min data
-  followed by 1-min data, are screened correctly. Rolling-window and difference tests run on
-  each resolution separately, resampling weights each record by the time it covers, and plots
-  show the coarse data. Resampled values for data with one resolution are unchanged.
-- **Meteo screening dates:** manual removal and `correction_setto_value` take dates as they
-  appear in the downloaded data (local time, end of each period). Dates that match no record give a warning.
-- **Meteo screening, new methods:** `set_corrections()` applies a list of corrections in one
-  call, `records_count()` and `resolutions()` describe the loaded data, and
-  `meteoscreening_to_code()` (in `diive.preprocessing.qaqc.codegen`) writes a script of a
-  screening setup.
-- **Meteo screening options:** Local SD and z-score take separate daytime and nighttime
-  thresholds, correction plots can be switched off with `showplot=False`, the nighttime
-  zero-offset correction takes `clamp_negatives`, and the QCF accept thresholds of
-  `finalize_outlier_detection()` take effect.
-- **Meteo screening, irregular timestamps:** records a few seconds off the regular time grid
-  raise an error that asks to clean the timestamps, and inputs too small to screen raise a clear
-  error. Stretches of fewer than three records at one resolution are left unscreened, with a
+- **Meteo screening, mixed time resolutions:** data with a change in time resolution, e.g. 10-min
+  data followed by 1-min data, are screened correctly, and data with one resolution give the same
+  resampled values as before.
+- **Meteo screening dates:** manual removal and `correction_setto_value` take dates as they appear
+  in the downloaded data (local time, end of each period), and dates that match no record give a
   warning.
-- **Time-span windows:** Hampel, Local SD and rolling z-score (and their stepwise and meteo
-  screening methods) also take the window as a time span, e.g. `'7D'`.
-- **Local outlier factor:** in stepwise screening, `repeat` defaults to `False`. Each pass flags
-  the `contamination` fraction again, so repeating kept removing valid data.
+- **Meteo screening, new methods:** `set_corrections()` applies a list of corrections in one call,
+  `records_count()` and `resolutions()` describe the loaded data, and `meteoscreening_to_code()`
+  writes a script of a screening setup.
+- **Meteo screening options:** Local SD and z-score take separate daytime and nighttime thresholds,
+  correction plots can be switched off with `showplot=False`, and the nighttime zero-offset
+  correction takes `clamp_negatives`.
+- **Meteo screening, irregular timestamps:** records a few seconds off the regular time grid and
+  inputs too small to screen raise a clear error.
+- **Meteo screening, short stretches:** fewer than three records at one resolution are left
+  unscreened, with a warning.
+- **Time-span windows:** Hampel, Local SD and rolling z-score also take the window as a time span,
+  e.g. `'7D'`.
+- **Local outlier factor:** `repeat` defaults to `False` in stepwise screening, because each pass
+  flags the `contamination` fraction again.
 - **Console output:** outlier tests, corrections and resampling no longer print a
-  `running <name> ...` line. The outlier classes are plain classes now, so `isinstance` and
-  subclassing work, and their arguments show in the documentation.
-- **Documentation:** the meteo screening methods and the outlier classes show usage examples,
-  e.g. all date formats for manual removal.
+  `running <name> ...` line.
+- **Outlier classes:** they are plain classes now, so `isinstance` and subclassing work and their
+  arguments show in the documentation.
+- **Documentation:** the meteo screening methods and the outlier classes show usage examples, e.g.
+  all date formats for manual removal.
 
 GUI only:
 
-- **UTC offset:** the offset is set only in Project settings. Every tab that needs it and the
-  database download show it read-only; where it is needed but not set, a red mark says to set it
-  there first.
-- **Meteo screening (database):** the tab screens through `StepwiseMeteoScreeningDb`, so it
-  handles mixed time resolutions like the library, follows site coordinate changes and shows
-  loading errors in the status line. Copy Python writes a `StepwiseMeteoScreeningDb` script.
+- **UTC offset:** the offset is set only in Project settings, and tabs that need it show it
+  read-only, with a red mark where it is not set yet.
+- **Meteo screening (database):** the tab screens through `StepwiseMeteoScreeningDb` like the
+  library, follows changes to the site coordinates and shows loading errors in the status line.
+- **Meteo screening (database), Copy Python:** writes a `StepwiseMeteoScreeningDb` script.
 - **Screening tabs:** absolute limits can be added as a step.
 
-Notebook:
+Notebook (meteo screening notebook v13):
 
-- **Meteo screening notebook v13:** Run All no longer applies tests and corrections whose example
-  settings only fit one variable (LOF, trim low, absolute limits, corrections). Window settings
-  are time spans, and method descriptions are shorter and link to the documentation. A note
-  after the first plot says when outlier detection can be skipped. Resampling keeps a period
-  only if at least half of it is covered (was a quarter).
+- **Run All:** no longer applies tests and corrections with example settings for one specific
+  variable (LOF, trim low, absolute limits, corrections).
+- **Windows:** window settings are time spans, e.g. `'7D'`.
+- **Descriptions:** method descriptions are shorter and link to the documentation.
+- **Skipping outlier detection:** a note after the first plot says when it can be skipped.
+- **Resampling:** a period is kept only if at least half of it is covered (was a quarter).
 
 ### Bugfixes
 
@@ -68,6 +67,8 @@ Library:
   lost.
 - **Meteo screening, finalize:** running `finalize_outlier_detection()` again with looser
   thresholds did not bring back records a stricter run removed.
+- **Meteo screening, QCF thresholds:** the accept thresholds of `finalize_outlier_detection()` had
+  no effect.
 - **Daily resampling:** `StepwiseMeteoScreeningDb.resample('1D')` and
   `resample_series_to_freq(..., '1D')` failed under pandas 3.
 - **Meteo screening, upload:** screening again could leave older screened values at the start or
@@ -75,9 +76,9 @@ Library:
 - **Database upload:** the delete before an upload removed that variable for every site in a
   shared bucket, not only for the uploaded site.
 - **`Hampel`, spikes next to gaps:** with `use_differencing=True` and `repeat=True`, a spike on the
-  first or last record, or next to a gap, was never flagged, and each iteration removed the
-  next record instead, often up to the next gap. Such records are now tested. This also affects
-  the flux processing chain (L3.2) and the GUI screening tabs.
+  first or last record or next to a gap was never flagged, and each iteration removed the next
+  record instead, often up to the next gap. This also affected the flux processing chain (L3.2)
+  and the GUI screening tabs.
 - **`Hampel`:** a whole-number nighttime threshold combined with a decimal daytime threshold
   raised a `TypeError`.
 - **`setto_value`:** a bare date now covers the whole day, as documented.
