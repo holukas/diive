@@ -13,7 +13,7 @@ Library (also used by the notebook and the GUI):
   each resolution separately, resampling weights each record by the time it covers, and plots
   show the coarse data. Resampled values for data with one resolution are unchanged.
 - **Meteo screening dates:** manual removal and `correction_setto_value` take dates as they
-  appear in the database (end of each period). Dates that match no record give a warning.
+  appear in the downloaded data (local time, end of each period). Dates that match no record give a warning.
 - **Meteo screening, new methods:** `set_corrections()` applies a list of corrections in one
   call, `records_count()` and `resolutions()` describe the loaded data, and
   `meteoscreening_to_code()` (in `diive.preprocessing.qaqc.codegen`) writes a script of a
@@ -48,9 +48,10 @@ GUI only:
 
 Notebook:
 
-- **Meteo screening notebook v12:** Run All no longer screens and uploads with example settings,
-  window settings are time spans, and method descriptions are shorter and link to the
-  documentation.
+- **Meteo screening notebook v12:** Run All no longer applies tests and corrections whose example
+  settings only fit one variable (LOF, trim low, absolute limits, corrections). Window settings
+  are time spans, and method descriptions are shorter and link to the documentation. A note
+  after the first plot says when outlier detection can be skipped.
 
 ### Bugfixes
 
@@ -72,6 +73,10 @@ Library:
   end of the period in the database.
 - **Database upload:** the delete before an upload removed that variable for every site in a
   shared bucket, not only for the uploaded site.
+- **`Hampel`, spikes next to gaps:** with `use_differencing=True` and `repeat=True`, a spike on the
+  first or last record, or next to a gap, was never flagged, and each iteration removed the
+  next record instead, often up to the next gap. Such records are now tested. This also affects
+  the flux processing chain (L3.2) and the GUI screening tabs.
 - **`Hampel`:** a whole-number nighttime threshold combined with a decimal daytime threshold
   raised a `TypeError`.
 - **`setto_value`:** a bare date now covers the whole day, as documented.

@@ -121,7 +121,7 @@ Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to t
 - Rolling-window and difference tests (Hampel, Local SD, rolling z-score, increments z-score) run **per resolution period** on the period's own grid (`_run_per_period` → `StepwiseOutlierDetection.set_pending_flag`), so `'7D'` means seven days everywhere. Global tests (z-score, LOF, absolute limits, trim low) run on all records at once.
 - `resample()` weights each record by the time it covers (overlap-capped); `mean` is time-weighted, `sum` counts each record once. For single-resolution data every path is bit-identical to the plain implementation; check that against HEAD after any change here.
 - `FlagQCF` treats a row as "not a record" only when the missing-values flag **and** the value are NaN. Plots use display-only copies (`_display_lines`, `_display_heatmap`).
-- Dates for manual removal and `correction_setto_value` are END timestamps, as users see them in the database.
+- Dates for manual removal and `correction_setto_value` are END timestamps in the data's own time zone, as users see them after download (the download already applied the UTC offset).
 
 ## Coding Standards
 
