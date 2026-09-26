@@ -48,10 +48,11 @@ GUI only:
 
 Notebook:
 
-- **Meteo screening notebook v12:** Run All no longer applies tests and corrections whose example
+- **Meteo screening notebook v13:** Run All no longer applies tests and corrections whose example
   settings only fit one variable (LOF, trim low, absolute limits, corrections). Window settings
   are time spans, and method descriptions are shorter and link to the documentation. A note
-  after the first plot says when outlier detection can be skipped.
+  after the first plot says when outlier detection can be skipped. Resampling keeps a period
+  only if at least half of it is covered (was a quarter).
 
 ### Bugfixes
 
