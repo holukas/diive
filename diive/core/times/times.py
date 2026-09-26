@@ -1465,6 +1465,21 @@ def continuous_timestamp_freq(data: Union[Series, DataFrame], freq: str, verbose
     return data
 
 
+def freq_as_timedelta(freq, unit: str, divisor: int = 1) -> pd.Timedelta:
+    """Duration of the fixed frequency *freq*, divided by *divisor*, in *unit*.
+
+    A Day offset has no to_timedelta conversion in pandas 3, so the duration is
+    taken from its nanoseconds. Pass the unit of the index the result is added
+    to: a nanosecond Timedelta would turn a microsecond index into nanoseconds.
+    Where the duration does not fit *unit* exactly it stays in nanoseconds.
+    """
+    timedelta = pd.Timedelta(to_offset(freq).nanos, unit='ns') / divisor
+    try:
+        return timedelta.as_unit(unit, round_ok=False)
+    except ValueError:
+        return timedelta
+
+
 def insert_timestamp(
         data: DataFrame or Series,
         convention: Literal['start', 'middle', 'end'],
@@ -1531,8 +1546,8 @@ def insert_timestamp(
              verbose=verbose)
 
     # Interval of data records
-    timedelta = pd.Timedelta(to_offset(timestamp_freq).nanos, unit='ns')
-    timedelta_half = timedelta / 2
+    timedelta = freq_as_timedelta(timestamp_freq, unit=data.index.unit)
+    timedelta_half = freq_as_timedelta(timestamp_freq, unit=data.index.unit, divisor=2)
 
     # Data has MIDDLE timestamp
     if timestamp_index_name == 'TIMESTAMP_MIDDLE':
@@ -1740,8 +1755,7 @@ def convert_series_timestamp_to_middle(data: Union[Series, DataFrame], verbose: 
         if verbose:
             info("Convert to middle-of-period: OK (already middle)", verbose=verbose)
     else:
-        # A Day offset has no to_timedelta conversion in pandas 3.
-        timedelta = pd.Timedelta(timestamp_freq.nanos, unit='ns') / 2
+        timedelta = freq_as_timedelta(timestamp_freq, unit=data.index.unit, divisor=2)
         if timestamp_name_before == 'TIMESTAMP_END':
             data.index = data.index - pd.Timedelta(timedelta)
         elif timestamp_name_before == 'TIMESTAMP_START':

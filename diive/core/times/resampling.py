@@ -8,6 +8,7 @@ from pandas.tseries.frequencies import to_offset
 
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import convert_series_timestamp_to_middle
+from diive.core.times.times import freq_as_timedelta
 from diive.core.utils.console import info
 
 
@@ -164,7 +165,7 @@ def resample_series_to_freq(series: Series,
         info(f"Data already at {to_freqstr} resolution; no resampling needed.")
         out = convert_series_timestamp_to_middle(data=series.copy())
         if output_timestamp_shows == 'end':
-            out.index = out.index + pd.Timedelta(current_freq.nanos, unit='ns') / 2
+            out.index = out.index + freq_as_timedelta(current_freq, unit=out.index.unit, divisor=2)
             out.index.name = 'TIMESTAMP_END'
         return out
 

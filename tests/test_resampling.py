@@ -99,6 +99,18 @@ class TestResampleToFreq(unittest.TestCase):
         self.assertTrue(out.index.equals(s_end.index))
         self.assertTrue(np.array_equal(out.to_numpy(), s_end.to_numpy()))
 
+    def test_index_unit_is_kept(self):
+        # pandas 3 builds microsecond indexes; shifting by a nanosecond Timedelta
+        # used to return nanoseconds.
+        for unit in ('s', 'us', 'ns'):
+            with self.subTest(unit=unit):
+                s = self._hires()
+                s.index = s.index.as_unit(unit)
+                for out in (resample_series_to_freq(s, '30min'),
+                            resample_series_to_freq(self._to_middle(s.asfreq('10min')), '10min'),
+                            resample_series_to_freq(s, '1D')):
+                    self.assertEqual(out.index.unit, unit)
+
     def test_same_resolution_middle_output(self):
         s_end = self._hires(freq='30min')
         for s in (s_end, self._to_middle(s_end)):
