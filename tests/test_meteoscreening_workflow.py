@@ -52,14 +52,15 @@ START = pd.Timestamp('2024-07-01 00:00')  # first raw END is START + raw freq
 
 # Screening settings. abslim catches the 80 spikes. Hampel runs on double
 # differences, where a spike of +S gives 2S at the spike and -S at its two
-# neighbours; n_sigma is set so the band (~24 * 0.49 = 12 for noise sd 0.2) lies
-# between S=8 and 2S, i.e. only the spike itself is rejected. zscore then finds
-# nothing more, so every rejection in the result is one this module planted.
+# neighbours; n_sigma is set so the band (measured k * MAD 0.36-0.49 depending on
+# the resolution, so 10-14) lies between S=8 and 2S, i.e. only the spike itself is
+# rejected. zscore then finds nothing more, so every rejection in the result is one
+# this module planted.
 ABSLIM = dict(minval=0, maxval=40)
 ABSLIM_SPIKE = 80.0
 EDGE_VALUE = 99.0
 HAMPEL_SPIKE = 8.0
-HAMPEL_N_SIGMA = 24
+HAMPEL_N_SIGMA = 28
 ZSCORE_THRES = 4.5
 CAP = 19.0  # correction_setto_max_threshold, clips daytime peaks
 MINCOUNTS_PERC = .25

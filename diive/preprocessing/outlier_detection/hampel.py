@@ -172,12 +172,12 @@ class Hampel(FlagBase):
         # rather than silent.
         self._n_degenerate_scale = 0
 
-        # Records whose double difference would reach across a gap in the INPUT
-        # data. Computed once, from the original series, so that it stays fixed
-        # across iterations: values removed by an earlier iteration must not make
-        # their neighbours untestable, or a cluster of spikes would shelter itself
-        # after the first pass.
-        self._untestable = self._gap_flanking_records(self.series)
+        # Runs of records without a gap in the INPUT data; differences never reach
+        # from one run into another. Computed once, from the original series, so
+        # that it stays fixed across iterations: a value removed by an earlier
+        # iteration must not end a run, or a cluster of spikes would shelter
+        # itself after the first pass.
+        self._segment = self._input_segments(self.series)
 
         # Detect daytime and nighttime
         if self.separate_day_night:
@@ -230,20 +230,20 @@ class Hampel(FlagBase):
                                                     title=title)
 
     @staticmethod
-    def _gap_flanking_records(series: Series) -> Series:
-        """Records whose immediate neighbour is missing in the input data.
+    def _input_segments(series: Series) -> Series:
+        """Number of the gap-free run each input record belongs to.
 
-        The double difference at record *t* uses both of its neighbours, so *t*
-        cannot be judged when either of them is absent: dropping missing records
-        before differencing would silently pair *t* with a partner hours or days
+        A run ends where the next record is missing, either as an absent
+        timestamp or as a missing value. Dropping missing records before
+        differencing would otherwise pair a record with a partner hours or days
         away and make every gap edge look like a spike.
 
-        Returns a boolean Series over the input index (all False when the index
-        is not a usable time axis, which leaves the previous behaviour in place).
+        Returns an integer Series over the input index (one run when the index
+        is not a usable time axis).
         """
         index = series.index
         if not isinstance(index, DatetimeIndex) or len(index) < 3:
-            return pd.Series(False, index=index)
+            return pd.Series(0, index=index)
 
         # A non-fixed offset (month/year start, business day, week) has no constant
         # duration and raises on `.nanos`; even `hasattr` propagates that error, so
@@ -257,17 +257,40 @@ class Hampel(FlagBase):
         if step is None:
             step = pd.Series(index).diff().median()
         if pd.isna(step) or step <= pd.Timedelta(0):
-            return pd.Series(False, index=index)
+            return pd.Series(0, index=index)
 
         # A neighbour is missing either because the timestamp itself is absent
         # (irregular index) or because it carries no value (gap on a regular grid).
         steps = pd.Series(index).diff()
         far_before = (steps > step * 1.5).to_numpy()
-        far_after = np.append(far_before[1:], False)
         empty = series.isna().to_numpy()
         empty_before = np.append(True, empty[:-1])
-        empty_after = np.append(empty[1:], True)
-        return pd.Series(far_before | far_after | empty_before | empty_after, index=index)
+        return pd.Series(np.cumsum(far_before | empty_before), index=index)
+
+    def _double_differences(self, s: Series) -> tuple[Series, Series, Series]:
+        """Second differences of *s* that stay inside each input run.
+
+        Inside a run: ``d = 2 x_t - x_{t-1} - x_{t+1}``, the Papale et al. (2006)
+        double difference. A record at the start or end of its run has a
+        neighbour on one side only and is tested against the linear
+        extrapolation from the next two records, ``d = x_t - 2 x_{t+1} + x_{t+2}``
+        (or mirrored), which has the same noise and also cancels a trend.
+        Without that test a spike at a run edge was never judged, and with
+        ``repeat=True`` each iteration removed the next record paired with it,
+        until the run was gone. Records in runs of fewer than three are NaN.
+
+        Returns ``d`` plus, for mapping the detection band to data units, the
+        value ``x_t`` is compared with and the factor on ``x_t`` in ``d``.
+        """
+        seg = self._segment.reindex(s.index)
+        same = {k: (seg.shift(k) == seg) for k in (1, 2, -1, -2)}
+        p1, p2, n1, n2 = s.shift(1), s.shift(2), s.shift(-1), s.shift(-2)
+        central = same[1] & same[-1]
+        forward = ~central & same[-2]
+        backward = ~central & ~forward & same[2]
+        reference = ((p1 + n1) / 2).where(central, (2 * n1 - n2).where(forward, (2 * p1 - p2).where(backward)))
+        factor = pd.Series(np.where(central, 2.0, 1.0), index=s.index)
+        return factor * (s - reference), reference, factor
 
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag using optimized Pandas operations."""
@@ -277,14 +300,9 @@ class Hampel(FlagBase):
 
         # 2. Transform data
         if self.use_differencing:
-            # d = (x_t - x_{t-1}) - (x_{t+1} - x_t)
-            s_to_test = s.diff() - s.diff().shift(-1)
-            s_to_test = s_to_test.fillna(0)
             # Missing records were dropped above, so consecutive entries can be hours
-            # or days apart. A difference taken across such a gap compares unrelated
-            # records and makes the two records flanking every gap look like spikes.
-            # Neutralize those (mask computed once from the input, see __init__).
-            s_to_test = s_to_test.mask(self._untestable.reindex(s.index, fill_value=False))
+            # or days apart; the differences stay inside each input run.
+            s_to_test, reference, factor = self._double_differences(s)
         else:
             s_to_test = s
 
@@ -338,14 +356,12 @@ class Hampel(FlagBase):
 
         # Expose the per-iteration detection band in DATA units (for visualisation).
         # Raw mode: the bounds already are in data units. Double-differencing mode:
-        # the test runs on d = 2*x_t - (x_{t-1} + x_{t+1}), so x_t is flagged iff it
-        # leaves [lower, upper] mapped to data units as neighbour_avg + bound/2
-        # (neighbour_avg = (x_{t-1} + x_{t+1}) / 2). This is the exact data-space
-        # band the flag decision uses for the current iteration.
+        # the test runs on d = factor * (x_t - reference), so x_t is flagged iff it
+        # leaves reference + bound / factor. This is the exact data-space band the
+        # flag decision uses for the current iteration.
         if self.use_differencing:
-            neighbour_avg = (s.shift(1) + s.shift(-1)) / 2.0
-            self.last_upper_bound = neighbour_avg + upper_bound / 2.0
-            self.last_lower_bound = neighbour_avg + lower_bound / 2.0
+            self.last_upper_bound = reference + upper_bound / factor
+            self.last_lower_bound = reference + lower_bound / factor
         else:
             self.last_upper_bound = upper_bound.copy()
             self.last_lower_bound = lower_bound.copy()
