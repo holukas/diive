@@ -136,8 +136,8 @@ class StepwiseMeteoScreeningDb:
     tests that run on all records at once (e.g. z-score, absolute limits, LOF) classify
     a coarse record as day or night at this slot time. The rolling-window and difference
     tests and the day/night QCF thresholds use each record's own middle.
-    `.flag_manualremoval_test()` and `.correction_setto_value()` take dates in the
-    database's TIMESTAMP_END convention.
+    `.flag_manualremoval_test()` and `.correction_setto_value()` take dates as TIMESTAMP_END
+    in the time zone of *data_detailed*, i.e. as the records appear after download.
 
     **Site coordinates**
     `site_lat`, `site_lon` and `utc_offset` (the offset of the data timestamps to UTC)
@@ -586,8 +586,8 @@ class StepwiseMeteoScreeningDb:
     def flag_manualremoval_test(self, remove_dates: list, showplot: bool = False, verbose: bool = False):
         """Flag specified records for removal.
 
-        Dates are in the database's TIMESTAMP_END convention, i.e. as the records
-        appear in the database, not as the TIMESTAMP_MIDDLE used during screening.
+        Dates are TIMESTAMP_END in the time zone of *data_detailed*, i.e. as the
+        records appear after download, not the TIMESTAMP_MIDDLE used during screening.
         Each entry is a single date(time) string or a ``[start, end]`` list; a
         bare date such as '2024-07-14' covers all records whose END timestamp is
         on that day. See ``ManualRemoval`` for the format.
@@ -1217,7 +1217,7 @@ class StepwiseMeteoScreeningDb:
     def correction_setto_value(self, dates: list, value: float, verbose: int = 1):
         """Set records within time range to value.
 
-        Dates are in the database's TIMESTAMP_END convention, as for
+        Dates are TIMESTAMP_END in the time zone of *data_detailed*, as for
         ``flag_manualremoval_test``.
 
         Example:
