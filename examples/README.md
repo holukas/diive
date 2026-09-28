@@ -157,7 +157,7 @@ Browse by topic:
 - **[events/README.rst](events/README.rst)** — Marking and overlaying time-stamped events
 - **[features/README.rst](features/README.rst)** — Variable creation, unit conversions, derived properties
 - **[fits/README.rst](fits/README.rst)** — Binned curve fitting with confidence and prediction bands
-- **[flux/README.rst](flux/README.rst)** — Multi-level flux processing (L2-L4.2), NEE partitioning, quality filtering, USTAR detection
+- **[flux/README.rst](flux/README.rst)** — Flux post-processing chain (L2-L4.2), NEE partitioning, quality filtering, USTAR detection
 - **[gapfilling/README.rst](gapfilling/README.rst)** — Linear, Random Forest, XGBoost, MDS methods
 - **[io/README.rst](io/README.rst)** — Parquet file I/O, EddyPro CSV reading, binary value extraction
 - **[preprocessing/corrections/README.rst](preprocessing/corrections/README.rst)** — Offset corrections, value clipping
@@ -195,7 +195,7 @@ uv run python examples/visualization/plot_heatmap_datetime_basic.py
 
 ## Documentation & Guides
 
-- **[COOKBOOK.md](COOKBOOK.md)** — Start here: 6 minimal working workflows (load data, clean timestamps, remove outliers, gap-fill, flux chain, visualize)
+- **[COOKBOOK.md](COOKBOOK.md)** — Start here: 6 minimal working workflows (load data, clean timestamps, remove outliers, gap-fill, flux post-processing chain, visualize)
 - **[CATALOG.md](CATALOG.md)** — Find examples by use case (workflows, analysis types, methods)
 - **[EXAMPLE_DATASET.md](EXAMPLE_DATASET.md)** — Complete documentation of the example dataset (columns, availability, quality)
 

@@ -13,7 +13,7 @@ _**`diive` is currently being prepared for the v1.0 release.**_
 
 `diive` is a Python library for time series processing, focused on ecosystem data. It was originally developed by the
 [ETH Grassland Sciences group](https://gl.ethz.ch/) for [Swiss FluxNet](https://www.swissfluxnet.ethz.ch/): eddy
-covariance flux processing, gap-filling, quality control, and the plots that go with them.
+covariance flux post-processing, gap-filling, quality control, and the plots that go with them.
 
 There are two ways to use it, and you can pick whichever fits:
 
@@ -92,7 +92,7 @@ Plots follow a two-phase pattern throughout: the constructor takes the data, `.p
 
 From here, the [cookbook](examples/COOKBOOK.md) walks through six minimal workflows — load data, clean timestamps,
 remove
-outliers, gap-fill, run the flux chain, visualize.
+outliers, gap-fill, run the flux post-processing chain, visualize.
 
 ## What's in it
 

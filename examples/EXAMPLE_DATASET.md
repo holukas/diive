@@ -106,7 +106,7 @@ print(df.columns)        # List of 37 variables
 ### **Gap-Filling Status**
 - **Gap-filled variables** (suffix `_f`): NEE, GPP, LE, temperature, VPD, radiation
   - Ready to use for analysis without additional gap-filling
-  - Used in flux processing pipeline (Levels 2-4.1)
+  - Used in the flux post-processing chain (Levels 2-4.1)
 - **Original measured variables** (suffix `_orig`): Raw measurements with gaps
   - Useful for demonstrating gap-filling methods
   - Contains natural measurement gaps during instrument downtime, maintenance, precipitation, etc.
@@ -122,7 +122,7 @@ The dataset includes three USTAR threshold scenarios:
 - **CUT_16**: Conservative (16th percentile) — more stringent filtering
 - **CUT_84**: Lenient (84th percentile) — less stringent filtering
 
-This allows demonstration of uncertainty quantification in flux processing.
+This allows demonstration of uncertainty quantification in flux post-processing.
 
 ## Recommended Uses
 
@@ -131,7 +131,7 @@ This allows demonstration of uncertainty quantification in flux processing.
 - ✓ Quality control and outlier detection workflows
 - ✓ Visualization and time series analysis
 - ✓ Feature engineering and variable creation
-- ✓ Flux processing pipeline (Levels 2-4.1)
+- ✓ Flux post-processing chain (Levels 2-4.1)
 - ✓ Uncertainty quantification
 - ✓ Comparison of USTAR filtering scenarios
 
