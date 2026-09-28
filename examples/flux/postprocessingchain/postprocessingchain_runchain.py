@@ -1,16 +1,16 @@
 """
-=================================================
-Flux Processing Chain - Single-Call ``run_chain``
-=================================================
+======================================================
+Flux Post-Processing Chain - Single-Call ``run_chain``
+======================================================
 
-The flux processing chain ships **two entry points**:
+The flux post-processing chain ships **two entry points**:
 
 - ``run_chain(data, FluxConfig)`` — single-call driver for the standard
   FLUXNET-style workflow. Fixed sensible defaults for per-detector and
   per-model knobs, only the high-level decisions are on ``FluxConfig``.
 - The **composable per-level API** — full control over every knob, every
   detector class, every model hyperparameter. See
-  ``fluxprocessingchain_composable.py`` for that path.
+  ``postprocessingchain_composable.py`` for that path.
 
 This example shows the **simple path**: load data, build one ``FluxConfig``,
 hand it to ``run_chain``, inspect the results. Use this when you want the
@@ -42,7 +42,7 @@ The chain that ``run_chain`` runs:
 # ^^^^^^^
 
 from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
-from diive.flux.fluxprocessingchain import (
+from diive.flux.postprocessingchain import (
     FluxConfig,
     add_driver,
     init_flux_data,
@@ -259,7 +259,7 @@ data.plot_cumulative_comparison(
 #
 # ``run_chain`` is intentionally simple — it ships fixed defaults for every
 # per-detector / per-model knob. Reach for the composable per-level
-# callables (see ``fluxprocessingchain_composable.py``) when you need:
+# callables (see ``postprocessingchain_composable.py``) when you need:
 #
 # - a non-Hampel L3.2 detector (z-score rolling, abslim, manual removal),
 #   or a multi-step L3.2 pipeline

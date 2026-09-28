@@ -14,13 +14,13 @@ Terminology
 Contents
 --------
 
-Processing Chain
-~~~~~~~~~~~~~~~~
+Post-Processing Chain
+~~~~~~~~~~~~~~~~~~~~~
 
-- **fluxprocessingchain/fluxprocessingchain_level2.py** — Level 2 in isolation: load a real EddyPro FLUXNET output file, ``init_flux_data``, then ``run_level2`` to expand the EddyPro quality diagnostics into per-test flags and one overall QCF. Shows ``level2_test_inputs`` (which column each test reads), the QCF-filtered vs. high-quality (QCF=0) series, and the effect of the accept threshold. The smallest standalone entry point into the chain.
-- **fluxprocessingchain/fluxprocessingchain_runchain.py** — Single-call ``run_chain(data, FluxConfig)`` example. Minimal config drives the full L2→L4.2 pipeline with sensible defaults. The easy path; use this when you want the chain to "just work".
-- **fluxprocessingchain/fluxprocessingchain_composable.py** — Full L2→L4.2 pipeline using composable callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; on-demand ``gap_stats()`` after L3.3; ``plot_gapfilled_heatmaps()`` (side-by-side heatmap comparison) and ``plot_cumulative_comparison()`` (all methods on one axes) after L4.1; then all four ``run_level42_*`` partitioning callables. The full-control path — every detector class, model hyperparameter, MDS tolerance, and diagnostic flag is reachable here.
-- **fluxprocessingchain/fluxprocessingchain_partitioning.py** — Level 4.2 on the ``run_chain`` path: all four partitioning ports enabled through the ``partition_*`` fields of ``FluxConfig``. Shows which driver columns each port reads, ``partition_gapfill_method`` (which L4.1 gap-filled NEE feeds the nighttime variants), and how the per-USTAR-scenario output columns are named (``RECO_NT_OF_CUT_50``).
+- **postprocessingchain/postprocessingchain_level2.py** — Level 2 in isolation: load a real EddyPro FLUXNET output file, ``init_flux_data``, then ``run_level2`` to expand the EddyPro quality diagnostics into per-test flags and one overall QCF. Shows ``level2_test_inputs`` (which column each test reads), the QCF-filtered vs. high-quality (QCF=0) series, and the effect of the accept threshold. The smallest standalone entry point into the chain.
+- **postprocessingchain/postprocessingchain_runchain.py** — Single-call ``run_chain(data, FluxConfig)`` example. Minimal config drives the full L2→L4.2 pipeline with sensible defaults. The easy path; use this when you want the chain to "just work".
+- **postprocessingchain/postprocessingchain_composable.py** — Full L2→L4.2 pipeline using composable callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; on-demand ``gap_stats()`` after L3.3; ``plot_gapfilled_heatmaps()`` (side-by-side heatmap comparison) and ``plot_cumulative_comparison()`` (all methods on one axes) after L4.1; then all four ``run_level42_*`` partitioning callables. The full-control path — every detector class, model hyperparameter, MDS tolerance, and diagnostic flag is reachable here.
+- **postprocessingchain/postprocessingchain_partitioning.py** — Level 4.2 on the ``run_chain`` path: all four partitioning ports enabled through the ``partition_*`` fields of ``FluxConfig``. Shows which driver columns each port reads, ``partition_gapfill_method`` (which L4.1 gap-filled NEE feeds the nighttime variants), and how the per-USTAR-scenario output columns are named (``RECO_NT_OF_CUT_50``).
 
 NEE Partitioning (Level 4.2)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -57,8 +57,8 @@ Available classes and functions in ``dv.flux``:
 - **UstarVekuriThresholdDetection** — Quantile-based USTAR detection (Vekuri method)
 - **UstarBootstrapThresholds** — Multi-year bootstrap wrapper for any USTAR detector; 3-year sliding window. Returns **VUT** (variable, per-year p16/p50/p84 via ``get_vut_thresholds()`` / ``run()``) and **CUT** (constant, pooled across years via ``get_cut_threshold()``). diive's VUT is smoothed over the 3-year window (differs from strict single-year ONEFlux VUT)
 - **ScopApplicator** — SCOP self-heating correction for open-path IRGA. Not re-exported on ``dv.flux``; import it from ``diive.flux.lowres`` (``from diive.flux.lowres import ScopApplicator``).
-- **run_chain / FluxConfig** — Single-call driver for the full L2→L4.2 flux processing pipeline; one ``FluxConfig`` per flux variable. L4.2 partitioning is opt-in via the ``partition_*`` fields (``partition_nighttime_oneflux``, ``partition_daytime_oneflux``, …)
-- **Composable level callables** — ``init_flux_data``, ``run_level2``, ``run_level31``, ``make_level32_detector`` + ``run_level32``, ``run_level33_constant_ustar`` / ``run_level33_variable_ustar`` / ``run_level33_ustar_detection`` (mode ``'cut'``/``'vut'``), ``run_level41_mds`` / ``_rf`` / ``_xgb``, ``run_level42_nighttime_oneflux`` / ``_nighttime_reddyproc`` / ``_daytime_reddyproc`` / ``_daytime_oneflux``; pure functions on a typed ``FluxLevelData`` container. Import them from ``diive.flux.fluxprocessingchain`` — only ``init_flux_data``, ``add_driver``, ``run_chain`` and ``FluxConfig`` are also re-exported on ``dv.flux``
+- **run_chain / FluxConfig** — Single-call driver for the full L2→L4.2 flux post-processing pipeline; one ``FluxConfig`` per flux variable. L4.2 partitioning is opt-in via the ``partition_*`` fields (``partition_nighttime_oneflux``, ``partition_daytime_oneflux``, …)
+- **Composable level callables** — ``init_flux_data``, ``run_level2``, ``run_level31``, ``make_level32_detector`` + ``run_level32``, ``run_level33_constant_ustar`` / ``run_level33_variable_ustar`` / ``run_level33_ustar_detection`` (mode ``'cut'``/``'vut'``), ``run_level41_mds`` / ``_rf`` / ``_xgb``, ``run_level42_nighttime_oneflux`` / ``_nighttime_reddyproc`` / ``_daytime_reddyproc`` / ``_daytime_oneflux``; pure functions on a typed ``FluxLevelData`` container. Import them from ``diive.flux.postprocessingchain`` — only ``init_flux_data``, ``add_driver``, ``run_chain`` and ``FluxConfig`` are also re-exported on ``dv.flux``
 - **Partitioning ports** — ``NighttimePartitioningOneFlux`` (``*_NT_OF``), ``NighttimePartitioningReddyProc`` (``*_NT_RP``), ``DaytimePartitioningReddyProc`` (``*_DT_RP``), ``DaytimePartitioningOneFlux`` (``*_DT_OF``), plus the ``partition_nee_*`` function wrappers. The standalone classes behind Level 4.2; usable on their own dataframe outside the chain
 - **add_driver(data, series)** — Add a computed driver column to ``data.full_df``, where L4.1 gap-filling and the L4.2 ``partition_*`` drivers read from (not ``fpc_df``)
 - Flux variable detection and nomenclature
@@ -70,7 +70,7 @@ Use Cases
 
 .. code-block:: python
 
-   from diive.flux.fluxprocessingchain import (
+   from diive.flux.postprocessingchain import (
        FluxConfig, init_flux_data, run_chain,
    )
 
@@ -88,7 +88,7 @@ Use Cases
    results = data.fpc_df          # all per-level and gap-filled columns
    cols = data.gapfilled_cols()   # {'rf': {'CUT_50': '...'}, 'xgb': ..., 'mds': ...}
 
-**Composable per-level API** — for custom L3.2 outlier pipelines, custom feature engineering, or per-level inspection, call each ``run_level*`` directly. See ``examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py``.
+**Composable per-level API** — for custom L3.2 outlier pipelines, custom feature engineering, or per-level inspection, call each ``run_level*`` directly. See ``examples/flux/postprocessingchain/postprocessingchain_composable.py``.
 
 **Analyze time lag and measurement quality:**
 
@@ -124,10 +124,10 @@ Running Examples
 .. code-block:: bash
 
    # Complete multi-level processing workflow (recommended starting point)
-   uv run python examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py
+   uv run python examples/flux/postprocessingchain/postprocessingchain_composable.py
 
    # NEE partitioning (Level 4.2)
-   uv run python examples/flux/fluxprocessingchain/fluxprocessingchain_partitioning.py
+   uv run python examples/flux/postprocessingchain/postprocessingchain_partitioning.py
    uv run python examples/flux/partitioning/partitioning_nighttime_oneflux.py
    uv run python examples/flux/partitioning/partitioning_nighttime_reddyproc.py
    uv run python examples/flux/partitioning/partitioning_daytime_reddyproc.py

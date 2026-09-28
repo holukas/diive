@@ -1,9 +1,9 @@
 """
 ====================================================
-Flux Processing Chain - Level 2 (Quality Flags)
+Flux Post-Processing Chain - Level 2 (Quality Flags)
 ====================================================
 
-Level 2 is the first real step of the flux processing chain: it expands the
+Level 2 is the first real step of the flux post-processing chain: it expands the
 quality flags an EddyPro **FLUXNET** output file already carries into individual
 diive test flags, then aggregates them into one overall quality-control flag
 (QCF) for the flux.
@@ -19,8 +19,8 @@ Each L2 test reads a fixed EddyPro-FLUXNET input column (see
 accept threshold configured at ``init_flux_data``.
 
 For the full L2 -> L4.2 pipeline see
-``fluxprocessingchain_composable.py`` (composable callables) and
-``fluxprocessingchain_runchain.py`` (single-call driver).
+``postprocessingchain_composable.py`` (composable callables) and
+``postprocessingchain_runchain.py`` (single-call driver).
 """
 
 # %%
@@ -28,7 +28,7 @@ For the full L2 -> L4.2 pipeline see
 # ^^^^^^^
 
 from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-from diive.flux.fluxprocessingchain import (
+from diive.flux.postprocessingchain import (
     init_flux_data,
     level2_test_inputs,
     run_level2,

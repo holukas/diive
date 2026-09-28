@@ -139,11 +139,11 @@ Full examples: [gapfilling/gapfill_randomforest.py](gapfilling/gapfill_randomfor
 
 ---
 
-## 5. Run the full flux processing chain (L2–L4.1)
+## 5. Run the full flux post-processing chain (L2–L4.1)
 
 ```python
 from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
-from diive.flux.fluxprocessingchain import (
+from diive.flux.postprocessingchain import (
     FluxConfig, add_driver, init_flux_data, run_chain)
 
 df = load_exampledata_parquet_lae_level1_30MIN()
@@ -191,8 +191,8 @@ Returns a complete audit trail: one flag column per test, QCF composite flag, an
 gap-filled flux at every USTAR scenario. For full control over every detector and
 model knob, use the composable per-level API (`run_level2`, `run_level31`, ...).
 
-Full example: [flux/fluxprocessingchain/fluxprocessingchain_runchain.py](flux/fluxprocessingchain/fluxprocessingchain_runchain.py) |
-composable version: [flux/fluxprocessingchain/fluxprocessingchain_composable.py](flux/fluxprocessingchain/fluxprocessingchain_composable.py)
+Full example: [flux/postprocessingchain/postprocessingchain_runchain.py](flux/postprocessingchain/postprocessingchain_runchain.py) |
+composable version: [flux/postprocessingchain/postprocessingchain_composable.py](flux/postprocessingchain/postprocessingchain_composable.py)
 
 ---
 

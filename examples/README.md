@@ -63,11 +63,11 @@ examples/
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
 ├── flux/                  # Eddy covariance flux processing (18 examples)
-│   ├── fluxprocessingchain/
-│   │   ├── fluxprocessingchain_level2.py
-│   │   ├── fluxprocessingchain_runchain.py
-│   │   ├── fluxprocessingchain_composable.py
-│   │   └── fluxprocessingchain_partitioning.py
+│   ├── postprocessingchain/
+│   │   ├── postprocessingchain_level2.py
+│   │   ├── postprocessingchain_runchain.py
+│   │   ├── postprocessingchain_composable.py
+│   │   └── postprocessingchain_partitioning.py
 │   ├── partitioning/      # NEE partitioning into GPP/RECO (5 examples)
 │   │   ├── partitioning_nighttime_oneflux.py
 │   │   ├── partitioning_nighttime_reddyproc.py
@@ -174,7 +174,7 @@ Browse by topic:
 | **Events** | 1 | Instant/period event markers, 0/1 flag columns, plot overlays, custom category palette |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
-| **Flux** | 18 | Time lag analysis, processing chain (4), NEE partitioning into GPP/RECO (5), HQ filtering, USTAR detection (3), self-heating (2), uncertainty |
+| **Flux** | 18 | Time lag analysis, post-processing chain (4), NEE partitioning into GPP/RECO (5), HQ filtering, USTAR detection (3), self-heating (2), uncertainty |
 | **Gapfilling** | 12 | Linear interpolation (2), Random Forest (4 variants), XGBoost (2 variants), MDS (2), SW_IN physics+XGBoost, comparison |
 | **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
 | **Preprocessing** | 19 | Corrections (7), outlier detection (9), QA/QC (3) |

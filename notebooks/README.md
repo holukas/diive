@@ -18,7 +18,7 @@ You can run examples directly:
 
 ```bash
 uv run python examples/gapfilling/gapfill_randomforest.py
-uv run python examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py
+uv run python examples/flux/postprocessingchain/postprocessingchain_composable.py
 python examples/run_all_examples.py  # Run all in parallel
 ```
 
@@ -37,7 +37,7 @@ files from disk instead.
 
 ### Flux Workflows
 
-- [FluxProcessingChain.ipynb](FluxProcessingChain.ipynb) — Post-processing of Level-1 fluxes:
+- [FluxPostProcessingChain.ipynb](FluxPostProcessingChain.ipynb) — Post-processing of Level-1 fluxes:
   quality flag extension (L2), storage correction (L3.1), outlier removal (L3.2), USTAR threshold (L3.3), gap-filling
   (L4.1) with random forest, XGBoost and MDS, then model reporting, result plots and export. Runs on the bundled
   example data. Rewritten for the composable per-level API in v0.91.0

@@ -1,7 +1,7 @@
 """
-====================================================
-Flux Processing Chain - NEE Partitioning (Level 4.2)
-====================================================
+=========================================================
+Flux Post-Processing Chain - NEE Partitioning (Level 4.2)
+=========================================================
 
 After gap-filling (Level 4.1) the chain can split the gap-filled net ecosystem
 exchange (NEE) into its gross components, gross primary production (GPP) and
@@ -23,7 +23,7 @@ it from the L4.1 method named by ``partition_gapfill_method`` (default
 
 This example uses the single-call ``run_chain`` path; the same four callables
 are available on the composable per-level API (see
-``fluxprocessingchain_composable.py``).
+``postprocessingchain_composable.py``).
 """
 
 # %%
@@ -31,7 +31,7 @@ are available on the composable per-level API (see
 # ^^^^^^^
 
 from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
-from diive.flux.fluxprocessingchain import (
+from diive.flux.postprocessingchain import (
     FluxConfig,
     add_driver,
     init_flux_data,

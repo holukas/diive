@@ -120,11 +120,11 @@ EXAMPLE_FILES = [
     # Fits
     'fits/fit_binfittercp.py',
     'fits/fit_fitter.py',
-    # Flux - Processing chain
-    'flux/fluxprocessingchain/fluxprocessingchain_level2.py',
-    'flux/fluxprocessingchain/fluxprocessingchain_runchain.py',
-    'flux/fluxprocessingchain/fluxprocessingchain_composable.py',
-    'flux/fluxprocessingchain/fluxprocessingchain_partitioning.py',
+    # Flux - Post-processing chain
+    'flux/postprocessingchain/postprocessingchain_level2.py',
+    'flux/postprocessingchain/postprocessingchain_runchain.py',
+    'flux/postprocessingchain/postprocessingchain_composable.py',
+    'flux/postprocessingchain/postprocessingchain_partitioning.py',
     # Flux - Partitioning
     'flux/partitioning/partitioning_nighttime_oneflux.py',
     'flux/partitioning/partitioning_nighttime_reddyproc.py',

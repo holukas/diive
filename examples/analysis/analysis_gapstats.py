@@ -11,7 +11,7 @@ and annual breakdowns, explicit long-gap listing, and a three-panel figure.
 Use this when you need to understand *when* gaps cluster (seasonal bias),
 *how many* qualify as long gaps, and what the year-by-year coverage looks like.
 
-Best for: Pre-gap-filling data quality assessment, flux processing chain audits
+Best for: Pre-gap-filling data quality assessment, flux post-processing chain audits
 """
 
 # %%

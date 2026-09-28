@@ -1,9 +1,9 @@
 """
 ====================================================
-Flux Processing Chain - Composable Functions
+Flux Post-Processing Chain - Composable Functions
 ====================================================
 
-The flux processing chain is also exposed as standalone pure functions, one per
+The flux post-processing chain is also exposed as standalone pure functions, one per
 level.  Each function takes a ``FluxLevelData`` container and returns a new
 one — no shared state, no orchestrator class required.
 
@@ -38,7 +38,7 @@ import warnings
 import diive as dv
 from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
 from diive.core.ml.feature_engineer import FeatureEngineer
-from diive.flux.fluxprocessingchain import (
+from diive.flux.postprocessingchain import (
     init_flux_data,
     make_level32_detector,
     run_level2,
@@ -217,7 +217,7 @@ print(f"After L3.3 (CUT_50): {flux_l33.dropna().count()} accepted  |  "
 #
 # Not run here to keep the example fast::
 #
-#     from diive.flux.fluxprocessingchain import run_level33_ustar_detection
+#     from diive.flux.postprocessingchain import run_level33_ustar_detection
 #     data = run_level33_ustar_detection(
 #         data,
 #         ta_col='TA_1_1_1',
@@ -260,7 +260,7 @@ for scen, gs in data.gap_stats('L3.3').items():
 # predictors only.
 #
 # For sensible 30-min defaults you can override piecewise, use
-# :func:`~diive.flux.fluxprocessingchain.make_level41_engineer` instead.
+# :func:`~diive.flux.postprocessingchain.make_level41_engineer` instead.
 
 FEATURES = ["TA_T1_47_1_gfXG", "SW_IN_T1_47_1_gfXG", "VPD_T1_47_1_gfXG"]
 
