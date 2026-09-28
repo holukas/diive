@@ -16,12 +16,12 @@ from typing import TYPE_CHECKING, Callable
 import pandas as pd
 
 from diive.core.utils.console import detail, rule, warn
-from diive.flux.fluxprocessingchain.container import FluxLevelData
-from diive.flux.fluxprocessingchain.levels._rerun import (
+from diive.flux.postprocessingchain.container import FluxLevelData
+from diive.flux.postprocessingchain.levels._rerun import (
     drop_columns_for_key,
     record_added_columns,
 )
-from diive.flux.fluxprocessingchain.levels._shared import (
+from diive.flux.postprocessingchain.levels._shared import (
     append_level_id,
     assert_aligned_index,
     require_level33,
@@ -55,7 +55,7 @@ def make_level41_engineer(
 
     Usage::
 
-        from diive.flux.fluxprocessingchain import (
+        from diive.flux.postprocessingchain import (
             make_level41_engineer, run_level41_rf,
         )
 

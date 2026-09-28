@@ -13,7 +13,7 @@ import unittest
 class TestFluxCodegen(unittest.TestCase):
 
     def test_chain_to_code(self):
-        from diive.flux.fluxprocessingchain import chain_to_code
+        from diive.flux.postprocessingchain import chain_to_code
         code = chain_to_code(
             init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
             config_kwargs=dict(
@@ -33,7 +33,7 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertIn("gapfill_xgb=True", code)        # non-default kept
 
     def test_chain_to_code_omits_init_defaults(self):
-        from diive.flux.fluxprocessingchain import chain_to_code
+        from diive.flux.postprocessingchain import chain_to_code
         code = chain_to_code(
             init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1,
                              nighttime_threshold=20,   # equals default -> omitted
@@ -45,7 +45,7 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertIn("site_lat=46.6", code)
 
     def test_level2_to_code(self):
-        from diive.flux.fluxprocessingchain import level2_to_code
+        from diive.flux.postprocessingchain import level2_to_code
         code = level2_to_code(
             init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
             level2_settings={
@@ -58,7 +58,7 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertIn("ssitc={'apply': True", code)
 
     def test_level31_to_code(self):
-        from diive.flux.fluxprocessingchain import level31_to_code
+        from diive.flux.postprocessingchain import level31_to_code
         code = level31_to_code(
             init_kwargs=dict(fluxcol="LE", site_lat=46.6, site_lon=9.8, utc_offset=1),
             level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
@@ -71,7 +71,7 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertNotIn("gapfill_storage_term", code)
 
     def test_level32_to_code(self):
-        from diive.flux.fluxprocessingchain import level32_to_code
+        from diive.flux.postprocessingchain import level32_to_code
         code = level32_to_code(
             init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
             level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
@@ -94,7 +94,7 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertIn("sod.flag_missingvals_test()", code)
 
     def test_level33_to_code(self):
-        from diive.flux.fluxprocessingchain import level33_to_code
+        from diive.flux.postprocessingchain import level33_to_code
         code = level33_to_code(
             init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
             level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
@@ -109,7 +109,7 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertIn("threshold_labels=['CUT_50']", code)
 
     def test_level41_to_code(self):
-        from diive.flux.fluxprocessingchain import level41_to_code
+        from diive.flux.postprocessingchain import level41_to_code
         code = level41_to_code(
             init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
             level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
@@ -135,7 +135,7 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertIn("make_level41_engineer", code)
 
     def test_level41_to_code_mds_only_omits_engineer(self):
-        from diive.flux.fluxprocessingchain import level41_to_code
+        from diive.flux.postprocessingchain import level41_to_code
         code = level41_to_code(
             init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
             level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},

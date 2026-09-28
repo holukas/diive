@@ -56,7 +56,7 @@ class FlagMultipleConstantUstarThresholds:
         idstr: Optional identifier string for output columns
 
     Example:
-        See `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py` for complete examples
+        See `examples/flux/postprocessingchain/postprocessingchain_composable.py` for complete examples
         of USTAR threshold detection and data filtering.
     """
 

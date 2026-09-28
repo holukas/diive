@@ -17,7 +17,7 @@ from pandas import DataFrame
 
 from diive.core.dfun.frames import detect_new_columns
 from diive.core.utils.console import detail
-from diive.flux.fluxprocessingchain.container import FluxLevelData
+from diive.flux.postprocessingchain.container import FluxLevelData
 from diive.preprocessing.qaqc import FlagQCF
 
 

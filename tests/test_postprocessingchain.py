@@ -1,12 +1,12 @@
 import unittest
 
 
-class TestFluxProcessingChainComposable(unittest.TestCase):
+class TestFluxPostProcessingChainComposable(unittest.TestCase):
     """Exercise the standalone level callables (composable API) directly."""
 
     def test_partial_pipeline_l2_l31_l32(self):
         from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-        from diive.flux.fluxprocessingchain import (
+        from diive.flux.postprocessingchain import (
             FluxLevelData, LevelResults,
             init_flux_data, run_level2, run_level31,
             make_level32_detector, run_level32,
@@ -95,7 +95,7 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         self.assertIsNone(data31.levels.level32)
 
     def test_level2_test_inputs_and_vm97_subtests(self):
-        from diive.flux.fluxprocessingchain import VM97_SUBTESTS, level2_test_inputs
+        from diive.flux.postprocessingchain import VM97_SUBTESTS, level2_test_inputs
 
         # Eight VM97 sub-tests, each (key, label, kind in {'hard','soft'}).
         self.assertEqual(len(VM97_SUBTESTS), 8)
@@ -117,7 +117,7 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
                          ["LE_SCF"])
 
     def test_level31_storage_col(self):
-        from diive.flux.fluxprocessingchain import level31_storage_col
+        from diive.flux.postprocessingchain import level31_storage_col
         self.assertEqual(level31_storage_col("FC"), "SC_SINGLE")
         self.assertEqual(level31_storage_col("LE"), "SLE_SINGLE")
         self.assertEqual(level31_storage_col("H"), "SH_SINGLE")
@@ -131,7 +131,7 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         """
         import pandas as pd
         from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-        from diive.flux.fluxprocessingchain import init_flux_data, run_level2, run_level31
+        from diive.flux.postprocessingchain import init_flux_data, run_level2, run_level31
 
         df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
         df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
@@ -156,7 +156,7 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         # Each L2 test can read a differently-named column via a 'col' override
         # (two keys for the two-column completeness test).
         from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
-        from diive.flux.fluxprocessingchain import init_flux_data, run_level2
+        from diive.flux.postprocessingchain import init_flux_data, run_level2
 
         df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
         df = df.drop(columns=[c for c in ("SW_IN_POT", "DAYTIME", "NIGHTTIME")
@@ -183,7 +183,7 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
     def test_ordering_errors(self):
         """Level callables should fail loudly when called out of order."""
         from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-        from diive.flux.fluxprocessingchain import (
+        from diive.flux.postprocessingchain import (
             init_flux_data, run_level31, make_level32_detector, run_level33_constant_ustar,
             run_level41_mds,
         )
@@ -216,7 +216,7 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
     def test_run_chain_single_call_driver(self):
         """Smoke-test the headline single-call FLUXNET driver (run_chain + FluxConfig)."""
         from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-        from diive.flux.fluxprocessingchain import (
+        from diive.flux.postprocessingchain import (
             FluxConfig, FluxLevelData, init_flux_data, run_chain,
         )
         df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
@@ -256,7 +256,7 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         """Wire the four NEE partitioning variants through run_chain (L4.2)."""
         import warnings
         from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-        from diive.flux.fluxprocessingchain import (
+        from diive.flux.postprocessingchain import (
             FluxConfig, FluxLevelData, init_flux_data, run_chain,
         )
         df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
@@ -301,7 +301,7 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
                          {'nt_of', 'nt_rp', 'dt_rp', 'dt_of'})
 
         # Re-running an upstream cascade-aware level (L3.3) must clear L4.2.
-        from diive.flux.fluxprocessingchain import run_level33_constant_ustar
+        from diive.flux.postprocessingchain import run_level33_constant_ustar
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             out2 = run_level33_constant_ustar(
@@ -313,7 +313,7 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
     def test_level42_nighttime_requires_gapfilled_nee(self):
         """A nighttime partitioning variant must have its gap-fill method run first."""
         from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-        from diive.flux.fluxprocessingchain import (
+        from diive.flux.postprocessingchain import (
             init_flux_data, run_level2, run_level31, make_level32_detector,
             run_level32, run_level33_constant_ustar, run_level42_nighttime_oneflux,
         )
@@ -336,16 +336,16 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
                 data, ta='TA_1_1_1', sw_in='SW_IN_1_1_1', ta_f='TA_F')
 
 
-class TestFluxProcessingChainLevel2(unittest.TestCase):
+class TestFluxPostProcessingChainLevel2(unittest.TestCase):
     """Level 2 in isolation: quality-flag expansion + QCF on EddyPro output.
 
-    Mirrors ``examples/flux/fluxprocessingchain/fluxprocessingchain_level2.py``,
+    Mirrors ``examples/flux/postprocessingchain/postprocessingchain_level2.py``,
     which runs L2 standalone on a real EddyPro FLUXNET output file.
     """
 
     def _init_data(self, **init_kwargs):
         from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-        from diive.flux.fluxprocessingchain import init_flux_data
+        from diive.flux.postprocessingchain import init_flux_data
 
         df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
         df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
@@ -358,7 +358,7 @@ class TestFluxProcessingChainLevel2(unittest.TestCase):
 
     def test_level2_produces_qcf_and_flags(self):
         """L2 emits the QCF-filtered flux, the HQ series, and per-test flags."""
-        from diive.flux.fluxprocessingchain import run_level2
+        from diive.flux.postprocessingchain import run_level2
 
         data = self._init_data()
         out = run_level2(
@@ -404,7 +404,7 @@ class TestFluxProcessingChainLevel2(unittest.TestCase):
 
     def test_level2_skips_unset_tests(self):
         """A test whose config is omitted produces no flag column for it."""
-        from diive.flux.fluxprocessingchain import run_level2
+        from diive.flux.postprocessingchain import run_level2
 
         out = run_level2(self._init_data(),
                          ssitc={'apply': True, 'setflag_timeperiod': None})
@@ -415,14 +415,14 @@ class TestFluxProcessingChainLevel2(unittest.TestCase):
 
     def test_level2_signal_strength_requires_keys(self):
         """Enabling signal_strength without its keys raises a clear KeyError."""
-        from diive.flux.fluxprocessingchain import run_level2
+        from diive.flux.postprocessingchain import run_level2
 
         with self.assertRaises(KeyError):
             run_level2(self._init_data(), signal_strength={'apply': True})
 
     def test_level2_vm97_requires_all_eight_subkeys(self):
         """Enabling VM97 with a missing sub-key raises a clear KeyError."""
-        from diive.flux.fluxprocessingchain import run_level2
+        from diive.flux.postprocessingchain import run_level2
 
         with self.assertRaises(KeyError):
             run_level2(self._init_data(),
@@ -430,7 +430,7 @@ class TestFluxProcessingChainLevel2(unittest.TestCase):
 
     def test_level2_accept_threshold_changes_retained_count(self):
         """A stricter daytime accept threshold cannot retain more records."""
-        from diive.flux.fluxprocessingchain import run_level2
+        from diive.flux.postprocessingchain import run_level2
 
         settings = dict(
             ssitc={'apply': True, 'setflag_timeperiod': None},
@@ -462,7 +462,7 @@ class TestRerunCascade(unittest.TestCase):
         import matplotlib
         matplotlib.use('Agg')
         from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-        from diive.flux.fluxprocessingchain import (
+        from diive.flux.postprocessingchain import (
             init_flux_data, run_level2, run_level31, make_level32_detector,
             run_level32, run_level33_constant_ustar)
 
@@ -491,7 +491,7 @@ class TestRerunCascade(unittest.TestCase):
     # --- integration: re-running a real level ---
 
     def test_rerun_level2_drops_its_own_columns_and_cascades(self):
-        from diive.flux.fluxprocessingchain import run_level2
+        from diive.flux.postprocessingchain import run_level2
         again = run_level2(self.d33, **self.LEVEL2_SETTINGS)
 
         # Back to a container that has only been through L2.
@@ -510,7 +510,7 @@ class TestRerunCascade(unittest.TestCase):
         self.assertEqual(again.levels.level33_qcf, {})
 
     def test_rerun_level31_keeps_level2_but_clears_below(self):
-        from diive.flux.fluxprocessingchain import run_level31
+        from diive.flux.postprocessingchain import run_level31
         again = run_level31(self.d33, gapfill_storage_term=True)
         self.assertEqual(again.level_ids, ['L2', 'L3.1'])
         self.assertIsNotNone(again.levels.level2)          # upstream survives
@@ -519,7 +519,7 @@ class TestRerunCascade(unittest.TestCase):
         self.assertEqual(set(again.added_columns), {'L2', 'L3.1'})
 
     def test_rerun_does_not_mutate_the_input_container(self):
-        from diive.flux.fluxprocessingchain import run_level2
+        from diive.flux.postprocessingchain import run_level2
         before_ids = list(self.d33.level_ids)
         before_cols = len(self.d33.fpc_df.columns)
         run_level2(self.d33, **self.LEVEL2_SETTINGS)
@@ -529,7 +529,7 @@ class TestRerunCascade(unittest.TestCase):
     # --- unit: cascade_reset ---
 
     def test_cascade_reset_keeps_upstream_levels(self):
-        from diive.flux.fluxprocessingchain.levels._rerun import cascade_reset
+        from diive.flux.postprocessingchain.levels._rerun import cascade_reset
         reset = cascade_reset(self.d33, 'L3.2')
         self.assertEqual(reset.level_ids, ['L2', 'L3.1'])
         self.assertIsNotNone(reset.levels.level2)
@@ -542,7 +542,7 @@ class TestRerunCascade(unittest.TestCase):
         # filteredseries always belongs to the most recently completed level, so
         # after a cascade it must fall back to the newest survivor -- not linger
         # on the invalidated level's series.
-        from diive.flux.fluxprocessingchain.levels._rerun import cascade_reset
+        from diive.flux.postprocessingchain.levels._rerun import cascade_reset
         self.assertEqual(cascade_reset(self.d33, 'L3.2').filteredseries.name,
                          'NEE_L3.1_QCF')
         self.assertEqual(cascade_reset(self.d33, 'L3.3').filteredseries.name,
@@ -551,7 +551,7 @@ class TestRerunCascade(unittest.TestCase):
         self.assertIsNone(cascade_reset(self.d33, 'L2').filteredseries)
 
     def test_cascade_reset_rejects_an_unknown_level(self):
-        from diive.flux.fluxprocessingchain.levels._rerun import cascade_reset
+        from diive.flux.postprocessingchain.levels._rerun import cascade_reset
         with self.assertRaises(ValueError) as ctx:
             cascade_reset(self.d33, 'L4.1')
         self.assertIn('L4.1', str(ctx.exception))
@@ -561,7 +561,7 @@ class TestRerunCascade(unittest.TestCase):
         # earlier level must clear them: their output was computed against
         # upstream inputs that just became stale.
         import dataclasses
-        from diive.flux.fluxprocessingchain.levels._rerun import cascade_reset
+        from diive.flux.postprocessingchain.levels._rerun import cascade_reset
         seeded = dataclasses.replace(
             self.d33,
             levels=dataclasses.replace(self.d33.levels,
@@ -583,7 +583,7 @@ class TestRerunCascade(unittest.TestCase):
         # This is what keeps L4.1 additive: re-running MDS must not disturb the
         # random-forest or XGBoost output sitting in the same frame.
         import dataclasses
-        from diive.flux.fluxprocessingchain.levels._rerun import drop_columns_for_key
+        from diive.flux.postprocessingchain.levels._rerun import drop_columns_for_key
         mds_col, rf_col = list(self.d33.fpc_df.columns)[:2]
         seeded = dataclasses.replace(
             self.d33,
@@ -596,11 +596,11 @@ class TestRerunCascade(unittest.TestCase):
         self.assertIn('L4.1_rf', dropped.added_columns)
 
     def test_drop_columns_for_key_is_a_noop_for_an_unknown_key(self):
-        from diive.flux.fluxprocessingchain.levels._rerun import drop_columns_for_key
+        from diive.flux.postprocessingchain.levels._rerun import drop_columns_for_key
         self.assertIs(drop_columns_for_key(self.d33, 'L4.1_never_ran'), self.d33)
 
     def test_record_added_columns_attributes_new_columns(self):
-        from diive.flux.fluxprocessingchain.levels._rerun import record_added_columns
+        from diive.flux.postprocessingchain.levels._rerun import record_added_columns
         pre = list(self.d2.fpc_df.columns)
         recorded = record_added_columns(self.d31, 'L3.1', pre)
         expected = [c for c in self.d31.fpc_df.columns if c not in set(pre)]
@@ -611,14 +611,14 @@ class TestRerunCascade(unittest.TestCase):
 
 
 class TestChainReports(unittest.TestCase):
-    """Reporting over a finished chain (diive/flux/fluxprocessingchain/reports.py)."""
+    """Reporting over a finished chain (diive/flux/postprocessingchain/reports.py)."""
 
     @classmethod
     def setUpClass(cls):
         import matplotlib
         matplotlib.use('Agg')
         from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-        from diive.flux.fluxprocessingchain import (
+        from diive.flux.postprocessingchain import (
             FluxConfig, init_flux_data, run_chain,
         )
         df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
@@ -672,11 +672,11 @@ class TestChainReports(unittest.TestCase):
 
     def test_merged_df_reports_the_added_columns(self):
         out = self._capture(self.data.merged_df)
-        self.assertIn("New variables from the flux processing chain", out)
+        self.assertIn("New variables from the flux post-processing chain", out)
         self.assertIn("only new variables added", out)
 
     def test_gapfilled_variables_holds_both_sides(self):
-        from diive.flux.fluxprocessingchain import gapfilled_variables
+        from diive.flux.postprocessingchain import gapfilled_variables
         df = gapfilled_variables(self.data)
         self.assertIn(self.data.gapfilled_cols()['mds']['CUT_50'], df.columns)
         self.assertIn(self.data.nongapfilled_cols()['mds']['CUT_50'], df.columns)
@@ -684,7 +684,7 @@ class TestChainReports(unittest.TestCase):
         self.assertIsNot(df, self.data.fpc_df)
 
     def test_report_gapfilling_variables_names_target_and_output(self):
-        from diive.flux.fluxprocessingchain import report_gapfilling_variables
+        from diive.flux.postprocessingchain import report_gapfilling_variables
         out = self._capture(report_gapfilling_variables, self.data)
         self.assertIn(self.data.nongapfilled_cols()['mds']['CUT_50'], out)
         self.assertIn(self.data.gapfilled_cols()['mds']['CUT_50'], out)
@@ -696,7 +696,7 @@ class TestChainReports(unittest.TestCase):
         The long-term gap-fillers expose those as properties that *raise* when
         unset, so a plain hasattr() guard would let the exception through.
         """
-        from diive.flux.fluxprocessingchain import (
+        from diive.flux.postprocessingchain import (
             report_gapfilling_feature_importances,
             report_gapfilling_poolyears,
             report_traintest_details,
@@ -708,14 +708,14 @@ class TestChainReports(unittest.TestCase):
             self.assertIn('MDS', out, msg=f"{fn.__name__} said nothing about MDS")
 
     def test_report_gapfilling_model_scores_prints_a_table(self):
-        from diive.flux.fluxprocessingchain import report_gapfilling_model_scores
+        from diive.flux.postprocessingchain import report_gapfilling_model_scores
         out = self._capture(report_gapfilling_model_scores, self.data)
         self.assertIn('MDS', out)
 
     def test_report_writes_csv_when_outpath_given(self):
         import tempfile
         from pathlib import Path
-        from diive.flux.fluxprocessingchain import report_gapfilling_model_scores
+        from diive.flux.postprocessingchain import report_gapfilling_model_scores
         with tempfile.TemporaryDirectory() as tmp:
             report_gapfilling_model_scores(self.data, outpath=tmp)
             written = list(Path(tmp).glob('*.csv'))
@@ -724,7 +724,7 @@ class TestChainReports(unittest.TestCase):
 
     def test_plot_gapfilled_cumulative_over_the_whole_record(self):
         import matplotlib.pyplot as plt
-        from diive.flux.fluxprocessingchain import plot_gapfilled_cumulative
+        from diive.flux.postprocessingchain import plot_gapfilled_cumulative
         before = len(plt.get_fignums())
         plot_gapfilled_cumulative(self.data, gain=12.011 * 1e-6 * 1800, units='gC m-2',
                                   per_year=False, showplot=False)
@@ -733,10 +733,28 @@ class TestChainReports(unittest.TestCase):
 
     def test_plot_mds_gapfilling_qualities_runs(self):
         import matplotlib.pyplot as plt
-        from diive.flux.fluxprocessingchain import plot_mds_gapfilling_qualities
+        from diive.flux.postprocessingchain import plot_mds_gapfilling_qualities
         plot_mds_gapfilling_qualities(self.data)
         plt.close('all')
 
+
+
+class TestFluxProcessingChainAlias(unittest.TestCase):
+    """The old import path keeps working and points at the same modules."""
+
+    def test_old_path_warns_and_aliases_new_modules(self):
+        import importlib
+        import sys
+        import diive.flux.postprocessingchain as new
+        for name in [k for k in sys.modules if k.startswith('diive.flux.fluxprocessingchain')]:
+            del sys.modules[name]
+        with self.assertWarns(FutureWarning):
+            old = importlib.import_module('diive.flux.fluxprocessingchain')
+        self.assertIs(old, new)
+        from diive.flux.fluxprocessingchain.levels.level2 import run_level2
+        self.assertIs(run_level2, new.run_level2)
+        from diive.flux.fluxprocessingchain.container import FluxLevelData
+        self.assertIs(FluxLevelData, new.FluxLevelData)
 
 if __name__ == '__main__':
     unittest.main()

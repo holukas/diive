@@ -1,5 +1,5 @@
 """
-FLUXPROCESSINGCHAIN.CODEGEN: RENDER CHAIN CHOICES AS A RUNNABLE SCRIPT
+POSTPROCESSINGCHAIN.CODEGEN: RENDER CHAIN CHOICES AS A RUNNABLE SCRIPT
 =====================================================================
 
 Turn the parameter choices a caller makes (e.g. in the GUI's flux-chain tab)
@@ -29,20 +29,20 @@ _RESERVED = ("SW_IN_POT", "DAYTIME", "NIGHTTIME")
 
 
 def _init_defaults() -> dict:
-    from diive.flux.fluxprocessingchain.levels import init_flux_data
+    from diive.flux.postprocessingchain.levels import init_flux_data
     return {p.name: p.default
             for p in inspect.signature(init_flux_data).parameters.values()
             if p.default is not inspect.Parameter.empty}
 
 
 def _config_defaults() -> dict:
-    from diive.flux.fluxprocessingchain.container import FluxConfig
+    from diive.flux.postprocessingchain.container import FluxConfig
     return {f.name: f.default for f in dataclasses.fields(FluxConfig)
             if f.default is not dataclasses.MISSING}
 
 
 def _level31_defaults() -> dict:
-    from diive.flux.fluxprocessingchain.levels import run_level31
+    from diive.flux.postprocessingchain.levels import run_level31
     return {p.name: p.default
             for p in inspect.signature(run_level31).parameters.values()
             if p.default is not inspect.Parameter.empty}
@@ -78,7 +78,7 @@ def chain_to_code(init_kwargs: dict, config_kwargs: dict,
         A runnable Python script as a string.
     """
     lines = ["import diive as dv",
-             "from diive.flux.fluxprocessingchain import "
+             "from diive.flux.postprocessingchain import "
              "FluxConfig, init_flux_data, run_chain", ""]
     if load_hint:
         lines += [f"{df_var} = {load_hint}", ""]
@@ -119,7 +119,7 @@ def level2_to_code(init_kwargs: dict, level2_settings: dict,
         df_var, load_hint: as in :func:`chain_to_code`.
     """
     lines = _init_level2_lines(
-        "from diive.flux.fluxprocessingchain import init_flux_data, run_level2",
+        "from diive.flux.postprocessingchain import init_flux_data, run_level2",
         init_kwargs, level2_settings, df_var, load_hint)
     lines += ["final_df = data.fpc_df"]
     return "\n".join(lines) + "\n"
@@ -142,7 +142,7 @@ def level31_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
         df_var, load_hint: as in :func:`chain_to_code`.
     """
     lines = _init_level2_lines(
-        "from diive.flux.fluxprocessingchain import "
+        "from diive.flux.postprocessingchain import "
         "init_flux_data, run_level2, run_level31",
         init_kwargs, level2_settings, df_var, load_hint)
     lines += _level31_block(level31_kwargs)
@@ -178,7 +178,7 @@ def level32_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
         df_var, load_hint: as in :func:`chain_to_code`.
     """
     lines = _init_level2_lines(
-        "from diive.flux.fluxprocessingchain import (init_flux_data, run_level2, "
+        "from diive.flux.postprocessingchain import (init_flux_data, run_level2, "
         "run_level31,\n    make_level32_detector, run_level32)",
         init_kwargs, level2_settings, df_var, load_hint)
     lines += _level31_block(level31_kwargs)
@@ -203,7 +203,7 @@ def _level32_block(level32_steps: list[dict]) -> list[str]:
 
 
 def _level33_defaults() -> dict:
-    from diive.flux.fluxprocessingchain.levels import run_level33_constant_ustar
+    from diive.flux.postprocessingchain.levels import run_level33_constant_ustar
     return {p.name: p.default
             for p in inspect.signature(run_level33_constant_ustar).parameters.values()
             if p.default is not inspect.Parameter.empty}
@@ -227,7 +227,7 @@ def level33_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
         df_var, load_hint: as in :func:`chain_to_code`.
     """
     lines = _init_level2_lines(
-        "from diive.flux.fluxprocessingchain import (init_flux_data, run_level2, "
+        "from diive.flux.postprocessingchain import (init_flux_data, run_level2, "
         "run_level31,\n    make_level32_detector, run_level32, "
         f"{_level33_import_name(level33_kwargs)})",
         init_kwargs, level2_settings, df_var, load_hint)
@@ -250,7 +250,7 @@ def _level33_import_name(level33_kwargs: dict) -> str:
 
 
 def _level33_detection_defaults() -> dict:
-    from diive.flux.fluxprocessingchain.levels import run_level33_ustar_detection
+    from diive.flux.postprocessingchain.levels import run_level33_ustar_detection
     return {p.name: p.default
             for p in inspect.signature(run_level33_ustar_detection).parameters.values()
             if p.default is not inspect.Parameter.empty}
@@ -400,7 +400,7 @@ def level42_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
         if method in methods:
             names.append(f"run_level41_{method}")
     names += _level42_fn_names(variants)
-    imports = ("from diive.flux.fluxprocessingchain import (\n    "
+    imports = ("from diive.flux.postprocessingchain import (\n    "
                + ", ".join(names) + ")")
     lines = _init_level2_lines(imports, init_kwargs, level2_settings, df_var, load_hint)
     lines += _level31_block(level31_kwargs)
@@ -440,7 +440,7 @@ def level41_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
     for method in ("mds", "rf", "xgb"):
         if method in methods:
             names.append(f"run_level41_{method}")
-    imports = ("from diive.flux.fluxprocessingchain import (\n    "
+    imports = ("from diive.flux.postprocessingchain import (\n    "
                + ", ".join(names) + ")")
     lines = _init_level2_lines(imports, init_kwargs, level2_settings, df_var, load_hint)
     lines += _level31_block(level31_kwargs)

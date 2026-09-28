@@ -1,8 +1,8 @@
 """
-REPORTS: FLUX PROCESSING CHAIN REPORTING
-========================================
+REPORTS: FLUX POST-PROCESSING CHAIN REPORTING
+=============================================
 
-Console reports and summary plots over a finished flux processing chain.
+Console reports and summary plots over a finished flux post-processing chain.
 
 Each function takes the :class:`FluxLevelData` container as its first argument,
 matching the composable per-level callables (``run_level2(data, ...)``). The

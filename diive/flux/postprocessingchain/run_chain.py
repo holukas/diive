@@ -1,8 +1,8 @@
 """
-RUN CHAIN: SINGLE-CALL FLUX PROCESSING DRIVER
-==============================================
+RUN CHAIN: SINGLE-CALL FLUX POST-PROCESSING DRIVER
+===================================================
 
-Convenience function that drives the full Swiss FluxNet processing chain
+Convenience function that drives the full Swiss FluxNet post-processing chain
 (L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1) from one ``FluxConfig``.
 
 For custom L3.2 outlier pipelines or custom feature engineering, drop down to
@@ -14,12 +14,12 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 from diive.core.utils.console import rule
-from diive.flux.fluxprocessingchain.container import (
+from diive.flux.postprocessingchain.container import (
     DEFAULT_LEVEL2_TEST_SETTINGS,
     FluxConfig,
     FluxLevelData,
 )
-from diive.flux.fluxprocessingchain.levels import (
+from diive.flux.postprocessingchain.levels import (
     make_level32_detector,
     run_level2,
     run_level31,
@@ -49,7 +49,7 @@ _PARTITION_REQUIRED: dict[str, tuple[str, ...]] = {
 
 
 def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
-    """Drive the full processing chain (L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1).
+    """Drive the full post-processing chain (L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1).
 
     Single-call convenience wrapper for the standard FLUXNET-style workflow.
     Each step is the same composable callable you would otherwise call by hand;
@@ -172,7 +172,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             fields it needs (see contextual-validation note above).
 
     See also:
-        ``examples/flux/fluxprocessingchain/fluxprocessingchain_runchain.py``
+        ``examples/flux/postprocessingchain/postprocessingchain_runchain.py``
         for a runnable end-to-end example.
 
     Example:

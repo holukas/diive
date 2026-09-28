@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import dataclasses
 
-from diive.flux.fluxprocessingchain.container import FluxLevelData
+from diive.flux.postprocessingchain.container import FluxLevelData
 
 # Ordering of cascade-aware levels. The additive levels (L4.1 gap-filling,
 # L4.2 partitioning) are NOT in this list because their re-run semantics are

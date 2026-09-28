@@ -15,7 +15,7 @@ from pandas import DataFrame
 from diive.core.utils.console import detail, info, rule
 from diive.variables import daytime_nighttime_flag_from_swinpot
 from diive.variables.radiation import potrad
-from diive.flux.fluxprocessingchain.container import FluxLevelData, FluxMeta
+from diive.flux.postprocessingchain.container import FluxLevelData, FluxMeta
 from diive.flux.lowres.common import detect_fluxbasevar
 
 
@@ -120,7 +120,7 @@ def init_flux_data(
             f"before calling init_flux_data()."
         )
 
-    # Frequency sanity check. The flux processing chain's defaults
+    # Frequency sanity check. The flux post-processing chain's defaults
     # (``outlier_window_length=48*13``, ``_default_engineer`` rolling
     # windows of 4/12/48 records, the 13-day Hampel window) assume a
     # half-hourly (30-min) sampling rate. Inputs at a different rate will
@@ -136,7 +136,7 @@ def init_flux_data(
         import warnings
         warnings.warn(
             f"Input timestamp index has detected frequency {detected!r}, but "
-            f"the flux processing chain's defaults (outlier_window_length, "
+            f"the flux post-processing chain's defaults (outlier_window_length, "
             f"_default_engineer rolling windows, Hampel window length) assume "
             f"30-min sampling. The chain will run, but durations expressed in "
             f"records — e.g. ``48 * 13`` records = '13 days at 30 min' — will "

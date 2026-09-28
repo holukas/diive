@@ -49,9 +49,9 @@ SKIP = {
         "statsmodels' grangercausalitytests prints its own report to stdout",
     'diive.core.ml.results.GapFillingResult':
         "trains a random forest on the full bundled record",
-    'diive.flux.fluxprocessingchain.container.add_driver':
+    'diive.flux.postprocessingchain.container.add_driver':
         "needs a FluxLevelData built by init_flux_data",
-    'diive.flux.fluxprocessingchain.run_chain.run_chain':
+    'diive.flux.postprocessingchain.run_chain.run_chain':
         "runs the whole six-level chain on EddyPro-FLUXNET input",
     'diive.core.plotting.timeseries.TimeSeries.plot_interactive':
         "bokeh show() opens a browser tab",

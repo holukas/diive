@@ -18,7 +18,7 @@ import warnings
 
 import pandas as pd
 
-from diive.flux.fluxprocessingchain.container import FluxLevelData
+from diive.flux.postprocessingchain.container import FluxLevelData
 
 
 def assert_aligned_index(left: pd.DataFrame, *others, context: str) -> None:

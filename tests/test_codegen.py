@@ -654,7 +654,7 @@ class TestFluxCodegen(CodegenTestCase):
                            f"dv.flux.{func}(")
 
     def test_level42(self):
-        from diive.flux.fluxprocessingchain import level42_to_code
+        from diive.flux.postprocessingchain import level42_to_code
         code = self.check(
             level42_to_code(
                 init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8,

@@ -1,6 +1,6 @@
 """
-FLUX PROCESSING CHAIN: MULTI-LEVEL WORKFLOW
-=============================================
+FLUX POST-PROCESSING CHAIN: MULTI-LEVEL WORKFLOW
+================================================
 
 Swiss FluxNet multi-level post-processing: quality flag expansion (L2), storage correction (L3.1),
 outlier removal (L3.2), USTAR filtering (L3.3), gap-filling (L4.1).
@@ -11,7 +11,7 @@ Two entry points
 **Composable per-level API** — one callable per level, each returning a new
 ``FluxLevelData`` container::
 
-    from diive.flux.fluxprocessingchain import (
+    from diive.flux.postprocessingchain import (
         init_flux_data, run_level2, run_level31,
         make_level32_detector, run_level32,
         run_level33_constant_ustar,
@@ -28,7 +28,7 @@ Two entry points
 
 **Single-call convenience API** — one ``FluxConfig``, one ``run_chain`` call::
 
-    from diive.flux.fluxprocessingchain import init_flux_data, run_chain, FluxConfig
+    from diive.flux.postprocessingchain import init_flux_data, run_chain, FluxConfig
 
     cfg = FluxConfig(fluxcol='FC', ustar_thresholds=[0.18], ustar_labels=['CUT_50'], ...)
     data = init_flux_data(df, fluxcol='FC', site_lat=..., site_lon=..., utc_offset=1)
@@ -105,7 +105,7 @@ distinction shows up on ``LevelResults`` fields: ``filteredseries_*_qcf``
 Part of the diive library: https://github.com/holukas/diive
 """
 
-from diive.flux.fluxprocessingchain.container import (
+from diive.flux.postprocessingchain.container import (
     DEFAULT_LEVEL2_TEST_SETTINGS,
     FluxConfig,
     FluxLevelData,
@@ -115,7 +115,7 @@ from diive.flux.fluxprocessingchain.container import (
 )
 from diive.flux.lowres.quality_flags import FluxQualityFlagsEddyPro
 from diive.flux.lowres.storage_correction import FluxStorageCorrectionSinglePointEddyPro
-from diive.flux.fluxprocessingchain.levels import (
+from diive.flux.postprocessingchain.levels import (
     VM97_SUBTESTS,
     init_flux_data,
     level2_test_inputs,
@@ -136,8 +136,8 @@ from diive.flux.fluxprocessingchain.levels import (
     run_level42_nighttime_oneflux,
     run_level42_nighttime_reddyproc,
 )
-from diive.flux.fluxprocessingchain.run_chain import run_chain
-from diive.flux.fluxprocessingchain.reports import (
+from diive.flux.postprocessingchain.run_chain import run_chain
+from diive.flux.postprocessingchain.reports import (
     gapfilled_variables,
     plot_feature_ranks_per_year,
     plot_gapfilled_cumulative,
@@ -149,7 +149,7 @@ from diive.flux.fluxprocessingchain.reports import (
     report_traintest_details,
     report_traintest_model_scores,
 )
-from diive.flux.fluxprocessingchain.codegen import (
+from diive.flux.postprocessingchain.codegen import (
     chain_to_code, level2_to_code, level31_to_code, level32_to_code, level33_to_code,
     level41_to_code, level42_to_code,
 )

@@ -15,9 +15,9 @@ from dataclasses import replace
 import pandas as pd
 
 from diive.core.utils.console import rule
-from diive.flux.fluxprocessingchain.container import FluxLevelData
-from diive.flux.fluxprocessingchain.levels._qcf import finalize_level
-from diive.flux.fluxprocessingchain.levels._rerun import (
+from diive.flux.postprocessingchain.container import FluxLevelData
+from diive.flux.postprocessingchain.levels._qcf import finalize_level
+from diive.flux.postprocessingchain.levels._rerun import (
     cascade_reset,
     record_added_columns,
 )
@@ -66,7 +66,7 @@ def make_level32_detector(
     # explicitly (tuple return) so they can update their reference — staleness
     # of the caller's data was a real footgun before this signature change.
     if 'L3.3' in data.level_ids:
-        from diive.flux.fluxprocessingchain.levels._rerun import cascade_reset
+        from diive.flux.postprocessingchain.levels._rerun import cascade_reset
         data = cascade_reset(data, 'L3.2')
 
     if data.filteredseries is None:

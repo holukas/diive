@@ -60,7 +60,7 @@ class FluxConfig:
     so that a composable-function loop can process each variable without repeating
     site-level parameters.
 
-    **Consumed by** :func:`~diive.flux.fluxprocessingchain.run_chain`.  The
+    **Consumed by** :func:`~diive.flux.postprocessingchain.run_chain`.  The
     per-level ``run_level*`` functions take their own specific arguments — they
     do **not** accept a ``FluxConfig``.  Use ``run_chain(data, config)`` for the
     standard pipeline, or drop down to the composable per-level API for custom
@@ -88,7 +88,7 @@ class FluxConfig:
 
     Example — NEE, H, and N2O configs::
 
-        from diive.flux.fluxprocessingchain import FluxConfig
+        from diive.flux.postprocessingchain import FluxConfig
 
         fc_cfg = FluxConfig(
             fluxcol='FC',
@@ -1299,7 +1299,7 @@ class FluxLevelData:
         from diive.core.utils.console import info
 
         new_cols = [c for c in self.fpc_df.columns if c not in self.full_df.columns]
-        info("New variables from the flux processing chain:", verbose=verbose)
+        info("New variables from the flux post-processing chain:", verbose=verbose)
         for c in new_cols:
             info(f"  {c}", verbose=verbose)
         info("No variables in the input data were overwritten, only new variables added.",

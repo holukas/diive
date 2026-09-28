@@ -4,13 +4,13 @@ FLUX: EDDY COVARIANCE PROCESSING
 
 Low-resolution flux analysis, USTAR filtering, NEE partitioning and uncertainty.
 High-frequency raw-data tooling moved to the dyco package: https://github.com/holukas/dyco
-Complete Swiss FluxNet processing chain for L2-L4.1 levels.
+Swiss FluxNet post-processing chain for levels L2-L4.2.
 
 Part of the diive library: https://github.com/holukas/diive
 """
 
 from diive.flux import lowres
-from diive.flux import fluxprocessingchain
+from diive.flux import postprocessingchain
 from diive.flux import partitioning
 from diive.flux.partitioning import NighttimePartitioningOneFlux
 from diive.flux.partitioning import partition_nee_nighttime_oneflux
@@ -20,7 +20,7 @@ from diive.flux.partitioning import DaytimePartitioningReddyProc
 from diive.flux.partitioning import partition_nee_daytime_reddyproc
 from diive.flux.partitioning import DaytimePartitioningOneFlux
 from diive.flux.partitioning import partition_nee_daytime_oneflux
-from diive.flux.fluxprocessingchain import (
+from diive.flux.postprocessingchain import (
     FluxConfig,
     FluxLevelData,
     add_driver,
@@ -41,7 +41,7 @@ from diive.flux.lowres.ustarthreshold import UstarThresholdConstantScenarios
 
 __all__ = [
     'lowres',
-    'fluxprocessingchain',
+    'postprocessingchain',
     'partitioning',
     'NighttimePartitioningOneFlux',
     'partition_nee_nighttime_oneflux',
@@ -68,3 +68,11 @@ __all__ = [
     'FlagSingleConstantUstarThreshold',
     'UstarThresholdConstantScenarios',
 ]
+
+
+def __getattr__(name):
+    # Old name of postprocessingchain; importing the alias module emits the FutureWarning.
+    if name == 'fluxprocessingchain':
+        import importlib
+        return importlib.import_module('diive.flux.fluxprocessingchain')
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

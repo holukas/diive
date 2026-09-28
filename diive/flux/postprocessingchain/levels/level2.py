@@ -13,9 +13,9 @@ from __future__ import annotations
 from dataclasses import replace
 
 from diive.core.utils.console import rule
-from diive.flux.fluxprocessingchain.container import FluxLevelData
-from diive.flux.fluxprocessingchain.levels._qcf import finalize_level
-from diive.flux.fluxprocessingchain.levels._rerun import (
+from diive.flux.postprocessingchain.container import FluxLevelData
+from diive.flux.postprocessingchain.levels._qcf import finalize_level
+from diive.flux.postprocessingchain.levels._rerun import (
     cascade_reset,
     record_added_columns,
 )

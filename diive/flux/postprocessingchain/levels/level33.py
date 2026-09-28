@@ -25,9 +25,9 @@ import numpy as np
 import pandas as pd
 
 from diive.core.utils.console import console as _console, info, rule
-from diive.flux.fluxprocessingchain.container import FluxLevelData
-from diive.flux.fluxprocessingchain.levels._qcf import finalize_level
-from diive.flux.fluxprocessingchain.levels._rerun import (
+from diive.flux.postprocessingchain.container import FluxLevelData
+from diive.flux.postprocessingchain.levels._qcf import finalize_level
+from diive.flux.postprocessingchain.levels._rerun import (
     cascade_reset,
     record_added_columns,
 )
