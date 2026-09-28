@@ -60,6 +60,9 @@ from diive.gui.widgets.worker import WorkerRunner, shutdown_process_pool
 #: Source name of the bundled example dataset (also its title-bar label).
 _EXAMPLE_SOURCE = "example data (CH-DAV)"
 
+#: Old menu labels still found in saved projects, mapped to the current label.
+_RENAMED_MENU_LABELS = {"Flux processing chain": "Flux post-processing chain"}
+
 
 def _namespace_metadata(raw: dict, key: str) -> dict:
     """Coerce a persisted ``variable_metadata`` blob to the per-dataset shape
@@ -553,8 +556,8 @@ class MainWindow(QMainWindow):
                 if menu_name == "Flux" and label == "Random uncertainty (PAS20)":
                     menu.addSeparator()
                 menu.addAction(_menu_tab_act(label))
-                # Set the full processing chain apart from the standalone tools.
-                if menu_name == "Flux" and label == "Flux processing chain":
+                # Set the full post-processing chain apart from the standalone tools.
+                if menu_name == "Flux" and label == "Flux post-processing chain":
                     menu.addSeparator()
 
         help_menu = add_menu("&Help")
@@ -829,6 +832,7 @@ class MainWindow(QMainWindow):
         """Reopen the menu tabs recorded by `_open_tabs_state` (label/title/pin)."""
         for entry in state or []:
             label = entry.get("label")
+            label = _RENAMED_MENU_LABELS.get(label, label)  # projects saved before a rename
             if label not in MENU_TAB_CLASSES:
                 continue  # unknown/renamed feature — skip rather than crash
             self._open_menu_tab(label)

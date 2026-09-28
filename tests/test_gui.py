@@ -3279,7 +3279,7 @@ def test_flux_chain_tab_level2_details(app):
     # The L2 page shows the variables each test reads, exposes the 8 VM97 sub-tests,
     # gates tests on input availability, and the run produces a QCF report.
     from diive.gui.tabs.fluxchain import FluxChainTab
-    from diive.flux.fluxprocessingchain import VM97_SUBTESTS
+    from diive.flux.postprocessingchain import VM97_SUBTESTS
     from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
     df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
 
@@ -3635,7 +3635,7 @@ def test_stepwise_method_params_run_on_detector(app):
     # mapping (which differs from the raw-detector tabs) against the library API.
     import diive as dv
     from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
-    from diive.flux.fluxprocessingchain import level32_to_code
+    from diive.flux.postprocessingchain import level32_to_code
     from diive.gui.widgets.stepwise_method_params import STEP_METHODS
 
     df = dv.variables.generate_noisy_timeseries(
@@ -5178,6 +5178,13 @@ def test_project_saves_and_restores_open_tabs(window, tmp_path, monkeypatch):
     assert {"Time series", "Driver explorer"} <= restored
     # Always-on tabs are never duplicated by the restore.
     assert _tabs(window)[:2] == ["Overview", "Log"]
+
+
+def test_project_restores_tab_saved_under_old_label(window):
+    # Projects saved before the rename store the old menu label.
+    window._close_all_menu_tabs()
+    window._restore_tabs([{"label": "Flux processing chain"}])
+    assert [t._menu_label for t in window._menu_tab_list] == ["Flux post-processing chain"]
 
 
 def test_project_restores_per_tab_state(window, tmp_path, monkeypatch):

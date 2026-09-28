@@ -1,8 +1,8 @@
 """
-GUI.TABS.FLUXCHAIN: FLUX PROCESSING CHAIN (Input + L2 + L3.1 + L3.2 + L3.3 + L4.1)
-=================================================================================
+GUI.TABS.FLUXCHAIN: FLUX POST-PROCESSING CHAIN (Input + L2 + L3.1 + L3.2 + L3.3 + L4.1)
+======================================================================================
 
-A guided tab for the Swiss-FluxNet flux processing chain. It wires the **Input**
+A guided tab for the Swiss-FluxNet flux post-processing chain. It wires the **Input**
 (site + flux column), **Level 2** (quality-flag tests), **Level 3.1** (single-point
 storage correction), **Level 3.2** (an optional outlier-detection chain), and
 **Level 3.3** (optional USTAR filtering — constant thresholds or moving-point
@@ -73,7 +73,7 @@ import pandas as pd
 
 import diive as dv
 from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
-from diive.flux.fluxprocessingchain import (
+from diive.flux.postprocessingchain import (
     VM97_SUBTESTS, init_flux_data, level2_test_inputs, level31_storage_col,
     level31_to_code, level32_to_code, level33_to_code, level41_to_code,
     make_level32_detector, make_level41_engineer, run_level2, run_level31,
@@ -134,7 +134,7 @@ class _ChainSignals(QObject):
 
 
 class FluxChainTab(DiiveTab):
-    """Guided flux processing chain — Input + Level 2 (first slice)."""
+    """Guided flux post-processing chain — Input + Level 2 (first slice)."""
 
     title = "Flux chain"
 
@@ -164,7 +164,7 @@ class FluxChainTab(DiiveTab):
         # Standardized copy button: copies the script to the clipboard with a
         # "Copied ✓" flash — no code dump in the summary box.
         self.code_btn = CopyPythonButton(self._code)
-        outer.addLayout(build_titlebar("Flux processing chain", self.run_btn, self.code_btn))
+        outer.addLayout(build_titlebar("Flux post-processing chain", self.run_btn, self.code_btn))
 
         # Pipeline rail: the chain as selectable stage cards (the navigation).
         self.rail = PipelineRail(_STAGES)
@@ -1115,7 +1115,7 @@ class FluxChainTab(DiiveTab):
     def _apply_tooltips(self) -> None:
         """Tooltip each control with its library parameter docstring."""
         from diive.core.utils.docstrings import param_docs
-        from diive.flux.fluxprocessingchain import FluxConfig
+        from diive.flux.postprocessingchain import FluxConfig
         docs: dict = {}
         for src in (init_flux_data, FluxConfig, run_level2, run_level31):
             docs.update(param_docs(src))
@@ -1800,7 +1800,7 @@ class FluxChainTab(DiiveTab):
         out.attrs[ATTRS_KEY] = {
             str(c): provenance_attr(
                 origin=DERIVED, parent=str(data.meta.fluxcol),
-                operation=f"Flux processing chain {label}",
+                operation=f"Flux post-processing chain {label}",
                 tags=["fluxchain", label.lower()])
             for c in out.columns
         }

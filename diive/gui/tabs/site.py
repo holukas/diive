@@ -5,7 +5,7 @@ Enter the project's settings — the author name, a free-text project descriptio
 and the measurement site's metadata (site name, latitude, longitude, elevation,
 UTC offset) — and store them app-wide in ``diive.gui.site.manager`` so diive
 functions that need site coordinates (daytime/nighttime separation, the flux
-processing chain, ...) can reuse them, and so they travel with a saved project.
+post-processing chain, ...) can reuse them, and so they travel with a saved project.
 The form reads the current values on build and writes them back through
 ``site.manager.update`` on **Save**; persistence is handled with the other GUI
 preferences (``config.py``) and inside ``.diive`` projects (``app.py`` extras).
@@ -67,7 +67,7 @@ class ProjectSettingsTab(DiiveTab):
             "Settings for this project — your name, a description, and the "
             "measurement site. The site coordinates and UTC offset are reused by "
             "functions that need them (e.g. daytime/nighttime separation, the flux "
-            "processing chain). All of these are saved with the project.")
+            "post-processing chain). All of these are saved with the project.")
         intro.setWordWrap(True)
         intro.setStyleSheet("color: #6B7780;")
         col.addWidget(intro)

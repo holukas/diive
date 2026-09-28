@@ -1073,9 +1073,9 @@ ICOS products. The UTC offset is local standard time; daylight saving is never a
 
 ## Flux
 
-### Flux processing chain
+### Flux post-processing chain
 
-A guided workspace for the flux processing chain, covering **Input + Level 2 +
+A guided workspace for the flux post-processing chain, covering **Input + Level 2 +
 Level 3.1 + Level 3.2 + Level 3.3 + Level 4.1** (gap-filling). Pick the flux column
 and site, choose which Level-2 quality tests to run, set the Level-3.1 storage
 correction, optionally build a Level-3.2 outlier-detection chain, apply Level-3.3

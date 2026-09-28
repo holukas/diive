@@ -5,7 +5,7 @@ GUI.TABS.BASE: TAB EXTENSION POINT
 `DiiveTab` is the abstract base every GUI tab implements. The main window is
 deliberately ignorant of concrete tabs: it reads the registry, instantiates
 each `DiiveTab`, and adds `tab.widget()` under `tab.title`. Adding a new
-feature area (e.g. the flux processing chain) means writing a subclass and
+feature area (e.g. the flux post-processing chain) means writing a subclass and
 appending it to the registry -- the main window does not change.
 
 Part of the diive library: https://github.com/holukas/diive

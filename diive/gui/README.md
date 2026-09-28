@@ -66,7 +66,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `icons.py` | `menu_icon(label)` — tiny `QPainter`-drawn glyphs for **all** menu entries (folder/disk/calendar/gear/palette/… + plot shapes), keyword-matched |
 | `widgets/plot_settings.py` | `PlotSettingsPanel(plot_type)` — live plot-parameter controls (between list and canvas); `changed` re-renders; defines `HEATMAP`/`TIMESERIES` |
 | `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
-| `tabs/fluxchain.py` | Flux processing chain tab — Input + L2 + L3.1 + L3.2 + L3.3 + L4.1 via the composable callables (`init_flux_data`/`run_level2`/`run_level31`/`make_level32_detector`+`run_level32`/`run_level33_constant_ustar`/`run_level33_ustar_detection`/`run_level41_*`); L3.3 supports constant thresholds **or** moving-point detection (Apply: CUT / VUT); shows the deepest level's QCF-filtered flux as a heatmap, **Copy Python** emits a reproducible script. Per-level **Add to dataset** buttons (`_add_level`, gated on the level having run) emit that level's columns + QCF-filtered flux via `featuresCreated` (DERIVED provenance) |
+| `tabs/fluxchain.py` | Flux post-processing chain tab — Input + L2 + L3.1 + L3.2 + L3.3 + L4.1 via the composable callables (`init_flux_data`/`run_level2`/`run_level31`/`make_level32_detector`+`run_level32`/`run_level33_constant_ustar`/`run_level33_ustar_detection`/`run_level41_*`); L3.3 supports constant thresholds **or** moving-point detection (Apply: CUT / VUT); shows the deepest level's QCF-filtered flux as a heatmap, **Copy Python** emits a reproducible script. Per-level **Add to dataset** buttons (`_add_level`, gated on the level having run) emit that level's columns + QCF-filtered flux via `featuresCreated` (DERIVED provenance) |
 | `tabs/ustar_detection.py` | **USTAR detection** tab — standalone moving-point u\* threshold detection (`UstarMovingPointDetection`): single seasonal detection (per-season + annual) or multi-year bootstrap (`UstarBootstrapThresholds`) for VUT (per-year) + CUT (constant); table + diagnostic plot, worker thread |
 | `tabs/timelag.py` | Time-lag analysis tab — pick a gas, analyse its `*_TLAG_ACTUAL` lag distribution (`dv.flux.TimeLagAnalysis`), embed the 4-panel peak/range/EddyPro figure; **Load example TLAG data** loads the bundled level-0 lag dataset locally |
 | `tabs/_partitioning_base.py` | `BasePartitioningTab` — shared machinery for the NEE-partitioning tabs (declarative input-column combos + ✓/✗ markers, site coords from `site.manager`, optional VPD-in-kPa toggle, worker thread, GPP/RECO daily-mean + cumulative preview, Add results). Subclasses set `inputs`/`needs_*`/`reco_col`/`gpp_col` and implement `_build_partitioner` |
@@ -237,7 +237,7 @@ Reset to full range** clears the window. `_apply_range()` re-derives `_data`, re
 window, enables/disables the reset action, and re-pushes. Engineered features merge into `_full_data`, so they survive a
 reset (out-of-range rows align to NaN). All plots and processing then run on the narrowed `_data`; saving writes it too.
 
-**Flux processing chain (`tabs/fluxchain.py`):** opened from **Flux ▸ Flux processing chain**. A
+**Flux post-processing chain (`tabs/fluxchain.py`):** opened from **Flux ▸ Flux post-processing chain**. A
 guided tab for the Swiss-FluxNet chain, covering **Input + L2 + L3.1 + L3.2 + L3.3 + L4.1**. It
 collects site/flux-column + which L2 quality tests to run, the L3.1 storage-correction options, an optional L3.2
 outlier-detection chain, optional L3.3 USTAR filtering, and L4.1 gap-filling, then on a worker thread calls the composable library
@@ -249,7 +249,7 @@ Python** emits the exact runnable script via the library's per-level codegen
 (a Mode selector swaps the inspector page): *constant thresholds* (enter value/label scenarios) or *moving-point
 detection* (`run_level33_ustar_detection`, with TA/SW_IN pickers, bootstrap params, and an **Apply** selector choosing
 **CUT** (constant → `CUT_16/50/84`) vs **VUT** (per-year → `VUT_16/50/84`) — mutually exclusive strategies). The
-script-gen lives in the library (`flux/fluxprocessingchain/codegen.py`: `chain_to_code` for the full
+script-gen lives in the library (`flux/postprocessingchain/codegen.py`: `chain_to_code` for the full
 `run_chain`/`FluxConfig` path, the `level*_to_code` functions for the composable path) because it encodes the API call
 shape; the GUI only calls it. Needs real EddyPro-FLUXNET input (FC/USTAR/`*_TEST` columns) —
 `load_exampledata_parquet_lae_level1_30MIN`, not the default CH-DAV.

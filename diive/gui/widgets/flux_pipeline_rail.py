@@ -1,8 +1,8 @@
 """
-GUI.WIDGETS.FLUX_PIPELINE_RAIL: STAGE RAIL FOR THE FLUX PROCESSING CHAIN
-=======================================================================
+GUI.WIDGETS.FLUX_PIPELINE_RAIL: STAGE RAIL FOR THE FLUX POST-PROCESSING CHAIN
+============================================================================
 
-The flux processing chain is a pipeline of levels (Input → L2 → L3.1 → L3.2 →
+The flux post-processing chain is a pipeline of levels (Input → L2 → L3.1 → L3.2 →
 L3.3 → L4.1). This widget renders that pipeline as a compact horizontal **rail**
 of selectable stage cards joined by chevrons — a navigation + status surface, not
 a parameter form. Each :class:`StageCard` shows a level badge, a title, and a

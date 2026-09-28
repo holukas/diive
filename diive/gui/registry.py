@@ -3,7 +3,7 @@ GUI.REGISTRY: TAB REGISTRY
 ==========================
 
 Single source of truth for which tabs the main window shows, in order. To add
-a feature area (e.g. the flux processing chain), implement a `DiiveTab`
+a feature area (e.g. the flux post-processing chain), implement a `DiiveTab`
 subclass and register it here -- nothing else changes.
 
 Menu tabs are registered by module path, not imported: each entry is a
@@ -164,7 +164,7 @@ MENU_TABS: dict[str, dict[str, LazyTab]] = {
     # Eddy-covariance flux processing (dv.flux). Its own menu — a first-class
     # diive domain that will grow (gap-filling, USTAR, storage, ...).
     "Flux": {
-        "Flux processing chain": _tab("fluxchain", "FluxChainTab"),
+        "Flux post-processing chain": _tab("fluxchain", "FluxChainTab"),
         "USTAR detection": _tab("ustar_detection", "UstarDetectionTab"),
         "Time lag analysis": _tab("timelag", "TimeLagAnalysisTab"),
         "Nighttime partitioning (ONEFlux)": _tab("partitioning_nighttime_oneflux", "NighttimePartitioningOneFluxTab"),
