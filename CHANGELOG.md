@@ -2,7 +2,7 @@
 
 ![diive](images/logo_diive1_256px.png)
 
-## v0.91.3 | Unreleased
+## v0.92.0 | Unreleased
 
 ### Changes
 

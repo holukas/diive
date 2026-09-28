@@ -460,7 +460,7 @@ wheels = [
 
 [[package]]
 name = "diive"
-version = "0.91.3"
+version = "0.92.0"
 source = { editable = "." }
 dependencies = [
     { name = "bokeh" },

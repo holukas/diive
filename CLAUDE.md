@@ -176,4 +176,4 @@ pytest tests/ -v
 
 ---
 
-**Last Updated:** 2026-09-25 | **Version:** v0.91.3
+**Last Updated:** 2026-09-25 | **Version:** v0.92.0

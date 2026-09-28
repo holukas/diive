@@ -173,7 +173,7 @@ the latest release, so include the version number in your citation.
 @software{diive2026,
   author = {Hörtnagl, Lukas},
   title = {diive: Python library for time series processing},
-  version = {0.91.3},
+  version = {0.92.0},
   year = {2026},
   doi = {10.5281/zenodo.10884017}
 }
