@@ -29,7 +29,7 @@ Categories
 - **events** — event markers and their overlays on plots
 - **features** — the 8-stage feature engineering pipeline
 - **fits** — binned curve fitting with confidence and prediction bands
-- **flux** — processing chain, u* threshold detection, NEE partitioning, uncertainty
+- **flux** — post-processing chain, u* threshold detection, NEE partitioning, uncertainty
 - **gapfilling** — Random Forest, XGBoost, MDS, linear interpolation, long-term filling
 - **io** — reading and writing the supported file formats
 - **preprocessing** — outlier detection, corrections, stepwise screening

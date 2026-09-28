@@ -8,6 +8,10 @@
 
 Library (also used by the notebook and the GUI):
 
+- **Flux post-processing chain:** the flux processing chain is now called the flux post-processing
+  chain and lives in `diive.flux.postprocessingchain`. The old import path
+  `diive.flux.fluxprocessingchain` still works but gives a `FutureWarning` and will be removed in
+  a future release.
 - **Meteo screening, mixed time resolutions:** data with a change in time resolution, e.g. 10-min
   data followed by 1-min data, are screened correctly, and data with one resolution give the same
   resampled values as before.
@@ -37,6 +41,8 @@ Library (also used by the notebook and the GUI):
 
 GUI only:
 
+- **Flux menu:** the chain tab is now called "Flux post-processing chain". Saved projects still
+  reopen it.
 - **UTC offset:** the offset is set only in Project settings, and tabs that need it show it
   read-only, with a red mark where it is not set yet.
 - **Meteo screening (database):** the tab screens through `StepwiseMeteoScreeningDb` like the

@@ -61,9 +61,11 @@ Four NEE partitioning ports coexist via suffixes `*_NT_OF`, `*_NT_RP`, `*_DT_RP`
 
 **`DetectFrequency`** runs at the front of nearly every workflow. Verify any change leaves the *detected frequency* unmoved on the bundled datasets, not just the reported percentage.
 
-## Flux Processing Chain
+## Flux Post-Processing Chain
 
-L2 → L3.1 → L3.2 → L3.3 → L4.1 → L4.2 (optional). `run_chain(data, FluxConfig)` for the standard pipeline; composable `run_level*` for custom ones (`FluxConfig` is only for `run_chain`). Per-level signatures intentionally differ. Example: `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py`.
+`diive.flux.postprocessingchain`. "Post-processing" on purpose: raw data -> fluxes happens earlier (EddyPro, dyco). The old path `diive.flux.fluxprocessingchain` is a deprecated alias module (FutureWarning) that maps every submodule onto the new one; new code uses the new path.
+
+L2 → L3.1 → L3.2 → L3.3 → L4.1 → L4.2 (optional). `run_chain(data, FluxConfig)` for the standard pipeline; composable `run_level*` for custom ones (`FluxConfig` is only for `run_chain`). Per-level signatures intentionally differ. Example: `examples/flux/postprocessingchain/postprocessingchain_composable.py`.
 
 - Each level is a pure function; never mutate input. Treat `LevelResults` as immutable (rebuilt via `dataclasses.replace`).
 - Re-running level N drops N and every later level (`levels/_rerun.py`); L4.1 is per-method and additive.
@@ -163,7 +165,7 @@ MPLBACKEND=Agg uv run python examples/gapfilling/gapfill_randomforest.py
 
 ```bash
 pytest tests/test_gapfilling.py -v
-pytest tests/test_fluxprocessingchain.py -v
+pytest tests/test_postprocessingchain.py -v
 pytest tests/test_gui.py -v        # offscreen, needs 'gui' extra
 pytest tests/ -v
 ```

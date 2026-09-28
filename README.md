@@ -102,7 +102,7 @@ outliers, gap-fill, run the flux chain, visualize.
 |------------------|----------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------|
 | `dv.plotting`    | 18 plot types: time series, heatmaps, diel cycle, cumulative, ridgeline, scatter, hexbin, wind rose, tree ring, 3-D surface, ... | [visualization/](examples/visualization/README.rst)                       |
 | `dv.gapfilling`  | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, linear interpolation, long-term variants, `FeatureEngineer`    | [gapfilling/](examples/gapfilling/README.rst)                             |
-| `dv.flux`        | Flux processing chain (L2–L4.2), NEE partitioning, USTAR filtering, uncertainty                                                  | [flux/](examples/flux/README.rst)                                         |
+| `dv.flux`        | Flux post-processing chain (L2–L4.2), NEE partitioning, USTAR filtering, uncertainty                                             | [flux/](examples/flux/README.rst)                                         |
 | `dv.outliers`    | Nine detection methods (Hampel, z-score variants, local SD, LOF, absolute limits, ...)                                           | [outlier_detection/](examples/preprocessing/outlier_detection/README.rst) |
 | `dv.corrections` | Offset corrections (measurement, radiation, humidity, wind direction), thresholds, missing values                                | [corrections/](examples/preprocessing/corrections/README.rst)             |
 | `dv.qaqc`        | `FlagQCF` quality flags, EddyPro flag handling, meteo screening                                                                  | [qaqc/](examples/preprocessing/qaqc/README.rst)                           |
@@ -116,11 +116,11 @@ For the authoritative symbol list, check `diive.__all__` and each namespace's `_
 
 ## Highlights
 
-**Flux processing chain** — post-processing from quality flags through gap-filling and NEE partitioning (Levels 2 to
+**Flux post-processing chain** — from quality flags through gap-filling and NEE partitioning (Levels 2 to
 4.2),
 following [Swiss FluxNet standards](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/).
 Either `run_chain(data, config)` for the standard workflow, or composable per-level callables when you need every
-detector, hyperparameter and diagnostic flag. → [examples/flux/fluxprocessingchain/](examples/flux/fluxprocessingchain/)
+detector, hyperparameter and diagnostic flag. → [examples/flux/postprocessingchain/](examples/flux/postprocessingchain/)
 
 **NEE partitioning** — four faithful ports of the reference routines, each validated against its original
 implementation: nighttime and daytime (Reichstein 2005, Lasslop 2010) × ONEFlux and REddyProc. Output columns are tagged
@@ -130,7 +130,7 @@ so all four coexist in one dataframe. → [examples/flux/partitioning/](examples
 training. An 8-stage feature engineer feeds them all. → [examples/gapfilling/](examples/gapfilling/README.rst)
 
 **Desktop GUI** — the same library code behind an interactive app: plotting, cleaning, gap-filling and flux tabs, a
-guided processing chain, per-variable metadata with full provenance, and portable `.diive` project folders.
+guided post-processing chain, per-variable metadata with full provenance, and portable `.diive` project folders.
 → [GUI manual](diive/gui/MANUAL.md)
 
 ![The diive desktop GUI showing the Overview tab: variable list, summary statistics, and linked time series, heatmap, cumulative, diel cycle and distribution panels](images/diive-gui_v0.91.0_20260820.png)
@@ -159,7 +159,7 @@ Examples run as plain scripts:
 ```bash
 uv run python examples/visualization/plot_heatmap_datetime_basic.py
 uv run python examples/gapfilling/gapfill_randomforest.py
-uv run python examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py
+uv run python examples/flux/postprocessingchain/postprocessingchain_composable.py
 ```
 
 ---

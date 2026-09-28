@@ -16,7 +16,7 @@ one of them, generated from that namespace's ``__all__``.
    * - :ref:`dv.gapfilling <api_gapfilling>`
      - Machine-learning and meteorological-similarity gap-filling, plus the feature engineering that feeds the models.
    * - :ref:`dv.flux <api_flux>`
-     - Eddy covariance flux post-processing: the processing chain, u* threshold detection, NEE partitioning and uncertainty.
+     - Eddy covariance fluxes: the post-processing chain, u* threshold detection, NEE partitioning and uncertainty.
    * - :ref:`dv.analysis <api_analysis>`
      - Time series analysis: correlation, causality, gaps, binning, decomposition and compound extremes.
    * - :ref:`dv.plotting <api_plotting>`

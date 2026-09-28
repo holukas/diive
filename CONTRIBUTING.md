@@ -111,7 +111,7 @@ lines but still counts the coverage the GUI tests contribute elsewhere.
 [devnotes/COVERAGE_GAPS.md](devnotes/COVERAGE_GAPS.md) tracks what is still uncovered and why —
 worth a look before writing new tests, so you pick something that matters.
 
-The suite runs real models on real data (gap-filling, the flux processing chain,
+The suite runs real models on real data (gap-filling, the flux post-processing chain,
 the partitioning ports), so expect it to take minutes rather than seconds. Use
 `-k` or a single test file while iterating.
 
@@ -223,9 +223,9 @@ result.to_csv('output.csv')
 5. Update docstring with new parameter
 6. Add example in `examples/features/` if applicable
 
-### Adding a Gap-Filling Method to the Flux Processing Chain
+### Adding a Gap-Filling Method to the Flux Post-Processing Chain
 
-The chain uses composable per-level callables (`diive.flux.fluxprocessingchain`), not
+The chain uses composable per-level callables (`diive.flux.postprocessingchain`), not
 a monolithic class. To add an L4.1 gap-filling method:
 
 1. Add a `run_level41_newmethod(data, ...)` callable that builds the model and stores
@@ -233,8 +233,8 @@ a monolithic class. To add an L4.1 gap-filling method:
    `data` via `dataclasses.replace` — never mutate the input
 2. Build a `FeatureEngineer`, train the model, gap-fill
 3. Wire it into `run_chain` behind a `FluxConfig` flag and update
-   `diive/flux/fluxprocessingchain/codegen.py`
-4. Update tests (`tests/test_fluxprocessingchain.py`) and add an example
+   `diive/flux/postprocessingchain/codegen.py`
+4. Update tests (`tests/test_postprocessingchain.py`) and add an example
 
 ### Adding an Outlier Detection Method
 

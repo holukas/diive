@@ -1413,7 +1413,7 @@ author believed they had written:
 | `flux/lowres/selfheating.py` | 895, 1252, 1263 |
 | `preprocessing/corrections/offsetcorrection.py` | 103, 470 |
 | `core/io/files.py` | 169, 267 |
-| `flux/fluxprocessingchain/levels/` | `level41.py:190`, `_init.py:198`, `_qcf.py:69` |
+| `flux/postprocessingchain/levels/` | `level41.py:190`, `_init.py:198`, `_qcf.py:69` |
 | `preprocessing/corrections/setto.py` | 73 |
 | `preprocessing/outlier_detection/manualremoval.py` | 149 |
 | `preprocessing/qaqc/eddyproflags.py` | 503 |
@@ -4045,7 +4045,7 @@ runs once the import is corrected.
 **This is an L85 coverage hole, not just a typo.** The sample is a reST `Example::` literal block, not
 a `>>>` block, so neither `test_docstring_refs.py` nor the new `test_docstring_examples.py` sees it.
 There are **13 such blocks across 7 files** (`core/ml/results.py`, `core/plotting/heatmap_xyz.py`,
-`treering.py`, `windrose.py`, `flux/fluxprocessingchain/container.py`, `run_chain.py`,
+`treering.py`, `windrose.py`, `flux/postprocessingchain/container.py`, `run_chain.py`,
 `gapfilling/swin.py`), none of them currently checked by anything.
 
 **[x] L134. A waterfall contribution of exactly 0.0 is coloured "release"**

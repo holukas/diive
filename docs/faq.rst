@@ -149,7 +149,7 @@ A: The loaders live in ``diive.configs.exampledata``. Two of them are
 
    The two used most often are ``load_exampledata_parquet`` (CH-DAV half-hourly
    fluxes and meteo) and ``load_exampledata_parquet_lae_level1_30MIN`` (CH-LAE
-   EddyPro output, the input the flux processing chain expects).
+   EddyPro output, the input the flux post-processing chain expects).
 
 **Q: My data has gaps (NaN values). Should I fill them before outlier detection?**
 
@@ -443,7 +443,7 @@ A: Titles, labels, units, fonts, colors, grid and legend all go through
 Flux processing
 ===============
 
-**Q: What is the flux processing chain?**
+**Q: What is the flux post-processing chain?**
 
 A: The Swiss FluxNet post-processing workflow for eddy covariance data, in six
    levels:
@@ -461,7 +461,7 @@ A: The Swiss FluxNet post-processing workflow for eddy covariance data, in six
    .. code-block:: python
 
       from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
-      from diive.flux.fluxprocessingchain import (
+      from diive.flux.postprocessingchain import (
           init_flux_data, run_level2, run_level31,
           make_level32_detector, run_level32,
           run_level33_constant_ustar, run_level41_mds,
@@ -494,7 +494,7 @@ A: The Swiss FluxNet post-processing workflow for eddy covariance data, in six
       final_df = data.fpc_df
 
    The full pipeline including partitioning is in
-   ``examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py``.
+   ``examples/flux/postprocessingchain/postprocessingchain_composable.py``.
 
    An older ``FluxProcessingChain`` class with methods such as
    ``level2_qualityflags()`` has been removed. The functions above replace it.
@@ -507,7 +507,7 @@ A: Yes. Put the per-flux decisions into a ``FluxConfig`` and hand it to
    .. code-block:: python
 
       from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
-      from diive.flux.fluxprocessingchain import FluxConfig, init_flux_data, run_chain
+      from diive.flux.postprocessingchain import FluxConfig, init_flux_data, run_chain
 
       df = load_exampledata_parquet_lae_level1_30MIN().loc['2024-07':'2024-07']
       df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
