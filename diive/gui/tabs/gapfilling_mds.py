@@ -9,7 +9,8 @@ conditions on three fixed drivers — short-wave incoming radiation (SWIN), air
 temperature (TA) and vapour pressure deficit (VPD) — within similarity
 tolerances, assigning each fill a quality level. So this tab has no free feature
 picker, no SHAP and no held-out test score; instead it offers a fixed
-three-driver picker + tolerances, and a Results page focused on the
+three-driver picker (each driver with an optional QC flag column) + tolerances,
+and a Results page focused on the
 per-quality-level breakdown.
 
 It uses the shared tab primitives — ``tab_chrome`` (title bar + list header),
@@ -51,6 +52,7 @@ from diive.gui import theme
 from diive.variables import auto_pick_column
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.copy_button import CopyPythonButton
+from diive.gui.widgets.driver_qc import QC_TIP, fill_qc_combo, qc_value, set_qc_value
 from diive.gui.widgets.mds_results import MdsResultsPanel
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.plot_settings import _DropComboBox
@@ -72,7 +74,8 @@ _DRIVERS = [
     {"key": "ta", "label": "TA (°C)", "needles": ["TA", "TAIR"],
      "tip": "Air-temperature driver, in degrees Celsius."},
     {"key": "vpd", "label": "VPD (kPa)", "needles": ["VPD"],
-     "tip": "Vapour-pressure-deficit driver, in kPa (not hPa)."},
+     "tip": "Vapour-pressure-deficit driver, in kPa. For hPa, untick "
+            "'VPD driver is in kPa' below."},
 ]
 
 
@@ -189,7 +192,8 @@ class MdsGapFillingTab(DiiveTab):
     (<code>dv.gapfilling.FluxMDS</code>) is a faithful port of the ONEFlux
     marginal-distribution-sampling gap-filler (Reichstein et al., 2005), down to
     its 6-stage expanding-window cascade, the &ge;2-sample acceptance rule and the
-    1/2/3 quality collapse.</p>
+    1/2/3 quality collapse. With the same input and settings it gives the same
+    values as ONEFlux's C <code>gf_mds</code> tool, bit for bit.</p>
 
     <h3>Drivers and similarity</h3>
     <p>Three fixed meteorological drivers define "similar conditions":</p>
@@ -207,9 +211,19 @@ class MdsGapFillingTab(DiiveTab):
       at low light where the flux changes fastest.</li>
       <li><b>TA tolerance</b> — fixed band (default &plusmn;2.5&nbsp;&deg;C).</li>
       <li><b>VPD tolerance</b> — fixed band (default &plusmn;0.5&nbsp;kPa). If your
-      VPD column is in hPa, untick "VPD driver is in kPa" and it is converted
-      internally so the kPa tolerance still applies.</li>
+      VPD column is in hPa, untick "VPD driver is in kPa"; the tolerance is then
+      converted to hPa (0.5&nbsp;kPa &rarr; 5&nbsp;hPa, as in ONEFlux).</li>
     </ul>
+
+    <h3>Driver quality flags (optional)</h3>
+    <p>Each driver can get a <b>QC flag column</b> (0 = measured, above 0 =
+    gap-filled, e.g. <code>FLAG_…_ISFILLED</code> or FLUXNET
+    <code>*_F_QC</code>), used with the gap-filled driver. The record being filled
+    then still uses its own driver value, gap-filled or not, but only records with
+    a <b>measured</b> driver value (flag 0, or no flag) count as similar
+    conditions. This is how ONEFlux gap-fills NEE. It applies to the all-driver
+    and SWIN-only look-ups; the diurnal-cycle method ignores it. Default
+    <i>(none)</i>: every record with a driver value counts.</p>
 
     <h3>The 6-stage cascade</h3>
     <p>Each gap is filled by the <b>first stage that succeeds</b> (first success
@@ -220,10 +234,11 @@ class MdsGapFillingTab(DiiveTab):
     <ol>
       <li><b>All drivers</b> (SWIN+TA+VPD), windows <b>14</b> &amp; <b>28</b> days &rarr; method 1</li>
       <li><b>SWIN only</b>, window <b>14</b> days &rarr; method 2</li>
-      <li><b>Diurnal cycle</b> (same time of day &plusmn;1&nbsp;h), windows <b>1, 3, 5</b> days &rarr; method 3</li>
+      <li><b>Diurnal cycle</b> (same time of day &plusmn;1&nbsp;h, also across midnight), windows <b>1, 3, 5</b> days &rarr; method 3</li>
       <li><b>All drivers</b>, windows <b>42 … 154</b> days &rarr; method 1</li>
       <li><b>SWIN only</b>, windows <b>28 … 154</b> days &rarr; method 2</li>
-      <li><b>Diurnal cycle</b> &plusmn;1&nbsp;h, windows <b>7 … 427</b> days &rarr; method 3</li>
+      <li><b>Diurnal cycle</b> &plusmn;1&nbsp;h, windows <b>7, 13, 19, …</b> days, growing
+      by 6 days until the window covers the whole record &rarr; method 3</li>
     </ol>
     <p>Each accepted fill is the mean of the similar measured fluxes in the
     window; the spread of those values (N-1 standard deviation) and the count are
@@ -325,6 +340,7 @@ class MdsGapFillingTab(DiiveTab):
         v = QVBoxLayout(inner)
         v.setContentsMargins(0, 0, 0, 0)
         v.addWidget(self._build_driver_box())
+        v.addWidget(self._build_qc_box())
         v.addWidget(self._build_tol_box())
         v.addStretch(1)
         scroll.setWidget(inner)
@@ -341,6 +357,7 @@ class MdsGapFillingTab(DiiveTab):
             combo = _DropComboBox()
             combo.setToolTip(spec["tip"])
             combo.currentTextChanged.connect(self._refresh_availability)
+            combo.currentTextChanged.connect(self._refresh_qc_items)
             mark = QLabel("")
             mark.setToolTip("Whether the chosen column is present in the dataset.")
             cell = QWidget()
@@ -352,6 +369,24 @@ class MdsGapFillingTab(DiiveTab):
             form.addRow(spec["label"], cell)
             self._combos[spec["key"]] = combo
             self._avail[spec["key"]] = mark
+        return box
+
+    def _build_qc_box(self) -> QGroupBox:
+        """Optional per-driver QC flag columns ("(none)" = no driver QC)."""
+        box = QGroupBox("Driver QC flags (optional)")
+        form = QFormLayout(box)
+        note = QLabel("Only measured driver values count as similar conditions "
+                      "(as in ONEFlux's NEE gap-filling).")
+        note.setWordWrap(True)
+        note.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
+        form.addRow(note)
+        self._qc_combos: dict[str, _DropComboBox] = {}
+        for spec in _DRIVERS:
+            combo = _DropComboBox()
+            combo.setToolTip(QC_TIP)
+            combo.currentTextChanged.connect(self._update_status)
+            form.addRow(f"{spec['key'].upper()} flag", combo)
+            self._qc_combos[spec["key"]] = combo
         return box
 
     def _build_tol_box(self) -> QGroupBox:
@@ -381,8 +416,8 @@ class MdsGapFillingTab(DiiveTab):
         self.vpd_in_kpa.setChecked(True)
         self.vpd_in_kpa.setToolTip(
             "Check if the VPD driver column is in kPa (default). Uncheck if it "
-            "is in hPa - it is then converted to kPa internally so the kPa "
-            "tolerance still applies.")
+            "is in hPa - the kPa tolerance is then converted to hPa "
+            "(0.5 kPa -> 5 hPa, as in ONEFlux).")
         self.vpd_in_kpa.toggled.connect(self._update_status)  # refresh unit warning
         f.addRow(self.vpd_in_kpa)
         self.avg_min_n_vals = QSpinBox(); self.avg_min_n_vals.setRange(0, 1000)
@@ -503,7 +538,13 @@ class MdsGapFillingTab(DiiveTab):
                 if guess:
                     combo.setCurrentText(guess)
             combo.blockSignals(False)
+        self._refresh_qc_items()
         self._refresh_availability()
+
+    def _refresh_qc_items(self, *_) -> None:
+        """Refill each QC combo, listing the chosen driver's flag columns first."""
+        for key, combo in self._qc_combos.items():
+            fill_qc_combo(combo, self._all_cols, self._combos[key].currentText())
 
     def _refresh_availability(self, *_) -> None:
         for key, combo in self._combos.items():
@@ -515,6 +556,15 @@ class MdsGapFillingTab(DiiveTab):
 
     def _driver_names(self) -> dict:
         return {k: c.currentText() for k, c in self._combos.items()}
+
+    def _qc_names(self) -> dict:
+        """``{"swin_qc": col, ...}`` for the QC flags that are set (none -> omitted)."""
+        out = {}
+        for k, c in self._qc_combos.items():
+            col = qc_value(c)
+            if col is not None:
+                out[f"{k}_qc"] = col
+        return out
 
     def _inputs_valid(self) -> bool:
         """True when a target and three distinct, valid driver columns are set."""
@@ -550,6 +600,10 @@ class MdsGapFillingTab(DiiveTab):
         else:
             text = (f"Target: {self._target} — drivers SWIN={drivers['swin']}, "
                     f"TA={drivers['ta']}, VPD={drivers['vpd']}. Run gap-filling.")
+            qc = self._qc_names()
+            if qc:
+                text += " Driver QC: " + ", ".join(
+                    f"{k[:-3].upper()}={v}" for k, v in qc.items()) + "."
             unit_warn = self._vpd_unit_warning(drivers["vpd"])
             if unit_warn:
                 text += " " + unit_warn
@@ -558,8 +612,8 @@ class MdsGapFillingTab(DiiveTab):
     def _vpd_unit_warning(self, vpd_col: str) -> str | None:
         """Soft, non-blocking heuristic: if the chosen VPD column name suggests a
         unit that disagrees with the 'VPD driver is in kPa' checkbox, warn — leaving
-        it wrong mis-scales the fills ~100x. Never blocks the run; the library does
-        not validate units (the caller owns them)."""
+        it wrong makes the VPD tolerance 10x too tight or too loose. Never blocks
+        the run; the library does not validate units (the caller owns them)."""
         name = vpd_col.lower()
         in_kpa = self.vpd_in_kpa.isChecked()
         if "hpa" in name and in_kpa:
@@ -576,7 +630,9 @@ class MdsGapFillingTab(DiiveTab):
                 "swin_tol_low": self.swin_tol_low, "swin_tol_high": self.swin_tol_high,
                 "ta_tol": self.ta_tol, "vpd_tol": self.vpd_tol,
                 "avg_min_n_vals": self.avg_min_n_vals, "sym_mean": self.sym_mean,
-                "vpd_in_kpa": self.vpd_in_kpa}
+                "vpd_in_kpa": self.vpd_in_kpa,
+                # Last, so the driver picks above have reordered their items.
+                **{f"{k}_qc": c for k, c in self._qc_combos.items()}}
 
     def save_state(self) -> dict:
         from diive.gui.widgets.state_utils import save_controls
@@ -584,7 +640,11 @@ class MdsGapFillingTab(DiiveTab):
 
     def restore_state(self, state: dict) -> None:
         from diive.gui.widgets.state_utils import restore_controls
-        restore_controls(self._controls(), state.get("controls"))
+        saved = state.get("controls") or {}
+        restore_controls(self._controls(), saved)
+        # Projects saved before the QC option (or naming a vanished column) -> none.
+        for k, combo in self._qc_combos.items():
+            set_qc_value(combo, saved.get(f"{k}_qc"))
         tgt = state.get("target")
         if tgt in self._all_cols:
             self._set_target(tgt)
@@ -599,6 +659,8 @@ class MdsGapFillingTab(DiiveTab):
             "avg_min_n_vals": self.avg_min_n_vals.value(),
             "sym_mean": self.sym_mean.isChecked(),
             "vpd_in_kpa": self.vpd_in_kpa.isChecked(),
+            # Only the QC flags that are set: unset keeps the run and script as before.
+            **self._qc_names(),
         }
 
     def _python_code(self) -> str | None:
@@ -626,7 +688,9 @@ class MdsGapFillingTab(DiiveTab):
             self.status.setText("Target and the three drivers must be four distinct columns.")
             return
         kwargs = self._method_kwargs()
-        work = self._df[[target, swin, ta, vpd]].copy()
+        # QC combos list only current columns (refilled on every data load).
+        qc_cols = [kwargs[k] for k in ("swin_qc", "ta_qc", "vpd_qc") if k in kwargs]
+        work = self._df[list(dict.fromkeys([target, swin, ta, vpd, *qc_cols]))].copy()
         self._set_running(True)
         # Indeterminate (busy) until the first quality level reports in.
         self.progress.start_busy("Preparing…")

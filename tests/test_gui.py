@@ -3629,6 +3629,71 @@ def test_flux_chain_tab_level41(app):
     assert tab2.l41_features.selected() == tab.l41_features.selected()
 
 
+def test_flux_chain_tab_level41_mds_driver_qc(app, monkeypatch):
+    # L4.1 MDS driver QC flags: "(none)" by default (config and script
+    # unchanged); a picked flag reaches run_level41_mds and the script, and
+    # round-trips through save/restore. Old projects restore to none.
+    import diive.gui.tabs.fluxchain as fc
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.column_picker import NONE_ITEM
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+    vpd_flag = "FLAG_VPD_T1_47_1_gfXG_ISFILLED"
+
+    tab = FluxChainTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._steps = [HampelParams().step()]
+    tab.l33_enable.setChecked(True)
+    tab._ustar = [(0.1, "CUT_50")]
+    tab.l41_mds.setChecked(True)
+    assert tab.mds_vpd.currentText() == "VPD_T1_47_1_gfXG"
+
+    # Default: no QC, nothing extra in the config or the script.
+    assert all(c.currentText() == NONE_ITEM for c in tab._mds_qc.values())
+    assert not any(k.endswith("_qc") for k in tab._level41_cfg()["mds"])
+    assert "_qc=" not in tab._code()
+    # The VPD driver's own flag column is offered right after "(none)".
+    assert tab._mds_qc["vpd"].itemText(1) == vpd_flag
+
+    tab._mds_qc["vpd"].setCurrentText(vpd_flag)
+    cfg = tab._level41_cfg()
+    assert cfg["mds"]["vpd_qc"] == vpd_flag
+    assert "swin_qc" not in cfg["mds"] and "ta_qc" not in cfg["mds"]
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    assert f"vpd_qc={vpd_flag!r}," in code
+
+    # A real run through L4.1 passes the flag column to the library.
+    seen = []
+    real = fc.run_level41_mds
+
+    def spy(data, **kw):
+        seen.append(kw)
+        return real(data, **kw)
+
+    monkeypatch.setattr(fc, "run_level41_mds", spy)
+    data = tab._compute(df, tab._init_kwargs(), tab._level2_settings(),
+                        tab._level31_kwargs(), tab._steps, tab._level33_kwargs(), cfg)
+    assert seen and seen[0]["vpd_qc"] == vpd_flag
+    assert "swin_qc" not in seen[0] and "ta_qc" not in seen[0]
+    assert "CUT_50" in data.gapfilled_cols()["mds"]
+
+    # Save/restore round-trips the pick; an older project without the key -> none.
+    state = tab.save_state()
+    assert state["controls"]["mds_vpd_qc"] == vpd_flag
+    tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2._mds_qc["vpd"].currentText() == vpd_flag
+    assert tab2._level41_cfg()["mds"]["vpd_qc"] == vpd_flag
+    old = dict(state, controls={k: v for k, v in state["controls"].items()
+                                if not k.endswith("_qc")})
+    tab2.restore_state(old)
+    assert tab2._mds_qc["vpd"].currentText() == NONE_ITEM
+    assert "vpd_qc" not in tab2._level41_cfg()["mds"]
+
+
 def test_stepwise_method_params_run_on_detector(app):
     # Every stepwise method-params widget must produce a {method, kwargs} step that
     # StepwiseOutlierDetection actually accepts and runs — this guards the kwarg
@@ -6337,6 +6402,85 @@ def test_gapfilling_mds_tab(app, example_year):
     tab2.restore_state(state)
     assert tab2._target == "NEE_CUT_REF_orig"
     assert tab2.vpd_tol.value() == 0.8
+
+
+def test_gapfilling_mds_tab_driver_qc(app, example_year):
+    # Optional per-driver QC flags: "(none)" by default (run and script unchanged);
+    # a picked flag column reaches FluxMDS, changes the fill, shows up in Copy
+    # Python and round-trips through save/restore. Old projects restore to none.
+    from diive.gui.tabs.gapfilling_mds import MdsGapFillingTab
+    from diive.gui.widgets.column_picker import NONE_ITEM
+    df = example_year.loc["2021-05":"2021-07"].copy()
+    # The example drivers are nearly gap-free: mark June TA as gap-filled so the
+    # QC rule removes those records from the similar samples.
+    flag = pd.Series(0.0, index=df.index)
+    flag.loc["2021-06"] = 1.0
+    df["FLAG_Tair_f_ISFILLED"] = flag
+    target = "NEE_CUT_REF_orig"
+    tab = MdsGapFillingTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._set_target(target)
+    for key, col in (("swin", "Rg_f"), ("ta", "Tair_f"), ("vpd", "VPD_f")):
+        tab._combos[key].setCurrentText(col)
+
+    # Default: no QC anywhere, nothing extra in the kwargs or the script.
+    assert all(c.currentText() == NONE_ITEM for c in tab._qc_combos.values())
+    assert not any(k.endswith("_qc") for k in tab._method_kwargs())
+    assert "_qc=" not in tab._python_code()
+    # The chosen driver's flag column is offered right after "(none)".
+    assert tab._qc_combos["ta"].itemText(1) == "FLAG_Tair_f_ISFILLED"
+
+    tab._qc_combos["ta"].setCurrentText("FLAG_Tair_f_ISFILLED")
+    kwargs = tab._method_kwargs()
+    assert kwargs["ta_qc"] == "FLAG_Tair_f_ISFILLED"
+    assert "swin_qc" not in kwargs and "vpd_qc" not in kwargs
+    code = tab._python_code()
+    compile(code, "<gen>", "exec")
+    assert "ta_qc='FLAG_Tair_f_ISFILLED'," in code
+    assert "Driver QC: TA=FLAG_Tair_f_ISFILLED" in tab.status.text()
+
+    # _run hands the flag column to the worker together with the drivers.
+    calls = []
+    tab._runner.run = lambda fn, *args: calls.append(args)
+    tab._run()
+    assert calls
+    work, _, _, _, _, run_kwargs = calls[0]
+    assert "FLAG_Tair_f_ISFILLED" in work.columns
+    assert run_kwargs["ta_qc"] == "FLAG_Tair_f_ISFILLED"
+    tab._set_running(False)
+    tab.progress.finish()
+
+    payload = tab._compute_payload(*calls[0])
+    model = payload[3]
+    assert model.ta_qc == "FLAG_Tair_f_ISFILLED"
+    base = tab._compute_payload(work, target, "Rg_f", "Tair_f", "VPD_f",
+                                {k: v for k, v in run_kwargs.items() if k != "ta_qc"})
+    assert base[3].ta_qc is None
+    # Same gaps filled, different values: June TA no longer serves as a sample.
+    assert payload[2].notna().sum() == base[2].notna().sum()
+    assert (payload[2] - base[2]).abs().max() > 0
+    tab._on_done(payload)
+    QApplication.processEvents()
+    assert tab._result_df is not None
+
+    # Save/restore round-trips the pick; an older project without the key -> none.
+    state = tab.save_state()
+    assert state["controls"]["ta_qc"] == "FLAG_Tair_f_ISFILLED"
+    tab2 = MdsGapFillingTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2._qc_combos["ta"].currentText() == "FLAG_Tair_f_ISFILLED"
+    assert tab2._method_kwargs()["ta_qc"] == "FLAG_Tair_f_ISFILLED"
+    old = {"target": state["target"],
+           "controls": {k: v for k, v in state["controls"].items()
+                        if not k.endswith("_qc")}}
+    tab2.restore_state(old)
+    assert tab2._qc_combos["ta"].currentText() == NONE_ITEM
+    assert "ta_qc" not in tab2._method_kwargs()
+    # A reload without the flag column drops the pick back to none.
+    tab._qc_combos["ta"].setCurrentText("FLAG_Tair_f_ISFILLED")
+    tab.on_data_loaded(df.drop(columns="FLAG_Tair_f_ISFILLED"))
+    assert tab._qc_combos["ta"].currentText() == NONE_ITEM
 
 
 def test_partitioning_tabs_refuse_to_run_without_site_coords(app, example_year):

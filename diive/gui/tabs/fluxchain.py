@@ -28,7 +28,8 @@ them (heavy runs on a worker thread). Script-generation is the library's
 
 **Level 4.1** gap-fills the per-scenario L3.3 flux: tick any of rf / xgb / mds
 (additive across methods — each replaces only its own previous result), pick
-rf/xgb predictor features and the MDS SW_IN / TA / VPD driver columns, and the
+rf/xgb predictor features and the MDS SW_IN / TA / VPD driver columns (each
+with an optional QC flag column, default none), and the
 run fans out one gap-fill per USTAR scenario on the worker thread. The canvas
 then shows the method comparison (cumulative overlay or side-by-side heatmaps)
 via the library's `plot_cumulative_comparison(ax=...)` / `plot_gapfilled_heatmaps(fig=...)`,
@@ -84,6 +85,7 @@ from diive.flux.lowres.common import detect_fluxbasevar
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.copy_button import CopyPythonButton
+from diive.gui.widgets.driver_qc import QC_TIP, fill_qc_combo, qc_value, set_qc_value
 from diive.gui.widgets.feature_picker import FeaturePicker
 from diive.gui.widgets.flux_pipeline_rail import PipelineRail
 from diive.gui.widgets.mpl_canvas import MplCanvas
@@ -932,7 +934,7 @@ class FluxChainTab(DiiveTab):
         # Method toggles drive which setting sections are visible (declutter).
         self.l41_rf = QCheckBox("Random Forest (rf)")
         self.l41_xgb = QCheckBox("XGBoost (xgb)")
-        self.l41_mds = QCheckBox("Marginal Data Substitution (mds)")
+        self.l41_mds = QCheckBox("Marginal Distribution Sampling (mds)")
         for cb in (self.l41_rf, self.l41_xgb, self.l41_mds):
             cb.toggled.connect(self._update_run_label)
             cb.toggled.connect(self._sync_l41_visibility)
@@ -1017,6 +1019,16 @@ class FluxChainTab(DiiveTab):
         self.mds_vpd = QComboBox()
         self.mds_vpd.currentTextChanged.connect(self._refresh_levels_info)
         form.addRow("VPD (kPa)", self.mds_vpd)
+        # Optional per-driver QC flag ("(none)" = no driver QC, the default).
+        self._mds_qc: dict[str, QComboBox] = {}
+        for key, label, driver in (("swin", "SW_IN QC flag", self.mds_swin),
+                                   ("ta", "TA QC flag", self.mds_ta),
+                                   ("vpd", "VPD QC flag", self.mds_vpd)):
+            combo = QComboBox()
+            combo.setToolTip(QC_TIP)
+            driver.currentTextChanged.connect(self._refresh_mds_qc_items)
+            form.addRow(label, combo)
+            self._mds_qc[key] = combo
         # MDS similarity tolerances (Reichstein et al. 2005 defaults).
         self.mds_ta_tol = self._dspin(2.5, 0.1, 20.0, 2)
         form.addRow("TA tolerance (°C)", self.mds_ta_tol)
@@ -1031,6 +1043,13 @@ class FluxChainTab(DiiveTab):
         gv.addWidget(vpd_note)
         self._l41_mds = gb
         return gb
+
+    def _refresh_mds_qc_items(self, *_) -> None:
+        """Refill the MDS QC combos, listing each driver's flag columns first."""
+        cols = [str(c) for c in self._df.columns] if self._df is not None else []
+        for key, driver in (("swin", self.mds_swin), ("ta", self.mds_ta),
+                            ("vpd", self.mds_vpd)):
+            fill_qc_combo(self._mds_qc[key], cols, driver.currentText())
 
     def _sync_l41_visibility(self, *_) -> None:
         """Show each method's settings section only when that method is enabled."""
@@ -1095,6 +1114,10 @@ class FluxChainTab(DiiveTab):
                 mds["ta_tol"] = self.mds_ta_tol.value()
             if abs(self.mds_vpd_tol.value() - 0.5) > 1e-9:  # run_level41_mds default
                 mds["vpd_tol"] = self.mds_vpd_tol.value()
+            for key, combo in self._mds_qc.items():  # only the flags that are set
+                col = qc_value(combo)
+                if col is not None:
+                    mds[f"{key}_qc"] = col
             cfg["mds"] = mds
         return cfg
 
@@ -1173,7 +1196,9 @@ class FluxChainTab(DiiveTab):
                 "rf_n_est": self.rf_n_est, "rf_max_depth": self.rf_max_depth,
                 "xgb_n_est": self.xgb_n_est, "xgb_max_depth": self.xgb_max_depth,
                 "xgb_lr": self.xgb_lr,
-                "mds_ta_tol": self.mds_ta_tol, "mds_vpd_tol": self.mds_vpd_tol}
+                "mds_ta_tol": self.mds_ta_tol, "mds_vpd_tol": self.mds_vpd_tol,
+                # After the drivers, which reorder these combos' items.
+                **{f"mds_{k}_qc": c for k, c in self._mds_qc.items()}}
 
     def save_state(self) -> dict:
         from diive.gui.widgets.state_utils import save_controls
@@ -1189,7 +1214,11 @@ class FluxChainTab(DiiveTab):
 
     def restore_state(self, state: dict) -> None:
         from diive.gui.widgets.state_utils import restore_controls
-        restore_controls(self._fx_controls(), state.get("controls"))
+        saved = state.get("controls") or {}
+        restore_controls(self._fx_controls(), saved)
+        # Projects saved before the QC option (or naming a vanished column) -> none.
+        for k, combo in self._mds_qc.items():
+            set_qc_value(combo, saved.get(f"mds_{k}_qc"))
         for k, val in (state.get("l2") or {}).items():
             if k in self.l2_checks:
                 self.l2_checks[k].setChecked(bool(val))
@@ -1268,6 +1297,7 @@ class FluxChainTab(DiiveTab):
                 if needle in up and (avoid is None or avoid not in up):
                     combo.setCurrentText(c)
                     break
+        self._refresh_mds_qc_items()  # kept only if the column is still there
         # New dataset: the previous run's reach no longer applies.
         self.rail.set_reached_through(-1)
         self._populate_l2_cols()  # seed the per-test column pickers + availability
@@ -1393,7 +1423,8 @@ class FluxChainTab(DiiveTab):
                                        reduce_features=reduce, **cfg.get("xgb_kwargs", {}))
         if "mds" in methods:
             mds = cfg["mds"]
-            extra = {k: mds[k] for k in ("ta_tol", "vpd_tol") if k in mds}
+            extra = {k: mds[k] for k in ("ta_tol", "vpd_tol", "swin_qc", "ta_qc", "vpd_qc")
+                     if k in mds}
             data = run_level41_mds(data, swin=mds["swin"], ta=mds["ta"], vpd=mds["vpd"],
                                    **extra)
         return data

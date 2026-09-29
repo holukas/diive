@@ -1106,6 +1106,13 @@ intermediate results out of the chain without waiting for the whole pipeline.
   are the uncertainty scenarios within it. Each scenario is gap-filled separately at
   Level 4.1.
 
+**Level 4.1: gap-filling** runs any of Random Forest, XGBoost and MDS on each USTAR
+scenario. For MDS, pick the SW_IN, TA and VPD driver columns and the tolerances.
+Each driver also has an optional **QC flag** column (default **(none)**), as in the
+**MDS gap-filling** tab: with a flag, only records with a measured driver value count
+as similar conditions, as in ONEFlux's NEE gap-filling. The flag column must be in the
+loaded dataset.
+
 > Needs eddy-covariance input with the raw EddyPro columns (FC, USTAR, the `*_TEST`
 > flags). The bundled CH-DAV example is a processed product and won't run the chain,
 > so load a level-1 EC dataset.
@@ -1434,21 +1441,34 @@ FLUXNET look-up-table method. Unlike XGBoost and Random Forest, MDS is **not a
 trained regressor**: it has no SHAP importances, no held-out test split, and no
 feature reduction. Instead it fills each gap from records with **similar
 meteorological conditions** using three fixed drivers: shortwave-in radiation, air
-temperature, and VPD.
+temperature, and VPD. With the same input and settings, diive's MDS gives the same
+values as ONEFlux's `gf_mds` tool, bit for bit.
 
 Pick a **target** (flux) on the left and the **three driver columns** (SWIN / TA /
 VPD combos, auto-seeded by name with ✓ / ✗ markers; gap-filled `_f` versions are
 preferred). Set the **similarity tolerances** (SWIN low/high, TA in °C, VPD in kPa)
 and the minimum number of similar records to average. Driver units matter: TA must be
-in °C and VPD in kPa. diive does not check the units, so a column in the wrong unit
-produces a wrong fill with no warning.
+in °C and VPD in kPa. For VPD in hPa, untick **VPD driver is in kPa**; the VPD
+tolerance is then converted to hPa. diive does not check the units, so a column in the
+wrong unit produces a wrong fill with no warning.
+
+**Driver QC flags (optional)** gives each driver a flag column: 0 = measured, above 0 =
+gap-filled, for example `FLAG_TA_gfXG_ISFILLED` from a diive gap-filling tab or FLUXNET
+`TA_F_QC`. Use it with the gap-filled driver. The record being filled then still uses
+its own driver value, gap-filled or not, but only records with a measured driver value
+(flag 0, or no flag) count as similar conditions. This is how ONEFlux gap-fills NEE.
+It changes the SWIN/TA/VPD look-up, not the mean diurnal cycle. Each combo lists the
+chosen driver's flag columns first; the default **(none)** gives the same fill as
+before. For a separate measured column, first make a flag column that is 1 where the
+measured value is missing.
 
 A **progress bar** tracks the quality levels as the fill runs (higher level = looser
 meteorological match). The **Results** sub-tab shows the configuration, in-sample
 scores, a **per-quality-level breakdown** table and bar plot, a predicted-vs-observed
 scatter, the cumulative sum, and a colour-by-quality time series. The fill flag
-(`FLAG_{var}_gfMDS_ISFILLED`) is 0 for observed and 1+ for the quality level at which
-each gap was filled. **Add results to dataset** appends the gap-filled series and its
+(`FLAG_{var}_gfMDS_ISFILLED`) is 0 for observed; for a filled gap it is the method
+times 1000 plus the window in days (method 1 = all three drivers, 2 = SWIN only,
+3 = diurnal cycle), so `1014` means "all drivers, 14-day window". **Add results to dataset** appends the gap-filled series and its
 flag; **Copy Python** copies a reproducible script.
 
 ---
