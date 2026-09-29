@@ -45,12 +45,12 @@ print("Comparing 2 NIGHTTIME methods (*_NT_OF, *_NT_RP) and 2 DAYTIME methods (*
 print(f"Period: {df.index.min().date()} to {df.index.max().date()} ({len(df)} records)")
 
 # %%
-# Run all three ports on identical inputs
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# All three share the measured/gap-filled NEE and air temperature plus incoming
-# shortwave radiation. The REddyProc ports additionally need longitude and the
-# UTC offset (solar-time day/night split); the daytime port additionally needs
-# VPD (the light-response curve's VPD term).
+# Run all four ports on identical inputs
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# All four take NEE, air temperature and incoming shortwave radiation, measured
+# or gap-filled as each method requires. The REddyProc ports additionally need
+# longitude and the UTC offset (solar-time day/night split); the daytime ports
+# additionally need VPD (the light-response curve's VPD term).
 
 of = dv.flux.NighttimePartitioningOneFlux(
     nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
@@ -83,7 +83,7 @@ reco_ref_dt, gpp_ref_dt = df['Reco_DT_CUT_REF'], df['GPP_DT_CUT_REF']
 # %%
 # Numerical comparison
 # ^^^^^^^^^^^^^^^^^^^^^
-# Each port vs its own bundled reference, and the three ports against each other.
+# Each port vs its own bundled reference, and pairs of ports against each other.
 
 
 def _r(a, b):

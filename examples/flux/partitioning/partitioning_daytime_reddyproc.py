@@ -26,7 +26,8 @@ and nighttime approaches.
 # NEE uncertainty (which is not shipped) and on the full multi-year record, so
 # the port is expected to track GPP closely and RECO with a small stable bias - a
 # provenance artifact, not an algorithmic difference (on identical inputs the
-# port matches a fresh REddyProc run to about 1e-5 umol m-2 s-1).
+# port matches a fresh REddyProc run: half-hourly values mostly within 1e-4
+# umol m-2 s-1, annual sums within 0.001%).
 
 import matplotlib.pyplot as plt
 import numpy as np

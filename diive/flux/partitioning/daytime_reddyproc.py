@@ -490,7 +490,7 @@ def _fit_nighttime_pass(nee, temp, is_night, i_central, win_days, dts, n):
 # arithmetic on the start values; the likelihood only decides which vertex
 # moves. So as long as those comparisons agree (the likelihood values here
 # agree with mlegp's to ~1e-15), the result is mlegp's to the bit. In all 8
-# parity runs the L-BFGS stage ended where it started: its gradient
+# CH-DAV parity runs the L-BFGS stage ended where it started: its gradient
 # is a forward difference with h = 1e-10 on the natural scale, used as if it
 # were the gradient in log space, so the line search fails and mlegp keeps the
 # simplex result. It is ported anyway, but it is not reproducible to the bit if
