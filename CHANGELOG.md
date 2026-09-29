@@ -63,6 +63,16 @@ Notebook (meteo screening notebook v13):
 
 Library:
 
+- **Nighttime partitioning (ONEFlux):** results now match ONEFlux bit for bit (CH-DAV 2016
+  and 2019), up from an RMSE of 0.0003 µmol m⁻² s⁻¹.
+- **Daytime partitioning (ONEFlux):** every light-response fit now matches ONEFlux, and annual
+  sums agree to 0.0001% (were up to 1.2% apart on CH-DAV 2019).
+- **Nighttime partitioning (REddyProc):** results change and now match REddyProc to about
+  1e-15. The E0 upper limit was 350 instead of REddyProc's 450, which on CH-DAV 2016
+  lowered E0 from 281 to 231 and annual GPP by 1.3%.
+- **Daytime partitioning (REddyProc):** results change slightly and now match REddyProc to
+  about 1e-5 µmol m⁻² s⁻¹. The reported SD of the smoothed E0 was 50-84% too low. Runs no
+  longer slow down or change with the number of BLAS threads.
 - **Meteo screening, timestamps:** data that already had the target resolution kept the internal
   middle-of-period timestamps after resampling and would be uploaded half a period early.
 - **Meteo screening, mixed time resolutions:** sums counted coarse records several times, manual
