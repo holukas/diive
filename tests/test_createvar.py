@@ -373,6 +373,22 @@ class TestClassifyVariable(unittest.TestCase):
         self.assertEqual((kind, category), (result.kind, result.category))
 
 
+class TestDriverFlagColumns(unittest.TestCase):
+    """Suggested QC-flag columns for an MDS driver."""
+
+    def test_diive_and_fluxnet_flags_in_input_order(self):
+        from diive.variables import driver_flag_columns
+        cols = ['TA_F', 'TA_F_QC', 'FLAG_TA_F_gfMDS_ISFILLED', 'TA_F_MDS',
+                'SW_IN_F', 'SW_IN_F_QC']
+        self.assertEqual(driver_flag_columns(cols, 'TA_F'),
+                         ['TA_F_QC', 'FLAG_TA_F_gfMDS_ISFILLED'])
+
+    def test_driver_itself_and_empty_driver_are_not_returned(self):
+        from diive.variables import driver_flag_columns
+        self.assertEqual(driver_flag_columns(['VPD_QC'], 'VPD_QC'), [])
+        self.assertEqual(driver_flag_columns(['VPD_QC'], ''), [])
+
+
 class TestAutoPickColumn(unittest.TestCase):
     """Name-based seeding for the GUI's variable pickers."""
 
