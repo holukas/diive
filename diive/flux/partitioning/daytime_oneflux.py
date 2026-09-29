@@ -271,16 +271,26 @@ def _nlinlts2(lts_func, dep, indeps, npara, xguess, mprior, sigm, sigd):
     ``dep`` is the dependent array (nee_f), ``indeps`` the independent-variable
     dict, ``sigd`` the per-record data sigma. Returns a result dict with fitted
     parameters, standard errors, covariance/correlation, residuals and RMSE, or
-    ``cov_matrix=None`` when the fit is singular / underdetermined.
+    ``cov_matrix=None`` when the fit is singular.
+
+    With fewer than ``3 * npara`` usable records no fit is run, and the result
+    is ONEFlux's default ``result_dict``: parameters -9999, standard errors 0,
+    a zero covariance matrix, a correlation matrix of -inf, residuals -9999 and
+    RMSE 0. The covariance is not None there, so ONEFlux does not treat the
+    window as broken: the -9999 parameters send its model cascade on to a
+    model with fewer parameters. This decides every window with exactly 11
+    daytime records (enough to enter, one short of the 12 HLRC_LloydVPD needs),
+    which CH-LAE's sparse NEE coverage produces a few times a year.
     """
     # validity of independent vars (all finite within the subset)
     nonnan_indep = np.ones(dep.size, dtype=bool)
     for key in indeps:
         nonnan_indep &= _notnan(np.atleast_1d(indeps[key]) if np.ndim(indeps[key]) else
                                 np.full(dep.size, indeps[key]))
-    fail = dict(params=np.full(npara, NAN), std=np.full(npara, np.nan),
-                cov_matrix=None, cor_matrix=None,
-                residuals=np.full(int(nonnan_indep.sum()), np.nan), rmse=0.0)
+    fail = dict(params=np.full(npara, NAN), std=np.zeros(npara),
+                cov_matrix=np.zeros((npara, npara)),
+                cor_matrix=np.full((npara, npara), -np.inf),
+                residuals=np.full(int(nonnan_indep.sum()), NAN), rmse=0.0)
     if int(nonnan_indep.sum()) < npara * 3:
         return fail
     nonnan_dep = _notnan(dep)
@@ -522,7 +532,12 @@ def _estimate_parasets(D, nperday, verbose=1, reject_alpha_at_start=False):
             # fires and those windows are accepted.
             pj = np.zeros((3, 10), dtype=np.float32)
             indj = np.tile(ind_rows, (3, 1))
-            rmse = np.zeros(3)
+            # ONEFlux's RMSE table is FLOAT_PREC too, and the best of the three
+            # beta starting guesses is picked from it. Two fits whose RMSEs
+            # differ only beyond float32 precision tie there, and the first one
+            # wins; in float64 the later one can win (CH-LAE 2019 with gaps in
+            # measured TA/SW_IN: window of 7 June, alpha then carried to the next).
+            rmse = np.zeros(3, dtype=np.float32)
             wm = np.zeros(3, dtype=int)
             jtj = np.zeros((3, 4, 4))
             rescor = np.zeros(3)
@@ -897,11 +912,14 @@ class DaytimePartitioningOneFlux:
     window fits, so results are close to, but not bit-identical with, a native
     ONEFlux run.
 
-    Measured agreement, CH-DAV 2016 half-hourly against a native ONEFlux 1.3.7
-    run (NumPy 1.26, SciPy 1.17) on the same arrays: the per-record NEE
-    uncertainty is identical bit for bit, and so is every light-response fit
-    in all 143 windows. Per record, GPP and RECO differ by an RMSE of 1e-5
-    umol m-2 s-1 (largest 2.4e-4), and the annual sums agree to 0.0001%.
+    Measured agreement, half-hourly against a native ONEFlux 1.3.7 run
+    (NumPy 1.26, SciPy 1.17) on the same arrays, CH-DAV 2016 and 2019 and
+    CH-LAE 2017-2019 (where only 17-20 % of NEE is measured), also with gaps in
+    measured TA, SW_IN and nighttime NEE: the per-record NEE uncertainty is
+    identical bit for bit, and so is every light-response fit and every
+    window parameter (143 windows on CH-DAV 2016, 77-123 per CH-LAE run).
+    Per record, GPP and RECO differ by at most 6e-6 umol m-2 s-1, float32
+    rounding, and the annual sums agree to 0.0001%.
 
     ONEFlux's own output depends on the NumPy version it runs under. NumPy 2
     changed scalar type promotion (NEP 50), and that moves ONEFlux in two

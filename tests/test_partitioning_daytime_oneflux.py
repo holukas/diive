@@ -321,6 +321,94 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
         self.assertEqual(julday[-1], 366)
         self.assertEqual(julday[0], 1)
 
+    def test_too_few_records_returns_oneflux_default_result(self):
+        # ONEFlux's nlinlts2 skips the fit below 3 * npara records and returns
+        # its default result: parameters -9999, standard errors 0, a zero
+        # covariance matrix (not None), residuals -9999, RMSE 0. A None
+        # covariance would mark the window as broken instead.
+        from diive.flux.partitioning.daytime_oneflux import _fit, NAN
+        n = 11  # one short of the 12 records HLRC_LloydVPD needs
+        ind = {'rg': np.full(n, 500.0, dtype=np.float32),
+               'ta': np.full(n, 15.0, dtype=np.float32),
+               'e0': np.full(n, 150.0, dtype=np.float32),
+               'vpd': np.full(n, 8.0, dtype=np.float32)}
+        r = _fit('HLRC_LloydVPD', np.full(n, -5.0, dtype=np.float32), ind, npara=4,
+                 xguess=[0.01, 30.0, 0.0, 5.0], mprior=np.zeros(4, dtype='f4'),
+                 sigm=np.ones(4), sigd=np.ones(n, dtype=np.float32))
+        np.testing.assert_array_equal(r['params'], np.full(4, NAN))
+        np.testing.assert_array_equal(r['std'], np.zeros(4))
+        np.testing.assert_array_equal(r['cov_matrix'], np.zeros((4, 4)))
+        self.assertTrue(np.all(np.isneginf(r['cor_matrix'])))
+        np.testing.assert_array_equal(r['residuals'], np.full(n, NAN))
+        self.assertEqual(r['rmse'], 0.0)
+
+    def test_window_with_eleven_daytime_records_falls_back_to_hlrc_lloyd(self):
+        # A window enters the fit with 11 measured daytime records, one short of
+        # what HLRC_LloydVPD needs. ONEFlux then gets -9999 parameters back,
+        # reads k = -9999 < 0 and refits the window without the VPD term. The
+        # port used to skip such a window. On CH-LAE, where only a fifth of NEE
+        # is measured, that dropped 1-6 windows a year and moved annual daytime
+        # GPP by up to 1.5 %.
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        from diive.flux.partitioning import daytime_oneflux as mod
+        short = self.short.copy()
+        nee = short['NEE_CUT_REF_orig'].copy()
+        jd = (short.index + pd.Timedelta(minutes=15)).dayofyear
+        # Window (160, 164]: keep 11 measured daytime records, all nights.
+        day = (jd > 160) & (jd <= 164) & (short['Rg_orig'] > 4) & nee.notna()
+        nee.iloc[np.flatnonzero(day)[11:]] = np.nan
+        self.assertEqual(int((day & nee.notna()).sum()), 11)
+
+        real = mod._fit
+        calls = []
+
+        def spy(lts_func, dep, *args, **kwargs):
+            calls.append((lts_func, int(np.size(dep))))
+            return real(lts_func, dep, *args, **kwargs)
+
+        with mock.patch.object(mod, '_fit', side_effect=spy):
+            DaytimePartitioningOneFlux(
+                nee=nee, ta=short['Tair_orig'], sw_in=short['Rg_orig'],
+                ta_f=short['Tair_f'], sw_in_f=short['Rg_f'], vpd=short['VPD_f'],
+                verbose=0).run()
+        self.assertIn(('HLRC_LloydVPD', 11), calls)
+        # all three beta starting guesses carry on with the 3-parameter model
+        self.assertEqual(calls.count(('HLRC_Lloyd', 11)), 3)
+
+    def test_best_beta_guess_is_chosen_on_float32_rmse(self):
+        # ONEFlux keeps the RMSEs of the three beta starting guesses in a
+        # float32 table and takes the first minimum. Two fits whose RMSEs differ
+        # only beyond float32 precision tie, and the earlier guess wins. In
+        # float64 the later one won, which on CH-LAE 2019 carried a different
+        # alpha into the next window.
+        from diive.flux.partitioning import daytime_oneflux as mod
+        n = 48 * 6
+        julday = (1 + np.arange(n) // 48).astype(np.float32)
+        rg = np.where(np.arange(n) % 48 >= 24, 500.0, 0.0).astype(np.float32)
+        D = dict(nee_f=np.full(n, -2.0, dtype=np.float32), nee_fqc=np.zeros(n),
+                 tair_f=np.full(n, 15.0, dtype=np.float32), rg_f=rg,
+                 vpd_f=np.full(n, 8.0, dtype=np.float32), rg_meas=rg,
+                 julday=julday, nee_fs_unc=np.ones(n, dtype=np.float32))
+        guess = {'j': 0}
+        # alpha and RMSE per beta starting guess j; j=1 and j=2 tie in float32
+        alphas, rmses = (0.05, 0.06, 0.07), (3.0, 2.0 + 1e-8, 2.0)
+
+        def fake_fit(lts_func, dep, indeps, npara, xguess, mprior, sigm, sigd):
+            if lts_func == 'LloydTemp':
+                params, rmse = np.array([2.0, 150.0]), 1.0
+            else:
+                j = guess['j'] % 3
+                guess['j'] += 1
+                params, rmse = np.array([alphas[j], 30.0, 0.05, 2.0]), rmses[j]
+            return dict(params=params, std=np.full(npara, 0.01),
+                        cov_matrix=np.eye(npara) * 1e-4, cor_matrix=np.eye(npara),
+                        residuals=np.zeros(dep.size), rmse=rmse)
+
+        with mock.patch.object(mod, '_fit', side_effect=fake_fit):
+            params_ok, *_ = mod._estimate_parasets(D, nperday=48, verbose=0)
+        self.assertGreater(len(params_ok), 0)
+        self.assertEqual(params_ok[0][0], np.float32(0.06))
+
     def test_results_before_run_raises(self):
         from diive.flux.partitioning import DaytimePartitioningOneFlux
         part = DaytimePartitioningOneFlux(

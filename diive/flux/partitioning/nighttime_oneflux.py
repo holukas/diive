@@ -476,11 +476,12 @@ class NighttimePartitioningOneFlux:
     than solved. ``NEE_NIGHT_OF`` keeps the input's float64 values; all other
     columns hold float32 values.
 
-    Measured agreement, CH-DAV 2016 half-hourly against a native ONEFlux 1.3.7
-    run (NumPy 1.26, SciPy 1.17): RECO, GPP (ordinary and robust), Rref and E0
-    are bitwise identical in every record, also with gaps in measured TA,
-    SW_IN and nighttime NEE. This relies on SciPy's ``leastsq`` and
-    ``interp1d`` behaving as in that version.
+    Measured agreement, CH-DAV 2016 and CH-LAE 2017-2019 half-hourly against a
+    native ONEFlux 1.3.7 run (NumPy 1.26, SciPy 1.17): RECO, GPP (ordinary and
+    robust), Rref and E0 are bitwise identical in every record, also with gaps
+    in measured TA, SW_IN and nighttime NEE, and at CH-LAE, where only 17-20 %
+    of NEE is measured. This relies on SciPy's ``leastsq`` and ``interp1d``
+    behaving as in that version.
 
     Example: ``examples/flux/partitioning/partitioning_nighttime_oneflux.py``
 
