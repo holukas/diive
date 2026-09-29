@@ -758,7 +758,7 @@ wrong** — corrected here.
 
 | Module | Real coverage | Earlier claim |
 |---|---|---|
-| `gapfilling/similarity.py` | **88 %**, only 32/128 GUI-only | **[revised]** I called it "indirect only, no direct test". It is well exercised by the `FluxMDS` and `RandomUncertaintyPAS20` tests. Deprioritise |
+| `gapfilling/similarity.py` | **88 %**, only 32/128 GUI-only | **[revised]** I called it "indirect only, no direct test". It is well exercised by the `FluxMDS` and `RandomUncertaintyPAS20` tests. Deprioritise. (2026-09-29: `RandomUncertaintyPAS20` uses only the similarity tolerances; the cascade's other caller is the daytime ONEFlux NEE uncertainty, and `test_uncertainty.py` now tests the cascade directly.) |
 | `core/base/flagbase.py` | **69 %**, 44/134 GUI-only | **[revised]** Genuinely covered via the outlier detectors, as suspected but now confirmed |
 | `flux/lowres/storage_correction.py` | **47 %**, 26/72 GUI-only | **[revised]** I listed it as "no test". Real tests reach it via `run_level31` |
 | `flux/postprocessingchain/codegen.py` | 80 %, 40 % GUI-only | **[revised]** The healthiest codegen module, thanks to `test_flux_codegen.py` |

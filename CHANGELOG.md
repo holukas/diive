@@ -11,7 +11,12 @@ Library (also used by the notebook and the GUI):
 - **Flux post-processing chain:** the flux processing chain is now called the flux post-processing
   chain and lives in `diive.flux.postprocessingchain`. The old import path
   `diive.flux.fluxprocessingchain` still works but gives a `FutureWarning` and will be removed in
-  a future release.
+  a future release. The examples and the notebook (now `FluxPostProcessingChain.ipynb`) are
+  renamed to match.
+- **MDS gap-filling, driver QC:** `FluxMDS`, `run_level41_mds` and `FluxConfig` take optional QC
+  columns for SW_IN, TA and VPD, so NEE can be gap-filled exactly as in ONEFlux, where only
+  measured driver values serve as similar samples. `dv.variables.driver_flag_columns` finds the
+  matching flag columns by name.
 - **Meteo screening, mixed time resolutions:** data with a change in time resolution, e.g. 10-min
   data followed by 1-min data, are screened correctly, and data with one resolution give the same
   resampled values as before.
@@ -49,6 +54,8 @@ GUI only:
   library, follows changes to the site coordinates and shows loading errors in the status line.
 - **Meteo screening (database), Copy Python:** writes a `StepwiseMeteoScreeningDb` script.
 - **Screening tabs:** absolute limits can be added as a step.
+- **MDS gap-filling, driver QC:** the MDS tab and Level 4.1 of the flux post-processing chain
+  take an optional QC flag column for SW_IN, TA and VPD, and Copy Python includes it.
 
 Notebook (meteo screening notebook v13):
 
@@ -59,22 +66,35 @@ Notebook (meteo screening notebook v13):
 - **Skipping outlier detection:** a note after the first plot says when it can be skipped.
 - **Resampling:** a period is kept only if at least half of it is covered (was a quarter).
 
+### Packaging
+
+- `threadpoolctl` is now a declared dependency; before, it was only installed through
+  scikit-learn.
+
 ### Bugfixes
 
-Library:
+Library (also used by the notebook and the GUI):
 
 - **Nighttime partitioning (ONEFlux):** results now match ONEFlux bit for bit (CH-DAV 2016
-  and 2019), up from an RMSE of 0.0003 µmol m⁻² s⁻¹.
+  and 2019, CH-LAE 2017-2019), up from an RMSE of 0.0003 µmol m⁻² s⁻¹.
 - **Daytime partitioning (ONEFlux):** every light-response fit now matches ONEFlux, also at sites
   with little measured NEE, and annual sums agree to 0.0001% (were up to 1.2% apart on CH-DAV 2019
   and 1.5% on CH-LAE 2018).
+- **Daytime partitioning (ONEFlux), failed fits:** when a window's fit fails, the measured NEE
+  of the surrounding 12 days is now removed and the year partitioned again, as in ONEFlux,
+  instead of skipping only that window.
 - **Nighttime partitioning (REddyProc):** results change and now match REddyProc to about
   1e-15. The E0 upper limit was 350 instead of REddyProc's 450, which on CH-DAV 2016
   lowered E0 from 281 to 231 and annual GPP by 1.3%.
-- **Daytime partitioning (REddyProc):** results change slightly and now match REddyProc to
-  about 1e-5 µmol m⁻² s⁻¹. The reported SD of the smoothed E0 was 50-84% too low. Runs no
+- **Daytime partitioning (REddyProc):** results change slightly and now match REddyProc; annual
+  sums agree to 0.001%. The reported SD of the smoothed E0 was 50-84% too low. Runs no
   longer slow down or change with the number of BLAS threads. Records that start without
   nighttime data in their first days now also match.
+- **MDS gap-filling:** results now match ONEFlux's `gf_mds` bit for bit. Gaps filled from the
+  mean diurnal cycle had used other records (none from before midnight, wider windows), which
+  moved annual NEE by up to 3 gC m⁻² on CH-LAE.
+- **MDS gap-filling, VPD in hPa:** with `vpd_in_kpa=False`, records exactly 5 hPa apart counted as
+  similar, unlike in ONEFlux.
 - **Meteo screening, timestamps:** data that already had the target resolution kept the internal
   middle-of-period timestamps after resampling and would be uploaded half a period early.
 - **Meteo screening, mixed time resolutions:** sums counted coarse records several times, manual
@@ -95,8 +115,8 @@ Library:
   shared bucket, not only for the uploaded site.
 - **`Hampel`, spikes next to gaps:** with `use_differencing=True` and `repeat=True`, a spike on the
   first or last record or next to a gap was never flagged, and each iteration removed the next
-  record instead, often up to the next gap. This also affected the flux processing chain (L3.2)
-  and the GUI screening tabs.
+  record instead, often up to the next gap. This also affected the flux post-processing chain
+  (L3.2) and the GUI screening tabs.
 - **`Hampel`:** a whole-number nighttime threshold combined with a decimal daytime threshold
   raised a `TypeError`.
 - **`setto_value`:** a bare date now covers the whole day, as documented.
