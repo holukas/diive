@@ -36,16 +36,21 @@ References:
 # - No overfitting risk
 # - Widely used in FLUXNET, ICOS, REddyProc
 #
-# How it works:
+# How it works (a port of the ONEFlux ``gf_mds`` cascade):
 # 1. For each gap, look for similar meteorological conditions
 # 2. Similarity defined by: radiation (Rg), temperature (Ta), VPD
-# 3. Hierarchical approach: start strict (7 days), relax to 140+ days
+# 3. Relax step by step: all three drivers in a 14-day, then a 28-day window;
+#    Rg only in 14 days; the mean diurnal cycle (same time of day +/- 1 h)
+#    over 1-5 days; the drivers again in windows up to 154 days; finally the
+#    diurnal cycle in ever wider windows
 # 4. Fill gap with mean flux from similar periods
 #
-# Quality levels (1-26):
-# - Levels 1-3: High quality (7-14 days, all 3 variables)
-# - Levels 4-5: Diurnal cycle (1-2 hours)
-# - Levels 6+: Progressively lower quality as window expands
+# Flag and quality:
+# - The gap-fill flag is method * 1000 + window in days (0 = measured), with
+#   method 1 = Rg+Ta+VPD, 2 = Rg only, 3 = diurnal cycle. For example, 1014
+#   means all three drivers in a 14-day window.
+# - The ONEFlux quality (1-3, 1 = best) condenses method and window; the
+#   report lists both.
 
 import time
 
@@ -53,6 +58,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import diive as dv
+from diive.gapfilling.mds import mds_quality_description
 
 # %%
 # Load and prepare data
@@ -152,10 +158,10 @@ mds.report()
 # %%
 # Results: Performance scores
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Scores computed by cross-validation on measured flux data
-# (estimate of gap-filling accuracy)
+# Scores compare MDS predictions at measured records with the measured values
+# (in-sample, a rough estimate of gap-filling accuracy)
 
-print("\nPerformance Scores (from cross-validation):")
+print("\nPerformance Scores (in-sample):")
 print(f"  R2: {mds.scores_['r2']:.4f}")
 print(f"  RMSE: {mds.scores_['rmse']:.4f} (root mean squared error)")
 print(f"  MAE: {mds.scores_['mae']:.4f} (mean absolute error)")
@@ -166,7 +172,8 @@ print(f"  Mean quality flag: {mds.scores_['mean_quality_flag_gap_predictions']:.
 # %%
 # Results: Quality flag analysis
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Understand how many gaps were filled at each quality level
+# Understand how many gaps were filled at each flag value
+# (method * 1000 + window in days, see above)
 
 gf_df = mds.gapfilling_df_
 flag_col = [c for c in gf_df.columns if 'FLAG' in c and 'FILLED' in c][0]
@@ -177,7 +184,7 @@ for quality_level, count in quality_counts.items():
     if quality_level == 0:
         label = "Measured (not gap-filled)"
     else:
-        label = f"Quality level {int(quality_level)}"
+        label = mds_quality_description(quality_level)
     percent = 100 * count / len(gf_df)
     print(f"  {label:.<40} {count:>6} ({percent:>5.1f}%)")
 

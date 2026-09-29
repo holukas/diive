@@ -2,13 +2,14 @@
 SIMILARITY: METEOROLOGICAL SIMILARITY FOR MDS-STYLE METHODS
 ============================================================
 
-Shared meteorological-similarity primitives used by both MDS gap-filling
-(Reichstein et al. 2005) and PAS20 random-uncertainty estimation
-(Pastorello et al. 2020 / ONEFlux). Both pool measured fluxes that occur under
-"similar" meteorological conditions (SWIN, TA, VPD) and reduce them to a
-statistic — the mean for gap-filling, the standard deviation for uncertainty.
-The tolerance constants and the per-window mean/SD/count reduction are the same
-definition in both, so they live here once.
+Meteorological-similarity primitives for MDS gap-filling (Reichstein et al.
+2005) and PAS20 random-uncertainty estimation (Pastorello et al. 2020 /
+ONEFlux). Both pool measured fluxes that occur under "similar" meteorological
+conditions (SWIN, TA, VPD) and reduce them to a statistic — the mean for
+gap-filling, the standard deviation for uncertainty. The random-uncertainty
+step shares only the tolerance constants and :func:`swin_tolerance`; it runs
+its own window loop. The MDS cascade (:func:`mds_gapfill_cascade`) serves the
+MDS gap-filler and the NEE uncertainty of the daytime ONEFlux partitioning.
 
 The tolerance values mirror the ONEFlux ``GF_DRIVER_*`` defines in
 ``oneflux_steps/common/common.h``.
@@ -66,13 +67,15 @@ def window_mean_sd_count(values, min_count: int, ddof: int = 0):
 # --------------------------------------------------------------------------- #
 # The 6-loop window-expansion cascade below is the single implementation behind
 # diive's MDS gap-filler AND the daytime-partitioning NEE-uncertainty step.
-# It is a faithful port of ONEFlux's Python ``uncert_via_gapFill``
-# (``oneflux/partition/daytime.py``), validated to ~5e-7 against a native
-# ONEFlux run on CH-DAV. Loops 1-6 map one-to-one to the C ``gf_mds`` stages in
-# ``common.c`` (``fillWindow`` == C ``time_window``, ``fillMethod`` == C
-# ``method``, and the quality collapse below is byte-identical to the C
-# formula). Operates on integer record positions of a regular (gap-free index)
-# half-hourly/hourly grid, using the np.nan "missing" convention throughout.
+# ONEFlux has two versions of it, and ``edge`` picks the one a caller matches:
+# ``'trim'`` the C ``gf_mds`` in ``common.c`` (the MDS gap-filler), ``'clip'``
+# the Python ``uncert_via_gapFill`` in ``oneflux/partition/daytime.py`` (the
+# daytime-partitioning uncertainty). The drivers-based loops 1, 2, 4 and 5 are
+# the same in both. The diurnal-cycle loops 3 and 6, the window edges and the
+# summation order differ (see ``mds_gapfill_cascade``). The quality collapse
+# is byte-identical to both. Operates on integer record positions of a regular
+# (gap-free index) half-hourly/hourly grid, using the np.nan "missing"
+# convention throughout.
 
 #: Base window width in days; the cascade expands in multiples of this.
 _TW_ORIG = 14
@@ -92,10 +95,10 @@ def meteo_similar_mask(w, index, *, swin=None, ta=None, vpd=None, hr=None,
     ``w`` is an array of candidate record positions; ``index`` the target
     record. Each supplied driver adds a strict ``< tolerance`` constraint on the
     absolute difference to the target (and requires the candidate driver to be
-    finite). This is the shared similarity primitive used by every MDS cascade
-    stage and by the random-uncertainty step. The SWIN tolerance is clamped to
-    the target's own radiation level (:func:`swin_tolerance`). Pass ``hr`` with
-    ``hr_tol`` (e.g. 1.1) for a +/- 1 h time-of-day (diurnal) constraint.
+    finite). The drivers-based MDS cascade passes (methods 1 and 2) use it.
+    The SWIN tolerance is clamped to the target's own radiation level
+    (:func:`swin_tolerance`). Pass ``hr`` with ``hr_tol`` (e.g. 1.1) for a
+    +/- 1 h time-of-day (diurnal) constraint.
     """
     mask = np.ones(w.shape, dtype=bool)
     if ta is not None:
@@ -134,11 +137,15 @@ def mds_granular_flag(method, time_window):
     so the driver method and exact window are both recoverable
     (``method = flag // 1000``, ``time_window = flag % 1000``). ``method == 0``
     (measured) maps to 0. E.g. ALL @ 14-day window -> ``1014``, SWIN @ 28 ->
-    ``2028``, MDC @ 1 -> ``3001``.
+    ``2028``, MDC @ 1 -> ``3001``. The window is capped at 999 in the flag:
+    gf_mds's diurnal-cycle windows can grow past 1000 days on a multi-year
+    record, which would otherwise spill into the method digit. 999 then means
+    "999 days or more"; gf_mds's window sequence (7, 13, 19, ...) never hits
+    999 exactly.
     """
     m = np.asarray(method)
     tw = np.asarray(time_window)
-    flag = np.where(m > 0, m * 1000 + np.rint(tw).astype(int), 0)
+    flag = np.where(m > 0, m * 1000 + np.minimum(np.rint(tw).astype(int), 999), 0)
     return flag if flag.ndim else int(flag)
 
 
@@ -153,24 +160,29 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
                         longest_marginal_gap: int = 60,
                         edge: str = 'trim',
                         sd_func=None,
+                        sample_ok=None,
                         progress_callback=None):
     """Faithful ONEFlux MDS marginal-distribution-sampling cascade.
 
     Six expanding-window passes (first success per record wins), a faithful port
-    of ONEFlux ``uncert_via_gapFill`` / C ``gf_mds`` (see module header):
+    of ONEFlux C ``gf_mds`` (``edge='trim'``) or ONEFlux Python
+    ``uncert_via_gapFill`` (``edge='clip'``), see module header:
 
       1. all drivers (SWIN+TA+VPD), windows 14 & 28 days  (method 1)
       2. SWIN only, 14 days                               (method 2)
       3. diurnal +/-1 h, windows 1, 3, 5 days             (method 3)
       4. all drivers, windows 42..154 days                (method 1)
       5. SWIN only, windows 28..154 days                  (method 2)
-      6. diurnal +/-1 h, windows 7..427 days              (method 3)
+      6. diurnal +/-1 h, windows 7, 13, 19, ... days until the window covers
+         the whole record (``'trim'``), or 7, 14, ..., 427 days (``'clip'``)
+                                                          (method 3)
 
     Args:
         tofill: target values to gap-fill (np.nan = missing).
         swin/ta/vpd: similarity drivers (np.nan = missing). Units must match the
             tolerances (SWIN W m-2, TA deg C, VPD same unit as ``vpd_tol``).
-        hr: time-of-day in hours (e.g. 0.0, 0.5, ..., 23.5) for the diurnal match.
+        hr: time-of-day in hours (e.g. 0.0, 0.5, ..., 23.5) for the diurnal
+            match. Used only with ``edge='clip'``.
         nperday: records per day (48 half-hourly, 24 hourly).
         min_samples: minimum similar samples to accept a fill. ONEFlux gap-fill
             uses 2 (``>1``); the uncertainty variant uses 10 (``>9``).
@@ -183,12 +195,25 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
             otherwise only at missing ``tofill`` records (gap-filling mode).
         longest_marginal_gap: leading/trailing gaps longer than this many days
             are left unfilled (ONEFlux ``longestMarginalgap``).
-        edge: how a look-up window that runs past the start or the end of the
-            record is handled, matching the caller's own ONEFlux reference:
-            ``'trim'`` drops the out-of-range offsets (the C ``gf_mds`` tool),
-            ``'clip'`` folds them onto record 0 / n-1 so the edge record enters
-            the mean, SD and count repeatedly (the Python
-            ``daytime.uncert_via_gapFill``).
+        edge: which ONEFlux reference the cascade follows, named after how a
+            look-up window that runs past the start or the end of the record
+            is handled. ``'trim'`` (the C ``gf_mds`` tool) drops the
+            out-of-range offsets, takes the diurnal-cycle samples by record
+            position (same time of day +/- 1 h on whole days, across midnight
+            too), grows the last diurnal window by 3 days a side, and sums the
+            samples one after the other in time order, as the C code does.
+            ``'clip'`` (the Python ``daytime.uncert_via_gapFill``) folds
+            out-of-range offsets onto record 0 / n-1 so the edge record enters
+            the mean, SD and count repeatedly, matches the time of day on
+            ``hr`` (not across midnight), grows the last diurnal window by 3.5
+            days a side and reduces with ``np.mean`` / ``np.std``.
+        sample_ok: optional ``dict`` mapping ``'swin'``/``'ta'``/``'vpd'`` to a
+            boolean array: False where that driver's value may not serve as a
+            look-up sample (ONEFlux driver QC above threshold). The record
+            being filled still compares against its own driver value, and the
+            diurnal-cycle method ignores it. Mirrors C ``gf_mds``: method 1
+            needs all three drivers eligible, method 2 only SWIN. Off
+            (``None``) by default.
         sd_func: optional ``callable(values, ddof)`` that replaces
             ``np.std(values, ddof=ddof)`` for the SD of the similar samples, for
             a caller whose reference computes the SD with different arithmetic.
@@ -243,6 +268,10 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
     # records), even in fill_all mode where measured records are also predicted.
     gap_eligible = ~large & ~target_valid
 
+    # 'trim' follows the C gf_mds tool in full, 'clip' ONEFlux's Python
+    # uncert_via_gapFill (see the `edge` argument).
+    c_gf_mds = edge != 'clip'
+
     def gaps():
         return np.where(eligible & ~np.isfinite(filled))[0]
 
@@ -253,6 +282,10 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
         if off is None:
             off = np.append(-np.arange(t_window / 2.0 * nperday),
                             np.arange(t_window / 2.0 * nperday - 1) + 1)
+            if c_gf_mds:
+                # gf_mds walks the window from its start to its end, so its
+                # samples, and the order it sums them in, run forward in time.
+                off = np.sort(off)
             _offset_cache[t_window] = off
         w = index + off
         if edge == 'clip':
@@ -289,12 +322,24 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
                      vals[cs <= swin[index]].mean() if np.any(cs <= swin[index]) else np.nan]
             parts = [p for p in parts if np.isfinite(p)]
             filled[index] = np.mean(parts) if parts else np.nan
+        elif c_gf_mds:
+            # gf_mds adds the samples one after the other in time order
+            # (common.c gf_get_similiar_mean). np.mean sums pairwise, which
+            # rounds differently in the last bits; np.add.accumulate does not.
+            filled[index] = np.add.accumulate(vals)[-1] / vals.size
         else:
             filled[index] = np.mean(vals)
         if vals.size <= ddof:
             sd[index] = np.nan
+        elif sd_func is not None:
+            sd[index] = sd_func(vals, ddof)
+        elif c_gf_mds:
+            # common.c gf_get_similiar_standard_deviation: sequential sum of
+            # squared deviations from the (sequential, plain) mean
+            dev = vals - np.add.accumulate(vals)[-1] / vals.size
+            sd[index] = np.sqrt(np.add.accumulate(dev * dev)[-1] / (vals.size - ddof))
         else:
-            sd[index] = np.std(vals, ddof=ddof) if sd_func is None else sd_func(vals, ddof)
+            sd[index] = np.std(vals, ddof=ddof)
         count[index] = vals.size
         method[index] = m
         time_window[index] = tw
@@ -317,9 +362,16 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
             nongap = w[np.isfinite(tofill[w])]
             if nongap.size < min_samples:
                 continue
-            sel = nongap[meteo_similar_mask(nongap, index, swin_tol=swin_tol,
-                                            ta_tol=ta_tol, vpd_tol=vpd_tol,
-                                            **drivers)]
+            similar = meteo_similar_mask(nongap, index, swin_tol=swin_tol,
+                                         ta_tol=ta_tol, vpd_tol=vpd_tol, **drivers)
+            if sample_ok is not None:
+                # gf_mds clears a driver's valid bit when its QC is above the
+                # threshold (common.c gf_mds mask loop), which removes the
+                # record from the samples of every method using that driver
+                for name in drivers:
+                    if name in sample_ok:
+                        similar &= sample_ok[name][nongap]
+            sel = nongap[similar]
             if sel.size >= min_samples:
                 fill_at(index, sel, m, t_window)
         emit(q)
@@ -337,6 +389,29 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
                 fill_at(index, sel, METHOD_MDC, t_window)
         emit(q)
 
+    def mdc_pass_gf_mds(days):
+        """One diurnal pass as C gf_mds does it (common.c gapfill, GF_TOFILL_METHOD).
+
+        The samples are the records at the same position of each day within
+        +/- `days` days, +/- 1 h: by record position, so the hour before
+        midnight counts for a record just after it (the `hr` match of the
+        Python reference drops it). The window is reported as 2 * days + 1.
+        """
+        per_h = nperday // 24
+        off = (np.arange(-days, days + 1)[:, None] * nperday
+               + np.arange(-per_h, per_h + 1)[None, :]).ravel()
+        tw = 2 * days + 1
+        q = mds_quality_from(METHOD_MDC, tw)
+        for k, index in enumerate(gaps()):
+            if progress_callback is not None and (k % _PROGRESS_EVERY) == 0:
+                emit(q)
+            w = index + off
+            w = w[(w >= 0) & (w < n)]
+            sel = w[np.isfinite(tofill[w])]
+            if sel.size >= min_samples:
+                fill_at(index, sel, METHOD_MDC, tw)
+        emit(q)
+
     # Loop 1: all drivers, windows 14 & 28 days
     for it in range(2):
         if gaps().size == 0:
@@ -349,7 +424,10 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
     for it in range(3):
         if gaps().size == 0:
             break
-        mdc_pass((2 * it + 1) * 1)
+        if c_gf_mds:
+            mdc_pass_gf_mds(it)
+        else:
+            mdc_pass((2 * it + 1) * 1)
     # Loop 4: all drivers, windows 42..154 days
     for it in range(2, 11):
         if gaps().size == 0:
@@ -360,11 +438,21 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
         if gaps().size == 0:
             break
         meteo_pass((it + 1) * _TW_ORIG, METHOD_SWIN, drivers=dict(swin=swin))
-    # Loop 6: diurnal, windows 7..427 days
-    for it in range(61):
-        if gaps().size == 0:
-            break
-        mdc_pass((it + 1) * (_TW_ORIG * 0.5))
+    # Loop 6: diurnal. gf_mds: +/- 3, 6, 9, ... days (windows 7, 13, 19, ...)
+    # until the window covers the whole record; a larger window adds nothing.
+    # The Python reference: windows 7, 14, ..., 427 days.
+    if c_gf_mds:
+        days = 3
+        while gaps().size:
+            mdc_pass_gf_mds(days)
+            if days * nperday >= n:
+                break
+            days += 3
+    else:
+        for it in range(61):
+            if gaps().size == 0:
+                break
+            mdc_pass((it + 1) * (_TW_ORIG * 0.5))
 
     quality = mds_quality_from(method, time_window)
     flag = mds_granular_flag(method, time_window)

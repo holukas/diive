@@ -105,6 +105,70 @@ class TestGapFilling(unittest.TestCase):
             with self.subTest(field=ml_only):
                 self.assertIsNone(getattr(res, ml_only))
 
+    def test_fluxmds_hpa_vpd_tolerance_boundary(self):
+        # VPD in hPa: ONEFlux compares hPa differences with 5 hPa. 5.154 and
+        # 0.154 hPa are 5.0 apart, so not similar; scaled to kPa they were
+        # 0.49999999999999994 apart and passed the 0.5 kPa test, which pulled
+        # every 0.154 record into the fill.
+        import pandas as pd
+        from diive.gapfilling.mds import FluxMDS
+        n = 20 * 48
+        idx = pd.date_range('2020-06-01 00:15', periods=n, freq='30min')
+        df = pd.DataFrame({'flux': np.random.RandomState(0).normal(0, 1, n),
+                           'sw': 300.0, 'ta': 15.0, 'vpd': 0.154}, index=idx)
+        pos = n // 2
+        df.iloc[[pos, pos - 3, pos + 3, pos + 5], df.columns.get_loc('vpd')] = 5.154
+        df.iloc[pos, df.columns.get_loc('flux')] = np.nan
+        mds = FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd',
+                      vpd_in_kpa=False, verbose=0)
+        mds.run()
+        out = mds.gapfilling_df_
+        self.assertEqual(out['.PREDICTIONS_COUNTS'].iloc[pos], 3)
+        self.assertEqual(out['.PREDICTIONS_METHOD'].iloc[pos], 1)
+
+    def test_fluxmds_driver_qc_like_nee_proc(self):
+        # ONEFlux nee_proc: the gap compares against its own gap-filled driver,
+        # but only records whose driver QC is 0 serve as samples; a missing QC
+        # does not exclude. All drivers constant, so every record within the
+        # 14-day window (+/- 335 records) is similar.
+        import pandas as pd
+        from diive.gapfilling.mds import FluxMDS
+        n = 20 * 48
+        idx = pd.date_range('2020-06-01 00:15', periods=n, freq='30min')
+        df = pd.DataFrame({'flux': np.random.RandomState(0).normal(0, 1, n),
+                           'sw': 300.0, 'ta': 15.0, 'vpd': 1.0,
+                           'sw_qc': 0.0, 'ta_qc': 0.0}, index=idx)
+        pos = n // 2
+        df.iloc[pos, df.columns.get_loc('flux')] = np.nan
+        sw_qc = df.columns.get_loc('sw_qc')
+        df.iloc[pos - 10:pos + 11, sw_qc] = 1.0     # gap-filled, incl. the gap itself
+        df.iloc[pos + 20:pos + 30, sw_qc] = np.nan  # QC missing: still a sample
+        window = 2 * 335
+
+        plain = FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd', verbose=0)
+        plain.run()
+        self.assertEqual(plain.gapfilling_df_['.PREDICTIONS_COUNTS'].iloc[pos], window)
+
+        qc = FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd',
+                     swin_qc='sw_qc', verbose=0)
+        qc.run()
+        out = qc.gapfilling_df_
+        self.assertEqual(out['.PREDICTIONS_METHOD'].iloc[pos], 1)
+        self.assertEqual(out['.PREDICTIONS_COUNTS'].iloc[pos], window - 20)
+
+        # TA flagged everywhere: method 1 (needs all three drivers) has no
+        # sample left, method 2 (SWIN only) is unaffected by the TA flag
+        df['ta_qc'] = 1.0
+        qc = FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd',
+                     swin_qc='sw_qc', ta_qc='ta_qc', verbose=0)
+        qc.run()
+        out = qc.gapfilling_df_
+        self.assertEqual(out['.PREDICTIONS_METHOD'].iloc[pos], 2)
+        self.assertEqual(out['.PREDICTIONS_COUNTS'].iloc[pos], window - 20)
+
+        with self.assertRaises(KeyError):
+            FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd', vpd_qc='nope')
+
     def test_gapfilling_longterm_randomforest(self):
         from diive.configs.exampledata import load_exampledata_parquet
         from diive.gapfilling.longterm import LongTermGapFillingRandomForestTS

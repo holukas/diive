@@ -98,14 +98,15 @@ def mds_gapfill_to_code(target: str, swin: str, ta: str, vpd: str, kwargs: dict,
     on three fixed meteorological drivers (SWIN / TA / VPD) with similarity
     tolerances — so unlike the ML renderer there are no feature list and no SHAP
     reduction. ``swin``/``ta``/``vpd`` name the driver columns; ``kwargs`` carries
-    the tolerances (``swin_tol``/``ta_tol``/``vpd_tol``/``avg_min_n_vals``).
+    the other options (``swin_tol``/``ta_tol``/``vpd_tol``/``avg_min_n_vals``,
+    and optionally the driver QC columns ``swin_qc``/``ta_qc``/``vpd_qc``).
 
     Args:
         target: the flux column to gap-fill.
         swin: short-wave incoming radiation column (W m-2).
         ta: air-temperature column (deg C).
         vpd: vapour-pressure-deficit column (kPa).
-        kwargs: FluxMDS tolerance kwargs (without ``df``/``flux``/``swin``/``ta``/``vpd``).
+        kwargs: other FluxMDS kwargs (without ``df``/``flux``/``swin``/``ta``/``vpd``).
         df_var: variable name used for the input DataFrame.
         load_hint: if given, prepend ``df = <load_hint>`` so the snippet runs as-is.
 

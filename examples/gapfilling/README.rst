@@ -8,7 +8,7 @@ Examples demonstrating various gap-filling approaches for time series data, from
 Method Overview
 ---------------
 
-Linear interpolation is fast but works only for small gaps. Random Forest and XGBoost require training data but handle larger gaps and complex patterns. MDS (Meteorological Data Similarity) needs no training — it matches similar conditions across your dataset. SW_IN Physics+XGBoost uses solar geometry to constrain nighttime values to zero and fills daytime gaps with gradient boosting.
+Linear interpolation is fast but works only for small gaps. Random Forest and XGBoost require training data but handle larger gaps and complex patterns. MDS (Marginal Distribution Sampling) needs no training — it matches similar conditions across your dataset. SW_IN Physics+XGBoost uses solar geometry to constrain nighttime values to zero and fills daytime gaps with gradient boosting.
 
 .. list-table::
    :header-rows: 1
@@ -61,12 +61,12 @@ Gradient boosting. Has more hyperparameters to tune than Random Forest.
 - **gapfill_xgboost.py** — Basic XGBoost with default hyperparameters
 - **gapfill_optimize_xgboost.py** — Hyperparameter tuning via grid search
 
-MDS (Meteorological Data Similarity)
+MDS (Marginal Distribution Sampling)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 No training. Fills gaps by finding similar conditions elsewhere in your data.
 
-- **gapfill_mds.py** — Original MDS implementation
+- **gapfill_mds.py** — MDS gap-filling of one month of NEE, with the report, flags and plots
 - **gapfill_mds_comparison.py** — MDS reproducibility / determinism check (two runs are bit-identical)
 
 SW_IN Physics + XGBoost
@@ -201,4 +201,4 @@ See ``dv.gapfilling`` for API documentation:
 - ``RandomForestTS`` — Random Forest time series with 8-stage feature engineering
 - ``XGBoostTS`` — XGBoost gradient boosting with tunable hyperparameters
 - ``linear_interpolation()`` — Simple linear interpolation
-- ``FluxMDS`` — Meteorological Data Similarity
+- ``FluxMDS`` — Marginal Distribution Sampling

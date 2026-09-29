@@ -5,11 +5,11 @@ GAP-FILLING: MARGINAL DISTRIBUTION SAMPLING
 Statistical gap-filling using meteorological similarity. No training required.
 
 Faithful port of the ONEFlux marginal-distribution-sampling gap-filler: the
-6-stage expanding-window cascade, the >=2-sample acceptance rule and the 1/2/3
-quality collapse all follow ONEFlux (``oneflux/partition/daytime.py``
-``uncert_via_gapFill`` / C ``common.c`` ``gf_mds``). The cascade itself lives in
-:mod:`diive.gapfilling.similarity` (shared with the random-uncertainty step and
-the daytime-partitioning NEE uncertainty); this module wraps it as a gap-filler.
+6-stage expanding-window cascade, the >=2-sample acceptance rule, the 1/2/3
+quality collapse and the arithmetic all follow ONEFlux's C ``gf_mds``
+(``oneflux_steps/common/common.c``). The cascade itself lives in
+:mod:`diive.gapfilling.similarity` (shared with the NEE uncertainty of the
+daytime ONEFlux partitioning); this module wraps it as a gap-filler.
 
 The public gap-fill **flag** (``FLAG_..._gfMDS_ISFILLED``) is *granular*: it
 encodes ``method * 1000 + time_window`` (0 = measured), so both the driver
@@ -66,7 +66,9 @@ def mds_quality_description(flag: int) -> str:
         return 'measured'
     method, tw = f // 1000, f % 1000
     name = _METHOD_NAMES.get(method, f'method {method}')
-    return f'{name}: {tw} d window (quality {mds_quality_from(method, tw)})'
+    # 999 is the flag's cap for windows of 999 days or more.
+    days = '999+' if tw == 999 else str(tw)
+    return f'{name}: {days} d window (quality {mds_quality_from(method, tw)})'
 
 
 def _infer_nperday(index: pd.DatetimeIndex) -> int:
@@ -102,6 +104,9 @@ class _MdsGapFillingBase:
                  sym_mean: bool = False,
                  fill_marginal_gaps: bool = True,
                  vpd_in_kpa: bool = True,
+                 swin_qc: str = None,
+                 ta_qc: str = None,
+                 vpd_qc: str = None,
                  verbose: int = 1):
         """Gap-fill an ecosystem flux by marginal distribution sampling (MDS).
 
@@ -130,8 +135,20 @@ class _MdsGapFillingBase:
                 trailing gaps longer than 60 days unfilled (the ONEFlux
                 ``uncert_via_gapFill`` ``longestMarginalgap`` guard).
             vpd_in_kpa: if True (default), *vpd* is in kPa and *vpd_tol* applies
-                directly. If False, *vpd* is in hPa and is converted to kPa
-                internally so the kPa *vpd_tol* still applies.
+                directly. If False, *vpd* is in hPa and the kPa *vpd_tol* is
+                converted to hPa (0.5 kPa -> 5 hPa, as in ONEFlux).
+            swin_qc, ta_qc, vpd_qc: optional column in *df* with the QC flag of
+                that driver, 0 = measured, above 0 = gap-filled: a diive
+                ``FLAG_..._ISFILLED`` column or a FLUXNET ``*_F_QC`` column.
+                Given together with a gap-filled driver column, MDS works as
+                ONEFlux does for NEE (``nee_proc``): the record being filled
+                compares against its own driver value, gap-filled or not, but
+                only records whose flag is 0 serve as similar samples. A
+                missing flag (NaN) does not exclude a record. Methods 1 (all
+                drivers) and 2 (SWIN) are affected, the diurnal cycle is not.
+                Each driver is handled on its own. Default: no QC, every
+                record with a driver value is a candidate (ONEFlux
+                ``energy_proc``, H and LE).
             verbose: verbosity level.
         """
         _required = {
@@ -147,6 +164,14 @@ class _MdsGapFillingBase:
                 "Column(s) not found in df - MDS requires flux, SWIN (W m-2), TA (deg C), VPD (kPa):\n"
                 + "\n".join(_msgs)
             )
+
+        _qc = {'swin': swin_qc, 'ta': ta_qc, 'vpd': vpd_qc}
+        _qc = {k: c for k, c in _qc.items() if c is not None}
+        _missing_qc = [c for c in _qc.values() if c not in df.columns]
+        if _missing_qc:
+            raise KeyError(f"Driver QC column(s) not found in df: {_missing_qc}")
+        self._driver_qc = {k: df[c].to_numpy(dtype=float) for k, c in _qc.items()}
+        self.swin_qc, self.ta_qc, self.vpd_qc = swin_qc, ta_qc, vpd_qc
 
         self._gapfilling_df = df[[flux, swin, ta, vpd]].copy()
         self.flux = flux
@@ -230,7 +255,7 @@ class _MdsGapFillingBase:
             progress_callback: optional ``callable(filled, total, quality,
                 n_filled, remaining)`` for a GUI progress bar (gap counts).
         """
-        rule(f"MDS Gap-Filling: {self.flux}")
+        rule(f"MDS Gap-Filling: {self.flux}", verbose=self.verbose)
 
         df = self.gapfilling_df_
         index = df.index
@@ -243,10 +268,12 @@ class _MdsGapFillingBase:
             return a
 
         flux_arr = arr(self.flux)
-        # vpd_tol is in kPa; convert an hPa VPD column so the tolerance applies.
+        # vpd_tol is in kPa. For an hPa VPD column, scale the tolerance, not the
+        # data: ONEFlux compares hPa differences with 5 hPa, and scaled data
+        # can land on the other side of that boundary (5.154 and 0.154 hPa are
+        # 5.0 apart, but 0.49999999999999994 kPa).
         vpd_arr = arr(self.vpd)
-        if not self.vpd_in_kpa:
-            vpd_arr = vpd_arr * 0.1
+        vpd_tol = self.vpd_tol if self.vpd_in_kpa else self.vpd_tol * 10.0
 
         # Predict at every record (fill_all): gap predictions fill the gaps, and
         # predictions at measured records give the in-sample score (matches the
@@ -261,7 +288,10 @@ class _MdsGapFillingBase:
             flux_arr, arr(self.swin), arr(self.ta), vpd_arr, hr, nperday,
             min_samples=self.avg_min_n_vals,
             swin_tol=(self.swin_tol[0], self.swin_tol[1]),
-            ta_tol=self.ta_tol, vpd_tol=self.vpd_tol,
+            ta_tol=self.ta_tol, vpd_tol=vpd_tol,
+            # nee_proc passes qc_gf_threshold 0: QC above 0 is not a sample,
+            # a missing QC (-9999 there, NaN here) does not exclude
+            sample_ok={k: ~(qc > 0) for k, qc in self._driver_qc.items()} or None,
             ddof=1, sym_mean=self.sym_mean, fill_all=True,
             longest_marginal_gap=10 ** 9 if self.fill_marginal_gaps else 60,
             progress_callback=_cb,
@@ -499,7 +529,21 @@ class FluxMDS(_MdsGapFillingBase):
     Fills missing flux data by matching meteorologically similar conditions
     (SWIN, TA, VPD) following the faithful ONEFlux 6-stage expanding-window
     cascade (Reichstein 2005 / Vekuri 2023). The cascade is shared with the
-    random-uncertainty step (:mod:`diive.gapfilling.similarity`).
+    daytime-partitioning NEE uncertainty (:mod:`diive.gapfilling.similarity`).
+
+    Measured agreement: compared with ONEFlux's ``gf_mds`` tool, compiled from
+    the ONEFlux 1.3.7 C source and run on the same input with the settings of
+    ONEFlux's pipeline (VPD in hPa, ``vpd_in_kpa=False``). Filled values, SDs,
+    sample counts, methods and windows are bitwise identical in every gap and
+    every measured record, and so are the annual sums: NEE and LE for CH-DAV
+    2016 and 2019, NEE, H and LE for CH-LAE 2017-2019, each with the data's own
+    gaps, extra gaps of 2-30 days, missing drivers, 60+ day gaps at both ends
+    of the year, and hourly data (65 runs). Harness:
+    ``diive-data/references/mds_parity_oneflux``. ONEFlux's own NEE
+    gap-filling (``nee_proc``) passes gap-filled drivers with their QC flags:
+    with the same drivers and ``swin_qc``/``ta_qc``/``vpd_qc``, FluxMDS matches
+    it bitwise too (CH-DAV 2016/2019, CH-LAE 2017-2019). Without the QC
+    columns, CH-LAE annual NEE differed by 3-10 gC m-2 (1-5 % of the gaps).
 
     Examples:
         See examples/gapfilling/gapfill_mds.py for basic usage.
