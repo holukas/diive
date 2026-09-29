@@ -169,6 +169,30 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
             mod._uncert_via_gapfill(arr, arr, arr, arr, arr, 48)
         self.assertEqual(seen.get('edge'), 'clip')
 
+    def test_uncertainty_sd_uses_oneflux_tstd_arithmetic(self):
+        # ONEFlux takes the look-up SD with scipy.stats.tstd. Under NumPy 1 its
+        # variance is float32 but the n/(n-1) correction and the square root
+        # run in float64. np.std rounds differently in about one record in
+        # five, and these SDs weight every daytime fit. Expected value: scipy
+        # 1.17.1 tstd under NumPy 1.26.4.
+        from diive.flux.partitioning import daytime_oneflux as mod
+        x = np.array([-2.609, -9.697, 0.043, -2.206, 0.03, -5.151, -4.887,
+                      -7.379, 3.611, -4.526, 0.763, -5.942], dtype=np.float32)
+        expected = np.float32(3.8134894371032715)
+        self.assertEqual(mod._tstd_oneflux(x, 1), expected)
+        self.assertNotEqual(np.std(x, ddof=1), expected)
+
+        seen = {}
+
+        def spy(*args, **kwargs):
+            seen.update(kwargs)
+            return {'sd': np.full(len(args[0]), np.nan)}
+
+        arr = np.zeros(10, dtype=np.float32)
+        with mock.patch.object(mod, 'mds_gapfill_cascade', side_effect=spy):
+            mod._uncert_via_gapfill(arr, arr, arr, arr, arr, 48)
+        self.assertIs(seen.get('sd_func'), mod._tstd_oneflux)
+
     def test_alpha_left_at_the_starting_guess_is_accepted(self):
         # ONEFlux reads alpha back from its float32 parameter table, and
         # float32(0.01) != 0.01, so its guard against an alpha that never left

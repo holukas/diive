@@ -34,8 +34,8 @@ the ONEFlux and REddyProc daytime implementations.
 # (``Reco_DT_CUT_REF`` / ``GPP_DT_CUT_REF``). They come from a different
 # algorithm and provenance (measured NEE uncertainty, bootstrap, full record), so
 # the ONEFlux port tracks GPP closely and RECO with a stable bias - a provenance
-# artifact, not an algorithmic difference (the port matches a native ONEFlux run
-# on identical inputs to RECO r ~ 0.999, GPP r ~ 0.9999).
+# artifact, not an algorithmic difference (on identical inputs, every fit
+# matches a native ONEFlux run and RECO/GPP agree to about 1e-5).
 
 import matplotlib.pyplot as plt
 import numpy as np

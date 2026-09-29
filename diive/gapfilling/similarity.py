@@ -152,6 +152,7 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
                         fill_all: bool = False,
                         longest_marginal_gap: int = 60,
                         edge: str = 'trim',
+                        sd_func=None,
                         progress_callback=None):
     """Faithful ONEFlux MDS marginal-distribution-sampling cascade.
 
@@ -188,6 +189,9 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
             ``'clip'`` folds them onto record 0 / n-1 so the edge record enters
             the mean, SD and count repeatedly (the Python
             ``daytime.uncert_via_gapFill``).
+        sd_func: optional ``callable(values, ddof)`` that replaces
+            ``np.std(values, ddof=ddof)`` for the SD of the similar samples, for
+            a caller whose reference computes the SD with different arithmetic.
         progress_callback: optional ``callable(gaps_filled, total_gaps, quality)``
             invoked during/after each cascade pass (gap counts + the current
             1/2/3 quality), for a progress bar.
@@ -271,11 +275,9 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
 
     def fill_at(index, sel, m, tw):
         # Reduce in the input dtype: float32 callers (daytime uncertainty) match
-        # ONEFlux's float32 tmean/tstd; the float64 MDS gap-filler stays f8.
-        # This cannot be made bitwise-exact against a reference run, because
-        # scipy's tstd has changed how it accumulates between versions (recent
-        # ones stay in the input dtype, older ones cast to float64 first). The
-        # spread either way is under one float32 ulp of the result.
+        # ONEFlux's float32 tmean; the float64 MDS gap-filler stays f8. The SD
+        # can be replaced through `sd_func` (the daytime uncertainty passes
+        # ONEFlux's scipy tstd arithmetic).
         vals = tofill[sel]
         # Symmetric mean (Vekuri 2023): split the similar samples by whether the
         # candidate's SWIN is above/below the target's, average the two sub-means
@@ -289,7 +291,10 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
             filled[index] = np.mean(parts) if parts else np.nan
         else:
             filled[index] = np.mean(vals)
-        sd[index] = np.std(vals, ddof=ddof) if vals.size > ddof else np.nan
+        if vals.size <= ddof:
+            sd[index] = np.nan
+        else:
+            sd[index] = np.std(vals, ddof=ddof) if sd_func is None else sd_func(vals, ddof)
         count[index] = vals.size
         method[index] = m
         time_window[index] = tw

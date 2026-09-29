@@ -362,6 +362,26 @@ def _percentiles_fn(values_arr, percs):
 # --------------------------------------------------------------------------- #
 # Stage A: per-record NEE uncertainty (port of daytime.uncert_via_gapFill)
 # --------------------------------------------------------------------------- #
+def _tstd_oneflux(vals, ddof):
+    """Sample SD of float32 values with the arithmetic of ONEFlux's
+    ``scipy.stats.tstd`` under NumPy 1.
+
+    scipy computes the mean and the mean of squared deviations in the input
+    dtype (float32). The ``n / (n - ddof)`` correction and the square root then
+    run in float64 under NumPy 1, because there ``n`` is a float32 scalar and
+    ``n - ddof`` with a Python int promotes to float64. NumPy 2 (NEP 50) keeps
+    them in float32, and ``np.std`` divides the sum by ``n - ddof`` in one
+    float32 step. The three results differ by one float32 ulp in about a fifth
+    of the records, and these SDs weight every daytime fit: that alone flipped
+    the sign of a VPD sensitivity ``k`` near zero in four CH-DAV 2016 windows.
+    With this arithmetic all fits match ONEFlux on NumPy 1 bit for bit.
+    """
+    d = vals - np.mean(vals, keepdims=True)
+    var = np.mean(d * d)
+    n = vals.size
+    return np.float32(np.sqrt(np.float64(var) * (n / (n - ddof))))
+
+
 def _uncert_via_gapfill(nee, rg, ta, vpd, hr, nperday, longest_marginal_gap=60):
     """Reichstein-style marginal-distribution look-up gap-fill of NEE.
 
@@ -383,6 +403,9 @@ def _uncert_via_gapfill(nee, rg, ta, vpd, hr, nperday, longest_marginal_gap=60):
     window bounds instead. Clipping costs nothing away from the record ends; on
     CH-DAV 2016 it changed the uncertainty of 172 of 17568 records, all of them
     within 336 records of the trailing edge.
+
+    The SD uses ONEFlux's own ``tstd`` arithmetic (:func:`_tstd_oneflux`), not
+    ``np.std``.
     """
     def to_nan(x):
         x = np.asarray(x)
@@ -393,7 +416,7 @@ def _uncert_via_gapfill(nee, rg, ta, vpd, hr, nperday, longest_marginal_gap=60):
         to_nan(nee), to_nan(rg), to_nan(ta), to_nan(vpd), np.asarray(hr), nperday,
         min_samples=10, swin_tol=(20.0, _RG_TOL), ta_tol=_TA_TOL, vpd_tol=_VPD_TOL,
         ddof=1, fill_all=True, longest_marginal_gap=longest_marginal_gap,
-        edge='clip',
+        edge='clip', sd_func=_tstd_oneflux,
     )
     sd = res['sd']
     return np.where(np.isfinite(sd), sd, NAN)
@@ -875,19 +898,20 @@ class DaytimePartitioningOneFlux:
     ONEFlux run.
 
     Measured agreement, CH-DAV 2016 half-hourly against a native ONEFlux 1.3.7
-    run on the same arrays: the same 143 windows are fitted, all but four of
-    them agree on RRef, beta and alpha to better than 1%, and E0 agrees to
-    0.002 K. Per record, GPP r = 0.9999 (RMSE 0.061 umol m-2 s-1), RECO
-    r = 0.9996 (RMSE 0.068); annual sums differ by -0.06% (GPP) and -0.14%
-    (RECO).
+    run (NumPy 1.26, SciPy 1.17) on the same arrays: the per-record NEE
+    uncertainty is identical bit for bit, and so is every light-response fit
+    in all 143 windows. Per record, GPP and RECO differ by an RMSE of 1e-5
+    umol m-2 s-1 (largest 2.4e-4), and the annual sums agree to 0.0001%.
 
-    What is left is not a port difference. In a few windows the VPD sensitivity
-    ``k`` converges to zero, and the model cascade branches on its sign, which
-    is then decided by rounding. ONEFlux itself takes a different path in such
-    windows when only its NumPy/SciPy versions change: with a gappy CH-DAV 2016
-    year, 6 windows differed between two ONEFlux runs (NumPy 1.24/SciPy 1.10 vs
-    NumPy 1.26/SciPy 1.17) and its annual GPP moved by 0.7%, more than diive
-    differs from either run.
+    ONEFlux's own output depends on the NumPy version it runs under. NumPy 2
+    changed scalar type promotion (NEP 50), and that moves ONEFlux in two
+    places: the SD in its uncertainty look-up rounds differently in a fifth of
+    the records, and its alpha check starts to reject windows (see
+    ``reject_alpha_at_start``). On CH-DAV 2016, ONEFlux under NumPy 2 fits 7
+    fewer windows and its annual GPP rises by 5.8%. With the alpha check held
+    at its NumPy-1 result, 17 windows still change, most of them windows where
+    ``k`` converges to zero and the model cascade branches on its sign. diive
+    reproduces ONEFlux under NumPy 1.
 
     Example: ``examples/flux/partitioning/partitioning_daytime_oneflux.py``
 
@@ -938,6 +962,8 @@ class DaytimePartitioningOneFlux:
                 the results match its output. True applies the check as ONEFlux's
                 own comment intends. On CH-DAV 2016 that rejects 7 more windows
                 and raises annual GPP by 5.7%, in ONEFlux and here alike.
+                ONEFlux run under NumPy 2 behaves like True, because there the
+                comparison happens in float32.
             verbose: Console verbosity level (0 silent, 1 warnings, 2 progress
                 + report, 3 debug). Default 2.
         """
