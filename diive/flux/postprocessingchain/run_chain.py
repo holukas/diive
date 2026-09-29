@@ -281,7 +281,12 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     if config.gapfill_mds:
         for _fld, _val in (('mds_swin', config.mds_swin),
                            ('mds_ta', config.mds_ta),
-                           ('mds_vpd', config.mds_vpd)):
+                           ('mds_vpd', config.mds_vpd),
+                           ('mds_swin_qc', config.mds_swin_qc),
+                           ('mds_ta_qc', config.mds_ta_qc),
+                           ('mds_vpd_qc', config.mds_vpd_qc)):
+            if _fld.endswith('_qc') and _val is None:
+                continue
             if _val not in data.full_df.columns:
                 _column_misses.append(f"{_fld}={_val!r}")
     if config.ustar_detection_mode == 'bootstrap':
@@ -458,6 +463,9 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             swin=config.mds_swin,
             ta=config.mds_ta,
             vpd=config.mds_vpd,
+            swin_qc=config.mds_swin_qc,
+            ta_qc=config.mds_ta_qc,
+            vpd_qc=config.mds_vpd_qc,
         )
 
     if config.gapfill_rf or config.gapfill_xgb:

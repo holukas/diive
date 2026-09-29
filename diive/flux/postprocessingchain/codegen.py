@@ -274,7 +274,10 @@ def _level41_block(level41_cfg: dict) -> list[str]:
 
         {"methods": ["rf", "xgb", "mds"],   # subset, in this canonical order
          "features": ["TA_...", "SW_IN_...", "VPD_..."],   # rf / xgb predictors
-         "mds": {"swin": "SW_IN_...", "ta": "TA_...", "vpd": "VPD_..."}}
+         "mds": {"swin": "SW_IN_...", "ta": "TA_...", "vpd": "VPD_...",
+                 # optional: "ta_tol", "vpd_tol", and the driver QC flag
+                 # columns "swin_qc", "ta_qc", "vpd_qc" (omitted when None)
+                 }}
 
     RF and XGBoost share one ``make_level41_engineer`` instance (feature
     engineering runs once and is reused across methods and USTAR scenarios).
@@ -308,6 +311,9 @@ def _level41_block(level41_cfg: dict) -> list[str]:
                 f"    vpd={mds.get('vpd')!r},"]
         for k in ("ta_tol", "vpd_tol"):
             if k in mds:
+                body.append(f"    {k}={mds[k]!r},")
+        for k in ("swin_qc", "ta_qc", "vpd_qc"):
+            if mds.get(k) is not None:
                 body.append(f"    {k}={mds[k]!r},")
         body.append(")")
         lines += body

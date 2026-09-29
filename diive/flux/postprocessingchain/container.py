@@ -351,6 +351,18 @@ class FluxConfig:
     mds_vpd: str | None = None
     """VPD column for MDS (**kPa**; must be in ``data.full_df``)."""
 
+    mds_swin_qc: str | None = None
+    """Optional QC flag column of ``mds_swin`` (0 = measured, above 0 =
+    gap-filled, e.g. ``FLAG_..._ISFILLED`` or FLUXNET ``SW_IN_F_QC``; must be
+    in ``data.full_df``). Only records with flag 0 serve as similar samples,
+    as in ONEFlux's NEE gap-filling. Default ``None``: no QC."""
+
+    mds_ta_qc: str | None = None
+    """Optional QC flag column of ``mds_ta``; see ``mds_swin_qc``."""
+
+    mds_vpd_qc: str | None = None
+    """Optional QC flag column of ``mds_vpd``; see ``mds_swin_qc``."""
+
     # ----- NEE partitioning (Level-4.2) -----
     # Each ``partition_*`` flag enables one of the four faithful partitioning
     # ports. They are off by default — partitioning needs gap-filled meteo

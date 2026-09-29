@@ -252,6 +252,34 @@ class TestFluxPostProcessingChainComposable(unittest.TestCase):
         self.assertIn(gf['mds']['CUT_50'], out.fpc_df.columns)
 
 
+    def test_run_chain_mds_driver_qc(self):
+        """FluxConfig mds_*_qc reach FluxMDS; a missing QC column fails up front."""
+        from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+        from diive.flux.postprocessingchain import FluxConfig, init_flux_data, run_chain
+        df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME') if c in df.columns])
+        for c in ('TA_1_1_1', 'SW_IN_1_1_1'):
+            df[f'{c}_QC'] = df[c].isna().astype(float)   # 1 = gap-filled below
+            df[c] = df[c].bfill()
+        df['VPD_kPa'] = df['VPD_EP'].bfill().multiply(0.1)
+        data = init_flux_data(df=df, fluxcol='FC',
+                              site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+        kw = dict(fluxcol='FC', ustar_thresholds=[0.1], ustar_labels=['CUT_50'],
+                  outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,
+                  level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+                  gapfill_rf=False, gapfill_xgb=False, gapfill_mds=True,
+                  mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_kPa')
+
+        with self.assertRaises(KeyError):
+            run_chain(data, FluxConfig(**kw, mds_vpd_qc='NOT_THERE'))
+
+        out = run_chain(data, FluxConfig(**kw, mds_swin_qc='SW_IN_1_1_1_QC',
+                                         mds_ta_qc='TA_1_1_1_QC'))
+        mds = out.levels.level41_mds['CUT_50']
+        self.assertEqual((mds.swin_qc, mds.ta_qc, mds.vpd_qc),
+                         ('SW_IN_1_1_1_QC', 'TA_1_1_1_QC', None))
+        self.assertEqual(set(mds._driver_qc), {'swin', 'ta'})
+
     def test_level42_partitioning_run_chain(self):
         """Wire the four NEE partitioning variants through run_chain (L4.2)."""
         import warnings

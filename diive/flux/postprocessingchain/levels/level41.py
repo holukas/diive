@@ -132,9 +132,12 @@ def run_level41_mds(
         ta_tol: float = 2.5,
         vpd_tol: float = 0.5,
         avg_min_n_vals: int = 2,
+        swin_qc: str | None = None,
+        ta_qc: str | None = None,
+        vpd_qc: str | None = None,
 ) -> FluxLevelData:
     """
-    Level-4.1: Gap-fill using Marginal Data Substitution (MDS).
+    Level-4.1: Gap-fill using Marginal Distribution Sampling (MDS).
 
     Runs one MDS instance per USTAR scenario found in
     ``data.levels.filteredseries_level33_qcf``.
@@ -147,10 +150,18 @@ def run_level41_mds(
             Must exist in ``data.full_df``.
         vpd: Column name for vapour pressure deficit (**kPa**).
             Must exist in ``data.full_df``.
-        swin_tol: Tolerance window for radiation matching [absolute, relative].
+        swin_tol: SWIN tolerance clamp ``[min, max]`` in W m-2 (default
+            ``[20, 50]``): a record's tolerance is its own SWIN clamped into
+            this range.
         ta_tol: Temperature tolerance (deg C).
         vpd_tol: VPD tolerance (kPa).
         avg_min_n_vals: Minimum number of values for averaging.
+        swin_qc, ta_qc, vpd_qc: Optional QC flag column of each driver
+            (0 = measured, above 0 = gap-filled, e.g. ``FLAG_..._ISFILLED``
+            or FLUXNET ``*_F_QC``), in ``data.full_df``. With gap-filled
+            drivers this is how ONEFlux gap-fills NEE: only measured driver
+            values serve as similar samples. See
+            :class:`diive.gapfilling.mds.FluxMDS`.
 
     Returns:
         Updated FluxLevelData; MDS instances accessible via
@@ -158,8 +169,9 @@ def run_level41_mds(
     """
     from diive.gapfilling.mds import FluxMDS
 
-    # Validate that all three driver columns exist in full_df before the loop.
-    missing_drivers = [c for c in (swin, ta, vpd) if c not in data.full_df.columns]
+    # Validate that the driver columns (and any QC columns) exist in full_df before the loop.
+    qc_cols = [c for c in (swin_qc, ta_qc, vpd_qc) if c is not None]
+    missing_drivers = [c for c in (swin, ta, vpd, *qc_cols) if c not in data.full_df.columns]
     if missing_drivers:
         raise KeyError(
             f"MDS driver column(s) not found in data.full_df: {missing_drivers}. "
@@ -171,12 +183,12 @@ def run_level41_mds(
     rule("Level 4.1: Gap-Filling (MDS)")
 
     # Driver coverage check: MDS fills a target record by averaging neighbours
-    # whose driver values fall within tolerance. Gaps in TA / SW_IN / VPD
-    # themselves therefore directly cap the achievable fill rate, but the
-    # final gap-filled column gives no hint that the driver coverage is the
-    # bottleneck. Log coverage upfront so a low fill rate downstream is
-    # explainable rather than mysterious; warn when any driver is below 80%
-    # because that is usually the dominant cause of poor MDS performance.
+    # whose driver values fall within tolerance. Where TA / SW_IN / VPD are
+    # missing, it falls back to the mean diurnal cycle, so the record is still
+    # filled but with a lower-quality method. The gap-filled column gives no
+    # hint that driver coverage is the cause. Log coverage upfront; warn when
+    # any driver is below 80%, because that is usually the main reason for
+    # poor MDS fill quality.
     n_total = len(data.full_df)
     for _drv_label, _drv_col in (('SW_IN', swin), ('TA', ta), ('VPD', vpd)):
         _n_valid = int(data.full_df[_drv_col].notna().sum())
@@ -184,8 +196,8 @@ def run_level41_mds(
         _msg = (f"MDS driver coverage: {_drv_label}={_drv_col!r}  "
                 f"{_n_valid}/{n_total} valid ({_coverage:.1%})")
         if _coverage < 0.80:
-            warn(f"{_msg} - low driver coverage will cap the gap-fill rate "
-                 f"regardless of model quality")
+            warn(f"{_msg} - where drivers are missing, MDS falls back to the "
+                 f"mean diurnal cycle (lower fill quality)")
         else:
             detail(_msg)
 
@@ -204,7 +216,7 @@ def run_level41_mds(
     mds_results: dict = {}
 
     for ustar_scen, ustar_flux in filteredseries_l33.items():
-        scen_df = data.full_df[[swin, ta, vpd]].copy()
+        scen_df = data.full_df[list(dict.fromkeys([swin, ta, vpd, *qc_cols]))].copy()
         assert_aligned_index(scen_df, fpc_df[ustar_flux.name],
                              context=f"run_level41_mds[{ustar_scen!r}] scen_df build")
         scen_df = pd.concat([scen_df, fpc_df[ustar_flux.name]], axis=1)
@@ -215,6 +227,7 @@ def run_level41_mds(
             swin=swin, ta=ta, vpd=vpd,
             swin_tol=swin_tol, ta_tol=ta_tol, vpd_tol=vpd_tol,
             avg_min_n_vals=avg_min_n_vals,
+            swin_qc=swin_qc, ta_qc=ta_qc, vpd_qc=vpd_qc,
         )
         instance.run()
 

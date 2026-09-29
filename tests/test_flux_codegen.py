@@ -134,6 +134,33 @@ class TestFluxCodegen(unittest.TestCase):
         # Only the requested method's functions are imported.
         self.assertIn("make_level41_engineer", code)
 
+    def test_level41_to_code_mds_driver_qc(self):
+        from diive.flux.postprocessingchain import level41_to_code
+        kw = dict(init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+                  level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
+                  level31_kwargs={},
+                  level32_steps=[{"method": "flag_outliers_hampel_test", "kwargs": {}}],
+                  level33_kwargs={"thresholds": [0.18], "threshold_labels": ["CUT_50"]})
+        code = level41_to_code(**kw, level41_cfg={
+            "methods": ["mds"],
+            "mds": {"swin": "SW_IN_F", "ta": "TA_F", "vpd": "VPD_F",
+                    "swin_qc": "SW_IN_F_QC", "ta_qc": "TA_F_QC", "vpd_qc": None}})
+        compile(code, "<gen>", "exec")
+        self.assertIn("swin_qc='SW_IN_F_QC'", code)
+        self.assertIn("ta_qc='TA_F_QC'", code)
+        self.assertNotIn("vpd_qc", code)            # None -> omitted
+
+    def test_chain_to_code_mds_driver_qc(self):
+        from diive.flux.postprocessingchain import chain_to_code
+        code = chain_to_code(
+            init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+            config_kwargs=dict(fluxcol="FC", ustar_thresholds=[0.18], ustar_labels=["CUT_50"],
+                               mds_swin="SW_IN_F", mds_ta="TA_F", mds_vpd="VPD_F",
+                               mds_swin_qc="SW_IN_F_QC", mds_ta_qc=None))
+        compile(code, "<gen>", "exec")
+        self.assertIn("mds_swin_qc='SW_IN_F_QC'", code)
+        self.assertNotIn("mds_ta_qc", code)         # default None -> omitted
+
     def test_level41_to_code_mds_only_omits_engineer(self):
         from diive.flux.postprocessingchain import level41_to_code
         code = level41_to_code(
