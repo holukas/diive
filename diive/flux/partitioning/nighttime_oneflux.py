@@ -49,6 +49,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
+from scipy.interpolate import interp1d
 from scipy.optimize import leastsq
 
 from diive.core.utils.console import info, warn, success
@@ -114,7 +115,11 @@ def sunrise_sunset(doy: np.ndarray, lat: float) -> tuple[np.ndarray, np.ndarray]
 
     lat_rad = lat * pi / 180.0
     decl = decl_amp * np.sin(rad_per_day * (doy - march21_doy_diff))
-    hs = np.arccos(-np.tan(lat_rad) * np.tan(decl))
+    tan_decl = np.tan(decl)
+    # np.tan(lat_rad) is a float64 scalar. ONEFlux ran on NumPy 1, where such a
+    # scalar did not widen its float32 day-of-year array (value-based casting);
+    # under NumPy 2 it would. Cast it to the array's dtype to keep that.
+    hs = np.arccos(tan_decl.dtype.type(-np.tan(lat_rad)) * tan_decl)
     sunrise = 12.0 - hs * hours_per_hs
     sunset = 12.0 + hs * hours_per_hs
     return sunrise, sunset
@@ -126,6 +131,10 @@ def _pct(array: np.ndarray, percent: float) -> float:
     Not a standard percentile: it returns the value at the smallest integer
     rank strictly greater than ``n * percent / 100`` (averaging with the
     preceding rank when that critical rank is an integer).
+
+    The average is skipped, as in ONEFlux, when the preceding-rank value sits
+    at position 0 of the array: ONEFlux tests for that rank with
+    ``numpy.sum(<its index>) != 0``, which is false for index 0.
     """
     nonnan = array[~np.isnan(array)]
     n = nonnan.size
@@ -137,11 +146,13 @@ def _pct(array: np.ndarray, percent: float) -> float:
     if n <= critical_rank:
         return float(np.max(nonnan))
 
-    s = np.sort(nonnan)
+    # Stable sort order = ONEFlux's ordinal ranks (ties in order of appearance).
+    order = np.argsort(nonnan, kind='stable')
     k = int(np.floor(critical_rank)) + 1  # smallest integer rank > critical_rank (1-based)
-    val_k = s[k - 1]
-    if float(critical_rank).is_integer() and (k - 1) >= 1:
-        return float((val_k + s[k - 2]) / 2.0)
+    val_k = nonnan[order[k - 1]]
+    if float(critical_rank).is_integer() and k >= 2 and order[k - 2] != 0:
+        # In the array's own dtype (float32 in the port), as ONEFlux averages.
+        return float((val_k + nonnan[order[k - 2]]) / 2.0)
     return float(val_k)
 
 
@@ -172,6 +183,10 @@ def _fit_lloyd_taylor(nee_night: np.ndarray, tair: np.ndarray,
 
     Port of ONEFlux ``nlinlts1``. Returns ``(rref, e0, rref_se, e0_se)`` or
     ``None`` when there are too few valid points.
+
+    Pass float32 ``nee_night`` and ``tair`` to reproduce ONEFlux: the residuals
+    then stay float32, as in ONEFlux, and ``leastsq`` sizes its finite-difference
+    step from the precision of the residuals it is given.
     """
     npara = 2
     nonnan_indep = ~np.isnan(tair)
@@ -188,7 +203,10 @@ def _fit_lloyd_taylor(nee_night: np.ndarray, tair: np.ndarray,
     temp = tair
 
     def trimmed_residuals(par):
-        rref, e0 = par
+        # leastsq hands over float64 parameters. ONEFlux ran on NumPy 1, where a
+        # float64 scalar did not widen a float32 array (value-based casting), so
+        # its prediction stayed in the temperature's dtype. NumPy 2 would widen.
+        rref, e0 = (temp.dtype.type(p) for p in par)
         prediction = lloyd_taylor(temp, rref, e0)
         residuals = clean_dep - prediction
         residuals[nan_dep_mask] = 0.0
@@ -205,18 +223,41 @@ def _fit_lloyd_taylor(nee_night: np.ndarray, tair: np.ndarray,
     return float(pars[0]), float(pars[1]), float(std_devs[0]), float(std_devs[1])
 
 
+def _fit_rref(lloyd_fac: np.ndarray, nee: np.ndarray) -> float:
+    """Rref for a fixed E0, fitted as in ONEFlux ``reanalyse_rref``.
+
+    ONEFlux hands ``leastsq`` the scalar sum of squared residuals as the
+    function to minimise, starting from 0.1. The float64 parameter widens the
+    float32 inputs, so this sum is float64 on NumPy 1 and 2 alike.
+    """
+    def sum_of_squares(b):
+        return ((b * lloyd_fac - nee) ** 2).sum()
+
+    pars, _std, _res = _leastsq_fit(sum_of_squares, [0.1], entries=nee.size,
+                                    maxfev=1000 * (nee.size + 1))
+    return float(pars[0])
+
+
 def _interp_missing(values: np.ndarray, x: np.ndarray) -> np.ndarray:
     """Linear interpolation of NaNs over coordinate ``x``, end values clamped.
 
-    Equivalent to ONEFlux ``ipolmiss`` (linear, exact), implemented with
-    ``numpy.interp`` (which clamps to the first/last valid value outside the
-    sampled range).
+    Port of ONEFlux ``ipolmiss`` (linear, exact). Like ONEFlux, it interpolates
+    with ``scipy.interpolate.interp1d`` over the offset from the first valid
+    ``x``, computed in the dtype of ``x`` (float32 in ONEFlux), and stores the
+    result back in the dtype of ``values``.
     """
     mask = ~np.isnan(values)
     count = mask.sum()
     if count < 2 or count == values.size:
         return values
-    return np.interp(x, x[mask], values[mask])
+    idx = np.where(mask)[0]
+    duration = x - x[idx[0]]
+    f = interp1d(duration[mask], values[mask], kind='linear',
+                 bounds_error=False, fill_value=np.nan)
+    out = f(duration).astype(values.dtype)
+    out[:idx[0]] = out[idx[0]]
+    out[idx[-1] + 1:] = out[idx[-1]]
+    return out
 
 
 def _reanalyse_rref(nee_night: np.ndarray, tair: np.ndarray, tair_f: np.ndarray,
@@ -228,8 +269,9 @@ def _reanalyse_rref(nee_night: np.ndarray, tair: np.ndarray, tair_f: np.ndarray,
     arrays (RECO computed from gap-filled temperature ``tair_f``).
     """
     n = nee_night.size
-    rref_ord = np.full(n, np.nan)
-    rref_trim = np.full(n, np.nan)
+    # ONEFlux stores the Rref knots in FLOAT_PREC (float32) columns.
+    rref_ord = np.full(n, np.nan, dtype=np.float32)
+    rref_trim = np.full(n, np.nan, dtype=np.float32)
 
     julday_int = (julday_dec + 0.5).astype(np.int64)
     last_day = int(julday_dec[-1])
@@ -245,13 +287,17 @@ def _reanalyse_rref(nee_night: np.ndarray, tair: np.ndarray, tair_f: np.ndarray,
         idx = np.where(mask)[0]
         # Truncate, as ONEFlux does (`int(numpy.average(idx))`).
         mid = int(idx.mean())
-        reco_average = nee_night[mask].mean()
-        # E0 is fixed -> respiration is linear in Rref: nee = b * lloyd_fac.
-        lloyd_fac = lloyd_taylor(tair[mask], rref=1.0, e0=e0)
         nee_sub = nee_night[mask]
+        reco_average = nee_sub.mean()
+        # ONEFlux averages E0 over the window from a float32 array holding E0
+        # in every record; that float32 mean can be an ulp off E0 itself.
+        e0_average = np.full(count, e0, dtype=np.float32).mean()
+        lloyd_fac = lloyd_taylor(tair[mask], rref=1.0, e0=e0_average)
 
-        denom = (lloyd_fac ** 2).sum()
-        b = (lloyd_fac * nee_sub).sum() / denom if denom > 0 else np.nan
+        # E0 is fixed, so respiration is linear in Rref (nee = b * lloyd_fac).
+        # ONEFlux still fits b with leastsq on the scalar sum of squares rather
+        # than solving it; that stops close to, not at, the least-squares b.
+        b = _fit_rref(lloyd_fac, nee_sub)
         rref_ord[mid] = b if b > 1e-6 else 1e-6
 
         # Outlier-robust variant: drop the largest deviations from the mean.
@@ -259,8 +305,7 @@ def _reanalyse_rref(nee_night: np.ndarray, tair: np.ndarray, tair_f: np.ndarray,
         cutoff = _pct(deviation, 95.0)
         trim = deviation < cutoff
         if trim.sum() > 0:
-            denom_t = (lloyd_fac[trim] ** 2).sum()
-            b_t = (lloyd_fac[trim] * nee_sub[trim]).sum() / denom_t if denom_t > 0 else np.nan
+            b_t = _fit_rref(lloyd_fac[trim], nee_sub[trim])
             rref_trim[mid] = b_t if b_t > 1e-6 else 1e-6
 
     rref_ord = _interp_missing(rref_ord, julday_dec)
@@ -280,6 +325,12 @@ def _partition_one_year(nee: np.ndarray, tair: np.ndarray, sw_in: np.ndarray,
     All arrays are 1D and aligned. Returns a dict of result arrays.
     """
     n = nee.size
+    # ONEFlux stores every working array as float32 (FLOAT_PREC = 'f4',
+    # library.create_data_structures), and the fits, E0 and Rref inherit it.
+    # Keep the float64 NEE only for the NEE_NIGHT_OF pass-through column.
+    nee_in = nee
+    nee, tair, sw_in, nee_f, tair_f, doy, hr = (
+        a.astype(np.float32) for a in (nee, tair, sw_in, nee_f, tair_f, doy, hr))
     out = {
         'NEE_NIGHT_OF': np.full(n, np.nan),
         'RECO_NT_OF': np.full(n, np.nan),
@@ -292,12 +343,12 @@ def _partition_one_year(nee: np.ndarray, tair: np.ndarray, sw_in: np.ndarray,
 
     # --- Day/night flag and nighttime NEE ---
     if lat is not None and np.isfinite(lat):
+        # In float32 from the float32 day of year, as ONEFlux computes and
+        # stores hr, sunrise and sunset. On day 80 sunrise is 5.99999990 in
+        # float64 but exactly 6.0 in float32, which decides whether the 06:00
+        # record is night.
         sunrise, sunset = sunrise_sunset(doy, lat)
-        # Compare in float32: ONEFlux stores hr, sunrise and sunset in FLOAT_PREC
-        # columns. On day 80 sunrise is 5.99999990 in float64 but exactly 6.0 in
-        # float32, which decides whether the 06:00 record is night.
-        hr32 = hr.astype(np.float32)
-        daylight = (hr32 > sunrise.astype(np.float32)) & (hr32 < sunset.astype(np.float32))
+        daylight = (hr > sunrise) & (hr < sunset)
     else:
         daylight = np.zeros(n, dtype=bool)
 
@@ -307,8 +358,8 @@ def _partition_one_year(nee: np.ndarray, tair: np.ndarray, sw_in: np.ndarray,
     with np.errstate(invalid='ignore'):
         rg_below = np.isnan(sw_in) | (sw_in < DAY_MIN_SW_IN)
     night_mask = rg_below & (~daylight)
-    nee_night = np.where(night_mask, nee, np.nan)
-    out['NEE_NIGHT_OF'] = nee_night
+    nee_night = np.where(night_mask, nee, np.float32(np.nan))
+    out['NEE_NIGHT_OF'] = np.where(night_mask, nee_in, np.nan)
 
     # --- 1) Full-year (fallback) fit ---
     full = _fit_lloyd_taylor(nee_night, tair)
@@ -343,9 +394,11 @@ def _partition_one_year(nee: np.ndarray, tair: np.ndarray, sw_in: np.ndarray,
         win_e0_se.append(e0_se)
         win_mid.append(w_where[w_len // 2])
 
-    win_rref = np.asarray(win_rref)
-    win_e0 = np.asarray(win_e0)
-    win_e0_se = np.asarray(win_e0_se)
+    # ONEFlux keeps the per-window results in a FLOAT_PREC table (`stats`), so
+    # the E0 selection, the gate and the mean E0 below all work in float32.
+    win_rref = np.asarray(win_rref, dtype=np.float32)
+    win_e0 = np.asarray(win_e0, dtype=np.float32)
+    win_e0_se = np.asarray(win_e0_se, dtype=np.float32)
     win_mid = np.asarray(win_mid, dtype=np.int64)
 
     # --- 3) Determine representative E0 from best (lowest-SE) windows ---
@@ -358,14 +411,15 @@ def _partition_one_year(nee: np.ndarray, tair: np.ndarray, sw_in: np.ndarray,
             order = np.argsort(win_e0_se[in_range])
             take = min(3, order.size)
             selected = idx_in[order[:take]]
-            best_e0 = float(np.mean(win_e0[selected]))
+            # float32 mean of float32 values, stored in a FLOAT_PREC column.
+            best_e0 = np.mean(win_e0[selected])
 
     if not np.isfinite(best_e0):
-        # Fall back to the full-year E0 estimate.
+        # Fall back to the full-year E0 estimate (a FLOAT_PREC column in ONEFlux).
         if verbose:
             warn("Nighttime partitioning: no short-term E0; using full-year E0.",
                  verbose=verbose)
-        best_e0 = e0_1
+        best_e0 = np.float32(e0_1)
 
     if not np.isfinite(best_e0):
         return out  # nothing more can be done for this year
@@ -385,6 +439,7 @@ def _partition_one_year(nee: np.ndarray, tair: np.ndarray, sw_in: np.ndarray,
         return out
 
     # --- 4) Re-estimate Rref with E0 fixed, then RECO and GPP ---
+    # float32, as ONEFlux builds it from its julday and hr columns.
     julday_dec = doy + (hr / 24.0)
     reco, reco_rob, rref_ord = _reanalyse_rref(
         nee_night=nee_night, tair=tair, tair_f=tair_f,
@@ -415,10 +470,17 @@ class NighttimePartitioningOneFlux:
     night, as the ONEFlux -9999 sentinel does; the sunrise/sunset test then
     decides.
 
+    Numerics follow ONEFlux: working arrays are float32, as ONEFlux stores them
+    (``FLOAT_PREC = 'f4'``), with the dtype of every intermediate as ONEFlux
+    gets it on NumPy 1, and Rref is fitted with ``leastsq`` as in ONEFlux rather
+    than solved. ``NEE_NIGHT_OF`` keeps the input's float64 values; all other
+    columns hold float32 values.
+
     Measured agreement, CH-DAV 2016 half-hourly against a native ONEFlux 1.3.7
-    run: the same nighttime records are used, RECO agrees to an RMSE of 0.0003
-    umol m-2 s-1 (max 0.003) and E0 to 0.05 K. The remainder is float64 fitting
-    here against float32 in ONEFlux.
+    run (NumPy 1.26, SciPy 1.17): RECO, GPP (ordinary and robust), Rref and E0
+    are bitwise identical in every record, also with gaps in measured TA,
+    SW_IN and nighttime NEE. This relies on SciPy's ``leastsq`` and
+    ``interp1d`` behaving as in that version.
 
     Example: ``examples/flux/partitioning/partitioning_nighttime_oneflux.py``
 

@@ -193,6 +193,15 @@ class TestNighttimePartitioningOneFlux(unittest.TestCase):
         self.assertAlmostEqual(rref[1], 2.0)
         self.assertAlmostEqual(rref[2], 2.2)
 
+    def test_pct_skips_average_when_preceding_rank_is_at_index_0(self):
+        # 20 values at 95 %: the critical rank 19 is an integer, so ONEFlux
+        # averages ranks 20 and 19, unless rank 19 sits at index 0, which its
+        # `numpy.sum(index) != 0` test misses.
+        from diive.flux.partitioning.nighttime_oneflux import _pct
+        rest = np.arange(18, dtype=float)
+        self.assertEqual(_pct(np.concatenate([rest, [18.0, 19.0]]), 95.0), 18.5)
+        self.assertEqual(_pct(np.concatenate([[18.0], rest, [19.0]]), 95.0), 19.0)
+
     def test_results_before_run_raises(self):
         from diive.flux.partitioning import NighttimePartitioningOneFlux
         df = self.df
