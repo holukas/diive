@@ -409,6 +409,41 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
         self.assertGreater(len(params_ok), 0)
         self.assertEqual(params_ok[0][0], np.float32(0.06))
 
+    def test_broken_fit_removes_the_night_range_and_reruns_the_year(self):
+        # A fit without covariance matrix makes ONEFlux abort the year. Its
+        # pipeline appends the window's night range (day_begin2, day_end2] to
+        # the error file, removes the measured NEE there and runs the year
+        # again. The port used to skip only that window and keep the data.
+        # Result: identical to a run on data without NEE in that range.
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        from diive.flux.partitioning import daytime_oneflux as mod
+        short = self.short
+        nee = short['NEE_CUT_REF_orig']
+        jd = (short.index + pd.Timedelta(minutes=15)).dayofyear
+        # window i = 82 fits days (164, 168]; its night range is (160, 172]
+        day = (jd > 164) & (jd <= 168) & (short['Rg_orig'] > 4) & nee.notna()
+        target = nee[day].to_numpy(dtype=np.float32)
+        real = mod._fit
+        broke = []
+
+        def spy(lts_func, dep, *args, **kwargs):
+            if lts_func == 'HLRC_LloydVPD' and not broke and np.array_equal(dep, target):
+                broke.append(lts_func)
+                raise mod._BrokenWindow(lts_func)
+            return real(lts_func, dep, *args, **kwargs)
+
+        def run(nee_in):
+            return DaytimePartitioningOneFlux(
+                nee=nee_in, ta=short['Tair_orig'], sw_in=short['Rg_orig'],
+                ta_f=short['Tair_f'], sw_in_f=short['Rg_f'], vpd=short['VPD_f'],
+                verbose=0).run().results
+
+        with mock.patch.object(mod, '_fit', side_effect=spy):
+            broken = run(nee)
+        self.assertEqual(broke, ['HLRC_LloydVPD'])
+        removed = run(nee.where(~((jd > 160) & (jd <= 172))))
+        pd.testing.assert_frame_equal(broken, removed)
+
     def test_results_before_run_raises(self):
         from diive.flux.partitioning import DaytimePartitioningOneFlux
         part = DaytimePartitioningOneFlux(
