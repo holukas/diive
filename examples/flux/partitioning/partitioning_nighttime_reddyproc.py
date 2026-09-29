@@ -21,9 +21,10 @@ Best for: matching a REddyProc partitioning, or cross-checking the ONEFlux one.
 # Why a second port?
 # ^^^^^^^^^^^^^^^^^^
 # The bundled CH-DAV dataset ships the REddyProc-produced reference columns
-# ``Reco_CUT_REF`` / ``GPP_CUT_REF_f``. Because they are REddyProc-derived, the
-# REddyProc port is expected to reproduce them closely (a genuine 1:1 target),
-# unlike the ONEFlux port where they are only a loose sanity check.
+# ``Reco_CUT_REF`` / ``GPP_CUT_REF_f``. They were made with a different setup
+# (other inputs and settings), so they are a plausibility check, not a 1:1
+# target: run on the same inputs, the port matches native REddyProc to about
+# 1e-15, but these columns only correlate closely with it.
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -92,8 +93,7 @@ print(f"  GPP   diive (REddyProc method): {results['GPP_NT_RP'].mean():.3f}   "
 # Visual comparison
 # ^^^^^^^^^^^^^^^^^
 # Scatter the partitioned RECO and GPP against the reference columns, with the
-# 1:1 line for orientation. Tight clustering along the 1:1 line confirms the
-# close agreement seen in the correlations above.
+# 1:1 line for orientation.
 
 fig, axes = plt.subplots(1, 2, figsize=(11, 5.2))
 fig.subplots_adjust(left=0.08, right=0.97, top=0.88, bottom=0.12, wspace=0.27)
