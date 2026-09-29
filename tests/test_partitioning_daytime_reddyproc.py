@@ -21,9 +21,8 @@ class TestDaytimePartitioningReddyProc(unittest.TestCase):
             vpd=cls.df['VPD_f'], sw_in=cls.df['Rg_f'],
             lat=cls.lat, lon=cls.lon, utc_offset=cls.utc_offset, verbose=0).run()
         # A short slice for the two plumbing tests below (wrapper delegation and
-        # the kPa/hPa equivalence). Neither needs a full year, and the per-window
-        # LRC fit costs superlinearly in record count: measured on this fixture,
-        # one month is 6 s against 227 s for the year. One month still fits 14
+        # the kPa/hPa equivalence). Neither needs a full year: measured on this
+        # fixture, one month is 0.5 s against 5 s for the year. One month still fits 14
         # windows, so a dropped unit conversion or a wrapper that lost rows or
         # renamed a column cannot hide in it.
         cls.short = cls.df.loc['2017-06-01':'2017-06-30']
@@ -125,6 +124,148 @@ class TestDaytimePartitioningReddyProc(unittest.TestCase):
             lat=self.lat, lon=self.lon, utc_offset=self.utc_offset, verbose=0)
         with self.assertRaises(RuntimeError):
             _ = part.results
+
+
+class TestDaytimeReddyProcRNumerics(unittest.TestCase):
+    """The port's building blocks against values computed in R.
+
+    Reference values: REddyProc 1.3.4 and mlegp 3.1.9 in R 4.5.3 (Windows,
+    reference BLAS/LAPACK), printed with ``%.17g``. The inputs are exact
+    decimal literals, which R and Python parse to the same doubles.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import diive.flux.partitioning.daytime_reddyproc as DR
+        cls.DR = DR
+
+    # First 60 finite nighttime E0 windows of the CH-DAV 2019 parity run
+    # (E0Fit, sdE0Fit rounded to 4 decimals), as partGLSmoothTempSens passes
+    # them: X = iCentralRec, Z = E0, nugget = sdE0^2.
+    GP_X = 97.0 + 96.0 * np.r_[0:16, 20:64]
+    GP_Z = np.array([
+        117.4342, 109.5473, 113.0604, 281.3127, 311.0457, 220.021, 225.5298, 306.0262,
+        294.2352, 185.1608, 278.1403, 268.878, 177.6864, 294.7593, 275.2557, 58.0169,
+        82.6775, 84.8409, 55.3182, 55.3204, 179.1349, 219.9984, 101.4883, 110.5935,
+        123.6746, 197.939, 217.7044, 167.4228, 355.6518, 365.799, 357.1247, 337.6191,
+        344.9604, 361.6876, 212.5529, 259.2349, 186.5017, 384.6273, 125.1755, 70.0998,
+        69.0281, 82.0797, 277.1429, 336.609, 302.5841, 211.9626, 382.8528, 329.7798,
+        336.6117, 324.8737, 132.1647, 155.3308, 168.3569, 208.662, 245.4393, 384.4316,
+        380.5566, 122.5628, 379.8451, 377.8093])
+    GP_SD = np.array([
+        66.6011, 74.2529, 75.8263, 82.2541, 112.2316, 104.4432, 95.259, 136.1699,
+        134.0292, 168.4391, 145.9826, 140.896, 153.5267, 415.5018, 366.3819, 125.8386,
+        154.5435, 149.1353, 144.6502, 144.6501, 156.6971, 168.4898, 144.7719, 284.398,
+        242.081, 194.8732, 197.1832, 169.8942, 221.9017, 273.6708, 216.7606, 256.1336,
+        253.1915, 265.6397, 462.1851, 588.0249, 245.3301, 320.825, 281.2478, 265.2837,
+        295.1808, 285.4354, 200.4042, 205.4418, 295.9915, 161.3641, 238.1689, 103.7105,
+        173.379, 256.2072, 174.7175, 203.4691, 190.9256, 162.5506, 158.2853, 216.9126,
+        412.7342, 303.9788, 106.1925, 105.564])
+
+    def test_mlegp_random_starts(self):
+        # mlegp seeds its own SFMT-607 generator with 0 on every call; fitGP
+        # draws one uniform per simplex start.
+        u = self.DR._sfmt607_res53(0, 5)
+        self.assertEqual(u, [0.4933620949207319, 0.8782963048540589, 0.9588460293484754,
+                             0.7950198455327621, 0.17368634832817373])
+        # mlegp(X, Z, nugget, simplex.maxiter = 0, BFGS.maxiter = 0)$beta is
+        # exp(log(start)) of the first start, between -log(0.65) and -log(0.3)
+        # over the smallest squared spacing (96^2).
+        m1 = -self.DR._log_c(0.65) / 9216.0
+        m2 = -self.DR._log_c(0.3) / 9216.0
+        start = self.DR._exp_c(self.DR._log_c(m1 + (m2 - m1) * u[0]))
+        self.assertEqual(start, 8.8134277248573241e-05)
+
+    def test_gp_smoother_matches_mlegp(self):
+        DR = self.DR
+        beta, mu, sig2, _nscale = DR._mlegp_fit(self.GP_X, self.GP_Z, self.GP_SD ** 2)
+        # mlegp stops on a flat likelihood; only its own optimizer path gives
+        # its beta, and that to the bit.
+        self.assertEqual(beta, 4.6916433782657807e-05)
+        np.testing.assert_allclose([sig2, mu], [8647.0840318012506, 218.68173297935977],
+                                   rtol=1e-12)
+        predict, nugget = DR._gp_smooth(self.GP_X, self.GP_Z, self.GP_SD ** 2)
+        # gpFit$nugget is the absolute nugget variance sdE0^2 * scale * sig2;
+        # without sig2 the E0 uncertainty was 50-80 % too low.
+        np.testing.assert_allclose(nugget[0], 230.06634662459925, rtol=1e-12)
+        fit, se = predict(np.array([97.0, 1633.0, 6337.0]))  # observed, gap, beyond
+        np.testing.assert_allclose(fit, [120.94526188776447, 99.25952585273873,
+                                         229.4152786354832], rtol=1e-12)
+        np.testing.assert_allclose(se, [14.766005630249561, 71.11300590848488,
+                                        90.99309941007544], rtol=1e-12)
+
+    def test_nighttime_e0_fit_matches_r_nls(self):
+        # partGLEstimateTempSensInBoundsE0Only(REco, TK, prevE0, TRefFit)
+        tc = np.array([-0.5, 0.3, 1.1, 2.4, 3.0, 3.9, 4.4, 5.8, 6.1, 7.3, 8.0, 8.8,
+                       9.9, 10.4, 11.7, 12.2])
+        reco = np.array([0.9, 1.3, 1.1, 1.6, 1.4, 1.9, 1.7, 2.3, 2.0, 2.6, 2.4, 3.1,
+                         2.8, 3.3, 3.6, 3.4])
+        tref = float(np.median(tc)) + 273.15
+        for prev, ref in ((150.0, (258.33135449933008, 17.676610788557479, 2.1310423011781978)),
+                          (np.nan, (258.33169297132929, 17.67661854624421, 2.1310417026676181))):
+            e0, sde0, _tref, rref = self.DR._fit_e0_window(reco, tc + 273.15, prev, tref)
+            # numpy's QR, sums and mean moved E0 by ~1e-7 here
+            np.testing.assert_allclose([e0, sde0, rref], ref, rtol=1e-13)
+
+    def test_exp_rounds_like_r(self):
+        # exp() in R on Windows: x87 extended precision, rounded twice. numpy
+        # differs in the last bit for the first, third and fourth argument.
+        x = np.array([0.40090808598324656, 0.648769767023623, 0.14537000702694058,
+                      0.560505997389555])
+        r_exp = np.array([1.4931800180192432, 1.9131857164840285, 1.1564673921761173,
+                          1.7515585601643018])
+        self.assertTrue(np.array_equal(self.DR._exp_r(x), r_exp))
+
+    def _lrc_window(self):
+        # One synthetic 60-record LRC window, NEE rounded to 3 decimals.
+        i = np.arange(60)
+        up = np.where(i < 30, i, 59 - i)
+        rg = 30.0 + 30.0 * up
+        vpd = 3.25 + 0.75 * up
+        temp = 8.125 + 0.5 * up
+        nee = np.array([
+            0.574, 0.376, -1.525, -2.887, -2.508, -2.961, -4.801, -5.327, -4.694, -5.572,
+            -6.939, -6.519, -5.784, -6.815, -7.614, -6.625, -6.256, -7.449, -7.561, -6.336,
+            -6.489, -7.58, -7.013, -5.901, -6.556, -7.273, -6.182, -5.471, -6.451, -6.596,
+            -5.402, -5.565, -6.893, -6.701, -5.717, -6.437, -7.488, -6.723, -6.068, -7.169,
+            -7.673, -6.536, -6.376, -7.557, -7.363, -6.123, -6.462, -7.366, -6.464, -5.371,
+            -6.03, -6.144, -4.496, -3.565, -4.111, -3.448, -1.495, -0.945, -1.166, 0.391])
+        sd = np.tile([0.8, 1.1, 0.9, 1.4], 15)
+        return nee, sd, rg, vpd, temp
+
+    def test_lrc_fit_matches_r(self):
+        # RectangularLRCFitter()$fitLRC(dsDay, E0 = 180, sdE0 = 25,
+        #   RRefNight = 2.2, partGLControl(nBootUncertainty = 0))
+        res = self.DR._fit_lrc(self._lrc_window(), 180.0, 25.0, 2.2, np.full(5, np.nan))
+        self.assertEqual(res['iopt'], [0, 1, 2, 3])
+        np.testing.assert_allclose(
+            res['theta'][:4], [0.02392561859679989, 19.233225120938663,
+                               0.051145015446522814, 3.1820468865344664], rtol=1e-12)
+
+    def test_lrc_fit_without_vpd_effect_matches_r(self):
+        # The same window with isNeglectVPDEffect = TRUE, as REddyProc fits a
+        # window with fewer than 10 usable records that have VPD: k fixed at 0.
+        res = self.DR._fit_lrc(self._lrc_window(), 180.0, 25.0, 2.2, np.full(5, np.nan),
+                               neglect_vpd=True)
+        self.assertEqual(res['iopt'], [1, 2, 3])
+        self.assertEqual(res['theta'][0], 0.0)
+        np.testing.assert_allclose(
+            res['theta'][1:4], [17.221555223837271, 0.093472750234682656,
+                                5.6599000990408781], rtol=1e-12)
+
+    def test_missing_vpd_gives_na_gpp_unless_k_is_zero(self):
+        # R's ifelse(VPD > VPD0, ...) is NA for missing VPD; only k = 0 (VPD
+        # effect off) predicts GPP there. These NAs trigger REddyProc's refit.
+        rg = np.array([500.0, 500.0, 500.0])
+        vpd = np.array([15.0, np.nan, 5.0])
+        ta = np.array([15.0, 15.0, 15.0])
+        params = np.array([[0.05, 20.0, 0.05, 2.0, 150.0]])
+        _reco, gpp = self.DR._interpolate_fluxes(np.array([2]), params, rg, vpd, ta, 3)
+        self.assertTrue(np.isfinite(gpp[[0, 2]]).all())
+        self.assertTrue(np.isnan(gpp[1]))
+        params[0, 0] = 0.0
+        _reco, gpp = self.DR._interpolate_fluxes(np.array([2]), params, rg, vpd, ta, 3)
+        self.assertTrue(np.isfinite(gpp).all())
 
 
 if __name__ == '__main__':

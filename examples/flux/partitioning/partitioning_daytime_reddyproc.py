@@ -25,8 +25,8 @@ and nighttime approaches.
 # ``Reco_DT_CUT_REF`` / ``GPP_DT_CUT_REF``. They were produced with the measured
 # NEE uncertainty (which is not shipped) and on the full multi-year record, so
 # the port is expected to track GPP closely and RECO with a small stable bias - a
-# provenance artifact, not an algorithmic difference (the port matches a fresh
-# REddyProc run on identical inputs to r > 0.999).
+# provenance artifact, not an algorithmic difference (on identical inputs the
+# port matches a fresh REddyProc run to about 1e-5 umol m-2 s-1).
 
 import matplotlib.pyplot as plt
 import numpy as np

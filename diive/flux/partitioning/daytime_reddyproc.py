@@ -39,18 +39,52 @@ Algorithm (REddyProc defaults, ``partGLControl()``):
    ``beta``, ``alpha``, ``RRef`` (``E0`` fixed) by penalized least squares
    (Lasslop priors, NEE-uncertainty weighting) with R's BFGS ``optim`` from
    three starting points, picking the lowest-cost fit, plus the Lasslop bounds
-   refit cascade (fix VPD / fix alpha / reject out-of-range parameters).
+   refit cascade (fix VPD / fix alpha / reject out-of-range parameters). A
+   window with fewer than 10 usable records that have VPD is fitted on all
+   records without the VPD effect (``k = 0``).
 4. Predict RECO and GPP for every record by interpolating the two neighboring
-   windows' parameter sets with distance-based weights.
+   windows' parameter sets with distance-based weights. Where VPD is missing
+   and GPP therefore NA, all windows are refitted without the VPD effect and
+   RECO and GPP of those records come from that fit
+   (``isRefitMissingVPDWithNeglectVPDEffect``).
 
-This port reproduces REddyProc's algorithm faithfully. Because the method is a
-stack of three nested numerical optimizers (nighttime ``nls``, the ``mlegp``
-Gaussian-process smoother, and the LRC ``optim``), exact bit-for-bit parity is
-not attainable across languages, but each stage matches REddyProc closely:
-the day/night split and the flux interpolation are exact (~1e-13), the LRC fit
-matches per-window parameters to ~1e-6 for the large majority of windows, the
-GP-smoothed ``E0`` matches to ~0.03 K (a flux-negligible <0.1% on RECO), and
-window acceptance/rejection matches exactly.
+The port reproduces REddyProc's arithmetic, not only its algorithm, because
+every stage is sensitive to the last bit. The nighttime ``nls`` fits use a
+forward-difference Jacobian (step ``sqrt(eps) * |p|``), which turns a one-ulp
+difference into ~1e-8, and each window starts from the previous window's E0,
+so a difference travels along the year. The ``mlegp`` likelihood is flat at its
+optimum: any other optimizer stops elsewhere with the same likelihood to 1e-8,
+and the smoothed E0 then differs by 1e-4. The LRC ``optim`` stops at a relative
+cost change of 1e-3, so in ill-conditioned windows (k near 0, alpha fixed or
+not) a tiny input difference changes where it stops by up to 1e-3. Hence:
+``nls`` runs on LINPACK's QR and R's sums and mean (shared with the nighttime
+port), ``mlegp`` is ported run for run (its SFMT random starts, R 2.4.0
+Nelder-Mead, liblbfgs), ``optim`` loop for loop, ``quantile`` with R's formula,
+``lm`` through R's QR, and ``exp`` is rounded as R on Windows rounds it
+(:func:`_exp_r`). BLAS is limited to one thread during the run, so
+the result does not depend on the thread count.
+
+Measured agreement, CH-DAV 2016 and 2019 half-hourly against native REddyProc
+1.3.4 / mlegp 3.1.9 (R 4.5.3, Windows) on identical inputs, with and without
+gaps in NEE, drivers and nighttime data (8 runs). Window acceptance and
+convergence codes are identical in every run. Stage by stage, each stage fed
+REddyProc's own input: the mlegp hyperparameters are bitwise identical, the
+smoothed E0 agrees to 4e-15 and its SD to 2e-14, RRef to 5e-15; the LRC
+parameters are bitwise identical in 91-99 % of the windows and within 1e-8 in
+the rest (8e-9 in one window, which becomes bitwise identical when R's 80-bit
+long-double sums are emulated; ``math.fsum`` is used instead, the emulation is
+too slow). End to end, RECO and GPP differ by at most 2e-5 umol m-2 s-1 in five
+of the eight runs, by 5e-4 and 1e-3 in 2019 (baseline and measured gaps) and
+by 0.013 in 2016 with driver gaps; annual sums agree to 0.001 %. These
+differences start in R's ``exp``: it runs in x87 extended precision, and
+:func:`_exp_r` reproduces its rounding except for about 1 in 30 000
+arguments, where the x87 instruction itself decides. That changes 10 of ~540
+nighttime window fits by 1e-10 to 4e-8. Each window starts from the previous
+window's E0, which carries the difference along the year (E0 to 2e-7), the
+smoothed E0 follows (2e-7), and the LRC stop criterion (relative cost change
+1e-3) amplifies it in a few ill-conditioned windows; there even the 1e-15 that
+the GP prediction differs by (LAPACK's solve vs. R's) moves parameters by up
+to 1e-4. R's own results differ between platforms at this level.
 
 Reference:
     Lasslop, G. et al. (2010). Separation of net ecosystem exchange into
@@ -68,15 +102,23 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
+import math
+from decimal import Decimal, localcontext
+
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
-from scipy.optimize import minimize
+from scipy.linalg import lapack
+from threadpoolctl import threadpool_limits
 
 from diive.core.utils.console import info, warn, success
 from diive.flux.partitioning._report import partitioning_report
+# R's own arithmetic (LINPACK QR, R's sum/mean/quantile, lm), ported and checked
+# bitwise against R 4.5.3 for the nighttime REddyProc port; the daytime method
+# runs the same R functions.
 from diive.flux.partitioning.nighttime_reddyproc import (
-    potential_radiation, _infer_dts, T0_K)
+    potential_radiation, _infer_dts, T0_K, _dqrdc2, _qr_qty, _qr_coef,
+    _r_sum, _r_mean, _r_quantile7, _lm_through_origin)
 
 # Reference temperature for RRef/Lloyd-Taylor: 273.15 + 15 degC.
 TREF_K = 273.15 + 15.0
@@ -114,12 +156,20 @@ _VMMIN_RELTEST = 10.0
 # Lloyd & Taylor respiration (Kelvin, custom reference temperature)
 # --------------------------------------------------------------------------- #
 def _lloyd_taylor(rref, e0, ta_k, tref_k=TREF_K):
-    return rref * np.exp(e0 * (1.0 / (tref_k - T0_K) - 1.0 / (ta_k - T0_K)))
+    return rref * _exp_r(e0 * (1.0 / (tref_k - T0_K) - 1.0 / (ta_k - T0_K)))
 
 
 # --------------------------------------------------------------------------- #
 # R's nls default Gauss-Newton (for the nighttime E0 fit)
 # --------------------------------------------------------------------------- #
+# The per-window E0 fit is chaotic in the last bit: numericDeriv's forward
+# difference (step sqrt(eps) * |p|) turns a one-ulp change of a parameter or a
+# model value into a ~1e-8 relative change of the Jacobian, and the next
+# Gauss-Newton step carries it into E0. numpy's QR, sums, mean and exp moved
+# E0 by up to 4e-6 relative. So everything below is R's arithmetic: the
+# start value is R's mean, the QR is LINPACK's dqrdc2/dqrsl, the sums are R's
+# long-double sums, the SD is summary.nls's chol2inv, and the model's exp is
+# rounded as R's (_exp_r).
 def _numeric_deriv(predict, par, rhs):
     """Forward-difference Jacobian, R's numericDeriv (dir=1, eps=sqrt(macheps))."""
     grad = np.empty((rhs.size, par.size))
@@ -132,63 +182,80 @@ def _numeric_deriv(predict, par, rhs):
     return grad
 
 
-def _r_nls(y, predict, start):
-    """Faithful port of R's nls default Gauss-Newton (src/.../nls.c + nlsModel).
+def _nls_state(y, predict, par):
+    """nlsModel's setPars: model, Jacobian, residuals, deviance and QR at ``par``.
 
-    Returns ``(par, cov)`` on convergence, or ``(None, None)`` on any
-    non-convergence (singular gradient / step factor below minFactor / maxiter
-    exceeded) - exactly when R's ``nls()`` throws and REddyProc treats the fit
-    as NA.
+    ``None`` where R's numericDeriv stops with "Missing value or an infinity
+    produced when evaluating the model" (a diverging step overflows exp)."""
+    with np.errstate(over='ignore', invalid='ignore'):
+        rhs = predict(par)
+        if not np.isfinite(rhs).all():
+            return None
+        grad = _numeric_deriv(predict, par, rhs)
+        if not np.isfinite(grad).all():
+            return None
+        resid = y - rhs
+        dev = _r_sum(resid * resid)  # inf for a wild step: rejected, as in R
+    qr, qraux, rank = _dqrdc2(grad)
+    return resid, dev, qr, qraux, rank
+
+
+def _r_nls(y, predict, start):
+    """Port of R's ``nls`` (default Gauss-Newton), ``nls.control(maxiter = 20)``.
+
+    As REddyProc's ``partGLEstimateTempSensInBoundsE0Only`` calls it: C
+    ``nls_iter`` with increments ``qr.coef(QR, resid)``, the relative-offset
+    criterion on ``qr.qty(QR, resid)`` (tol 1e-5), step halving down to
+    ``minFactor = 1/1024``, and nls's rank test (LINPACK ``dqrdc2``, tol 1e-7)
+    at every trial point. For two parameters.
+
+    Returns ``(par, cov)`` with ``cov = chol2inv(R) * deviance / (n - 2)``
+    (``summary.nls``), or ``(None, None)`` wherever R's ``nls()`` stops with an
+    error (singular gradient, step factor below minFactor, iteration limit,
+    non-finite model values); REddyProc then treats the fit as NA.
     """
     npar = start.size
     par = start.astype(float).copy()
-    rhs = predict(par)
-    grad = _numeric_deriv(predict, par, rhs)
-    resid = y - rhs
-    dev = float((resid ** 2).sum())
-    try:
-        Q, R = np.linalg.qr(grad)
-        if abs(np.linalg.det(R)) == 0.0:
-            return None, None
-    except np.linalg.LinAlgError:
+    state = _nls_state(y, predict, par)
+    if state is None or state[4] < npar:
         return None, None
+    resid, dev, qr, qraux, rank = state
     fac = 1.0
     converged = False
     for _ in range(_NLS_MAXITER):
-        proj = Q.T @ resid
-        ss_proj = float((proj ** 2).sum())
-        denom = float((resid ** 2).sum()) - ss_proj
-        conv = np.sqrt(ss_proj / denom) if denom > 0 else np.inf
+        rr = _qr_qty(qr, qraux, rank, resid)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            conv = np.sqrt(np.float64(_r_sum(rr[:npar] * rr[:npar]))
+                           / np.float64(0.0 + _r_sum(rr[npar:] * rr[npar:])))
         if conv <= _NLS_TOL:
             converged = True
             break
-        incr = np.linalg.solve(R, proj)
+        incr = _qr_coef(qr, qraux, rank, resid)
+        if incr is None:
+            return None, None
         while fac >= _NLS_MINFAC:
             new_par = par + fac * incr
-            new_rhs = predict(new_par)
-            new_grad = _numeric_deriv(predict, new_par, new_rhs)
-            try:
-                new_Q, new_R = np.linalg.qr(new_grad)
-            except np.linalg.LinAlgError:
+            state = _nls_state(y, predict, new_par)
+            # nls tests the rank at every trial point, also at one it rejects.
+            if state is None or state[4] < npar:
                 return None, None
-            if not np.all(np.isfinite(new_R)) or abs(np.linalg.det(new_R)) == 0.0:
-                return None, None
-            new_resid = y - new_rhs
-            new_dev = float((new_resid ** 2).sum())
-            if new_dev <= dev:
-                dev, par, rhs, grad = new_dev, new_par, new_rhs, new_grad
-                Q, R, resid = new_Q, new_R, new_resid
-                fac = min(2 * fac, 1.0)
+            if state[1] <= dev:
+                par = new_par
+                resid, dev, qr, qraux, rank = state
+                fac = min(2.0 * fac, 1.0)
                 break
             fac /= 2.0
         if fac < _NLS_MINFAC:
             return None, None
     if not converged:
         return None, None
-    n = y.size
-    rinv = np.linalg.inv(R)
-    cov = (dev / (n - npar)) * (rinv @ rinv.T)
-    return par, cov
+    # summary.nls: chol2inv(qr.R(QR)) through LAPACK dpotri (dtrti2 + dlauu2),
+    # written out for the 2 x 2 triangle so the rounding is LAPACK's.
+    ia = 1.0 / qr[0, 0]
+    ic = 1.0 / qr[1, 1]
+    u12 = (ia * qr[0, 1]) * (-ic)
+    xtx_inv = np.array([[ia * ia + u12 * u12, ic * u12], [ic * u12, ic * ic]])
+    return par, xtx_inv * (dev / (y.size - npar))
 
 
 # --------------------------------------------------------------------------- #
@@ -208,7 +275,13 @@ def _fmingr(fn, p):
 
 
 def _vmmin(b0, fn):
-    """Faithful port of R's vmmin BFGS (src/appl/optim.c), reltol=1e-3."""
+    """Port of R's vmmin BFGS (src/appl/optim.c), reltol=1e-3.
+
+    Loop for loop as in C: B is kept as its lower triangle and every product
+    and sum runs in C's order. Matrix products (``B @ g``, outer products)
+    round differently, and the line search and the ``reltol`` stop turn such
+    last-bit differences into different iterates in ill-conditioned windows.
+    """
     n = b0.size
     b = b0.astype(float).copy()
     f = fn(b)
@@ -217,15 +290,29 @@ def _vmmin(b0, fn):
     iter_ = 1
     gradcount = 1
     ilast = gradcount
-    B = np.eye(n)
+    B = [[0.0] * n for _ in range(n)]
+    t = [0.0] * n
+    X = [0.0] * n
+    c = [0.0] * n
     count = 0
     while True:
         if ilast == gradcount:
-            B = np.eye(n)
-        X = b.copy()
-        c = g.copy()
-        t = -(B @ g)
-        gradproj = float(t @ g)
+            for i in range(n):
+                for j in range(i):
+                    B[i][j] = 0.0
+                B[i][i] = 1.0
+        for i in range(n):
+            X[i] = float(b[i])
+            c[i] = float(g[i])
+        gradproj = 0.0
+        for i in range(n):
+            s = 0.0
+            for j in range(i + 1):
+                s -= B[i][j] * g[j]
+            for j in range(i + 1, n):
+                s -= B[j][i] * g[j]
+            t[i] = s
+            gradproj += s * g[i]
         if gradproj < 0.0:
             steplength = 1.0
             accpoint = False
@@ -237,7 +324,7 @@ def _vmmin(b0, fn):
                         count += 1
                 if count < n:
                     f = fn(b)
-                    accpoint = np.isfinite(f) and (
+                    accpoint = math.isfinite(f) and (
                         f <= Fmin + gradproj * steplength * _VMMIN_ACCTOL)
                     if not accpoint:
                         steplength *= _VMMIN_STEPREDN
@@ -252,14 +339,25 @@ def _vmmin(b0, fn):
                 g = _fmingr(fn, b)
                 gradcount += 1
                 iter_ += 1
-                t = steplength * t
-                c = g - c
-                D1 = float(t @ c)
+                D1 = 0.0
+                for i in range(n):
+                    t[i] = steplength * t[i]
+                    c[i] = g[i] - c[i]
+                    D1 += t[i] * c[i]
                 if D1 > 0:
-                    X2 = B @ c
-                    D2 = 1.0 + float(X2 @ c) / D1
-                    B = B + (D2 * np.outer(t, t) - np.outer(X2, t)
-                             - np.outer(t, X2)) / D1
+                    D2 = 0.0
+                    for i in range(n):
+                        s = 0.0
+                        for j in range(i + 1):
+                            s += B[i][j] * c[j]
+                        for j in range(i + 1, n):
+                            s += B[j][i] * c[j]
+                        X[i] = s
+                        D2 += s * c[i]
+                    D2 = 1.0 + D2 / D1
+                    for i in range(n):
+                        for j in range(i + 1):
+                            B[i][j] += (D2 * t[i] * t[j] - X[i] * t[j] - t[i] * X[j]) / D1
                 else:
                     ilast = gradcount
             else:
@@ -332,10 +430,10 @@ def _fit_e0_window(reco, temp_k, prev_e0, tref_k):
     """Port of partGLEstimateTempSensInBoundsE0Only (R nls), bounded [50, 400]."""
     b = 1.0 / (tref_k - T0_K) - 1.0 / (temp_k - T0_K)
     start_e0 = prev_e0 if np.isfinite(prev_e0) else 100.0
-    start_rref = float(np.nanmean(reco))
+    start_rref = _r_mean(reco)  # R's mean, not numpy's: the fit is chaotic in it
 
     def predict(p):
-        return p[0] * np.exp(p[1] * b)
+        return p[0] * _exp_r(p[1] * b)
 
     par, cov = _r_nls(reco, predict, np.array([start_rref, start_e0]))
     if par is None:
@@ -372,55 +470,702 @@ def _fit_nighttime_pass(nee, temp, is_night, i_central, win_days, dts, n):
     return e0, sde0, treffit, rreffit
 
 
+# --------------------------------------------------------------------------- #
+# mlegp 3.1.9 (fitGP in src/fit_gp.h, createGP/predict.gp in R), as
+# partGLSmoothTempSens calls it: mlegp(X = iCentralRec, Z = E0, nugget = sdE0^2)
+# --------------------------------------------------------------------------- #
+# mlegp maximises the likelihood over (log beta, log nugget scale) with 5
+# Nelder-Mead runs from random starts, then L-BFGS from the best. The optimum
+# is flat: other optimizers (or other starts) stop at a different point with
+# the same likelihood to 1e-8, and the smoothed E0 then differs by ~1e-4. What
+# mlegp returns is where *its* simplex stops, so the port reproduces the run
+# itself: the SFMT random numbers of seed 0, the start values, R's 2.4.0
+# nmmin and liblbfgs 1.x step by step. The simplex vertices are pure
+# arithmetic on the start values; the likelihood only decides which vertex
+# moves. So as long as those comparisons agree (the likelihood values here
+# agree with mlegp's to ~1e-15), the result is mlegp's to the bit. In all 8
+# parity runs the L-BFGS stage ended where it started: its gradient
+# is a forward difference with h = 1e-10 on the natural scale, used as if it
+# were the gradient in log space, so the line search fails and mlegp keeps the
+# simplex result. It is ported anyway, but it is not reproducible to the bit if
+# it ever moves: the h = 1e-10 difference amplifies last-bit differences of the
+# likelihood by 1e10.
+_MLEGP_LN2 = 0.693147180559945309417
+# gp.h's fallback, used because math.h has no M_LNPI; it only shifts the
+# likelihood, but it changes its rounding and so the comparisons above.
+_MLEGP_LNPI = 1.1447298858494
+_MLEGP_SIMPLEX_TRIES = 5
+_MLEGP_SIMPLEX_MAXIT = 500
+_MLEGP_SIMPLEX_RELTOL = 1e-8
+_MLEGP_BFGS_MAXIT = 500
+_MLEGP_BFGS_TOL = 0.01
+_MLEGP_BFGS_H = 1e-10
+_MLEGP_SEED = 0
+_DBL_MAX = float(np.finfo(float).max)
+
+# SFMT 1.3 with MEXP = 607 (mlegp's Makevars), the generator behind
+# genrand_res53() in fitGP.
+_SFMT_N = 5
+_SFMT_POS1, _SFMT_SL1, _SFMT_SL2, _SFMT_SR1, _SFMT_SR2 = 2, 15, 3, 13, 3
+_SFMT_MSK = (0xfdff37ff, 0xef7f3f7d, 0xff777b7d, 0x7ff7fb2f)
+_SFMT_PARITY = (0x00000001, 0x00000000, 0x00000000, 0x5986f054)
+
+
+def _sfmt607_res53(seed, count):
+    """``count`` draws of SFMT-607 ``genrand_res53()`` after ``init_gen_rand(seed)``.
+
+    mlegp seeds its own generator (not R's RNG) with ``seed = 0`` on every
+    call, so the five start values are the same in every fit.
+    """
+    m32 = 0xffffffff
+    m128 = (1 << 128) - 1
+    st = [0] * (4 * _SFMT_N)
+    st[0] = seed & m32
+    for i in range(1, 4 * _SFMT_N):
+        st[i] = (1812433253 * (st[i - 1] ^ (st[i - 1] >> 30)) + i) & m32
+    # period_certification()
+    inner = 0
+    for i in range(4):
+        inner ^= st[i] & _SFMT_PARITY[i]
+    for sh in (16, 8, 4, 2, 1):
+        inner ^= inner >> sh
+    if not inner & 1:
+        for i in range(4):
+            bit = next((1 << k for k in range(32) if (1 << k) & _SFMT_PARITY[i]), 0)
+            if bit:
+                st[i] ^= bit
+                break
+    # 128-bit words, little endian as on x86 (u[0] is the low word).
+    w = [st[4 * i] | st[4 * i + 1] << 32 | st[4 * i + 2] << 64 | st[4 * i + 3] << 96
+         for i in range(_SFMT_N)]
+
+    def recursion(a, b, c, d):
+        x = (a << (_SFMT_SL2 * 8)) & m128
+        y = c >> (_SFMT_SR2 * 8)
+        r = 0
+        for k in range(4):
+            sh = 32 * k
+            rk = (((a >> sh) & m32) ^ ((x >> sh) & m32)
+                  ^ ((((b >> sh) & m32) >> _SFMT_SR1) & _SFMT_MSK[k])
+                  ^ ((y >> sh) & m32) ^ ((((d >> sh) & m32) << _SFMT_SL1) & m32))
+            r |= rk << sh
+        return r
+
+    out = []
+    idx = 4 * _SFMT_N
+    while len(out) < count:
+        if idx >= 4 * _SFMT_N:  # gen_rand_all()
+            r1, r2 = w[_SFMT_N - 2], w[_SFMT_N - 1]
+            for i in range(_SFMT_N):
+                w[i] = recursion(w[i], w[(i + _SFMT_POS1) % _SFMT_N], r1, r2)
+                r1, r2 = r2, w[i]
+            idx = 0
+        v = (w[idx // 4] >> (32 * (idx % 4))) & ((1 << 64) - 1)  # gen_rand64()
+        idx += 2
+        # to_res53(): v * 2^-64 in long double, rounded once to double.
+        out.append(float(v) * 2.0 ** -64)
+    return out
+
+
+def _exp_c(x):
+    """Scalar ``exp``, correctly rounded, which is what R's x87 ``exp`` returns
+    except in rare near-ties (see :func:`_exp_r`). UCRT's ``exp`` (numpy,
+    ``math``) is off by one ulp for ~0.5 % of arguments, and these scalars are
+    the GP parameters themselves."""
+    if x > 709.8:
+        return math.inf
+    if x < -745.2:
+        return 0.0
+    with localcontext() as ctx:
+        ctx.prec = 40
+        return float(Decimal(float(x)).exp())
+
+
+def _log_c(x):
+    """Scalar ``log``, correctly rounded (see :func:`_exp_c`)."""
+    with localcontext() as ctx:
+        ctx.prec = 40
+        return float(Decimal(float(x)).ln())
+
+
+_EXP_TABLES = None
+
+
+def _exp_tables():
+    """Reduction constants and 2^(j/256) as double-double pairs (computed once)."""
+    global _EXP_TABLES
+    if _EXP_TABLES is None:
+        with localcontext() as ctx:
+            ctx.prec = 60
+            ln2_256 = Decimal(2).ln() / 256
+            # l1 has 32 significant bits, so k * l1 is exact for |k| < 2^21
+            l1 = math.ldexp(math.floor(math.ldexp(float(ln2_256), 40)), -40)
+            rest = ln2_256 - Decimal(l1)
+            l2 = float(rest)
+            l3 = float(rest - Decimal(l2))
+            t_hi = np.empty(256)
+            t_lo = np.empty(256)
+            for j in range(256):
+                t = Decimal(2) ** (Decimal(j) / 256)
+                t_hi[j] = float(t)
+                t_lo[j] = float(t - Decimal(t_hi[j]))
+        _EXP_TABLES = (1.0 / float(ln2_256), l1, l2, l3, t_hi, t_lo)
+    return _EXP_TABLES
+
+
+def _exp_r(x):
+    """Vectorized ``exp`` rounded as R computes it on Windows.
+
+    R computes ``exp`` in x87 extended precision and rounds the 64-bit result
+    to double; within 2^-12 ulp of a midpoint that double rounding goes to the
+    even neighbour. numpy's ``exp`` (UCRT) differs from R's in the last bit
+    for ~0.5 % of arguments, the correctly rounded value for ~0.04 %, this
+    function for ~0.003 % (where the x87 instruction's own error decides). The
+    E0 fits amplify one such bit to ~1e-8 relative (see :func:`_r_nls`), the
+    LRC fits to ~1e-6. Double-double evaluation (table of 2^(j/256), degree-6
+    polynomial, error < 1e-22); about 20 times slower than ``np.exp``.
+    """
+    inv, l1, l2, l3, t_hi, t_lo = _exp_tables()
+    x = np.asarray(x, dtype=float)
+    with np.errstate(over='ignore', invalid='ignore'):
+        k = np.rint(x * inv)
+        k = np.where(np.isfinite(k) & (np.abs(x) <= 708.0), k, 0.0)
+        a = x - k * l1  # exact (Sterbenz)
+        b = -(k * l2)
+        r_hi = a + b
+        bb = r_hi - a
+        r_lo = (a - (r_hi - bb)) + (b - bb) - k * l3
+        p = (r_hi * r_hi) * (0.5 + r_hi * (1.0 / 6 + r_hi * (
+            1.0 / 24 + r_hi * (1.0 / 120 + r_hi * (1.0 / 720)))))
+        s_lo = r_lo + p + r_lo * r_hi
+        ki = k.astype(np.int64)
+        j = ki & 255
+        th, tl = t_hi[j], t_lo[j]
+        # exact product th * r_hi (Dekker, no FMA)
+        c = 134217729.0 * th
+        th_h = c - (c - th)
+        th_l = th - th_h
+        c = 134217729.0 * r_hi
+        r_h = c - (c - r_hi)
+        r_l = r_hi - r_h
+        p_hi = th * r_hi
+        p_lo = ((th_h * r_h - p_hi) + th_h * r_l + th_l * r_h) + th_l * r_l
+        s_hi = th + p_hi
+        bb = s_hi - th
+        s_err = (th - (s_hi - bb)) + (p_hi - bb)
+        low = s_err + p_lo + th * s_lo + tl + tl * r_hi
+        y = s_hi + low        # correctly rounded
+        d = (s_hi - y) + low  # exact value minus y
+        # x87 double rounding: R's exp rounds to 64 bits, then to 53. Within
+        # 2^-12 ulp of a midpoint the 64-bit value is the midpoint itself,
+        # and the second rounding goes to the even neighbour.
+        nb = np.where(d > 0, np.nextafter(y, np.inf), np.nextafter(y, -np.inf))
+        odd = (y.view(np.int64) & 1) == 1
+        tie = np.abs(d) >= np.abs(nb - y) * (0.5 - 2.0 ** -12)
+        y = np.where(tie & odd, nb, y)
+        res = np.ldexp(y, (ki - j) >> 8)
+        # outside the reduced range (and for inf/nan) numpy's exp is exact enough
+        return np.where(np.abs(x) <= 708.0, res, np.exp(x))
+
+
+def _nelder_mead_min(bvec, fminfn, abstol, intol, maxit,
+                     alpha=1.0, bet=0.5, gamm=2.0):
+    """mlegp's ``nelder_mead_min`` (R 2.4.0 ``nmmin``), statement by statement.
+
+    Returns ``(x, fmin, fail)``.
+    """
+    n = len(bvec)
+    bvec = [float(v) for v in bvec]
+    big = 1e+140
+    P = [[0.0] * (n + 2) for _ in range(n + 1)]
+    f = fminfn(bvec)
+    if not math.isfinite(f):
+        return list(bvec), f, 1
+    funcount = 1
+    convtol = intol * (abs(f) + intol)
+    n1 = n + 1
+    C = n + 2
+    P[n1 - 1][0] = f
+    for i in range(n):
+        P[i][0] = bvec[i]
+    L = 1
+    size = 0.0
+    step = 0.0
+    for i in range(n):
+        if 0.1 * abs(bvec[i]) > step:
+            step = 0.1 * abs(bvec[i])
+    if step == 0.0:
+        step = 0.1
+    for j in range(2, n1 + 1):
+        for i in range(n):
+            P[i][j - 1] = bvec[i]
+        trystep = step
+        while P[j - 2][j - 1] == bvec[j - 2]:
+            P[j - 2][j - 1] = bvec[j - 2] + trystep
+            trystep *= 10
+        size += trystep
+    oldsize = size
+    calcvert = True
+    fail = 0
+    while True:
+        if calcvert:
+            for j in range(n1):
+                if j + 1 != L:
+                    for i in range(n):
+                        bvec[i] = P[i][j]
+                    f = fminfn(bvec)
+                    if not math.isfinite(f):
+                        f = big
+                    funcount += 1
+                    P[n1 - 1][j] = f
+            calcvert = False
+        VL = P[n1 - 1][L - 1]
+        VH = VL
+        H = L
+        for j in range(1, n1 + 1):
+            if j != L:
+                f = P[n1 - 1][j - 1]
+                if f < VL:
+                    L = j
+                    VL = f
+                if f > VH:
+                    H = j
+                    VH = f
+        if VH <= VL + convtol or VL <= abstol:
+            break
+        for i in range(n):
+            temp = -P[i][H - 1]
+            for j in range(n1):
+                temp += P[i][j]
+            P[i][C - 1] = temp / n
+        for i in range(n):
+            bvec[i] = (1.0 + alpha) * P[i][C - 1] - alpha * P[i][H - 1]
+        f = fminfn(bvec)
+        if not math.isfinite(f):
+            f = big
+        funcount += 1
+        VR = f
+        if VR < VL:
+            P[n1 - 1][C - 1] = f
+            for i in range(n):
+                f = gamm * bvec[i] + (1 - gamm) * P[i][C - 1]
+                P[i][C - 1] = bvec[i]
+                bvec[i] = f
+            f = fminfn(bvec)
+            if not math.isfinite(f):
+                f = big
+            funcount += 1
+            if f < VR:
+                for i in range(n):
+                    P[i][H - 1] = bvec[i]
+                P[n1 - 1][H - 1] = f
+            else:
+                for i in range(n):
+                    P[i][H - 1] = P[i][C - 1]
+                P[n1 - 1][H - 1] = VR
+        else:
+            if VR < VH:
+                for i in range(n):
+                    P[i][H - 1] = bvec[i]
+                P[n1 - 1][H - 1] = VR
+            for i in range(n):
+                bvec[i] = (1 - bet) * P[i][H - 1] + bet * P[i][C - 1]
+            f = fminfn(bvec)
+            if not math.isfinite(f):
+                f = big
+            funcount += 1
+            if f < P[n1 - 1][H - 1]:
+                for i in range(n):
+                    P[i][H - 1] = bvec[i]
+                P[n1 - 1][H - 1] = f
+            elif VR >= VH:  # shrink towards the lowest vertex
+                calcvert = True
+                size = 0.0
+                for j in range(n1):
+                    if j + 1 != L:
+                        for i in range(n):
+                            P[i][j] = bet * (P[i][j] - P[i][L - 1]) + P[i][L - 1]
+                            size += abs(P[i][j] - P[i][L - 1])
+                if size < oldsize:
+                    oldsize = size
+                else:
+                    fail = 10
+                    break
+        if funcount > maxit:
+            break
+    if funcount > maxit:
+        fail = 1
+    return [P[i][L - 1] for i in range(n)], P[n1 - 1][L - 1], fail
+
+
+# liblbfgs 1.x as bundled with mlegp (lbfgs.c), defaults but epsilon and
+# max_iterations. Error codes as in lbfgs.h.
+_LBFGS_M, _LBFGS_MAX_LS = 6, 20
+_LBFGS_MIN_STEP, _LBFGS_MAX_STEP = 1e-20, 1e20
+_LBFGS_FTOL, _LBFGS_GTOL, _LBFGS_XTOL = 1e-4, 0.9, 1e-16
+_LBFGSERR_OUTOFINTERVAL, _LBFGSERR_INCORRECT_TMINMAX = -1011, -1010
+_LBFGSERR_ROUNDING_ERROR, _LBFGSERR_MINIMUMSTEP = -1009, -1008
+_LBFGSERR_MAXIMUMSTEP, _LBFGSERR_MAXIMUMLINESEARCH = -1007, -1006
+_LBFGSERR_MAXIMUMITERATION, _LBFGSERR_WIDTHTOOSMALL = -1005, -1004
+_LBFGSERR_INCREASEGRADIENT = -1002
+
+
+def _vecdot(x, y):
+    s = 0.0
+    for a, b in zip(x, y, strict=True):
+        s += a * b
+    return s
+
+
+def _max2(a, b):
+    return a if a >= b else b
+
+
+def _min2(a, b):
+    return a if a <= b else b
+
+
+def _cubic_minimizer(u, fu, du, v, fv, dv):
+    d = v - u
+    theta = (fu - fv) * 3 / d + du + dv
+    s = _max2(_max2(abs(theta), abs(du)), abs(dv))
+    a = theta / s
+    gamma = s * math.sqrt(a * a - (du / s) * (dv / s))
+    if v < u:
+        gamma = -gamma
+    p = gamma - du + theta
+    q = gamma - du + gamma + dv
+    return u + (p / q) * d
+
+
+def _cubic_minimizer2(u, fu, du, v, fv, dv, xmin, xmax):
+    d = v - u
+    theta = (fu - fv) * 3 / d + du + dv
+    s = _max2(_max2(abs(theta), abs(du)), abs(dv))
+    a = theta / s
+    gamma = s * math.sqrt(_max2(0.0, a * a - (du / s) * (dv / s)))
+    if u < v:
+        gamma = -gamma
+    p = gamma - dv + theta
+    q = gamma - dv + gamma + du
+    r = p / q
+    if r < 0. and gamma != 0.:
+        return v - r * d
+    return xmax if a < 0 else xmin
+
+
+def _update_trial_interval(st, t, ft, dt, tmin, tmax):
+    """liblbfgs ``update_trial_interval`` (More-Thuente); updates ``st`` in place
+    and returns ``(new_t, info)``."""
+    x, fx, dx, y, fy, dy = st['x'], st['fx'], st['dx'], st['y'], st['fy'], st['dy']
+    dsign = dt * (dx / abs(dx)) < 0.
+    if st['brackt']:
+        if t <= _min2(x, y) or _max2(x, y) <= t:
+            return t, _LBFGSERR_OUTOFINTERVAL
+        if 0. <= dx * (t - x):
+            return t, _LBFGSERR_INCREASEGRADIENT
+        if tmax < tmin:
+            return t, _LBFGSERR_INCORRECT_TMINMAX
+    if fx < ft:
+        st['brackt'] = True
+        bound = True
+        mc = _cubic_minimizer(x, fx, dx, t, ft, dt)
+        mq = x + dx / ((fx - ft) / (t - x) + dx) / 2 * (t - x)
+        newt = mc if abs(mc - x) < abs(mq - x) else mc + 0.5 * (mq - mc)
+    elif dsign:
+        st['brackt'] = True
+        bound = False
+        mc = _cubic_minimizer(x, fx, dx, t, ft, dt)
+        mq = t + dt / (dt - dx) * (x - t)
+        newt = mc if abs(mc - t) > abs(mq - t) else mq
+    elif abs(dt) < abs(dx):
+        bound = True
+        mc = _cubic_minimizer2(x, fx, dx, t, ft, dt, tmin, tmax)
+        mq = t + dt / (dt - dx) * (x - t)
+        if st['brackt']:
+            newt = mc if abs(t - mc) < abs(t - mq) else mq
+        else:
+            newt = mc if abs(t - mc) > abs(t - mq) else mq
+    else:
+        bound = False
+        if st['brackt']:
+            newt = _cubic_minimizer(t, ft, dt, y, fy, dy)
+        elif x < t:
+            newt = tmax
+        else:
+            newt = tmin
+    if fx < ft:
+        st['y'], st['fy'], st['dy'] = t, ft, dt
+    else:
+        if dsign:
+            st['y'], st['fy'], st['dy'] = x, fx, dx
+        st['x'], st['fx'], st['dx'] = t, ft, dt
+    if tmax < newt:
+        newt = tmax
+    if newt < tmin:
+        newt = tmin
+    if st['brackt'] and bound:
+        mq = st['x'] + 0.66 * (st['y'] - st['x'])
+        if st['x'] < st['y']:
+            if mq < newt:
+                newt = mq
+        elif newt < mq:
+            newt = mq
+    return newt, 0
+
+
+def _lbfgs_line_search(x, f, g, s, stp, evaluate):
+    """liblbfgs ``line_search`` (More-Thuente). Returns ``(ls, x, f, g, stp)``;
+    ``ls < 0`` is an error code, and then ``x`` is the last point tried."""
+    count = 0
+    uinfo = 0
+    dginit = _vecdot(g, s)
+    if 0 < dginit:
+        return _LBFGSERR_INCREASEGRADIENT, x, f, g, stp
+    stage1 = True
+    finit = f
+    dgtest = _LBFGS_FTOL * dginit
+    width = _LBFGS_MAX_STEP - _LBFGS_MIN_STEP
+    prev_width = 2.0 * width
+    wa = list(x)
+    st = dict(x=0., fx=finit, dx=dginit, y=0., fy=finit, dy=dginit, brackt=False)
+    while True:
+        if st['brackt']:
+            stmin, stmax = _min2(st['x'], st['y']), _max2(st['x'], st['y'])
+        else:
+            stmin, stmax = st['x'], stp + 4.0 * (stp - st['x'])
+        if stp < _LBFGS_MIN_STEP:
+            stp = _LBFGS_MIN_STEP
+        if _LBFGS_MAX_STEP < stp:
+            stp = _LBFGS_MAX_STEP
+        br = st['brackt']
+        if (br and ((stp <= stmin or stmax <= stp) or _LBFGS_MAX_LS <= count + 1
+                    or uinfo != 0)) or (br and (stmax - stmin <= _LBFGS_XTOL * stmax)):
+            stp = st['x']
+        x = [a + stp * b for a, b in zip(wa, s, strict=True)]
+        f, g = evaluate(x)
+        count += 1
+        dg = _vecdot(g, s)
+        ftest1 = finit + stp * dgtest
+        if br and ((stp <= stmin or stmax <= stp) or uinfo != 0):
+            return _LBFGSERR_ROUNDING_ERROR, x, f, g, stp
+        if stp == _LBFGS_MAX_STEP and f <= ftest1 and dg <= dgtest:
+            return _LBFGSERR_MAXIMUMSTEP, x, f, g, stp
+        if stp == _LBFGS_MIN_STEP and (ftest1 < f or dgtest <= dg):
+            return _LBFGSERR_MINIMUMSTEP, x, f, g, stp
+        if br and (stmax - stmin) <= _LBFGS_XTOL * stmax:
+            return _LBFGSERR_WIDTHTOOSMALL, x, f, g, stp
+        if _LBFGS_MAX_LS <= count:
+            return _LBFGSERR_MAXIMUMLINESEARCH, x, f, g, stp
+        if f <= ftest1 and abs(dg) <= _LBFGS_GTOL * (-dginit):
+            return count, x, f, g, stp
+        if stage1 and f <= ftest1 and _min2(_LBFGS_FTOL, _LBFGS_GTOL) * dginit <= dg:
+            stage1 = False
+        if stage1 and ftest1 < f and f <= st['fx']:
+            # modified function (psi) until sufficient decrease is reached
+            sm = dict(x=st['x'], fx=st['fx'] - st['x'] * dgtest, dx=st['dx'] - dgtest,
+                      y=st['y'], fy=st['fy'] - st['y'] * dgtest, dy=st['dy'] - dgtest,
+                      brackt=st['brackt'])
+            stp, uinfo = _update_trial_interval(sm, stp, f - stp * dgtest, dg - dgtest,
+                                                stmin, stmax)
+            st = dict(x=sm['x'], fx=sm['fx'] + sm['x'] * dgtest, dx=sm['dx'] + dgtest,
+                      y=sm['y'], fy=sm['fy'] + sm['y'] * dgtest, dy=sm['dy'] + dgtest,
+                      brackt=sm['brackt'])
+        else:
+            stp, uinfo = _update_trial_interval(st, stp, f, dg, stmin, stmax)
+        if st['brackt']:
+            if 0.66 * prev_width <= abs(st['y'] - st['x']):
+                stp = st['x'] + 0.5 * (st['y'] - st['x'])
+            prev_width = width
+            width = abs(st['y'] - st['x'])
+
+
+def _lbfgs(x, evaluate, epsilon, max_iterations):
+    """liblbfgs ``lbfgs()`` (m = 6, More-Thuente). Returns ``(ret, x)``; on an
+    error ``x`` is the last point the line search tried, as in C."""
+    m = _LBFGS_M
+    x = list(x)
+    fx, g = evaluate(x)
+    d = [-a for a in g]
+    step = 1.0 / math.sqrt(_vecdot(d, d))
+    k, end = 1, 0
+    lm_s, lm_y = [None] * m, [None] * m
+    lm_ys, lm_alpha = [0.0] * m, [0.0] * m
+    while True:
+        xp, gp = list(x), list(g)
+        ls, x, fx, g, step = _lbfgs_line_search(x, fx, g, d, step, evaluate)
+        if ls < 0:
+            return ls, x
+        gnorm = math.sqrt(_vecdot(g, g))
+        xnorm = math.sqrt(_vecdot(x, x))
+        if xnorm < 1.0:
+            xnorm = 1.0
+        if gnorm / xnorm <= epsilon:
+            return 0, x
+        if max_iterations != 0 and max_iterations < k + 1:
+            return _LBFGSERR_MAXIMUMITERATION, x
+        lm_s[end] = [a - b for a, b in zip(x, xp, strict=True)]
+        lm_y[end] = [a - b for a, b in zip(g, gp, strict=True)]
+        ys = _vecdot(lm_y[end], lm_s[end])
+        yy = _vecdot(lm_y[end], lm_y[end])
+        lm_ys[end] = ys
+        bound = m if m <= k else k
+        k += 1
+        end = (end + 1) % m
+        d = [-a for a in g]
+        j = end
+        for _ in range(bound):
+            j = (j + m - 1) % m
+            lm_alpha[j] = _vecdot(lm_s[j], d) / lm_ys[j]
+            c = -lm_alpha[j]
+            d = [a + c * b for a, b in zip(d, lm_y[j], strict=True)]
+        c = ys / yy
+        d = [a * c for a in d]
+        for _ in range(bound):
+            beta = _vecdot(lm_y[j], d) / lm_ys[j]
+            c = lm_alpha[j] - beta
+            d = [a + c * b for a, b in zip(d, lm_s[j], strict=True)]
+            j = (j + 1) % m
+        step = 1.0
+
+
+class _MlegpLikelihood:
+    """fitGP's ``f_min``: negative log likelihood of (log beta, log nugget
+    scale), with the constant mean and the GP variance ``sig2`` profiled out.
+
+    The correlation is ``exp(-beta * d^2)`` rounded as C does,
+    ``exp((-beta * d) * d)``. The nugget is ``scale * sdE0^2`` on the diagonal.
+    """
+
+    def __init__(self, x, z, nug):
+        self.x = np.asarray(x, float)
+        self.z = np.asarray(z, float)
+        self.nug = np.asarray(nug, float)
+        self.n = self.z.size
+        self.d = self.x[:, None] - self.x[None, :]
+        self.diag = np.diag_indices(self.n)
+
+    def corr(self, beta, nscale, exp=np.exp):
+        # np.exp while optimizing (only comparisons of the likelihood matter),
+        # R's rounding for the final estimates
+        corr = exp(((-beta) * self.d) * self.d)
+        corr[self.diag] += nscale * self.nug
+        return corr
+
+    def gls(self, corr):
+        """Constant GLS mean ``bhat`` and ``sig2`` (calcBhat, calcMLESig2)."""
+        ainv = lapack.dpotri(lapack.dpotrf(corr, lower=1)[0], lower=1)[0]
+        ainv = np.tril(ainv) + np.tril(ainv, -1).T
+        one_ainv = ainv.sum(axis=0)
+        bhat = (1.0 / one_ainv.sum()) * float(one_ainv @ self.z)
+        r = self.z - bhat
+        return bhat, float(r @ ainv @ r) / self.n
+
+    def __call__(self, v):
+        beta = 0.0 if v[0] < -500 else _exp_c(v[0])
+        nscale = 0.0 if v[1] < -500 else _exp_c(v[1])
+        corr = self.corr(beta, nscale)
+        chol, info = lapack.dpotrf(corr, lower=1)
+        if info != 0:
+            return _DBL_MAX
+        bhat, sig2 = self.gls(corr)
+        chol_v, info = lapack.dpotrf(corr * sig2, lower=1)
+        if info != 0:
+            return _DBL_MAX
+        logdet = 2.0 * float(np.log(np.diag(chol_v)).sum())
+        r = self.z - bhat
+        vinv = lapack.dpotri(chol_v, lower=1)[0]
+        vinv = np.tril(vinv) + np.tril(vinv, -1).T
+        dd = float(r @ vinv @ r)
+        return -(-(self.n / 2.0) * (_MLEGP_LN2 + _MLEGP_LNPI) - 0.5 * (logdet + dd))
+
+    def fdf(self, v):
+        """fdf_evaluate: value and forward-difference 'gradient' (step h on the
+        natural scale, returned as if it were the gradient in log space)."""
+        fv = self(v)
+        vc = [0.0 if a < -500 else _exp_c(a) for a in v]
+        g = []
+        for i in range(len(v)):
+            vp = list(vc)
+            vp[i] = vc[i] + _MLEGP_BFGS_H
+            fp = self([_log_c(a) for a in vp])
+            if fv == _DBL_MAX:
+                g.append(0.0)
+            elif fp == _DBL_MAX:
+                vp = list(vc)
+                vp[i] = vc[i] - _MLEGP_BFGS_H
+                fp = self([_log_c(a) for a in vp])
+                g.append(0.0 if fp == _DBL_MAX else (fv - fp) / -_MLEGP_BFGS_H)
+            else:
+                g.append((fp - fv) / _MLEGP_BFGS_H)
+        return fv, g
+
+
+def _mlegp_fit(x, z, nug):
+    """mlegp's fitGP for one input column, a constant mean and a nugget matrix
+    ``nug`` (estimated scale). Returns ``(beta, mu, sig2, nugget_scale)``, the
+    mlegp estimates; mlegp reports the nugget as ``nug * nugget_scale * sig2``.
+    """
+    lik = _MlegpLikelihood(x, z, nug)
+    n = lik.n
+    # vectorVariance(): C loops, mean then sum of squares, / (n - 1)
+    mean = 0.0
+    for a in lik.z:
+        mean += a
+    mean = mean / n
+    sse = 0.0
+    for a in lik.z:
+        sse += (a - mean) * (a - mean)
+    init_nugget = 1.0 / (sse / (n - 1))
+    # getUnivariateCorRange(): starting beta between the values that give the
+    # two closest design points a correlation of 0.65 and of 0.3
+    d2 = (lik.x[:, None] - lik.x[None, :]) ** 2
+    xmin = float(d2[d2 > 0].min())
+    m1 = -_log_c(.65) / xmin
+    m2 = -_log_c(.3) / xmin
+    draws = _sfmt607_res53(_MLEGP_SEED, _MLEGP_SIMPLEX_TRIES)
+    best_v, best_f = None, _DBL_MAX
+    for t in range(_MLEGP_SIMPLEX_TRIES):
+        v0 = [_log_c(m1 + (m2 - m1) * draws[t]), _log_c(init_nugget)]
+        v, fval, _fail = _nelder_mead_min(v0, lik, -_DBL_MAX, _MLEGP_SIMPLEX_RELTOL,
+                                          _MLEGP_SIMPLEX_MAXIT)
+        if t == 0 or fval < best_f:
+            best_v, best_f = v, fval
+    _ret, v = _lbfgs(best_v, lik.fdf, _MLEGP_BFGS_TOL, _MLEGP_BFGS_MAXIT)
+    fval = lik(v)
+    if math.isnan(fval) or fval == _DBL_MAX:
+        v = best_v  # L-BFGS failed: fitGP falls back to the simplex estimate
+    beta = 0.0 if v[0] < -500 else _exp_c(v[0])
+    nscale = 0.0 if v[1] < -500 else _exp_c(v[1])
+    mu, sig2 = lik.gls(lik.corr(beta, nscale, _exp_r))
+    return beta, mu, sig2, nscale
+
+
 def _gp_smooth(x, z, nug):
-    """mlegp GP MLE: Gaussian correlation, constant GLS mean + sig2 profiled out,
-    free params (log beta, log nugget_scale). Returns (predict, nugget_vec)."""
+    """mlegp GP fit + ``predict.gp(se.fit = TRUE)``. Returns ``(predict,
+    nugget_vec)``, where ``nugget_vec`` is mlegp's ``gpFit$nugget``: the
+    absolute nugget variance ``sdE0^2 * nugget_scale * sig2``."""
     x = np.asarray(x, float)
-    z = np.asarray(z, float).reshape(-1, 1)
+    z = np.asarray(z, float)
     nug = np.asarray(nug, float)
-    npts = x.size
-    D2 = (x[:, None] - x[None, :]) ** 2
-    one = np.ones((npts, 1))
-
-    def neg_ll(v):
-        beta, nscale = np.exp(v[0]), np.exp(v[1])
-        A = np.exp(-beta * D2) + nscale * np.diag(nug)
-        try:
-            Ainv = np.linalg.inv(A)
-        except np.linalg.LinAlgError:
-            return 1e300
-        mu = float(((one.T @ Ainv @ z) / (one.T @ Ainv @ one)).item())
-        r = z - mu
-        sig2 = float(((r.T @ Ainv @ r) / npts).item())
-        if not np.isfinite(sig2) or sig2 <= 0:
-            return 1e300
-        _, logdet = np.linalg.slogdet(sig2 * A)
-        return 0.5 * (npts * np.log(2 * np.pi) + logdet
-                      + (r.T @ Ainv @ r)[0, 0] / sig2)
-
-    xr = x.max() - x.min()
-    best = None
-    for b0 in (np.log(1.0 / xr ** 2 * f) for f in (0.1, 1.0, 10.0)):
-        for s0 in (np.log(s) for s in (0.1, 1.0, 10.0)):
-            res = minimize(neg_ll, [b0, s0], method='Nelder-Mead',
-                           options=dict(xatol=1e-8, fatol=1e-8, maxiter=2000))
-            if best is None or res.fun < best.fun:
-                best = res
-    beta, nscale = np.exp(best.x[0]), np.exp(best.x[1])
-    K = np.exp(-beta * D2)
-    nugget_vec = nscale * nug
-    Ainv = np.linalg.inv(K + np.diag(nugget_vec))
-    mu = float(((one.T @ Ainv @ z) / (one.T @ Ainv @ one)).item())
-    sig2 = float((((z - mu).T @ Ainv @ (z - mu)) / npts).item())
-    Vinv = np.linalg.inv(sig2 * K + np.diag(sig2 * nugget_vec))
+    beta, mu, sig2, nscale = _mlegp_fit(x, z, nug)
+    # mlegp2(): nugget matrix times the reported (scale * sig2); createGP()
+    # then inverts sig2 * K + diag(nugget), K from calcVarMatrix, which rounds
+    # the exponent as exp(-(beta * d^2)), unlike fitGP.
+    nugget_vec = nug * (nscale * sig2)
+    A = sig2 * _exp_r(-(beta * (x[:, None] - x[None, :]) ** 2))
+    A[np.diag_indices(x.size)] += nugget_vec
+    inv_var = np.linalg.inv(A)
     zc = z - mu
 
     def predict(xnew):
         xnew = np.atleast_1d(np.asarray(xnew, float))
-        rr = np.exp(-beta * (xnew[:, None] - x[None, :]) ** 2)
-        fit = mu + sig2 * (rr @ (Vinv @ zc)).ravel()
-        var = sig2 - sig2 * np.einsum('ij,jk,ik->i', rr, Vinv, rr) * sig2
-        return fit, np.sqrt(np.clip(var, 0, None))
+        r = _exp_r(-(beta * (x[None, :] - xnew[:, None]) ** 2))
+        r_inv = r @ inv_var
+        fit = mu + sig2 * (r_inv @ zc)
+        # calcPredictionError(): sig2 + 0 - sig2 * (r V^-1 r') * sig2, 0 if < 0
+        v = sig2 - (sig2 * np.einsum('ij,ij->i', r_inv, r)) * sig2
+        return fit, np.sqrt(np.where(v < 0, 0.0, v))
 
     return predict, nugget_vec
 
@@ -440,20 +1185,20 @@ def _smooth_tempsens(e0fit, sde0fit, icentral, daystart):
         if fin.sum() == 0:
             continue
         ef, sf, xf = e0[fin], sde0[fin], icentral[fin].astype(float)
-        if np.std(ef, ddof=1) / np.mean(ef) < 0.01:
-            out_e0[ym] = np.mean(ef)
+        if np.std(ef, ddof=1) / _r_mean(ef) < 0.01:
+            out_e0[ym] = _r_mean(ef)
             out_sd[ym] = np.max(sf)
             continue
         predict, nugget = _gp_smooth(xf, ef, sf ** 2)
         fit, se = predict(icentral[ym].astype(float))
-        nug_all = np.full(int(ym.sum()), np.quantile(nugget, 0.9))
+        nug_all = np.full(int(ym.sum()), _r_quantile7(nugget, 0.9))
         nug_all[np.isfinite(e0[ym])] = nugget
         out_e0[ym] = fit
         out_sd[ym] = se + np.sqrt(nug_all)
     nf = ~np.isfinite(out_e0)
     if nf.any() and (~nf).any():
-        out_e0[nf] = np.mean(out_e0[~nf])
-        out_sd[nf] = np.quantile(out_sd[~nf], 0.9) * 1.5
+        out_e0[nf] = _r_mean(out_e0[~nf])
+        out_sd[nf] = _r_quantile7(out_sd[~nf], 0.9) * 1.5
     return out_e0, out_sd
 
 
@@ -469,10 +1214,13 @@ def _fit_rref_windows(nee, temp, is_night, e0_smooth, i_central, dts, n):
             continue
         reco = nee[lo:hi][v]
         if reco.size >= 3:
-            tk = temp[lo:hi][v] + 273.15
-            tfac = np.exp(e0_smooth[w] * (1.0 / (TREF_K - T0_K)
+            tk = 273.15 + temp[lo:hi][v]
+            tfac = _exp_r(e0_smooth[w] * (1.0 / (TREF_K - T0_K)
                                           - 1.0 / (tk - T0_K)))
-            rref[w] = max(0.0, float((tfac * reco).sum() / (tfac * tfac).sum()))
+            # coef(lm(REco ~ TFac - 1)): R's QR, not sum(x*y)/sum(x^2);
+            # max(0, NA) stays NA in R
+            coef = _lm_through_origin(tfac, reco)
+            rref[w] = max(0.0, coef) if np.isfinite(coef) else np.nan
     fin = np.isfinite(rref)
     if fin.any():
         cur = rref[fin][0]
@@ -487,30 +1235,45 @@ def _fit_rref_windows(nee, temp, is_night, e0_smooth, i_central, dts, n):
 # --------------------------------------------------------------------------- #
 # Stage 3: light-response-curve fit per window
 # --------------------------------------------------------------------------- #
-def _predict_nep(theta, rg, vpd, temp, fix_vpd):
+def _make_cost(theta_full, iopt, flux, sdflux, prior, sdprior, rg, vpd, temp):
+    """REddyProc's computeCost with predictLRC (rectangular hyperbola).
+
+    The exponentials use :func:`_exp_r`: with numpy's ``exp`` the fits in a few
+    ill-conditioned windows moved by up to 3e-6 relative (vmmin compares costs
+    and differences them over ``ndeps = 1e-3``). They are cached, which keeps
+    the bits: E0 is fixed during the fit, so the Lloyd-Taylor factor is a
+    constant, and the VPD factor only changes with k.
+    """
+    iopt = np.asarray(iopt)
     # The optimizer probes large k/beta where exp() overflows to inf; that just
     # yields a non-finite cost the line search rejects, so silence the warnings.
-    k, beta, alpha, rref, e0 = theta
     with np.errstate(over='ignore', invalid='ignore'):
-        if fix_vpd:
-            amax = np.full(rg.shape, beta)
-        else:
-            amax = np.where(vpd > VPD0, beta * np.exp(-k * (vpd - VPD0)), beta)
-        reco = rref * np.exp(e0 * (1.0 / (TREF_K - T0_K) - 1.0 / (temp + 273.15 - T0_K)))
-        gpp = (amax * alpha * rg) / (alpha * rg + amax)
-    return gpp - reco
-
-
-def _make_cost(theta_full, iopt, flux, sdflux, prior, sdprior, rg, vpd, temp):
-    iopt = np.asarray(iopt)
+        lloyd_taylor = _exp_r(theta_full[4] * (1.0 / (TREF_K - T0_K)
+                                               - 1.0 / (temp + 273.15 - T0_K)))
+    above = vpd > VPD0
+    dvpd = vpd[above] - VPD0
+    vpd_na = np.isnan(vpd)
+    vpd_factor = {}
 
     def cost(theta_opt):
         theta = theta_full.copy()
         theta[iopt] = theta_opt
-        fix_vpd = (theta[0] == 0)
-        nep = _predict_nep(theta, rg, vpd, temp, fix_vpd)
-        mfp = ((theta - prior) / sdprior) ** 2
-        return float(np.sum(((nep - flux) / sdflux) ** 2)) + float(np.nansum(mfp))
+        k, beta, alpha, rref = theta[:4]
+        with np.errstate(over='ignore', invalid='ignore'):
+            amax = np.full(rg.shape, beta)
+            if k != 0:  # fixVPD = (k == 0)
+                f = vpd_factor.get(k)
+                if f is None:
+                    if len(vpd_factor) > 16:
+                        vpd_factor.clear()
+                    f = vpd_factor[k] = _exp_r(-k * dvpd)
+                amax[above] = beta * f
+                amax[vpd_na] = np.nan  # ifelse(NA > VPD0, ...) is NA
+            gpp = (amax * alpha * rg) / (alpha * rg + amax)
+            nep = gpp - rref * lloyd_taylor
+            mfp = ((theta - prior) / sdprior) ** 2
+            # R's sum() (long double), not numpy's pairwise sum
+            return _r_sum(((nep - flux) / sdflux) ** 2) + _r_sum(mfp[~np.isnan(mfp)])
 
     return cost
 
@@ -529,7 +1292,7 @@ def _optim_adjusted_prior(theta, iopt, day, prior):
     nee, sdnee, rg, vpd, temp = day
     fin = np.isfinite(nee) & np.isfinite(sdnee)
     nee, sdnee, rg, vpd, temp = nee[fin], sdnee[fin], rg[fin], vpd[fin], temp[fin]
-    min_unc = np.quantile(sdnee, 0.3)
+    min_unc = _r_quantile7(sdnee, 0.3)
     fc_unc = np.maximum(sdnee, min_unc)  # isBoundLowerNEEUncertainty=TRUE
     sdprior = LASSLOP_SDPRIOR.copy()
     sdprior[[i for i in range(5) if i not in iopt]] = np.nan
@@ -542,13 +1305,16 @@ def _optim_adjusted_prior(theta, iopt, day, prior):
                 convergence=fail, hessian=hess)
 
 
-def _optim_lrc_bounds(theta0, prior, day, last_good):
+def _optim_lrc_bounds(theta0, prior, day, last_good, neglect_vpd=False):
     last_good = last_good.copy()
     if not np.isfinite(last_good[2]):
         last_good[2] = 0.22
-    is_fixed_vpd = (np.nansum(day[3] >= VPD0) == 0)
+    # isNeglectVPDEffect: k fixed at 0, so Amax = beta whatever VPD is
+    is_fixed_vpd = neglect_vpd or (np.nansum(day[3] >= VPD0) == 0)
     is_fixed_alpha = False
     theta0_adj = theta0.copy()
+    if neglect_vpd:
+        theta0_adj[0] = 0
     res = _optim_adjusted_prior(theta0_adj, _get_iopt(is_fixed_vpd, False), day, prior)
     th = res['theta']
     if not np.isfinite(th[0]) or th[0] < 0:
@@ -576,27 +1342,44 @@ def _optim_lrc_bounds(theta0, prior, day, last_good):
     return res
 
 
-def _fit_lrc(day, e0, sde0, rref_night, last_good):
+def _r_solve(a):
+    """R's ``solve(a)``: ``None`` where R stops, i.e. for an exactly singular
+    matrix and also when LAPACK's reciprocal condition number (1-norm,
+    ``dgecon``) is below ``.Machine$double.eps``."""
+    lu, piv, info = lapack.dgetrf(a)
+    if info != 0:
+        return None
+    anorm = float(np.abs(a).sum(axis=0).max())
+    rcond, info = lapack.dgecon(lu, anorm, norm='1')
+    if not rcond >= np.finfo(float).eps:
+        return None
+    return lapack.dgetri(lu, piv)[0]
+
+
+def _fit_lrc(day, e0, sde0, rref_night, last_good, neglect_vpd=False):
     nee = day[0]
     nee_fin = nee[np.isfinite(nee)]
-    beta_prior = abs(np.quantile(nee_fin, 0.03) - np.quantile(nee_fin, 0.97))
+    # R's quantile() interpolates as (1 - h) * a + h * b, numpy as a + (b - a) * h
+    beta_prior = abs(_r_quantile7(nee_fin, 0.03) - _r_quantile7(nee_fin, 0.97))
     prior = np.array([0.05, beta_prior, 0.1, rref_night, e0])
     inits = np.tile(prior, (3, 1))
     inits[1, 1] = prior[1] * 1.3
     inits[2, 1] = prior[1] * 0.8
-    results = [_optim_lrc_bounds(inits[r], prior, day, last_good) for r in range(3)]
+    results = [_optim_lrc_bounds(inits[r], prior, day, last_good, neglect_vpd)
+               for r in range(3)]
     valid = [r for r in results if np.isfinite(r['theta'][0])]
     if not valid:
         return None
     best = min(valid, key=lambda r: r['value'])
     theta, iopt, hess = best['theta'], best['iopt'], best['hessian']
-    try:
-        if hess[0, 0] < 1e-8:
-            cov_lrc = np.zeros_like(hess)
-            cov_lrc[1:, 1:] = np.linalg.inv(hess[1:, 1:])
-        else:
-            cov_lrc = np.linalg.inv(hess)
-    except np.linalg.LinAlgError:
+    if hess[0, 0] < 1e-8:
+        cov_lrc = np.zeros_like(hess)
+        inv = _r_solve(hess[1:, 1:])
+        if inv is not None:
+            cov_lrc[1:, 1:] = inv
+    else:
+        cov_lrc = inv = _r_solve(hess)
+    if inv is None:
         return None  # 1006
     cov = np.zeros((5, 5))
     cov[4, 4] = sde0 ** 2
@@ -681,8 +1464,10 @@ def _interpolate_fluxes(i_mean, params, rg, vpd, temp, nrec):
         k, beta, alpha = p[:, 0], p[:, 1], p[:, 2]
         fix = (k == 0)
         with np.errstate(over='ignore', invalid='ignore'):
+            # R's ifelse(VPD > VPD0, ...) is NA where VPD is NA (unless k == 0)
             amax = np.where(fix, beta,
-                            np.where(vpd > VPD0, beta * np.exp(-k * (vpd - VPD0)), beta))
+                            np.where(vpd > VPD0, beta * _exp_r(-k * (vpd - VPD0)),
+                                     np.where(np.isnan(vpd), np.nan, beta)))
             return (amax * alpha * rg) / (alpha * rg + amax)
 
     reco_out = w_before * reco(p_b) + w_after * reco(p_a)
@@ -693,6 +1478,46 @@ def _interpolate_fluxes(i_mean, params, rg, vpd, temp, nrec):
 # --------------------------------------------------------------------------- #
 # Orchestrator
 # --------------------------------------------------------------------------- #
+def _fit_lrc_windows(nee, sd_nee, ta, vpd, rg, is_day, i_central, e0_sm, sde0_sm,
+                     rref_win, dts, n, neglect_vpd=False):
+    """Port of partGLFitLRCWindows / partGLFitLRCOneWindow.
+
+    Returns the lists ``(i_mean, params, i_central)`` of the accepted windows.
+    ``neglect_vpd`` is ``controlGLPart$isNeglectVPDEffect``.
+    """
+    rec_start, rec_end = _win_recs(i_central, WIN_REF_DAYS, dts, n)
+    i_mean_list, params_list, central_list = [], [], []
+    last_good = np.full(5, np.nan)
+    for w in range(i_central.size):
+        if not np.isfinite(e0_sm[w]):
+            continue
+        lo, hi = rec_start[w] - 1, rec_end[w]
+        sl = slice(lo, hi)
+        valid_no_vpd = (is_day[sl] & np.isfinite(nee[sl]) & np.isfinite(ta[sl])
+                        & np.isfinite(rg[sl]) & np.isfinite(sd_nee[sl]))
+        neglect_vpd_w = neglect_vpd
+        valid = valid_no_vpd if neglect_vpd else valid_no_vpd & np.isfinite(vpd[sl])
+        if valid.sum() < MIN_NREC:
+            # too few records with VPD: this window neglects the VPD effect
+            neglect_vpd_w = True
+            valid = valid_no_vpd
+            if valid.sum() < MIN_NREC:
+                continue
+        i_mean_local = int(round(float(np.nonzero(valid)[0].mean()) + 1))  # 1-based
+        i_mean_global = lo + i_mean_local  # iRecStart-1 + local
+        day = (nee[sl][valid], sd_nee[sl][valid], rg[sl][valid],
+               vpd[sl][valid], ta[sl][valid])
+        res = _fit_lrc(day, e0_sm[w], sde0_sm[w], rref_win[w], last_good,
+                       neglect_vpd_w)
+        if res is None:
+            continue
+        last_good = res['theta']
+        i_mean_list.append(i_mean_global)
+        params_list.append(res['theta'])
+        central_list.append(int(i_central[w]))
+    return i_mean_list, params_list, central_list
+
+
 def _partition_daytime(nee, sd_nee, ta, vpd, rg, doy, hour, lat, lon,
                        utc_offset, dts, verbose=1):
     n = nee.size
@@ -730,43 +1555,29 @@ def _partition_daytime(nee, sd_nee, ta, vpd, rg, doy, hour, lat, lon,
     rref_win = _fit_rref_windows(nee, ta, is_night, e0_sm, i_central, dts, n)
 
     # --- Stage 3: LRC fit per window ---
-    rec_start, rec_end = _win_recs(i_central, WIN_REF_DAYS, dts, n)
-    i_mean_list, params_list, central_list = [], [], []
-    last_good = np.full(5, np.nan)
-    for w in range(nw):
-        if not np.isfinite(e0_sm[w]):
-            continue
-        lo, hi = rec_start[w] - 1, rec_end[w]
-        sl = slice(lo, hi)
-        valid = (is_day[sl] & np.isfinite(nee[sl]) & np.isfinite(ta[sl])
-                 & np.isfinite(rg[sl]) & np.isfinite(sd_nee[sl]) & np.isfinite(vpd[sl]))
-        if valid.sum() < MIN_NREC:
-            valid = (is_day[sl] & np.isfinite(nee[sl]) & np.isfinite(ta[sl])
-                     & np.isfinite(rg[sl]) & np.isfinite(sd_nee[sl]))
-            if valid.sum() < MIN_NREC:
-                continue
-        i_mean_local = int(round(float(np.nonzero(valid)[0].mean()) + 1))  # 1-based
-        i_mean_global = lo + i_mean_local  # iRecStart-1 + local
-        day = (nee[sl][valid], sd_nee[sl][valid], rg[sl][valid],
-               vpd[sl][valid], ta[sl][valid])
-        res = _fit_lrc(day, e0_sm[w], sde0_sm[w], rref_win[w], last_good)
-        if res is None:
-            continue
-        last_good = res['theta']
-        i_mean_list.append(i_mean_global)
-        params_list.append(res['theta'])
-        central_list.append(int(i_central[w]))
-
+    i_mean_list, params_list, central_list = _fit_lrc_windows(
+        nee, sd_nee, ta, vpd, rg, is_day, i_central, e0_sm, sde0_sm, rref_win,
+        dts, n)
     if not params_list:
         warn("Daytime partitioning (ReddyProc): no light-response curve could be "
              "fitted; record left unpartitioned.", verbose=verbose)
         return out
 
-    params = np.array(params_list)
-    i_mean = np.array(i_mean_list, int)
-
     # --- Stage 4: interpolate Reco/GPP to every record ---
-    reco, gpp = _interpolate_fluxes(i_mean, params, rg, vpd, ta, n)
+    reco, gpp = _interpolate_fluxes(np.array(i_mean_list, int),
+                                    np.array(params_list), rg, vpd, ta, n)
+    # isRefitMissingVPDWithNeglectVPDEffect: where VPD is missing, GPP is NA
+    # unless both neighbouring windows have k = 0. REddyProc then refits all
+    # windows without the VPD effect and takes RECO and GPP from that fit there.
+    na_vpd = np.isnan(vpd) & np.isnan(gpp)
+    if na_vpd.any():
+        i_mean_nv, params_nv, _ = _fit_lrc_windows(
+            nee, sd_nee, ta, vpd, rg, is_day, i_central, e0_sm, sde0_sm,
+            rref_win, dts, n, neglect_vpd=True)
+        if params_nv:
+            reco_nv, gpp_nv = _interpolate_fluxes(np.array(i_mean_nv, int),
+                                                  np.array(params_nv), rg, vpd, ta, n)
+            reco[na_vpd], gpp[na_vpd] = reco_nv[na_vpd], gpp_nv[na_vpd]
     out['RECO_DT_RP'] = reco
     out['GPP_DT_RP'] = gpp
 
@@ -786,7 +1597,8 @@ def _replace_missing_sd(sd, nee):
     """REddyProc replaceMissingSdByPercentage: max(minSd, perc*|NEE|)."""
     sd = sd.astype(float).copy()
     fill = ~np.isfinite(sd)
-    sd[fill] = np.maximum(SD_MINSD, np.abs(nee[fill] * SD_PERC))
+    # pmax(..., na.rm = TRUE): minSd also where NEE is missing
+    sd[fill] = np.fmax(SD_MINSD, np.abs(nee[fill] * SD_PERC))
     return sd
 
 
@@ -890,10 +1702,14 @@ class DaytimePartitioningReddyProc:
                  f"starting for {len(index)} records ({dts} per day).",
                  verbose=self.verbose)
 
-        out = _partition_daytime(
-            nee=nee, sd_nee=sd_nee, ta=df['ta'].to_numpy(), vpd=vpd,
-            rg=df['sw_in'].to_numpy(), doy=doy, hour=hour, lat=self.lat,
-            lon=self.lon, utc_offset=self.utc_offset, dts=dts, verbose=self.verbose)
+        # Single-threaded BLAS: the GP smoother runs hundreds of small Cholesky
+        # factorizations, which multi-threaded OpenBLAS makes slower (up to 10x
+        # under load) and whose last bits depend on the thread count.
+        with threadpool_limits(limits=1, user_api='blas'):
+            out = _partition_daytime(
+                nee=nee, sd_nee=sd_nee, ta=df['ta'].to_numpy(), vpd=vpd,
+                rg=df['sw_in'].to_numpy(), doy=doy, hour=hour, lat=self.lat,
+                lon=self.lon, utc_offset=self.utc_offset, dts=dts, verbose=self.verbose)
 
         cols = ['RECO_DT_RP', 'GPP_DT_RP', 'K_DT_RP', 'BETA_DT_RP',
                 'ALPHA_DT_RP', 'RREF_DT_RP', 'E0_DT_RP']
