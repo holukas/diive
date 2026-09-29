@@ -253,6 +253,34 @@ class TestDaytimeReddyProcRNumerics(unittest.TestCase):
             res['theta'][1:4], [17.221555223837271, 0.093472750234682656,
                                 5.6599000990408781], rtol=1e-12)
 
+    def test_rref_series_starts_with_first_nighttime_fit_rref(self):
+        # partGLFitNightTimeTRespSens fills windows without an RRef estimate with
+        # fillNAForward(RRef, firstValue = E0Smooth$RRef[which(is.finite(E0Smooth$RRef))[1]]).
+        # E0Smooth has no RRef column; R's `$` partially matches RRefFit, the RRef
+        # of the nighttime nls fit. So leading windows get the first finite
+        # RRefFit, not the first estimated RRef (CH-LAE 2017: 4.25 vs 13.86).
+        DR = self.DR
+        dts, n = 48, 48 * 30
+        _start, ic = DR._window_grid(n, dts)
+        hour = np.arange(n) % dts
+        day = np.arange(n) // dts
+        is_night = hour < 12
+        temp = 5.0 + 0.5 * (hour % 12) + 0.1 * day
+        # nighttime NEE only from the 13th day on: the first windows have no estimate
+        nee = np.where(day >= 12, 2.0 * DR._exp_r(150.0 * (
+            1.0 / (DR.TREF_K - DR.T0_K) - 1.0 / (temp + 273.15 - DR.T0_K))), np.nan)
+        e0 = np.full(ic.size, 150.0)
+        rref_fit = np.full(ic.size, np.nan)
+        rref_fit[1], rref_fit[5] = 4.25, 7.5
+        rref = DR._fit_rref_windows(nee, temp, is_night, e0, ic, dts, n, rref_fit)
+        n_lead = 3  # windows 1-3 (centred on days 3, 5, 7) end before the 13th day
+        self.assertTrue(np.all(rref[:n_lead] == 4.25))
+        np.testing.assert_allclose(rref[n_lead:], 2.0, rtol=1e-12)
+        # no estimate at all: every window takes the first finite RRefFit
+        rref = DR._fit_rref_windows(np.full(n, np.nan), temp, is_night, e0, ic, dts, n,
+                                    rref_fit)
+        self.assertTrue(np.all(rref == 4.25))
+
     def test_missing_vpd_gives_na_gpp_unless_k_is_zero(self):
         # R's ifelse(VPD > VPD0, ...) is NA for missing VPD; only k = 0 (VPD
         # effect off) predicts GPP there. These NAs trigger REddyProc's refit.

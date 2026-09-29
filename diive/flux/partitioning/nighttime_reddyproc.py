@@ -53,18 +53,23 @@ generic least-squares solver reaches nearly the same optimum, but its last
 digits differ, it keeps windows in which ``nls`` fails, and near-ties in the
 rounded E0 or in the SD ranking can then change the result.
 
-Measured agreement, CH-DAV 2016 and 2019 half-hourly against native REddyProc
-1.3.4 (R 4.5.3, Windows) on identical inputs, with and without gaps in
-measured TA, SW_IN and nighttime NEE (8 runs): E0, the three averaged windows,
+Measured agreement against native REddyProc 1.3.4 (R 4.5.3, Windows) on
+identical half-hourly inputs, with and without gaps in measured TA, SW_IN and
+nighttime NEE: CH-DAV 2016 and 2019 (8 runs) and CH-LAE 2017-2019 (12 runs,
+measured NEE in only 17-20 % of the records). E0, the three averaged windows,
 the set of windows ``nls`` fails in, and the annual RECO and GPP sums are the
-same in every run; on the whole ten-year record (2013-2022) E0 is 282.89 on
-both sides. Per record, RECO and GPP differ by at most 3.6e-15 umol m-2 s-1,
-and 97.6-99.8% of the records are bitwise identical. The rest is ``exp()``:
+same in every run; on the whole ten-year CH-DAV record (2013-2022) E0 is
+282.89 on both sides. Per record, RECO and GPP differ by at most 3.6e-15
+umol m-2 s-1 at CH-DAV and 7.1e-15 at CH-LAE (larger fluxes, same last bit),
+and 95.6-99.8% of the records are bitwise identical. The rest is ``exp()``:
 R on Windows computes it in 80-bit x87 arithmetic and rounds it to double,
 numpy returns the nearly correctly rounded double, and the two differ by one
-unit in the last place for about 0.4% of arguments. With an emulation
+unit in the last place for about 0.5% of arguments. With an emulation
 of R's ``exp`` in place of numpy's, RECO, GPP, Rref and E0 are bitwise
-identical in every record of all 8 runs. The individual window fits stay
+identical in every record of all 8 CH-DAV runs; with R's own ``exp`` values
+looked up (the emulation misses the ~1 in 30 000 arguments where the x87
+instruction itself decides), also in all 12 CH-LAE runs, every window fit
+included. The individual window fits stay
 sensitive to that last bit: in poorly constrained windows (E0 near zero or
 negative, SD of hundreds of K) the difference grows to 2e-5 relative, in the
 three averaged windows it stays below 1e-7. The same last-bit dependence

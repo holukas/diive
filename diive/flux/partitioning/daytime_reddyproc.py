@@ -64,27 +64,33 @@ Nelder-Mead, liblbfgs), ``optim`` loop for loop, ``quantile`` with R's formula,
 (:func:`_exp_r`). BLAS is limited to one thread during the run, so
 the result does not depend on the thread count.
 
-Measured agreement, CH-DAV 2016 and 2019 half-hourly against native REddyProc
-1.3.4 / mlegp 3.1.9 (R 4.5.3, Windows) on identical inputs, with and without
-gaps in NEE, drivers and nighttime data (8 runs). Window acceptance and
-convergence codes are identical in every run. Stage by stage, each stage fed
-REddyProc's own input: the mlegp hyperparameters are bitwise identical, the
-smoothed E0 agrees to 4e-15 and its SD to 2e-14, RRef to 5e-15; the LRC
-parameters are bitwise identical in 91-99 % of the windows and within 1e-8 in
-the rest (8e-9 in one window, which becomes bitwise identical when R's 80-bit
-long-double sums are emulated; ``math.fsum`` is used instead, the emulation is
-too slow). End to end, RECO and GPP differ by at most 2e-5 umol m-2 s-1 in five
-of the eight runs, by 5e-4 and 1e-3 in 2019 (baseline and measured gaps) and
-by 0.013 in 2016 with driver gaps; annual sums agree to 0.001 %. These
-differences start in R's ``exp``: it runs in x87 extended precision, and
-:func:`_exp_r` reproduces its rounding except for about 1 in 30 000
-arguments, where the x87 instruction itself decides. That changes 10 of ~540
-nighttime window fits by 1e-10 to 4e-8. Each window starts from the previous
-window's E0, which carries the difference along the year (E0 to 2e-7), the
-smoothed E0 follows (2e-7), and the LRC stop criterion (relative cost change
-1e-3) amplifies it in a few ill-conditioned windows; there even the 1e-15 that
-the GP prediction differs by (LAPACK's solve vs. R's) moves parameters by up
-to 1e-4. R's own results differ between platforms at this level.
+Measured agreement against native REddyProc 1.3.4 / mlegp 3.1.9 (R 4.5.3,
+Windows) on identical half-hourly inputs, with and without gaps in NEE,
+drivers and nighttime data: CH-DAV 2016 and 2019 (8 runs) and CH-LAE
+2017-2019 (12 runs, measured NEE in only 17-20 % of the records). Window
+acceptance and convergence codes are identical in every run. Stage by stage,
+each stage fed REddyProc's own input: the smoothed E0 agrees to 7e-15 and its
+SD to 7e-14 (the mlegp hyperparameters beta are bitwise identical, mu and
+sig2 differ in the last bit), RRef to 5e-15; the LRC parameters are bitwise
+identical in 91-99 % of the windows and within 1e-8 in the rest (8e-9 in one
+window, which becomes bitwise identical when R's 80-bit long-double sums are
+emulated; ``math.fsum`` is used instead, the emulation is too slow). End to
+end, RECO and GPP differ by at most 1e-4 umol m-2 s-1 in 4 of the 8 CH-DAV and
+9 of the 12 CH-LAE runs, by 3e-4 to 1e-3 in five more, by 0.013 in CH-DAV 2016
+with driver gaps and by 0.022 in CH-LAE 2019 with sparse nights; annual sums
+agree to 0.001 %. These differences start in R's ``exp``: it runs in x87
+extended precision, and :func:`_exp_r` reproduces its rounding except for
+about 1 in 30 000 arguments, where the x87 instruction itself decides. With
+R's own exp values in their place, the 12/24/48-day nighttime E0 fits are
+bitwise identical to REddyProc's. Otherwise a few of the ~540 window fits
+differ by 1e-10 to 4e-8. Each window starts from the previous window's E0,
+which carries the difference along the year (E0 to 4e-7), the smoothed E0
+follows (2e-7), and the LRC stop criterion (relative cost change 1e-3)
+amplifies it in a few ill-conditioned windows; there even the last bit of the
+smoothed E0 (the GP's linear algebra, OpenBLAS vs. R's reference LAPACK) moves
+parameters by up to 2e-3 (CH-LAE 2019 with sparse nights, where the nighttime
+fits are bitwise identical). R's own results differ between platforms at this
+level.
 
 Reference:
     Lasslop, G. et al. (2010). Separation of net ecosystem exchange into
@@ -1202,8 +1208,13 @@ def _smooth_tempsens(e0fit, sde0fit, icentral, daystart):
     return out_e0, out_sd
 
 
-def _fit_rref_windows(nee, temp, is_night, e0_smooth, i_central, dts, n):
-    """Port of partGLFitNightRespRefOneWindow (lm) + fillNAForward."""
+def _fit_rref_windows(nee, temp, is_night, e0_smooth, i_central, dts, n, rref_fit):
+    """Port of partGLFitNightRespRefOneWindow (lm) + fillNAForward.
+
+    ``rref_fit`` is the RRef of the nighttime E0 fits per window (``RRefFit``,
+    merged over the 12/24/48-day passes); only its first finite value is used,
+    for a series that starts without an estimate.
+    """
     rec_start, rec_end = _win_recs(i_central, WIN_NIGHT_DAYS, dts, n)
     nw = i_central.size
     rref = np.full(nw, np.nan)
@@ -1221,14 +1232,17 @@ def _fit_rref_windows(nee, temp, is_night, e0_smooth, i_central, dts, n):
             # max(0, NA) stays NA in R
             coef = _lm_through_origin(tfac, reco)
             rref[w] = max(0.0, coef) if np.isfinite(coef) else np.nan
-    fin = np.isfinite(rref)
-    if fin.any():
-        cur = rref[fin][0]
-        for w in range(nw):
-            if np.isfinite(rref[w]):
-                cur = rref[w]
-            else:
-                rref[w] = cur
+    # fillNAForward(RRef, firstValue = E0Smooth$RRef[which(is.finite(E0Smooth$RRef))[1]]).
+    # E0Smooth has no RRef column yet, and R's `$` partially matches RRefFit, so
+    # a series without an estimate in its first window starts with the first
+    # finite RRefFit (the nighttime nls fit's RRef at the window's median
+    # temperature), not with the first estimated RRef. Parity with REddyProc.
+    if nw and not np.isfinite(rref[0]):
+        fin_fit = rref_fit[np.isfinite(rref_fit)]
+        rref[0] = fin_fit[0] if fin_fit.size else np.nan
+    for w in range(1, nw):
+        if not np.isfinite(rref[w]):
+            rref[w] = rref[w - 1]
     return rref
 
 
@@ -1534,15 +1548,17 @@ def _partition_daytime(nee, sd_nee, ta, vpd, rg, doy, hour, lat, lon,
     nw = i_central.size
 
     # --- Stage 2: nighttime E0 (nls) + window extension ---
-    e0, sde0, _, _ = _fit_nighttime_pass(nee, ta, is_night, i_central,
-                                         WIN_NIGHT_DAYS, dts, n)
+    e0, sde0, _, rref_fit = _fit_nighttime_pass(nee, ta, is_night, i_central,
+                                                WIN_NIGHT_DAYS, dts, n)
     for win_days in WIN_EXTEND:
         miss = ~np.isfinite(e0)
         if not miss.any():
             break
-        e0x, sdx, _, _ = _fit_nighttime_pass(nee, ta, is_night, i_central,
-                                             win_days, dts, n)
-        e0[miss], sde0[miss] = e0x[miss], sdx[miss]
+        e0x, sdx, _, rfx = _fit_nighttime_pass(nee, ta, is_night, i_central,
+                                               win_days, dts, n)
+        # resNight[iNoSummary, ] <- resNightExtend[iNoSummary, ]: whole rows,
+        # RRefFit included (the first finite one seeds the RRef series)
+        e0[miss], sde0[miss], rref_fit[miss] = e0x[miss], sdx[miss], rfx[miss]
 
     n_finite = int(np.isfinite(e0).sum())
     if n_finite < 5 and n_finite < 0.1 * nw:
@@ -1552,7 +1568,7 @@ def _partition_daytime(nee, sd_nee, ta, vpd, rg, doy, hour, lat, lon,
 
     # GP smoothing of E0 across time, then RRef per window
     e0_sm, sde0_sm = _smooth_tempsens(e0, sde0, i_central, start_days)
-    rref_win = _fit_rref_windows(nee, ta, is_night, e0_sm, i_central, dts, n)
+    rref_win = _fit_rref_windows(nee, ta, is_night, e0_sm, i_central, dts, n, rref_fit)
 
     # --- Stage 3: LRC fit per window ---
     i_mean_list, params_list, central_list = _fit_lrc_windows(
