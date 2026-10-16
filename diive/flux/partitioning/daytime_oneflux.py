@@ -115,9 +115,11 @@ def _notnan(a):
 class _BrokenWindow(Exception):
     """Raised when a window's fit returns no covariance matrix (ONEFlux's
     ``ONEFluxPartitionBrokenOptError``). ``_estimate_parasets`` sets
-    ``day_range`` to the window's night range ``(day_begin2, day_end2)``, and
-    ``_partition_one_year`` removes the measured NEE in that range and
-    partitions the year again, as ONEFlux's pipeline does."""
+    ``day_range`` to the window's night range ``(day_begin2, day_end2)``,
+    ``_partition_one_year`` rounds it to whole days, and
+    ``_partition_year_shared`` removes the measured NEE in that range from
+    every NEE series of the year and partitions them again, as ONEFlux's
+    pipeline does."""
     day_range = None
 
 
@@ -825,48 +827,119 @@ def _compute_var(n, tair_f, rg_f, vpd_f, params_ok, central, whichmodel, jtj_ok,
 # --------------------------------------------------------------------------- #
 # Orchestrator (one calendar year)
 # --------------------------------------------------------------------------- #
+def _remove_days(nee, julday, ranges):
+    """Set NEE to missing for julday in (begin, end] of every range.
+
+    Port of ONEFlux ``library.remove_errored_entries``, which selects with
+    ``(julday > begin) == (julday <= end)``.
+    """
+    for begin, end in ranges:
+        nee = np.where((julday > begin) == (julday <= end), np.float32(NAN), nee)
+    return nee
+
+
+def _partition_year_shared(nees, julday, verbose=1, **kwargs):
+    """Partition one year of several NEE arrays that share one list of removed days.
+
+    A window whose fit returns no covariance aborts the year in ONEFlux
+    (ONEFluxPartitionBrokenOptError). Its pipeline (PipelineNEEPartitionDT.run)
+    appends the window's night range to the site's error file and runs
+    ``partitioning_dt`` again; ``library.remove_errored_entries`` then marks
+    the measured NEE in every range listed for that site, year and product as
+    missing, which also changes the NEE uncertainty. The file is not keyed by
+    u* percentile, so a range found in one percentile is removed in all of
+    them. During this search the rerun keeps the outputs already written, so
+    the search resumes at the percentile that broke. Once nothing breaks, the
+    pipeline runs every percentile again with the complete file, and goes
+    back to searching if that pass breaks. Years are partitioned
+    independently, so per year this is: sweep the series in order; at a broken
+    fit, add its range and retry the same series; after a sweep with a break,
+    sweep again, until a sweep runs through without one. The order decides
+    which ranges are found. It terminates: a range covers its own window's
+    daytime records, so that window never fits again.
+
+    A series whose last run already had every range removed is not run again
+    in the next sweep: it would give the same result. So each series runs once
+    when no fit breaks, and a single series runs exactly as often as it breaks
+    plus one.
+
+    Args:
+        nees: ``{label: nee}``, -9999-sentinel float32 NEE arrays of one year,
+            in partitioning order. ``label`` names the series in the warning;
+            ``None`` for a single series.
+        julday: Day of year per record.
+        verbose: Console verbosity.
+        **kwargs: The other arguments of ``_partition_one_year`` (drivers,
+            ``hr``, ``nperday``, ``reject_alpha_at_start``).
+
+    Returns:
+        ``(outs, ranges)``: ``{label: out}`` from ``_partition_one_year`` with
+        all ``ranges`` removed, and the removed ``(begin, end)`` day ranges in
+        the order they were found.
+    """
+    ranges = []
+    outs = {}      # label -> result of its last clean run
+    n_used = {}    # label -> number of ranges removed in that run
+    while True:
+        broke = False
+        for label, nee in nees.items():
+            while n_used.get(label) != len(ranges):
+                try:
+                    outs[label] = _partition_one_year(
+                        nee=_remove_days(nee, julday, ranges), julday=julday,
+                        verbose=verbose, **kwargs)
+                    n_used[label] = len(ranges)
+                except _BrokenWindow as e:
+                    begin, end = e.day_range
+                    ranges.append((begin, end))
+                    broke = True
+                    if label is None:
+                        warn(f"Daytime partitioning (ONEFlux): {e.args[0]} fit failed in "
+                             f"the window of days {begin}-{end}; measured NEE there "
+                             f"removed and the year partitioned again, as ONEFlux "
+                             f"does.", verbose=verbose)
+                    else:
+                        warn(f"Daytime partitioning (ONEFlux): {e.args[0]} fit failed in "
+                             f"the window of days {begin}-{end} of NEE series "
+                             f"{label!r}; measured NEE there removed in all series and "
+                             f"the year partitioned again, as ONEFlux does.",
+                             verbose=verbose)
+        if not broke:
+            return outs, ranges
+
+
 def _partition_one_year(nee, ta, sw_in, ta_f, sw_in_f, vpd, julday, hr, nperday,
                         verbose=1, reject_alpha_at_start=False):
-    """Run the ONEFlux daytime partitioning for one year of -9999-sentinel arrays."""
+    """Run the ONEFlux daytime partitioning for one year of -9999-sentinel arrays.
+
+    Raises ``_BrokenWindow`` at the first fit without covariance, with
+    ``day_range`` as whole days; ``_partition_year_shared`` handles the rerun.
+    """
     n = nee.size
     out = {c: np.full(n, np.nan) for c in
            ('RECO_DT_OF', 'GPP_DT_OF', 'SE_GPP_DT_OF', 'ALPHA_DT_OF',
             'BETA_DT_OF', 'K_DT_OF', 'RREF_DT_OF', 'E0_DT_OF')}
 
-    # A window whose fit returns no covariance aborts the year in ONEFlux
-    # (ONEFluxPartitionBrokenOptError). Its pipeline (PipelineNEEPartitionDT.run)
-    # appends the window's night range to the site's error file and runs the
-    # year again; library.remove_errored_entries then marks the measured NEE in
-    # every range listed for that year as missing, which also changes the NEE
-    # uncertainty. Repeated until no window breaks. It terminates: a range
-    # covers its own window's daytime records, so that window never fits again.
-    while True:
-        # Stage A: per-record NEE uncertainty (sigd). ONEFlux stores it as float32.
-        nee_fs_unc = _uncert_via_gapfill(nee, sw_in, ta, vpd, hr, nperday).astype(np.float32)
+    # Stage A: per-record NEE uncertainty (sigd). ONEFlux stores it as float32.
+    nee_fs_unc = _uncert_via_gapfill(nee, sw_in, ta, vpd, hr, nperday).astype(np.float32)
 
-        measured = _notnan(nee)
-        D = dict(
-            nee_f=np.where(measured, nee, NAN),
-            nee_fqc=np.where(measured, 0.0, 1.0),
-            tair_f=ta_f, rg_f=sw_in_f, vpd_f=vpd, rg_meas=sw_in,
-            julday=julday, nee_fs_unc=nee_fs_unc,
-        )
+    measured = _notnan(nee)
+    D = dict(
+        nee_f=np.where(measured, nee, NAN),
+        nee_fqc=np.where(measured, 0.0, 1.0),
+        tair_f=ta_f, rg_f=sw_in_f, vpd_f=vpd, rg_meas=sw_in,
+        julday=julday, nee_fs_unc=nee_fs_unc,
+    )
 
-        # Stage B: per-window parameters
-        try:
-            params_ok, ind_ok, whichmodel, jtj_ok, rescor = _estimate_parasets(
-                D, nperday, verbose, reject_alpha_at_start)
-        except _BrokenWindow as e:
-            # The error file stores the range as whole days ('{:.0f}', read
-            # back as int), and remove_errored_entries selects with
-            # (julday > begin) == (julday <= end).
-            begin, end = (int(format(d, '.0f')) for d in e.day_range)
-            warn(f"Daytime partitioning (ONEFlux): {e.args[0]} fit failed in the "
-                 f"window of days {begin}-{end}; measured NEE there removed and "
-                 f"the year partitioned again, as ONEFlux does.", verbose=verbose)
-            nee = np.where((julday > begin) == (julday <= end), np.float32(NAN), nee)
-            continue
-        break
+    # Stage B: per-window parameters
+    try:
+        params_ok, ind_ok, whichmodel, jtj_ok, rescor = _estimate_parasets(
+            D, nperday, verbose, reject_alpha_at_start)
+    except _BrokenWindow as e:
+        # The error file stores the range as whole days ('{:.0f}', read
+        # back as int).
+        e.day_range = tuple(int(format(d, '.0f')) for d in e.day_range)
+        raise
     if not params_ok:
         warn("Daytime partitioning (ONEFlux): no light-response curve could be "
              "fitted; year left unpartitioned.", verbose=verbose)
@@ -955,9 +1028,15 @@ class DaytimePartitioningOneFlux:
     makes ONEFlux abort the year. Its pipeline then removes the measured NEE
     on the days that window's nighttime fit uses (about 12 days) and runs the
     year again, until no fit fails. diive does the same, so the NEE
-    uncertainty and the windows around the failed one change too. In ONEFlux the
-    removed days apply to all u* percentiles of that year; diive partitions
-    one NEE series and removes only the days its own fits need.
+    uncertainty and the windows around the failed one change too; the removed
+    day ranges are in :attr:`removed_days`. In ONEFlux the removed days apply
+    to all u* percentiles of that year and product. This class partitions one
+    NEE series and removes only the days its own fits need. To share the
+    removed days between u* scenarios, use
+    :func:`partition_nee_daytime_oneflux_scenarios`, which Level 4.2 of the
+    post-processing chain (``run_level42_daytime_oneflux``) does. That equals
+    ONEFlux only when the scenarios are ONEFlux's percentile set in its order
+    (``'1.25'``, ``'3.75'``, ... in ``PERC_TO_COMPARE``).
 
     ONEFlux's own output depends on the NumPy version it runs under. NumPy 2
     changed scalar type promotion (NEP 50), and that moves ONEFlux in two
@@ -1028,6 +1107,7 @@ class DaytimePartitioningOneFlux:
         self.reject_alpha_at_start = bool(reject_alpha_at_start)
         self.verbose = verbose
         self._results: DataFrame | None = None
+        self._removed_days: dict[int, list[tuple[int, int]]] | None = None
 
     @staticmethod
     def _validate(nee, ta, sw_in, ta_f, sw_in_f, vpd) -> DataFrame:
@@ -1044,58 +1124,24 @@ class DaytimePartitioningOneFlux:
         return df
 
     def run(self) -> "DaytimePartitioningOneFlux":
-        """Run the partitioning and populate :attr:`results`."""
-        df = self._inputs
-        index = df.index
-        years = index.year.to_numpy()
-
-        cols = ['RECO_DT_OF', 'GPP_DT_OF', 'SE_GPP_DT_OF', 'ALPHA_DT_OF',
-                'BETA_DT_OF', 'K_DT_OF', 'RREF_DT_OF', 'E0_DT_OF']
-        result = pd.DataFrame(index=index, columns=cols, dtype=float)
-
-        # records per day from the median timestamp spacing
-        dt_min = np.median(np.diff(index.values).astype('timedelta64[m]').astype(float))
-        nperday = int(round(24 * 60 / dt_min)) if dt_min > 0 else 48
-
-        # END-convention hour (diive may use MIDDLE-stamped index); ONEFlux hr
-        # is on the 0.0 / 0.5 grid -> derive from the period end.
-        end = index + pd.Timedelta(minutes=int(dt_min / 2))
-        hr_all = (end.hour + np.where(end.minute == 0, 0.0, 0.5)).to_numpy().astype(np.float32)
-        julday_all = end.dayofyear.to_numpy().astype(np.float32)
-
-        vpd_factor = 10.0 if self.vpd_in_kpa else 1.0
-
-        if self.verbose:
-            info("Daytime partitioning ONEFlux (Lasslop et al. 2010) starting "
-                 f"for {len(np.unique(years))} year(s).", verbose=self.verbose)
-
-        for year in np.unique(years):
-            ym = years == year
-            julday = julday_all[ym]
-            # The END timestamp of a year's last record already belongs to the
-            # next year, so its day-of-year wraps to 1 and the record would be
-            # pooled into the January windows. ONEFlux repairs the same wrap in
-            # library.create_data_structures (365 -> 366, 366 -> 367).
-            if julday.size > 1 and julday[-1] == 1 and julday[-2] in (365.0, 366.0):
-                julday = julday.copy()
-                julday[-1] = julday[-2] + 1
-            out = _partition_one_year(
-                nee=_to_sentinel(df['nee'].to_numpy()[ym]),
-                ta=_to_sentinel(df['ta'].to_numpy()[ym]),
-                sw_in=_to_sentinel(df['sw_in'].to_numpy()[ym]),
-                ta_f=_to_sentinel(df['ta_f'].to_numpy()[ym]),
-                sw_in_f=_to_sentinel(df['sw_in_f'].to_numpy()[ym]),
-                vpd=_to_sentinel(df['vpd'].to_numpy()[ym] * vpd_factor),
-                julday=julday, hr=hr_all[ym], nperday=nperday,
-                verbose=self.verbose, reject_alpha_at_start=self.reject_alpha_at_start)
-            for col in cols:
-                result.loc[ym, col] = out[col]
-
-        self._results = result
-        self.report()
-        if self.verbose:
-            success("Daytime partitioning (ONEFlux) finished.", verbose=self.verbose)
+        """Run the partitioning and populate :attr:`results` and :attr:`removed_days`."""
+        _run_shared({None: self})
         return self
+
+    @property
+    def removed_days(self) -> dict[int, list[tuple[int, int]]]:
+        """Day ranges whose measured NEE was removed after a failed fit.
+
+        ``{year: [(begin, end), ...]}`` for every partitioned year, in the
+        order the ranges were found (empty list when no fit failed). Each
+        range covers the days of year ``begin < day <= end``, the night range
+        of the window whose fit failed, as in ONEFlux's error file. After
+        :func:`partition_nee_daytime_oneflux_scenarios`, all scenarios carry
+        the same ranges.
+        """
+        if self._removed_days is None:
+            raise RuntimeError("Call .run() before accessing .removed_days.")
+        return self._removed_days
 
     @property
     def results(self) -> DataFrame:
@@ -1131,6 +1177,75 @@ class DaytimePartitioningOneFlux:
             verbose=self.verbose)
 
 
+def _run_shared(parts: dict) -> None:
+    """Run ``{label: DaytimePartitioningOneFlux}`` year by year with shared removed days.
+
+    All instances must have the same index, drivers and settings; drivers and
+    settings are read from the first one. Sets ``_results`` and
+    ``_removed_days`` on every instance and prints each report.
+    """
+    first = next(iter(parts.values()))
+    df = first._inputs
+    index = df.index
+    years = index.year.to_numpy()
+
+    cols = ['RECO_DT_OF', 'GPP_DT_OF', 'SE_GPP_DT_OF', 'ALPHA_DT_OF',
+            'BETA_DT_OF', 'K_DT_OF', 'RREF_DT_OF', 'E0_DT_OF']
+    results = {label: pd.DataFrame(index=index, columns=cols, dtype=float)
+               for label in parts}
+    removed = {}
+
+    # records per day from the median timestamp spacing
+    dt_min = np.median(np.diff(index.values).astype('timedelta64[m]').astype(float))
+    nperday = int(round(24 * 60 / dt_min)) if dt_min > 0 else 48
+
+    # END-convention hour (diive may use MIDDLE-stamped index); ONEFlux hr
+    # is on the 0.0 / 0.5 grid -> derive from the period end.
+    end = index + pd.Timedelta(minutes=int(dt_min / 2))
+    hr_all = (end.hour + np.where(end.minute == 0, 0.0, 0.5)).to_numpy().astype(np.float32)
+    julday_all = end.dayofyear.to_numpy().astype(np.float32)
+
+    vpd_factor = 10.0 if first.vpd_in_kpa else 1.0
+    verbose = first.verbose
+
+    if verbose:
+        series = f" and {len(parts)} NEE series" if len(parts) > 1 else ""
+        info("Daytime partitioning ONEFlux (Lasslop et al. 2010) starting "
+             f"for {len(np.unique(years))} year(s){series}.", verbose=verbose)
+
+    for year in np.unique(years):
+        ym = years == year
+        julday = julday_all[ym]
+        # The END timestamp of a year's last record already belongs to the
+        # next year, so its day-of-year wraps to 1 and the record would be
+        # pooled into the January windows. ONEFlux repairs the same wrap in
+        # library.create_data_structures (365 -> 366, 366 -> 367).
+        if julday.size > 1 and julday[-1] == 1 and julday[-2] in (365.0, 366.0):
+            julday = julday.copy()
+            julday[-1] = julday[-2] + 1
+        outs, ranges = _partition_year_shared(
+            nees={label: _to_sentinel(p._inputs['nee'].to_numpy()[ym])
+                  for label, p in parts.items()},
+            ta=_to_sentinel(df['ta'].to_numpy()[ym]),
+            sw_in=_to_sentinel(df['sw_in'].to_numpy()[ym]),
+            ta_f=_to_sentinel(df['ta_f'].to_numpy()[ym]),
+            sw_in_f=_to_sentinel(df['sw_in_f'].to_numpy()[ym]),
+            vpd=_to_sentinel(df['vpd'].to_numpy()[ym] * vpd_factor),
+            julday=julday, hr=hr_all[ym], nperday=nperday,
+            verbose=verbose, reject_alpha_at_start=first.reject_alpha_at_start)
+        removed[int(year)] = ranges
+        for label, out in outs.items():
+            for col in cols:
+                results[label].loc[ym, col] = out[col]
+
+    for label, p in parts.items():
+        p._results = results[label]
+        p._removed_days = {year: list(r) for year, r in removed.items()}
+        p.report()
+    if verbose:
+        success("Daytime partitioning (ONEFlux) finished.", verbose=verbose)
+
+
 def partition_nee_daytime_oneflux(nee: Series, ta: Series, sw_in: Series,
                                   ta_f: Series, sw_in_f: Series, vpd: Series,
                                   vpd_in_kpa: bool = True,
@@ -1147,3 +1262,55 @@ def partition_nee_daytime_oneflux(nee: Series, ta: Series, sw_in: Series,
         nee=nee, ta=ta, sw_in=sw_in, ta_f=ta_f, sw_in_f=sw_in_f, vpd=vpd,
         vpd_in_kpa=vpd_in_kpa, reject_alpha_at_start=reject_alpha_at_start,
         verbose=verbose).run().results
+
+
+def partition_nee_daytime_oneflux_scenarios(
+        nee: dict[str, Series], ta: Series, sw_in: Series, ta_f: Series,
+        sw_in_f: Series, vpd: Series, vpd_in_kpa: bool = True,
+        reject_alpha_at_start: bool = False,
+        verbose: int = 2) -> dict[str, DaytimePartitioningOneFlux]:
+    """Partition several NEE series (u* scenarios) that share drivers and removed days.
+
+    Runs :class:`DaytimePartitioningOneFlux` on each series, but with the
+    removed days shared, as ONEFlux's pipeline shares its error file between
+    the u* percentiles of a year and product. Per year, the series are
+    partitioned in the order of ``nee``. When a fit fails, the night range of
+    its window is removed from the measured NEE of every series and the same
+    series is partitioned again. After a pass in which a fit failed, the
+    series whose result predates the last removed range are partitioned again,
+    in order, until a pass runs through without a failed fit. When no fit
+    fails, each series is partitioned once, as with the class.
+
+    With one series the result equals the class. The result equals ONEFlux
+    only when the series are ONEFlux's u* percentiles in its order (``'1.25'``,
+    ``'3.75'``, ... in ``PERC_TO_COMPARE``) and of one product (CUT or VUT):
+    the order decides which fits fail.
+
+    Args:
+        nee: ``{label: measured NEE}``, one Series per scenario, all with the
+            same index. The order is the partitioning order.
+        ta, sw_in, ta_f, sw_in_f, vpd, vpd_in_kpa, reject_alpha_at_start,
+        verbose: As in :class:`DaytimePartitioningOneFlux`, shared by all
+            series.
+
+    Returns:
+        ``{label: DaytimePartitioningOneFlux}``, already run: ``results`` and
+        ``removed_days`` are populated, and ``removed_days`` is the same for
+        every series.
+    """
+    if not nee:
+        raise ValueError("nee is empty; pass at least one NEE series.")
+    parts = {label: DaytimePartitioningOneFlux(
+        nee=s, ta=ta, sw_in=sw_in, ta_f=ta_f, sw_in_f=sw_in_f, vpd=vpd,
+        vpd_in_kpa=vpd_in_kpa, reject_alpha_at_start=reject_alpha_at_start,
+        verbose=verbose) for label, s in nee.items()}
+    # The year loop reads the drivers from the first instance only. Each
+    # instance aligns the same driver Series to its NEE index, so the driver
+    # columns are identical only when the indexes are.
+    first_index = next(iter(parts.values()))._inputs.index
+    for label, p in parts.items():
+        if not p._inputs.index.equals(first_index):
+            raise ValueError(f"NEE series {label!r} has a different index than the "
+                             f"first series; all series must share one index.")
+    _run_shared(parts)
+    return parts

@@ -444,6 +444,134 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
         removed = run(nee.where(~((jd > 160) & (jd <= 172))))
         pd.testing.assert_frame_equal(broken, removed)
 
+    def _break_window_82_of(self, nee):
+        """A _fit spy that breaks the first HLRC_LloydVPD fit of window
+        (164, 168] of ``nee``, and only of that series (night range (160, 172])."""
+        from diive.flux.partitioning import daytime_oneflux as mod
+        short = self.short
+        jd = (short.index + pd.Timedelta(minutes=15)).dayofyear
+        day = (jd > 164) & (jd <= 168) & (short['Rg_orig'] > 4) & nee.notna()
+        target = nee[day].to_numpy(dtype=np.float32)
+        real = mod._fit
+        broke = []
+
+        def spy(lts_func, dep, *args, **kwargs):
+            if lts_func == 'HLRC_LloydVPD' and not broke and np.array_equal(dep, target):
+                broke.append(lts_func)
+                raise mod._BrokenWindow(lts_func)
+            return real(lts_func, dep, *args, **kwargs)
+        return spy, broke, (jd > 160) & (jd <= 172)
+
+    def _scenarios(self, nee):
+        from diive.flux.partitioning import partition_nee_daytime_oneflux_scenarios
+        short = self.short
+        return partition_nee_daytime_oneflux_scenarios(
+            nee=nee, ta=short['Tair_orig'], sw_in=short['Rg_orig'],
+            ta_f=short['Tair_f'], sw_in_f=short['Rg_f'], vpd=short['VPD_f'],
+            verbose=0)
+
+    def _single(self, nee):
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        short = self.short
+        return DaytimePartitioningOneFlux(
+            nee=nee, ta=short['Tair_orig'], sw_in=short['Rg_orig'],
+            ta_f=short['Tair_f'], sw_in_f=short['Rg_f'], vpd=short['VPD_f'],
+            verbose=0).run()
+
+    def test_broken_fit_in_one_scenario_removes_the_range_in_all(self):
+        # ONEFlux keys its error file by site, year and product, not by u*
+        # percentile, and after the search reruns every percentile with the
+        # complete file. A fit that breaks only in the second scenario must
+        # therefore rerun the first one with the range removed too.
+        from diive.flux.partitioning import daytime_oneflux as mod
+        nee1 = self.short['NEE_CUT_REF_orig']
+        nee2 = nee1 + 0.5  # differs from nee1 in every window
+        spy, broke, night = self._break_window_82_of(nee2)
+        with mock.patch.object(mod, '_fit', side_effect=spy):
+            parts = self._scenarios({'a': nee1, 'b': nee2})
+        self.assertEqual(broke, ['HLRC_LloydVPD'])
+        self.assertEqual(parts['a'].removed_days, {2017: [(160, 172)]})
+        self.assertEqual(parts['b'].removed_days, {2017: [(160, 172)]})
+        pd.testing.assert_frame_equal(parts['a'].results,
+                                      self._single(nee1.where(~night)).results)
+        pd.testing.assert_frame_equal(parts['b'].results,
+                                      self._single(nee2.where(~night)).results)
+
+    def test_single_scenario_equals_the_class(self):
+        from diive.flux.partitioning import daytime_oneflux as mod
+        nee = self.short['NEE_CUT_REF_orig']
+        spy, _, _ = self._break_window_82_of(nee)
+        with mock.patch.object(mod, '_fit', side_effect=spy):
+            parts = self._scenarios({'a': nee})
+        spy, _, _ = self._break_window_82_of(nee)
+        with mock.patch.object(mod, '_fit', side_effect=spy):
+            single = self._single(nee)
+        self.assertEqual(single.removed_days, {2017: [(160, 172)]})
+        self.assertEqual(parts['a'].removed_days, single.removed_days)
+        pd.testing.assert_frame_equal(parts['a'].results, single.results)
+
+    def test_search_resumes_at_the_broken_scenario_then_resweeps(self):
+        # ONEFlux keeps the outputs already written while it searches, so after
+        # a broken fit it retries the same percentile, not the first one. Once
+        # a pass breaks nowhere new it reruns every percentile with the complete
+        # error file. The order decides which ranges are found. Here B breaks
+        # at r1 first, then at r3 while r2 is still in. A breaks at r2 only
+        # while r1 is removed and r3 is not. Resuming at B finds r3 before A
+        # is rerun, which stops A from breaking: ranges r1, r3. Restarting
+        # from the first scenario would rerun A first and find r1, r2.
+        from diive.flux.partitioning import daytime_oneflux as mod
+        short = self.short
+        r1, r2, r3 = (152, 158), (160, 166), (170, 176)
+        nee_a = pd.Series(1.0, index=short.index)
+        nee_b = pd.Series(2.0, index=short.index)
+        cols = ['RECO_DT_OF', 'GPP_DT_OF', 'SE_GPP_DT_OF', 'ALPHA_DT_OF',
+                'BETA_DT_OF', 'K_DT_OF', 'RREF_DT_OF', 'E0_DT_OF']
+        calls = []
+
+        def fake(**kw):
+            nee, julday = kw['nee'], kw['julday']
+            gone = [r for r in (r1, r2, r3)
+                    if np.all(nee[(julday > r[0]) & (julday <= r[1])] == mod.NAN)]
+            scen = 'a' if nee[nee > mod.NAN_TEST][0] == 1.0 else 'b'
+            calls.append((scen, gone))
+            if scen == 'a' and r1 in gone and r2 not in gone and r3 not in gone:
+                broken = r2
+            elif scen == 'b' and r1 not in gone:
+                broken = r1
+            elif scen == 'b' and r2 not in gone and r3 not in gone:
+                broken = r3
+            else:
+                return {c: np.full(nee.size, np.nan) for c in cols}
+            e = mod._BrokenWindow('HLRC_LloydVPD')
+            e.day_range = broken
+            raise e
+
+        with mock.patch.object(mod, '_partition_one_year', side_effect=fake):
+            parts = self._scenarios({'a': nee_a, 'b': nee_b})
+        for p in parts.values():
+            self.assertEqual(p.removed_days, {2017: [r1, r3]})
+        self.assertEqual(calls, [('a', []), ('b', []), ('b', [r1]),
+                                 ('b', [r1, r3]), ('a', [r1, r3])])
+
+    def test_scenarios_must_share_one_index(self):
+        # A series with timestamps the others lack would be partitioned on
+        # drivers taken from the first series' frame, which has other records.
+        nee = self.short['NEE_CUT_REF_orig']
+        with self.assertRaises(ValueError):
+            self._scenarios({'a': nee, 'b': nee.shift(freq='15min')})
+        with self.assertRaises(ValueError):
+            self._scenarios({})
+
+    def test_removed_days_before_run_raises(self):
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        short = self.short
+        part = DaytimePartitioningOneFlux(
+            nee=short['NEE_CUT_REF_orig'], ta=short['Tair_orig'],
+            sw_in=short['Rg_orig'], ta_f=short['Tair_f'],
+            sw_in_f=short['Rg_f'], vpd=short['VPD_f'], verbose=0)
+        with self.assertRaises(RuntimeError):
+            _ = part.removed_days
+
     def test_results_before_run_raises(self):
         from diive.flux.partitioning import DaytimePartitioningOneFlux
         part = DaytimePartitioningOneFlux(

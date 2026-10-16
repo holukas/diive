@@ -36,7 +36,9 @@ produce identical numbers. Output columns carry a token after the ``_NT``
   port of ONEFlux's ``flux_part_gl2010`` (FLUXNET2015); per-window LRC fit with a
   measured-radiation day/night split (no latitude) and an internal NEE-uncertainty
   look-up. Emits ``*_DT_OF`` columns (including the GPP standard error
-  ``SE_GPP_DT_OF``).
+  ``SE_GPP_DT_OF``). ``partition_nee_daytime_oneflux_scenarios`` partitions
+  several u* scenarios that share the days removed after failed fits, as
+  ONEFlux does.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -53,6 +55,7 @@ from diive.flux.partitioning.daytime_reddyproc import DaytimePartitioningReddyPr
 from diive.flux.partitioning.daytime_reddyproc import partition_nee_daytime_reddyproc
 from diive.flux.partitioning.daytime_oneflux import DaytimePartitioningOneFlux
 from diive.flux.partitioning.daytime_oneflux import partition_nee_daytime_oneflux
+from diive.flux.partitioning.daytime_oneflux import partition_nee_daytime_oneflux_scenarios
 
 __all__ = [
     "NighttimePartitioningOneFlux",
@@ -67,4 +70,5 @@ __all__ = [
     "partition_nee_daytime_reddyproc",
     "DaytimePartitioningOneFlux",
     "partition_nee_daytime_oneflux",
+    "partition_nee_daytime_oneflux_scenarios",
 ]
