@@ -275,7 +275,7 @@ def _level41_block(level41_cfg: dict) -> list[str]:
         {"methods": ["rf", "xgb", "mds"],   # subset, in this canonical order
          "features": ["TA_...", "SW_IN_...", "VPD_..."],   # rf / xgb predictors
          "mds": {"swin": "SW_IN_...", "ta": "TA_...", "vpd": "VPD_...",
-                 # optional: "ta_tol", "vpd_tol", and the driver QC flag
+                 # optional: "ta_tol", "vpd_tol", "mode", and the driver QC flag
                  # columns "swin_qc", "ta_qc", "vpd_qc" (omitted when None)
                  }}
 
@@ -309,7 +309,7 @@ def _level41_block(level41_cfg: dict) -> list[str]:
         body = ["", "data = run_level41_mds(", "    data,",
                 f"    swin={mds.get('swin')!r},", f"    ta={mds.get('ta')!r},",
                 f"    vpd={mds.get('vpd')!r},"]
-        for k in ("ta_tol", "vpd_tol"):
+        for k in ("ta_tol", "vpd_tol", "mode"):
             if k in mds:
                 body.append(f"    {k}={mds[k]!r},")
         for k in ("swin_qc", "ta_qc", "vpd_qc"):

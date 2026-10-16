@@ -132,6 +132,7 @@ def run_level41_mds(
         ta_tol: float = 2.5,
         vpd_tol: float = 0.5,
         avg_min_n_vals: int = 2,
+        mode: str = 'diive',
         swin_qc: str | None = None,
         ta_qc: str | None = None,
         vpd_qc: str | None = None,
@@ -156,6 +157,10 @@ def run_level41_mds(
         ta_tol: Temperature tolerance (deg C).
         vpd_tol: VPD tolerance (kPa).
         avg_min_n_vals: Minimum number of values for averaging.
+        mode: ``'diive'`` (default, Vekuri et al. 2023 symmetric mean in
+            daytime), ``'oneflux'`` (bit for bit as ONEFlux) or
+            ``'reddyproc'`` (as REddyProc).
+            See :class:`diive.gapfilling.mds.FluxMDS`.
         swin_qc, ta_qc, vpd_qc: Optional QC flag column of each driver
             (0 = measured, above 0 = gap-filled, e.g. ``FLAG_..._ISFILLED``
             or FLUXNET ``*_F_QC``), in ``data.full_df``. With gap-filled
@@ -226,7 +231,7 @@ def run_level41_mds(
             flux=ustar_flux.name,
             swin=swin, ta=ta, vpd=vpd,
             swin_tol=swin_tol, ta_tol=ta_tol, vpd_tol=vpd_tol,
-            avg_min_n_vals=avg_min_n_vals,
+            avg_min_n_vals=avg_min_n_vals, mode=mode,
             swin_qc=swin_qc, ta_qc=ta_qc, vpd_qc=vpd_qc,
         )
         instance.run()

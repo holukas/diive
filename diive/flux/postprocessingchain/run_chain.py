@@ -463,6 +463,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             swin=config.mds_swin,
             ta=config.mds_ta,
             vpd=config.mds_vpd,
+            mode=config.mds_mode,
             swin_qc=config.mds_swin_qc,
             ta_qc=config.mds_ta_qc,
             vpd_qc=config.mds_vpd_qc,

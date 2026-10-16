@@ -156,9 +156,12 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
                         vpd_tol: float = VPD_TOLERANCE,
                         ddof: int = 1,
                         sym_mean: bool = False,
+                        sym_mean_night_swin: float = None,
+                        leave_one_out: bool = False,
                         fill_all: bool = False,
                         longest_marginal_gap: int = 60,
                         edge: str = 'trim',
+                        rules: str = 'oneflux',
                         sd_func=None,
                         sample_ok=None,
                         progress_callback=None):
@@ -191,6 +194,17 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
         ddof: standard-deviation convention (1 = ONEFlux sample SD).
         sym_mean: use the Vekuri (2023) symmetric mean for the SWIN-driven
             methods (1 & 2) instead of the plain mean; off by default.
+        sym_mean_night_swin: with ``sym_mean``, a record whose own SWIN is
+            below this value (W m-2) is filled with the plain mean: Vekuri et
+            al. (2023) apply the symmetric mean to daytime data only (SWR >= 20
+            W m-2), REddyProc's ``Vekuri23`` below 10 W m-2. None (default):
+            the symmetric mean at every SWIN, as in ONEFlux's ``gf_mds``.
+        leave_one_out: with ``fill_all``, a measured record is not a sample
+            for its own prediction. ONEFlux keeps it (False, default). With
+            ``sym_mean`` it would dominate the half it falls into (at the top
+            of the SWIN range it is the whole upper half), so predictions and
+            scores at measured records would mostly echo the record itself.
+            Gap fills are the same either way (a gap has no value).
         fill_all: predict at every record (uncertainty mode, ``compute_hat``);
             otherwise only at missing ``tofill`` records (gap-filling mode).
         longest_marginal_gap: leading/trailing gaps longer than this many days
@@ -207,6 +221,16 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
             the mean, SD and count repeatedly, matches the time of day on
             ``hr`` (not across midnight), grows the last diurnal window by 3.5
             days a side and reduces with ``np.mean`` / ``np.std``.
+        rules: ``'oneflux'`` (default) or ``'reddyproc'``, only with
+            ``edge='trim'``. ``'reddyproc'`` switches the four fixed rules in
+            which REddyProc 1.3.4 ``sMDSGapFill`` differs from ONEFlux
+            ``gf_mds``: look-up windows of +/-W days include both ends
+            (+/-W*nperday records instead of +/-(W*nperday-1)), the look-up
+            windows end at +/-70 days instead of 77, the last diurnal-cycle
+            stage uses +/-7, 14, ..., 210 days instead of 3, 6, 9, ... until
+            the window spans the record, and every gap longer than 60 days is
+            left unfilled, wherever it is (``EddyGapfilling.R``: ``sFillInit``,
+            ``sFillLUT``, ``sMDSGapFill``).
         sample_ok: optional ``dict`` mapping ``'swin'``/``'ta'``/``'vpd'`` to a
             boolean array: False where that driver's value may not serve as a
             look-up sample (ONEFlux driver QC above threshold). The record
@@ -231,6 +255,11 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
     # get float32 boundary behaviour matching native ONEFlux, while the float64
     # MDS gap-filler keeps full precision. The mean/SD reduction runs in the
     # input dtype for the same reason (see ``fill_at``).
+    if rules not in ('oneflux', 'reddyproc'):
+        raise ValueError(f"rules must be 'oneflux' or 'reddyproc', got {rules!r}.")
+    if rules == 'reddyproc' and edge == 'clip':
+        raise ValueError("rules='reddyproc' needs edge='trim'.")
+    rp = rules == 'reddyproc'
     tofill = np.asarray(tofill)
     swin = np.asarray(swin)
     ta = np.asarray(ta)
@@ -260,6 +289,14 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
         large[:(firstvalid + 1 - (48 * longest_marginal_gap))] = True
     if lastvalid < (n - (48 * longest_marginal_gap)):
         large[(lastvalid + (48 * longest_marginal_gap)):] = True
+    if rp:
+        # REddyProc sFillInit: no gap longer than 60 days is filled, wherever
+        # it is (GapLength > sINFO$DTS * 60).
+        missing = ~target_valid
+        edges = np.flatnonzero(np.diff(np.concatenate(([0], missing.astype(np.int8), [0]))))
+        for start, stop in zip(edges[::2], edges[1::2], strict=True):
+            if stop - start > 60 * nperday:
+                large[start:stop] = True
 
     # Records eligible to receive a fill: not in an excluded marginal gap, and
     # (gap-filling mode) originally missing — uncertainty mode predicts all.
@@ -280,8 +317,13 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
     def window_idx(index, t_window):
         off = _offset_cache.get(t_window)
         if off is None:
-            off = np.append(-np.arange(t_window / 2.0 * nperday),
-                            np.arange(t_window / 2.0 * nperday - 1) + 1)
+            if rp:
+                # sFillLUT: Gap.i -/+ WinDays.i * sINFO$DTS, both ends included
+                half = int(round(t_window / 2.0 * nperday))
+                off = np.arange(-half, half + 1)
+            else:
+                off = np.append(-np.arange(t_window / 2.0 * nperday),
+                                np.arange(t_window / 2.0 * nperday - 1) + 1)
             if c_gf_mds:
                 # gf_mds walks the window from its start to its end, so its
                 # samples, and the order it sums them in, run forward in time.
@@ -316,7 +358,10 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
         # candidate's SWIN is above/below the target's, average the two sub-means
         # (ONEFlux gf_get_similiar_mean_sym_mean; SWIN-driven methods 1 & 2 only,
         # candidates equal to the target count in both halves).
-        if sym_mean and m in (METHOD_ALL, METHOD_SWIN):
+        # At night radiation does not drive the flux, so REddyProc's Vekuri23
+        # keeps the plain mean there (sym_mean_night_swin).
+        night = sym_mean_night_swin is not None and swin[index] < sym_mean_night_swin
+        if sym_mean and m in (METHOD_ALL, METHOD_SWIN) and not night:
             cs = swin[sel]
             parts = [vals[cs >= swin[index]].mean() if np.any(cs >= swin[index]) else np.nan,
                      vals[cs <= swin[index]].mean() if np.any(cs <= swin[index]) else np.nan]
@@ -372,6 +417,8 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
                     if name in sample_ok:
                         similar &= sample_ok[name][nongap]
             sel = nongap[similar]
+            if leave_one_out:
+                sel = sel[sel != index]
             if sel.size >= min_samples:
                 fill_at(index, sel, m, t_window)
         emit(q)
@@ -385,6 +432,8 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
             w = window_idx(index, t_window)
             nongap = w[np.isfinite(tofill[w])]
             sel = nongap[np.abs(hr[nongap] - hr[index]) < 1.1]
+            if leave_one_out:
+                sel = sel[sel != index]
             if sel.size >= min_samples:
                 fill_at(index, sel, METHOD_MDC, t_window)
         emit(q)
@@ -408,6 +457,8 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
             w = index + off
             w = w[(w >= 0) & (w < n)]
             sel = w[np.isfinite(tofill[w])]
+            if leave_one_out:
+                sel = sel[sel != index]
             if sel.size >= min_samples:
                 fill_at(index, sel, METHOD_MDC, tw)
         emit(q)
@@ -428,20 +479,27 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
             mdc_pass_gf_mds(it)
         else:
             mdc_pass((2 * it + 1) * 1)
-    # Loop 4: all drivers, windows 42..154 days
-    for it in range(2, 11):
+    # Loop 4: all drivers, windows 42..154 days (REddyProc: ..140)
+    last_lut = 10 if rp else 11
+    for it in range(2, last_lut):
         if gaps().size == 0:
             break
         meteo_pass((it + 1) * _TW_ORIG, METHOD_ALL, drivers=dict(swin=swin, ta=ta, vpd=vpd))
-    # Loop 5: SWIN only, windows 28..154 days
-    for it in range(1, 11):
+    # Loop 5: SWIN only, windows 28..154 days (REddyProc: ..140)
+    for it in range(1, last_lut):
         if gaps().size == 0:
             break
         meteo_pass((it + 1) * _TW_ORIG, METHOD_SWIN, drivers=dict(swin=swin))
     # Loop 6: diurnal. gf_mds: +/- 3, 6, 9, ... days (windows 7, 13, 19, ...)
     # until the window covers the whole record; a larger window adds nothing.
     # The Python reference: windows 7, 14, ..., 427 days.
-    if c_gf_mds:
+    if rp:
+        # sMDSGapFill step 8: +/- 7, 14, ..., 210 days
+        for days in range(7, 211, 7):
+            if gaps().size == 0:
+                break
+            mdc_pass_gf_mds(days)
+    elif c_gf_mds:
         days = 3
         while gaps().size:
             mdc_pass_gf_mds(days)

@@ -4,10 +4,12 @@ GAP-FILLING: MARGINAL DISTRIBUTION SAMPLING
 
 Statistical gap-filling using meteorological similarity. No training required.
 
-Faithful port of the ONEFlux marginal-distribution-sampling gap-filler: the
-6-stage expanding-window cascade, the >=2-sample acceptance rule, the 1/2/3
-quality collapse and the arithmetic all follow ONEFlux's C ``gf_mds``
-(``oneflux_steps/common/common.c``). The cascade itself lives in
+Port of the ONEFlux marginal-distribution-sampling gap-filler: the 6-stage
+expanding-window cascade, the >=2-sample acceptance rule, the 1/2/3 quality
+collapse and the arithmetic all follow ONEFlux's C ``gf_mds``
+(``oneflux_steps/common/common.c``). Three modes: ``'diive'`` (default) adds
+the Vekuri et al. (2023) symmetric mean to ONEFlux's rules, ``'oneflux'``
+reproduces ONEFlux and ``'reddyproc'`` REddyProc's ``sMDSGapFill``. The cascade itself lives in
 :mod:`diive.gapfilling.similarity` (shared with the NEE uncertainty of the
 daytime ONEFlux partitioning); this module wraps it as a gap-filler.
 
@@ -82,6 +84,13 @@ def _infer_nperday(index: pd.DatetimeIndex) -> int:
     return int(round(86400.0 / secs))
 
 
+MDS_MODES = ('diive', 'oneflux', 'reddyproc')
+
+# Vekuri et al. (2023) apply the symmetric mean to daytime data only and count
+# SWR >= 20 W m-2 as daytime. REddyProc's Vekuri23 uses 10 W m-2 instead.
+_SYM_MEAN_NIGHT_SWIN = 20.0
+
+
 class _MdsGapFillingBase:
     """Shared implementation behind :class:`FluxMDS`.
 
@@ -101,17 +110,18 @@ class _MdsGapFillingBase:
                  ta_tol: float = 2.5,
                  vpd_tol: float = 0.5,
                  avg_min_n_vals: int = 2,
-                 sym_mean: bool = False,
+                 mode: str = 'diive',
                  fill_marginal_gaps: bool = True,
                  vpd_in_kpa: bool = True,
                  swin_qc: str = None,
                  ta_qc: str = None,
                  vpd_qc: str = None,
-                 verbose: int = 1):
+                 verbose: int = 1,
+                 **legacy):
         """Gap-fill an ecosystem flux by marginal distribution sampling (MDS).
 
         Missing values are replaced by the average measured *flux* during
-        meteorologically similar conditions, using the faithful ONEFlux 6-stage
+        meteorologically similar conditions, using ONEFlux's 6-stage
         expanding-window cascade.
 
         Args:
@@ -128,8 +138,30 @@ class _MdsGapFillingBase:
             vpd_tol: VPD similarity tolerance (kPa, default 0.5 = ONEFlux 5 hPa).
             avg_min_n_vals: minimum similar samples to accept a fill. ONEFlux
                 gap-filling uses 2 (default); larger values are stricter.
-            sym_mean: use the Vekuri (2023) symmetric mean (SWIN-driven methods)
-                instead of the plain mean. Off by default (standard ONEFlux).
+            mode: ``'diive'`` (default), ``'oneflux'`` or ``'reddyproc'``.
+                All three use the same tolerances and order of methods.
+                ``'oneflux'`` fills with the plain mean of the similar records
+                and reproduces ONEFlux's ``gf_mds`` bit for bit.
+                ``'reddyproc'`` reproduces REddyProc 1.3.4 ``sMDSGapFill``
+                (default method, plain mean): its look-up windows include
+                both ends and stop at +/-70 days, its last diurnal-cycle
+                windows are +/-7, 14, ..., 210 days, and every gap longer than
+                60 days stays unfilled, whatever ``fill_marginal_gaps`` says.
+                ``'diive'`` uses ONEFlux's windows. ``'diive'`` uses the
+                symmetric mean of Vekuri et al. (2023) in the methods that
+                match on SWIN (1 and 2): the similar records are split into
+                those with less and those with more SWIN than the record being
+                filled (records with equal SWIN count in both, as in ONEFlux's
+                ``gf_mds``), and the fill is the mean of the two group means.
+                This removes the bias from an uneven spread of SWIN within the
+                tolerance. As in the paper, it applies to daytime records only
+                (SWIN >= 20 W m-2); below that the plain mean is kept
+                (REddyProc's ``Vekuri23`` uses 10 W m-2). At gaps, the SD, the
+                sample count and the quality flags are the same in both modes.
+                At measured records, ``'diive'`` leaves the record out of its
+                own sample, so the scores are out-of-sample. ONEFlux keeps it,
+                which with the symmetric mean would let the record echo
+                itself.
             fill_marginal_gaps: if True (default), fill everything (ONEFlux
                 ``gf_mds`` gap-filling behaviour). If False, leave leading/
                 trailing gaps longer than 60 days unfilled (the ONEFlux
@@ -151,6 +183,16 @@ class _MdsGapFillingBase:
                 ``energy_proc``, H and LE).
             verbose: verbosity level.
         """
+        if 'sym_mean' in legacy:
+            raise TypeError(
+                "FluxMDS: 'sym_mean' was replaced by 'mode'. mode='diive' (default) "
+                "uses the Vekuri (2023) symmetric mean, mode='oneflux' the plain mean.")
+        if legacy:
+            raise TypeError(f"FluxMDS.__init__() got an unexpected keyword argument "
+                            f"'{next(iter(legacy))}'")
+        if mode not in MDS_MODES:
+            raise ValueError(f"mode must be one of {MDS_MODES}, got {mode!r}.")
+
         _required = {
             flux: 'flux (no unit restriction)',
             swin: 'SWIN - short-wave incoming radiation (W m-2)',
@@ -187,7 +229,7 @@ class _MdsGapFillingBase:
         self.ta_tol = ta_tol
         self.vpd_tol = vpd_tol
         self.avg_min_n_vals = avg_min_n_vals if avg_min_n_vals else 2
-        self.sym_mean = sym_mean
+        self.mode = mode
         self.fill_marginal_gaps = fill_marginal_gaps
         self.vpd_in_kpa = vpd_in_kpa
         self.verbose = verbose
@@ -249,7 +291,7 @@ class _MdsGapFillingBase:
 
     # --- run -----------------------------------------------------------------
     def run(self, progress_callback=None):
-        """Execute the faithful ONEFlux MDS cascade.
+        """Execute the ONEFlux MDS cascade in the selected mode.
 
         Args:
             progress_callback: optional ``callable(filled, total, quality,
@@ -292,7 +334,11 @@ class _MdsGapFillingBase:
             # nee_proc passes qc_gf_threshold 0: QC above 0 is not a sample,
             # a missing QC (-9999 there, NaN here) does not exclude
             sample_ok={k: ~(qc > 0) for k, qc in self._driver_qc.items()} or None,
-            ddof=1, sym_mean=self.sym_mean, fill_all=True,
+            ddof=1, rules='reddyproc' if self.mode == 'reddyproc' else 'oneflux',
+            sym_mean=self.mode == 'diive',
+            sym_mean_night_swin=_SYM_MEAN_NIGHT_SWIN if self.mode == 'diive' else None,
+            leave_one_out=self.mode == 'diive',
+            fill_all=True,
             longest_marginal_gap=10 ** 9 if self.fill_marginal_gaps else 60,
             progress_callback=_cb,
         )
@@ -474,7 +520,7 @@ class _MdsGapFillingBase:
             f"  TA tolerance           {self.ta_tol} deg C\n"
             f"  VPD tolerance          {self.vpd_tol} kPa\n"
             f"  Min samples for mean   {self.avg_min_n_vals}\n"
-            f"  Symmetric mean         {self.sym_mean}"
+            f"  Mode                   {self.mode}"
         )
 
         rule("Data & Performance", min_level=2)
@@ -527,11 +573,17 @@ class FluxMDS(_MdsGapFillingBase):
     """Gap-filling for ecosystem fluxes using Marginal Distribution Sampling (MDS).
 
     Fills missing flux data by matching meteorologically similar conditions
-    (SWIN, TA, VPD) following the faithful ONEFlux 6-stage expanding-window
-    cascade (Reichstein 2005 / Vekuri 2023). The cascade is shared with the
-    daytime-partitioning NEE uncertainty (:mod:`diive.gapfilling.similarity`).
+    (SWIN, TA, VPD) following ONEFlux's 6-stage expanding-window cascade
+    (Reichstein 2005). The cascade is shared with the daytime-partitioning NEE
+    uncertainty (:mod:`diive.gapfilling.similarity`).
 
-    Measured agreement: compared with ONEFlux's ``gf_mds`` tool, compiled from
+    ``mode='diive'`` (default) fills with the symmetric mean of Vekuri et al.
+    (2023) in the methods that match on SWIN, which removes a bias in the
+    filled fluxes and the carbon balance. ``mode='oneflux'`` fills with the
+    plain mean, as ONEFlux does, and ``mode='reddyproc'`` follows REddyProc's
+    ``sMDSGapFill``. See ``mode`` in ``__init__``.
+
+    Measured agreement (``mode='oneflux'``): compared with ONEFlux's ``gf_mds`` tool, compiled from
     the ONEFlux 1.3.7 C source and run on the same input with the settings of
     ONEFlux's pipeline (VPD in hPa, ``vpd_in_kpa=False``). Filled values, SDs,
     sample counts, methods and windows are bitwise identical in every gap and
@@ -544,6 +596,13 @@ class FluxMDS(_MdsGapFillingBase):
     with the same drivers and ``swin_qc``/``ta_qc``/``vpd_qc``, FluxMDS matches
     it bitwise too (CH-DAV 2016/2019, CH-LAE 2017-2019). Without the QC
     columns, CH-LAE annual NEE differed by 3-10 gC m-2 (1-5 % of the gaps).
+
+    Measured agreement (``mode='reddyproc'``): compared with REddyProc 1.3.4
+    ``sMDSGapFill`` (default method) on the same input, every gap value agrees
+    to 2e-13 (R sums the mean in long double) and the annual sums are equal:
+    NEE and LE for CH-DAV 2016 and 2019, NEE, H and LE for CH-LAE 2017-2019,
+    with the data's own gaps, extra gaps, missing drivers and gaps longer than
+    60 days (46 runs). Harness: ``diive-data/references/mds_parity_reddyproc``.
 
     Examples:
         See examples/gapfilling/gapfill_mds.py for basic usage.

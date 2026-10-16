@@ -351,6 +351,12 @@ class FluxConfig:
     mds_vpd: str | None = None
     """VPD column for MDS (**kPa**; must be in ``data.full_df``)."""
 
+    mds_mode: str = 'diive'
+    """MDS mode: ``'diive'`` (default, Vekuri et al. 2023 symmetric mean in
+    daytime), ``'oneflux'`` (bit for bit as ONEFlux) or ``'reddyproc'`` (as
+    REddyProc). See
+    :class:`diive.gapfilling.mds.FluxMDS`."""
+
     mds_swin_qc: str | None = None
     """Optional QC flag column of ``mds_swin`` (0 = measured, above 0 =
     gap-filled, e.g. ``FLAG_..._ISFILLED`` or FLUXNET ``SW_IN_F_QC``; must be

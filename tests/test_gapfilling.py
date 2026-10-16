@@ -58,6 +58,7 @@ class TestGapFilling(unittest.TestCase):
             ta='Tair_f',
             swin='Rg_f',
             vpd='VPD_f',
+            mode='oneflux',  # the exact numbers below are ONEFlux's plain mean
             # swin_tol=[20, 50],
             # ta_tol=2.5,
             # vpd_tol=0.5,  # kPa; 5 hPa is default for reference
@@ -168,6 +169,117 @@ class TestGapFilling(unittest.TestCase):
 
         with self.assertRaises(KeyError):
             FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd', vpd_qc='nope')
+
+    @staticmethod
+    def _mds_sym_case(sw_gap, sw_low, sw_high):
+        """One gap with three similar records below its SWIN (flux 1) and one
+        above (flux 3); every other record has SWIN far outside the tolerance."""
+        import pandas as pd
+        n = 20 * 48
+        idx = pd.date_range('2020-06-01 00:15', periods=n, freq='30min')
+        df = pd.DataFrame({'flux': 10.0, 'sw': 900.0, 'ta': 15.0, 'vpd': 1.0}, index=idx)
+        pos = n // 2
+        flux, sw = df.columns.get_loc('flux'), df.columns.get_loc('sw')
+        df.iloc[pos, [flux, sw]] = [np.nan, sw_gap]
+        df.iloc[pos + 1:pos + 4, [flux, sw]] = [1.0, sw_low]
+        df.iloc[pos + 4, [flux, sw]] = [3.0, sw_high]
+        return df, pos
+
+    def test_fluxmds_mode_diive_symmetric_mean_in_daytime(self):
+        from diive.gapfilling.mds import FluxMDS
+
+        def filled(df, pos, mode):
+            m = FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd', mode=mode, verbose=0)
+            m.run()
+            return m.get_gapfilled_target().iloc[pos], m
+
+        # Daytime: plain mean (3 * 1 + 3) / 4, symmetric mean (1 + 3) / 2
+        df, pos = self._mds_sym_case(300.0, 260.0, 340.0)
+        plain, m_of = filled(df, pos, 'oneflux')
+        sym, m_dv = filled(df, pos, 'diive')
+        self.assertAlmostEqual(plain, 1.5)
+        self.assertAlmostEqual(sym, 2.0)
+        self.assertEqual(m_dv.mode, 'diive')
+        # Count, SD and method at the gap do not depend on the mode
+        for col in ('.PREDICTIONS_COUNTS', '.PREDICTIONS_SD', '.PREDICTIONS_METHOD'):
+            self.assertEqual(m_of.gapfilling_df_[col].iloc[pos],
+                             m_dv.gapfilling_df_[col].iloc[pos])
+
+        # A record with the gap's own SWIN (flux 5) counts in both halves:
+        # lower (1, 1, 5), upper (5, 3)
+        df.iloc[pos + 3, df.columns.get_loc('sw')] = 300.0
+        df.iloc[pos + 3, df.columns.get_loc('flux')] = 5.0
+        self.assertAlmostEqual(filled(df, pos, 'diive')[0], (7 / 3 + 8 / 2) / 2)
+
+        # Night (SWIN below 20 W m-2): the plain mean in both modes
+        df, pos = self._mds_sym_case(10.0, 5.0, 15.0)
+        self.assertAlmostEqual(filled(df, pos, 'diive')[0], 1.5)
+        self.assertAlmostEqual(filled(df, pos, 'oneflux')[0], 1.5)
+
+    def test_fluxmds_mode_diive_leaves_a_measured_record_out_of_its_sample(self):
+        from diive.gapfilling.mds import FluxMDS
+        # 280 and 320 W m-2 are within each other's tolerance (50 W m-2)
+        df, pos = self._mds_sym_case(300.0, 280.0, 320.0)
+        counts = {}
+        for mode in ('oneflux', 'diive'):
+            m = FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd', mode=mode, verbose=0)
+            m.run()
+            counts[mode] = m.gapfilling_df_['.PREDICTIONS_COUNTS'].iloc[pos + 4]
+            if mode == 'diive':
+                # The record at 320 W m-2 is predicted from the three at 280 only
+                self.assertAlmostEqual(m.gapfilling_df_['.PREDICTIONS'].iloc[pos + 4], 1.0)
+        self.assertEqual(counts['oneflux'], 4)
+        self.assertEqual(counts['diive'], 3)
+
+    def test_fluxmds_mode_arguments(self):
+        from diive.gapfilling.mds import FluxMDS
+        df, _ = self._mds_sym_case(300.0, 260.0, 340.0)
+        with self.assertRaisesRegex(TypeError, "replaced by 'mode'"):
+            FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd', sym_mean=True)
+        with self.assertRaisesRegex(TypeError, 'unexpected keyword'):
+            FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd', nope=1)
+        with self.assertRaisesRegex(ValueError, 'mode must be one of'):
+            FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd', mode='nope')
+
+    def test_fluxmds_mode_reddyproc_window_ends(self):
+        # REddyProc's +/-7-day look-up window includes the records exactly 7 days
+        # away (+/-336 half-hours), ONEFlux's stops one record short.
+        from diive.gapfilling.mds import FluxMDS
+        df, pos = self._mds_sym_case(300.0, 280.0, 320.0)
+        df.iloc[pos + 336, [0, 1]] = [7.0, 300.0]
+        counts = {}
+        for mode in ('oneflux', 'reddyproc'):
+            m = FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd', mode=mode, verbose=0)
+            m.run()
+            out = m.gapfilling_df_
+            self.assertEqual(out['.PREDICTIONS_METHOD'].iloc[pos], 1)
+            counts[mode] = out['.PREDICTIONS_COUNTS'].iloc[pos]
+        self.assertEqual(counts['oneflux'], 4)
+        self.assertEqual(counts['reddyproc'], 5)
+
+    def test_fluxmds_mode_reddyproc_leaves_long_gaps_unfilled(self):
+        # REddyProc leaves every gap longer than 60 days unfilled, also one in
+        # the middle of the record; ONEFlux fills it.
+        import pandas as pd
+        from diive.gapfilling.mds import FluxMDS
+        n = 150 * 48
+        idx = pd.date_range('2020-01-01 00:15', periods=n, freq='30min')
+        rng = np.random.RandomState(0)
+        df = pd.DataFrame({'flux': rng.normal(0, 1, n), 'sw': rng.uniform(0, 800, n),
+                           'ta': 15.0, 'vpd': 1.0}, index=idx)
+        long_gap = slice(40 * 48, 40 * 48 + 61 * 48)   # 61 days
+        short_gap = slice(120 * 48, 120 * 48 + 59 * 24)  # 29.5 days
+        df.iloc[long_gap, 0] = np.nan
+        df.iloc[short_gap, 0] = np.nan
+        filled = {}
+        for mode in ('oneflux', 'reddyproc'):
+            m = FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd', mode=mode, verbose=0)
+            m.run()
+            filled[mode] = m.get_gapfilled_target()
+        self.assertEqual(int(filled['oneflux'].isna().sum()), 0)
+        self.assertTrue(filled['reddyproc'].iloc[long_gap].isna().all())
+        self.assertFalse(filled['reddyproc'].iloc[short_gap].isna().any())
+        self.assertEqual(int(filled['reddyproc'].isna().sum()), 61 * 48)
 
     def test_gapfilling_longterm_randomforest(self):
         from diive.configs.exampledata import load_exampledata_parquet
