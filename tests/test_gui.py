@@ -3733,6 +3733,14 @@ def test_flux_chain_tab_level41_mds_mode(app, monkeypatch):
     tab._run_level41("data", cfg)
     assert seen[-1]["mode"] == "oneflux"
 
+    tab.mds_mode.setCurrentText("REddyProc")
+    cfg = tab._level41_cfg()
+    assert cfg["mds"]["mode"] == "reddyproc"
+    assert "mode='reddyproc'," in tab._code()
+    tab._run_level41("data", cfg)
+    assert seen[-1]["mode"] == "reddyproc"
+    tab.mds_mode.setCurrentText("ONEFlux (bit for bit)")
+
     state = tab.save_state()
     assert state["controls"]["mds_mode"] == "oneflux"
     tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
@@ -6601,6 +6609,17 @@ def test_gapfilling_mds_tab_mode(app, example_year):
     # Same gaps filled, different daytime values.
     assert oneflux_payload[2].notna().sum() == diive_payload[2].notna().sum()
     assert (oneflux_payload[2] - diive_payload[2]).abs().max() > 0
+
+    tab.mode.setCurrentText("REddyProc")
+    assert tab._method_kwargs()["mode"] == "reddyproc"
+    assert "mode='reddyproc'," in tab._python_code()
+    reddyproc_payload = tab._compute_payload(work, target, "Rg_f", "Tair_f", "VPD_f",
+                                             tab._method_kwargs())
+    assert reddyproc_payload[3].mode == "reddyproc"
+    # REddyProc's wider look-up windows move some fills (no gap here is > 60 days).
+    assert reddyproc_payload[2].notna().sum() == oneflux_payload[2].notna().sum()
+    assert (reddyproc_payload[2] - oneflux_payload[2]).abs().max() > 0
+    tab.mode.setCurrentText("ONEFlux (bit for bit)")
 
     # Save/restore stores the mode value (not the label) and round-trips it.
     state = tab.save_state()
