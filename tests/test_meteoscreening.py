@@ -402,6 +402,22 @@ class TestTimeSpanWindows(unittest.TestCase):
             self.assertGreater(int((by_records == 2).sum()), 0)
             pd.testing.assert_series_equal(by_span, by_records)
 
+    def test_default_window_is_13_days(self):
+        # L175: the default was 13 records (130 minutes at 10MIN) instead of 13 days.
+        index = pd.date_range('2020-06-01 00:10', periods=144 * 20, freq='10min')
+        df = _series_detailed(index, _diurnal(index, seed=3, sd=.5))
+
+        def flags(**kwargs):
+            m = _screening(df)
+            m.start_outlier_detection()
+            m.flag_outliers_hampel_test(repeat=False, **kwargs)
+            return m.outlier_detection[FIELD].last_flag
+
+        default, thirteen_records = flags(), flags(window_length=13)
+        self.assertGreater(int((thirteen_records == 2).sum()), 0)
+        self.assertFalse(default.equals(thirteen_records))
+        pd.testing.assert_series_equal(default, flags(window_length=13 * 144))
+
     def test_span_not_a_multiple_of_the_frequency_raises(self):
         df, _ = _spiky()
         m = _screening(df)

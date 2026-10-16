@@ -811,7 +811,7 @@ class StepwiseMeteoScreeningDb:
                              thres_zscore=thres_zscore, showplot=showplot, verbose=verbose,
                              plottitle=plottitle, repeat=repeat, winsize=winsize)
 
-    def flag_outliers_hampel_test(self, window_length: int | str = 13, n_sigma: float = 5.5,
+    def flag_outliers_hampel_test(self, window_length: int | str = '13D', n_sigma: float = 5.5,
                                   n_sigma_daytime: float = None, n_sigma_nighttime: float = None,
                                   k: float = 1.4826, use_differencing: bool = True,
                                   separate_day_night: bool = True, showplot: bool = False,
@@ -820,10 +820,12 @@ class StepwiseMeteoScreeningDb:
 
         Parameters
         ----------
-        window_length : int or str, default 13
+        window_length : int or str, default '13D'
             Size of the sliding window for median/MAD calculation, as a record
             count or a time span such as ``'7D'`` (converted to records at the
-            data frequency, of which it must be a whole multiple)
+            data frequency, of which it must be a whole multiple). The default
+            covers 13 days at any resolution, the span of the 624-record
+            default of ``StepwiseOutlierDetection`` at 30-minute data
         n_sigma : float, default 5.5
             Threshold multiplier for global mode (number of MADs above median)
         n_sigma_daytime : float, optional
