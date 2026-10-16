@@ -3694,6 +3694,58 @@ def test_flux_chain_tab_level41_mds_driver_qc(app, monkeypatch):
     assert "vpd_qc" not in tab2._level41_cfg()["mds"]
 
 
+def test_flux_chain_tab_level41_mds_mode(app, monkeypatch):
+    # L4.1 MDS mode: 'diive' by default, always written to the config and the
+    # script, passed to run_level41_mds, saved as the value. Chain projects saved
+    # before the option used the plain mean and restore to 'oneflux'.
+    import diive.gui.tabs.fluxchain as fc
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._steps = [HampelParams().step()]
+    tab.l33_enable.setChecked(True)
+    tab._ustar = [(0.1, "CUT_50")]
+    tab.l41_mds.setChecked(True)
+
+    assert tab.mds_mode.currentText() == "diive (Vekuri 2023 mean)"
+    cfg = tab._level41_cfg()
+    assert cfg["mds"]["mode"] == "diive"
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    assert "mode='diive'," in code
+
+    # _run_level41 hands the mode to the library (spy: no real gap-filling).
+    seen = []
+    monkeypatch.setattr(fc, "run_level41_mds",
+                        lambda data, **kw: seen.append(kw) or data)
+    assert tab._run_level41("data", cfg) == "data"
+    assert seen[-1]["mode"] == "diive"
+
+    tab.mds_mode.setCurrentText("ONEFlux (bit for bit)")
+    cfg = tab._level41_cfg()
+    assert cfg["mds"]["mode"] == "oneflux"
+    assert "mode='oneflux'," in tab._code()
+    tab._run_level41("data", cfg)
+    assert seen[-1]["mode"] == "oneflux"
+
+    state = tab.save_state()
+    assert state["controls"]["mds_mode"] == "oneflux"
+    tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
+    assert tab2.mds_mode.currentData() == "diive"
+    tab2.restore_state(state)
+    assert tab2.mds_mode.currentData() == "oneflux"
+    # An older chain project (no mds_mode key) restores to 'oneflux'.
+    tab3 = FluxChainTab(); tab3.widget(); tab3.on_data_loaded(df)
+    tab3.restore_state(dict(state, controls={k: v for k, v in state["controls"].items()
+                                             if k != "mds_mode"}))
+    assert tab3.mds_mode.currentData() == "oneflux"
+
+
 def test_stepwise_method_params_run_on_detector(app):
     # Every stepwise method-params widget must produce a {method, kwargs} step that
     # StepwiseOutlierDetection actually accepts and runs — this guards the kwarg
@@ -6503,6 +6555,70 @@ def test_gapfilling_mds_tab_driver_qc(app, example_year):
     tab._qc_combos["ta"].setCurrentText("FLAG_Tair_f_ISFILLED")
     tab.on_data_loaded(df.drop(columns="FLAG_Tair_f_ISFILLED"))
     assert tab._qc_combos["ta"].currentText() == NONE_ITEM
+
+
+def test_gapfilling_mds_tab_mode(app, example_year):
+    # MDS mode combo: 'diive' (Vekuri 2023 mean) by default, reaching FluxMDS and
+    # Copy Python; 'ONEFlux' gives mode 'oneflux' and other fills. Old projects
+    # with the 'sym_mean' checkbox restore False -> 'oneflux', True -> 'diive'.
+    from PySide6.QtWidgets import QApplication, QTableWidget
+    from diive.gui.tabs.gapfilling_mds import MdsGapFillingTab
+    df = example_year.loc["2021-06":"2021-06"].copy()
+    target = "NEE_CUT_REF_orig"
+    tab = MdsGapFillingTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._set_target(target)
+    for key, col in (("swin", "Rg_f"), ("ta", "Tair_f"), ("vpd", "VPD_f")):
+        tab._combos[key].setCurrentText(col)
+
+    assert tab.mode.currentText() == "diive (Vekuri 2023 mean)"
+    assert tab._method_kwargs()["mode"] == "diive"
+    assert "sym_mean" not in tab._method_kwargs()
+    code = tab._python_code()
+    compile(code, "<gen>", "exec")
+    assert "mode='diive'," in code
+
+    work = df[[target, "Rg_f", "Tair_f", "VPD_f"]].copy()
+    diive_payload = tab._compute_payload(work, target, "Rg_f", "Tair_f", "VPD_f",
+                                         tab._method_kwargs())
+    assert diive_payload[3].mode == "diive"
+    tab._on_done(diive_payload)
+    QApplication.processEvents()
+    # The Results configuration table lists the mode.
+    cells = {(t.item(r, 0).text(), t.item(r, 1).text())
+             for t in tab.results_panel.findChildren(QTableWidget)
+             if t.columnCount() == 2
+             for r in range(t.rowCount()) if t.item(r, 0) and t.item(r, 1)}
+    assert ("mode", "diive") in cells
+
+    tab.mode.setCurrentText("ONEFlux (bit for bit)")
+    assert tab._method_kwargs()["mode"] == "oneflux"
+    assert "mode='oneflux'," in tab._python_code()
+    oneflux_payload = tab._compute_payload(work, target, "Rg_f", "Tair_f", "VPD_f",
+                                           tab._method_kwargs())
+    assert oneflux_payload[3].mode == "oneflux"
+    # Same gaps filled, different daytime values.
+    assert oneflux_payload[2].notna().sum() == diive_payload[2].notna().sum()
+    assert (oneflux_payload[2] - diive_payload[2]).abs().max() > 0
+
+    # Save/restore stores the mode value (not the label) and round-trips it.
+    state = tab.save_state()
+    assert state["controls"]["mode"] == "oneflux"
+    tab2 = MdsGapFillingTab(); tab2.widget(); tab2.on_data_loaded(df)
+    assert tab2._method_kwargs()["mode"] == "diive"
+    tab2.restore_state(state)
+    assert tab2._method_kwargs()["mode"] == "oneflux"
+
+    # Old projects: no 'mode', a 'sym_mean' checkbox value instead.
+    old_controls = {k: v for k, v in state["controls"].items() if k != "mode"}
+    tab3 = MdsGapFillingTab(); tab3.widget(); tab3.on_data_loaded(df)
+    tab3.restore_state({"target": target,
+                        "controls": {**old_controls, "sym_mean": False}})
+    assert tab3._method_kwargs()["mode"] == "oneflux"
+    tab3.restore_state({"target": target,
+                        "controls": {**old_controls, "sym_mean": True}})
+    assert tab3._method_kwargs()["mode"] == "diive"
 
 
 def test_partitioning_tabs_refuse_to_run_without_site_coords(app, example_year):

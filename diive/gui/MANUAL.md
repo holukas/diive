@@ -1111,7 +1111,9 @@ scenario. For MDS, pick the SW_IN, TA and VPD driver columns and the tolerances.
 Each driver also has an optional **QC flag** column (default **(none)**), as in the
 **MDS gap-filling** tab: with a flag, only records with a measured driver value count
 as similar conditions, as in ONEFlux's NEE gap-filling. The flag column must be in the
-loaded dataset.
+loaded dataset. **Mode** chooses how the fill is averaged, as in the **MDS
+gap-filling** tab (default **diive**). Projects saved before this option load as
+**ONEFlux**, the plain mean they were filled with.
 
 > Needs eddy-covariance input with the raw EddyPro columns (FC, USTAR, the `*_TEST`
 > flags). The bundled CH-DAV example is a processed product and won't run the chain,
@@ -1441,8 +1443,15 @@ FLUXNET look-up-table method. Unlike XGBoost and Random Forest, MDS is **not a
 trained regressor**: it has no SHAP importances, no held-out test split, and no
 feature reduction. Instead it fills each gap from records with **similar
 meteorological conditions** using three fixed drivers: shortwave-in radiation, air
-temperature, and VPD. With the same input and settings, diive's MDS gives the same
-values as ONEFlux's `gf_mds` tool, bit for bit.
+temperature, and VPD. It follows ONEFlux's `gf_mds` tool. **Mode** sets how a fill
+is averaged. **diive (Vekuri 2023 mean)**, the default, fills daytime gaps in the
+SWIN look-ups with the symmetric mean of Vekuri et al. (2023): the mean of the similar
+records with less SWIN and the mean of those with more SWIN are averaged, which removes
+a bias when they are spread unevenly. **ONEFlux (bit for bit)** uses the plain mean
+and gives the same values as `gf_mds`. **REddyProc** uses the plain mean with
+REddyProc's windows, as its `sMDSGapFill` does, and leaves gaps longer than 60 days
+unfilled. Projects saved with the old **Symmetric mean**
+box unticked load as ONEFlux.
 
 Pick a **target** (flux) on the left and the **three driver columns** (SWIN / TA /
 VPD combos, auto-seeded by name with ✓ / ✗ markers; gap-filled `_f` versions are

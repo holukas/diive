@@ -9,8 +9,8 @@ conditions on three fixed drivers — short-wave incoming radiation (SWIN), air
 temperature (TA) and vapour pressure deficit (VPD) — within similarity
 tolerances, assigning each fill a quality level. So this tab has no free feature
 picker, no SHAP and no held-out test score; instead it offers a fixed
-three-driver picker (each driver with an optional QC flag column) + tolerances,
-and a Results page focused on the
+three-driver picker (each driver with an optional QC flag column) + tolerances
++ the mode (diive / ONEFlux), and a Results page focused on the
 per-quality-level breakdown.
 
 It uses the shared tab primitives — ``tab_chrome`` (title bar + list header),
@@ -53,6 +53,7 @@ from diive.variables import auto_pick_column
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.driver_qc import QC_TIP, fill_qc_combo, qc_value, set_qc_value
+from diive.gui.widgets.mds_mode import make_mode_combo, mode_value, set_mode_value
 from diive.gui.widgets.mds_results import MdsResultsPanel
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.plot_settings import _DropComboBox
@@ -189,11 +190,12 @@ class MdsGapFillingTab(DiiveTab):
     <p>MDS is a statistical, <b>training-free</b> gap-filler. A missing flux value
     is replaced by the <b>average measured flux during meteorologically similar
     conditions</b> in a window of time around the gap. diive's implementation
-    (<code>dv.gapfilling.FluxMDS</code>) is a faithful port of the ONEFlux
+    (<code>dv.gapfilling.FluxMDS</code>) is a port of the ONEFlux
     marginal-distribution-sampling gap-filler (Reichstein et al., 2005), down to
     its 6-stage expanding-window cascade, the &ge;2-sample acceptance rule and the
-    1/2/3 quality collapse. With the same input and settings it gives the same
-    values as ONEFlux's C <code>gf_mds</code> tool, bit for bit.</p>
+    1/2/3 quality collapse. In <b>ONEFlux</b> mode it gives the same values as
+    ONEFlux's C <code>gf_mds</code> tool, bit for bit. The default <b>diive</b>
+    mode differs only in how the fill is averaged (see below).</p>
 
     <h3>Drivers and similarity</h3>
     <p>Three fixed meteorological drivers define "similar conditions":</p>
@@ -242,9 +244,18 @@ class MdsGapFillingTab(DiiveTab):
     </ol>
     <p>Each accepted fill is the mean of the similar measured fluxes in the
     window; the spread of those values (N-1 standard deviation) and the count are
-    recorded too. Optionally the <b>symmetric mean (Vekuri 2023)</b> can be used
-    for the SWIN-driven methods, which splits the similar samples by radiation
-    above/below the target and averages the two halves to reduce a known bias.</p>
+    recorded too.</p>
+    <p><b>Mode.</b> <i>diive (Vekuri 2023 mean)</i>, the default, uses the
+    symmetric mean of Vekuri et al. (2023) in the SWIN-matching methods (1 and
+    2) for daytime gaps (SWIN &ge; 20&nbsp;W&nbsp;m<sup>-2</sup>): the mean of the
+    similar records with less SWIN and the mean of those with more SWIN are
+    averaged. This removes a bias when the similar records are spread unevenly
+    around the gap's SWIN. <i>ONEFlux (bit for bit)</i> uses the plain mean, as
+    ONEFlux does. <i>REddyProc</i> uses the plain mean with REddyProc's windows
+    (look-ups up to &plusmn;70 days, diurnal cycle up to &plusmn;210 days) and
+    leaves gaps longer than 60 days unfilled, as its <tt>sMDSGapFill</tt>
+    does. At gaps, the SD, the count and the quality flags of <i>diive</i> and
+    <i>ONEFlux</i> are the same.</p>
 
     <h3>Quality of each fill</h3>
     <p>Every filled value carries a quality. The faithful ONEFlux quality is
@@ -427,14 +438,8 @@ class MdsGapFillingTab(DiiveTab):
             "average. ONEFlux uses 2; larger values are stricter (a gap with "
             "fewer matches falls through to a looser stage).")
         f.addRow("Min samples for mean", self.avg_min_n_vals)
-        self.sym_mean = QCheckBox("Symmetric mean (Vekuri 2023)")
-        self.sym_mean.setChecked(False)
-        self.sym_mean.setToolTip(
-            "Use the Vekuri (2023) symmetric mean for the SWIN-driven methods "
-            "(splits similar samples by radiation above/below the target and "
-            "averages the two halves) instead of the plain mean. Off by default "
-            "(standard ONEFlux).")
-        f.addRow(self.sym_mean)
+        self.mode = make_mode_combo()
+        f.addRow("Mode", self.mode)
         return box
 
     def _build_results(self) -> QWidget:
@@ -629,14 +634,16 @@ class MdsGapFillingTab(DiiveTab):
         return {**self._combos,
                 "swin_tol_low": self.swin_tol_low, "swin_tol_high": self.swin_tol_high,
                 "ta_tol": self.ta_tol, "vpd_tol": self.vpd_tol,
-                "avg_min_n_vals": self.avg_min_n_vals, "sym_mean": self.sym_mean,
+                "avg_min_n_vals": self.avg_min_n_vals,
                 "vpd_in_kpa": self.vpd_in_kpa,
                 # Last, so the driver picks above have reordered their items.
                 **{f"{k}_qc": c for k, c in self._qc_combos.items()}}
 
     def save_state(self) -> dict:
         from diive.gui.widgets.state_utils import save_controls
-        return {"target": self._target, "controls": save_controls(self._controls())}
+        controls = save_controls(self._controls())
+        controls["mode"] = mode_value(self.mode)  # the value, not the label
+        return {"target": self._target, "controls": controls}
 
     def restore_state(self, state: dict) -> None:
         from diive.gui.widgets.state_utils import restore_controls
@@ -645,6 +652,12 @@ class MdsGapFillingTab(DiiveTab):
         # Projects saved before the QC option (or naming a vanished column) -> none.
         for k, combo in self._qc_combos.items():
             set_qc_value(combo, saved.get(f"{k}_qc"))
+        # Projects saved before the mode option had a 'sym_mean' checkbox, off by
+        # default, so they were filled with the plain mean: False -> 'oneflux'.
+        mode = saved.get("mode")
+        if mode is None and saved:
+            mode = "diive" if saved.get("sym_mean") else "oneflux"
+        set_mode_value(self.mode, mode)
         tgt = state.get("target")
         if tgt in self._all_cols:
             self._set_target(tgt)
@@ -657,7 +670,7 @@ class MdsGapFillingTab(DiiveTab):
             "ta_tol": self.ta_tol.value(),
             "vpd_tol": self.vpd_tol.value(),
             "avg_min_n_vals": self.avg_min_n_vals.value(),
-            "sym_mean": self.sym_mean.isChecked(),
+            "mode": mode_value(self.mode),
             "vpd_in_kpa": self.vpd_in_kpa.isChecked(),
             # Only the QC flags that are set: unset keeps the run and script as before.
             **self._qc_names(),

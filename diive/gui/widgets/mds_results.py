@@ -166,7 +166,7 @@ class MdsResultsPanel(QScrollArea):
             ("ta_tol", f"{model.ta_tol} °C"),
             ("vpd_tol", f"{model.vpd_tol} kPa"),
             ("avg_min_n_vals", str(model.avg_min_n_vals)),
-            ("sym_mean", str(model.sym_mean)),
+            ("mode", str(model.mode)),
             ("vpd_in_kpa", str(model.vpd_in_kpa)),
             ("swin_qc", str(model.swin_qc or "(none)")),
             ("ta_qc", str(model.ta_qc or "(none)")),

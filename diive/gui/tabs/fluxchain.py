@@ -29,7 +29,7 @@ them (heavy runs on a worker thread). Script-generation is the library's
 **Level 4.1** gap-fills the per-scenario L3.3 flux: tick any of rf / xgb / mds
 (additive across methods — each replaces only its own previous result), pick
 rf/xgb predictor features and the MDS SW_IN / TA / VPD driver columns (each
-with an optional QC flag column, default none), and the
+with an optional QC flag column, default none) and mode (diive / ONEFlux), and the
 run fans out one gap-fill per USTAR scenario on the worker thread. The canvas
 then shows the method comparison (cumulative overlay or side-by-side heatmaps)
 via the library's `plot_cumulative_comparison(ax=...)` / `plot_gapfilled_heatmaps(fig=...)`,
@@ -87,6 +87,7 @@ from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.driver_qc import QC_TIP, fill_qc_combo, qc_value, set_qc_value
 from diive.gui.widgets.feature_picker import FeaturePicker
+from diive.gui.widgets.mds_mode import make_mode_combo, mode_value, set_mode_value
 from diive.gui.widgets.flux_pipeline_rail import PipelineRail
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.project_offset import (
@@ -1034,6 +1035,8 @@ class FluxChainTab(DiiveTab):
         form.addRow("TA tolerance (°C)", self.mds_ta_tol)
         self.mds_vpd_tol = self._dspin(0.5, 0.05, 10.0, 2)
         form.addRow("VPD tolerance (kPa)", self.mds_vpd_tol)
+        self.mds_mode = make_mode_combo()
+        form.addRow("Mode", self.mds_mode)
         gv.addLayout(form)
         self.mds_mark = self._info_marker()
         gv.addWidget(self.mds_mark)
@@ -1114,6 +1117,9 @@ class FluxChainTab(DiiveTab):
                 mds["ta_tol"] = self.mds_ta_tol.value()
             if abs(self.mds_vpd_tol.value() - 0.5) > 1e-9:  # run_level41_mds default
                 mds["vpd_tol"] = self.mds_vpd_tol.value()
+            # Always written: the default changed from the plain mean to 'diive',
+            # so the script states which one it used.
+            mds["mode"] = mode_value(self.mds_mode)
             for key, combo in self._mds_qc.items():  # only the flags that are set
                 col = qc_value(combo)
                 if col is not None:
@@ -1202,7 +1208,9 @@ class FluxChainTab(DiiveTab):
 
     def save_state(self) -> dict:
         from diive.gui.widgets.state_utils import save_controls
-        return {"controls": save_controls(self._fx_controls()),
+        controls = save_controls(self._fx_controls())
+        controls["mds_mode"] = mode_value(self.mds_mode)  # the value, not the label
+        return {"controls": controls,
                 "l2": {k: cb.isChecked() for k, cb in self.l2_checks.items()},
                 "l2_vm97": {k: cb.isChecked() for k, cb in self.l2_vm97_checks.items()},
                 "l2_cols": {k: [c.currentText() for c in combos]
@@ -1219,6 +1227,10 @@ class FluxChainTab(DiiveTab):
         # Projects saved before the QC option (or naming a vanished column) -> none.
         for k, combo in self._mds_qc.items():
             set_qc_value(combo, saved.get(f"mds_{k}_qc"))
+        # The chain offered no averaging choice before the mode option, so older
+        # projects were filled with the plain mean: restore them to 'oneflux'.
+        set_mode_value(self.mds_mode,
+                       saved.get("mds_mode", "oneflux" if saved else None))
         for k, val in (state.get("l2") or {}).items():
             if k in self.l2_checks:
                 self.l2_checks[k].setChecked(bool(val))
@@ -1423,7 +1435,8 @@ class FluxChainTab(DiiveTab):
                                        reduce_features=reduce, **cfg.get("xgb_kwargs", {}))
         if "mds" in methods:
             mds = cfg["mds"]
-            extra = {k: mds[k] for k in ("ta_tol", "vpd_tol", "swin_qc", "ta_qc", "vpd_qc")
+            extra = {k: mds[k] for k in ("ta_tol", "vpd_tol", "mode",
+                                         "swin_qc", "ta_qc", "vpd_qc")
                      if k in mds}
             data = run_level41_mds(data, swin=mds["swin"], ta=mds["ta"], vpd=mds["vpd"],
                                    **extra)
