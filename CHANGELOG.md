@@ -17,6 +17,10 @@ Library (also used by the notebook and the GUI):
   columns for SW_IN, TA and VPD, so NEE can be gap-filled exactly as in ONEFlux, where only
   measured driver values serve as similar samples. `dv.variables.driver_flag_columns` finds the
   matching flag columns by name.
+- **Daytime partitioning (ONEFlux), u\* scenarios:** Level 4.2 of the flux post-processing chain
+  and the new `partition_nee_daytime_oneflux_scenarios()` remove the measured NEE around a failed
+  fit from all u\* scenarios of that year, as ONEFlux does, and
+  `DaytimePartitioningOneFlux.removed_days` lists the removed days.
 - **Meteo screening, mixed time resolutions:** data with a change in time resolution, e.g. 10-min
   data followed by 1-min data, are screened correctly, and data with one resolution give the same
   resampled values as before.
