@@ -127,6 +127,8 @@ Library (also used by the notebook and the GUI):
 - Smaller fixes in `StepwiseMeteoScreeningDb`: `fields` as a single string, repeated `addflag()` and
   `finalize_outlier_detection()` calls, LOF on fewer than 200 records, and missing tags uploaded
   as the text "nan".
+- **`StepwiseMeteoScreeningDb.flag_outliers_hampel_test`:** the default window is now 13 days
+  (`'13D'`) instead of 13 records, which were only about two hours of 10-minute data.
 
 GUI only:
 
@@ -135,6 +137,8 @@ GUI only:
 - **Screening tabs:** corrections saved in a GUI project were lost when it was opened again.
 - **Stepwise screening:** Local SD with separate daytime and nighttime failed with a
   `TypeError`.
+- **Plot tabs with several panels:** *Update plot* became active again right after a render
+  or a switch between panels, although no setting had changed.
 
 ## v0.91.2 | 24 September 2026
 
