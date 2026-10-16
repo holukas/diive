@@ -638,6 +638,86 @@ class TestRerunCascade(unittest.TestCase):
         self.assertEqual(recorded['L2'], list(self.d31.added_columns['L2']))
 
 
+class TestLevel42DaytimeOneFluxSharedRanges(unittest.TestCase):
+    """L4.2 daytime ONEFlux shares the days removed after a failed fit between
+    USTAR scenarios, as ONEFlux shares its error file between u* percentiles."""
+
+    @classmethod
+    def setUpClass(cls):
+        import matplotlib
+        matplotlib.use('Agg')
+        from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+        from diive.flux.postprocessingchain import (
+            init_flux_data, run_level2, run_level31, make_level32_detector,
+            run_level32, run_level33_constant_ustar)
+
+        df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
+                              if c in df.columns])
+        df['TA_F'] = df['TA_1_1_1'].bfill()
+        df['SW_IN_F'] = df['SW_IN_1_1_1'].bfill()
+        df['VPD_F'] = df['VPD_EP'].bfill().multiply(0.1)  # hPa -> kPa
+        data = init_flux_data(
+            df=df, fluxcol='FC', site_lat=46.583056, site_lon=9.790639,
+            utc_offset=1, nighttime_threshold=20,
+            daytime_accept_qcf_below=2, nighttime_accept_qcf_below=2)
+        data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None})
+        data = run_level31(data, gapfill_storage_term=True)
+        data, sod = make_level32_detector(data)
+        sod.flag_outliers_abslim_test(minval=-50, maxval=50, showplot=False,
+                                      verbose=False)
+        sod.addflag()
+        data = run_level32(data, outlier_detector=sod)
+        cls.d33 = run_level33_constant_ustar(
+            data, thresholds=[0.1, 0.3], threshold_labels=['CUT_16', 'CUT_84'],
+            showplot=False, verbose=False)
+
+    def test_broken_fit_in_one_scenario_removes_the_range_in_all(self):
+        # The fit breaks only in the second scenario. The first one must be
+        # partitioned again with that range removed, and both must report it.
+        from unittest import mock
+        import numpy as np
+        from diive.flux.partitioning import daytime_oneflux as mod
+        from diive.flux.postprocessingchain import run_level42_daytime_oneflux
+
+        nee = self.d33.levels.filteredseries_level33_qcf
+        n_measured = {s: int(nee[s].notna().sum()) for s in ('CUT_16', 'CUT_84')}
+        self.assertNotEqual(n_measured['CUT_16'], n_measured['CUT_84'])
+        rng = (190, 202)
+        cols = ['RECO_DT_OF', 'GPP_DT_OF', 'SE_GPP_DT_OF', 'ALPHA_DT_OF',
+                'BETA_DT_OF', 'K_DT_OF', 'RREF_DT_OF', 'E0_DT_OF']
+        calls = []
+
+        def fake(**kw):
+            calls.append((kw['nee'], kw['julday']))
+            if len(calls) > 10:  # a range that removes nothing would loop forever
+                raise AssertionError("partitioning did not settle")
+            if int((kw['nee'] > mod.NAN_TEST).sum()) == n_measured['CUT_84']:
+                e = mod._BrokenWindow('HLRC_LloydVPD')
+                e.day_range = rng
+                raise e
+            return {c: np.full(kw['nee'].size, np.nan) for c in cols}
+
+        with mock.patch.object(mod, '_partition_one_year', side_effect=fake):
+            out = run_level42_daytime_oneflux(
+                self.d33, ta='TA_1_1_1', sw_in='SW_IN_1_1_1', ta_f='TA_F',
+                sw_in_f='SW_IN_F', vpd_f='VPD_F', verbose=0)
+
+        parts = out.levels.level42_dt_of
+        self.assertEqual(set(parts), {'CUT_16', 'CUT_84'})
+        for scen in parts:
+            self.assertEqual(parts[scen].removed_days, {2021: [rng]})
+        # CUT_16, CUT_84 (breaks), CUT_84 again with the range removed, then
+        # CUT_16 again in the final sweep.
+        self.assertEqual(len(calls), 4)
+        first, julday = calls[0]
+        rerun = calls[3][0]
+        self.assertFalse(np.array_equal(first, rerun))
+        np.testing.assert_array_equal(rerun, mod._remove_days(first, julday, [rng]))
+        for scen in parts:
+            self.assertIn(f'GPP_DT_OF_{scen}', out.fpc_df.columns)
+
+
 class TestChainReports(unittest.TestCase):
     """Reporting over a finished chain (diive/flux/postprocessingchain/reports.py)."""
 

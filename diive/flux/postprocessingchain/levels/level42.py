@@ -7,6 +7,8 @@ ONEFlux / nighttime REddyProc (Reichstein et al. 2005) and daytime REddyProc /
 daytime ONEFlux (Lasslop et al. 2010). Each runs one partitioning instance per
 USTAR scenario produced at Level-3.3 and merges its result columns into
 ``fpc_df`` with the scenario label appended (so all scenarios coexist).
+Daytime ONEFlux runs its scenarios together, because they share the days
+removed after a failed fit, as in ONEFlux.
 
 Mirrors Level-4.1 gap-filling structurally — same per-scenario loop, same
 additive-across-variants semantics, same re-run cleanup and scenario-overwrite
@@ -112,7 +114,8 @@ def _run_level42(
         results_attr: str,
         tracking_key: str,
         fn_label: str,
-        make_instance: Callable[[str, pd.Series, pd.Series | None], object],
+        make_instance: Callable[[str, pd.Series, pd.Series | None], object] | None = None,
+        run_instances: Callable[[dict[str, pd.Series]], dict[str, object]] | None = None,
         needs_nee_f: bool,
         gapfill_method: str | None,
 ) -> FluxLevelData:
@@ -120,7 +123,12 @@ def _run_level42(
 
     ``make_instance(scen, nee_meas, nee_f)`` builds the partitioning instance
     for one USTAR scenario; ``nee_f`` is the gap-filled NEE for the nighttime
-    variants and ``None`` for the daytime ones.
+    variants and ``None`` for the daytime ones. Each instance is run on its own.
+
+    ``run_instances(nee_by_scen)`` replaces that for a variant whose scenarios
+    depend on each other (daytime ONEFlux shares removed days): it gets the
+    measured NEE of all scenarios and returns ``{scen: instance}``, already
+    run. Pass exactly one of the two.
     """
     # Require L3.3 *before* mutating state — same ordering guard as L4.1: if we
     # dropped columns first and then raised, a caller recovering from the
@@ -142,9 +150,16 @@ def _run_level42(
     fpc_df = data.fpc_df.copy()
     results: dict = {}
 
-    for scen, nee_meas in filteredseries_l33.items():
-        instance = make_instance(scen, nee_meas, nee_f_by_scen.get(scen))
-        instance.run()
+    if run_instances is not None:
+        instances = run_instances(dict(filteredseries_l33))
+    else:
+        instances = {}
+        for scen, nee_meas in filteredseries_l33.items():
+            instance = make_instance(scen, nee_meas, nee_f_by_scen.get(scen))
+            instance.run()
+            instances[scen] = instance
+
+    for scen, instance in instances.items():
         res = instance.results
         assert_aligned_index(fpc_df, res,
                              context=f"{fn_label}[{scen!r}] merge into fpc_df")
@@ -375,6 +390,15 @@ def run_level42_daytime_oneflux(
     (no latitude). Runs one partitioning per USTAR scenario. Uses **measured
     NEE only** (no L4.1 gap-filled NEE required).
 
+    The scenarios are partitioned together with
+    :func:`~diive.flux.partitioning.partition_nee_daytime_oneflux_scenarios`:
+    when a fit fails, the measured NEE in that window's night range is removed
+    from every scenario of that year, and the scenarios are partitioned again
+    until no fit fails, as ONEFlux shares its error file between u*
+    percentiles. The removed ranges are in ``removed_days`` of each instance.
+    This equals ONEFlux only when the scenarios are ONEFlux's percentiles in
+    its order.
+
     Args:
         data: FluxLevelData after ``run_level33_*``.
         ta: Measured air temperature column (**deg C**) in ``data.full_df``.
@@ -392,16 +416,20 @@ def run_level42_daytime_oneflux(
         ``data.levels.level42_dt_of[ustar_scenario]``, columns via
         ``data.partitioned_cols()['dt_of']``.
     """
-    from diive.flux.partitioning import DaytimePartitioningOneFlux
+    from diive.flux.partitioning import partition_nee_daytime_oneflux_scenarios
 
     rule("Level 4.2: NEE Partitioning (Daytime ONEFlux, Lasslop 2010)")
     _require_full_df_cols(data, {'ta': ta, 'sw_in': sw_in, 'ta_f': ta_f,
                                  'sw_in_f': sw_in_f, 'vpd_f': vpd_f})
     full_df = data.full_df
 
-    def make_instance(scen, nee_meas, nee_f):
-        return DaytimePartitioningOneFlux(
-            nee=nee_meas, ta=full_df[ta], sw_in=full_df[sw_in],
+    def run_instances(nee_by_scen):
+        # ONEFlux shares removed days only within one product (CUT or VUT).
+        # All scenarios here come from one L3.3 run, which applies either
+        # constant or variable thresholds and replaces any earlier scenarios,
+        # so they form one product and share every range.
+        return partition_nee_daytime_oneflux_scenarios(
+            nee=nee_by_scen, ta=full_df[ta], sw_in=full_df[sw_in],
             ta_f=full_df[ta_f], sw_in_f=full_df[sw_in_f], vpd=full_df[vpd_f],
             vpd_in_kpa=vpd_in_kpa, verbose=verbose,
         )
@@ -411,7 +439,7 @@ def run_level42_daytime_oneflux(
         results_attr='level42_dt_of',
         tracking_key='L4.2_dt_of',
         fn_label='run_level42_daytime_oneflux',
-        make_instance=make_instance,
+        run_instances=run_instances,
         needs_nee_f=False,
         gapfill_method=None,
     )
