@@ -3787,6 +3787,28 @@ def test_icon_glyphs_are_identical_at_every_device_pixel_ratio(app, monkeypatch)
         assert right <= 0.98 and bottom <= 0.98
 
 
+def test_multi_panel_render_leaves_update_disabled(window):
+    # L152: re-applying each panel's own settings during a render, or switching
+    # the panel pills, fired settings.changed and re-enabled Update plot.
+    window._open_menu_tab("Diel cycle")
+    tab = window._menu_tab_list[-1]
+    tab._on_selected("Tair_f", True)
+    QApplication.processEvents()
+    assert tab._panels == ["NEE_CUT_REF_f", "Tair_f"]
+    tab.panel_pills.changed.emit(1)
+    tab.settings.dc_agg.setCurrentText("Median")  # panels now differ
+    assert tab.update_btn.isEnabled() is True
+    tab.update_btn.click()
+    QApplication.processEvents()
+    assert tab.update_btn.isEnabled() is False
+    assert tab.settings.dc_agg.currentText() == "Median"  # active panel's controls back
+    tab.panel_pills.changed.emit(0)
+    assert tab.settings.dc_agg.currentText() == "Mean"
+    assert tab.update_btn.isEnabled() is False
+    tab.settings.dc_agg.setCurrentText("Max")  # a real edit still marks it dirty
+    assert tab.update_btn.isEnabled() is True
+
+
 def test_diel_cycle_tab(window):
     from diive.gui.icons import menu_icon
     assert not menu_icon("Diel cycle").isNull()

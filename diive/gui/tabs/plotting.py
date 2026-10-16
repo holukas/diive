@@ -382,7 +382,20 @@ class PlottingTab(DiiveTab):
             return
         self._capture_active()
         self._active_panel = self._panels[idx]
-        self.settings.apply_state(self._panel_settings.get(self._active_panel))
+        self._load_panel_state(self._panel_settings.get(self._active_panel))
+
+    def _load_panel_state(self, snapshot) -> None:
+        """Load a saved panel snapshot into the controls without marking the plot dirty.
+
+        ``apply_state`` sets the controls with their signals live, so a snapshot
+        that differs from what they showed fires ``settings.changed`` and
+        ``_mark_dirty`` would enable Update plot although nothing is pending (L152).
+        """
+        blocked = self.settings.blockSignals(True)
+        try:
+            self.settings.apply_state(snapshot)
+        finally:
+            self.settings.blockSignals(blocked)
 
     def on_data_loaded(self, df, created: set | None = None) -> None:
         """Populate the variable list from the dataset and render.
@@ -682,7 +695,7 @@ class PlottingTab(DiiveTab):
         explicit: list[tuple[bool, bool]] = []
         for i, (ax, name) in enumerate(zip(axes, self._panels, strict=False)):
             if self._panel_settings.get(name) is not None:
-                self.settings.apply_state(self._panel_settings[name])
+                self._load_panel_state(self._panel_settings[name])
             self._draw_one(ax, name, i)
             self._apply_axes([ax])
             axo = self.settings.values().get("_axes") or {}
@@ -690,7 +703,7 @@ class PlottingTab(DiiveTab):
                 axo.get("xmin") is not None or axo.get("xmax") is not None,
                 axo.get("ymin") is not None or axo.get("ymax") is not None))
         if self._active_panel is not None and self._panel_settings.get(self._active_panel):
-            self.settings.apply_state(self._panel_settings[self._active_panel])
+            self._load_panel_state(self._panel_settings[self._active_panel])
 
         if self._plot_type in _HEATMAP_TYPES:
             # y axis only on the leftmost panel.
