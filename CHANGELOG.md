@@ -13,6 +13,18 @@ Library (also used by the notebook and the GUI):
   `diive.flux.fluxprocessingchain` still works but gives a `FutureWarning` and will be removed in
   a future release. The examples and the notebook (now `FluxPostProcessingChain.ipynb`) are
   renamed to match.
+- **MDS gap-filling, new default mode (changes results):** `FluxMDS`, `run_level41_mds` and
+  `FluxConfig` take `mode='diive'` (new default) or `mode='oneflux'`.
+  - `'diive'` fills daytime gaps with the symmetric mean of Vekuri et al. (2023), which removes a
+    bias in the filled fluxes and the carbon balance. On CH-DAV 2020 the daytime bias dropped from
+    +0.041 to +0.004 µmol m⁻² s⁻¹, and the RMSE barely changed.
+  - `'oneflux'` reproduces ONEFlux bit for bit, as the default did until now. Use it to compare
+    with FLUXNET or ICOS data.
+  - `'reddyproc'` fills gaps as REddyProc does, with REddyProc's windows, and leaves gaps longer
+    than 60 days unfilled.
+  - The scores of `'diive'` leave each measured record out of its own prediction, so they are
+    lower than the in-sample scores of `'oneflux'`.
+  - `sym_mean` is replaced by `mode` and now raises an error.
 - **MDS gap-filling, driver QC:** `FluxMDS`, `run_level41_mds` and `FluxConfig` take optional QC
   columns for SW_IN, TA and VPD, so NEE can be gap-filled exactly as in ONEFlux, where only
   measured driver values serve as similar samples. `dv.variables.driver_flag_columns` finds the
@@ -58,6 +70,10 @@ GUI only:
   library, follows changes to the site coordinates and shows loading errors in the status line.
 - **Meteo screening (database), Copy Python:** writes a `StepwiseMeteoScreeningDb` script.
 - **Screening tabs:** absolute limits can be added as a step.
+- **MDS gap-filling, mode:** the MDS tab and Level 4.1 of the flux post-processing chain have a
+  Mode choice ("diive" by default, "ONEFlux" or "REddyProc"), which replaces the symmetric-mean
+  checkbox.
+  Projects saved before keep their plain mean ("ONEFlux").
 - **MDS gap-filling, driver QC:** the MDS tab and Level 4.1 of the flux post-processing chain
   take an optional QC flag column for SW_IN, TA and VPD, and Copy Python includes it.
 
