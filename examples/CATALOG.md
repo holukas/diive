@@ -222,7 +222,7 @@ See: [flux/README.rst](flux/README.rst)
 | [**gapfill_optimize_randomforest.py**](gapfilling/gapfill_optimize_randomforest.py) | Random Forest with hyperparameter tuning | Yes |
 | [**gapfill_xgboost.py**](gapfilling/gapfill_xgboost.py) | XGBoost | Yes |
 | [**gapfill_optimize_xgboost.py**](gapfilling/gapfill_optimize_xgboost.py) | XGBoost with hyperparameter tuning | Yes |
-| [**gapfill_mds.py**](gapfilling/gapfill_mds.py) | Marginal Distribution Sampling | No |
+| [**gapfill_mds.py**](gapfilling/gapfill_mds.py) | Marginal Distribution Sampling; compares the default `mode='diive'` (Vekuri et al. 2023 symmetric mean) with `mode='oneflux'` (bit for bit as ONEFlux `gf_mds`) | No |
 | [**gapfill_mds_comparison.py**](gapfilling/gapfill_mds_comparison.py) | MDS reproducibility / determinism check | No |
 | [**gapfill_comparison.py**](gapfilling/gapfill_comparison.py) | Compare all methods side-by-side | Mixed |
 | [**gapfill_swin.py**](gapfilling/gapfill_swin.py) | SW_IN physics + XGBoost (nighttime zero, daytime ML) | Yes |

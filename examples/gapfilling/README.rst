@@ -65,8 +65,11 @@ MDS (Marginal Distribution Sampling)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 No training. Fills gaps by finding similar conditions elsewhere in your data.
+``FluxMDS`` has two modes: ``mode='diive'`` (default) uses the symmetric mean of
+Vekuri et al. (2023) in the radiation-matching methods, ``mode='oneflux'``
+reproduces ONEFlux's ``gf_mds`` bit for bit.
 
-- **gapfill_mds.py** — MDS gap-filling of one month of NEE, with the report, flags and plots
+- **gapfill_mds.py** — MDS gap-filling of one month of NEE, with the report, flags and plots, then both modes on one year
 - **gapfill_mds_comparison.py** — MDS reproducibility / determinism check (two runs are bit-identical)
 
 SW_IN Physics + XGBoost

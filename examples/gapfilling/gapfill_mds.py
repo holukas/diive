@@ -45,6 +45,19 @@ References:
 #    diurnal cycle in ever wider windows
 # 4. Fill gap with mean flux from similar periods
 #
+# Two modes:
+#
+# - ``mode='diive'`` (default): ONEFlux's windows, tolerances and order of
+#   methods, but methods 1 and 2 (the ones that match on Rg) fill with the
+#   symmetric mean of Vekuri et al. (2023). The similar records are split into
+#   those with less and those with more Rg than the gap record, and the fill is
+#   the mean of the two group means. This removes a bias that appears when Rg
+#   is spread unevenly inside the tolerance. It applies to daytime records only
+#   (Rg >= 20 W m-2), as in the paper.
+# - ``mode='oneflux'``: the plain mean of the similar records. This reproduces
+#   ONEFlux's ``gf_mds`` bit for bit. Use it when results must match ONEFlux,
+#   for example in a comparison with FLUXNET or ICOS data products.
+#
 # Flag and quality:
 # - The gap-fill flag is method * 1000 + window in days (0 = measured), with
 #   method 1 = Rg+Ta+VPD, 2 = Rg only, 3 = diurnal cycle. For example, 1014
@@ -137,6 +150,7 @@ mds = dv.gapfilling.FluxMDS(
     ta_tol=ta_tol,
     vpd_tol=vpd_tol,
     avg_min_n_vals=avg_min_n_vals,
+    mode='diive',  # the default, written out here
     verbose=1
 )
 
@@ -246,5 +260,38 @@ hm_gapfilled.plot(
 
 plt.tight_layout()
 fig.show()
+
+# %%
+# Compare the two modes on one year
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Fill the full year 2022 once with each mode, with ONEFlux's default
+# tolerances. Only gaps filled by method 1 or 2 during daytime can differ.
+# VPD is still in hPa in ``df_full_year``, so ``vpd_in_kpa=False`` tells
+# FluxMDS to scale its tolerance instead of the data.
+
+filled = {}
+for mode in ['diive', 'oneflux']:
+    m = dv.gapfilling.FluxMDS(df=df_full_year, flux=flux_col, ta=ta_col, swin=swin_col,
+                              vpd=vpd_col, vpd_in_kpa=False, mode=mode, verbose=0)
+    m.run()
+    filled[mode] = m.gapfilling_df_[m.target_gapfilled]
+
+isgap = df_full_year[flux_col].isna()
+diff = (filled['diive'] - filled['oneflux'])[isgap]
+differs = diff.abs() > 0
+
+# umol CO2 m-2 s-1 per half-hour -> g C m-2: 1800 s * 12.011 g C mol-1 * 1e-6
+to_gc = 1800 * 12.011e-6
+sum_diive = filled['diive'].sum() * to_gc
+sum_oneflux = filled['oneflux'].sum() * to_gc
+
+print("\nMDS mode 'diive' vs 'oneflux' (2022):")
+print(f"  Gap records: {isgap.sum()}")
+print(f"  Filled values that differ: {differs.sum()} ({100 * differs.sum() / isgap.sum():.1f}% of gaps)")
+print(f"  Mean difference where they differ: {diff[differs].mean():.3f} umol m-2 s-1")
+print(f"  Largest absolute difference: {diff.abs().max():.3f} umol m-2 s-1")
+print(f"  Annual NEE, mode='diive':   {sum_diive:.1f} g C m-2")
+print(f"  Annual NEE, mode='oneflux': {sum_oneflux:.1f} g C m-2")
+print(f"  Difference (diive - oneflux): {sum_diive - sum_oneflux:.1f} g C m-2")
 
 print("\n[OK] MDS gap-filling demonstration complete")
