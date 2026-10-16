@@ -719,7 +719,7 @@ class TestMeteoScreeningCodegen(CodegenTestCase):
     ``tests/test_meteoscreening.py``."""
 
     _STEPS = [{"method": "flag_outliers_hampel_test",
-               "kwargs": {"window_length": 13, "n_sigma": 4.0, "separate_day_night": False}},
+               "kwargs": {"window_length": "13D", "n_sigma": 4.0, "separate_day_night": False}},
               {"method": "flag_missingvals_test", "kwargs": {}},
               {"method": "flag_outliers_zscore_test", "kwargs": {"thres_zscore": 3},
                "enabled": False}]
