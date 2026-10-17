@@ -121,15 +121,21 @@ class LocalSD(FlagBase):
                 median/SD calculation, as a record count or as a time span such
                 as ``'7D'``. A time span is converted to records at the series'
                 frequency (``'1D'`` is 48 records of 30-min data, 144 of 10-min
-                data) and must be a whole multiple of it. With
-                `separate_day_night`, used for both periods unless overridden;
-                the window then counts records of that period only, so ``'7D'``
-                (1008 records of 10-min data) covers more than seven calendar
-                days of daytime or nighttime data. If None, defaults to 5% of
-                the series length. Defaults to None.
+                data) and must be a whole multiple of it. The time span is
+                converted on the full series, but the window then rolls over
+                the records present only: missing records (gaps, and outliers
+                removed by earlier iterations) do not count, so the window
+                stretches across them. With `separate_day_night`, `winsize` is
+                used for both periods unless overridden, and the window counts
+                records of that period only. ``'7D'`` (1008 records of 10-min
+                data) then covers about 14 calendar days if day and night are
+                equally long, and in winter about 16-20 days of daytime and
+                10-13 days of nighttime data at mid latitudes. If None,
+                defaults to 5% of the series length. Defaults to None.
             winsize_daytime, winsize_nighttime (int or str, optional): Override
                 `winsize` for daytime or nighttime records, converted like
-                `winsize`. None uses `winsize`.
+                `winsize` (record count of the full series, rolled over the
+                records of that period). None uses `winsize`.
             constant_sd (bool, optional): If True, uses the standard deviation
                 of the *entire* series. If False (default), uses a *rolling*
                 standard deviation based on `winsize`. Defaults to False.

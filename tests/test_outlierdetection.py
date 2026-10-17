@@ -240,18 +240,20 @@ class TestOutlierDetection(unittest.TestCase):
         baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
         self.assertEqual(baddata_stats.loc['max']['s_noise'], 420.37816376334473)
         self.assertEqual(baddata_stats.loc['min']['s_noise'], -38.04507418841196)
-        self.assertEqual(baddata_stats.loc['count']['flag'], 227)
+        # L226: records removed by an earlier iteration end a run, so repeat=True
+        # no longer takes the good records two steps from a spike pair.
+        self.assertEqual(baddata_stats.loc['count']['flag'], 223)
         self.assertEqual(baddata_stats.loc['min']['flag'], 2)
         self.assertEqual(baddata_stats.loc['max']['flag'], 2)
-        self.assertEqual(baddata_stats.loc['count']['s_noise'], 227)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 223)
 
         # Checks on good data
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
-        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 53.93064794948049)
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 51.98160999845608)
         self.assertEqual(gooddata_stats.loc['min']['s_noise'], -24.68608044400628)
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
-        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1261)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1265)
 
     def test_hampel_filter_basic(self):
         df = ed.load_exampledata_parquet()

@@ -50,6 +50,16 @@ class Hampel(FlagBase):
 
     Optional double-differencing (Papale et al. 2006) removes trends before detection.
 
+    With double-differencing the filter finds single spikes and pairs of
+    adjacent spikes, also at the series ends and next to gaps. A large spike
+    usually costs its two neighbours too, because their double differences
+    contain the spike. With ``repeat=True`` a block of three or four
+    bad values is also removed. In a block of five or more only the outer bad
+    values and their good neighbours are removed, because the inner values are
+    consistent with each other. Runs of several bad values (logger glitch,
+    stuck sensor) belong to absolute limits or manual removal. A level shift
+    costs at most the two records at the step.
+
     Example:
         Daytime and nighttime are separate by default and need the site location.
         ``window_length`` is a record count (48 * 7 is one week of 30-minute data)
@@ -118,6 +128,12 @@ class Hampel(FlagBase):
                 sampling rate** typical of eddy-covariance data — matching the
                 Papale et al. 2006 spike-detection window. For other sampling
                 rates pass ``'13D'`` or scale the count (e.g. ``24 * 13`` for hourly).
+                The window rolls over the records present, so missing records
+                (gaps, and outliers removed by earlier iterations) do not count
+                and the window stretches across them: with 20 % of the records
+                missing, ``'13D'`` covers about 16 calendar days. Daytime and
+                nighttime records share the window, only the threshold differs
+                per period.
             n_sigma (float): The number of standard deviations for the threshold.
                 Default is 5.5. Used for:
                 * **Global mode (separate_day_night=False):** Applied to all records.
@@ -174,11 +190,10 @@ class Hampel(FlagBase):
         # rather than silent.
         self._n_degenerate_scale = 0
 
-        # Runs of records without a gap in the INPUT data; differences never reach
-        # from one run into another. Computed once, from the original series, so
-        # that it stays fixed across iterations: a value removed by an earlier
-        # iteration must not end a run, or a cluster of spikes would shelter
-        # itself after the first pass.
+        # Runs of records without a gap in the INPUT data. A gap in the input is
+        # never bridged. The differences themselves use the runs of the current
+        # series (see _double_differences), so a record removed by an earlier
+        # iteration also ends a run.
         self._segment = self._input_segments(self.series)
 
         # Detect daytime and nighttime
@@ -270,21 +285,31 @@ class Hampel(FlagBase):
         return pd.Series(np.cumsum(far_before | empty_before), index=index)
 
     def _double_differences(self, s: Series) -> tuple[Series, Series, Series]:
-        """Second differences of *s* that stay inside each input run.
+        """Second differences of *s* that stay inside each gap-free run.
 
-        Inside a run: ``d = 2 x_t - x_{t-1} - x_{t+1}``, the Papale et al. (2006)
-        double difference. A record at the start or end of its run has a
-        neighbour on one side only and is tested against the linear
+        A run ends at a gap in the input and at a record removed by an earlier
+        iteration. Inside a run: ``d = 2 x_t - x_{t-1} - x_{t+1}``, the Papale
+        et al. (2006) double difference. A record at the start or end of its run
+        has a neighbour on one side only and is tested against the linear
         extrapolation from the next two records, ``d = x_t - 2 x_{t+1} + x_{t+2}``
         (or mirrored), which has the same noise and also cancels a trend.
         Without that test a spike at a run edge was never judged, and with
         ``repeat=True`` each iteration removed the next record paired with it,
-        until the run was gone. Records in runs of fewer than three are NaN.
+        until the run was gone.
+
+        Removed records end runs because differencing across them assumes equal
+        spacing. On a diurnal ramp or across a level shift that mismatch looks
+        like a spike, so each iteration removed the next record and
+        ``repeat=True`` ate into good data (L226). The price: in a block of five
+        or more bad values the inner records are consistent with each other and
+        stay. A run of one or two records between two such holes is compared
+        with the line across the holes (see below). Other records in runs of
+        fewer than three are NaN.
 
         Returns ``d`` plus, for mapping the detection band to data units, the
         value ``x_t`` is compared with and the factor on ``x_t`` in ``d``.
         """
-        seg = self._segment.reindex(s.index)
+        seg = self._input_segments(self.filteredseries).reindex(s.index)
         same = {k: (seg.shift(k) == seg) for k in (1, 2, -1, -2)}
         p1, p2, n1, n2 = s.shift(1), s.shift(2), s.shift(-1), s.shift(-2)
         central = same[1] & same[-1]
@@ -292,6 +317,29 @@ class Hampel(FlagBase):
         backward = ~central & ~forward & same[2]
         reference = ((p1 + n1) / 2).where(central, (2 * n1 - n2).where(forward, (2 * p1 - p2).where(backward)))
         factor = pd.Series(np.where(central, 2.0, 1.0), index=s.index)
+
+        # One or two records left between two holes made by earlier iterations
+        # form a run too short to test inside itself. They are compared with the
+        # straight line between the nearest kept records on either side, so a
+        # block of three or four bad values is still removed completely. Gaps in
+        # the input are never bridged. The factor gives this test the noise of
+        # the central difference. Longer runs are not bridged: across wide holes
+        # the line misses the curvature of a diurnal cycle.
+        segv = seg.to_numpy()
+        n = len(segv)
+        first = np.searchsorted(segv, segv, side='left')
+        last = np.searchsorted(segv, segv, side='right') - 1
+        left, right = first - 1, last + 1
+        island = (last - first < 2) & (left >= 0) & (right < n)
+        if island.any():
+            left, right = np.clip(left, 0, n - 1), np.clip(right, 0, n - 1)
+            inseg = self._segment.reindex(s.index).to_numpy()
+            island &= (inseg[left] == inseg) & (inseg[right] == inseg)
+            pos = self.series.index.get_indexer(s.index)
+            w = (pos - pos[left]) / (pos[right] - pos[left])
+            x = s.to_numpy(dtype=float)
+            reference = reference.mask(island, (1 - w) * x[left] + w * x[right])
+            factor = factor.mask(island, np.sqrt(6 / (1 + (1 - w) ** 2 + w ** 2)))
         return factor * (s - reference), reference, factor
 
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
@@ -303,7 +351,7 @@ class Hampel(FlagBase):
         # 2. Transform data
         if self.use_differencing:
             # Missing records were dropped above, so consecutive entries can be hours
-            # or days apart; the differences stay inside each input run.
+            # or days apart. The differences stay inside each gap-free run.
             s_to_test, reference, factor = self._double_differences(s)
         else:
             s_to_test = s

@@ -299,6 +299,10 @@ class zScoreRolling(FlagBase):
                 records at the series' frequency (``'1D'`` is 48 records of
                 30-min data, 144 of 10-min data) and must be a whole multiple
                 of it. The window must be at least 3 records either way.
+                The window rolls over the records present, so missing records
+                (gaps, and outliers removed by earlier iterations) do not count
+                and the window stretches across them: with 20 % of the records
+                missing, ``'7D'`` covers about 9 calendar days.
                 If None, defaults to len(series) / 20 (5% of data).
             showplot: If True, display results plot.
             plottitle: Optional title string for the plot.

@@ -67,9 +67,9 @@ class TestGapSpanningDifferences(unittest.TestCase):
         return s
 
     def test_clustered_spikes_are_still_all_removed(self):
-        """Iterating must keep working: the gap mask comes from the INPUT data, so
-        a value removed in an earlier iteration must not make its neighbours
-        untestable - otherwise a cluster of spikes shelters itself after pass one."""
+        """A cluster of three spikes must not shelter itself. A value removed in
+        an earlier iteration ends a run (L226), so the clustered spikes must all
+        go in the first pass or as a short run between the holes."""
         rng = np.random.default_rng(11)
         idx = pd.date_range('2020-05-01', periods=3000, freq='1min', name='TIMESTAMP_MIDDLE')
         s = pd.Series(20 + rng.normal(0, 0.05, len(idx)), index=idx, name='SWC')
