@@ -47,6 +47,22 @@ _PARTITION_REQUIRED: dict[str, tuple[str, ...]] = {
                                   'partition_sw_in_f', 'partition_vpd_f'),
 }
 
+def _partition_flags(config: FluxConfig) -> list[str]:
+    """The partition_* flags in effect: those set on ``config`` plus the one
+    ``partition_method`` / ``partition_mode`` select, in the canonical order."""
+    flags = {flag for flag in _PARTITION_REQUIRED if getattr(config, flag)}
+    if config.partition_method is not None:
+        from diive.flux.partitioning.nee import PARTITION_METHODS, PARTITION_MODES
+        if config.partition_method not in PARTITION_METHODS:
+            raise ValueError(f"partition_method must be one of {PARTITION_METHODS} "
+                             f"or None, got {config.partition_method!r}.")
+        if config.partition_mode not in PARTITION_MODES:
+            raise ValueError(f"partition_mode must be one of {PARTITION_MODES}, "
+                             f"got {config.partition_mode!r}.")
+        # The flags are named partition_<method>_<mode>.
+        flags.add(f"partition_{config.partition_method}_{config.partition_mode}")
+    return [flag for flag in _PARTITION_REQUIRED if flag in flags]
+
 
 def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     """Drive the full post-processing chain (L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1).
@@ -119,6 +135,11 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     run with the raw engineered feature set. Model hyperparameters
     (``n_estimators``, ``max_depth``, ...) and custom ``FeatureEngineer``
     configurations remain reachable only via the composable API.
+
+    *Level-4.2 (NEE partitioning)* — off by default. Runs each variant with
+    its ``config.partition_*`` flag set to ``True``, plus the one selected by
+    ``config.partition_method`` / ``config.partition_mode`` (ONEFlux by
+    default). A variant selected both ways runs once.
 
     What ``run_chain`` does *not* expose
     ------------------------------------
@@ -243,13 +264,16 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     # Each enabled variant requires its driver-column fields. The nighttime
     # variants additionally need the chosen L4.1 gap-filling method to be on
     # (they consume its gap-filled NEE for the GPP residual).
-    partition_enabled = [flag for flag in _PARTITION_REQUIRED
-                         if getattr(config, flag)]
+    partition_enabled = _partition_flags(config)
     for flag in partition_enabled:
+        reason = (f"{flag}=True" if getattr(config, flag) else
+                  f"partition_method={config.partition_method!r}, "
+                  f"partition_mode={config.partition_mode!r}")
         for fld in _PARTITION_REQUIRED[flag]:
             if not getattr(config, fld):
-                _missing.append(f"{fld} ({flag}=True)")
-    if config.partition_nighttime_oneflux or config.partition_nighttime_reddyproc:
+                _missing.append(f"{fld} ({reason})")
+    if ('partition_nighttime_oneflux' in partition_enabled
+            or 'partition_nighttime_reddyproc' in partition_enabled):
         _gf_on = {'mds': config.gapfill_mds, 'rf': config.gapfill_rf,
                   'xgb': config.gapfill_xgb}
         if config.partition_gapfill_method not in _gf_on:
@@ -306,7 +330,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             val = getattr(config, fld)
             if val and val not in data.full_df.columns:
                 _part_misses[f"{fld}={val!r}"] = None
-    if config.partition_daytime_reddyproc and config.partition_nee_sd:
+    if 'partition_daytime_reddyproc' in partition_enabled and config.partition_nee_sd:
         if config.partition_nee_sd not in data.full_df.columns:
             _part_misses[f"partition_nee_sd={config.partition_nee_sd!r}"] = None
     _column_misses.extend(_part_misses)
@@ -489,8 +513,9 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     # -------------------------------------------------------------- Level-4.2
     # NEE partitioning. Each enabled variant runs once per USTAR scenario. The
     # nighttime variants read their gap-filled NEE from the L4.1 method named by
-    # config.partition_gapfill_method (validated above to be enabled).
-    if config.partition_nighttime_oneflux:
+    # config.partition_gapfill_method (validated above to be enabled). Daytime
+    # ONEFlux uses it too when that method ran, and works without it.
+    if 'partition_nighttime_oneflux' in partition_enabled:
         data = run_level42_nighttime_oneflux(
             data,
             ta=config.partition_ta,
@@ -498,7 +523,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             ta_f=config.partition_ta_f,
             gapfill_method=config.partition_gapfill_method,
         )
-    if config.partition_nighttime_reddyproc:
+    if 'partition_nighttime_reddyproc' in partition_enabled:
         data = run_level42_nighttime_reddyproc(
             data,
             ta=config.partition_ta,
@@ -506,7 +531,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             ta_f=config.partition_ta_f,
             gapfill_method=config.partition_gapfill_method,
         )
-    if config.partition_daytime_reddyproc:
+    if 'partition_daytime_reddyproc' in partition_enabled:
         data = run_level42_daytime_reddyproc(
             data,
             ta_f=config.partition_ta_f,
@@ -515,7 +540,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             nee_sd=config.partition_nee_sd,
             vpd_in_kpa=config.partition_vpd_in_kpa,
         )
-    if config.partition_daytime_oneflux:
+    if 'partition_daytime_oneflux' in partition_enabled:
         data = run_level42_daytime_oneflux(
             data,
             ta=config.partition_ta,
@@ -524,6 +549,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             sw_in_f=config.partition_sw_in_f,
             vpd_f=config.partition_vpd_f,
             vpd_in_kpa=config.partition_vpd_in_kpa,
+            gapfill_method=config.partition_gapfill_method,
         )
 
     return data

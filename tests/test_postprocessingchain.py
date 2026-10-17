@@ -718,6 +718,198 @@ class TestLevel42DaytimeOneFluxSharedRanges(unittest.TestCase):
             self.assertIn(f'GPP_DT_OF_{scen}', out.fpc_df.columns)
 
 
+class TestLevel42Partitioning(unittest.TestCase):
+    """run_level42_partitioning selects a variant with method/mode and equals
+    the matching per-variant function. FluxConfig does the same with
+    partition_method / partition_mode."""
+
+    @classmethod
+    def setUpClass(cls):
+        import matplotlib
+        matplotlib.use('Agg')
+        import warnings
+        from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+        from diive.flux.postprocessingchain import (
+            init_flux_data, run_level2, run_level31, make_level32_detector,
+            run_level32, run_level33_constant_ustar, run_level41_mds)
+
+        df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
+                              if c in df.columns])
+        df['TA_F'] = df['TA_1_1_1'].bfill()
+        df['SW_IN_F'] = df['SW_IN_1_1_1'].bfill()
+        df['VPD_F'] = df['VPD_EP'].bfill().multiply(0.1)  # hPa -> kPa
+        cls.data0 = init_flux_data(df=df, fluxcol='FC', site_lat=46.583056,
+                                   site_lon=9.790639, utc_offset=1)
+        data = run_level2(cls.data0, ssitc={'apply': True, 'setflag_timeperiod': None})
+        data = run_level31(data, gapfill_storage_term=True)
+        data, sod = make_level32_detector(data)
+        sod.flag_outliers_abslim_test(minval=-50, maxval=50, showplot=False,
+                                      verbose=False)
+        sod.addflag()
+        data = run_level32(data, outlier_detector=sod)
+        data = run_level33_constant_ustar(
+            data, thresholds=[0.1], threshold_labels=['CUT_50'],
+            showplot=False, verbose=False)
+        cls.d33 = data
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            cls.d41 = run_level41_mds(data, swin='SW_IN_1_1_1', ta='TA_1_1_1',
+                                      vpd='VPD_F')
+        cls.drivers = dict(ta='TA_1_1_1', sw_in='SW_IN_1_1_1', ta_f='TA_F',
+                           sw_in_f='SW_IN_F', vpd_f='VPD_F')
+
+    def test_equals_per_variant_function(self):
+        import warnings
+        import pandas as pd
+        from diive.flux.postprocessingchain import (
+            run_level42_partitioning, run_level42_nighttime_oneflux,
+            run_level42_nighttime_reddyproc, run_level42_daytime_oneflux,
+            run_level42_daytime_reddyproc)
+        d = self.drivers
+        cases = {
+            ('nighttime', 'oneflux'): ('nt_of', lambda data: run_level42_nighttime_oneflux(
+                data, ta=d['ta'], sw_in=d['sw_in'], ta_f=d['ta_f'], verbose=0)),
+            ('nighttime', 'reddyproc'): ('nt_rp', lambda data: run_level42_nighttime_reddyproc(
+                data, ta=d['ta'], sw_in=d['sw_in'], ta_f=d['ta_f'], verbose=0)),
+            ('daytime', 'oneflux'): ('dt_of', lambda data: run_level42_daytime_oneflux(
+                data, ta=d['ta'], sw_in=d['sw_in'], ta_f=d['ta_f'],
+                sw_in_f=d['sw_in_f'], vpd_f=d['vpd_f'], verbose=0)),
+            ('daytime', 'reddyproc'): ('dt_rp', lambda data: run_level42_daytime_reddyproc(
+                data, ta_f=d['ta_f'], vpd_f=d['vpd_f'], sw_in_f=d['sw_in_f'], verbose=0)),
+        }
+        for (method, mode), (variant, direct_fn) in cases.items():
+            with self.subTest(method=method, mode=mode), warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                # All drivers are passed: those a variant does not use are ignored.
+                out = run_level42_partitioning(self.d41, method=method, mode=mode,
+                                               verbose=0, **d)
+                ref = direct_fn(self.d41)
+                self.assertEqual(set(out.levels.level42_variants()), {variant})
+                pd.testing.assert_frame_equal(out.fpc_df, ref.fpc_df, check_exact=True)
+                self.assertEqual(out.partitioned_cols(), ref.partitioned_cols())
+
+    def _daytime_oneflux_nee_f_first(self, data, **kw):
+        """Run L4.2 daytime ONEFlux with the year's partitioning stubbed out and
+        return the gap-filled NEE of the first record that reached it."""
+        from unittest import mock
+        import numpy as np
+        from diive.flux.partitioning import daytime_oneflux as mod
+        from diive.flux.postprocessingchain import run_level42_daytime_oneflux
+        cols = ['RECO_DT_OF', 'GPP_DT_OF', 'SE_GPP_DT_OF', 'ALPHA_DT_OF',
+                'BETA_DT_OF', 'K_DT_OF', 'RREF_DT_OF', 'E0_DT_OF']
+        seen = []
+
+        def fake(**k):
+            seen.append(k['nee_f_first'])
+            return {c: np.full(k['nee'].size, np.nan) for c in cols}
+
+        with mock.patch.object(mod, '_partition_one_year', side_effect=fake):
+            run_level42_daytime_oneflux(data, verbose=0, **self.drivers, **kw)
+        return seen[0]
+
+    def test_daytime_oneflux_passes_the_l41_gapfilled_nee(self):
+        # ONEFlux reads the gap-filled NEE of the year's first record for
+        # windows without measured nighttime NEE (L215). L4.2 passes the L4.1
+        # gap-filled NEE of the scenario on, and nothing when L4.1 did not run
+        # or gapfill_method=None.
+        import numpy as np
+        col = self.d41.gapfilled_cols()['mds']['CUT_50']
+        gf = self.d41.fpc_df[col]
+        expected = np.float32(gf[gf.index.year == gf.index.year[0]].iloc[0])
+        self.assertEqual(self._daytime_oneflux_nee_f_first(self.d41), expected)
+        self.assertIsNone(self._daytime_oneflux_nee_f_first(self.d41, gapfill_method=None))
+        self.assertIsNone(self._daytime_oneflux_nee_f_first(self.d33))
+        with self.assertRaisesRegex(ValueError, 'gapfill_method'):
+            self._daytime_oneflux_nee_f_first(self.d41, gapfill_method='rfx')
+
+    def test_default_mode_is_oneflux(self):
+        import warnings
+        from diive.flux.postprocessingchain import run_level42_partitioning
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            out = run_level42_partitioning(self.d41, method='daytime', verbose=0,
+                                           **self.drivers)
+        self.assertEqual(set(out.levels.level42_variants()), {'dt_of'})
+
+    def test_missing_driver_and_invalid_values(self):
+        from diive.flux.postprocessingchain import run_level42_partitioning
+        with self.assertRaisesRegex(ValueError, r'Missing: vpd_f, sw_in_f\.'):
+            run_level42_partitioning(self.d41, method='daytime', mode='reddyproc',
+                                     ta_f='TA_F')
+        with self.assertRaisesRegex(ValueError, 'mode'):
+            run_level42_partitioning(self.d41, method='daytime', mode='diive',
+                                     **self.drivers)
+        with self.assertRaisesRegex(ValueError, 'method'):
+            run_level42_partitioning(self.d41, method='night', **self.drivers)
+
+    def _config(self, **kw):
+        from diive.flux.postprocessingchain import FluxConfig
+        return FluxConfig(
+            fluxcol='FC', ustar_thresholds=[0.1], ustar_labels=['CUT_50'],
+            level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+            gapfill_rf=False, gapfill_xgb=False, gapfill_mds=True,
+            mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_F', **kw)
+
+    def test_run_chain_daytime_oneflux_gets_the_l41_gapfilled_nee(self):
+        # run_chain passes partition_gapfill_method on to daytime ONEFlux, so
+        # its MDS gap-filled NEE reaches the partitioning (L215).
+        import warnings
+        from unittest import mock
+        import numpy as np
+        from diive.flux.partitioning import daytime_oneflux as mod
+        from diive.flux.postprocessingchain import run_chain
+        cols = ['RECO_DT_OF', 'GPP_DT_OF', 'SE_GPP_DT_OF', 'ALPHA_DT_OF',
+                'BETA_DT_OF', 'K_DT_OF', 'RREF_DT_OF', 'E0_DT_OF']
+        seen = []
+
+        def fake(**k):
+            seen.append(k['nee_f_first'])
+            return {c: np.full(k['nee'].size, np.nan) for c in cols}
+
+        cfg = self._config(partition_method='daytime', partition_ta='TA_1_1_1',
+                           partition_sw_in='SW_IN_1_1_1', partition_ta_f='TA_F',
+                           partition_sw_in_f='SW_IN_F', partition_vpd_f='VPD_F')
+        with warnings.catch_warnings(), \
+                mock.patch.object(mod, '_partition_one_year', side_effect=fake):
+            warnings.simplefilter('ignore')
+            out = run_chain(self.data0, cfg)
+        col = out.gapfilled_cols()['mds']['CUT_50']
+        gf = out.fpc_df[col]
+        self.assertEqual(seen[0], np.float32(gf[gf.index.year == gf.index.year[0]].iloc[0]))
+
+    def test_run_chain_partition_method_mode(self):
+        import warnings
+        from diive.flux.postprocessingchain import run_chain
+        # The flag selects the same variant as method/mode, so it runs once.
+        cfg = self._config(partition_method='daytime', partition_mode='reddyproc',
+                           partition_daytime_reddyproc=True,
+                           partition_ta_f='TA_F', partition_sw_in_f='SW_IN_F',
+                           partition_vpd_f='VPD_F')
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            out = run_chain(self.data0, cfg)
+        self.assertEqual(set(out.levels.level42_variants()), {'dt_rp'})
+        self.assertIn('GPP_DT_RP_CUT_50', out.fpc_df.columns)
+        self.assertEqual(out.level_ids.count('L4.2'), 1)
+
+    def test_run_chain_partition_validation(self):
+        from diive.flux.postprocessingchain import run_chain
+        with self.assertRaisesRegex(ValueError, 'partition_mode'):
+            run_chain(self.data0, self._config(partition_method='daytime',
+                                               partition_mode='diive'))
+        with self.assertRaisesRegex(ValueError, 'partition_method'):
+            run_chain(self.data0, self._config(partition_method='night'))
+        # A missing driver is reported with the method/mode that needs it.
+        with self.assertRaisesRegex(ValueError,
+                                    "partition_sw_in_f .partition_method='daytime'"):
+            run_chain(self.data0, self._config(partition_method='daytime',
+                                               partition_ta='TA_1_1_1',
+                                               partition_sw_in='SW_IN_1_1_1',
+                                               partition_ta_f='TA_F',
+                                               partition_vpd_f='VPD_F'))
+
+
 class TestChainReports(unittest.TestCase):
     """Reporting over a finished chain (diive/flux/postprocessingchain/reports.py)."""
 

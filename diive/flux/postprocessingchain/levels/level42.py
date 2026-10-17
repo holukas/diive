@@ -8,7 +8,9 @@ daytime ONEFlux (Lasslop et al. 2010). Each runs one partitioning instance per
 USTAR scenario produced at Level-3.3 and merges its result columns into
 ``fpc_df`` with the scenario label appended (so all scenarios coexist).
 Daytime ONEFlux runs its scenarios together, because they share the days
-removed after a failed fit, as in ONEFlux.
+removed after a failed fit, as in ONEFlux. ``run_level42_partitioning``
+selects one of the four with ``method`` and ``mode`` (ONEFlux by default) and
+calls the matching per-variant function.
 
 Mirrors Level-4.1 gap-filling structurally — same per-scenario loop, same
 additive-across-variants semantics, same re-run cleanup and scenario-overwrite
@@ -26,8 +28,10 @@ from ``data.full_df`` (as for MDS at L4.1). The site ``lat`` / ``lon`` /
 
 The **nighttime** variants additionally need a gap-filled NEE for the GPP
 residual; ``gapfill_method`` selects which L4.1 output to use (default
-``'mds'``). The **daytime** variants use measured NEE only and therefore do not
-require L4.1 to have run.
+``'mds'``). The **daytime** variants fit measured NEE only and do not require
+L4.1 to have run. Daytime ONEFlux uses the L4.1 gap-filled NEE when it exists:
+ONEFlux reads one gap-filled value per year (the first record), for windows
+without measured nighttime NEE.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -106,6 +110,24 @@ def _resolve_nee_f(data: FluxLevelData, gapfill_method: str,
             )
         out[scen] = data.fpc_df[gf[gapfill_method][scen]]
     return out
+
+
+def _available_nee_f(data: FluxLevelData, gapfill_method: str | None,
+                     scenarios: list[str]) -> dict[str, pd.Series]:
+    """Return the L4.1 gap-filled NEE per USTAR scenario where it exists.
+
+    For daytime ONEFlux, which works without it: a method that has not run,
+    or a scenario it did not fill, is simply left out. ``None`` uses none.
+    """
+    if gapfill_method is None:
+        return {}
+    if gapfill_method not in _GAPFILL_METHODS:
+        raise ValueError(
+            f"gapfill_method must be one of {_GAPFILL_METHODS} or None; "
+            f"got {gapfill_method!r}."
+        )
+    filled = data.gapfilled_cols().get(gapfill_method, {})
+    return {scen: data.fpc_df[filled[scen]] for scen in scenarios if scen in filled}
 
 
 def _run_level42(
@@ -380,6 +402,7 @@ def run_level42_daytime_oneflux(
         sw_in_f: str,
         vpd_f: str,
         vpd_in_kpa: bool = True,
+        gapfill_method: str | None = 'mds',
         verbose: int = 1,
 ) -> FluxLevelData:
     """
@@ -387,8 +410,12 @@ def run_level42_daytime_oneflux(
 
     Faithful port of ONEFlux's ``flux_part_gl2010`` (Lasslop et al. 2010,
     FLUXNET2015). Per-window LRC fit with a measured-radiation day/night split
-    (no latitude). Runs one partitioning per USTAR scenario. Uses **measured
-    NEE only** (no L4.1 gap-filled NEE required).
+    (no latitude). Runs one partitioning per USTAR scenario. Fits **measured
+    NEE only**, so L4.1 is not required. If L4.1 ran ``gapfill_method``, its
+    gap-filled NEE of each scenario is passed on as ``nee_f``: ONEFlux reads
+    it for windows without measured nighttime NEE (see
+    :class:`~diive.flux.partitioning.DaytimePartitioningOneFlux`). Without it
+    such windows are not fitted and the partitioning warns.
 
     The scenarios are partitioned together with
     :func:`~diive.flux.partitioning.partition_nee_daytime_oneflux_scenarios`:
@@ -409,6 +436,9 @@ def run_level42_daytime_oneflux(
             ``data.full_df`` (LRC light driver).
         vpd_f: Gap-filled VPD column in ``data.full_df`` — **kPa** by default.
         vpd_in_kpa: Whether ``vpd_f`` is in kPa (default). Set ``False`` if hPa.
+        gapfill_method: Which L4.1 gap-filled NEE to pass as ``nee_f``
+            (``'mds'`` default / ``'rf'`` / ``'xgb'``), used where it has run.
+            ``None`` passes none.
         verbose: Console verbosity passed to the partitioning instance.
 
     Returns:
@@ -422,6 +452,8 @@ def run_level42_daytime_oneflux(
     _require_full_df_cols(data, {'ta': ta, 'sw_in': sw_in, 'ta_f': ta_f,
                                  'sw_in_f': sw_in_f, 'vpd_f': vpd_f})
     full_df = data.full_df
+    nee_f_by_scen = _available_nee_f(data, gapfill_method,
+                                     list(require_level33(data)))
 
     def run_instances(nee_by_scen):
         # ONEFlux shares removed days only within one product (CUT or VUT).
@@ -431,7 +463,7 @@ def run_level42_daytime_oneflux(
         return partition_nee_daytime_oneflux_scenarios(
             nee=nee_by_scen, ta=full_df[ta], sw_in=full_df[sw_in],
             ta_f=full_df[ta_f], sw_in_f=full_df[sw_in_f], vpd=full_df[vpd_f],
-            vpd_in_kpa=vpd_in_kpa, verbose=verbose,
+            vpd_in_kpa=vpd_in_kpa, nee_f=nee_f_by_scen, verbose=verbose,
         )
 
     return _run_level42(
@@ -443,3 +475,113 @@ def run_level42_daytime_oneflux(
         needs_nee_f=False,
         gapfill_method=None,
     )
+
+
+#: (method, mode) -> L4.2 variant token, as used by ``data.partitioned_cols()``
+#: and ``data.levels.level42_<token>``.
+PARTITION_VARIANTS: dict[tuple[str, str], str] = {
+    ('nighttime', 'oneflux'): 'nt_of',
+    ('nighttime', 'reddyproc'): 'nt_rp',
+    ('daytime', 'oneflux'): 'dt_of',
+    ('daytime', 'reddyproc'): 'dt_rp',
+}
+
+#: Driver-column arguments each variant needs in run_level42_partitioning.
+_VARIANT_DRIVERS: dict[str, tuple[str, ...]] = {
+    'nt_of': ('ta', 'sw_in', 'ta_f'),
+    'nt_rp': ('ta', 'sw_in', 'ta_f'),
+    'dt_rp': ('ta_f', 'vpd_f', 'sw_in_f'),
+    'dt_of': ('ta', 'sw_in', 'ta_f', 'sw_in_f', 'vpd_f'),
+}
+
+
+def partition_variant(method: str, mode: str = 'oneflux') -> str:
+    """Return the L4.2 variant token (``'nt_of'``, ...) for a method and mode."""
+    from diive.flux.partitioning.nee import _check_method_mode
+    _check_method_mode(method, mode)
+    return PARTITION_VARIANTS[(method, mode)]
+
+
+def run_level42_partitioning(
+        data: FluxLevelData,
+        *,
+        method: str,
+        mode: str = 'oneflux',
+        ta: str | None = None,
+        sw_in: str | None = None,
+        ta_f: str | None = None,
+        sw_in_f: str | None = None,
+        vpd_f: str | None = None,
+        nee_sd: str | None = None,
+        gapfill_method: str = 'mds',
+        vpd_in_kpa: bool = True,
+        verbose: int = 1,
+) -> FluxLevelData:
+    """
+    Level-4.2: Partition NEE into GPP + RECO, with the method and mode as switches.
+
+    One entry point for the four L4.2 variants, the chain counterpart of
+    :class:`~diive.flux.partitioning.PartitioningNEE`. It calls the matching
+    per-variant function, so the result is the same as calling that function:
+
+    - ``method='nighttime', mode='oneflux'``: :func:`run_level42_nighttime_oneflux`
+      (needs ``ta``, ``sw_in``, ``ta_f`` and an L4.1 run of ``gapfill_method``)
+    - ``method='nighttime', mode='reddyproc'``: :func:`run_level42_nighttime_reddyproc`
+      (same inputs)
+    - ``method='daytime', mode='oneflux'``: :func:`run_level42_daytime_oneflux`
+      (needs ``ta``, ``sw_in``, ``ta_f``, ``sw_in_f``, ``vpd_f``; uses the
+      L4.1 run of ``gapfill_method`` if there is one)
+    - ``method='daytime', mode='reddyproc'``: :func:`run_level42_daytime_reddyproc`
+      (needs ``ta_f``, ``sw_in_f``, ``vpd_f``, optional ``nee_sd``)
+
+    ONEFlux, the ICOS and FLUXNET2015 approach, is the default mode. Driver
+    columns the chosen variant does not use are ignored. Each call adds the
+    columns of one variant, so calls with different modes or methods add up,
+    as with the per-variant functions.
+
+    Args:
+        data: FluxLevelData after ``run_level33_*`` (and an L4.1 run for the
+            nighttime method).
+        method: ``'nighttime'`` (Reichstein et al. 2005) or ``'daytime'``
+            (Lasslop et al. 2010).
+        mode: ``'oneflux'`` (default) or ``'reddyproc'``.
+        ta: Measured air temperature column (**deg C**) in ``data.full_df``.
+        sw_in: Measured shortwave incoming radiation column (**W m-2**).
+        ta_f: Gap-filled air temperature column (**deg C**).
+        sw_in_f: Gap-filled shortwave incoming radiation column (**W m-2**).
+        vpd_f: Gap-filled VPD column, **kPa** by default (see ``vpd_in_kpa``).
+        nee_sd: Optional NEE uncertainty column, daytime REddyProc only.
+        gapfill_method: Which L4.1 gap-filled NEE the nighttime method uses
+            (``'mds'`` default / ``'rf'`` / ``'xgb'``). Daytime ONEFlux passes
+            it on as ``nee_f`` where it has run.
+        vpd_in_kpa: Whether ``vpd_f`` is in kPa (default). Daytime method only.
+        verbose: Console verbosity passed to the partitioning instances.
+
+    Returns:
+        Updated FluxLevelData. The variant token for ``data.partitioned_cols()``
+        and ``data.levels.level42_<token>`` is ``partition_variant(method, mode)``.
+    """
+    variant = partition_variant(method, mode)
+    given = {'ta': ta, 'sw_in': sw_in, 'ta_f': ta_f, 'sw_in_f': sw_in_f,
+             'vpd_f': vpd_f}
+    needed = _VARIANT_DRIVERS[variant]
+    missing = [name for name in needed if given[name] is None]
+    if missing:
+        raise ValueError(
+            f"run_level42_partitioning(method={method!r}, mode={mode!r}) needs "
+            f"the driver column(s) {', '.join(needed)}. "
+            f"Missing: {', '.join(missing)}.")
+    drivers = {name: given[name] for name in needed}
+
+    if variant == 'nt_of':
+        return run_level42_nighttime_oneflux(
+            data, **drivers, gapfill_method=gapfill_method, verbose=verbose)
+    if variant == 'nt_rp':
+        return run_level42_nighttime_reddyproc(
+            data, **drivers, gapfill_method=gapfill_method, verbose=verbose)
+    if variant == 'dt_rp':
+        return run_level42_daytime_reddyproc(
+            data, **drivers, nee_sd=nee_sd, vpd_in_kpa=vpd_in_kpa, verbose=verbose)
+    return run_level42_daytime_oneflux(
+        data, **drivers, vpd_in_kpa=vpd_in_kpa, gapfill_method=gapfill_method,
+        verbose=verbose)

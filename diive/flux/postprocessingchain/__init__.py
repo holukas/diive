@@ -135,6 +135,7 @@ from diive.flux.postprocessingchain.levels import (
     run_level42_daytime_reddyproc,
     run_level42_nighttime_oneflux,
     run_level42_nighttime_reddyproc,
+    run_level42_partitioning,
 )
 from diive.flux.postprocessingchain.run_chain import run_chain
 from diive.flux.postprocessingchain.reports import (
@@ -192,6 +193,7 @@ __all__ = [
     'run_level42_nighttime_reddyproc',
     'run_level42_daytime_reddyproc',
     'run_level42_daytime_oneflux',
+    'run_level42_partitioning',
     # Reporting over a finished chain
     'report_gapfilling_variables',
     'report_gapfilling_model_scores',

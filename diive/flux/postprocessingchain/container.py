@@ -395,13 +395,29 @@ class FluxConfig:
     """Run daytime partitioning, ONEFlux port (Lasslop 2010) — emits ``*_DT_OF``
     columns. Needs ``partition_ta`` / ``partition_sw_in`` (measured) and
     ``partition_ta_f`` / ``partition_sw_in_f`` / ``partition_vpd_f``
-    (gap-filled). Measured NEE per USTAR scenario comes from L3.3."""
+    (gap-filled). Measured NEE per USTAR scenario comes from L3.3. If L4.1 ran
+    ``partition_gapfill_method``, its gap-filled NEE is passed on: ONEFlux reads
+    it for windows without measured nighttime NEE."""
+
+    partition_method: str | None = None
+    """Select one partitioning variant with two switches instead of a flag:
+    ``'nighttime'`` or ``'daytime'``, combined with ``partition_mode``. It
+    turns on the matching ``partition_*`` flag and needs the same driver
+    columns. ``None`` (default): only the flags decide. Flags that are also
+    set still run, so the variants add up, and a variant selected both ways
+    runs once."""
+
+    partition_mode: str = 'oneflux'
+    """Reference implementation for ``partition_method``: ``'oneflux'``
+    (default, the ICOS and FLUXNET2015 approach) or ``'reddyproc'``. Ignored
+    while ``partition_method`` is ``None``."""
 
     partition_gapfill_method: str = 'mds'
     """Which L4.1 gap-filled NEE feeds the *nighttime* partitioning variants
     (they need a gap-filled NEE for the GPP residual): ``'mds'`` (default,
     FLUXNET standard), ``'rf'``, or ``'xgb'``. The chosen method must have run
-    at L4.1. Ignored by the daytime variants (they use measured NEE only)."""
+    at L4.1. Daytime ONEFlux uses it too where that method ran (for windows
+    without measured nighttime NEE), daytime REddyProc ignores it."""
 
     partition_ta: str | None = None
     """Measured air temperature column (deg C) for partitioning, in

@@ -326,17 +326,46 @@ _LEVEL42_VARIANTS: dict[str, tuple[str, tuple[str, ...]]] = {
     "nt_of": ("nighttime_oneflux", ("ta", "sw_in", "ta_f", "gapfill_method")),
     "nt_rp": ("nighttime_reddyproc", ("ta", "sw_in", "ta_f", "gapfill_method")),
     "dt_rp": ("daytime_reddyproc", ("ta_f", "vpd_f", "sw_in_f", "nee_sd", "vpd_in_kpa")),
-    "dt_of": ("daytime_oneflux", ("ta", "sw_in", "ta_f", "sw_in_f", "vpd_f", "vpd_in_kpa")),
+    "dt_of": ("daytime_oneflux", ("ta", "sw_in", "ta_f", "sw_in_f", "vpd_f", "vpd_in_kpa",
+                                  "gapfill_method")),
 }
 
 #: Kwargs whose default is omitted from the rendered L4.2 call.
 _LEVEL42_DEFAULTS: dict = {"gapfill_method": "mds", "vpd_in_kpa": True, "nee_sd": None}
 
 
-def _level42_fn_names(variants: list[str]) -> list[str]:
+def _level42_selected(level42_cfg: dict) -> str | None:
+    """The variant token picked by ``method`` / ``mode`` in ``level42_cfg``, or None."""
+    method = level42_cfg.get("method")
+    if method is None:
+        return None
+    from diive.flux.postprocessingchain.levels.level42 import PARTITION_VARIANTS
+    mode = level42_cfg.get("mode", "oneflux")
+    if (method, mode) not in PARTITION_VARIANTS:
+        raise ValueError(f"level42_cfg: unknown method/mode {method!r}/{mode!r}.")
+    return PARTITION_VARIANTS[(method, mode)]
+
+
+def _level42_fn_names(level42_cfg: dict) -> list[str]:
     """The ``run_level42_*`` symbols to import for the selected variants."""
-    return [f"run_level42_{_LEVEL42_VARIANTS[v][0]}"
-            for v in ("nt_of", "nt_rp", "dt_rp", "dt_of") if v in variants]
+    selected = _level42_selected(level42_cfg)
+    variants = level42_cfg.get("variants", [])
+    names = ["run_level42_partitioning"] if selected else []
+    return names + [f"run_level42_{_LEVEL42_VARIANTS[v][0]}"
+                    for v in ("nt_of", "nt_rp", "dt_rp", "dt_of")
+                    if v in variants and v != selected]
+
+
+def _level42_kwarg_lines(level42_cfg: dict, keys: tuple[str, ...]) -> list[str]:
+    lines = []
+    for key in keys:
+        if key not in level42_cfg or level42_cfg[key] is None:
+            continue
+        # Drop kwargs that equal their library default to keep the script minimal.
+        if key in _LEVEL42_DEFAULTS and level42_cfg[key] == _LEVEL42_DEFAULTS[key]:
+            continue
+        lines.append(f"    {key}={level42_cfg[key]!r},")
+    return lines
 
 
 def _level42_block(level42_cfg: dict) -> list[str]:
@@ -344,30 +373,38 @@ def _level42_block(level42_cfg: dict) -> list[str]:
 
     ``level42_cfg`` shape::
 
-        {"variants": ["nt_of", "nt_rp", "dt_rp", "dt_of"],  # subset, canonical order
-         "gapfill_method": "mds",          # nighttime variants (default 'mds')
+        {"method": "nighttime",            # or "daytime", renders run_level42_partitioning
+         "mode": "oneflux",                # or "reddyproc" (default 'oneflux')
+         "variants": ["nt_of", "nt_rp", "dt_rp", "dt_of"],  # subset, canonical order
+         "gapfill_method": "mds",          # nighttime variants and daytime ONEFlux (default 'mds')
          "ta": "...", "sw_in": "...",      # measured meteo
          "ta_f": "...", "sw_in_f": "...", "vpd_f": "...",   # gap-filled meteo
          "nee_sd": "...",                  # optional, daytime REddyProc
          "vpd_in_kpa": True}               # optional, daytime variants
 
-    Partitioning is additive across variants — each selected variant emits its
-    own ``run_level42_*`` call, just like the L4.1 gap-filling methods.
+    With ``method`` set, the block starts with one ``run_level42_partitioning``
+    call for that method and mode, with only the kwargs that variant uses.
+    ``variants`` is then optional. Partitioning is additive across variants —
+    each further selected variant emits its own ``run_level42_*`` call, just
+    like the L4.1 gap-filling methods. A variant selected both ways is
+    rendered once.
     """
+    selected = _level42_selected(level42_cfg)
     variants = level42_cfg.get("variants", [])
     lines: list[str] = []
+    if selected:
+        body = ["", "data = run_level42_partitioning(", "    data,",
+                f"    method={level42_cfg['method']!r},",
+                f"    mode={level42_cfg.get('mode', 'oneflux')!r},"]
+        body += _level42_kwarg_lines(level42_cfg, _LEVEL42_VARIANTS[selected][1])
+        body.append(")")
+        lines += body
     for variant in ("nt_of", "nt_rp", "dt_rp", "dt_of"):
-        if variant not in variants:
+        if variant not in variants or variant == selected:
             continue
         suffix, keys = _LEVEL42_VARIANTS[variant]
         body = ["", f"data = run_level42_{suffix}(", "    data,"]
-        for key in keys:
-            if key not in level42_cfg or level42_cfg[key] is None:
-                continue
-            # Drop kwargs that equal their library default to keep the script minimal.
-            if key in _LEVEL42_DEFAULTS and level42_cfg[key] == _LEVEL42_DEFAULTS[key]:
-                continue
-            body.append(f"    {key}={level42_cfg[key]!r},")
+        body += _level42_kwarg_lines(level42_cfg, keys)
         body.append(")")
         lines += body
     return lines
@@ -382,8 +419,10 @@ def level42_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
     L4.2 sits after L4.1, so the full L2 -> L4.1 chain is rendered first.
     Partitioning is additive across variants: each selected variant
     (``nt_of`` / ``nt_rp`` / ``dt_rp`` / ``dt_of``) emits its own
-    ``run_level42_*`` call. The nighttime variants additionally consume an L4.1
-    gap-filled NEE (``level42_cfg['gapfill_method']``).
+    ``run_level42_*`` call. With ``level42_cfg['method']`` (and ``'mode'``)
+    set, that variant is rendered as one ``run_level42_partitioning`` call.
+    The nighttime variants additionally consume an L4.1 gap-filled NEE
+    (``level42_cfg['gapfill_method']``).
 
     Args:
         init_kwargs: kwargs for ``init_flux_data`` (without ``df``).
@@ -396,7 +435,6 @@ def level42_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
         df_var, load_hint: as in :func:`chain_to_code`.
     """
     methods = level41_cfg.get("methods", [])
-    variants = level42_cfg.get("variants", [])
     names = ["init_flux_data", "run_level2", "run_level31",
              "make_level32_detector", "run_level32",
              _level33_import_name(level33_kwargs)]
@@ -405,7 +443,7 @@ def level42_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
     for method in ("mds", "rf", "xgb"):
         if method in methods:
             names.append(f"run_level41_{method}")
-    names += _level42_fn_names(variants)
+    names += _level42_fn_names(level42_cfg)
     imports = ("from diive.flux.postprocessingchain import (\n    "
                + ", ".join(names) + ")")
     lines = _init_level2_lines(imports, init_kwargs, level2_settings, df_var, load_hint)

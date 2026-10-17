@@ -653,6 +653,47 @@ class TestFluxCodegen(CodegenTestCase):
                                                 utc_offset=1),
                            f"dv.flux.{func}(")
 
+    def test_partition_nee_method_mode(self):
+        from diive.flux.partitioning.codegen import partition_nee_to_code
+        picks = {"nee": "NEE", "ta": "TA", "sw_in": "SW_IN", "nee_f": "NEE_f",
+                 "ta_f": "TA_f", "sw_in_f": "SW_IN_f", "vpd": "VPD",
+                 "nee_sd": "NEE_SD"}
+        # Inputs each variant writes besides nee (and the ones it must leave out).
+        expected = {
+            ("nighttime", "oneflux"): (["ta=", "sw_in=", "nee_f=", "ta_f=", "lat="],
+                                       ["lon=", "vpd=", "vpd_in_kpa="]),
+            ("nighttime", "reddyproc"): (["ta=", "nee_f=", "lat=", "lon=", "utc_offset="],
+                                         ["vpd=", "sw_in_f="]),
+            ("daytime", "oneflux"): (["ta=", "sw_in=", "ta_f=", "sw_in_f=", "vpd=",
+                                      "nee_f=", "vpd_in_kpa=False"],
+                                     ["lat=", "lon=", "nee_sd="]),
+            ("daytime", "reddyproc"): (["ta_f=", "sw_in_f=", "vpd=", "nee_sd=",
+                                        "lat=", "lon=", "utc_offset="],
+                                       ["    ta=", "    sw_in=", "nee_f="]),
+        }
+        for (method, mode), (present, absent) in expected.items():
+            with self.subTest(method=method, mode=mode):
+                code = self.check(
+                    partition_nee_to_code(method, mode, picks, lat=46.6, lon=9.8,
+                                          utc_offset=1, vpd_in_kpa=False),
+                    "dv.flux.partition_nee(", f"method={method!r},",
+                    f"mode={mode!r},", *present)
+                for needle in absent:
+                    self.assertNotIn(needle, code)
+
+    def test_partition_nee_daytime_oneflux_nee_f_only_when_picked(self):
+        # nee_f is optional for daytime ONEFlux: written when picked, left out
+        # when not (the GUI drops an optional "(none)" pick).
+        from diive.flux.partitioning.codegen import partition_nee_to_code
+        picks = {"nee": "NEE", "ta": "TA", "sw_in": "SW_IN", "ta_f": "TA_f",
+                 "sw_in_f": "SW_IN_f", "vpd": "VPD"}
+        code = self.check(partition_nee_to_code("daytime", "oneflux", picks),
+                          "dv.flux.partition_nee(")
+        self.assertNotIn("nee_f=", code)
+        code = self.check(partition_nee_to_code("daytime", "oneflux",
+                                                dict(picks, nee_f="NEE_f")),
+                          "    nee_f=df['NEE_f'],")
+
     def test_level42(self):
         from diive.flux.postprocessingchain import level42_to_code
         code = self.check(
@@ -674,6 +715,59 @@ class TestFluxCodegen(CodegenTestCase):
         # L4.2 renders the whole chain before it.
         self.assertIn("run_level2(", code)
         self.assertIn("run_level41_mds(", code)
+
+    def test_level42_method_mode(self):
+        from diive.flux.postprocessingchain import level42_to_code
+        drivers = {"ta": "TA", "sw_in": "SW_IN", "ta_f": "TA_F",
+                   "sw_in_f": "SW_IN_F", "vpd_f": "VPD_F"}
+        code = self.check(
+            level42_to_code(
+                init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8,
+                                 utc_offset=1),
+                level2_settings={"ssitc": {"apply": True,
+                                           "setflag_timeperiod": None}},
+                level31_kwargs={},
+                level32_steps=[{"method": "flag_outliers_hampel_test",
+                                "kwargs": {}}],
+                level33_kwargs={"thresholds": [0.18],
+                                "threshold_labels": ["CUT_50"]},
+                level41_cfg={"methods": ["mds"],
+                             "mds": {"swin": "SW_IN", "ta": "TA", "vpd": "VPD"}},
+                # dt_rp is selected twice: method/mode and the variants list.
+                level42_cfg={"method": "daytime", "mode": "reddyproc",
+                             "variants": ["nt_of", "dt_rp"], **drivers}),
+            "run_level42_partitioning(", "method='daytime'", "mode='reddyproc'",
+            "run_level42_nighttime_oneflux(", expect_dv_calls=False)
+        self.assertNotIn("run_level42_daytime_reddyproc", code)
+        # Only the drivers daytime REddyProc uses are rendered in its call.
+        call = code[code.index("run_level42_partitioning("):]
+        call = call[:call.index(")")]
+        self.assertNotIn("sw_in='SW_IN'", call)
+        self.assertIn("sw_in_f='SW_IN_F'", call)
+
+    def test_level42_daytime_oneflux_renders_gapfill_method(self):
+        # Daytime ONEFlux passes the L4.1 gap-filled NEE on (L215): a
+        # non-default gapfill_method reaches its call, the default 'mds' not.
+        from diive.flux.postprocessingchain import level42_to_code
+        drivers = {"ta": "TA", "sw_in": "SW_IN", "ta_f": "TA_F",
+                   "sw_in_f": "SW_IN_F", "vpd_f": "VPD_F"}
+        common = dict(
+            init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+            level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
+            level31_kwargs={},
+            level32_steps=[{"method": "flag_outliers_hampel_test", "kwargs": {}}],
+            level33_kwargs={"thresholds": [0.18], "threshold_labels": ["CUT_50"]},
+            level41_cfg={"methods": ["mds"],
+                         "mds": {"swin": "SW_IN", "ta": "TA", "vpd": "VPD"}})
+        for cfg in ({"variants": ["dt_of"]}, {"method": "daytime", "mode": "oneflux"}):
+            with self.subTest(cfg=cfg):
+                code = self.check(
+                    level42_to_code(**common, level42_cfg={**cfg, **drivers,
+                                                          "gapfill_method": "xgb"}),
+                    "gapfill_method='xgb'", expect_dv_calls=False)
+                code = level42_to_code(**common, level42_cfg={**cfg, **drivers,
+                                                             "gapfill_method": "mds"})
+                self.assertNotIn("gapfill_method", code)
 
 
 # --- Misc -------------------------------------------------------------------
