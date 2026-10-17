@@ -65,14 +65,14 @@ nt = dv.flux.NighttimePartitioningReddyProc(
 
 dt = dv.flux.DaytimePartitioningReddyProc(
     nee=df['NEE_CUT_REF_orig'], ta=df['Tair_f'], vpd=df['VPD_f'], sw_in=df['Rg_f'],
-    lat=46.815, lon=9.855, utc_offset=1,
+    lat=46.815, lon=9.855, utc_offset=1, vpd_in_kpa=False,  # VPD_f is in hPa
 ).run().results
 
 # The ONEFlux daytime method uses ONEFlux's measured-radiation day/night split
 # (no latitude) and needs both the measured and gap-filled drivers.
 dt_of = dv.flux.DaytimePartitioningOneFlux(
     nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
-    ta_f=df['Tair_f'], sw_in_f=df['Rg_f'], vpd=df['VPD_f'],
+    ta_f=df['Tair_f'], sw_in_f=df['Rg_f'], vpd=df['VPD_f'], vpd_in_kpa=False,
 ).run().results
 
 # Reference columns: nighttime methods share the NT reference, the daytime methods

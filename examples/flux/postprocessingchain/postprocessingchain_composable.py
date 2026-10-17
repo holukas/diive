@@ -493,12 +493,12 @@ data.plot_cumulative_comparison(
 #
 # This LAE subset ships only gap-filled (``_gfXG``) meteo, so we reuse those
 # columns for the "measured" TA / SW_IN inputs too; a real workflow points
-# ``ta`` / ``sw_in`` at the raw measured series. ``VPD_T1_47_1_gfXG`` is in hPa,
-# so we pass ``vpd_in_kpa=False`` to the daytime variants.
+# ``ta`` / ``sw_in`` at the raw measured series. ``VPD_T1_47_1_gfXG`` is in kPa,
+# the daytime variants' default (pass ``vpd_in_kpa=False`` for VPD in hPa).
 
 TA_M = TA_F = "TA_T1_47_1_gfXG"      # measured / gap-filled TA (stand-in)
 SW_M = SW_F = "SW_IN_T1_47_1_gfXG"   # measured / gap-filled SW_IN (stand-in)
-VPD_F = "VPD_T1_47_1_gfXG"           # gap-filled VPD (hPa here)
+VPD_F = "VPD_T1_47_1_gfXG"           # gap-filled VPD (kPa)
 
 # Nighttime variants (need an L4.1 gap-filled NEE; MDS selected).
 data = run_level42_nighttime_oneflux(
@@ -508,9 +508,9 @@ data = run_level42_nighttime_reddyproc(
 
 # Daytime variants (measured NEE only — no gap-filled NEE needed).
 data = run_level42_daytime_reddyproc(
-    data, ta_f=TA_F, vpd_f=VPD_F, sw_in_f=SW_F, vpd_in_kpa=False)
+    data, ta_f=TA_F, vpd_f=VPD_F, sw_in_f=SW_F)
 data = run_level42_daytime_oneflux(
-    data, ta=TA_M, sw_in=SW_M, ta_f=TA_F, sw_in_f=SW_F, vpd_f=VPD_F, vpd_in_kpa=False)
+    data, ta=TA_M, sw_in=SW_M, ta_f=TA_F, sw_in_f=SW_F, vpd_f=VPD_F)
 
 # ``partitioned_cols()`` mirrors ``gapfilled_cols()``: it returns
 # ``{variant: {ustar_scenario: [column, ...]}}`` so you can find the RECO / GPP

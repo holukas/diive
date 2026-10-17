@@ -62,7 +62,8 @@ part = dv.flux.DaytimePartitioningOneFlux(
     sw_in=df['Rg_orig'],  # measured incoming shortwave radiation
     ta_f=df['Tair_f'],  # gap-filled air temperature
     sw_in_f=df['Rg_f'],  # gap-filled incoming shortwave radiation
-    vpd=df['VPD_f'],  # gap-filled VPD (kPa, converted to hPa internally)
+    vpd=df['VPD_f'],  # gap-filled VPD, in hPa in this dataset
+    vpd_in_kpa=False,  # the default expects kPa
 )
 part.run()
 results = part.results

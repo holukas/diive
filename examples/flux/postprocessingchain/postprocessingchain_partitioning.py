@@ -55,9 +55,10 @@ df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
 # Register VPD in kPa
 # ^^^^^^^^^^^^^^^^^^^
 #
-# Both MDS (L4.1) and the daytime partitioning variants want VPD in **kPa**;
-# the input VPD here is in hPa. Convert once and register via ``add_driver`` so the
-# column lands in ``data.full_df`` where the levels read their drivers.
+# Both MDS (L4.1) and the daytime partitioning variants want VPD in **kPa**,
+# which the input VPD here already is. Register it once via ``add_driver`` so the
+# column lands in ``data.full_df`` where the levels read their drivers (divide
+# by 10 first if your VPD is in hPa).
 
 data = init_flux_data(
     df=df,
@@ -69,7 +70,7 @@ data = init_flux_data(
     daytime_accept_qcf_below=2,
     nighttime_accept_qcf_below=2,
 )
-vpd_kpa = (df['VPD_T1_47_1_gfXG'] / 10.0).rename('VPD_kPa')
+vpd_kpa = df['VPD_T1_47_1_gfXG'].rename('VPD_kPa')
 data = add_driver(data, vpd_kpa)
 
 # %%

@@ -53,14 +53,15 @@ print(f"Period: {df.index.min().date()} to {df.index.max().date()} ({len(df)} re
 #
 #   - measured NEE (gaps are records that were not measured / did not pass QC)
 #   - gap-filled air temperature (for the fit and for RECO)
-#   - gap-filled VPD (diive's kPa is converted to REddyProc's hPa internally)
+#   - gap-filled VPD (hPa in this dataset, so vpd_in_kpa=False; diive's default is kPa)
 #   - gap-filled incoming shortwave radiation (day/night split + LRC light driver)
 #   - site latitude, longitude and UTC offset (solar-time day/night split)
 
 part = dv.flux.DaytimePartitioningReddyProc(
     nee=df['NEE_CUT_REF_orig'],  # measured NEE (NaN where not measured)
     ta=df['Tair_f'],  # gap-filled air temperature
-    vpd=df['VPD_f'],  # gap-filled VPD (kPa)
+    vpd=df['VPD_f'],  # gap-filled VPD, in hPa in this dataset
+    vpd_in_kpa=False,  # the default expects kPa
     sw_in=df['Rg_f'],  # gap-filled incoming shortwave radiation
     lat=46.815,  # CH-DAV latitude
     lon=9.855,  # CH-DAV longitude

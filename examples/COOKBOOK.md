@@ -163,10 +163,11 @@ data = init_flux_data(
     nighttime_accept_qcf_below=2,
 )
 
-# MDS needs VPD in kPa, but this dataset carries it in hPa. Convert, then
-# register it with add_driver so it lands in data.full_df, where L4.1 reads
-# from. Without this step FluxConfig raises: there is no VPD_kPa column.
-vpd_kpa = (df['VPD_T1_47_1_gfXG'] / 10.0).rename('VPD_kPa')
+# MDS needs VPD in kPa, which this dataset already has. add_driver registers
+# it under a short name in data.full_df, where L4.1 reads from. Without this
+# step FluxConfig raises: there is no VPD_kPa column. With VPD in hPa, divide
+# by 10 here.
+vpd_kpa = df['VPD_T1_47_1_gfXG'].rename('VPD_kPa')
 data = add_driver(data, vpd_kpa)
 
 # One FluxConfig drives the whole L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1 chain.
@@ -176,7 +177,7 @@ cfg = FluxConfig(
     ustar_labels=['CUT_50'],
     mds_swin='SW_IN_T1_47_1_gfXG',          # L4.1 MDS drivers (must be in data.full_df)
     mds_ta='TA_T1_47_1_gfXG',
-    mds_vpd='VPD_kPa',                       # MDS needs VPD in kPa, not hPa
+    mds_vpd='VPD_kPa',                       # MDS needs VPD in kPa
     gapfill_mds=True,
     gapfill_rf=True,
     gapfilling_features=['TA_T1_47_1_gfXG', 'SW_IN_T1_47_1_gfXG', 'VPD_kPa'],

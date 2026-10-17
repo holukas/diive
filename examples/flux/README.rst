@@ -113,6 +113,7 @@ Use Cases
        fluxgapfilledcol='NEE_CUT_REF_f',  # gap-filled flux
        tacol='Tair_f',
        vpdcol='VPD_f',
+       vpd_in_kpa=False,                  # VPD_f is in hPa in the example data
        swincol='Rg_f',
    )
    randunc.run()

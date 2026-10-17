@@ -89,14 +89,14 @@ print(data)
 # Step 2 — register VPD in kPa
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# MDS needs VPD in **kPa**; the input VPD here is in hPa. Convert and
-# register the result via ``add_driver`` — this puts the column into
-# ``data.full_df`` (where L4.1 reads from), not into ``data.fpc_df``.
-# If the column is already in the right unit elsewhere in ``df`` you can
-# point ``mds_vpd=`` at it directly and skip this step.
+# MDS needs VPD in **kPa**, which the input VPD here already is. Register it
+# under a short name via ``add_driver`` — this puts the column into
+# ``data.full_df`` (where L4.1 reads from), not into ``data.fpc_df``. With VPD
+# in hPa, divide by 10 first. You can also point ``mds_vpd=`` at the original
+# column directly and skip this step.
 
 if 'VPD_T1_47_1_gfXG' in df.columns:
-    vpd_kpa = (df['VPD_T1_47_1_gfXG'] / 10.0).rename('VPD_kPa')
+    vpd_kpa = df['VPD_T1_47_1_gfXG'].rename('VPD_kPa')
     data = add_driver(data, vpd_kpa)
 
 # %%
