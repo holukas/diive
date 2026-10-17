@@ -63,6 +63,32 @@ _EXAMPLE_SOURCE = "example data (CH-DAV)"
 #: Old menu labels still found in saved projects, mapped to the current label.
 _RENAMED_MENU_LABELS = {"Flux processing chain": "Flux post-processing chain"}
 
+#: Menu tabs merged into another tab: old label -> (new label, state preset,
+#: renamed control keys). A project saved with an old tab reopens as the new
+#: one, preset to the old tab's variant, with its saved controls carried over.
+_MERGED_MENU_TABS = {
+    "Nighttime partitioning (ONEFlux)": (
+        "NEE partitioning", {"method": "nighttime", "mode": "oneflux"}, {}),
+    "Nighttime partitioning (REddyProc)": (
+        "NEE partitioning", {"method": "nighttime", "mode": "reddyproc"}, {}),
+    "Daytime partitioning (ONEFlux)": (
+        "NEE partitioning", {"method": "daytime", "mode": "oneflux"}, {}),
+    # The old daytime REddyProc tab called its gap-filled drivers "ta" / "sw_in".
+    "Daytime partitioning (REddyProc)": (
+        "NEE partitioning", {"method": "daytime", "mode": "reddyproc"},
+        {"ta": "ta_f", "sw_in": "sw_in_f"}),
+}
+
+
+def _migrate_merged_tab(label: str, state: dict) -> tuple[str, dict]:
+    """The new label and state for a tab saved under a merged label (see
+    ``_MERGED_MENU_TABS``). Other labels pass through unchanged."""
+    if label not in _MERGED_MENU_TABS:
+        return label, state
+    new_label, preset, renames = _MERGED_MENU_TABS[label]
+    controls = {renames.get(k, k): v for k, v in (state.get("controls") or {}).items()}
+    return new_label, {**state, **preset, "controls": controls}
+
 
 def _namespace_metadata(raw: dict, key: str) -> dict:
     """Coerce a persisted ``variable_metadata`` blob to the per-dataset shape
@@ -552,7 +578,7 @@ class MainWindow(QMainWindow):
                 # Set the 3-D surface (GPU/VTK) apart from the 2-D plot methods.
                 if menu_name == "Plot" and label == "3D surface":
                     menu.addSeparator()
-                # Set the random-uncertainty tool apart from the partitioning tabs.
+                # Set the random-uncertainty tool apart from the partitioning tab.
                 if menu_name == "Flux" and label == "Random uncertainty (PAS20)":
                     menu.addSeparator()
                 menu.addAction(_menu_tab_act(label))
@@ -833,6 +859,12 @@ class MainWindow(QMainWindow):
         for entry in state or []:
             label = entry.get("label")
             label = _RENAMED_MENU_LABELS.get(label, label)  # projects saved before a rename
+            title = entry.get("title")
+            tab_state = entry.get("state") or {}
+            if label in _MERGED_MENU_TABS:
+                # The old title names the old tab: keep the new tab's own title.
+                label, tab_state = _migrate_merged_tab(label, tab_state)
+                title = None
             if label not in MENU_TAB_CLASSES:
                 continue  # unknown/renamed feature — skip rather than crash
             self._open_menu_tab(label)
@@ -840,12 +872,12 @@ class MainWindow(QMainWindow):
             if tab is None:
                 continue
             idx = self._tabwidget.indexOf(tab.widget())
-            if idx >= 0 and entry.get("title"):
-                self._tabwidget.setTabText(idx, entry["title"])
+            if idx >= 0 and title:
+                self._tabwidget.setTabText(idx, title)
             # Re-apply the tab's own inputs (the list is already populated, since
             # _open_menu_tab pushed the current data). Tolerant of stale state.
             try:
-                tab.restore_state(entry.get("state") or {})
+                tab.restore_state(tab_state)
             except Exception:
                 pass
             if entry.get("pinned"):

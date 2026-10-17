@@ -479,7 +479,8 @@ class HeroBand(QFrame):
         h = QHBoxLayout(self)
         h.setContentsMargins(12, 8, 12, 8)
         h.setSpacing(12)
-        h.addWidget(_chip(chip_label, chip_bg, chip_fg))
+        self._chip = _chip(chip_label, chip_bg, chip_fg)
+        h.addWidget(self._chip)
         h.addStretch(1)
         # Metrics strip: rebuilt after each run from set_metrics().
         self._metrics_host = QWidget()
@@ -487,6 +488,10 @@ class HeroBand(QFrame):
         self._metrics_lay.setContentsMargins(0, 0, 0, 0)
         self._metrics_lay.setSpacing(12)
         h.addWidget(self._metrics_host)
+
+    def set_chip(self, text: str) -> None:
+        """Change the method chip's text (a tab that switches methods)."""
+        self._chip.setText(text)
 
     def set_metrics(self, metrics) -> None:
         """Rebuild the strip from ``[(name, value, tooltip), ...]``."""

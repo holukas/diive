@@ -6640,16 +6640,265 @@ def test_gapfilling_mds_tab_mode(app, example_year):
     assert tab3._method_kwargs()["mode"] == "diive"
 
 
+_PART_VARIANTS = (("nighttime", "oneflux", "NT_OF"), ("nighttime", "reddyproc", "NT_RP"),
+                  ("daytime", "oneflux", "DT_OF"), ("daytime", "reddyproc", "DT_RP"))
+
+#: The example columns each partitioning input maps to.
+_PART_COLS = {"nee": "NEE_CUT_REF_orig", "nee_f": "NEE_CUT_REF_f", "ta": "Tair_orig",
+              "ta_f": "Tair_f", "sw_in": "Rg_orig", "sw_in_f": "Rg_f", "vpd": "VPD_f"}
+
+
+@pytest.fixture(scope="module")
+def partitioning_frames():
+    # The nighttime methods need a year to constrain E0, the daytime fits run on
+    # one summer month (as in tests/test_partitioning_nee.py).
+    df = dv.load_exampledata_parquet()
+    year = df.loc[df.index.year == 2017].copy()
+    return {"nighttime": year, "daytime": year.loc["2017-06-01":"2017-06-30"].copy()}
+
+
+def _partitioning_tab(method, mode, df):
+    from diive.gui.tabs.partitioning import PartitioningNEETab
+    from diive.gui.widgets.partitioning_mode import set_combo_value
+    tab = PartitioningNEETab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    set_combo_value(tab.method_combo, method)
+    set_combo_value(tab.mode_combo, mode)
+    for key, col in _PART_COLS.items():
+        tab.picker.combos()[key].setCurrentText(col)
+    return tab
+
+
+def _captured_run(tab):
+    """The arguments `_run` hands the worker (the runner is not started)."""
+    calls = []
+    tab._runner.run = lambda fn, *args: calls.append(args)
+    tab._run()
+    assert len(calls) == 1, tab.status.text()
+    return calls[0]
+
+
+def test_partitioning_tab_matches_library_for_all_variants(app, partitioning_frames):
+    # One tab, two switches: every method/mode gives exactly the library's
+    # PartitioningNEE result, shows only the inputs that variant needs, and its
+    # Copy Python snippet names method= and mode=, compiles and reproduces it.
+    from diive.core.metadata import ATTRS_KEY
+    from diive.flux.partitioning import (
+        PartitioningNEE,
+        partitioning_inputs,
+        partitioning_optional_inputs,
+    )
+    from diive.gui import site
+
+    snap = site.manager.as_dict()
+    try:
+        site.manager.update(name="CH-DAV", latitude=46.815, longitude=9.855,
+                            elevation=1639.0, utc_offset=1)
+        columns = {}
+        for method, mode, suffix in _PART_VARIANTS:
+            df = partitioning_frames[method]
+            tab = _partitioning_tab(method, mode, df)
+            assert (tab.method, tab.mode) == (method, mode)
+            assert tab.hero._chip.text() == suffix
+
+            # Pickers: NEE plus the variant's series inputs and its optional
+            # ones (DT_OF's gap-filled NEE, DT_RP's NEE SD).
+            needed = partitioning_inputs(method, mode)
+            optional = partitioning_optional_inputs(method, mode)
+            expected = {"nee", *optional,
+                        *(n for n in needed if n not in ("lat", "lon", "utc_offset"))}
+            shown = {k for k, row in tab.picker._rows.items()
+                     if tab.picker._form.isRowVisible(row)}
+            assert shown == expected, suffix
+            assert tab._site_form.isRowVisible(tab.lat) == ("lat" in needed)
+            assert tab._site_form.isRowVisible(tab.lon) == ("lon" in needed)
+            assert tab._site_form.isRowVisible(tab.utc) == ("utc_offset" in needed)
+            assert tab._site_box.isHidden() == (suffix == "DT_OF")
+            assert tab._opt_box.isHidden() == (method == "nighttime")
+
+            args = _captured_run(tab)
+            assert args[4] == {"method": method, "mode": mode, "suffix": suffix,
+                               "operation": f"NEE partitioning ({suffix})"}
+            payload = tab._compute_payload(*args)
+
+            lib_inputs = {n: df[_PART_COLS[n]] for n in (*needed, *optional)
+                          if n in _PART_COLS}
+            lib_coords = {k: v for k, v in dict(lat=46.815, lon=9.855,
+                                                utc_offset=1).items() if k in needed}
+            expected_df = PartitioningNEE(df["NEE_CUT_REF_orig"], method=method,
+                                          mode=mode, verbose=0, **lib_inputs,
+                                          **lib_coords).run().results
+            gpp, reco = f"GPP_{suffix}", f"RECO_{suffix}"
+            assert gpp in payload and reco in payload
+            assert payload[gpp].notna().sum() > 0
+            pd.testing.assert_series_equal(payload[gpp], expected_df[gpp], check_exact=True)
+            pd.testing.assert_frame_equal(payload, expected_df, check_exact=True)
+            prov = payload.attrs[ATTRS_KEY][gpp]
+            assert prov["parent"] == "NEE_CUT_REF_orig"
+            assert prov["tags"] == ["partitioning", suffix.lower()]
+            columns[suffix] = set(payload.columns)
+
+            # Copy Python: method= and mode=, compiles, runs to the same result.
+            code = tab._python_code()
+            assert f"method={method!r}," in code and f"mode={mode!r}," in code
+            assert "dv.flux.partition_nee(" in code
+            ns = {"df": df}
+            exec(compile(code, "<partitioning snippet>", "exec"), ns)
+            pd.testing.assert_frame_equal(ns["results"], expected_df, check_exact=True)
+
+            # The done handler reports this variant's columns.
+            tab._on_done(payload)
+            assert f"{suffix} columns" in tab.status.text()
+            assert tab.add_btn.isEnabled()
+
+        # Switching the mode switches the result columns.
+        assert "GPP_NT_RP" not in columns["NT_OF"] and "GPP_NT_OF" not in columns["NT_RP"]
+        assert "GPP_DT_RP" not in columns["DT_OF"] and "GPP_DT_OF" not in columns["DT_RP"]
+    finally:
+        site.manager.load_dict(snap)
+
+
+def test_partitioning_tab_gapfilled_nee_is_optional_for_daytime_oneflux(app, partitioning_frames):
+    # Daytime ONEFlux takes the gap-filled NEE only when given (L215): its
+    # picker offers "(none)" and says optional, a "(none)" pick runs and copies
+    # without nee_f, and the nighttime method needs the column again.
+    from diive.gui.tabs.partitioning import PartitioningNEETab
+    from diive.gui.widgets.column_picker import NONE_ITEM
+    from diive.gui.widgets.partitioning_mode import set_combo_value
+
+    df = partitioning_frames["daytime"]
+    tab = _partitioning_tab("daytime", "oneflux", df)
+    combo = tab.picker.combos()["nee_f"]
+    label = tab.picker._form.labelForField(tab.picker._rows["nee_f"])
+    assert combo.findText(NONE_ITEM) == 0
+    assert "optional" in label.text()
+    assert combo.currentText() == "NEE_CUT_REF_f"  # the pick stays
+
+    combo.setCurrentText(NONE_ITEM)
+    series_map = _captured_run(tab)[0]
+    assert "nee_f" not in series_map and "nee" in series_map
+    assert "nee_f=" not in tab._python_code()
+    combo.setCurrentText("NEE_CUT_REF_f")
+    assert _captured_run(tab)[0]["nee_f"].name == "NEE_CUT_REF_f"
+    assert "nee_f=df['NEE_CUT_REF_f']," in tab._python_code()
+
+    # Nighttime needs it: "(none)" goes away and the column a fresh nighttime
+    # tab picks is picked again.
+    fresh = PartitioningNEETab()
+    fresh.widget()
+    fresh.on_data_loaded(df)  # nighttime by default: no "(none)" entry
+    fresh_pick = fresh.picker.combos()["nee_f"].currentText()
+    assert fresh.picker.combos()["nee_f"].findText(NONE_ITEM) == -1
+    assert fresh_pick in df.columns
+    combo.setCurrentText(NONE_ITEM)
+    set_combo_value(tab.method_combo, "nighttime")
+    assert combo.findText(NONE_ITEM) == -1
+    assert combo.currentText() == fresh_pick
+    assert "optional" not in label.text()
+
+
+def test_partitioning_tab_switch_keeps_picks_and_defaults_to_oneflux(app, partitioning_frames):
+    # ONEFlux (the ICOS processing) is the default mode, nighttime the default
+    # method. A pick made for one variant survives a switch away and back, and
+    # a result on screen keeps its own columns when the variant changes.
+    from diive.gui.tabs.partitioning import PartitioningNEETab
+    from diive.gui.widgets.partitioning_mode import set_combo_value
+
+    df = partitioning_frames["daytime"]
+    tab = PartitioningNEETab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    assert (tab.method, tab.mode) == ("nighttime", "oneflux")
+    assert tab.mode_combo.currentText() == "ONEFlux (ICOS, default)"
+
+    set_combo_value(tab.method_combo, "daytime")
+    tab.picker.combos()["vpd"].setCurrentText("VPD_f")
+    set_combo_value(tab.method_combo, "nighttime")
+    assert not tab.picker._form.isRowVisible(tab.picker._rows["vpd"])
+    set_combo_value(tab.method_combo, "daytime")
+    assert tab.picker.picks()["vpd"] == "VPD_f"
+
+    # Round trip: a saved state stores the values, not the labels.
+    set_combo_value(tab.mode_combo, "reddyproc")
+    state = tab.save_state()
+    assert (state["method"], state["mode"]) == ("daytime", "reddyproc")
+    tab2 = PartitioningNEETab()
+    tab2.widget()
+    tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert (tab2.method, tab2.mode) == ("daytime", "reddyproc")
+    assert tab2.picker.picks()["vpd"] == "VPD_f"
+
+
+@pytest.mark.parametrize("old_label, method, mode, controls, expected_picks", [
+    ("Nighttime partitioning (ONEFlux)", "nighttime", "oneflux",
+     {"nee": "NEE_CUT_REF_orig", "ta": "Tair_orig", "sw_in": "Rg_orig",
+      "nee_f": "NEE_CUT_REF_f", "ta_f": "Tair_f", "lat": 46.5},
+     {"nee": "NEE_CUT_REF_orig", "nee_f": "NEE_CUT_REF_f", "ta_f": "Tair_f"}),
+    ("Nighttime partitioning (REddyProc)", "nighttime", "reddyproc",
+     {"nee": "NEE_CUT_REF_orig", "ta": "Tair_orig", "sw_in": "Rg_orig",
+      "nee_f": "NEE_CUT_REF_f", "ta_f": "Tair_f", "lat": 46.5, "lon": 9.5},
+     {"nee": "NEE_CUT_REF_orig", "nee_f": "NEE_CUT_REF_f"}),
+    ("Daytime partitioning (ONEFlux)", "daytime", "oneflux",
+     {"nee": "NEE_CUT_REF_orig", "ta": "Tair_orig", "sw_in": "Rg_orig",
+      "ta_f": "Tair_f", "sw_in_f": "Rg_f", "vpd": "VPD_f", "vpd_kpa": False},
+     {"nee": "NEE_CUT_REF_orig", "sw_in_f": "Rg_f", "vpd": "VPD_f"}),
+    # The old daytime REddyProc tab stored its gap-filled drivers as ta / sw_in.
+    ("Daytime partitioning (REddyProc)", "daytime", "reddyproc",
+     {"nee": "NEE_CUT_REF_orig", "ta": "Tair_f", "vpd": "VPD_f", "sw_in": "Rg_f",
+      "nee_sd": "(none)", "lat": 46.5, "lon": 9.5, "vpd_kpa": False},
+     {"nee": "NEE_CUT_REF_orig", "ta_f": "Tair_f", "sw_in_f": "Rg_f",
+      "vpd": "VPD_f", "nee_sd": "(none)"}),
+])
+def test_project_restores_old_partitioning_tab_as_nee_partitioning(
+        window, old_label, method, mode, controls, expected_picks):
+    # Projects saved with one of the four old partitioning tabs reopen as the
+    # one NEE partitioning tab, preset to the old variant, with its settings.
+    from diive.gui import site
+    snap = site.manager.as_dict()
+    try:
+        site.manager.configured = False   # lat/lon must come from the project
+        window._close_all_menu_tabs()
+        window._restore_tabs([{"label": old_label, "title": f"{old_label} 1",
+                               "pinned": False, "state": {"controls": controls}}])
+        assert [t._menu_label for t in window._menu_tab_list] == ["NEE partitioning"]
+        tab = window._menu_tab_list[0]
+        assert _tabs(window)[-1] == "NEE partitioning 1"
+        assert (tab.method, tab.mode) == (method, mode)
+        picks = tab.picker.picks()
+        for key, col in expected_picks.items():
+            assert picks[key] == col, key
+        if "lat" in controls:
+            assert tab.lat.value() == controls["lat"]
+        if "lon" in controls:
+            assert tab.lon.value() == controls["lon"]
+        if "vpd_kpa" in controls:
+            assert tab.vpd_kpa_cb.isChecked() is controls["vpd_kpa"]
+        # No "saved selection no longer available" warning for hidden inputs.
+        assert "no longer available" not in tab.status.text()
+    finally:
+        site.manager.load_dict(snap)
+
+
+def test_old_partitioning_menu_labels_are_gone(app):
+    # The menu has one partitioning entry; the old labels only migrate projects.
+    from diive.gui.app import _MERGED_MENU_TABS
+    from diive.gui.registry import MENU_TAB_CLASSES, MENU_TABS
+    assert "NEE partitioning" in MENU_TABS["Flux"]
+    for old in _MERGED_MENU_TABS:
+        assert old not in MENU_TAB_CLASSES
+        assert _MERGED_MENU_TABS[old][0] == "NEE partitioning"
+
+
 def test_partitioning_tabs_refuse_to_run_without_site_coords(app, example_year):
     # The lat/lon/UTC spin boxes default to 0/0/0 and _seed_site leaves them there
     # when the site is unset, so an unguarded run would partition at (0, 0) on UTC
-    # and return plausible-looking GPP/RECO. Every coordinate-consuming tab must
-    # refuse, the way the outlier and correction tabs already do.
+    # and return plausible-looking GPP/RECO. Every coordinate-consuming variant
+    # must refuse, the way the outlier and correction tabs already do.
     from diive.gui import site
-    from diive.gui.tabs.partitioning_daytime_oneflux import DaytimePartitioningOneFluxTab
-    from diive.gui.tabs.partitioning_daytime_reddyproc import DaytimePartitioningReddyProcTab
-    from diive.gui.tabs.partitioning_nighttime_oneflux import NighttimePartitioningOneFluxTab
-    from diive.gui.tabs.partitioning_nighttime_reddyproc import NighttimePartitioningReddyProcTab
+    from diive.gui.tabs.partitioning import PartitioningNEETab
+    from diive.gui.widgets.partitioning_mode import set_combo_value
 
     # Set the flag directly (as the meteo-screening test above does): load_dict({})
     # early-returns on an empty dict, so it would silently leave a site configured
@@ -6659,26 +6908,26 @@ def test_partitioning_tabs_refuse_to_run_without_site_coords(app, example_year):
         site.manager.configured = False
         assert not site.manager.configured
 
-        needs = (NighttimePartitioningOneFluxTab, NighttimePartitioningReddyProcTab,
-                 DaytimePartitioningReddyProcTab)
-        for cls in needs:
-            tab = cls()
-            tab.widget()
-            tab.on_data_loaded(example_year)
-            assert tab.needs_coords, f"{cls.__name__} should declare a coordinate need"
+        tab = PartitioningNEETab()
+        tab.widget()
+        tab.on_data_loaded(example_year)
+        for method, mode, suffix in _PART_VARIANTS:
+            set_combo_value(tab.method_combo, method)
+            set_combo_value(tab.mode_combo, mode)
+            tab.status.setText("")
+            if suffix == "DT_OF":
+                # Daytime ONEFlux splits on measured Rg, not solar geometry: no
+                # coords, no guard.
+                assert not tab.needs_coords
+                assert not tab._coords_missing()
+                continue
+            assert tab.needs_coords, f"{suffix} should declare a coordinate need"
             tab._run()
             QApplication.processEvents()
-            assert not tab._runner.is_running, f"{cls.__name__} started a run"
+            assert not tab._runner.is_running, f"{suffix} started a run"
             assert "Project settings" in tab.status.text()
             # The snippet would otherwise carry lat=0.0, lon=0.0.
             assert tab._python_code() is None
-
-        # Daytime ONEFlux splits on measured Rg, not solar geometry: no coords, no guard.
-        tab = DaytimePartitioningOneFluxTab()
-        tab.widget()
-        tab.on_data_loaded(example_year)
-        assert not tab.needs_coords
-        assert not tab._coords_missing()
     finally:
         site.manager.configured = saved
 
@@ -6690,9 +6939,8 @@ def test_partitioning_tab_uses_project_utc_offset(app):
     # before the settings changed.
     import numpy as np
     from diive.gui import site
-    from diive.gui.tabs.partitioning_nighttime_reddyproc import (
-        NighttimePartitioningReddyProcTab,
-    )
+    from diive.gui.tabs.partitioning import PartitioningNEETab
+    from diive.gui.widgets.partitioning_mode import set_combo_value
     from diive.gui.widgets.project_offset import ProjectUtcOffset
 
     idx = pd.date_range("2024-06-01", periods=48 * 5, freq="30min",
@@ -6704,8 +6952,9 @@ def test_partitioning_tab_uses_project_utc_offset(app):
     snap = site.manager.as_dict()
     try:
         site.manager.configured = False
-        tab = NighttimePartitioningReddyProcTab()
+        tab = PartitioningNEETab()
         tab.widget()
+        set_combo_value(tab.mode_combo, "reddyproc")   # nighttime REddyProc
         assert isinstance(tab.utc, ProjectUtcOffset)
         assert tab.utc.text() == "not set" and not tab.utc.warning_mark.isHidden()
 
@@ -6715,10 +6964,8 @@ def test_partitioning_tab_uses_project_utc_offset(app):
         tab.on_data_loaded(df)
         for key, col in cols.items():
             tab.picker.combos()[key].setCurrentText(col)
-        calls = []
-        tab._runner.run = lambda fn, *args: calls.append(args)
-        tab._run()
-        assert calls and calls[0][1]["utc_offset"] == 2   # coords -> library class
+        args = _captured_run(tab)
+        assert args[1]["utc_offset"] == 2                  # coords -> library class
         assert "utc_offset=2," in tab._python_code()
 
         state = tab.save_state()

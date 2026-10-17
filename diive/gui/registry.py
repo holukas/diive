@@ -167,10 +167,8 @@ MENU_TABS: dict[str, dict[str, LazyTab]] = {
         "Flux post-processing chain": _tab("fluxchain", "FluxChainTab"),
         "USTAR detection": _tab("ustar_detection", "UstarDetectionTab"),
         "Time lag analysis": _tab("timelag", "TimeLagAnalysisTab"),
-        "Nighttime partitioning (ONEFlux)": _tab("partitioning_nighttime_oneflux", "NighttimePartitioningOneFluxTab"),
-        "Nighttime partitioning (REddyProc)": _tab("partitioning_nighttime_reddyproc", "NighttimePartitioningReddyProcTab"),
-        "Daytime partitioning (REddyProc)": _tab("partitioning_daytime_reddyproc", "DaytimePartitioningReddyProcTab"),
-        "Daytime partitioning (ONEFlux)": _tab("partitioning_daytime_oneflux", "DaytimePartitioningOneFluxTab"),
+        # One tab for the four partitioning ports (Method + Mode switches).
+        "NEE partitioning": _tab("partitioning", "PartitioningNEETab"),
         "Random uncertainty (PAS20)": _tab("uncertainty_randunc", "RandomUncertaintyTab"),
         "Joint uncertainty (PAS20)": _tab("uncertainty_jointunc", "JointUncertaintyTab"),
     },

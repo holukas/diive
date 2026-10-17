@@ -17,6 +17,8 @@ Each input is a spec dict:
   * ``avoid``    — optional substring that disqualifies a column,
   * ``optional`` — when true the combo gains a leading ``"(none)"`` and stays on
     it unless the distinctive ``prefer`` token actually appears,
+  * ``optional_label`` — form-row label while :meth:`ColumnPicker.set_optional_keys`
+    makes the input optional (default: ``label``),
   * ``tip``      — optional combo tooltip.
 
 Presentation + name-based seeding only; the name matching itself is library
@@ -61,7 +63,9 @@ class ColumnPicker(QGroupBox):
         self._combos: dict[str, QComboBox] = {}
         self._avail: dict[str, QLabel] = {}
         self._cols: set[str] = set()
-        form = QFormLayout(self)
+        self._rows: dict[str, QWidget] = {}
+        self._optional = {spec["key"]: bool(spec.get("optional")) for spec in specs}
+        self._form = form = QFormLayout(self)
         # In a narrow, fixed-width column a long label + a column-name-wide combo
         # don't fit on one line, and QFormLayout would otherwise starve the label
         # to zero width (invisible). Wrapping long rows puts the label on its own
@@ -83,6 +87,7 @@ class ColumnPicker(QGroupBox):
             form.addRow(spec["label"], row)
             self._combos[spec["key"]] = combo
             self._avail[spec["key"]] = avail
+            self._rows[spec["key"]] = row
             combo.currentTextChanged.connect(self._on_changed)
 
     def _on_changed(self, *_) -> None:
@@ -102,27 +107,67 @@ class ColumnPicker(QGroupBox):
             cur = combo.currentText()
             combo.blockSignals(True)
             combo.clear()
-            if spec.get("optional"):
+            if self._optional[spec["key"]]:
                 combo.addItem(NONE_ITEM)
             combo.addItems(cols)
             if cur and cur in cols:
                 combo.setCurrentText(cur)
             else:
-                needles = spec["needle"]
-                if isinstance(needles, str):
-                    needles = [needles]
-                prefer = spec.get("prefer")
-                for needle in needles:  # try each naming alternative in order
-                    guess = auto_pick_column(cols, needle, prefer=prefer,
-                                             avoid=spec.get("avoid"))
-                    # An optional input stays "(none)" unless its distinctive token
-                    # (prefer) actually appears — don't guess a wrong column for it.
-                    if guess and spec.get("optional") and prefer \
-                            and prefer not in guess.upper():
-                        guess = ""
-                    if guess:
-                        combo.setCurrentText(guess)
-                        break
+                self._auto_pick(spec, cols)
+            combo.blockSignals(False)
+        self.refresh_availability()
+
+    def _auto_pick(self, spec: dict, cols: list[str]) -> None:
+        """Select the column :func:`auto_pick_column` guesses for ``spec``."""
+        needles = spec["needle"]
+        if isinstance(needles, str):
+            needles = [needles]
+        prefer = spec.get("prefer")
+        for needle in needles:  # try each naming alternative in order
+            guess = auto_pick_column(cols, needle, prefer=prefer,
+                                     avoid=spec.get("avoid"))
+            # An optional input stays "(none)" unless its distinctive token
+            # (prefer) actually appears — don't guess a wrong column for it.
+            if guess and self._optional[spec["key"]] and prefer \
+                    and prefer not in guess.upper():
+                guess = ""
+            if guess:
+                self._combos[spec["key"]].setCurrentText(guess)
+                break
+
+    def set_optional_keys(self, keys) -> None:
+        """Make the inputs in ``keys`` optional, the others as their spec says.
+
+        For a tab whose variants differ in whether an input is needed. An input
+        that becomes optional gains the leading ``"(none)"`` (its pick stays)
+        and its ``optional_label``. One that becomes required loses it; if it
+        was on ``"(none)"``, a column is guessed as in :meth:`seed`.
+        """
+        keys = set(keys)
+        for spec in self._specs:
+            key = spec["key"]
+            label = self._form.labelForField(self._rows[key])
+            if label is not None:
+                label.setText(spec.get("optional_label", spec["label"])
+                              if key in keys else spec["label"])
+            optional = bool(spec.get("optional")) or key in keys
+            if optional == self._optional[key]:
+                continue
+            self._optional[key] = optional
+            combo = self._combos[key]
+            combo.blockSignals(True)
+            if optional:
+                combo.insertItem(0, NONE_ITEM)
+                if combo.currentIndex() < 0:
+                    combo.setCurrentIndex(0)
+            else:
+                was_none = combo.currentText() == NONE_ITEM
+                idx = combo.findText(NONE_ITEM)
+                if idx >= 0:
+                    combo.removeItem(idx)
+                if was_none:
+                    combo.setCurrentIndex(-1)
+                    self._auto_pick(spec, [combo.itemText(i) for i in range(combo.count())])
             combo.blockSignals(False)
         self.refresh_availability()
 
@@ -142,6 +187,16 @@ class ColumnPicker(QGroupBox):
     def picks(self) -> dict[str, str]:
         """Current selection per input key (``"(none)"`` for an empty optional)."""
         return {k: c.currentText() for k, c in self._combos.items()}
+
+    def set_visible_keys(self, keys) -> None:
+        """Show only the rows of ``keys`` and hide the others.
+
+        Hidden combos keep their selection (and are still seeded), so a tab
+        that switches between input sets restores a pick when the row returns.
+        """
+        keys = set(keys)
+        for key, row in self._rows.items():
+            self._form.setRowVisible(row, key in keys)
 
     def combos(self) -> dict[str, QComboBox]:
         """The raw combo boxes, keyed by input key (for project save/restore)."""

@@ -1163,61 +1163,76 @@ on the right with a results readout below it.
 ### NEE partitioning
 
 Split measured net ecosystem exchange (NEE) into its two component fluxes, **gross
-primary production (GPP)** and **ecosystem respiration (RECO)**, using one of four
-faithful method ports, each on its own tab:
+primary production (GPP)** and **ecosystem respiration (RECO)**. Open it from
+**Flux ▸ NEE partitioning**. One tab covers four faithful method ports, chosen with
+two switches at the top of the settings column:
 
-- **Nighttime partitioning (ONEFlux).** Reichstein et al. (2005), per calendar year.
-  Output columns end in `_NT_OF`.
-- **Nighttime partitioning (REddyProc).** The REddyProc `sMRFluxPartition` variant
-  (single temperature sensitivity for the whole record). Columns end in `_NT_RP`.
-- **Daytime partitioning (REddyProc).** The light-response-curve method (Lasslop et
-  al. 2010, REddyProc `partitionNEEGL`). Columns end in `_DT_RP`.
-- **Daytime partitioning (ONEFlux).** The FLUXNET2015 light-response method (Lasslop
-  et al. 2010, ONEFlux). Columns end in `_DT_OF`.
+- **Method** picks the algorithm. **Nighttime** (Reichstein et al. 2005) reads
+  respiration straight from nighttime NEE, when photosynthesis is switched off, fits
+  its temperature response, extends that response into the daytime and recovers GPP
+  as the rest. **Daytime** (Lasslop et al. 2010) fits a light-response curve to
+  daytime NEE and gets GPP and RECO from the same fit, so it also uses VPD and
+  radiation.
+- **Mode** picks the reference implementation. **ONEFlux (ICOS, default)** is the
+  processing used by ICOS and FLUXNET2015. **REddyProc** is the R package of the same
+  name.
 
-The two families get at the split differently. The **nighttime** methods read
-respiration straight from nighttime NEE, when photosynthesis is switched off, fit its
-temperature response, extrapolate that response into the daytime, and recover GPP as
-the leftover. The **daytime** methods fit a light-response curve to daytime NEE and
-separate GPP and RECO together, so they also draw on VPD and radiation. ONEFlux and
-REddyProc are two established reference implementations of these algorithms. Running
-more than one and comparing is a common sanity check, which is why each writes its own
-column suffix and all four can sit in the dataset side by side.
+Each combination writes its own column suffix:
+
+| Method | Mode | Columns end in |
+|---|---|---|
+| Nighttime | ONEFlux | `_NT_OF` (per calendar year) |
+| Nighttime | REddyProc | `_NT_RP` (`sMRFluxPartition`, one temperature sensitivity for the whole record) |
+| Daytime | ONEFlux | `_DT_OF` (`flux_part_gl2010`) |
+| Daytime | REddyProc | `_DT_RP` (`partitionNEEGL`) |
+
+Running more than one and comparing is a common sanity check. Because each writes
+its own columns, all four can sit in the dataset side by side.
 
 A note on signs: NEE is negative when the ecosystem takes up carbon. GPP and RECO come
 back as positive fluxes, related by NEE = RECO - GPP.
 
-On each tab, pick the **input columns** (auto-filled from the data, with a green ✓ /
-red ✗ marker showing whether the chosen column exists):
+Pick the **input columns** (auto-filled from the data, with a green ✓ / red ✗ marker
+showing whether the chosen column exists). The tab shows only the inputs the chosen
+method and mode need. A column you picked stays picked when you switch away and back.
 
-- The **nighttime** methods need *measured* and *gap-filled* NEE and air
-  temperature, plus shortwave-in radiation for the day/night split.
-- The **daytime** methods fit on *measured* NEE with *gap-filled* meteo drivers (air
-  temperature, VPD, shortwave-in). The ONEFlux daytime variant also takes the
-  measured air temperature and radiation; the REddyProc daytime variant has an
-  optional **NEE SD** column (leave it as *(none)* to use the method's default
-  uncertainty).
+| Method / Mode | Inputs besides measured NEE | Site location |
+|---|---|---|
+| Nighttime / ONEFlux | measured TA and SW_IN, gap-filled NEE and TA | latitude |
+| Nighttime / REddyProc | measured TA and SW_IN, gap-filled NEE and TA | latitude, longitude, UTC offset |
+| Daytime / ONEFlux | measured TA and SW_IN, gap-filled TA, SW_IN and VPD, optional gap-filled NEE | none |
+| Daytime / REddyProc | gap-filled TA, SW_IN and VPD, optional NEE SD | latitude, longitude, UTC offset |
 
-Set the **site coordinates** (latitude, and for the methods that need them,
-longitude; both default from **Settings ▸ Project settings**). The UTC offset is
-always the project's, shown read-only. The site
-has to be filled in there first: a method that needs coordinates **refuses to run**
-while Project settings is empty, and says why in the status line. Left to their
-defaults, latitude and longitude read 0 / 0 and the UTC offset shows **not set**, so
-the run would partition at latitude 0, longitude 0 on UTC and return
-plausible-looking GPP and RECO for the wrong place. For
-the daytime methods, the **VPD is in kPa** toggle says whether your VPD column is in
-kPa (the diive convention, default) or hPa.
+Daytime / ONEFlux splits day and night on the measured radiation, so it needs no site
+location. Its optional **NEE (gap-filled)** matters only for windows without any
+measured nighttime NEE (for example under the midnight sun): ONEFlux then starts from the
+gap-filled NEE of the year's first record, and with this input diive does the same.
+Left as *(none)*, those windows are not fitted and a console warning lists them. For Daytime /
+REddyProc, leave **NEE SD** as *(none)* to use the method's default uncertainty.
 
-Click **Run partitioning** (it runs in the background; the daytime methods can take
-a while, roughly tens of seconds per year). The preview shows daily-mean NEE, GPP,
-and RECO over time plus their cumulative sums. **Add results to dataset** appends all
-of the method's output columns (GPP, RECO, and the fitted parameters) to your
-variables.
+The **site coordinates** (latitude, and for the variants that need it, longitude)
+default from **Settings ▸ Project settings**. The UTC offset is always the project's,
+shown read-only. The site has to be filled in there first: a variant that needs the
+site location **refuses to run** while Project settings is empty, and says why in the
+status line. Left to their defaults, latitude and longitude read 0 / 0 and the UTC
+offset shows **not set**, so the run would partition at latitude 0, longitude 0 on UTC
+and return plausible-looking GPP and RECO for the wrong place. For the daytime method,
+the **VPD is in kPa** toggle says whether your VPD column is in kPa (the diive
+convention, default) or hPa.
+
+Click **Run partitioning**. It runs in the background, and the daytime method can take
+a while, roughly tens of seconds per year. The preview shows daily-mean NEE, GPP, and
+RECO over time plus their cumulative sums. **Add results to dataset** appends all of
+the variant's output columns (GPP, RECO, and the fitted parameters) to your variables.
+**Copy Python** copies a `dv.flux.partition_nee(...)` call with the same `method=`
+and `mode=`.
+
+Projects saved with the earlier per-variant tabs (for example **Daytime partitioning
+(REddyProc)**) open in this tab, with Method, Mode and the saved column picks set to
+match.
 
 > The bundled CH-DAV example already has measured and gap-filled NEE, air
-> temperature, VPD, and radiation columns, so you can try these tabs on it right
-> away.
+> temperature, VPD, and radiation columns, so you can try this tab on it right away.
 
 ### Random uncertainty (PAS20)
 
