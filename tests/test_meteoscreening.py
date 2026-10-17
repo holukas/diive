@@ -1130,6 +1130,232 @@ class TestSetCorrections(unittest.TestCase):
         self._assert_same(m, expected)
 
 
+class TestUnappliedFlags(unittest.TestCase):
+    """L229: flags take effect in finalize_outlier_detection() only, so flags
+    that never reached a finalize must not pass silently."""
+
+    def test_resample_warns_about_flags_added_since_finalize(self):
+        df, _ = _spiky()
+        m = _screening(df)
+        m.start_outlier_detection()
+        m.flag_outliers_abslim_test(minval=0, maxval=50)
+        m.addflag()
+        messages = _warnings(lambda: m.resample(to_freqstr='30min'))
+        self.assertEqual(len(messages), 1)
+        self.assertIn(f'FLAG_{FIELD}_OUTLIER_ABSLIM_TEST', messages[0])
+        self.assertIn('Run finalize_outlier_detection() before resample()', messages[0])
+        self.assertGreater(m.resampled_detailed[FIELD][FIELD].max(), 40)  # not applied
+
+        m.finalize_outlier_detection()
+        self.assertEqual(_warnings(lambda: m.resample(to_freqstr='30min')), [])
+        self.assertLess(m.resampled_detailed[FIELD][FIELD].max(), 40)
+
+        m.flag_outliers_zscore_test(thres_zscore=50)
+        m.addflag()
+        messages = _warnings(lambda: m.resample(to_freqstr='30min'))
+        self.assertEqual(len(messages), 1)
+        self.assertIn(f'FLAG_{FIELD}_OUTLIER_ZSCORE_TEST', messages[0])
+        self.assertNotIn('ABSLIM', messages[0])
+
+    def test_no_warning_without_flags(self):
+        df, _ = _spiky()
+        m = _screening(df)
+        self.assertEqual(_warnings(lambda: m.resample(to_freqstr='30min')), [])
+        m.start_outlier_detection()
+        self.assertEqual(_warnings(lambda: m.resample(to_freqstr='30min')), [])
+
+    def test_finalize_warns_about_a_test_not_added(self):
+        df, spike_end = _spiky()
+        m = _screening(df)
+        m.start_outlier_detection()
+        m.flag_outliers_abslim_test(minval=0, maxval=50)
+        messages = _warnings(m.finalize_outlier_detection)
+        self.assertEqual(len(messages), 1)
+        self.assertIn(f'FLAG_{FIELD}_OUTLIER_ABSLIM_TEST', messages[0])
+        self.assertIn('not added with addflag()', messages[0])
+        self.assertEqual(m.series_hires_cleaned[FIELD].loc[spike_end - pd.Timedelta('5min')], 90)
+        m.addflag()
+        self.assertEqual(_warnings(m.finalize_outlier_detection), [])
+
+    def test_finalize_without_start_raises(self):
+        df, _ = _spiky()
+        m = _screening(df)
+        m.flag_missingvals_test()
+        with self.assertRaisesRegex(RuntimeError, r'start_outlier_detection\(\)'):
+            m.finalize_outlier_detection()
+
+
+class TestRestartAfterFinalize(unittest.TestCase):
+    """L230: start_outlier_detection() after a finalize starts a new round."""
+
+    def _round_one(self):
+        df, spike_end = _spiky()
+        m = _screening(df)
+        m.flag_missingvals_test()
+        m.start_outlier_detection()
+        m.flag_outliers_abslim_test(minval=0, maxval=50)
+        m.addflag()
+        m.finalize_outlier_detection()
+        spike = spike_end - pd.Timedelta('5min')
+        self.assertTrue(np.isnan(m.series_hires_cleaned[FIELD].loc[spike]))
+        return m, spike
+
+    def test_flags_of_the_previous_round_are_dropped(self):
+        m, spike = self._round_one()
+        m.start_outlier_detection()
+        # The new round tests the record the QCF removed.
+        self.assertEqual(m.outlier_detection[FIELD].series_hires_cleaned.loc[spike], 90)
+        m.flag_outliers_zscore_test(thres_zscore=50)
+        m.addflag()
+        m.finalize_outlier_detection()
+        self.assertEqual(int(m.series_hires_cleaned[FIELD].isna().sum()), 0)
+        flags = [c for c in m.data_detailed[FIELD] if c.endswith('_TEST')]
+        self.assertEqual(flags, [f'FLAG_{FIELD}_MISSING_TEST', f'FLAG_{FIELD}_OUTLIER_ZSCORE_TEST'])
+
+    def test_same_test_with_other_settings(self):
+        m, spike = self._round_one()
+        m.start_outlier_detection()
+        m.flag_outliers_abslim_test(minval=0, maxval=100)
+        m.addflag()
+        m.finalize_outlier_detection()  # raised "duplicate, but is not identical"
+        self.assertEqual(m.series_hires_cleaned[FIELD].loc[spike], 90)
+
+    def test_until_the_next_finalize_the_last_removals_hold(self):
+        m, spike = self._round_one()
+        m.start_outlier_detection()
+        self.assertTrue(np.isnan(m.series_hires_cleaned[FIELD].loc[spike]))
+
+    def test_new_round_starts_from_the_corrected_series(self):
+        m, spike = self._round_one()
+        m.correction_setto_min_threshold(threshold=30, showplot=False)
+        m.start_outlier_detection()
+        series = m.outlier_detection[FIELD].series_hires_cleaned
+        self.assertEqual(series.loc[spike], 90)
+        self.assertEqual(int(series.isna().sum()), 0)
+        self.assertGreaterEqual(series.min(), 30)
+
+
+def _radiation_with_removed_and_missing_night_records():
+    """10MIN radiation-like data: a night spike END 01:50 and a night record without value END 02:50."""
+    index = pd.date_range('2020-06-01 00:10', periods=3 * 144, freq='10min')
+    hour = index.hour.to_numpy() + index.minute.to_numpy() / 60
+    values = np.clip(800 * np.sin(np.pi * (hour - 5) / 15), 0, None) - 3
+    values += np.random.default_rng(3).normal(0, .5, len(index))
+    spike, missing = index.get_loc(pd.Timestamp('2020-06-01 01:50')), index.get_loc(pd.Timestamp('2020-06-01 02:50'))
+    values[spike], values[missing] = 400, np.nan
+    m = _screening(_series_detailed(index, values))
+    m.flag_missingvals_test()
+    m.start_outlier_detection()
+    m.flag_manualremoval_test(remove_dates=['2020-06-01 01:50'])
+    m.addflag()
+    m.finalize_outlier_detection()
+    return m, index[spike] - pd.Timedelta('5min'), index[missing] - pd.Timedelta('5min')
+
+
+class TestCorrectionAfterFinalize(unittest.TestCase):
+    """L231: corrections after finalize keep the records the QCF removed removed."""
+
+    def test_setto_value_keeps_a_removed_record_removed(self):
+        df, spike_end = _spiky()
+        m = _screening(df)
+        m.start_outlier_detection()
+        m.flag_outliers_abslim_test(minval=0, maxval=50)
+        m.addflag()
+        m.finalize_outlier_detection()
+        spike = spike_end - pd.Timedelta('5min')
+        m.correction_setto_value(dates=[str(spike_end)], value=1)
+        self.assertTrue(np.isnan(m.series_hires_cleaned[FIELD].loc[spike]))
+        m.resample(to_freqstr='30min')
+        self.assertGreater(m.resampled_detailed[FIELD][FIELD].min(), 20)
+
+    def test_zero_offset_keeps_removed_night_record_and_zeroes_missing_one(self):
+        for via in ('method', 'set_corrections'):
+            with self.subTest(via=via):
+                m, spike, missing = _radiation_with_removed_and_missing_night_records()
+                qcf = m.outlier_detection_qcf[FIELD].flagqcf
+                self.assertEqual(qcf.loc[spike], 2)
+                self.assertEqual(qcf.loc[missing], 2)  # the missing-values flag
+                if via == 'method':
+                    m.correction_remove_nighttime_zero_offset(showplot=False)
+                else:
+                    m.set_corrections([{'key': 'radiation_zero_offset', 'kwargs': {}}])
+                cleaned = m.series_hires_cleaned[FIELD]
+                self.assertTrue(np.isnan(cleaned.loc[spike]))  # was 0.0
+                self.assertEqual(cleaned.loc[missing], 0)  # deliberate, Round 7 note
+                # The next finalize decides again from the corrected records.
+                self.assertEqual(m._series_hires_corrected[FIELD].loc[spike], 0)
+
+    def test_empty_slots_stay_empty(self):
+        m = _screening(_mixed_radiation())
+        empty = m.series_hires_orig[FIELD].isna()
+        m.start_outlier_detection()
+        m.flag_manualremoval_test(remove_dates=['2020-06-01 02:00', '2020-06-03 02:00'])  # 10MIN and 1MIN
+        m.addflag()
+        m.finalize_outlier_detection()
+        removed = (m.outlier_detection_qcf[FIELD].flagqcf == 2) & ~empty
+        self.assertEqual(int(removed.sum()), 2)
+        m.correction_remove_nighttime_zero_offset(showplot=False)
+        cleaned = m.series_hires_cleaned[FIELD]
+        self.assertEqual(int(cleaned[empty].notna().sum()), 0)
+        self.assertEqual(int(cleaned[removed].notna().sum()), 0)
+
+
+class TestResampleCoverage(unittest.TestCase):
+    """L235: coverage is the time the kept records cover, whatever the grid."""
+
+    @staticmethod
+    def _resampled(index, values, remove, agg, perc):
+        m = _screening(_series_detailed(index, values))
+        m.start_outlier_detection()
+        if remove:
+            m.flag_manualremoval_test(remove_dates=remove)
+            m.addflag()
+        m.finalize_outlier_detection()
+        m.resample(to_freqstr='30min', agg=agg, mincounts_perc=perc)
+        return m.resampled_detailed[FIELD][FIELD]
+
+    def test_other_resolutions_do_not_change_the_result(self):
+        coarse = pd.date_range('2020-06-01 00:10', '2020-06-03 00:00', freq='10min')
+        fine = pd.date_range('2020-06-03 00:01', '2020-06-05 00:00', freq='1min')
+        single = (coarse, np.ones(len(coarse)))
+        mixed = (coarse.append(fine), np.r_[np.ones(len(coarse)), np.full(len(fine), .1)])
+        half_hour = pd.Timestamp('2020-06-02 12:30')
+        for remove, agg, perc, expected in (
+                (['2020-06-02 12:10', '2020-06-02 12:20'], 'sum', .5, np.nan),  # 1 of 3 kept
+                (['2020-06-02 12:10'], 'sum', .5, 2.0),  # 2 of 3 kept
+                (['2020-06-02 12:10', '2020-06-02 12:20'], 'mean', .5, 1.0)):  # one record is enough
+            with self.subTest(remove=remove, agg=agg):
+                got = [self._resampled(*data, remove, agg, perc).loc[half_hour] for data in (single, mixed)]
+                np.testing.assert_array_equal(got, [expected, expected])
+
+    def test_sum_has_no_one_record_rule(self):
+        index = pd.date_range('2020-06-01 00:10', '2020-06-03 00:00', freq='10min')
+        remove = ['2020-06-02 12:10', '2020-06-02 12:20']
+        half_hour = pd.Timestamp('2020-06-02 12:30')
+        for perc, expected in ((.25, 1.0), (.5, np.nan), (1, np.nan)):
+            with self.subTest(perc=perc):
+                got = self._resampled(index, np.ones(len(index)), remove, 'sum', perc).loc[half_hour]
+                np.testing.assert_array_equal(got, expected)
+        r = self._resampled(index, np.ones(len(index)), None, 'sum', 1)
+        self.assertTrue((r.dropna() == 3).all())
+
+    def test_sum_needs_a_record_at_any_minimum(self):
+        index = pd.date_range('2020-06-01 00:10', '2020-06-03 00:00', freq='10min')
+        remove = [['2020-06-02 12:10', '2020-06-02 12:30']]
+        got = self._resampled(index, np.ones(len(index)), remove, 'sum', 0).loc['2020-06-02 12:30']
+        self.assertTrue(np.isnan(got))
+
+    def test_partial_one_minute_sum(self):
+        """15 of 30 one-minute records: half the total, kept at mincounts_perc=0.5 only."""
+        index = pd.date_range('2020-06-01 00:01', '2020-06-03 00:00', freq='1min')
+        remove = [['2020-06-02 12:01', '2020-06-02 12:15']]
+        half_hour = pd.Timestamp('2020-06-02 12:30')
+        self.assertAlmostEqual(self._resampled(index, np.full(len(index), .1), remove, 'sum', .5)
+                               .loc[half_hour], 1.5)
+        self.assertTrue(np.isnan(self._resampled(index, np.full(len(index), .1), remove, 'sum', 1)
+                                 .loc[half_hour]))
+
+
 class TestPublicHelpers(unittest.TestCase):
     """Display helpers, record count and resolutions for the GUI."""
 

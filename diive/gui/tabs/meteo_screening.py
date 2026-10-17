@@ -151,10 +151,11 @@ class MeteoScreeningTab(ScreeningTabBase):
         self._mincounts.setToolTip(
             "Minimum fraction of each target period that the kept records must "
             "cover (each record counts the time it covers), else the resampled "
-            "value is missing. The minimum is counted in slots of the "
-            "high-resolution grid and rounded down; when it is below three slots, "
-            "one covered slot is enough (e.g. 10-min data resampled to 30 min "
-            "need only one record per period).")
+            "value is missing. For mean, the minimum is rounded down to whole "
+            "records, and when it is below three records one record is enough "
+            "(e.g. 10-min data resampled to 30 min need only one record per "
+            "period). For sum there is no such rule: a sum from part of the "
+            "period counts only the measured part.")
         f.addRow("Resolution", self._freq)
         f.addRow("Aggregation", self._agg)
         f.addRow("Min. records (frac)", self._mincounts)

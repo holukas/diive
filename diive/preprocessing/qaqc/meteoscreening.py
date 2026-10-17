@@ -226,6 +226,9 @@ class StepwiseMeteoScreeningDb:
         self._series_hires_corrected = {}
         self._outlier_detection = {}  # Results (instances) from the outlier detection for each variable
         self._outlier_detection_qcf = {}  # Results (instances) from the overall quality flag QCF calculations
+        # Flag columns of each field's current detector that the last finalize used.
+        # resample() warns about flags added after that finalize.
+        self._finalized_flags = {}
         self._resampled_detailed = {}  # Resampled time series with tags
 
         for field in self.fields:
@@ -280,18 +283,36 @@ class StepwiseMeteoScreeningDb:
 
     def start_outlier_detection(self):
         """Initiate step-wise outlier detection (sod) for each field.
+
         Each field gets its own sod instance. Tests run on the current series, so
-        corrections applied before this call are what the tests see."""
+        corrections applied before this call are what the tests see.
+
+        Called again, e.g. after ``finalize_outlier_detection()``, it starts a new
+        round. The flags of the previous round are dropped, so the next finalize
+        uses only the flags added from now on. The tests start from the corrected
+        series before the QCF removed records, so those records are tested again.
+        Until the next finalize the current series keeps the last QCF removals.
+        """
         for field in self.fields:
             info(f"Starting step-wise outlier detection for variable {field} ...")
+            previous = self._outlier_detection.get(field)
+            if previous is not None:
+                # finalize copied the previous round's flags into data_detailed, and
+                # FlagQCF uses every flag column there.
+                dropped = [c for c in previous.flags.columns if c in self.data_detailed[field].columns]
+                self._data_detailed[field] = self.data_detailed[field].drop(columns=dropped)
+                if dropped:
+                    info(f"Dropped the flags of the previous outlier detection: {', '.join(dropped)}")
             dfin = self.data_detailed[field].copy()
-            dfin[field] = self._series_hires_cleaned[field]
+            # After a finalize the current series lacks the records the QCF removed.
+            dfin[field] = self._series_hires_corrected.get(field, self._series_hires_cleaned[field])
             self._outlier_detection[field] = StepwiseOutlierDetection(
                 dfin=dfin,
                 col=field,
                 site_lat=self.site_lat,
                 site_lon=self.site_lon,
                 utc_offset=self.utc_offset)
+            self._finalized_flags[field] = set()
 
     @property
     def resampled_detailed(self) -> dict:
@@ -999,6 +1020,13 @@ class StepwiseMeteoScreeningDb:
         # Some corrections write every slot (the nighttime zero offset sets all of
         # the night to 0), but a slot without an original record must stay empty.
         series = series.where(self._has_record(field))
+        if field in self._outlier_detection_qcf:
+            # Records the last finalize removed stay removed until the next finalize,
+            # also where a correction writes a value (zero offset, set to value).
+            # Records missing in the download are not masked: the zero offset sets
+            # missing nighttime records to zero on purpose.
+            removed = (self._outlier_detection_qcf[field].flagqcf == 2) & self._series_hires_orig[field].notna()
+            series = series.mask(removed)
         self._series_hires_cleaned[field] = series
         if field in self._outlier_detection:
             # After finalize, tests run on the corrected series before the QCF
@@ -1415,11 +1443,21 @@ class StepwiseMeteoScreeningDb:
         original resolution, or less where its period overlaps the previous
         record's (the overlap counts once): ``agg='mean'`` is the time-weighted mean,
         ``agg='sum'`` adds each record once. ``mincounts_perc`` is the minimum
-        fraction of the period the kept records must cover, counted in slots of
-        the high-resolution grid and rounded down; if that minimum is below three
-        slots, one covered slot is enough (e.g. 10MIN data resampled to 30min).
-        Periods below the minimum are NaN, so the result spans the whole screened
-        range.
+        fraction of the period the kept records must cover, measured by the time
+        they cover, so other resolutions in the same download do not change it.
+        For ``agg='mean'`` the minimum is rounded down to whole records of the
+        finest resolution in the period, and if that is below three records, one
+        record is enough (e.g. 10MIN data resampled to 30min). For ``agg='sum'``
+        the records must cover at least ``mincounts_perc`` of the period. Periods
+        below the minimum are NaN, so the result spans the whole screened range.
+
+        A sum over a partly covered period counts only the measured part (15 of
+        30 one-minute records give half the half-hour's total). For precipitation,
+        use ``mincounts_perc=1`` if partial sums are not wanted.
+
+        Flags added with ``addflag()`` are applied by
+        ``finalize_outlier_detection()``, not here. A warning names the flags
+        added since the last finalize.
 
         A coarse record is assigned whole to the period that contains its END
         timestamp. This is exact when its resolution divides the target period.
@@ -1434,9 +1472,9 @@ class StepwiseMeteoScreeningDb:
             >>> mscr.resampled_detailed['TA_T1_2_1'].index.freqstr
             '30min'
 
-            Hourly sums (e.g. precipitation), each hour at least half covered:
+            Hourly sums (e.g. precipitation), only for completely covered hours:
 
-            >>> mscr.resample(to_freqstr='1h', agg='sum', mincounts_perc=0.5)
+            >>> mscr.resample(to_freqstr='1h', agg='sum', mincounts_perc=1)
         """
         if agg not in ('mean', 'sum'):
             raise ValueError(f"agg must be 'mean' or 'sum', not {agg!r}.")
@@ -1452,6 +1490,17 @@ class StepwiseMeteoScreeningDb:
                                           f"a lower time resolution than the data ({grid.freqstr}).")
             info(f"Resampling {field} from {grid.freqstr} to {to_freqstr} ({agg}) ...")
 
+            sod = self._outlier_detection.get(field)
+            if sod is not None:
+                unapplied = [c for c in sod.flags.columns if c not in self._finalized_flags.get(field, set())]
+                if unapplied:
+                    # No verbose argument here, and unscreened data would be tagged
+                    # as screened: the warning must be seen.
+                    warn(f"{field}: {len(unapplied)} flag(s) added with addflag() are not applied, "
+                         f"because finalize_outlier_detection() has not run since: "
+                         f"{', '.join(unapplied)}. The resampled data still hold the records they "
+                         f"reject. Run finalize_outlier_detection() before resample().")
+
             # A kept record weighs the grid slots its original resolution covers
             # (10 for a 10MIN record on a 1MIN grid, less where it overlaps the
             # previous record); empty slots and rejected records weigh 0.
@@ -1461,19 +1510,26 @@ class StepwiseMeteoScreeningDb:
             # The index is TIMESTAMP_MIDDLE, so label='right' puts each record into
             # the period (T - to_freqstr, T] that contains its END timestamp.
             periods = dict(rule=to_freqstr, label='right')
-            covered = weight.resample(**periods).sum()
             if agg == 'mean':
-                series_resampled = (series * weight).resample(**periods).sum() / covered
+                series_resampled = (series * weight).resample(**periods).sum() / weight.resample(**periods).sum()
             else:
                 series_resampled = series.resample(**periods).sum()
 
-            # Same minimum rule as resample_series_to_freq (truncated, at least one
-            # slot below three), so periods are kept as resample_series_to_freq
-            # keeps them for single-resolution data.
-            maxcounts = pd.Series(1, index=series.index).resample(**periods).count().max()
-            mincounts = int(maxcounts * mincounts_perc)
-            mincounts = 1 if mincounts < 3 else mincounts
-            series_resampled = series_resampled.where(covered >= mincounts)
+            # Coverage in seconds of the kept records' own periods, not in grid
+            # slots, so a finer grid from other records does not change it.
+            covered = self._covered_seconds(field).where(series.notna(), 0).resample(**periods).sum()
+            period_sec = pd.Timedelta(to_offset(to_freqstr).nanos, unit='ns').total_seconds()
+            if agg == 'mean':
+                # Whole records, rounded down, and one record below three: for
+                # single-resolution data this is the rule of resample_series_to_freq.
+                resolution = self.data_detailed[field]['FREQ_AUTO_SEC'].resample(**periods).min()
+                records = np.floor(period_sec / resolution * mincounts_perc)
+                keep = (covered >= records * resolution).where(records >= 3, covered > 0)
+            else:
+                # No one-record rule: a sum from part of the period is too small.
+                # The tolerance absorbs rounding in mincounts_perc * period_sec.
+                keep = (covered > 0) & (covered >= mincounts_perc * period_sec * (1 - 1e-9))
+            series_resampled = series_resampled.where(keep)
 
             series_resampled = series_resampled.asfreq(to_freqstr)
             series_resampled.index.name = 'TIMESTAMP_END'
@@ -1506,7 +1562,12 @@ class StepwiseMeteoScreeningDb:
         bring back records a stricter run removed. Tests run after this call,
         with or without corrections in between, also test the records the QCF
         removed (not those rejected by an added flag), so every record a later
-        run brings back has been through all tests.
+        run brings back has been through all tests. To drop this round's flags
+        and screen again, call ``start_outlier_detection()``.
+
+        Only flags added with ``addflag()`` count. A warning names the most
+        recent test if its flag was not added. ``resample()`` warns about flags
+        added after the last call of this method, which it does not apply.
 
         With more than one time resolution the missing-values flag is needed to
         tell records from empty grid slots, so it is added here if
@@ -1518,6 +1579,9 @@ class StepwiseMeteoScreeningDb:
                 QCF=1 (records with soft flags). Daytime and nighttime come from
                 potential radiation at the site (daytime above 20 W m-2).
             nighttime_accept_qcf_below: Same for nighttime records.
+
+        Raises:
+            RuntimeError: If ``start_outlier_detection()`` was not called.
 
         Example:
             ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example.
@@ -1532,7 +1596,18 @@ class StepwiseMeteoScreeningDb:
             >>> mscr.finalize_outlier_detection(daytime_accept_qcf_below=2,
             ...                                 nighttime_accept_qcf_below=1)
         """
+        not_started = [field for field in self.fields if field not in self._outlier_detection]
+        if not_started:
+            raise RuntimeError(f"No outlier detection to finalize for {', '.join(not_started)}. Call "
+                               f"start_outlier_detection(), run the tests and keep their flags with "
+                               f"addflag() first.")
         for field in self.fields:
+            sod = self.outlier_detection[field]
+            if sod.flag_pending:
+                # No verbose argument here, and a test left out of the QCF must be seen.
+                warn(f"{field}: the most recent test ({sod.last_flag.name}) was not added with "
+                     f"addflag(), so the QCF does not use it.")
+
             # A previous run's QCF columns would otherwise stay in data_detailed,
             # since FlagQCF.get() only appends columns that are missing.
             previous = self._outlier_detection_qcf.get(field)
@@ -1554,12 +1629,11 @@ class StepwiseMeteoScreeningDb:
                          f"from empty grid slots in the QCF.")
 
             # Detect new columns
-            newcols = frames.detect_new_columns(df=self.outlier_detection[field].flags,
-                                                other=self.data_detailed[field])
-            self._data_detailed[field] = pd.concat(
-                [self.data_detailed[field], self.outlier_detection[field].flags[newcols]], axis=1)
+            newcols = frames.detect_new_columns(df=sod.flags, other=self.data_detailed[field])
+            self._data_detailed[field] = pd.concat([self.data_detailed[field], sod.flags[newcols]], axis=1)
             for col in newcols:
                 detail(f"++Added new column {col}.")
+            self._finalized_flags[field] = set(sod.flags.columns)
 
             # Calculate overall quality flag QCF. FlagQCF uses every FLAG_*_TEST
             # column of the field; idstr only names the output columns. Potential

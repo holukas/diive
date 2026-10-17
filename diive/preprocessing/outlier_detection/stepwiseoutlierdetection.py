@@ -113,6 +113,12 @@ class StepwiseOutlierDetection:
         return self._last_flag
 
     @property
+    def flag_pending(self) -> bool:
+        """True when the most recent test ran but its flag was not added with `.addflag()`."""
+        return (isinstance(self._last_flag, Series) and not self._last_flag.empty
+                and not self._last_flag_added)
+
+    @property
     def last_bounds(self) -> tuple:
         """``(lower, upper)`` data-unit Series for the most recent test's final
         detection band, or ``(None, None)`` for tests without a single envelope

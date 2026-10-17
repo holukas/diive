@@ -189,35 +189,30 @@ def _download(segments, field=FIELD, units="degC", value_fn=None,
     return df[TAGS + [field]], duration
 
 
-def _grid_step(ends: pd.DatetimeIndex, duration: pd.Series) -> pd.Timedelta:
-    """Step of a grid that holds every record at its own END: the greatest common
-    divisor of the resolutions and of the offsets between END timestamps."""
-    ns = np.concatenate([duration.dt.total_seconds().to_numpy() * 1e9,
-                         (ends - ends[0]).total_seconds().to_numpy() * 1e9]).astype(np.int64)
-    return pd.Timedelta(int(np.gcd.reduce(ns)), unit="ns")
-
-
-def _reference(values: pd.Series, duration: pd.Series, agg: str, mincounts: float,
-               step: pd.Timedelta) -> pd.Series:
+def _reference(values: pd.Series, duration: pd.Series, agg: str, mincounts: float) -> pd.Series:
     """Time-weighted 30-min aggregate of the kept raw records, per period END T.
 
     A period collects the records whose END is in (T - 30min, T]. The mean weights
-    each record by the time it covers; the sum adds each record once. A period is
-    kept if its records cover at least int(slots * mincounts) slots of the grid
-    (at least one slot if that minimum is below three), the rule the Resample
+    each record by the time it covers; the sum adds each record once. Coverage is
+    the time the records cover, independent of the grid. A mean is kept if that
+    is at least int(records * mincounts) whole records of the finest resolution in
+    the period (one record if that minimum is below three). A sum is kept if the
+    records cover at least mincounts of the period. This is the rule the Resample
     page documents.
     """
     target = values.index.ceil(P)
     w = duration.reindex(values.index).dt.total_seconds()
-    covered_slots = w.groupby(target).sum() / step.total_seconds()
+    covered = w.groupby(target).sum()
+    period = P.total_seconds()
     if agg == "mean":
         out = (values * w).groupby(target).sum() / w.groupby(target).sum()
+        resolution = w.groupby(target).min()
+        records = np.floor(period / resolution * mincounts)
+        keep = (covered >= records * resolution).where(records >= 3, covered > 0)
     else:
         out = values.groupby(target).sum()
-    slots = int(round(P / step))
-    minslots = int(slots * mincounts)
-    minslots = 1 if minslots < 3 else minslots
-    return out.where(covered_slots >= minslots - 1e-9)
+        keep = covered >= mincounts * period * (1 - 1e-9)
+    return out.where(keep)
 
 
 # --- driving the tab ---------------------------------------------------------------
@@ -568,8 +563,7 @@ def test_emitted_matches_time_weighted_reference(window, slot_exceptions, name, 
     got = out.iloc[:, 0].copy()
     got.index = got.index + P / 2  # MIDDLE -> END, checked in test_emitted_timestamps
     kept = res.raw[FIELD].drop(res.planted)
-    step = _grid_step(res.raw.index, res.duration)
-    ref = _reference(kept, res.duration, agg, mincounts, step)
+    ref = _reference(kept, res.duration, agg, mincounts)
     got_valid, ref_valid = got.dropna(), ref.dropna()
     missing = ref_valid.index.difference(got_valid.index)
     extra = got_valid.index.difference(ref_valid.index)
