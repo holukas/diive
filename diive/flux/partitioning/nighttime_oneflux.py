@@ -483,14 +483,19 @@ class NighttimePartitioningOneFlux:
     decides. On days without sunrise or sunset (polar day and polar night) no
     record is night, as in ONEFlux, where the day/night flag is missing there.
 
+    Hourly data are partitioned on their own records, as in ONEFlux. ONEFlux
+    puts an hourly year onto a half-hourly grid only for its daytime method
+    (``library.create_data_structures``), not for this one.
+
     Numerics follow ONEFlux: working arrays are float32, as ONEFlux stores them
     (``FLOAT_PREC = 'f4'``), with the dtype of every intermediate as ONEFlux
     gets it on NumPy 1, and Rref is fitted with ``leastsq`` as in ONEFlux rather
     than solved. ``NEE_NIGHT_OF`` keeps the input's float64 values; all other
     columns hold float32 values.
 
-    Measured agreement, CH-DAV 2016 and 2019 and CH-LAE 2017-2019 half-hourly
-    against a native ONEFlux 1.3.7 run (NumPy 1.26, SciPy 1.17): RECO, GPP
+    Measured agreement, CH-DAV 2016 and 2019 and CH-LAE 2017-2019 half-hourly,
+    and US-Ha1 2023-2024, US-MMS 2022-2023 and CH-DAV 2016 averaged to hourly
+    records, against a native ONEFlux 1.3.7 run (NumPy 1.26, SciPy 1.17): RECO, GPP
     (ordinary and robust), Rref and E0 are bitwise identical in every record,
     also with gaps in measured TA, SW_IN and nighttime NEE, and at CH-LAE,
     where only 17-20 % of NEE is measured. This relies on SciPy's ``leastsq``

@@ -45,8 +45,9 @@ or latitude.
 
 This port mirrors the ONEFlux reference function-for-function. The fits use the
 same penalized (Bayesian-prior) least squares solved with the same SciPy
-``leastsq`` (step-bound ``factor=0.25``). On identical half-hourly arrays every
-fit reproduces a native ONEFlux run under NumPy 1 bit for bit (see
+``leastsq`` (step-bound ``factor=0.25``). On identical half-hourly or hourly
+arrays every fit reproduces a native ONEFlux run under NumPy 1 bit for bit. An
+hourly year is first put onto a half-hourly grid, as ONEFlux does (see
 :class:`DaytimePartitioningOneFlux`).
 
 Reference:
@@ -479,9 +480,11 @@ def _estimate_parasets(D, nperday, verbose=1, reject_alpha_at_start=False):
         day_begin2 = (i - 2) * WINSIZE / 2.0 if i > 1 else 0
         day_end2 = (i + 2) * WINSIZE / 2.0 + WINSIZE if i < n_parasets - 2 else float(np.max(julday))
 
-        # ONEFlux hardcodes 48 here because it duplicates hourly years to a
-        # half-hourly grid first (library.create_data_structures); diive keeps
-        # the input resolution, so the anchor uses the record count per day.
+        # ONEFlux hardcodes 48 records per day here (daytime.py:1045). It can,
+        # because an hourly year reaches it duplicated onto a half-hourly grid
+        # (library.create_data_structures), and _run_shared does the same, so
+        # nperday is 48 for both resolutions ONEFlux supports. Other
+        # resolutions anchor on their own record count per day.
         central = int((day_begin + WINSIZE / 2.0) * float(nperday))
         ind_rows = np.array([central, central, central], dtype=float)
 
@@ -1053,23 +1056,27 @@ class DaytimePartitioningOneFlux:
     uncertainty look-up, while the gap-filled drivers feed the fits and the
     flux prediction.
 
-    Input resolution: half-hourly and hourly data are both partitioned at their
-    own resolution. ONEFlux instead duplicates an hourly year onto a half-hourly
-    grid before partitioning, which is why its window anchors can assume 48
-    records per day. diive derives the records per day from the timestamps, so
-    hourly results stay on the hourly grid. For an hourly site this is a
-    deliberate deviation: the duplicated grid feeds every record twice into the
-    window fits, so results are close to, but not bit-identical with, a native
-    ONEFlux run.
+    Input resolution: hourly data are partitioned the way ONEFlux partitions an
+    hourly site. ONEFlux's daytime method works on a half-hourly grid. It
+    repeats every hourly record, and the first copy stands for the half-hour
+    that ends 30 minutes earlier. The windows are fitted on this grid, which
+    holds every measured record twice, and ONEFlux's pipeline keeps the first
+    copy of each record for its hourly output. diive does the same, so an
+    hourly year gives ONEFlux's hourly result. The window parameters are
+    reported at their central records on the hourly index. Half-hourly data
+    are partitioned as they are. Other resolutions, which ONEFlux does not
+    process, are partitioned at their own resolution.
 
-    Measured agreement, half-hourly against a native ONEFlux 1.3.7 run
-    (NumPy 1.26, SciPy 1.17) on the same arrays, CH-DAV 2016 and 2019 and
-    CH-LAE 2017-2019 (where only 17-20 % of NEE is measured), also with gaps in
-    measured TA, SW_IN and nighttime NEE: the per-record NEE uncertainty is
-    identical bit for bit, and so is every light-response fit and every
-    window parameter (143 windows on CH-DAV 2016, 77-123 per CH-LAE run).
-    Per record, GPP and RECO differ by at most 6e-6 umol m-2 s-1, float32
-    rounding, and the annual sums agree to 0.0001%.
+    Measured agreement against a native ONEFlux 1.3.7 run (NumPy 1.26, SciPy
+    1.17) on the same arrays: half-hourly CH-DAV 2016 and 2019 and CH-LAE
+    2017-2019 (where only 17-20 % of NEE is measured), also with gaps in
+    measured TA, SW_IN and nighttime NEE, and hourly US-Ha1 2023-2024, US-MMS
+    2022-2023 and CH-DAV 2016 averaged to hourly records. The per-record NEE
+    uncertainty is identical bit for bit, and so is every light-response fit
+    and every window parameter (143 windows on CH-DAV 2016, 77-123 per CH-LAE
+    run, 142-162 per hourly run). Per record, GPP and RECO differ by at most
+    8e-6 umol m-2 s-1, float32 rounding, and the annual sums agree to
+    0.0001%.
 
     A fit that returns no covariance matrix (``leastsq`` did not converge)
     makes ONEFlux abort the year. Its pipeline then removes the measured NEE
@@ -1102,7 +1109,8 @@ class DaytimePartitioningOneFlux:
         >>> df = dv.load_exampledata_parquet()
         >>> part = dv.flux.DaytimePartitioningOneFlux(
         ...     nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
-        ...     ta_f=df['Tair_f'], sw_in_f=df['Rg_f'], vpd=df['VPD_f'])
+        ...     ta_f=df['Tair_f'], sw_in_f=df['Rg_f'], vpd=df['VPD_f'],
+        ...     vpd_in_kpa=False)  # VPD_f is in hPa in the example data
         >>> part.run()  # then part.results -> DataFrame with RECO_DT_OF, GPP_DT_OF, ...
     """
 
@@ -1260,6 +1268,30 @@ def _run_shared(parts: dict) -> None:
     # END-convention hour (diive may use MIDDLE-stamped index); ONEFlux hr
     # is on the 0.0 / 0.5 grid -> derive from the period end.
     end = index + pd.Timedelta(minutes=int(dt_min / 2))
+
+    # Hourly data: ONEFlux partitions the daytime on a half-hourly grid.
+    # library.create_data_structures (library.py:1264-1287) repeats every
+    # record of a year with fewer than 17000 records, which in its pipeline
+    # (full years only) means an hourly year. The first copy becomes the
+    # half-hour that ends 30 minutes earlier: hour - 1, minute 30, hr - 0.5,
+    # and for the record ending at 00:00 the date, julday and hr 23.5 of the
+    # day before. The second copy keeps the record's own END. flux_part_gl2010
+    # then runs on this grid with 48 records per day, and the pipeline keeps
+    # every second record of its result, the first copies
+    # (pipeline/wrappers.py:1953-1960, PipelinePrepareURE.check_cleanup_dt:
+    # reco[::2], gpp[::2]). Building the grid from the END timestamps gives
+    # the same julday and hr. Only the daytime duplicates (DT_STR at
+    # library.py:1267): the nighttime partitioning runs on the hourly records.
+    duplicate = nperday == 24
+    if duplicate:
+        end_first = (end - pd.Timedelta(minutes=30)).values
+        end = pd.DatetimeIndex(np.column_stack([end_first, end.values]).ravel())
+        nperday = 48
+    years_grid = np.repeat(years, 2) if duplicate else years
+
+    def on_grid(a):
+        return np.repeat(a, 2) if duplicate else a
+
     hr_all = (end.hour + np.where(end.minute == 0, 0.0, 0.5)).to_numpy().astype(np.float32)
     julday_all = end.dayofyear.to_numpy().astype(np.float32)
 
@@ -1273,7 +1305,8 @@ def _run_shared(parts: dict) -> None:
 
     for year in np.unique(years):
         ym = years == year
-        julday = julday_all[ym]
+        yg = years_grid == year
+        julday = julday_all[yg]
         # The END timestamp of a year's last record already belongs to the
         # next year, so its day-of-year wraps to 1 and the record would be
         # pooled into the January windows. ONEFlux repairs the same wrap in
@@ -1287,20 +1320,24 @@ def _run_shared(parts: dict) -> None:
                                if 'nee_f' in p._inputs else None)
                        for label, p in parts.items()}
         outs, ranges = _partition_year_shared(
-            nees={label: _to_sentinel(p._inputs['nee'].to_numpy()[ym])
+            nees={label: _to_sentinel(on_grid(p._inputs['nee'].to_numpy()[ym]))
                   for label, p in parts.items()},
             nee_f_first=nee_f_first, year=int(year),
-            ta=_to_sentinel(df['ta'].to_numpy()[ym]),
-            sw_in=_to_sentinel(df['sw_in'].to_numpy()[ym]),
-            ta_f=_to_sentinel(df['ta_f'].to_numpy()[ym]),
-            sw_in_f=_to_sentinel(df['sw_in_f'].to_numpy()[ym]),
-            vpd=_to_sentinel(df['vpd'].to_numpy()[ym] * vpd_factor),
-            julday=julday, hr=hr_all[ym], nperday=nperday,
+            ta=_to_sentinel(on_grid(df['ta'].to_numpy()[ym])),
+            sw_in=_to_sentinel(on_grid(df['sw_in'].to_numpy()[ym])),
+            ta_f=_to_sentinel(on_grid(df['ta_f'].to_numpy()[ym])),
+            sw_in_f=_to_sentinel(on_grid(df['sw_in_f'].to_numpy()[ym])),
+            vpd=_to_sentinel(on_grid(df['vpd'].to_numpy()[ym] * vpd_factor)),
+            julday=julday, hr=hr_all[yg], nperday=nperday,
             verbose=verbose, reject_alpha_at_start=first.reject_alpha_at_start)
         removed[int(year)] = ranges
         for label, out in outs.items():
             for col in cols:
-                results[label].loc[ym, col] = out[col]
+                # Hourly: the first copy of each record, as ONEFlux's pipeline
+                # keeps it. Window parameters sit at even grid records
+                # ((day_begin + 2) * 48 with day_begin a multiple of 2), so
+                # none is lost.
+                results[label].loc[ym, col] = out[col][::2] if duplicate else out[col]
 
     for label, p in parts.items():
         p._results = results[label]

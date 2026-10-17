@@ -126,11 +126,12 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
 
     def test_hourly_windows_land_on_their_own_records(self):
         # The window anchors are record indices, so they depend on the records
-        # per day. Assuming 48 (half-hourly) for hourly input puts each window
-        # at twice its true position: the windows of the first half of the year
-        # get stretched over the whole year and those of the second half fall
-        # off the end of the record. Both symptoms are asserted here, because
-        # the results stay gap-free either way.
+        # per day. Hourly input goes onto ONEFlux's duplicated half-hourly grid,
+        # where 48 per day is right. Assuming 48 on the hourly records themselves
+        # puts each window at twice its true position: the windows of the first
+        # half of the year get stretched over the whole year and those of the
+        # second half fall off the end of the record. Both symptoms are asserted
+        # here, because the results stay gap-free either way.
         from diive.flux.partitioning import DaytimePartitioningOneFlux
         hourly = self.df[['NEE_CUT_REF_orig', 'Tair_orig', 'Rg_orig',
                           'Tair_f', 'Rg_f', 'VPD_f']].resample('1h').mean()
@@ -152,6 +153,116 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
 
         # The last window still has to sit inside the record, not past its end.
         self.assertGreater(anchors[-1], res.index[int(0.95 * len(res))])
+
+    def _hourly(self, df):
+        """Hourly records ending on the full hour, MIDDLE-stamped (hh:30), as
+        a FLUXNET HR file gives them."""
+        cols = ['NEE_CUT_REF_orig', 'NEE_CUT_REF_f', 'Tair_orig', 'Rg_orig',
+                'Tair_f', 'Rg_f', 'VPD_f']
+        end = df.index + pd.Timedelta(minutes=15)
+        hourly = df[cols].groupby(end.ceil('h')).mean()
+        hourly.index = hourly.index - pd.Timedelta(minutes=30)
+        return hourly
+
+    def _partition(self, d):
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        return DaytimePartitioningOneFlux(
+            nee=d['NEE_CUT_REF_orig'], ta=d['Tair_orig'], sw_in=d['Rg_orig'],
+            ta_f=d['Tair_f'], sw_in_f=d['Rg_f'], vpd=d['VPD_f'],
+            nee_f=d['NEE_CUT_REF_f'], verbose=0).run().results
+
+    def test_hourly_input_follows_the_oneflux_duplication_rule(self):
+        # ONEFlux repeats every hourly record (library.create_data_structures),
+        # the first copy standing for the half-hour that ends 30 minutes
+        # earlier, partitions that half-hourly grid, and its pipeline keeps the
+        # first copy of each record (pipeline/wrappers.py, check_cleanup_dt:
+        # reco[::2]). So the hourly result must equal a run on that grid built
+        # by hand, read at every second record from the first.
+        hourly = self._hourly(self.df.loc['2017-01-01':'2017-06-30'])
+        grid = pd.DataFrame(np.repeat(hourly.to_numpy(), 2, axis=0),
+                            columns=hourly.columns)
+        # MIDDLE stamps of the two half-hours: END - 30 min and END
+        mid = hourly.index.to_numpy()
+        grid.index = pd.DatetimeIndex(np.column_stack(
+            [mid - pd.Timedelta(minutes=15), mid + pd.Timedelta(minutes=15)]).ravel())
+
+        res = self._partition(hourly)
+        on_grid = self._partition(grid)
+        for col in res.columns:
+            np.testing.assert_array_equal(res[col].to_numpy(),
+                                          on_grid[col].to_numpy()[::2], err_msg=col)
+        # Not vacuous: windows were fitted, and the second copies differ (the
+        # interpolation weights depend on the grid record), so the choice of
+        # copy matters.
+        self.assertGreater(res['BETA_DT_OF'].notna().sum(), 20)
+        gpp_first, gpp_second = on_grid['GPP_DT_OF'].to_numpy()[::2], on_grid['GPP_DT_OF'].to_numpy()[1::2]
+        self.assertFalse(np.array_equal(gpp_first, gpp_second, equal_nan=True))
+
+    def test_hourly_grid_matches_oneflux_create_data_structures(self):
+        # The julday and hr of the half-hourly grid, against ONEFlux's own code
+        # (library.py, create_data_structures, the "Duplicating hourly data"
+        # block) run on the hourly END timestamps of a full year. In ONEFlux
+        # hr_value is a view of the hour column, so hr of the first copy is
+        # hour - 0.5, and the first copy of each 00:00 record takes the date,
+        # julday and hr 23.5 of the 23:00 record of the day before.
+        from diive.flux.partitioning import daytime_oneflux as mod
+        hourly = self._hourly(self.df)
+        seen = {}
+
+        def stub(**kwargs):
+            seen.update(kwargs)
+            n = len(kwargs['julday'])
+            out = {c: np.full(n, np.nan) for c in self.part.results.columns}
+            out['RECO_DT_OF'] = np.arange(n, dtype=float)  # grid record number
+            return out
+
+        with mock.patch.object(mod, '_partition_one_year', side_effect=stub):
+            res = self._partition(hourly)
+
+        end = hourly.index + pd.Timedelta(minutes=30)
+        w = np.zeros(len(end), dtype=[(k, 'f4') for k in
+                                      ('year', 'month', 'day', 'hour', 'minute', 'julday', 'hr')])
+        for k in ('year', 'month', 'day', 'hour', 'minute'):
+            w[k] = getattr(end, k)
+        w['julday'] = end.dayofyear
+        w['julday'][-1] = 366  # library.py: 1 after 365 -> 366
+        w['hr'] = w['hour']  # all records at minute 0
+        # ONEFlux, library.py create_data_structures, verbatim apart from names
+        t = np.repeat(w, 2, axis=0)
+        hr_value = t['hour'][::2]
+        t['hour'][::2] = hr_value - 1
+        t['minute'][::2] = 30
+        t['hr'][::2] = hr_value + 0.5
+        before_midnight_hour_mask = (t['hr'][:] == 23)
+        before_midnight_half_mask = (t['hour'][:] == -1)
+        for k in ('hour', 'year', 'month', 'julday', 'day'):
+            t[k][before_midnight_half_mask] = t[k][before_midnight_hour_mask]
+        t['hr'][before_midnight_half_mask] = t['hr'][before_midnight_hour_mask] + 0.5
+
+        self.assertEqual(seen['nperday'], 48)
+        np.testing.assert_array_equal(seen['julday'], t['julday'])
+        np.testing.assert_array_equal(seen['hr'], t['hr'])
+        np.testing.assert_array_equal(
+            seen['nee'], mod._to_sentinel(np.repeat(hourly['NEE_CUT_REF_orig'].to_numpy(), 2)))
+        # The result keeps the first copy of every record.
+        np.testing.assert_array_equal(res['RECO_DT_OF'].to_numpy(),
+                                      np.arange(0, 2 * len(hourly), 2, dtype=float))
+
+    def test_half_hourly_input_is_not_duplicated(self):
+        from diive.flux.partitioning import daytime_oneflux as mod
+        seen = {}
+
+        def stub(**kwargs):
+            seen.update(kwargs)
+            return {c: np.full(len(kwargs['julday']), np.nan) for c in self.part.results.columns}
+
+        with mock.patch.object(mod, '_partition_one_year', side_effect=stub):
+            self._partition(self.df)
+        end = self.df.index + pd.Timedelta(minutes=15)
+        self.assertEqual(seen['nperday'], 48)
+        self.assertEqual(len(seen['nee']), len(self.df))
+        np.testing.assert_array_equal(
+            seen['hr'], (end.hour + np.where(end.minute == 0, 0.0, 0.5)).astype(np.float32))
 
     def test_uncertainty_lookup_clips_at_the_record_edges(self):
         # The weights come from ONEFlux's Python daytime.uncert_via_gapFill,

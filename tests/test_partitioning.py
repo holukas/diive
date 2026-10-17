@@ -157,6 +157,37 @@ class TestNighttimePartitioningOneFlux(unittest.TestCase):
         self.assertEqual(doy[-2], 365)
         self.assertEqual(doy[-1], 366)
 
+    def test_hourly_input_is_partitioned_on_its_own_records(self):
+        # ONEFlux puts an hourly year onto a half-hourly grid only for the
+        # daytime method (library.create_data_structures duplicates for
+        # part_type DT only). The nighttime method gets the hourly records,
+        # with hr = the hour of the period END (all at minute 0) and the day of
+        # year of the END.
+        from diive.flux.partitioning import nighttime_oneflux as mod
+        cols = ['NEE_CUT_REF_orig', 'Tair_orig', 'Rg_orig', 'NEE_CUT_REF_f', 'Tair_f']
+        df = self.df.loc['2017', cols]
+        end_hh = df.index + pd.Timedelta(minutes=15)
+        hourly = df.groupby(end_hh.ceil('h')).mean()
+        hourly.index = hourly.index - pd.Timedelta(minutes=30)  # MIDDLE, hh:30
+        seen = []
+
+        def stub(**kwargs):
+            seen.append(kwargs)
+            n = len(kwargs['hr'])
+            return {c: np.full(n, np.nan) for c in (
+                'NEE_NIGHT_OF', 'RECO_NT_OF', 'RECO_NT_OF_ROB', 'GPP_NT_OF',
+                'GPP_NT_OF_ROB', 'RREF_NT_OF', 'E0_NT_OF')}
+
+        with mock.patch.object(mod, '_partition_one_year', side_effect=stub):
+            self._run_on(hourly)
+        end = hourly.index + pd.Timedelta(minutes=30)
+        doy = end.dayofyear.to_numpy().astype(float)
+        doy[-1] = 366  # END 1 January 2018, repaired as in ONEFlux
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(len(seen[0]['nee']), len(hourly))
+        np.testing.assert_array_equal(seen[0]['hr'], end.hour.to_numpy())
+        np.testing.assert_array_equal(seen[0]['doy'], doy)
+
     def test_missing_sw_in_does_not_exclude_night_records(self):
         # ONEFlux stores a missing SW_IN as -9999, which passes its `< 10`
         # night test; only the sunrise/sunset flag decides then. Blank SW_IN on
