@@ -70,7 +70,7 @@ class PartitioningNEETab(BasePartitioningTab):
          "tip": "Measured net ecosystem exchange (µmol m⁻² s⁻¹), gaps as missing values."},
         {"key": "nee_f", "label": "NEE (gap-filled)", "needle": "NEE",
          "prefer": "_F", "optional_label": "NEE (gap-filled, optional)",
-         "tip": "Gap-filled NEE (µmol m⁻² s⁻¹). Nighttime: the GPP residual. "
+         "tip": "Gap-filled NEE (µmol m⁻² s⁻¹). Nighttime: GPP is RECO minus this NEE. "
                 "Daytime ONEFlux (optional): ONEFlux reads it for windows without "
                 "measured nighttime NEE, so pick it to reproduce ONEFlux there."},
         {"key": "ta", "label": "TA (measured)", "needle": "TA",

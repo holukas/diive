@@ -1458,15 +1458,15 @@ FLUXNET look-up-table method. Unlike XGBoost and Random Forest, MDS is **not a
 trained regressor**: it has no SHAP importances, no held-out test split, and no
 feature reduction. Instead it fills each gap from records with **similar
 meteorological conditions** using three fixed drivers: shortwave-in radiation, air
-temperature, and VPD. It follows ONEFlux's `gf_mds` tool. **Mode** sets how a fill
-is averaged. **diive (Vekuri 2023 mean)**, the default, fills daytime gaps in the
-SWIN look-ups with the symmetric mean of Vekuri et al. (2023): the mean of the similar
-records with less SWIN and the mean of those with more SWIN are averaged, which removes
-a bias when they are spread unevenly. **ONEFlux (bit for bit)** uses the plain mean
-and gives the same values as `gf_mds`. **REddyProc** uses the plain mean with
-REddyProc's windows, as its `sMDSGapFill` does, and leaves gaps longer than 60 days
-unfilled. Projects saved with the old **Symmetric mean**
-box unticked load as ONEFlux.
+temperature, and VPD. **Mode** sets the fill rules and how a fill is averaged.
+**diive (Vekuri 2023 mean)**, the default, follows the rules of ONEFlux's `gf_mds` tool
+and fills daytime gaps in the SWIN look-ups with the symmetric mean of Vekuri et al.
+(2023): the mean of the similar records with less SWIN and the mean of those with more
+SWIN are averaged, which removes a bias when they are spread unevenly.
+**ONEFlux (bit for bit)** uses the plain mean and gives the same values as `gf_mds`.
+**REddyProc** uses the plain mean with REddyProc's windows, as its `sMDSGapFill` does,
+and leaves gaps longer than 60 days unfilled. Projects saved with the old
+**Symmetric mean** box load as diive if it was ticked and as ONEFlux if not.
 
 Pick a **target** (flux) on the left and the **three driver columns** (SWIN / TA /
 VPD combos, auto-seeded by name with ✓ / ✗ markers; gap-filled `_f` versions are
