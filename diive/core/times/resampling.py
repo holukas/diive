@@ -35,11 +35,12 @@ def resample_to_monthly_agg_matrix(series: pd.Series, agg: str, ranks: bool = Fa
     Returns:
         Matrix with resampled data. The resulting dataframe has YEAR as index and MONTH as columns.
     """
-    series.name = 'data' if not series.name else series.name
-    df = pd.DataFrame(series)
+    # Renamed copy: renaming the parameter in place would rename the caller's series
+    name = series.name if series.name else 'data'
+    df = pd.DataFrame(series.rename(name))
     df['MONTH'] = df.index.month
     df['YEAR'] = df.index.year
-    monthly_agg = df.groupby(['YEAR', 'MONTH'])[series.name].agg(agg).unstack()
+    monthly_agg = df.groupby(['YEAR', 'MONTH'])[name].agg(agg).unstack()
 
     # Calculate ranks per month
     def rank_monthly_aggs(col):

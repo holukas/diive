@@ -41,7 +41,8 @@ class MeasurementOffsetFromReplicate:
                  replicate: Series,
                  offset_start: int = -100,
                  offset_end: int = 100,
-                 offset_stepsize: float = 0.1):
+                 offset_stepsize: float = 0.1,
+                 verbose: int | bool | None = None):
         """Find the additive offset that best aligns *measurement* with *replicate*.
 
         For each offset in ``arange(offset_start, offset_end, offset_stepsize)``,
@@ -55,12 +56,16 @@ class MeasurementOffsetFromReplicate:
             offset_start: Smallest offset to try (same units as the data).
             offset_end: Largest offset to try (exclusive).
             offset_stepsize: Step between candidate offsets.
+            verbose: Verbosity for the console helpers. The line printed for each
+                candidate offset appears at ``VERBOSE_DEBUG`` (3). None uses the
+                level set with ``set_verbosity()``.
         """
         self.measurement = measurement
         self.replicate = replicate
         self.offset_start = offset_start
         self.offset_end = offset_end
         self.offset_stepsize = offset_stepsize
+        self.verbose = verbose
 
         d = decimal.Decimal(str(offset_stepsize))
         self.n_digits_after_comma = abs(d.as_tuple().exponent)
@@ -102,16 +107,7 @@ class MeasurementOffsetFromReplicate:
             offsets_df.loc[len(offsets_df)] = [offset, abs_diff]
 
             detail(f"#{counter}   trying with offset: {offset:.{self.n_digits_after_comma}f}   "
-                   f"found absolute difference: {abs_diff}")
-            # fig = plt.figure()
-            # r.plot(x_compat=True, label="true measurement")
-            # m_shifted.plot(x_compat=True, label=f"corrected by offset")
-            # plt.title(f"OFFSET: {offset}  /  SUM_ABS_DIFF: {abs_diff}")
-            # plt.legend(loc='upper right')
-            # path = rf"C:\Users\nopan\Desktop\temp\{counter}.png"
-            # fig.tight_layout()
-            # # fig.show()
-            # fig.savefig(path)
+                   f"found absolute difference: {abs_diff}", verbose=self.verbose)
 
         offsets_df = offsets_df.sort_values(by='ABS_DIFF', ascending=True)
         min_ix = offsets_df['ABS_DIFF'] == offsets_df['ABS_DIFF'].min()
@@ -393,7 +389,8 @@ class WindDirOffset:
                  hist_ref_years: list,
                  offset_start: int = -100,
                  offset_end: int = 100,
-                 hist_n_bins: int = 360):
+                 hist_n_bins: int = 360,
+                 verbose: int | bool | None = None):
         """
         Build histogram of wind directions for each year and compare to reference
         histogram built from data in reference years
@@ -414,12 +411,16 @@ class WindDirOffset:
             hist_n_bins: Number of bins for building histograms. The bins always
                 span the full compass circle [0, 360), so the default 360 gives
                 one bin per degree and e.g. 36 gives one per 10 degrees.
+            verbose: Verbosity for the console helpers. The line printed for each
+                year appears at ``VERBOSE_DEBUG`` (3). None uses the level set
+                with ``set_verbosity()``.
         """
         self.winddir = winddir
         self.hist_ref_years = hist_ref_years
         self.offset_start = offset_start
         self.offset_end = offset_end
         self.hist_n_bins = hist_n_bins
+        self.verbose = verbose
 
         # Wind directions shifted by offset that yielded maximum absolute
         # correlation with reference
@@ -468,7 +469,7 @@ class WindDirOffset:
         """ """
         shiftdict = {}
         for year in self.uniq_years:
-            detail(f"Working on year {year} ...")
+            detail(f"Working on year {year} ...", verbose=self.verbose)
             s_year = self.winddir.loc[self.winddir.index.year == year].copy()
             shiftdf_year = pd.DataFrame(columns=['SHIFT', 'CORR_ABS'])
             for shift in np.arange(self.offset_start, self.offset_end, 1):

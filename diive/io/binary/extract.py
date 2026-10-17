@@ -111,7 +111,8 @@ def get_encoded_value_series(
     """
     missing = int_series.isnull()
     available = ~missing
-    int_series.loc[missing] = 0
+    # where() returns a new series, so the caller's series keeps its NaNs
+    int_series = int_series.where(available, 0)
     int_series = int_series.astype(int)
 
     if available.sum() > 0:

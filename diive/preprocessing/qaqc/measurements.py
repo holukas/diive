@@ -88,9 +88,11 @@ CORRECTIONS: tuple[CorrectionSpec, ...] = (
         needs_coords=True),
     CorrectionSpec(
         CORR_RELATIVEHUMIDITY_OFFSET, 'Remove relative humidity offset',
-        'Fixes relative humidity that drifts above 100%. The daily mean of the '
-        'values exceeding 100% is removed as an offset and any remainder is '
-        'capped at 100%. Use for RH.',
+        "Fixes relative humidity that drifts above 100%. For each day, the offset "
+        "is the mean of that day's values above 100% minus 100, and days without "
+        'such values get an offset interpolated from the neighbouring days. The '
+        'offset is subtracted from every record, then values still above 100% '
+        'are set to 100%. Use for RH.',
         needs_coords=False),
     CorrectionSpec(
         CORR_SETTO_MAX, 'Set to max threshold',

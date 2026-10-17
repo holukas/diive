@@ -1000,7 +1000,8 @@ def vectorize_timestamps(df,
         doy (bool): Add day of year (1-366) and sin/cos columns.
         hour (bool): Add hour (0-23) and sin/cos columns.
         txt (str): Optional suffix text for the verbose print statement.
-        verbose (int): If > 0, prints the list of added columns.
+        verbose (int): Console verbosity. At 2 (or ``True``) and above, prints
+            the list of added columns.
 
     Returns:
         DataFrame: A copy of the dataframe with the new columns appended. With
@@ -1101,7 +1102,7 @@ def vectorize_timestamps(df,
         df[yearweek_col] = df[year_col] * 100 + df[week_col]
 
     if verbose > 0:
-        info(f"++ Added new columns with timestamp info: {newcols} {txt}")
+        info(f"++ Added new columns with timestamp info: {newcols} {txt}", verbose=verbose)
 
     return df
 

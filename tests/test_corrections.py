@@ -85,6 +85,31 @@ class TestCorrections(unittest.TestCase):
         self.assertEqual(winddir_corrected.max(), 359.9)
         self.assertEqual(winddir_corrected.min(), 0)
 
+    def test_winddiroffset_passes_verbose_to_the_year_lines(self):
+        """`verbose` must win over the module default in both directions."""
+        from diive.core.utils.console import (console, get_verbosity, set_verbosity,
+                                              VERBOSE_DEBUG, VERBOSE_PROGRESS, VERBOSE_SILENT)
+        from diive.preprocessing.corrections import WindDirOffset
+        idx = pd.date_range("2021-01-01", "2022-12-31", freq="1D")
+        winddir = pd.Series(np.linspace(0, 359, len(idx)), index=idx, name="WD")
+        kwargs = dict(winddir=winddir, hist_ref_years=[2021],
+                      offset_start=-2, offset_end=2, hist_n_bins=36)
+
+        def _output(default, verbose):
+            set_verbosity(default)
+            with console.capture() as cap:
+                WindDirOffset(**kwargs, verbose=verbose)
+            return cap.get()
+
+        saved = get_verbosity()
+        try:
+            self.assertNotIn("Working on year", _output(VERBOSE_DEBUG, VERBOSE_SILENT))
+            self.assertIn("Working on year", _output(VERBOSE_PROGRESS, VERBOSE_DEBUG))
+            # None keeps following the module default
+            self.assertIn("Working on year", _output(VERBOSE_DEBUG, None))
+        finally:
+            set_verbosity(saved)
+
 
 class TestCorrectionsDoNotMutateTheInput(unittest.TestCase):
     """A correction must not touch the Series the caller handed it.
@@ -229,6 +254,37 @@ class TestOffsetCorrections(unittest.TestCase):
         self.assertAlmostEqual(float(corr.get_offset()), 5.0, places=6)
         np.testing.assert_allclose(corr.get_corrected_measurement().to_numpy(),
                                    replicate.to_numpy(), atol=1e-9)
+
+    def test_measurement_offset_from_replicate_passes_verbose_to_the_scan_lines(self):
+        """`verbose` must win over the module default in both directions.
+
+        The per-offset line is a `detail` call. Without `verbose=` it followed
+        only the level set with `set_verbosity()`, so a caller could neither
+        silence nor show it.
+        """
+        from diive.core.utils.console import (console, get_verbosity, set_verbosity,
+                                              VERBOSE_DEBUG, VERBOSE_PROGRESS, VERBOSE_SILENT)
+        from diive.preprocessing.corrections import MeasurementOffsetFromReplicate
+        idx = pd.date_range("2021-01-01", periods=20, freq="30min")
+        replicate = pd.Series(np.linspace(0, 2, 20), index=idx, name="TA_REF")
+        measurement = (replicate - 1.0).rename("TA")
+        kwargs = dict(measurement=measurement, replicate=replicate,
+                      offset_start=-2, offset_end=2, offset_stepsize=1)
+
+        def _scan_output(default, verbose):
+            set_verbosity(default)
+            with console.capture() as cap:
+                MeasurementOffsetFromReplicate(**kwargs, verbose=verbose)
+            return cap.get()
+
+        saved = get_verbosity()
+        try:
+            self.assertNotIn("trying with offset", _scan_output(VERBOSE_DEBUG, VERBOSE_SILENT))
+            self.assertIn("trying with offset", _scan_output(VERBOSE_PROGRESS, VERBOSE_DEBUG))
+            # None keeps following the module default
+            self.assertIn("trying with offset", _scan_output(VERBOSE_DEBUG, None))
+        finally:
+            set_verbosity(saved)
 
 
 class TestNighttimeZeroOffset(unittest.TestCase):

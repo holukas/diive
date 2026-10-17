@@ -167,6 +167,17 @@ class TestResampling(unittest.TestCase):
         self.assertAlmostEqual(longform_means.sum(), monthly_means.sum().sum(), places=12)
         self.assertEqual(longform_means_ranks.sum(), monthly_means_ranks.sum().sum())
 
+    def test_resample_to_monthly_agg_matrix_keeps_input_unchanged(self):
+        # An unnamed series used to be renamed to 'data' in place.
+        idx = pd.date_range('2020-01-01', '2021-12-31', freq='D')
+        series = pd.Series(np.arange(len(idx), dtype=float), index=idx)
+        original = series.copy()
+        matrix = dv.times.resample_to_monthly_agg_matrix(series=series, agg='mean')
+        self.assertIsNone(series.name)
+        pd.testing.assert_series_equal(series, original)
+        self.assertEqual(matrix.shape, (2, 12))
+        self.assertEqual(matrix.loc[2020, 1], 15.0)
+
     def test_diel_cycle(self):
         df = ed.load_exampledata_parquet()
         s = df['Tair_f'].copy()
