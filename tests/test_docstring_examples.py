@@ -71,6 +71,8 @@ SKIP = {
         "partitioning port, ~20 s per year, plus a parquet load",
     'diive.flux.partitioning.nighttime_reddyproc.NighttimePartitioningReddyProc':
         "partitioning port, ~20 s per year, plus a parquet load",
+    'diive.flux.partitioning.nee.PartitioningNEE':
+        "runs a partitioning port, ~20 s per year, plus a parquet load",
 }
 
 # Samples that continue from another sample, so a method docstring can show
