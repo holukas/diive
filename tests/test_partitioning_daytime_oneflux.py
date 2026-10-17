@@ -582,5 +582,133 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
             _ = part.results
 
 
+def _synthetic_window_year(n_days=40, night_days=10):
+    """Arrays for _estimate_parasets: 24 night and 24 day records per day,
+    daytime NEE measured every day, nighttime NEE only on days 1..night_days.
+    tair_f is the day number, so a fake fit can tell the windows apart."""
+    n = 48 * n_days
+    day = 1 + np.arange(n) // 48
+    is_day = (np.arange(n) % 48) >= 24
+    rg = np.where(is_day, 500.0, 0.0).astype(np.float32)
+    measured = is_day | (day <= night_days)
+    return dict(nee_f=np.where(measured, -2.0, -9999.0).astype(np.float32),
+                nee_fqc=np.where(measured, 0.0, 1.0),
+                tair_f=day.astype(np.float32), rg_f=rg,
+                vpd_f=np.full(n, 8.0, dtype=np.float32), rg_meas=rg,
+                julday=day.astype(np.float32), nee_fs_unc=np.ones(n, dtype=np.float32))
+
+
+def _fit_result(params, npara, dep, rmse=1.0, std=None):
+    return dict(params=np.asarray(params, dtype=float),
+                std=np.full(npara, 0.01) if std is None else np.asarray(std, dtype=float),
+                cov_matrix=np.eye(npara) * 1e-4, cor_matrix=np.eye(npara),
+                residuals=np.zeros(dep.size), rmse=rmse)
+
+
+class TestDaytimeOneFluxWindowsWithoutNightData(unittest.TestCase):
+    """Windows whose ~12-day night range has (almost) no measured NEE.
+
+    With nights measured on days 1-10 only, window i (days 2i < d <= 2i+4,
+    night range 2i-4 < d <= 2i+8) has night records up to i = 6 and none
+    from i = 7 (days 14-18) on.
+    """
+
+    def test_empty_night_selection_falls_back_to_the_first_record(self):
+        # ONEFlux's newselif turns an empty selection into the year's first
+        # record. The window then takes E0 from earlier and the gap-filled NEE
+        # of that record as the Rref starting guess, and is fitted (L215).
+        from diive.flux.partitioning import daytime_oneflux as mod
+        D = _synthetic_window_year()
+        D['nee_f_first'] = np.float32(4.25)
+        rb_of = {}
+
+        def fake_fit(lts_func, dep, indeps, npara, xguess, mprior, sigm, sigd):
+            if lts_func == 'LloydTemp':
+                return _fit_result([2.0, 150.0], npara, dep)
+            window = int(round((float(np.mean(indeps['ta'])) - 2.5) / 2))
+            rb_of.setdefault(window, float(xguess[3]))
+            return _fit_result([0.05, 30.0, 0.05, 2.0], npara, dep)
+
+        with mock.patch.object(mod, '_fit', side_effect=fake_fit):
+            params_ok, ind_ok, *_, no_night = mod._estimate_parasets(D, nperday=48, verbose=0)
+        self.assertEqual(rb_of[7], 4.25)
+        self.assertEqual(rb_of[6], -2.0)  # night data of its own
+        self.assertIn(16 * 48, [int(r[2]) for r in ind_ok])  # window 7 accepted
+        self.assertEqual(no_night, [])
+
+    def test_empty_night_selection_without_nee_f_is_not_fitted_and_listed(self):
+        # Without the gap-filled NEE the selection stays empty, the Rref
+        # starting guess is NaN and the window is not fitted, as before. The
+        # window is reported so the caller can warn.
+        from diive.flux.partitioning import daytime_oneflux as mod
+        D = _synthetic_window_year()  # no 'nee_f_first'
+
+        def fake_fit(lts_func, dep, indeps, npara, xguess, mprior, sigm, sigd):
+            if lts_func == 'LloydTemp':
+                return _fit_result([2.0, 150.0], npara, dep)
+            if np.isnan(np.asarray(xguess, dtype=float)).any():  # NaN propagates, as in leastsq
+                return _fit_result(np.full(npara, np.nan), npara, dep, rmse=np.nan)
+            return _fit_result([0.05, 30.0, 0.05, 2.0], npara, dep)
+
+        with mock.patch.object(mod, '_fit', side_effect=fake_fit):
+            params_ok, ind_ok, *_, no_night = mod._estimate_parasets(D, nperday=48, verbose=0)
+        centrals = [int(r[2]) for r in ind_ok]
+        self.assertIn(14 * 48, centrals)       # window 6, own night data
+        self.assertNotIn(16 * 48, centrals)    # window 7
+        self.assertEqual(no_night[0], (14.0, 18.0))
+
+    def test_warning_names_nee_f_only_without_it(self):
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        from diive.flux.partitioning import daytime_oneflux as mod
+        D = _synthetic_window_year()
+        idx = pd.date_range('2021-01-01 00:15', periods=D['julday'].size, freq='30min')
+        day = pd.Series(D['nee_f'].astype(float), index=idx).where(lambda s: s > -9990)
+        kw = dict(nee=day, ta=pd.Series(D['tair_f'].astype(float), index=idx),
+                  sw_in=pd.Series(D['rg_meas'].astype(float), index=idx),
+                  ta_f=pd.Series(D['tair_f'].astype(float), index=idx),
+                  sw_in_f=pd.Series(D['rg_f'].astype(float), index=idx),
+                  vpd=pd.Series(0.8, index=idx), verbose=1)
+
+        def fake_fit(lts_func, dep, indeps, npara, xguess, mprior, sigm, sigd):
+            if lts_func == 'LloydTemp':
+                return _fit_result([2.0, 150.0], npara, dep)
+            if np.isnan(np.asarray(xguess, dtype=float)).any():
+                return _fit_result(np.full(npara, np.nan), npara, dep, rmse=np.nan)
+            return _fit_result([0.05, 30.0, 0.05, 2.0], npara, dep)
+
+        for nee_f, expect_warning in ((None, True), (day.fillna(3.0), False)):
+            with mock.patch.object(mod, '_fit', side_effect=fake_fit), \
+                    mock.patch.object(mod, 'warn') as warn:
+                DaytimePartitioningOneFlux(nee_f=nee_f, **kw).run()
+            texts = [str(c.args[0]) for c in warn.call_args_list]
+            self.assertEqual(any('pass nee_f' in t for t in texts), expect_warning, texts)
+
+    def test_window_without_night_data_takes_e0_of_the_last_lloydtemp_window(self):
+        # ONEFlux sets lloydtemp_e0 = params_ok[4, i_ok - 1] for such a window
+        # but fits with its local e0 / e0_se, left by the last window that ran
+        # LloydTemp. Here that window (6) is rejected, so the two differ: E0 300
+        # (window 6) instead of 200 (window 5, the last accepted) (L216).
+        from diive.flux.partitioning import daytime_oneflux as mod
+        D = _synthetic_window_year()
+
+        def fake_fit(lts_func, dep, indeps, npara, xguess, mprior, sigm, sigd):
+            ta = float(np.mean(indeps['ta']))
+            if lts_func == 'LloydTemp':
+                last = ta > 9.0  # window 6: night records of days 9-10 only
+                return _fit_result([2.0, 300.0 if last else 200.0], npara, dep,
+                                   std=[0.1, 7.0 if last else 3.0])
+            window = int(round((ta - 2.5) / 2))
+            beta = 300.0 if window == 6 else 30.0  # beta >= 250 rejects window 6
+            return _fit_result([0.05, beta, 0.05, 2.0], npara, dep)
+
+        with mock.patch.object(mod, '_fit', side_effect=fake_fit):
+            params_ok, ind_ok, *_ = mod._estimate_parasets(D, nperday=48, verbose=0)
+        by_central = {int(r[2]): p for r, p in zip(ind_ok, params_ok)}
+        self.assertNotIn(14 * 48, by_central)                 # window 6 rejected
+        self.assertEqual(by_central[12 * 48][4], np.float32(200.0))  # window 5
+        self.assertEqual(by_central[16 * 48][4], np.float32(300.0))  # window 7
+        self.assertEqual(by_central[16 * 48][9], np.float32(7.0))
+
+
 if __name__ == '__main__':
     unittest.main()

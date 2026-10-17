@@ -179,6 +179,29 @@ class TestNighttimePartitioningOneFlux(unittest.TestCase):
         res = self._run_on(df)
         self.assertEqual(res.loc[t, 'NEE_NIGHT_OF'], 1.5)
 
+    def test_no_night_on_days_without_sunrise_or_sunset(self):
+        # Polar night and polar day: ONEFlux's sunrs gives NaN sunrise and
+        # sunset, compu() stores the day/night flag as missing, and the night
+        # test `daylight == 0` fails, so no record of such a day is night,
+        # whatever its SW_IN (L214). Same data at 70 N: December has no night
+        # records, November keeps its nights.
+        from diive.flux.partitioning import NighttimePartitioningOneFlux, sunrise_sunset
+        idx = pd.date_range('2021-11-01 00:15', '2021-12-31 23:45', freq='30min')
+        rng = np.random.default_rng(1)
+        ta = pd.Series(5.0 + rng.normal(0, 3, idx.size), index=idx)
+        nee = pd.Series(2.0 + rng.normal(0, 0.5, idx.size), index=idx)
+        sw_in = pd.Series(0.0, index=idx)  # dark around the clock
+        res = NighttimePartitioningOneFlux(
+            nee=nee, ta=ta, sw_in=sw_in, nee_f=nee, ta_f=ta, lat=70.0,
+            verbose=0).run().results
+        doy = (idx + pd.Timedelta(minutes=15)).dayofyear.to_numpy().astype(np.float32)
+        no_sun = np.isnan(sunrise_sunset(doy, 70.0)[0])
+        self.assertGreater(int(no_sun.sum()), 0)
+        self.assertGreater(int((~no_sun).sum()), 0)
+        night = res['NEE_NIGHT_OF'].notna().to_numpy()
+        self.assertFalse(night[no_sun].any())
+        self.assertTrue(night[~no_sun].any())
+
     def test_rref_knot_uses_the_truncated_window_midpoint(self):
         # ONEFlux places each window's Rref at int(mean(indices)), a truncation.
         # Two windows of four records each: knot at index 1 and index 5, so

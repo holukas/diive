@@ -446,8 +446,12 @@ def _estimate_parasets(D, nperday, verbose=1, reject_alpha_at_start=False):
     """Per-window LRC parameter estimation.
 
     ``D`` holds the year's arrays: nee_f, nee_fqc, tair_f, rg_f, vpd_f, rg_meas
-    (measured, -9999 sentinel), julday, nee_fs_unc. Returns lists of accepted
-    windows: params (10,), whichmodel, cov (4x4), res_cor, and the 3 ind rows.
+    (measured, -9999 sentinel), julday, nee_fs_unc, and ``nee_f_first``, the
+    gap-filled NEE of the year's first record (float32, -9999 sentinel) or
+    None when no gap-filled NEE was given. Returns lists of accepted windows:
+    params (10,), whichmodel, cov (4x4), res_cor, and the 3 ind rows, plus the
+    ``(day_begin, day_end)`` of windows that ONEFlux would fit from record 0
+    but that could not be fitted without ``nee_f_first``.
     Raises ``_BrokenWindow`` (with ``day_range`` set) at the first fit that
     returns no covariance matrix.
     """
@@ -459,11 +463,13 @@ def _estimate_parasets(D, nperday, verbose=1, reject_alpha_at_start=False):
     rg_meas = D['rg_meas']
     julday = D['julday']
     sigd_all = D['nee_fs_unc']
+    nee_f_first = D.get('nee_f_first')
 
     n_parasets = (365 // WINSIZE) * 2
     fguess = list(FGUESS0)
 
     params_ok, ind_ok, whichmodel_ok, jtj_ok, rescor_ok = [], [], [], [], []
+    no_night_windows = []
     i_ok = 0
     lloydtemp_e0 = None
 
@@ -491,20 +497,45 @@ def _estimate_parasets(D, nperday, verbose=1, reject_alpha_at_start=False):
         if subd_sigd.size and np.min(subd_sigd) < 0:
             subd_sigd[:] = 1
 
+        # A window without any measured night record: ONEFlux selects with
+        # library.newselif, which sets condition[0] = True when the selection
+        # is empty. The window then has one night record, the year's first,
+        # so it takes E0 from earlier (E0set below) and the gap-filled NEE of
+        # that record, measured or not, becomes the Rref starting guess rb.
+        # Only that rb is used: with E0set no LloydTemp fit runs. diive keeps
+        # only measured NEE, so it needs the gap-filled value passed in
+        # (nee_f_first). Without it the selection stays empty, rb is NaN and
+        # the window is not fitted (L215).
+        night_from_first = (nee_f_first is not None) and not subn_m.any()
+        n_night = 1 if night_from_first else int(subn_m.sum())
+
         E0set = 0
-        if subn_m.sum() <= 10 and i_ok > 0 and lloydtemp_e0 is not None:
+        if n_night <= 10 and i_ok > 0 and lloydtemp_e0 is not None:
+            # ONEFlux sets lloydtemp_e0 (and lloydtemp_e0_se) here but never
+            # reads them again: the E0 column of the fits and the parameter
+            # table get the local e0 and e0_se, which still hold the values of
+            # the last window that ran LloydTemp, after its 50-400 check. They
+            # differ from params_ok[i_ok - 1] when that window was rejected
+            # (GF-Guy 2024: E0 282.6 instead of 57.0; L216). So e0 and e0_se
+            # are left as they are.
             lloydtemp_e0 = params_ok[i_ok - 1][4]
-            e0_se = params_ok[i_ok - 1][9]
             ind_rows[0] = ind_ok[i_ok - 1][0]
             E0set = 1
 
-        if not ((subn_m.sum() > 10 or E0set == 1) and subd_m.sum() > 10):
+        if not ((n_night > 10 or E0set == 1) and subd_m.sum() > 10):
             continue
+        if E0set == 1 and not subn_m.any() and not night_from_first:
+            no_night_windows.append((day_begin, day_end))
 
         try:
             percs = _percentiles_fn(nee_f[sub_m], [0.03, 0.97])
             beta = abs(percs[0] - percs[1])
-            rb = float(np.average(nee_f[subn_m]))
+            if night_from_first:
+                rb = float(nee_f_first)
+            elif not subn_m.any():
+                rb = np.nan  # np.average of nothing, without its RuntimeWarning
+            else:
+                rb = float(np.average(nee_f[subn_m]))
             fguess[3] = rb
 
             if E0set == 0:
@@ -524,8 +555,8 @@ def _estimate_parasets(D, nperday, verbose=1, reject_alpha_at_start=False):
                         e0, e0_se = E0_MIN, np.nan
                     elif e0 > E0_MAX:
                         e0, e0_se = E0_MAX, np.nan
-            else:
-                e0 = lloydtemp_e0
+            # E0set == 1: e0 and e0_se keep the last LloydTemp window's values,
+            # as in ONEFlux (see above).
 
             # ONEFlux stores the fixed E0 driver column as float32.
             e0_arr_d = np.full(int(subd_m.sum()), e0, dtype=np.float32)
@@ -681,7 +712,7 @@ def _estimate_parasets(D, nperday, verbose=1, reject_alpha_at_start=False):
             raise
     # end for i
 
-    return params_ok, ind_ok, whichmodel_ok, jtj_ok, rescor_ok
+    return params_ok, ind_ok, whichmodel_ok, jtj_ok, rescor_ok, no_night_windows
 
 
 # --------------------------------------------------------------------------- #
@@ -838,7 +869,7 @@ def _remove_days(nee, julday, ranges):
     return nee
 
 
-def _partition_year_shared(nees, julday, verbose=1, **kwargs):
+def _partition_year_shared(nees, julday, verbose=1, nee_f_first=None, **kwargs):
     """Partition one year of several NEE arrays that share one list of removed days.
 
     A window whose fit returns no covariance aborts the year in ONEFlux
@@ -869,6 +900,9 @@ def _partition_year_shared(nees, julday, verbose=1, **kwargs):
             ``None`` for a single series.
         julday: Day of year per record.
         verbose: Console verbosity.
+        nee_f_first: ``{label: value}``, the gap-filled NEE of each series'
+            first record of the year (float32, -9999 sentinel), or None when
+            no gap-filled NEE was given. See ``_estimate_parasets``.
         **kwargs: The other arguments of ``_partition_one_year`` (drivers,
             ``hr``, ``nperday``, ``reject_alpha_at_start``).
 
@@ -887,7 +921,8 @@ def _partition_year_shared(nees, julday, verbose=1, **kwargs):
                 try:
                     outs[label] = _partition_one_year(
                         nee=_remove_days(nee, julday, ranges), julday=julday,
-                        verbose=verbose, **kwargs)
+                        verbose=verbose, nee_f_first=(nee_f_first or {}).get(label),
+                        **kwargs)
                     n_used[label] = len(ranges)
                 except _BrokenWindow as e:
                     begin, end = e.day_range
@@ -909,8 +944,12 @@ def _partition_year_shared(nees, julday, verbose=1, **kwargs):
 
 
 def _partition_one_year(nee, ta, sw_in, ta_f, sw_in_f, vpd, julday, hr, nperday,
-                        verbose=1, reject_alpha_at_start=False):
+                        verbose=1, reject_alpha_at_start=False, nee_f_first=None,
+                        year=None):
     """Run the ONEFlux daytime partitioning for one year of -9999-sentinel arrays.
+
+    ``nee_f_first`` is the gap-filled NEE of the year's first record (or None),
+    ``year`` only names the year in warnings.
 
     Raises ``_BrokenWindow`` at the first fit without covariance, with
     ``day_range`` as whole days; ``_partition_year_shared`` handles the rerun.
@@ -928,18 +967,26 @@ def _partition_one_year(nee, ta, sw_in, ta_f, sw_in_f, vpd, julday, hr, nperday,
         nee_f=np.where(measured, nee, NAN),
         nee_fqc=np.where(measured, 0.0, 1.0),
         tair_f=ta_f, rg_f=sw_in_f, vpd_f=vpd, rg_meas=sw_in,
-        julday=julday, nee_fs_unc=nee_fs_unc,
+        julday=julday, nee_fs_unc=nee_fs_unc, nee_f_first=nee_f_first,
     )
 
     # Stage B: per-window parameters
     try:
-        params_ok, ind_ok, whichmodel, jtj_ok, rescor = _estimate_parasets(
+        params_ok, ind_ok, whichmodel, jtj_ok, rescor, no_night = _estimate_parasets(
             D, nperday, verbose, reject_alpha_at_start)
     except _BrokenWindow as e:
         # The error file stores the range as whole days ('{:.0f}', read
         # back as int).
         e.day_range = tuple(int(format(d, '.0f')) for d in e.day_range)
         raise
+    if no_night:
+        days = ', '.join(f'{b:.0f}-{e:.0f}' for b, e in no_night)
+        of_year = f' of {year}' if year is not None else ''
+        warn(f"Daytime partitioning (ONEFlux): {len(no_night)} window(s){of_year} "
+             f"without any measured nighttime NEE (days {days}) not fitted. ONEFlux "
+             f"fits them, with the gap-filled NEE of the year's first record as the "
+             f"Rref starting guess; pass nee_f (gap-filled NEE) to reproduce ONEFlux.",
+             verbose=verbose)
     if not params_ok:
         warn("Daytime partitioning (ONEFlux): no light-response curve could be "
              "fitted; year left unpartitioned.", verbose=verbose)
@@ -1068,6 +1115,7 @@ class DaytimePartitioningOneFlux:
                  vpd: Series,
                  vpd_in_kpa: bool = True,
                  reject_alpha_at_start: bool = False,
+                 nee_f: Series | None = None,
                  verbose: int = 2):
         """
         Args:
@@ -1099,10 +1147,18 @@ class DaytimePartitioningOneFlux:
                 and raises annual GPP by 5.7%, in ONEFlux and here alike.
                 ONEFlux run under NumPy 2 behaves like True, because there the
                 comparison happens in float32.
+            nee_f: Gap-filled NEE (umol m-2 s-1), optional. ONEFlux uses it in
+                one place only: a window without any measured nighttime record
+                takes the gap-filled NEE of the year's first record as its Rref
+                starting guess (ONEFlux's selection falls back to that record
+                when it would be empty) and is fitted. With ``nee_f`` diive
+                does the same. Without it such windows are not fitted and a
+                warning lists them. This happens at high latitudes in summer
+                (FI-Hyy, FI-Var) and in long gaps of nighttime NEE.
             verbose: Console verbosity level (0 silent, 1 warnings, 2 progress
                 + report, 3 debug). Default 2.
         """
-        self._inputs = self._validate(nee, ta, sw_in, ta_f, sw_in_f, vpd)
+        self._inputs = self._validate(nee, ta, sw_in, ta_f, sw_in_f, vpd, nee_f)
         self.vpd_in_kpa = bool(vpd_in_kpa)
         self.reject_alpha_at_start = bool(reject_alpha_at_start)
         self.verbose = verbose
@@ -1110,9 +1166,11 @@ class DaytimePartitioningOneFlux:
         self._removed_days: dict[int, list[tuple[int, int]]] | None = None
 
     @staticmethod
-    def _validate(nee, ta, sw_in, ta_f, sw_in_f, vpd) -> DataFrame:
+    def _validate(nee, ta, sw_in, ta_f, sw_in_f, vpd, nee_f=None) -> DataFrame:
         series = {'nee': nee, 'ta': ta, 'sw_in': sw_in, 'ta_f': ta_f,
                   'sw_in_f': sw_in_f, 'vpd': vpd}
+        if nee_f is not None:
+            series['nee_f'] = nee_f
         for name, s in series.items():
             if not isinstance(s, Series):
                 raise TypeError(f"'{name}' must be a pandas Series, got {type(s)}.")
@@ -1223,9 +1281,15 @@ def _run_shared(parts: dict) -> None:
         if julday.size > 1 and julday[-1] == 1 and julday[-2] in (365.0, 366.0):
             julday = julday.copy()
             julday[-1] = julday[-2] + 1
+        # The gap-filled NEE of each series' first record of the year, the
+        # one value of nee_f that ONEFlux's daytime partitioning reads.
+        nee_f_first = {label: (_to_sentinel(p._inputs['nee_f'].to_numpy()[ym][:1])[0]
+                               if 'nee_f' in p._inputs else None)
+                       for label, p in parts.items()}
         outs, ranges = _partition_year_shared(
             nees={label: _to_sentinel(p._inputs['nee'].to_numpy()[ym])
                   for label, p in parts.items()},
+            nee_f_first=nee_f_first, year=int(year),
             ta=_to_sentinel(df['ta'].to_numpy()[ym]),
             sw_in=_to_sentinel(df['sw_in'].to_numpy()[ym]),
             ta_f=_to_sentinel(df['ta_f'].to_numpy()[ym]),
@@ -1250,6 +1314,7 @@ def partition_nee_daytime_oneflux(nee: Series, ta: Series, sw_in: Series,
                                   ta_f: Series, sw_in_f: Series, vpd: Series,
                                   vpd_in_kpa: bool = True,
                                   reject_alpha_at_start: bool = False,
+                                  nee_f: Series | None = None,
                                   verbose: int = 2) -> DataFrame:
     """Functional wrapper around :class:`DaytimePartitioningOneFlux`.
 
@@ -1261,13 +1326,14 @@ def partition_nee_daytime_oneflux(nee: Series, ta: Series, sw_in: Series,
     return DaytimePartitioningOneFlux(
         nee=nee, ta=ta, sw_in=sw_in, ta_f=ta_f, sw_in_f=sw_in_f, vpd=vpd,
         vpd_in_kpa=vpd_in_kpa, reject_alpha_at_start=reject_alpha_at_start,
-        verbose=verbose).run().results
+        nee_f=nee_f, verbose=verbose).run().results
 
 
 def partition_nee_daytime_oneflux_scenarios(
         nee: dict[str, Series], ta: Series, sw_in: Series, ta_f: Series,
         sw_in_f: Series, vpd: Series, vpd_in_kpa: bool = True,
         reject_alpha_at_start: bool = False,
+        nee_f: dict[str, Series] | None = None,
         verbose: int = 2) -> dict[str, DaytimePartitioningOneFlux]:
     """Partition several NEE series (u* scenarios) that share drivers and removed days.
 
@@ -1292,6 +1358,9 @@ def partition_nee_daytime_oneflux_scenarios(
         ta, sw_in, ta_f, sw_in_f, vpd, vpd_in_kpa, reject_alpha_at_start,
         verbose: As in :class:`DaytimePartitioningOneFlux`, shared by all
             series.
+        nee_f: ``{label: gap-filled NEE}``, optional, the gap-filled NEE of
+            each scenario (see :class:`DaytimePartitioningOneFlux`). A label
+            missing from it partitions without gap-filled NEE.
 
     Returns:
         ``{label: DaytimePartitioningOneFlux}``, already run: ``results`` and
@@ -1300,10 +1369,14 @@ def partition_nee_daytime_oneflux_scenarios(
     """
     if not nee:
         raise ValueError("nee is empty; pass at least one NEE series.")
+    nee_f = nee_f or {}
+    unknown = [label for label in nee_f if label not in nee]
+    if unknown:
+        raise ValueError(f"nee_f has label(s) {unknown} that are not in nee.")
     parts = {label: DaytimePartitioningOneFlux(
         nee=s, ta=ta, sw_in=sw_in, ta_f=ta_f, sw_in_f=sw_in_f, vpd=vpd,
         vpd_in_kpa=vpd_in_kpa, reject_alpha_at_start=reject_alpha_at_start,
-        verbose=verbose) for label, s in nee.items()}
+        nee_f=nee_f.get(label), verbose=verbose) for label, s in nee.items()}
     # The year loop reads the drivers from the first instance only. Each
     # instance aligns the same driver Series to its NEE index, so the driver
     # columns are identical only when the indexes are.

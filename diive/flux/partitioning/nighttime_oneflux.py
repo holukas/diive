@@ -104,7 +104,8 @@ def sunrise_sunset(doy: np.ndarray, lat: float) -> tuple[np.ndarray, np.ndarray]
         lat: Site latitude in decimal degrees.
 
     Returns:
-        Tuple ``(sunrise, sunset)`` of decimal hours.
+        Tuple ``(sunrise, sunset)`` of decimal hours, NaN on days without
+        sunrise or sunset (polar day and polar night), as in ONEFlux.
     """
     # Days from Jan 1 to Mar 21 (spring equinox), as in the original code.
     march21_doy_diff = 80
@@ -119,7 +120,8 @@ def sunrise_sunset(doy: np.ndarray, lat: float) -> tuple[np.ndarray, np.ndarray]
     # np.tan(lat_rad) is a float64 scalar. ONEFlux ran on NumPy 1, where such a
     # scalar did not widen its float32 day-of-year array (value-based casting);
     # under NumPy 2 it would. Cast it to the array's dtype to keep that.
-    hs = np.arccos(tan_decl.dtype.type(-np.tan(lat_rad)) * tan_decl)
+    with np.errstate(invalid='ignore'):  # NaN at polar day/night is the result
+        hs = np.arccos(tan_decl.dtype.type(-np.tan(lat_rad)) * tan_decl)
     sunrise = 12.0 - hs * hours_per_hs
     sunset = 12.0 + hs * hours_per_hs
     return sunrise, sunset
@@ -349,15 +351,25 @@ def _partition_one_year(nee: np.ndarray, tair: np.ndarray, sw_in: np.ndarray,
         # record is night.
         sunrise, sunset = sunrise_sunset(doy, lat)
         daylight = (hr > sunrise) & (hr < sunset)
+        # Polar day and polar night: the sun neither rises nor sets, and sunrs
+        # gives NaN sunrise and sunset (arccos of |x| > 1). ONEFlux's compu()
+        # passes only records whose inputs are valid (library.nomi) to
+        # compu_daylight and stores the missing value in `daylight` for the
+        # rest, so flux_partition's night test `daylight == 0` is False and
+        # those records are never night, whatever their SW_IN. Without this,
+        # (hr > NaN) is False and they would count as night (FI-Var, 67.75 N:
+        # December, and low-SW_IN records in June/July; L214).
+        sun_defined = ~(np.isnan(sunrise) | np.isnan(sunset))
     else:
         daylight = np.zeros(n, dtype=bool)
+        sun_defined = np.ones(n, dtype=bool)
 
     # A missing SW_IN counts as below the threshold: ONEFlux stores it as the
     # -9999 sentinel, and -9999 < 10, so the record stays eligible as night as
     # long as the sunrise/sunset flag says so.
     with np.errstate(invalid='ignore'):
         rg_below = np.isnan(sw_in) | (sw_in < DAY_MIN_SW_IN)
-    night_mask = rg_below & (~daylight)
+    night_mask = rg_below & (~daylight) & sun_defined
     nee_night = np.where(night_mask, nee, np.float32(np.nan))
     out['NEE_NIGHT_OF'] = np.where(night_mask, nee_in, np.nan)
 
@@ -468,7 +480,8 @@ class NighttimePartitioningOneFlux:
     and the year's last record, whose END falls on 1 January, is counted as day
     366 (367 in a leap year). A record with missing ``sw_in`` stays eligible as
     night, as the ONEFlux -9999 sentinel does; the sunrise/sunset test then
-    decides.
+    decides. On days without sunrise or sunset (polar day and polar night) no
+    record is night, as in ONEFlux, where the day/night flag is missing there.
 
     Numerics follow ONEFlux: working arrays are float32, as ONEFlux stores them
     (``FLOAT_PREC = 'f4'``), with the dtype of every intermediate as ONEFlux
