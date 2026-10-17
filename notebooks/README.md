@@ -39,8 +39,9 @@ files from disk instead.
 
 - [FluxPostProcessingChain.ipynb](FluxPostProcessingChain.ipynb) — Post-processing of Level-1 fluxes:
   quality flag extension (L2), storage correction (L3.1), outlier removal (L3.2), USTAR threshold (L3.3), gap-filling
-  (L4.1) with random forest, XGBoost and MDS, then model reporting, result plots and export. Runs on the bundled
-  example data. Rewritten for the composable per-level API in v0.91.0
+  (L4.1) with random forest, XGBoost and MDS (with its three modes), NEE partitioning into GPP and RECO (L4.2), then
+  model reporting, result plots and export. Runs on the bundled example data. Rewritten for the composable per-level
+  API in v0.91.0
 
 ### Database (InfluxDB)
 
