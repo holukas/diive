@@ -745,7 +745,7 @@ Coverage cannot speak to this tier; it stays grep-derived. Each is a documented 
 | `get_encoded_value_from_int`, `get_encoded_value_series` | top-level |
 | `add_driver` | `flux/postprocessingchain/container.py` — 235 of 269 covered lines GUI-only |
 | `detect_fluxbasevar`, `run_level33_variable_ustar` | chain; `levels/level33.py` 79 of 122 GUI-only |
-| `run_level42_nighttime_reddyproc`, `run_level42_daytime_reddyproc` | 2 of 4 L4.2 entry points reached only through the ONEFlux-nighttime path. `run_level42_daytime_oneflux` has its own test since 2026-10-16 (`test_postprocessingchain.py`, L211) |
+| ~~`run_level42_nighttime_reddyproc`, `run_level42_daytime_reddyproc`~~ | ~~2 of 4 L4.2 entry points reached only through the ONEFlux-nighttime path~~ Since 2026-10-17 `TestLevel42Partitioning` in `test_postprocessingchain.py` runs all four `run_level42_*` functions and checks `run_level42_partitioning` against each. `run_level42_daytime_oneflux` also has its own test (L211) |
 
 ---
 

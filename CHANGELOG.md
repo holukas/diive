@@ -9,22 +9,27 @@
 Library (also used by the notebook and the GUI):
 
 - **Flux post-processing chain:** the flux processing chain is now called the flux post-processing
-  chain and lives in `diive.flux.postprocessingchain`. The old import path
-  `diive.flux.fluxprocessingchain` still works but gives a `FutureWarning` and will be removed in
-  a future release. The examples and the notebook (now `FluxPostProcessingChain.ipynb`) are
-  renamed to match.
+  chain and lives in `diive.flux.postprocessingchain`, and its examples and notebook (now
+  `FluxPostProcessingChain.ipynb`) are renamed to match.
+- **Flux post-processing chain, old import path:** `diive.flux.fluxprocessingchain` still works but
+  gives a `FutureWarning` and will be removed in a future release.
 - **MDS gap-filling, new default mode (changes results):** `FluxMDS` and `run_level41_mds` take
   `mode=`, and `FluxConfig` takes `mds_mode=`: `'diive'` (new default), `'oneflux'` or `'reddyproc'`.
   - `'diive'` fills daytime gaps with the symmetric mean of Vekuri et al. (2023), which removes a
-    bias in the filled fluxes and the carbon balance. On CH-DAV 2020 the daytime bias dropped from
-    +0.041 to +0.004 µmol m⁻² s⁻¹, and the RMSE barely changed.
-  - `'oneflux'` reproduces ONEFlux bit for bit, as the default did until now. Use it to compare
-    with FLUXNET or ICOS data.
+    bias in the filled fluxes and the carbon balance (on CH-DAV 2020 the daytime bias dropped from
+    +0.041 to +0.004 µmol m⁻² s⁻¹ with almost the same RMSE).
+  - `'oneflux'` uses the plain mean of the old default and reproduces ONEFlux bit for bit, for
+    comparisons with FLUXNET or ICOS data.
   - `'reddyproc'` fills gaps as REddyProc does, with REddyProc's windows, and leaves gaps longer
     than 60 days unfilled.
   - The scores of `'diive'` leave each measured record out of its own prediction, so they are
     lower than the in-sample scores of `'oneflux'`.
   - `sym_mean` is replaced by `mode` and now raises an error.
+- **MDS gap-filling, driver QC:** `FluxMDS`, `run_level41_mds` and `FluxConfig` take optional QC
+  columns for SW_IN, TA and VPD, so NEE can be gap-filled exactly as in ONEFlux, where only
+  measured driver values serve as similar samples.
+- **Driver flag columns:** `dv.variables.driver_flag_columns` finds the QC flag columns of a driver
+  by name.
 - **NEE partitioning, method and mode:** the new `PartitioningNEE` and `partition_nee()` select the
   partitioning with `method='nighttime'|'daytime'` and `mode='oneflux'|'reddyproc'`, like
   `FluxMDS(mode=)`, with ONEFlux (as used by ICOS and FLUXNET) as the default.
@@ -34,10 +39,6 @@ Library (also used by the notebook and the GUI):
 - **Daytime partitioning (ONEFlux), gap-filled NEE:** `DaytimePartitioningOneFlux` takes an optional
   gap-filled NEE (`nee_f`), which Level 4.2 of the chain passes from Level 4.1, so windows without
   measured nighttime NEE are fitted as in ONEFlux.
-- **MDS gap-filling, driver QC:** `FluxMDS`, `run_level41_mds` and `FluxConfig` take optional QC
-  columns for SW_IN, TA and VPD, so NEE can be gap-filled exactly as in ONEFlux, where only
-  measured driver values serve as similar samples. `dv.variables.driver_flag_columns` finds the
-  matching flag columns by name.
 - **Daytime partitioning (ONEFlux), u\* scenarios:** Level 4.2 of the flux post-processing chain
   and the new `partition_nee_daytime_oneflux_scenarios()` remove the measured NEE around a failed
   fit from all u\* scenarios of that year, as ONEFlux does, and
@@ -71,7 +72,7 @@ Library (also used by the notebook and the GUI):
 
 GUI only:
 
-- **Flux menu:** the chain tab is now called "Flux post-processing chain". Saved projects still
+- **Flux menu:** the chain tab is now called "Flux post-processing chain", and saved projects still
   reopen it.
 - **UTC offset:** the offset is set only in Project settings, and tabs that need it show it
   read-only, with a red mark where it is not set yet.
@@ -84,7 +85,8 @@ GUI only:
 - **MDS gap-filling, mode:** the MDS tab and Level 4.1 of the flux post-processing chain have a
   Mode choice ("diive" by default, "ONEFlux" or "REddyProc"), which replaces the symmetric-mean
   checkbox.
-  Projects saved before load with the mode that matches their old setting.
+- **MDS gap-filling, older projects:** projects saved before the Mode choice load with the mode
+  that matches their old setting.
 - **MDS gap-filling, driver QC:** the MDS tab and Level 4.1 of the flux post-processing chain
   take an optional QC flag column for SW_IN, TA and VPD, and Copy Python includes it.
 
@@ -99,8 +101,7 @@ Notebook (meteo screening notebook v13):
 
 ### Packaging
 
-- `threadpoolctl` is now a declared dependency; before, it was only installed through
-  scikit-learn.
+- `threadpoolctl` is now a declared dependency, no longer installed only through scikit-learn.
 
 ### Bugfixes
 
@@ -109,28 +110,33 @@ Library (also used by the notebook and the GUI):
 - **Nighttime partitioning (ONEFlux):** results now match ONEFlux bit for bit (CH-DAV 2016
   and 2019, CH-LAE 2017-2019), up from an RMSE of 0.0003 µmol m⁻² s⁻¹.
 - **Nighttime partitioning (ONEFlux), polar day and night:** on days without sunrise or sunset, no
-  record counts as night any more, as in ONEFlux (annual GPP at FI-Var was up to 1.5 % off).
-- **Daytime partitioning (ONEFlux), hourly data:** an hourly year is now partitioned on a
-  half-hourly grid as ONEFlux does, so hourly results match ONEFlux (annual daytime GPP was up to
-  7.8 % off at US-Ha1 and US-MMS).
-- **Daytime partitioning (ONEFlux), sparse nights:** a window after a rejected temperature fit now
-  takes its E0 as ONEFlux does, which moved annual GPP at GF-Guy 2024 by 0.1 %.
+  record counts as night any more, as in ONEFlux (annual GPP at FI-Var was up to 1.5% off).
 - **Daytime partitioning (ONEFlux):** every light-response fit now matches ONEFlux, also at sites
   with little measured NEE, and annual sums agree to 0.0001% (were up to 1.2% apart on CH-DAV 2019
   and 1.5% on CH-LAE 2018).
 - **Daytime partitioning (ONEFlux), failed fits:** when a window's fit fails, the measured NEE
   of the surrounding 12 days is now removed and the year partitioned again, as in ONEFlux,
   instead of skipping only that window.
-- **Nighttime partitioning (REddyProc):** results change and now match REddyProc to about
-  1e-15. The E0 upper limit was 350 instead of REddyProc's 450, which on CH-DAV 2016
-  lowered E0 from 281 to 231 and annual GPP by 1.3%.
-- **Daytime partitioning (REddyProc):** results change slightly and now match REddyProc; annual
-  sums agree to 0.001%. The reported SD of the smoothed E0 was 50-84% too low. Runs no
-  longer slow down or change with the number of BLAS threads. Records that start without
-  nighttime data in their first days now also match.
-- **MDS gap-filling:** with `mode='oneflux'`, results now match ONEFlux's `gf_mds` bit for bit. Gaps filled from the
-  mean diurnal cycle had used other records (none from before midnight, wider windows), which
-  moved annual NEE by up to 3 gC m⁻² on CH-LAE.
+- **Daytime partitioning (ONEFlux), sparse nights:** a window after a rejected temperature fit now
+  takes its E0 as ONEFlux does, which moved annual GPP at GF-Guy 2024 by 0.1%.
+- **Daytime partitioning (ONEFlux), hourly data:** an hourly year is now partitioned on a
+  half-hourly grid as ONEFlux does, so hourly results match ONEFlux (annual daytime GPP was up to
+  7.8% off at US-Ha1 and US-MMS).
+- **Nighttime partitioning (REddyProc):** results change and now match REddyProc to about 1e-15.
+- **Nighttime partitioning (REddyProc), E0 limit:** the upper limit of E0 was 350 instead of
+  REddyProc's 450, which on CH-DAV 2016 lowered E0 from 281 to 231 and annual GPP by 1.3%.
+- **Daytime partitioning (REddyProc):** results change slightly and now match REddyProc, with
+  annual sums mostly within 0.001%.
+- **Daytime partitioning (REddyProc), E0 uncertainty:** the reported SD of the smoothed E0 was
+  50-84% too low.
+- **Daytime partitioning (REddyProc), BLAS threads:** runs no longer slow down or change with the
+  number of BLAS threads.
+- **Daytime partitioning (REddyProc), first days:** records without nighttime data in their first
+  days now also match REddyProc.
+- **MDS gap-filling:** with `mode='oneflux'`, results now match ONEFlux's `gf_mds` bit for bit.
+- **MDS gap-filling, mean diurnal cycle:** gaps filled from the mean diurnal cycle used other
+  records than ONEFlux (none from before midnight, wider windows), which moved annual NEE by up to
+  3 gC m⁻² on CH-LAE.
 - **MDS gap-filling, VPD in hPa:** with `vpd_in_kpa=False`, records exactly 5 hPa apart counted as
   similar, unlike in ONEFlux.
 - **Meteo screening, timestamps:** data that already had the target resolution kept the internal
@@ -153,8 +159,8 @@ Library (also used by the notebook and the GUI):
   shared bucket, not only for the uploaded site.
 - **`Hampel`, spikes next to gaps:** with `use_differencing=True` and `repeat=True`, a spike on the
   first or last record or next to a gap was never flagged, and each iteration removed the next
-  record instead, often up to the next gap. This also affected the flux post-processing chain
-  (L3.2) and the GUI screening tabs.
+  record instead, often up to the next gap, also in the flux post-processing chain (L3.2) and the
+  GUI screening tabs.
 - **`Hampel`:** a whole-number nighttime threshold combined with a decimal daytime threshold
   raised a `TypeError`.
 - **`setto_value`:** a bare date now covers the whole day, as documented.
@@ -173,6 +179,11 @@ GUI only:
   `TypeError`.
 - **Plot tabs with several panels:** *Update plot* became active again right after a render
   or a switch between panels, although no setting had changed.
+
+Examples:
+
+- **VPD units:** several examples and docstring examples passed VPD in hPa where kPa was expected,
+  or the other way round, which skewed their MDS, partitioning and random uncertainty results.
 
 ## v0.91.2 | 24 September 2026
 
