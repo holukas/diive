@@ -26,6 +26,7 @@ Plot methods:
 
 - ``plot_fft_results`` — time series, histogram, polar and monthly boxplot.
 - ``plot_crosscorr_results`` — scatter over time and shift histogram.
+- ``plot_noon_shift_results``: scatter over time, histogram and monthly boxplot.
 - ``plot_monthly_dielcycles`` — multi-year diel cycles per calendar month.
 - ``plot_radiation_fingerprint`` — heatmap of intra-day radiation patterns.
 
@@ -72,7 +73,7 @@ class DetectTimestampShifts:
         Site latitude in decimal degrees.  Required when col_pot is not in df.
     lon : float, optional
         Site longitude in decimal degrees.  Required when col_pot is not in df.
-    utc_offset : int
+    utc_offset : int, default 1
         UTC offset in hours (e.g. 1 for CET).
     """
 
@@ -126,7 +127,7 @@ class DetectTimestampShifts:
 
         Parameters
         ----------
-        min_clearness : float
+        min_clearness : float, default 0.6
             Minimum clearness index (measured / potential daily sum).  Days below
             this are too cloudy to yield a reliable phase estimate.
 
@@ -200,11 +201,11 @@ class DetectTimestampShifts:
 
         Parameters
         ----------
-        max_shift_min : int
+        max_shift_min : int, default 120
             Search window in minutes (symmetric, e.g. 120 searches +/-2 h).
-        upsample_freq : str
+        upsample_freq : str, default '1min'
             Pandas frequency string for upsampling (e.g. '1min').
-        min_clearness_index : float
+        min_clearness_index : float, default 0.5
             Minimum daily clearness index to include a day.
 
         Returns
@@ -327,7 +328,7 @@ class DetectTimestampShifts:
 
         Parameters
         ----------
-        clearness_threshold : float
+        clearness_threshold : float, default 0.7
             Minimum clearness index (measured / potential daily sum) to include a day.
 
         Returns

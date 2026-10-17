@@ -1,8 +1,10 @@
 """
-OFFSET CORRECTION: MEASUREMENT OFFSET AND GAIN DETECTION
-=========================================================
+OFFSET CORRECTION: MEASUREMENT OFFSET DETECTION AND REMOVAL
+===========================================================
 
-Detect and remove systematic offsets and gain changes in measurement pairs via histogram comparison.
+Detect and remove systematic offsets: a constant offset to a replicate sensor,
+yearly wind direction offsets (histogram comparison with reference years), the
+relative humidity offset above 100% and the nighttime zero offset of radiation.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -211,11 +213,12 @@ class NighttimeZeroOffsetResult:
         corrected_by_offset: ``input - offset``, before nighttime is forced to
             zero and remaining negatives are clamped.
         corrected: Final corrected series (nighttime forced to zero, remaining
-            negative values clamped to zero).
+            negative values clamped to zero when ``clamp_negatives``).
         nighttime_flag: 1 where nighttime, 0 where daytime.
         n_below_zero_before: Records below zero in ``input``.
         n_below_zero_before_night: Nighttime records below zero in ``input``.
-        n_below_zero_after: Records below zero in ``corrected`` (expected 0).
+        n_below_zero_after: Records below zero in ``corrected`` (expected 0 when
+            ``clamp_negatives``).
         n_below_zero_after_night: Nighttime records below zero in ``corrected``
             (expected 0).
         n_night: Number of nighttime records.

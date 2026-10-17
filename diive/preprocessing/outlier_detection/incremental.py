@@ -3,14 +3,8 @@ Z-SCORE INCREMENTS: ABRUPT CHANGE DETECTION
 =============================================
 
 Detect outliers based on z-scores of consecutive value changes (forward, backward, combined).
-
-Part of the diive library: https://github.com/holukas/diive
-
-Record increment z-score:
-
-This module provides outlier detection based on abrupt changes between consecutive values.
-The method calculates z-scores for three types of increments (forward, backward, combined)
-and flags values where all three exceed the threshold.
+The method calculates z-scores for the three types of increments and flags values
+where all three exceed the threshold.
 
 Quality flags:
   - flag=0: Value within acceptable range (valid)
@@ -19,8 +13,7 @@ Quality flags:
 
 See examples/preprocessing/outlier_detection/outlier_incremental.py for working examples.
 
-This module is part of the diive library:
-https://github.com/holukas/diive
+Part of the diive library: https://github.com/holukas/diive
 """
 from pandas import Series, DatetimeIndex
 
@@ -41,8 +34,9 @@ class zScoreIncrements(FlagBase):
     3. **Combined increment:** sum of forward and backward increments
 
     Z-scores are calculated for each increment type, and values are flagged as outliers
-    only when ALL THREE increments exceed the z-score threshold. This approach is robust
-    to isolated spikes while allowing gradual changes.
+    only when ALL THREE increments exceed the z-score threshold. An isolated spike has
+    large increments on both sides and is flagged. A step change or a gradual change
+    does not have both and is kept.
 
     Example:
         >>> import diive as dv

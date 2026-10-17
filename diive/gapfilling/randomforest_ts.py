@@ -71,7 +71,8 @@ class RandomForestTS(MlRegressorGapFillingBase):
             model_: Trained RandomForestRegressor instance.
             gapfilling_df_: DataFrame with gap-filled target.
             feature_importances_: SHAP feature importance.
-            scores_: Model performance metrics (MAE, RMSE, R²).
+            scores_: In-sample scores of the gap-filling model (MAE, RMSE, R²).
+            scores_traintest_: Scores on the held-out test split.
 
         Examples:
             See examples/gapfilling/gapfill_randomforest.py for complete examples.
@@ -99,12 +100,15 @@ class QuickFillRFTS:
     and rapid prototyping. It is NOT meant for production/final gap-filling.
 
     Uses minimal feature engineering and model complexity for speed:
-    - FeatureEngineer with single lag: [-1, -1] (only immediate past value)
-    - No rolling statistics, differencing, or timestamp features
-    - RandomForestTS with n_estimators=3 (very fast, low quality)
-    - Shallow trees with larger min_samples for fast inference
+    - FeatureEngineer with a single lag of one record: [-1, -1]
+    - Vectorized timestamp features, but no rolling statistics, differencing,
+      EMA, polynomial or STL features
+    - RandomForestTS with n_estimators=9 (fast, low quality)
+    - min_samples_split=10 and min_samples_leaf=5 to keep the trees small
 
-    Attributes:
+    Methods:
+        fill(): Train the model and fill the gaps
+        report(): Print the gap-filling report
         gapfilling_df(): DataFrame with gap-filled target and flags
         get_gapfilled_target(): Series with gap-filled values
         get_flag(): Series with gap-filling flags (0=observed, 1=filled, 2=fallback)

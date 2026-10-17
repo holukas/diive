@@ -2,15 +2,8 @@
 LOCAL SD: ROLLING WINDOW DEVIATION DETECTION
 =============================================
 
-Identify outliers as values exceeding rolling median by specified standard deviations.
-
-Part of the diive library: https://github.com/holukas/diive
-
-Rolling window standard deviation:
-
-This module provides outlier detection based on deviations from a rolling median.
-The method identifies values that exceed a rolling window's median by a specified
-number of standard deviations. Two modes are available:
+Identify outliers as values that deviate from a rolling median by more than a
+given number of standard deviations. Two modes are available:
 
 - **Global Mode:** Single threshold applied to entire time series
   Fast, simple outlier detection using constant or rolling standard deviation.
@@ -25,8 +18,7 @@ Quality flags:
 
 See examples/preprocessing/outlier_detection/outlier_localsd.py for working examples.
 
-This module is part of the diive library:
-https://github.com/holukas/diive
+Part of the diive library: https://github.com/holukas/diive
 """
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt

@@ -3,7 +3,8 @@ OUTLIER DETECTION: STEP-WISE OUTLIER DETECTION
 ==============================================
 
 Chain multiple detection methods sequentially for progressive outlier filtering.
-Includes Hampel, z-score, LOF, absolute limits, local SD, and manual removal.
+Includes Hampel, z-score (global, rolling and increments), LOF, absolute limits,
+local SD, trim low, missing values and manual removal.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -28,8 +29,6 @@ from diive.preprocessing.outlier_detection.zscore import zScore, zScoreRolling
 class StepwiseOutlierDetection:
     """
     Step-wise outlier detection in time series data
-
-    The class is optimized to work in Jupyter notebooks.
 
     Quality flags that can be directly created via this class:
     - `.flag_missingvals_test()`: Generate flag that indicates missing records in data
@@ -236,11 +235,14 @@ class StepwiseOutlierDetection:
             matching Papale et al. 2006. For other sampling rates pass
             ``'13D'`` or scale the count (e.g. ``24 * 13`` for hourly).
         n_sigma : float, default 5.5
-            Threshold multiplier for global mode (number of MADs above median)
+            Threshold multiplier (number of scaled MADs from the median). Used
+            for both periods unless overridden.
         n_sigma_daytime : float, optional
-            Threshold for daytime data (when separate_day_night=True)
+            Override ``n_sigma`` for daytime data (when separate_day_night=True).
+            If None, uses ``n_sigma``.
         n_sigma_nighttime : float, optional
-            Threshold for nighttime data (when separate_day_night=True)
+            Override ``n_sigma`` for nighttime data (when separate_day_night=True).
+            If None, uses ``n_sigma``.
         k : float, default 1.4826
             Scaling factor for MAD (median absolute deviation)
         use_differencing : bool, default True
@@ -512,11 +514,11 @@ class StepwiseOutlierDetection:
         else:
             # It is possible to re-run an outlier method, which produces a flag
             # with the same name as for the first (original) run. In this case
-            # an integer is added to the flag name. For example, if the test
-            # z-score daytime/nighttime is run the first time, it produces the flag with the name
-            # FLAG_TA_T1_2_1_OUTLIER_ZSCOREDTNT_TEST. When the test is run again
+            # an integer is added to the flag name. For example, if the z-score
+            # test is run the first time, it produces the flag with the name
+            # FLAG_TA_T1_2_1_OUTLIER_ZSCORE_TEST. When the test is run again
             # (e.g. with different settings) then the name of the flag of this second
-            # run is FLAG_TA_T1_2_1_OUTLIER_ZSCOREDTNT_2_TEST, etc ...
+            # run is FLAG_TA_T1_2_1_OUTLIER_ZSCORE_2_TEST, etc ...
             new_flagname = flag.name
             rerun = 1
             while new_flagname in self.flags.columns:

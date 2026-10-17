@@ -26,9 +26,10 @@ class VariableClass(NamedTuple):
     """Result of :func:`classify_variable`.
 
     Attributes:
-        kind: Canonical short variable label, e.g. ``'NEE'``, ``'GPP'``,
+        kind: Canonical short variable label, e.g. ``'NEE'``, ``'FC'``, ``'GPP'``,
             ``'Reco'``, ``'FCH4'``, ``'FN2O'``, ``'FH2O'``, ``'LE'``, ``'ET'``,
-            ``'Rg'``, ``'SW_IN'``, ``'PPFD'``, ``'PAR'``, ``'LW'``.
+            ``'Rg'``, ``'SW_IN'``, ``'PPFD'``, ``'PAR'``, ``'LW'``, ``'TA'``,
+            ``'VPD'``, ``'SWC'``.
         category: One of ``'carbon'``, ``'water'``, ``'radiation'``,
             ``'meteo'``, ``'soil'``, ``'nitrogen'``.
     """

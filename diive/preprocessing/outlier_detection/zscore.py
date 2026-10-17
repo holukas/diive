@@ -1,7 +1,8 @@
 """
-Outlier detection using Z-score methods.
+ZSCORE: Z-SCORE OUTLIER DETECTION
+=================================
 
-This module provides three z-score-based outlier detection approaches:
+Three z-score-based outlier detection approaches:
 
 - **Global:** Single z-score threshold for entire time series
 - **Daytime/Nighttime:** Separate z-score thresholds for different times of day
@@ -14,8 +15,7 @@ Quality flags:
 
 See examples/preprocessing/outlier_detection/outlier_zscore.py for working examples.
 
-This module is part of the diive library:
-https://github.com/holukas/diive
+Part of the diive library: https://github.com/holukas/diive
 """
 import numpy as np
 import pandas as pd

@@ -1,8 +1,9 @@
 """
-UTILITIES: TESTING AND SYNTHETIC DATA GENERATION
-=================================================
+UTILITIES: SYNTHETIC DATA AND VARIABLE HELPERS
+==============================================
 
-Generate synthetic time series with noise and add impulse disturbances for testing.
+Generate synthetic time series with noise, add impulse disturbances for testing,
+combine two variables, and render variable calculations as runnable code.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -195,7 +196,7 @@ def generate_noisy_timeseries(
             distribution used to generate white noise. Defaults to 2.0.
         outlier_fraction (float): The proportion of data points to replace with
             outliers (between 0.0 and 1.0). Outliers are random spikes with
-            magnitude 3x-5x the noise level. Defaults to 0.02 (2%).
+            magnitude 5x-10x the noise level. Defaults to 0.02 (2%).
         random_seed (int): The seed for the random number generator to ensure
             reproducibility. Defaults to 42.
 

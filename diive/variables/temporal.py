@@ -139,7 +139,7 @@ def daytime_nighttime_flag_from_swinpot(swinpot: Series,
 class TimeSince:
     """Count consecutive records since last occurrence of a condition.
 
-    Counts the number of records elapsed since a time series last fell outside
+    Counts the number of records elapsed since a time series last fell inside
     a specified limit range. Useful for tracking dry periods (time since last rain),
     frost periods (time since freezing), warm spells, or any event-based analysis.
 
@@ -267,7 +267,7 @@ class TimeSince:
         Returns
         -------
         pd.Series
-            Integer count of records since last "outside range" occurrence.
+            Integer count of records since the last inside-range occurrence.
             Column name is TIMESINCE_{original_series_name}.
         """
         return self._timesince_df[self.timesince_col].copy()
@@ -359,13 +359,13 @@ def lagged_variants(df: DataFrame,
                     verbose: int = 0) -> DataFrame:
     """Create lagged variants of variables
 
-    Shifts all records in *df* by *lag* records and stores he lagged variants
+    Shifts all records in *df* by *lag* records and stores the lagged variants
     as new columns.
 
     For example, lagging the two variables `TA` and `SW_IN` with the settings *lag=[-2, 1]*
-    and *stepsize=1* creates the new variables `TA-2` (two records before `TA`),
-    `TA-1` (one record before `TA`), `TA+1` (one record after `TA`), `SW_IN-2`, `SW_IN-1`,
-    and `SW_IN+1`. Note that the minus sign means "before", the plus sign means "after".
+    and *stepsize=1* creates the new variables `.TA-2` (two records before `TA`),
+    `.TA-1` (one record before `TA`), `.TA+1` (one record after `TA`), `.SW_IN-2`, `.SW_IN-1`,
+    and `.SW_IN+1`. Note that the minus sign means "before", the plus sign means "after".
 
     Can be used to investigate correlations between a scalar and the preceding or subsequent
     records of another scalar.
@@ -385,7 +385,7 @@ def lagged_variants(df: DataFrame,
 
     Args:
         df: dataframe that contains variables that will be lagged
-        lag: list of integers given as number or records, defining the range of generated lag times
+        lag: list of integers given as number of records, defining the range of generated lag times
             For example lag=[-3, 2] and stepsize=1 will generated lagged
             variants -3, -2, -1, +1 and +2
         stepsize: stepsize between the different lagged variants given as number of records

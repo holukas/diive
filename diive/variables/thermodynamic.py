@@ -32,7 +32,7 @@ def aerodynamic_resistance(u_ms: pd.Series, ustar_ms: pd.Series) -> pd.Series:
 
     Returns:
         pd.Series: Aerodynamic resistance (ra) in [s m-1].
-        Returns NaN where ustar is 0 or NaN.
+        Returns NaN where ustar is 0 or below, or NaN.
     """
     ustar_clean = ustar_ms.copy()
     ustar_clean[ustar_clean <= 0] = np.nan
@@ -70,12 +70,8 @@ def dry_air_density(rho_a: pd.Series, rho_v: pd.Series) -> pd.Series:
 
     Returns:
         pd.Series: The calculated dry air density (rho_d) in [kg m-3].
-
-
-    Raises:
-        TypeError: If inputs are not pandas Series or numeric arrays.
-        ValueError: If rho_v is larger than rho_a (resulting in negative dry density),
-            though this is handled mathematically, it indicates bad input data.
+        Where rho_v is larger than rho_a the result is negative, which points to
+        bad input data. A warning is shown in that case.
     """
     rho_d = rho_a - rho_v
 

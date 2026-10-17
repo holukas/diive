@@ -2,7 +2,8 @@
 GAP-FILLING: TIME SERIES IMPUTATION METHODS
 ============================================
 
-ML and statistical methods for filling missing data: Random Forest, XGBoost, MDS, linear interpolation.
+ML and statistical methods for filling missing data: Random Forest, XGBoost, MDS, linear interpolation,
+long-term per-year models and a dedicated SW_IN gap-filler.
 Feature engineering pipeline and model scoring included.
 
 Part of the diive library: https://github.com/holukas/diive

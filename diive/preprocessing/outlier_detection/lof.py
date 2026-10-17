@@ -4,8 +4,6 @@ LOCAL OUTLIER FACTOR: DENSITY-BASED ANOMALY DETECTION
 
 Identify anomalies by measuring local density deviation relative to neighbors.
 
-Part of the diive library: https://github.com/holukas/diive
-
 Local outlier factor:
     "The anomaly score of each sample is called the Local Outlier Factor. It measures
     the local deviation of the density of a given sample with respect to its neighbors.
@@ -27,6 +25,7 @@ References:
 
 See examples/preprocessing/outlier_detection/outlier_lof.py for working examples.
 
+Part of the diive library: https://github.com/holukas/diive
 """
 import numpy as np
 import pandas as pd

@@ -66,7 +66,8 @@ class XGBoostTS(MlRegressorGapFillingBase):
             model_: Trained XGBRegressor instance.
             gapfilling_df_: DataFrame with gap-filled target.
             feature_importances_: SHAP feature importance.
-            scores_: Model performance metrics (MAE, RMSE, R²).
+            scores_: In-sample scores of the gap-filling model (MAE, RMSE, R²).
+            scores_traintest_: Scores on the held-out test split.
 
         Examples:
             See examples/gapfilling/gapfill_xgboost.py for complete example.

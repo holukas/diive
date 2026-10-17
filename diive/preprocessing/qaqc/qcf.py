@@ -1,5 +1,6 @@
 """
-QCF - OVERALL QUALITY CONTROL FLAG
+QCF: OVERALL QUALITY CONTROL FLAG
+=================================
 
 Calculate overall quality flag (QCF) by combining multiple individual test flags
 into a single quality indicator. Supports daytime/nighttime separation and USTAR
@@ -23,6 +24,8 @@ Example:
     ...                   index=pd.date_range('2024-06-01', periods=2, freq='30min'))
     >>> qcf = dv.qaqc.FlagQCF(df=df, target_col='NEE', idstr='_L41')
     >>> qcf.calculate(daytime_accept_qcf_below=2, nighttime_accept_qcf_below=2)
+
+Part of the diive library: https://github.com/holukas/diive
 """
 
 import matplotlib.gridspec as gridspec
@@ -377,9 +380,9 @@ class FlagQCF:
         on data rejection and understand QC filtering progression.
 
         Output:
-            - Sequential table: for each test, available vs rejected records with percentages
-            - Impact summary: tests ranked by number of records they newly reject
-            - Impact levels: HIGH (>=5 records), MODERATE (>=2), LOW (<2)
+            One table with a row per test, in order: newly rejected records,
+            available vs rejected records with percentages, and the QCF
+            distribution (0/1/2) with all tests up to that one.
         """
         _console.print(f"\n\n{'=' * 120}")
         _console.print(f"QCF EVOLUTION: SEQUENTIAL TEST APPLICATION")
@@ -736,7 +739,7 @@ class FlagQCF:
         Panels (left to right):
         1. Original series (before QC)
         2. Quality-controlled series (after QC, NaN where QCF=2)
-        3. Flag sums (total count of raised flags)
+        3. Flag sums (sum of the flag values of all tests)
         4. QCF overall flag (0=good, 1=marginal, 2=poor)
 
         Uses datetime heatmap layout (e.g., day-of-year vs hour-of-day) for visual patterns.

@@ -1,8 +1,9 @@
 """
-Outlier detection using absolute value limits.
+ABSOLUTE LIMITS: FIXED-RANGE OUTLIER DETECTION
+==============================================
 
-This module provides simple, interpretable outlier detection by comparing values
-against fixed minimum and maximum thresholds.
+Simple, interpretable outlier detection by comparing values against fixed
+minimum and maximum thresholds.
 
 - **Global Mode:** Single threshold range applied to all data
   Fast, simple validation for any time series.
@@ -17,8 +18,7 @@ Both modes use the quality flag system:
 
 See examples/preprocessing/outlier_detection/outlier_absolutelimits.py for working examples.
 
-This module is part of the diive library:
-https://github.com/holukas/diive
+Part of the diive library: https://github.com/holukas/diive
 """
 import numpy as np
 import pandas as pd

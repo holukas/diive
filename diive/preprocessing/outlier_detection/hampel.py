@@ -1,14 +1,17 @@
 """
-Outlier detection using the Hampel filter (Median Absolute Deviation).
+HAMPEL: ROLLING MEDIAN ABSOLUTE DEVIATION FILTER
+================================================
 
-This module provides robust, window-based outlier detection using the Hampel filter,
-which relies on the Median Absolute Deviation (MAD). Two modes are available:
+Robust, window-based outlier detection with the Hampel filter, which relies on
+the Median Absolute Deviation (MAD). Two modes are available:
 
 - **Global Mode:** Single threshold applied to entire time series
   Fast, simple outlier detection for any data.
 
 - **Daytime/Nighttime Mode:** Separate thresholds for different times of day
   Useful when data characteristics vary significantly by time-of-day conditions.
+  The rolling median and MAD still run on the whole series. Only the threshold
+  differs between daytime and nighttime.
 
 Both modes support:
   - Double-differencing (Papale et al. 2006 method) to remove trends
@@ -22,8 +25,7 @@ Quality flags:
 
 See examples/preprocessing/outlier_detection/outlier_hampel.py for working examples.
 
-This module is part of the diive library:
-https://github.com/holukas/diive
+Part of the diive library: https://github.com/holukas/diive
 """
 import numpy as np
 import pandas as pd
@@ -321,9 +323,10 @@ class Hampel(FlagBase):
         # carry no scale to judge against - and substituting a tiny epsilon turns it
         # into a silent mass rejection of the signal itself. Windows that arise from
         # coarse data upsampled (e.g. back-filled) before it reaches this class,
-        # quantized readings or a stuck sensor hit this routinely; the meteo
-        # screening no longer upsamples coarse records. Such records are therefore left unflagged (NaN limits compare
-        # False), and the count is reported rather than hidden.
+        # quantized readings or a stuck sensor hit this routinely (the meteo
+        # screening no longer upsamples coarse records). Records in such windows
+        # are therefore left unflagged (NaN limits compare False), and the count
+        # is reported rather than hidden.
         degenerate = rolling_mad == 0
         if degenerate.any():
             self._n_degenerate_scale += int(degenerate.sum())

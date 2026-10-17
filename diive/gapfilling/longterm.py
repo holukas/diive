@@ -49,7 +49,8 @@ class LongTermGapFillingBase:
                 - for 2017, the model is built from 2015, 2016 and 2017 data
 
         Args:
-            See docstring for pkgs.gapfilling.randomforest_ts.RandomForestTS
+            regressor: Regressor class, e.g. RandomForestRegressor or XGBRegressor.
+            Other args: see diive.gapfilling.randomforest_ts.RandomForestTS.
             below_zero: How to treat predicted values below zero for variables that
                        cannot be negative (e.g. VPD, SW_IN, PPFD).
                        None (default): keep as-is. 'zero': clip to 0.
@@ -58,8 +59,9 @@ class LongTermGapFillingBase:
             gapfilling_df_: dataframe, gapfilling results from all years in one dataframe
             gapfilled_: series, gap-filled target series from all years in one time series
             results_yearly_: dict, detailed results for each year
-            scores_: dict, scoring results for each year
-            feature_importances_: dict, feature importances for each year
+            scores_: dict, in-sample scores for each year
+            scores_traintest_: dict, held-out test scores for each year
+            feature_importances_yearly_: dict, feature importances for each year
         """
         self.regressor = regressor
         self.input_df = input_df
@@ -280,7 +282,7 @@ class LongTermGapFillingBase:
         self.initialize_yearly_models()
 
     def fillgaps(self):
-        """Train model for each year"""
+        """Train the model for each year and fill its gaps."""
         for year, _df in self._yearpools.items():
             info(f"Training model for {year} ...", verbose=self.verbose)
             rfts = self.results_yearly_[year]  # Get instance with model from dict

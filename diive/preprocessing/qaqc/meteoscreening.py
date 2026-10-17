@@ -95,9 +95,9 @@ class StepwiseMeteoScreeningDb:
     often measure negative values during the night. These negative values are useful
     because they give info about the accuracy and precision of the sensor. In this
     case, values during the night should be zero. Instead of cutting off negative
-    values, `diive` detects the nighttime offset for each day and then calculates
-    a correction slope between individual days. This way, the daytime values are
-    also corrected.
+    values, `diive` takes the mean of each day's nighttime values as that day's
+    offset and subtracts it from all of the day's records. This way, the daytime
+    values are also corrected.
 
     **Resampling**
     After quality-screening and corrections, `.resample()` resamples the data to a coarser
@@ -827,11 +827,14 @@ class StepwiseMeteoScreeningDb:
             covers 13 days at any resolution, the span of the 624-record
             default of ``StepwiseOutlierDetection`` at 30-minute data
         n_sigma : float, default 5.5
-            Threshold multiplier for global mode (number of MADs above median)
+            Threshold multiplier (number of scaled MADs from the median). Used
+            for both periods unless overridden.
         n_sigma_daytime : float, optional
-            Threshold for daytime data (when separate_day_night=True)
+            Override ``n_sigma`` for daytime data (when separate_day_night=True).
+            If None, uses ``n_sigma``.
         n_sigma_nighttime : float, optional
-            Threshold for nighttime data (when separate_day_night=True)
+            Override ``n_sigma`` for nighttime data (when separate_day_night=True).
+            If None, uses ``n_sigma``.
         k : float, default 1.4826
             Scaling factor for MAD (median absolute deviation)
         use_differencing : bool, default True

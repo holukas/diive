@@ -4,8 +4,6 @@ TRIM LOW: SYMMETRIC OUTLIER REMOVAL
 
 Detect outliers using trimmed mean approach: remove values below threshold, then remove equal number from high end.
 
-Part of the diive library: https://github.com/holukas/diive
-
 How it works:
 
 By default the whole series is trimmed against one distribution: it counts how
@@ -51,8 +49,7 @@ rejected values to NaN.
 
 See examples/preprocessing/outlier_detection/outlier_trim.py for working examples.
 
-This module is part of the diive library:
-https://github.com/holukas/diive
+Part of the diive library: https://github.com/holukas/diive
 """
 import numpy as np
 import pandas as pd

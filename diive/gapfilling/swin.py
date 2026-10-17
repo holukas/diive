@@ -202,8 +202,8 @@ class SWINGapFillerXGBoost:
         **kwargs: XGBoost hyperparameters forwarded to XGBRegressor (n_estimators,
             max_depth, learning_rate, subsample, colsample_bytree, random_state, etc.),
             overriding the SW_IN defaults in ``_XGB_DEFAULTS``: n_estimators=3000,
-            max_depth=6, early_stopping_rounds=20. If you raise n_estimators, keep
-            early stopping on — see the note at ``_XGB_DEFAULTS`` for why.
+            max_depth=6, early_stopping_rounds=20, random_state=42. If you raise
+            n_estimators, keep early stopping on — see the note at ``_XGB_DEFAULTS`` for why.
 
     Methods:
         run(): Execute the full gap-filling workflow. Returns self for chaining.
@@ -229,8 +229,8 @@ class SWINGapFillerXGBoost:
                 interpolate_short_gaps is set)
 
         Values 0/1/2 carry the same meaning as everywhere else in diive (see
-        GapFillingResult); 3 is specific to this class, which is the only
-        gap-filler with a physics branch. Flag 2 matters most when *context_df*
+        GapFillingResult). Values 3 (physics branch) and 4 (interpolation) are
+        specific to this class. Flag 2 matters most when *context_df*
         is used: it marks records where the extra drivers were unavailable and
         the fill therefore fell back to timestamps alone.
 
@@ -630,7 +630,7 @@ class SWINGapFillerXGBoost:
         # Capture the original gap mask BEFORE any correction is applied.
         # remove_nighttime_zero_offset() zeros ALL nighttime positions (including NaN),
         # so using working_series.isna() afterwards would miss those nighttime gaps
-        # and assign them flag=0 (observed) instead of flag=2 (physics fill).
+        # and assign them flag=0 (observed) instead of flag=3 (physics fill).
         original_gaps = self.series.isna()
 
         # Optional: correct nighttime sensor offset before gap-filling.
