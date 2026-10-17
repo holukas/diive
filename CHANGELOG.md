@@ -70,6 +70,20 @@ Library (also used by the notebook and the GUI):
 - **Documentation:** the meteo screening methods and the outlier classes show usage examples, e.g.
   all date formats for manual removal.
 
+- **Meteo screening, resampling coverage (changes results):** coverage is measured by the time the
+  kept records cover, so other resolutions in the same download no longer change which periods are
+  kept. A sum needs `mincounts_perc` of the period covered, with no one-record minimum. Means of
+  data with one resolution are unchanged.
+- **Meteo screening, new detection round:** calling `start_outlier_detection()` again drops the
+  previous round's flags and tests all records again, including those the last finalize removed.
+- **Meteo screening, warnings:** `resample()` warns about flags that `finalize_outlier_detection()`
+  has not applied yet, and finalize warns about a test whose flag was not added.
+- **Database upload:** writes are synchronous and retried on connection and server errors, and
+  `upload_singlevar` takes `delete_start` and `delete_stop` to delete a whole period before the
+  upload.
+- **Database download:** when a variable is stored with several tag sets, the series that starts
+  later wins at shared timestamps, and a warning reports conflicting values.
+
 GUI only:
 
 - **Flux menu:** the chain tab is now called "Flux post-processing chain", and saved projects still
@@ -90,14 +104,19 @@ GUI only:
 - **MDS gap-filling, driver QC:** the MDS tab and Level 4.1 of the flux post-processing chain
   take an optional QC flag column for SW_IN, TA and VPD, and Copy Python includes it.
 
-Notebook (meteo screening notebook v13):
+Notebook (meteo screening notebook v14):
 
-- **Run All:** no longer applies tests and corrections with example settings for one specific
-  variable (LOF, trim low, absolute limits, corrections).
+- **Run All:** no longer applies tests and corrections with example settings. All outlier tests
+  are commented out, with notes on the variables each one does not suit.
 - **Windows:** window settings are time spans, e.g. `'7D'`.
 - **Descriptions:** method descriptions are shorter and link to the documentation.
 - **Skipping outlier detection:** a note after the first plot says when it can be skipped.
 - **Resampling:** a period is kept only if at least half of it is covered (was a quarter).
+
+- **Upload:** deletes the whole screened period, from `START` to `STOP`, so older screened values
+  at its edges are removed.
+- **Upload check:** compares the stored values with the uploaded ones and reports a failed upload.
+- **UTC offset:** the notes say to keep one fixed offset all year, without daylight saving time.
 
 ### Packaging
 
@@ -190,6 +209,17 @@ Library (also used by the notebook and the GUI):
 - **No changes to inputs:** `resample_to_monthly_agg_matrix` and `get_encoded_value_series` no
   longer modify the series passed in.
 - **RH offset correction:** its description now says what the correction does.
+- **`Hampel`, repeated passes:** with `use_differencing=True` and `repeat=True`, each pass could
+  remove the good records next to the ones removed before, e.g. all daytime shortwave radiation or
+  a whole day at a level shift. Single passes give the same results as before.
+- **Database upload, failed writes:** a write that failed after the delete was only logged, so the
+  period stayed empty while the upload reported success. It now raises an error.
+- **Database upload, empty data:** an empty table raises a clear error before anything is deleted,
+  and a table with only missing values gives a warning that nothing was written.
+- **Meteo screening, corrections after finalize:** a correction no longer brings back records the
+  last finalize removed, e.g. a rejected night record set to zero by the zero-offset correction.
+- **Meteo screening, finalize first:** `finalize_outlier_detection()` without
+  `start_outlier_detection()` raises a clear error.
 
 GUI only:
 
