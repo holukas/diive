@@ -1644,7 +1644,8 @@ class DaytimePartitioningReddyProc:
         >>> df = dv.load_exampledata_parquet()
         >>> part = dv.flux.DaytimePartitioningReddyProc(
         ...     nee=df['NEE_CUT_REF_orig'], ta=df['Tair_f'], vpd=df['VPD_f'],
-        ...     sw_in=df['Rg_f'], lat=46.815, lon=9.855, utc_offset=1)
+        ...     sw_in=df['Rg_f'], lat=46.815, lon=9.855, utc_offset=1,
+        ...     vpd_in_kpa=False)  # VPD_f is in hPa in the example data
         >>> part.run()  # then part.results -> DataFrame with RECO_DT_RP, GPP_DT_RP, ...
     """
 

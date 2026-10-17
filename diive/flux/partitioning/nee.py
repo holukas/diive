@@ -129,7 +129,7 @@ class PartitioningNEE:
         >>> part = dv.flux.PartitioningNEE(
         ...     nee=df['NEE_CUT_REF_orig'], method='daytime', mode='oneflux',
         ...     ta=df['Tair_orig'], sw_in=df['Rg_orig'], ta_f=df['Tair_f'],
-        ...     sw_in_f=df['Rg_f'], vpd=df['VPD_f']).run()
+        ...     sw_in_f=df['Rg_f'], vpd=df['VPD_f'], vpd_in_kpa=False).run()  # VPD_f in hPa
         >>> part.gpp  # GPP_DT_OF, and part.results holds all backend columns
     """
 
