@@ -169,6 +169,27 @@ Library (also used by the notebook and the GUI):
   as the text "nan".
 - **`StepwiseMeteoScreeningDb.flag_outliers_hampel_test`:** the default window is now 13 days
   (`'13D'`) instead of 13 records, which were only about two hours of 10-minute data.
+- **Plotting:** `has_twin` no longer fails, `ScatterXY` keeps its layout without a warning, and
+  `CompoundExtremesPlot(legend=False)` draws no legend.
+- **Heatmaps:** `HeatmapDateTime` and `HeatmapYearMonth` raise an error when `plot()` gets an
+  orientation that differs from the one set at creation, instead of mislabelling the axes.
+- **Driver analysis plots:** `AleCurve.plot`, `Ale2DResult.plot` and the `DriverAnalysis` plots
+  (`plot_importance`, `plot_lagged`, `plot_scale_resolved`, `plot_convergence`) take their title
+  through `format_style=FormatStyle(...)` like the other plots, and a flat `title=` raises an
+  error that says so.
+- **Diel cycle and compound extremes plots:** a standalone plot keeps its layout without a warning.
+- **Time-lag analysis:** a histogram range that would keep fewer than two bins now keeps all bins
+  with a warning, instead of failing.
+- **Offset corrections:** `WindDirOffset` and `MeasurementOffsetFromReplicate` take `verbose`.
+- **Histogram:** the `'uniques'` method gives the largest value its own bin, so the time-lag
+  analysis now counts one bin per distinct lag (its reported lag ranges are unchanged on the
+  example data).
+- **Bin fits:** `BinFitterCP.showplot` works without bins and unbinned data, and its bin points
+  follow `bins_y_agg`.
+- **Decoupling:** saving the plot works when an `ax` is passed.
+- **No changes to inputs:** `resample_to_monthly_agg_matrix` and `get_encoded_value_series` no
+  longer modify the series passed in.
+- **RH offset correction:** its description now says what the correction does.
 
 GUI only:
 
@@ -184,6 +205,8 @@ Examples:
 
 - **VPD units:** several examples and docstring examples passed VPD in hPa where kPa was expected,
   or the other way round, which skewed their MDS, partitioning and random uncertainty results.
+- **Site coordinates:** the CH-LAE and CH-DAV examples and the post-processing chain notebook used
+  coordinates of other sites, which shifted potential radiation, day/night flags and partitioning.
 
 ## v0.91.2 | 24 September 2026
 
