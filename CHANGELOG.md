@@ -110,6 +110,9 @@ Library (also used by the notebook and the GUI):
   and 2019, CH-LAE 2017-2019), up from an RMSE of 0.0003 µmol m⁻² s⁻¹.
 - **Nighttime partitioning (ONEFlux), polar day and night:** on days without sunrise or sunset, no
   record counts as night any more, as in ONEFlux (annual GPP at FI-Var was up to 1.5 % off).
+- **Daytime partitioning (ONEFlux), hourly data:** an hourly year is now partitioned on a
+  half-hourly grid as ONEFlux does, so hourly results match ONEFlux (annual daytime GPP was up to
+  7.8 % off at US-Ha1 and US-MMS).
 - **Daytime partitioning (ONEFlux), sparse nights:** a window after a rejected temperature fit now
   takes its E0 as ONEFlux does, which moved annual GPP at GF-Guy 2024 by 0.1 %.
 - **Daytime partitioning (ONEFlux):** every light-response fit now matches ONEFlux, also at sites
