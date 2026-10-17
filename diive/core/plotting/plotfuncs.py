@@ -592,10 +592,11 @@ def save_fig(fig,
              title: str = "",
              path: Path or str = None,
              sanitize_filename: bool = False):
-    """Save figure to file
+    """Save *fig* as a PNG named after *title* plus a timestamp.
 
-    Filename is sanitized, i.e. not-allowed characters are removed,
-    removes also whitespace. Filename contains timestamp.
+    Spaces in the title become underscores. With ``sanitize_filename=True``
+    only the alphanumeric characters of the title are kept. The file goes to
+    *path*, or to the working directory when *path* is None.
     """
     # Use alphanumeric for savename
 

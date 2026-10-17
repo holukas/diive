@@ -1,6 +1,6 @@
 """
 DRIVERANALYSIS: EVIDENCE-TRIANGULATION DRIVER ATTRIBUTION
-========================================================
+=========================================================
 
 Attribute a flux time series to its candidate drivers and organize every output
 by *epistemic level* — association, temporal prediction, causation — rather than
@@ -14,8 +14,8 @@ is the actual scientific signal.
 
 Hard rules honored here:
   - SHAP and ALE are association-level diagnostics and are NEVER labeled causal.
-  - All train/test splits are time-aware (no shuffling) to avoid the leakage that
-    diive recently fixed in its gap-fillers and OptimizeParamsTS.
+  - Train/test splits are time-aware (no shuffling) by default
+    (``time_aware_split=True``).
   - Model scores are held-out (out-of-sample), never in-sample.
 
 Part of the diive library: https://github.com/holukas/diive
@@ -71,10 +71,9 @@ _RANDOM_COL = '.RANDOM'
 def _stl_components(series: Series, period: int, robust: bool = True):
     """STL trend/seasonal/residual via statsmodels with an explicit period.
 
-    ``SeasonalTrendDecomposition`` infers the period from the index frequency,
-    which statsmodels cannot do for sub-daily (e.g. 30-min) eddy-covariance data.
-    Passing ``period`` explicitly (records per seasonal cycle — a daily cycle by
-    default) makes STL reliable here.
+    statsmodels cannot infer the period of sub-daily (e.g. 30-min)
+    eddy-covariance data from the index, so ``period`` (records per seasonal
+    cycle, a daily cycle by default) is passed explicitly.
 
     Gaps are interpolated *only* so STL can run (statsmodels has no NaN handling)
     and are masked back out of all three components before returning: a gap in
@@ -620,6 +619,12 @@ class DriverAnalysis:
         A driver important at the daily/monthly scale but not half-hourly (or
         confined to one STL component) responds on a different timescale than its
         raw importance suggests.
+
+        Args:
+            scales: Any of ``'stl'`` (trend, seasonal and residual of the target),
+                ``'halfhourly'`` (the native resolution of the data), ``'daily'``
+                and ``'monthly'`` (means). The native resolution is added
+                automatically when ``'daily'`` or ``'monthly'`` is requested.
         """
         cols = {}  # column name (scale) -> per-driver importance Series
         baselines = {}  # column name (scale) -> that fit's own .RANDOM floor

@@ -53,13 +53,14 @@ class FormatEddyProFluxnetFileForUpload:
     - Load data from all found files and store in dataframe
     - Make subset that contains required variables
     - Set missing values to FLUXNET format (-9999)
+    - Rename storage variables to FLUXNET codes (e.g. SC_SINGLE to SC)
     - Rename variables by adding the FLUXNET suffix (_1_1_1)
     - Insert two timestamp columns denoting START and END of averaging interval
     - Format the two timestamp columns to FLUXNET format YYYYMMDDhhmm
     - Save data from dataframe to yearly files
 
     - Example notebook available in:
-        notebooks/Formats/ConvertEddyProFluxnetFileForUpload.ipynb
+        notebooks/FormatEddyProFluxnetFileForUpload.ipynb
 
     Variables shared with FLUXNET:
 
@@ -121,7 +122,24 @@ class FormatEddyProFluxnetFileForUpload:
                  use_wind: bool = False,
                  use_meteo: bool = False,
                  add_runid: bool = True):
-        """Configure the conversion (site, folders, which variable groups to include). See the class docstring."""
+        """Configure the conversion.
+
+        Args:
+            site: Site name, used in the names of the output files.
+            sourcedir: Folder that is searched for EddyPro ``_fluxnet_`` files.
+            outdir: Folder for the yearly output files.
+            use_co2: Include the CO2 variables.
+            use_h2o: Include the H2O and latent heat variables.
+            use_h: Include the sensible heat variables.
+            use_n2o: Include the N2O variables.
+            use_ch4: Include the CH4 variables.
+            use_wind: Include the wind and footprint variables.
+            use_meteo: Include the meteo variables.
+            add_runid: Add the current date and time to the output file names.
+
+        Raises:
+            Exception: If no variable group is selected.
+        """
         self.site = site
         self.sourcedir = sourcedir
         self.outdir = outdir
@@ -201,12 +219,12 @@ class FormatEddyProFluxnetFileForUpload:
 
         Args:
             var: str, name of variable from which data points are removed
-            remove_dates: list, see docstring of pkgs.outlierdetection.manualremoval.ManualRemoval.calc
-                for examples
+            remove_dates: list of single timestamps and [start, end] date ranges,
+                see the docstring of ``dv.outliers.ManualRemoval`` for examples
             showplot: show plot with removed data points
 
         Returns:
-            updated *var* in merged dataframe, with data points removed
+            None. The data points are set to missing in *var* of the merged dataframe.
         """
         info(f"\nRemoving {var} data points for the following date(s) and/or time range(s):")
         for d in remove_dates:

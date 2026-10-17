@@ -1,4 +1,11 @@
-"""Regression helpers built on statsmodels."""
+"""
+DATA FUNCTIONS: REGRESSION
+==========================
+
+Regression helpers built on statsmodels.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 from statsmodels.formula import api as smf
 
 

@@ -1,4 +1,11 @@
-"""Summary-statistic helpers for Series and DataFrames."""
+"""
+DATA FUNCTIONS: STATS
+=====================
+
+Summary-statistic helpers for Series and DataFrames.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 # import diive.pkgs.dfun
 # from stats.boxes import insert_statsboxes_txt
 import numpy as np
@@ -184,10 +191,10 @@ def outlier_count(s: Series, threshold: float = 3, method: str = 'zscore') -> in
 
     Args:
         s: Series to analyze
-        threshold: Detection threshold
-            - zscore: values > threshold * sigma (default 3 = 3-sigma)
-            - iqr: values > Q3 + threshold * IQR (default 1.5)
-            - mad: values > median + threshold * MAD (default 3)
+        threshold: Detection threshold (default 3). Outliers on both sides count:
+            - zscore: |z| > threshold
+            - iqr: values below Q1 - threshold * IQR or above Q3 + threshold * IQR
+            - mad: |value - median| > threshold * MAD (no outliers if MAD is 0)
         method: Detection method ('zscore', 'iqr', 'mad')
 
     Returns:
@@ -245,12 +252,13 @@ def linear_trend_slope(s: Series) -> tuple:
     Returns:
         (slope, intercept, r_value) tuple
 
-    slope: direction and rate of change per time step
+    slope: direction and rate of change per valid record (NaNs are dropped
+        before the fit, so gaps do not count as steps)
         > 0: upward trend
         < 0: downward trend
         ≈ 0: relatively stable
-    r_value: correlation coefficient (goodness of fit) [-1, 1]
-        > 0.7 or < -0.7: strong fit
+    r_value: square root of the fit's R², in [0, 1], NaN for a constant series
+        > 0.7: strong fit
         0.3 to 0.7: moderate fit
         < 0.3: weak fit
     """
@@ -346,7 +354,7 @@ def sstats(s: Series) -> DataFrame:
     r"""
     Calculate comprehensive time series statistics.
 
-    Returns 30 metrics across 8 categories:
+    Returns 30 metrics in 11 groups:
 
     TEMPORAL INFORMATION
     --------------------
@@ -420,7 +428,7 @@ def sstats(s: Series) -> DataFrame:
         High values: volatile, rapidly changing series
         Low values: smooth, stable trends
     TREND_SLOPE : float
-        Linear regression slope (change per time step)
+        Linear regression slope (change per valid record, gaps are skipped)
         > 0: upward trend
         < 0: downward trend
         ≈ 0: stable (flat trend)

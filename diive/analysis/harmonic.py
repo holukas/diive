@@ -1,9 +1,9 @@
 """
 ANALYSIS: HARMONIC DECOMPOSITION
-=================================
+================================
 
-Fourier-based time series decomposition using FFT for frequency-domain analysis.
-Extracts amplitude and phase information from sine/cosine basis functions.
+Frequency-domain analysis of time series: amplitude and phase of harmonics from
+an FFT, and spectrograms (short-time Fourier transform).
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -30,7 +30,8 @@ def harmonic_analysis(
     frequency (1/period).
 
     Args:
-        series (pd.Series): Input time series (NaN values removed).
+        series (pd.Series): Input time series. NaN values are dropped before the
+            FFT, and the remaining records are treated as evenly spaced.
         period (int): Fundamental period in observations.
         n_harmonics (int): Number of harmonics to extract. Default 10.
         window (str): Window function ('hamming', 'hann', 'blackman'). Default 'hamming'.
@@ -39,8 +40,10 @@ def harmonic_analysis(
     Returns:
         Dict with keys:
             - 'fundamental_frequency': float, fundamental frequency (1/period)
-            - 'harmonics': list of dicts with 'amplitude', 'phase', 'frequency', 'harmonic_number'
-            - 'frequencies': np.ndarray, all frequency bins
+            - 'harmonics': list of dicts with 'harmonic_number', 'target_frequency',
+              'actual_frequency' (nearest FFT bin), 'amplitude', 'phase', 'power'.
+              Harmonics at or above the Nyquist frequency are left out.
+            - 'frequencies': np.ndarray, all frequency bins (cycles per record)
             - 'amplitudes': np.ndarray, amplitude at each frequency
             - 'phases': np.ndarray, phase at each frequency (radians)
             - 'power': np.ndarray, power (amplitude squared)
@@ -141,7 +144,8 @@ def spectrogram(
     spectrum (:func:`harmonic_analysis`) cannot show.
 
     Args:
-        series (pd.Series): Input time series (NaN values removed).
+        series (pd.Series): Input time series. NaN values are dropped first, and
+            the remaining records are treated as evenly spaced.
         nperseg (int): Samples per segment (window length). Larger = finer
             frequency resolution but coarser time resolution. Clamped to the
             series length. Default 256.

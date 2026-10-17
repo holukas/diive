@@ -1,4 +1,11 @@
-"""Public namespace: dv.times (timestamp handling)."""
+"""
+TIMES: TIMESTAMP HANDLING
+=========================
+
+Public namespace ``dv.times``: timestamp sanitizing, frequency detection, date ranges and resampling.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 from diive.core.times.resampling import resample_to_daily_agg
 from diive.core.times.resampling import resample_to_monthly_agg_matrix
 from diive.core.times.times import DetectFrequency

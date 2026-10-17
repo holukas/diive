@@ -2,7 +2,7 @@
 BINARY: BINARY FILE UTILITIES
 ==============================
 
-Extract encoded values from binary data and manipulate bit fields.
+Extract values that are encoded in a subrange of the bits of an integer.
 
 Part of the diive library: https://github.com/holukas/diive
 """

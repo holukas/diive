@@ -320,7 +320,8 @@ class ScatterXY:
             x: Series for x-axis
             y: Series for y-axis
             z: Optional Series for color-coding scatter points
-            nbins: Number of bins for x-axis aggregation (0 = no aggregation)
+            nbins: Number of x-axis bins for aggregation (0 = no aggregation). The
+                bins are quantiles of x, so each holds about the same number of points.
             binagg: Aggregation method for bins ('mean' or 'median', default: 'median')
 
         Features:
@@ -329,7 +330,8 @@ class ScatterXY:
             - Bin aggregation: Group data by x-axis bins and overlay trends
             - Confidence intervals: Show IQR (median) or std (mean) per bin
 
-        Call `plot()` to render with styling options (labels, limits, title, colormap).
+        Call `plot()` to render it (limits, colormap, markers, with labels and title via
+        ``format_style``).
 
         Artists:
             The points are the first `PathCollection` in ``ax.collections``,
@@ -416,8 +418,9 @@ class ScatterXY:
             vmax: Upper bound of the z colour scale (default: data maximum)
 
         Notes:
-            - xlim always uses full data range (no quantile trimming)
-            - ylim='auto' with nbins: uses binned data limits
+            - Without xlim the x-axis spans the full data range (no quantile trimming)
+            - ylim='auto' with nbins: uses binned data limits (IQR for median, ±1 SD
+              for mean). Without bins it uses the 1st to 99th percentile of y.
             - Colorbar shown only if z is provided and show_colorbar=True
         """
         style = format_style or FormatStyle()

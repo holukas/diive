@@ -1,4 +1,11 @@
-"""Loaders for the bundled example datasets."""
+"""
+CONFIGS: EXAMPLE DATA
+=====================
+
+Loaders for the example datasets bundled with diive.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 import os
 from pathlib import Path
 
@@ -33,7 +40,7 @@ def load_exampledata_parquet_long() -> DataFrame:
 
 
 def load_exampledata_parquet_cha() -> DataFrame:
-    """Load the CH-CHA 30-min example subset (parquet)."""
+    """Load the CH-CHA 2015 30-min example subset (parquet)."""
     filepath = Path(DIR_PATH) / 'exampledata_PARQUET_CH-CHA_FP2025.3_subset_30MIN.parquet'
     data_df = load_parquet(filepath=filepath)
     return data_df
@@ -48,14 +55,14 @@ def load_exampledata_parquet_lae() -> DataFrame:
 
 
 def load_exampledata_parquet_meteo_swin_1MIN() -> DataFrame:
-    """Load the CH-LAE 1-min SW_IN meteo example series (parquet)."""
+    """Load the CH-LAE SW_IN meteo example series for August 2015 (parquet, 30-min records despite the 1MIN in the name)."""
     filepath = Path(DIR_PATH) / 'exampledata_PARQUET_CH-LAE_METEO_SW_IN_1MIN.parquet'
     data_df = load_parquet(filepath=filepath)
     return data_df
 
 
 def load_exampledata_parquet_meteo_rh_1MIN() -> DataFrame:
-    """Load the CH-LAE 1-min relative-humidity meteo example series (parquet)."""
+    """Load the CH-LAE relative-humidity meteo example series for August 2015 (parquet, 30-min records despite the 1MIN in the name)."""
     filepath = Path(DIR_PATH) / 'exampledata_PARQUET_CH-LAE_METEO_RH_1MIN.parquet'
     data_df = load_parquet(filepath=filepath)
     return data_df
@@ -103,7 +110,7 @@ def load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN():
 
 
 def load_exampledata_parquet_lae_level1_30MIN():
-    """Load the CH-LAE 30-min Level-1 flux example dataset (parquet)."""
+    """Load the CH-LAE 2024 30-min Level-1 flux example dataset (parquet)."""
     filepath = Path(
         DIR_PATH) / 'exampledata_PARQUET_CH-LAE_22.4_FLUXES_LEVEL-1_IRGA72+METEO7_2024_SUBSET.parquet'
     data_df = load_parquet(filepath=filepath)
@@ -226,14 +233,14 @@ def load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN_with_datafilereader_parameters():
 
 
 def load_exampledata_pickle():
-    """Load pickled dataframe"""
+    """Load a short CH-DAV 30-min example dataset (100 records from January 2022) from a pickle file."""
     filepath = Path(DIR_PATH) / 'exampledata_PICKLE_CH-DAV_FP2022.5_2022_ID20230206154316_30MIN.diive.csv.pickle'
     data_df = load_pickle(filepath=str(filepath))
     return data_df
 
 
 def load_exampledata_winddir():
-    """Load time series if wind direction in degrees"""
+    """Load the CH-FRU 30-min wind direction example series (degrees, 2005-2022, parquet)."""
     filepath = Path(DIR_PATH) / 'exampledata_PARQUET_winddirection_degrees_CH-FRU_2005-2022.parquet'
     data_df = load_parquet(filepath=str(filepath))
     return data_df

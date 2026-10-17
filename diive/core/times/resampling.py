@@ -1,4 +1,11 @@
-"""Resample time series to coarser aggregates."""
+"""
+TIMES: RESAMPLING
+=================
+
+Resample time series to a lower time resolution (daily, monthly matrix, any frequency).
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 from typing import Literal
 
 import numpy as np

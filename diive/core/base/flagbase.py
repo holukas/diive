@@ -1,7 +1,10 @@
 """
+BASE: FLAGBASE
+==============
 
-BASE CLASS FOR QUALITY FLAGS
+Base class for quality flags and outlier detectors.
 
+Part of the diive library: https://github.com/holukas/diive
 """
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt

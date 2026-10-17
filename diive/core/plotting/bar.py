@@ -26,7 +26,8 @@ class LongtermAnomaliesYear:
         series: Time series for anomalies with one value per year (pandas Series with year index)
         reference_start_year: First year of the reference period (int)
         reference_end_year: Last year of the reference period (int)
-        series_label: Description label for the variable (displayed in title and legend)
+        series_label: Description label for the variable (displayed in the title and
+            the y-axis label)
         series_units: Units string for the variable (displayed on y-axis, e.g., '(°C)')
 
     Methods:
@@ -54,7 +55,7 @@ class LongtermAnomaliesYear:
             series: Data to plot (pandas Series with year index)
             reference_start_year: First year of reference period for anomaly calculation
             reference_end_year: Last year of reference period for anomaly calculation
-            series_label: Label for the variable (used in plot title and text)
+            series_label: Label for the variable (used in the plot title and y-axis label)
             series_units: Units string (e.g., '(°C)', appended to y-axis label)
 
         See Also:

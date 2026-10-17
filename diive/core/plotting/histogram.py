@@ -58,7 +58,9 @@ class HistogramPlot:
 
     Args:
         series: Series to plot
-        method: Binning method (e.g., 'n_bins')
+        method: Name of the binning method, shown in the info box. With 'n_bins'
+            the box also lists the bin count and the peak bin range. It does not
+            change the binning.
         n_bins: Number of bins for histogram. An int (or None for the matplotlib
             default) lets the edges follow this series' own range; a sequence is
             used as the explicit bin edges. Passing the same sequence to two

@@ -2,9 +2,9 @@
 DATA FUNCTIONS: FITS
 ====================
 
-This module is part of the diive library:
-https://github.com/holukas/diive
+Binning helpers for fits with confidence interval (CI) and prediction interval (PI).
 
+Part of the diive library: https://github.com/holukas/diive
 """
 
 """
@@ -30,7 +30,10 @@ from diive.core.dfun.stats import q25, q75
 
 
 def groupagg(df, num_bins, bin_col) -> pd.DataFrame:
-    """Bin *bin_col* into *num_bins* groups and return per-bin aggregates."""
+    """Bin *bin_col* into *num_bins* quantile groups and return per-bin aggregates.
+
+    Adds the bin labels to *df* as column ``group`` (in place).
+    """
     # Divide into groups of x
 
     # # Alternative: using .cut

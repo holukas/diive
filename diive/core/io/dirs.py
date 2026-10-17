@@ -1,4 +1,11 @@
-"""Directory helpers (verify/create output directories)."""
+"""
+IO: DIRS
+========
+
+Directory helpers (verify/create output directories).
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 from pathlib import Path
 from typing import Union
 

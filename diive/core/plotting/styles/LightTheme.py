@@ -1,12 +1,13 @@
 """
+LIGHTTHEME: DEFAULT PLOT COLOURS, FONT SIZES AND LINE WIDTHS
+============================================================
 
-PLOT COLORS
------------
-LIGHT THEME
+Default colours, font sizes, line widths and colour lists for diive plots.
 
-    Define default plot colors.
-    *Note that this does not affect colors defined in the CSS file for the GUI.*
+The desktop GUI sets its own widget colours separately, so this module does not
+change them.
 
+Part of the diive library: https://github.com/holukas/diive
 """
 
 from diive.core.plotting.styles._material_design_colors import (
@@ -179,7 +180,7 @@ def colorwheel_48():
 
 
 def colorwheel_36_wider():
-    """Create dictionary with a total of 36 colors."""
+    """Create dictionary with a total of 36 colors (currently the same as :func:`colorwheel_36`)."""
     picked_colors_dict = {}
     pick = -1
     shades = [300, 600, 900]
@@ -208,7 +209,7 @@ def colors_12(shade):
 
 
 def colors_12_months():
-    """Create list of 12 colors."""
+    """Create list of 12 colors, one per month starting with January."""
     list_12colors = [lightblue(400),
                      blue(900),
                      teal(500),
@@ -234,7 +235,7 @@ def colors_24():
 
 
 def colors_6():
-    """Return a list of distinguishable 500-shade colours."""
+    """Return a list of five distinguishable 500-shade colours (despite the name)."""
     list_6colors = [deeporange(500), orange(500), amber(500),
                     blue(500), cyan(500)]
     return list_6colors

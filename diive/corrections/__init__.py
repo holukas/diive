@@ -1,4 +1,11 @@
-"""Public namespace: dv.corrections (offset/gain and value corrections)."""
+"""
+CORRECTIONS: VALUE CORRECTIONS
+==============================
+
+Public namespace ``dv.corrections``: offset and value corrections.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 from diive.preprocessing.corrections import MeasurementOffsetFromReplicate
 from diive.preprocessing.corrections import NighttimeZeroOffsetResult
 from diive.preprocessing.corrections import WindDirOffset

@@ -42,17 +42,21 @@ class CumulativeYear:
                  excl_years_from_reference: list = None,
                  highlight_year: int = None,
                  highlight_year_color: str = None):
-        """
+        """Compute the cumulative sum of each year by day of year.
 
         Args:
-            series: Data for cumulative
-            highlight_year_color: Deprecated — pass this styling option to plot() instead.
+            series: Time series to accumulate. NaNs are dropped.
+            series_units: Units shown on the y-axis label, LaTeX format is supported.
             yearly_end_date: Calculate cumulatives up to this date, given as string,
                 e.g. "08-11" means that cumulatives for each year are calculated until
                 11 August of each year.
-            cumulative_for:
-                - "all" for cumulative sum over all years
-                - "year" for yearly cumulative sums
+            start_year: First year to show. None uses the first year in the data.
+            end_year: Last year to show. None uses the last year in the data.
+            show_reference: If True, plot the mean cumulative across years and a
+                band of ±1 standard deviation around it.
+            excl_years_from_reference: Years left out of the reference mean and SD.
+            highlight_year: Year drawn with a wider line in the highlight colour.
+            highlight_year_color: Deprecated. Pass this styling option to plot() instead.
         """
 
         self.series = series.copy()
@@ -151,7 +155,7 @@ class CumulativeYear:
 
 
     def get(self):
-        """Return axis"""
+        """Return the axes of the last :meth:`plot` call (None before it)."""
         return self.ax
 
 
@@ -161,13 +165,19 @@ class CumulativeYear:
 
         Args:
             ax: Matplotlib axes to draw on; a standalone figure is created if None.
-            format_style: Shared chrome (title/labels/fonts/grid/legend). None = house style.
+            format_style: Shared chrome (labels/fonts/grid/legend). None = house style.
+                The title is generated from the years and the last day of year, so
+                ``format_style.title`` has no effect. The constructor's ``series_units``,
+                when given, override ``format_style.yunits``.
             showplot: If True and a new figure was created, show it.
             digits_after_comma: Decimal places for the end-of-year total in each legend label.
             highlight_year_color: Colour for the highlighted year; defaults to red.
+
+        Returns:
+            The matplotlib axes the curves were drawn on.
         """
-        # Fold the legacy units kwarg onto the (copied) style; the dynamic title and
-        # the per-year legend stay class-owned, so suppress those on the applied style.
+        # Set the constructor's units on a copy of the style. The dynamic title and
+        # the per-year legend stay class-owned, so _apply_format suppresses them.
         style = (format_style or FormatStyle()).merged(yunits=self.series_units)
         # Phase 2: use the caller's axes, or create a standalone figure.
         if ax is None:
@@ -291,7 +301,7 @@ class Cumulative:
         # self.fig.tight_layout()
 
     def get_ax(self):
-        """Return axis"""
+        """Return the axes of the last :meth:`plot` call (None before it)."""
         return self.ax
 
     def _fill_to_zero(self, series: Series, color) -> None:
@@ -345,11 +355,17 @@ class Cumulative:
 
         Args:
             ax: Matplotlib axes to draw on; a standalone figure is created if None.
-            format_style: Shared chrome (title/labels/fonts/grid/legend). None = house style.
+            format_style: Shared chrome (labels/fonts/grid/legend). None = house style.
+                The title is generated from the date range, so ``format_style.title``
+                has no effect (use ``show_title`` to hide it). The constructor's
+                ``units``, when given, override ``format_style.yunits``.
             showplot: If True and a new figure was created, show it.
             digits_after_comma: Decimal places for the end-of-series total in each legend label.
             show_title: If True, draw the auto-generated title.
             fill: If True, shade the area between each curve and zero.
+
+        Returns:
+            The matplotlib axes the curves were drawn on.
         """
         # Units come from the constructor; all other chrome comes from format_style.
         style = (format_style or FormatStyle()).merged(yunits=self.units)

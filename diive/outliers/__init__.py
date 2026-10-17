@@ -1,4 +1,13 @@
-"""Public namespace: dv.outliers (outlier detection methods)."""
+"""
+OUTLIERS: OUTLIER DETECTION
+===========================
+
+Public namespace ``dv.outliers``: single outlier detection methods.
+For several tests in sequence, use ``StepwiseOutlierDetection`` from
+``diive.preprocessing.outlier_detection``.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 from diive.preprocessing.outlier_detection import AbsoluteLimits
 from diive.preprocessing.outlier_detection import AbsoluteLimitsDaytimeNighttime
 from diive.preprocessing.outlier_detection import LocalOutlierFactor

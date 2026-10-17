@@ -1,8 +1,11 @@
 """
-Feature Engineering for Time Series Gap-Filling
+ML: FEATURE ENGINEERING
+=======================
 
-This module provides standalone feature engineering for time series data,
-enabling pre-computation of features before gap-filling model training.
+Standalone feature engineering for time series data, so features can be
+computed once before gap-filling models are trained.
+
+Part of the diive library: https://github.com/holukas/diive
 
 Supports 8-stage feature engineering pipeline:
 1. Lag features (temporal context)
@@ -94,8 +97,9 @@ class FeatureEngineer:
 
         The FeatureEngineer creates temporal and statistical features from time series data.
         Set unused parameters to None/False to skip those stages. All features use naming
-        convention: `.{col}_{STAGE}_{detail}` (e.g., `.Tair_f-1` for lag, `.Tair_f_MEAN12`
-        for rolling mean with window 12). Columns already carrying that `.` prefix in the
+        convention: `.{col}_{TYPE}{detail}` (e.g., `.Tair_f_MEAN12` for rolling mean with
+        window 12, `.Tair_f_POL2` for the squared values). Lags are named `.{col}-1`
+        and `.{col}+1`. Columns already carrying that `.` prefix in the
         input are never used as sources by the per-column stages, so running the engineer
         on its own output adds nothing rather than engineering the engineered columns.
 
@@ -274,9 +278,11 @@ class FeatureEngineer:
                 Default: False (disabled, fast)
                 Set to: True or False
                 Effect if False: No timestamp features (skip stage, 2-3% speedup).
-                Effect if True: Creates 19 features: year, season, month, week, DOY
-                (day-of-year), hour + sin/cos versions for circular encoding. Captures
-                diurnal cycles (photosynthesis) and seasonal patterns (dormancy).
+                Effect if True: Creates 14 features: .YEAR, sin/cos versions of season,
+                month, week, DOY (day-of-year) and hour for circular encoding, and the
+                combined .YEARMONTH, .YEARDOY and .YEARWEEK. The linear season, month,
+                week, DOY and hour columns are dropped. Captures diurnal cycles
+                (photosynthesis) and seasonal patterns (dormancy).
                 Typical use:
 
                   - False: For fast testing or when temporal patterns already captured
@@ -311,7 +317,9 @@ class FeatureEngineer:
                 Set to: True or False
                 Effect if False: Trust input timestamps (fast, assumes clean).
                 Effect if True: Validate and fix timestamp issues (duplicates, gaps,
-                non-monotonic). Slightly slower but catches data problems.
+                non-monotonic) and convert the index to TIMESTAMP_MIDDLE. This runs
+                after all features are computed, so it does not change how they
+                were built.
                 Typical use:
 
                   - False: When data already validated (production)

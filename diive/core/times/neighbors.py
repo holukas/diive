@@ -1,4 +1,11 @@
-"""Find neighbouring years/records for time series."""
+"""
+TIMES: NEIGHBORS
+================
+
+Group each year of a time series with its two nearest years.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 from pandas import DataFrame
 
 from diive.core.funcs.funcs import find_nearest_val

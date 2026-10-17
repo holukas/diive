@@ -2,7 +2,7 @@
 METEO: METEOROLOGICAL DATA FORMAT CONVERSION
 =============================================
 
-Convert meteorological data between EddyPro and FLUXNET file formats.
+Format meteorological data as EddyPro flux-processing input and for FLUXNET upload.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -19,7 +19,7 @@ from diive.core.utils.console import info
 
 
 class FormatMeteoForEddyProFluxProcessing:
-    """Reformat a meteo DataFrame into the EddyPro flux-processing input layout."""
+    """Reformat a 30-min meteo DataFrame into the EddyPro flux-processing input layout."""
 
     # Timestamp columns for EddyPro
     colname_timestamp1 = ('TIMESTAMP_1', 'yyyy-mm-dd')
@@ -89,7 +89,7 @@ class FormatMeteoForEddyProFluxProcessing:
 
 
 class FormatMeteoForFluxnetUpload:
-    """Reformat a meteo DataFrame into the FLUXNET upload layout (START/END timestamps)."""
+    """Reformat a 30-min meteo DataFrame into the FLUXNET upload layout (START/END timestamps)."""
 
     # Timestamp columns for EddyPro
     colname_timestamp1 = ('TIMESTAMP_1', 'yyyy-mm-dd')
@@ -102,7 +102,7 @@ class FormatMeteoForFluxnetUpload:
 
     @property
     def df(self) -> pd.DataFrame:
-        """Dataframe reformatted for EddyPro."""
+        """Dataframe reformatted for FLUXNET upload."""
         if not isinstance(self._df, pd.DataFrame):
             raise Exception('No reformatted data available.')
         return self._df

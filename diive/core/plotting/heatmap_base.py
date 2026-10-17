@@ -1,15 +1,17 @@
 """
-HEATMAP
-=======
+HEATMAP_BASE: SHARED BASE CLASS FOR THE HEATMAP PLOTS
+=====================================================
 
 Base class and shared utilities for all heatmap plot types in diive.
 
 ``HeatmapBase`` is not used directly.  Subclasses (``HeatmapDateTime``,
-``HeatmapYearMonth``, ``HeatmapXYZ``) call ``super().__init__()`` to inherit
-figure / axis management, colormap handling, colorbar formatting, and the
+``HeatmapYearMonth``, ``HeatmapXYZ``, ``HexbinPlot``) call ``super().__init__()``
+to inherit figure / axis management, colormap handling, colorbar formatting, and the
 ``show_vals_in_plot`` overlay.  Each subclass is responsible for shaping its
 data into ``self.x``, ``self.y``, and ``self.z`` arrays before calling
 ``plot_pcolormesh``.
+
+Part of the diive library: https://github.com/holukas/diive
 """
 import copy
 import datetime
@@ -100,7 +102,8 @@ class HeatmapBase:
             heatmaptype: Internal tag set by subclasses to select the correct
                          cell-centering logic in :meth:`show_vals_in_plot`.
                          Valid values: ``'yearmonth'``, ``'xyz'``,
-                         ``'datetime'``, ``'datetime_horizontal'``.
+                         ``'datetime'``, ``'datetime_horizontal'``, and
+                         ``'hexbin'`` (which has its own overlay).
                          Do not set this manually.
             verbose: Print progress and diagnostic messages.  Defaults to *False*.
 
@@ -292,8 +295,10 @@ class HeatmapBase:
                 ``'horizontal'`` — date on x, time-of-day on y.
             format_style: A :class:`~diive.core.plotting.styles.format.FormatStyle`
                 describing the shared chrome (title, axis labels, font sizes,
-                tick/spine colours, grid, legend). When *None* the diive house
-                style is used (with the grid off). The colorbar is
+                tick/spine colours, grid). When *None* the heatmap default is
+                used: no grid, black spines (width 2) and outward ticks. A passed
+                style replaces that default as a whole, so ``FormatStyle()`` gives
+                the general house style (grid on, inward ticks). The colorbar is
                 heatmap-specific and is configured by the ``cb_*``/``zlabel``
                 arguments, not by the style.
             vmin: Lower bound of the colour scale.  *None* = auto from data.
@@ -567,10 +572,10 @@ class HeatmapBase:
 
         Title logic:
 
-        - If ``self.title`` was set explicitly it is used as-is.
-        - If ``shown_freq`` is given and ``self.title`` is *None*, the title is
-          auto-generated as ``"{series.name} ({shown_freq})"``.
-        - If both are *None* / empty, no title is shown.
+        - If ``format_style.title`` is set it is used as-is (``""`` hides the title).
+        - Otherwise, if ``shown_freq`` is given, the title is auto-generated as
+          ``"{series.name} ({shown_freq})"``.
+        - Otherwise no title is shown.
 
         Args:
             ax_xlabel_txt (str): Label for the x-axis.
@@ -582,14 +587,14 @@ class HeatmapBase:
                 ``'mean, MS'``).  Pass *None* to omit.
         """
         # Auto-title from series name + frequency (heatmap-specific), used as the
-        # caller default when the style/legacy title is unset.
+        # caller default when the style's title is unset.
         auto_title = f"{self.series.name} ({shown_freq})" if shown_freq else None
 
         # Shared chrome (title, axis labels, ticks, spines, grid) via FormatStyle.
         # Encode the heatmap's distinctive look on the default style: black spines
         # (lw 2) + outward ticks (length 4, width 2). Heatmaps never draw a legend
-        # and default to grid OFF (FormatStyle defaults show_grid=True). All chrome
-        # now comes only from the caller's format_style.
+        # and default to grid OFF (FormatStyle defaults show_grid=True). A
+        # caller's format_style replaces this default entirely.
         style = self.format_style or FormatStyle(
             show_grid=False, show_legend=False, show_zeroline=False,
             chrome_color='black', spine_linewidth=2,

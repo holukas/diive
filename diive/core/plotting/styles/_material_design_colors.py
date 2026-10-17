@@ -1,5 +1,8 @@
 """
-Collection of functions for easy access to Material Design colors.
+_MATERIAL_DESIGN_COLORS: MATERIAL DESIGN COLOUR PALETTE
+=======================================================
+
+One function per Material Design colour, returning the hex code for a shade id.
 
     For more info about Material Design see here: https://material.io/design/
     List of colors: https://material.io/design/color/#tools-for-picking-colors
@@ -7,10 +10,11 @@ Collection of functions for easy access to Material Design colors.
         https://www.materialpalette.com/colors
         https://material.io/design/color/the-color-system.html#tools-for-picking-colors
 
-    Some Material Design color start with a letter. To keep this list integer-only,
-    these colors are expressed as an integer with an additional 0 at the end of their
-    id. For example, A100 has id 1000, A700 has id 7000.
+    Some Material Design shade ids start with a letter (A100 to A700). To keep the
+    ids integer-only, these shades get an extra 0 at the end of their number.
+    For example, A100 has id 1000, A700 has id 7000.
 
+Part of the diive library: https://github.com/holukas/diive
 """
 
 

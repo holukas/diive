@@ -1,4 +1,11 @@
-"""Name-pattern groups for classifying variables."""
+"""
+UTILS: VARIABLE GROUPS
+======================
+
+Name-pattern groups for classifying variables.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 AIR_TEMPERATURE_METEO = ['*TA_*', 'Ta_*']
 AIR_TEMPERATURE_EDDYPRO = ['*air_temperature*']
 AIR_TEMPERATURE = AIR_TEMPERATURE_METEO + AIR_TEMPERATURE_EDDYPRO

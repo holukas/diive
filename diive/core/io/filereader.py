@@ -1,8 +1,10 @@
 """
-FILEREADER
-==========
-This package is part of the diive library.
+IO: FILEREADER
+==============
 
+Read data files with a built-in filetype configuration (YAML) or with explicit settings.
+
+Part of the diive library: https://github.com/holukas/diive
 """
 import datetime
 import fnmatch
@@ -23,7 +25,7 @@ from diive.core.utils.console import info, warn
 
 
 def search_folders(searchdirs: str or list) -> list:
-    """ Search files and store their filename and the path to the file in dictionary. """
+    """Return the paths of the given folders and of all their subfolders."""
     foundfolders = []
     if isinstance(searchdirs, str):
         searchdirs = [searchdirs]  # Use str as list
@@ -40,7 +42,15 @@ def search_folders(searchdirs: str or list) -> list:
 
 
 def search_files(searchdirs: str or list, pattern: str) -> list:
-    """ Search files and store their filename and the path to the file in dictionary. """
+    """Search folders and their subfolders for files matching a pattern.
+
+    Args:
+        searchdirs: Folder or list of folders to search.
+        pattern: Filename pattern in ``fnmatch`` syntax, e.g. ``'*.csv'``.
+
+    Returns:
+        Sorted list of ``Path`` objects of the matching files.
+    """
     # found_files_dict = {}
     foundfiles = []
     if isinstance(searchdirs, str):
@@ -340,7 +350,7 @@ class MultiDataFileReader:
 
 
 class ReadFileType:
-    """Read single data file using settings from dictionary for specified filetype"""
+    """Read a single data file using the settings of a filetype configuration."""
 
     def __init__(self,
                  filepath: str or Path,
@@ -348,12 +358,22 @@ class ReadFileType:
                  filetype: str = None,
                  data_nrows: int = None,
                  output_middle_timestamp: bool = True):
-        """
+        """Read the file. Get the result with :meth:`get_filedata`.
 
         Args:
-            filepath:
-            filetypeconfig:
-            filetype:
+            filepath: Path to the data file.
+            filetypeconfig: Filetype settings as dict, as read from a filetype
+                YAML file. Used only if *filetype* is not given.
+            filetype: Name of a built-in filetype configuration (a key from
+                :func:`diive.configs.filetypes.get_filetypes`), e.g.
+                ``'EDDYPRO-FLUXNET-CSV-30MIN'``. Takes precedence over
+                *filetypeconfig*.
+            data_nrows: Number of data rows to read. None reads all rows.
+            output_middle_timestamp: If True, the output timestamp index marks
+                the middle of each averaging interval.
+
+        Example:
+            See ``examples/io/io_read_single_file_with_readfiletype.py``.
         """
         self.filepath = Path(filepath)
         self.data_nrows = data_nrows
@@ -398,7 +418,15 @@ class ReadFileType:
 
 
 class DataFileReader:
-    """Read single data file with *provided settings*"""
+    """Read a single data file with explicitly provided settings.
+
+    Use this for files without a built-in filetype configuration. With a
+    configuration, :class:`ReadFileType` passes its settings here.
+    Get the result with :meth:`get_data`.
+
+    Example:
+        See ``examples/io/io_read_single_file_with_datafilereader.py``.
+    """
 
     def __init__(
             self,
@@ -418,7 +446,38 @@ class DataFileReader:
             output_middle_timestamp: bool = True,
             compression: str = None
     ):
-        """Configure how to read a single data file (header layout, NA values, timestamp convention, ...)."""
+        """Read the file.
+
+        Args:
+            filepath: Path to the data file.
+            data_header_section_rows: Rows at the start of the file that come
+                before the data (the whole header section), skipped when the
+                data are parsed.
+            data_skip_rows: Rows ignored when the header is parsed, e.g.
+                ``[0, 1, 2]`` ignores the first three rows of the file.
+            data_header_rows: Header rows with variable names and units.
+            data_varnames_row: Row index of the variable names, counted after
+                *data_skip_rows* are removed.
+            data_varunits_row: Row index of the variable units, counted after
+                *data_skip_rows* are removed. None if the file has no units row.
+            data_na_vals: Values read as missing, e.g. ``[-9999]``.
+            data_delimiter: Column delimiter, e.g. ``','``.
+            data_freq: Expected time resolution, e.g. ``'30min'``. The detected
+                frequency must match it.
+            data_nrows: Number of data rows to read. None reads all rows.
+            timestamp_idx_col: Columns (names or positions) that make up the
+                timestamp. Several columns are joined with a space before
+                parsing. None means the data get no timestamp index.
+            timestamp_datetime_format: Format of the joined timestamp string,
+                e.g. ``'%Y%m%d%H%M'``.
+            timestamp_start_middle_end: Whether the timestamp in the file marks
+                the ``'start'``, ``'middle'`` or ``'end'`` of the averaging
+                interval. The index is named ``TIMESTAMP_<START|MIDDLE|END>``.
+            output_middle_timestamp: If True, the output timestamp index marks
+                the middle of each averaging interval.
+            compression: Compression of the file as understood by
+                ``pandas.read_csv``, e.g. ``'gzip'``. None for uncompressed files.
+        """
 
         self.filepath = filepath if isinstance(filepath, Path) else Path(filepath)
 

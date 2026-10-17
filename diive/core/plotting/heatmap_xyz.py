@@ -1,6 +1,6 @@
 """
-HEATMAP — XYZ variant
-=====================
+HEATMAP_XYZ: HEATMAP OF THREE PARALLEL SERIES
+=============================================
 
 Contains :class:`HeatmapXYZ`, a heatmap that accepts three parallel Series
 (x, y, z) and pivots them into a 2-D colour grid.
@@ -23,6 +23,8 @@ Public names:
 
 References:
     https://matplotlib.org/stable/gallery/images_contours_and_fields/pcolormesh_levels.html
+
+Part of the diive library: https://github.com/holukas/diive
 """
 
 import warnings
@@ -57,7 +59,7 @@ class HeatmapXYZ(HeatmapBase):
 
     See Also:
         GridAggregator : Bin and aggregate data into pre-aggregated format
-        plot_heatmap_datetime : For temporal heatmaps (date × time-of-day)
+        HeatmapDateTime : For temporal heatmaps (date × time-of-day)
     """
 
     def __init__(self,
@@ -81,9 +83,12 @@ class HeatmapXYZ(HeatmapBase):
                Must have a non-``None`` name unique across x, y, z.
             z: Series of cell values mapped to colour.
                Must have a non-``None`` name unique across x, y, z.
-            xlabel: x-axis label. If None, uses ``x.name``.
-            ylabel: y-axis label. If None, uses ``y.name``.
-            zlabel: Colorbar label. If None, uses ``z.name``.
+            xlabel: Deprecated, pass it to :meth:`plot` instead. x-axis label.
+                If None, uses ``x.name``.
+            ylabel: Deprecated, pass it to :meth:`plot` instead. y-axis label.
+                If None, uses ``y.name``.
+            zlabel: Deprecated, pass it to :meth:`plot` instead. Colorbar label.
+                If None, uses ``z.name``.
             xtickpos: Explicit x-axis tick positions (None = auto).
             xticklabels: Tick labels matching xtickpos (ignored if xtickpos is None).
             ytickpos: Explicit y-axis tick positions (None = auto).
@@ -290,14 +295,16 @@ class HeatmapXYZ(HeatmapBase):
             figsize: Figure size as (width, height) in inches. Only used when ax is None
             figdpi: Figure DPI. Only used when ax is None. Defaults to 72
             format_style: Shared chrome (title/labels/fonts/ticks/spines/grid) via
-                :class:`~diive.core.plotting.styles.format.FormatStyle`. None = house
-                style (grid off). The ``xlabel``/``ylabel`` below still feed the
-                axis labels as caller defaults; a passed format_style overrides
-                them. The colorbar stays ``cb_*``/``zlabel``-controlled.
+                :class:`~diive.core.plotting.styles.format.FormatStyle`. None = heatmap
+                default (no grid, black spines, outward ticks). A passed style replaces
+                that default as a whole. The ``xlabel``/``ylabel`` below are the
+                defaults for the axis labels, and ``format_style.xlabel``/``ylabel``
+                override them. The colorbar stays ``cb_*``/``zlabel``-controlled.
             vmin: Minimum color value (auto from data if None)
             vmax: Maximum color value (auto from data if None)
             cmap: Colormap name (default: 'RdYlBu_r')
-            cb_digits_after_comma: Decimal places on colorbar labels (default: 2)
+            cb_digits_after_comma: Decimal places on colorbar labels (default: 2), or 'auto'
+                to pick them from the data range
             cb_labelsize: Font size for colorbar tick labels
             cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
             color_bad: Color for NaN cells (default: 'grey')
@@ -305,6 +312,12 @@ class HeatmapXYZ(HeatmapBase):
             show_values: Overlay numeric values on cells (default: False)
             show_values_fontsize: Font size for value overlay text
             show_values_n_dec_places: Decimal places for value overlay (default: 0)
+            xlabel: x-axis label. None uses the label from the constructor
+                (``x.name`` by default).
+            ylabel: y-axis label. None uses the label from the constructor
+                (``y.name`` by default).
+            zlabel: Colorbar label. None uses the label from the constructor
+                (``z.name`` by default).
 
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)

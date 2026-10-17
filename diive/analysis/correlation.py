@@ -1,9 +1,9 @@
 """
 ANALYSIS: CORRELATION
-======================
+=====================
 
-Daily and lagged correlation analysis for time series relationships.
-Detect patterns, anomalies, and decoupling between variables.
+Daily correlation between two time series, and ranking of candidate drivers
+by (lagged) correlation with a target.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -128,17 +128,18 @@ class DailyCorrelation:
 
     Properties:
         correlations: Daily correlations as pandas Series
+        result: Same as *correlations*
 
     Methods:
-        summary(): Comprehensive statistics (mean, median, skewness, kurtosis, normality)
-        get_days_by_correlation(high): Days sorted by correlation strength
+        summary(): Summary statistics (mean, median, skewness, kurtosis, normality)
+        get_days_by_correlation(high): Days sorted by absolute correlation
         detect_anomalies(method, threshold): Identify outlier correlation days
-        plot(): Interactive visualization with correlation distribution and day examples
+        plot(): Figure with the daily correlations and example days with low and high correlation
 
     Example:
-        See `examples/analysis/analysis_daily_correlation.py` for comprehensive examples covering:
-        quality checks (observed vs. potential radiation), physical relationships (temperature vs. radiation),
-        biological processes (temperature vs. CO2 flux), and advanced methods like summary statistics
+        See `examples/analysis/analysis_daily_correlation.py`. It covers quality checks
+        (observed vs. potential radiation), physical relationships (temperature vs.
+        radiation), biological processes (temperature vs. CO2 flux), summary statistics
         and anomaly detection.
     """
 
@@ -180,7 +181,7 @@ class DailyCorrelation:
         return self.daycorrs_
 
     def summary(self) -> dict:
-        """Get comprehensive summary statistics of correlations.
+        """Get summary statistics of the daily correlations.
 
         Returns:
             dict with:
@@ -193,8 +194,8 @@ class DailyCorrelation:
             - max: maximum correlation
             - p1: 1st percentile
             - p99: 99th percentile
-            - skewness: distribution skewness (-1 to +1)
-            - kurtosis: distribution kurtosis (heavy/light tails)
+            - skewness: distribution skewness (0 for a symmetric distribution)
+            - kurtosis: excess kurtosis (0 for a normal distribution, >0 for heavy tails)
             - normality_statistic: Shapiro-Wilk test statistic
             - normality_pvalue: p-value (>0.05 suggests normal distribution)
 
@@ -231,14 +232,14 @@ class DailyCorrelation:
         }
 
     def get_days_by_correlation(self, high: bool = True) -> pd.DataFrame:
-        """Get days sorted by correlation strength.
+        """Get days sorted by correlation strength (absolute correlation).
 
         Args:
-            high: if True, return highest correlations first (descending).
-                  if False, return lowest correlations first (ascending).
+            high: if True, return the strongest correlations first (descending
+                absolute value). If False, return the weakest first (ascending).
 
         Returns:
-            DataFrame with columns ['date', 'correlation'] sorted by strength.
+            DataFrame with columns ['date', 'correlation'] sorted by absolute correlation.
             Days with no valid correlation (NaN) are excluded.
         """
         sorted_corrs = self.daycorrs_.dropna().sort_values(key=abs, ascending=not high)

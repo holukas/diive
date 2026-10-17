@@ -1,9 +1,8 @@
 """
 ANALYSIS: QUANTILES AND PERCENTILES
-====================================
+===================================
 
-Calculate and visualize distribution quantiles and percentiles.
-Includes percentile ranges and statistical distribution analysis.
+Percentiles 0 to 100 of a series, with an optional plot.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -21,12 +20,12 @@ def percentiles101(series: Series, showplot: bool = True, verbose: bool = True) 
     """Calculate percentiles 0-100 for series.
 
     Args:
-        series: Input series.
+        series: Input series. NaN values are ignored.
         showplot: Shows plot of percentiles 0-100 if *True*.
         verbose: Prints some percentiles if *True*.
 
     Returns:
-        Dataframe with percentiles 0-100 for *series*.
+        Dataframe with columns PERCENTILE (0 to 100) and VALUE, one row per percentile.
 
     Example:
         See `examples/analysis/analysis_quantiles.py` for complete examples.

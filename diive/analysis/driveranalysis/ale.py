@@ -153,7 +153,14 @@ class Ale2DResult:
 
     def plot(self, ax=None, cmap: str = 'RdBu_r', title: str = None,
              showplot: bool = False):
-        """Render the 2D ALE surface as a diverging heatmap."""
+        """Render the 2D ALE surface as a diverging heatmap.
+
+        Args:
+            ax: Existing axes to draw on. A new figure is created when ``None``.
+            cmap: Diverging colormap, centred on zero.
+            title: Axes title. Defaults to ``"2D ALE: <f1> x <f2>"``.
+            showplot: Call ``fig.show()`` when a new figure was created.
+        """
         created = False
         if ax is None:
             from diive.core.plotting import plotfuncs as pf

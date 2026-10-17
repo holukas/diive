@@ -1,4 +1,11 @@
-"""Timestamp sanitization, frequency detection and conversions."""
+"""
+TIMES: TIMESTAMPS
+=================
+
+Timestamp sanitization, frequency detection and timestamp conversions.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 import datetime as dt
 import fnmatch
 import time
@@ -58,16 +65,17 @@ class TimestampSanitizer:
     ValueError
         If nominal_freq does not match detected frequency.
     RuntimeError
-        If any processing step fails unexpectedly.
+        If the time resolution cannot be detected (see :class:`DetectFrequency`).
 
     Warnings
     --------
     - **Regularization side effect**: When regularize=True, gaps are filled with
       NaN data rows. This may increase the number of rows significantly.
-    - **No rollback**: If processing fails mid-pipeline, data is partially
-      transformed and returned as-is (not rolled back to original state).
-    - **Frequency detection**: Detection may fail if timestamps are irregular.
-      Use nominal_freq=None to skip frequency validation in such cases.
+    - **Processing runs in the constructor**: if a step raises, no sanitized
+      data are returned. The input data are not changed.
+    - **Frequency detection**: Detection raises RuntimeError if timestamps are
+      too irregular. nominal_freq=None skips only the comparison with the
+      expected frequency, not the detection itself.
 
     See Also
     --------
@@ -320,10 +328,18 @@ class DetectFrequency:
     with a single timestamp defines no interval at all and therefore raises
     RuntimeError, same as an index that is too irregular to detect.
 
-    - Example notebook available in:
-        notebooks/TimeStamps/Detect_time_resolution.ipynb
-    - Unittest:
-        test_timestamps.TestTimestamps
+    Three methods run: pandas ``infer_freq`` on the full index, the most
+    frequent time step, and ``infer_freq`` on chunks at the start and end of the
+    index. After construction, ``freq`` (also returned by :meth:`get`),
+    ``confidence`` (0-1), ``detection_method``, ``percent_matching`` and
+    ``alternatives`` describe the result.
+
+    Args:
+        index: Timestamp index to check.
+        verbose: Print the detected frequency.
+
+    - Example: examples/times/times_frequency_detection.py
+    - Tests: tests/test_time.py
 
     """
 
@@ -412,8 +428,8 @@ class DetectFrequency:
                 info(f"Detect frequency: {self.freq} (full data)", verbose=self.verbose)
 
         elif freq_timedelta:
-            # High certainty, freq found from most frequent timestep that
-            # occurred at least 90% of the time
+            # Freq found from the most frequent time step, which occurs in
+            # more than 50% of all intervals
             self.freq = freq_timedelta
             self.detection_method = "timedelta"
             # This branch runs only if the timedelta method found a frequency, which is
@@ -801,9 +817,6 @@ def validate_timestamp_monotonic(data: Union[Series, DataFrame], verbose: bool =
 def current_unixtime() -> int:
     """
     Current time as integer number of nanoseconds since the epoch
-
-    - Example notebook available in:
-        notebooks/TimeFunctions/times.ipynb
     """
     current_time_unix = time.time_ns()
     return current_time_unix
@@ -812,9 +825,6 @@ def current_unixtime() -> int:
 def current_datetime(str_format: str = '%Y-%m-%d %H:%M:%S') -> tuple[dt.datetime, str]:
     """
     Current datetime as datetime and string
-
-    - Example notebook available in:
-        notebooks/TimeFunctions/times.ipynb
     """
     now_time_dt = dt.datetime.now()
     now_time_str = now_time_dt.strftime(str_format)
@@ -824,9 +834,6 @@ def current_datetime(str_format: str = '%Y-%m-%d %H:%M:%S') -> tuple[dt.datetime
 def current_date_str_condensed() -> str:
     """
     Current date as string
-
-    - Example notebook available in:
-        -
     """
     now_time_dt = dt.datetime.now()
     now_time_str = now_time_dt.strftime("%Y%m%d")
@@ -838,9 +845,6 @@ def current_date_str_condensed() -> str:
 def current_datetime_str_condensed() -> str:
     """
     Current datetime as string
-
-    - Example notebook available in:
-        notebooks/TimeFunctions/times.ipynb
     """
     now_time_dt = dt.datetime.now()
     now_time_str = now_time_dt.strftime("%Y%m%d%H%M%S")
@@ -852,9 +856,6 @@ def current_datetime_str_condensed() -> str:
 def current_time_microseconds_str() -> str:
     """
     Current time including microseconds as string
-
-    - Example notebook available in:
-        notebooks/TimeFunctions/times.ipynb
     """
     now_time_dt = dt.datetime.now()
     now_time_str = now_time_dt.strftime("%H%M%S%f")
@@ -866,9 +867,6 @@ def current_time_microseconds_str() -> str:
 def make_run_id(prefix: str = False) -> str:
     """
     Create string identifier that includes current datetime
-
-    - Example notebook available in:
-        notebooks/TimeFunctions/times.ipynb
     """
     now_time_dt, _ = current_datetime()
     now_time_str = now_time_dt.strftime("%Y%m%d-%H%M%S")
@@ -1005,7 +1003,10 @@ def vectorize_timestamps(df,
         verbose (int): If > 0, prints the list of added columns.
 
     Returns:
-        DataFrame: A copy of the dataframe with the new columns appended.
+        DataFrame: A copy of the dataframe with the new columns appended. With
+        *year* enabled, the combined columns ``.YEARMONTH`` (YYYYMM), ``.YEARDOY``
+        (YYYYDDD) and ``.YEARWEEK`` (YYYYWW) are added for each of *month*,
+        *doy* and *week* that is also enabled.
     """
     df = df.copy()
     newcols = []
@@ -1176,7 +1177,7 @@ def timestamp_infer_freq_progressively(timestamp_ix: pd.DatetimeIndex) -> tuple:
     Infer frequency by comparing first and last intervals of timestamp index.
 
     Checks if the first N rows and last N rows have the same frequency, starting
-    with N=1000 and progressively reducing to N=3. If both match, the frequency is
+    with N=1000 and progressively reducing to N=4. If both match, the frequency is
     consistent throughout the dataset. This method is fast and robust for detecting
     regular sampling patterns even in large datasets.
 
@@ -1197,7 +1198,7 @@ def timestamp_infer_freq_progressively(timestamp_ix: pd.DatetimeIndex) -> tuple:
 
     Notes
     -----
-    - Requires at least 6 rows (3 from start, 3 from end) for detection
+    - Requires at least 8 rows (4 from start, 4 from end) for detection
     - Returns frequency only if start and end intervals match
     - Useful for quick frequency validation before full dataset analysis
     """
@@ -1490,7 +1491,8 @@ def insert_timestamp(
     Insert timestamp column that shows the START, END or MIDDLE time of the averaging interval
 
     The new timestamp column is added as data column, the current
-    *data* index remains unchanged.
+    *data* index remains unchanged. A DataFrame is not copied: the column is
+    also added to the DataFrame that was passed in.
 
     The current *data* index must be a properly named timestamp index.
     Allowed names are: 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE', 'TIMESTAMP_END'.
@@ -1802,9 +1804,9 @@ def remove_after_date(data: Union[Series, DataFrame], yearly_end_date: str) -> U
                 "08-11" means that all data after 11 August will be removed,
                 this is done for each year in the dataset. For a dataset that
                 contains data of multiple years, e.g. 2016, 2017 and 2018, the
-                returned dataset will only contain data from all years, but
-                data for each year will end on 1 August (i.e., 11 August 2016,
-                11 August 2017 and 11 August 2018).
+                returned dataset still contains all years, but the data of each
+                year end on 11 August (11 August 2016, 11 August 2017 and
+                11 August 2018).
 
     Returns:
         Data with all data after *yearly_end_date* removed

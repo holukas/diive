@@ -2,7 +2,7 @@
 FORMATS: FILE FORMAT CONVERSION
 ================================
 
-Convert data between EddyPro, FLUXNET, and diive formats for flux processing and upload.
+Format EddyPro output and meteo data for EddyPro flux processing and FLUXNET upload.
 
 Part of the diive library: https://github.com/holukas/diive
 """

@@ -101,7 +101,7 @@ def get_encoded_value_series(
      n_bits: The total number of bits in the integer (default is 8).
 
     Returns:
-     Series of the converted and scaled values as a floats.
+     Series of the converted and scaled values. Missing values stay NaN.
 
     See Also:
         get_encoded_value_from_int : Extract bits from a single integer value.

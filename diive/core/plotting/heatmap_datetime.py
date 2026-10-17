@@ -1,6 +1,8 @@
 """
-HEATMAP — Date/Time and Year/Month variants
-============================================
+HEATMAP_DATETIME: DATE/TIME AND YEAR/MONTH HEATMAPS
+===================================================
+
+Heatmaps of a time series, by date and time of day or by year and month.
 
 Contains two public heatmap classes built on :class:`~diive.core.plotting.heatmap_base.HeatmapBase`:
 
@@ -12,11 +14,13 @@ Contains two public heatmap classes built on :class:`~diive.core.plotting.heatma
   plots it as a *year × month* (or *month × year*) grid.  Supports arbitrary
   aggregation functions and optional rank transformation.
 
-Both classes are exposed as top-level convenience aliases in the ``diive``
-namespace (``dv.heatmap_datetime`` and ``dv.heatmap_year_month``).
+Both classes are public as ``dv.plotting.HeatmapDateTime`` and
+``dv.plotting.HeatmapYearMonth``.
 
 References:
     https://matplotlib.org/stable/gallery/images_contours_and_fields/pcolormesh_levels.html
+
+Part of the diive library: https://github.com/holukas/diive
 """
 import datetime
 
@@ -264,17 +268,19 @@ class HeatmapDateTime(HeatmapBase):
             fig: Existing matplotlib Figure. If None and ax is None, creates new figure
             figsize: Figure size as (width, height) in inches. Only used when ax is None
             figdpi: Figure DPI. Only used when ax is None. Defaults to 72
-            ax_orientation: Layout of axes. If None, uses value from __init__()
-                ``'vertical'`` — dates on y-axis, hours on x-axis (default)
-                ``'horizontal'`` — dates on x-axis, hours on y-axis
+            ax_orientation: Layout of axes. If None, uses the value from __init__().
+                The grid is built in __init__, so set the orientation there: a
+                different value here does not rebuild the grid and mislabels the axes.
             format_style: Shared chrome (title/labels/fonts/ticks/spines/grid) via
-                :class:`~diive.core.plotting.styles.format.FormatStyle`. None = house
-                style (grid off). The colorbar stays ``cb_*``/``zlabel``-controlled.
+                :class:`~diive.core.plotting.styles.format.FormatStyle`. None = heatmap
+                default (no grid, black spines, outward ticks). A passed style replaces
+                that default as a whole. The colorbar stays ``cb_*``/``zlabel``-controlled.
             vmin: Minimum color value (auto from data if None)
             vmax: Maximum color value (auto from data if None)
             cmap: Colormap name (default: 'RdYlBu_r')
             zlabel: Colorbar label (e.g., '°C', 'µmol m⁻²s⁻¹')
-            cb_digits_after_comma: Decimal places on colorbar labels (default: 2)
+            cb_digits_after_comma: Decimal places on colorbar labels (default: 2), or 'auto'
+                to pick them from the data range
             cb_labelsize: Font size for colorbar tick labels
             cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
             minticks: Minimum major ticks on date axis (default: 3)
@@ -530,19 +536,24 @@ class HeatmapYearMonth(HeatmapBase):
             fig: Existing matplotlib Figure. If None and ax is None, creates new figure
             figsize: Figure size as (width, height) in inches. Only used when ax is None
             figdpi: Figure DPI. Only used when ax is None. Defaults to 72
-            ax_orientation: Layout of axes. If None, uses value from __init__()
+            ax_orientation: Layout of axes. If None, uses the value from __init__().
+                The grid is built in __init__, so set the orientation there: a
+                different value here does not rebuild the grid and mislabels the axes.
             format_style: Shared chrome (title/labels/fonts/ticks/spines/grid) via
-                :class:`~diive.core.plotting.styles.format.FormatStyle`. None = house
-                style (grid off). The colorbar stays ``cb_*``/``zlabel``-controlled.
+                :class:`~diive.core.plotting.styles.format.FormatStyle`. None = heatmap
+                default (no grid, black spines, outward ticks). A passed style replaces
+                that default as a whole. The colorbar stays ``cb_*``/``zlabel``-controlled.
             vmin: Minimum color value (auto from data if None)
             vmax: Maximum color value (auto from data if None)
             cmap: Colormap name (auto-selected if None: 'RdYlBu' for ranks, 'RdYlBu_r' for raw)
             zlabel: Colorbar label
-            cb_digits_after_comma: Decimal places on colorbar labels (default: 2)
+            cb_digits_after_comma: Decimal places on colorbar labels (default: 2), or 'auto'
+                to pick them from the data range
             cb_labelsize: Font size for colorbar tick labels
             cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
-            minticks: Minimum major ticks (default: 3)
-            maxticks: Maximum major ticks (default: 10)
+            minticks: Not used here, the ticks are one per month and year (kept for
+                signature parity with the other heatmaps)
+            maxticks: Not used here, see ``minticks``
             color_bad: Color for NaN cells (default: 'grey')
             show_colormap: Whether to show colorbar (default: True)
             show_less_xticklabels: Hide every second x-tick label (default: False)

@@ -1,6 +1,6 @@
 """
 GRANGER CAUSALITY: PREDICTIVE CAUSALITY TESTING
-================================================
+===============================================
 
 Test whether one time series helps predict another (Granger causality).
 
@@ -26,7 +26,7 @@ class GrangerCausality:
         x: Time series that may cause y (pandas Series)
         y: Time series potentially caused by x (pandas Series)
         max_lag: Maximum lag order to test (default: 5)
-        verbose: Print detailed results (default: True)
+        verbose: Currently unused. Call :meth:`report` to print the results.
 
     Example:
         See `examples/analysis/analysis_granger.py` for complete examples.
@@ -75,10 +75,11 @@ class GrangerCausality:
 
     def p_values(self) -> DataFrame:
         """
-        Extract p-values for each lag.
+        Extract the p-value of the SSR-based F-test for each lag.
 
         Returns:
-            DataFrame with p-values for each test (Lag, Ssr_ftest, Ssr_chi2test, etc.)
+            DataFrame with columns ``Lag`` and ``p_value``, one row per lag from 1
+            to *max_lag*.
         """
         p_vals = []
         for lag in range(1, self.max_lag + 1):

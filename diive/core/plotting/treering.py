@@ -171,7 +171,8 @@ class TreeRingPlot:
             show_month_lines: Draw thin radial lines at each month boundary (default False)
             show_year_labels: Show year numbers on rings (default True)
             show_year_separators: Draw thin white circles between year rings (default True)
-            year_label_frequency: Interval between year labels, e.g. 10 = every decade (default 10)
+            year_label_frequency: Interval between year labels, e.g. 10 = every decade (default 10).
+                The first and last year are always labelled.
             cb_label: Colorbar label text
             cb_labelsize: Font size for colorbar tick labels
             cb_digits_after_comma: Decimal places on colorbar tick labels (default 1)
@@ -306,7 +307,7 @@ class TreeRingPlot:
         # --- Year labels ---
         # Place year text at Jan-1 angle (bottom), at the ring's midpoint radius.
         if show_year_labels:
-            jan1_angle = offset  # 3pi/2 (bottom)
+            jan1_angle = offset  # pi/2 is the bottom in this clockwise layout
             for i, year in enumerate(self.years):
                 if (year % year_label_frequency == 0) or (i == 0) or (i == self.n_years - 1):
                     r_mid = radii[i] + 0.5
@@ -328,7 +329,7 @@ class TreeRingPlot:
 
         # --- Colorbar ---
         # Shrink and shift the colorbar so it does not overlap month labels on the
-        # right side (Apr/May area).
+        # right side (Sep/Oct/Nov area).
         fmt = mticker.FormatStrFormatter(f'%.{cb_digits_after_comma}f')
         cb = self._fig.colorbar(
             mesh,
@@ -396,7 +397,8 @@ class TreeRingPlot:
             show_month_lines: Draw thin radial spokes at each month boundary (default False)
             show_year_labels: Show year numbers at each ring's midpoint (default False)
             show_year_separators: Draw faint circles between year rings (default False)
-            year_label_frequency: Interval between year labels, e.g. 1 = every year (default 1)
+            year_label_frequency: Interval between year labels, e.g. 1 = every year (default 1).
+                The first and last year are always labelled.
             cb_label: Colorbar label text
             cb_labelsize: Font size for colorbar tick labels
             cb_digits_after_comma: Decimal places on colorbar tick labels (default 1)

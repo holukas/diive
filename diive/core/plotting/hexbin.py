@@ -1,4 +1,8 @@
-"""Hexbin scatter plot for aggregating flux values into 2D bins of driver variables.
+"""
+HEXBIN: HEXAGONAL BINNING OF A VARIABLE BY TWO DRIVERS
+======================================================
+
+Hexbin scatter plot for aggregating flux values into 2D bins of driver variables.
 
 HexbinPlot visualizes the relationship between two driver variables (e.g., soil temperature
 and water-filled pore space) and a flux variable by aggregating flux values into hexagonal
@@ -9,6 +13,8 @@ during aggregation).
 
 Public name: ``dv.plotting.HexbinPlot(x, y, z, ...)``. ``normalize_axes=True`` puts both
 drivers on a 0-100 percentile scale; see the class for a sample.
+
+Part of the diive library: https://github.com/holukas/diive
 """
 
 import warnings
@@ -37,7 +43,7 @@ class HexbinPlot(HeatmapBase):
         >>> import diive as dv, pandas as pd, numpy as np
         >>> ta, vpd, nee = (pd.Series(np.arange(100.), name=n) for n in ('TA', 'VPD', 'NEE'))
         >>> hm = dv.plotting.HexbinPlot(x=ta, y=vpd, z=nee, gridsize=11, normalize_axes=True)
-        >>> ax = hm.plot(zlabel='Net ecosystem exchange')
+        >>> hm.plot(zlabel='Net ecosystem exchange')
 
     See Also:
         examples/visualization/plot_hexbin_basic.py — Hexbin variations (percentile normalization, aggregation, overlay)
@@ -67,7 +73,8 @@ class HexbinPlot(HeatmapBase):
                 same labels in a different order are re-aligned, not zipped by
                 position. Identical indexes (the usual case: three columns of one
                 dataframe) are used as they are
-            gridsize: Number of hexagon bins (default 11, matches matplotlib.hexbin)
+            gridsize: Number of hexagons in the x direction (default 11, while matplotlib's
+                own default is 100)
             reduce_C_function: Aggregation function for z-values in each hexagon
                 (default np.median). Can be np.mean, np.sum, etc.
             normalize_axes: If True, convert x/y to percentile ranks (0-100 scale)
@@ -84,10 +91,14 @@ class HexbinPlot(HeatmapBase):
                 (daytime vs nighttime, before vs after) get **different**
                 hexagons and cell *i* is not the same region in both. Pass the
                 same extent to every subset to compare them cell by cell
-            edgecolors: Hexagon edge color (default 'none')
-            xlabel: Label for x-axis (auto-inferred from x.name if None)
-            ylabel: Label for y-axis (auto-inferred from y.name if None)
-            zlabel: Label for colorbar (auto-inferred from z.name if None)
+            edgecolors: Deprecated, pass it to :meth:`plot` instead. Hexagon edge
+                color (default 'none')
+            xlabel: Deprecated, pass it to :meth:`plot` instead. Label for x-axis
+                (auto-inferred from x.name if None)
+            ylabel: Deprecated, pass it to :meth:`plot` instead. Label for y-axis
+                (auto-inferred from y.name if None)
+            zlabel: Deprecated, pass it to :meth:`plot` instead. Label for colorbar
+                (auto-inferred from z.name if None)
             verbose: Print progress and diagnostic messages (default False)
 
         Raises:
@@ -337,20 +348,30 @@ class HexbinPlot(HeatmapBase):
         on the same HexbinPlot object to plot on different axes with different styling.
 
         Args:
-            ax: Matplotlib axes to plot on. If None, creates new figure
+            ax: Matplotlib axes to plot on. If None, creates a new figure (not shown
+                automatically)
             fig: Existing matplotlib Figure. If None and ax is None, creates new figure
             figsize: Figure size as (width, height) in inches. Only used when ax is None
             figdpi: Figure DPI. Only used when ax is None (default 72)
             format_style: Shared chrome (title/labels/fonts/ticks/spines/grid) via
-                :class:`~diive.core.plotting.styles.format.FormatStyle`. None = house
-                style (grid off). The ``xlabel``/``ylabel`` below still feed the
-                axis labels as caller defaults; a passed format_style overrides
-                them. The colorbar stays ``cb_*``/``zlabel``-controlled.
+                :class:`~diive.core.plotting.styles.format.FormatStyle`. None = heatmap
+                default (no grid, black spines, outward ticks). A passed style replaces
+                that default as a whole. The ``xlabel``/``ylabel`` below are the
+                defaults for the axis labels, and ``format_style.xlabel``/``ylabel``
+                override them. The colorbar stays ``cb_*``/``zlabel``-controlled.
             vmin: Minimum color value (auto from data if None)
             vmax: Maximum color value (auto from data if None)
             cmap: Colormap name (default: 'RdYlBu_r')
-            zlabel: Colorbar label (e.g., '°C', 'µmol m⁻²s⁻¹')
-            cb_digits_after_comma: Decimal places on colorbar labels (default 2)
+            zlabel: Colorbar label (e.g., '°C', 'µmol m⁻²s⁻¹'). None uses the
+                label from the constructor (``z.name`` by default)
+            xlabel: x-axis label. None uses the label from the constructor
+                (``x.name`` by default)
+            ylabel: y-axis label. None uses the label from the constructor
+                (``y.name`` by default)
+            edgecolors: Hexagon edge color. None uses the constructor value, or
+                'none' (no edges)
+            cb_digits_after_comma: Decimal places on colorbar labels (default 2), or 'auto'
+                to pick them from the data range
             cb_labelsize: Font size for colorbar tick labels
             cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max').
                 Default None derives them from ``vmin``/``vmax`` against the range
@@ -371,7 +392,7 @@ class HexbinPlot(HeatmapBase):
             show_values_color: Text color for value overlay (default 'black')
 
         Returns:
-            None (displays plot if ax=None, otherwise renders on provided axes)
+            None. The plot is drawn on ``ax``, or on a new figure when ax=None.
         """
         # Use the provided styling, or fall back to the (deprecated) __init__
         # value. Labels auto-default from the data's .name (set in __init__).

@@ -58,6 +58,7 @@ class TimeSeries:
     Methods:
         plot : Render static matplotlib plot with styling options
         plot_interactive : Render interactive Bokeh plot with zoom, pan, selection tools
+        plot_rangetool : Render interactive Bokeh plot with a RangeTool overview panel
 
     Example:
         See `examples/visualization/plot_timeseries.py` for matplotlib examples.

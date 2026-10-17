@@ -2,8 +2,8 @@
 ANALYSIS: DECOUPLING
 ====================
 
-Sorting bins method for analyzing variable decoupling in bivariate relationships.
-Identifies anomalies and patterns in time series correlations.
+Stratified binning (sorting bins method): aggregate y in bins of x, separately
+for quantile bins of z, to see how the x-y relationship changes with z.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -48,16 +48,18 @@ class StratifiedAnalysis:
             yvar: Name of the variable of interest, will be shown on the y-axis (y) in the plot.
             n_bins_z: Number of stratification bins for zvar. Must be >0 and <= 120.
             n_bins_x: Number of bins for xvar within each z bin. Must be >= 2.
-            conversion: Convert to z-scores or percentiles. Options: 'z-score', 'percentile'
+            conversion: Convert all three variables before binning. Options: 'z-score',
+                'percentile', or None (default, no conversion).
             agg: Aggregation method for binning, e.g. 'median', 'mean'.
 
         Properties:
             .results: All binned results as a single DataFrame with z_bin_label column
+                (needs .calcbins() first)
             .binaggs: Dict of DataFrames, one per z bin
             .n_records_input / .n_records_used: Records received vs. records analyzed
 
         Methods:
-            .calcbins(): Compute binned aggregates
+            .calcbins(): Compute binned aggregates (.run() does the same)
             .get_binaggs(): Return results dictionary
             .showplot_decoupling_sbm(): Visualize results with line plot and error bars
 
@@ -66,7 +68,7 @@ class StratifiedAnalysis:
             stratified binning across temperature ranges, result access, and visualization.
 
         See Also:
-            stratified_analysis : Convenience alias (StratifiedAnalysis = stratified_analysis).
+            SortingBinsMethod : Alias of StratifiedAnalysis, kept for backward compatibility.
         """
         # Restrict to the three analysis variables *before* dropping gaps. Dropping
         # on the full frame is listwise deletion across every column it happens to
@@ -127,7 +129,7 @@ class StratifiedAnalysis:
         return self.results
 
     def get_binaggs(self) -> dict:
-        """Return dict of dataframes with variable 1 group as key"""
+        """Return the dict of DataFrames keyed by z bin label (same as :attr:`binaggs`)."""
         return self.binaggs
 
     @property
@@ -263,11 +265,14 @@ class StratifiedAnalysis:
 
         Args:
             ax: Optional matplotlib axes to draw on; a new figure is created if None.
-            saveplot: If True, save the figure to *path*.
-            title: Optional plot title.
-            path: Output path used when *saveplot* is True.
-            emphasize_lines: If True, draw connecting lines with stronger emphasis.
-            **kwargs: Forwarded to the underlying plotting call.
+            saveplot: If True, save the figure as PNG to *path*. Works only when *ax*
+                is None (the method needs its own figure to save).
+            title: Optional figure title, shown only when the method creates the figure
+                (*ax* is None). Also used in the file name of the saved figure.
+            path: Folder for the saved figure when *saveplot* is True.
+            emphasize_lines: If True, draw thicker lines with a thin black line on top.
+            **kwargs: ``legend=False`` hides the legend. Other keywords are forwarded
+                to ``ax.plot`` for each z-bin line.
         """
 
         # Figure size and legend number of columns

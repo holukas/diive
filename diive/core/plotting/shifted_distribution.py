@@ -1,6 +1,6 @@
 """
-ShiftedDistributionPlot: SHIFTED DISTRIBUTION PLOT
-===================================================
+SHIFTED_DISTRIBUTION: SHIFTED DISTRIBUTION PLOT
+===============================================
 
 Visualize how a variable's distribution has shifted between a reference
 period and a comparison period, with color-coded zones derived from the
@@ -251,10 +251,10 @@ class ShiftedDistributionPlot:
             ax: Matplotlib axes (creates new figure if None).
             format_style: A :class:`~diive.plotting.FormatStyle` describing the chrome
                 (axis labels/font sizes/colours/ticks/grid). When None the diive house
-                style is used, with the grid off — pass ``show_grid=True`` to draw it.
-                The y-label defaults to ``"Density"``; the title and the legend keep this
-                plot's own left-aligned placement, so ``legend_loc``/``legend_ncol`` do
-                not apply.
+                style is used with the grid off. Pass ``FormatStyle(show_grid=True)``
+                to draw it. The y-label defaults to ``"Density"``. The title and the
+                legend keep this plot's own left-aligned placement, so the
+                ``legend_loc``/``legend_ncol`` fields of the style do not apply.
             ref_label: Legend label for reference period.
             comp_label: Legend label for comparison period.
                 Both labels get the period's sample size appended — ``n = 4018``,

@@ -117,10 +117,11 @@ class FormatStyle:
     def merged(self, **overrides) -> "FormatStyle":
         """Return a copy with the given non-*None* fields overridden.
 
-        Used by ``plot()`` methods to fold legacy flat keyword arguments
-        (``title=``, ``xlabel=``, ...) onto a caller-supplied style without
-        mutating it. Keys whose value is *None* are ignored, so an unset legacy
-        argument never clobbers a value already on the style.
+        Used by ``plot()`` methods to adjust a caller-supplied style without
+        mutating it, e.g. to suppress the title on the applied copy
+        (``title=""``) or to set the y-axis units from a constructor argument.
+        Keys set to *None* are ignored, so they never clobber a value
+        already on the style.
         """
         clean = {k: v for k, v in overrides.items() if v is not None}
         return replace(self, **clean) if clean else self

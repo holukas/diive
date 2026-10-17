@@ -2,9 +2,9 @@
 DATA FUNCTIONS: FRAMES
 ======================
 
-This module is part of the diive library:
-https://github.com/holukas/diive
+DataFrame helpers: column and record selection, renaming, header parsing and reshaping.
 
+Part of the diive library: https://github.com/holukas/diive
 """
 from pathlib import Path
 
@@ -398,7 +398,7 @@ def parse_header(filepath: Path,
         variable units in row 3 the settings are:
             skiprows=[0, 1, 4, 5, 6]
             varnames_row=0
-            varnames_units=1
+            varunits_row=1
 
     Args:
         filepath: Path to the csv file.

@@ -112,6 +112,11 @@ class DielCycle:
         line) comes from a shared :class:`~diive.plotting.FormatStyle`.
 
         Args:
+            ax: Matplotlib axes to draw on. If None, a new figure is created and shown.
+            format_style: A :class:`~diive.plotting.FormatStyle` describing the
+                chrome. When None the diive house style is used.
+            color: Colour of every curve. None picks the colours automatically
+                (from ``cmap`` or the diive 12-month palette).
             agg: Central aggregation drawn as the curve: ``'mean'``, ``'median'``,
                 ``'min'``, ``'max'``, ``'p25'`` or ``'p75'`` (25th/75th percentile).
             band: Uncertainty band drawn around the curve: ``'sd'`` (±1 standard
@@ -123,10 +128,13 @@ class DielCycle:
                 only). ``None`` uses the diive 12-month palette.
             marker: Draw a marker at each time-of-day point.
             markersize: Marker size (when ``marker`` is True).
-            format_style: A :class:`~diive.plotting.FormatStyle` describing the
-                chrome. When None the diive house style is used.
+            linewidth: Line width of the curves.
+            ylim: Y-axis limits as ``[min, max]``. None scales to the data.
+            show_xticklabels: Show the hour labels on the x-axis.
+            show_xlabel: Show the x-axis label.
             mean: Deprecated. Kept for back-compat; ignored (use ``agg``).
             std: Deprecated. Kept for back-compat; ``False`` maps to ``band='none'``.
+            **kwargs: Passed on to matplotlib's ``ax.plot`` for each curve.
         """
 
         # Back-compat: the old boolean std= toggle maps onto the band selector.

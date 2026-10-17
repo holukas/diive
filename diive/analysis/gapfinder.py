@@ -9,7 +9,7 @@ Classes::
 
     GapFinder  — lightweight gap detection; returns per-gap table and headline stats.
     GapStats   — extended analysis built on GapFinder; adds monthly / annual breakdown,
-                 long-gap listing, and a three-panel visualization.
+                 long-gap listing, and a four-panel visualization.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -164,7 +164,8 @@ class GapFinder:
 
         Keys: n_gaps, total_missing_records, missing_pct, longest_gap_records,
         median_gap_records, mean_gap_records, longest_gap_duration.
-        Counts reflect any max_length / min_length filters applied.
+        n_gaps and the gap-length keys reflect any max_length / min_length
+        filters. total_missing_records and missing_pct count all missing records.
         """
         gaps = self.results
         total = len(self._series)
@@ -274,8 +275,8 @@ class GapFinder:
     def plot_availability_heatmap(self, ax):
         """Heatmap of daily data availability: day-of-year (x) vs year (y).
 
-        Green = fully available, red = all missing. Reveals seasonal and
-        annual patterns in data loss at a glance.
+        Blue = fully available, red = all missing (RdYlBu colormap). Shows
+        seasonal and annual patterns in data loss.
         """
         daily_count = self._series.resample('D').count()
         daily_total = self._series.resample('D').size()
@@ -365,7 +366,7 @@ class GapStats:
     """Extended gap analysis with seasonal breakdown and long-gap flagging.
 
     Wraps :class:`GapFinder` and adds monthly statistics, annual coverage,
-    identification of long gaps, and a three-panel visualization.
+    identification of long gaps, and a four-panel visualization.
 
     Use :class:`GapFinder` when you only need per-gap locations and headline
     counts. Use ``GapStats`` when you need seasonal context, annual trends,
@@ -389,7 +390,7 @@ class GapStats:
             (row includes YEAR / MONTH).
         .report(): Rich-formatted console report — rules, coloured tables,
             long-gap list, monthly and annual breakdowns.
-        .showfig(): Four-panel figure — RdYlGn availability heatmap, gap spike
+        .showfig(): Four-panel figure with RdYlBu availability heatmap, gap spike
             timeline, monthly polar chart, gap-length histogram.
         .plot_availability_heatmap(ax): Heatmap panel for custom figures.
         .plot_gap_spike_timeline(ax): Gap spike panel for custom figures.
@@ -766,7 +767,7 @@ class GapStats:
 
         Layout (top to bottom):
 
-        - Row 1 (full width): daily availability heatmap — green = data, red = gap
+        - Row 1 (full width): daily availability heatmap, blue = data, red = gap
         - Row 2 (full width): gap spike timeline — each gap as a coloured
           vertical line, tall spikes mark long gaps
         - Row 3 left: monthly missing-data polar chart (Jan at top, clockwise)
@@ -810,8 +811,8 @@ class GapStats:
     def plot_availability_heatmap(self, ax):
         """Daily availability heatmap: day-of-year (x) vs year (y).
 
-        Green = fully available, red = all missing. Uses RdYlGn colormap with
-        white year-separator lines and subtle month grid lines.
+        Blue = fully available, red = all missing. Uses the RdYlBu colormap with
+        white year-separator lines and faint month grid lines.
 
         Args:
             ax: Matplotlib Axes to draw on.

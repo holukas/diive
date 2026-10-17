@@ -1,4 +1,7 @@
 """
+TIMES: DECOMPOSITION UTILITIES
+==============================
+
 Low-level time series decomposition utilities.
 
 Supports multiple decomposition methods:
@@ -6,7 +9,11 @@ Supports multiple decomposition methods:
 - Classical (moving average): Simple, fast, assumes stationarity
 - Harmonic (Fourier): Frequency-domain analysis, periodic signals
 
-All functions preserve NaN locations.
+STL returns NaN where the input is NaN. Classical decomposition also returns
+NaN trend and residual at both ends. Harmonic decomposition and seasonality
+detection drop NaN records before the FFT.
+
+Part of the diive library: https://github.com/holukas/diive
 """
 
 import numpy as np
@@ -246,7 +253,7 @@ def harmonic_decompose(
     Args:
         series (pd.Series): Input time series (NaN values removed).
         n_harmonics (int): Number of harmonics to extract. Default 10.
-        period (int): Expected dominant period. Used for frequency scaling. Default 365.
+        period (int): Not used in the computation. Default 365.
         window (str): Window function ('hamming', 'hann', 'blackman'). Default 'hamming'.
         verbose (bool): Print decomposition details. Default False.
 

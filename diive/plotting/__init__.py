@@ -1,4 +1,16 @@
-"""Public namespace: dv.plotting (visualization classes)."""
+"""
+PLOTTING: PUBLIC NAMESPACE FOR THE PLOT CLASSES
+===============================================
+
+Public namespace ``dv.plotting``: the plot classes and ``FormatStyle``.
+
+The plot classes follow a two-phase pattern: data and computation parameters go
+to ``__init__``, styling goes to ``plot(ax=None, ...)``. Title, labels, font
+sizes, grid and legend are set with a ``FormatStyle`` passed as ``format_style``
+(polar plots use only some of its fields, see their ``plot()``).
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 from diive.core.plotting.bar import LongtermAnomaliesYear
 from diive.core.plotting.compoundextremes import CompoundExtremesPlot
 from diive.core.plotting.styles.format import FormatStyle

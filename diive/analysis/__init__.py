@@ -1,8 +1,11 @@
 """
 ANALYSIS: TIME SERIES ANALYSIS METHODS
-=======================================
+======================================
 
-Comprehensive toolkit: decomposition, correlation, gap detection, histograms, grid aggregation.
+Gap statistics, correlation and driver ranking, Granger causality, seasonal-trend
+decomposition, harmonic analysis and spectrograms, histograms, percentiles, grid
+aggregation, stratified binning, optimum ranges, compound extremes, dataframe
+profiling and binned curve fitting. Provisional tools are in ``experimental``.
 
 Part of the diive library: https://github.com/holukas/diive
 """

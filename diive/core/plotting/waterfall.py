@@ -130,7 +130,7 @@ class WaterfallPlot:
         pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='auto')
 
     def get(self):
-        """Return axis"""
+        """Return the axes of the last :meth:`plot` call (None before it)."""
         return self.ax
 
     def plot(self, ax=None, format_style: FormatStyle = None, showplot: bool = True,
@@ -147,9 +147,8 @@ class WaterfallPlot:
         Args:
             ax: Matplotlib axes to plot on. If None, a new figure is created and shown.
             format_style: A :class:`~diive.plotting.FormatStyle` describing the chrome.
-                When None the diive house style is used. The ``series_units`` passed at
-                construction is folded onto it as the y-axis units for backward
-                compatibility.
+                When None the diive house style is used. The ``series_units`` given to
+                the constructor, when set, override ``format_style.yunits``.
             showplot: Show the figure (only when this object created the figure).
             digits_after_comma: Decimals for the final-total annotation.
             color_uptake: Bar color for uptake (sink) periods.
@@ -164,8 +163,8 @@ class WaterfallPlot:
             ``'waterfall_bars'``) and the connectors one ``LineCollection`` (gid
             ``'waterfall_connectors'``), both in ``ax.collections``.
         """
-        # Fold the legacy series_units onto the (copied) style so old call sites keep
-        # working without mutating a caller-supplied FormatStyle.
+        # Set the constructor's series_units on a copy of the style, so a
+        # caller-supplied FormatStyle is not mutated.
         style = (format_style or FormatStyle()).merged(yunits=self.series_units)
         if ax is None:
             self.fig, self.ax = pf.create_ax()

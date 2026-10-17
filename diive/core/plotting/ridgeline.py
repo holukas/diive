@@ -1,6 +1,14 @@
 """
-https://matplotlib.org/matplotblog/posts/create-ridgeplots-in-matplotlib/
-https://matplotlib.org/stable/users/explain/colors/colormaps.html
+RIDGELINE: STACKED KERNEL DENSITIES PER YEAR, MONTH OR WEEK
+===========================================================
+
+Ridgeline plot of a time series: one kernel density curve per year, month or week.
+
+References:
+    https://matplotlib.org/matplotblog/posts/create-ridgeplots-in-matplotlib/
+    https://matplotlib.org/stable/users/explain/colors/colormaps.html
+
+Part of the diive library: https://github.com/holukas/diive
 """
 
 import matplotlib.gridspec as grid_spec
@@ -17,8 +25,9 @@ from diive.core.utils.console import detail
 
 
 class RidgeLinePlot:
-    """
-    RidgeLinePlot uses the kernel density estimator from scikit-learn, see here:
+    """Ridgeline plot: one kernel density curve per year, month or week, stacked vertically.
+
+    The densities come from the kernel density estimator in scikit-learn, see here:
         - https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.KernelDensity.html
         - https://scikit-learn.org/stable/modules/density.html#kernel-density
 
@@ -94,7 +103,31 @@ class RidgeLinePlot:
              fig=None, format_style: FormatStyle = None):
         """Render the ridgeline plot.
 
+        Each group (year, month or week) gets one density curve. The curves are
+        coloured from ``Spectral_r`` by the group mean, lowest mean first. The
+        mean is printed at the right end of each curve.
+
         Args:
+            xlim: X-axis limits ``[min, max]``, shared by all curves. None uses the
+                data range.
+            ylim: Y-axis (density) limits ``[min, max]``, shared by all curves. None
+                uses 0 up to the highest density of all groups.
+            hspace: Vertical space between the curves. Negative values make them
+                overlap (default -0.5).
+            fig_width: Width of a new figure in inches (default 8).
+            fig_height: Height of a new figure in inches (default 8).
+            shade_percentile: Quantile (0 to 1) of each group's values. The area
+                above it is shaded slightly darker (default 0.5, the median).
+            show_mean_line: Draw a vertical line at each group's mean (default False).
+            fig_dpi: DPI of a new figure (default 72).
+            showplot: Show the figure (default True).
+            ascending: Order of the groups from top to bottom. False (default) puts
+                the highest group label (e.g. the latest year) at the top.
+            how: Grouping: ``'yearly'``, ``'monthly'`` or ``'weekly'`` (ISO week,
+                default).
+            kd_kwargs: Keyword arguments for scikit-learn's ``KernelDensity``, e.g.
+                ``{'bandwidth': 0.5, 'kernel': 'gaussian'}``. None uses its defaults
+                (Gaussian kernel, bandwidth 1.0).
             fig: Existing matplotlib ``Figure`` to draw into (cleared first). When
                 given, the plot builds its stacked-density grid on it instead of
                 creating a new figure -- e.g. for embedding in a GUI canvas. The
@@ -105,7 +138,6 @@ class RidgeLinePlot:
                 are honoured here: the bottom x-axis label (text/units, font, colour)
                 and the figure title (text, font, colour). The per-ridge grid, spines,
                 ticks and shading stay fixed.
-            (other args unchanged)
         """
         style = format_style or FormatStyle()
         self._update_params(xlim=xlim, ylim=ylim, hspace=hspace,
@@ -135,7 +167,7 @@ class RidgeLinePlot:
         return y_index, y_index_unique
 
     def _assign_colors(self, how: str):
-        """Assign colors depending on the monthly mean value."""
+        """Assign colors by the mean of each group (year, month or week), lowest mean first."""
         if how == 'yearly':
             aggs = self.series.groupby(self.series.index.year).agg('mean')
         elif how == 'monthly':
@@ -314,7 +346,7 @@ class RidgeLinePlot:
             if self.show_mean_line:
                 self.ax.axvline(x1_mean, ls="-", lw=1, color="black")
 
-            # Show 99th percentile
+            # Shade the area above the shade_percentile quantile
             locs_percentile = np.where(x_d >= x1_percentile)
             x_d_percentile = x_d[locs_percentile]
             y_percentile = y[locs_percentile]

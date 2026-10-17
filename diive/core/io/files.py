@@ -1,4 +1,11 @@
-"""Read and write data files (CSV, parquet, ...)."""
+"""
+IO: FILES
+=========
+
+Save and load parquet and pickle files, unzip files, coerce data to the diive format.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 import os
 import pickle
 import time
@@ -94,7 +101,8 @@ def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None 
             Full filepath to saved Parquet file.
 
     Notes:
-        Index name and frequency information are preserved in the Parquet file.
+        The index name is preserved in the Parquet file, the index frequency is not.
+        load_parquet() detects the frequency again when it sanitizes the timestamp.
         When reloading with load_parquet(), use output_middle_timestamp to convert
         timestamp representation if needed.
 
@@ -131,7 +139,8 @@ def load_parquet(filepath: str or Path, output_middle_timestamp: bool = True,
             **'TIMESTAMP_END', 'TIMESTAMP_START', or 'TIMESTAMP_MIDDLE'.**
         sanitize_timestamp : bool, optional (default True)
             Validate and regularize timestamp index: check naming convention, auto-detect
-            frequency, fill small gaps, remove duplicate timestamps. Calls TimestampSanitizer.
+            frequency, remove duplicate timestamps and insert missing timestamps as
+            empty (NaN) rows. Calls TimestampSanitizer.
             Required for output_middle_timestamp to work.
 
     Returns:
