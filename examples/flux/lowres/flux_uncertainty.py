@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 # Load example data
 data_df = dv.load_exampledata_parquet()
 
-# Use subset only - June 2013 (smaller dataset for faster demo)
+# Use subset only - March 2013 (smaller dataset for faster demo)
 data_df = data_df.loc[(data_df.index.year == 2013) & (data_df.index.month == 3)].copy()
 
 # Prepare subset with required columns

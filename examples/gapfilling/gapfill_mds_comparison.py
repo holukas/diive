@@ -10,10 +10,10 @@ Unlike the machine-learning gap-fillers (Random Forest / XGBoost), MDS does not
 train a model and uses no random sampling - it fills each gap from the average
 of meteorologically similar measured records (ONEFlux's marginal-distribution-
 sampling cascade). So repeated runs always return exactly the same result,
-which makes MDS reproducible without a random seed. This holds for both modes,
-the default ``mode='diive'`` (Vekuri et al. 2023 symmetric mean) and
-``mode='oneflux'`` (plain mean, bit for bit as ONEFlux). The example uses the
-default.
+which makes MDS reproducible without a random seed. This holds for all three
+modes: the default ``mode='diive'`` (Vekuri et al. 2023 symmetric mean),
+``mode='oneflux'`` (plain mean, bit for bit as ONEFlux) and
+``mode='reddyproc'`` (as REddyProc). The example uses the default.
 """
 
 # %%
@@ -43,7 +43,8 @@ print(f"Missing {flux}: {df[flux].isnull().sum():,d} "
 # ^^^^^^^^^^^^^^^^^^
 runs = []
 for _ in range(2):
-    model = FluxMDS(df=df, flux=flux, swin=swin, ta=ta, vpd=vpd, verbose=0)
+    # VPD_f is in hPa in the example data, so vpd_in_kpa=False
+    model = FluxMDS(df=df, flux=flux, swin=swin, ta=ta, vpd=vpd, vpd_in_kpa=False, verbose=0)
     model.run()
     runs.append(model)
 

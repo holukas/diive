@@ -45,7 +45,7 @@ References:
 #    diurnal cycle in ever wider windows
 # 4. Fill gap with mean flux from similar periods
 #
-# Two modes:
+# Three modes:
 #
 # - ``mode='diive'`` (default): ONEFlux's windows, tolerances and order of
 #   methods, but methods 1 and 2 (the ones that match on Rg) fill with the
@@ -57,6 +57,9 @@ References:
 # - ``mode='oneflux'``: the plain mean of the similar records. This reproduces
 #   ONEFlux's ``gf_mds`` bit for bit. Use it when results must match ONEFlux,
 #   for example in a comparison with FLUXNET or ICOS data products.
+# - ``mode='reddyproc'``: the plain mean with REddyProc's windows. This
+#   reproduces REddyProc's ``sMDSGapFill``. Gaps longer than 60 days stay
+#   unfilled.
 #
 # Flag and quality:
 # - The gap-fill flag is method * 1000 + window in days (0 = measured), with
@@ -172,10 +175,12 @@ mds.report()
 # %%
 # Results: Performance scores
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Scores compare MDS predictions at measured records with the measured values
-# (in-sample, a rough estimate of gap-filling accuracy)
+# Scores compare MDS predictions at measured records with the measured values.
+# In the default mode='diive' each measured record is left out of its own
+# prediction, so the scores are out-of-sample. In mode='oneflux' and
+# mode='reddyproc' they are in-sample and usually higher.
 
-print("\nPerformance Scores (in-sample):")
+print("\nPerformance Scores (out-of-sample):")
 print(f"  R2: {mds.scores_['r2']:.4f}")
 print(f"  RMSE: {mds.scores_['rmse']:.4f} (root mean squared error)")
 print(f"  MAE: {mds.scores_['mae']:.4f} (mean absolute error)")
