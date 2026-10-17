@@ -583,7 +583,15 @@ class FluxMDS(_MdsGapFillingBase):
 
     ``mode='diive'`` (default) fills with the symmetric mean of Vekuri et al.
     (2023) in the methods that match on SWIN, which removes a bias in the
-    filled fluxes and the carbon balance. ``mode='oneflux'`` fills with the
+    filled fluxes and the carbon balance. Validated against ``'oneflux'`` with
+    synthetic truth and each site-year's real gaps at 8 forest sites from 68 N
+    to 30 S (8-11 years each): the annual balance error fell at 6 sites, most
+    in the north and the tropics (FI-Var +11.0 -> +2.5, FI-Hyy +8.1 -> +1.4,
+    GF-Guy +68.2 -> +60.0 g C m-2 y-1), barely at two drylands (IL-Yat,
+    AU-GWW), and rose slightly at the deciduous DE-Hai (-9.7 -> -12.8), where
+    the daytime error is already negative. The RMSE changed by -0.4 to +0.5 %.
+    Harness: ``diive-data/references/mds_vekuri_validation``.
+    ``mode='oneflux'`` fills with the
     plain mean, as ONEFlux does (use it to compare with ICOS or FLUXNET
     products), and ``mode='reddyproc'`` follows REddyProc's
     ``sMDSGapFill``. See ``mode`` in ``__init__``.
