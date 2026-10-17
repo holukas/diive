@@ -2,14 +2,14 @@
 
 ## Overview
 
-The example dataset is a **10-year record of eddy covariance measurements** from the Davos site (CH-DAV), a mixed Alpine forest ecosystem in Switzerland. This dataset is included with diive for demonstration purposes and is used throughout the examples.
+The example dataset is a **10-year record of eddy covariance measurements** from the Davos site (CH-DAV), a subalpine coniferous forest dominated by Norway spruce in Switzerland. This dataset is included with diive for demonstration purposes and is used throughout the examples.
 
 ## Dataset Characteristics
 
 | Property | Value |
 |----------|-------|
 | **Site** | Davos, Switzerland (CH-DAV) |
-| **Ecosystem** | Mixed Alpine forest |
+| **Ecosystem** | Subalpine coniferous forest (Norway spruce) |
 | **Time Period** | 2013-01-01 to 2022-12-31 |
 | **Duration** | 10 years (3,652 days) |
 | **Temporal Resolution** | 30 minutes |
@@ -39,23 +39,23 @@ print(df.columns)        # List of 37 variables
 | Variable | Units | Description | Availability |
 |----------|-------|-------------|---------------|
 | `NEE_CUT_REF_f` | µmol m⁻² s⁻¹ | Net Ecosystem Exchange (reference USTAR) — **gap-filled** | Complete (0% missing) |
-| `NEE_CUT_16_f` | µmol m⁻² s⁻¹ | NEE with conservative USTAR threshold (16th percentile) — gap-filled | Complete |
-| `NEE_CUT_84_f` | µmol m⁻² s⁻¹ | NEE with lenient USTAR threshold (84th percentile) — gap-filled | Complete |
+| `NEE_CUT_16_f` | µmol m⁻² s⁻¹ | NEE with lenient USTAR threshold (16th percentile) — gap-filled | Complete |
+| `NEE_CUT_84_f` | µmol m⁻² s⁻¹ | NEE with conservative USTAR threshold (84th percentile) — gap-filled | Complete |
 | `NEE_CUT_REF_orig` | µmol m⁻² s⁻¹ | Original measured NEE (reference) | ~33% (66.8% missing) |
-| `NEE_CUT_16_orig` | µmol m⁻² s⁻¹ | Original NEE (conservative USTAR) | ~40% (60.0% missing) |
-| `NEE_CUT_84_orig` | µmol m⁻² s⁻¹ | Original NEE (lenient USTAR) | ~23% (77.2% missing) |
+| `NEE_CUT_16_orig` | µmol m⁻² s⁻¹ | Original NEE (lenient USTAR) | ~40% (60.0% missing) |
+| `NEE_CUT_84_orig` | µmol m⁻² s⁻¹ | Original NEE (conservative USTAR) | ~23% (77.2% missing) |
 | `GPP_CUT_REF_f` | µmol m⁻² s⁻¹ | Gross Primary Productivity (gap-filled) | Complete |
-| `GPP_CUT_16_f` | µmol m⁻² s⁻¹ | GPP (conservative USTAR, gap-filled) | Complete |
-| `GPP_CUT_84_f` | µmol m⁻² s⁻¹ | GPP (lenient USTAR, gap-filled) | Complete |
+| `GPP_CUT_16_f` | µmol m⁻² s⁻¹ | GPP (lenient USTAR, gap-filled) | Complete |
+| `GPP_CUT_84_f` | µmol m⁻² s⁻¹ | GPP (conservative USTAR, gap-filled) | Complete |
 | `GPP_DT_CUT_REF` | µmol m⁻² s⁻¹ | GPP from daytime NEE (reference) | Complete |
-| `GPP_DT_CUT_16` | µmol m⁻² s⁻¹ | GPP from daytime NEE (conservative) | Complete |
-| `GPP_DT_CUT_84` | µmol m⁻² s⁻¹ | GPP from daytime NEE (lenient) | Complete |
+| `GPP_DT_CUT_16` | µmol m⁻² s⁻¹ | GPP from daytime NEE (lenient) | Complete |
+| `GPP_DT_CUT_84` | µmol m⁻² s⁻¹ | GPP from daytime NEE (conservative) | Complete |
 | `Reco_CUT_REF` | µmol m⁻² s⁻¹ | Ecosystem respiration (reference) | Complete |
-| `Reco_CUT_16` | µmol m⁻² s⁻¹ | Respiration (conservative USTAR) | Complete |
-| `Reco_CUT_84` | µmol m⁻² s⁻¹ | Respiration (lenient USTAR) | Complete |
+| `Reco_CUT_16` | µmol m⁻² s⁻¹ | Respiration (lenient USTAR) | Complete |
+| `Reco_CUT_84` | µmol m⁻² s⁻¹ | Respiration (conservative USTAR) | Complete |
 | `Reco_DT_CUT_REF` | µmol m⁻² s⁻¹ | Respiration from daytime NEE (reference) | Complete |
-| `Reco_DT_CUT_16` | µmol m⁻² s⁻¹ | Respiration (conservative) | Complete |
-| `Reco_DT_CUT_84` | µmol m⁻² s⁻¹ | Respiration (lenient) | Complete |
+| `Reco_DT_CUT_16` | µmol m⁻² s⁻¹ | Respiration (lenient) | Complete |
+| `Reco_DT_CUT_84` | µmol m⁻² s⁻¹ | Respiration (conservative) | Complete |
 | `Reco_DT_CUT_REF_SD` | µmol m⁻² s⁻¹ | Standard deviation of respiration | Complete |
 | `LE_f` | W m⁻² | Latent heat flux (gap-filled) | Complete |
 | `LE_orig` | W m⁻² | Latent heat flux (measured) | ~71% (29.2% missing) |
@@ -106,21 +106,20 @@ print(df.columns)        # List of 37 variables
 ### **Gap-Filling Status**
 - **Gap-filled variables** (suffix `_f`): NEE, GPP, LE, temperature, VPD, radiation
   - Ready to use for analysis without additional gap-filling
-  - Used in the flux post-processing chain (Levels 2-4.1)
 - **Original measured variables** (suffix `_orig`): Raw measurements with gaps
   - Useful for demonstrating gap-filling methods
   - Contains natural measurement gaps during instrument downtime, maintenance, precipitation, etc.
 
 ### **Missing Data Patterns**
-- **High-gap fluxes**: NEE measurements with USTAR filtering have 60-77% gaps (conservative vs. lenient thresholds)
+- **High-gap fluxes**: NEE measurements with USTAR filtering have 60-77% gaps (lenient vs. conservative thresholds)
 - **Meteorological data**: Generally complete (>99%)
 - **Quality flags**: ~18% missing (no QC applied during those periods)
 
 ### **USTAR Filtering Scenarios**
 The dataset includes three USTAR threshold scenarios:
 - **REF (Reference)**: Standard threshold
-- **CUT_16**: Conservative (16th percentile) — more stringent filtering
-- **CUT_84**: Lenient (84th percentile) — less stringent filtering
+- **CUT_16**: Lenient (16th percentile), lower threshold, less stringent filtering
+- **CUT_84**: Conservative (84th percentile), higher threshold, more stringent filtering
 
 This allows demonstration of uncertainty quantification in flux post-processing.
 
@@ -131,9 +130,11 @@ This allows demonstration of uncertainty quantification in flux post-processing.
 - ✓ Quality control and outlier detection workflows
 - ✓ Visualization and time series analysis
 - ✓ Feature engineering and variable creation
-- ✓ Flux post-processing chain (Levels 2-4.1)
+- ✓ NEE partitioning into GPP and RECO (examples in `flux/partitioning/`)
 - ✓ Uncertainty quantification
 - ✓ Comparison of USTAR filtering scenarios
+
+The flux post-processing chain examples use a different dataset, Level-1 fluxes from CH-LAE (`load_exampledata_parquet_lae_level1_30MIN`).
 
 ### **Not Suitable For:**
 - ✗ Establishing ecosystem-specific conclusions (only one site, one ecosystem)
@@ -165,8 +166,8 @@ meteo = df[['Tair_f', 'RH', 'VPD_f', 'PPFD', 'Rg_f']]
 qcf_nee = df['QCF_NEE']  # Quality flag
 
 # Filter by USTAR scenario
-nee_conservative = df['NEE_CUT_16_f']  # More gaps removed
-nee_lenient = df['NEE_CUT_84_f']       # Fewer gaps removed
+nee_lenient = df['NEE_CUT_16_f']       # Lower threshold, more records kept
+nee_conservative = df['NEE_CUT_84_f']  # Higher threshold, more records removed
 ```
 
 ## File Location

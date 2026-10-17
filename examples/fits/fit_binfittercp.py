@@ -8,7 +8,7 @@ confidence and prediction intervals. BinFitterCP is useful for analyzing
 physical relationships and driver-response functions in environmental data.
 
 This example shows how to:
-- Bin data into equal-width intervals
+- Bin data into quantile bins (about the same number of records per bin)
 - Fit polynomial equations (linear, quadratic, cubic)
 - Extract and interpret results (fit parameters, confidence intervals, binned data)
 - Visualize fitted curves with uncertainty bands
@@ -66,7 +66,7 @@ bf = dv.analysis.BinFitterCP(
     predict_max_x=None,  # Use data max for predictions
     predict_min_x=None,  # Use data min for predictions
     n_predictions=1000,  # Number of fit points for smooth curve
-    n_bins_x=10,         # Divide X data into 10 equal-width bins
+    n_bins_x=10,         # Divide X data into 10 quantile bins
     bins_y_agg='mean',   # Aggregate Y values by mean per bin ('mean' or 'median')
     fit_type='quadratic_offset'  # Polynomial: y = ax² + bx + c
 )
@@ -210,7 +210,7 @@ print(f"\n" + "=" * 60)
 print(f"SUMMARY")
 print(f"=" * 60)
 print(f"\n1. DATA BINNING:")
-print(f"   - Divided {len(df)} records into 10 equal-width bins")
+print(f"   - Divided {len(df)} records into 10 quantile bins")
 print(f"   - Each bin contains {int(n_vals['min'])}-{int(n_vals['max'])} values")
 
 print(f"\n2. RELATIONSHIP:")

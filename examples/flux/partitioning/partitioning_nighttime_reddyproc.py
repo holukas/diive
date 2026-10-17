@@ -15,6 +15,9 @@ record at once** with a single temperature sensitivity E0. Output columns carry
 the ``_RP`` token, so both variants can live in one dataframe.
 
 Best for: matching a REddyProc partitioning, or cross-checking the ONEFlux one.
+
+``dv.flux.PartitioningNEE(method='nighttime', mode='reddyproc')`` runs the same
+port. It selects any of the four partitioning ports with these two arguments.
 """
 
 # %%

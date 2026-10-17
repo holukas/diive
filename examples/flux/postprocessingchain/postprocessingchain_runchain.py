@@ -32,7 +32,8 @@ The chain that ``run_chain`` runs:
              differencing, ``4 / 12 / 48``-record rolling median + std,
              and vectorised timestamps. SHAP feature reduction is **on**.
 - **L4.2** — NEE -> GPP + RECO partitioning with whichever of the four
-             variants you enabled via the ``partition_*`` fields. One fit per
+             variants you enabled via the ``partition_*`` flags, or the one
+             selected with ``partition_method`` / ``partition_mode``. One fit per
              USTAR scenario; nighttime variants read their gap-filled NEE from
              the L4.1 method named by ``partition_gapfill_method``.
 """
@@ -103,11 +104,10 @@ if 'VPD_T1_47_1_gfXG' in df.columns:
 # Step 3 — build the FluxConfig
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Only ``fluxcol`` and ``ustar_thresholds`` are unconditionally required.
-# Every other field is required *contextually* by ``run_chain`` based on
-# what's enabled: ``outlier_sigma_*`` are needed because L3.2 always runs;
-# ``mds_*`` columns are needed because we enabled MDS; ``gapfilling_features``
-# is needed because we enabled at least one ML method. If you forget any of
+# Only ``fluxcol`` and ``ustar_thresholds`` are always required. Other fields
+# are required depending on what is enabled: the ``mds_*`` columns because MDS
+# is on, ``gapfilling_features`` because at least one ML method is on. The
+# ``outlier_sigma_*`` fields are optional overrides. If you forget any of
 # them, ``run_chain`` raises one cumulative error listing every missing
 # field instead of failing partway through.
 #
@@ -131,13 +131,13 @@ cfg = FluxConfig(
     # / outlier_window_length only when you need to deviate.
     #
     # L2 quality tests: defaults apply (ssitc + gas_completeness + scf +
-    # vm97). Uncomment to add the optional signal-strength test:
+    # vm97). This line adds the optional signal-strength test:
     signal_strength_col='CUSTOM_SIGNAL_STRENGTH_IRGA72_MEAN',
     # L4.1 MDS (driver columns must already be in data.full_df)
     mds_swin='SW_IN_T1_47_1_gfXG',
     mds_ta='TA_T1_47_1_gfXG',
     mds_vpd='VPD_kPa',
-    # L4.1 ML — turn off XGBoost for a faster example; RF stays on.
+    # L4.1 ML: RF is off to keep the example fast, XGBoost is on.
     gapfill_mds=True,
     gapfill_rf=False,
     gapfill_xgb=True,
@@ -147,10 +147,14 @@ cfg = FluxConfig(
     # runs once per USTAR scenario. The partition_* driver columns must be in
     # data.full_df; lat / lon / utc_offset come from init_flux_data. The
     # nighttime variants read their gap-filled NEE from the L4.1 method named by
-    # partition_gapfill_method (MDS here); the daytime variants use measured NEE.
+    # partition_gapfill_method (MDS here). The daytime variants fit measured NEE.
+    # Daytime ONEFlux also reads that gap-filled NEE for windows without
+    # measured nighttime NEE.
     # This LAE subset ships only gap-filled meteo, so the "measured" partition_ta
     # / partition_sw_in reuse the gap-filled columns (a real workflow points them
     # at the raw measured series).
+    # To run one variant only, set partition_method='nighttime' or 'daytime'
+    # with partition_mode='oneflux' (default) or 'reddyproc' instead of the flags.
     partition_nighttime_oneflux=True,
     partition_nighttime_reddyproc=True,
     partition_daytime_reddyproc=True,

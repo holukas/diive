@@ -17,7 +17,8 @@ Contents
 - **postprocessingchain_runchain.py** — the single-call driver: one ``FluxConfig``, one ``run_chain``.
   Fixed sensible defaults, much less to write.
 - **postprocessingchain_level2.py** — Level 2 on its own, showing the per-test flag settings.
-- **postprocessingchain_partitioning.py** — Level 4.2, splitting gap-filled NEE into GPP and RECO.
+- **postprocessingchain_partitioning.py** — Level 4.2, splitting NEE into GPP and RECO with all four
+  partitioning variants. ``partition_method`` and ``partition_mode`` select a single one.
 
 Which entry point?
 ------------------

@@ -27,6 +27,7 @@ Pipeline at a glance::
   L4.2 -> ``run_level42_nighttime_oneflux`` / ``_nighttime_reddyproc`` /
           ``run_level42_daytime_reddyproc`` / ``_daytime_oneflux``
                                         — NEE -> GPP + RECO partitioning
+       or ``run_level42_partitioning``  (one variant, by method and mode)
 """
 
 # %%
@@ -346,6 +347,8 @@ print("XGBoost gap-filling complete")
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # Driver columns must exist in ``data.full_df``. MDS requires VPD in **kPa**.
+# ``mode`` is left at its default ``'diive'``. Pass ``mode='oneflux'`` or
+# ``mode='reddyproc'`` to reproduce those tools (see ``gapfill_mds.py``).
 
 VPD_COL = 'VPD_T1_47_1_gfXG'
 vpd_median = data.full_df[VPD_COL].median()
@@ -489,7 +492,12 @@ data.plot_cumulative_comparison(
 # ``utc_offset`` come from the container's metadata. The **nighttime** variants
 # need a gap-filled NEE for the GPP residual and read it from the L4.1 method
 # named by ``gapfill_method`` (default ``'mds'``, run in Step 7c). The
-# **daytime** variants use measured NEE only.
+# **daytime** variants fit measured NEE. Daytime ONEFlux also reads the L4.1
+# gap-filled NEE, where it exists, for windows without measured nighttime NEE.
+#
+# To run one variant only, ``run_level42_partitioning(data, method=...,
+# mode=...)`` selects it with two switches: ``method='nighttime'`` or
+# ``'daytime'``, and ``mode='oneflux'`` (default) or ``'reddyproc'``.
 #
 # This LAE subset ships only gap-filled (``_gfXG``) meteo, so we reuse those
 # columns for the "measured" TA / SW_IN inputs too; a real workflow points
@@ -506,7 +514,7 @@ data = run_level42_nighttime_oneflux(
 data = run_level42_nighttime_reddyproc(
     data, ta=TA_M, sw_in=SW_M, ta_f=TA_F, gapfill_method='mds')
 
-# Daytime variants (measured NEE only — no gap-filled NEE needed).
+# Daytime variants (fit measured NEE, no L4.1 run needed).
 data = run_level42_daytime_reddyproc(
     data, ta_f=TA_F, vpd_f=VPD_F, sw_in_f=SW_F)
 data = run_level42_daytime_oneflux(

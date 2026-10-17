@@ -14,6 +14,9 @@ temperatures to recover daytime respiration; GPP is then the difference
 ``GPP = RECO - NEE``.
 
 Best for: deriving GPP and RECO from gap-filled, USTAR-filtered NEE.
+
+``dv.flux.PartitioningNEE(method='nighttime', mode='oneflux')`` runs the same
+port. It selects any of the four partitioning ports with these two arguments.
 """
 
 # %%

@@ -139,7 +139,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs the headless-safe suite (113 scripts) in parallel with up to 12 workers, reporting execution time and any errors. Every example in `examples/` is registered; the database-backed meteoscreening workflows and the interactive TUI demo that used to be excluded no longer exist as example scripts.
+This runs all 113 examples in parallel with up to 12 workers and reports run times and errors.
 
 ## Finding Examples
 
@@ -205,5 +205,5 @@ When adding new examples:
 1. Place in the appropriate functional domain folder (`visualization/`, `analysis/`, `gapfilling/`, etc.)
 2. Add file reference to the category's **README.rst**
 3. Add file path to `run_all_examples.py` in the correct section
-4. Update **CATALOG.md** if introducing a new use case
+4. Add a row to **CATALOG.md** and update the counts in this README
 5. Ensure example runs in <60 seconds

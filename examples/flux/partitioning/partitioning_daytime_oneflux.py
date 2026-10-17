@@ -18,6 +18,9 @@ daytime REddyProc port (``_DT_RP``) and the nighttime ports (``_NT_OF`` /
 
 Best for: matching an ONEFlux / FLUXNET2015 daytime partitioning, or comparing
 the ONEFlux and REddyProc daytime implementations.
+
+``dv.flux.PartitioningNEE(method='daytime', mode='oneflux')`` runs the same
+port. It selects any of the four partitioning ports with these two arguments.
 """
 
 # %%
@@ -29,6 +32,11 @@ the ONEFlux and REddyProc daytime implementations.
 # drivers feed the fits and the flux prediction. Unlike the nighttime method, it
 # does NOT use solar geometry or latitude - the day/night split is the measured
 # radiation threshold.
+#
+# The gap-filled NEE (``nee_f``) is optional. ONEFlux reads it only for windows
+# without any measured nighttime NEE, for example at high latitudes in summer
+# or in long gaps. Without it such windows are not fitted and a warning lists
+# them.
 #
 # The bundled CH-DAV dataset ships REddyProc daytime reference columns
 # (``Reco_DT_CUT_REF`` / ``GPP_DT_CUT_REF``). They come from a different

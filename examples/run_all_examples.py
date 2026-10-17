@@ -8,11 +8,10 @@ Usage:
     python examples/run_all_examples.py
 
 Runs each example with ``MPLBACKEND=Agg`` so matplotlib writes figures without
-opening a window. Eighteen examples call ``plt.show()``, which blocks until a
-window is closed; unattended that meant each one burned the full 120 s timeout
-and was reported as a failure it had not earned. Set ``MPLBACKEND`` yourself to
-override — e.g. ``MPLBACKEND=QtAgg`` to watch the plots appear — but then the
-run needs someone to close each window.
+opening a window. Sixteen examples call ``plt.show()``. With a window backend
+each of them would block until its window is closed, run into the timeout and
+count as failed. To watch the plots, set ``MPLBACKEND`` yourself, for example
+``MPLBACKEND=QtAgg``. Then someone has to close each window.
 
 Examples are otherwise left to use the machine as they see fit; see
 ``_child_env`` for why capping their thread count made the suite slower.
@@ -141,7 +140,6 @@ EXAMPLE_FILES = [
     'flux/lowres/flux_ustar_mp_detection.py',
     'flux/lowres/flux_ustar_vekuri_detection.py',
     'flux/lowres/flux_ustar_method_comparison.py',
-    # Flux - High-resolution analysis
     # Gap-filling
     'gapfilling/gapfill_interpolate_generous.py',
     'gapfilling/gapfill_interpolate_conservative.py',

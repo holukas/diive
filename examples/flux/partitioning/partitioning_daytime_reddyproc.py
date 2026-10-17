@@ -16,6 +16,9 @@ RECO and GPP are then predicted for every record. Output columns carry the
 
 Best for: matching a REddyProc daytime partitioning, or comparing the daytime
 and nighttime approaches.
+
+``dv.flux.PartitioningNEE(method='daytime', mode='reddyproc')`` runs the same
+port. It selects any of the four partitioning ports with these two arguments.
 """
 
 # %%
