@@ -108,9 +108,10 @@ class RandomUncertaintyPAS20:
 
     Key Features:
 
-    * Hierarchical approach ensures all records have uncertainty estimates
-    * Proper error propagation through cumulative calculations using uncertainties package
-    * Separate day/night or combined uncertainty depending on data quality
+    * The hierarchy gives every record an uncertainty estimate.
+    * The cumulative uncertainty adds the per-record uncertainties in
+      quadrature and skips missing values, so one NaN does not make the rest
+      of the cumulative NaN.
 
     References:
         Hollinger, D. Y., & Richardson, A. D. (2005). Uncertainty in eddy covariance measurements
@@ -172,14 +173,14 @@ class RandomUncertaintyPAS20:
     def randunc_results(self):
         """Results subset containing uncertainty and auxiliary variables"""
         if not isinstance(self._randunc_results, DataFrame):
-            raise Exception(f'No results available. Calculate results by calling .calc_random_uncertainty()')
+            raise Exception(f'No results available. Call .run() first.')
         return self._randunc_results
 
     @property
     def randunc_results_cumulatives(self):
         """Cumulatives including random uncertainty propagation"""
         if not isinstance(self._randunc_results_cumulatives, DataFrame):
-            raise Exception(f'No results available. Calculate results by calling .calc_cumulative_error_propagation()')
+            raise Exception(f'No results available. Call .run() first.')
         return self._randunc_results_cumulatives
 
     @property

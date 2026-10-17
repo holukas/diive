@@ -1,6 +1,6 @@
 """
 DAYTIME PARTITIONING REDDYPROC: NEE -> GPP + RECO (Lasslop et al. 2010)
-======================================================================
+=======================================================================
 
 Faithful, vectorized Python port of the REddyProc *daytime* partitioning
 (``partitionNEEGL`` in REddyProc's ``PartitioningLasslop10.R``), the Lasslop et

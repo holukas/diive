@@ -16,6 +16,7 @@ Two entry points
         make_level32_detector, run_level32,
         run_level33_constant_ustar,
         run_level41_mds, run_level41_rf, run_level41_xgb,
+        run_level42_partitioning,
     )
 
     data = init_flux_data(df, fluxcol='FC', site_lat=..., site_lon=..., utc_offset=1)
@@ -25,6 +26,8 @@ Two entry points
     data = run_level32(data, outlier_detector=sod)
     data = run_level33_constant_ustar(data, thresholds=[0.18], threshold_labels=['CUT_50'])
     data = run_level41_mds(data, swin='SW_IN', ta='TA', vpd='VPD_kPa')
+    data = run_level42_partitioning(data, method='nighttime', ta='TA', sw_in='SW_IN',
+                                    ta_f='TA_F')
 
 **Single-call convenience API** — one ``FluxConfig``, one ``run_chain`` call::
 
@@ -34,21 +37,18 @@ Two entry points
     data = init_flux_data(df, fluxcol='FC', site_lat=..., site_lon=..., utc_offset=1)
     data = run_chain(data, cfg)
 
-``run_chain`` is intentionally simple and **not** a parity superset of the
-composable API — it picks fixed defaults for every per-level knob beyond what
-``FluxConfig`` exposes (see the "What ``run_chain`` does *not* expose" section
-in :func:`run_chain` for the exact list). The composable per-level callables
-are the path to **full control** — every detector class, every model
-hyperparameter, every diagnostic flag is reachable there and only there. Reach
-for ``run_chain`` when you want a clean, low-friction default; reach for the
-composable API when you need to override anything beyond ``FluxConfig``.
+``run_chain`` covers the standard pipeline and uses fixed defaults for every
+per-level setting that ``FluxConfig`` does not expose (see "What ``run_chain``
+does *not* expose" in :func:`run_chain`). Every detector class, model
+hyperparameter and diagnostic flag is reachable only through the composable
+per-level callables.
 
 Why the per-level signatures look different
 -------------------------------------------
 
-Each level's signature matches the *shape* of what it controls.  The same shape
-forced onto every level would harm at least one of them, so the API embraces five
-small patterns rather than one bad uniform one:
+Each level's signature matches the *shape* of what it controls. One shape
+forced onto every level would fit at least one of them badly, so the API uses
+a few small patterns:
 
 ============================== ============================= ===============================================
 Level                          Shape                         Why this shape
@@ -69,16 +69,15 @@ Level                          Shape                         Why this shape
 ``run_level41_*``              built object + ad-hoc kwargs  Feature engineering is itself an 8-stage
                                                              configuration; passing it as a built object
                                                              is correct.
+``run_level42_*``              driver column names           Each variant names the measured and gap-filled
+                                                             meteo columns it reads from ``full_df``.
+                                                             ``run_level42_partitioning`` adds the
+                                                             ``method`` / ``mode`` switches.
 ============================== ============================= ===============================================
 
-If you find the per-level variation distracting, use ``run_chain(data, config)``
-as the **high-level entry point**: one ``FluxConfig`` carries the
-typical-user decisions (which L2 tests, which USTAR mode, which gap-filling
-methods, which driver columns), and ``run_chain`` picks fixed defaults for
-everything else. It is **not** a parity superset of the composable API —
-the per-detector and per-model knobs are reachable only by calling the
-per-level functions directly. See :func:`run_chain` for the explicit list
-of what it does and does not expose.
+``run_chain(data, config)`` hides these differences: one ``FluxConfig`` holds
+the usual decisions (which L2 tests, which USTAR mode, which gap-filling
+methods, which partitioning, which driver columns).
 
 Column naming convention
 ------------------------
@@ -95,9 +94,10 @@ encode *which* quality threshold was applied:
   reference series, used as the training target for ML gap-filling and
   anywhere you want to be conservative.
 
-When ``accept_qcf_below=1`` the two contain identical values (both keep only
-QCF=0), but the column names still differ to preserve the *intent* — re-run
-with ``accept_qcf_below=2`` and they diverge without renaming.  The same
+With ``daytime_accept_qcf_below=1`` and ``nighttime_accept_qcf_below=1``
+(the defaults) the two contain identical values (both keep only QCF=0), but
+the column names still differ to preserve the *intent*. Re-run with ``2`` and
+they diverge without renaming.  The same
 distinction shows up on ``LevelResults`` fields: ``filteredseries_*_qcf``
 (user-accepted) vs ``filteredseries_hq`` / ``filteredseries_level33_hq``
 (strictly QCF=0, "hq" = high-quality).

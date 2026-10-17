@@ -3,7 +3,7 @@ RUN CHAIN: SINGLE-CALL FLUX POST-PROCESSING DRIVER
 ===================================================
 
 Convenience function that drives the full Swiss FluxNet post-processing chain
-(L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1) from one ``FluxConfig``.
+(L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1, optionally L4.2) from one ``FluxConfig``.
 
 For custom L3.2 outlier pipelines or custom feature engineering, drop down to
 the composable per-level API documented in the package docstring.
@@ -65,7 +65,7 @@ def _partition_flags(config: FluxConfig) -> list[str]:
 
 
 def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
-    """Drive the full post-processing chain (L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1).
+    """Drive the full post-processing chain (L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1 -> L4.2).
 
     Single-call convenience wrapper for the standard FLUXNET-style workflow.
     Each step is the same composable callable you would otherwise call by hand;
@@ -124,8 +124,10 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
       ``data.levels.ustar_detection``.
 
     *Level-4.1 (gap-filling)* — runs only the methods whose
-    ``config.gapfill_*`` flag is ``True``. MDS uses the underlying
-    :class:`FluxMDS` defaults for tolerances and ``avg_min_n_vals``. RF and
+    ``config.gapfill_*`` flag is ``True``. MDS runs in ``config.mds_mode``
+    (default ``'diive'``) with the optional driver QC columns
+    ``config.mds_*_qc``, and uses the :class:`FluxMDS` defaults for
+    tolerances and ``avg_min_n_vals``. RF and
     XGBoost are built with a default ``FeatureEngineer`` that ships with
     the symmetric lag window ``[-2, 2]``, first- and second-order
     differencing, 4 / 12 / 48-record rolling median + std, and vectorized
@@ -149,16 +151,17 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     ``run_level2`` / ``run_level31`` / ``make_level32_detector`` +
     ``run_level32`` / ``run_level33_constant_ustar`` (or
     ``run_level33_ustar_detection``) / ``run_level41_mds`` /
-    ``run_level41_rf`` / ``run_level41_xgb`` instead.
+    ``run_level41_rf`` / ``run_level41_xgb`` / ``run_level42_partitioning``
+    instead.
 
     - **L3.2** — non-Hampel detectors (z-score rolling, abslim, LocalSD,
       manual removal), multi-step pipelines (Hampel + something else with
       sequential ``addflag()``), and Hampel sub-options
       (``use_differencing``, ``repeat``, ``k``, ``window_length`` per call).
     - **L3.3** — diagnostic ``showplot=True`` and ``verbose=True`` (both
-      forced to ``False`` here for non-interactive use); custom
+      forced to ``False`` here for non-interactive use), custom
       ``detector_class`` / ``detector_kwargs`` in bootstrap mode (defaults
-      to ONEFlux moving-point).
+      to ONEFlux moving-point), and VUT (``mode='vut'``).
     - **L4.1 MDS** — ``swin_tol`` / ``ta_tol`` / ``vpd_tol`` /
       ``avg_min_n_vals`` (fixed at :class:`FluxMDS` defaults).
     - **L4.1 RF / XGBoost** — model hyperparameters (``n_estimators``,
@@ -177,8 +180,10 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     ``gapfilling_features`` is required when ``gapfill_rf`` or
     ``gapfill_xgb`` is ``True``; ``ustar_thresholds`` is required in
     ``'constant'`` mode; ``ustar_bootstrap_ta_col`` / ``..._swin_col`` are
-    required in ``'bootstrap'`` mode. A single ``ValueError`` lists every
-    missing field.
+    required in ``'bootstrap'`` mode. Each enabled partitioning variant
+    needs its ``partition_*`` driver columns, and the nighttime variants need
+    the L4.1 method named by ``partition_gapfill_method`` to be on. A single
+    ``ValueError`` lists every missing field.
 
     Args:
         data: Initial container from ``init_flux_data()``.

@@ -97,8 +97,9 @@ def cascade_reset(data: FluxLevelData, from_idstr: str) -> FluxLevelData:
       (None for scalar fields, {} for dict fields).
     - ``level_ids`` with the affected level idstrs removed.
     - ``added_columns`` with the affected entries removed.
-    - ``filteredseries`` set to ``None`` (it always belongs to "the most
-      recently completed level", which has just been invalidated).
+    - ``filteredseries`` reset to the series of the latest level that
+      survives the cascade (``None`` if no level survives), because the level
+      it belonged to has just been invalidated.
 
     Args:
         data: Current FluxLevelData.

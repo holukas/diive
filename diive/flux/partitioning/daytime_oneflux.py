@@ -1,6 +1,6 @@
 """
 DAYTIME PARTITIONING ONEFLUX: NEE -> GPP + RECO (Lasslop et al. 2010)
-====================================================================
+=====================================================================
 
 Faithful, vectorized Python port of the ONEFlux *daytime* partitioning
 (``flux_part_gl2010`` in ``oneflux.partition.daytime``), the Lasslop et al.
@@ -1076,7 +1076,9 @@ class DaytimePartitioningOneFlux:
     and every window parameter (143 windows on CH-DAV 2016, 77-123 per CH-LAE
     run, 142-162 per hourly run). Per record, GPP and RECO differ by at most
     8e-6 umol m-2 s-1, float32 rounding, and the annual sums agree to
-    0.0001%.
+    0.0001%. On the FLUXNET v1.3 sites FI-Hyy, FI-Var, IL-Yat, AU-GWW and
+    GF-Guy (2023, 2024) and DE-Hai (2020, 2024) every fit is bitwise
+    identical as well.
 
     A fit that returns no covariance matrix (``leastsq`` did not converge)
     makes ONEFlux abort the year. Its pipeline then removes the measured NEE

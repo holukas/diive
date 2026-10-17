@@ -56,7 +56,7 @@ def make_level32_detector(
         sod.flag_outliers_hampel_test(window_length=48 * 13, ...)
         sod.addflag()   # <- required after every detector call
 
-        sod.flag_outliers_zscore_rolling(...)
+        sod.flag_outliers_zscore_rolling_test(...)
         sod.addflag()   # <- required again
 
         data = run_level32(data, outlier_detector=sod)

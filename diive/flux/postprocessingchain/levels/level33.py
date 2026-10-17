@@ -11,7 +11,7 @@ Entry points:
 * ``run_level33_variable_ustar`` — apply time-varying (e.g. per-year, VUT)
   threshold Series, one per scenario.
 * ``run_level33_ustar_detection`` — auto-detect the threshold via bootstrap, then
-  apply it as CUT (constant), VUT (per-year), or both (``mode=`` argument).
+  apply it as CUT (constant) or VUT (per-year), selected with ``mode=``.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -59,9 +59,10 @@ def run_level33_constant_ustar(
         **Constant thresholds only.** This function accepts one or more fixed
         USTAR values.  The community standard since Papale et al. (2006) is to
         derive the threshold via a bootstrap analysis that accounts for
-        inter-annual and seasonal variability (e.g. using the R package
-        REddyProc).  Run that analysis externally, then pass its output
-        percentiles (e.g. 16th, 50th, 84th) as ``thresholds`` here.
+        inter-annual and seasonal variability.  Pass the percentiles of such
+        an analysis (e.g. 16th, 50th, 84th, from REddyProc or a previous run)
+        as ``thresholds`` here, or use :func:`run_level33_ustar_detection` to
+        run the bootstrap in the chain.
 
         **USTAR filtering applies only to CO2, CH4, and N2O fluxes.**
         Do *not* apply it to energy fluxes (H, LE) — those are not subject
@@ -165,7 +166,7 @@ def run_level33_constant_ustar(
     flux_corrected_col = data.levels.flux_corrected_col
 
     # Re-run cleanup: drop columns from any previous L3.3 invocation (which
-    # may have used different USTAR labels), and clear L4.1 downstream state.
+    # may have used different USTAR labels), and clear L4.1/L4.2 downstream state.
     if idstr in data.level_ids:
         data = cascade_reset(data, idstr)
     pre_columns = list(data.fpc_df.columns)
@@ -384,9 +385,8 @@ def run_level33_ustar_detection(
     CUT and VUT are mutually exclusive filtering strategies — one is applied before
     gap-filling (the percentiles are the uncertainty scenarios within the chosen strategy).
 
-    Requires Level-3.1 (``data.levels.flux_corrected_col``) to have been run.
-    Level-3.2 is strongly recommended before calling this function to avoid bias from
-    outliers at low-turbulence conditions.
+    Requires Level-3.1 (``data.levels.flux_corrected_col``) and Level-3.2 to have
+    been run: outliers at low turbulence would bias the bootstrap threshold.
 
     **When to use which function:**
 
@@ -413,10 +413,12 @@ def run_level33_ustar_detection(
             Defaults to 1.
         percentiles: Bootstrap percentiles to compute and use as separate USTAR
             scenarios.  Each value ``p`` produces one scenario labelled
-            ``CUT_<p>``, zero-padded to a uniform width so labels can never be
-            substrings of each other (e.g. ``(16, 50, 84)`` -> ``CUT_16`` /
-            ``CUT_50`` / ``CUT_84``; ``(5, 50, 95)`` -> ``CUT_05`` / ``CUT_50``
-            / ``CUT_95``).  Defaults to ``(16, 50, 84)``.
+            ``CUT_<p>`` (``VUT_<p>`` with ``mode='vut'``), zero-padded to a
+            uniform width so labels can never be substrings of each other
+            (e.g. ``(16, 50, 84)`` -> ``CUT_16`` / ``CUT_50`` / ``CUT_84``,
+            ``(5, 50, 95)`` -> ``CUT_05`` / ``CUT_50`` / ``CUT_95``).  Defaults
+            to ``(16, 50, 84)``.
+        mode: ``'cut'`` (default) or ``'vut'``, see above.
         showplot: Show diagnostic plots from USTAR filtering. Defaults to True.
         verbose: Print progress and detection summary. Defaults to True.
 
@@ -431,9 +433,11 @@ def run_level33_ustar_detection(
             annual = data.levels.ustar_detection.annual_stats_
 
     Raises:
-        RuntimeError: If ``run_level31()`` has not been called, or if threshold
-            detection produces NaN for any requested percentile (e.g. too little
-            nighttime data).
+        RuntimeError: If ``run_level31()`` or ``run_level32()`` has not been
+            called, or if threshold detection produces NaN for any requested
+            percentile (e.g. too little nighttime data).
+        ValueError: If ``mode`` is not ``'cut'`` or ``'vut'``, or
+            ``detector_kwargs`` holds a column-name key.
     """
     from diive.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
     from diive.flux.lowres.ustar_mp_detection import UstarMovingPointDetection

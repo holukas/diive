@@ -1,18 +1,20 @@
 """
 POSTPROCESSINGCHAIN.CODEGEN: RENDER CHAIN CHOICES AS A RUNNABLE SCRIPT
-=====================================================================
+======================================================================
 
 Turn the parameter choices a caller makes (e.g. in the GUI's flux-chain tab)
 into a self-contained, runnable diive script — so a point-and-click run stays
-reproducible. Two renderers:
+reproducible. Two forms:
 
-- :func:`chain_to_code` — the single-call ``FluxConfig`` + ``run_chain`` form.
-- :func:`level2_to_code` — the composable ``init_flux_data`` + ``run_level2``
-  form (the incremental per-level path).
+- :func:`chain_to_code`: the single-call ``FluxConfig`` + ``run_chain`` form.
+- :func:`level2_to_code`, :func:`level31_to_code`, :func:`level32_to_code`,
+  :func:`level33_to_code`, :func:`level41_to_code` and
+  :func:`level42_to_code`: the composable per-level form, from
+  ``init_flux_data`` up to the named level.
 
 Default-valued kwargs are omitted from the rendered call (introspected from the
-``FluxConfig`` dataclass and the ``init_flux_data`` signature), so the script
-shows only the decisions that actually differ from the defaults.
+``FluxConfig`` dataclass and the function signatures), so the script shows
+only the decisions that differ from the defaults.
 
 This belongs in the library (not the GUI): it encodes the exact API call shape
 and must stay correct as that API evolves; the GUI only calls it.
@@ -212,10 +214,10 @@ def _level33_defaults() -> dict:
 def level33_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: dict,
                     level32_steps: list[dict], level33_kwargs: dict,
                     df_var: str = "df", load_hint: str | None = None) -> str:
-    """Render the composable chain through Level 3.3 (constant-USTAR filtering).
+    """Render the composable chain through Level 3.3 (USTAR filtering).
 
     L3.3 requires L3.2 to have run, so the L3.2 outlier chain is always rendered
-    before the ``run_level33_constant_ustar`` call.
+    before the L3.3 call.
 
     Args:
         init_kwargs: kwargs for ``init_flux_data`` (without ``df``).
@@ -223,7 +225,8 @@ def level33_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
         level31_kwargs: kwargs for ``run_level31`` (storage correction).
         level32_steps: ordered ``[{"method": str, "kwargs": dict}, ...]``.
         level33_kwargs: kwargs for ``run_level33_constant_ustar`` (``thresholds``,
-            optional ``threshold_labels``).
+            optional ``threshold_labels``), or for
+            ``run_level33_ustar_detection`` when it holds ``"_detection": True``.
         df_var, load_hint: as in :func:`chain_to_code`.
     """
     lines = _init_level2_lines(
@@ -429,7 +432,7 @@ def level42_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
         level2_settings: ``{test_name: settings_dict}`` for ``run_level2``.
         level31_kwargs: kwargs for ``run_level31`` (storage correction).
         level32_steps: ordered ``[{"method": str, "kwargs": dict}, ...]``.
-        level33_kwargs: kwargs for ``run_level33_constant_ustar``.
+        level33_kwargs: L3.3 spec, as in :func:`level33_to_code`.
         level41_cfg: gap-filling selection — see :func:`_level41_block`.
         level42_cfg: partitioning selection — see :func:`_level42_block`.
         df_var, load_hint: as in :func:`chain_to_code`.
@@ -471,7 +474,7 @@ def level41_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
         level2_settings: ``{test_name: settings_dict}`` for ``run_level2``.
         level31_kwargs: kwargs for ``run_level31`` (storage correction).
         level32_steps: ordered ``[{"method": str, "kwargs": dict}, ...]``.
-        level33_kwargs: kwargs for ``run_level33_constant_ustar``.
+        level33_kwargs: L3.3 spec, as in :func:`level33_to_code`.
         level41_cfg: gap-filling selection — see :func:`_level41_block`.
         df_var, load_hint: as in :func:`chain_to_code`.
     """

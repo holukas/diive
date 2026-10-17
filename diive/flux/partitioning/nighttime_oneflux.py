@@ -1,6 +1,6 @@
 """
 NIGHTTIME PARTITIONING ONEFLUX: NEE -> GPP + RECO (Reichstein et al. 2005)
-=========================================================================
+==========================================================================
 
 Faithful, vectorized Python port of the ONEFlux nighttime partitioning
 reference implementation (``oneflux.partition.nighttime``), which itself is a
@@ -498,8 +498,10 @@ class NighttimePartitioningOneFlux:
     records, against a native ONEFlux 1.3.7 run (NumPy 1.26, SciPy 1.17): RECO, GPP
     (ordinary and robust), Rref and E0 are bitwise identical in every record,
     also with gaps in measured TA, SW_IN and nighttime NEE, and at CH-LAE,
-    where only 17-20 % of NEE is measured. This relies on SciPy's ``leastsq``
-    and ``interp1d`` behaving as in that version.
+    where only 17-20 % of NEE is measured. The same holds for the FLUXNET
+    v1.3 sites FI-Hyy, FI-Var, IL-Yat, AU-GWW and GF-Guy (2023, 2024) and
+    DE-Hai (2020, 2024). This relies on SciPy's ``leastsq`` and ``interp1d``
+    behaving as in that version.
 
     Example: ``examples/flux/partitioning/partitioning_nighttime_oneflux.py``
 

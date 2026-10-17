@@ -76,15 +76,14 @@ class FluxConfig:
     API. See :func:`run_chain` for the full list of what is and is not
     exposed. The composable per-level callables are the path to full control.
 
-    Only ``fluxcol`` and ``ustar_thresholds`` are unconditionally required.
-    All other fields default to ``None`` / sensible booleans and are validated
-    *contextually* by ``run_chain`` — e.g. ``gapfilling_features`` is required
-    only when ``gapfill_rf`` or ``gapfill_xgb`` is ``True``;
-    ``outlier_sigma_*`` is unconditionally required by ``run_chain`` (L3.2
-    always runs because L3.3 depends on it);
-    ``mds_swin`` / ``mds_ta`` / ``mds_vpd`` are required only when
-    ``gapfill_mds=True``. This way each new flux declaration only needs the
-    fields that match the features it actually enables.
+    Only ``fluxcol`` is always required. ``run_chain`` checks the other
+    fields only for the features they serve: ``ustar_thresholds`` in the
+    default ``ustar_detection_mode='constant'``, ``gapfilling_features`` when
+    ``gapfill_rf`` or ``gapfill_xgb`` is ``True``, ``mds_swin`` / ``mds_ta``
+    / ``mds_vpd`` when ``gapfill_mds=True``, and the ``partition_*`` driver
+    columns for each enabled partitioning variant. The ``outlier_*`` fields
+    are optional overrides of the Hampel defaults (L3.2 always runs). So each
+    flux declaration needs only the fields for the features it enables.
 
     Example — NEE, H, and N2O configs::
 
@@ -276,7 +275,7 @@ class FluxConfig:
 
     ``None`` (the default) defers to
     :class:`~diive.preprocessing.outlier_detection.hampel.Hampel`'s own
-    ``n_sigma_daytime`` default (currently 5.5). Override only when you have
+    ``n_sigma`` default (currently 5.5). Override only when you have
     inspected the flux record and have a reason to pick a different
     threshold — typical bands are 5–6 for CO2/H/LE and 3–5 for trace gases
     (N2O, CH4). L3.2 always runs in ``run_chain`` because L3.3 USTAR
@@ -288,7 +287,7 @@ class FluxConfig:
 
     ``None`` (the default) defers to
     :class:`~diive.preprocessing.outlier_detection.hampel.Hampel`'s own
-    ``n_sigma_nighttime`` default (currently 5.5). Override only when you
+    ``n_sigma`` default (currently 5.5). Override only when you
     have a deliberate reason to choose a different nighttime threshold;
     see ``outlier_sigma_daytime`` for typical ranges."""
 
@@ -510,16 +509,17 @@ class LevelResults:
 
     The corresponding columns in ``data.fpc_df`` carry the same distinction in
     their suffixes: ``..._QCF`` for the user-accepted series and ``..._QCF0``
-    for the strictly-QCF=0 series.  When ``accept_qcf_below=1`` the two
-    contain identical values, but the names stay distinct so that the
+    for the strictly-QCF=0 series.  With ``daytime_accept_qcf_below=1`` and
+    ``nighttime_accept_qcf_below=1`` (the defaults) the two contain identical
+    values, but the names stay distinct so that the
     *intent* of each column is preserved across re-runs with different
     thresholds.
 
     **USTAR scenario dicts:** ``level33_qcf``, ``filteredseries_level33_qcf``,
-    ``filteredseries_level33_hq``, ``level41_*`` are keyed by the scenario labels
-    supplied to ``run_level33_constant_ustar()`` (e.g. ``'CUT_16'``, ``'CUT_50'``,
-    ``'CUT_84'`` for the 16th, 50th, and 84th percentiles of a bootstrap USTAR
-    threshold distribution).
+    ``filteredseries_level33_hq``, ``level41_*`` and ``level42_*`` are keyed by
+    the L3.3 scenario labels (e.g. ``'CUT_16'``, ``'CUT_50'``, ``'CUT_84'`` for
+    the 16th, 50th, and 84th percentiles of a bootstrap USTAR threshold
+    distribution).
 
     ``filteredseries_level33_hq`` holds the QCF=0-only (strictest quality) series
     per USTAR scenario — the analogue of ``filteredseries_hq`` at the L3.3 level.
@@ -651,14 +651,14 @@ class FluxLevelData:
       results, or plotting quality-controlled fluxes.
     - ``full_df`` — the *full input* dataframe (original EddyPro columns plus
       potential radiation and day/night flags added by ``init_flux_data``).
-      Level-2 reads EddyPro diagnostic columns from here; Level-4.1 reads
+      Level-2 reads EddyPro diagnostic columns from here. Level-4.1 reads
       meteorological driver columns (e.g. ``TA_1_1_1``, ``SW_IN``) from here
-      as gap-filling features.  Do not modify this dataframe — level callables
-      use it read-only.
+      as gap-filling features, and Level-4.2 its partitioning drivers.  Do not
+      modify this dataframe. Level callables use it read-only.
 
     Need a new driver mid-pipeline (e.g. a computed VPD column for MDS)?
     Use ``add_driver(data, series, name=...)`` — it adds the column to
-    ``full_df`` where L4.1 will actually look for it, not to ``fpc_df``.
+    ``full_df`` where L4.1 and L4.2 look for it, not to ``fpc_df``.
     """
 
     fpc_df: pd.DataFrame
@@ -670,18 +670,20 @@ class FluxLevelData:
     levels: LevelResults = field(default_factory=LevelResults)
     level_ids: list[str] = field(default_factory=list)
     """Ordered list of level idstrs that have run (``'L2'``, ``'L3.1'``,
-    ``'L3.2'``, ``'L3.3'``, ``'L4.1'``). Records the *cascade-aware* level
-    boundaries only — for L4.1 the single entry ``'L4.1'`` is appended
-    whichever subset of MDS / RF / XGBoost ran; it does not tell you which
-    methods produced output. To discover which gap-filling methods are
-    available, use :meth:`gapfilled_cols` or
-    :meth:`LevelResults.level41_methods`. Cleared by the re-run cascade
+    ``'L3.2'``, ``'L3.3'``, ``'L4.1'``, ``'L4.2'``). Records the
+    *cascade-aware* level boundaries only. For L4.1 the single entry
+    ``'L4.1'`` is appended whichever subset of MDS / RF / XGBoost ran, so it
+    does not tell you which methods produced output, and the same holds for
+    the L4.2 variants. To find out, use :meth:`gapfilled_cols` /
+    :meth:`LevelResults.level41_methods` and :meth:`partitioned_cols` /
+    :meth:`LevelResults.level42_variants`. Cleared by the re-run cascade
     (see ``levels/_rerun.py``)."""
     added_columns: dict[str, list[str]] = field(default_factory=dict)
     """Columns each level added to ``fpc_df``, keyed by level idstr (``'L2'``,
-    ``'L3.1'``, ``'L3.2'``, ``'L3.3'``) or per-method L4.1 key
-    (``'L4.1_mds'``, ``'L4.1_rf'``, ``'L4.1_xgb'``). Used to clean up stale
-    columns when a level is re-run."""
+    ``'L3.1'``, ``'L3.2'``, ``'L3.3'``), per-method L4.1 key
+    (``'L4.1_mds'``, ``'L4.1_rf'``, ``'L4.1_xgb'``) or per-variant L4.2 key
+    (``'L4.2_nt_of'``, ``'L4.2_nt_rp'``, ``'L4.2_dt_rp'``, ``'L4.2_dt_of'``).
+    Used to clean up stale columns when a level is re-run."""
 
     def __repr__(self) -> str:
         rows, cols = self.fpc_df.shape
@@ -1390,11 +1392,11 @@ def add_driver(
 ) -> FluxLevelData:
     """Add a Series as a driver column to ``data.full_df``.
 
-    L4.1 gap-filling reads its driver / feature columns from ``data.full_df``,
-    not ``data.fpc_df`` — a footgun, because the working dataframe (``fpc_df``)
-    is the one that grows level-by-level and feels like the natural place to
-    add a new variable. Use this helper to put the column where L4.1 will
-    actually look for it.
+    L4.1 gap-filling and L4.2 partitioning read their driver / feature
+    columns from ``data.full_df``, not ``data.fpc_df``. This is easy to get
+    wrong, because the working dataframe (``fpc_df``) is the one that grows
+    level by level and feels like the natural place to add a new variable.
+    Use this helper to put the column where L4.1 and L4.2 look for it.
 
     Args:
         data: Current FluxLevelData.

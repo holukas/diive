@@ -73,8 +73,10 @@ included. The individual window fits stay
 sensitive to that last bit: in poorly constrained windows (E0 near zero or
 negative, SD of hundreds of K) the difference grows to 2e-5 relative, in the
 three averaged windows it stays below 1e-7. The same last-bit dependence
-means R's own results can differ between platforms whose ``exp`` rounds
-differently.
+means R's own results can differ between platforms where ``exp`` rounds
+differently. On six FLUXNET v1.3 sites (FI-Hyy, FI-Var, IL-Yat, AU-GWW,
+DE-Hai, GF-Guy, two years each) the results agree with REddyProc at the
+same last-bit level.
 
 REddyProc has no outlier-robust RECO variant, so this port emits no ``*_ROB``
 columns (unlike the ONEFlux variant).
