@@ -141,7 +141,9 @@ class _MdsGapFillingBase:
             mode: ``'diive'`` (default), ``'oneflux'`` or ``'reddyproc'``.
                 All three use the same tolerances and order of methods.
                 ``'oneflux'`` fills with the plain mean of the similar records
-                and reproduces ONEFlux's ``gf_mds`` bit for bit.
+                and reproduces ONEFlux's ``gf_mds`` bit for bit. Use it when
+                results must match ICOS or FLUXNET products, which are
+                gap-filled with ONEFlux.
                 ``'reddyproc'`` reproduces REddyProc 1.3.4 ``sMDSGapFill``
                 (default method, plain mean): its look-up windows include
                 both ends and stop at +/-70 days, its last diurnal-cycle
@@ -582,7 +584,8 @@ class FluxMDS(_MdsGapFillingBase):
     ``mode='diive'`` (default) fills with the symmetric mean of Vekuri et al.
     (2023) in the methods that match on SWIN, which removes a bias in the
     filled fluxes and the carbon balance. ``mode='oneflux'`` fills with the
-    plain mean, as ONEFlux does, and ``mode='reddyproc'`` follows REddyProc's
+    plain mean, as ONEFlux does (use it to compare with ICOS or FLUXNET
+    products), and ``mode='reddyproc'`` follows REddyProc's
     ``sMDSGapFill``. See ``mode`` in ``__init__``.
 
     Measured agreement (``mode='oneflux'``): compared with ONEFlux's ``gf_mds`` tool, compiled from
