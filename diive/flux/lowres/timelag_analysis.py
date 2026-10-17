@@ -187,9 +187,9 @@ class TimeLagAnalysis:
             Lowest lag value in seconds kept for display and analysis. Bins are
             compared against their inclusive start, not their index. Default: 0
         histogram_end_seconds : float
-            Highest lag value in seconds kept for display and analysis. If no bin
-            falls into the range, the whole lag range is kept and a warning is
-            issued. Default: 10
+            Highest lag value in seconds kept for display and analysis. If fewer
+            than two bins fall into the range, the whole lag range is kept and a
+            warning is issued. Default: 10
         gradient_threshold : float
             Threshold for gradient-based peak edge detection (0-1 range).
             Lower values = stricter edge detection. Controls where peak edges are
@@ -416,7 +416,7 @@ class TimeLagAnalysis:
         2. Creates histogram using unique value binning
         3. Excludes specified fringe bins (non-physical accumulations)
         4. Filters histogram to display range (startbin-endbin, in lag seconds),
-           skipping the filter with a warning if it would keep no bin at all
+           skipping the filter with a warning if it would keep fewer than two bins
         5. Detects peak lag using histogram maximum
         6. Identifies peak range boundaries via gradient-based edge detection
         7. Adjusts range for EddyPro's discrete 0.05s steps
@@ -446,8 +446,8 @@ class TimeLagAnalysis:
         ------
         ValueError
             If column '{gas}_TLAG_ACTUAL' not found in input dataframe, or if
-            the lag values hold fewer than two distinct values, i.e. not even
-            one histogram bin can be formed.
+            the lag values hold fewer than two distinct values. The peak range
+            needs at least two histogram bins, one per distinct value.
 
         Notes
         -----
@@ -463,17 +463,22 @@ class TimeLagAnalysis:
 
         series = self.tlag_actual[gascol].copy()
 
-        # Fringe trimming removes a fixed number of bins from each end, but
-        # method='uniques' only yields (n_unique - 1) bins, so for a lag column
-        # with few distinct values the default [5, 10] would trim the histogram
-        # away completely and leave no peak bin. Keep all bins in that case,
-        # and say so: the peak may then sit on a fringe accumulation.
+        # The peak range is found from the gradient across bins, which needs at
+        # least two bins. method='uniques' yields one bin per distinct lag.
         n_uniques = int(series.dropna().nunique())
-        n_bins = max(n_uniques - 1, 0)
+        if n_uniques < 2:
+            raise ValueError(f"Cannot analyze {gascol}: found {n_uniques} distinct lag "
+                             f"value(s), at least 2 are needed")
+
+        # Fringe trimming removes a fixed number of bins from each end, so for a
+        # lag column with few distinct values the default [5, 10] would leave
+        # fewer than the two bins the peak range needs. Keep all bins in that
+        # case, and say so: the peak may then sit on a fringe accumulation.
+        n_bins = n_uniques
         ignore_fringe_bins = self.ignore_fringe_bins
-        if ignore_fringe_bins and sum(ignore_fringe_bins[:2]) >= n_bins:
-            warn(f"{gascol}: ignore_fringe_bins={ignore_fringe_bins} would remove all "
-                 f"{n_bins} histogram bin(s) ({n_uniques} distinct lag values); keeping "
+        if ignore_fringe_bins and n_bins - sum(ignore_fringe_bins[:2]) < 2:
+            warn(f"{gascol}: ignore_fringe_bins={ignore_fringe_bins} would leave fewer than "
+                 f"2 of the {n_bins} histogram bins ({n_uniques} distinct lag values); keeping "
                  f"all bins, fringe accumulations are therefore included.")
             ignore_fringe_bins = None
 
@@ -485,24 +490,22 @@ class TimeLagAnalysis:
         )
         results = hist.results
         peakbins = hist.peakbins
-        if not peakbins:
-            raise ValueError(f"No histogram bins for {gascol}: found {n_uniques} distinct "
-                             f"lag value(s), at least 2 are needed to form a bin")
 
         # Filter histogram bins to display range. The range is given in lag
-        # seconds, so a range that no measured lag falls into would leave no
-        # bins and detect_peak_range would fail on the empty array. Keep all
-        # bins in that case, and say so, for the same reason as above.
+        # seconds, so it can keep fewer than the two bins the peak range needs
+        # (none if no measured lag falls into it). Keep all bins in that case,
+        # and say so, as for the fringe trimming above.
         locs = ((results['BIN_START_INCL'] >= self.histogram_start_seconds) &
                 (results['BIN_START_INCL'] <= self.histogram_end_seconds))
-        if locs.any():
+        n_in_range = int(locs.sum())
+        if n_in_range >= 2:
             results = results[locs].copy()
         else:
-            warn(f"{gascol}: no lag value falls into histogram_start_seconds="
-                 f"{self.histogram_start_seconds} to histogram_end_seconds="
-                 f"{self.histogram_end_seconds} "
-                 f"(both in seconds); keeping all bins, the analysis therefore covers "
-                 f"the full lag range.")
+            warn(f"{gascol}: histogram_start_seconds={self.histogram_start_seconds} to "
+                 f"histogram_end_seconds={self.histogram_end_seconds} (both in seconds) "
+                 f"would keep {n_in_range} of the {len(results)} histogram bins, but at "
+                 f"least 2 are needed. Keeping all bins, so the analysis covers the full "
+                 f"lag range.")
             results = results.copy()
 
         # Detect peak and ranges

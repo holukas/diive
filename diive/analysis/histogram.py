@@ -32,8 +32,7 @@ class Histogram:
             method: Method used for binning data
                 Options:
 
-                    - 'uniques': Each unique value starts a bin. The largest value
-                      falls into the last bin, together with the second largest.
+                    - 'uniques': One bin per unique value.
                     - 'n_bins': *n_bins* bins of equal width
 
             n_bins: Number of bins, needed if *method* is 'n_bins', otherwise ignored.
@@ -116,8 +115,12 @@ class Histogram:
     def _binning_method(self):
         bins = None
         if self.method == 'uniques':
-            # Use unique values as bins, each unique value is a separate bin
-            bins = np.unique(self.series)
+            # Use unique values as bins, each unique value is a separate bin.
+            # np.histogram closes only its last bin, so the largest value is
+            # repeated as a final edge: [max, max] holds the largest value, and
+            # the second largest keeps a bin of its own.
+            uniques = np.unique(self.series)
+            bins = np.append(uniques, uniques[-1:])
         elif self.method == 'n_bins':
             # Input defines number of bins
             bins = self.n_bins

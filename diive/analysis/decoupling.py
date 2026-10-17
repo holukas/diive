@@ -265,8 +265,8 @@ class StratifiedAnalysis:
 
         Args:
             ax: Optional matplotlib axes to draw on; a new figure is created if None.
-            saveplot: If True, save the figure as PNG to *path*. Works only when *ax*
-                is None (the method needs its own figure to save).
+            saveplot: If True, save the figure as PNG to *path*. With *ax*, the figure
+                that holds *ax* is saved.
             title: Optional figure title, shown only when the method creates the figure
                 (*ax* is None). Also used in the file name of the saved figure.
             path: Folder for the saved figure when *saveplot* is True.
@@ -300,6 +300,7 @@ class StratifiedAnalysis:
             fig.tight_layout()
             fig.show()
         else:
+            fig = ax.figure
             ax = self._plot_bins(ax=ax, n_col=n_col, emphasize_lines=emphasize_lines, **kwargs)
         if saveplot:
             save_fig(fig=fig, title=title, path=path)

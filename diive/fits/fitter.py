@@ -314,7 +314,7 @@ class BinFitterCP:
 
         Returns:
             Tuple of artists: (last scatter drawn, fit line, confidence region,
-            upper prediction band, highlighted year). The last four are None when not drawn.
+            upper prediction band, highlighted year). Each is None when not drawn.
         """
         own_fig = ax is None
         if own_fig:
@@ -331,6 +331,7 @@ class BinFitterCP:
                   f"({n_vals_min}-{n_vals_max} values per bin)")
 
         # Input data
+        line_xy = None
         if show_unbinned_data:
             line_xy = ax.scatter(
                 x=self.fit_results['input_df'][self.xcol],
@@ -345,8 +346,8 @@ class BinFitterCP:
         # Binned data
         if self.usebins > 0:
             line_xy = ax.scatter(
-                x=self.fit_results['bin_df'][self.xcol]['mean'],
-                y=self.fit_results['bin_df'][self.ycol]['mean'],
+                x=self.fit_results['bin_df'][self.xcol][self.bins_y_agg],
+                y=self.fit_results['bin_df'][self.ycol][self.bins_y_agg],
                 edgecolor=bin_edgecolor, color=bin_color, alpha=bin_alpha, s=bin_size,
                 label=_label,
                 zorder=1, marker=bin_marker)

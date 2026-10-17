@@ -47,5 +47,42 @@ class TestFits(unittest.TestCase):
         self.assertEqual(fit_results['bins_y'].sum(), fit_results['bin_df'][ycol]['mean'].sum())
 
 
+class TestBinFitterCPShowplot(unittest.TestCase):
+
+    @staticmethod
+    def _fitted(n_bins_x, bins_y_agg='mean'):
+        import numpy as np
+        import pandas as pd
+        rng = np.random.RandomState(0)
+        n = 2000
+        df = pd.DataFrame({'x': rng.uniform(0, 30, n)},
+                          index=pd.date_range('2020-01-01', periods=n, freq='30min'))
+        # Skewed noise, so mean and median bins differ
+        df['y'] = 0.01 * df['x'] ** 2 + rng.exponential(1, n)
+        bf = BinFitterCP(df=df, xcol='x', ycol='y', n_bins_x=n_bins_x,
+                         bins_y_agg=bins_y_agg, fit_type='quadratic_offset')
+        bf.run()
+        return bf
+
+    def test_no_bins_and_no_unbinned_data_plots_the_fit(self):
+        # Neither scatter is drawn here, and the returned scatter was unbound.
+        from matplotlib.figure import Figure
+        ax = Figure().add_subplot()
+        line_xy, line_fit, *_ = self._fitted(n_bins_x=0).showplot(ax=ax, show_unbinned_data=False)
+        self.assertIsNone(line_xy)
+        self.assertIsNotNone(line_fit)
+
+    def test_bin_scatter_follows_bins_y_agg(self):
+        # The scatter always drew the bin means, also for median bins.
+        import numpy as np
+        from matplotlib.figure import Figure
+        bf = self._fitted(n_bins_x=10, bins_y_agg='median')
+        line_xy = bf.showplot(ax=Figure().add_subplot(), show_unbinned_data=False)[0]
+        bin_df = bf.fit_results['bin_df']
+        np.testing.assert_array_equal(line_xy.get_offsets()[:, 0], bin_df['x']['median'])
+        np.testing.assert_array_equal(line_xy.get_offsets()[:, 1], bin_df['y']['median'])
+        self.assertFalse(np.allclose(bin_df['y']['median'], bin_df['y']['mean']))
+
+
 if __name__ == '__main__':
     unittest.main()
