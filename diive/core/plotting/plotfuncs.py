@@ -304,7 +304,7 @@ def has_twin(ax):
     """Return True if *ax* already has a twin axis sharing its bounding box."""
     # Check if axis already has a secondary axis
     # https://stackoverflow.com/questions/36209575/how-to-detect-if-a-twin-axis-has-been-generated-for-a-matplotlib-axis
-    for other_ax in ax.fig.axes:
+    for other_ax in ax.figure.axes:
         if other_ax is ax:
             continue
         if other_ax.bbox.bounds == ax.bbox.bounds:

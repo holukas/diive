@@ -225,6 +225,8 @@ class DielCycle:
         self.ax.set_xlim([0, 24])
         self.ax.set_ylim(ylim)
 
+        # No tight_layout(): set_fig() builds the figure with layout='constrained',
+        # which already spaces it. Switching engines warned ("The figure layout
+        # has changed to tight").
         if self.showplot:
-            self.fig.tight_layout()
             self.fig.show()

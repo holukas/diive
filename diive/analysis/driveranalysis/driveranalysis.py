@@ -23,7 +23,7 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -31,8 +31,12 @@ from pandas import DataFrame, Series
 
 from diive.analysis.driveranalysis.ale import (
     AleCurve, Ale2DResult, accumulated_local_effects, accumulated_local_effects_2d,
+    _reject_flat_title,
 )
 from diive.core.utils.console import info, warn, success, rule, detail
+
+if TYPE_CHECKING:
+    from diive.core.plotting.styles.format import FormatStyle
 
 # Material Design palette (CLAUDE.md plotting conventions).
 _MD = {
@@ -1156,8 +1160,19 @@ class DriverAnalysis:
         console.print("  [dim]Association (SHAP/ALE) is never causal. "
                       "Diverging rows (yellow) are where the science is.[/dim]")
 
-    def plot_importance(self, ax=None, title: str = None, showplot: bool = False):
-        """Horizontal SHAP importance bars, colored by relevance vs ``.RANDOM``."""
+    def plot_importance(self, ax=None, format_style: FormatStyle = None,
+                        showplot: bool = False, **legacy):
+        """Horizontal SHAP importance bars, colored by relevance vs ``.RANDOM``.
+
+        Args:
+            ax: Existing axes to draw on. A new figure is created when ``None``.
+            format_style: Shared :class:`~diive.plotting.FormatStyle` for the chrome
+                (title, labels, fonts, grid, legend). The title defaults to
+                ``"SHAP importance"``. Without a style the legend sits lower right.
+            showplot: Call ``fig.show()`` when a new figure was created.
+        """
+        _reject_flat_title(legacy, 'DriverAnalysis.plot_importance')
+        from diive.core.plotting.styles.format import FormatStyle
         shap_df = self._result.shap_importance
         if shap_df is None:
             self.shap()
@@ -1173,13 +1188,11 @@ class DriverAnalysis:
         if self._random_baseline is not None:
             ax.axvline(self._random_baseline, color=_MD['grey'], ls='--',
                        label='.RANDOM baseline', zorder=4)
-            ax.legend(loc='lower right', fontsize=10)
-        ax.set_xlabel('mean |SHAP| (association level — not causal)')
-        ax.set_title(title or 'SHAP importance')
-        if created:
-            ax.grid(True, axis='x', ls='--', alpha=0.4, zorder=0)
-            if showplot:
-                fig.show()
+        (format_style or FormatStyle(legend_loc='lower right')).apply(
+            ax=ax, default_title='SHAP importance',
+            default_xlabel='mean |SHAP| (association level — not causal)')
+        if created and showplot:
+            fig.show()
         return ax
 
     def plot_ale(self, feature: str, ax=None, **kw):
@@ -1187,9 +1200,21 @@ class DriverAnalysis:
         curve = self._result.ale.get(feature) or self.ale(feature)
         return curve.plot(ax=ax, **kw)
 
-    def plot_lagged(self, ax=None, cmap: str = 'viridis', title: str = None,
-                    showplot: bool = False):
-        """Driver x lag importance heatmap → per-driver response-timescale fingerprint."""
+    def plot_lagged(self, ax=None, format_style: FormatStyle = None, cmap: str = 'viridis',
+                    showplot: bool = False, **legacy):
+        """Driver x lag importance heatmap → per-driver response-timescale fingerprint.
+
+        Args:
+            ax: Existing axes to draw on. A new figure is created when ``None``.
+            format_style: Shared :class:`~diive.plotting.FormatStyle` for the chrome
+                (title, labels, fonts, grid). The title defaults to
+                ``"Lagged importance (response timescale)"``. Without a style the
+                grid is off.
+            cmap: Colormap of the heatmap.
+            showplot: Call ``fig.show()`` when a new figure was created.
+        """
+        _reject_flat_title(legacy, 'DriverAnalysis.plot_lagged')
+        from diive.core.plotting.styles.format import FormatStyle
         li = self._result.lagged_importance
         if li is None:
             raise ValueError("No lagged importance; pass lags=... and run the temporal layer.")
@@ -1204,15 +1229,27 @@ class DriverAnalysis:
         ax.figure.colorbar(mesh, ax=ax, label='SHAP importance')
         ax.set_yticks(range(len(li.index)))
         ax.set_yticklabels(li.index)
-        ax.set_xlabel('lag (records; negative = past)')
-        ax.set_title(title or 'Lagged importance (response timescale)')
+        (format_style or FormatStyle(show_grid=False)).apply(
+            ax=ax, default_title='Lagged importance (response timescale)',
+            default_xlabel='lag (records; negative = past)')
         if created and showplot:
             fig.show()
         return ax
 
-    def plot_scale_resolved(self, ax=None, cmap: str = 'magma', title: str = None,
-                            showplot: bool = False):
-        """Driver x scale importance heatmap (STL components / aggregations)."""
+    def plot_scale_resolved(self, ax=None, format_style: FormatStyle = None,
+                            cmap: str = 'magma', showplot: bool = False, **legacy):
+        """Driver x scale importance heatmap (STL components / aggregations).
+
+        Args:
+            ax: Existing axes to draw on. A new figure is created when ``None``.
+            format_style: Shared :class:`~diive.plotting.FormatStyle` for the chrome
+                (title, labels, fonts, grid). The title defaults to
+                ``"Scale-resolved importance"``. Without a style the grid is off.
+            cmap: Colormap of the heatmap.
+            showplot: Call ``fig.show()`` when a new figure was created.
+        """
+        _reject_flat_title(legacy, 'DriverAnalysis.plot_scale_resolved')
+        from diive.core.plotting.styles.format import FormatStyle
         sr = self._result.scale_resolved
         if sr is None:
             raise ValueError("No scale-resolved result; run the temporal layer.")
@@ -1228,18 +1265,30 @@ class DriverAnalysis:
         ax.set_xticklabels(sr.columns, rotation=30, ha='right')
         ax.set_yticks(np.arange(len(sr.index)) + 0.5)
         ax.set_yticklabels(sr.index)
-        ax.set_title(title or 'Scale-resolved importance')
+        (format_style or FormatStyle(show_grid=False)).apply(
+            ax=ax, default_title='Scale-resolved importance')
         if created and showplot:
             fig.show()
         return ax
 
-    def plot_convergence(self, ax=None, title: str = None, showplot: bool = False):
+    def plot_convergence(self, ax=None, format_style: FormatStyle = None,
+                         showplot: bool = False, **legacy):
         """Headline plot: per-driver x per-method relevance grid.
 
         Green = relevant, grey = weak, red = not relevant; direction glyphs (+/-)
         annotate signed methods. Divergence across a row is the scientific signal.
+
+        Args:
+            ax: Existing axes to draw on. A new figure is created when ``None``.
+            format_style: Shared :class:`~diive.plotting.FormatStyle` for the chrome
+                (title, labels, fonts, grid). The title defaults to
+                ``"Convergence grid (green=yes, grey=weak, red=no)"``. Without a
+                style the grid is off.
+            showplot: Call ``fig.show()`` when a new figure was created.
         """
+        _reject_flat_title(legacy, 'DriverAnalysis.plot_convergence')
         from matplotlib.colors import ListedColormap, BoundaryNorm
+        from diive.core.plotting.styles.format import FormatStyle
         conv = self._result.convergence
         if conv is None:
             raise ValueError("Nothing to plot; call run() first.")
@@ -1274,7 +1323,8 @@ class DriverAnalysis:
             if 'ale' in methods and adir in ('+', '-', '∩', '∪'):
                 j = methods.index('ale')
                 ax.text(j, i, adir, ha='center', va='center', color='white', fontsize=12)
-        ax.set_title(title or 'Convergence grid (green=yes, grey=weak, red=no)')
+        (format_style or FormatStyle(show_grid=False)).apply(
+            ax=ax, default_title='Convergence grid (green=yes, grey=weak, red=no)')
         if created and showplot:
             fig.show()
         return ax

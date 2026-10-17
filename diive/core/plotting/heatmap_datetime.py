@@ -269,8 +269,8 @@ class HeatmapDateTime(HeatmapBase):
             figsize: Figure size as (width, height) in inches. Only used when ax is None
             figdpi: Figure DPI. Only used when ax is None. Defaults to 72
             ax_orientation: Layout of axes. If None, uses the value from __init__().
-                The grid is built in __init__, so set the orientation there: a
-                different value here does not rebuild the grid and mislabels the axes.
+                The grid is built in __init__, so set the orientation there. A
+                different value here raises a ValueError.
             format_style: Shared chrome (title/labels/fonts/ticks/spines/grid) via
                 :class:`~diive.core.plotting.styles.format.FormatStyle`. None = heatmap
                 default (no grid, black spines, outward ticks). A passed style replaces
@@ -309,9 +309,14 @@ class HeatmapDateTime(HeatmapBase):
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
         """
-        # Use provided ax_orientation or fall back to __init__ value
+        # The grid was built for the __init__ orientation. Plotting it with
+        # another one would put the labels and ticks on the wrong axes.
         if ax_orientation is None:
             ax_orientation = self.ax_orientation
+        elif ax_orientation != self.ax_orientation:
+            raise ValueError(
+                f"ax_orientation={ax_orientation!r} differs from the value set in __init__ "
+                f"({self.ax_orientation!r}). Set the orientation in the constructor.")
 
         # Use theme defaults if not provided
         if cb_labelsize is None:
@@ -537,8 +542,8 @@ class HeatmapYearMonth(HeatmapBase):
             figsize: Figure size as (width, height) in inches. Only used when ax is None
             figdpi: Figure DPI. Only used when ax is None. Defaults to 72
             ax_orientation: Layout of axes. If None, uses the value from __init__().
-                The grid is built in __init__, so set the orientation there: a
-                different value here does not rebuild the grid and mislabels the axes.
+                The grid is built in __init__, so set the orientation there. A
+                different value here raises a ValueError.
             format_style: Shared chrome (title/labels/fonts/ticks/spines/grid) via
                 :class:`~diive.core.plotting.styles.format.FormatStyle`. None = heatmap
                 default (no grid, black spines, outward ticks). A passed style replaces
@@ -569,9 +574,14 @@ class HeatmapYearMonth(HeatmapBase):
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
         """
-        # Use provided ax_orientation or fall back to __init__ value
+        # The grid was built for the __init__ orientation. Plotting it with
+        # another one would put the labels and ticks on the wrong axes.
         if ax_orientation is None:
             ax_orientation = self.ax_orientation
+        elif ax_orientation != self.ax_orientation:
+            raise ValueError(
+                f"ax_orientation={ax_orientation!r} differs from the value set in __init__ "
+                f"({self.ax_orientation!r}). Set the orientation in the constructor.")
 
         # Auto-select colormap based on ranks if not provided
         if cmap is None:

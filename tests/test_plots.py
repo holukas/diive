@@ -1523,3 +1523,104 @@ class TestHeatmapYearMonthLattice(unittest.TestCase):
         # 12 labelled ticks over 12 cells; before the fix there were 12 ticks
         # over 5 cells, so a tick pointed at the wrong month's colour.
         self.assertEqual(len(ax.get_xticks()), h.z.shape[1])
+
+
+class TestL219PlottingFixes(unittest.TestCase):
+    """Regression tests for the plotting bugs in finding L219.
+
+    Axes come from a bare ``Figure()`` where the code under test takes ``ax``,
+    so a pyplot call that targets the current figure cannot hide a bug.
+    """
+
+    def test_has_twin_reads_the_axes_figure(self):
+        from matplotlib.figure import Figure
+        from diive.core.plotting.plotfuncs import has_twin
+        fig = Figure()
+        ax = fig.add_subplot()
+        self.assertFalse(has_twin(ax))  # raised AttributeError ('ax.fig')
+        ax.twinx()
+        self.assertTrue(has_twin(ax))
+
+    def test_scatterxy_keeps_its_constrained_layout(self):
+        import warnings
+        import numpy as np
+        import pandas as pd
+        from matplotlib.layout_engine import ConstrainedLayoutEngine
+        from diive.core.plotting.scatter import ScatterXY
+        rng = np.random.default_rng(0)
+        x = pd.Series(rng.normal(size=100), name='x')
+        y = pd.Series(rng.normal(size=100), name='y')
+        s = ScatterXY(x=x, y=y)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            s.plot()
+        msgs = [str(w.message) for w in caught]
+        self.assertFalse([m for m in msgs if 'layout has changed' in m], msgs)
+        self.assertIsInstance(s.fig.get_layout_engine(), ConstrainedLayoutEngine)
+        plt.close(s.fig)
+
+    def _compound_plot(self, **kwargs):
+        import numpy as np
+        import pandas as pd
+        from matplotlib.figure import Figure
+        from diive.core.plotting.compoundextremes import CompoundExtremesPlot
+        rng = np.random.default_rng(1)
+        x = pd.Series(rng.normal(size=60), name='x')
+        y = pd.Series(rng.normal(size=60), name='y')
+        cat = pd.Series(rng.choice(['none', 'hot'], size=60))
+        ax = Figure().add_subplot()
+        CompoundExtremesPlot(x=x, y=y, category=cat).plot(ax=ax, **kwargs)
+        return ax
+
+    def test_compoundextremes_legend_false_draws_no_legend(self):
+        self.assertIsNone(self._compound_plot(legend=False).get_legend())
+        self.assertIsNone(self._compound_plot(
+            format_style=FormatStyle(show_legend=False)).get_legend())
+        legend = self._compound_plot(legend=True, legend_title='Type').get_legend()
+        self.assertIsNotNone(legend)
+        self.assertEqual(legend.get_title().get_text(), 'Type')
+
+    def _assert_keeps_constrained_layout(self, plot_obj):
+        """A standalone plot() must not switch its constrained figure to tight."""
+        import warnings
+        from matplotlib.layout_engine import ConstrainedLayoutEngine
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            plot_obj.plot()
+        msgs = [str(w.message) for w in caught]
+        self.assertFalse([m for m in msgs if 'layout has changed' in m], msgs)
+        self.assertIsInstance(plot_obj.fig.get_layout_engine(), ConstrainedLayoutEngine)
+        plt.close(plot_obj.fig)
+
+    def test_compoundextremes_standalone_keeps_its_constrained_layout(self):
+        # Finding L225: plot() without ax called self.fig.tight_layout().
+        import numpy as np
+        import pandas as pd
+        from diive.core.plotting.compoundextremes import CompoundExtremesPlot
+        rng = np.random.default_rng(1)
+        x = pd.Series(rng.normal(size=60), name='x')
+        y = pd.Series(rng.normal(size=60), name='y')
+        cat = pd.Series(rng.choice(['none', 'hot'], size=60))
+        self._assert_keeps_constrained_layout(CompoundExtremesPlot(x=x, y=y, category=cat))
+
+    def test_dielcycle_standalone_keeps_its_constrained_layout(self):
+        # Finding L225: plot() without ax called self.fig.tight_layout().
+        from diive.core.plotting.dielcycle import DielCycle
+        self._assert_keeps_constrained_layout(DielCycle(_synthetic_series(years=1)))
+
+    def test_heatmaps_reject_an_orientation_that_differs_from_init(self):
+        from matplotlib.figure import Figure
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime, HeatmapYearMonth
+        series = _synthetic_series(years=1)
+        for cls in (HeatmapDateTime, HeatmapYearMonth):
+            with self.subTest(cls=cls.__name__):
+                hm = cls(series, ax_orientation='vertical')
+                fig = Figure()
+                ax = fig.add_subplot()
+                # Used to plot the vertical grid with horizontal axis labels.
+                with self.assertRaises(ValueError):
+                    hm.plot(ax=ax, fig=fig, ax_orientation='horizontal')
+                self.assertEqual(hm.ax_orientation, 'vertical')
+                # The same value as in __init__ is still accepted.
+                hm.plot(ax=ax, fig=fig, ax_orientation='vertical')
+                self.assertIn(ax.get_ylabel(), ('Date', 'Year'))

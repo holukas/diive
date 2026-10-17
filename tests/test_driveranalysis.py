@@ -274,5 +274,90 @@ class TestPublicApi(unittest.TestCase):
         self.assertTrue(any(issubclass(w.category, ExperimentalWarning) for w in caught))
 
 
+class TestAleCurvePlotFormatStyle(unittest.TestCase):
+    """AleCurve.plot takes its chrome from FormatStyle, not a flat ``title`` kwarg."""
+
+    @staticmethod
+    def _curve():
+        edges = np.linspace(0.0, 1.0, 6)
+        return AleCurve(feature='VPD', bin_edges=edges, ale=edges - 0.5,
+                        bin_counts=np.full(5, 10), size=50)
+
+    def test_title_comes_from_format_style(self):
+        from matplotlib.figure import Figure
+        ax = Figure().add_subplot()
+        self._curve().plot(ax=ax, format_style=dv.plotting.FormatStyle(title='My ALE'))
+        self.assertEqual(ax.get_title(), 'My ALE')
+        ax = Figure().add_subplot()
+        self._curve().plot(ax=ax)
+        self.assertEqual(ax.get_title(), 'ALE: VPD')
+        self.assertEqual(ax.get_xlabel(), 'VPD')
+
+    def test_flat_title_names_format_style(self):
+        from matplotlib.figure import Figure
+        with self.assertRaisesRegex(TypeError, 'FormatStyle'):
+            self._curve().plot(ax=Figure().add_subplot(), title='old')
+
+
+class TestDriverPlotsFormatStyle(unittest.TestCase):
+    """Ale2DResult.plot and the DriverAnalysis plots take their title from FormatStyle.
+
+    The results are set by hand, so no model is fitted.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import warnings
+        from diive.analysis.driveranalysis import Ale2DResult
+        target, drivers = _synthetic(months=1)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')  # ExperimentalWarning
+            da = DriverAnalysis(target=target, drivers=drivers, verbose=0)
+        names = ['TA', 'SW_IN']
+        da._result.shap_importance = pd.DataFrame(
+            {'shap_importance': [0.5, 1.0], 'shap_relevant': ['weak', 'yes']}, index=names)
+        da._random_baseline = 0.2
+        da._result.lagged_importance = pd.DataFrame([[0.1, 0.3], [0.2, 0.4]],
+                                                    index=names, columns=[-1, 0])
+        da._result.scale_resolved = pd.DataFrame([[0.1, 0.3], [0.2, 0.4]],
+                                                 index=names, columns=['stl_trend', 'stl_resid'])
+        da._result.convergence = pd.DataFrame(
+            {'shap_relevant': ['weak', 'yes'], 'ale_relevant': ['no', 'yes'],
+             'ale_direction': ['-', '+']}, index=names)
+        cls.da = da
+        edges = np.linspace(0.0, 1.0, 4)
+        ale2d = Ale2DResult(f1='VPD', f2='TA', x_edges=edges, y_edges=edges,
+                            ale=np.arange(9.0).reshape(3, 3) - 4)
+        cls.plots = {
+            'Ale2DResult.plot': (ale2d.plot, '2D ALE: VPD x TA'),
+            'plot_importance': (da.plot_importance, 'SHAP importance'),
+            'plot_lagged': (da.plot_lagged, 'Lagged importance (response timescale)'),
+            'plot_scale_resolved': (da.plot_scale_resolved, 'Scale-resolved importance'),
+            'plot_convergence': (da.plot_convergence,
+                                 'Convergence grid (green=yes, grey=weak, red=no)'),
+        }
+
+    def test_title_comes_from_format_style(self):
+        from matplotlib.figure import Figure
+        for name, (plot, default_title) in self.plots.items():
+            with self.subTest(plot=name):
+                ax = Figure().add_subplot()
+                plot(ax=ax, format_style=dv.plotting.FormatStyle(title='Mine'))
+                self.assertEqual(ax.get_title(), 'Mine')
+                ax = Figure().add_subplot()
+                plot(ax=ax)
+                self.assertEqual(ax.get_title(), default_title)
+
+    def test_flat_title_names_format_style(self):
+        from matplotlib.figure import Figure
+        for name, (plot, _) in self.plots.items():
+            with self.subTest(plot=name):
+                with self.assertRaisesRegex(TypeError, 'FormatStyle'):
+                    plot(ax=Figure().add_subplot(), title='old')
+                # Any other leftover keyword is still rejected.
+                with self.assertRaisesRegex(TypeError, "unexpected keyword argument 'titel'"):
+                    plot(ax=Figure().add_subplot(), titel='old')
+
+
 if __name__ == '__main__':
     unittest.main()

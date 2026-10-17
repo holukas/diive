@@ -31,7 +31,7 @@ series_temp = series_temp.dropna()
 
 hm = dv.plotting.HeatmapYearMonth(
     series=series_temp,
-    ax_orientation="vertical",  # Data computation: months on y-axis, years on x-axis
+    ax_orientation="vertical",  # Data computation: months on x-axis, years on y-axis
     ranks=False  # Data computation: use actual values (not ranks)
 )
 hm.plot(

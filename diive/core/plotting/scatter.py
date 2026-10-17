@@ -432,9 +432,10 @@ class ScatterXY:
             self.fig, self.ax = pf.create_ax(figsize=(8, 8))
             self._plot(self.ax, style, zlabel, xlim, ylim, cmap, show_colorbar,
                        markersize=markersize, alpha=alpha, vmin=vmin, vmax=vmax)
-            # Skip tight_layout if colorbar is present (incompatible with new layout engine)
-            if self.zname is None or not show_colorbar:
-                plt.tight_layout()
+            # No tight_layout(): pf.create_ax() builds the figure with
+            # layout='constrained', which already spaces it. Switching engines
+            # warned ("The figure layout has changed to tight"), and the pyplot
+            # call targeted the current figure, not necessarily this one.
             self.fig.show()
         else:
             self.ax = ax
