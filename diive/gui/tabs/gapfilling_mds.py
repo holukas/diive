@@ -10,7 +10,7 @@ temperature (TA) and vapour pressure deficit (VPD) — within similarity
 tolerances, assigning each fill a quality level. So this tab has no free feature
 picker, no SHAP and no held-out test score; instead it offers a fixed
 three-driver picker (each driver with an optional QC flag column) + tolerances
-+ the mode (diive / ONEFlux), and a Results page focused on the
++ the mode (diive / ONEFlux / REddyProc), and a Results page focused on the
 per-quality-level breakdown.
 
 It uses the shared tab primitives — ``tab_chrome`` (title bar + list header),

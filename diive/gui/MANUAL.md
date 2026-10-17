@@ -1472,9 +1472,10 @@ before. For a separate measured column, first make a flag column that is 1 where
 measured value is missing.
 
 A **progress bar** tracks the quality levels as the fill runs (higher level = looser
-meteorological match). The **Results** sub-tab shows the configuration, in-sample
-scores, a **per-quality-level breakdown** table and bar plot, a predicted-vs-observed
-scatter, the cumulative sum, and a colour-by-quality time series. The fill flag
+meteorological match). The **Results** sub-tab shows the configuration, the scores
+(in **diive** mode each record is left out of its own prediction, in the other modes
+it stays in its own sample), a **per-quality-level breakdown** table and bar plot, a
+predicted-vs-observed scatter, the cumulative sum, and a colour-by-quality time series. The fill flag
 (`FLAG_{var}_gfMDS_ISFILLED`) is 0 for observed; for a filled gap it is the method
 times 1000 plus the window in days (method 1 = all three drivers, 2 = SWIN only,
 3 = diurnal cycle), so `1014` means "all drivers, 14-day window". **Add results to dataset** appends the gap-filled series and its

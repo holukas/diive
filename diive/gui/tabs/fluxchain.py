@@ -29,7 +29,7 @@ them (heavy runs on a worker thread). Script-generation is the library's
 **Level 4.1** gap-fills the per-scenario L3.3 flux: tick any of rf / xgb / mds
 (additive across methods — each replaces only its own previous result), pick
 rf/xgb predictor features and the MDS SW_IN / TA / VPD driver columns (each
-with an optional QC flag column, default none) and mode (diive / ONEFlux), and the
+with an optional QC flag column, default none) and mode (diive / ONEFlux / REddyProc), and the
 run fans out one gap-fill per USTAR scenario on the worker thread. The canvas
 then shows the method comparison (cumulative overlay or side-by-side heatmaps)
 via the library's `plot_cumulative_comparison(ax=...)` / `plot_gapfilled_heatmaps(fig=...)`,
