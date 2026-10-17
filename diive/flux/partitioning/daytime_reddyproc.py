@@ -92,6 +92,16 @@ parameters by up to 2e-3 (CH-LAE 2019 with sparse nights, where the nighttime
 fits are bitwise identical). R's own results differ between platforms at this
 level.
 
+On six FLUXNET v1.3 sites (FI-Hyy, FI-Var, IL-Yat, AU-GWW, DE-Hai, GF-Guy,
+two years each) the nighttime results are bitwise identical as well, and 9
+of the 12 daytime runs are within the agreement above. In the other three
+the same last-bit difference meets a window with only 10-17 records and
+changes its outcome: REddyProc rejects a window that diive accepts (FI-Hyy
+2023), or diive takes the alpha-fixed refit where REddyProc keeps all five
+parameters (AU-GWW 2023). Single half-hours then differ by up to 3.2 umol
+m-2 s-1 and annual RECO by up to 2.1 % (GPP 0.5 %). With REddyProc's own E0
+injected, these runs agree to 1.5e-5 or better.
+
 Reference:
     Lasslop, G. et al. (2010). Separation of net ecosystem exchange into
     assimilation and respiration using a light response curve approach: critical

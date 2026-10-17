@@ -25,6 +25,15 @@ Library (also used by the notebook and the GUI):
   - The scores of `'diive'` leave each measured record out of its own prediction, so they are
     lower than the in-sample scores of `'oneflux'`.
   - `sym_mean` is replaced by `mode` and now raises an error.
+- **NEE partitioning, method and mode:** the new `PartitioningNEE` and `partition_nee()` select the
+  partitioning with `method='nighttime'|'daytime'` and `mode='oneflux'|'reddyproc'`, like
+  `FluxMDS(mode=)`, with ONEFlux (as used by ICOS and FLUXNET) as the default.
+  - In the flux post-processing chain, `run_level42_partitioning()` and
+    `FluxConfig(partition_method=, partition_mode=)` do the same.
+  - The four partitioning classes and `run_level42_*` functions stay as they are.
+- **Daytime partitioning (ONEFlux), gap-filled NEE:** `DaytimePartitioningOneFlux` takes an optional
+  gap-filled NEE (`nee_f`), which Level 4.2 of the chain passes from Level 4.1, so windows without
+  measured nighttime NEE are fitted as in ONEFlux.
 - **MDS gap-filling, driver QC:** `FluxMDS`, `run_level41_mds` and `FluxConfig` take optional QC
   columns for SW_IN, TA and VPD, so NEE can be gap-filled exactly as in ONEFlux, where only
   measured driver values serve as similar samples. `dv.variables.driver_flag_columns` finds the
@@ -70,6 +79,8 @@ GUI only:
   library, follows changes to the site coordinates and shows loading errors in the status line.
 - **Meteo screening (database), Copy Python:** writes a `StepwiseMeteoScreeningDb` script.
 - **Screening tabs:** absolute limits can be added as a step.
+- **NEE partitioning:** the four partitioning tabs are now one tab with a Method choice (nighttime,
+  daytime) and a Mode choice (ONEFlux, REddyProc), and projects saved before open in it.
 - **MDS gap-filling, mode:** the MDS tab and Level 4.1 of the flux post-processing chain have a
   Mode choice ("diive" by default, "ONEFlux" or "REddyProc"), which replaces the symmetric-mean
   checkbox.
@@ -97,6 +108,10 @@ Library (also used by the notebook and the GUI):
 
 - **Nighttime partitioning (ONEFlux):** results now match ONEFlux bit for bit (CH-DAV 2016
   and 2019, CH-LAE 2017-2019), up from an RMSE of 0.0003 µmol m⁻² s⁻¹.
+- **Nighttime partitioning (ONEFlux), polar day and night:** on days without sunrise or sunset, no
+  record counts as night any more, as in ONEFlux (annual GPP at FI-Var was up to 1.5 % off).
+- **Daytime partitioning (ONEFlux), sparse nights:** a window after a rejected temperature fit now
+  takes its E0 as ONEFlux does, which moved annual GPP at GF-Guy 2024 by 0.1 %.
 - **Daytime partitioning (ONEFlux):** every light-response fit now matches ONEFlux, also at sites
   with little measured NEE, and annual sums agree to 0.0001% (were up to 1.2% apart on CH-DAV 2019
   and 1.5% on CH-LAE 2018).
