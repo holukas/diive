@@ -589,6 +589,31 @@ A: ``data.fpc_df`` is the working dataframe, everything the chain produced is a
    is ``None``, because with several USTAR scenarios there is no single filtered
    series. Access those per scenario.
 
+**Q: How do I partition NEE into GPP and RECO?**
+
+A: ``dv.flux.PartitioningNEE`` selects one of four ports with two switches:
+   ``method='nighttime'`` (Reichstein et al. 2005) or ``'daytime'`` (Lasslop et
+   al. 2010), and ``mode='oneflux'`` (the default, as used by ICOS and
+   FLUXNET2015) or ``'reddyproc'``. Each combination needs its own inputs.
+   ``dv.flux.partitioning.partitioning_inputs(method, mode)`` lists them:
+
+   .. code-block:: python
+
+      import diive as dv
+
+      df = dv.load_exampledata_parquet()
+      part = dv.flux.PartitioningNEE(
+          nee=df['NEE_CUT_REF_orig'], method='daytime', mode='oneflux',
+          ta=df['Tair_orig'], sw_in=df['Rg_orig'], ta_f=df['Tair_f'],
+          sw_in_f=df['Rg_f'], vpd=df['VPD_f'], vpd_in_kpa=False)  # VPD_f in hPa
+      part.run()
+      gpp = part.gpp  # GPP_DT_OF, part.results holds all columns
+
+   Inside the chain, ``run_level42_partitioning`` does the same per USTAR
+   scenario, and ``FluxConfig(partition_method=..., partition_mode=...)``
+   switches it on in ``run_chain``. The nighttime method needs a gap-filled NEE
+   from Level 4.1.
+
 Debugging and performance
 =========================
 

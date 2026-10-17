@@ -91,8 +91,7 @@ dv.plotting.HeatmapDateTime(series=df['NEE_CUT_REF_f']).plot()
 Plots follow a two-phase pattern throughout: the constructor takes the data, `.plot()` takes the styling.
 
 From here, the [cookbook](examples/COOKBOOK.md) walks through six minimal workflows — load data, clean timestamps,
-remove
-outliers, gap-fill, run the flux post-processing chain, visualize.
+remove outliers, gap-fill, run the flux post-processing chain, visualize.
 
 ## What's in it
 
@@ -116,15 +115,15 @@ For the authoritative symbol list, check `diive.__all__` and each namespace's `_
 
 ## Highlights
 
-**Flux post-processing chain** — from quality flags through gap-filling and NEE partitioning (Levels 2 to
-4.2),
+**Flux post-processing chain** — from quality flags through gap-filling and NEE partitioning (Levels 2 to 4.2),
 following [Swiss FluxNet standards](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/).
 Either `run_chain(data, config)` for the standard workflow, or composable per-level callables when you need every
 detector, hyperparameter and diagnostic flag. → [examples/flux/postprocessingchain/](examples/flux/postprocessingchain/)
 
 **NEE partitioning** — four faithful ports of the reference routines, each validated against its original
-implementation: nighttime and daytime (Reichstein 2005, Lasslop 2010) × ONEFlux and REddyProc. Output columns are tagged
-so all four coexist in one dataframe. → [examples/flux/partitioning/](examples/flux/partitioning/)
+implementation: nighttime and daytime (Reichstein 2005, Lasslop 2010) × ONEFlux and REddyProc. `PartitioningNEE`
+selects one with `method='nighttime'|'daytime'` and `mode='oneflux'|'reddyproc'` (ONEFlux, the ICOS approach, is the
+default). Output columns are tagged so all four coexist in one dataframe. → [examples/flux/partitioning/](examples/flux/partitioning/)
 
 **Gap-filling** — Random Forest and XGBoost with SHAP-based feature reduction, plus an MDS gap-filler that needs no
 training, with modes that reproduce ONEFlux and REddyProc. An 8-stage feature engineer feeds them all.
