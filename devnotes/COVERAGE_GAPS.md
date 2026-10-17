@@ -705,7 +705,7 @@ direct test of the dispatch table, not just the individual correction functions.
 | `dv.plotting.DateTimeSurface`, `datetime_surface_grid` | `core/plotting/surface_grid.py` 48 %, all GUI-only. Runs without the `gui3d` extra, so testable headless |
 | `dv.events.CATEGORY_COLORS` | no test, no example |
 | `dv.load_parquet_many` | no test, no example, despite a documented `progress_callback` |
-| `UstarDetectionMPT`, `UstarThresholdConstantScenarios`, `FlagSingleConstantUstarThreshold` | `flux/lowres/ustarthreshold.py` **29 %**, 92 of 126 covered lines GUI-only |
+| `UstarDetectionMPT` (removed since, `85eb97cc`), `UstarThresholdConstantScenarios`, `FlagSingleConstantUstarThreshold` | `flux/lowres/ustarthreshold.py` **29 %**, 92 of 126 covered lines GUI-only |
 
 ---
 
@@ -738,14 +738,14 @@ Coverage cannot speak to this tier; it stays grep-derived. Each is a documented 
 | `UstarVekuriThresholdDetection` | 19 of 193 stmts, all GUI-only |
 | `TimeLagAnalysis` | 23 of 211 stmts, all GUI-only |
 | `FindOptimumRange` | 27 of 222 stmts, all GUI-only |
-| `harmonic_analysis` + `reconstruct_harmonics`, `periodogram`, `fft_decompose`, `multi_scale_harmonics` | 6 of 7 symbols in `analysis/harmonic.py` untested |
+| ~~`harmonic_analysis` + `reconstruct_harmonics`, `periodogram`, `fft_decompose`, `multi_scale_harmonics`~~ | ~~6 of 7 symbols in `analysis/harmonic.py` untested~~ The four helpers were removed (`57b8b845`), and `harmonic_analysis` is tested in `test_analyses.py` |
 | `GrangerCausality` | 10 of 53 stmts, all GUI-only |
 | `ManualRemoval` | 33 of 37 stmts, all GUI-only |
 | `DailyCorrelation`, `StratifiedAnalysis` | `analysis/correlation.py`, `analysis/decoupling.py` |
 | `get_encoded_value_from_int`, `get_encoded_value_series` | top-level |
 | `add_driver` | `flux/postprocessingchain/container.py` — 235 of 269 covered lines GUI-only |
 | `detect_fluxbasevar`, `run_level33_variable_ustar` | chain; `levels/level33.py` 79 of 122 GUI-only |
-| `run_level42_nighttime_reddyproc`, `run_level42_daytime_reddyproc`, `run_level42_daytime_oneflux` | 3 of 4 L4.2 entry points reached only through the ONEFlux-nighttime path |
+| `run_level42_nighttime_reddyproc`, `run_level42_daytime_reddyproc` | 2 of 4 L4.2 entry points reached only through the ONEFlux-nighttime path. `run_level42_daytime_oneflux` has its own test since 2026-10-16 (`test_postprocessingchain.py`, L211) |
 
 ---
 

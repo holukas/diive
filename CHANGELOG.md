@@ -13,8 +13,8 @@ Library (also used by the notebook and the GUI):
   `diive.flux.fluxprocessingchain` still works but gives a `FutureWarning` and will be removed in
   a future release. The examples and the notebook (now `FluxPostProcessingChain.ipynb`) are
   renamed to match.
-- **MDS gap-filling, new default mode (changes results):** `FluxMDS`, `run_level41_mds` and
-  `FluxConfig` take `mode='diive'` (new default) or `mode='oneflux'`.
+- **MDS gap-filling, new default mode (changes results):** `FluxMDS` and `run_level41_mds` take
+  `mode=`, and `FluxConfig` takes `mds_mode=`: `'diive'` (new default), `'oneflux'` or `'reddyproc'`.
   - `'diive'` fills daytime gaps with the symmetric mean of Vekuri et al. (2023), which removes a
     bias in the filled fluxes and the carbon balance. On CH-DAV 2020 the daytime bias dropped from
     +0.041 to +0.004 µmol m⁻² s⁻¹, and the RMSE barely changed.
@@ -73,7 +73,7 @@ GUI only:
 - **MDS gap-filling, mode:** the MDS tab and Level 4.1 of the flux post-processing chain have a
   Mode choice ("diive" by default, "ONEFlux" or "REddyProc"), which replaces the symmetric-mean
   checkbox.
-  Projects saved before keep their plain mean ("ONEFlux").
+  Projects saved before load with the mode that matches their old setting.
 - **MDS gap-filling, driver QC:** the MDS tab and Level 4.1 of the flux post-processing chain
   take an optional QC flag column for SW_IN, TA and VPD, and Copy Python includes it.
 
@@ -110,7 +110,7 @@ Library (also used by the notebook and the GUI):
   sums agree to 0.001%. The reported SD of the smoothed E0 was 50-84% too low. Runs no
   longer slow down or change with the number of BLAS threads. Records that start without
   nighttime data in their first days now also match.
-- **MDS gap-filling:** results now match ONEFlux's `gf_mds` bit for bit. Gaps filled from the
+- **MDS gap-filling:** with `mode='oneflux'`, results now match ONEFlux's `gf_mds` bit for bit. Gaps filled from the
   mean diurnal cycle had used other records (none from before midnight, wider windows), which
   moved annual NEE by up to 3 gC m⁻² on CH-LAE.
 - **MDS gap-filling, VPD in hPa:** with `vpd_in_kpa=False`, records exactly 5 hPa apart counted as
