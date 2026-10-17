@@ -107,8 +107,8 @@ class TestOutlierDetection(unittest.TestCase):
             lower_limit=10,
             showplot=False,
             verbose=False,
-            lat=47.286417,
-            lon=7.733750,
+            lat=46.81533,
+            lon=9.85591,
             utc_offset=1
         )
         trm.calc()
@@ -116,29 +116,30 @@ class TestOutlierDetection(unittest.TestCase):
         frame = {'s_noise': s_noise, 'flag': flag}
         checkdf = pd.DataFrame.from_dict(frame)
 
-        # Counts encode the potrad day/night split (ONEFlux/FLUXNET parity), which
-        # classifies these 1488 July records; the twilight edges decide a handful of
-        # them, and two land on the day side, so trim_nighttime does not trim them.
+        # Counts encode the potrad day/night split (ONEFlux/FLUXNET parity) at the
+        # CH-DAV coordinates: 184 nighttime records are below 10, so TrimLow flags
+        # them plus the 184 highest nighttime values (368). Records at the twilight
+        # edges decide the split, so the counts change with the site coordinates.
         # Checks on bad data
         badmean = checkdf.loc[checkdf.flag == 2, 's_noise'].mean()
-        self.assertEqual(badmean, 19.914995180241654)
+        self.assertEqual(badmean, 20.160679858072996)
         baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
         self.assertEqual(baddata_stats.loc['max']['s_noise'], 338.9234661966423)
         self.assertEqual(baddata_stats.loc['min']['s_noise'], -12.230067031003944)
-        self.assertEqual(baddata_stats.loc['count']['flag'], 376)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 368)
         self.assertEqual(baddata_stats.loc['min']['flag'], 2)
         self.assertEqual(baddata_stats.loc['max']['flag'], 2)
-        self.assertEqual(baddata_stats.loc['count']['s_noise'], 376)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 368)
 
         # Checks on good data
         goodmean = checkdf.loc[checkdf.flag == 0, 's_noise'].mean()
-        self.assertEqual(goodmean, 17.82873128107376)
+        self.assertEqual(goodmean, 17.762908200494664)
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
         self.assertEqual(gooddata_stats.loc['max']['s_noise'], 338.3652327597214)
         self.assertEqual(gooddata_stats.loc['min']['s_noise'], -40.33549755756406)
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
-        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1112)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1120)
 
     def test_hampel_filter_daytime_nighttime(self):
         df = ed.load_exampledata_parquet()
@@ -164,8 +165,8 @@ class TestOutlierDetection(unittest.TestCase):
             separate_day_night=True,
             showplot=False,
             verbose=False,
-            lat=47.286417,
-            lon=7.733750,
+            lat=46.81533,
+            lon=9.85591,
             utc_offset=1
         )
         ham.calc(repeat=True)
@@ -195,7 +196,7 @@ class TestOutlierDetection(unittest.TestCase):
         which then rejected the float daytime value with a TypeError."""
         s = ed.load_exampledata_parquet()['Tair_f'].loc['2018-07']
         kwargs = dict(series=s, window_length=48 * 3, separate_day_night=True,
-                      lat=47.286417, lon=7.733750, utc_offset=1)
+                      lat=46.81533, lon=9.85591, utc_offset=1)
         ham_int = HampelDaytimeNighttime(n_sigma_daytime=5.5, n_sigma_nighttime=4, **kwargs)
         ham_int.calc(repeat=False)
         ham_float = HampelDaytimeNighttime(n_sigma_daytime=5.5, n_sigma_nighttime=4.0, **kwargs)
@@ -226,8 +227,8 @@ class TestOutlierDetection(unittest.TestCase):
             separate_day_night=True,
             showplot=False,
             verbose=False,
-            lat=47.286417,
-            lon=7.733750,
+            lat=46.81533,
+            lon=9.85591,
             utc_offset=1
         )
         ham.calc(repeat=True)
@@ -276,8 +277,8 @@ class TestOutlierDetection(unittest.TestCase):
             separate_day_night=False,
             showplot=False,
             verbose=False,
-            lat=47.286417,
-            lon=7.733750,
+            lat=46.81533,
+            lon=9.85591,
             utc_offset=1
         )
         ham.calc(repeat=True)
@@ -362,8 +363,8 @@ class TestOutlierDetection(unittest.TestCase):
         zdn = zScore(
             series=s_noise,
             separate_day_night=True,
-            lat=47.286417,
-            lon=7.733750,
+            lat=46.81533,
+            lon=9.85591,
             utc_offset=1,
             thres_zscore=4,
             showplot=False,
@@ -446,8 +447,8 @@ class TestOutlierDetection(unittest.TestCase):
             winsize_daytime=48 * 2,
             winsize_nighttime=48 * 1,
             constant_sd=False,
-            lat=46.0,
-            lon=11.0,
+            lat=46.81533,
+            lon=9.85591,
             utc_offset=1,
             showplot=False,
             verbose=False
@@ -472,21 +473,21 @@ class TestOutlierDetection(unittest.TestCase):
         good_dt_stats = good_dt.describe()
         self.assertEqual(good_dt_stats.loc['max']['s_noise'], 31.87658379873561)
         self.assertEqual(good_dt_stats.loc['min']['s_noise'], 4.3238046734031155)
-        self.assertEqual(good_dt_stats.loc['count']['s_noise'], 766)
+        self.assertEqual(good_dt_stats.loc['count']['s_noise'], 772)
         good_nt_stats = good_nt.describe()
         self.assertEqual(good_nt_stats.loc['max']['s_noise'], 17.073)
         self.assertEqual(good_nt_stats.loc['min']['s_noise'], 5.262)
-        self.assertEqual(good_nt_stats.loc['count']['s_noise'], 376)
+        self.assertEqual(good_nt_stats.loc['count']['s_noise'], 377)
 
         # Checks on bad data
         bad_dt_stats = bad_dt.describe()
         self.assertEqual(bad_dt_stats.loc['max']['s_noise'], 231.78475439289213)
         self.assertEqual(bad_dt_stats.loc['min']['s_noise'], -38.52634400343396)
-        self.assertEqual(bad_dt_stats.loc['count']['s_noise'], 168)
+        self.assertEqual(bad_dt_stats.loc['count']['s_noise'], 167)
         bad_nt_stats = bad_nt.describe()
         self.assertEqual(bad_nt_stats.loc['max']['s_noise'], 224.8390630344748)
         self.assertEqual(bad_nt_stats.loc['min']['s_noise'], -36.84146979488223)
-        self.assertEqual(bad_nt_stats.loc['count']['s_noise'], 178)
+        self.assertEqual(bad_nt_stats.loc['count']['s_noise'], 172)
 
     def test_localsd_with_constantsd(self):
         df = ed.load_exampledata_parquet()
@@ -672,8 +673,8 @@ class TestOutlierDetection(unittest.TestCase):
         nighttime_minmax = [-5.0, 10.0]
         al = AbsoluteLimitsDaytimeNighttime(
             series=s_noise,
-            lat=46.815333,
-            lon=9.855972,
+            lat=46.81533,
+            lon=9.85591,
             utc_offset=1,
             minval_daytime=daytime_minmax[0],
             maxval_daytime=daytime_minmax[1],

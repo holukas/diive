@@ -62,8 +62,8 @@ df = dv.load_exampledata_parquet()
 detector = StepwiseOutlierDetection(
     dfin=df,
     col='NEE_CUT_REF_orig',
-    site_lat=47.48,
-    site_lon=8.37,
+    site_lat=46.81533,
+    site_lon=9.85591,
     utc_offset=1
 )
 
@@ -155,8 +155,8 @@ df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
 data = init_flux_data(
     df=df,
     fluxcol='FC',
-    site_lat=47.41887,
-    site_lon=8.491318,
+    site_lat=47.478333,
+    site_lon=8.364389,
     utc_offset=1,
     nighttime_threshold=20,                 # W m-2
     daytime_accept_qcf_below=2,

@@ -77,8 +77,8 @@ df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
 data = init_flux_data(
     df=df,
     fluxcol="FC",
-    site_lat=47.41887,  # CH-LAE
-    site_lon=8.491318,
+    site_lat=47.478333,  # CH-LAE
+    site_lon=8.364389,
     utc_offset=1,
     nighttime_threshold=20,
     daytime_accept_qcf_below=2,

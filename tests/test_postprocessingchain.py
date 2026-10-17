@@ -165,7 +165,7 @@ class TestFluxPostProcessingChainComposable(unittest.TestCase):
         df = df.rename(columns={"FC_SSITC_TEST": "MY_SSITC",
                                 "CO2_VM97_TEST": "MY_VM97",
                                 "CO2_NR": "MY_CO2_NR"})
-        data = init_flux_data(df=df, fluxcol="FC", site_lat=47.4, site_lon=8.5, utc_offset=1)
+        data = init_flux_data(df=df, fluxcol="FC", site_lat=47.478333, site_lon=8.364389, utc_offset=1)
         data = run_level2(
             data,
             ssitc={"apply": True, "setflag_timeperiod": None, "col": "MY_SSITC"},

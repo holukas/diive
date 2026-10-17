@@ -1,7 +1,8 @@
 Low-Resolution Flux Processing Examples
 =======================================
 
-Low-resolution (30-minute) eddy-covariance flux processing at the Swiss FluxNet site (CH-LAE).
+Low-resolution (30-minute) eddy-covariance flux processing, mostly with data from the Swiss FluxNet
+site CH-LAE (some examples use CH-DAV or CH-CHA).
 Covers time lag detection, quality filtering, self-heating correction, uncertainty estimation, and turbulence thresholds.
 
 Examples

@@ -74,8 +74,8 @@ class TestCreateVar(unittest.TestCase):
         dnf = DaytimeNighttimeFlag(
             timestamp_index=df.index,
             nighttime_threshold=1,
-            lat=47.286417,
-            lon=7.733750,
+            lat=46.81533,
+            lon=9.85591,
             utc_offset=1
         )
         results = dnf.get_results()
@@ -84,12 +84,12 @@ class TestCreateVar(unittest.TestCase):
         nighttime_flag = dnf.get_nighttime_flag()
         # Baselines encode potrad (ONEFlux/FLUXNET parity): solar constant 1376,
         # Spencer 1971 declination/eccentricity, NOAA solar-noon shift, period mean.
-        self.assertAlmostEqual(results.sum().sum(), 52742196.78324184, places=3)
-        self.assertAlmostEqual(swin_pot.sum(), 52566900.78324184, places=3)
-        self.assertEqual(daytime_flag.sum(), 90888)
+        self.assertAlmostEqual(results.sum().sum(), 53121906.35272053, places=3)
+        self.assertAlmostEqual(swin_pot.sum(), 52946610.35272053, places=3)
+        self.assertEqual(daytime_flag.sum(), 90638)
         self.assertEqual(daytime_flag.max(), 1)
         self.assertEqual(daytime_flag.min(), 0)
-        self.assertEqual(nighttime_flag.sum(), 84408)
+        self.assertEqual(nighttime_flag.sum(), 84658)
         self.assertEqual(nighttime_flag.max(), 1)
         self.assertEqual(nighttime_flag.min(), 0)
         self.assertEqual(daytime_flag[nighttime_flag == 0].min(), 1)
