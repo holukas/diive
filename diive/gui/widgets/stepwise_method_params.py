@@ -106,7 +106,8 @@ class HampelParams(_StepParams):
     def _build(self, form: QFormLayout) -> None:
         self.window = _ispin(48 * 13, 3, 1_000_000)
         self.window.setToolTip("Sliding-window size in record count (624 = 13 days at "
-                               "30-min sampling, Papale 2006).")
+                               "30-min sampling, Papale 2006). The span in days depends on "
+                               "the resolution: 13 days of 1-min data are 18720 records.")
         form.addRow("Window (records)", self.window)
         self.n_sigma = _fspin(5.5, 0.1, 50.0)
         self.n_sigma.setToolTip("Threshold width in MADs; lower = stricter. Used for all "

@@ -1553,6 +1553,9 @@ the corrections and resamples it.
   (chain outlier tests, apply corrections, check the QCF). Downloads that mix time
   resolutions (e.g. 10-minute and 1-minute records in one field) are supported:
   all records are kept.
+- **Window sizes are record counts.** The Hampel default of 624 records is 13 days
+  only at 30-minute resolution. On 10-minute data 13 days are 1872 records, on
+  1-minute data 18720. Day/night separation is off by default for every test.
 - **Status warnings.** Latitude, longitude and UTC offset come from **Settings ▸
   Project settings** and apply to the next run; results computed with old values
   are cleared. The status line warns when the UTC offset is **not set** (UTC+00:00
@@ -1564,7 +1567,8 @@ the corrections and resamples it.
   be detected); the info line shows the
   source vs. target resolution and whether resampling is needed. **If the data are
   already at the target resolution, no resampling is done** (so already-30MIN data
-  merge straight through).
+  merge straight through). **Min. records (frac)** (default 0.9) is the fraction
+  of each target period the kept records must cover, else the value is missing.
 - **Add resampled to dataset** appends the screened, resampled column. Its
   timestamps are converted to your dataset's **middle-of-period** convention so it
   aligns on merge, it is **renamed with a suffix** if the name already exists, and
