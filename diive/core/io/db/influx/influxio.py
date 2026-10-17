@@ -31,6 +31,9 @@ from diive.core.io.db.influx.config import get_conf_filetypes, read_configfile
 from diive.core.io.db.influx.connection import get_client, get_delete_api, get_query_api
 from diive.core.utils.console import VERBOSE_PROGRESS, detail, info, success, warn
 
+#: Records per synchronous write request in ``upload_singlevar``.
+_WRITE_CHUNK_ROWS = 5000
+
 
 class InfluxIO:
     """InfluxDB v2 connection backed by ``influxdb-client``.
@@ -82,7 +85,9 @@ class InfluxIO:
                          to_bucket: str,
                          to_measurement: str,
                          timezone_offset_to_utc_hours: int | float,
-                         delete_from_db_before_upload: bool = True) -> None:
+                         delete_from_db_before_upload: bool = True,
+                         delete_start: str | None = None,
+                         delete_stop: str | None = None) -> None:
         """Upload single variable to database.
 
         The database needs to know the timezone because all data in the db are
@@ -93,11 +98,30 @@ class InfluxIO:
             to_bucket: name of database bucket
             to_measurement: name of measurement, e.g. 'TA'
             timezone_offset_to_utc_hours: e.g. 1, see the docstring of ``_add_timestamp_utc`` for details
-            delete_from_db_before_upload: data between the start and end dates of *var_df* are
-                deleted before uploading. The delete is limited to the same site, measurement,
-                variable name and data version as *var_df*, so *var_df* must hold exactly one
-                ``site`` and one ``data_version``. Implemented to avoid duplicate uploads of the
-                same data in cases where data remained the same, but one of the tags has changed.
+            delete_from_db_before_upload: delete existing data before uploading. The delete is
+                limited to the same site, measurement, variable name and data version as *var_df*,
+                so *var_df* must hold exactly one ``site`` and one ``data_version``. Implemented to
+                avoid duplicate uploads of the same data in cases where data remained the same, but
+                one of the tags has changed.
+            delete_start: start of the delete range, e.g. '2024-03-01 00:00:00', in the same
+                local time as the index of *var_df* (same format and timezone frame as the
+                *start* of ``download``). Default ``None`` uses the first timestamp of *var_df*.
+            delete_stop: end of the delete range, e.g. '2024-04-01 00:00:00'. Default ``None``
+                uses the last timestamp of *var_df*.
+
+        The deleted range is ``[delete_start, delete_stop]`` with both bounds included:
+        InfluxDB deletes from the earliest to the latest given time. Passing the same
+        START and STOP as to ``download`` (which reads ``[start, stop)``) therefore also
+        deletes a record stamped exactly at STOP. A ValueError is raised before anything
+        is deleted if *var_df* is empty, has timestamps outside the delete range, or if
+        its ``site`` tag holds several sites.
+
+        Records with a NaN value are not written. If all values are NaN, the period is
+        still deleted (the old values were rejected as well) and a warning says that
+        nothing was written.
+
+        Writes are synchronous, in chunks of ``_WRITE_CHUNK_ROWS`` records. A failed
+        write raises a RuntimeError that says whether the period was already deleted.
 
         Note:
             *var_df* must contain one data column (the variable) plus a column
@@ -107,7 +131,10 @@ class InfluxIO:
         Returns:
             Nothing, only uploads to database.
         """
-        from influxdb_client import WriteOptions  # lazy: only upload needs it
+        from influxdb_client.client.write_api import SYNCHRONOUS  # lazy: only upload needs it
+
+        if var_df.empty:
+            raise ValueError("var_df has no records, nothing to upload. Nothing was deleted.")
 
         # Work on a copy so the caller's DataFrame is not mutated (the index is
         # localized to UTC below).
@@ -126,9 +153,19 @@ class InfluxIO:
         if len(field) > 1:
             raise ValueError(f"Only one field (variable name) allowed, found {field}.")
 
+        if (delete_start is not None or delete_stop is not None) and not delete_from_db_before_upload:
+            raise ValueError("delete_start and delete_stop need delete_from_db_before_upload=True.")
+
+        start = stop = None
         if delete_from_db_before_upload:
-            start = str(var_df.index[0])
-            stop = str(var_df.index[-1])
+            first, last = var_df.index.min(), var_df.index.max()
+            start = str(first) if delete_start is None else delete_start
+            stop = str(last) if delete_stop is None else delete_stop
+            outside = (var_df.index < pd.Timestamp(start)) | (var_df.index > pd.Timestamp(stop))
+            if outside.any():
+                raise ValueError(
+                    f"var_df has {int(outside.sum())} timestamps outside the delete range "
+                    f"[{start}, {stop}] (data from {first} to {last}). Nothing was deleted.")
             data_version = list(set(var_df['data_version'].tolist()))
             if len(data_version) > 1:
                 raise ValueError('Multiple data versions not supported')
@@ -139,42 +176,57 @@ class InfluxIO:
             if len(site) != 1:
                 raise ValueError(f"Exactly one site required for the delete before upload, found {site}.")
             site = site[0]
+            # Tag extraction joins differing tag values with commas, so a single
+            # value like 'ch-hon,ch-oth' still means several sites.
+            if ',' in str(site):
+                raise ValueError(f"The site tag '{site}' joins several sites with commas. "
+                                 f"Upload one site at a time. Nothing was deleted.")
             self.delete(bucket=to_bucket, measurements=[to_measurement],
                         start=start, stop=stop,
                         timezone_offset_to_utc_hours=timezone_offset_to_utc_hours,
                         data_version=data_version, fields=field, site=site)
 
+        deleted_msg = (f" The period {start} to {stop} (both included) was deleted from "
+                       f"bucket {to_bucket} before the write." if delete_from_db_before_upload else "")
+
+        # NaN records are not written (the serializer would skip them anyway).
+        # Dropping them here gives the exact number of points.
+        var_df = var_df[var_df[field[0]].notna()]
+        n_points = len(var_df)
+        if n_points == 0:
+            warn(f"All values of {field[0]} are NaN: nothing was written to bucket {to_bucket}."
+                 f"{deleted_msg} The old values in that period were rejected as well, so they "
+                 f"stay deleted.", verbose=self.verbose)
+            return
+
         # Add timezone info to timestamp
         var_df.index = self._add_timestamp_utc(timestamp_index=var_df.index,
                                                timezone_offset_to_utc_hours=timezone_offset_to_utc_hours)
 
-        # Database clients
         info("Connecting to database ...", verbose=self.verbose)
+        info(f"--> UPLOAD TO DATABASE BUCKET {to_bucket}:  {field}", verbose=self.verbose)
 
-        # The WriteApi in batching mode (default mode) is suppose to run as a singleton.
-        # To flush all your data you should wrap the execution using with
-        # client.write_api(...) as write_api: statement or call write_api.close()
-        # at the end of your script.
-        # https://influxdb-client.readthedocs.io/en/stable/usage.html#write
+        # Synchronous writes raise HTTP errors here. The batching WriteApi only
+        # logged them, so a failed write after the delete went unnoticed (L227).
+        n_written = 0
         with get_client(conf_db=self.conf_db) as client, \
-                client.write_api(write_options=WriteOptions(batch_size=5000,
-                                                            flush_interval=10_000,
-                                                            jitter_interval=2_000,
-                                                            retry_interval=5_000,
-                                                            max_retries=5,
-                                                            max_retry_delay=30_000,
-                                                            exponential_base=2)) as write_api:
+                client.write_api(write_options=SYNCHRONOUS) as write_api:
+            try:
+                for i in range(0, n_points, _WRITE_CHUNK_ROWS):
+                    chunk = var_df.iloc[i:i + _WRITE_CHUNK_ROWS]
+                    write_api.write(to_bucket,
+                                    record=chunk,
+                                    data_frame_measurement_name=to_measurement,
+                                    data_frame_tag_columns=TAGS,
+                                    write_precision='s')
+                    n_written += len(chunk)
+            except Exception as err:
+                raise RuntimeError(
+                    f"Upload of {field[0]} to bucket {to_bucket} failed after {n_written} of "
+                    f"{n_points} points: {str(err).strip()}.{deleted_msg} Re-run the upload.") from err
 
-            # Write to db
-            info(f"--> UPLOAD TO DATABASE BUCKET {to_bucket}:  {field}", verbose=self.verbose)
-
-            write_api.write(to_bucket,
-                            record=var_df,
-                            data_frame_measurement_name=to_measurement,
-                            data_frame_tag_columns=TAGS,
-                            write_precision='s')
-
-            success("Upload finished.", verbose=self.verbose)
+        success(f"Upload finished: {n_points} points of {field[0]} written to bucket {to_bucket}.",
+                verbose=self.verbose)
 
     def download(self,
                  bucket: str,
@@ -194,6 +246,12 @@ class InfluxIO:
         as defined in 'timezone_offset_to_utc_hours'. This means that if the offset
         is e.g. '1' for CET, then the dates are also understood to be in the same
         timezone, e.g. CET.
+
+        A variable stored with several tag sets (e.g. a changed ``gain``) comes back
+        as several tables. At shared timestamps the table that starts later wins,
+        i.e. the newer setup. Tables that start at the same time are ordered by their
+        tag values (as strings, in :data:`~diive.core.io.db.influx.common.TAGS`
+        order). A warning reports timestamps where the tables hold different values.
 
         Args:
             bucket: name of bucket in database
@@ -275,6 +333,7 @@ class InfluxIO:
 
         # Each table in tables contains data for one variable
         found_measurements = []
+        tables_per_var = {}  # Var name -> tables of that var (one per tag set)
         data_detailed = {}  # Stores variables and their tags
         data_simple = DataFrame()  # Stores variables
         for ix, table in enumerate(tables):
@@ -302,10 +361,9 @@ class InfluxIO:
             table.set_index("TIMESTAMP_END", inplace=True)
             table.sort_index(inplace=True)
 
-            # Remove duplicated index entries, v0.4.1
-            # This can happen if the variable is logged in a new file, but the
-            # old file is still active and also contains data for the var.
-            # In this case, keep the last data entry.
+            # Remove duplicated timestamps within this one table (one tag set),
+            # keeping the last entry. Duplicates across tables (e.g. an old and a
+            # new logger file with different tags) are merged further below.
             table = table[~table.index.duplicated(keep='last')]
 
             # Remove timezone info from UTC timestamp, header already states it's UTC
@@ -327,20 +385,27 @@ class InfluxIO:
             keepcols.append(key)
             table = table[keepcols].copy()
 
+            # Variables with different sets of tags are downloaded in their own
+            # table, so one var name can come in several tables.
+            tables_per_var.setdefault(key, []).append(table)
+
+        # Merge the tables of each variable by start time, then tag values. At
+        # shared timestamps the later table wins, i.e. the newer setup. Influx's
+        # table order is not used, so the result does not depend on it.
+        for key, var_tables in tables_per_var.items():
+            var_tables = sorted(var_tables, key=self._tag_sort_key)
+            merged = var_tables[0]
+            for table in var_tables[1:]:
+                self._warn_conflicting_tables(merged, table, key)
+                # Whole rows, so the tags always belong to the kept value.
+                keep_old = merged.index.difference(table.index[table[key].notna()])
+                merged = pd.concat([merged.loc[keep_old],
+                                    table.drop(index=table.index.intersection(keep_old))]).sort_index()
+            data_detailed[key] = merged
+
             # Collect variables without tags in a separate (simplified) dataframe.
             # This dataframe only contains the timestamp and the data column of each var.
-            incomingdata = pd.DataFrame(table[key])
-            data_simple = data_simple.combine_first(incomingdata)
-            data_simple = data_simple[~data_simple.index.duplicated(keep='last')]
-
-            # Store frame in dict with the field (variable name) as key.
-            # Variables with different sets of tags are downloaded in their own
-            # table, so a table with this var name may already exist; merge them.
-            if key not in data_detailed:
-                data_detailed[key] = table
-            else:
-                data_detailed[key] = data_detailed[key].combine_first(table)
-                data_detailed[key] = data_detailed[key][~data_detailed[key].index.duplicated(keep='last')]
+            data_simple = data_simple.combine_first(pd.DataFrame(merged[key]))
 
         # Info
         info(f"Downloaded data for {len(data_detailed)} variables:", verbose=self.verbose)
@@ -363,6 +428,31 @@ class InfluxIO:
             self._verify_freq(data_index=data_simple.index, expected_freq=verify_freq)
 
         return data_simple, data_detailed, assigned_measurements
+
+    @staticmethod
+    def _tag_sort_key(table: DataFrame) -> tuple:
+        """Sort key of a downloaded table: its first timestamp, then its tag values as strings."""
+        return (table.index.min(),) + tuple(
+            str(table[tag].iloc[0]) if tag in table.columns else '' for tag in TAGS)
+
+    def _warn_conflicting_tables(self, merged: DataFrame, table: DataFrame, key: str) -> None:
+        """Warn if *table* and *merged* hold different values of *key* at shared timestamps."""
+        shared = merged.index.intersection(table.index)
+        old = merged.loc[shared, key]
+        new = table.loc[shared, key]
+        conflict = old.notna() & new.notna() & (old != new)
+        if not conflict.any():
+            return
+        stamps = conflict.index[conflict]
+        tagdiffs = []
+        for tag in TAGS:
+            old_vals = sorted(set(merged.loc[stamps, tag].astype(str))) if tag in merged.columns else ['<none>']
+            new_vals = sorted(set(table.loc[stamps, tag].astype(str))) if tag in table.columns else ['<none>']
+            if old_vals != new_vals:
+                tagdiffs.append(f"{tag} {new_vals} kept over {old_vals}")
+        warn(f"{key}: {len(stamps)} timestamps hold different values in tables with different "
+             f"tags ({'; '.join(tagdiffs)}). Kept the values of the table that starts later.",
+             verbose=self.verbose)
 
     def _verify_freq(self, data_index: pd.DatetimeIndex, expected_freq: str) -> None:
         """Warn if the inferred frequency of the data does not match *expected_freq*."""

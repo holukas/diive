@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pandas as pd
 
 from diive.core.io.db.influx import fluxql
@@ -208,6 +209,215 @@ class TestInfluxDelete(unittest.TestCase):
                 self.dbc.upload_singlevar(var_df=self._var_df(["CH-DAV", "CH-LAE"]), to_bucket="b",
                                           to_measurement="TA", timezone_offset_to_utc_hours=1)
         delete.assert_not_called()
+
+
+try:
+    import influxdb_client  # noqa: F401
+    HAS_INFLUXDB_CLIENT = True
+except ImportError:
+    HAS_INFLUXDB_CLIENT = False
+
+FIELD = "TA_T1_4_2"
+
+
+def _upload_frame(n=48, start="2026-03-01 00:30", site="ch-hon", all_nan=False):
+    idx = pd.date_range(start, periods=n, freq="30min", name="TIMESTAMP_END")
+    df = pd.DataFrame({FIELD: np.arange(n, dtype=float)}, index=idx)
+    if all_nan:
+        df[FIELD] = np.nan
+    for tag in TAGS:
+        df[tag] = "x"
+    df["site"] = site
+    df["varname"] = FIELD
+    df["data_version"] = "meteoscreening_diive"
+    return df
+
+
+@unittest.skipUnless(HAS_INFLUXDB_CLIENT, "needs the db group (influxdb-client)")
+class TestInfluxUploadMockedHttp(unittest.TestCase):
+    """upload_singlevar with the real client, only the HTTP calls replaced."""
+
+    def setUp(self):
+        from influxdb_client.client.delete_api import DeleteApi
+        from influxdb_client.service.write_service import WriteService
+
+        self.dbc = InfluxIO.__new__(InfluxIO)
+        self.dbc.conf_db = {"url": "http://127.0.0.1:1", "token": "x", "org": "o"}  # never contacted
+        self.dbc.verbose = 2
+        self.deletes, self.bodies = [], []
+        self.write_error = None
+
+        def fake_delete(api, start, stop, predicate, bucket, org=None):
+            self.deletes.append(dict(start=start, stop=stop, predicate=predicate))
+
+        def fake_post_write(service, org, bucket, body, **kw):
+            if self.write_error is not None:
+                raise self.write_error
+            self.bodies.append(body.decode() if isinstance(body, bytes) else body)
+
+        mod = "diive.core.io.db.influx.influxio"
+        self.success = MagicMock()
+        self.warn = MagicMock()
+        patchers = [patch.object(DeleteApi, "delete", fake_delete),
+                    patch.object(WriteService, "post_write", fake_post_write),
+                    patch(f"{mod}.success", self.success),
+                    patch(f"{mod}.warn", self.warn),
+                    patch(f"{mod}.info"),
+                    patch(f"{mod}.detail")]
+        for p in patchers:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def _upload(self, df, **kwargs):
+        self.dbc.upload_singlevar(var_df=df, to_bucket="b", to_measurement="TA",
+                                  timezone_offset_to_utc_hours=1, **kwargs)
+
+    def _lines(self):
+        return [line for body in self.bodies for line in body.split("\n") if line]
+
+    def test_writes_all_points_then_reports_success(self):
+        df = _upload_frame()
+        df.iloc[[0, 5], 0] = np.nan
+        self._upload(df)
+        self.assertEqual(len(self.deletes), 1)
+        self.assertEqual(len(self._lines()), 46)
+        self.success.assert_called_once()
+        self.assertIn("46 points", self.success.call_args.args[0])
+
+    def test_large_frame_is_written_in_chunks(self):
+        with patch("diive.core.io.db.influx.influxio._WRITE_CHUNK_ROWS", 100):
+            self._upload(_upload_frame(n=250))
+        self.assertEqual(len(self.bodies), 3)
+        self.assertEqual(len(self._lines()), 250)
+
+    def test_write_error_after_delete_raises(self):
+        from influxdb_client.rest import ApiException
+        self.write_error = ApiException(status=400, reason="field type conflict")
+        with self.assertRaises(RuntimeError) as ctx:
+            self._upload(_upload_frame())
+        msg = str(ctx.exception)
+        self.assertIn("field type conflict", msg)
+        self.assertIn("2026-03-01 00:30:00 to 2026-03-02 00:00:00 (both included) was deleted", msg)
+        self.assertIn("Re-run the upload", msg)
+        self.assertIsInstance(ctx.exception.__cause__, ApiException)
+        self.assertEqual(len(self.deletes), 1)
+        self.success.assert_not_called()
+
+    def test_delete_range_from_start_stop(self):
+        self._upload(_upload_frame(), delete_start="2026-03-01 00:00:00",
+                     delete_stop="2026-03-03 00:00:00")
+        self.assertEqual(self.deletes[0]["start"], "2026-03-01T00:00:00+01:00")
+        self.assertEqual(self.deletes[0]["stop"], "2026-03-03T00:00:00+01:00")
+
+    def test_delete_range_defaults_to_frame(self):
+        self._upload(_upload_frame())
+        self.assertEqual(self.deletes[0]["start"], "2026-03-01T00:30:00+01:00")
+        self.assertEqual(self.deletes[0]["stop"], "2026-03-02T00:00:00+01:00")
+
+    def test_stamps_outside_delete_range_raise(self):
+        # Last stamp 2026-03-02 00:00 lies after the stop: rejected before the delete.
+        with self.assertRaisesRegex(ValueError, "1 timestamps outside the delete range"):
+            self._upload(_upload_frame(), delete_start="2026-03-01 00:00:00",
+                         delete_stop="2026-03-01 23:59:59")
+        with self.assertRaisesRegex(ValueError, "outside the delete range"):
+            self._upload(_upload_frame(), delete_start="2026-03-01 01:00:00")
+        self.assertEqual(self.deletes, [])
+        self.assertEqual(self.bodies, [])
+
+    def test_delete_range_needs_delete_flag(self):
+        with self.assertRaises(ValueError):
+            self._upload(_upload_frame(), delete_from_db_before_upload=False,
+                         delete_stop="2026-03-03 00:00:00")
+        self.assertEqual(self.bodies, [])
+
+    def test_joined_site_tag_rejected(self):
+        with self.assertRaisesRegex(ValueError, "several sites"):
+            self._upload(_upload_frame(site="ch-hon,ch-oth"))
+        self.assertEqual(self.deletes, [])
+
+    def test_all_nan_frame_deletes_and_warns(self):
+        self._upload(_upload_frame(all_nan=True))
+        self.assertEqual(len(self.deletes), 1)
+        self.assertEqual(self.bodies, [])
+        self.success.assert_not_called()
+        self.warn.assert_called_once()
+        msg = self.warn.call_args.args[0]
+        self.assertIn("nothing was written", msg)
+        self.assertIn("was deleted", msg)
+        self.assertEqual(self.warn.call_args.kwargs["verbose"], 2)
+
+    def test_empty_frame_raises_before_delete(self):
+        with self.assertRaisesRegex(ValueError, "no records"):
+            self._upload(_upload_frame(n=0))
+        self.assertEqual(self.deletes, [])
+
+
+@unittest.skipUnless(HAS_INFLUXDB_CLIENT, "needs the db group (influxdb-client)")
+class TestInfluxDownloadMergeMockedHttp(unittest.TestCase):
+    """Several tables of one variable (different tag sets) at the same timestamps."""
+
+    def setUp(self):
+        self.dbc = InfluxIO.__new__(InfluxIO)
+        self.dbc.conf_db = {"url": "http://127.0.0.1:1", "token": "x", "org": "o"}  # never contacted
+        self.dbc.verbose = 2
+        self.warn = MagicMock()
+        mod = "diive.core.io.db.influx.influxio"
+        for p in [patch(f"{mod}.warn", self.warn), patch(f"{mod}.info"), patch(f"{mod}.detail")]:
+            p.start()
+            self.addCleanup(p.stop)
+
+    @staticmethod
+    def _table(gain, values):
+        t = pd.date_range("2026-02-28 23:10", periods=len(values), freq="10min", tz="UTC")
+        df = pd.DataFrame({"_time": t, "_measurement": "TA", FIELD: values})
+        for tag in TAGS:
+            df[tag] = "x"
+        df["site"] = "ch-hon"
+        df["varname"] = FIELD
+        df["data_version"] = "raw"
+        df["gain"] = gain
+        return df
+
+    def _download(self, tables):
+        from influxdb_client.client.query_api import QueryApi
+
+        def fake_query(api, query, **kw):
+            if "schema" in query:
+                return pd.DataFrame({"_value": [FIELD]})
+            return [t.copy() for t in tables]
+
+        with patch.object(QueryApi, "query_data_frame", fake_query):
+            return self.dbc.download(bucket="b", measurements=["TA"], fields=[FIELD],
+                                     start="2026-03-01 00:00:01", stop="2026-03-02 00:00:01",
+                                     timezone_offset_to_utc_hours=1, data_version="raw")
+
+    def test_winner_does_not_depend_on_table_order(self):
+        a = self._table("1", [5.0, 5.0, 5.0, np.nan])
+        b = self._table("1.02", [6.0, 6.0, np.nan, 6.0])
+        for tables in ([a, b], [b, a]):
+            self.warn.reset_mock()
+            simple, detailed, _ = self._download(tables)
+            # Same start, so gain '1.02' sorts after '1' and wins where both hold a value.
+            self.assertEqual(detailed[FIELD][FIELD].tolist(), [6.0, 6.0, 5.0, 6.0])
+            self.assertEqual(detailed[FIELD]["gain"].tolist(), ["1.02", "1.02", "1", "1.02"])
+            self.assertEqual(simple[FIELD].tolist(), [6.0, 6.0, 5.0, 6.0])
+            self.warn.assert_called_once()
+            msg = self.warn.call_args.args[0]
+            self.assertIn("2 timestamps", msg)
+            self.assertIn("gain ['1.02'] kept over ['1']", msg)
+            self.assertEqual(self.warn.call_args.kwargs["verbose"], 2)
+
+    def test_table_that_starts_later_wins(self):
+        old = self._table("2", [5.0, 5.0, 5.0])
+        new = self._table("1", [6.0, 6.0])
+        new["_time"] = new["_time"] + pd.Timedelta("10min")  # newer setup, smaller tag value
+        for tables in ([old, new], [new, old]):
+            _, detailed, _ = self._download(tables)
+            self.assertEqual(detailed[FIELD][FIELD].tolist(), [5.0, 6.0, 6.0])
+
+    def test_no_warning_when_tables_agree(self):
+        self._download([self._table("1", [5.0, 5.0]), self._table("1.02", [5.0, np.nan])])
+        self.warn.assert_not_called()
 
 
 if __name__ == "__main__":
