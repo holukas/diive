@@ -3,7 +3,7 @@ FLUX POST-PROCESSING CHAIN: MULTI-LEVEL WORKFLOW
 ================================================
 
 Swiss FluxNet multi-level post-processing: quality flag expansion (L2), storage correction (L3.1),
-outlier removal (L3.2), USTAR filtering (L3.3), gap-filling (L4.1).
+outlier removal (L3.2), USTAR filtering (L3.3), gap-filling (L4.1) and optional NEE partitioning (L4.2).
 
 Two entry points
 ----------------

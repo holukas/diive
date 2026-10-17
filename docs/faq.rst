@@ -180,7 +180,10 @@ A: They differ in whether they train a model and in what they need as input:
 
    All of them live in ``dv.gapfilling``. Start with Random Forest. MDS is the
    right choice when you need output comparable to FLUXNET or ONEFlux
-   processing, since it is a faithful port of that algorithm.
+   processing: with ``mode='oneflux'`` it reproduces ONEFlux gap-filling bit for
+   bit, and ``mode='reddyproc'`` follows REddyProc. The default
+   ``mode='diive'`` uses ONEFlux's rules with the symmetric mean of Vekuri et
+   al. (2023) in daytime.
 
 **Q: How do I choose feature engineering parameters?**
 

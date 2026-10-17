@@ -227,7 +227,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
                 "ustar_bootstrap_swin_col (ustar_detection_mode='bootstrap')"
             )
     # L3.2 runs unconditionally in run_chain (L3.3 depends on it), but the
-    # Hampel filter ships its own sensible defaults — window_length=13,
+    # Hampel filter ships its own sensible defaults — window_length=48*13,
     # n_sigma_daytime/nighttime=5.5, use_differencing=True, day/night split.
     # The FluxConfig outlier_* fields are pure overrides; we don't require
     # them.

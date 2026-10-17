@@ -157,7 +157,8 @@ class _MdsGapFillingBase:
                 tolerance. As in the paper, it applies to daytime records only
                 (SWIN >= 20 W m-2); below that the plain mean is kept
                 (REddyProc's ``Vekuri23`` uses 10 W m-2). At gaps, the SD, the
-                sample count and the quality flags are the same in both modes.
+                sample count and the quality flags are the same in ``'diive'``
+                and ``'oneflux'``.
                 At measured records, ``'diive'`` leaves the record out of its
                 own sample, so the scores are out-of-sample. ONEFlux keeps it,
                 which with the symmetric mean would let the record echo
@@ -318,8 +319,9 @@ class _MdsGapFillingBase:
         vpd_tol = self.vpd_tol if self.vpd_in_kpa else self.vpd_tol * 10.0
 
         # Predict at every record (fill_all): gap predictions fill the gaps, and
-        # predictions at measured records give the in-sample score (matches the
-        # standard MDS validation). Marginal gaps are filled unless disabled.
+        # predictions at measured records give the score (in-sample for
+        # 'oneflux' and 'reddyproc', out-of-sample for 'diive', which leaves the
+        # record out). Marginal gaps are filled unless disabled.
         _cb = None
         if progress_callback is not None:
             def _cb(gaps_filled, gaps_total, quality):  # -> GUI 5-arg signature
@@ -363,7 +365,7 @@ class _MdsGapFillingBase:
         flag = np.where(filled_gap, res['flag'].astype(float), flag)
         df[self.target_gapfilled_flag] = flag
 
-        # Scores: in-sample, predictions vs measured where both exist.
+        # Scores: predictions vs measured where both exist.
         score_mask = measured & np.isfinite(predictions)
         self._scores = prediction_scores(
             predictions=pd.Series(predictions[score_mask]),

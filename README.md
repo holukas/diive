@@ -126,8 +126,9 @@ detector, hyperparameter and diagnostic flag. → [examples/flux/postprocessingc
 implementation: nighttime and daytime (Reichstein 2005, Lasslop 2010) × ONEFlux and REddyProc. Output columns are tagged
 so all four coexist in one dataframe. → [examples/flux/partitioning/](examples/flux/partitioning/)
 
-**Gap-filling** — Random Forest and XGBoost with SHAP-based feature reduction, plus a faithful MDS port that needs no
-training. An 8-stage feature engineer feeds them all. → [examples/gapfilling/](examples/gapfilling/README.rst)
+**Gap-filling** — Random Forest and XGBoost with SHAP-based feature reduction, plus an MDS gap-filler that needs no
+training, with modes that reproduce ONEFlux and REddyProc. An 8-stage feature engineer feeds them all.
+→ [examples/gapfilling/](examples/gapfilling/README.rst)
 
 **Desktop GUI** — the same library code behind an interactive app: plotting, cleaning, gap-filling and flux tabs, a
 guided post-processing chain, per-variable metadata with full provenance, and portable `.diive` project folders.

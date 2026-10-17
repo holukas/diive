@@ -473,8 +473,9 @@ class LevelResults:
     both populated. From the field's perspective the value still changes
     only via ``dataclasses.replace`` — the merged dict is a *new* object —
     but logically the L4.1 fields are a write-then-extend record rather
-    than write-once. See :func:`_warn_scenario_overwrite` for the
-    same-scenario re-run case.
+    than write-once. See
+    :func:`~diive.flux.postprocessingchain.levels._shared.warn_scenario_overwrite`
+    for the same-scenario re-run case.
 
     **High-quality vs. accepted-quality series:**
 

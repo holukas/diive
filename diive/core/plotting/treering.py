@@ -386,7 +386,7 @@ class TreeRingPlot:
             vmin: Low colour anchor (defaults to data minimum).
             vmax: High colour anchor (defaults to data maximum).
             cmap: Colormap applied to data values (default 'RdYlBu_r', blue=low, red=high).
-            linewidth: Line width in points (default 0.8)
+            linewidth: Line width in points (default 1.2)
             alpha: Line opacity (default 0.85)
             amplitude_scale: Maximum radial displacement as a fraction of one ring width.
                 0.5 makes lines reach ring boundaries; >0.5 causes overlap (default 0.5).
@@ -394,7 +394,7 @@ class TreeRingPlot:
                 Smaller values pack rings closer together.
             show_month_labels: Show month abbreviations outside the outer ring (default True)
             show_month_lines: Draw thin radial spokes at each month boundary (default False)
-            show_year_labels: Show year numbers at each ring's midpoint (default True)
+            show_year_labels: Show year numbers at each ring's midpoint (default False)
             show_year_separators: Draw faint circles between year rings (default False)
             year_label_frequency: Interval between year labels, e.g. 1 = every year (default 1)
             cb_label: Colorbar label text

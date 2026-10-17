@@ -165,7 +165,7 @@ def mds_gapfill_cascade(tofill, swin, ta, vpd, hr, nperday, *,
                         sd_func=None,
                         sample_ok=None,
                         progress_callback=None):
-    """Faithful ONEFlux MDS marginal-distribution-sampling cascade.
+    """MDS marginal-distribution-sampling cascade (ONEFlux or REddyProc rules).
 
     Six expanding-window passes (first success per record wins), a faithful port
     of ONEFlux C ``gf_mds`` (``edge='trim'``) or ONEFlux Python

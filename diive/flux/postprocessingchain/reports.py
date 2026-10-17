@@ -139,6 +139,8 @@ def report_gapfilling_model_scores(data, outpath: str | None = None,
 
     In-sample scores are optimistically biased; compare against
     :func:`report_traintest_model_scores` for the held-out counterpart.
+    MDS in ``mode='diive'`` (the default) is the exception: it leaves each
+    measured record out of its own prediction, so its scores are out-of-sample.
 
     Args:
         data: Chain container after at least one ``run_level41_*``.
