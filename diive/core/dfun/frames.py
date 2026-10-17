@@ -680,7 +680,7 @@ def _example_convert_matrix_to_longform():
     from diive.configs.exampledata import load_exampledata_parquet_long
     df = load_exampledata_parquet_long()
     series = df['Tair_f'].copy()
-    monthly = dv.resample_to_monthly_agg_matrix(series=series, agg='mean', ranks=True)
+    monthly = dv.times.resample_to_monthly_agg_matrix(series=series, agg='mean', ranks=True)
     monthly_longform = transform_yearmonth_matrix_to_longform(matrixdf=monthly)
     print(monthly)
     print(monthly_longform)

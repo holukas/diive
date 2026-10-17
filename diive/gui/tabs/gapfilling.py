@@ -87,9 +87,9 @@ class XGBoostGapFillingTab(MlGapFillingTab):
         self.test_size.setToolTip(
             "Fraction of complete records held out to compute the (honest) test "
             "score; the rest is used for training. The hold-out is sampled RANDOMLY "
-            "across the record (not a temporal block) — the appropriate test for "
-            "gap-filling, which interpolates short scattered gaps from nearby "
-            "observed data rather than extrapolating long unseen periods.")
+            "across the record, not as a temporal block. This reproduces the "
+            "gap-filling task: gaps lie between observed records and are filled "
+            "from the drivers at the same timestamp.")
         mf.addRow("test_size", self.test_size)
         self.random_state = QSpinBox()
         # -1 is the special "empty" value (shows "none") → no seed passed, so

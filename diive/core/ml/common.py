@@ -683,9 +683,10 @@ class MlRegressorGapFillingBase:
              f"({self.model_df.index[0]} to {self.model_df.index[-1]})", verbose=self.verbose)
         info(f"Train/test split: {len(self.train_df):,} train / {len(self.test_df):,} test "
              f"({self.test_size * 100:.0f}% held out)", verbose=self.verbose)
-        info("[dim]Test set is a RANDOM subset (scattered in time), not a temporal block "
-             "— the right validation for gap-filling (short scattered gaps), not "
-             "extrapolation.[/dim]", verbose=self.verbose)
+        info("[dim]Test set is a RANDOM subset of the complete records, not a temporal "
+             "block. This reproduces the gap-filling task: gaps lie between observed "
+             "records and are filled from the drivers at the same timestamp.[/dim]",
+             verbose=self.verbose)
         self._log_config()
         idtxt = f"TRAIN & TEST "
 
