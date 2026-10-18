@@ -28,7 +28,7 @@ uv run pytest tests/test_gapfilling.py -v
 
 ## Repository rules
 
-**`devnotes/`** holds internal working documents (excluded from the sdist, outside `docs/`): `CODE_REVIEW_FINDINGS.md` (entries `L1`…, `S1`–`S5`), `COVERAGE_GAPS.md`, `GUI_PERFORMANCE.md` (re-measure with `devnotes/gui_timing_pass.py`). Items carry a status box (`[ ]` open, `[x]` fixed with its commit, `[-]` won't fix, with reason), a file anchor and evidence. Update the matching entry when you fix something it lists; add new findings there, not in the repo root.
+**`devnotes/`** holds internal working documents (excluded from the sdist, outside `docs/`): `CODE_REVIEW_FINDINGS.md` (entries `L1`… and `G1`–`G9`, severity classes `S1`–`S5`), `COVERAGE_GAPS.md`, `GUI_PERFORMANCE.md` (re-measure with `devnotes/gui_timing_pass.py`). Items carry a status box (`[ ]` open, `[x]` fixed with its commit, `[-]` won't fix, with reason), a file anchor and evidence. Update the matching entry when you fix something it lists; add new findings there, not in the repo root.
 
 **[CRITICAL] Keep `diive/__init__.py` lazy.** Namespaces (and `diive.io`'s `binary`/`formats`) resolve via PEP 562 `__getattr__`. A plain `from diive import <namespace>` re-imports sklearn/xgboost/shap/statsmodels on `import diive` (~1.4 s). New namespaces go in `_LAZY_SUBMODULES`, the `TYPE_CHECKING` block, **and** `packaging/diive_gui.spec`'s `hiddenimports` (PyInstaller cannot follow `__getattr__`).
 
@@ -126,17 +126,17 @@ PySide6, optional `gui` extra, launch `diive-gui`. **File map and per-tab detail
 
 Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to trim; `LocalOutlierFactor` has no per-period knobs. `*DaytimeNighttime` names are wrappers or plain aliases.
 
-**[DESIGN — do not revert] Mixed time resolutions in `StepwiseMeteoScreeningDb`** (e.g. 10-min then 1-min records in one download). Findings L153–L198 in `devnotes/CODE_REVIEW_FINDINGS.md` (L192–L198: the GUI tab).
+**[DESIGN — do not revert] Mixed time resolutions in `StepwiseMeteoScreeningDb`** (e.g. 10-min then 1-min records in one download). Findings L153–L198 in `devnotes/CODE_REVIEW_FINDINGS.md` (L192–L198: the GUI tab), and L226–L254 from the notebook production checks.
 - The grid is the common divisor of all resolutions and END offsets. Each record sits **only at its own END slot**; the slots in between are empty ("not a record") and must stay NaN through every step, including corrections (`_set_corrected` re-applies the mask). Never back-fill coarse records onto the fine grid: that made removals miss copies, sums count copies, and difference tests reject valid data.
-- Rolling-window and difference tests (Hampel, Local SD, rolling z-score, increments z-score) run **per resolution period** on the period's own grid (`_run_per_period` → `StepwiseOutlierDetection.set_pending_flag`), so `'7D'` means seven days everywhere. Global tests (z-score, LOF, absolute limits, trim low) run on all records at once.
-- `resample()` weights each record by the time it covers (overlap-capped); `mean` is time-weighted, `sum` counts each record once. For single-resolution data every path is bit-identical to the plain implementation; check that against HEAD after any change here.
+- Rolling-window and difference tests (Hampel, Local SD, rolling z-score, increments z-score) run **per resolution period** on the period's own grid (`_run_per_period` → `StepwiseOutlierDetection.set_pending_flag`), so `'7D'` is converted at each period's own resolution. The window still stretches across missing records (L236). Global tests (z-score, LOF, absolute limits, trim low) run on all records at once.
+- `resample()` weights each record by the time it covers (overlap-capped); `mean` is time-weighted, `sum` counts each record once. Coverage is the time the kept records cover, not grid slots, so other resolutions in the download don't change which periods are kept. For single-resolution data every path is bit-identical to the plain implementation, except `sum`, which drops the one-record minimum on purpose (L235). Check that against HEAD after any change here.
 - `FlagQCF` treats a row as "not a record" only when the missing-values flag **and** the value are NaN. Plots use display-only copies (`_display_lines`, `_display_heatmap`).
 - Dates for manual removal and `correction_setto_value` are END timestamps in the data's own time zone, as users see them after download (the download already applied the UTC offset).
 
 ## Coding Standards
 
 - Validate input only at system boundaries. Let exceptions propagate unless you can recover. Comments explain WHY, not WHAT.
-- **Console output:** use the Rich helpers from `diive/core/utils/console.py` (`rule`/`info`/`success` at PROGRESS, `warn`/`error` at ERROR, `detail` at DEBUG, `_console.print` for reports). **No `print()` in production code** (allowed in examples, docstrings, `__main__`, `_cli_main()`), no separate `Console`, no `logging` for general output.
+- **Console output:** use the Rich helpers from `diive/core/utils/console.py` (`rule`/`info`/`success` at PROGRESS, `warn`/`error` at ERROR, `detail` at DEBUG, `_console.print` for reports). **No `print()` in production code** (allowed in examples, docstrings, `__main__`), no separate `Console`, no `logging` for general output.
 - **[CRITICAL] Always pass `verbose=` when the caller has one**, even inside an `if self.verbose >= N:` guard. A bare `detail(msg)` resolves to the module default (PROGRESS), below `detail`'s own DEBUG level, so it never prints.
 - **Module docstring:** `MODULE_NAME: DESCRIPTIVE_TITLE`, `===` underline, one-line scope, then `Part of the diive library: https://github.com/holukas/diive`.
 - **Written text** (docs, comments, commit messages, examples): use the `/llm-detox` skill.
@@ -184,4 +184,4 @@ pytest tests/ -v
 
 ---
 
-**Last Updated:** 2026-10-17 | **Version:** v0.92.0
+**Last Updated:** 2026-10-18 | **Version:** v0.92.0

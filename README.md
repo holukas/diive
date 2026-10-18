@@ -126,7 +126,8 @@ selects one with `method='nighttime'|'daytime'` and `mode='oneflux'|'reddyproc'`
 default). Output columns are tagged so all four coexist in one dataframe. → [examples/flux/partitioning/](examples/flux/partitioning/)
 
 **Gap-filling** — Random Forest and XGBoost with SHAP-based feature reduction, plus an MDS gap-filler that needs no
-training, with modes that reproduce ONEFlux and REddyProc. An 8-stage feature engineer feeds them all.
+training. Its default mode adds the symmetric mean of Vekuri et al. (2023) to ONEFlux's rules, and two more modes
+reproduce ONEFlux and REddyProc. An 8-stage feature engineer builds the inputs for the machine-learning models.
 → [examples/gapfilling/](examples/gapfilling/README.rst)
 
 **Desktop GUI** — the same library code behind an interactive app: plotting, cleaning, gap-filling and flux tabs, a
