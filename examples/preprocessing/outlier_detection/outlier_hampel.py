@@ -43,8 +43,10 @@ print(f"  Valid records: {s_noise.notna().sum()}")
 # Apply Hampel filter with day/night separation
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Use separate thresholds for daytime and nighttime data.
-# This accounts for different signal characteristics across the day.
+# Daytime records are judged against the median and MAD of the daytime
+# records in the window, nighttime records against the nighttime records.
+# Here both periods use n_sigma. n_sigma_daytime and n_sigma_nighttime
+# override it for one period.
 
 ham_dtnt = dv.outliers.Hampel(
     series=s_noise,
@@ -72,7 +74,7 @@ print(f"  Filtered range: {filtered_dtnt.min():.2f} to {filtered_dtnt.max():.2f}
 # Apply global Hampel filter (single threshold)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Use consistent threshold across entire series.
+# One median, MAD and threshold for all records.
 # Simpler, faster approach when time-of-day variation is not a concern.
 
 ham_global = dv.outliers.Hampel(
