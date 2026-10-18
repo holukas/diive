@@ -124,6 +124,12 @@ Library (also used by the notebook and the GUI):
 - **Time resolution text:** `describe_time_resolution()` in `diive.core.times.times` gives the
   detected time resolution of an index as text, with the number of records for each resolution
   where it changes.
+- **Nighttime zero offset, figure:** `remove_nighttime_zero_offset(showplot=True)` and the meteo
+  screening correction show a new figure (`NighttimeZeroOffsetPlot`). A strip shows the five steps in
+  order with their counts: find night, daily offset, subtract, night to 0, clamp negatives. Below it:
+  measured and corrected series, the daily offset as one value per calendar day with the spread of
+  each night, the diel cycle near zero after each step, the night values before and after subtracting
+  the offset, and a summary.
 - **QCF reports:** `report_qcf_series()`, `report_qcf_flags()` and `report_qcf_evolution()` of
   `FlagQCF` (also called by the meteo screening) print one aligned table each, readable in
   notebooks.
@@ -168,7 +174,7 @@ GUI only:
 - **MDS gap-filling, driver QC:** the MDS tab and Level 4.1 of the flux post-processing chain
   take an optional QC flag column for SW_IN, TA and VPD, and Copy Python includes it.
 
-Notebook (meteo screening notebook v19):
+Notebook (meteo screening notebook v20):
 
 - **Run All:** no longer applies outlier tests with example settings. All outlier tests are
   commented out, with notes on the variables each one does not suit.
@@ -192,6 +198,8 @@ Notebook (meteo screening notebook v19):
   site or fields changed after the download or after the screening.
 - **Resampling note:** `'mean'` is an arithmetic mean, so angles such as wind direction need a
   circular mean.
+- **Layout and texts:** more space above each section header, and shorter, clearer texts that
+  mention the download summary, the plot statistics and the QCF reports.
 
 ### Packaging
 
