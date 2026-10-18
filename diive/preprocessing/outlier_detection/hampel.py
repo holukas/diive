@@ -51,6 +51,10 @@ class Hampel(FlagBase):
       between day and night)
 
     Optional double-differencing (Papale et al. 2006) removes trends before detection.
+    In both modes a record at the start or end of a run without gaps is
+    compared with the line through its next two records. That comparison has
+    the curvature sign of the central double difference, so a smooth curve
+    gives the same sign at the edge as inside the run.
 
     With double-differencing the filter finds single spikes and pairs of
     adjacent spikes, also at the series ends and next to gaps. A large spike
@@ -159,13 +163,31 @@ class Hampel(FlagBase):
                 records of the same period in the window, and their own threshold, as in
                 ONEFlux. Unlike ONEFlux, the records next to the change between day and
                 night belong to one period only: against the near-zero night MAD of
-                radiation every record on the light ramp would look like a spike. With
-                ``use_differencing=True`` a double difference uses records of one period
-                only, also as in ONEFlux. The record next to the change is compared with
-                the extrapolation from records of its own period. The
+                radiation every record on the light ramp would look like a spike. The
                 night includes records with up to 20 W m-2 potential radiation, so in
                 radiation a few records at sunrise and sunset can still be rejected.
-                If ``False``, one median, MAD and threshold for all records.
+                With ``use_differencing=True`` a double difference uses records of one
+                period only, also as in ONEFlux:
+
+                * In a run of three or more records of one period without a gap, the
+                  first and last record are compared with the line through the next
+                  two records of the run, the others with both neighbours.
+                * A single record with a change between day and night on one side
+                  and one missing record on the other is compared with the line
+                  through the nearest two records of its own period beyond the
+                  missing one, if those belong to a run of three or more.
+                * A run of one or two records with a change on both sides (short polar
+                  days and nights) is compared with both neighbours, across the change.
+                * Other runs of one or two records stay untested, e.g. a run of two
+                  between a change and a gap, or a run between a change and a longer
+                  gap or a series end. On clean clear-sky 30-min SW_IN every test
+                  tried for them rejected good first and last daytime records.
+
+                With ``repeat=True`` a record removed by an earlier iteration also ends
+                a run, and the short runs next to it get the line tests described in
+                ``_double_differences`` first. If ``False``, one median, MAD and
+                threshold for all records, and double differences ignore the change
+                between day and night.
             idstr (str, optional): Identifier suffix added to output variable names.
             showplot (bool): If ``True``, displays a summary plot after calculation.
             verbose (bool): If ``True``, prints iteration statistics to the console.
@@ -311,8 +333,9 @@ class Hampel(FlagBase):
         spike against the daytime statistics: clear-sky 30-min SW_IN lost the
         first and last daytime record of nearly every day (L255). The record
         next to the change is tested against the extrapolation from records of
-        its own period instead, so a spike there is still found. A period with
-        fewer than three records in a row stays untested.
+        its own period instead, so a spike there is still found. Runs of one or
+        two records next to the change get the tests listed in
+        ``_double_differences`` (L274).
         """
         seg = self._input_segments(series)
         if not self.separate_day_night:
@@ -342,7 +365,9 @@ class Hampel(FlagBase):
         the central sign. With statistics per period the median of ``d`` is not
         zero (daytime curvature), and with the opposite sign each run edge was
         judged against a band shifted the wrong way: ``repeat=True`` removed
-        both ends of each clear day, record by record (L255).
+        both ends of each clear day, record by record (L255). The rule applies
+        in both modes. With ``separate_day_night=False`` the median is near
+        zero, so the sign changes fewer flags, but it still changes some.
 
         Removed records end runs because differencing across them assumes equal
         spacing. On a diurnal ramp or across a level shift that mismatch looks
@@ -360,7 +385,28 @@ class Hampel(FlagBase):
           extended across the hole. Those two records must belong to a run of
           three or more.
 
-        A line never crosses an input gap or a change between day and night.
+        Here an input run is also split at each change between day and night
+        (``self._segment``), so these lines never cross a change or an input
+        gap.
+
+        With ``separate_day_night=True`` a run of one or two records next to a
+        change between day and night has no test inside its period (one missing
+        record next to the change, short polar days and nights, L274):
+
+        - A single record with a change on one side and one missing record
+          (input gap or removed record) on the other is compared with the line
+          through the nearest two records of its own period beyond the missing
+          one. Those two records must belong to a run of three or more. A run
+          of two between a change and a gap stays untested: on clean clear-sky
+          30-min SW_IN (noise 0.5 W m-2) the same line rejected 1-7 % of the
+          good inner records, and 15-24 % of the outer ones.
+        - With a change on both sides, each record is compared with both
+          neighbours, across the change (the central difference, as before
+          L255).
+
+        No difference across the change next to a gap or a series end: on
+        clear-sky 30-min SW_IN the step from the flat night to the light ramp
+        rejected 78-95 % of the good first and last daytime records there.
         Other records in runs of fewer than three are NaN.
 
         Returns ``d`` plus, for mapping the detection band to data units, the
@@ -418,6 +464,46 @@ class Hampel(FlagBase):
                 w = (pos - pos[a]) / (pos[b] - pos[a])
                 reference = reference.mask(line, (1 - w) * x[a] + w * x[b])
                 factor = factor.mask(line, sign * np.sqrt(6 / (1 + (1 - w) ** 2 + w ** 2)))
+
+            if self.separate_day_night:
+                # A run of one or two records next to a change between day and
+                # night has no test inside its period (L274). Such runs come
+                # from a missing record next to the change and from short polar
+                # days and nights. gap_l and gap_r count the missing records
+                # before and after the run, -1 at a series end.
+                day = self.is_daytime.reindex(s.index, fill_value=False).to_numpy(dtype=bool)
+                full_day = self.is_daytime.reindex(self.series.index, fill_value=False).to_numpy(dtype=bool)
+                period = np.cumsum(np.r_[True, full_day[1:] != full_day[:-1]])
+                lc, rc = np.clip(left, 0, n - 1), np.clip(right, 0, n - 1)
+                gap_l = np.where(left >= 0, pos[first] - pos[lc] - 1, -1)
+                gap_r = np.where(right < n, pos[rc] - pos[last] - 1, -1)
+                change_l = (gap_l == 0) & (day[lc] != day)
+                change_r = (gap_r == 0) & (day[rc] != day)
+                untested = (length <= 2) & ~line & (change_l | change_r)
+                # A single record with a change on one side and one missing
+                # record on the other: the line through the nearest two records
+                # of its own period beyond the gap (see docstring).
+                own_r = (untested & (length == 1) & (gap_r == 1) & (period[pos[rc]] == period[pos[last]])
+                         & (length[rc] >= 3))
+                own_l = (untested & ~own_r & (length == 1) & (gap_l == 1)
+                         & (period[pos[lc]] == period[pos[first]]) & (length[lc] >= 3))
+                own = own_r | own_l
+                a = np.where(own_r, rc, lc)
+                b = np.clip(np.where(own_r, rc + 1, lc - 1), 0, n - 1)
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    w = (pos - pos[a]) / (pos[b] - pos[a])
+                    reference = reference.mask(own, (1 - w) * x[a] + w * x[b])
+                    factor = factor.mask(own, -np.sqrt(6 / (1 + (1 - w) ** 2 + w ** 2)))
+                # Change on both sides (short polar day or night): the central
+                # difference across the change, as before L255. Not used next to
+                # a gap: there the step from the flat night to the light ramp
+                # rejected most good first and last daytime records of
+                # clear-sky 30-min SW_IN, centrally or one-sided.
+                across = untested & change_l & change_r
+                i = np.arange(n)
+                ip, inx = np.clip(i - 1, 0, n - 1), np.clip(i + 1, 0, n - 1)
+                reference = reference.mask(across, (x[ip] + x[inx]) / 2)
+                factor = factor.mask(across, 2.0)
         return factor * (s - reference), reference, factor
 
     def _rolling_median_mad(self, x: Series) -> tuple[Series, Series]:

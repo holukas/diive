@@ -301,6 +301,83 @@ class TestClearSkyRunEdges(unittest.TestCase):
         self.assertTrue((outside == flagged).all())
 
 
+class TestShortRunsNextToTheChange(unittest.TestCase):
+    """L274: since L255 the runs are split at the change between day and night,
+    so a day or night run of one or two records had no test. Such runs come
+    from one missing record next to the change and from short polar nights."""
+
+    @staticmethod
+    def _swin(lat, start, days, sd, seed, lon=9.0, scale=0.75):
+        from diive.variables.radiation import potrad
+        idx = pd.date_range(start, periods=48 * days, freq='30min', name='TIMESTAMP_MIDDLE')
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=1).to_numpy()
+        values = scale * pot + np.random.default_rng(seed).normal(0, sd, len(idx))
+        return pd.Series(values, index=idx, name='SW_IN')
+
+    @staticmethod
+    def _hampel(series, lat, repeat=True, lon=9.0):
+        ham = Hampel(series=series, window_length=624, n_sigma=5.5, lat=lat, lon=lon, utc_offset=1)
+        ham.calc(repeat=repeat)
+        return ham
+
+    @staticmethod
+    def _first_daytime_records(ham):
+        day = ham.is_daytime.reindex(ham.series.index, fill_value=False).to_numpy().astype(bool)
+        return np.flatnonzero(day & ~np.r_[False, day[:-1]])
+
+    def test_dawn_gap_spikes_are_caught(self):
+        # The 2nd daytime record is missing, so the 1st is a run of one. It is
+        # compared with the line through the 3rd and 4th, across the gap.
+        lat = 47.3
+        s = self._swin(lat, '2024-05-01', 45, sd=2, seed=4)
+        first = self._first_daytime_records(self._hampel(s, lat))
+        s.iloc[first + 1] = np.nan
+        clean = self._hampel(s, lat).get_flag()
+        self.assertEqual(int((clean.iloc[first] == 2).sum()), 0)
+        s.iloc[first] += 300
+        flag = self._hampel(s, lat).get_flag()
+        # Was 0 of 45 since L255.
+        self.assertTrue((flag.iloc[first] == 2).all())
+        self.assertEqual(int((flag == 2).sum()), len(first))
+
+    def test_dawn_gap_on_clean_clear_sky_days_is_kept(self):
+        # The 2nd or the 3rd daytime record is missing. A comparison across the
+        # change, or the line beyond the gap used for a run of two, rejected
+        # many of these good records. Same days as TestClearSkyRunEdges.
+        lat, lon = 46.8, 9.86
+        s = self._swin(lat, '2023-01-01 00:15', 59, sd=0.5, seed=2, lon=lon, scale=0.8)
+        first = self._first_daytime_records(self._hampel(s, lat, lon=lon))
+        s.iloc[first[::2] + 1] = np.nan
+        s.iloc[first[1::2] + 2] = np.nan
+        runs = np.r_[first, first[1::2] + 1]
+        for repeat in (False, True):
+            with self.subTest(repeat=repeat):
+                flag = self._hampel(s, lat, repeat, lon=lon).get_flag()
+                # Only the short runs: with these gaps the last daytime record
+                # of 2023-02-01 sits just outside its band, as before L274.
+                self.assertEqual(int((flag.iloc[runs] == 2).sum()), 0)
+
+    def test_short_polar_nights_are_tested(self):
+        # 68 N in June: nights of one or two records between two days are
+        # compared with both neighbours, across the change.
+        lat = 68.0
+        s = self._swin(lat, '2024-06-01', 45, sd=2, seed=3)
+        ham = self._hampel(s, lat)
+        day = ham.is_daytime.reindex(s.index, fill_value=False).to_numpy().astype(bool)
+        run = np.cumsum(np.r_[True, day[1:] != day[:-1]])
+        length = pd.Series(run).map(pd.Series(run).value_counts()).to_numpy()
+        short = np.flatnonzero(~day & (length <= 2) & (run > 1) & (run < run[-1]))
+        self.assertGreater(len(short), 30)
+        self.assertEqual(int((ham.get_flag().iloc[short] == 2).sum()), 0)
+        # Every third short night, so the window still has clean nights.
+        spikes = short[np.isin(run[short], np.unique(run[short])[::3])]
+        s.iloc[spikes] += 400
+        flag = self._hampel(s, lat).get_flag()
+        # Was 0 since L255.
+        self.assertTrue((flag.iloc[spikes] == 2).all())
+        self.assertEqual(int((flag == 2).sum()), len(spikes))
+
+
 def potrad_positive(series):
     from diive.variables.radiation import potrad
     return potrad(timestamp_index=series.index, lat=47.42, lon=8.49, utc_offset=1).to_numpy() > 50
