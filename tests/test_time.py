@@ -435,6 +435,37 @@ class TestDetectFreqGroups(unittest.TestCase):
                 g = self._groups(full[rng.random(len(full)) > p])
                 self.assertTrue((g == 60).all())
 
+    def test_own_period_wins_against_a_coarse_run(self):
+        # L283: the last 2MIN record before a 30MIN block, with a 2MIN record missing
+        # two places before it, has a lone 2MIN neighbour and got 1800 s
+        fine = pd.date_range('2024-07-01 12:01', '2024-07-01 15:13', freq='2min')
+        fine = fine.drop(pd.Timestamp('2024-07-01 15:07'))
+        coarse = pd.date_range('2024-07-01 15:43', periods=20, freq='30min')
+        g = self._groups(fine.append(coarse))
+        self.assertTrue((g.loc[fine] == 120).all())
+        self.assertTrue((g.loc[coarse] == 1800).all())
+
+    def test_own_period_wins_against_a_fine_run(self):
+        # L283: the last record of an off-phase 3 x 5MIN block between 2MIN periods
+        # got 120 s from the 2MIN run after it
+        f1 = pd.date_range('2024-07-02 12:00', '2024-07-02 16:36', freq='2min')
+        blk = pd.DatetimeIndex(['2024-07-02 16:45', '2024-07-02 16:50', '2024-07-02 16:55'])
+        f2 = pd.date_range('2024-07-02 16:57', periods=200, freq='2min')
+        g = self._groups(f1.append(blk).append(f2))
+        self.assertTrue((g.loc[blk] == 300).all())
+        self.assertTrue((g.drop(blk) == 120).all())
+
+    def test_own_period_wins_for_timestamp_start(self):
+        # Mirror image of the 2MIN/30MIN case: for TIMESTAMP_START the record's own
+        # period is the next record
+        from diive.core.times.times import detect_freq_groups
+        coarse = pd.date_range('2024-07-01 02:00', periods=20, freq='30min')
+        fine = pd.date_range(coarse[-1] + pd.Timedelta('30min'), periods=97, freq='2min')
+        fine = fine.drop(fine[3])
+        g = detect_freq_groups(index=pd.DatetimeIndex(coarse.append(fine), name='TIMESTAMP_START'))
+        self.assertTrue((g.loc[fine] == 120).all())
+        self.assertTrue((g.loc[coarse] == 1800).all())
+
 
 class TestStlDecompose(unittest.TestCase):
     """Regression tests for `core/times/decomposition_utils.py::stl_decompose`.

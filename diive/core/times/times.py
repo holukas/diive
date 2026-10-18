@@ -539,12 +539,15 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
     1. A record whose time differences to the previous and to the next record are
        equal has an unambiguous resolution: that difference.
     2. A record where the two differences differ sits next to a timestamp gap or at a
-       change of resolution. It gets the group of a neighbour from pass 1, on the side
-       where the difference to that neighbour equals the neighbour's resolution, or
-       else is an integer multiple of it (a gap of whole missing records). If both
-       sides qualify equally, the side of the record's own averaging period wins: the
-       previous record for TIMESTAMP_END (and unnamed) indexes, the next record for
-       TIMESTAMP_START.
+       change of resolution. It gets the group of a neighbour from pass 1 (the
+       difference to that neighbour equals the neighbour's resolution). If both
+       neighbours are from pass 1, the side of the record's own averaging period
+       wins: the previous record for TIMESTAMP_END (and unnamed) indexes, the next
+       record for TIMESTAMP_START. One exception: a neighbour that is a single
+       pass-1 record, with no neighbour of the same group, loses if the other
+       neighbour belongs to a run of pass-1 records and the single record's
+       resolution is a whole multiple of the run's. It may be one record between
+       missing records of that resolution (see pass 3).
     3. A single record between two gaps of the same length (e.g. 10MIN data with the
        records before and after it missing) has equal differences to both neighbours
        and got the gap length in pass 1. It joins its neighbours' group when both have
@@ -609,23 +612,27 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
     next_group = np.concatenate([group[1:], [0]])
 
     # A pass-1 record is backed by a run if a neighbour has the same group. A lone
-    # record between two equal gaps is not, and must not pull the records around
-    # it into its gap-sized group.
+    # record between two equal gaps is not. If its group is a whole multiple of a
+    # run on the other side, it may be a single record between missing records of
+    # that resolution (pass 3), and it must not pull the record into its
+    # gap-sized group.
     in_run = (group > 0) & ((group == prev_group) | (group == next_group))
     prev_in_run = np.concatenate([[False], in_run[:-1]])
     next_in_run = np.concatenate([in_run[1:], [False]])
 
-    def _score(d, g, g_in_run):
-        # 3/2 = spacing equals the neighbour's resolution (with/without a run),
-        # 1 = whole missing records in between, 0 = does not fit
+    def _score(d, g, g_in_run, g_other, other_in_run):
+        # 2 = spacing equals the neighbour's resolution, 1 = the same, but the
+        # neighbour is a lone record that may sit between missing records of the
+        # run on the other side, 0 = does not fit. A pass-1 neighbour's group
+        # always equals the spacing to it, so whole multiples do not occur here.
         valid = (d > 0) & (g > 0)
-        safe_g = np.where(valid, g, 1)
         exact = valid & (d == g)
-        multiple = valid & (d % safe_g == 0)
-        return np.where(exact, np.where(g_in_run, 3, 2), np.where(multiple, 1, 0))
+        safe_o = np.where(other_in_run, g_other, 1)
+        suspect = ~g_in_run & other_in_run & (g > g_other) & (g % safe_o == 0)
+        return np.where(exact, np.where(suspect, 1, 2), 0)
 
-    prev_score = _score(prev_d, prev_group, prev_in_run)
-    next_score = _score(next_d, next_group, next_in_run)
+    prev_score = _score(prev_d, prev_group, prev_in_run, next_group, next_in_run)
+    next_score = _score(next_d, next_group, next_in_run, prev_group, prev_in_run)
 
     # On a tie, take the side covered by the record's own averaging period
     tie_to_next = index.name == 'TIMESTAMP_START'
