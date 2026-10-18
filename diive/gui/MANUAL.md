@@ -667,10 +667,12 @@ The **Preview** section holds two display options that don't change the result:
   entries. Every iteration's band accumulates in the top panel (a tightening
   envelope); the bottom panel shows just the current pass's band. Shown in data
   units even with double-differencing on. Toggling it re-renders the last result.
-- **Separate daytime / nighttime** *(optional).* Use **different** thresholds for
-  day and night. That is the point of separating: with the same value for both, the
-  result is identical to not separating. Set **Daytime n sigma** and **Nighttime n
-  sigma** (they start from the global value, then edit each). Latitude and
+- **Separate daytime / nighttime** *(optional).* Daytime points are judged against
+  the median and spread of the daytime points in the window, nighttime points against
+  those of the nighttime points, as in ONEFlux. This matters for variables with a
+  quiet night, such as radiation or fluxes, even with the same threshold for both.
+  Set **Daytime n sigma** and **Nighttime n sigma** (they start from the global
+  value, then edit each). Latitude and
   longitude default from **Settings ▸ Project settings**; the UTC offset is shown
   read-only from there. Day and night outliers are then
   drawn in red and blue, and the status line reports how many of each were found.

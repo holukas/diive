@@ -120,7 +120,7 @@ PySide6, optional `gui` extra, launch `diive-gui`. **File map and per-tab detail
 
 1. The switch is always `separate_day_night` (default `True` only for `Hampel`).
 2. One global knob (`n_sigma`, `n_sd`, …) is the source of truth. Per-period overrides are `{knob}_daytime`/`{knob}_nighttime`, **default `None`** (never a literal, which shadows the global), falling back to the global. No lists or packed pairs.
-3. Separation is not a no-op with equal thresholds for subset-derived methods (`zScore`, `LocalSD`, `LOF`), which compute their statistic per period. It is a no-op for pointwise `AbsoluteLimits` and for `Hampel`, whose rolling median and MAD run on the whole series; only its threshold differs per period.
+3. Separation is not a no-op with equal thresholds for subset-derived methods (`zScore`, `LocalSD`, `LOF`, `Hampel`), which compute their statistic per period. `Hampel` rolls the same window span and blanks the other period's records, as ONEFlux `qc_auto` does (L239), but unlike ONEFlux it does not count transition records in both periods (that rejected the whole light ramp of radiation). It is a no-op only for pointwise `AbsoluteLimits`.
 4. A GUI exposing it should expose per-period thresholds (reference: Hampel tab).
 5. A removed parameter must say what replaced it: take `**legacy` and call `reject_legacy_params`.
 

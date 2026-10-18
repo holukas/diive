@@ -105,5 +105,138 @@ class TestBlocks(unittest.TestCase):
         self.assertEqual(list(np.flatnonzero((flag == 2).to_numpy())), [1005, 1006, 1007])
 
 
+class TestBlocksAtEndsAndGaps(unittest.TestCase):
+    """L240: one to three records between a removal hole and a series end or an
+    input gap are compared with the line from the other side of the hole. Before
+    the fix the middle of the block stayed."""
+
+    N = 144 * 14
+    GAP = (1000, 1005)  # input gap, records 1000-1004
+
+    def _rejected(self, bad, gap=None, seed=1):
+        s = _diurnal(self.N, '10min', seed=seed)
+        if gap:
+            s.iloc[gap[0]:gap[1]] = np.nan
+        s.iloc[bad] += 10
+        return np.flatnonzero((_flags(s, repeat=True) == 2).to_numpy())
+
+    def test_blocks_are_removed_with_their_good_neighbours(self):
+        N, (g0, g1) = self.N, self.GAP
+        cases = {
+            'start, bad 1-3': (range(1, 4), None),
+            'start, bad 0-2': (range(0, 3), None),
+            'start, bad 1-4': (range(1, 5), None),
+            'start, bad 0-3': (range(0, 4), None),
+            'after gap, bad +1..+3': (range(g1 + 1, g1 + 4), self.GAP),
+            'after gap, bad 0..+2': (range(g1, g1 + 3), self.GAP),
+            'after gap, bad 0..+3': (range(g1, g1 + 4), self.GAP),
+            'before gap, bad -4..-2': (range(g0 - 4, g0 - 1), self.GAP),
+            'before gap, bad -3..-1': (range(g0 - 3, g0), self.GAP),
+            'before gap, bad -4..-1': (range(g0 - 4, g0), self.GAP),
+            'end, bad -4..-2': (range(N - 4, N - 1), None),
+            'end, bad -3..-1': (range(N - 3, N), None),
+            'end, bad -4..-1': (range(N - 4, N), None),
+        }
+        for label, (bad, gap) in cases.items():
+            with self.subTest(label):
+                bad = list(bad)
+                # The block and the good record on either side, never a record
+                # of the input gap or outside the series.
+                expected = [i for i in range(bad[0] - 1, bad[-1] + 2)
+                            if 0 <= i < N and not (gap and gap[0] <= i < gap[1])]
+                self.assertEqual(list(self._rejected(bad, gap)), expected)
+
+    def test_line_comes_only_from_a_run_of_three(self):
+        # Pass 1 leaves records 0-2 (good) at the start and 5-6 (bad) as the rest
+        # of the block. The line for 0-2 must not run through 5-6.
+        self.assertEqual(list(self._rejected(list(range(4, 8)))), list(range(3, 9)))
+
+    def test_level_shift_before_a_gap(self):
+        # Documented limit: the records between the step and an input gap that
+        # follows within four records look like a bad block and go too.
+        s = _diurnal(1440 * 4, '1min')
+        t = len(s) // 2
+        s.iloc[t:] += 5.0
+        s.iloc[t + 4:t + 7] = np.nan
+        rejected = np.flatnonzero((_flags(s, repeat=True) == 2).to_numpy())
+        self.assertEqual(list(rejected - t), [-1, 0, 1, 2, 3])
+
+
+class TestStepwiseChain(unittest.TestCase):
+    """L240 in the notebook path: a record removed by absolute limits is an input
+    gap for Hampel. Before the fix the middle of the block next to it stayed."""
+
+    def test_block_next_to_an_abslim_removal(self):
+        from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+        idx = pd.date_range('2026-03-01 00:05', '2026-03-30 23:55', freq='10min', name='TIMESTAMP_MIDDLE')
+        hour = idx.hour + idx.minute / 60
+        values = 5 + 5 * np.sin(2 * np.pi * (hour - 9) / 24) + np.random.default_rng(4).normal(0, 0.1, len(idx))
+        df = pd.DataFrame({'TA': values}, index=idx)
+        t0 = idx.get_loc(pd.Timestamp('2026-03-15 12:55'))
+        df.iloc[t0, 0] = -999.0
+        block = [t0 + 2, t0 + 3, t0 + 4]  # one good record, then three bad
+        df.iloc[block, 0] += 15
+        sod = StepwiseOutlierDetection(dfin=df, col='TA', site_lat=47.4, site_lon=8.5, utc_offset=1)
+        sod.flag_outliers_abslim_test(minval=-50, maxval=50)
+        sod.addflag()
+        sod.flag_outliers_hampel_test(window_length='7D', n_sigma=5.5)
+        sod.addflag()
+        cleaned = sod.series_hires_cleaned
+        self.assertTrue(cleaned.iloc[block].isna().all())
+        removed = np.flatnonzero((df['TA'].notna() & cleaned.isna()).to_numpy())
+        self.assertEqual(list(removed - t0), [0, 1, 2, 3, 4, 5])
+
+
+class TestDayNightStatistics(unittest.TestCase):
+    """L239: with separate_day_night=True the median and MAD come from the
+    records of the same period. Shared statistics let the quiet night set the
+    MAD, and clean daytime radiation lost more than half its records."""
+
+    @staticmethod
+    def _swin(spikes=()):
+        from diive.variables.radiation import potrad
+        rng = np.random.default_rng(0)
+        idx = pd.date_range('2026-03-01 00:05', periods=144 * 31, freq='10min', name='TIMESTAMP_MIDDLE')
+        pot = potrad(timestamp_index=idx, lat=47.42, lon=8.49, utc_offset=1).to_numpy()
+        cloud = np.clip(np.convolve(rng.normal(0.7, 0.25, len(idx)), np.ones(3) / 3, 'same'), 0.1, 1)
+        values = pot * cloud + rng.normal(0, 1.2, len(idx)) * (pot > 0) + rng.normal(-3, 0.3, len(idx))
+        values[list(spikes)] += 600
+        return pd.Series(values, index=idx, name='SW_IN')
+
+    @staticmethod
+    def _hampel(series, repeat):
+        ham = Hampel(series=series, window_length='7D', n_sigma=5.5, lat=47.42, lon=8.49, utc_offset=1)
+        ham.calc(repeat=repeat)
+        return ham
+
+    def test_clean_daytime_radiation_is_kept(self):
+        for repeat in (False, True):
+            with self.subTest(repeat=repeat):
+                ham = self._hampel(self._swin(), repeat)
+                rejected = ham.get_flag() == 2
+                day = ham.is_daytime.reindex(rejected.index, fill_value=False)
+                self.assertEqual(int((rejected & day).sum()), 0)  # was 1625 / 2130
+                self.assertLess(int(rejected.sum()), 100)  # sunrise/sunset records counted as night
+
+    def test_daytime_spikes_are_caught(self):
+        swin = self._swin()
+        day_idx = np.flatnonzero(potrad_positive(swin))
+        spikes = np.random.default_rng(1).choice(day_idx, 20, replace=False)
+        flag = self._hampel(self._swin(spikes), repeat=True).get_flag()
+        self.assertEqual(int((flag.iloc[spikes] == 2).sum()), 20)
+
+    def test_global_mode_is_unchanged(self):
+        # One median and MAD for all records, as before
+        s = _diurnal(144 * 14, '10min', sd=0.1)
+        s.iloc[[300, 900, 1500]] += 5
+        flag = _flags(s, repeat=False)
+        self.assertEqual(sorted(np.flatnonzero((flag == 2).to_numpy())), [299, 300, 301, 899, 900, 901, 1499, 1500, 1501])
+
+
+def potrad_positive(series):
+    from diive.variables.radiation import potrad
+    return potrad(timestamp_index=series.index, lat=47.42, lon=8.49, utc_offset=1).to_numpy() > 50
+
+
 if __name__ == '__main__':
     unittest.main()
