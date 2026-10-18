@@ -589,6 +589,28 @@ def _polar_series(start="2026-06-10", days=4, freq="10min", offset=2.0,
     return measured, 0.7 * true, pr
 
 
+def _true_night(index, lat, lon, utc_offset, period_min):
+    """Night where potential radiation is below 0.001 W m-2 with the minutes
+    potrad's solar-noon shift vacates taken from the neighbouring day's curve."""
+    from diive.variables.radiation import _noaa_solar_noon_minutes, _oneflux_daily_rpot
+    starts = index - pd.Timedelta(minutes=period_min / 2)
+    epoch = starts.min().normalize() - pd.Timedelta(days=1)
+    off = np.floor((starts - epoch) / pd.Timedelta(minutes=1) + 0.5).astype(np.int64)
+    dates = pd.date_range(epoch, periods=int((off.max() + period_min) // 1440) + 3, freq="D")
+    shifts = np.array([_noaa_solar_noon_minutes(d.year, d.month, d.day, -lon, -utc_offset) - 720
+                       for d in dates])
+    rows = np.array([d.dayofyear - 1 for d in dates])
+    total = np.zeros(len(index))
+    for k in range(period_min):
+        minute = off + k
+        day = minute // 1440
+        i = (minute % 1440) - shifts[day]
+        day = np.where(i < 0, day - 1, np.where(i >= 1440, day + 1, day))
+        i = np.mod(i, 1440)
+        total += _oneflux_daily_rpot(lat, rows[day] + i / 1440.0 + 1.0, i / 60.0)
+    return total / period_min < 0.001
+
+
 class TestNighttimeZeroOffsetPolarDay(unittest.TestCase):
     """potrad's midnight zeros in polar day are not nighttime (L244)."""
 
@@ -628,18 +650,32 @@ class TestNighttimeZeroOffsetPolarDay(unittest.TestCase):
         self.assertFalse(result.corrected.isna().any())
         pd.testing.assert_series_equal(result.corrected, measured)
 
-    def test_real_nights_ending_at_midnight_stay_nighttime(self):
-        # Utqiagvik in early May: the shift vacates 00:00-01:27, and the real
-        # night continues after it (runs 00:00 to ~02:45), so it is longer than
-        # the vacated minutes and stays nighttime.
-        from diive.variables import daytime_nighttime_flag_from_swinpot
+    def test_real_nights_next_to_the_midnight_zeros_stay_nighttime(self):
+        # Utqiagvik in early May: the shift vacates 00:00-01:27, the real night
+        # lasts from about 00:10 to 02:45. Records of the real night stay
+        # nighttime, the vacated records before it with the sun up do not (L266).
         lat, lon, utc = 71.29, -156.79, -9
         measured, _, pr = _polar_series(start="2026-05-10", days=4, lat=lat, lon=lon,
                                         utc_offset=utc)
-        _, raw_night = daytime_nighttime_flag_from_swinpot(pr, nighttime_threshold=0.001)
-        self.assertGreater(int(raw_night.sum()), 50)
         result = self._diag(measured.copy(), lat=lat, lon=lon, utc_offset=utc)
-        pd.testing.assert_series_equal(result.nighttime_flag, raw_night)
+        truth = _true_night(measured.index, lat, lon, utc, period_min=10)
+        self.assertGreater(int(truth.sum()), 50)
+        self.assertGreater(int(((pr <= 0.001) & ~truth).sum()), 0)  # precondition
+        np.testing.assert_array_equal(result.nighttime_flag.to_numpy() == 1, truth)
+
+    def test_late_solar_noon_follows_the_sun_across_midnight(self):
+        # L266: where solar noon is late, nights mixing the midnight zeros with a
+        # real night kept sunlit records as nighttime (10-min), and the old
+        # length tolerance made short real nights daytime (hourly).
+        for lat, lon, utc, freq in ((69.0, -30.0, 0, "10min"), (71.3, -156.6, -9, "10min"),
+                                    (67.0, -110.0, -6, "60min"), (69.0, -30.0, 0, "60min")):
+            with self.subTest(lon=lon, freq=freq):
+                step = pd.Timedelta(freq)
+                idx = pd.date_range("2023-01-01", "2024-01-01", freq=freq, inclusive="left") + step / 2
+                series = pd.Series(1.0, index=idx, name="SW_IN")
+                result = self._diag(series, lat=lat, lon=lon, utc_offset=utc)
+                truth = _true_night(idx, lat, lon, utc, period_min=int(step / pd.Timedelta("1min")))
+                np.testing.assert_array_equal(result.nighttime_flag.to_numpy() == 1, truth)
 
     def test_normal_latitudes_keep_the_potrad_night(self):
         # Bit-identity guard: away from polar day the night flag is potrad's own.
@@ -707,9 +743,8 @@ class TestNighttimeZeroOffsetSwinPot(unittest.TestCase):
         pd.testing.assert_series_equal(given.corrected, default.corrected)
         pd.testing.assert_series_equal(given.nighttime_flag, default.nighttime_flag)
 
-    def test_swin_pot_on_the_series_index_keeps_a_zero_run_at_the_series_end(self):
-        # Documented: without a record beyond the end, the last day's zero
-        # record has no known outer neighbour and stays nighttime.
+    def test_swin_pot_on_the_series_index_finds_the_zero_record_at_the_series_end(self):
+        # Each record is judged on its own window, so no record beyond the end is needed
         import diive as dv
         measured, _, _ = _polar_series(freq="10min")
         swin_pot = dv.variables.potrad(timestamp_index=measured.index, lat=POLAR_LAT,
@@ -717,8 +752,25 @@ class TestNighttimeZeroOffsetSwinPot(unittest.TestCase):
         result = dv.corrections.nighttime_zero_offset_diagnostics(
             series=measured, lat=POLAR_LAT, lon=POLAR_LON, utc_offset=POLAR_UTC,
             swin_pot=swin_pot)
-        self.assertEqual(result.n_night, 1)
-        self.assertEqual(result.nighttime_flag.iloc[-1], 1)
+        self.assertEqual(result.n_night, 0)
+
+    def test_swin_pot_on_a_finer_grid_uses_each_record_period(self):
+        # Meteo screening's mixed grids: 10-min records at their END slot of a
+        # 1-min grid (slot = END - 30 s), the slots in between empty (NaN).
+        import diive as dv
+        lat, lon, utc = 69.0, -30.0, 0
+        ends = pd.date_range("2023-06-10 00:10", "2023-06-20 00:00", freq="10min")
+        middles = ends - pd.Timedelta("5min")
+        pr = dv.variables.potrad(timestamp_index=middles, lat=lat, lon=lon, utc_offset=utc)
+        slots = pd.date_range(ends[0], ends[-1], freq="1min") - pd.Timedelta("30s")
+        swin_pot = pd.Series(np.nan, index=slots)
+        swin_pot.loc[ends - pd.Timedelta("30s")] = pr.to_numpy()
+        series = pd.Series(1.0, index=ends - pd.Timedelta("30s"), name="SW_IN")
+        result = dv.corrections.nighttime_zero_offset_diagnostics(
+            series=series, lat=lat, lon=lon, utc_offset=utc, swin_pot=swin_pot)
+        truth = _true_night(middles, lat, lon, utc, period_min=10)
+        self.assertGreater(int(((pr <= 0.001).to_numpy() & ~truth).sum()), 0)  # precondition
+        np.testing.assert_array_equal(result.nighttime_flag.to_numpy() == 1, truth)
 
     def test_swin_pot_is_used_instead_of_the_coordinates(self):
         import diive as dv
@@ -768,6 +820,22 @@ class TestSetExactValuesToMissingTolerance(unittest.TestCase):
         series = pd.Series([0.0, 1e-12, -1e-30, -9999.0, -9998.0, np.float32(-9999.0)], name="TA")
         out = set_exact_values_to_missing(series=series, values=[0, -9999], verbose=0)
         self.assertEqual(out.isna().tolist(), [True, False, False, True, False, True])
+
+    def test_non_numeric_values_raise_a_clear_error(self):
+        # L267: these raised TypeError/DTypePromotionError from np.isclose
+        from diive.preprocessing.corrections import set_exact_values_to_missing
+        series = pd.Series([-9999.0, 1.0], name="TA")
+        for values in ([None], ["-9999"], [pd.NA], [-9999, True], "-9999", -9999):
+            with self.subTest(values=values):
+                with self.assertRaisesRegex(ValueError, "values must be"):
+                    set_exact_values_to_missing(series=series, values=values, verbose=0)
+
+    def test_numpy_numbers_and_nan_are_accepted(self):
+        from diive.preprocessing.corrections import set_exact_values_to_missing
+        series = pd.Series([-9999.0, 1.0, np.nan], name="TA")
+        out = set_exact_values_to_missing(series=series, values=[np.int64(-9999), np.nan],
+                                          verbose=0)
+        self.assertEqual(out.isna().tolist(), [True, False, True])
 
 
 class TestSettoVerbose(unittest.TestCase):

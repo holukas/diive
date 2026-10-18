@@ -7,6 +7,8 @@ Set data to missing, specific values, or thresholds based on conditions.
 Part of the diive library: https://github.com/holukas/diive
 """
 
+import numbers
+
 import numpy as np
 import pandas as pd
 from pandas import Series
@@ -30,7 +32,11 @@ def set_exact_values_to_missing(series: Series,
 
     Args:
         series: Data for variable that is corrected
-        values: List of floats that will be set to missing values
+        values: List of numbers that will be set to missing values. Any other
+            entry (None, pd.NA, a string such as '-9999', a bool) raises a
+            ValueError before anything is changed, because a value that is
+            silently skipped would leave e.g. -9999 in the data. NaN is a
+            number and matches nothing.
         showplot: Show plot
         verbose: Verbosity for the console helpers. The report appears at
             ``VERBOSE_PROGRESS`` (2) and above, the locations of the records
@@ -43,6 +49,12 @@ def set_exact_values_to_missing(series: Series,
     Example:
         See `examples/preprocessing/corrections/correction_set_exact_values_to_missing.py`
     """
+    if isinstance(values, (str, bytes)) or not np.iterable(values):
+        raise ValueError(f"values must be a list of numbers, got {values!r}.")
+    invalid = [v for v in values if isinstance(v, (bool, np.bool_)) or not isinstance(v, numbers.Real)]
+    if invalid:
+        raise ValueError(f"values must be numbers (e.g. -9999, not '-9999'), got {invalid!r}.")
+
     outname = series.name
     # Renamed copy, not an in-place rename: the label is only needed so the
     # quickplot panels distinguish input from output, and renaming the parameter
