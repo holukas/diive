@@ -96,6 +96,14 @@ Library (also used by the notebook and the GUI):
   nighttime records against the nighttime ones, as in ONEFlux. Double differences use records of
   one period only. Before, the quiet night set the spread for both, so variables with a quiet
   night lost too many daytime records, e.g. latent heat flux more than twice as many as now.
+- **`Hampel`, records next to gaps (changes results):** records at the series ends and next to gaps
+  are tested with the same sign as the other records, which changes a few flags also without
+  day/night separation.
+- **Meteo screening, time resolutions (changes results):** only odd time resolutions are dropped,
+  each with a warning. Short blocks whose resolution is a whole multiple or divisor of the data
+  around them are kept. Before, any resolution with at most 0.2 % of the records was dropped,
+  e.g. a 3-day block of 10-min data in a year of 1-min data.
+- **Meteo screening, speed:** screening runs about 20-50 % faster, with identical results.
 
 GUI only:
 
@@ -106,8 +114,12 @@ GUI only:
 - **Meteo screening (database):** the tab screens through `StepwiseMeteoScreeningDb` like the
   library, follows changes to the site coordinates and shows loading errors in the status line.
 - **Meteo screening (database), Copy Python:** writes a `StepwiseMeteoScreeningDb` script, also
-  when only corrections are set, in the UTC offset the data were downloaded in.
-- **Hampel step:** separates daytime and nighttime by default when the project site is set.
+  when only corrections are set. The script and the screening use the UTC offset the data were
+  downloaded in.
+- **Hampel step:** separates daytime and nighttime by default when the project site is set, and
+  the daytime and nighttime thresholds follow the global value until they are edited.
+- **Meteo screening (database), status line:** messages after corrections, resampling and Add say
+  what happened.
 - **Meteo screening (database), set to value:** the dates are marked as END timestamps, and dates
   that match no record show a warning in the status line.
 - **Meteo screening (database), add to dataset:** the data version shows the processed version,
@@ -125,7 +137,7 @@ GUI only:
 - **MDS gap-filling, driver QC:** the MDS tab and Level 4.1 of the flux post-processing chain
   take an optional QC flag column for SW_IN, TA and VPD, and Copy Python includes it.
 
-Notebook (meteo screening notebook v16):
+Notebook (meteo screening notebook v17):
 
 - **Run All:** no longer applies outlier tests with example settings. All outlier tests are
   commented out, with notes on the variables each one does not suit.
@@ -143,6 +155,7 @@ Notebook (meteo screening notebook v16):
   notebook stops with a suggested value otherwise.
 - **Frequency check:** the upload stops before anything is deleted when the resampled frequency
   differs from `RESAMPLING_FREQ`.
+- **Hampel note:** records with up to 20 W m-2 potential radiation count as night.
 
 ### Packaging
 
@@ -262,6 +275,10 @@ Library (also used by the notebook and the GUI):
   the new frequency.
 - **Meteo screening, manual removal:** a removed record came back when it had no value at test time
   and a later correction gave it one.
+- **Meteo screening, odd-second grids:** manual removal and set to value hit the neighbouring
+  record, or none, on grids with an odd number of seconds, e.g. 5-second data.
+- **Time resolution detection:** a record next to a change of resolution could get the neighbouring
+  resolution, which weighted it wrong in resampling.
 - **Set-to corrections, console:** their reports follow `verbose`.
 
 GUI only:
