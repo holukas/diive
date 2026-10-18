@@ -7,6 +7,7 @@ Public namespace ``dv.corrections``: offset and value corrections.
 Part of the diive library: https://github.com/holukas/diive
 """
 from diive.preprocessing.corrections import MeasurementOffsetFromReplicate
+from diive.preprocessing.corrections import NighttimeZeroOffsetPlot
 from diive.preprocessing.corrections import NighttimeZeroOffsetResult
 from diive.preprocessing.corrections import WindDirOffset
 from diive.preprocessing.corrections import nighttime_zero_offset_diagnostics
@@ -19,6 +20,7 @@ from diive.preprocessing.corrections import apply_corrections
 
 __all__ = [
     'MeasurementOffsetFromReplicate',
+    'NighttimeZeroOffsetPlot',
     'NighttimeZeroOffsetResult',
     'WindDirOffset',
     'nighttime_zero_offset_diagnostics',

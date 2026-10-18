@@ -15,6 +15,7 @@ from diive.preprocessing.corrections.offsetcorrection import (
     remove_nighttime_zero_offset,
     WindDirOffset,
 )
+from diive.preprocessing.corrections.nighttime_offset_plot import NighttimeZeroOffsetPlot
 from diive.preprocessing.corrections.setto import (
     set_exact_values_to_missing,
     setto_threshold,
@@ -25,6 +26,7 @@ from diive.preprocessing.corrections.apply import apply_corrections
 __all__ = [
     'MeasurementOffsetFromReplicate',
     'NighttimeZeroOffsetResult',
+    'NighttimeZeroOffsetPlot',
     'nighttime_zero_offset_diagnostics',
     'remove_relativehumidity_offset',
     'remove_nighttime_zero_offset',

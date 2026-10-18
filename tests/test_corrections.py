@@ -403,6 +403,123 @@ class TestNighttimeZeroOffset(unittest.TestCase):
         self.assertLess(result.n_night, len(self.series))  # daytime exists too
 
 
+class TestNighttimeZeroOffsetPlot(unittest.TestCase):
+    """The diagnostic figure of the nighttime zero-offset correction."""
+
+    def setUp(self):
+        import matplotlib.pyplot as plt
+        plt.close('all')
+
+    def tearDown(self):
+        import matplotlib.pyplot as plt
+        plt.close('all')
+
+    @staticmethod
+    def _result(series, **kwargs):
+        import diive as dv
+        return dv.corrections.nighttime_zero_offset_diagnostics(
+            series=series, lat=LAT, lon=LON, utc_offset=UTC_OFFSET, **kwargs)
+
+    @staticmethod
+    def _summary(fig) -> dict:
+        ax = fig.axes[5]
+        texts = [t.get_text() for t in ax.texts]
+        return dict(zip(texts[::2], texts[1::2], strict=True))
+
+    def test_panels_and_title(self):
+        import diive as dv
+        fig = dv.corrections.NighttimeZeroOffsetPlot(self._result(_radiation_series())).plot(showplot=False)
+        titles = [ax.get_title(loc='left') for ax in fig.axes[1:]]
+        self.assertEqual(titles, ['Series', 'Daily offset  ·  steps 1-2', 'Diel cycle near zero  ·  steps 3-5',
+                                  'Night values  ·  step 3', 'Summary'])
+        self.assertEqual(fig._suptitle.get_text(), 'Nighttime zero offset: SW_IN')
+        steps = [t.get_text() for t in fig.axes[0].texts]
+        for number, name in enumerate(['Find night', 'Daily offset', 'Subtract', 'Night to 0', 'Clamp'], 1):
+            self.assertIn(str(number), steps)
+            self.assertIn(name, steps)
+
+    def test_offset_is_drawn_constant_per_day(self):
+        import diive as dv
+        plot = dv.corrections.NighttimeZeroOffsetPlot(self._result(_radiation_series()))
+        fig = plot.plot(showplot=False)
+        line = next(l for l in fig.axes[2].get_lines() if l.get_label().startswith('daily offset'))
+        x = np.asarray(line.get_xdata(), dtype='datetime64[ns]')
+        y = np.asarray(line.get_ydata(), dtype=float)
+        # Two points per day, from midnight to midnight, at the same value
+        self.assertEqual(len(x), 2 * len(plot.daily))
+        np.testing.assert_array_equal(y[::2], y[1::2])
+        self.assertTrue((x[1::2] - x[::2] == np.timedelta64(1, 'D')).all())
+
+    def test_clamp_step_count(self):
+        import diive as dv
+        series = _radiation_series(offset=3.0)
+        series.iloc[np.where(series.to_numpy() > 100.0)[0][:5]] = 1.0
+        fig = dv.corrections.NighttimeZeroOffsetPlot(self._result(series)).plot(showplot=False)
+        self.assertIn('5 records', [t.get_text() for t in fig.axes[0].texts])
+        kept = dv.corrections.NighttimeZeroOffsetPlot(
+            self._result(series, clamp_negatives=False)).plot(showplot=False)
+        texts = [t.get_text() for t in kept.axes[0].texts]
+        self.assertIn('Negatives kept', texts)
+        self.assertIn('5 records below 0', texts)
+
+    def test_summary_matches_the_result(self):
+        import diive as dv
+        series = _radiation_series(offset=3.0)
+        daytime = np.where(series.to_numpy() > 100.0)[0][:5]
+        series.iloc[daytime] = 1.0  # below the offset, clamped after the correction
+        result = self._result(series)
+        rows = self._summary(dv.corrections.NighttimeZeroOffsetPlot(result).plot(showplot=False))
+        self.assertEqual(rows['Records'], f"{len(series):,}")
+        self.assertEqual(rows['Day records clamped to 0'], '5')
+        self.assertEqual(rows['Offset median'], '3.00')
+        self.assertEqual(rows['Below zero after'], '0 (night 0)')
+        self.assertTrue(rows['Days'].endswith('0 without night data'))
+
+    def test_day_without_night_data_is_marked(self):
+        import diive as dv
+        series = _radiation_series(offset=3.0)
+        result = self._result(series)
+        day3 = series.index.normalize() == series.index.normalize().unique()[3]
+        series[day3 & (result.nighttime_flag == 1)] = np.nan
+        plot = dv.corrections.NighttimeZeroOffsetPlot(self._result(series))
+        fig = plot.plot(showplot=False)
+        self.assertEqual(int((plot.daily['n_night'] == 0).sum()), 1)
+        labels = fig.axes[2].get_legend_handles_labels()[1]
+        self.assertIn('no night data, median used', labels)
+        self.assertTrue(self._summary(fig)['Days'].endswith('1 without night data'))
+
+    def test_records_mask_keeps_empty_slots_out_of_the_lines(self):
+        import diive as dv
+        series = _radiation_series(offset=3.0)
+        records = pd.Series(True, index=series.index)
+        records.iloc[1::2] = False
+        series[~records] = np.nan  # empty slots between records
+        fig = dv.corrections.NighttimeZeroOffsetPlot(self._result(series), records=records).plot(showplot=False)
+        measured, corrected = fig.axes[1].get_lines()[:2]
+        self.assertEqual(len(measured.get_xdata()), int(records.sum()))
+        self.assertEqual(int(np.isnan(np.asarray(measured.get_ydata(), float)).sum()), 0)
+
+    def test_no_nighttime_values_still_draws(self):
+        import diive as dv
+        series = _radiation_series(offset=3.0)
+        result = self._result(series)
+        series[result.nighttime_flag == 1] = np.nan
+        fig = dv.corrections.NighttimeZeroOffsetPlot(self._result(series)).plot(showplot=False)
+        fig.canvas.draw()
+        self.assertIn('no nighttime values', [t.get_text() for t in fig.axes[4].texts])
+
+    def test_showplot_draws_the_figure(self):
+        import matplotlib.pyplot as plt
+        import diive as dv
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')  # Agg cannot show
+            dv.corrections.remove_nighttime_zero_offset(
+                series=_radiation_series(), lat=LAT, lon=LON, utc_offset=UTC_OFFSET, showplot=True)
+        self.assertEqual(len(plt.get_fignums()), 1)
+        self.assertEqual(plt.gcf()._suptitle.get_text(), 'Nighttime zero offset: SW_IN')
+
+
 class TestApplyCorrections(unittest.TestCase):
     """`apply_corrections` is the dispatch table every correction tab routes through."""
 

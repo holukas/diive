@@ -424,10 +424,12 @@ def remove_nighttime_zero_offset(series: Series,
 
     General-purpose: works for any variable expected to be zero during nighttime
     (e.g. shortwave radiation, PPFD). A nighttime flag is calculated and used to
-    detect nighttime data. Then, for each day, the mean of that day's nighttime
-    values is the offset by which all of the day's records are corrected (days
-    without nighttime data use the median of all daily offsets, and with no
-    nighttime value at all the offset is 0). Finally, after the offset is
+    detect nighttime data. Then, for each calendar day, the mean of that day's
+    nighttime values (before sunrise and after sunset of that date) is the offset
+    by which all of the day's records are corrected. The offset is constant
+    within the day, without interpolation between days (days without nighttime
+    data use the median of all daily offsets, and with no nighttime value at all
+    the offset is 0). Finally, after the offset is
     applied, nighttime values are set to zero and (when ``clamp_negatives``) any
     remaining negative values are clamped to zero, enforcing the variable's
     physical floor of zero.
@@ -448,7 +450,8 @@ def remove_nighttime_zero_offset(series: Series,
         utc_offset: UTC offset of the timestamp index of *series*, e.g. 1 for
             UTC+01:00. Used to find nighttime; the returned Series keeps the
             index of *series*.
-        showplot: Show plot
+        showplot: Show the diagnostic figure (``NighttimeZeroOffsetPlot``): series,
+            daily offset, diel cycle near zero, nighttime values and a summary.
         clamp_negatives: If True (default), set remaining negative values (daytime
             included) to zero after the offset is removed, enforcing a physical
             floor of zero. If False, keep those negatives (nighttime is still
@@ -485,16 +488,9 @@ def remove_nighttime_zero_offset(series: Series,
                                     swin_pot_period_sec=swin_pot_period_sec)
 
     if showplot:
-        # Named per stage: the raw and the final series otherwise share the variable
-        # name, which makes the panels ambiguous about which stage they show.
-        varname = result.input.name
-        quickplot([result.input.rename(f"{varname} (measured)"),
-                   result.corrected_by_offset.rename("after offset subtraction"),
-                   result.corrected.rename("after nighttime zeroing + clamping"),
-                   result.offset.rename("daily offset")],
-                  subplots=True,
-                  showplot=showplot,
-                  title=f"Removing nighttime zero-offset from {varname}")
+        # Imported here: the plot module imports this one
+        from diive.preprocessing.corrections.nighttime_offset_plot import NighttimeZeroOffsetPlot
+        NighttimeZeroOffsetPlot(result).plot()
 
     return result.corrected
 

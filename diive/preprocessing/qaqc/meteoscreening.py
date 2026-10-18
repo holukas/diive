@@ -30,7 +30,8 @@ from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import detect_freq_groups
 from diive.analysis import daily_correlation
 from diive.variables.radiation import potrad
-from diive.preprocessing.corrections import remove_nighttime_zero_offset, remove_relativehumidity_offset
+from diive.preprocessing.corrections import nighttime_zero_offset_diagnostics, remove_relativehumidity_offset
+from diive.preprocessing.corrections.nighttime_offset_plot import NighttimeZeroOffsetPlot
 from diive.preprocessing.corrections import set_exact_values_to_missing, setto_threshold, setto_value
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 from diive.preprocessing.outlier_detection.common import window_to_records
@@ -1536,12 +1537,22 @@ class StepwiseMeteoScreeningDb:
             # Each record's own resolution, so the last coarse record before a
             # finer block gets its own potrad window, not the spacing to the next record.
             period_sec = None if swin_pot is None else self.data_detailed[field]['FREQ_AUTO_SEC']
-            self._correct(field, remove_nighttime_zero_offset,
-                          preview=dict(title=f"Removing nighttime zero-offset from {field}"),
-                          lat=self.site_lat, lon=self.site_lon,
-                          utc_offset=self.utc_offset, showplot=showplot,
-                          clamp_negatives=clamp_negatives,
+            results = []
+
+            def correction(series, results=results, **kwargs):
+                # The diagnostics give the corrected series and the figure data in
+                # one pass. The first call corrects the series shown, a second one
+                # (after finalize) the records the QCF removed.
+                result = nighttime_zero_offset_diagnostics(series, **kwargs)
+                results.append(result)
+                return result.corrected
+
+            self._correct(field, correction, lat=self.site_lat, lon=self.site_lon,
+                          utc_offset=self.utc_offset, clamp_negatives=clamp_negatives,
                           swin_pot=swin_pot, swin_pot_period_sec=period_sec)
+            if showplot:
+                NighttimeZeroOffsetPlot(results[0], records=self._has_record(field)).plot(
+                    title=f"Nighttime zero offset: {field}")
 
     def _zero_offset_swin_pot(self, field: str) -> pd.Series | None:
         """Potential radiation of each record for the nighttime zero offset.

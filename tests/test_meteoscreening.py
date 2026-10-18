@@ -1350,6 +1350,27 @@ class TestCorrectionAfterFinalize(unittest.TestCase):
         self.assertEqual(int(cleaned[empty].notna().sum()), 0)
         self.assertEqual(int(cleaned[removed].notna().sum()), 0)
 
+    def test_zero_offset_figure_shows_records_only(self):
+        """The diagnostic figure joins neighbouring records, not empty grid slots,
+        and the correction is the same with and without it."""
+        import warnings
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        plt.close('all')
+        quiet, shown = _screening(_mixed_radiation()), _screening(_mixed_radiation())
+        quiet.correction_remove_nighttime_zero_offset(showplot=False)
+        self.assertEqual(plt.get_fignums(), [])
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')  # Agg cannot show
+            shown.correction_remove_nighttime_zero_offset(showplot=True)
+        pd.testing.assert_series_equal(shown.series_hires_cleaned[FIELD], quiet.series_hires_cleaned[FIELD])
+        fig = plt.figure(plt.get_fignums()[-1])
+        self.assertEqual(fig._suptitle.get_text(), f'Nighttime zero offset: {FIELD}')
+        measured = fig.axes[1].get_lines()[0]
+        self.assertEqual(len(measured.get_xdata()), int(shown._has_record(FIELD).sum()))
+        plt.close('all')
+
 
 class TestResampleCoverage(unittest.TestCase):
     """L235: coverage is the time the kept records cover, whatever the grid."""
@@ -2228,12 +2249,12 @@ class TestZeroOffsetRecordPeriod(unittest.TestCase):
                                      site_lat=71.29, site_lon=-156.79, utc_offset=-9)
         flags = []
 
-        def diagnose(series, showplot=False, **kwargs):
+        def diagnose(series, **kwargs):
             result = nighttime_zero_offset_diagnostics(series, **kwargs)
             flags.append(result.nighttime_flag)
-            return result.corrected
+            return result
 
-        with mock.patch.object(module, 'remove_nighttime_zero_offset', diagnose):
+        with mock.patch.object(module, 'nighttime_zero_offset_diagnostics', diagnose):
             m.correction_remove_nighttime_zero_offset(showplot=False)
         flag = flags[0]
         flag.index = flag.index + module._half_step(m.data_detailed[FIELD].index)
