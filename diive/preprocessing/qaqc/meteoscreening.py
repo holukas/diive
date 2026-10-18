@@ -40,11 +40,19 @@ from diive.preprocessing.qaqc.measurements import (
 from diive.preprocessing.qaqc.qcf import FlagQCF
 
 _SWINPOT_COL = '_SW_IN_POT_METSCR'  # Temporary day/night input for the QCF
-# Grid slots per record at most, counted over each record's own period. Legitimate
-# phase shifts need about 2-10 (10MIN data moving from :00 to :05 or :01), genuine
-# mixed data about 2-10 (10MIN, then 1MIN or 15MIN data). Timestamps a second late
-# need 60 (1MIN data) to 600 (10MIN data), as do a few 1S records in 10MIN data.
+# Grid slots per record at most, counted over each record's own period, when records
+# off the phase of the others (_grid_seconds) or at a resolution that is no multiple
+# or divisor of the grid (_grid_bound_drops) shrink the grid below their own steps.
+# Legitimate cases need about 2-10 (10MIN data moving from :00 to :05, 10MIN then
+# 15MIN data). Timestamps a second late need 60 (1MIN data) to 600 (10MIN data), as
+# do 7S records at a change of the logger program in 1MIN data.
 _MAX_SLOTS_PER_RECORD = 20
+# Grid rows at most before a further time resolution is dropped (_grid_bound_drops).
+# Empty slots cost memory and time in every step: two tests, the QCF and resample
+# need about 0.6 GB and 1.5 s per million rows (L297), a year of 1MIN data 0.53M
+# rows. 2M rows hold a 1MIN grid for 3.8 years, e.g. 30MIN data with a 1MIN block,
+# but no 1S grid for a month of 10MIN data (2.68M rows).
+_MAX_GRID_ROWS = 2_000_000
 # A run of at least this many records with one resolution is a resolution period
 # of its own, as in detect_freq_groups.
 _MIN_PERIOD_RECORDS = 12
@@ -83,18 +91,25 @@ def _slots_per_record(counts: dict, step: int) -> float:
     return covered / int(step) / sum(int(c) for c in counts.values())
 
 
-def _grid_bound_drops(run_res: np.ndarray, lengths: np.ndarray, used: np.ndarray) -> dict:
-    """Kept runs to drop so the grid holds at most ``_MAX_SLOTS_PER_RECORD`` slots per record.
+def _grid_bound_drops(run_res: np.ndarray, lengths: np.ndarray, used: np.ndarray, span: int) -> dict:
+    """Kept runs to drop so the grid holds at most ``_MAX_GRID_ROWS`` rows.
 
     The grid step is the greatest common divisor of the kept resolutions. They
     are added in order of the time their records cover, longest first, so the
-    main resolutions come first. A resolution that would shrink the grid beyond
-    the limit is dropped with all its runs, e.g. a few 1S records in 10MIN data.
+    main resolutions come first and are always kept. A resolution that would
+    shrink the grid to more than ``_MAX_GRID_ROWS`` rows over *span* is dropped
+    with all its runs, e.g. a few 1S records in a month of 10MIN data. The bound
+    is absolute, so a fine block survives in a long download as in a short one.
+    A resolution that is no multiple or divisor of the grid needs a common
+    divisor finer than both. It is also dropped if that grid would hold more
+    than ``_MAX_SLOTS_PER_RECORD`` slots per record, as for a phase shift (7S
+    records in 1MIN data need a 1S grid with 60 slots per record).
 
     Args:
         run_res: Resolution of each run in ns.
         lengths: Number of records of each run.
         used: True for the runs kept so far.
+        span: Time from the first to the last END timestamp of the kept runs in ns.
 
     Returns:
         ``{run: reason}`` for each run to drop.
@@ -110,13 +125,18 @@ def _grid_bound_drops(run_res: np.ndarray, lengths: np.ndarray, used: np.ndarray
     drops = {}
     for r in order[1:]:
         new_step = math.gcd(step, r)
+        rows = int(span) // new_step + 1
         slots = _slots_per_record({m: n[m] for m in main + [r]}, new_step)
-        if slots <= _MAX_SLOTS_PER_RECORD:
+        odd = new_step not in (step, r)
+        if rows <= _MAX_GRID_ROWS and not (odd and slots > _MAX_SLOTS_PER_RECORD):
             main.append(r)
             step = new_step
             continue
+        need = (f"{rows} rows (limit {_MAX_GRID_ROWS})" if rows > _MAX_GRID_ROWS else
+                f"{slots:.0f} slots per record (limit {_MAX_SLOTS_PER_RECORD} for a resolution that is "
+                f"no multiple or divisor of the grid)")
         reason = (f"next to the {' and '.join(_offset_str(m) for m in main)} records it needs a grid of "
-                  f"{_offset_str(new_step)} with {slots:.0f} slots per record (limit {_MAX_SLOTS_PER_RECORD})")
+                  f"{_offset_str(new_step)} with {need}")
         drops.update({int(k): reason for k in kept if run_res[k] == r})
     return drops
 
@@ -185,11 +205,11 @@ class StepwiseMeteoScreeningDb:
     timestamp** (the database timestamp is TIMESTAMP_END). The grid is the finest resolution,
     or finer where needed to hold every record (10MIN, then 15MIN data give a 5MIN grid). A
     coarse record is not copied onto the finer slots it covers: those slots stay empty through
-    the whole screening, and corrections do not fill them. The grid holds at most 20 slots
-    per record on average, counted over each record's own period. Records off the phase of
-    the others, e.g. END timestamps a second late, would need a grid of seconds or less: if
-    that grid would be finer than 1S or hold more than 20 slots per record, a ValueError
-    asks to clean or resample the timestamps first.
+    the whole screening, and corrections do not fill them. Records off the phase of the
+    others, e.g. END timestamps a second late, would need a grid of seconds or less: if that
+    grid would be finer than 1S or hold more than 20 slots per record on average (counted
+    over each record's own period), a ValueError asks to clean or resample the timestamps
+    first.
 
     Before that, ``detect_freq_groups`` finds the resolution of each record, and only
     clean resolutions are kept. A run is a series of consecutive records with one
@@ -200,15 +220,22 @@ class StepwiseMeteoScreeningDb:
     divisor, e.g. 1MIN records inside 10MIN data) is kept only with at least 3 records:
     one or two finer records, such as a stamp at :30 s inside 1MIN data, are a stray
     timestamp. Then the resolutions are added to the grid in order of the time their
-    records cover. A resolution that would push the grid beyond 20 slots per record
-    next to the main resolutions is dropped with all its runs, also runs of 12 or more
-    (a few 1S records in 10MIN data would need a 1S grid with 600 slots per record).
-    Dropped runs get a warning each, which names the records and the reason: odd
-    resolutions such as 7S records at a change of the logger program, stray
-    timestamps, or a grid too fine. Records with no detectable resolution are dropped
-    with a warning too. If no run has 12 records, the runs of the most frequent
-    resolution count as periods. ``detect_freq_groups`` may also take 3-5 coarse
-    records inside much finer data for fine records with holes (see there).
+    records cover. The main resolution is always kept. A further resolution that would
+    make the grid longer than 2 million rows is dropped with all its runs, also runs of
+    12 or more: a few 1S records in a month of 10MIN data would need a 1S grid with
+    2.68 million rows. The bound is absolute, so a 1MIN block stays in a year of 30MIN
+    data (0.53 million rows) as in a month. A resolution that is no multiple or divisor
+    of the grid, such as 7S records at a change of the logger program in 1MIN data, is
+    also dropped if its grid would hold more than 20 slots per record, as for a phase
+    shift. Dropped runs get a warning that names the records and the reason (odd
+    resolution, stray timestamp or grid too fine), the first 20 runs one by one, the
+    rest counted in one line. Records with no detectable resolution are dropped with
+    one warning that gives the first five END timestamps. If no run has 12 records, the
+    runs of the most frequent resolution count as periods. ``detect_freq_groups`` may
+    take a few coarse records inside much finer data for fine records with holes: a
+    single record always, and short blocks at the start of the data or next to a gap
+    below the thresholds given there. Such records are weighted with the finer
+    resolution, so their resampled periods can be NaN or biased.
 
     The rolling-window and difference tests (Hampel, local SD, rolling z-score, z-score of
     increments) run on each **resolution period** separately, i.e. on each run of records
@@ -1706,6 +1733,10 @@ class StepwiseMeteoScreeningDb:
         30 one-minute records give half the half-hour's total). For precipitation,
         use ``mincounts_perc=1`` if partial sums are not wanted.
 
+        ``agg='mean'`` is an arithmetic mean. It is wrong for angles such as wind
+        direction: 350 and 10 degrees average to 180. Angles need a circular mean
+        (e.g. of the wind vector components), computed outside this class.
+
         Flags added with ``addflag()`` are applied by
         ``finalize_outlier_detection()``, not here. A warning names the flags
         added since the last finalize.
@@ -2138,10 +2169,12 @@ class StepwiseMeteoScreeningDb:
         two are a stray timestamp. Kept runs of fewer than 3 records are left
         untested by the rolling and difference tests. If no run has 12 records,
         the runs of the most frequent resolution count as periods. Last, a
-        resolution that would need a grid of more than ``_MAX_SLOTS_PER_RECORD``
-        slots per record next to the main resolutions is dropped with all its
-        runs, also periods (``_grid_bound_drops``). Every dropped run gets a
-        warning with the reason.
+        resolution that would make the grid longer than ``_MAX_GRID_ROWS`` rows
+        next to the main resolutions, or that is no multiple or divisor of the
+        grid and would need more than ``_MAX_SLOTS_PER_RECORD`` slots per record,
+        is dropped with all its runs, also periods (``_grid_bound_drops``). The
+        first ``_MAX_LISTED_RUNS`` dropped runs get a warning each with the
+        reason, the rest are counted in one warning.
         """
         has_res = freq_sec.notna().to_numpy()
         keep = np.zeros(len(freq_sec), dtype=bool)
@@ -2186,7 +2219,9 @@ class StepwiseMeteoScreeningDb:
             reasons[k] = (f"finer than the neighbouring {neighbours} with fewer than 3 records, "
                           f"a stray timestamp" if stray[k] else
                           f"no whole multiple or divisor of the neighbouring {neighbours}")
-        for k, reason in _grid_bound_drops(run_res, lengths, used).items():
+        kept_ends = ends[np.repeat(used, lengths)].as_unit('ns').asi8
+        span = int(kept_ends.max() - kept_ends.min()) if len(kept_ends) else 0
+        for k, reason in _grid_bound_drops(run_res, lengths, used, span).items():
             used[k] = False
             reasons[k] = reason
         keep[np.flatnonzero(has_res)] = np.repeat(used, lengths)

@@ -2063,7 +2063,8 @@ class TestShortResolutionBlocks(unittest.TestCase):
 
 class TestGridBound(unittest.TestCase):
     """L285: kept runs of a fine resolution blew up the grid (4 records at 1 s in
-    two months of 10MIN data gave a 1 s grid with 2.68M rows per month)."""
+    two months of 10MIN data gave a 1 s grid with 2.68M rows per month). L297: the
+    bound was relative, so a 1MIN block in a year of 30MIN data was dropped."""
 
     def _build(self, index):
         holder = {}
@@ -2072,8 +2073,9 @@ class TestGridBound(unittest.TestCase):
         return holder['m'], warnings
 
     def test_few_one_second_records_in_ten_minute_data(self):
-        coarse = pd.date_range('2024-01-01 00:10', '2024-01-08 00:00', freq='10min')
-        burst = pd.date_range('2024-01-04 12:00:01', periods=4, freq='1s')
+        """A month of 10MIN data with 4 records at 1 s would need 2.68M rows."""
+        coarse = pd.date_range('2024-01-01 00:10', '2024-02-01 00:00', freq='10min')
+        burst = pd.date_range('2024-01-15 12:00:01', periods=4, freq='1s')
         m, warnings = self._build(coarse.union(burst))
         dd = m.data_detailed[FIELD]
         self.assertEqual(dd.index.freqstr, '10min')
@@ -2082,11 +2084,47 @@ class TestGridBound(unittest.TestCase):
         dropped = [w for w in warnings if 'dropped 4 record(s) at time resolution 1s' in w]
         self.assertEqual(len(dropped), 1, warnings)
         self.assertIn(f'END {burst[0]} to {burst[-1]}', dropped[0])
-        self.assertIn('grid of 1s with', dropped[0])
-        self.assertIn('limit 20', dropped[0])
+        self.assertIn('grid of 1s with 2677801 rows (limit 2000000)', dropped[0])
+
+    def test_one_second_records_in_one_day_stay(self):
+        """The bound is absolute: in one day of 10MIN data the 1 s grid has 86k rows."""
+        coarse = pd.date_range('2024-01-01 00:10', '2024-01-02 00:00', freq='10min')
+        burst = pd.date_range('2024-01-01 12:00:01', periods=4, freq='1s')
+        m, warnings = self._build(coarse.union(burst))
+        self.assertEqual(m.data_detailed[FIELD].index.freqstr, 's')
+        self.assertEqual(m.records_count(), len(coarse) + 4)
+        self.assertFalse(any('dropped' in w for w in warnings), warnings)
+
+    def test_one_minute_block_in_a_year_of_half_hourly_data(self):
+        """L297: 5 days of 1MIN data stay in a year of 30MIN data (527k grid rows)."""
+        first = pd.date_range('2020-01-01 00:30', '2020-07-01 00:00', freq='30min')
+        block = pd.date_range('2020-07-01 00:01', '2020-07-06 00:00', freq='1min')
+        last = pd.date_range('2020-07-06 00:30', '2021-01-01 00:00', freq='30min')
+        index = first.append(block).append(last)
+        m, warnings = self._build(index)
+        self.assertEqual(m.data_detailed[FIELD].index.freqstr, 'min')
+        self.assertEqual(m.records_count(), len(index))
+        self.assertFalse(any('dropped' in w for w in warnings), warnings)
+        m.resample(to_freqstr='30min', agg='mean')
+        resampled = m.resampled_detailed[FIELD][FIELD]
+        self.assertEqual(int(resampled.loc['2020-07-01 00:30':'2020-07-06 00:00'].count()), 240)
+
+    def test_bound_counts_grid_rows(self):
+        """Two years of 30MIN data with a 10-day 1MIN block need 1.05M rows and stay,
+        4 years need 2.1M and the block is dropped."""
+        from diive.preprocessing.qaqc.meteoscreening import _grid_bound_drops
+        ns = 10 ** 9
+        run_res = np.array([1800 * ns, 60 * ns, 1800 * ns])
+        used = np.ones(3, dtype=bool)
+        for years, dropped in ((2, set()), (4, {1})):
+            with self.subTest(years=years):
+                n30 = years * 17520 - 480
+                lengths = np.array([n30 // 2, 14400, n30 - n30 // 2])
+                drops = _grid_bound_drops(run_res, lengths, used, span=years * 365 * 86400 * ns)
+                self.assertEqual(set(drops), dropped)
 
     def test_long_odd_run_in_one_minute_data(self):
-        """15 records at 7 s are a run of 12+, kept by the run rule, but need a 1 s grid."""
+        """15 records at 7 s are a run of 12+, but no multiple or divisor of 1MIN: a 1 s grid."""
         fine = pd.date_range('2024-01-01 00:01', '2024-01-03 00:00', freq='1min')
         odd = pd.date_range('2024-01-02 12:00:07', periods=15, freq='7s')
         fine = fine[(fine < odd[0]) | (fine > odd[-1] + pd.Timedelta('1min'))]
@@ -2098,7 +2136,7 @@ class TestGridBound(unittest.TestCase):
         self.assertIn('grid of 1s with 60 slots per record', dropped[0])
 
     def test_three_one_minute_records_in_ten_minute_data_stay(self):
-        """Three finer records need a 1MIN grid with about 10 slots per record, within the limit."""
+        """Three finer records need a 1MIN grid with 10k rows, within the limit."""
         coarse = pd.date_range('2024-01-01 00:10', '2024-01-08 00:00', freq='10min')
         fine = pd.date_range('2024-01-04 12:01', periods=3, freq='1min')
         m, warnings = self._build(coarse.union(fine))
