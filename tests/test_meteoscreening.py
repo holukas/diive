@@ -1693,5 +1693,246 @@ class TestCodegenScriptRuns(unittest.TestCase):
         pd.testing.assert_frame_equal(namespace['resampled'], self._expected(df))
 
 
+class TestResampleBinsOnEnd(unittest.TestCase):
+    """L257: a period ending at T collects the records with END in (T - period, T]."""
+
+    def test_end_timestamps_off_the_clock(self):
+        for phase in ('0min', '3min', '5min', '7min'):
+            index = pd.date_range('2024-07-01 00:10', periods=144, freq='10min') + pd.Timedelta(phase)
+            values = np.arange(144.0)
+            reference = pd.Series(values, index=index).groupby(index.ceil('30min'))
+            for agg in ('mean', 'sum'):
+                with self.subTest(phase=phase, agg=agg):
+                    m = _screening(_series_detailed(index, values))
+                    m.resample(to_freqstr='30min', agg=agg, mincounts_perc=0)
+                    got = m.resampled_detailed[FIELD][FIELD]
+                    expected = reference.mean() if agg == 'mean' else reference.sum()
+                    np.testing.assert_array_equal(got.index, expected.index)
+                    np.testing.assert_array_equal(got.to_numpy(), expected.to_numpy())
+
+    def test_first_record_after_a_boundary(self):
+        # END 00:03 belongs to the period ending 00:30, not to the one ending 00:00.
+        index = pd.date_range('2024-07-01 00:03', periods=12, freq='10min')
+        m = _screening(_series_detailed(index, np.arange(12.0)))
+        m.resample(to_freqstr='30min', agg='mean', mincounts_perc=0)
+        got = m.resampled_detailed[FIELD][FIELD]
+        self.assertEqual(got.index[0], pd.Timestamp('2024-07-01 00:30'))
+        self.assertEqual(got.iloc[0], np.mean([0, 1, 2]))
+
+
+class TestResampleOneLabel(unittest.TestCase):
+    """L258: a result with a single period does not crash."""
+
+    def test_one_period(self):
+        for periods, target, label in ((6, '1h', '2024-07-01 01:00'), (144, '1D', '2024-07-02')):
+            with self.subTest(target=target):
+                index = pd.date_range('2024-07-01 00:10', periods=periods, freq='10min')
+                m = _screening(_series_detailed(index, np.arange(float(periods))))
+                m.resample(to_freqstr=target)
+                r = m.resampled_detailed[FIELD]
+                self.assertEqual(list(r.index), [pd.Timestamp(label)])
+                self.assertEqual(r[FIELD].iloc[0], np.mean(np.arange(float(periods))))
+                self.assertEqual(r.index.name, 'TIMESTAMP_END')
+                self.assertEqual(r['freq'].iloc[0], target)
+
+
+def _two_fields():
+    """Field A at 1MIN, field B at 10MIN, as two downloads of one measurement."""
+    frames = {}
+    for field, freq, n in (('A', '1min', 3000), ('B', '10min', 300)):
+        index = pd.date_range(pd.Timestamp('2024-01-01') + pd.Timedelta(freq), periods=n, freq=freq,
+                              name='TIMESTAMP_END')
+        df = pd.DataFrame({field: np.linspace(1, 2, n)}, index=index)
+        for tag, value in {**TAGS, 'varname': field, 'freq': freq}.items():
+            df[tag] = value
+        frames[field] = df
+    return StepwiseMeteoScreeningDb(site='ch-lae', data_detailed=frames, fields=['A', 'B'],
+                                    site_lat=47.478333, site_lon=8.364389, utc_offset=1)
+
+
+class TestResampleAtomic(unittest.TestCase):
+    """L260: a resample that fails for one field changes no field and marks the result stale."""
+
+    def test_failed_resample(self):
+        m = _two_fields()
+        m.resample(to_freqstr='30min')
+        before = {field: m.resampled_detailed[field].copy() for field in m.fields}
+        with self.assertRaises(NotImplementedError):
+            m.resample(to_freqstr='5min')  # upsampling for B
+        self.assertEqual([m.tags[field]['freq'] for field in m.fields], ['30min', '30min'])
+        with self.assertRaisesRegex(RuntimeError, r'last resample\(\) failed'):
+            _ = m.resampled_detailed
+        for field in m.fields:
+            pd.testing.assert_frame_equal(m._resampled_detailed[field], before[field])
+        m.resample(to_freqstr='30min')
+        self.assertEqual({m.resampled_detailed[field].index.freqstr for field in m.fields}, {'30min'})
+
+    def test_invalid_agg_marks_stale(self):
+        m = _two_fields()
+        m.resample(to_freqstr='30min')
+        with self.assertRaises(ValueError):
+            m.resample(to_freqstr='1h', agg='median')
+        with self.assertRaises(RuntimeError):
+            _ = m.resampled_detailed
+
+
+class TestSetCorrectionsRollback(unittest.TestCase):
+    """L259: set_corrections() that raises leaves the previous corrections in place."""
+
+    MAX = {'key': 'setto_max', 'kwargs': {'threshold': 30.5}}
+    BAD = [{'key': 'setto_min', 'kwargs': {'threshold': 29.5}},
+           {'key': 'setto_value', 'kwargs': {'dates': ['2020-06-02 1O:00'], 'value': 0}}]
+
+    def _check(self, m):
+        m.set_corrections([self.MAX])
+        m.resample(to_freqstr='30min')
+        before = TestSetCorrections._state(m)
+        resampled = m.resampled_detailed[FIELD].copy()
+        with self.assertRaises(TypeError):
+            m.set_corrections(self.BAD)
+        after = TestSetCorrections._state(m)
+        self.assertEqual(len(before), len(after))
+        for x, y in zip(before, after):
+            pd.testing.assert_series_equal(x, y)
+        pd.testing.assert_frame_equal(m.resampled_detailed[FIELD], resampled)  # still valid
+
+    def test_before_start(self):
+        self._check(_screening(_spiky()[0]))
+
+    def test_between_tests(self):
+        m = _screening(_spiky()[0])
+        m.start_outlier_detection()
+        m.flag_outliers_abslim_test(minval=0, maxval=50)
+        m.addflag()
+        self._check(m)
+
+    def test_after_finalize(self):
+        m = _screening(_spiky()[0])
+        m.start_outlier_detection()
+        m.flag_outliers_abslim_test(minval=0, maxval=50)
+        m.addflag()
+        m.finalize_outlier_detection()
+        self._check(m)
+
+
+class TestManualRemovalOfRecordWithoutValue(unittest.TestCase):
+    """L262: a record named for manual removal stays removed when a correction restores its value."""
+
+    def test_removal_survives_undoing_set_to_missing(self):
+        index = pd.date_range('2024-07-01 00:10', periods=144, freq='10min')
+        values = np.linspace(10, 20, 144)
+        values[50] = -9999.0
+        slot = index[50] - pd.Timedelta('5min')
+        for variant in ('method', 'set_corrections'):
+            with self.subTest(variant=variant):
+                m = _screening(_series_detailed(index, values))
+                if variant == 'method':
+                    m.correction_set_exact_value_to_missing(values=[-9999], showplot=False)
+                else:
+                    m.set_corrections([{'key': 'set_exact_to_missing', 'kwargs': {'values': [-9999]}}])
+                m.start_outlier_detection()
+                m.flag_manualremoval_test(remove_dates=[str(index[50])])
+                self.assertEqual(m.outlier_detection[FIELD].last_flag.loc[slot], 2)
+                m.addflag()
+                m.set_corrections([])
+                m.finalize_outlier_detection()
+                self.assertTrue(np.isnan(m.series_hires_cleaned[FIELD].loc[slot]))
+                self.assertEqual(int(m.series_hires_cleaned[FIELD].isna().sum()), 1)
+
+    def test_empty_slots_stay_unflagged(self):
+        coarse = pd.date_range('2020-06-01 00:10', '2020-06-03 00:00', freq='10min')
+        fine = pd.date_range('2020-06-03 00:01', '2020-06-05 00:00', freq='1min')
+        index = coarse.append(fine)
+        values = np.ones(len(index))
+        values[index.get_loc(pd.Timestamp('2020-06-02 12:20'))] = np.nan
+        m = _screening(_series_detailed(index, values))
+        m.start_outlier_detection()
+        m.flag_manualremoval_test(remove_dates=[['2020-06-02 12:10', '2020-06-02 12:30']])
+        flag = m.outlier_detection[FIELD].last_flag
+        named = flag.loc['2020-06-02 12:00':'2020-06-02 12:30']
+        records = m._has_record(FIELD).reindex(named.index)
+        self.assertEqual(int((named == 2).sum()), 3)  # the three records, also the one without value
+        self.assertTrue(named[records].eq(2).all())
+        self.assertTrue(named[~records].isna().all())
+
+
+class TestCoveredSecondsOverlapWithGaps(unittest.TestCase):
+    """L263: a record covers its period minus the time earlier records cover in it."""
+
+    @staticmethod
+    def _transition(gap: bool):
+        fine = pd.date_range('2024-07-01 22:00', '2024-07-02 00:09', freq='1min')
+        if gap:
+            fine = fine.drop(pd.date_range('2024-07-02 00:04', '2024-07-02 00:06', freq='1min'))
+        coarse = pd.date_range('2024-07-02 00:12', periods=60, freq='10min')
+        index = fine.append(coarse)
+        values = np.where(index < coarse[0], 0.0, 10.0)
+        values[index.get_loc(coarse[0])] = 100.0
+        df = _series_detailed(index, values)
+        df['freq'] = np.where(index < coarse[0], '1min', '10min')
+        return _screening(df), coarse[0] - pd.Timedelta('30s')
+
+    def test_gap_in_the_fine_records(self):
+        m, slot = self._transition(gap=True)
+        self.assertEqual(m._covered_seconds(FIELD).loc[slot], 360)  # 10 min minus 4 min of 1MIN records
+        m.resample(to_freqstr='30min', agg='mean', mincounts_perc=0)
+        got = m.resampled_detailed[FIELD][FIELD].loc['2024-07-02 00:30']
+        self.assertAlmostEqual(got, (6 * 0 + 6 * 100 + 10 * 10) / (6 + 6 + 10), places=12)
+
+    def test_contiguous_fine_records(self):
+        m, slot = self._transition(gap=False)
+        covered = m._covered_seconds(FIELD).dropna()
+        self.assertEqual(covered.loc[slot], 180)
+        self.assertEqual(set(covered.drop(slot).unique()), {60.0, 600.0})
+
+
+class TestSumsWithoutFloatNoise(unittest.TestCase):
+    """L268: sums of decimal values carry no float representation noise."""
+
+    def test_tipping_bucket_sums(self):
+        index = pd.date_range('2024-07-01 00:01', periods=7 * 1440, freq='1min')
+        tips = np.random.default_rng(0).integers(0, 4, len(index))
+        m = _screening(_series_detailed(index, tips * 0.1))
+        m.resample(to_freqstr='30min', agg='sum', mincounts_perc=1)
+        got = m.resampled_detailed[FIELD][FIELD]
+        expected = pd.Series(tips, index=index).groupby(index.ceil('30min')).sum() / 10
+        np.testing.assert_array_equal(got.reindex(expected.index).to_numpy(), expected.to_numpy())
+
+    def test_ten_minute_sum(self):
+        index = pd.date_range('2024-07-01 00:10', periods=144, freq='10min')
+        m = _screening(_series_detailed(index, np.full(144, 0.1)))
+        m.resample(to_freqstr='30min', agg='sum', mincounts_perc=1)
+        self.assertTrue((m.resampled_detailed[FIELD][FIELD] == 0.3).all())  # not 0.30000000000000004
+
+    def test_digits_are_kept(self):
+        sums = pd.Series([1.2000000000000002, 123456.789012, -0.000123456789, 0.0, np.nan, 3e-15])
+        got = StepwiseMeteoScreeningDb._round_sums(sums)
+        np.testing.assert_array_equal(got.to_numpy(), [1.2, 123456.789012, -0.000123456789, 0.0, np.nan, 3e-15])
+
+
+class TestCorrectionOfRecordsWithoutValue(unittest.TestCase):
+    """L264: a record in the download without a value stays NaN after a correction only
+    when the missing-values flag is part of the QCF."""
+
+    def test_zero_offset_with_and_without_missing_values_flag(self):
+        index = pd.date_range('2020-06-01 00:10', periods=3 * 144, freq='10min')
+        hour = index.hour.to_numpy() + index.minute.to_numpy() / 60
+        values = np.clip(800 * np.sin(np.pi * (hour - 5) / 15), 0, None) + 3
+        night = index.get_loc(pd.Timestamp('2020-06-01 01:50'))
+        values[night] = np.nan
+        slot = index[night] - pd.Timedelta('5min')
+        for missingvals, expected in ((False, 0.0), (True, np.nan)):
+            with self.subTest(missingvals=missingvals):
+                m = _screening(_series_detailed(index, values))
+                m.start_outlier_detection()
+                if missingvals:
+                    m.flag_missingvals_test()
+                m.flag_outliers_abslim_test(minval=-50, maxval=2000)
+                m.addflag()
+                m.finalize_outlier_detection()
+                m.correction_remove_nighttime_zero_offset(showplot=False)
+                np.testing.assert_array_equal(m.series_hires_cleaned[FIELD].loc[slot], expected)
+
+
 if __name__ == '__main__':
     unittest.main()

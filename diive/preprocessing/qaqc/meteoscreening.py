@@ -127,7 +127,8 @@ class StepwiseMeteoScreeningDb:
     warn about dates that match no record's END timestamp. The missing-values flag counts
     a missing coarse record once, at its END. `.resample()` weights each record by the time
     it covers: a 10MIN record counts ten times as much as a 1MIN record in a mean, and once
-    in a sum. Where a record's period overlaps the previous record's, the overlap counts once.
+    in a sum. Where a record's period overlaps earlier records, the time they cover counts
+    once, with them.
 
     **Timestamps**
     Screening runs on TIMESTAMP_MIDDLE (converted from the database's TIMESTAMP_END).
@@ -329,14 +330,15 @@ class StepwiseMeteoScreeningDb:
         Raises:
             RuntimeError: If the screened data changed after ``resample()``, by
                 ``start_outlier_detection()``, ``finalize_outlier_detection()``
-                or a correction. Run ``resample()`` again.
+                or a correction, or if the last ``resample()`` raised. Run
+                ``resample()`` again.
         """
         if not isinstance(self._resampled_detailed, dict):
             raise Exception("No resampled data available.")
         if self._resampled_stale:
-            raise RuntimeError("The screened data changed after resample() (outlier detection "
-                               "or corrections), so the resampled data are out of date. Run "
-                               "resample() again.")
+            raise RuntimeError("The resampled data are out of date: the screened data changed "
+                               "after resample() (outlier detection or corrections), or the "
+                               "last resample() failed. Run resample() again.")
         return self._resampled_detailed
 
     def _invalidate_resampled(self):
@@ -630,7 +632,9 @@ class StepwiseMeteoScreeningDb:
         records appear after download, not the TIMESTAMP_MIDDLE used during screening.
         Each entry is a single date(time) string or a ``[start, end]`` list; a
         bare date such as '2024-07-14' covers all records whose END timestamp is
-        on that day. See ``ManualRemoval`` for the format.
+        on that day. See ``ManualRemoval`` for the format. A named record is
+        flagged 2 also when it has no value at test time, so it stays removed if
+        a correction gives it a value later.
 
         Example:
             ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example
@@ -672,10 +676,20 @@ class StepwiseMeteoScreeningDb:
             >>> mscr.addflag()
         """
         for field in self.fields:
-            self.outlier_detection[field].flag_manualremoval_test(
-                remove_dates=self._end_dates_to_middle(field=field, remove_dates=remove_dates),
-                showplot=showplot,
-                verbose=verbose)
+            sod = self.outlier_detection[field]
+            ranges = self._end_dates_to_middle(field=field, remove_dates=remove_dates)
+            sod.flag_manualremoval_test(remove_dates=ranges, showplot=showplot, verbose=verbose)
+            # ManualRemoval leaves records without a value at test time unflagged.
+            # A correction can give such a record a value later (set_corrections([])
+            # undoing a set-to-missing), so every record named here is flagged 2.
+            # Slots without a record in the download stay unflagged: no correction
+            # fills them.
+            named = pd.Series(False, index=sod.last_flag.index)
+            for start, end in ranges:
+                named.loc[start:end] = True
+            named &= self._has_record(field).to_numpy()
+            if (named & sod.last_flag.isna()).any():
+                sod.set_pending_flag(sod.last_flag.mask(named, 2))
 
     @staticmethod
     def _date_spec_bounds(spec, argname: str) -> tuple:
@@ -1061,9 +1075,12 @@ class StepwiseMeteoScreeningDb:
         if field in self._outlier_detection_qcf:
             # Records the last finalize removed stay removed until the next finalize,
             # also where a correction writes a value (zero offset, set to value).
-            # This includes records without a value in the download, which get
-            # QCF = 2 from the missing-values flag, so they end NaN whether the
-            # correction runs before or after finalize.
+            # A record that is in the download without a value has QCF = 2 only
+            # when the missing-values flag is part of the QCF (flag_missingvals_test()
+            # ran, or finalize added it for mixed resolutions). Only then does it
+            # stay NaN. Otherwise the zero offset sets such a night record to 0 and
+            # setto_value writes its value, on purpose. Slots without a record in
+            # the download stay empty in any case (see above).
             series = series.mask(self._outlier_detection_qcf[field].flagqcf == 2)
         self._series_hires_cleaned[field] = series
         self._invalidate_resampled()
@@ -1230,14 +1247,31 @@ class StepwiseMeteoScreeningDb:
     def _covered_seconds(self, field: str) -> pd.Series:
         """Seconds each record covers, NaN at empty slots.
 
-        A record covers its resolution, except where its period overlaps the
-        previous record's (e.g. 1MIN records up to END 00:05, then a 10MIN record
-        END 00:10): the overlap is counted once, with the previous record.
+        A record covers its period (END - resolution, END] minus the time that
+        earlier records cover in it. The overlap counts once, with the earlier
+        records. E.g. 1MIN records END 00:01 to 00:03 and 00:07 to 00:09, then a
+        10MIN record END 00:12: the 10MIN record covers 10 - 4 = 6 minutes. A
+        record that overlaps no earlier record covers its resolution.
         """
         freq_sec = self.data_detailed[field]['FREQ_AUTO_SEC']
         records = freq_sec.dropna()
-        since_previous = records.index.to_series().diff().dt.total_seconds()
-        covered = records.where(~(since_previous < records), since_previous)
+        ends = records.index.as_unit('ns').asi8
+        res = np.round(records.to_numpy() * 1e9).astype(np.int64)
+        covered = records.copy()
+        # Only records that start before the previous END overlap earlier records.
+        for i in np.flatnonzero(np.r_[False, ends[1:] - res[1:] < ends[:-1]]):
+            start = ends[i] - res[i]
+            # Earlier periods that reach into this one, merged into their union.
+            j = i - 1
+            while j >= 0 and ends[j] > start:
+                j -= 1
+            pieces = sorted((max(start, ends[k] - res[k]), ends[k]) for k in range(j + 1, i))
+            union, reach = 0, start
+            for lo, hi in pieces:
+                if hi > reach:
+                    union += hi - max(lo, reach)
+                    reach = hi
+            covered.iloc[i] = (res[i] - union) / 1e9
         return covered.reindex(freq_sec.index)
 
     def correction_remove_nighttime_zero_offset(self, showplot: bool = True, clamp_negatives: bool = True):
@@ -1245,6 +1279,11 @@ class StepwiseMeteoScreeningDb:
 
         With ``clamp_negatives=True`` negative values left after the correction are
         set to zero. See ``remove_nighttime_zero_offset``.
+
+        Night records that are in the download without a value are set to 0 too,
+        unless the missing-values flag is part of the QCF (``flag_missingvals_test()``
+        ran, or the data hold more than one time resolution): then
+        ``finalize_outlier_detection()`` keeps them NaN.
 
         Example:
             ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example;
@@ -1327,7 +1366,10 @@ class StepwiseMeteoScreeningDb:
         """Set records within time range to value.
 
         Dates are TIMESTAMP_END in the time zone of *data_detailed*, as for
-        ``flag_manualremoval_test``.
+        ``flag_manualremoval_test``. Records that are in the download without a
+        value get the value too, unless the missing-values flag is part of the QCF
+        (``flag_missingvals_test()`` ran, or the data hold more than one time
+        resolution): then ``finalize_outlier_detection()`` keeps them NaN.
 
         Raises:
             TypeError: If an entry of *dates* is neither a string nor a list.
@@ -1397,6 +1439,8 @@ class StepwiseMeteoScreeningDb:
                 not have two elements. Nothing is changed then.
             TypeError: If a ``'setto_value'`` date entry is neither a string nor a
                 list. Nothing is changed then.
+            Exception: Any error a correction raises, e.g. a date that does not
+                parse. The corrections in place before the call are restored.
 
         Example:
             ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example:
@@ -1443,19 +1487,36 @@ class StepwiseMeteoScreeningDb:
                 raise ValueError(f"Unknown correction key: {key!r}")
             calls.append(call)
 
-        for field in self.fields:
-            uncorrected = self._series_hires_orig[field]
-            if field in self._series_hires_corrected:
-                # After finalize: the next finalize starts from the uncorrected
-                # records, and the current series keeps the QCF removals.
-                self._series_hires_corrected[field] = uncorrected
-                removed = self._outlier_detection_qcf[field].flagqcf == 2
-                current = uncorrected.mask(removed).rename(self._series_hires_cleaned[field].name)
-            else:
-                current = uncorrected
-            self._set_corrected(field, current)
-        for call in calls:
-            call()
+        # Every step below rebinds these series instead of changing them in place,
+        # so references to the current ones are enough to restore them.
+        saved = (dict(self._series_hires_cleaned), dict(self._series_hires_corrected),
+                 {field: sod.series_hires_cleaned for field, sod in self._outlier_detection.items()},
+                 self._resampled_stale)
+        try:
+            for field in self.fields:
+                uncorrected = self._series_hires_orig[field]
+                if field in self._series_hires_corrected:
+                    # After finalize: the next finalize starts from the uncorrected
+                    # records, and the current series keeps the QCF removals.
+                    self._series_hires_corrected[field] = uncorrected
+                    removed = self._outlier_detection_qcf[field].flagqcf == 2
+                    current = uncorrected.mask(removed).rename(self._series_hires_cleaned[field].name)
+                else:
+                    current = uncorrected
+                self._set_corrected(field, current)
+            for call in calls:
+                call()
+        except Exception:
+            # A correction that raises (e.g. a date that does not parse) must not
+            # leave the earlier corrections half undone.
+            cleaned, corrected, sod_series, stale = saved
+            self._series_hires_cleaned = cleaned
+            self._series_hires_corrected = corrected
+            for field, series in sod_series.items():
+                # The saved series already lacks the records the added flags reject.
+                self._outlier_detection[field].rebase_series(series)
+            self._resampled_stale = stale
+            raise
 
     def analysis_potential_radiation_correlation(self,
                                                  utc_offset: int,
@@ -1523,11 +1584,14 @@ class StepwiseMeteoScreeningDb:
 
         A target period ending at T collects the kept records whose END timestamp
         is in (T - period, T]. Each record weighs the time it covers, i.e. its
-        original resolution, or less where its period overlaps the previous
-        record's (the overlap counts once): ``agg='mean'`` is the time-weighted mean,
-        ``agg='sum'`` adds each record once. ``mincounts_perc`` is the minimum
-        fraction of the period the kept records must cover, measured by the time
-        they cover, so other resolutions in the same download do not change it.
+        original resolution, minus the time earlier records cover where its period
+        overlaps theirs (the overlap counts once, with the earlier records):
+        ``agg='mean'`` is the time-weighted mean, ``agg='sum'`` adds each record
+        once. Sums are rounded to 12 significant digits, which removes float noise
+        (0.1 mm records summing to 1.2000000000000002) and no measured precision.
+        ``mincounts_perc`` is the minimum fraction of the period the kept records
+        must cover, measured by the time they cover, so other resolutions in the
+        same download do not change it.
         For ``agg='mean'`` the minimum is rounded down to whole records of the
         finest resolution in the period, and if that is below three records, one
         record is enough (e.g. 10MIN data resampled to 30min). For ``agg='sum'``
@@ -1545,6 +1609,8 @@ class StepwiseMeteoScreeningDb:
         The result reflects the screened data at the time of the call. After
         ``start_outlier_detection()``, ``finalize_outlier_detection()`` or a
         correction, ``resampled_detailed`` raises until ``resample()`` runs again.
+        The same holds after a call of ``resample()`` that raised: then no field
+        is changed, and the previous result cannot be read.
 
         A coarse record is assigned whole to the period that contains its END
         timestamp. This is exact when its resolution divides the target period.
@@ -1563,78 +1629,115 @@ class StepwiseMeteoScreeningDb:
 
             >>> mscr.resample(to_freqstr='1h', agg='sum', mincounts_perc=1)
         """
-        if agg not in ('mean', 'sum'):
-            raise ValueError(f"agg must be 'mean' or 'sum', not {agg!r}.")
-        # pandas 3 no longer reads the old minute alias ('30T').
-        if to_freqstr.endswith('T'):
-            to_freqstr = f"{to_freqstr[:-1]}min"
-        for field in self.fields:
-            series = self._series_hires_cleaned[field]
-            grid = series.index.freq
-            # As durations: pandas 3 cannot compare a Day offset with a Minute one.
-            if pd.Timedelta(to_offset(to_freqstr).nanos, unit='ns') < pd.Timedelta(grid):
-                raise NotImplementedError(f"Upsampling not allowed: target frequency {to_freqstr} must be "
-                                          f"a lower time resolution than the data ({grid.freqstr}).")
-            info(f"Resampling {field} from {grid.freqstr} to {to_freqstr} ({agg}) ...")
-
-            sod = self._outlier_detection.get(field)
-            if sod is not None:
-                unapplied = [c for c in sod.flags.columns if c not in self._finalized_flags.get(field, set())]
-                if unapplied:
-                    # No verbose argument here, and unscreened data would be tagged
-                    # as screened: the warning must be seen.
-                    warn(f"{field}: {len(unapplied)} flag(s) added with addflag() are not applied, "
-                         f"because finalize_outlier_detection() has not run since: "
-                         f"{', '.join(unapplied)}. The resampled data still hold the records they "
-                         f"reject. Run finalize_outlier_detection() before resample().")
-
-            # A kept record weighs the grid slots its original resolution covers
-            # (10 for a 10MIN record on a 1MIN grid, less where it overlaps the
-            # previous record); empty slots and rejected records weigh 0.
-            grid_sec = pd.Timedelta(grid).total_seconds()
-            weight = (self._covered_seconds(field) / grid_sec).where(series.notna(), 0)
-
-            # The index is TIMESTAMP_MIDDLE, so label='right' puts each record into
-            # the period (T - to_freqstr, T] that contains its END timestamp.
-            periods = dict(rule=to_freqstr, label='right')
-            if agg == 'mean':
-                series_resampled = (series * weight).resample(**periods).sum() / weight.resample(**periods).sum()
-            else:
-                series_resampled = series.resample(**periods).sum()
-
-            # Coverage in seconds of the kept records' own periods, not in grid
-            # slots, so a finer grid from other records does not change it.
-            covered = self._covered_seconds(field).where(series.notna(), 0).resample(**periods).sum()
-            period_sec = pd.Timedelta(to_offset(to_freqstr).nanos, unit='ns').total_seconds()
-            if agg == 'mean':
-                # Whole records, rounded down, and one record below three: for
-                # single-resolution data this is the rule of resample_series_to_freq.
-                resolution = self.data_detailed[field]['FREQ_AUTO_SEC'].resample(**periods).min()
-                records = np.floor(period_sec / resolution * mincounts_perc)
-                keep = (covered >= records * resolution).where(records >= 3, covered > 0)
-            else:
-                # No one-record rule: a sum from part of the period is too small.
-                # The tolerance absorbs rounding in mincounts_perc * period_sec.
-                keep = (covered > 0) & (covered >= mincounts_perc * period_sec * (1 - 1e-9))
-            series_resampled = series_resampled.where(keep)
-
-            series_resampled = series_resampled.asfreq(to_freqstr)
-            series_resampled.index.name = 'TIMESTAMP_END'
-            series_resampled = TimestampSanitizer(data=series_resampled, output_middle_timestamp=False).get()
-
-            # Update tags with resampling info
+        try:
+            if agg not in ('mean', 'sum'):
+                raise ValueError(f"agg must be 'mean' or 'sum', not {agg!r}.")
+            # pandas 3 no longer reads the old minute alias ('30T').
+            if to_freqstr.endswith('T'):
+                to_freqstr = f"{to_freqstr[:-1]}min"
+            resampled = {field: self._resample_field(field, to_freqstr, agg, mincounts_perc)
+                         for field in self.fields}
+        except Exception:
+            # The previous result no longer matches the requested frequency.
+            self._invalidate_resampled()
+            raise
+        # Stored only when every field succeeded, so all fields share one frequency.
+        for field, frame in resampled.items():
             self._tags[field]['freq'] = to_freqstr
             self._tags[field]['data_version'] = 'meteoscreening_diive'
-
-            # Create df that includes the resampled series and its tags
-            self._resampled_detailed[field] = pd.DataFrame()
-            self._resampled_detailed[field][field] = series_resampled  # Store screened variable with original name
-            self._resampled_detailed[field] = self._resampled_detailed[field].asfreq(series_resampled.index.freqstr)
-
-            # Insert tags as columns
             for key, value in self._tags[field].items():
-                self._resampled_detailed[field][key] = value
+                frame[key] = value
+            self._resampled_detailed[field] = frame
         self._resampled_stale = False
+
+    @staticmethod
+    def _round_sums(sums: pd.Series, digits: int = 12) -> pd.Series:
+        """Round *sums* to *digits* significant digits.
+
+        Removes the float noise of adding decimal values (0.1 + 0.2 gives
+        0.30000000000000004). The noise lies far beyond the 12th digit, where no
+        measurement has precision.
+        """
+        # Through decimal text: np.round scales by 10**decimals, which is inexact
+        # beyond 1e22 and would add noise to small values.
+        values = [float(f"{value:.{digits}g}") for value in sums.to_numpy(dtype=float)]
+        return pd.Series(values, index=sums.index, name=sums.name, dtype=float)
+
+    def _resample_field(self, field: str, to_freqstr: str, agg: str, mincounts_perc: float) -> DataFrame:
+        """Resample one field for ``resample()``, without storing anything.
+
+        Returns the resampled series as a one-column DataFrame on a TIMESTAMP_END
+        index, without the tag columns.
+        """
+        series = self._series_hires_cleaned[field]
+        grid = series.index.freq
+        # As durations: pandas 3 cannot compare a Day offset with a Minute one.
+        if pd.Timedelta(to_offset(to_freqstr).nanos, unit='ns') < pd.Timedelta(grid):
+            raise NotImplementedError(f"Upsampling not allowed: target frequency {to_freqstr} must be "
+                                      f"a lower time resolution than the data ({grid.freqstr}).")
+        info(f"Resampling {field} from {grid.freqstr} to {to_freqstr} ({agg}) ...")
+
+        sod = self._outlier_detection.get(field)
+        if sod is not None:
+            unapplied = [c for c in sod.flags.columns if c not in self._finalized_flags.get(field, set())]
+            if unapplied:
+                # No verbose argument here, and unscreened data would be tagged
+                # as screened: the warning must be seen.
+                warn(f"{field}: {len(unapplied)} flag(s) added with addflag() are not applied, "
+                     f"because finalize_outlier_detection() has not run since: "
+                     f"{', '.join(unapplied)}. The resampled data still hold the records they "
+                     f"reject. Run finalize_outlier_detection() before resample().")
+
+        # Each record goes into the period (T - to_freqstr, T] that contains its END
+        # (slot + grid/2), also when the ENDs are off the clock (10MIN data at :03,
+        # :13, ...). Left-closed bins on END minus one time unit select exactly
+        # that. closed='right' would do the same, but in pandas 3 it adds an empty
+        # period at both ends of daily results.
+        ends = series.index + pd.Timedelta(grid) / 2
+        ends = ends - pd.Timedelta(1, unit=ends.unit)
+
+        def binned(values: pd.Series):
+            return values.set_axis(ends).resample(rule=to_freqstr, label='right')
+
+        # A kept record weighs the grid slots its original resolution covers
+        # (10 for a 10MIN record on a 1MIN grid, less where earlier records
+        # cover part of its period). Empty slots and rejected records weigh 0.
+        covered_sec = self._covered_seconds(field)
+        grid_sec = pd.Timedelta(grid).total_seconds()
+        weight = (covered_sec / grid_sec).where(series.notna(), 0)
+        if agg == 'mean':
+            series_resampled = binned(series * weight).sum() / binned(weight).sum()
+        else:
+            series_resampled = self._round_sums(binned(series).sum())
+
+        # Coverage in seconds of the kept records' own periods, not in grid
+        # slots, so a finer grid from other records does not change it.
+        covered = binned(covered_sec.where(series.notna(), 0)).sum()
+        period_sec = pd.Timedelta(to_offset(to_freqstr).nanos, unit='ns').total_seconds()
+        if agg == 'mean':
+            # Whole records, rounded down, and one record below three: for
+            # single-resolution data this is the rule of resample_series_to_freq.
+            resolution = binned(self.data_detailed[field]['FREQ_AUTO_SEC']).min()
+            records = np.floor(period_sec / resolution * mincounts_perc)
+            keep = (covered >= records * resolution).where(records >= 3, covered > 0)
+        else:
+            # No one-record rule: a sum from part of the period is too small.
+            # The tolerance absorbs rounding in mincounts_perc * period_sec.
+            keep = (covered > 0) & (covered >= mincounts_perc * period_sec * (1 - 1e-9))
+        series_resampled = series_resampled.where(keep)
+
+        series_resampled = series_resampled.asfreq(to_freqstr)
+        series_resampled.index.name = 'TIMESTAMP_END'
+        if len(series_resampled) > 1:
+            # Frequency detection needs two timestamps. asfreq already gave the
+            # single label of a one-period result its frequency.
+            series_resampled = TimestampSanitizer(data=series_resampled, output_middle_timestamp=False).get()
+
+        # The screened variable with its original name, the tags are added by resample()
+        frame = pd.DataFrame()
+        frame[field] = series_resampled
+        frame = frame.asfreq(series_resampled.index.freqstr)
+        return frame
 
     def finalize_outlier_detection(self,
                                    daytime_accept_qcf_below: int = 2,
@@ -1860,8 +1963,8 @@ class StepwiseMeteoScreeningDb:
         value onto those slots would make a record removable only in part and
         would give difference-based outlier tests runs of zero increments.
         `resample` weights each record by the seconds it covers instead
-        (`_covered_seconds`: its FREQ_AUTO_SEC, less where it overlaps the
-        previous record).
+        (`_covered_seconds`: its FREQ_AUTO_SEC, less the time earlier records
+        cover in its period).
         """
         data_detailed = data_detailed.sort_index(ascending=True)
         data_detailed.index.name = timestamp_name
