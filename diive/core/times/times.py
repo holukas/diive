@@ -514,7 +514,7 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
     10MIN averages for a year and 1MIN averages afterwards. The result can be used to
     access the different time resolution groups separately during later processing.
 
-    The assignment works in three passes:
+    The assignment works in four passes:
 
     1. A record whose time differences to the previous and to the next record are
        equal has an unambiguous resolution: that difference.

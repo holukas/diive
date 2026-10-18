@@ -115,8 +115,8 @@ class Hampel(FlagBase):
         1. **Double-Differencing:** If ``use_differencing=True``, applies filter to
            double-differenced data ($d = (x_t - x_{t-1}) - (x_{t+1} - x_t)$).
            Removes trends and isolates short-term deviations/spikes.
-        2. **Day/Night Separation:** If ``separate_day_night=True``, uses solar elevation
-           to apply different thresholds for daytime and nighttime periods.
+        2. **Day/Night Separation:** If ``separate_day_night=True``, daytime and
+           nighttime records each get their own median, MAD and threshold.
 
         The general formula for the detection interval is:
         $$Limit = \\text{Median} \\pm (n\\_sigma \\times k \\times MAD)$$

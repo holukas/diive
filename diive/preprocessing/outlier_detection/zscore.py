@@ -303,7 +303,8 @@ class zScoreRolling(FlagBase):
                 (gaps, and outliers removed by earlier iterations) do not count
                 and the window stretches across them: with 20 % of the records
                 missing, ``'7D'`` covers about 9 calendar days.
-                If None, defaults to len(series) / 20 (5% of data).
+                If None, 5 % of the records with a value, counted in the
+                first iteration.
             showplot: If True, display results plot.
             plottitle: Optional title string for the plot.
             verbose: If True, print iteration statistics.

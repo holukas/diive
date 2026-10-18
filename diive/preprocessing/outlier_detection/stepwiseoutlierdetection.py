@@ -252,10 +252,13 @@ class StepwiseOutlierDetection:
         k : float, default 1.4826
             Scaling factor for MAD (median absolute deviation)
         use_differencing : bool, default True
-            If True, apply Hampel filter to differenced series (rate of change)
+            If True, apply the filter to the double-differenced series
+            (Papale et al. 2006), which removes trends. If False, to the values.
         separate_day_night : bool, default True
-            If False, apply single threshold globally across all records.
-            If True, apply separate thresholds for daytime and nighttime data.
+            If False, one median, MAD and threshold for all records.
+            If True, daytime and nighttime records each get the median and MAD
+            of the records of their own period in the window, and their own
+            threshold. See ``Hampel``.
         showplot : bool, default False
             If True, display visualization of flagged outliers
         verbose : bool, default False
