@@ -29,6 +29,7 @@ from diive.core.io.db.influx import fluxql
 from diive.core.io.db.influx.common import TAGS, convert_ts_to_timezone
 from diive.core.io.db.influx.config import get_conf_filetypes, read_configfile, read_dbconf
 from diive.core.io.db.influx.connection import get_client, get_delete_api, get_query_api
+from diive.core.times.times import describe_time_resolution
 from diive.core.utils.console import VERBOSE_PROGRESS, detail, info, success, warn
 
 #: Records per synchronous write request in ``upload_singlevar``.
@@ -435,12 +436,14 @@ class InfluxIO:
 
         # Info
         info(f"Downloaded data for {len(data_detailed)} variables:", verbose=self.verbose)
-        for key, val in data_detailed.items():
-            num_records = len(data_detailed[key])
-            first_date = data_detailed[key].index[0]
-            last_date = data_detailed[key].index[-1]
-            detail(f"<-- {key}  ({num_records} records)  "
-                   f"first date: {first_date}  last date: {last_date}", verbose=self.verbose)
+        for key, frame in data_detailed.items():
+            # Detected from the timestamps, with the freq tag next to it: a wrong tag
+            # shows here already, before the screening warns about it.
+            tags = ', '.join(str(v) for v in pd.unique(frame['freq'].dropna())) if 'freq' in frame else ''
+            tag_text = f" (freq tag: {tags})" if tags else " (no freq tag)"
+            info(f"<-- {key}: {len(frame):,} records from {frame.index[0]} to {frame.index[-1]}, "
+                 f"time resolution {describe_time_resolution(frame.index)}{tag_text}",
+                 verbose=self.verbose)
 
         if not measurements:
             found_measurements = list(set(found_measurements))

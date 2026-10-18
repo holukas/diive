@@ -674,6 +674,37 @@ class TestDetectFreqGroups(unittest.TestCase):
         self.assertEqual(g.loc[pd.Timestamp('2024-07-01 00:22')], 60)
         self.assertNotEqual(g.loc[pd.Timestamp('2024-07-01 00:23')], 30)
 
+
+class TestDescribeTimeResolution(unittest.TestCase):
+    """Text of the detected time resolution, as shown after a download and in plots."""
+
+    def _describe(self, ix):
+        from diive.core.times.times import describe_time_resolution
+        return describe_time_resolution(ix)
+
+    def test_regular(self):
+        self.assertEqual(self._describe(pd.date_range('2024-01-01', periods=50, freq='30min')), '30min')
+        self.assertEqual(self._describe(pd.date_range('2024-01-01', periods=50, freq='1min')), '1min')
+        self.assertEqual(self._describe(pd.date_range('2024-01-01', periods=5, freq='D')), '24h')
+
+    def test_missing_records_keep_the_resolution(self):
+        ix = pd.date_range('2024-01-01', periods=500, freq='10min')
+        self.assertEqual(self._describe(ix.delete([10, 11, 12, 200, 300])), '10min')
+
+    def test_mixed_resolutions_with_counts_in_order(self):
+        a = pd.date_range('2024-01-01 00:10', periods=100, freq='10min')
+        b = pd.date_range(a[-1] + pd.Timedelta('1min'), periods=300, freq='1min')
+        self.assertEqual(self._describe(a.append(b)), '10min (100 records), 1min (300 records)')
+
+    def test_unsorted_index_is_sorted_first(self):
+        ix = pd.date_range('2024-01-01', periods=50, freq='30min')
+        self.assertEqual(self._describe(ix[::-1]), '30min')
+
+    def test_too_few_records(self):
+        self.assertEqual(self._describe(pd.DatetimeIndex([])), 'unknown')
+        self.assertEqual(self._describe(pd.DatetimeIndex(['2024-01-01'])), 'unknown')
+
+
 class TestStlDecompose(unittest.TestCase):
     """Regression tests for `core/times/decomposition_utils.py::stl_decompose`.
 

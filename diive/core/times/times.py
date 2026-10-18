@@ -813,6 +813,48 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
     return pd.Series(index=index, data=group_sec, name='FREQ_AUTO_SEC')
 
 
+def describe_time_resolution(index: DatetimeIndex) -> str:
+    """Short text of the time resolution(s) of the records in *index*.
+
+    Each record gets its resolution from ``detect_freq_groups``, so missing records
+    and changes of resolution are handled. One resolution gives e.g. ``'30min'``.
+    Several give each with its number of records, in order of first appearance,
+    e.g. ``'10min (8,640 records), 1min (52,000 records)'``. Records without a
+    detected resolution count as ``unknown``, and fewer than two records give
+    ``'unknown'``.
+
+    Example:
+        >>> import pandas as pd
+        >>> from diive.core.times.times import describe_time_resolution
+        >>> describe_time_resolution(pd.date_range('2024-01-01', periods=48, freq='30min'))
+        '30min'
+    """
+    index = pd.DatetimeIndex(index)
+    if len(index) < 2:
+        return 'unknown'
+    if not index.is_monotonic_increasing:
+        index = index.sort_values()
+    ns = index.as_unit('ns').asi8
+    diffs = np.diff(ns)
+    if diffs[0] > 0 and (diffs == diffs[0]).all():
+        # Evenly spaced, nothing to detect (also skips detection on long regular data)
+        sec = np.full(len(index), diffs[0] / 1e9)
+    else:
+        sec = detect_freq_groups(index).to_numpy()
+    resolutions = pd.Series(sec).value_counts(dropna=False, sort=False)
+    if len(resolutions) == 1 and resolutions.index[0] == resolutions.index[0]:  # one, not NaN
+        return _resolution_str(resolutions.index[0])
+    return ', '.join(f"{_resolution_str(s)} ({n:,} records)" for s, n in resolutions.items())
+
+
+def _resolution_str(seconds: float) -> str:
+    """Offset string of a resolution in seconds with the count, e.g. '1min', 'unknown' for NaN."""
+    if seconds != seconds:
+        return 'unknown'
+    offset = to_offset(pd.Timedelta(int(round(seconds * 1e9)), unit='ns'))
+    return f"{offset.n}{offset.name}"
+
+
 # Spacings a stretch needs before its common resolution counts as evidence
 # (_regular_outages). Random missing records leave a spacing that is a whole
 # multiple of twice their resolution with a chance below 1/2, so 24 such

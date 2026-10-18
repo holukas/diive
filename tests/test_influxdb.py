@@ -679,6 +679,19 @@ class TestInfluxRealParser(unittest.TestCase):
         pd.testing.assert_series_equal(back[FIELD][FIELD], detailed[FIELD][FIELD])
         self.assertEqual(back[FIELD].index.tolist(), detailed[FIELD].index.tolist())
 
+    def test_download_reports_detected_resolution_and_freq_tag(self):
+        self.csv = _annotated_csv([_series([5.0] * 6), _series([1.0, 2.0, 3.0], field=FIELD2, freq=None)],
+                                  fields=[FIELD, FIELD2])
+        with patch("diive.core.io.db.influx.influxio.info") as info:
+            self._download()
+        lines = [c.args[0] for c in info.call_args_list if c.args[0].startswith("<--")]
+        self.assertEqual(len(lines), 2)
+        line = next(s for s in lines if s.startswith(f"<-- {FIELD}:"))
+        self.assertIn("6 records", line)
+        self.assertIn("time resolution 10min (freq tag: 10min)", line)
+        line2 = next(s for s in lines if s.startswith(f"<-- {FIELD2}:"))
+        self.assertIn("time resolution 10min (no freq tag)", line2)
+
     def test_upload_still_needs_site_varname_and_data_version(self):
         var_df = _upload_frame().drop(columns=["gain", "offset", "varname"])
         with self.assertRaisesRegex(ValueError, r"required tag columns: \['varname'\]"):
