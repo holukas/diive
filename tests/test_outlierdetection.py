@@ -245,18 +245,22 @@ class TestOutlierDetection(unittest.TestCase):
         # L226: records removed by an earlier iteration end a run, so repeat=True
         # no longer takes the good records two steps from a spike pair.
         # L239: median and MAD per period (223 -> 225).
-        self.assertEqual(baddata_stats.loc['count']['flag'], 225)
+        # L255: edge tests with the central sign, differences inside one period
+        # (225 -> 220: the same 89 of 104 spikes, 5 fewer good records).
+        self.assertEqual(baddata_stats.loc['count']['flag'], 220)
         self.assertEqual(baddata_stats.loc['min']['flag'], 2)
         self.assertEqual(baddata_stats.loc['max']['flag'], 2)
-        self.assertEqual(baddata_stats.loc['count']['s_noise'], 225)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 220)
 
         # Checks on good data
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
-        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 51.98160999845608)
+        # L255: at n_sigma=100 one borderline spike (+34 degC) stays and another
+        # (+19 degC) goes, so the largest kept value changed (was 51.98).
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 53.93064794948049)
         self.assertEqual(gooddata_stats.loc['min']['s_noise'], -24.68608044400628)
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
-        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1263)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1268)
 
     def test_hampel_filter_basic(self):
         df = ed.load_exampledata_parquet()

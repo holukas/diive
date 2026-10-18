@@ -233,6 +233,74 @@ class TestDayNightStatistics(unittest.TestCase):
         self.assertEqual(sorted(np.flatnonzero((flag == 2).to_numpy())), [299, 300, 301, 899, 900, 901, 1499, 1500, 1501])
 
 
+class TestClearSkyRunEdges(unittest.TestCase):
+    """L255: every test has the curvature sign of the central double difference,
+    and differences stay inside one period. Before, the edge tests had the
+    opposite sign: against the daytime median of its own (L239) each run edge
+    looked like a spike, and repeat=True removed clean clear-sky days from both
+    ends, record by record. The step from night to day at sunrise and sunset
+    also cost the first and last daytime record of each day."""
+
+    LAT, LON = 46.8, 9.86
+
+    def _swin(self):
+        from diive.variables.radiation import potrad
+        idx = pd.date_range('2023-01-01 00:15', periods=48 * 59, freq='30min', name='TIMESTAMP_MIDDLE')
+        pot = potrad(timestamp_index=idx, lat=self.LAT, lon=self.LON, utc_offset=1).to_numpy()
+        values = 0.8 * pot + np.random.default_rng(2).normal(0, 0.5, len(idx))
+        return pd.Series(values, index=idx, name='SW_IN')
+
+    def _hampel(self, series, repeat):
+        ham = Hampel(series=series, window_length=624, n_sigma=5.5, lat=self.LAT, lon=self.LON, utc_offset=1)
+        ham.calc(repeat=repeat)
+        return ham
+
+    def test_clean_clear_sky_days_are_kept(self):
+        for repeat in (False, True):
+            with self.subTest(repeat=repeat):
+                ham = self._hampel(self._swin(), repeat)
+                rejected = ham.get_flag() == 2
+                day = ham.is_daytime.reindex(rejected.index, fill_value=False)
+                # Was 105 (repeat=False) and 920 (repeat=True) daytime records.
+                self.assertEqual(int((rejected & day).sum()), 0)
+
+    def test_repeat_does_not_cascade(self):
+        s = self._swin()
+        n_first = int((self._hampel(s, repeat=False).get_flag() == 2).sum())
+        n_repeat = int((self._hampel(s, repeat=True).get_flag() == 2).sum())
+        self.assertLessEqual(n_repeat, 1.1 * n_first + 5)
+
+    def test_spikes_next_to_sunrise_and_sunset_are_caught(self):
+        # The first and last daytime record are tested against the line from
+        # records of their own period.
+        s = self._swin()
+        ham = self._hampel(s, repeat=False)
+        day = ham.is_daytime.reindex(s.index, fill_value=False).to_numpy().astype(int)
+        firsts = np.flatnonzero(np.diff(day) == 1) + 1
+        lasts = np.flatnonzero(np.diff(day) == -1)
+        spikes = np.concatenate([firsts[::4], lasts[2::4]])
+        s.iloc[spikes] += np.where(np.arange(len(spikes)) % 2, -60, 60)
+        flag = self._hampel(s, repeat=True).get_flag()
+        self.assertTrue((flag.iloc[spikes] == 2).all())
+        rejected_day = (flag == 2) & ham.is_daytime.reindex(s.index, fill_value=False)
+        self.assertLessEqual(int(rejected_day.sum()), 3 * len(spikes))
+
+    def test_band_in_data_units_matches_the_decision(self):
+        # The extrapolation tests have a negative factor, so upper and lower
+        # swap when the band is mapped back to data units.
+        s = self._swin()
+        s.iloc[[100, 101, 600, 1500, 1501, 1502]] = np.nan
+        s.iloc[[102, 603, 1503, 2000]] += 80
+        ham = self._hampel(s, repeat=False)
+        lower, upper = ham.last_lower_bound, ham.last_upper_bound
+        has_band = lower.notna() & upper.notna()
+        self.assertTrue((upper[has_band] >= lower[has_band]).all())
+        x = s.reindex(lower.index)
+        outside = ((x > upper) | (x < lower)) & has_band
+        flagged = (ham.get_flag() == 2).reindex(lower.index)
+        self.assertTrue((outside == flagged).all())
+
+
 def potrad_positive(series):
     from diive.variables.radiation import potrad
     return potrad(timestamp_index=series.index, lat=47.42, lon=8.49, utc_offset=1).to_numpy() > 50

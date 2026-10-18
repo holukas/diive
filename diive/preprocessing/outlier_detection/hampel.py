@@ -159,7 +159,10 @@ class Hampel(FlagBase):
                 records of the same period in the window, and their own threshold, as in
                 ONEFlux. Unlike ONEFlux, the records next to the change between day and
                 night belong to one period only: against the near-zero night MAD of
-                radiation every record on the light ramp would look like a spike. The
+                radiation every record on the light ramp would look like a spike. With
+                ``use_differencing=True`` a double difference uses records of one period
+                only, also as in ONEFlux. The record next to the change is compared with
+                the extrapolation from records of its own period. The
                 night includes records with up to 20 W m-2 potential radiation, so in
                 radiation a few records at sunrise and sunset can still be rejected.
                 If ``False``, one median, MAD and threshold for all records.
@@ -205,12 +208,6 @@ class Hampel(FlagBase):
         # rather than silent.
         self._n_degenerate_scale = 0
 
-        # Runs of records without a gap in the INPUT data. A gap in the input is
-        # never bridged. The differences themselves use the runs of the current
-        # series (see _double_differences), so a record removed by an earlier
-        # iteration also ends a run.
-        self._segment = self._input_segments(self.series)
-
         # Detect daytime and nighttime
         if self.separate_day_night:
             if lat is None or lon is None or utc_offset is None:
@@ -224,6 +221,12 @@ class Hampel(FlagBase):
             self.is_daytime = None
             self.is_nighttime = None
             self.flag_daytime = None
+
+        # Runs of records without a gap in the INPUT data. A gap in the input is
+        # never bridged. The differences themselves use the runs of the current
+        # series (see _double_differences), so a record removed by an earlier
+        # iteration also ends a run.
+        self._segment = self._runs(self.series)
 
     def calc(self, repeat: bool = True, progress_callback=None):
         """Calculate overall flag, based on individual flags from multiple iterations.
@@ -299,18 +302,47 @@ class Hampel(FlagBase):
         empty_before = np.append(True, empty[:-1])
         return pd.Series(np.cumsum(far_before | empty_before), index=index)
 
-    def _double_differences(self, s: Series) -> tuple[Series, Series, Series]:
-        """Second differences of *s* that stay inside each gap-free run.
+    def _runs(self, series: Series) -> Series:
+        """Gap-free runs of *series*, split at each change between day and night.
 
-        A run ends at a gap in the input and at a record removed by an earlier
-        iteration. Inside a run: ``d = 2 x_t - x_{t-1} - x_{t+1}``, the Papale
-        et al. (2006) double difference. A record at the start or end of its run
-        has a neighbour on one side only and is tested against the linear
-        extrapolation from the next two records, ``d = x_t - 2 x_{t+1} + x_{t+2}``
-        (or mirrored), which has the same noise and also cancels a trend.
-        Without that test a spike at a run edge was never judged, and with
-        ``repeat=True`` each iteration removed the next record paired with it,
-        until the run was gone.
+        The split applies only with ``separate_day_night=True``. As in ONEFlux,
+        a double difference then uses records of one period only. Across the
+        change, the step from the flat night to the light ramp looks like a
+        spike against the daytime statistics: clear-sky 30-min SW_IN lost the
+        first and last daytime record of nearly every day (L255). The record
+        next to the change is tested against the extrapolation from records of
+        its own period instead, so a spike there is still found. A period with
+        fewer than three records in a row stays untested.
+        """
+        seg = self._input_segments(series)
+        if not self.separate_day_night:
+            return seg
+        day = self.is_daytime.reindex(seg.index, fill_value=False).astype(bool)
+        return ((seg != seg.shift()) | (day != day.shift())).cumsum()
+
+    def _double_differences(self, s: Series) -> tuple[Series, Series, Series]:
+        """Second differences of *s* that stay inside each run.
+
+        A run ends at a gap in the input, at a record removed by an earlier
+        iteration and, with ``separate_day_night=True``, at a change between day
+        and night (see ``_runs``). Inside a run: ``d = 2 x_t - x_{t-1} - x_{t+1}``,
+        the Papale et al. (2006) double difference. A record at the start or end
+        of its run has a neighbour on one side only and is tested against the
+        linear extrapolation from the next two records,
+        ``d = -(x_t - 2 x_{t+1} + x_{t+2})`` (or mirrored), which has the same
+        noise and also cancels a trend. Without that test a spike at a run edge
+        was never judged, and with ``repeat=True`` each iteration removed the
+        next record paired with it, until the run was gone.
+
+        Every test has the curvature sign of the central difference. For a
+        smooth curve with second derivative ``f''`` and step ``h`` the central
+        ``d`` is about ``-f'' h^2``, and ``x_t`` minus a line extended beyond
+        its two records is about ``+f'' h^2``, so all extrapolations carry a
+        negative factor. ``x_t`` minus a line between records on both sides has
+        the central sign. With statistics per period the median of ``d`` is not
+        zero (daytime curvature), and with the opposite sign each run edge was
+        judged against a band shifted the wrong way: ``repeat=True`` removed
+        both ends of each clear day, record by record (L255).
 
         Removed records end runs because differencing across them assumes equal
         spacing. On a diurnal ramp or across a level shift that mismatch looks
@@ -328,20 +360,21 @@ class Hampel(FlagBase):
           extended across the hole. Those two records must belong to a run of
           three or more.
 
-        A line never crosses an input gap. Other records in runs of fewer than
-        three are NaN.
+        A line never crosses an input gap or a change between day and night.
+        Other records in runs of fewer than three are NaN.
 
         Returns ``d`` plus, for mapping the detection band to data units, the
         value ``x_t`` is compared with and the factor on ``x_t`` in ``d``.
         """
-        seg = self._input_segments(self.filteredseries).reindex(s.index)
+        seg = self._runs(self.filteredseries).reindex(s.index)
         same = {k: (seg.shift(k) == seg) for k in (1, 2, -1, -2)}
         p1, p2, n1, n2 = s.shift(1), s.shift(2), s.shift(-1), s.shift(-2)
         central = same[1] & same[-1]
         forward = ~central & same[-2]
         backward = ~central & ~forward & same[2]
         reference = ((p1 + n1) / 2).where(central, (2 * n1 - n2).where(forward, (2 * p1 - p2).where(backward)))
-        factor = pd.Series(np.where(central, 2.0, 1.0), index=s.index)
+        # Negative for the extrapolations, see the sign rule in the docstring.
+        factor = pd.Series(np.where(central, 2.0, -1.0), index=s.index)
 
         # Short runs next to a hole made by an earlier iteration get the line
         # tests described in the docstring, so a block of three or four bad
@@ -378,11 +411,13 @@ class Hampel(FlagBase):
             a, b = np.clip(a, 0, n - 1), np.clip(b, 0, n - 1)
             pos = self.series.index.get_indexer(s.index)
             x = s.to_numpy(dtype=float)
+            # Island lines interpolate (0 < w < 1), the others extrapolate.
+            sign = np.where(island, 1.0, -1.0)
             # Without a line test a and b can coincide, so w is not finite there.
             with np.errstate(divide='ignore', invalid='ignore'):
                 w = (pos - pos[a]) / (pos[b] - pos[a])
                 reference = reference.mask(line, (1 - w) * x[a] + w * x[b])
-                factor = factor.mask(line, np.sqrt(6 / (1 + (1 - w) ** 2 + w ** 2)))
+                factor = factor.mask(line, sign * np.sqrt(6 / (1 + (1 - w) ** 2 + w ** 2)))
         return factor * (s - reference), reference, factor
 
     def _rolling_median_mad(self, x: Series) -> tuple[Series, Series]:
@@ -451,10 +486,14 @@ class Hampel(FlagBase):
         # Raw mode: the bounds already are in data units. Double-differencing mode:
         # the test runs on d = factor * (x_t - reference), so x_t is flagged iff it
         # leaves reference + bound / factor. This is the exact data-space band the
-        # flag decision uses for the current iteration.
+        # flag decision uses for the current iteration. A negative factor
+        # (extrapolations) swaps upper and lower.
         if self.use_differencing:
-            self.last_upper_bound = reference + upper_bound / factor
-            self.last_lower_bound = reference + lower_bound / factor
+            hi = reference + upper_bound / factor
+            lo = reference + lower_bound / factor
+            flipped = factor < 0
+            self.last_upper_bound = hi.mask(flipped, lo)
+            self.last_lower_bound = lo.mask(flipped, hi)
         else:
             self.last_upper_bound = upper_bound.copy()
             self.last_lower_bound = lower_bound.copy()
