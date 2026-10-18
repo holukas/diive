@@ -102,10 +102,10 @@ Library (also used by the notebook and the GUI):
 - **Meteo screening, time resolutions (changes results):** only odd time resolutions are dropped,
   each with a warning. Short blocks whose resolution is a whole multiple or divisor of the data
   around them are kept, e.g. a 3-day block of 10-min data in a year of 1-min data, and 2-5
-  ten-minute records inside 1-min data are recognised as 10-min records. Stray timestamps
-  (fewer than 3 records finer than the data around them) and resolutions that would make the
-  screening grid more than 20 times finer than a record are dropped. Before, any resolution with
-  at most 0.2 % of the records was dropped.
+  ten-minute records inside 1-min data are recognised as 10-min records, also next to a gap or at
+  the end of the data. Stray timestamps (fewer than 3 records finer than the data around them)
+  and resolutions that would need a screening grid of more than 2 million rows are dropped. Before,
+  any resolution with at most 0.2 % of the records was dropped.
 - **Meteo screening, speed:** screening runs about 20-50 % faster and previews draw faster, with
   identical results.
 
@@ -144,7 +144,7 @@ GUI only:
 - **MDS gap-filling, driver QC:** the MDS tab and Level 4.1 of the flux post-processing chain
   take an optional QC flag column for SW_IN, TA and VPD, and Copy Python includes it.
 
-Notebook (meteo screening notebook v17):
+Notebook (meteo screening notebook v18):
 
 - **Run All:** no longer applies outlier tests with example settings. All outlier tests are
   commented out, with notes on the variables each one does not suit.
@@ -162,7 +162,12 @@ Notebook (meteo screening notebook v17):
   notebook stops with a suggested value otherwise.
 - **Frequency check:** the upload stops before anything is deleted when the resampled frequency
   differs from `RESAMPLING_FREQ`.
-- **Hampel note:** records with up to 20 W m-2 potential radiation count as night.
+- **Hampel note:** records with up to 20 W m-2 potential radiation count as night, and a sensor
+  stuck at one value is not flagged.
+- **Settings check:** the upload stops before anything is deleted if the UTC offset, START, STOP,
+  site or fields changed after the download.
+- **Resampling note:** `'mean'` is an arithmetic mean, so angles such as wind direction need a
+  circular mean.
 
 ### Packaging
 
@@ -287,6 +292,12 @@ Library (also used by the notebook and the GUI):
 - **Time resolution detection:** a record next to a change of resolution could get the neighbouring
   resolution, which weighted it wrong in resampling, and an empty index raised a shape error.
 - **Heatmaps:** they failed for data with a time resolution under one minute, e.g. 5-second data.
+- **Database download, changed tags:** a variable stored with two tag sets (e.g. after a gain
+  correction) kept old and new values at random at shared timestamps.
+- **Database upload, missing tags:** data without some tags could not be uploaded. A missing
+  `gain` is now written as 1 and a missing `offset` as 0.
+- **Time resolution detection, regular outages:** records in data with a regular outage pattern
+  (e.g. every third record missing) got no time resolution and were dropped.
 - **Set-to corrections, console:** their reports follow `verbose`.
 
 GUI only:
