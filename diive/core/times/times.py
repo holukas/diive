@@ -504,6 +504,26 @@ def format_timestamp_to_fluxnet_format(df: DataFrame, timestamp_col: str) -> Ser
 # at a multiple of the resolution: at 50 % missing 10MIN records the chance per
 # record is 0.25**12 (6e-8) for 20MIN spacing and lower for coarser ones.
 _MIN_PERIOD_RECORDS = 12
+# A shorter run is still a period if it has at least this many records and missing
+# records of the neighbouring periods are as unlikely to produce it (see
+# _min_period_records).
+_MIN_SHORT_PERIOD_RECORDS = 3
+
+
+def _min_period_records(m: np.ndarray) -> np.ndarray:
+    """Records a run needs to be a period when its spacing is *m* times the
+    resolution of a neighbouring period.
+
+    Missing records of resolution r give spacing m*r with a chance of at most
+    q = (m-1)**(m-1) / m**m per record (at the worst missing fraction (m-1)/m).
+    The run needs as many records as make q**n as small as 0.25**12, the chance
+    behind _MIN_PERIOD_RECORDS at m = 2: 12 records at m = 2, 9 at 3, 6 at 10,
+    4 at 30 and 60, never fewer than 3.
+    """
+    m = np.asarray(m, dtype=float)
+    log_q = (m - 1) * np.log(m - 1) - m * np.log(m)
+    n = _MIN_PERIOD_RECORDS * np.log(0.25) / log_q
+    return np.maximum(_MIN_SHORT_PERIOD_RECORDS, np.ceil(n - 1e-9)).astype(int)
 
 
 def detect_freq_groups(index: DatetimeIndex) -> Series:
@@ -531,14 +551,20 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
        the same resolution and the gaps are whole missing records of it.
     4. Many missing records leave short runs that look like a coarser resolution
        (10MIN data with every other record missing for an hour give 20MIN spacing)
-       and records that fit no neighbour. A run of at least 12 records with the same
-       resolution is a resolution period. Every other record joins the nearest period
-       on either side if all time differences between it and that period, and to
-       both its own neighbours, are whole multiples of the period's resolution. If
-       periods of different resolutions qualify, the coarsest wins: a record spaced
-       at multiples of 10MIN shows no sign of 1MIN logging. Records of a genuine
-       resolution that lasts fewer than 12 records join the neighbouring period as
-       records with gaps in between.
+       and records that fit no neighbour. A run is a series of consecutive records
+       with the same resolution and only whole multiples of it between them. A run
+       of at least 12 records is a resolution period. A run of 3 to 11 records is a
+       period too unless missing records of the nearest such period could produce
+       it: its resolution must not be a whole multiple m of that period's, or the
+       run needs more records the smaller m is (12 at m = 2, 9 at 3, 6 at 10, 4 at
+       30 and 60). Eleven 10MIN records between 1MIN periods stay 600 s, while
+       10MIN data with every other record missing for an hour join the 10MIN
+       period. Every other record joins the nearest period on either side if all
+       time differences between it and that period, and to both its own
+       neighbours, are whole multiples of the period's resolution. If periods of
+       different resolutions qualify, the coarsest wins: a record spaced at
+       multiples of 10MIN shows no sign of 1MIN logging. Without any run of 12
+       records (e.g. 90 % of the records missing) pass 4 changes nothing.
 
     Example: in regular 10MIN data with the record at 12:20 missing, the records at
     12:10 and 12:30 have differences of 10 and 20 minutes to their neighbours. Both
@@ -623,8 +649,8 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
 
 
 def _join_resolution_periods(group: np.ndarray, diffs: np.ndarray) -> np.ndarray:
-    """Pass 4 of :func:`detect_freq_groups`: records outside a resolution period
-    join the coarsest neighbouring period they fit.
+    """Pass 4 of :func:`detect_freq_groups`: find the resolution periods, then let
+    every other record join the coarsest neighbouring period it fits.
 
     *group* is the resolution of each record in ns (0 = unassigned), *diffs* the
     time differences between consecutive records in ns.
@@ -632,10 +658,20 @@ def _join_resolution_periods(group: np.ndarray, diffs: np.ndarray) -> np.ndarray
     n = len(group)
     if n < _MIN_PERIOD_RECORDS:
         return group
-    starts = np.flatnonzero(np.concatenate([[True], group[1:] != group[:-1]]))
+    # Runs of one resolution. A run also ends at a difference that is no whole
+    # multiple of its resolution: pass 2 labels a record from one neighbour only,
+    # so in 1MIN data with many holes a run labelled 120 s could carry on across
+    # a 1MIN step.
+    safe_g = np.where(group[:-1] > 0, group[:-1], 1)
+    joined = (group[1:] == group[:-1]) & (diffs % safe_g == 0)
+    starts = np.flatnonzero(np.concatenate([[True], ~joined]))
     lengths = np.diff(np.concatenate([starts, [n]]))
-    period = (group > 0) & (np.repeat(lengths, lengths) >= _MIN_PERIOD_RECORDS)
-    if period.all() or not period.any():
+    run_group = group[starts]
+    long_run = (run_group > 0) & (lengths >= _MIN_PERIOD_RECORDS)
+    if not long_run.any():
+        return group
+    period = np.repeat(long_run | _short_periods(run_group, lengths, long_run), lengths)
+    if period.all():
         return group
 
     pos = np.arange(n)
@@ -658,6 +694,30 @@ def _join_resolution_periods(group: np.ndarray, diffs: np.ndarray) -> np.ndarray
             fits |= (near >= 0) & (near < n) & (group[safe] == res) & (bad[safe] == bad)
         result = np.where(~period & own & fits, res, result)
     return result
+
+
+def _short_periods(run_group: np.ndarray, lengths: np.ndarray, long_run: np.ndarray) -> np.ndarray:
+    """Runs shorter than _MIN_PERIOD_RECORDS that are resolution periods too.
+
+    A run of at least _MIN_SHORT_PERIOD_RECORDS records is a period unless missing
+    records of the nearest long period on either side could explain it. They can
+    only if the run's resolution is a whole multiple m of that period's, and then
+    the run needs _min_period_records(m) records. Eleven 10MIN records between
+    1MIN periods (m = 10, 6 needed) stay 600 s, three 20MIN records in 10MIN data
+    (m = 2, 12 needed) join the 10MIN period.
+    """
+    nr = len(run_group)
+    idx = np.arange(nr)
+    need = np.full(nr, _MIN_SHORT_PERIOD_RECORDS)
+    prev_r = np.maximum.accumulate(np.where(long_run, idx, -1))
+    next_r = np.minimum.accumulate(np.where(long_run, idx, nr)[::-1])[::-1]
+    for near in (prev_r, next_r):
+        has = (near >= 0) & (near < nr)
+        r = np.where(has, run_group[np.clip(near, 0, nr - 1)], 1)
+        holes = has & (run_group > r) & (run_group % r == 0)
+        m = np.where(holes, run_group // r, 2)
+        need = np.where(holes, np.maximum(need, _min_period_records(m)), need)
+    return ~long_run & (run_group > 0) & (lengths >= need)
 
 
 def sort_timestamp_ascending(data: Union[Series, DataFrame], verbose: bool = False) -> Union[Series, DataFrame]:

@@ -399,13 +399,41 @@ class TestDetectFreqGroups(unittest.TestCase):
         self.assertTrue((g.loc[:'2024-06-01 10:00'] == 60).all())
         self.assertTrue((g.loc['2024-06-01 12:01':] == 60).all())
 
-    def test_shorter_run_joins_its_neighbours(self):
-        # Fewer than 12 records at another resolution read as gaps in the period around them
+    def test_short_coarse_run_stays_its_own_period(self):
+        # L265: holes in 1MIN data cannot give 6 or 11 records at exactly 10MIN
         a = pd.date_range('2024-06-01 00:01', '2024-06-01 10:00', freq='1min')
-        m = pd.date_range('2024-06-01 10:10', '2024-06-01 11:00', freq='10min')  # 6 records
-        c = pd.date_range('2024-06-01 11:01', '2024-06-01 20:00', freq='1min')
-        g = self._groups(a.append(m).append(c))
-        self.assertTrue((g == 60).all())
+        for n in (6, 11):
+            with self.subTest(records=n):
+                m = pd.date_range('2024-06-01 10:10', periods=n, freq='10min')
+                c = pd.date_range(m[-1] + pd.Timedelta('1min'), periods=400, freq='1min')
+                g = self._groups(a.append(m).append(c))
+                self.assertTrue((g.loc[m] == 600).all())
+                self.assertTrue((g.drop(m) == 60).all())
+
+    def test_short_run_that_holes_explain_joins_its_neighbours(self):
+        # 20MIN spacing for 11 records is ordinary in 10MIN data with many holes
+        ix = pd.date_range('2024-06-01 00:10', periods=600, freq='10min')
+        keep = np.ones(len(ix), dtype=bool)
+        keep[200:222:2] = False
+        g = self._groups(ix[keep])
+        self.assertTrue((g == 600).all())
+
+    def test_short_fine_run_stays_its_own_period(self):
+        a = pd.date_range('2024-06-01 00:10', '2024-06-01 10:00', freq='10min')
+        b = pd.date_range('2024-06-01 10:01', periods=5, freq='1min')
+        c = pd.date_range('2024-06-01 10:10', '2024-06-01 20:00', freq='10min')
+        g = self._groups(a.append(b).append(c))
+        self.assertTrue((g.loc[b] == 60).all())
+        self.assertTrue((g.drop(b) == 600).all())
+
+    def test_holey_1min_data_give_no_spurious_coarse_period(self):
+        # L265: passes 2-3 joined runs across 1MIN steps into 120 s periods
+        full = pd.date_range('2024-01-01 00:01', periods=60 * 24 * 60, freq='1min')
+        rng = np.random.default_rng(0)
+        for p in (0.3, 0.5, 0.7):
+            with self.subTest(missing=p):
+                g = self._groups(full[rng.random(len(full)) > p])
+                self.assertTrue((g == 60).all())
 
 
 class TestStlDecompose(unittest.TestCase):
