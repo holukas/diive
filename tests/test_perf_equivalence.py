@@ -1,6 +1,4 @@
 """Faster code paths give the same results as the formulas they replaced (finding L284)."""
-import contextlib
-import io
 import threading
 import unittest
 
@@ -93,67 +91,6 @@ class TestRepeatOverallFlag(unittest.TestCase):
                 self.assertEqual(n_iterations, frames.shape[1])
                 pd.testing.assert_series_equal(overall, old.rename(flagbase.generate_flagname()),
                                                check_exact=True)
-
-
-class TestReportQCFFlags(unittest.TestCase):
-
-    @staticmethod
-    def _old_report(qcf):
-        """report_qcf_flags as it was before L284, filtering the records per column."""
-        from diive.core.base.identify import identify_flagcols
-        from diive.preprocessing.qaqc import qcf as qcf_mod
-        out = qcf_mod._console.print
-
-        def flagstats_dt_nt(col, df):
-            test_name = col.replace('FLAG_', '').replace('_TEST', '')
-            out(f"\n  +- {test_name}")
-            out(f"  |  {'Period':<15} | {'Pass (0)':<15} | {'Warn (1)':<15} | {'Fail (2)':<15} | {'Missing':<12}")
-            out(f"  |  {'-' * 85}")
-            qcf._flagstats(flag=df[col], prefix="OVERALL", indent="  |  ")
-            for prefix, mask in (("DAYTIME", qcf.daytime), ("NIGHTTIME", qcf.nighttime)):
-                if isinstance(mask, pd.Series):
-                    flag = df[col].loc[mask == 1]
-                    if len(flag) > 0:
-                        qcf._flagstats(flag=flag, prefix=prefix, indent="  |  ")
-
-        out(f"\n\n{'=' * 100}")
-        out(f"  INDIVIDUAL TEST FLAG STATISTICS: {qcf.series_name}")
-        out(f"{'=' * 100}")
-        flagcols = identify_flagcols(df=qcf.flags, seriescol=qcf.series_name)
-        test_flagcols = [c for c in flagcols if str(c).endswith('_TEST')]
-        out(f"\n  Total test flags: {len(test_flagcols)}")
-        out(f"\n\n  +- REPORT 1A: ALL RECORDS (INCLUDING MISSING VALUES)")
-        out(f"  |")
-        for col in test_flagcols:
-            flagstats_dt_nt(col, qcf.flags[qcf._is_record])
-        out(f"\n  +- REPORT 1B: AVAILABLE RECORDS ONLY (EXCLUDING MISSING VALUES)")
-        out(f"  |")
-        _df = qcf.flags[qcf._is_record].copy()
-        _df = _df[~_df[qcf.series_name].isnull()].copy()
-        for col in test_flagcols:
-            flagstats_dt_nt(col, _df)
-        out(f"\n{'=' * 100}\n")
-
-    def test_printed_tables_match_old_loop(self):
-        from diive.qaqc import FlagQCF
-        for with_swinpot in (False, True):
-            df = _random_flags(3, n_rows=48 * 6)
-            df['TA'] = np.random.default_rng(3).normal(size=len(df))
-            df.loc[df.index[::5], 'TA'] = np.nan
-            kwargs = {}
-            if with_swinpot:
-                df['SW_IN_POT'] = potrad(df.index, lat=47.29, lon=7.73, utc_offset=1).to_numpy()
-                kwargs = dict(swinpot_col='SW_IN_POT', nighttime_threshold=20)
-            qcf = FlagQCF(df=df, target_col='TA', **kwargs)
-            qcf.calculate(daytime_accept_qcf_below=2, nighttime_accept_qcf_below=2)
-            new_buf, old_buf = io.StringIO(), io.StringIO()
-            with contextlib.redirect_stdout(new_buf):
-                qcf.report_qcf_flags()
-            with contextlib.redirect_stdout(old_buf):
-                self._old_report(qcf)
-            with self.subTest(with_swinpot=with_swinpot):
-                self.assertEqual(new_buf.getvalue(), old_buf.getvalue())
-                self.assertEqual('NIGHTTIME' in new_buf.getvalue(), with_swinpot)
 
 
 class TestPotradCache(unittest.TestCase):

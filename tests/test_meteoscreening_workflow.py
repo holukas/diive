@@ -26,6 +26,7 @@ QCF reports that count records rather than empty grid slots.
 
 Part of the diive library: https://github.com/holukas/diive
 """
+import io
 import re
 import warnings
 from contextlib import contextmanager
@@ -36,6 +37,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from pandas.tseries.frequencies import to_offset
+from rich.console import Console
 
 import diive.core.utils.console as console_module
 import diive.preprocessing.qaqc.qcf as qcf_module
@@ -604,6 +606,13 @@ def _slots(mscr: StepwiseMeteoScreeningDb, ends: pd.DatetimeIndex) -> pd.Datetim
     return ends - pd.Timedelta(mscr.series_hires_orig[FIELD].index.freq) / 2
 
 
+def _rendered(renderable) -> str:
+    """Plain text of a Rich renderable, as a wide terminal shows it."""
+    buffer = io.StringIO()
+    Console(file=buffer, width=200, color_system=None).print(renderable)
+    return buffer.getvalue()
+
+
 class _Output:
     """What diive printed while a ``_captured()`` block ran."""
 
@@ -612,7 +621,8 @@ class _Output:
         self.pywarnings: list[str] = []
 
     def print(self, *args, **kwargs):
-        self.lines.append(' '.join(str(a) for a in args))
+        # The QCF reports print Rich tables, which str() does not render.
+        self.lines.append(' '.join(a if isinstance(a, str) else _rendered(a) for a in args))
 
     def log(self, *args, **kwargs):
         self.print(*args)
@@ -912,9 +922,18 @@ MISSING_1MIN = {'10min_then_1min': '2024-07-03 12:00', '1min_then_10min': '2024-
 
 
 def _report_number(text: str, label: str) -> int:
-    m = re.search(rf'{label}[^:\n]*:\s*(\d+)', text)
+    m = re.search(rf'{label}[^:\n]*:\s*([\d,]+)', text)
     assert m, f'{label!r} not in report'
-    return int(m.group(1))
+    return int(m.group(1).replace(',', ''))
+
+
+def _report_row(text: str, label: str) -> list[int]:
+    """The numbers in the report table row that starts with *label*."""
+    row = next((line for line in text.splitlines() if line.strip().startswith(label)
+                and not line.strip()[len(label):].startswith(':')), None)  # not an info line
+    assert row is not None, f'{label!r} row not in report'
+    rest = row.strip()[len(label):]
+    return [int(x.replace(',', '')) for x in re.findall(r'(?<![\d.<>])\d[\d,]*(?![\d.])', rest)]
 
 
 @pytest.mark.parametrize('order', ORDERS)
@@ -954,23 +973,28 @@ def test_qcf_reports_count_records_not_empty_slots(order):
     first = table.groupby('period')['n_potential'].first()
     assert first['DAYTIME'] + first['NIGHTTIME'] == n + 1
 
+    n_spikes = len(sc.abslim_spikes)
     with _captured() as out:
         qcf.report_qcf_series()
-    assert _report_number(out.text, 'Potential records') == n + 1
-    assert _report_number(out.text, 'Measured records') == n
-    assert _report_number(out.text, 'Missing records') == 1
+    # Counts first, then day and night (the percentage columns hold decimals).
+    records = _report_row(out.text, 'All records')
+    assert records[0] == n + 1 and sum(records[-2:]) == n + 1
+    assert _report_row(out.text, 'Missing')[0] == 1
+    assert _report_row(out.text, 'Measured')[0] == n
+    assert _report_row(out.text, 'QCF 2, rejected')[0] == n_spikes
+    assert _report_row(out.text, 'Accepted')[0] == n - n_spikes
 
     with _captured() as out:
         qcf.report_qcf_evolution()
     assert _report_number(out.text, 'Measured records') == n
+    assert 'MISSING' not in out.text  # flags no measured record, so it is left out
 
-    # Report 1A (all records): the missing-values test passes n records, fails one,
-    # and has no NaN flag (an empty slot would be one).
+    # Every measured record was tested, the spikes failed, and the one missing
+    # record (not an empty slot) is reported above the table.
     with _captured() as out:
         qcf.report_qcf_flags()
-    lines = out.text.splitlines()
-    start = next(i for i, line in enumerate(lines) if 'REPORT 1A' in line)
-    header = next(i for i in range(start, len(lines)) if lines[i].rstrip().endswith('_MISSING'))
-    row = next(lines[i] for i in range(header, len(lines)) if 'OVERALL' in lines[i])
-    n_pass, _, n_fail, n_nan = (int(x) for x in re.findall(r'(\d+) \(\s*[\d.]+%\)', row))
-    assert (n_pass, n_fail, n_nan) == (n, 1, 0), row
+    assert f'Measured records: {n:,} of {n + 1:,}' in out.text
+    assert 'Missing records: 1 ' in out.text
+    tested, n_pass, n_warn, n_fail = _report_row(out.text, 'OUTLIER_ABSLIM')[:4]
+    assert (tested, n_pass, n_warn, n_fail) == (n, n - n_spikes, 0, n_spikes)
+    assert _report_row(out.text, 'OUTLIER_ABSLIM')[-1] == 0  # not tested

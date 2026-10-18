@@ -6,6 +6,16 @@ import pandas as pd
 from diive.qaqc import FlagQCF
 
 
+def _report_row(text: str, label: str) -> list:
+    """The whole numbers in the report table row that starts with *label*."""
+    import re
+    row = next((line for line in text.splitlines() if line.strip().startswith(label)
+                and not line.strip()[len(label):].startswith(':')), None)  # not an info line
+    assert row is not None, f'{label!r} row not in report'
+    rest = row.strip()[len(label):]
+    return [int(x.replace(',', '')) for x in re.findall(r'(?<![\d.<>])\d[\d,]*(?![\d.])', rest)]
+
+
 class TestFlagQCF(unittest.TestCase):
 
     def _build(self):
@@ -211,9 +221,9 @@ class TestFlagQCFReports(unittest.TestCase):
 
     def test_reports_emit_output(self):
         expected = {
-            'report_qcf_flags': 'INDIVIDUAL TEST FLAG STATISTICS',
-            'report_qcf_evolution': 'QCF EVOLUTION',
-            'report_qcf_series': 'QCF QUALITY CONTROL REPORT',
+            'report_qcf_flags': 'Test flags: FC',
+            'report_qcf_evolution': 'QCF evolution: FC',
+            'report_qcf_series': 'QCF summary: FC',
         }
         for method, heading in expected.items():
             with self.subTest(report=method):
@@ -431,7 +441,6 @@ class TestFlagQCFEmptySlots(unittest.TestCase):
         self.assertEqual(set(flag.iloc[100:104]), {1})
 
     def test_reports_exclude_empty_slots(self):
-        from unittest import mock
         qcf, empty = self._qcf(empty_slots=True)
         n_records = self.N - len(empty)
 
@@ -443,18 +452,19 @@ class TestFlagQCFEmptySlots(unittest.TestCase):
         self.assertIn(f"Potential records : {n_records:>7}", text)
 
         series_report = self._emits(qcf, 'report_qcf_series')
-        self.assertIn(f"Potential records (all time slots): {n_records}", series_report)
-        self.assertIn("Missing records (gaps/gaps):           1", series_report)
+        all_records = _report_row(series_report, 'All records')
+        self.assertEqual(all_records[0], n_records)
+        self.assertEqual(sum(all_records[-2:]), n_records)  # day + night
+        self.assertEqual(_report_row(series_report, 'Missing')[0], 1)
 
-        self.assertIn(f"Measured records (excluding missing): {n_records - 1}",
-                      self._emits(qcf, 'report_qcf_evolution'))
+        self.assertIn(f"Measured records: {n_records - 1}", self._emits(qcf, 'report_qcf_evolution'))
 
-        # Every per-flag count sees only records.
-        with mock.patch.object(qcf, '_flagstats', wraps=qcf._flagstats) as stats:
-            self._emits(qcf, 'report_qcf_flags')
-        self.assertTrue(stats.call_args_list)
-        for call in stats.call_args_list:
-            self.assertEqual(len(call.kwargs['flag'].index.intersection(empty)), 0)
+        # Every per-flag count sees only records: all measured records tested, none extra.
+        flags_report = self._emits(qcf, 'report_qcf_flags')
+        self.assertIn(f"Measured records: {n_records - 1} of {n_records}", flags_report)
+        for test in ('T1', 'T2', 'T3', 'T4', 'T5'):
+            row = _report_row(flags_report, test)  # shown without the 'FC_' prefix
+            self.assertEqual((row[0], row[-1]), (n_records - 1, 0))  # tested, not tested
 
     def test_plots_do_not_show_empty_slots_as_good(self):
         import matplotlib
@@ -485,8 +495,7 @@ class TestFlagQCFEmptySlots(unittest.TestCase):
         self.assertEqual(set(out.loc[empty, qcf.flagqcfcol]), {2})
         table, _ = qcf.screening_report()
         self.assertEqual(int(table.groupby('period')['n_potential'].max()['OVERALL']), self.N)
-        self.assertIn(f"Potential records (all time slots): {self.N}",
-                      self._emits(qcf, 'report_qcf_series'))
+        self.assertEqual(_report_row(self._emits(qcf, 'report_qcf_series'), 'All records')[0], self.N)
 
     def test_measured_value_with_nan_missing_flag_is_a_record(self):
         """A NaN missing flag makes an empty slot only where the value is NaN too.
