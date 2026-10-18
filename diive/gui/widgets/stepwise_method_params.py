@@ -122,10 +122,11 @@ class HampelParams(_StepParams):
         self.dn_cb = QCheckBox("Separate daytime / nighttime")
         self.dn_cb.setToolTip(
             "Each period gets its own median, MAD and threshold, computed in the "
-            "same window from its own records only. This keeps daytime radiation: "
-            "with one shared MAD the quiet night makes the band far too narrow for "
-            "the day. On by default when the site coordinates are set in Project "
-            "settings, off without them (day and night would come from (0, 0)).")
+            "same window from its own records only. The night includes the records "
+            "with up to 20 W m-2 potential radiation, so these records are judged "
+            "against the night statistics. On by default when the site coordinates "
+            "are set in Project settings, off without them (day and night would "
+            "come from (0, 0)).")
         form.addRow(self.dn_cb)
         self.n_sigma_dt = _fspin(5.5, 0.1, 50.0)
         self.n_sigma_dt.setToolTip("Threshold (n sigma) for daytime records.")
@@ -135,17 +136,43 @@ class HampelParams(_StepParams):
         form.addRow("Nighttime n sigma", self.n_sigma_nt)
         self.n_sigma_dt.setEnabled(False)
         self.n_sigma_nt.setEnabled(False)
+        # The per-period spins follow the global value until the user edits them
+        # (a new step starts with day/night on when the site is configured).
+        self._dt_follows = self._nt_follows = True
+        self._syncing = False
+        self.n_sigma.valueChanged.connect(self._sync_periods)
+        self.n_sigma_dt.valueChanged.connect(self._dt_edited)
+        self.n_sigma_nt.valueChanged.connect(self._nt_edited)
         self.dn_cb.toggled.connect(self._toggle_dn)
         # Only the default for a new step: load() sets a saved step's own value.
         self.dn_cb.setChecked(site.manager.configured)
         self._add_repeat(form)
 
+    def _sync_periods(self, *_) -> None:
+        """Copy the global value into the per-period spins the user has not edited."""
+        self._syncing = True
+        try:
+            if self._dt_follows:
+                self.n_sigma_dt.setValue(self.n_sigma.value())
+            if self._nt_follows:
+                self.n_sigma_nt.setValue(self.n_sigma.value())
+        finally:
+            self._syncing = False
+
+    def _dt_edited(self, *_) -> None:
+        if not self._syncing:
+            self._dt_follows = False
+
+    def _nt_edited(self, *_) -> None:
+        if not self._syncing:
+            self._nt_follows = False
+
     def _toggle_dn(self, on: bool) -> None:
         self.n_sigma_dt.setEnabled(on)
         self.n_sigma_nt.setEnabled(on)
         if on:  # seed per-period from the global value (convention)
-            self.n_sigma_dt.setValue(self.n_sigma.value())
-            self.n_sigma_nt.setValue(self.n_sigma.value())
+            self._dt_follows = self._nt_follows = True
+            self._sync_periods()
 
     def kwargs(self) -> dict:
         kw = dict(window_length=self.window.value(), n_sigma=self.n_sigma.value(),
@@ -161,13 +188,18 @@ class HampelParams(_StepParams):
         self.window.setValue(int(kwargs.get("window_length", self.window.value())))
         self.n_sigma.setValue(float(kwargs.get("n_sigma", self.n_sigma.value())))
         self.diff_cb.setChecked(bool(kwargs.get("use_differencing", True)))
-        # Set the toggle first (it seeds the per-period spins from the global
-        # value), then overwrite with the saved per-period thresholds.
         self.dn_cb.setChecked(bool(kwargs.get("separate_day_night", False)))
+        # A missing per-period value falls back to the global value and keeps
+        # following it. A saved one is kept, and follows the global value only
+        # when it equals it.
+        self._dt_follows = self._nt_follows = True
+        self._sync_periods()
         if kwargs.get("n_sigma_daytime") is not None:
             self.n_sigma_dt.setValue(float(kwargs["n_sigma_daytime"]))
+            self._dt_follows = self.n_sigma_dt.value() == self.n_sigma.value()
         if kwargs.get("n_sigma_nighttime") is not None:
             self.n_sigma_nt.setValue(float(kwargs["n_sigma_nighttime"]))
+            self._nt_follows = self.n_sigma_nt.value() == self.n_sigma.value()
         self.repeat_cb.setChecked(bool(kwargs.get("repeat", True)))
 
 

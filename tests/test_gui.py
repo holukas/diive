@@ -2401,12 +2401,13 @@ def test_meteo_screening_follows_site_coordinates(app):
                             elevation=0.0, utc_offset=1)
         assert tab._payload is not None
 
-        # The project's UTC offset: the screening uses it, so the results are
-        # stale, and the staged data (downloaded in UTC+01:00) need re-sending.
+        # The project's UTC offset: the screening keeps the offset the staged
+        # data were downloaded in (UTC+01:00, L277), so the results stay, and
+        # the status line says to send the field again.
         site.manager.update(name="X", latitude=47.29, longitude=7.73,
                             elevation=0.0, utc_offset=2)
-        assert tab._coords()["utc_offset"] == 2
-        assert tab._payload is None
+        assert tab._coords()["utc_offset"] == 1
+        assert tab._payload is not None
         assert "send the field again" in tab.status.text()
         site.manager.update(name="X", latitude=47.29, longitude=7.73,
                             elevation=0.0, utc_offset=1)
@@ -2442,15 +2443,18 @@ def test_meteo_screening_follows_site_coordinates(app):
 
 
 def test_meteo_screening_uses_project_utc_offset(app):
-    """The screening and the state use the project's UTC offset. While it is
-    not set, 0 is used and the status line warns. Copy Python uses the offset
-    the data were downloaded in. A saved offset from an older project is
+    """The staged data are screened in the UTC offset they were downloaded in
+    (the Database explorer downloads in the project's offset), and Copy Python
+    uses the same offset (L277). After the project's offset changes, or is no
+    longer set, the status line says to send the field again. Without staged
+    data the project's offset is used. A saved offset from an older project is
     ignored on restore."""
     from diive.gui import site
     from diive.gui.tabs.meteo_screening import MeteoScreeningTab
     from diive.gui.widgets.project_offset import NOT_SET_WARNING
     from diive.gui.widgets.stepwise_method_params import AbsLimParams
 
+    changed = "UTC offset changed after the download"
     tab = _staged_meteo_tab(_meteo_download([("10min", "2D")]))
     try:
         assert NOT_SET_WARNING not in tab.status.text()
@@ -2465,14 +2469,36 @@ def test_meteo_screening_uses_project_utc_offset(app):
         fresh.restore_state({**state, "utc_offset": 5})  # older project
         assert fresh._coords()["utc_offset"] == 1
 
+        # The rule (L277): the staged timestamps are in the download's offset
+        # (UTC+1), so the run and Copy Python both keep it after the project's
+        # offset changed. Before, the run took the project's offset and the
+        # script the download's, so the script did not reproduce the run.
+        site.manager.update(name="X", latitude=47.29, longitude=7.73, elevation=0.0,
+                            utc_offset=3)
+        assert changed in tab.status.text()
+        _run_meteo_chain(tab, tab._steps)
+        assert tab._payload["mscr"].utc_offset == 1
+        assert "utc_offset=1," in tab._code_provider()
+        assert "utc_offset=3" not in tab._code_provider()
+        assert changed in tab.status.text()
+
         site.manager.configured = False
         site.manager.changed.emit()
         _run_meteo_chain(tab, tab._steps)
+        assert tab._payload["mscr"].utc_offset == 1
+        assert changed in tab.status.text()
+        assert "utc_offset=1," in tab._code_provider()
+        # Data downloaded while the offset was not set are in UTC+00:00 (0 is
+        # used and the status line warns).
+        assert fresh._coords()["utc_offset"] == 0
+        tab.load_staged({"data_detailed": {"TA_T1_2_1": _meteo_download([("10min", "2D")])},
+                         "field": "TA_T1_2_1", "measurement": "TA",
+                         "bucket": "ch-xyz_raw", "data_version": "raw", "utc_offset": 0})
+        _wait_for_worker(tab)
+        _run_meteo_chain(tab, [AbsLimParams().step()])
         assert tab._payload["mscr"].utc_offset == 0
         assert NOT_SET_WARNING in tab.status.text()
-        # Copy Python keeps the offset the data were downloaded in (UTC+1), so
-        # its download window and timestamps match the data (L273).
-        assert "utc_offset=1," in tab._code_provider()
+        assert changed not in tab.status.text()
     finally:
         site.manager.update(name="X", latitude=47.29, longitude=7.73, elevation=0.0,
                             utc_offset=1)

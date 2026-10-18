@@ -1034,3 +1034,144 @@ def test_copy_python_corrections_only_and_download_offset(window, slot_exception
     finally:
         _restore_site()
         _disable_corrections(tab)
+
+
+# --- tests: Round 12 GUI findings (L276, L280, L281) ----------------------------------
+
+def test_hampel_period_thresholds_follow_global(app):
+    """L276: with the site set, a new Hampel step's daytime and nighttime n sigma
+    follow the global n sigma until edited. load() falls back to the global value,
+    and a saved step with its own per-period values loads unchanged. L280: the
+    day/night tooltip describes the mechanics."""
+    from diive.gui import site
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+
+    before = site.manager.as_dict()
+    try:
+        site.manager.configured = True
+        w = HampelParams()
+        tip = w.dn_cb.toolTip()
+        assert "20 W m-2 potential radiation" in tip and "keeps daytime" not in tip
+        w.n_sigma.setValue(3.0)
+        kw = w.kwargs()
+        assert (kw["n_sigma_daytime"], kw["n_sigma_nighttime"]) == (3.0, 3.0)
+        w.n_sigma_dt.setValue(7.0)  # the user edits the daytime value
+        w.n_sigma.setValue(4.0)
+        kw = w.kwargs()
+        assert (kw["n_sigma"], kw["n_sigma_daytime"], kw["n_sigma_nighttime"]) == (4.0, 7.0, 4.0)
+        w.dn_cb.setChecked(False)
+        w.dn_cb.setChecked(True)  # switching on again seeds both from the global value
+        kw = w.kwargs()
+        assert (kw["n_sigma_daytime"], kw["n_sigma_nighttime"]) == (4.0, 4.0)
+        w.deleteLater()
+
+        w = HampelParams()
+        w.load({"window_length": 624, "n_sigma": 3.0, "separate_day_night": True})
+        kw = w.kwargs()
+        assert (kw["n_sigma_daytime"], kw["n_sigma_nighttime"]) == (3.0, 3.0)
+        w.n_sigma.setValue(2.5)
+        assert w.kwargs()["n_sigma_daytime"] == w.kwargs()["n_sigma_nighttime"] == 2.5
+        w.deleteLater()
+
+        saved = {"window_length": 624, "n_sigma": 5.5, "use_differencing": True,
+                 "separate_day_night": True, "repeat": True,
+                 "n_sigma_daytime": 8.0, "n_sigma_nighttime": 5.5}
+        w = HampelParams()
+        w.load(saved)
+        assert w.kwargs() == saved
+        w.n_sigma.setValue(6.0)  # the saved 8 stays, the value equal to the global follows
+        kw = w.kwargs()
+        assert (kw["n_sigma_daytime"], kw["n_sigma_nighttime"]) == (8.0, 6.0)
+        w.deleteLater()
+    finally:
+        site.manager.load_dict(before)
+
+
+def test_correction_error_cleared_after_success(window, slot_exceptions, monkeypatch):
+    """L281a: a successful correction replaces the error of an earlier failed one."""
+    from diive.preprocessing.qaqc.meteoscreening import StepwiseMeteoScreeningDb
+
+    raw, _ = _download([("10min", "2D")])
+    tab = _fresh_tab(window, raw)
+    original = StepwiseMeteoScreeningDb.set_corrections
+
+    def failing(self, corrections):
+        if corrections:
+            raise ValueError("boom")
+        return original(self, corrections)
+
+    row = tab.corrections_panel._rows["setto_max"]
+    try:
+        row.threshold.setValue(16.0)
+        row.enable.setChecked(True)
+        monkeypatch.setattr(StepwiseMeteoScreeningDb, "set_corrections", failing)
+        tab.run_corrections_btn.click()
+        _settle(window, tab)
+        assert tab.status.text().startswith("Correction failed: boom"), tab.status.text()
+        assert tab._corrected is None
+
+        monkeypatch.setattr(StepwiseMeteoScreeningDb, "set_corrections", original)
+        tab.run_corrections_btn.click()
+        _settle(window, tab)
+        assert "Correction failed" not in tab.status.text(), tab.status.text()
+        assert tab.status.text().startswith("Corrections applied.")
+        assert tab._corrected.max() == 16.0
+    finally:
+        _disable_corrections(tab)
+
+
+def test_resample_status_reports_used_frequency(window, slot_exceptions):
+    """L281b: the status names the resolution of the last resample, not of an
+    earlier one."""
+    raw, _ = _download([("10min", "2D")])
+    tab = _fresh_tab(window, raw)
+    _run_chain(window, tab, STEPS)
+    try:
+        for typed in ("4", "45min"):
+            tab._freq.setCurrentText(typed)
+            tab._freq_debounce.flush()
+        assert tab.status.text().startswith("Resampled to 45min"), tab.status.text()
+        tab._freq.setCurrentText("D")
+        tab._freq_debounce.flush()
+        assert tab.status.text().startswith("Resampled to D (mean)"), tab.status.text()
+        assert tab._result_df.index.freq == pd.Timedelta("1D")
+    finally:
+        tab._freq.setCurrentText("30min")
+        tab._freq_debounce.flush()
+        tab._steps = []
+        tab._apply_chain_change()
+
+
+def test_add_refusal_names_grid_mismatch(window, slot_exceptions):
+    """L281c: hourly data on the 30-min dataset overlap its range but miss its
+    grid, and the refusal says so. Data outside the range still say they do not
+    overlap."""
+    raw, _ = _download([("10min", "2D")])
+    tab = _fresh_tab(window, raw)
+    try:
+        tab.run_outliers_btn.click()
+        _settle(window, tab)
+        before = list(window._full_data.columns)
+        _emitted(window, tab, "mean", freq="1h")
+        tab.add_btn.click()
+        _settle(window, tab)
+        status = tab.status.text()
+        assert "do not align with the working dataset's grid (30min" in status, status
+        assert "does not overlap" not in status
+        assert list(window._full_data.columns) == before
+
+        later = raw.copy()
+        later.index = pd.DatetimeIndex(later.index + pd.DateOffset(years=3),
+                                       name="TIMESTAMP_END")
+        tab = _fresh_tab(window, later)
+        tab.run_outliers_btn.click()
+        _settle(window, tab)
+        _emitted(window, tab, "mean", freq="30min")
+        tab.add_btn.click()
+        _settle(window, tab)
+        status = tab.status.text()
+        assert "does not overlap the working dataset" in status, status
+        assert list(window._full_data.columns) == before
+    finally:
+        tab._freq.setCurrentText("30min")
+        tab._freq_debounce.flush()

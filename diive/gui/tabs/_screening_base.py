@@ -712,6 +712,10 @@ class ScreeningTabBase(DiiveTab):
             applied = False  # keep the pending dot so the user can retry
         if applied:
             self._corr_dirty = False
+            # A later success replaces the error of an earlier failed correction.
+            if self.status.text().startswith("Correction failed"):
+                self.status.setText("Corrections applied." if corrs
+                                    else "No corrections to apply.")
         self._build_result()
         self.add_btn.setEnabled(self._result_df is not None
                                 and not self._result_df.empty)

@@ -24,15 +24,16 @@ the plain screening tab, all via the base's seams:
   (``start_outlier_detection`` -> steps + ``addflag`` ->
   ``finalize_outlier_detection``); corrections go through ``set_corrections``.
   Plots use the class's display helpers, so coarse records show in full.
-- **Site coordinates** are passed at run time (project latitude, longitude and
-  UTC offset), so edits in Project settings apply to the next run; results
-  computed with the old coordinates are cleared. The Database explorer downloads
-  in the project's UTC offset too, so the staged timestamps match it. While the
-  offset is not set, the status line says so (0 is used).
+- **Site coordinates** are passed at run time (project latitude and longitude),
+  so edits in Project settings apply to the next run; results computed with the
+  old coordinates are cleared. The UTC offset is the one the data were
+  downloaded in (the Database explorer downloads in the project's offset), since
+  the staged timestamps are in it. When the project's offset changes after the
+  download, the status line says to send the field again. While the offset is
+  not set, the status line says so (0 is used).
 - **Copy Python**: ``meteoscreening_to_code`` renders a ``StepwiseMeteoScreeningDb``
   script (download, steps, QCF, corrections, resampling), also for corrections
-  alone. It uses the UTC offset the data were downloaded in, the offset of the
-  download's start/stop.
+  alone. It uses the same coordinates and UTC offset as the run.
 - **Extra inspector page**: ``Resample`` (target resolution + aggregation + min counts).
 - **Emit**: ``resample()`` to the target resolution (TIMESTAMP_END), converted
   END -> MIDDLE (so it aligns onto diive's TIMESTAMP_MIDDLE index), with a
@@ -389,15 +390,15 @@ class MeteoScreeningTab(ScreeningTabBase):
         return format_utc_offset(self._utc_offset)
 
     def _tz_warning(self) -> str:
-        """Status suffix while Project settings have no UTC offset, or after
-        the offset was changed there since the download (the staged timestamps
-        keep the offset they were downloaded in)."""
-        if not project_utc_offset_is_set():
-            return f"  {NOT_SET_WARNING}"
+        """Status suffix after the project's UTC offset changed since the
+        download (the staged timestamps keep the offset they were downloaded
+        in, and the run uses it), or while Project settings have no offset."""
         if self._utc_offset is not None and self._utc_offset != project_utc_offset():
             return (f"  The project's UTC offset changed after the download "
                     f"({self._tz_label()}): send the field again from the "
                     f"Database explorer.")
+        if not project_utc_offset_is_set():
+            return f"  {NOT_SET_WARNING}"
         return ""
 
     def on_data_loaded(self, df, created=None) -> None:
@@ -411,9 +412,13 @@ class MeteoScreeningTab(ScreeningTabBase):
 
     # --- site coordinates: read at run time, so Project settings edits apply ---
     def _coords(self) -> dict:
-        """The project's site coordinates and UTC offset (0 when not set)."""
+        """The project's site coordinates, and the UTC offset the staged data
+        were downloaded in (their timestamps are in it). Without staged data,
+        the project's offset (0 when not set). The run, the corrections and
+        Copy Python all use these."""
         coords = ScreeningTabBase._coords()
-        coords["utc_offset"] = project_utc_offset()
+        coords["utc_offset"] = (self._utc_offset if self._utc_offset is not None
+                                else project_utc_offset())
         return coords
 
     @staticmethod
@@ -431,7 +436,12 @@ class MeteoScreeningTab(ScreeningTabBase):
         self.corrections_panel.set_coords_available(site.manager.configured)
         coords = self._coords()
         if coords == self._site_coords:
-            return  # e.g. only the site name or notes changed
+            # e.g. only the site name or notes changed, or only the project's
+            # UTC offset (the run keeps the download's): say when it differs.
+            warning = self._tz_warning()
+            if self._mscr is not None and warning and warning.strip() not in self.status.text():
+                self.status.setText(self.status.text() + warning)
+            return
         self._site_coords = coords
         if self._mscr is None or self._var is None:
             return
@@ -550,12 +560,9 @@ class MeteoScreeningTab(ScreeningTabBase):
                         "start": self._db_range[0], "stop": self._db_range[1],
                         "dirconf": db.manager.dirconf or None}
         # start/stop are in the offset the data were downloaded in, and the
-        # script's download and class must use that same offset.
-        coords = self._coords()
-        if self._utc_offset is not None:
-            coords["utc_offset"] = self._utc_offset
+        # script's download and class use that same offset, as the run does.
         return meteoscreening_to_code(
-            enabled, field=self._var, site=self._site_name, **coords,
+            enabled, field=self._var, site=self._site_name, **self._coords(),
             download=download, corrections=corrections,
             to_freqstr=self._freq.currentText().strip() or "30min",
             agg=self._agg.currentText(), mincounts_perc=self._mincounts.value())
@@ -576,8 +583,10 @@ class MeteoScreeningTab(ScreeningTabBase):
         except Exception as err:
             self.status.setText(f"Resampling failed: {err}")
             return None
-        if self.status.text().startswith("Resampling failed"):
-            self.status.setText(f"Resampled to {freq} ({self._agg.currentText()}).")
+        # Replace a resample message of an earlier resolution with the one used.
+        if self.status.text().startswith(("Resampling failed", "Resampled to")):
+            used = mscr.tags.get(field, {}).get("freq", freq)
+            self.status.setText(f"Resampled to {used} ({self._agg.currentText()}).")
         resampled_end = mscr.resampled_detailed[field][field]
         if resampled_end.dropna().empty:
             return None
@@ -646,6 +655,17 @@ class MeteoScreeningTab(ScreeningTabBase):
             overlap = int(series.index.isin(self._dataset_index).sum())
             if overlap == 0:
                 ds = self._dataset_index
+                if series.index.min() <= ds.max() and series.index.max() >= ds.min():
+                    # The ranges overlap, so the timestamps miss the grid.
+                    grid = f"{self._target_freq}, " if self._target_freq else ""
+                    self.status.setText(
+                        f"Not added: the timestamps of the resampled data "
+                        f"({self._freq.currentText().strip()}, e.g. "
+                        f"{series.index.min():%Y-%m-%d %H:%M}) do not align with the "
+                        f"working dataset's grid ({grid}e.g. "
+                        f"{ds.min():%Y-%m-%d %H:%M}). Resample to the dataset's "
+                        f"resolution.")
+                    return
                 self.status.setText(
                     f"Not added: the resampled data "
                     f"({series.index.min():%Y-%m-%d %H:%M} to "

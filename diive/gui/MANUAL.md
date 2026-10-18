@@ -824,8 +824,9 @@ is shown so the plots stay large:
   run (a `•` on the button marks unapplied edits). A new **Hampel** step has
   **Separate daytime / nighttime** on when the site coordinates are set in
   **Settings ▸ Project settings**, off without them. With the split each period
-  gets its own median, MAD and threshold, which keeps daytime radiation. Saved
-  steps keep their own setting. The same default applies to Hampel steps in the
+  gets its own median, MAD and threshold, and the night includes the records with
+  up to 20 W m-2 potential radiation. The daytime and nighttime n sigma follow the
+  global n sigma until you edit them. Saved steps keep their own setting. The same default applies to Hampel steps in the
   Meteo screening tab and the flux chain's Level 3.2.
 - **Corrections.** High-resolution corrections applied to the QCF-filtered series
   (nighttime zero-offset, relative-humidity offset, set-to-min/max, set-to-value,
@@ -1568,12 +1569,13 @@ the corrections and resamples it.
   plot shows each record at its middle: the 10-minute record ending 10:10 is
   drawn at 10:05, so type 10:10. A date that matches no record changes nothing,
   and the status line says so after **Run corrections**.
-- **Status warnings.** Latitude, longitude and UTC offset come from **Settings ▸
-  Project settings** and apply to the next run; results computed with old values
-  are cleared. The status line warns when the UTC offset is **not set** (UTC+00:00
-  is used), and when the offset was **changed after the download**: the field
-  keeps the offset it was downloaded in, so send it again from the Database
-  explorer.
+- **Status warnings.** Latitude and longitude come from **Settings ▸ Project
+  settings** and apply to the next run; results computed with old values are
+  cleared. The run uses the UTC offset the field was downloaded in, because its
+  timestamps are in that offset. The status line warns when the UTC offset is
+  **not set** (UTC+00:00 is used), and when the offset was **changed after the
+  download**: send the field again from the Database explorer to use the new
+  offset.
 - **Resample** (extra inspector page). The target resolution **defaults to your
   working dataset's resolution**, detected automatically (30 minutes if it cannot
   be detected); the info line shows the
@@ -1590,11 +1592,13 @@ the corrections and resamples it.
   timestamps are converted to your dataset's **middle-of-period** convention so it
   aligns on merge, it is **renamed with a suffix** if the name already exists, and
   it is **refused with an explanation** if its time range doesn't overlap your
-  dataset. The new column's history records the database origin and **all its
+  dataset or its timestamps miss your dataset's grid (e.g. 1 hour on 30-minute
+  data). The new column's history records the database origin and **all its
   tags** (and the timezone it was downloaded in). Its data-version tag is the
   processed version (`meteoscreening_diive`), not the download's.
-- **Copy Python** also works with corrections alone. The script uses the UTC
-  offset the field was downloaded in, the offset of its start and stop dates.
+- **Copy Python** also works with corrections alone. The script uses the same
+  coordinates and UTC offset as the run: the offset the field was downloaded in,
+  which is also the offset of its start and stop dates.
 
 ---
 
