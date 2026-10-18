@@ -8,34 +8,18 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
-from matplotlib.patches import FancyBboxPatch, Patch
 import numpy as np
 import pandas as pd
+from matplotlib.patches import Patch
 from pandas import Series
 
+from diive.preprocessing.corrections._figure import (
+    C_BOX_EDGE as _C_BOX_EDGE, C_CORRECTED as _C_CORRECTED, C_FILLED as _C_FILLED, C_FIRST as _C_NIGHTSTEP,
+    C_INK as _C_INK, C_MEASURED as _C_MEASURED, C_OFFSET as _C_OFFSET, C_SHADE as _C_NIGHT,
+    C_SUBTRACTED as _C_SUBTRACTED, C_TITLE as _C_TITLE, C_ZERO as _C_ZERO, date_axis, day_steps,
+    draw_steps, draw_summary, fmt as _fmt, legend, panel_title, style_axes)
 from diive.preprocessing.corrections.offsetcorrection import NighttimeZeroOffsetResult
-
-# Material Design, as the TimeSeries default look
-_C_MEASURED = '#90A4AE'  # blue-grey 300
-_C_CORRECTED = '#2196F3'  # blue 500
-_C_OFFSET = '#FB8C00'  # orange 600
-_C_FILLED = '#E53935'  # red 600, days without nighttime data
-_C_INK = '#455A64'  # blue-grey 700
-_C_TITLE = '#263238'  # blue-grey 900
-_C_GRID = '#ECEFF1'  # blue-grey 50
-_C_NIGHT = '#ECEFF1'  # night shading
-_C_ZERO = '#90A4AE'
-_C_SUBTRACTED = '#AB47BC'  # purple 400, after step 3
-_C_NIGHTSTEP = '#78909C'  # blue-grey 400, step 1
-_C_BOX = '#F5F7F8'
-_C_BOX_EDGE = '#CFD8DC'
-
-
-def _fmt(value: float, decimals: int = 2) -> str:
-    """Number with thousands separators and a true minus sign."""
-    return f"{value:,.{decimals}f}".replace('-', '−')
 
 
 class NighttimeZeroOffsetPlot:
@@ -136,11 +120,7 @@ class NighttimeZeroOffsetPlot:
         self._plot_summary(ax_text)
         for ax in (ax_series, ax_offset, ax_diel, ax_hist):
             self._style(ax)
-        locator = mdates.AutoDateLocator(minticks=3, maxticks=12)
-        formatter = mdates.ConciseDateFormatter(locator)
-        formatter.offset_formats = ['', '%Y', '%Y', '%Y', '%Y-%m-%d', '%Y-%m-%d %H:%M']
-        ax_offset.xaxis.set_major_locator(locator)
-        ax_offset.xaxis.set_major_formatter(formatter)
+        date_axis(ax_offset)
         ax_series.tick_params(labelbottom=False)
         fig.suptitle(title or f"Nighttime zero offset: {self.name}", x=0.01, ha='left',
                      fontsize=15, fontweight='bold', color=_C_TITLE)
@@ -152,30 +132,17 @@ class NighttimeZeroOffsetPlot:
     @staticmethod
     def _style(ax):
         """Open frame, light horizontal gridlines, as the TimeSeries default look."""
-        for side in ('top', 'right'):
-            ax.spines[side].set_visible(False)
-        for side in ('left', 'bottom'):
-            ax.spines[side].set_color(_C_ZERO)
-            ax.spines[side].set_linewidth(0.8)
-        ax.tick_params(colors=_C_ZERO, labelcolor=_C_INK, labelsize=9, width=0.8, length=4, direction='out')
-        ax.grid(False)
-        ax.yaxis.grid(True, color=_C_GRID, linewidth=0.8)
-        ax.set_axisbelow(True)
-        ax.set_facecolor('white')
+        style_axes(ax)
 
     @staticmethod
     def _legend(ax, **kwargs):
         """Frameless legend with lines thick enough to tell the colours apart."""
-        legend = ax.legend(frameon=False, fontsize=9, **kwargs)
-        for line in legend.get_lines():
-            line.set_linewidth(2.5)
+        legend(ax, **kwargs)
 
     @staticmethod
     def _title(ax, text: str, note: str = None):
         """Left-aligned panel title with an optional grey note after it."""
-        ax.set_title(text, loc='left', fontsize=11, fontweight='bold', color=_C_TITLE)
-        if note:
-            ax.set_title(note, loc='right', fontsize=9, color=_C_INK)
+        panel_title(ax, text, note)
 
     def _steps(self) -> list[tuple[str, str, str, str]]:
         """Colour, title, description and count of each correction step, in order."""
@@ -208,30 +175,7 @@ class NighttimeZeroOffsetPlot:
 
     def _plot_steps(self, ax):
         """Numbered boxes with arrows: the order in which the correction works."""
-        ax.axis('off')
-        steps = self._steps()
-        n = len(steps)
-        width, gap = 0.172, (1 - len(steps) * 0.172) / (len(steps) - 1)
-        for k, (color, title, text, count) in enumerate(steps):
-            x0 = k * (width + gap)
-            ax.add_patch(FancyBboxPatch((x0, 0.04), width, 0.92, transform=ax.transAxes,
-                                        boxstyle='round,pad=0,rounding_size=0.015',
-                                        fc=_C_BOX, ec=_C_BOX_EDGE, lw=0.8))
-            ax.text(x0 + 0.014, 0.76, str(k + 1), transform=ax.transAxes, ha='center', va='center',
-                    fontsize=10, fontweight='bold', color='white',
-                    bbox=dict(boxstyle='circle,pad=0.3', fc=color, ec='none'))
-            ax.text(x0 + 0.032, 0.76, title, transform=ax.transAxes, va='center', fontsize=10.5,
-                    fontweight='bold', color=_C_TITLE)
-            ax.text(x0 + 0.01, 0.47, text, transform=ax.transAxes, va='center', fontsize=8.5,
-                    color=_C_INK, linespacing=1.3)
-            ax.text(x0 + 0.01, 0.15, count, transform=ax.transAxes, va='center', fontsize=9,
-                    fontweight='bold', color=color)
-            if k < n - 1:
-                ax.annotate('', xy=(x0 + width + gap - 0.002, 0.5), xytext=(x0 + width + 0.002, 0.5),
-                            xycoords='axes fraction',
-                            arrowprops=dict(arrowstyle='-|>', color=_C_ZERO, lw=1.2, mutation_scale=12))
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
+        draw_steps(ax, self._steps())
 
     def _plot_series(self, ax):
         measured, corrected = self._lines
@@ -268,19 +212,8 @@ class NighttimeZeroOffsetPlot:
 
     @staticmethod
     def _day_steps(values: Series) -> tuple[np.ndarray, np.ndarray]:
-        """x and y of a step line holding each day's value from midnight to midnight.
-
-        Days that do not follow each other are separated by NaN, so the line breaks.
-        """
-        starts = values.index
-        x, y = [], []
-        for k, (start, value) in enumerate(values.items()):
-            if k and start - starts[k - 1] > pd.Timedelta('1D'):
-                x.append(start)
-                y.append(np.nan)
-            x += [start, start + pd.Timedelta('1D')]
-            y += [value, value]
-        return np.array(x, dtype='datetime64[ns]'), np.array(y, dtype=float)
+        """x and y of a step line holding each day's value from midnight to midnight."""
+        return day_steps(values)
 
     def _plot_diel(self, ax):
         r = self.result
@@ -363,12 +296,4 @@ class NighttimeZeroOffsetPlot:
         ]
 
     def _plot_summary(self, ax):
-        ax.axis('off')
-        self._title(ax, "Summary")
-        rows = self._summary_rows()
-        y, dy = 0.97, 0.97 / len(rows)
-        for label, value in rows:
-            ax.text(0.0, y, label, transform=ax.transAxes, va='top', fontsize=9.5, color=_C_INK)
-            ax.text(1.0, y, value, transform=ax.transAxes, va='top', ha='right', fontsize=9.5,
-                    color=_C_TITLE, fontweight='bold')
-            y -= dy
+        draw_summary(ax, self._summary_rows())
