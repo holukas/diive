@@ -85,14 +85,17 @@ Library (also used by the notebook and the GUI):
   `resampled_detailed` raise an error until `resample()` runs again, so outdated values cannot be
   uploaded.
 - **Set exact value to missing:** values match within a relative tolerance of 1e-6, so values stored
-  as float32 (e.g. 0.1) are found. 0 matches only 0.
+  as float32 (e.g. 0.1) are found. 0 matches only 0, and entries that are not numbers raise an
+  error.
+- **Meteo screening, sums:** resampled sums are rounded to 12 significant digits, which removes
+  floating-point noise such as 1.2000000000000002.
 - **Nighttime zero offset:** `remove_nighttime_zero_offset` takes an optional `swin_pot`, the
   potential radiation of each record.
 - **`Hampel`, daytime and nighttime (changes results):** with `separate_day_night=True`, daytime
   records are judged against the median and spread of the daytime records in the window, and
-  nighttime records against the nighttime ones, as in ONEFlux. Before, the quiet night set the
-  spread for both, so variables with a quiet night lost too many daytime records, e.g. latent
-  heat flux more than twice as many as now.
+  nighttime records against the nighttime ones, as in ONEFlux. Double differences use records of
+  one period only. Before, the quiet night set the spread for both, so variables with a quiet
+  night lost too many daytime records, e.g. latent heat flux more than twice as many as now.
 
 GUI only:
 
@@ -102,7 +105,15 @@ GUI only:
   read-only, with a red mark where it is not set yet.
 - **Meteo screening (database):** the tab screens through `StepwiseMeteoScreeningDb` like the
   library, follows changes to the site coordinates and shows loading errors in the status line.
-- **Meteo screening (database), Copy Python:** writes a `StepwiseMeteoScreeningDb` script.
+- **Meteo screening (database), Copy Python:** writes a `StepwiseMeteoScreeningDb` script, also
+  when only corrections are set, in the UTC offset the data were downloaded in.
+- **Hampel step:** separates daytime and nighttime by default when the project site is set.
+- **Meteo screening (database), set to value:** the dates are marked as END timestamps, and dates
+  that match no record show a warning in the status line.
+- **Meteo screening (database), add to dataset:** the data version shows the processed version,
+  not the download's.
+- **Meteo screening (database), resolution:** typing a resolution resamples once, after typing
+  stops.
 - **Screening tabs:** absolute limits can be added as a step.
 - **NEE partitioning:** the four partitioning tabs are now one tab with a Method choice (nighttime,
   daytime) and a Mode choice (ONEFlux, REddyProc), and projects saved before open in it.
@@ -114,7 +125,7 @@ GUI only:
 - **MDS gap-filling, driver QC:** the MDS tab and Level 4.1 of the flux post-processing chain
   take an optional QC flag column for SW_IN, TA and VPD, and Copy Python includes it.
 
-Notebook (meteo screening notebook v15):
+Notebook (meteo screening notebook v16):
 
 - **Run All:** no longer applies outlier tests with example settings. All outlier tests are
   commented out, with notes on the variables each one does not suit.
@@ -127,10 +138,11 @@ Notebook (meteo screening notebook v15):
   at its edges are removed.
 - **Upload check:** compares the stored values with the uploaded ones and reports a failed upload.
 - **UTC offset:** the notes say to keep one fixed offset all year, without daylight saving time.
-- **Upload switch:** nothing is uploaded unless `UPLOAD = True`, and variables without any outlier
-  test or change are refused unless `UPLOAD_UNSCREENED = True`.
+- **Upload switch:** nothing is uploaded unless `UPLOAD = True`.
 - **Time range check:** START and STOP must be one second after a resampling boundary, and the
   notebook stops with a suggested value otherwise.
+- **Frequency check:** the upload stops before anything is deleted when the resampled frequency
+  differs from `RESAMPLING_FREQ`.
 
 ### Packaging
 
@@ -242,6 +254,14 @@ Library (also used by the notebook and the GUI):
   offset of 0, where 30-min data gave only missing values.
 - **Meteo screening, set to value:** `correction_setto_value` raises for dates in a form it cannot
   read, instead of ignoring them.
+- **Meteo screening, resample periods:** records with END timestamps off the clock grid (e.g. 10-min
+  records at :03 and :13) went into the previous period.
+- **Meteo screening, one period:** `resample()` failed when the result had a single period, e.g.
+  one hour of 10-min records resampled to `'1h'`.
+- **Meteo screening, failed resample:** a resample that failed for one variable left the others at
+  the new frequency.
+- **Meteo screening, manual removal:** a removed record came back when it had no value at test time
+  and a later correction gave it one.
 - **Set-to corrections, console:** their reports follow `verbose`.
 
 GUI only:
