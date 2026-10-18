@@ -43,9 +43,6 @@ Library (also used by the notebook and the GUI):
   and the new `partition_nee_daytime_oneflux_scenarios()` remove the measured NEE around a failed
   fit from all u\* scenarios of that year, as ONEFlux does, and
   `DaytimePartitioningOneFlux.removed_days` lists the removed days.
-- **Meteo screening, mixed time resolutions:** data with a change in time resolution, e.g. 10-min
-  data followed by 1-min data, are screened correctly, and data with one resolution give the same
-  resampled values as before.
 - **Meteo screening dates:** manual removal and `correction_setto_value` take dates as they appear
   in the downloaded data (local time, end of each period), and dates that match no record give a
   warning.
@@ -69,7 +66,6 @@ Library (also used by the notebook and the GUI):
   arguments show in the documentation.
 - **Documentation:** the meteo screening methods and the outlier classes show usage examples, e.g.
   all date formats for manual removal.
-
 - **Meteo screening, resampling coverage (changes results):** coverage is measured by the time the
   kept records cover, so other resolutions in the same download no longer change which periods are
   kept. A sum needs `mincounts_perc` of the period covered, with no one-record minimum. Means of
@@ -77,7 +73,7 @@ Library (also used by the notebook and the GUI):
 - **Meteo screening, new detection round:** calling `start_outlier_detection()` again drops the
   previous round's flags and tests all records again, including those the last finalize removed.
 - **Meteo screening, warnings:** `resample()` warns about flags that `finalize_outlier_detection()`
-  has not applied yet, and finalize warns about a test whose flag was not added.
+  has not applied yet, and finalize warns when a test ran but its flag was not added.
 - **Database upload:** writes are synchronous and retried on connection and server errors, and
   `upload_singlevar` takes `delete_start` and `delete_stop` to delete a whole period before the
   upload.
@@ -120,13 +116,13 @@ GUI only:
 
 Notebook (meteo screening notebook v15):
 
-- **Run All:** no longer applies tests and corrections with example settings. All outlier tests
-  are commented out, with notes on the variables each one does not suit.
+- **Run All:** no longer applies outlier tests with example settings. All outlier tests are
+  commented out, with notes on the variables each one does not suit.
 - **Windows:** window settings are time spans, e.g. `'7D'`.
 - **Descriptions:** method descriptions are shorter and link to the documentation.
 - **Skipping outlier detection:** a note after the first plot says when it can be skipped.
-- **Resampling:** a period is kept only if at least half of it is covered (was a quarter).
-
+- **Resampling:** `mincounts_perc` is 0.5 (was 0.25), and the notes explain how it works for means
+  and for sums.
 - **Upload:** deletes the whole screened period, from `START` to `STOP`, so older screened values
   at its edges are removed.
 - **Upload check:** compares the stored values with the uploaded ones and reports a failed upload.
@@ -180,8 +176,11 @@ Library (also used by the notebook and the GUI):
   middle-of-period timestamps after resampling and would be uploaded half a period early.
 - **Meteo screening, mixed time resolutions:** sums counted coarse records several times, manual
   removal missed parts of coarse records, outlier tests rejected or skipped valid coarse
-  records, and records such as 15 min after 10 min were dropped.
-- **Meteo screening, gaps:** records next to a gap in the timestamp were dropped.
+  records, and records such as 15 min after 10 min were dropped. The nighttime zero offset and the
+  potential radiation correlation used the wrong period for coarse records.
+- **Meteo screening, gaps:** records next to a gap in the timestamps were dropped, and records
+  between gaps could get a coarser time resolution than their own. With 30 % of 10-min records
+  missing, almost half of the records were lost.
 - **Meteo screening, corrections:** corrections made before `finalize_outlier_detection()` were
   lost.
 - **Meteo screening, finalize:** running `finalize_outlier_detection()` again with looser
@@ -194,10 +193,12 @@ Library (also used by the notebook and the GUI):
   end of the period in the database.
 - **Database upload:** the delete before an upload removed that variable for every site in a
   shared bucket, not only for the uploaded site.
-- **`Hampel`, spikes next to gaps:** with `use_differencing=True` and `repeat=True`, a spike on the
-  first or last record or next to a gap was never flagged, and each iteration removed the next
-  record instead, often up to the next gap, also in the flux post-processing chain (L3.2) and the
-  GUI screening tabs.
+- **`Hampel` with differencing:** with `use_differencing=True`, a spike on the first or last record
+  or next to a gap was never flagged. With `repeat=True` as well, each pass removed good records
+  next to those removed before, often up to the next gap, e.g. all daytime shortwave radiation or a
+  whole day at a level shift. Blocks of up to four bad values are now removed, also at the series
+  ends and next to gaps. This also affected the flux post-processing chain (L3.2) and the GUI
+  screening tabs.
 - **`Hampel`:** a whole-number nighttime threshold combined with a decimal daytime threshold
   raised a `TypeError`.
 - **`setto_value`:** a bare date now covers the whole day, as documented.
@@ -227,32 +228,21 @@ Library (also used by the notebook and the GUI):
 - **No changes to inputs:** `resample_to_monthly_agg_matrix` and `get_encoded_value_series` no
   longer modify the series passed in.
 - **RH offset correction:** its description now says what the correction does.
-- **`Hampel`, repeated passes:** with `use_differencing=True` and `repeat=True`, each pass could
-  remove the good records next to the ones removed before, e.g. all daytime shortwave radiation or
-  a whole day at a level shift. Blocks of up to four bad values are removed, also at the series
-  ends and next to gaps. Single passes give the same results as before.
 - **Database upload, failed writes:** a write that failed after the delete was only logged, so the
   period stayed empty while the upload reported success. It now raises an error.
 - **Database upload, empty data:** an empty table raises a clear error before anything is deleted,
   and a table with only missing values gives a warning that nothing was written.
 - **Meteo screening, corrections after finalize:** a correction no longer brings back records the
-  last finalize removed, e.g. a rejected night record set to zero by the zero-offset correction.
+  last finalize removed or gives a value to records missing in the download, e.g. night records set
+  to zero by the zero-offset correction.
 - **Meteo screening, finalize first:** `finalize_outlier_detection()` without
   `start_outlier_detection()` raises a clear error.
 - **Nighttime zero offset, polar day:** at sites in polar day one record near midnight counted as
   night, so its value was removed from the whole day. A day without any night record now gets an
   offset of 0, where 30-min data gave only missing values.
-- **Meteo screening, missing records:** a correction after finalize could give a record missing in
-  the download a value.
 - **Meteo screening, set to value:** `correction_setto_value` raises for dates in a form it cannot
   read, instead of ignoring them.
-- **Meteo screening, mixed time resolutions:** the nighttime zero offset and the potential radiation
-  correlation use each record's own period.
-- **Meteo screening, console:** a correction after finalize prints its report once, and the
-  set-to corrections follow `verbose`.
-- **Meteo screening, many missing records:** records between gaps got a coarser time resolution
-  than their own, or none, and those without one were dropped. With 30 % of 10-min records
-  missing, about one in seven records was lost.
+- **Set-to corrections, console:** their reports follow `verbose`.
 
 GUI only:
 

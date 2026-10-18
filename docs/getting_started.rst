@@ -178,8 +178,9 @@ feeding the filtered series of one detector into the next:
    print(f"{n_removed} of {series.notna().sum()} measured records removed")
 
 ``Hampel`` separates daytime and nighttime by default, which is why it needs ``lat``,
-``lon`` and ``utc_offset``. For one threshold over all records, pass
-``separate_day_night=False``.
+``lon`` and ``utc_offset``: daytime records are compared with the daytime records of the
+window, nighttime records with the nighttime ones. To judge all records together with
+one threshold, pass ``separate_day_night=False``.
 
 For longer chains with a combined quality flag, use ``StepwiseOutlierDetection``
 from ``diive.preprocessing.outlier_detection`` together with ``dv.qaqc.FlagQCF``.

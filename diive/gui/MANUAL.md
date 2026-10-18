@@ -1571,6 +1571,9 @@ the corrections and resamples it.
   already at the target resolution, no resampling is done** (so already-30MIN data
   merge straight through). **Min. records (frac)** (default 0.9) is the fraction
   of each target period the kept records must cover, else the value is missing.
+  For a mean the minimum is rounded down to whole records, and if that leaves
+  fewer than three, one record is enough: 10-minute data resampled to 30 minutes
+  need one record per half-hour.
 - **Add resampled to dataset** appends the screened, resampled column. Its
   timestamps are converted to your dataset's **middle-of-period** convention so it
   aligns on merge, it is **renamed with a suffix** if the name already exists, and
