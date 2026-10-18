@@ -7,6 +7,7 @@ Includes: outlier detection, data corrections, resampling, and quality flag gene
 
 Part of the diive library: https://github.com/holukas/diive
 """
+import math
 from functools import partial
 from typing import Literal
 
@@ -21,7 +22,7 @@ import diive.core.dfun.frames as frames
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 from diive.core.utils.console import VERBOSE_SILENT, detail, get_verbosity, info, set_verbosity, warn
-from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
+from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks, quickplot
 from diive.core.plotting.styles.format import FormatStyle
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.times.times import TimestampSanitizer
@@ -39,9 +40,10 @@ from diive.preprocessing.qaqc.measurements import (
 from diive.preprocessing.qaqc.qcf import FlagQCF
 
 _SWINPOT_COL = '_SW_IN_POT_METSCR'  # Temporary day/night input for the QCF
-# Records off the phase of the others may shrink the grid only this far. Legitimate
-# phase shifts need about 2-10 slots per record (10MIN data moving from :00 to :05
-# or :01); timestamps a second late need 60 (1MIN data) to 600 (10MIN data).
+# Grid slots per record at most, counted over each record's own period. Legitimate
+# phase shifts need about 2-10 (10MIN data moving from :00 to :05 or :01), genuine
+# mixed data about 2-10 (10MIN, then 1MIN or 15MIN data). Timestamps a second late
+# need 60 (1MIN data) to 600 (10MIN data), as do a few 1S records in 10MIN data.
 _MAX_SLOTS_PER_RECORD = 20
 # A run of at least this many records with one resolution is a resolution period
 # of its own, as in detect_freq_groups.
@@ -68,6 +70,55 @@ def _offset_str(ns: int) -> str:
     """Offset string of a duration in ns with the count, e.g. '1min' where freqstr gives 'min'."""
     offset = to_offset(pd.Timedelta(int(ns), unit='ns'))
     return f"{offset.n}{offset.name}"
+
+
+def _slots_per_record(counts: dict, step: int) -> float:
+    """Grid slots of *step* ns inside the period of each record, on average.
+
+    *counts* maps each resolution in ns to its number of records. Missing
+    records do not count, so sparse data are not mistaken for a fine grid.
+    Python integers, as the products overflow int64 for long daily data.
+    """
+    covered = sum(int(r) * int(c) for r, c in counts.items())
+    return covered / int(step) / sum(int(c) for c in counts.values())
+
+
+def _grid_bound_drops(run_res: np.ndarray, lengths: np.ndarray, used: np.ndarray) -> dict:
+    """Kept runs to drop so the grid holds at most ``_MAX_SLOTS_PER_RECORD`` slots per record.
+
+    The grid step is the greatest common divisor of the kept resolutions. They
+    are added in order of the time their records cover, longest first, so the
+    main resolutions come first. A resolution that would shrink the grid beyond
+    the limit is dropped with all its runs, e.g. a few 1S records in 10MIN data.
+
+    Args:
+        run_res: Resolution of each run in ns.
+        lengths: Number of records of each run.
+        used: True for the runs kept so far.
+
+    Returns:
+        ``{run: reason}`` for each run to drop.
+    """
+    kept = np.flatnonzero(used)
+    n = {}
+    for k in kept:
+        n[int(run_res[k])] = n.get(int(run_res[k]), 0) + int(lengths[k])
+    order = sorted(n, key=lambda r: (-r * n[r], -r))
+    if not order:
+        return {}
+    main, step = [order[0]], order[0]
+    drops = {}
+    for r in order[1:]:
+        new_step = math.gcd(step, r)
+        slots = _slots_per_record({m: n[m] for m in main + [r]}, new_step)
+        if slots <= _MAX_SLOTS_PER_RECORD:
+            main.append(r)
+            step = new_step
+            continue
+        reason = (f"next to the {' and '.join(_offset_str(m) for m in main)} records it needs a grid of "
+                  f"{_offset_str(new_step)} with {slots:.0f} slots per record (limit {_MAX_SLOTS_PER_RECORD})")
+        drops.update({int(k): reason for k in kept if run_res[k] == r})
+    return drops
 
 
 class StepwiseMeteoScreeningDb:
@@ -134,8 +185,9 @@ class StepwiseMeteoScreeningDb:
     timestamp** (the database timestamp is TIMESTAMP_END). The grid is the finest resolution,
     or finer where needed to hold every record (10MIN, then 15MIN data give a 5MIN grid). A
     coarse record is not copied onto the finer slots it covers: those slots stay empty through
-    the whole screening, and corrections do not fill them. Records off the phase of the
-    others, e.g. END timestamps a second late, would need a grid of seconds or less: if
+    the whole screening, and corrections do not fill them. The grid holds at most 20 slots
+    per record on average, counted over each record's own period. Records off the phase of
+    the others, e.g. END timestamps a second late, would need a grid of seconds or less: if
     that grid would be finer than 1S or hold more than 20 slots per record, a ValueError
     asks to clean or resample the timestamps first.
 
@@ -143,13 +195,20 @@ class StepwiseMeteoScreeningDb:
     clean resolutions are kept. A run is a series of consecutive records with one
     resolution. A run of at least 12 records is a resolution period and is kept,
     whatever its resolution (10MIN, then 15MIN data). A shorter run is kept if its
-    resolution is a whole multiple or divisor of the resolution of the nearest
-    period before or after it, e.g. six 10MIN records inside 1MIN data. Other runs
-    are dropped, each with a warning: odd resolutions such as 7S records at a change
-    of the logger program. Records with no detectable resolution are dropped with a warning too.
-    If no run has 12 records, the runs of the most frequent resolution count as
-    periods. ``detect_freq_groups`` may also take 3-5 coarse records inside much
-    finer data for fine records with holes (see there).
+    resolution is a whole multiple of the resolution of the nearest period before or
+    after it, e.g. six 10MIN records inside 1MIN data. A shorter run of finer records (a
+    divisor, e.g. 1MIN records inside 10MIN data) is kept only with at least 3 records:
+    one or two finer records, such as a stamp at :30 s inside 1MIN data, are a stray
+    timestamp. Then the resolutions are added to the grid in order of the time their
+    records cover. A resolution that would push the grid beyond 20 slots per record
+    next to the main resolutions is dropped with all its runs, also runs of 12 or more
+    (a few 1S records in 10MIN data would need a 1S grid with 600 slots per record).
+    Dropped runs get a warning each, which names the records and the reason: odd
+    resolutions such as 7S records at a change of the logger program, stray
+    timestamps, or a grid too fine. Records with no detectable resolution are dropped
+    with a warning too. If no run has 12 records, the runs of the most frequent
+    resolution count as periods. ``detect_freq_groups`` may also take 3-5 coarse
+    records inside much finer data for fine records with holes (see there).
 
     The rolling-window and difference tests (Hampel, local SD, rolling z-score, z-score of
     increments) run on each **resolution period** separately, i.e. on each run of records
@@ -348,9 +407,10 @@ class StepwiseMeteoScreeningDb:
                 self._data_detailed[field] = self.data_detailed[field].drop(columns=dropped)
                 if dropped:
                     info(f"Dropped the flags of the previous outlier detection: {', '.join(dropped)}")
-            dfin = self.data_detailed[field].copy()
             # After a finalize the current series lacks the records the QCF removed.
-            dfin[field] = self._series_hires_corrected.get(field, self._series_hires_cleaned[field])
+            # StepwiseOutlierDetection uses only the field column, not the tags.
+            series = self._series_hires_corrected.get(field, self._series_hires_cleaned[field])
+            dfin = pd.DataFrame({field: series}, index=self.data_detailed[field].index)
             self._outlier_detection[field] = StepwiseOutlierDetection(
                 dfin=dfin,
                 col=field,
@@ -458,9 +518,12 @@ class StepwiseMeteoScreeningDb:
 
     def showplot_outlier_detection_cleaned(self, interactive: bool = False):
         """Show cleaned data from outlier detection."""
+        self._plot_records(lambda field: self.outlier_detection[field].series_hires_cleaned, interactive)
+
+    def _plot_records(self, series_of, interactive: bool):
+        """Plot the series ``series_of(field)`` of each field, records only (``_display_lines``)."""
         for field in self.fields:
-            series = self._display_lines(field, self.outlier_detection[field].series_hires_cleaned)
-            p = TimeSeries(series=series)
+            p = TimeSeries(series=self._display_lines(field, series_of(field)))
             p.plot() if not interactive else p.plot_interactive()
 
     def showplot_outlier_detection_qcf_heatmaps(self, **kwargs):
@@ -490,24 +553,21 @@ class StepwiseMeteoScreeningDb:
             ax_orig = fig.add_subplot(gs[0, 0:3])
             ax_resampled = fig.add_subplot(gs[1, 0:3], sharex=ax_orig)
             ax_both = fig.add_subplot(gs[2, 0:3], sharex=ax_orig)
-
-            ax_orig.xaxis.axis_date()
-            ax_resampled.xaxis.axis_date()
-            ax_both.xaxis.axis_date()
+            axes_series = (ax_orig, ax_resampled, ax_both)
+            for ax in axes_series:
+                ax.xaxis.axis_date()
 
             ax_heatmap_hires_before = fig.add_subplot(gs[0:3, 3])
             ax_heatmap_resampled_after = fig.add_subplot(gs[0:3, 4], sharey=ax_heatmap_hires_before)
 
             # Time series
             records_orig = self._display_lines(field, series_orig)
-            ax_orig.plot(records_orig.index, records_orig, label=f"{series_orig.name}", color="#78909C",
-                         alpha=.5, markersize=2, markeredgecolor='none')
-            ax_resampled.plot(series_resampled.index, series_resampled, label="resampled",
-                              color="#FFA726", alpha=1, markersize=3, markeredgecolor='none')
-            ax_both.plot(records_orig.index, records_orig, label=f"{series_orig.name}", color="#78909C",
-                         alpha=.5, markersize=2, markeredgecolor='none')
-            ax_both.plot(series_resampled.index, series_resampled, label="resampled",
-                         color="#FFA726", alpha=1, markersize=3, markeredgecolor='none')
+            for ax in (ax_orig, ax_both):
+                ax.plot(records_orig.index, records_orig, label=f"{series_orig.name}", color="#78909C",
+                        alpha=.5, markersize=2, markeredgecolor='none')
+            for ax in (ax_resampled, ax_both):
+                ax.plot(series_resampled.index, series_resampled, label="resampled",
+                        color="#FFA726", alpha=1, markersize=3, markeredgecolor='none')
 
             # Heatmaps
             kwargs_heatmap = dict(cb_labelsize=10, minticks=3, maxticks=99)
@@ -519,15 +579,13 @@ class StepwiseMeteoScreeningDb:
                                                           format_style=format_style_heatmap, **kwargs_heatmap)
 
             # Format time series
-            default_format(ax=ax_orig, ticks_labels_fontsize=10)
-            default_format(ax=ax_resampled, ticks_labels_fontsize=10)
-            default_format(ax=ax_both, ticks_labels_fontsize=10)
+            for ax in axes_series:
+                default_format(ax=ax, ticks_labels_fontsize=10)
             nice_date_ticks(ax=ax_orig, minticks=3, maxticks=20, which='x', locator='auto')
-            default_legend(ax=ax_orig, markerscale=3, textsize=10)
-            default_legend(ax=ax_resampled, markerscale=3, textsize=10)
-            default_legend(ax=ax_both, markerscale=3, textsize=10)
-            plt.setp(ax_orig.get_xticklabels(), visible=False)
-            plt.setp(ax_resampled.get_xticklabels(), visible=False)
+            for ax in axes_series:
+                default_legend(ax=ax, markerscale=3, textsize=10)
+            for ax in (ax_orig, ax_resampled):
+                plt.setp(ax.get_xticklabels(), visible=False)
             plt.setp(ax_heatmap_resampled_after.get_yticklabels(), visible=False)
 
             fig.suptitle(f"{self.series_hires_orig[field].name}: "
@@ -538,15 +596,11 @@ class StepwiseMeteoScreeningDb:
 
     def showplot_orig(self, interactive: bool = False):
         """Show original high-resolution data used as input"""
-        for field in self.fields:
-            p = TimeSeries(series=self._display_lines(field, self.series_hires_orig[field]))
-            p.plot() if not interactive else p.plot_interactive()
+        self._plot_records(lambda field: self.series_hires_orig[field], interactive)
 
     def showplot_cleaned(self, interactive: bool = False):
         """Show *current* cleaned high-resolution data"""
-        for field in self.fields:
-            p = TimeSeries(series=self._display_lines(field, self.series_hires_cleaned[field]))
-            p.plot() if not interactive else p.plot_interactive()
+        self._plot_records(lambda field: self.series_hires_cleaned[field], interactive)
 
     def display_lines(self, data: pd.Series | DataFrame, field: str = None) -> pd.Series | DataFrame:
         """Return a copy of *data* ready for a line plot. For display only.
@@ -630,18 +684,20 @@ class StepwiseMeteoScreeningDb:
 
     def report_outlier_detection_qcf_evolution(self):
         """Print the QCF flag-evolution report."""
-        for field in self.fields:
-            self.outlier_detection_qcf[field].report_qcf_evolution()
+        self._report_qcf('report_qcf_evolution')
 
     def report_outlier_detection_qcf_flags(self):
         """Print the QCF flags report."""
-        for field in self.fields:
-            self.outlier_detection_qcf[field].report_qcf_flags()
+        self._report_qcf('report_qcf_flags')
 
     def report_outlier_detection_qcf_series(self):
         """Print the QCF series report."""
+        self._report_qcf('report_qcf_series')
+
+    def _report_qcf(self, method: str):
+        """Call the report *method* of each field's ``FlagQCF``."""
         for field in self.fields:
-            self.outlier_detection_qcf[field].report_qcf_series()
+            getattr(self.outlier_detection_qcf[field], method)()
 
     def flag_missingvals_test(self, verbose: bool = False):
         """Flag missing values and add flag to dataframe.
@@ -892,18 +948,12 @@ class StepwiseMeteoScreeningDb:
         ...                                thres_zscore_daytime=4, thres_zscore_nighttime=3)
         >>> mscr.addflag()
         """
-        for field in self.fields:
-            self.outlier_detection[field].flag_outliers_zscore_test(
-                thres_zscore=thres_zscore,
-                separate_day_night=separate_day_night,
-                thres_zscore_daytime=thres_zscore_daytime,
-                thres_zscore_nighttime=thres_zscore_nighttime,
-                showplot=showplot,
-                plottitle=plottitle,
-                verbose=verbose,
-                repeat=repeat,
-                idstr=idstr
-            )
+        self._run_global('flag_outliers_zscore_test', thres_zscore=thres_zscore,
+                         separate_day_night=separate_day_night,
+                         thres_zscore_daytime=thres_zscore_daytime,
+                         thres_zscore_nighttime=thres_zscore_nighttime,
+                         showplot=showplot, plottitle=plottitle, verbose=verbose,
+                         repeat=repeat, idstr=idstr)
 
     def flag_outliers_zscore_rolling_test(self, thres_zscore: float = 4, showplot: bool = False, verbose: bool = False,
                                           plottitle: str = None, repeat: bool = True, winsize: int | str = None):
@@ -998,12 +1048,9 @@ class StepwiseMeteoScreeningDb:
             >>> mscr.flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=10)
             >>> mscr.addflag()
         """
-        for field in self.fields:
-            self.outlier_detection[field].flag_outliers_trim_low_test(trim_daytime=trim_daytime,
-                                                                      trim_nighttime=trim_nighttime,
-                                                                      lower_limit=lower_limit,
-                                                                      showplot=showplot,
-                                                                      verbose=verbose)
+        self._run_global('flag_outliers_trim_low_test', trim_daytime=trim_daytime,
+                         trim_nighttime=trim_nighttime, lower_limit=lower_limit,
+                         showplot=showplot, verbose=verbose)
 
     def flag_outliers_abslim_test(self, minval: float = None, maxval: float = None,
                                   separate_day_night: bool = False,
@@ -1045,16 +1092,11 @@ class StepwiseMeteoScreeningDb:
         ...                                minval_nighttime=-30, maxval_nighttime=35)
         >>> mscr.addflag()
         """
-        for field in self.fields:
-            self.outlier_detection[field].flag_outliers_abslim_test(minval=minval,
-                                                                    maxval=maxval,
-                                                                    separate_day_night=separate_day_night,
-                                                                    minval_daytime=minval_daytime,
-                                                                    maxval_daytime=maxval_daytime,
-                                                                    minval_nighttime=minval_nighttime,
-                                                                    maxval_nighttime=maxval_nighttime,
-                                                                    showplot=showplot,
-                                                                    verbose=verbose)
+        self._run_global('flag_outliers_abslim_test', minval=minval, maxval=maxval,
+                         separate_day_night=separate_day_night,
+                         minval_daytime=minval_daytime, maxval_daytime=maxval_daytime,
+                         minval_nighttime=minval_nighttime, maxval_nighttime=maxval_nighttime,
+                         showplot=showplot, verbose=verbose)
 
     def flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float | str = 'auto',
                                separate_day_night: bool = False,
@@ -1096,16 +1138,14 @@ class StepwiseMeteoScreeningDb:
         ...                             separate_day_night=True)
         >>> mscr.addflag()
         """
+        self._run_global('flag_outliers_lof_test', n_neighbors=n_neighbors,
+                         contamination=contamination, separate_day_night=separate_day_night,
+                         showplot=showplot, verbose=verbose, repeat=repeat, n_jobs=n_jobs)
+
+    def _run_global(self, method: str, **kwargs):
+        """Run the test *method* of StepwiseOutlierDetection on all records of each field at once."""
         for field in self.fields:
-            self.outlier_detection[field].flag_outliers_lof_test(
-                n_neighbors=n_neighbors,
-                contamination=contamination,
-                separate_day_night=separate_day_night,
-                showplot=showplot,
-                verbose=verbose,
-                repeat=repeat,
-                n_jobs=n_jobs
-            )
+            getattr(self.outlier_detection[field], method)(**kwargs)
 
     def _set_corrected(self, field: str, series: pd.Series):
         """Store a corrected series; outlier tests run after this see the corrected values."""
@@ -1266,9 +1306,24 @@ class StepwiseMeteoScreeningDb:
                      f"left untested: {listed(untested)}")
             sod.set_pending_flag(flag.rename(flagname))
 
-    def _correct(self, field: str, correction, **kwargs):
-        """Apply *correction*, a function taking ``series=``, to the current series of *field*."""
-        corrected = correction(series=self._series_hires_cleaned[field], **kwargs)
+    def _correct(self, field: str, correction, preview: dict = None, **kwargs):
+        """Apply *correction*, a function taking ``series=``, to the current series of *field*.
+
+        With empty grid slots (more than one time resolution) and ``showplot=True``
+        the correction's own preview would draw each coarse record as a lone
+        marker between empty slots. The preview then shows the series before and
+        after the correction from display copies instead, with the ``quickplot``
+        arguments in *preview* (e.g. ``title``).
+        """
+        series = self._series_hires_cleaned[field]
+        own_preview = kwargs.get('showplot', False) and self._not_a_record(field).any()
+        if own_preview:
+            kwargs['showplot'] = False
+        corrected = correction(series=series, **kwargs)
+        if own_preview:
+            quickplot([self._display_lines(field, series).rename(f"{field} (before correction)"),
+                       self._display_lines(field, corrected).rename(f"{field} (after correction)")],
+                      subplots=True, showplot=True, **(preview or {}))
         if field in self._series_hires_corrected:
             # After finalize the current series lacks the records the QCF removed.
             # Correct those too, quietly, so a later finalize with looser
@@ -1347,6 +1402,7 @@ class StepwiseMeteoScreeningDb:
             # finer block gets its own potrad window, not the spacing to the next record.
             period_sec = None if swin_pot is None else self.data_detailed[field]['FREQ_AUTO_SEC']
             self._correct(field, remove_nighttime_zero_offset,
+                          preview=dict(title=f"Removing nighttime zero-offset from {field}"),
                           lat=self.site_lat, lon=self.site_lon,
                           utc_offset=self.utc_offset, showplot=showplot,
                           clamp_negatives=clamp_negatives,
@@ -1374,7 +1430,8 @@ class StepwiseMeteoScreeningDb:
             >>> mscr.correction_setto_max_threshold(threshold=35, showplot=False)
         """
         for field in self.fields:
-            self._correct(field, setto_threshold, threshold=threshold, type='max', showplot=showplot)
+            self._correct(field, setto_threshold, threshold=threshold, type='max', showplot=showplot,
+                          preview=dict(title=f"Set {field} to max threshold {threshold}"))
 
     def correction_set_exact_value_to_missing(self, values: list, verbose: int | bool | None = None,
                                               showplot: bool = True):
@@ -1391,7 +1448,8 @@ class StepwiseMeteoScreeningDb:
         """
         for field in self.fields:
             self._correct(field, set_exact_values_to_missing,
-                          values=values, showplot=showplot, verbose=verbose)
+                          values=values, showplot=showplot, verbose=verbose,
+                          preview=dict(title=f"Set exact values in {field} to missing values"))
 
     def correction_setto_min_threshold(self, threshold: float, showplot: bool = True):
         """Set values below threshold to threshold
@@ -1402,7 +1460,8 @@ class StepwiseMeteoScreeningDb:
             >>> mscr.correction_setto_min_threshold(threshold=-5, showplot=False)
         """
         for field in self.fields:
-            self._correct(field, setto_threshold, threshold=threshold, type='min', showplot=showplot)
+            self._correct(field, setto_threshold, threshold=threshold, type='min', showplot=showplot,
+                          preview=dict(title=f"Set {field} to min threshold {threshold}"))
 
     def correction_setto_value(self, dates: list, value: float, verbose: int = 1):
         """Set records within time range to value.
@@ -1446,7 +1505,8 @@ class StepwiseMeteoScreeningDb:
             >>> mscr.correction_remove_relativehumidity_offset(showplot=False)
         """
         for field in self.fields:
-            self._correct(field, remove_relativehumidity_offset, showplot=showplot)
+            self._correct(field, remove_relativehumidity_offset, showplot=showplot,
+                          preview=dict(title=f"Remove RH offset from {field}", hline=100))
 
     def set_corrections(self, corrections: list[dict], showplot: bool = False):
         """Replace all corrections with *corrections*, applied in order to the uncorrected data.
@@ -1973,16 +2033,18 @@ class StepwiseMeteoScreeningDb:
             ValueError: If records off the phase of the others (e.g. END timestamps
                 a few seconds late) shrink the grid below the common divisor of
                 the resolutions, to a step below one second or to more than
-                ``_MAX_SLOTS_PER_RECORD`` slots per record.
+                ``_MAX_SLOTS_PER_RECORD`` slots per record. ``_used_records``
+                already keeps the resolutions within that limit.
         """
         ends = data_detailed.index.as_unit('ns').asi8
-        resolutions = np.unique(np.round(data_detailed['FREQ_AUTO_SEC'].to_numpy() * 1e9).astype(np.int64))
+        resolutions, counts = np.unique(np.round(data_detailed['FREQ_AUTO_SEC'].to_numpy() * 1e9).astype(np.int64),
+                                        return_counts=True)
         step = np.gcd.reduce(np.concatenate([resolutions, ends - ends[0]]))
         common = np.gcd.reduce(resolutions)
         if step < common:
             # Only a phase shift shrinks the grid below the resolutions' own divisor.
             # A few records off by a second would otherwise build millions of rows.
-            slots_per_record = ((ends[-1] - ends[0]) // step + 1) / len(ends)
+            slots_per_record = _slots_per_record(dict(zip(resolutions, counts, strict=True)), step)
             if step < 10 ** 9 or slots_per_record > _MAX_SLOTS_PER_RECORD:
                 phase = ends % common
                 phases, counts = np.unique(phase, return_counts=True)
@@ -2070,10 +2132,16 @@ class StepwiseMeteoScreeningDb:
         index. A run is a series of consecutive records with one resolution.
         Records without a resolution are dropped and do not interrupt a run. A run
         of at least 12 records is a resolution period and is kept. A shorter run
-        is kept if its resolution is a whole multiple or divisor of the
-        resolution of the nearest period before or after it. Kept runs of fewer
-        than 3 records are left untested by the rolling and difference tests. If no run has 12 records, the runs of the most frequent
-        resolution count as periods. Every dropped run gets a warning.
+        is kept if its resolution is a whole multiple of the resolution of the
+        nearest period before or after it. A shorter run at a divisor of that
+        resolution (finer records) is kept only with at least 3 records: one or
+        two are a stray timestamp. Kept runs of fewer than 3 records are left
+        untested by the rolling and difference tests. If no run has 12 records,
+        the runs of the most frequent resolution count as periods. Last, a
+        resolution that would need a grid of more than ``_MAX_SLOTS_PER_RECORD``
+        slots per record next to the main resolutions is dropped with all its
+        runs, also periods (``_grid_bound_drops``). Every dropped run gets a
+        warning with the reason.
         """
         has_res = freq_sec.notna().to_numpy()
         keep = np.zeros(len(freq_sec), dtype=bool)
@@ -2100,28 +2168,40 @@ class StepwiseMeteoScreeningDb:
         pos = np.arange(n_runs)
         prev_p = np.maximum.accumulate(np.where(period, pos, -1))
         next_p = np.minimum.accumulate(np.where(period, pos, n_runs)[::-1])[::-1]
-        clean = np.zeros(n_runs, dtype=bool)
+        multiple = np.zeros(n_runs, dtype=bool)
+        divisor = np.zeros(n_runs, dtype=bool)
         for near in (prev_p, next_p):
             has = (near >= 0) & (near < n_runs)
             other = run_res[np.clip(near, 0, n_runs - 1)]
-            clean |= has & ((run_res % other == 0) | (other % run_res == 0))
-        used = period | clean
+            multiple |= has & (run_res % other == 0)
+            divisor |= has & (other % run_res == 0)
+        # A finer run of one or two records is a stray timestamp (a record at :30 s
+        # inside 1MIN data), not a block of finer records.
+        stray = divisor & ~multiple & (lengths < 3)
+        used = period | multiple | (divisor & ~stray)
+        reasons = {}
+        for k in np.flatnonzero(~used):
+            neighbours = ' and '.join(sorted({_offset_str(run_res[near[k]]) for near in (prev_p, next_p)
+                                              if 0 <= near[k] < n_runs}))
+            reasons[k] = (f"finer than the neighbouring {neighbours} with fewer than 3 records, "
+                          f"a stray timestamp" if stray[k] else
+                          f"no whole multiple or divisor of the neighbouring {neighbours}")
+        for k, reason in _grid_bound_drops(run_res, lengths, used).items():
+            used[k] = False
+            reasons[k] = reason
         keep[np.flatnonzero(has_res)] = np.repeat(used, lengths)
 
         resolutions, counts = np.unique(res[np.repeat(used, lengths)], return_counts=True)
         info("Time resolutions used: " + ', '.join(
             f"{_offset_str(r)} ({c} records)" for r, c in zip(resolutions, counts, strict=True)))
-        dropped = np.flatnonzero(~used)
+        dropped = sorted(reasons)
         for k in dropped[:_MAX_LISTED_RUNS]:
             first, last = ends[starts[k]], ends[starts[k] + lengths[k] - 1]
-            neighbours = sorted({_offset_str(run_res[near[k]]) for near in (prev_p, next_p)
-                                 if 0 <= near[k] < n_runs})
-            reason = f"no whole multiple or divisor of the neighbouring {' and '.join(neighbours)}"
             # No verbose here: dropped records are lost to the screening and the upload.
             warn(f"{field}: dropped {lengths[k]} record(s) at time resolution "
-                 f"{_offset_str(run_res[k])}, END {first} to {last}: {reason}.")
+                 f"{_offset_str(run_res[k])}, END {first} to {last}: {reasons[k]}.")
         if len(dropped) > _MAX_LISTED_RUNS:
             rest = dropped[_MAX_LISTED_RUNS:]
             warn(f"{field}: dropped {int(lengths[rest].sum())} more record(s) in {len(rest)} more "
-                 f"run(s) of an odd time resolution.")
+                 f"run(s) for the same reasons.")
         return keep

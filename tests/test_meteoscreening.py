@@ -532,19 +532,27 @@ class TestPerResolutionPeriod(unittest.TestCase):
         self.assertTrue(flag.loc[short - pd.Timedelta('30s')].notna().all())
 
     def test_period_with_fewer_than_three_records_stays_untested(self):
-        """Two 1MIN records between 10MIN periods: flag NaN, as for a single record."""
+        """Two 1MIN records between 10MIN periods: flag NaN, as for a single record.
+
+        Two finer records alone are dropped as a stray timestamp (L287), so the
+        period of three 1MIN records is cut to two here.
+        """
         first = pd.date_range('2020-06-01 00:10', periods=2 * 144, freq='10min')
-        two = pd.date_range(first[-1] + pd.Timedelta('1min'), periods=2, freq='1min')
+        three = pd.date_range(first[-1] + pd.Timedelta('1min'), periods=3, freq='1min')
         last = pd.date_range(first[-1] + pd.Timedelta('10min'), periods=144, freq='10min')
-        index = first.append(two).append(last)
+        index = first.append(three).append(last)
         m = _screening(_series_detailed(index, _diurnal(index)))
         m.start_outlier_detection()
-        self.assertEqual([len(slots) for slots, _, _ in m._resolution_periods(FIELD)], [288, 2, 144])
-        messages = _warnings(lambda: m.flag_outliers_increments_zcore_test(thres_zscore=5))
+        periods = m._resolution_periods(FIELD)
+        self.assertEqual([len(slots) for slots, _, _ in periods], [288, 3, 144])
+        slots, middles, res = periods[1]
+        cut = [periods[0], (slots[:2], middles[:2], res), periods[2]]
+        with mock.patch.object(m, '_resolution_periods', return_value=cut):
+            messages = _warnings(lambda: m.flag_outliers_increments_zcore_test(thres_zscore=5))
         self.assertEqual(len(messages), 1)
         self.assertIn('1 resolution period(s) with fewer than 3 records, left untested', messages[0])
         flag = m.outlier_detection[FIELD].last_flag
-        self.assertTrue(flag.loc[two - pd.Timedelta('30s')].isna().all())
+        self.assertTrue(flag.loc[three - pd.Timedelta('30s')].isna().all())
         self.assertEqual(int(flag.notna().sum()), 288 + 144)
 
     def test_no_testable_period_gives_an_empty_named_flag(self):
@@ -926,6 +934,23 @@ class TestMixedResolutionPlots(unittest.TestCase):
         self.assertIsNot(spread, series)
         spread.iloc[:] = -1
         pd.testing.assert_series_equal(m.series_hires_orig[FIELD], stored['orig'])
+
+    def test_correction_preview_joins_coarse_records(self):
+        """L294: the preview plotted the grid series, so coarse records showed as lone markers."""
+        m = self._screened()
+        fig = self._figure(lambda: m.correction_setto_max_threshold(threshold=31, showplot=True))
+        lines = [ax.get_lines()[0] for ax in fig.axes]
+        self.assertEqual([ln.get_label().split('\n')[0] for ln in lines],
+                         [f"{FIELD} (before correction)", f"{FIELD} (after correction)"])
+        for line in lines:
+            # The missing and the removed record break the line, see above
+            self.assertEqual(self._coarse_segments(line), 287 - 2 - 2)
+        self.assertEqual(float(np.nanmax(lines[1].get_ydata())), 31.0)
+
+        # One resolution: the correction's own preview, as before
+        m = self._screened(mixed=False)
+        fig = self._figure(lambda: m.correction_setto_max_threshold(threshold=31, showplot=True))
+        self.assertEqual(fig.axes[0].get_lines()[0].get_label().split('\n')[0], 'input_data')
 
     def test_single_resolution_draws_the_data_as_before(self):
         m = self._screened(mixed=False)
@@ -2000,17 +2025,110 @@ class TestShortResolutionBlocks(unittest.TestCase):
         self.assertEqual(len(dropped), 1, warnings)
         self.assertIn('no whole multiple or divisor', dropped[0])
 
-    def test_run_of_two_clean_records_is_kept(self):
-        # Clean short runs stay (left untested by the rolling and difference
-        # tests), only odd resolutions are dropped.
+    def test_finer_short_runs_need_three_records(self):
+        """L287: one or two finer records are a stray timestamp, three a block."""
         first = pd.date_range('2020-06-01 00:10', periods=2 * 144, freq='10min')
-        two = pd.date_range(first[-1] + pd.Timedelta('1min'), periods=2, freq='1min')
         last = pd.date_range(first[-1] + pd.Timedelta('10min'), periods=144, freq='10min')
-        df = _series_detailed(first.append(two).append(last), 1.0)
+        for n, kept in ((2, False), (3, True)):
+            with self.subTest(n=n):
+                fine = pd.date_range(first[-1] + pd.Timedelta('1min'), periods=n, freq='1min')
+                df = _series_detailed(first.append(fine).append(last), 1.0)
+                holder = {}
+                warnings = _warnings(lambda: holder.setdefault('m', _screening(df)))
+                m = holder['m']
+                self.assertEqual(m.records_count(), 432 + n * kept)
+                self.assertEqual(m.data_detailed[FIELD].index.freqstr, 'min' if kept else '10min')
+                dropped = [w for w in warnings if 'dropped' in w]
+                if kept:
+                    self.assertEqual(dropped, [])
+                else:
+                    self.assertEqual(len(dropped), 1, warnings)
+                    self.assertIn(f'dropped 2 record(s) at time resolution 1min, END {fine[0]}', dropped[0])
+                    self.assertIn('a stray timestamp', dropped[0])
+
+    def test_lone_half_minute_stamp_is_dropped(self):
+        """L287: a stamp at :30 s in 1MIN data halved the grid and entered the mean."""
+        fine = pd.date_range('2021-07-01 00:01', '2021-07-02 00:00', freq='1min')
+        stray = pd.Timestamp('2021-07-01 12:00:30')
+        index = fine.append(pd.DatetimeIndex([stray])).sort_values()
+        values = np.where(index == stray, 55.0, 10.0)
         holder = {}
-        warnings = _warnings(lambda: holder.setdefault('m', _screening(df)))
-        self.assertEqual(holder['m'].records_count(), 434)
+        warnings = _warnings(lambda: holder.setdefault('m', _screening(_series_detailed(index, values))))
+        m = holder['m']
+        self.assertEqual(m.data_detailed[FIELD].index.freqstr, 'min')
+        self.assertTrue(any('dropped' in w and str(stray) in w for w in warnings), warnings)
+        m.resample(to_freqstr='30min', agg='mean', mincounts_perc=.5)
+        self.assertEqual(m.resampled_detailed[FIELD][FIELD].loc['2021-07-01 12:30'], 10.0)
+
+
+class TestGridBound(unittest.TestCase):
+    """L285: kept runs of a fine resolution blew up the grid (4 records at 1 s in
+    two months of 10MIN data gave a 1 s grid with 2.68M rows per month)."""
+
+    def _build(self, index):
+        holder = {}
+        warnings = _warnings(lambda: holder.setdefault(
+            'm', _screening(_series_detailed(index, np.linspace(10, 20, len(index))))))
+        return holder['m'], warnings
+
+    def test_few_one_second_records_in_ten_minute_data(self):
+        coarse = pd.date_range('2024-01-01 00:10', '2024-01-08 00:00', freq='10min')
+        burst = pd.date_range('2024-01-04 12:00:01', periods=4, freq='1s')
+        m, warnings = self._build(coarse.union(burst))
+        dd = m.data_detailed[FIELD]
+        self.assertEqual(dd.index.freqstr, '10min')
+        self.assertEqual(len(dd), len(coarse))
+        self.assertEqual(m.records_count(), len(coarse))
+        dropped = [w for w in warnings if 'dropped 4 record(s) at time resolution 1s' in w]
+        self.assertEqual(len(dropped), 1, warnings)
+        self.assertIn(f'END {burst[0]} to {burst[-1]}', dropped[0])
+        self.assertIn('grid of 1s with', dropped[0])
+        self.assertIn('limit 20', dropped[0])
+
+    def test_long_odd_run_in_one_minute_data(self):
+        """15 records at 7 s are a run of 12+, kept by the run rule, but need a 1 s grid."""
+        fine = pd.date_range('2024-01-01 00:01', '2024-01-03 00:00', freq='1min')
+        odd = pd.date_range('2024-01-02 12:00:07', periods=15, freq='7s')
+        fine = fine[(fine < odd[0]) | (fine > odd[-1] + pd.Timedelta('1min'))]
+        m, warnings = self._build(fine.union(odd))
+        self.assertEqual(m.data_detailed[FIELD].index.freqstr, 'min')
+        self.assertNotIn('7s', m.resolutions())
+        dropped = [w for w in warnings if 'dropped 15 record(s) at time resolution 7s' in w]
+        self.assertEqual(len(dropped), 1, warnings)
+        self.assertIn('grid of 1s with 60 slots per record', dropped[0])
+
+    def test_three_one_minute_records_in_ten_minute_data_stay(self):
+        """Three finer records need a 1MIN grid with about 10 slots per record, within the limit."""
+        coarse = pd.date_range('2024-01-01 00:10', '2024-01-08 00:00', freq='10min')
+        fine = pd.date_range('2024-01-04 12:01', periods=3, freq='1min')
+        m, warnings = self._build(coarse.union(fine))
+        self.assertEqual(m.data_detailed[FIELD].index.freqstr, 'min')
+        self.assertEqual(m.records_count(), len(coarse) + 3)
         self.assertFalse(any('dropped' in w for w in warnings), warnings)
+
+    def test_genuine_mixed_data_are_unchanged(self):
+        cases = {
+            '10min then 1min': (('10min', '2D'), ('1min', '2D'), 'min'),
+            '1min then 10min': (('1min', '2D'), ('10min', '2D'), 'min'),
+            '10min then 15min': (('10min', '2D'), ('15min', '2D'), '5min'),
+        }
+        for name, ((f1, span1), (f2, span2), grid) in cases.items():
+            with self.subTest(name):
+                first = pd.date_range('2024-03-01', periods=int(pd.Timedelta(span1) / pd.Timedelta(f1)),
+                                      freq=f1) + pd.Timedelta(f1)
+                second = pd.date_range(first[-1] + pd.Timedelta(f2), periods=int(pd.Timedelta(span2) /
+                                                                               pd.Timedelta(f2)), freq=f2)
+                index = first.append(second)
+                m, warnings = self._build(index)
+                self.assertEqual(m.data_detailed[FIELD].index.freqstr, grid)
+                self.assertEqual(m.records_count(), len(index))
+                self.assertFalse(any('dropped' in w for w in warnings), warnings)
+
+    def test_slots_per_record_ignores_missing_records(self):
+        """Sparse data are no fine grid: the slots are counted over each record's own period."""
+        from diive.preprocessing.qaqc.meteoscreening import _slots_per_record
+        self.assertEqual(_slots_per_record({600 * 10 ** 9: 100}, 600 * 10 ** 9), 1.0)
+        self.assertEqual(_slots_per_record({600 * 10 ** 9: 4, 10 ** 9: 4}, 10 ** 9), 300.5)
 
 
 class TestOddSecondGrid(unittest.TestCase):
