@@ -43,6 +43,11 @@ from diive.preprocessing.qaqc.flags import MissingValues
 from diive.variables import daytime_nighttime_flag_from_swinpot
 
 
+def _perc(n, total):
+    """*n* as percentage of *total*, 0 if *total* is 0."""
+    return (n / total) * 100 if total > 0 else 0
+
+
 class FlagQCF:
     """Calculate overall quality flag (QCF) from individual test flags.
 
@@ -378,6 +383,29 @@ class FlagQCF:
             if prefix == "OVERALL" or len(frame) > 0:
                 self._flagstats(flag=frame[col], prefix=prefix, indent="  |  ")
 
+    def _test_flagcols(self) -> list:
+        """Names of the individual test flags (FLAG_*_TEST) in ``flags``, in chain order."""
+        return [c for c in identify_flagcols(df=self.flags, seriescol=self.series_name)
+                if str(c).startswith('FLAG_') and str(c).endswith('_TEST')]
+
+    def _measured_flags(self, test_cols: list) -> DataFrame:
+        """Flags *test_cols* of the measured records (a record with a target value)."""
+        ix_measured = self.df[self.series_name].notna() & self._is_record
+        return self.flags[test_cols][ix_measured].copy()
+
+    def _progressive_qcf(self, flags: DataFrame, test_cols: list) -> list:
+        """QCF after each test, with all tests up to it applied, one Series per test.
+
+        The day/night accept thresholds apply as in the final QCF.
+        """
+        qcf = []
+        for k in range(1, len(test_cols) + 1):
+            prog = flags[test_cols[:k]].copy()
+            prog = self._calculate_flagsums(df=prog)
+            prog = self._calculate_flag_qcf(df=prog)
+            qcf.append(prog[self.flagqcfcol])
+        return qcf
+
     def report_qcf_evolution(self):
         """Print how QCF evolves as tests are applied sequentially.
 
@@ -396,12 +424,8 @@ class FlagQCF:
         _console.print(f"Shows how QCF flag distribution changes as tests are applied sequentially")
         _console.print(f"Target variable: {self.series_name}\n")
 
-        flagcols = identify_flagcols(df=self.flags, seriescol=self.series_name)
-        flagcols = [c for c in flagcols if str(c).startswith('FLAG_') and (str(c).endswith('_TEST'))]
-        allflags_df = self.flags[flagcols].copy()
-
-        ix_missing_vals = self.df[self.series_name].isnull() | ~self._is_record
-        allflags_df = allflags_df[~ix_missing_vals].copy()  # Ignore missing values
+        flagcols = self._test_flagcols()
+        allflags_df = self._measured_flags(flagcols)
 
         n_vals = len(allflags_df)
         _console.print(f"Measured records (excluding missing): {n_vals}\n")
@@ -415,24 +439,18 @@ class FlagQCF:
         _console.print(f"{'':5} {'':38} {'':8} {'(count)':<12} {'(count)':<12} {'':9} {'':9} {'0/1/2':<15}")
         _console.print(f"{'-' * 120}")
 
-        for ix_test, test_col in enumerate(flagcols, 1):
-            prog_testcols = flagcols[:ix_test]
-            prog_df = allflags_df[prog_testcols].copy()
-
-            # Calculate QCF with tests so far
-            prog_df = self._calculate_flagsums(df=prog_df)
-            prog_df = self._calculate_flag_qcf(df=prog_df)
-
+        prog_qcf = self._progressive_qcf(allflags_df, flagcols)
+        for ix_test, (test_col, qcf) in enumerate(zip(flagcols, prog_qcf), 1):
             # Count QCF distribution
-            n_flag0 = (prog_df[self.flagqcfcol] == 0).sum()
-            n_flag1 = (prog_df[self.flagqcfcol] == 1).sum()
-            n_flag2 = (prog_df[self.flagqcfcol] == 2).sum()
+            n_flag0 = (qcf == 0).sum()
+            n_flag1 = (qcf == 1).sum()
+            n_flag2 = (qcf == 2).sum()
 
             # Available (pass) vs Rejected records
             n_available = n_flag0 + n_flag1
             n_rejected = n_flag2
-            perc_available = (n_available / n_vals) * 100 if n_vals > 0 else 0
-            perc_rejected = (n_rejected / n_vals) * 100 if n_vals > 0 else 0
+            perc_available = _perc(n_available, n_vals)
+            perc_rejected = _perc(n_rejected, n_vals)
 
             # New rejections from this test
             n_new_rejected = n_flag2 - n_flag2_prev
@@ -467,10 +485,7 @@ class FlagQCF:
               - text: the same numbers formatted as fixed-width tables (one
                 section per period), ready to drop into a report.
         """
-        test_cols = [c for c in identify_flagcols(df=self.flags, seriescol=self.series_name)
-                     if str(c).startswith('FLAG_') and str(c).endswith('_TEST')]
-        target = self.df[self.series_name]
-        ix_measured = target.notna() & self._is_record
+        test_cols = self._test_flagcols()
 
         periods = [("OVERALL", self._is_record)]
         if isinstance(self.daytime, Series):
@@ -478,16 +493,7 @@ class FlagQCF:
         if isinstance(self.nighttime, Series):
             periods.append(("NIGHTTIME", (self.nighttime == 1) & self._is_record))
 
-        # Cumulative QCF after each test prefix (measured records only), mirroring
-        # report_qcf_evolution so day/night accept thresholds are honoured.
-        prog_qcf = []
-        if test_cols:
-            allflags = self.flags[test_cols][ix_measured].copy()
-            for k in range(1, len(test_cols) + 1):
-                prog = allflags[test_cols[:k]].copy()
-                prog = self._calculate_flagsums(df=prog)
-                prog = self._calculate_flag_qcf(df=prog)
-                prog_qcf.append(prog[self.flagqcfcol])
+        prog_qcf = self._progressive_qcf(self._measured_flags(test_cols), test_cols)
 
         rows = []
         for period_name, mask in periods:
@@ -577,17 +583,11 @@ class FlagQCF:
         n_warn = flagcounts.get(1, 0)
         n_fail = flagcounts.get(2, 0)
 
-        # Calculate percentages
-        perc_pass = (n_pass / n_values) * 100 if n_values > 0 else 0
-        perc_warn = (n_warn / n_values) * 100 if n_values > 0 else 0
-        perc_fail = (n_fail / n_values) * 100 if n_values > 0 else 0
-        perc_miss = (flagmissing / n_values) * 100 if n_values > 0 else 0
-
         # Format as table row with better spacing
-        pass_str = f"{n_pass:>5} ({perc_pass:>5.1f}%)"
-        warn_str = f"{n_warn:>5} ({perc_warn:>5.1f}%)"
-        fail_str = f"{n_fail:>5} ({perc_fail:>5.1f}%)"
-        miss_str = f"{flagmissing:>4} ({perc_miss:>5.1f}%)"
+        pass_str = f"{n_pass:>5} ({_perc(n_pass, n_values):>5.1f}%)"
+        warn_str = f"{n_warn:>5} ({_perc(n_warn, n_values):>5.1f}%)"
+        fail_str = f"{n_fail:>5} ({_perc(n_fail, n_values):>5.1f}%)"
+        miss_str = f"{flagmissing:>4} ({_perc(flagmissing, n_values):>5.1f}%)"
 
         _console.print(f"{indent}{prefix:<15} | {pass_str:<15} | {warn_str:<15} | {fail_str:<15} | {miss_str:<12}")
 
@@ -631,10 +631,10 @@ class FlagQCF:
         n_available = len(seriesqcf.dropna())
         n_rejected = n_measured - n_available
 
-        perc_measured = (n_measured / n_potential) * 100
-        perc_missed = (n_missed / n_potential) * 100
-        perc_available = (n_available / n_measured) * 100 if n_measured > 0 else 0
-        perc_rejected = (n_rejected / n_measured) * 100 if n_measured > 0 else 0
+        perc_measured = _perc(n_measured, n_potential)
+        perc_missed = _perc(n_missed, n_potential)
+        perc_available = _perc(n_available, n_measured)
+        perc_rejected = _perc(n_rejected, n_measured)
 
         _console.print(f"\n[2] DATA AVAILABILITY STAGES")
         _console.print(f"    Potential records (all time slots): {n_potential}")
@@ -653,23 +653,17 @@ class FlagQCF:
         n_qcf1 = (measured_qcf == 1).sum()
         n_qcf2 = (measured_qcf == 2).sum()
 
-        perc_qcf0 = (n_qcf0 / n_measured * 100) if n_measured > 0 else 0
-        perc_qcf1 = (n_qcf1 / n_measured * 100) if n_measured > 0 else 0
-        perc_qcf2 = (n_qcf2 / n_measured * 100) if n_measured > 0 else 0
-
         _console.print(f"\n[3] QCF FLAG DISTRIBUTION (for measured records)")
-        _console.print(f"    QCF=0 (Good quality):     {n_qcf0:>4} ({perc_qcf0:>6.2f}%) - All tests pass")
-        _console.print(f"    QCF=1 (Marginal quality): {n_qcf1:>4} ({perc_qcf1:>6.2f}%) - Minor quality issues")
-        _console.print(f"    QCF=2 (Poor quality):     {n_qcf2:>4} ({perc_qcf2:>6.2f}%) - Critical issues or too many warnings")
+        _console.print(f"    QCF=0 (Good quality):     {n_qcf0:>4} ({_perc(n_qcf0, n_measured):>6.2f}%) - All tests pass")
+        _console.print(f"    QCF=1 (Marginal quality): {n_qcf1:>4} ({_perc(n_qcf1, n_measured):>6.2f}%) - Minor quality issues")
+        _console.print(f"    QCF=2 (Poor quality):     {n_qcf2:>4} ({_perc(n_qcf2, n_measured):>6.2f}%) - Critical issues or too many warnings")
 
         # === DATA LOSS ANALYSIS ===
-        data_loss_perc = (n_rejected / n_measured * 100) if n_measured > 0 else 0
-
         _console.print(f"\n[4] DATA LOSS ANALYSIS")
         _console.print(f"    Records retained after QC: {n_available}/{n_measured} ({perc_available:.2f}%)")
-        _console.print(f"    Data loss from QC:         {n_rejected}/{n_measured} ({data_loss_perc:.2f}%)")
+        _console.print(f"    Data loss from QC:         {n_rejected}/{n_measured} ({perc_rejected:.2f}%)")
         _console.print(
-            f"    Final data coverage:       {n_available}/{n_potential} ({(n_available / n_potential) * 100:.2f}% of potential)")
+            f"    Final data coverage:       {n_available}/{n_potential} ({_perc(n_available, n_potential):.2f}% of potential)")
 
         _console.print(f"\n{'=' * 70}\n")
 

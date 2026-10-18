@@ -172,22 +172,38 @@ _WINDOW_MEAN_CACHE_MIN_RECORDS = 1000
 _WINDOW_MEAN_CACHE_LOCK = threading.Lock()
 
 
+def _key_part(value) -> tuple:
+    """Hashable cache key part for one argument, with its type.
+
+    A numpy array (e.g. a 0-d latitude) is not hashable, so its dtype, shape and
+    bytes stand in for it.
+    """
+    if isinstance(value, np.ndarray):
+        return np.ndarray, value.dtype.str, value.shape, value.tobytes()
+    return type(value), value
+
+
 def _cached_window_mean(timestamp_index: DatetimeIndex, lat: float, lon: float,
                         utc_offset: int, period_min: int) -> np.ndarray:
     """`_oneflux_window_mean` with a cache, returns a copy the caller may change.
 
     The key holds the dtype of the timestamps (unit and time zone), their number,
     a hash of their int64 values, and each argument with its type, because a
-    float32 latitude gives different numerics than a float64 one. The lock keeps
-    the cache consistent when GUI worker threads call it at the same time. Two
-    threads may still compute the same entry, which gives the same result.
+    float32 latitude gives different numerics than a float64 one. Arguments that
+    cannot be hashed skip the cache. The lock keeps the cache consistent when GUI
+    worker threads call it at the same time. Two threads may still compute the
+    same entry, which gives the same result.
     """
     if len(timestamp_index) < _WINDOW_MEAN_CACHE_MIN_RECORDS:
         return _oneflux_window_mean(timestamp_index, lat, lon, utc_offset, period_min)
     values = np.ascontiguousarray(timestamp_index.asi8)
     key = (str(timestamp_index.dtype), len(values),
            hashlib.blake2b(values.tobytes(), digest_size=16).digest(),
-           lat, type(lat), lon, type(lon), utc_offset, type(utc_offset), period_min)
+           _key_part(lat), _key_part(lon), _key_part(utc_offset), period_min)
+    try:
+        hash(key)
+    except TypeError:
+        return _oneflux_window_mean(timestamp_index, lat, lon, utc_offset, period_min)
     with _WINDOW_MEAN_CACHE_LOCK:
         result = _WINDOW_MEAN_CACHE.get(key)
         if result is not None:

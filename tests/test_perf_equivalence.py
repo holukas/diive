@@ -205,6 +205,24 @@ class TestPotradCache(unittest.TestCase):
         again = potrad(base, lat=self.LAT, lon=self.LON, utc_offset=self.OFF).to_numpy()
         np.testing.assert_array_equal(again, results[0])
 
+    def test_numpy_and_int_arguments(self):
+        # L290: a 0-d array raised "unhashable type" for indexes of 1000+ records
+        idx = self._idx()
+        inputs = [
+            (np.array(self.LAT), np.array(self.LON), np.array(self.OFF)),
+            (np.array(self.LAT, dtype=np.float32), self.LON, self.OFF),
+            (np.float32(self.LAT), np.float32(self.LON), self.OFF),
+            (np.float64(self.LAT), np.float64(self.LON), np.int64(self.OFF)),
+            (47, 8, self.OFF),
+            (47.0, 8.0, self.OFF),
+        ]
+        for lat, lon, off in inputs:
+            with self.subTest(lat=type(lat), lon=type(lon), off=type(off)):
+                expected = self._uncached(idx, lat, lon, off)
+                for _ in range(2):  # the second call reads the cache
+                    got = potrad(idx, lat=lat, lon=lon, utc_offset=off).to_numpy()
+                    np.testing.assert_array_equal(got, expected)
+
     def test_short_index_not_cached(self):
         idx = self._idx(periods=10)
         got = potrad(idx, lat=self.LAT, lon=self.LON, utc_offset=self.OFF).to_numpy()
