@@ -13,7 +13,8 @@ parameter *meanings* are the library's (`StepwiseOutlierDetection`); detection
 itself runs in the library. The day/night split needs no coordinates here — the
 tab gives the detector the site coordinates (the Meteo screening tab applies them
 at run time), so a step only carries ``separate_day_night`` (plus per-period
-thresholds where the method has them).
+thresholds where the method has them). A new Hampel step has the split on when
+the project site is configured (``site.manager.configured``), off otherwise.
 
 Add a method = add a ``_StepParams`` subclass and list it in ``STEP_METHODS``.
 
@@ -29,6 +30,8 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QWidget,
 )
+
+from diive.gui import site
 
 
 def _fspin(default: float, lo: float, hi: float, step: float = 0.5,
@@ -117,6 +120,12 @@ class HampelParams(_StepParams):
         self.diff_cb.setChecked(True)
         form.addRow(self.diff_cb)
         self.dn_cb = QCheckBox("Separate daytime / nighttime")
+        self.dn_cb.setToolTip(
+            "Each period gets its own median, MAD and threshold, computed in the "
+            "same window from its own records only. This keeps daytime radiation: "
+            "with one shared MAD the quiet night makes the band far too narrow for "
+            "the day. On by default when the site coordinates are set in Project "
+            "settings, off without them (day and night would come from (0, 0)).")
         form.addRow(self.dn_cb)
         self.n_sigma_dt = _fspin(5.5, 0.1, 50.0)
         self.n_sigma_dt.setToolTip("Threshold (n sigma) for daytime records.")
@@ -127,6 +136,8 @@ class HampelParams(_StepParams):
         self.n_sigma_dt.setEnabled(False)
         self.n_sigma_nt.setEnabled(False)
         self.dn_cb.toggled.connect(self._toggle_dn)
+        # Only the default for a new step: load() sets a saved step's own value.
+        self.dn_cb.setChecked(site.manager.configured)
         self._add_repeat(form)
 
     def _toggle_dn(self, on: bool) -> None:

@@ -821,7 +821,12 @@ is shown so the plots stay large:
   **＋ Add step** opens the method picker (Hampel, Local SD, the z-score family,
   Local outlier factor, Absolute limits, Missing values). The **Run outliers** button below the
   list applies the chain. Editing a step does *not* update the preview until you
-  run (a `•` on the button marks unapplied edits).
+  run (a `•` on the button marks unapplied edits). A new **Hampel** step has
+  **Separate daytime / nighttime** on when the site coordinates are set in
+  **Settings ▸ Project settings**, off without them. With the split each period
+  gets its own median, MAD and threshold, which keeps daytime radiation. Saved
+  steps keep their own setting. The same default applies to Hampel steps in the
+  Meteo screening tab and the flux chain's Level 3.2.
 - **Corrections.** High-resolution corrections applied to the QCF-filtered series
   (nighttime zero-offset, relative-humidity offset, set-to-min/max, set-to-value,
   set-exact-to-missing). The **Measurement** dropdown (auto-detected from the
@@ -1557,7 +1562,12 @@ the corrections and resamples it.
   all records are kept.
 - **Window sizes are record counts.** The Hampel default of 624 records is 13 days
   only at 30-minute resolution. On 10-minute data 13 days are 1872 records, on
-  1-minute data 18720. Day/night separation is off by default for every test.
+  1-minute data 18720. Day/night separation is on by default for a new Hampel
+  step when the site coordinates are set, and off for the other tests.
+- **Set to value takes END timestamps**, in the timezone of the download. The
+  plot shows each record at its middle: the 10-minute record ending 10:10 is
+  drawn at 10:05, so type 10:10. A date that matches no record changes nothing,
+  and the status line says so after **Run corrections**.
 - **Status warnings.** Latitude, longitude and UTC offset come from **Settings ▸
   Project settings** and apply to the next run; results computed with old values
   are cleared. The status line warns when the UTC offset is **not set** (UTC+00:00
@@ -1573,13 +1583,18 @@ the corrections and resamples it.
   of each target period the kept records must cover, else the value is missing.
   For a mean the minimum is rounded down to whole records, and if that leaves
   fewer than three, one record is enough: 10-minute data resampled to 30 minutes
-  need one record per half-hour.
-- **Add resampled to dataset** appends the screened, resampled column. Its
+  need one record per half-hour. A typed resolution applies once you stop typing.
+- **Add resampled to dataset** appends the screened, resampled column. It is
+  enabled after a run, also after **Run outliers** without an active step: a
+  variable that looks fine and needs no outlier removal is screened too. Its
   timestamps are converted to your dataset's **middle-of-period** convention so it
   aligns on merge, it is **renamed with a suffix** if the name already exists, and
   it is **refused with an explanation** if its time range doesn't overlap your
   dataset. The new column's history records the database origin and **all its
-  tags** (and the timezone it was downloaded in).
+  tags** (and the timezone it was downloaded in). Its data-version tag is the
+  processed version (`meteoscreening_diive`), not the download's.
+- **Copy Python** also works with corrections alone. The script uses the UTC
+  offset the field was downloaded in, the offset of its start and stop dates.
 
 ---
 

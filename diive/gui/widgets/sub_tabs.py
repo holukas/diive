@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from diive.gui import theme
+from diive.gui.widgets.weak_slot import weak_slot
 
 
 class _CornerSeparator(QWidget):
@@ -91,7 +92,9 @@ class SubTabs(QWidget):
         b = QPushButton(label)
         b.setCheckable(True)
         b.setCursor(Qt.PointingHandCursor)
-        b.clicked.connect(lambda _c=False, i=idx: self.set_page(i))
+        # weak_slot, not a lambda: a lambda capturing self on a child's signal
+        # makes a cycle Python's collector cannot see (CLAUDE.md).
+        b.clicked.connect(weak_slot(self.set_page, idx))
         self._buttons.append(b)
         # Insert before the trailing stretch so pills stay left-aligned.
         self._segrow.insertWidget(self._segrow.count() - 1, b)

@@ -92,9 +92,10 @@ class _CorrectionRow(QWidget):
     changed = Signal()
 
     def __init__(self, key: str, coords_available: bool,
-                 parent: QWidget | None = None) -> None:
+                 parent: QWidget | None = None, end_dates: bool = False) -> None:
         super().__init__(parent)
         self.key = key
+        self._end_dates = end_dates
         spec = correction_spec(key)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(2, 5, 2, 5)
@@ -102,7 +103,7 @@ class _CorrectionRow(QWidget):
 
         self.enable = QCheckBox(spec.label if spec else key)
         self.enable.setStyleSheet("font-weight: bold;")
-        self.enable.toggled.connect(lambda *_: self.changed.emit())
+        self.enable.toggled.connect(self._emit_changed)
         outer.addWidget(self.enable)
 
         # Parameters go on their own indented line(s) below the label so the
@@ -126,6 +127,11 @@ class _CorrectionRow(QWidget):
         self.desc.setStyleSheet("color: #6B7780; font-size: 11px;")
         outer.addWidget(self.desc)
 
+    def _emit_changed(self, *_) -> None:
+        # Bound method, not a lambda: a lambda capturing self on a child's
+        # signal makes a cycle Python's collector cannot see (CLAUDE.md).
+        self.changed.emit()
+
     def _param_row(self, outer: QVBoxLayout, label_text: str, field: QWidget) -> None:
         """Add one indented ``label: field`` parameter line that stretches to the
         pane width (no fixed minimum, so it can't overflow the inspector)."""
@@ -143,7 +149,7 @@ class _CorrectionRow(QWidget):
             self.clamp.setToolTip(
                 "Set remaining negatives (daytime included) to zero after the "
                 "offset is removed and the night is zeroed. Uncheck to keep them.")
-            self.clamp.toggled.connect(lambda *_: self.changed.emit())
+            self.clamp.toggled.connect(self._emit_changed)
             h = QHBoxLayout()
             h.setContentsMargins(22, 0, 0, 0)
             h.addWidget(self.clamp)
@@ -152,24 +158,30 @@ class _CorrectionRow(QWidget):
         if key in (CORR_SETTO_MAX, CORR_SETTO_MIN):
             self.threshold = _value_spin()
             self.threshold.setValue(30.0 if key == CORR_SETTO_MAX else -5.0)
-            self.threshold.valueChanged.connect(lambda *_: self.changed.emit())
+            self.threshold.valueChanged.connect(self._emit_changed)
             self._param_row(outer, "threshold:", self.threshold)
         elif key == CORR_SETTO_VALUE:
             self.dates = QLineEdit()
-            self.dates.setPlaceholderText("2022-04-01..2022-04-05; ...")
-            self.dates.setToolTip(
-                "Date ranges separated by ';'. A range uses '..' "
-                "(start..end, both inclusive); a single timestamp stands alone.")
-            self.dates.textChanged.connect(lambda *_: self.changed.emit())
+            tip = ("Date ranges separated by ';'. A range uses '..' "
+                   "(start..end, both inclusive), a single timestamp stands alone.")
+            if self._end_dates:
+                self.dates.setPlaceholderText("END times: 2022-04-01 10:10..2022-04-05; ...")
+                tip += (" Timestamps are record END times in the download's time "
+                        "zone. The plot shows each record at its middle: the "
+                        "10-min record ending 10:10 is drawn at 10:05, so type 10:10.")
+            else:
+                self.dates.setPlaceholderText("2022-04-01..2022-04-05; ...")
+            self.dates.setToolTip(tip)
+            self.dates.textChanged.connect(self._emit_changed)
             self._param_row(outer, "dates:", self.dates)
             self.value = _value_spin()
-            self.value.valueChanged.connect(lambda *_: self.changed.emit())
+            self.value.valueChanged.connect(self._emit_changed)
             self._param_row(outer, "value:", self.value)
         elif key == CORR_SET_EXACT_TO_MISSING:
             self.values = QLineEdit()
             self.values.setPlaceholderText("0, -9999")
             self.values.setToolTip("Comma-separated values set to missing (NaN).")
-            self.values.textChanged.connect(lambda *_: self.changed.emit())
+            self.values.textChanged.connect(self._emit_changed)
             self._param_row(outer, "values:", self.values)
 
     def is_enabled(self) -> bool:
@@ -234,8 +246,11 @@ class CorrectionsPanel(QWidget):
 
     changed = Signal()
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, end_dates: bool = False) -> None:
+        """*end_dates*: the host's set-to-value dates are record END timestamps
+        (the Meteo screening tab), so the date field says so."""
         super().__init__(parent)
+        self._end_dates = end_dates
         self._measurement: str | None = None
         self._coords_available = False
         self._rows: dict[str, _CorrectionRow] = {}
@@ -283,7 +298,8 @@ class CorrectionsPanel(QWidget):
                 "Corrections applicable to this measurement, applied in order "
                 "to the QCF-filtered series.")
         for key in keys:
-            row = _CorrectionRow(key, self._coords_available, self)
+            row = _CorrectionRow(key, self._coords_available, self,
+                                 end_dates=self._end_dates)
             if key in self._saved:
                 row.set_state(self._saved[key])
             row.changed.connect(self.changed.emit)

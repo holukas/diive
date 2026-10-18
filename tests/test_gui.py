@@ -2442,9 +2442,10 @@ def test_meteo_screening_follows_site_coordinates(app):
 
 
 def test_meteo_screening_uses_project_utc_offset(app):
-    """The screening, Copy Python and the state use the project's UTC offset;
-    while it is not set, 0 is used and the status line warns. A saved offset
-    from an older project is ignored on restore."""
+    """The screening and the state use the project's UTC offset. While it is
+    not set, 0 is used and the status line warns. Copy Python uses the offset
+    the data were downloaded in. A saved offset from an older project is
+    ignored on restore."""
     from diive.gui import site
     from diive.gui.tabs.meteo_screening import MeteoScreeningTab
     from diive.gui.widgets.project_offset import NOT_SET_WARNING
@@ -2469,7 +2470,9 @@ def test_meteo_screening_uses_project_utc_offset(app):
         _run_meteo_chain(tab, tab._steps)
         assert tab._payload["mscr"].utc_offset == 0
         assert NOT_SET_WARNING in tab.status.text()
-        assert "utc_offset=0," in tab._code_provider()
+        # Copy Python keeps the offset the data were downloaded in (UTC+1), so
+        # its download window and timestamps match the data (L273).
+        assert "utc_offset=1," in tab._code_provider()
     finally:
         site.manager.update(name="X", latitude=47.29, longitude=7.73, elevation=0.0,
                             utc_offset=1)

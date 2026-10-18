@@ -30,12 +30,15 @@ the plain screening tab, all via the base's seams:
   in the project's UTC offset too, so the staged timestamps match it. While the
   offset is not set, the status line says so (0 is used).
 - **Copy Python**: ``meteoscreening_to_code`` renders a ``StepwiseMeteoScreeningDb``
-  script (download, steps, QCF, corrections, resampling).
+  script (download, steps, QCF, corrections, resampling), also for corrections
+  alone. It uses the UTC offset the data were downloaded in, the offset of the
+  download's start/stop.
 - **Extra inspector page**: ``Resample`` (target resolution + aggregation + min counts).
 - **Emit**: ``resample()`` to the target resolution (TIMESTAMP_END), converted
   END -> MIDDLE (so it aligns onto diive's TIMESTAMP_MIDDLE index), with a
   collision rename, an overlap guard, and the InfluxDB origin + all db tags in
-  the variable's history.
+  the variable's history. Add is enabled after any run, also Run outliers
+  without steps (a variable that needs no outlier removal is still screened).
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -56,8 +59,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from rich.text import Text
+
 from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
 from diive.core.times.times import DetectFrequency, convert_series_timestamp_to_middle
+from diive.core.utils.console import add_console_sink, remove_console_sink
 from diive.gui import db, site
 from diive.gui.tabs._screening_base import ScreeningTabBase
 from diive.gui.widgets.project_offset import (
@@ -66,6 +72,7 @@ from diive.gui.widgets.project_offset import (
     project_utc_offset,
     project_utc_offset_is_set,
 )
+from diive.gui.widgets.debounce import Debouncer
 from diive.gui.widgets.worker import LatestRunner
 from diive.preprocessing.qaqc.codegen import meteoscreening_to_code
 from diive.preprocessing.qaqc.meteoscreening import StepwiseMeteoScreeningDb
@@ -74,6 +81,29 @@ from diive.qaqc import detect_measurement
 _C_MUTED = "#6B7780"
 #: Common target resolutions offered in the resample picker (editable).
 _FREQS = ["30min", "10min", "15min", "1h"]
+#: Status-line prefix of the library warnings from the last correction.
+_NOTES_PREFIX = "  Corrections: "
+
+
+class _WarningCollector:
+    """Console sink keeping the library's warning lines (``warn`` prints them
+    as '! ...'), so the tab can show them in its status line."""
+
+    def __init__(self) -> None:
+        self.lines: list[str] = []
+
+    def print(self, *args, **_kwargs) -> None:
+        for arg in args:
+            if isinstance(arg, str):
+                plain = Text.from_markup(arg).plain.strip()
+                if plain.startswith("!"):
+                    self.lines.append(plain.lstrip("! ").strip())
+
+    def log(self, *_args, **_kwargs) -> None:
+        return
+
+    def rule(self, *_args, **_kwargs) -> None:
+        return
 
 
 def _load_screening(frame, field: str, site_name: str, coords: dict) -> dict:
@@ -97,6 +127,7 @@ class MeteoScreeningTab(ScreeningTabBase):
     title = "Meteo screening (database)"
     add_button_label = "Add resampled to dataset"
     provenance_op = "Imported from InfluxDB & screened"
+    _correction_dates_are_end = True
 
     def build(self) -> QWidget:
         # DB-specific state (the base is otherwise self._df / self._var-centric).
@@ -114,6 +145,10 @@ class MeteoScreeningTab(ScreeningTabBase):
         self._loading_field: str | None = None
         self._site_name: str = ""       # site name the class is built with
         self._db_range: tuple | None = None  # download (start, stop) for Copy Python
+        # A run (outliers or corrections) happened since the variable was shown:
+        # only then do resample edits rebuild the result and enable Add.
+        self._ran = False
+        self._correction_notes: list[str] = []  # library warnings of the last correction
         # Coordinates the current results were computed with (see _on_site_changed).
         self._site_coords: dict = self._coords()
         # Builds the library class off the GUI thread; the newest download wins.
@@ -159,8 +194,11 @@ class MeteoScreeningTab(ScreeningTabBase):
         f.addRow("Resolution", self._freq)
         f.addRow("Aggregation", self._agg)
         f.addRow("Min. records (frac)", self._mincounts)
-        for w in (self._freq, self._agg):
-            w.currentTextChanged.connect(self._on_resample_changed)
+        # The resolution is typed: resample once the text has settled, not on
+        # every keystroke ('1h' would try '1' first).
+        self._freq_debounce = Debouncer(self._freq, self._on_resample_changed)
+        self._freq.currentTextChanged.connect(self._freq_debounce.trigger)
+        self._agg.currentTextChanged.connect(self._on_resample_changed)
         self._mincounts.valueChanged.connect(self._on_resample_changed)
         v.addWidget(box)
         hint = QLabel(
@@ -232,8 +270,11 @@ class MeteoScreeningTab(ScreeningTabBase):
             f"Source: {src}  ·  dataset target: {tgt}  {verdict}{self._agg_hint()}")
 
     def _on_resample_changed(self, *_) -> None:
-        """Resample settings changed: refresh the info + rebuild the column."""
+        """Resample settings changed: refresh the info, and rebuild the column
+        when a run has made one (before any run there is nothing to add)."""
         self._update_resample_info()
+        if not self._ran:
+            return
         self._build_result()
         self.add_btn.setEnabled(self._result_df is not None and not self._result_df.empty)
 
@@ -266,6 +307,8 @@ class MeteoScreeningTab(ScreeningTabBase):
         """Forget the loaded field and everything computed from it, so a new or
         failed download never shows the previous field's data."""
         self._run_id += 1  # a chain run still in flight belongs to the old field
+        self._freq_debounce.cancel()
+        self._ran = False
         self._mscr = self._mscr_work = None
         self._df = None
         self._var = None
@@ -283,10 +326,19 @@ class MeteoScreeningTab(ScreeningTabBase):
         self.report_text.clear()
         self.report_copy_btn.setEnabled(False)
         self.add_btn.setEnabled(False)
+        self.add_btn.setText(self.add_button_label)
         self.copy_btn.setEnabled(False)
         self._rebuild_cards()
         self._refresh_preview()
         self._update_resample_info()
+
+    def _show_variable(self, name: str, *, redetect_measurement: bool) -> None:
+        # The run is cleared: a resample edit still pending must not bring the
+        # cleared result back.
+        self._freq_debounce.cancel()
+        self._ran = False
+        super()._show_variable(name, redetect_measurement=redetect_measurement)
+        self.add_btn.setText(self.add_button_label)
 
     def _on_loaded(self, res: dict) -> None:
         field = res["field"]
@@ -433,6 +485,10 @@ class MeteoScreeningTab(ScreeningTabBase):
         if mscr is None or self._var is None:
             return None
         self._apply_coords(mscr, self._coords())
+        # The library warns on the console about set-to-value dates that match
+        # no record END: show those warnings in the status line too.
+        collector = _WarningCollector()
+        add_console_sink(collector)
         try:
             mscr.set_corrections(corrs)
         except Exception:
@@ -440,9 +496,24 @@ class MeteoScreeningTab(ScreeningTabBase):
             # base does, not a partly corrected one.
             mscr.set_corrections([])
             raise
+        finally:
+            remove_console_sink(collector)
+            self._correction_notes = list(dict.fromkeys(collector.lines))
         if not corrs:
             return None
         return mscr.series_hires_cleaned[self._var]
+
+    def _apply_corrections_state(self) -> None:
+        # Every run (outliers, corrections, or Run outliers without steps) ends
+        # here: from now on resample edits rebuild the result.
+        self._ran = True
+        self._correction_notes = []
+        super()._apply_corrections_state()
+        # Replace the previous run's notes rather than piling them up.
+        text = self.status.text().split(_NOTES_PREFIX)[0]
+        if self._correction_notes:
+            text += _NOTES_PREFIX + " ".join(self._correction_notes)
+        self.status.setText(text)
 
     def _raw_series(self):
         if self._mscr is None or self._var is None:
@@ -468,7 +539,8 @@ class MeteoScreeningTab(ScreeningTabBase):
     # --- Copy Python: the library renders the StepwiseMeteoScreeningDb script ---
     def _code_provider(self) -> str | None:
         enabled = self._enabled_steps()
-        if not enabled or self._mscr is None or self._var is None:
+        corrections = self.corrections_panel.corrections()
+        if not (enabled or corrections) or self._mscr is None or self._var is None:
             return None
         download = None
         if self._db_meta.get("bucket") and self._db_range:
@@ -477,9 +549,14 @@ class MeteoScreeningTab(ScreeningTabBase):
                         "data_version": self._db_meta.get("data_version"),
                         "start": self._db_range[0], "stop": self._db_range[1],
                         "dirconf": db.manager.dirconf or None}
+        # start/stop are in the offset the data were downloaded in, and the
+        # script's download and class must use that same offset.
+        coords = self._coords()
+        if self._utc_offset is not None:
+            coords["utc_offset"] = self._utc_offset
         return meteoscreening_to_code(
-            enabled, field=self._var, site=self._site_name, **self._coords(),
-            download=download, corrections=self.corrections_panel.corrections(),
+            enabled, field=self._var, site=self._site_name, **coords,
+            download=download, corrections=corrections,
             to_freqstr=self._freq.currentText().strip() or "30min",
             agg=self._agg.currentText(), mincounts_perc=self._mincounts.value())
 
@@ -499,6 +576,8 @@ class MeteoScreeningTab(ScreeningTabBase):
         except Exception as err:
             self.status.setText(f"Resampling failed: {err}")
             return None
+        if self.status.text().startswith("Resampling failed"):
+            self.status.setText(f"Resampled to {freq} ({self._agg.currentText()}).")
         resampled_end = mscr.resampled_detailed[field][field]
         if resampled_end.dropna().empty:
             return None
@@ -510,7 +589,12 @@ class MeteoScreeningTab(ScreeningTabBase):
 
         db_tags = self._tags.get(field, {})
         units = db_tags.get("units", "")
-        data_version = db_tags.get("data_version", "")
+        # The version resample() gives the processed data, not the download's.
+        data_version = mscr.tags.get(field, {}).get("data_version", "")
+        # A variable that looked fine and needed no outlier removal is screened
+        # too, so every result counts as screened.
+        corrected = self._corrected is not None
+        operation = self.provenance_op + (" & corrected" if corrected else "")
         history = {
             "source": "InfluxDB",
             "bucket": self._db_meta.get("bucket"),
@@ -521,14 +605,16 @@ class MeteoScreeningTab(ScreeningTabBase):
             "resample_freq": freq,
             "resample_agg": self._agg.currentText(),
             **db_tags,
+            "processed_data_version": data_version,
         }
-        pills = [t for t in ["from-database", "meteo-screened", units, data_version] if t]
+        pills = [t for t in ["from-database", "meteo-screened",
+                             "corrected" if corrected else "", units, data_version] if t]
         # Only the screened + corrected + resampled value goes into the dataset —
         # the QCF flag is deliberately not emitted here.
         out = pd.DataFrame({name: series_mid})
         out.attrs[ATTRS_KEY] = {
             name: provenance_attr(
-                origin=DERIVED, parent=None, operation=self.provenance_op,
+                origin=DERIVED, parent=None, operation=operation,
                 params=history, tags=pills),
         }
         return out
@@ -545,6 +631,8 @@ class MeteoScreeningTab(ScreeningTabBase):
 
     # --- add: overlap guard + meaningful status ---
     def _add_to_dataset(self) -> None:
+        # A resolution still being typed applies first.
+        self._freq_debounce.flush()
         if self._pending_guard():
             return
         if self._result_df is None or self._result_df.empty:

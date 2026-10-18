@@ -117,6 +117,11 @@ def window(app):
     from diive.gui import events as _events
     from diive.gui import site
     import diive
+    # Import the ML stack here, not first inside a tab method: shap keeps the
+    # traceback of an optional import that fails, and that traceback's frames
+    # would keep the tab alive after the window is deleted (its singleton slots
+    # then fire on deleted widgets in later test modules).
+    import diive.gapfilling  # noqa: F401
 
     example = dv.times.keep_daterange(
         dv.load_exampledata_parquet(), "2021-01-01", "2021-12-31 23:30")
@@ -289,6 +294,7 @@ def _run_chain(win, tab, steps):
 
 def _emitted(win, tab, agg, mincounts=MINCOUNTS, freq="30min"):
     tab._freq.setCurrentText(freq)
+    tab._freq_debounce.flush()  # a typed resolution applies once it settles
     tab._agg.setCurrentText(agg)
     tab._mincounts.setValue(mincounts)
     _settle(win, tab)
@@ -752,3 +758,279 @@ def test_absolute_limits_in_step_picker(app):
     params = inspect.signature(StepwiseMeteoScreeningDb.flag_outliers_abslim_test).parameters
     assert set(out["kwargs"]) <= set(params)
     w.deleteLater()
+
+
+# --- tests: Round 11 GUI findings (L256, L269-L273) ----------------------------------
+
+HAMPEL = "flag_outliers_hampel_test"
+
+
+def _restore_site():
+    from diive.gui import site
+    site.manager.update(name="CH-XYZ", latitude=LAT, longitude=LON, elevation=500.0,
+                        utc_offset=UTC)
+
+
+def _fresh_tab(win, raw, field=FIELD):
+    """Stage *raw* with no steps and no corrections."""
+    _disable_corrections(_meteo_tab(win))
+    tab = _stage(win, raw, field=field)
+    _disable_corrections(tab)
+    tab._steps = []
+    tab._apply_chain_change()
+    return tab
+
+
+def _pump(ms: int) -> None:
+    deadline = time.monotonic() + ms / 1000
+    while time.monotonic() < deadline:
+        QApplication.processEvents()
+        time.sleep(0.005)
+
+
+def test_hampel_daynight_default_follows_site(app):
+    """L256: a new Hampel step separates day and night when the site is set, in
+    every host of the shared widget; saved steps keep their own setting."""
+    from diive.gui import site
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.stepwise_cards import StepEditorDialog
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+
+    before = site.manager.as_dict()
+    try:
+        site.manager.configured = False
+        w = HampelParams()
+        kw = w.step()["kwargs"]
+        assert kw["separate_day_night"] is False and "n_sigma_daytime" not in kw
+        assert not w.n_sigma_dt.isEnabled()
+        assert "median, MAD and threshold" in w.dn_cb.toolTip()
+        w.deleteLater()
+
+        site.manager.configured = True
+        w = HampelParams()
+        kw = w.step()["kwargs"]
+        assert kw["separate_day_night"] is True
+        assert kw["n_sigma_daytime"] == kw["n_sigma_nighttime"] == kw["n_sigma"] == 5.5
+        assert w.n_sigma_dt.isEnabled() and w.n_sigma_nt.isEnabled()
+        w.deleteLater()
+
+        # Stepwise / Meteo screening: the step editor (Hampel is the first method).
+        dlg = StepEditorDialog(None)
+        assert dlg.method.currentData() == HAMPEL
+        assert dlg.step()["kwargs"]["separate_day_night"] is True
+        dlg.deleteLater()
+        # Editing a step saved with the split off keeps it off.
+        saved = {"method": HAMPEL, "kwargs": {"window_length": 624, "n_sigma": 5.5,
+                                              "use_differencing": True,
+                                              "separate_day_night": False, "repeat": True}}
+        dlg = StepEditorDialog(None, saved)
+        out = dlg.step()["kwargs"]
+        dlg.deleteLater()
+        assert out["separate_day_night"] is False and "n_sigma_daytime" not in out
+
+        # Flux chain L3.2: the parameter form uses the same default, and a saved
+        # chain is restored as saved.
+        flux = FluxChainTab()
+        flux.widget()
+        assert flux.l32_method.currentData() == HAMPEL
+        assert flux._l32_param_widget.dn_cb.isChecked()
+        flux.restore_state({"l32_steps": [saved]})
+        assert flux._steps == [saved]
+    finally:
+        site.manager.load_dict(before)
+
+
+def test_setto_value_end_dates_and_unmatched_warning(window, slot_exceptions):
+    """L269: set-to-value says its dates are END timestamps, and a date that
+    matches no record END shows the library warning in the status line."""
+    from diive.gui.widgets.corrections_panel import CorrectionsPanel
+
+    plain = CorrectionsPanel()  # the Stepwise screening tab: dates on its own index
+    assert "END" not in plain._rows["setto_value"].dates.placeholderText()
+    plain.deleteLater()
+
+    raw, _ = _download([("10min", "2D")])
+    tab = _fresh_tab(window, raw)
+    row = tab.corrections_panel._rows["setto_value"]
+    try:
+        assert row.dates.placeholderText().startswith("END")
+        assert "END" in row.dates.toolTip() and "10:05" in row.dates.toolTip()
+
+        # 10:05 is where the plot draws the record ending 10:10: no record END there.
+        row.dates.setText("2021-07-01 10:05")
+        row.value.setValue(-1.0)
+        row.enable.setChecked(True)
+        tab.run_corrections_btn.click()
+        _settle(window, tab)
+        status = tab.status.text()
+        assert "no record has its END timestamp" in status and "10:05" in status, status
+        assert not (tab._corrected == -1).any()
+
+        row.dates.setText("2021-07-01 10:10")
+        tab.run_corrections_btn.click()
+        _settle(window, tab)
+        assert "no record has its END timestamp" not in tab.status.text(), tab.status.text()
+        hit = tab._corrected == -1
+        assert list(_slot_ends(tab._corrected.index)[hit.to_numpy()]) == [
+            pd.Timestamp("2021-07-01 10:10")]
+    finally:
+        row.dates.setText("")
+        _disable_corrections(tab)
+
+
+def test_add_after_run_without_steps(window, slot_exceptions):
+    """L270: Add stays off before any run. After Run outliers without steps it is
+    on and the result counts as screened (no outlier removal was needed). The
+    data-version tag is the processed version, not the download's."""
+    from diive.core.metadata import ATTRS_KEY
+
+    raw, _ = _download([("10min", "2D")], abslim_spikes=["2021-07-01 03:00"])
+    tab = _fresh_tab(window, raw)
+    try:
+        tab._agg.setCurrentText("sum")
+        tab._agg.setCurrentText("mean")
+        assert tab._result_df is None and not tab.add_btn.isEnabled()
+
+        tab.run_outliers_btn.click()
+        _settle(window, tab)
+        assert tab.add_btn.isEnabled()
+        assert tab.add_btn.text() == "Add resampled to dataset"
+        out = tab._result_df
+        meta = out.attrs[ATTRS_KEY][FIELD]
+        assert meta["operation"] == "Imported from InfluxDB & screened"
+        assert "meteo-screened" in meta["tags"]
+        assert "meteoscreening_diive" in meta["tags"] and "raw" not in meta["tags"]
+        assert meta["params"]["data_version"] == "raw"  # the download's tag
+        assert meta["params"]["processed_data_version"] == "meteoscreening_diive"
+        assert out[FIELD].max() > 30  # the 80 degC spike is in the half-hour mean
+
+        before = set(window._full_data.columns)
+        tab.add_btn.click()
+        _settle(window, tab)
+        new = [c for c in window._full_data.columns if c not in before]
+        try:
+            assert len(new) == 1
+            assert "Not screened" not in tab.status.text(), tab.status.text()
+        finally:
+            if new:
+                window._full_data = window._full_data.drop(columns=new)
+                for c in new:
+                    window._created.discard(c)
+                window._apply_range()
+                _settle(window, tab)
+
+        _run_chain(window, tab, STEPS)
+        assert tab.add_btn.text() == "Add resampled to dataset"
+        meta = tab._result_df.attrs[ATTRS_KEY][FIELD]
+        assert meta["operation"] == "Imported from InfluxDB & screened"
+        assert "meteo-screened" in meta["tags"]
+        assert tab._result_df[FIELD].max() < 30
+    finally:
+        tab._steps = []
+        tab._apply_chain_change()
+
+
+def test_typed_resolution_is_debounced_and_clears_error(window, slot_exceptions, monkeypatch):
+    """L271: typing '1h' resamples once, after typing stops, and a failed value's
+    error leaves the status once a valid value resamples."""
+    from PySide6.QtTest import QTest
+    from diive.preprocessing.qaqc.meteoscreening import StepwiseMeteoScreeningDb
+
+    raw, _ = _download([("10min", "2D")])
+    tab = _fresh_tab(window, raw)
+    _run_chain(window, tab, STEPS)
+    calls = []
+    original = StepwiseMeteoScreeningDb.resample
+
+    def counting(self, *args, **kwargs):
+        calls.append(kwargs.get("to_freqstr"))
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(StepwiseMeteoScreeningDb, "resample", counting)
+    edit = tab._freq.lineEdit()
+    try:
+        edit.clear()
+        QTest.keyClicks(edit, "1h")
+        assert calls == [] or calls == ["1h"]  # nothing per keystroke
+        _pump(600)
+        assert calls == ["1h"], calls
+        assert tab._result_df.index.freqstr in ("h", "1h", "60min")
+
+        edit.setText("1")
+        tab._freq_debounce.flush()
+        assert tab.status.text().startswith("Resampling failed"), tab.status.text()
+        assert not tab.add_btn.isEnabled()
+        edit.setText("1h")
+        tab._freq_debounce.flush()
+        assert "Resampling failed" not in tab.status.text(), tab.status.text()
+        assert tab.add_btn.isEnabled()
+    finally:
+        edit.setText("30min")
+        tab._freq_debounce.flush()
+        tab._steps = []
+        tab._apply_chain_change()
+
+
+def test_child_signals_do_not_capture_self(app):
+    """L272: corrections rows and sub-tab pills work through bound methods, and
+    the widgets are collected once dropped (no lambda cycle keeps them)."""
+    import weakref
+    from PySide6.QtWidgets import QWidget
+    from diive.gui.widgets.corrections_panel import CorrectionsPanel
+    from diive.gui.widgets.sub_tabs import SubTabs
+
+    panel = CorrectionsPanel()
+    panel.set_measurement("SW")
+    seen = []
+    panel.changed.connect(lambda: seen.append(1))  # captures the list, not the panel
+    rows = panel._rows
+    rows["setto_max"].enable.setChecked(True)
+    rows["setto_max"].threshold.setValue(12.0)
+    rows["setto_value"].dates.setText("2021-07-01")
+    rows["setto_value"].value.setValue(3.0)
+    rows["set_exact_to_missing"].values.setText("0")
+    rows["radiation_zero_offset"].clamp.setChecked(False)
+    assert len(seen) == 6
+    assert {"key": "setto_max", "kwargs": {"threshold": 12.0}} in panel.corrections()
+
+    tabs = SubTabs()
+    tabs.add_page("a", QWidget())
+    tabs.add_page("b", QWidget())
+    pages = []
+    tabs.changed.connect(pages.append)
+    tabs._buttons[1].click()
+    assert tabs.current_index() == 1 and pages == [1]
+
+    refs = [weakref.ref(panel), weakref.ref(tabs)]
+    del panel, tabs, rows
+    gc.collect()
+    assert [r() for r in refs] == [None, None]
+
+
+def test_copy_python_corrections_only_and_download_offset(window, slot_exceptions):
+    """L273: Copy Python works with corrections alone, and uses the offset the
+    data were downloaded in after the project offset changed."""
+    from diive.gui import site
+
+    raw, _ = _download([("10min", "2D")])
+    tab = _fresh_tab(window, raw)
+    try:
+        assert not tab.copy_btn.isEnabled()
+        row = tab.corrections_panel._rows["setto_max"]
+        row.threshold.setValue(19.0)
+        row.enable.setChecked(True)
+        assert tab.copy_btn.isEnabled()
+        code = tab._code_provider()
+        compile(code, "<copy-python>", "exec")
+        assert "flag_outliers" not in code
+        assert "{'key': 'setto_max', 'kwargs': {'threshold': 19.0}}" in code
+
+        site.manager.update(name="CH-XYZ", latitude=LAT, longitude=LON, elevation=500.0,
+                            utc_offset=UTC + 1)
+        code = tab._code_provider()
+        assert f"timezone_offset_to_utc_hours={UTC}," in code
+        assert f"    utc_offset={UTC}," in code
+        assert f"utc_offset={UTC + 1}" not in code
+    finally:
+        _restore_site()
+        _disable_corrections(tab)

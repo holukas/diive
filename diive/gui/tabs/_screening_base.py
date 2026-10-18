@@ -123,6 +123,9 @@ class ScreeningTabBase(DiiveTab):
     add_button_label = "Add cleaned + flags + QCF to dataset"
     #: Operation name recorded in the emitted columns' provenance.
     provenance_op = "Stepwise screening"
+    #: Set-to-value dates are record END timestamps (the database variant), so
+    #: the corrections panel says so.
+    _correction_dates_are_end = False
 
     #: Inspector width per page — the Report's monospace table needs more room
     #: than the Outliers/Corrections forms, so the pane widens only for it.
@@ -363,7 +366,7 @@ class ScreeningTabBase(DiiveTab):
         hint.setStyleSheet(f"color: {_C_MUTED};")
         v.addWidget(hint)
 
-        self.corrections_panel = CorrectionsPanel()
+        self.corrections_panel = CorrectionsPanel(end_dates=self._correction_dates_are_end)
         self.corrections_panel.set_coords_available(site.manager.configured)
         self.corrections_panel.changed.connect(self._on_corrections_changed)
         v.addWidget(self.corrections_panel)
@@ -440,6 +443,11 @@ class ScreeningTabBase(DiiveTab):
         self._corr_dirty = True
         self._refresh_run_buttons()
         self._refresh_inspector_badges()
+        # Copy Python may depend on the corrections (the database variant
+        # renders a script for corrections alone).
+        copy_btn = getattr(self, "copy_btn", None)
+        if copy_btn is not None:
+            copy_btn.setEnabled(self._code_provider() is not None)
 
     def _refresh_run_buttons(self) -> None:
         """Mark each section's Run button pending when it has unapplied edits.
