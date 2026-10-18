@@ -1906,8 +1906,25 @@ class TestSumsWithoutFloatNoise(unittest.TestCase):
 
     def test_digits_are_kept(self):
         sums = pd.Series([1.2000000000000002, 123456.789012, -0.000123456789, 0.0, np.nan, 3e-15])
-        got = StepwiseMeteoScreeningDb._round_sums(sums)
+        got = StepwiseMeteoScreeningDb._round_sums(sums, sums.abs())
         np.testing.assert_array_equal(got.to_numpy(), [1.2, 123456.789012, -0.000123456789, 0.0, np.nan, 3e-15])
+
+    def test_same_as_significant_digits_for_one_sign(self):
+        """Rounding on the absolute values equals 12 significant digits when the
+        values share one sign, also at exact halfway decimals (17.21877452635)."""
+        sums = pd.Series([17.21877452635, 0.30000000000000004, -2.0000000000000004, 1e30 / 3])
+        got = StepwiseMeteoScreeningDb._round_sums(sums, sums.abs())
+        np.testing.assert_array_equal(got.to_numpy(), [float(f"{v:.12g}") for v in sums])
+
+    def test_cancellation_noise_vanishes(self):
+        """L278: 0.3 - 0.1 - 0.2 left -2.8e-17, kept by 12 significant digits of the sum."""
+        index = pd.date_range('2024-07-01 00:10', periods=6, freq='10min')
+        m = _screening(_series_detailed(index, [0.3, -0.1, -0.2, 1.5, -0.5, 0.25]))
+        m.resample(to_freqstr='30min', agg='sum', mincounts_perc=1)
+        got = m.resampled_detailed[FIELD][FIELD]
+        self.assertEqual(got.loc['2024-07-01 00:30'], 0.0)
+        self.assertFalse(np.signbit(got.loc['2024-07-01 00:30']))
+        self.assertEqual(got.loc['2024-07-01 01:00'], 1.25)
 
 
 class TestCorrectionOfRecordsWithoutValue(unittest.TestCase):
@@ -1936,3 +1953,136 @@ class TestCorrectionOfRecordsWithoutValue(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def _with_block(fine_start, fine_stop, block_after, n_block, block_freq='10min'):
+    """1MIN records from *fine_start* to *fine_stop* with *n_block* coarse records
+    inserted after the 1MIN record ending *block_after*."""
+    first = pd.date_range(fine_start, block_after, freq='1min')
+    block = pd.date_range(first[-1] + pd.Timedelta(block_freq), periods=n_block, freq=block_freq)
+    second = pd.date_range(block[-1] + pd.Timedelta('1min'), fine_stop, freq='1min')
+    return first.append(block).append(second), block
+
+
+class TestShortResolutionBlocks(unittest.TestCase):
+    """L279: a resolution with no more than 0.2 % of the records was dropped, also
+    clean blocks of 10MIN records inside 1MIN data."""
+
+    def test_short_ten_minute_blocks_are_kept(self):
+        for n in (6, 11):
+            with self.subTest(n=n):
+                index, block = _with_block('2024-03-01 00:01', '2024-03-04 00:00', '2024-03-02 12:00', n)
+                m = _screening(_series_detailed(index, np.linspace(10, 20, len(index))))
+                self.assertEqual(m.records_count(), len(index))
+                self.assertEqual(m.resolutions(), ['1min', '10min'])
+                m.resample(to_freqstr='30min', agg='mean', mincounts_perc=.5)
+                halfhours = pd.DatetimeIndex(sorted(set(block.ceil('30min'))))
+                self.assertTrue(m.resampled_detailed[FIELD][FIELD].reindex(halfhours).notna().all())
+
+    def test_three_day_block_in_a_year_is_kept(self):
+        index, block = _with_block('2024-01-01 00:01', '2025-01-01 00:00', '2024-06-01 00:00', 432)
+        m = _screening(_series_detailed(index, np.full(len(index), 1.0)))
+        self.assertEqual(m.records_count(), len(index))
+        self.assertEqual(int((m.data_detailed[FIELD]['FREQ_AUTO_SEC'] == 600).sum()), 432)
+
+    def test_odd_transition_records_are_dropped_with_a_warning(self):
+        coarse = pd.date_range('2024-03-01 00:10', '2024-03-03 00:00', freq='10min')
+        odd = pd.DatetimeIndex([coarse[-1] + pd.Timedelta(seconds=7 * k) for k in range(1, 5)])
+        fine = pd.date_range(coarse[-1] + pd.Timedelta('1min'), '2024-03-05 00:00', freq='1min')
+        index = coarse.append(odd).append(fine)
+        df = _series_detailed(index, np.full(len(index), 1.0))
+        holder = {}
+        warnings = _warnings(lambda: holder.setdefault('m', _screening(df)))
+        m = holder['m']
+        self.assertEqual(m.records_count(), len(coarse) + len(fine))
+        self.assertEqual(m.resolutions(), ['10min', '1min'])
+        dropped = [w for w in warnings if 'dropped 4 record(s) at time resolution 7s' in w]
+        self.assertEqual(len(dropped), 1, warnings)
+        self.assertIn('no whole multiple or divisor', dropped[0])
+
+    def test_run_of_two_clean_records_is_kept(self):
+        # Clean short runs stay (left untested by the rolling and difference
+        # tests), only odd resolutions are dropped.
+        first = pd.date_range('2020-06-01 00:10', periods=2 * 144, freq='10min')
+        two = pd.date_range(first[-1] + pd.Timedelta('1min'), periods=2, freq='1min')
+        last = pd.date_range(first[-1] + pd.Timedelta('10min'), periods=144, freq='10min')
+        df = _series_detailed(first.append(two).append(last), 1.0)
+        holder = {}
+        warnings = _warnings(lambda: holder.setdefault('m', _screening(df)))
+        self.assertEqual(holder['m'].records_count(), 434)
+        self.assertFalse(any('dropped' in w for w in warnings), warnings)
+
+
+class TestOddSecondGrid(unittest.TestCase):
+    """L282: on a grid with an odd number of seconds the half step was truncated
+    (5 s / 2 = 2 s), so END dates matched no record or the next one."""
+
+    def test_five_second_data(self):
+        index = pd.date_range('2024-07-01 00:00:05', '2024-07-01 02:00:00', freq='5s')
+        m = _screening(_series_detailed(index, np.linspace(10, 20, len(index))))
+        self.assertEqual(m.data_detailed[FIELD].index.freqstr, '5s')
+        m.start_outlier_detection()
+
+        def flagged():
+            flag = m.outlier_detection[FIELD].last_flag
+            return list(flag[flag == 2].index + pd.Timedelta('2500ms'))
+
+        m.flag_manualremoval_test(remove_dates=['2024-07-01 01:00:00'])
+        self.assertEqual(flagged(), [pd.Timestamp('2024-07-01 01:00:00')])
+        m.flag_manualremoval_test(remove_dates=[['2024-07-01 01:00:00', '2024-07-01 01:00:20']])
+        self.assertEqual(flagged(), list(pd.date_range('2024-07-01 01:00:00', periods=5, freq='5s')))
+        m.correction_setto_value(dates=['2024-07-01 01:00:00'], value=-99, verbose=0)
+        self.assertEqual(int((m.series_hires_cleaned[FIELD] == -99).sum()), 1)
+
+    def test_coarse_records_off_the_minute(self):
+        """1MIN data, then 10MIN data at :35 s give a 5 s grid."""
+        fine = pd.date_range('2024-07-01 00:01', '2024-07-01 21:00', freq='1min')
+        coarse = pd.date_range('2024-07-02 05:45:35', periods=17, freq='10min')
+        index = fine.append(coarse)
+        m = _screening(_series_detailed(index, np.linspace(10, 20, len(index))))
+        self.assertEqual(m.data_detailed[FIELD].index.freqstr, '5s')
+        m.start_outlier_detection()
+        m.flag_manualremoval_test(remove_dates=['2024-07-02 06:05:35', ['2024-07-01 02:00', '2024-07-01 02:03']])
+        flag = m.outlier_detection[FIELD].last_flag
+        want = pd.DatetimeIndex(['2024-07-01 02:00', '2024-07-01 02:01', '2024-07-01 02:02',
+                                 '2024-07-01 02:03', '2024-07-02 06:05:35'])
+        self.assertEqual(list(flag[flag == 2].index + pd.Timedelta('2500ms')), list(want))
+        # The coarse records' true middles, END - 5 min
+        middles = m._resolution_periods(FIELD)[-1][1]
+        self.assertEqual(list(middles), list(coarse - pd.Timedelta('5min')))
+
+
+class TestZeroOffsetRecordPeriod(unittest.TestCase):
+    """L278: on mixed grids the correction took a record's period from the spacing
+    to its nearer neighbour, so the last 10MIN record before 1MIN data was checked
+    for potrad's midnight zeros with a 1-minute window."""
+
+    @staticmethod
+    def _nighttime(index):
+        from diive.preprocessing.corrections.offsetcorrection import nighttime_zero_offset_diagnostics
+        import diive.preprocessing.qaqc.meteoscreening as module
+        df = _series_detailed(index, np.full(len(index), 100.0))
+        # Utqiagvik in polar day
+        m = StepwiseMeteoScreeningDb(site='us-utq', data_detailed={FIELD: df}, fields=[FIELD],
+                                     site_lat=71.29, site_lon=-156.79, utc_offset=-9)
+        flags = []
+
+        def diagnose(series, showplot=False, **kwargs):
+            result = nighttime_zero_offset_diagnostics(series, **kwargs)
+            flags.append(result.nighttime_flag)
+            return result.corrected
+
+        with mock.patch.object(module, 'remove_nighttime_zero_offset', diagnose):
+            m.correction_remove_nighttime_zero_offset(showplot=False)
+        flag = flags[0]
+        flag.index = flag.index + module._half_step(m.data_detailed[FIELD].index)
+        return flag.reindex(index)
+
+    def test_last_coarse_record_keeps_its_own_period(self):
+        coarse = pd.date_range('2026-05-11 12:10', '2026-05-12 00:20', freq='10min')
+        fine = pd.date_range(coarse[-1] + pd.Timedelta('1min'), '2026-05-12 12:00', freq='1min')
+        alone = self._nighttime(coarse)
+        mixed = self._nighttime(coarse.append(fine)).reindex(coarse)
+        # Daytime in the 10MIN data alone, nighttime with a 1-minute window
+        self.assertEqual(alone.loc['2026-05-12 00:20'], 0)
+        pd.testing.assert_series_equal(mixed, alone)

@@ -43,6 +43,31 @@ _SWINPOT_COL = '_SW_IN_POT_METSCR'  # Temporary day/night input for the QCF
 # phase shifts need about 2-10 slots per record (10MIN data moving from :00 to :05
 # or :01); timestamps a second late need 60 (1MIN data) to 600 (10MIN data).
 _MAX_SLOTS_PER_RECORD = 20
+# A run of at least this many records with one resolution is a resolution period
+# of its own, as in detect_freq_groups.
+_MIN_PERIOD_RECORDS = 12
+# Dropped runs warned about one by one, the rest in one line
+_MAX_LISTED_RUNS = 20
+
+
+def _half_step(index: pd.DatetimeIndex) -> pd.Timedelta:
+    """Half the step of the regular *index*, exact also for an odd number of seconds.
+
+    ``pd.Timedelta`` of an offset has unit 's' in pandas 3, so halving 5 s gives
+    2 s. The result keeps the unit of *index* where that unit holds it exactly,
+    so timestamps computed with it keep their dtype.
+    """
+    half = pd.Timedelta(index.freq).as_unit('ns') / 2
+    try:
+        return half.as_unit(index.unit, round_ok=False)
+    except ValueError:
+        return half
+
+
+def _offset_str(ns: int) -> str:
+    """Offset string of a duration in ns with the count, e.g. '1min' where freqstr gives 'min'."""
+    offset = to_offset(pd.Timedelta(int(ns), unit='ns'))
+    return f"{offset.n}{offset.name}"
 
 
 class StepwiseMeteoScreeningDb:
@@ -113,6 +138,18 @@ class StepwiseMeteoScreeningDb:
     others, e.g. END timestamps a second late, would need a grid of seconds or less: if
     that grid would be finer than 1S or hold more than 20 slots per record, a ValueError
     asks to clean or resample the timestamps first.
+
+    Before that, ``detect_freq_groups`` finds the resolution of each record, and only
+    clean resolutions are kept. A run is a series of consecutive records with one
+    resolution. A run of at least 12 records is a resolution period and is kept,
+    whatever its resolution (10MIN, then 15MIN data). A shorter run is kept if its
+    resolution is a whole multiple or divisor of the resolution of the nearest
+    period before or after it, e.g. six 10MIN records inside 1MIN data. Other runs
+    are dropped, each with a warning: odd resolutions such as 7S records at a change
+    of the logger program. Records with no detectable resolution are dropped with a warning too.
+    If no run has 12 records, the runs of the most frequent resolution count as
+    periods. ``detect_freq_groups`` may also take 3-5 coarse records inside much
+    finer data for fine records with holes (see there).
 
     The rolling-window and difference tests (Hampel, local SD, rolling z-score, z-score of
     increments) run on each **resolution period** separately, i.e. on each run of records
@@ -201,7 +238,6 @@ class StepwiseMeteoScreeningDb:
     def __init__(
             self,
             data_detailed: dict,
-            # measurement: str,
             fields: list | str,
             site: str,
             site_lat: float,
@@ -212,7 +248,6 @@ class StepwiseMeteoScreeningDb:
         self.site = site
         # Copy the frames too: validation adds columns and must not touch the caller's data.
         self._data_detailed = {key: df.copy() for key, df in data_detailed.items()}
-        # self.measurement = measurement
         self.fields = [fields] if isinstance(fields, str) else list(fields)
         self.site_lat = site_lat
         self.site_lon = site_lon
@@ -235,6 +270,11 @@ class StepwiseMeteoScreeningDb:
         # True once the screened data change after resample(), so the old result
         # cannot be read (and uploaded) by mistake.
         self._resampled_stale = False
+        # Per field, computed on first use. They depend only on the grid and on
+        # FREQ_AUTO_SEC, which no step changes after validation.
+        self._periods_cache = {}
+        self._not_a_record_cache = {}
+        self._covered_cache = {}
 
         for field in self.fields:
             # Validate data_detailed
@@ -724,7 +764,7 @@ class StepwiseMeteoScreeningDb:
         # matched records on as explicit MIDDLE ranges.
         bounds = [self._date_spec_bounds(spec, argname) for spec in remove_dates]
         index = self.data_detailed[field].index
-        middle_by_end = pd.Series(index, index=index + pd.Timedelta(index.freq) / 2)
+        middle_by_end = pd.Series(index, index=index + _half_step(index))
         middle_by_end = middle_by_end[self._has_record(field).to_numpy()]
         converted = []
         for spec, (start, end) in zip(remove_dates, bounds):
@@ -1106,10 +1146,12 @@ class StepwiseMeteoScreeningDb:
         All other empty slots lie inside the period of a record and are no record.
         With one record per slot every empty slot is a missing record.
         """
-        freq_sec = self.data_detailed[field]['FREQ_AUTO_SEC']
-        slot = self.data_detailed[field].index.to_series()
-        to_next_record = (slot.where(freq_sec.notna()).bfill() - slot).dt.total_seconds()
-        return freq_sec.isna() & (to_next_record % freq_sec.bfill() != 0)
+        if field not in self._not_a_record_cache:
+            freq_sec = self.data_detailed[field]['FREQ_AUTO_SEC']
+            slot = self.data_detailed[field].index.to_series()
+            to_next_record = (slot.where(freq_sec.notna()).bfill() - slot).dt.total_seconds()
+            self._not_a_record_cache[field] = freq_sec.isna() & (to_next_record % freq_sec.bfill() != 0)
+        return self._not_a_record_cache[field]
 
     def _resolution_periods(self, field: str) -> list:
         """Split the records of *field* into resolution periods.
@@ -1124,17 +1166,19 @@ class StepwiseMeteoScreeningDb:
             of its records, their true TIMESTAMP_MIDDLE (END - resolution / 2)
             and the resolution as a Timedelta.
         """
+        if field in self._periods_cache:
+            return self._periods_cache[field]
         freq_sec = self.data_detailed[field]['FREQ_AUTO_SEC'].dropna()
         slots = freq_sec.index
         res_ns = np.round(freq_sec.to_numpy() * 1e9).astype(np.int64)
         step_ns = np.diff(slots.as_unit('ns').asi8)
         new = np.r_[True, (res_ns[1:] != res_ns[:-1]) | (step_ns % res_ns[1:] != 0)]
         # Slots are END - grid/2, so the true middle is the slot + grid/2 - resolution/2.
-        grid = pd.Timedelta(self.data_detailed[field].index.freq)
-        middles = slots + grid / 2 - pd.to_timedelta(res_ns, unit='ns') / 2
+        middles = slots + _half_step(self.data_detailed[field].index) - pd.to_timedelta(res_ns, unit='ns') / 2
         periods = []
         for period in np.split(np.arange(len(slots)), np.flatnonzero(new)[1:]):
             periods.append((slots[period], middles[period], pd.Timedelta(res_ns[period[0]], unit='ns')))
+        self._periods_cache[field] = periods
         return periods
 
     def _run_per_period(self, method: str, windows: tuple, **kwargs):
@@ -1253,6 +1297,12 @@ class StepwiseMeteoScreeningDb:
         10MIN record END 00:12: the 10MIN record covers 10 - 4 = 6 minutes. A
         record that overlaps no earlier record covers its resolution.
         """
+        if field not in self._covered_cache:
+            self._covered_cache[field] = self._compute_covered_seconds(field)
+        return self._covered_cache[field]
+
+    def _compute_covered_seconds(self, field: str) -> pd.Series:
+        """Compute ``_covered_seconds`` of *field*."""
         freq_sec = self.data_detailed[field]['FREQ_AUTO_SEC']
         records = freq_sec.dropna()
         ends = records.index.as_unit('ns').asi8
@@ -1292,36 +1342,28 @@ class StepwiseMeteoScreeningDb:
             >>> mscr.correction_remove_nighttime_zero_offset(showplot=False)
         """
         for field in self.fields:
+            swin_pot = self._zero_offset_swin_pot(field)
+            # Each record's own resolution, so the last coarse record before a
+            # finer block gets its own potrad window, not the spacing to the next record.
+            period_sec = None if swin_pot is None else self.data_detailed[field]['FREQ_AUTO_SEC']
             self._correct(field, remove_nighttime_zero_offset,
                           lat=self.site_lat, lon=self.site_lon,
                           utc_offset=self.utc_offset, showplot=showplot,
                           clamp_negatives=clamp_negatives,
-                          swin_pot=self._zero_offset_swin_pot(field))
+                          swin_pot=swin_pot, swin_pot_period_sec=period_sec)
 
     def _zero_offset_swin_pot(self, field: str) -> pd.Series | None:
         """Potential radiation of each record for the nighttime zero offset.
 
         None with one resolution period: the correction computes it on the slots,
         which are the records' middles. Otherwise each record gets the mean over
-        its own period (``_potential_radiation``), empty slots are NaN (no record),
-        and one record before the first and after the last record lets the
-        correction recognise potrad's midnight zeros at the series edges, as it
-        does for single-resolution data.
+        its own period (``_potential_radiation``), and empty slots are NaN (no
+        record). The correction then also needs each record's resolution
+        (``swin_pot_period_sec``) to find potrad's midnight zeros.
         """
-        periods = self._resolution_periods(field)
-        if len(periods) == 1:
+        if len(self._resolution_periods(field)) == 1:
             return None
-        coords = dict(lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset)
-        swinpot = self._potential_radiation(field).where(self._has_record(field))
-        margins = []
-        for slots, middles, res, end in ((*periods[0], 0), (*periods[-1], -1)):
-            step = -res if end == 0 else res
-            # potrad averages each timestamp over its own window, so two timestamps
-            # one resolution apart give the value of the margin record.
-            pair = pd.DatetimeIndex([middles[end], middles[end] + step]).sort_values()
-            value = potrad(timestamp_index=pair, **coords).loc[middles[end] + step]
-            margins.append(pd.Series([value], index=[slots[end] + step]))
-        return pd.concat([margins[0], swinpot, margins[1]]).rename(swinpot.name)
+        return self._potential_radiation(field).where(self._has_record(field))
 
     def correction_setto_max_threshold(self, threshold: float, showplot: bool = True):
         """Set values above threshold to threshold
@@ -1587,8 +1629,10 @@ class StepwiseMeteoScreeningDb:
         original resolution, minus the time earlier records cover where its period
         overlaps theirs (the overlap counts once, with the earlier records):
         ``agg='mean'`` is the time-weighted mean, ``agg='sum'`` adds each record
-        once. Sums are rounded to 12 significant digits, which removes float noise
-        (0.1 mm records summing to 1.2000000000000002) and no measured precision.
+        once. Sums are rounded to 12 significant digits of the period's sum of
+        absolute values, which removes float noise (0.1 mm records summing to
+        1.2000000000000002, or 5.6e-17 left where positive and negative values
+        cancel) and no measured precision.
         ``mincounts_perc`` is the minimum fraction of the period the kept records
         must cover, measured by the time they cover, so other resolutions in the
         same download do not change it.
@@ -1651,16 +1695,34 @@ class StepwiseMeteoScreeningDb:
         self._resampled_stale = False
 
     @staticmethod
-    def _round_sums(sums: pd.Series, digits: int = 12) -> pd.Series:
-        """Round *sums* to *digits* significant digits.
+    def _round_sums(sums: pd.Series, abs_sums: pd.Series, digits: int = 12) -> pd.Series:
+        """Round each of *sums* to *digits* significant digits of its sum of absolute values.
 
         Removes the float noise of adding decimal values (0.1 + 0.2 gives
-        0.30000000000000004). The noise lies far beyond the 12th digit, where no
-        measurement has precision.
+        0.30000000000000004). The noise lies far beyond the 12th digit of the
+        added values, where no measurement has precision. Rounding at the scale
+        of the absolute values, not of the sum itself, also removes what is left
+        when values cancel (0.1 + 0.2 - 0.3 gives 5.6e-17, rounded to 0). For
+        sums of values with one sign it is the same as 12 significant digits.
+
+        Args:
+            sums: Sum of each period.
+            abs_sums: Sum of the absolute values of each period, on the index of *sums*.
+            digits: Significant digits kept.
         """
-        # Through decimal text: np.round scales by 10**decimals, which is inexact
-        # beyond 1e22 and would add noise to small values.
-        values = [float(f"{value:.{digits}g}") for value in sums.to_numpy(dtype=float)]
+        values = []
+        # tolist() gives Python floats: round() of a NumPy float is np.round.
+        for value, scale in zip(sums.to_numpy(dtype=float).tolist(), abs_sums.to_numpy(dtype=float).tolist(),
+                                strict=True):
+            if not (np.isfinite(value) and np.isfinite(scale) and scale > 0):
+                values.append(value)
+                continue
+            # The exponent of the scale after rounding to *digits*, as '.12g' finds
+            # it. Python's round() of a float is correctly rounded through decimal
+            # text, unlike np.round, which scales by 10**decimals. '+ 0.0' turns
+            # -0.0 into 0.0.
+            exponent = int(f"{scale:.{digits - 1}e}".split('e')[1])
+            values.append(round(value, digits - 1 - exponent) + 0.0)
         return pd.Series(values, index=sums.index, name=sums.name, dtype=float)
 
     def _resample_field(self, field: str, to_freqstr: str, agg: str, mincounts_perc: float) -> DataFrame:
@@ -1693,7 +1755,7 @@ class StepwiseMeteoScreeningDb:
         # :13, ...). Left-closed bins on END minus one time unit select exactly
         # that. closed='right' would do the same, but in pandas 3 it adds an empty
         # period at both ends of daily results.
-        ends = series.index + pd.Timedelta(grid) / 2
+        ends = series.index + _half_step(series.index)
         ends = ends - pd.Timedelta(1, unit=ends.unit)
 
         def binned(values: pd.Series):
@@ -1708,7 +1770,7 @@ class StepwiseMeteoScreeningDb:
         if agg == 'mean':
             series_resampled = binned(series * weight).sum() / binned(weight).sum()
         else:
-            series_resampled = self._round_sums(binned(series).sum())
+            series_resampled = self._round_sums(binned(series).sum(), binned(series.abs()).sum())
 
         # Coverage in seconds of the kept records' own periods, not in grid
         # slots, so a finer grid from other records does not change it.
@@ -1882,17 +1944,15 @@ class StepwiseMeteoScreeningDb:
         self._check_units(data_detailed=data_detailed)
         self._check_fields(data_detailed=data_detailed)
 
-        # Harmonize different time resolutions (one grid that holds every record)
-        groups = self._make_timeres_groups(data_detailed=data_detailed)
-        group_counts = self._count_group_records(group_series=groups[field])
-        used_freqs, rejected_freqs = self._validate_n_grouprecords(group_counts=group_counts)
-        data_detailed = self._filter_data(data_detailed=data_detailed, used_freqs=used_freqs)
+        # The time resolution of each record, then one grid that holds every record
+        data_detailed['FREQ_AUTO_SEC'] = detect_freq_groups(index=data_detailed.index)
+        data_detailed = data_detailed.loc[self._used_records(data_detailed['FREQ_AUTO_SEC'], field=field)]
         if len(data_detailed) < 2:
             raise ValueError(f"{field}: {len(data_detailed)} record(s) left after detecting the time "
                              f"resolution; too few regular records to screen.")
-        data_detailed = self._harmonize_timeresolution(data_detailed=data_detailed,
-                                                       timestamp_name=timestamp_name)
+        data_detailed = self._sort_records(data_detailed=data_detailed, timestamp_name=timestamp_name)
         targetfreq = self._grid_seconds(data_detailed=data_detailed, field=field)
+        used_freqs = pd.unique(data_detailed['FREQ_AUTO_SEC'])
         if len(used_freqs) > 1 or targetfreq != used_freqs[0]:
             info(f"Records with more than one time resolution or phase are placed on one "
                  f"grid of {targetfreq}S that holds each record at its own END timestamp.")
@@ -1917,7 +1977,7 @@ class StepwiseMeteoScreeningDb:
         """
         ends = data_detailed.index.as_unit('ns').asi8
         resolutions = np.unique(np.round(data_detailed['FREQ_AUTO_SEC'].to_numpy() * 1e9).astype(np.int64))
-        step = np.gcd.reduce(np.concatenate([resolutions, np.unique(ends - ends[0])]))
+        step = np.gcd.reduce(np.concatenate([resolutions, ends - ends[0]]))
         common = np.gcd.reduce(resolutions)
         if step < common:
             # Only a phase shift shrinks the grid below the resolutions' own divisor.
@@ -1952,19 +2012,18 @@ class StepwiseMeteoScreeningDb:
         return data_detailed
 
     @staticmethod
-    def _harmonize_timeresolution(data_detailed, timestamp_name: str) -> DataFrame:
+    def _sort_records(data_detailed, timestamp_name: str) -> DataFrame:
         """
-        Keep each record only at its own TIMESTAMP_END
+        Sort the records by TIMESTAMP_END and name the index
 
-        The grid (see `_grid_seconds`) is created afterwards in
-        `_sanitize_timestamp`. A record of a coarser resolution stays a single row
-        at its END timestamp; the grid slots before it that its averaging interval
-        covers stay empty (NaN in all columns, FREQ_AUTO_SEC included). Copying the
-        value onto those slots would make a record removable only in part and
-        would give difference-based outlier tests runs of zero increments.
-        `resample` weights each record by the seconds it covers instead
-        (`_covered_seconds`: its FREQ_AUTO_SEC, less the time earlier records
-        cover in its period).
+        Each record stays a single row at its own END timestamp. The grid (see
+        `_grid_seconds`) is created afterwards in `_sanitize_timestamp`. The grid
+        slots before a coarse record that its averaging interval covers stay
+        empty (NaN in all columns, FREQ_AUTO_SEC included). Copying the value onto
+        those slots would make a record removable only in part and would give
+        difference-based outlier tests runs of zero increments. `resample`
+        weights each record by the seconds it covers instead (`_covered_seconds`:
+        its FREQ_AUTO_SEC, less the time earlier records cover in its period).
         """
         data_detailed = data_detailed.sort_index(ascending=True)
         data_detailed.index.name = timestamp_name
@@ -1975,7 +2034,6 @@ class StepwiseMeteoScreeningDb:
         """For each variable, extract tag columns from the respective DataFrame
          and store info in simplified dict"""
         tags_df = data_detailed.drop(columns=[field, 'FREQ_AUTO_SEC'])
-        # tags_df.nunique()
         notags = tags_df.isnull().all(axis=1)
         tags_df = tags_df[~notags]  # Drop empty grid slots, which hold no record and no tags
         tags_dict = {}
@@ -1988,17 +2046,9 @@ class StepwiseMeteoScreeningDb:
         return tags_dict
 
     @staticmethod
-    def _init_flagsdf(data_detailed, field) -> DataFrame:
-        """Initialize dataframe that will contain all flags for each variable"""
-        series = data_detailed[field]  # Timeseries of variable
-        hires_flags = pd.DataFrame(index=series.index)
-        return hires_flags
-
-    @staticmethod
     def _check_units(data_detailed):
         """Check if units are the same for all records"""
-        unique_units = list(set(data_detailed['units']))
-        if len(unique_units) > 1:
+        if data_detailed['units'].nunique(dropna=False) > 1:
             raise Exception("More than one type of units in column 'units', "
                             "but only one allowed. All data records must be "
                             "in same units.")
@@ -2006,59 +2056,72 @@ class StepwiseMeteoScreeningDb:
     @staticmethod
     def _check_fields(data_detailed):
         """Check if really only one field in data"""
-        unique_fields = list(set(data_detailed['varname']))
-        if len(unique_fields) > 1:
+        if data_detailed['varname'].nunique(dropna=False) > 1:
             raise Exception("More than one variable name in column 'varname', "
                             "but only one allowed. All data records must be "
                             "for same variable.")
 
     @staticmethod
-    def _make_timeres_groups(data_detailed):
-        """Group data by time resolution"""
-        groups_ser = detect_freq_groups(index=data_detailed.index)
-        data_detailed[groups_ser.name] = groups_ser
-        groups = data_detailed.groupby(data_detailed['FREQ_AUTO_SEC'])
-        return groups
+    def _used_records(freq_sec: pd.Series, field: str) -> np.ndarray:
+        """Return a boolean mask of the records kept for screening.
 
-    @staticmethod
-    def _count_group_records(group_series):
-        """Count records for each found time resolution"""
-        group_counts = group_series.count().sort_values(ascending=False)
-        return group_counts
+        *freq_sec* is the resolution of each record in seconds from
+        ``detect_freq_groups`` (NaN where it found none), on the TIMESTAMP_END
+        index. A run is a series of consecutive records with one resolution.
+        Records without a resolution are dropped and do not interrupt a run. A run
+        of at least 12 records is a resolution period and is kept. A shorter run
+        is kept if its resolution is a whole multiple or divisor of the
+        resolution of the nearest period before or after it. Kept runs of fewer
+        than 3 records are left untested by the rolling and difference tests. If no run has 12 records, the runs of the most frequent
+        resolution count as periods. Every dropped run gets a warning.
+        """
+        has_res = freq_sec.notna().to_numpy()
+        keep = np.zeros(len(freq_sec), dtype=bool)
+        n_unassigned = int((~has_res).sum())
+        if n_unassigned:
+            examples = freq_sec.index[~has_res]
+            listed = ', '.join(str(t) for t in examples[:5]) + (', ...' if n_unassigned > 5 else '')
+            warn(f"{field}: dropped {n_unassigned} record(s) with no detectable time resolution, "
+                 f"e.g. END {listed}.")
+        if not has_res.any():
+            return keep
+        ends = freq_sec.index[has_res]
+        res = np.round(freq_sec.to_numpy()[has_res] * 1e9).astype(np.int64)
+        starts = np.flatnonzero(np.r_[True, res[1:] != res[:-1]])
+        lengths = np.diff(np.r_[starts, len(res)])
+        run_res = res[starts]
 
-    @staticmethod
-    def _validate_n_grouprecords(group_counts) -> tuple[list, list]:
-        """Detect which frequencies have enough records to be used"""
-        n_vals = group_counts.sum()
-        n_freqs = group_counts.index.unique()
-        info(f"Found {len(n_freqs)} unique frequencies across {n_vals} records.")
-        info("Found frequencies:")
-        cumulative_counts = 0
-        used_freqs = []
-        rejected_freqs = []
-        for freq in n_freqs:
-            counts = group_counts[freq]
-            cumulative_counts += counts
-            counts_perc = (counts / n_vals) * 100
-            if counts_perc > 0.2:  # At least 0.2% of the data must have this resolution to be considered
-                used_freqs.append(freq)
-                info(f"  Found time resolution {freq} (seconds) with {counts} records "
-                     f"({counts_perc:.2f}% of total records).")
-            else:
-                rejected_freqs.append(freq)
-                # info, not detail: this is the only report of a resolution group being discarded,
-                # and the records it names are dropped from the screening.
-                info(f"  Found time resolution {freq} (seconds) with {counts} records "
-                     f"({counts_perc:.2f}% of total records). --> Frequency will be ignored, too few records.")
-        info(f"The following frequencies will be used: {used_freqs} (seconds)")
-        return used_freqs, rejected_freqs
+        period = lengths >= _MIN_PERIOD_RECORDS
+        if not period.any():
+            values, counts = np.unique(res, return_counts=True)
+            period = run_res == values[np.argmax(counts)]
+        # Nearest period run before and after each run (-1 / n = none)
+        n_runs = len(run_res)
+        pos = np.arange(n_runs)
+        prev_p = np.maximum.accumulate(np.where(period, pos, -1))
+        next_p = np.minimum.accumulate(np.where(period, pos, n_runs)[::-1])[::-1]
+        clean = np.zeros(n_runs, dtype=bool)
+        for near in (prev_p, next_p):
+            has = (near >= 0) & (near < n_runs)
+            other = run_res[np.clip(near, 0, n_runs - 1)]
+            clean |= has & ((run_res % other == 0) | (other % run_res == 0))
+        used = period | clean
+        keep[np.flatnonzero(has_res)] = np.repeat(used, lengths)
 
-    def _filter_data(self, data_detailed, used_freqs):
-        keep = data_detailed['FREQ_AUTO_SEC'].isin(used_freqs)
-        n_dropped = int((~keep).sum())
-        if n_dropped:
-            # Off-grid records and very small resolution groups are removed here;
-            # without this message the loss would be invisible.
-            warn(f"{n_dropped} records were removed because they do not belong to "
-                 f"a used time resolution {used_freqs} (seconds).")
-        return data_detailed.loc[keep]
+        resolutions, counts = np.unique(res[np.repeat(used, lengths)], return_counts=True)
+        info("Time resolutions used: " + ', '.join(
+            f"{_offset_str(r)} ({c} records)" for r, c in zip(resolutions, counts, strict=True)))
+        dropped = np.flatnonzero(~used)
+        for k in dropped[:_MAX_LISTED_RUNS]:
+            first, last = ends[starts[k]], ends[starts[k] + lengths[k] - 1]
+            neighbours = sorted({_offset_str(run_res[near[k]]) for near in (prev_p, next_p)
+                                 if 0 <= near[k] < n_runs})
+            reason = f"no whole multiple or divisor of the neighbouring {' and '.join(neighbours)}"
+            # No verbose here: dropped records are lost to the screening and the upload.
+            warn(f"{field}: dropped {lengths[k]} record(s) at time resolution "
+                 f"{_offset_str(run_res[k])}, END {first} to {last}: {reason}.")
+        if len(dropped) > _MAX_LISTED_RUNS:
+            rest = dropped[_MAX_LISTED_RUNS:]
+            warn(f"{field}: dropped {int(lengths[rest].sum())} more record(s) in {len(rest)} more "
+                 f"run(s) of an odd time resolution.")
+        return keep
