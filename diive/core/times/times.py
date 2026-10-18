@@ -526,6 +526,64 @@ def _min_period_records(m: np.ndarray) -> np.ndarray:
     return np.maximum(_MIN_SHORT_PERIOD_RECORDS, np.ceil(n - 1e-9)).astype(int)
 
 
+# Short blocks need a spacing of at least this many times the finer spacing
+# around them. Below it, regular losses such as every other record missing are
+# common and the general rule (_min_period_records) applies.
+_MIN_BLOCK_RATIO = 5
+
+
+def _min_block_records(m: np.ndarray) -> np.ndarray:
+    """Records a block needs to be a period when its spacing is *m* times the
+    spacing of the finer records around it and it sits on its own grid.
+
+    The block is k records at spacing m*r with two records at spacing r on each
+    side (see _coarse_blocks). Random missing records of resolution r, missing
+    fraction p, leave this pattern at a given record with a chance of
+    (1-p)**(k+5) * p**(k*(m-1)): k+5 records present and the m-1 records before
+    each block record missing. Only 1 in m records lies on the grid of the
+    coarse spacing. The block needs as many records as make the worst case over
+    p as small as 0.25**12 (see _MIN_PERIOD_RECORDS): 4 at m = 5, 3 at 6 to 9,
+    2 at 10 and above. A single record is never enough: one outage of exactly
+    m-1 records that ends on the grid explains it.
+    """
+    m = np.asarray(m, dtype=float)
+    need = np.full(m.shape, _MIN_PERIOD_RECORDS)
+    for k in range(_MIN_PERIOD_RECORDS - 1, 1, -1):
+        present, missing = k + 5, k * (m - 1)
+        p = missing / (missing + present)
+        log_chance = present * np.log(1 - p) + missing * np.log(p) - np.log(m)
+        need = np.where(log_chance <= _MIN_PERIOD_RECORDS * np.log(0.25), k, need)
+    return need
+
+
+def _coarse_blocks(own: np.ndarray, wall_ns: np.ndarray) -> np.ndarray:
+    """Short blocks of coarse records between finer records (L286).
+
+    *own* is the spacing that covers each record's own averaging period (to the
+    previous record for TIMESTAMP_END, to the next one for TIMESTAMP_START) in
+    ns, *wall_ns* the local clock time in ns. A block is a series of records
+    with the same own spacing g, on the grid of g (e.g. 10MIN records at :00,
+    :10, ...), with at least two records of one finer spacing r on each side,
+    g a whole multiple m >= _MIN_BLOCK_RATIO of r, and at least
+    _min_block_records(m) records. Returns the block resolution of each record
+    in ns, 0 outside blocks.
+    """
+    n = len(own)
+    starts = np.flatnonzero(np.concatenate([[True], own[1:] != own[:-1]]))
+    lengths = np.diff(np.concatenate([starts, [n]]))
+    ends = starts + lengths - 1
+    g = own[starts]
+    ok = (starts >= 2) & (ends + 2 < n)
+    s, e = np.where(ok, starts, 2), np.where(ok, ends, 0)
+    r = own[s - 1]
+    ok &= (r > 0) & (own[s - 2] == r) & (own[e + 1] == r) & (own[e + 2] == r)
+    safe_r = np.where(ok, r, 1)
+    ok &= (g >= _MIN_BLOCK_RATIO * safe_r) & (g % safe_r == 0)
+    ok &= wall_ns[starts] % np.where(ok, g, 1) == 0
+    ok[ok] = lengths[ok] >= _min_block_records(g[ok] // r[ok])
+    return np.repeat(np.where(ok, g, 0), lengths)
+
+
 def detect_freq_groups(index: DatetimeIndex) -> Series:
     """
     Assign each record to the time resolution (frequency group) it was recorded at
@@ -555,19 +613,31 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
     4. Many missing records leave short runs that look like a coarser resolution
        (10MIN data with every other record missing for an hour give 20MIN spacing)
        and records that fit no neighbour. A run is a series of consecutive records
-       with the same resolution and only whole multiples of it between them. A run
-       of at least 12 records is a resolution period. A run of 3 to 11 records is a
+       with the same resolution and only whole multiples of it between them.
+       Unassigned records count towards the run they continue if one of their
+       spacings equals its resolution (e.g. the records after a missing record
+       at the end of a 30MIN run). A run of at least 12
+       records is a resolution period. A run of 3 to 11 records is a
        period too unless missing records of the nearest such period could produce
        it: its resolution must not be a whole multiple m of that period's, or the
        run needs more records the smaller m is (12 at m = 2, 9 at 3, 6 at 10, 4 at
        30 and 60). Eleven 10MIN records between 1MIN periods stay 600 s, while
        10MIN data with every other record missing for an hour join the 10MIN
-       period. Every other record joins the nearest period on either side if all
+       period. A block of evenly spaced records between finer records needs
+       fewer records if it sits on its own grid (10MIN records at :00, :10, ...),
+       each record covers a whole period of the block's resolution, and at least
+       two records at one finer spacing follow on each side: 2 records at 10 or
+       more times the finer spacing, 3 at 6 to 9, 4 at 5 (see
+       ``_min_block_records``). Two 10MIN records between 1MIN periods get
+       600 s. A single coarse record stays ambiguous: one outage in the finer
+       data can leave it, so it gets the finer resolution.
+       Every other record joins the nearest period on either side if all
        time differences between it and that period, and to both its own
        neighbours, are whole multiples of the period's resolution. If periods of
        different resolutions qualify, the coarsest wins: a record spaced at
        multiples of 10MIN shows no sign of 1MIN logging. Without any run of 12
-       records (e.g. 90 % of the records missing) pass 4 changes nothing.
+       records (e.g. 90 % of the records missing) pass 4 changes nothing but
+       the short blocks.
 
     Example: in regular 10MIN data with the record at 12:20 missing, the records at
     12:10 and 12:30 have differences of 10 and 20 minutes to their neighbours. Both
@@ -591,10 +661,14 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
 
     Returns:
         Series 'FREQ_AUTO_SEC' on *index* with the time resolution of each record in
-        seconds, NaN where the resolution could not be determined.
+        seconds, NaN where the resolution could not be determined. All NaN for
+        fewer than two records.
 
     :: Added in v0.43.0
     """
+    if len(index) < 2:
+        # Callers raise their own error for too few records
+        return pd.Series(index=index, data=np.nan, name='FREQ_AUTO_SEC', dtype=float)
     # Work in integer nanoseconds so the multiple-of check is exact also for
     # sub-second resolutions. A difference of 0 marks "no neighbour on this side".
     ns = index.as_unit('ns').asi8
@@ -649,35 +723,42 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
     lone &= prev_d % np.where(lone, prev_final, 1) == 0
     group = np.where(lone, prev_final, group)
 
-    group = _join_resolution_periods(group, diffs)
+    wall = index.tz_localize(None) if index.tz is not None else index
+    block = _coarse_blocks(next_d if tie_to_next else prev_d, wall.as_unit('ns').asi8)
+    group = _join_resolution_periods(group, diffs, block)
 
     group_sec = np.where(group > 0, group / 1e9, np.nan)
     return pd.Series(index=index, data=group_sec, name='FREQ_AUTO_SEC')
 
 
-def _join_resolution_periods(group: np.ndarray, diffs: np.ndarray) -> np.ndarray:
+def _join_resolution_periods(group: np.ndarray, diffs: np.ndarray, block: np.ndarray) -> np.ndarray:
     """Pass 4 of :func:`detect_freq_groups`: find the resolution periods, then let
     every other record join the coarsest neighbouring period it fits.
 
     *group* is the resolution of each record in ns (0 = unassigned), *diffs* the
-    time differences between consecutive records in ns.
+    time differences between consecutive records in ns, *block* the resolution
+    of short coarse blocks from _coarse_blocks (0 = none).
     """
     n = len(group)
     if n < _MIN_PERIOD_RECORDS:
         return group
+    group = np.where(block > 0, block, group)
     # Runs of one resolution. A run also ends at a difference that is no whole
     # multiple of its resolution: pass 2 labels a record from one neighbour only,
     # so in 1MIN data with many holes a run labelled 120 s could carry on across
-    # a 1MIN step.
-    safe_g = np.where(group[:-1] > 0, group[:-1], 1)
-    joined = (group[1:] == group[:-1]) & (diffs % safe_g == 0)
+    # a 1MIN step. Unassigned records count towards the run they continue (L289),
+    # but stay unassigned until they join a period below.
+    counted = _continue_runs(group, diffs)
+    safe_g = np.where(counted[:-1] > 0, counted[:-1], 1)
+    joined = (counted[1:] == counted[:-1]) & (diffs % safe_g == 0)
     starts = np.flatnonzero(np.concatenate([[True], ~joined]))
     lengths = np.diff(np.concatenate([starts, [n]]))
-    run_group = group[starts]
+    run_group = counted[starts]
     long_run = (run_group > 0) & (lengths >= _MIN_PERIOD_RECORDS)
     if not long_run.any():
         return group
     period = np.repeat(long_run | _short_periods(run_group, lengths, long_run), lengths)
+    period = (period & (group > 0)) | (block > 0)
     if period.all():
         return group
 
@@ -701,6 +782,43 @@ def _join_resolution_periods(group: np.ndarray, diffs: np.ndarray) -> np.ndarray
             fits |= (near >= 0) & (near < n) & (group[safe] == res) & (bad[safe] == bad)
         result = np.where(~period & own & fits, res, result)
     return result
+
+
+def _continue_runs(group: np.ndarray, diffs: np.ndarray) -> np.ndarray:
+    """*group* with each unassigned record set to the resolution of the run it
+    continues, for counting run lengths.
+
+    An unassigned record continues the run before it if all time differences
+    from the run's last record to it are whole multiples of the run's
+    resolution and it, like every unassigned record in between, is exactly one
+    resolution away from a neighbour (the evidence pass 2 needs for a label).
+    Otherwise it may continue the run after it under the same conditions. A
+    30MIN run with one record missing near the end of the data leaves the last
+    records without a group in passes 1-3. Counted with the run, they keep it
+    long enough to be a period. Without the exact spacing, unassigned records
+    in 1MIN data with half the records missing joined 2MIN runs into spurious
+    periods.
+    """
+    n = len(group)
+    pos = np.arange(n)
+    zero = group == 0
+    filled = group.copy()
+    prev_d = np.concatenate([[0], diffs])
+    next_d = np.concatenate([diffs, [0]])
+    for order in (slice(None), slice(None, None, -1)):
+        z, g_ = zero[order], group[order]
+        dd = (prev_d if order.step is None else next_d)[order]
+        last = np.maximum.accumulate(np.where(z, -1, pos))
+        has = last >= 0
+        g_last = np.where(has, g_[np.clip(last, 0, n - 1)], 0)
+        safe = np.where(g_last > 0, g_last, 1)
+        exact = (prev_d[order] == g_last) | (next_d[order] == g_last)
+        bad = z & ((g_last == 0) | (dd % safe != 0) | ~exact)
+        cum = np.cumsum(bad)
+        fits = z & has & (cum == cum[np.clip(last, 0, n - 1)])
+        f = filled[order]
+        filled[order] = np.where(fits & (f == 0), g_last, f)
+    return filled
 
 
 def _short_periods(run_group: np.ndarray, lengths: np.ndarray, long_run: np.ndarray) -> np.ndarray:

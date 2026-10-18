@@ -455,6 +455,51 @@ class TestDetectFreqGroups(unittest.TestCase):
         self.assertTrue((g.loc[blk] == 300).all())
         self.assertTrue((g.drop(blk) == 120).all())
 
+    def test_short_block_on_its_grid_stays_its_own_period(self):
+        # L286: 2-5 ten-minute records between 1MIN periods got 60 s
+        for name in ('TIMESTAMP_END', 'TIMESTAMP_START'):
+            for tz in (None, 'Etc/GMT-1'):
+                for n in range(1, 6):
+                    with self.subTest(name=name, tz=tz, records=n):
+                        a = pd.date_range('2024-06-01 00:01', '2024-06-01 10:00', freq='1min', tz=tz)
+                        m = pd.date_range('2024-06-01 10:10', periods=n, freq='10min', tz=tz)
+                        c = pd.date_range(m[-1] + pd.Timedelta('1min'), periods=400, freq='1min')
+                        if name == 'TIMESTAMP_START':
+                            a, m, c = (x - pd.Timedelta(f) for x, f in ((a, '1min'), (m, '10min'), (c, '1min')))
+                        from diive.core.times.times import detect_freq_groups
+                        g = detect_freq_groups(index=pd.DatetimeIndex(a.append(m).append(c), name=name))
+                        # A single record stays ambiguous and gets the finer resolution
+                        self.assertTrue((g.loc[m] == (60 if n == 1 else 600)).all())
+                        self.assertTrue((g.drop(m) == 60).all())
+
+    def test_short_block_off_its_grid_needs_more_records(self):
+        # Off the 10MIN grid, holes in 1MIN data explain up to 5 records
+        a = pd.date_range('2024-06-01 00:01', '2024-06-01 10:05', freq='1min')
+        m = pd.date_range('2024-06-01 10:15', periods=3, freq='10min')
+        c = pd.date_range(m[-1] + pd.Timedelta('1min'), periods=400, freq='1min')
+        g = self._groups(a.append(m).append(c))
+        self.assertTrue((g == 60).all())
+
+    def test_coarse_run_keeps_records_after_a_missing_one(self):
+        # L289: 15MIN data, then 12 thirty-minute records with 11:30 missing. The
+        # last two had no group before pass 4, the run counted 10 records and
+        # joined the 15MIN period.
+        q = pd.date_range('2024-01-01 01:45', '2024-01-01 06:00', freq='15min')
+        h = pd.date_range('2024-01-01 06:30', '2024-01-01 12:30', freq='30min')
+        h = h.drop(pd.Timestamp('2024-01-01 11:30'))
+        g = self._groups(q.append(h))
+        self.assertTrue((g.loc[q] == 900).all())
+        self.assertTrue((g.loc[h] == 1800).all())
+
+    def test_empty_and_single_record_index(self):
+        # L291: an empty index raised a shape error
+        for ix in ([], ['2024-01-01 00:10']):
+            with self.subTest(records=len(ix)):
+                g = self._groups(pd.to_datetime(ix))
+                self.assertEqual(len(g), len(ix))
+                self.assertTrue(g.isna().all())
+                self.assertEqual(g.name, 'FREQ_AUTO_SEC')
+
     def test_own_period_wins_for_timestamp_start(self):
         # Mirror image of the 2MIN/30MIN case: for TIMESTAMP_START the record's own
         # period is the next record
