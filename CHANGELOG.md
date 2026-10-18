@@ -83,6 +83,20 @@ Library (also used by the notebook and the GUI):
   upload.
 - **Database download:** when a variable is stored with several tag sets, the series that starts
   later wins at shared timestamps, and a warning reports conflicting values.
+- **Database config:** an incomplete config folder gives an error that names the file, and
+  `units.yaml` and `dirs.yaml` are optional.
+- **Meteo screening, outdated resample:** after `resample()`, any change to the screened data makes
+  `resampled_detailed` raise an error until `resample()` runs again, so outdated values cannot be
+  uploaded.
+- **Set exact value to missing:** values match within a relative tolerance of 1e-6, so values stored
+  as float32 (e.g. 0.1) are found. 0 matches only 0.
+- **Nighttime zero offset:** `remove_nighttime_zero_offset` takes an optional `swin_pot`, the
+  potential radiation of each record.
+- **`Hampel`, daytime and nighttime (changes results):** with `separate_day_night=True`, daytime
+  records are judged against the median and spread of the daytime records in the window, and
+  nighttime records against the nighttime ones, as in ONEFlux. Before, the quiet night set the
+  spread for both, so variables with a quiet night lost too many daytime records, e.g. latent
+  heat flux more than twice as many as now.
 
 GUI only:
 
@@ -104,7 +118,7 @@ GUI only:
 - **MDS gap-filling, driver QC:** the MDS tab and Level 4.1 of the flux post-processing chain
   take an optional QC flag column for SW_IN, TA and VPD, and Copy Python includes it.
 
-Notebook (meteo screening notebook v14):
+Notebook (meteo screening notebook v15):
 
 - **Run All:** no longer applies tests and corrections with example settings. All outlier tests
   are commented out, with notes on the variables each one does not suit.
@@ -117,6 +131,10 @@ Notebook (meteo screening notebook v14):
   at its edges are removed.
 - **Upload check:** compares the stored values with the uploaded ones and reports a failed upload.
 - **UTC offset:** the notes say to keep one fixed offset all year, without daylight saving time.
+- **Upload switch:** nothing is uploaded unless `UPLOAD = True`, and variables without any outlier
+  test or change are refused unless `UPLOAD_UNSCREENED = True`.
+- **Time range check:** START and STOP must be one second after a resampling boundary, and the
+  notebook stops with a suggested value otherwise.
 
 ### Packaging
 
@@ -211,7 +229,8 @@ Library (also used by the notebook and the GUI):
 - **RH offset correction:** its description now says what the correction does.
 - **`Hampel`, repeated passes:** with `use_differencing=True` and `repeat=True`, each pass could
   remove the good records next to the ones removed before, e.g. all daytime shortwave radiation or
-  a whole day at a level shift. Single passes give the same results as before.
+  a whole day at a level shift. Blocks of up to four bad values are removed, also at the series
+  ends and next to gaps. Single passes give the same results as before.
 - **Database upload, failed writes:** a write that failed after the delete was only logged, so the
   period stayed empty while the upload reported success. It now raises an error.
 - **Database upload, empty data:** an empty table raises a clear error before anything is deleted,
@@ -220,6 +239,20 @@ Library (also used by the notebook and the GUI):
   last finalize removed, e.g. a rejected night record set to zero by the zero-offset correction.
 - **Meteo screening, finalize first:** `finalize_outlier_detection()` without
   `start_outlier_detection()` raises a clear error.
+- **Nighttime zero offset, polar day:** at sites in polar day one record near midnight counted as
+  night, so its value was removed from the whole day. A day without any night record now gets an
+  offset of 0, where 30-min data gave only missing values.
+- **Meteo screening, missing records:** a correction after finalize could give a record missing in
+  the download a value.
+- **Meteo screening, set to value:** `correction_setto_value` raises for dates in a form it cannot
+  read, instead of ignoring them.
+- **Meteo screening, mixed time resolutions:** the nighttime zero offset and the potential radiation
+  correlation use each record's own period.
+- **Meteo screening, console:** a correction after finalize prints its report once, and the
+  set-to corrections follow `verbose`.
+- **Meteo screening, many missing records:** records between gaps got a coarser time resolution
+  than their own, or none, and those without one were dropped. With 30 % of 10-min records
+  missing, about one in seven records was lost.
 
 GUI only:
 
