@@ -20,7 +20,7 @@ from pandas.tseries.frequencies import to_offset
 import diive.core.dfun.frames as frames
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-from diive.core.utils.console import info, detail, warn
+from diive.core.utils.console import VERBOSE_SILENT, detail, get_verbosity, info, set_verbosity, warn
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
 from diive.core.plotting.styles.format import FormatStyle
 from diive.core.plotting.timeseries import TimeSeries
@@ -135,7 +135,8 @@ class StepwiseMeteoScreeningDb:
     END - grid/2, which for a coarse record is not the middle of its own period. The
     tests that run on all records at once (e.g. z-score, absolute limits, LOF) classify
     a coarse record as day or night at this slot time. The rolling-window and difference
-    tests and the day/night QCF thresholds use each record's own middle.
+    tests, the day/night QCF thresholds, the nighttime zero offset and the potential
+    radiation correlation use each record's own middle and period.
     `.flag_manualremoval_test()` and `.correction_setto_value()` take dates as TIMESTAMP_END
     in the time zone of *data_detailed*, i.e. as the records appear after download.
 
@@ -230,6 +231,9 @@ class StepwiseMeteoScreeningDb:
         # resample() warns about flags added after that finalize.
         self._finalized_flags = {}
         self._resampled_detailed = {}  # Resampled time series with tags
+        # True once the screened data change after resample(), so the old result
+        # cannot be read (and uploaded) by mistake.
+        self._resampled_stale = False
 
         for field in self.fields:
             # Validate data_detailed
@@ -313,6 +317,7 @@ class StepwiseMeteoScreeningDb:
                 site_lon=self.site_lon,
                 utc_offset=self.utc_offset)
             self._finalized_flags[field] = set()
+        self._invalidate_resampled()
 
     @property
     def resampled_detailed(self) -> dict:
@@ -320,10 +325,24 @@ class StepwiseMeteoScreeningDb:
 
         Each DataFrame holds the resampled series and the tag columns, on a
         TIMESTAMP_END index. Filled by ``resample()``.
+
+        Raises:
+            RuntimeError: If the screened data changed after ``resample()``, by
+                ``start_outlier_detection()``, ``finalize_outlier_detection()``
+                or a correction. Run ``resample()`` again.
         """
         if not isinstance(self._resampled_detailed, dict):
             raise Exception("No resampled data available.")
+        if self._resampled_stale:
+            raise RuntimeError("The screened data changed after resample() (outlier detection "
+                               "or corrections), so the resampled data are out of date. Run "
+                               "resample() again.")
         return self._resampled_detailed
+
+    def _invalidate_resampled(self):
+        """Mark an existing resample result as out of date."""
+        if self._resampled_detailed:
+            self._resampled_stale = True
 
     @property
     def tags(self) -> dict:
@@ -658,27 +677,43 @@ class StepwiseMeteoScreeningDb:
                 showplot=showplot,
                 verbose=verbose)
 
-    def _end_dates_to_middle(self, field: str, remove_dates: list) -> list:
+    @staticmethod
+    def _date_spec_bounds(spec, argname: str) -> tuple:
+        """Return ``(start, end)`` of one date entry, checked as ``ManualRemoval`` checks it.
+
+        Raises:
+            ValueError: If a list or tuple entry does not have two elements.
+            TypeError: If the entry is neither a string nor a list or tuple.
+        """
+        if isinstance(spec, str):
+            return spec, spec
+        if isinstance(spec, (list, tuple)):
+            if len(spec) != 2:
+                raise ValueError(
+                    f"A date range in {argname} must have exactly two elements "
+                    f"[start, end], got {len(spec)}: {spec!r}")
+            return tuple(spec)
+        raise TypeError(
+            f"Each entry in {argname} must be a date(time) string or a "
+            f"[start, end] list, got {type(spec).__name__}: {spec!r}")
+
+    def _end_dates_to_middle(self, field: str, remove_dates: list, argname: str = 'remove_dates') -> list:
         """Translate TIMESTAMP_END date specs to ranges of grid slots (TIMESTAMP_MIDDLE).
 
         Warns about each entry that matches no record, also when the caller is not
         verbose: the entry is a mistake in the input, not a result to report.
+        Raises as ``ManualRemoval`` does for an invalid entry (see
+        ``_date_spec_bounds``), before anything is converted.
         """
         # Match on the END timestamps of records only, so a bare date or a range
         # selects exactly the records the user sees in the database, then pass the
         # matched records on as explicit MIDDLE ranges.
+        bounds = [self._date_spec_bounds(spec, argname) for spec in remove_dates]
         index = self.data_detailed[field].index
         middle_by_end = pd.Series(index, index=index + pd.Timedelta(index.freq) / 2)
         middle_by_end = middle_by_end[self._has_record(field).to_numpy()]
         converted = []
-        for spec in remove_dates:
-            if isinstance(spec, str):
-                start = end = spec
-            elif isinstance(spec, (list, tuple)) and len(spec) == 2:
-                start, end = spec
-            else:
-                converted.append(spec)  # ManualRemoval reports the invalid entry
-                continue
+        for spec, (start, end) in zip(remove_dates, bounds):
             matched = middle_by_end.loc[start:end]
             if matched.empty:
                 # A typo, or a time inside a coarse record instead of its END.
@@ -1023,11 +1058,12 @@ class StepwiseMeteoScreeningDb:
         if field in self._outlier_detection_qcf:
             # Records the last finalize removed stay removed until the next finalize,
             # also where a correction writes a value (zero offset, set to value).
-            # Records missing in the download are not masked: the zero offset sets
-            # missing nighttime records to zero on purpose.
-            removed = (self._outlier_detection_qcf[field].flagqcf == 2) & self._series_hires_orig[field].notna()
-            series = series.mask(removed)
+            # This includes records without a value in the download, which get
+            # QCF = 2 from the missing-values flag, so they end NaN whether the
+            # correction runs before or after finalize.
+            series = series.mask(self._outlier_detection_qcf[field].flagqcf == 2)
         self._series_hires_cleaned[field] = series
+        self._invalidate_resampled()
         if field in self._outlier_detection:
             # After finalize, tests run on the corrected series before the QCF
             # removed records, as they do without a correction in between: a later
@@ -1177,7 +1213,14 @@ class StepwiseMeteoScreeningDb:
             quiet = {key: (0 if key == 'verbose' else False if key == 'showplot' else value)
                      for key, value in kwargs.items()}
             removed = self._outlier_detection_qcf[field].flagqcf == 2
-            unmasked = correction(series=self._series_hires_corrected[field], **quiet)
+            # Some corrections print without a verbose argument, and the report
+            # above already covers this call.
+            verbosity = get_verbosity()
+            set_verbosity(VERBOSE_SILENT)
+            try:
+                unmasked = correction(series=self._series_hires_corrected[field], **quiet)
+            finally:
+                set_verbosity(verbosity)
             self._series_hires_corrected[field] = corrected.mask(removed, unmasked).where(self._has_record(field))
         self._set_corrected(field, corrected)
 
@@ -1210,7 +1253,33 @@ class StepwiseMeteoScreeningDb:
             self._correct(field, remove_nighttime_zero_offset,
                           lat=self.site_lat, lon=self.site_lon,
                           utc_offset=self.utc_offset, showplot=showplot,
-                          clamp_negatives=clamp_negatives)
+                          clamp_negatives=clamp_negatives,
+                          swin_pot=self._zero_offset_swin_pot(field))
+
+    def _zero_offset_swin_pot(self, field: str) -> pd.Series | None:
+        """Potential radiation of each record for the nighttime zero offset.
+
+        None with one resolution period: the correction computes it on the slots,
+        which are the records' middles. Otherwise each record gets the mean over
+        its own period (``_potential_radiation``), empty slots are NaN (no record),
+        and one record before the first and after the last record lets the
+        correction recognise potrad's midnight zeros at the series edges, as it
+        does for single-resolution data.
+        """
+        periods = self._resolution_periods(field)
+        if len(periods) == 1:
+            return None
+        coords = dict(lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset)
+        swinpot = self._potential_radiation(field).where(self._has_record(field))
+        margins = []
+        for slots, middles, res, end in ((*periods[0], 0), (*periods[-1], -1)):
+            step = -res if end == 0 else res
+            # potrad averages each timestamp over its own window, so two timestamps
+            # one resolution apart give the value of the margin record.
+            pair = pd.DatetimeIndex([middles[end], middles[end] + step]).sort_values()
+            value = potrad(timestamp_index=pair, **coords).loc[middles[end] + step]
+            margins.append(pd.Series([value], index=[slots[end] + step]))
+        return pd.concat([margins[0], swinpot, margins[1]]).rename(swinpot.name)
 
     def correction_setto_max_threshold(self, threshold: float, showplot: bool = True):
         """Set values above threshold to threshold
@@ -1223,12 +1292,16 @@ class StepwiseMeteoScreeningDb:
         for field in self.fields:
             self._correct(field, setto_threshold, threshold=threshold, type='max', showplot=showplot)
 
-    def correction_set_exact_value_to_missing(self, values: list, verbose: int = 0, showplot: bool = True):
-        """Set exact values to missing values
+    def correction_set_exact_value_to_missing(self, values: list, verbose: int | bool | None = None,
+                                              showplot: bool = True):
+        """Set records equal to the given values to missing
+
+        Values match within a relative tolerance of 1e-6, so a value stored as
+        float32 (e.g. 0.1) is found. 0 matches only 0. See ``set_exact_values_to_missing``.
 
         Example:
             ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example.
-            Set records that are exactly -9999 or 0 to missing:
+            Set records that are -9999 or 0 to missing:
 
             >>> mscr.correction_set_exact_value_to_missing(values=[-9999, 0], showplot=False)
         """
@@ -1253,6 +1326,10 @@ class StepwiseMeteoScreeningDb:
         Dates are TIMESTAMP_END in the time zone of *data_detailed*, as for
         ``flag_manualremoval_test``.
 
+        Raises:
+            TypeError: If an entry of *dates* is neither a string nor a list.
+            ValueError: If a list entry does not have two elements.
+
         Example:
             ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example.
             Dates are END timestamps and take the same forms as in
@@ -1269,7 +1346,7 @@ class StepwiseMeteoScreeningDb:
         """
         for field in self.fields:
             self._correct(field, setto_value,
-                          dates=self._end_dates_to_middle(field=field, remove_dates=dates),
+                          dates=self._end_dates_to_middle(field=field, remove_dates=dates, argname='dates'),
                           value=value, verbose=verbose)
 
     def correction_remove_relativehumidity_offset(self, showplot: bool = True):
@@ -1313,7 +1390,10 @@ class StepwiseMeteoScreeningDb:
             showplot: Show a plot for each correction that has one.
 
         Raises:
-            ValueError: If a key is unknown. Nothing is changed then.
+            ValueError: If a key is unknown, or a ``'setto_value'`` date range does
+                not have two elements. Nothing is changed then.
+            TypeError: If a ``'setto_value'`` date entry is neither a string nor a
+                list. Nothing is changed then.
 
         Example:
             ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example:
@@ -1349,6 +1429,8 @@ class StepwiseMeteoScreeningDb:
                 call = partial(self.correction_setto_min_threshold, threshold=kwargs['threshold'],
                                showplot=showplot)
             elif key == CORR_SETTO_VALUE:
+                for spec in kwargs['dates']:
+                    self._date_spec_bounds(spec, 'dates')
                 call = partial(self.correction_setto_value, dates=kwargs['dates'],
                                value=kwargs.get('value', 0))
             elif key == CORR_SET_EXACT_TO_MISSING:
@@ -1402,11 +1484,9 @@ class StepwiseMeteoScreeningDb:
         daily_correlations = {}
         for field in self.fields:
             series = self.series_hires_cleaned[field]
-            # Calculate potential radiation SW_IN_POT
-            swinpot = potrad(timestamp_index=series.index,
-                             lat=self.site_lat,
-                             lon=self.site_lon,
-                             utc_offset=utc_offset)
+            # Potential radiation over each record's own period, also for coarse
+            # records on a mixed grid, whose slot is not their middle.
+            swinpot = self._potential_radiation(field, utc_offset=utc_offset)
 
             # Calculate daily correlation between potential and measured observation.
             # daily_correlation is the class DailyCorrelation, which does not plot from
@@ -1458,6 +1538,10 @@ class StepwiseMeteoScreeningDb:
         Flags added with ``addflag()`` are applied by
         ``finalize_outlier_detection()``, not here. A warning names the flags
         added since the last finalize.
+
+        The result reflects the screened data at the time of the call. After
+        ``start_outlier_detection()``, ``finalize_outlier_detection()`` or a
+        correction, ``resampled_detailed`` raises until ``resample()`` runs again.
 
         A coarse record is assigned whole to the period that contains its END
         timestamp. This is exact when its resolution divides the target period.
@@ -1547,6 +1631,7 @@ class StepwiseMeteoScreeningDb:
             # Insert tags as columns
             for key, value in self._tags[field].items():
                 self._resampled_detailed[field][key] = value
+        self._resampled_stale = False
 
     def finalize_outlier_detection(self,
                                    daytime_accept_qcf_below: int = 2,
@@ -1655,15 +1740,19 @@ class StepwiseMeteoScreeningDb:
             corrected = self._series_hires_corrected.setdefault(field, self._series_hires_cleaned[field])
             self._series_hires_cleaned[field] = corrected.mask(qcf.flagqcf == 2).where(
                 self._has_record(field)).rename(qcf.filteredseries.name)
+        self._invalidate_resampled()
 
-    def _potential_radiation(self, field: str) -> pd.Series:
-        """Potential radiation at the grid slots of *field*, for the day/night QCF thresholds.
+    def _potential_radiation(self, field: str, utc_offset: int = None) -> pd.Series:
+        """Potential radiation at the grid slots of *field*.
 
-        A record gets the mean over its own period. With more than one resolution
-        period the slot of a coarse record is not the middle of its period, so
-        each period is evaluated on its own grid of true middles.
+        Used for the day/night QCF thresholds, the nighttime zero offset and the
+        correlation analysis. A record gets the mean over its own period. With more
+        than one resolution period the slot of a coarse record is not the middle of
+        its period, so each period is evaluated on its own grid of true middles.
+        *utc_offset* defaults to ``self.utc_offset``.
         """
-        coords = dict(lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset)
+        utc_offset = self.utc_offset if utc_offset is None else utc_offset
+        coords = dict(lat=self.site_lat, lon=self.site_lon, utc_offset=utc_offset)
         swinpot = potrad(timestamp_index=self.data_detailed[field].index, **coords)
         periods = self._resolution_periods(field)
         if len(periods) > 1:

@@ -1235,8 +1235,12 @@ class TestRestartAfterFinalize(unittest.TestCase):
         self.assertGreaterEqual(series.min(), 30)
 
 
-def _radiation_with_removed_and_missing_night_records():
-    """10MIN radiation-like data: a night spike END 01:50 and a night record without value END 02:50."""
+def _radiation_with_removed_and_missing_night_records(correct=None):
+    """10MIN radiation-like data: a night spike END 01:50 and a night record without value END 02:50.
+
+    The spike is removed manually and finalized. *correct*, if given, is called
+    with the screening before ``start_outlier_detection()``.
+    """
     index = pd.date_range('2020-06-01 00:10', periods=3 * 144, freq='10min')
     hour = index.hour.to_numpy() + index.minute.to_numpy() / 60
     values = np.clip(800 * np.sin(np.pi * (hour - 5) / 15), 0, None) - 3
@@ -1245,6 +1249,8 @@ def _radiation_with_removed_and_missing_night_records():
     values[spike], values[missing] = 400, np.nan
     m = _screening(_series_detailed(index, values))
     m.flag_missingvals_test()
+    if correct is not None:
+        correct(m)
     m.start_outlier_detection()
     m.flag_manualremoval_test(remove_dates=['2020-06-01 01:50'])
     m.addflag()
@@ -1268,7 +1274,7 @@ class TestCorrectionAfterFinalize(unittest.TestCase):
         m.resample(to_freqstr='30min')
         self.assertGreater(m.resampled_detailed[FIELD][FIELD].min(), 20)
 
-    def test_zero_offset_keeps_removed_night_record_and_zeroes_missing_one(self):
+    def test_zero_offset_keeps_removed_and_missing_night_records_removed(self):
         for via in ('method', 'set_corrections'):
             with self.subTest(via=via):
                 m, spike, missing = _radiation_with_removed_and_missing_night_records()
@@ -1281,9 +1287,24 @@ class TestCorrectionAfterFinalize(unittest.TestCase):
                     m.set_corrections([{'key': 'radiation_zero_offset', 'kwargs': {}}])
                 cleaned = m.series_hires_cleaned[FIELD]
                 self.assertTrue(np.isnan(cleaned.loc[spike]))  # was 0.0
-                self.assertEqual(cleaned.loc[missing], 0)  # deliberate, Round 7 note
+                self.assertTrue(np.isnan(cleaned.loc[missing]))  # L246: was 0.0
                 # The next finalize decides again from the corrected records.
                 self.assertEqual(m._series_hires_corrected[FIELD].loc[spike], 0)
+
+    def test_missing_record_same_before_and_after_finalize(self):
+        """L246: a correction on a record without value gives NaN in either order."""
+        corrections = ([{'key': 'radiation_zero_offset', 'kwargs': {}}],
+                       [{'key': 'setto_value', 'kwargs': {'dates': ['2020-06-01 02:50'], 'value': 5}}])
+        for correction in corrections:
+            with self.subTest(correction=correction[0]['key']):
+                before, _, missing = _radiation_with_removed_and_missing_night_records(
+                    correct=lambda m: m.set_corrections(correction))
+                self.assertTrue(np.isnan(before.series_hires_cleaned[FIELD].loc[missing]))
+                after, _, _ = _radiation_with_removed_and_missing_night_records()
+                after.set_corrections(correction)
+                self.assertTrue(np.isnan(after.series_hires_cleaned[FIELD].loc[missing]))  # was 0.0 / 5.0
+                after.finalize_outlier_detection()
+                self.assertTrue(np.isnan(after.series_hires_cleaned[FIELD].loc[missing]))
 
     def test_empty_slots_stay_empty(self):
         m = _screening(_mixed_radiation())
@@ -1338,6 +1359,19 @@ class TestResampleCoverage(unittest.TestCase):
                 np.testing.assert_array_equal(got, expected)
         r = self._resampled(index, np.ones(len(index)), None, 'sum', 1)
         self.assertTrue((r.dropna() == 3).all())
+
+    def test_holes_do_not_inflate_coverage(self):
+        # L254: with many missing records the remaining 10MIN records were labelled
+        # 20MIN or 30MIN and counted that long, so one record passed mincounts_perc=1.
+        index = pd.date_range('2020-06-01 00:10', '2020-06-08 00:00', freq='10min')
+        index = index[np.random.default_rng(0).random(len(index)) >= 0.3]
+        m = _screening(_series_detailed(index, np.ones(len(index))))
+        self.assertTrue((m.data_detailed[FIELD]['FREQ_AUTO_SEC'].dropna() == 600).all())
+        self.assertEqual(m.records_count(), len(index))  # no record dropped
+        m.resample(to_freqstr='30min', agg='mean', mincounts_perc=1)
+        r = m.resampled_detailed[FIELD][FIELD]
+        counts = pd.Series(1, index=index).resample('30min', label='right', closed='right').count()
+        np.testing.assert_array_equal(r.notna().to_numpy(), (counts.reindex(r.index, fill_value=0) == 3).to_numpy())
 
     def test_sum_needs_a_record_at_any_minimum(self):
         index = pd.date_range('2020-06-01 00:10', '2020-06-03 00:00', freq='10min')
@@ -1434,6 +1468,163 @@ class TestPublicHelpers(unittest.TestCase):
         df = _series_detailed(coarse.append(fine), _diurnal(coarse.append(fine)))
         df.loc[fine, 'freq'] = '1min'
         self.assertEqual(_screening(df).tags[FIELD]['freq'], '10min,1min')
+
+
+class TestStaleResample(unittest.TestCase):
+    """L241: once the screened data change after resample(), the old result cannot be read."""
+
+    def _resampled(self):
+        df, spike_end = _spiky()
+        m = _screening(df)
+        m.start_outlier_detection()
+        m.finalize_outlier_detection()
+        m.resample(to_freqstr='30min')
+        self.assertGreater(m.resampled_detailed[FIELD][FIELD].max(), 40)
+        return m, spike_end
+
+    def _assert_stale(self, m):
+        with self.assertRaisesRegex(RuntimeError, r'Run resample\(\) again'):
+            _ = m.resampled_detailed
+        with self.assertRaisesRegex(RuntimeError, r'Run resample\(\) again'):
+            m.showplot_resampled()
+
+    def test_going_back_to_remove_a_spike(self):
+        m, spike_end = self._resampled()
+        m.flag_manualremoval_test(remove_dates=[str(spike_end)])
+        m.addflag()
+        m.finalize_outlier_detection()
+        self._assert_stale(m)
+        m.resample(to_freqstr='30min')
+        self.assertLess(m.resampled_detailed[FIELD][FIELD].max(), 40)
+
+    def test_every_change_of_the_screened_data(self):
+        changes = {
+            'start_outlier_detection': lambda m: m.start_outlier_detection(),
+            'finalize_outlier_detection': lambda m: m.finalize_outlier_detection(),
+            'correction': lambda m: m.correction_setto_max_threshold(threshold=40, showplot=False),
+            'setto_value': lambda m: m.correction_setto_value(dates=['2020-06-01 12:00'], value=1, verbose=0),
+            'set_corrections': lambda m: m.set_corrections([]),
+        }
+        for name, change in changes.items():
+            with self.subTest(change=name):
+                m, _ = self._resampled()
+                change(m)
+                self._assert_stale(m)
+                m.resample(to_freqstr='30min')
+                self.assertIn(FIELD, m.resampled_detailed)
+
+    def test_tests_analysis_and_plots_keep_it(self):
+        m, _ = self._resampled()
+        m.analysis_potential_radiation_correlation(utc_offset=1, showplot=False)
+        m.flag_outliers_zscore_test(thres_zscore=50)
+        m.addflag()
+        self.assertIn(FIELD, m.resampled_detailed)
+
+    def test_empty_before_the_first_resample(self):
+        m = _screening(_spiky()[0])
+        m.start_outlier_detection()
+        m.finalize_outlier_detection()
+        self.assertEqual(m.resampled_detailed, {})
+
+
+class TestSettoValueDates(unittest.TestCase):
+    """L248: correction_setto_value rejects the entries flag_manualremoval_test rejects."""
+
+    INVALID = (([pd.Timestamp('2020-06-01 12:00')], TypeError),
+               ([['2020-06-01 12:00', '2020-06-01 13:00', '2020-06-01 14:00']], ValueError),
+               (['2020-06-01 12:00', 5], TypeError))
+
+    def test_invalid_entries_raise_and_change_nothing(self):
+        df, _ = _spiky()
+        for dates, error in self.INVALID:
+            with self.subTest(dates=dates):
+                m = _screening(df)
+                m.correction_setto_max_threshold(threshold=31, showplot=False)
+                before = m.series_hires_cleaned[FIELD].copy()
+                with self.assertRaises(error):
+                    m.correction_setto_value(dates=dates, value=99)
+                with self.assertRaises(error):
+                    m.set_corrections([{'key': 'setto_value', 'kwargs': {'dates': dates, 'value': 99}}])
+                pd.testing.assert_series_equal(m.series_hires_cleaned[FIELD], before)
+
+    def test_same_messages_as_manual_removal(self):
+        m = _screening(_spiky()[0])
+        m.start_outlier_detection()
+        for dates, error in self.INVALID:
+            with self.subTest(dates=dates):
+                with self.assertRaises(error) as removal:
+                    m.flag_manualremoval_test(remove_dates=dates)
+                with self.assertRaises(error) as setto:
+                    m.correction_setto_value(dates=dates, value=99)
+                self.assertEqual(str(removal.exception).replace('remove_dates', 'dates'), str(setto.exception))
+
+    def test_tuple_is_a_range(self):
+        m = _screening(_spiky()[0])
+        m.correction_setto_value(dates=[('2020-06-01 12:00', '2020-06-01 13:00')], value=99, verbose=0)
+        self.assertEqual(int((m.series_hires_cleaned[FIELD] == 99).sum()), 7)
+
+
+class TestCorrectionReportAfterFinalize(unittest.TestCase):
+    """L252: after finalize a correction prints its report once."""
+
+    def test_report_printed_once(self):
+        m = _screening(_spiky()[0])
+        m.start_outlier_detection()
+        m.finalize_outlier_detection()
+        verbosity = console_module.get_verbosity()
+        for call, report in (
+                (lambda: m.correction_setto_max_threshold(threshold=31, showplot=False),
+                 'QA/QC set to threshold value'),
+                (lambda: m.correction_set_exact_value_to_missing(values=[-9999], showplot=False),
+                 'Correction: set exact values to missing')):
+            with self.subTest(report=report):
+                out = _Lines()
+                console_module.console.add_mirror(out)
+                try:
+                    call()
+                finally:
+                    console_module.console.remove_mirror(out)
+                self.assertEqual(sum(report in line for line in out.lines), 1)
+                self.assertEqual(console_module.get_verbosity(), verbosity)
+
+
+def _potrad_radiation(index, freq: str) -> np.ndarray:
+    """0.7 x potential radiation over each record's period (END index), minus a night offset of 3."""
+    middle = pd.DatetimeIndex(index - pd.Timedelta(freq) / 2, freq=freq)
+    return 0.7 * potrad(timestamp_index=middle, lat=47.478333, lon=8.364389, utc_offset=1).to_numpy() - 3
+
+
+class TestPotentialRadiationAtTrueMiddle(unittest.TestCase):
+    """L251: on a mixed grid the zero offset and the correlation analysis evaluate
+    potential radiation over each coarse record's own period."""
+
+    COARSE = pd.date_range('2020-06-01 00:10', '2020-06-03 00:00', freq='10min')
+    FINE = pd.date_range('2020-06-03 00:01', '2020-06-05 00:00', freq='1min')
+
+    def _mixed_and_pure(self):
+        values = np.r_[_potrad_radiation(self.COARSE, '10min'), _potrad_radiation(self.FINE, '1min')]
+        mixed = _screening(_series_detailed(self.COARSE.append(self.FINE), values))
+        pure = _screening(_series_detailed(self.COARSE, values[:len(self.COARSE)]))
+        return mixed, pure
+
+    def test_zero_offset_of_coarse_records(self):
+        mixed, pure = self._mixed_and_pure()
+        for m in (mixed, pure):
+            m.correction_remove_nighttime_zero_offset(showplot=False)
+        got = mixed.series_hires_cleaned[FIELD].loc[self.COARSE - pd.Timedelta('30s')].to_numpy()
+        expected = pure.series_hires_cleaned[FIELD].loc[self.COARSE - pd.Timedelta('5min')].to_numpy()
+        # Before the fix two sunset records were zeroed, as their slot time was night.
+        np.testing.assert_allclose(got, expected, rtol=0, atol=1e-9)
+        # Night records (potential radiation below 0.001) are set to 0.
+        np.testing.assert_allclose(got, _potrad_radiation(self.COARSE, '10min') + 3, rtol=0, atol=1e-3)
+
+    def test_correlation_of_coarse_days(self):
+        mixed, pure = self._mixed_and_pure()
+        got = mixed.analysis_potential_radiation_correlation(utc_offset=1, showplot=False)[FIELD]
+        expected = pure.analysis_potential_radiation_correlation(utc_offset=1, showplot=False)[FIELD]
+        for day in ('2020-06-01', '2020-06-02'):
+            self.assertAlmostEqual(got[day], 1.0, places=12)  # was 0.9996
+            self.assertAlmostEqual(got[day], expected[day], places=12)
 
 
 class TestCodegenScriptRuns(unittest.TestCase):
