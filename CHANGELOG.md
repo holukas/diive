@@ -112,6 +112,26 @@ Library (also used by the notebook and the GUI):
   and the other fields are screened.
 - **Meteo screening, speed:** screening runs about 20-50 % faster and previews draw faster, with
   identical results.
+- **InfluxDB download:** the summary lists each variable with its number of records, period, time
+  resolution detected from the timestamps and `freq` tag.
+- **Time series plot, new look:** `TimeSeries.plot()` without a `FormatStyle` draws a white plot
+  with an open frame, light horizontal gridlines, a left-aligned title, concise date labels with
+  the year and a thinner line (`linewidth` default 1.2, was 2.2). A given `FormatStyle` keeps the
+  previous look.
+- **Time series plot, stats:** `TimeSeries.plot()` writes the time resolution, period, number of
+  values, share of missing values, mean, median, SD, min and max above the plot. It is on for a
+  figure the plot creates itself and off on a given axes, set with `show_stats`.
+- **Time resolution text:** `describe_time_resolution()` in `diive.core.times.times` gives the
+  detected time resolution of an index as text, with the number of records for each resolution
+  where it changes.
+- **QCF reports:** `report_qcf_series()`, `report_qcf_flags()` and `report_qcf_evolution()` of
+  `FlagQCF` (also called by the meteo screening) print one aligned table each, readable in
+  notebooks.
+  - The summary adds the time resolution, the timestamp type, the accept rule and daytime and
+    nighttime counts.
+  - The test table counts measured records once, with the records a test did not reach.
+  - The evolution table adds how many records each test failed and warned.
+  - The missing-values test is listed above the tables, because it flags no measured record.
 
 GUI only:
 
@@ -299,11 +319,13 @@ Library (also used by the notebook and the GUI):
 - **Database download, changed tags:** a variable stored with two tag sets (e.g. after a gain
   correction) kept old and new values at random at shared timestamps.
 - **Database upload, missing tags:** data without some tags could not be uploaded. A missing
-  `gain` is now written as 1 and a missing `offset` as 0.
+  `gain` is now written as 1.0 and a missing `offset` as 0.0, as in the raw data.
 - **Time resolution detection, regular outages:** records in data with a regular outage pattern
   (e.g. every third record missing) got no time resolution and were dropped, and the last coarse
   record before finer data could get the finer resolution.
 - **Set to threshold or value:** a decimal value failed on data stored as integers.
+- **QCF summary, duration:** the period was one day short (272 instead of 273 days), because it
+  ran from the first to the last timestamp without the time step of the last record.
 - **Set-to corrections, console:** their reports follow `verbose`.
 
 GUI only:
