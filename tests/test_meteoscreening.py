@@ -255,7 +255,12 @@ class TestConstruction(unittest.TestCase):
         df, _ = _spiky()
         df['gain'] = df['gain'].astype(object)
         df.iloc[:10, df.columns.get_loc('gain')] = np.nan
-        self.assertEqual(_screening(df).tags[FIELD]['gain'], '100.0')
+        df['hpos'] = df['hpos'].astype(object)
+        df.iloc[:10, df.columns.get_loc('hpos')] = np.nan
+        tags = _screening(df).tags[FIELD]
+        self.assertEqual(tags['hpos'], 'FF1')
+        # L311: a record without gain was not scaled, gain 1
+        self.assertEqual(tags['gain'], '1,100.0')
 
 
 class TestOutlierWorkflow(unittest.TestCase):
@@ -2242,3 +2247,230 @@ class TestZeroOffsetRecordPeriod(unittest.TestCase):
         # Daytime in the 10MIN data alone, nighttime with a 1-minute window
         self.assertEqual(alone.loc['2026-05-12 00:20'], 0)
         pd.testing.assert_series_equal(mixed, alone)
+
+
+class TestGridBoundCoarserResolution(unittest.TestCase):
+    """L305: a resolution that leaves the grid step as it is costs no row and is kept,
+    also when the main resolution alone needs more than _MAX_GRID_ROWS rows."""
+
+    def test_coarser_resolution_next_to_a_long_fine_grid(self):
+        from diive.preprocessing.qaqc.meteoscreening import _MAX_GRID_ROWS, _grid_bound_drops
+        ns = 10 ** 9
+        day = 86400 * ns
+        cases = {
+            # 2 years of 10MIN, then 3 years of 1MIN (2.6M rows)
+            '10min then 1min': ([600, 60], [105264, 1578240], 5 * 365 * day),
+            # 4 years of 1MIN with one day of 10MIN in the middle (2.1M rows)
+            '1min with a 10min day': ([60, 600, 60], [1051200, 144, 1051200], 4 * 365 * day),
+            # one year of 10 s with a week of 1MIN (3.15M rows)
+            '10s with a 1min week': ([10, 60, 10], [1550880, 10080, 1550880], 365 * day),
+        }
+        for name, (res, lengths, span) in cases.items():
+            with self.subTest(name):
+                self.assertGreater(span // (min(res) * ns), _MAX_GRID_ROWS)
+                drops = _grid_bound_drops(np.array(res) * ns, np.array(lengths),
+                                          np.ones(len(res), dtype=bool), span=span)
+                self.assertEqual(drops, {})
+
+    def test_finer_resolution_is_still_dropped(self):
+        """A 10 s block in a year of 10MIN data shrinks the grid to 3.15M rows."""
+        from diive.preprocessing.qaqc.meteoscreening import _grid_bound_drops
+        ns = 10 ** 9
+        drops = _grid_bound_drops(np.array([600, 10, 600]) * ns, np.array([26000, 360, 26000]),
+                                  np.ones(3, dtype=bool), span=365 * 86400 * ns)
+        self.assertEqual(set(drops), {1})
+        self.assertIn('grid of 10s with 3153601 rows', drops[1])
+
+
+class TestFreqTag(unittest.TestCase):
+    """The freq tag is compared with the detected resolution. Detection stays the
+    source of the resolution: a mismatch only warns."""
+
+    @staticmethod
+    def _mixed():
+        """Two days of 10MIN, then two days of 1MIN, all tagged correctly."""
+        coarse = pd.date_range('2024-03-01 00:10', '2024-03-03 00:00', freq='10min')
+        fine = pd.date_range('2024-03-03 00:01', '2024-03-05 00:00', freq='1min')
+        df = _series_detailed(coarse.append(fine), np.linspace(10, 20, len(coarse) + len(fine)))
+        df['freq'] = np.where(df.index <= coarse[-1], '10min', '1min')
+        return df, coarse, fine
+
+    @staticmethod
+    def _build(df):
+        holder = {}
+        warnings = _warnings(lambda: holder.setdefault('m', _screening(df)))
+        return holder['m'], warnings
+
+    def test_matching_tags_do_not_warn(self):
+        df, _, _ = self._mixed()
+        _, warnings = self._build(df)
+        self.assertFalse(any('freq tag' in w for w in warnings), warnings)
+
+    def test_mismatch_warns_and_changes_nothing(self):
+        df, coarse, fine = self._mixed()
+        reference, _ = self._build(df)
+        wrong = df.copy()
+        wrong.loc[fine[100:160], 'freq'] = '10min'  # 60 1MIN records tagged 10MIN
+        wrong.loc[coarse[10:13], 'freq'] = '30min'
+        m, warnings = self._build(wrong)
+        found = [w for w in warnings if 'freq tag' in w]
+        self.assertEqual(len(found), 1, warnings)
+        text = ' '.join(found[0].split())
+        n = len(coarse) + len(fine)
+        self.assertIn(f'of 63 of {n} records differs from their freq tag', text)
+        self.assertIn(f'END {coarse[10]} to {coarse[12]}: 3 record(s) detected as 10min, tagged 30min', text)
+        self.assertIn(f'END {fine[100]} to {fine[159]}: 60 record(s) detected as 1min, tagged 10min', text)
+        pd.testing.assert_frame_equal(m.data_detailed[FIELD].drop(columns='freq'),
+                                      reference.data_detailed[FIELD].drop(columns='freq'))
+        self.assertEqual(m.resolutions(), ['10min', '1min'])
+
+    def test_runs_beyond_the_listed_ones_are_counted(self):
+        df, coarse, _ = self._mixed()
+        for k in range(7):
+            df.loc[coarse[10 * k], 'freq'] = '1min'
+        _, warnings = self._build(df)
+        text = ' '.join(next(w for w in warnings if 'freq tag' in w).split())
+        self.assertEqual(text.count('detected as 10min, tagged 1min'), 5)
+        self.assertIn('2 more record(s) in 2 more run(s)', text)
+
+    def test_missing_and_unparsable_tags_are_not_compared(self):
+        df, coarse, fine = self._mixed()
+        df['freq'] = df['freq'].astype(object)
+        df.loc[coarse[:5], 'freq'] = np.nan
+        df.loc[coarse[5:10], 'freq'] = '-'
+        df.loc[fine[:5], 'freq'] = '1MS'
+        df.loc[fine[5:10], 'freq'] = '10MIN'  # deprecated alias, still 10 minutes
+        _, warnings = self._build(df)
+        found = [w for w in warnings if 'freq tag' in w]
+        self.assertEqual(len(found), 1, warnings)
+        self.assertIn(f'of 5 of {len(df) - 15} records differs', ' '.join(found[0].split()))
+        # Without a freq column nothing is compared.
+        _, warnings = self._build(self._mixed()[0].drop(columns='freq'))
+        self.assertFalse(any('freq tag' in w for w in warnings), warnings)
+
+    def test_records_without_resolution_name_their_tag(self):
+        import diive.preprocessing.qaqc.meteoscreening as module
+        df, coarse, _ = self._mixed()
+        df.loc[coarse[50:53], 'freq'] = '30min'
+        real = module.detect_freq_groups
+
+        def detect(index):
+            freq = real(index=index)
+            freq.loc[coarse[50:53]] = np.nan
+            return freq
+
+        with mock.patch.object(module, 'detect_freq_groups', detect):
+            m, warnings = self._build(df)
+        self.assertEqual(m.records_count(), len(df) - 3)
+        dropped = [w for w in warnings if 'no detectable time resolution' in w]
+        self.assertEqual(len(dropped), 1, warnings)
+        self.assertIn('dropped 3 record(s) with no detectable time resolution (tagged 30min)',
+                      ' '.join(dropped[0].split()))
+        # Not compared with their tag
+        self.assertFalse(any('freq tag' in w for w in warnings), warnings)
+
+
+def _detect_none_below_three(index):
+    """detect_freq_groups, but no resolution for downloads of fewer than three records."""
+    from diive.core.times.times import detect_freq_groups
+    return pd.Series(np.nan, index=index) if len(index) < 3 else detect_freq_groups(index=index)
+
+
+class TestFieldWithTooFewRecords(unittest.TestCase):
+    """L306: a field with one or two records is left out, the other fields are screened."""
+
+    @staticmethod
+    def _frames(n_short):
+        frames = {}
+        for field, n in (('A', 300), ('B', n_short)):
+            index = pd.date_range('2024-01-01 00:10', periods=n, freq='10min', name='TIMESTAMP_END')
+            df = pd.DataFrame({field: np.linspace(1, 2, n)}, index=index)
+            for tag, value in {**TAGS, 'varname': field}.items():
+                df[tag] = value
+            frames[field] = df
+        return frames
+
+    @staticmethod
+    def _build(frames, fields):
+        holder = {}
+        warnings = _warnings(lambda: holder.setdefault('m', StepwiseMeteoScreeningDb(
+            site='ch-lae', data_detailed=frames, fields=fields, site_lat=47.478333, site_lon=8.364389,
+            utc_offset=1)))
+        return holder['m'], warnings
+
+    def test_short_field_is_left_out(self):
+        for n_short in (1, 2):
+            with self.subTest(n_short=n_short):
+                with mock.patch('diive.preprocessing.qaqc.meteoscreening.detect_freq_groups',
+                                _detect_none_below_three):
+                    m, warnings = self._build(self._frames(n_short), ['A', 'B'])
+                self.assertEqual(m.fields, ['A'])
+                for attr in (m.data_detailed, m.tags, m.series_hires_orig, m.series_hires_cleaned):
+                    self.assertEqual(list(attr), ['A'])
+                left_out = [' '.join(w.split()) for w in warnings if 'left out' in ' '.join(w.split())]
+                self.assertEqual(len(left_out), 1, warnings)
+                self.assertIn('B: 0 record(s) left', left_out[0])
+                m.start_outlier_detection()
+                m.flag_outliers_abslim_test(minval=0, maxval=10)
+                m.addflag()
+                m.finalize_outlier_detection()
+                m.resample('30min')
+                self.assertEqual(list(m.resampled_detailed), ['A'])
+                self.assertEqual(len(m.resampled_detailed['A']), 100)
+
+    def test_no_field_left_raises(self):
+        with mock.patch('diive.preprocessing.qaqc.meteoscreening.detect_freq_groups',
+                        lambda index: pd.Series(np.nan, index=index)):
+            with self.assertRaisesRegex(ValueError, r'No field left to screen\. A: 0 record\(s\) left.*'
+                                                    r'B: 0 record\(s\) left'):
+                self._build(self._frames(2), ['A', 'B'])
+
+
+class TestShowplotResampledOneLabel(unittest.TestCase):
+    """L306: a resample with a single label leaves out its heatmap instead of raising."""
+
+    def test_one_label(self):
+        import matplotlib.pyplot as plt
+        index = pd.date_range('2024-07-01 23:40', periods=3, freq='10min')
+        m = _screening(_series_detailed(index, [1.0, 2.0, 3.0]))
+        m.resample(to_freqstr='30min')
+        self.assertEqual(len(m.resampled_detailed[FIELD]), 1)
+        plt.close('all')
+        with mock.patch.object(plt.Figure, 'show'):
+            m.showplot_resampled()
+        fig = plt.gcf()
+        heatmap_resampled = fig.axes[4]
+        self.assertFalse(heatmap_resampled.axison)
+        self.assertIn('no resampled heatmap', heatmap_resampled.texts[0].get_text())
+        # The time series are still drawn, the high-resolution heatmap too.
+        self.assertEqual(len(fig.axes[1].get_lines()), 1)
+        self.assertTrue(fig.axes[3].axison)
+        plt.close('all')
+
+
+class TestTagsWithoutValues(unittest.TestCase):
+    """L311: a tag empty for every record is left out, missing gain/offset count as 1/0."""
+
+    def test_empty_tag_is_left_out(self):
+        df, _ = _spiky()
+        df['gain'] = np.nan
+        df['hpos'] = np.nan
+        m = _screening(df)
+        self.assertNotIn('gain', m.tags[FIELD])
+        self.assertNotIn('hpos', m.tags[FIELD])
+        m.resample('30min')
+        cols = m.resampled_detailed[FIELD].columns
+        self.assertNotIn('gain', cols)
+        self.assertNotIn('hpos', cols)
+
+    def test_missing_gain_and_offset_count_as_neutral(self):
+        df, _ = _spiky()
+        df['gain'] = df['gain'].astype(object)
+        df['offset'] = df['offset'].astype(object)
+        df.iloc[:100, df.columns.get_loc('gain')] = np.nan
+        df.iloc[:100, df.columns.get_loc('offset')] = np.nan
+        df.iloc[100:, df.columns.get_loc('gain')] = '1.02'
+        df.iloc[100:, df.columns.get_loc('offset')] = '0.5'
+        tags = _screening(df).tags[FIELD]
+        self.assertEqual(tags['gain'], '1,1.02')
+        self.assertEqual(tags['offset'], '0,0.5')

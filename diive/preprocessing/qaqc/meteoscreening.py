@@ -8,6 +8,7 @@ Includes: outlier detection, data corrections, resampling, and quality flag gene
 Part of the diive library: https://github.com/holukas/diive
 """
 import math
+import warnings
 from functools import partial
 from typing import Literal
 
@@ -58,6 +59,64 @@ _MAX_GRID_ROWS = 2_000_000
 _MIN_PERIOD_RECORDS = 12
 # Dropped runs warned about one by one, the rest in one line
 _MAX_LISTED_RUNS = 20
+# Runs of records whose freq tag differs from the detected resolution listed in the warning
+_MAX_LISTED_TAG_RUNS = 5
+
+
+class _TooFewRecordsError(ValueError):
+    """A field has fewer than two records left after the time-resolution check."""
+
+
+def _tag_seconds(freq_tag: pd.Series) -> np.ndarray:
+    """Resolution in seconds of each record's ``freq`` tag, NaN where it is missing or unparsable.
+
+    Parsed with ``to_offset``. Tags that give no fixed positive duration ('-',
+    'MS', '10T' in pandas 3) count as unparsable.
+    """
+    seconds = {}
+    for value in pd.unique(freq_tag.dropna()):
+        try:
+            with warnings.catch_warnings():
+                # Deprecated aliases such as '10MIN' still parse, with a warning.
+                warnings.simplefilter('ignore')
+                ns = to_offset(str(value).strip()).nanos
+        except (ValueError, TypeError):
+            continue
+        if ns > 0:
+            seconds[value] = ns / 1e9
+    return freq_tag.map(seconds).to_numpy(dtype=float)
+
+
+def _warn_freq_tag_mismatch(freq_sec: pd.Series, tag_sec: np.ndarray, field: str):
+    """Warn where the detected resolution of a record differs from its ``freq`` tag.
+
+    *freq_sec* is the detected resolution in seconds on the TIMESTAMP_END index,
+    *tag_sec* the tagged one (``_tag_seconds``). Records with NaN in either are
+    not compared. The detected resolution is kept, so nothing changes here.
+    """
+    detected = freq_sec.to_numpy(dtype=float)
+    compared = ~np.isnan(detected) & ~np.isnan(tag_sec)
+    detected_ns = np.round(np.where(compared, detected, 0) * 1e9).astype(np.int64)
+    tagged_ns = np.round(np.where(compared, tag_sec, 0) * 1e9).astype(np.int64)
+    pos = np.flatnonzero(compared & (detected_ns != tagged_ns))
+    if not len(pos):
+        return
+    # A run is a series of consecutive differing records with the same pair of resolutions.
+    new_run = np.r_[True, (np.diff(pos) != 1) | (detected_ns[pos[1:]] != detected_ns[pos[:-1]])
+                    | (tagged_ns[pos[1:]] != tagged_ns[pos[:-1]])]
+    starts = np.flatnonzero(new_run)
+    ends = np.r_[starts[1:], len(pos)] - 1
+    listed = ' '.join(
+        f"END {freq_sec.index[pos[s]]} to {freq_sec.index[pos[e]]}: {e - s + 1} record(s) detected as "
+        f"{_offset_str(detected_ns[pos[s]])}, tagged {_offset_str(tagged_ns[pos[s]])}."
+        for s, e in zip(starts[:_MAX_LISTED_TAG_RUNS], ends[:_MAX_LISTED_TAG_RUNS], strict=True))
+    if len(starts) > _MAX_LISTED_TAG_RUNS:
+        rest = slice(_MAX_LISTED_TAG_RUNS, None)
+        listed += (f" {int((ends[rest] - starts[rest] + 1).sum())} more record(s) in "
+                   f"{len(starts) - _MAX_LISTED_TAG_RUNS} more run(s).")
+    # No verbose here: a wrong tag or a wrong detection both matter for the result.
+    warn(f"{field}: the detected time resolution of {len(pos)} of {int(compared.sum())} records "
+         f"differs from their freq tag. The detected resolution is used. {listed}")
 
 
 def _half_step(index: pd.DatetimeIndex) -> pd.Timedelta:
@@ -96,14 +155,19 @@ def _grid_bound_drops(run_res: np.ndarray, lengths: np.ndarray, used: np.ndarray
 
     The grid step is the greatest common divisor of the kept resolutions. They
     are added in order of the time their records cover, longest first, so the
-    main resolutions come first and are always kept. A resolution that would
-    shrink the grid to more than ``_MAX_GRID_ROWS`` rows over *span* is dropped
-    with all its runs, e.g. a few 1S records in a month of 10MIN data. The bound
-    is absolute, so a fine block survives in a long download as in a short one.
-    A resolution that is no multiple or divisor of the grid needs a common
-    divisor finer than both. It is also dropped if that grid would hold more
-    than ``_MAX_SLOTS_PER_RECORD`` slots per record, as for a phase shift (7S
-    records in 1MIN data need a 1S grid with 60 slots per record).
+    main resolutions come first and are always kept. A resolution that leaves
+    the grid step as it is costs no row and is always kept, also when the grid
+    already holds more than ``_MAX_GRID_ROWS`` rows (10MIN records next to years
+    of 1MIN data). A resolution that would shrink the grid to more than
+    ``_MAX_GRID_ROWS`` rows over *span* is dropped with all its runs, e.g. a few
+    1S records in a month of 10MIN data. The bound is absolute, so a fine block
+    survives in a long download as in a short one. Whether a finer resolution is
+    dropped therefore depends on the length of the download, not on how few
+    records it has. A resolution that is no multiple or divisor of the grid
+    needs a common divisor finer than both. It is also dropped if that grid
+    would hold more than ``_MAX_SLOTS_PER_RECORD`` slots per record, as for a
+    phase shift (7S records in 1MIN data need a 1S grid with 60 slots per
+    record).
 
     Args:
         run_res: Resolution of each run in ns.
@@ -128,7 +192,8 @@ def _grid_bound_drops(run_res: np.ndarray, lengths: np.ndarray, used: np.ndarray
         rows = int(span) // new_step + 1
         slots = _slots_per_record({m: n[m] for m in main + [r]}, new_step)
         odd = new_step not in (step, r)
-        if rows <= _MAX_GRID_ROWS and not (odd and slots > _MAX_SLOTS_PER_RECORD):
+        # The row limit applies only to a resolution that makes the grid finer (L305).
+        if new_step == step or (rows <= _MAX_GRID_ROWS and not (odd and slots > _MAX_SLOTS_PER_RECORD)):
             main.append(r)
             step = new_step
             continue
@@ -220,22 +285,37 @@ class StepwiseMeteoScreeningDb:
     divisor, e.g. 1MIN records inside 10MIN data) is kept only with at least 3 records:
     one or two finer records, such as a stamp at :30 s inside 1MIN data, are a stray
     timestamp. Then the resolutions are added to the grid in order of the time their
-    records cover. The main resolution is always kept. A further resolution that would
-    make the grid longer than 2 million rows is dropped with all its runs, also runs of
-    12 or more: a few 1S records in a month of 10MIN data would need a 1S grid with
-    2.68 million rows. The bound is absolute, so a 1MIN block stays in a year of 30MIN
-    data (0.53 million rows) as in a month. A resolution that is no multiple or divisor
-    of the grid, such as 7S records at a change of the logger program in 1MIN data, is
-    also dropped if its grid would hold more than 20 slots per record, as for a phase
-    shift. Dropped runs get a warning that names the records and the reason (odd
-    resolution, stray timestamp or grid too fine), the first 20 runs one by one, the
-    rest counted in one line. Records with no detectable resolution are dropped with
-    one warning that gives the first five END timestamps. If no run has 12 records, the
-    runs of the most frequent resolution count as periods. ``detect_freq_groups`` may
-    take a few coarse records inside much finer data for fine records with holes: a
-    single record always, and short blocks at the start of the data or next to a gap
-    below the thresholds given there. Such records are weighted with the finer
-    resolution, so their resampled periods can be NaN or biased.
+    records cover. The main resolution is always kept, and so is a resolution that
+    leaves the grid step as it is (10MIN records next to years of 1MIN data). A further
+    resolution that would make the grid finer and longer than 2 million rows is dropped
+    with all its runs, also runs of 12 or more: a few 1S records in a month of 10MIN
+    data would need a 1S grid with 2.68 million rows. The bound is absolute, so a 1MIN
+    block stays in a year of 30MIN data (0.53 million rows) as in a month, but it
+    depends on the length of the download: a 10S block in a year of 10MIN data needs
+    3.15 million rows and is dropped, however short it is. A resolution that is no
+    multiple or divisor of the grid, such as 7S records at a change of the logger
+    program in 1MIN data, is also dropped if its grid would hold more than 20 slots per
+    record, as for a phase shift. Dropped runs get a warning that names the records and
+    the reason (odd resolution, stray timestamp or grid too fine), the first 20 runs one
+    by one, the rest counted in one line. Records with no detectable resolution are
+    dropped with one warning that gives the first five END timestamps and their ``freq``
+    tags. If no run has 12 records, the runs of the most frequent resolution count as
+    periods. ``detect_freq_groups`` may take a few coarse records inside much finer data
+    for fine records with holes: a single record always, and short blocks at the start
+    of the data or next to a gap below the thresholds given there. Such records are
+    weighted with the finer resolution, so their resampled periods can be NaN or biased.
+    The other way round, a long stretch whose spacings only show multiples of a coarser
+    step gets that step (e.g. 1MIN data spaced 4 and 6 minutes apart get 2MIN). Where a
+    detected resolution differs from the records' ``freq`` tag, a warning lists them.
+
+    The ``freq`` tag of each record (its logging resolution, e.g. '10min') is compared
+    with the detected resolution. The detected resolution is used in any case. Where the
+    two differ, a warning gives the number of records, the first END ranges and both
+    resolutions. Records with a missing or unparsable tag are not compared.
+
+    A field with fewer than two records left after these checks is left out with a
+    warning (removed from ``fields``), and the other fields are screened. A ValueError is
+    raised only if no field is left.
 
     The rolling-window and difference tests (Hampel, local SD, rolling z-score, z-score of
     increments) run on each **resolution period** separately, i.e. on each run of records
@@ -362,12 +442,18 @@ class StepwiseMeteoScreeningDb:
         self._not_a_record_cache = {}
         self._covered_cache = {}
 
+        too_few = {}
         for field in self.fields:
             # Validate data_detailed
             info(f"Validating data for variable {field} ...")
-            self._data_detailed[field] = self._validate_data_detailed(
-                data_detailed=self.data_detailed[field],
-                field=field)
+            try:
+                self._data_detailed[field] = self._validate_data_detailed(
+                    data_detailed=self.data_detailed[field],
+                    field=field)
+            except _TooFewRecordsError as err:
+                # One sensor with a record or two must not block the other fields (L306).
+                too_few[field] = str(err)
+                continue
 
             # The original input series that is screened
             self._series_hires_orig[field] = self.data_detailed[field][field]
@@ -376,6 +462,15 @@ class StepwiseMeteoScreeningDb:
             self._series_hires_cleaned[field] = self.data_detailed[field][field]
 
             self._tags[field] = self._extract_tags(data_detailed=self.data_detailed[field], field=field)
+
+        if too_few and len(too_few) == len(self.fields):
+            raise ValueError(f"No field left to screen. {' '.join(too_few.values())}")
+        for field, reason in too_few.items():
+            del self._data_detailed[field]
+            # No verbose here: the field is lost to the screening and the upload.
+            warn(f"{reason} {field} is left out of the screening and the upload, the other "
+                 f"fields are screened.")
+        self.fields = [field for field in self.fields if field not in too_few]
 
     @property
     def data_detailed(self) -> dict:
@@ -479,8 +574,10 @@ class StepwiseMeteoScreeningDb:
 
         Each value is a string. A tag with more than one value among the records,
         e.g. ``freq`` of a download whose time resolution changes, holds all its
-        values joined by commas in order of first appearance (``'10min,1min'``);
-        missing values are skipped. ``resample()`` sets ``freq`` to the target
+        values joined by commas in order of first appearance (``'10min,1min'``).
+        Missing values are skipped, except that a missing ``gain`` counts as
+        ``'1'`` and a missing ``offset`` as ``'0'`` (``'1,1.02'``). A tag with no
+        value at all is left out. ``resample()`` sets ``freq`` to the target
         frequency and ``data_version`` to ``'meteoscreening_diive'``.
 
         Example:
@@ -566,7 +663,11 @@ class StepwiseMeteoScreeningDb:
             qcf.showplot_qcf_timeseries(flags=self._display_lines(field, qcf.flags), **kwargs)
 
     def showplot_resampled(self):
-        """Show resampled data after high-resolution screening and corrections"""
+        """Show resampled data after high-resolution screening and corrections.
+
+        A heatmap of fewer than two timestamps (e.g. a resample with one label)
+        is left out with a message. The time series are still plotted.
+        """
 
         for field in self.fields:
             series_orig = self.series_hires_orig[field]
@@ -600,10 +701,17 @@ class StepwiseMeteoScreeningDb:
             kwargs_heatmap = dict(cb_labelsize=10, minticks=3, maxticks=99)
             format_style_heatmap = FormatStyle(axlabel_fontsize=10, ticks_fontsize=10)
             hires_before = self._display_heatmap(field, series_orig)
-            HeatmapDateTime(series=hires_before).plot(ax=ax_heatmap_hires_before,
-                                                      format_style=format_style_heatmap, **kwargs_heatmap)
-            HeatmapDateTime(series=series_resampled).plot(ax=ax_heatmap_resampled_after,
-                                                          format_style=format_style_heatmap, **kwargs_heatmap)
+            for series, ax, what in ((hires_before, ax_heatmap_hires_before, 'high-resolution'),
+                                     (series_resampled, ax_heatmap_resampled_after, 'resampled')):
+                # The heatmap needs two timestamps to detect the time resolution (L306).
+                if len(series) < 2:
+                    info(f"{field}: no {what} heatmap, it needs at least two timestamps "
+                         f"({len(series)} here).")
+                    ax.set_axis_off()
+                    ax.text(0.5, 0.5, f"no {what} heatmap\n({len(series)} timestamp(s))", ha='center', va='center',
+                            transform=ax.transAxes, color='#455A64')
+                    continue
+                HeatmapDateTime(series=series).plot(ax=ax, format_style=format_style_heatmap, **kwargs_heatmap)
 
             # Format time series
             for ax in axes_series:
@@ -2037,10 +2145,15 @@ class StepwiseMeteoScreeningDb:
 
         # The time resolution of each record, then one grid that holds every record
         data_detailed['FREQ_AUTO_SEC'] = detect_freq_groups(index=data_detailed.index)
-        data_detailed = data_detailed.loc[self._used_records(data_detailed['FREQ_AUTO_SEC'], field=field)]
+        # The freq tag is only compared: detection stays the source of the resolution.
+        freq_tag = data_detailed['freq'] if 'freq' in data_detailed.columns else None
+        if freq_tag is not None:
+            _warn_freq_tag_mismatch(data_detailed['FREQ_AUTO_SEC'], _tag_seconds(freq_tag), field=field)
+        data_detailed = data_detailed.loc[self._used_records(data_detailed['FREQ_AUTO_SEC'], field=field,
+                                                             freq_tag=freq_tag)]
         if len(data_detailed) < 2:
-            raise ValueError(f"{field}: {len(data_detailed)} record(s) left after detecting the time "
-                             f"resolution; too few regular records to screen.")
+            raise _TooFewRecordsError(f"{field}: {len(data_detailed)} record(s) left after detecting the "
+                                      f"time resolution; too few regular records to screen.")
         data_detailed = self._sort_records(data_detailed=data_detailed, timestamp_name=timestamp_name)
         targetfreq = self._grid_seconds(data_detailed=data_detailed, field=field)
         used_freqs = pd.unique(data_detailed['FREQ_AUTO_SEC'])
@@ -2125,17 +2238,29 @@ class StepwiseMeteoScreeningDb:
     @staticmethod
     def _extract_tags(data_detailed, field) -> dict:
         """For each variable, extract tag columns from the respective DataFrame
-         and store info in simplified dict"""
+        and store info in simplified dict.
+
+        Differing values are joined with commas in order of first appearance. A
+        tag that is empty for every record is left out, so the upload treats it
+        as absent (gain 1, offset 0, other tags not written). Where only some
+        records have a gain or offset, the others count as gain 1 and offset 0
+        (L311), e.g. '1,1.02' after merging tables with and without gain.
+        """
+        from diive.core.io.db.influx.influxio import _TAG_DEFAULTS  # light, no db client
         tags_df = data_detailed.drop(columns=[field, 'FREQ_AUTO_SEC'])
         notags = tags_df.isnull().all(axis=1)
         tags_df = tags_df[~notags]  # Drop empty grid slots, which hold no record and no tags
         tags_dict = {}
         for tag in tags_df.columns:
+            values = tags_df[tag]
+            if values.isna().all():
+                # A joined '' would be written as the tag value 'nan' (L311).
+                continue
+            if tag in _TAG_DEFAULTS:
+                values = values.where(values.notna(), _TAG_DEFAULTS[tag])
             # dropna: data merged from tables with different tag sets leaves a tag
             # empty for some records, which must not end up as a literal 'nan'.
-            list_of_vals = list(tags_df[tag].dropna().unique())
-            str_of_vals = ",".join([str(i) for i in list_of_vals])
-            tags_dict[tag] = str_of_vals
+            tags_dict[tag] = ",".join(str(i) for i in values.dropna().unique())
         return tags_dict
 
     @staticmethod
@@ -2155,7 +2280,7 @@ class StepwiseMeteoScreeningDb:
                             "for same variable.")
 
     @staticmethod
-    def _used_records(freq_sec: pd.Series, field: str) -> np.ndarray:
+    def _used_records(freq_sec: pd.Series, field: str, freq_tag: pd.Series = None) -> np.ndarray:
         """Return a boolean mask of the records kept for screening.
 
         *freq_sec* is the resolution of each record in seconds from
@@ -2174,7 +2299,9 @@ class StepwiseMeteoScreeningDb:
         grid and would need more than ``_MAX_SLOTS_PER_RECORD`` slots per record,
         is dropped with all its runs, also periods (``_grid_bound_drops``). The
         first ``_MAX_LISTED_RUNS`` dropped runs get a warning each with the
-        reason, the rest are counted in one warning.
+        reason, the rest are counted in one warning. *freq_tag* (the ``freq``
+        tag of each record, optional) only adds the tagged resolutions of the
+        records without a detected one to their warning.
         """
         has_res = freq_sec.notna().to_numpy()
         keep = np.zeros(len(freq_sec), dtype=bool)
@@ -2182,8 +2309,16 @@ class StepwiseMeteoScreeningDb:
         if n_unassigned:
             examples = freq_sec.index[~has_res]
             listed = ', '.join(str(t) for t in examples[:5]) + (', ...' if n_unassigned > 5 else '')
-            warn(f"{field}: dropped {n_unassigned} record(s) with no detectable time resolution, "
-                 f"e.g. END {listed}.")
+            tagged = ''
+            if freq_tag is not None:
+                tag_sec = _tag_seconds(freq_tag.iloc[np.flatnonzero(~has_res)])
+                valid = tag_sec[~np.isnan(tag_sec)]
+                if len(valid):
+                    names = ', '.join(_offset_str(round(s * 1e9)) for s in pd.unique(valid))
+                    tagged = (f" (tagged {names})" if len(valid) == n_unassigned else
+                              f" ({len(valid)} of them tagged {names})")
+            warn(f"{field}: dropped {n_unassigned} record(s) with no detectable time resolution"
+                 f"{tagged}, e.g. END {listed}.")
         if not has_res.any():
             return keep
         ends = freq_sec.index[has_res]
