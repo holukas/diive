@@ -101,9 +101,13 @@ Library (also used by the notebook and the GUI):
   day/night separation.
 - **Meteo screening, time resolutions (changes results):** only odd time resolutions are dropped,
   each with a warning. Short blocks whose resolution is a whole multiple or divisor of the data
-  around them are kept. Before, any resolution with at most 0.2 % of the records was dropped,
-  e.g. a 3-day block of 10-min data in a year of 1-min data.
-- **Meteo screening, speed:** screening runs about 20-50 % faster, with identical results.
+  around them are kept, e.g. a 3-day block of 10-min data in a year of 1-min data, and 2-5
+  ten-minute records inside 1-min data are recognised as 10-min records. Stray timestamps
+  (fewer than 3 records finer than the data around them) and resolutions that would make the
+  screening grid more than 20 times finer than a record are dropped. Before, any resolution with
+  at most 0.2 % of the records was dropped.
+- **Meteo screening, speed:** screening runs about 20-50 % faster and previews draw faster, with
+  identical results.
 
 GUI only:
 
@@ -119,7 +123,10 @@ GUI only:
 - **Hampel step:** separates daytime and nighttime by default when the project site is set, and
   the daytime and nighttime thresholds follow the global value until they are edited.
 - **Meteo screening (database), status line:** messages after corrections, resampling and Add say
-  what happened.
+  what happened, and the UTC offset warning disappears once the offsets match again.
+- **Meteo screening (database), add to dataset:** results finer than the working dataset or off its
+  time grid are refused with a hint to resample. A coarser result on the grid is added with a
+  note.
 - **Meteo screening (database), set to value:** the dates are marked as END timestamps, and dates
   that match no record show a warning in the status line.
 - **Meteo screening (database), add to dataset:** the data version shows the processed version,
@@ -278,7 +285,8 @@ Library (also used by the notebook and the GUI):
 - **Meteo screening, odd-second grids:** manual removal and set to value hit the neighbouring
   record, or none, on grids with an odd number of seconds, e.g. 5-second data.
 - **Time resolution detection:** a record next to a change of resolution could get the neighbouring
-  resolution, which weighted it wrong in resampling.
+  resolution, which weighted it wrong in resampling, and an empty index raised a shape error.
+- **Heatmaps:** they failed for data with a time resolution under one minute, e.g. 5-second data.
 - **Set-to corrections, console:** their reports follow `verbose`.
 
 GUI only:
