@@ -219,6 +219,51 @@ class TestSettoCorrections(unittest.TestCase):
         setto_value(series=self.series, dates=[str(self.idx[0])], value=-9.0)
         pd.testing.assert_series_equal(self.series, original)
 
+    # L307: an InfluxDB integer field arrives as int64, and pandas 3 raises when
+    # a decimal value is assigned into it.
+    def _int_series(self):
+        return pd.Series([1, 5, 10, 15, 20, 25], index=self.idx, name="TA", dtype="int64")
+
+    def test_setto_threshold_decimal_on_int64_returns_float(self):
+        from diive.preprocessing.corrections import setto_threshold
+        out = setto_threshold(series=self._int_series(), threshold=12.5, type="max")
+        pd.testing.assert_series_equal(
+            out, pd.Series([1.0, 5.0, 10.0, 12.5, 12.5, 12.5],
+                           index=self.idx, name="TA"))
+        out = setto_threshold(series=self._int_series(), threshold=12.5, type="min")
+        pd.testing.assert_series_equal(
+            out, pd.Series([12.5, 12.5, 12.5, 15.0, 20.0, 25.0],
+                           index=self.idx, name="TA"))
+
+    def test_setto_threshold_integer_on_int64_keeps_int64(self):
+        from diive.preprocessing.corrections import setto_threshold
+        out = setto_threshold(series=self._int_series(), threshold=12, type="max")
+        pd.testing.assert_series_equal(
+            out, pd.Series([1, 5, 10, 12, 12, 12], index=self.idx, name="TA", dtype="int64"))
+
+    def test_setto_value_decimal_on_int64_returns_float(self):
+        from diive.preprocessing.corrections import setto_value
+        series = self._int_series()
+        original = series.copy()
+        out = setto_value(series=series, dates=[[str(self.idx[3]), str(self.idx[4])]], value=3.7)
+        pd.testing.assert_series_equal(
+            out, pd.Series([1.0, 5.0, 10.0, 3.7, 3.7, 25.0], index=self.idx, name="TA"))
+        pd.testing.assert_series_equal(series, original)
+
+    def test_setto_value_integer_on_int64_keeps_int64(self):
+        from diive.preprocessing.corrections import setto_value
+        out = setto_value(series=self._int_series(), dates=[str(self.idx[0])], value=3)
+        pd.testing.assert_series_equal(
+            out, pd.Series([3, 5, 10, 15, 20, 25], index=self.idx, name="TA", dtype="int64"))
+
+    def test_setto_float32_series_keeps_its_dtype(self):
+        from diive.preprocessing.corrections import setto_threshold, setto_value
+        series = self.series.astype("float32")
+        out = setto_threshold(series=series, threshold=12.5, type="max")
+        self.assertEqual(out.dtype, np.float32)
+        out = setto_value(series=series, dates=[str(self.idx[0])], value=3.7)
+        self.assertEqual(out.dtype, np.float32)
+
 
 class TestOffsetCorrections(unittest.TestCase):
     """`remove_relativehumidity_offset` and `MeasurementOffsetFromReplicate`."""

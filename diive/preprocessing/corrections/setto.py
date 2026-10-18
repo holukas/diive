@@ -17,6 +17,18 @@ from diive.core.plotting.plotfuncs import quickplot
 from diive.core.utils.console import info, detail
 
 
+def _fits_value(series: Series, value) -> Series:
+    """Return *series* as float64 if its integer dtype cannot hold *value*.
+
+    pandas 3 raises when a non-integer value (e.g. 2.5) is assigned into an
+    integer series, e.g. an InfluxDB integer field. Integer values keep the
+    integer dtype, and float series are returned unchanged.
+    """
+    if pd.api.types.is_integer_dtype(series.dtype) and not float(value).is_integer():
+        return series.astype(float)
+    return series
+
+
 def set_exact_values_to_missing(series: Series,
                                 values: list,
                                 showplot: bool = False,
@@ -119,11 +131,12 @@ def setto_value(series: Series, dates: list, value: float = 0, verbose: int = 0)
 
     Returns:
         *series* with records in time range *dates* set to *value*
+        (float64 if *series* is integer and *value* is not a whole number)
 
     Example:
         See `examples/preprocessing/corrections/correction_setto_value.py`
     """
-    series_corr = series.copy()
+    series_corr = _fits_value(series, value).copy()
     for date in dates:
         # Label slicing matches partial strings, so a bare date covers the whole
         # day (a >= / <= comparison would stop at midnight), as in ManualRemoval.
@@ -156,7 +169,8 @@ def setto_threshold(series: Series,
             uses the level set with ``set_verbosity()``.
 
     Returns:
-        Corrected series
+        Corrected series (float64 if *series* is integer and *threshold* is
+        not a whole number)
 
     Example:
         See `examples/preprocessing/corrections/correction_setto_threshold.py`
@@ -195,7 +209,7 @@ def setto_threshold(series: Series,
              verbose=verbose)
 
     corrected_ix = flag == 1
-    series_corr = work.copy()
+    series_corr = _fits_value(work, threshold).copy()
     series_corr.loc[corrected_ix] = threshold
     series_corr = series_corr.rename(outname)
 
