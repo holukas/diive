@@ -34,6 +34,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
 
+from diive.core.base.flagbase import sum_flag_value
 from diive.core.base.identify import identify_flagcols
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
@@ -336,41 +337,46 @@ class FlagQCF:
         # === REPORT 1: FLAGS WITH MISSING VALUES ===
         _console.print(f"\n\n  +- REPORT 1A: ALL RECORDS (INCLUDING MISSING VALUES)")
         _console.print(f"  |")
+        # Filter the records and split them into day and night once, not per column
+        records = self.flags[self._is_record]
+        periods = self._dt_nt_frames(df=records)
         for col in test_flagcols:
-            self._flagstats_dt_nt(col=col, df=self.flags[self._is_record])
+            self._flagstats_dt_nt(col=col, periods=periods)
 
         # === REPORT 2: FLAGS FOR AVAILABLE RECORDS ===
         _console.print(f"\n  +- REPORT 1B: AVAILABLE RECORDS ONLY (EXCLUDING MISSING VALUES)")
         _console.print(f"  |")
-        _df = self.flags[self._is_record].copy()
-        ix_missing_vals = _df[self.series_name].isnull()
-        _df = _df[~ix_missing_vals].copy()
+        periods = self._dt_nt_frames(df=records[records[self.series_name].notnull()])
         for col in test_flagcols:
-            self._flagstats_dt_nt(col=col, df=_df)
+            self._flagstats_dt_nt(col=col, periods=periods)
 
         # === SUMMARY ===
         _console.print(f"\n{'=' * 100}\n")
 
-    def _flagstats_dt_nt(self, col: str, df: DataFrame):
-        """Print flag statistics overall, daytime, and nighttime (if available)."""
+    def _dt_nt_frames(self, df: DataFrame) -> list:
+        """Rows of *df* overall, at daytime and at nighttime (if available), as (prefix, frame) pairs."""
+        periods = [("OVERALL", df)]
+        if isinstance(self.daytime, Series):
+            periods.append(("DAYTIME", df.loc[self.daytime == 1]))
+        if isinstance(self.nighttime, Series):
+            periods.append(("NIGHTTIME", df.loc[self.nighttime == 1]))
+        return periods
+
+    def _flagstats_dt_nt(self, col: str, periods: list):
+        """Print flag statistics overall, daytime, and nighttime (if available).
+
+        *periods* comes from ``_dt_nt_frames``. Daytime and nighttime are printed
+        only if they have rows.
+        """
         # Extract test name from column
         test_name = col.replace('FLAG_', '').replace('_TEST', '')
         _console.print(f"\n  +- {test_name}")
         _console.print(f"  |  {'Period':<15} | {'Pass (0)':<15} | {'Warn (1)':<15} | {'Fail (2)':<15} | {'Missing':<12}")
         _console.print(f"  |  {'-' * 85}")
 
-        flag = df[col]
-        self._flagstats(flag=flag, prefix="OVERALL", indent="  |  ")
-
-        if isinstance(self.daytime, Series):
-            flag = df[col].loc[self.daytime == 1]
-            if len(flag) > 0:
-                self._flagstats(flag=flag, prefix="DAYTIME", indent="  |  ")
-
-        if isinstance(self.nighttime, Series):
-            flag = df[col].loc[self.nighttime == 1]
-            if len(flag) > 0:
-                self._flagstats(flag=flag, prefix="NIGHTTIME", indent="  |  ")
+        for prefix, frame in periods:
+            if prefix == "OVERALL" or len(frame) > 0:
+                self._flagstats(flag=frame[col], prefix=prefix, indent="  |  ")
 
     def report_qcf_evolution(self):
         """Print how QCF evolves as tests are applied sequentially.
@@ -719,11 +725,11 @@ class FlagQCF:
 
         # Get variables that contain flag data (individual quality test results)
         onlyflagtests = [c for c in df.columns if str(c).startswith('FLAG_') and str(c).endswith('_TEST')]
-        onlyflagtests_df = df[onlyflagtests].copy()
+        onlyflagtests_df = df[onlyflagtests]
 
         # Build flag sums from flag data
-        sumhardflags = onlyflagtests_df[onlyflagtests_df == 2].sum(axis=1)  # The sum of all flags that show 2
-        sumsoftflags = onlyflagtests_df[onlyflagtests_df == 1].sum(axis=1)  # The sum of all flags that show 1
+        sumhardflags = sum_flag_value(onlyflagtests_df, 2)  # The sum of all flags that show 2
+        sumsoftflags = sum_flag_value(onlyflagtests_df, 1)  # The sum of all flags that show 1
         sumflags = sumhardflags.add(sumsoftflags)  # Sum of all flags
 
         # Add flag sums to overall flag dataframe

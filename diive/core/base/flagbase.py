@@ -21,6 +21,19 @@ from diive.core.plotting.plotfuncs import default_format, default_legend, nice_d
 from diive.core.times.times import DetectFrequency
 
 
+def sum_flag_value(df: DataFrame, value: int) -> Series:
+    """Row sums of the cells equal to *value*, same result as ``df[df == value].sum(axis=1)``.
+
+    Builds no masked frame. The sums are small integers, so they are exact in any
+    summation order. Frames with a column other than float64 use the pandas
+    formula, which keeps the result dtype of that formula.
+    """
+    if len(df.columns) and all(dt == np.float64 for dt in df.dtypes):
+        hits = np.where(df.to_numpy() == value, float(value), 0.0)
+        return Series(hits.sum(axis=1), index=df.index)
+    return df[df == value].sum(axis=1)
+
+
 class FlagBase:
     """Base class for flag/outlier detectors: holds the series and exposes the flag and filtered result."""
 
@@ -143,11 +156,6 @@ class FlagBase:
         if isinstance(rejected, DatetimeIndex):
             self._filteredseries.loc[rejected] = np.nan
 
-    # TODO delete def reset(self):
-    #     self._filteredseries = self.series.copy()
-    #     # Generate flag series with NaNs
-    #     self._flag = pd.Series(index=self.series.index, data=np.nan, name=self.flagname)
-
     def generate_flagname(self, iteration: int = None) -> str:
         """Generate standardized name for flag variable"""
         flagname = "FLAG"
@@ -194,7 +202,7 @@ class FlagBase:
                 break
 
         # Calculate the sum of all flags that show 2, for each data row
-        overall_flag = iteration_flags_df[iteration_flags_df == 2].sum(axis=1)
+        overall_flag = sum_flag_value(iteration_flags_df, 2)
         # An all-NaN row sums to 0, so records that were never testable (missing
         # in the input) would otherwise be indistinguishable from records that
         # were tested and passed. See `nan_flag_at_missing`.

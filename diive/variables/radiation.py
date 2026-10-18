@@ -7,7 +7,10 @@ Calculate potential shortwave-incoming radiation (SW_IN_POT).
 Part of the diive library: https://github.com/holukas/diive
 """
 
+import hashlib
 import math
+import threading
+from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
@@ -159,6 +162,45 @@ def _oneflux_window_mean(timestamp_index: DatetimeIndex, lat: float, lon: float,
     return total / period_min
 
 
+# Small cache of `_oneflux_window_mean` results. One screening flow asks for the
+# potential radiation of the same timestamps several times (day/night split of
+# each test, corrections). Short indexes are cheap to compute and would only push
+# the long ones out, so they are not cached.
+_WINDOW_MEAN_CACHE = OrderedDict()
+_WINDOW_MEAN_CACHE_SIZE = 4
+_WINDOW_MEAN_CACHE_MIN_RECORDS = 1000
+_WINDOW_MEAN_CACHE_LOCK = threading.Lock()
+
+
+def _cached_window_mean(timestamp_index: DatetimeIndex, lat: float, lon: float,
+                        utc_offset: int, period_min: int) -> np.ndarray:
+    """`_oneflux_window_mean` with a cache, returns a copy the caller may change.
+
+    The key holds the dtype of the timestamps (unit and time zone), their number,
+    a hash of their int64 values, and each argument with its type, because a
+    float32 latitude gives different numerics than a float64 one. The lock keeps
+    the cache consistent when GUI worker threads call it at the same time. Two
+    threads may still compute the same entry, which gives the same result.
+    """
+    if len(timestamp_index) < _WINDOW_MEAN_CACHE_MIN_RECORDS:
+        return _oneflux_window_mean(timestamp_index, lat, lon, utc_offset, period_min)
+    values = np.ascontiguousarray(timestamp_index.asi8)
+    key = (str(timestamp_index.dtype), len(values),
+           hashlib.blake2b(values.tobytes(), digest_size=16).digest(),
+           lat, type(lat), lon, type(lon), utc_offset, type(utc_offset), period_min)
+    with _WINDOW_MEAN_CACHE_LOCK:
+        result = _WINDOW_MEAN_CACHE.get(key)
+        if result is not None:
+            _WINDOW_MEAN_CACHE.move_to_end(key)
+    if result is None:
+        result = _oneflux_window_mean(timestamp_index, lat, lon, utc_offset, period_min)
+        with _WINDOW_MEAN_CACHE_LOCK:
+            _WINDOW_MEAN_CACHE[key] = result
+            if len(_WINDOW_MEAN_CACHE) > _WINDOW_MEAN_CACHE_SIZE:
+                _WINDOW_MEAN_CACHE.popitem(last=False)
+    return result.copy()
+
+
 def potrad(timestamp_index: DatetimeIndex, lat: float, lon: float, utc_offset: int) -> Series:
     """
     Calculate potential shortwave-incoming radiation, ONEFlux/FLUXNET parity
@@ -216,5 +258,5 @@ def potrad(timestamp_index: DatetimeIndex, lat: float, lon: float, utc_offset: i
     period = pd.Series(timestamp_index).diff().median()
     period_min = max(1, int(round(period.total_seconds() / 60)))
 
-    swinpot = _oneflux_window_mean(timestamp_index, lat, lon, utc_offset, period_min)
+    swinpot = _cached_window_mean(timestamp_index, lat, lon, utc_offset, period_min)
     return Series(swinpot, index=timestamp_index, name='SW_IN_POT')

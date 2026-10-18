@@ -513,12 +513,11 @@ class StepwiseOutlierDetection:
 
         # Filter original time series with quality flag from last test
         rejected = flag == 2
-        # self._series_hires_cleaned = self.series_hires_orig.copy()
         self._series_hires_cleaned.loc[rejected] = np.nan
 
         # Add flag column to results data
         if flag.name not in self.flags.columns:
-            self._flags[flag.name] = flag.copy()
+            self._flags[flag.name] = flag
             info(f"++Added flag column {flag.name} to flag data")
         else:
             # It is possible to re-run an outlier method, which produces a flag
@@ -533,7 +532,7 @@ class StepwiseOutlierDetection:
             while new_flagname in self.flags.columns:
                 rerun += 1
                 new_flagname = flag.name.replace('_TEST', f'_{rerun}_TEST')
-            self._flags[new_flagname] = flag.copy()
+            self._flags[new_flagname] = flag
             info(f"++Added flag column {new_flagname} to flag data")
 
     def rebase_series(self, series: Series):
