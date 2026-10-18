@@ -576,7 +576,7 @@ class StepwiseMeteoScreeningDb:
         e.g. ``freq`` of a download whose time resolution changes, holds all its
         values joined by commas in order of first appearance (``'10min,1min'``).
         Missing values are skipped, except that a missing ``gain`` counts as
-        ``'1'`` and a missing ``offset`` as ``'0'`` (``'1,1.02'``). A tag with no
+        ``'1.0'`` and a missing ``offset`` as ``'0.0'`` (``'1.0,1.02'``). A tag with no
         value at all is left out. ``resample()`` sets ``freq`` to the target
         frequency and ``data_version`` to ``'meteoscreening_diive'``.
 
@@ -2244,7 +2244,7 @@ class StepwiseMeteoScreeningDb:
         tag that is empty for every record is left out, so the upload treats it
         as absent (gain 1, offset 0, other tags not written). Where only some
         records have a gain or offset, the others count as gain 1 and offset 0
-        (L311), e.g. '1,1.02' after merging tables with and without gain.
+        (L311), e.g. '1.0,1.02' after merging tables with and without gain.
         """
         from diive.core.io.db.influx.influxio import _TAG_DEFAULTS  # light, no db client
         tags_df = data_detailed.drop(columns=[field, 'FREQ_AUTO_SEC'])

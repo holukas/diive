@@ -662,14 +662,14 @@ class TestInfluxRealParser(unittest.TestCase):
         self.assertEqual(len(lines), 4)
         tagset = dict(p.split("=") for p in lines[0].split(" ")[0].split(",")[1:])
         expected = {**_RAW_TAGS, "varname": FIELD, "data_version": "meteoscreening_diive",
-                    "gain": "1", "offset": "0"}
+                    "gain": "1.0", "offset": "0.0"}
         self.assertEqual(tagset, expected)
         self.assertEqual(self.deletes[0]["predicate"],
                          f'_measurement="TA" AND varname="{FIELD}" '
                          f'AND data_version="meteoscreening_diive" AND site="ch-hon"')
 
         # Same delete as for a frame with every tag.
-        self.dbc.upload_singlevar(var_df=var_df.assign(gain="1", offset="0"), to_bucket="b",
+        self.dbc.upload_singlevar(var_df=var_df.assign(gain="1.0", offset="0.0"), to_bucket="b",
                                   to_measurement="TA", timezone_offset_to_utc_hours=1,
                                   delete_start="2026-03-01 00:00:01", delete_stop="2026-04-01 00:00:01")
         self.assertEqual(self.deletes[1], self.deletes[0])

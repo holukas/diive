@@ -260,7 +260,7 @@ class TestConstruction(unittest.TestCase):
         tags = _screening(df).tags[FIELD]
         self.assertEqual(tags['hpos'], 'FF1')
         # L311: a record without gain was not scaled, gain 1
-        self.assertEqual(tags['gain'], '1,100.0')
+        self.assertEqual(tags['gain'], '1.0,100.0')
 
 
 class TestOutlierWorkflow(unittest.TestCase):
@@ -2472,5 +2472,5 @@ class TestTagsWithoutValues(unittest.TestCase):
         df.iloc[100:, df.columns.get_loc('gain')] = '1.02'
         df.iloc[100:, df.columns.get_loc('offset')] = '0.5'
         tags = _screening(df).tags[FIELD]
-        self.assertEqual(tags['gain'], '1,1.02')
-        self.assertEqual(tags['offset'], '0,0.5')
+        self.assertEqual(tags['gain'], '1.0,1.02')
+        self.assertEqual(tags['offset'], '0.0,0.5')

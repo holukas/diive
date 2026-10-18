@@ -38,8 +38,9 @@ _WRITE_CHUNK_ROWS = 5000
 #: Tags ``upload_singlevar`` needs: the delete is limited to one site and data
 #: version, and ``download`` finds the variable by its ``varname`` tag.
 _REQUIRED_TAGS = ['site', 'varname', 'data_version']
-# A record stored without gain or offset was not scaled: gain 1, offset 0.
-_TAG_DEFAULTS = {'gain': '1', 'offset': '0'}
+# A record stored without gain or offset was not scaled: gain 1, offset 0. Written as
+# the raw buckets store them ('1.0' and '0.0' in nearly all raw data).
+_TAG_DEFAULTS = {'gain': '1.0', 'offset': '0.0'}
 
 
 class InfluxIO:
@@ -134,7 +135,7 @@ class InfluxIO:
             *var_df* must contain one data column (the variable) plus tag
             columns from :data:`diive.core.io.db.influx.common.TAGS`. The tags
             ``site``, ``varname`` and ``data_version`` are required. A missing
-            ``gain`` is written as ``'1'`` and a missing ``offset`` as ``'0'``
+            ``gain`` is written as ``'1.0'`` and a missing ``offset`` as ``'0.0'``
             (raw data stored without them were not scaled). Any other tag may be
             missing: the written points then do not carry it, as in the
             downloaded data. Do not add it as an empty column: the client can
