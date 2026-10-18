@@ -600,6 +600,79 @@ class TestDetectFreqGroups(unittest.TestCase):
                     self.assertEqual(g.loc[stray], res / 2)
                     self.assertTrue((g.drop(pd.Timestamp(stray)) == res).all())
 
+    def _both_orientations(self, ix, expected):
+        """Check *expected* (per record, in seconds) for TIMESTAMP_END and for the
+        mirror image as TIMESTAMP_START (time reversed, so each record keeps its
+        own averaging period)."""
+        ix = pd.DatetimeIndex(ix)
+        mirrored = pd.Timestamp('2030-01-01') - (ix[::-1] - pd.Timestamp('2020-01-01'))
+        for name, stamps, exp in (('TIMESTAMP_END', ix, expected), ('TIMESTAMP_START', mirrored, expected[::-1])):
+            with self.subTest(name=name):
+                g = self._named(stamps, name).to_numpy()
+                np.testing.assert_array_equal(g, exp)
+
+    def test_last_coarse_record_keeps_its_resolution(self):
+        # L310: with the record before it missing, the last coarse record before
+        # 1MIN data took the 60 s of the record after it
+        for coarse, missing in (('30min', ['07:30']), ('10min', ['07:50']), ('30min', ['07:00']),
+                                ('30min', ['07:00', '07:30'])):
+            with self.subTest(coarse=coarse, missing=missing):
+                c = pd.date_range('2024-03-04 00:30', '2024-03-05 08:00', freq=coarse)
+                c = c.drop(pd.DatetimeIndex([f'2024-03-05 {m}' for m in missing]))
+                f = pd.date_range('2024-03-05 08:01', '2024-03-05 12:00', freq='1min')
+                expected = np.r_[np.full(len(c), pd.Timedelta(coarse).total_seconds()), np.full(len(f), 60.)]
+                self._both_orientations(c.append(f), expected)
+
+    def test_first_coarse_record_after_holey_fine_data(self):
+        # L310 mirror case: the record at 10:00 is one 1MIN step from the record
+        # before it, which got no resolution in passes 1-3. It took the 600 s of
+        # the record after it once the 10MIN run counted as a period.
+        f = pd.date_range('2024-06-03 08:00', '2024-06-03 09:51', freq='1min').append(
+            pd.DatetimeIndex(['2024-06-03 09:54', '2024-06-03 09:57', '2024-06-03 09:59', '2024-06-03 10:00']))
+        c = pd.date_range('2024-06-03 10:10', periods=30, freq='10min')
+        self._both_orientations(f.append(c), np.r_[np.full(len(f), 60.), np.full(len(c), 600.)])
+
+    def test_overlapping_regular_outages_keep_their_resolution(self):
+        # L309: every 3rd and every 4th 10MIN record missing (spacings 1, 3, 2, 3,
+        # 1, 2 steps), or only records 2 and 5 of every 5 kept (3, 2 steps). Next
+        # to 1MIN data all records joined the 1MIN period, alone they had no group.
+        pos = np.arange(1440)
+        ten = pd.date_range('2024-03-01 00:10', periods=len(pos), freq='10min')
+        fine = pd.date_range(ten[-1] + pd.Timedelta('1min'), periods=1440, freq='1min')
+        for pattern, keep in (('3rd and 4th missing', ~((pos % 3 == 0) | (pos % 4 == 0))),
+                              ('2nd and 5th of 5 kept', (pos % 5 == 1) | (pos % 5 == 4))):
+            for with_fine in (False, True):
+                with self.subTest(pattern=pattern, with_fine=with_fine):
+                    ix = ten[keep].append(fine) if with_fine else ten[keep]
+                    expected = np.r_[np.full(int(keep.sum()), 600.), np.full(len(fine) if with_fine else 0, 60.)]
+                    self._both_orientations(ix, expected)
+
+    def test_pairs_of_regular_outages_keep_their_records(self):
+        # L309: 74 of 151 pairs of outage patterns lost more than 5 % of the
+        # records. Only a first or last record may stay without a group.
+        import itertools
+        pats = [(1, 2), (1, 3), (1, 4), (1, 5), (2, 4), (3, 5), (2, 5), (1, 6), (2, 3)]
+        pos = np.arange(3000)
+        ix = pd.date_range('2024-01-01 00:10', periods=len(pos), freq='10min')
+        for (w1, k1), (w2, k2) in itertools.combinations(pats, 2):
+            for j in range(k2):
+                keep = ~((pos % k1) < w1) & ~(((pos + j) % k2) < w2)
+                if keep.mean() < .2:
+                    continue
+                with self.subTest(p1=(w1, k1), p2=(w2, k2), offset=j):
+                    g = self._groups(ix[keep]).to_numpy()
+                    self.assertFalse(np.isnan(g[2:-2]).any())
+
+    def test_regular_outage_does_not_spread_from_a_stray_stamp(self):
+        # A stray stamp at 00:24:30 in 1MIN data with 00:21 and 00:24 missing
+        # leaves 00:23 with spacings of 60 and 90 s (common divisor 30 s). One
+        # such record is no regular outage: 00:22 stays 60 s.
+        ix = pd.date_range('2024-07-01', periods=600, freq='1min')
+        ix = ix.drop(pd.DatetimeIndex(['2024-07-01 00:21', '2024-07-01 00:24']))
+        ix = ix.append(pd.DatetimeIndex(['2024-07-01 00:24:30'])).sort_values()
+        g = self._groups(ix)
+        self.assertEqual(g.loc[pd.Timestamp('2024-07-01 00:22')], 60)
+        self.assertNotEqual(g.loc[pd.Timestamp('2024-07-01 00:23')], 30)
 
 class TestStlDecompose(unittest.TestCase):
     """Regression tests for `core/times/decomposition_utils.py::stl_decompose`.

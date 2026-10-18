@@ -650,13 +650,19 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
     4. Many missing records leave short runs that look like a coarser resolution
        (10MIN data with every other record missing for an hour give 20MIN spacing)
        and records that fit no neighbour. Regular outages, such as 2 of every 4
-       records missing, leave alternating spacings (1, 3, 1, 3 steps) that
-       passes 1-3 cannot assign. Such a record gets its shorter spacing if that
-       spacing covers its own averaging period, its longer spacing is a whole
-       multiple of it, and the record lies in a stretch of at least 24
-       spacings that are all whole multiples of it (see
-       ``_regular_outages``). A run is a series of consecutive records
-       with the same resolution and only whole multiples of it between them.
+       records missing (1, 3, 1, 3 steps) or every 3rd and every 4th (1, 3,
+       2, 3, 1, 2 steps), leave spacings that passes 1-3 cannot assign. Such
+       a record gets the greatest common divisor g of its two spacings if it
+       lies in a stretch of at least 24 spacings that are all whole multiples
+       of g, and either its shorter spacing is g and covers its own averaging
+       period, or both its spacings are at most 6 times g and the stretch
+       holds at least 12 such records. Their neighbours with spacings of at
+       most 6 times g get g too. A stretch that shows only multiples of a
+       coarser step gets that step: spacings of 4 and 6 minutes give 120 s,
+       also in 1MIN data (see ``_regular_outages``). Unassigned records
+       between two such records count towards their run. A run is a series
+       of consecutive records with the same resolution and only whole
+       multiples of it between them.
        Unassigned records count towards the run they continue if one of their
        spacings equals its resolution (e.g. the records after a missing record
        at the end of a 30MIN run). A run of at least 12
@@ -683,6 +689,14 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
        for TIMESTAMP_END, because the first record has no spacing of its own
        (reversed for TIMESTAMP_START). Blocks apply also with fewer than 12
        records.
+       The last coarse record before finer data keeps the resolution G of the
+       period before it (on its own side) if its own spacing is a whole
+       multiple of G, at most 6 times G, and on the period's grid: the last
+       30MIN record before 1MIN data stays 1800 s when the record before it
+       is missing. The first 1MIN record after a short gap that ends on the
+       30MIN grid gets 1800 s as well. Likewise, the first record of a coarse
+       run gets the finer resolution of the period before it if its own
+       spacing is one step of that period (see ``_keep_coarse_edge``).
        Every other record joins the nearest period on either side if all
        time differences between it and that period, and to both its own
        neighbours, are whole multiples of the period's resolution. If periods of
@@ -784,7 +798,8 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
     lone &= prev_d % np.where(lone, prev_final, 1) == 0
     group = np.where(lone, prev_final, group)
 
-    group = _regular_outages(group, prev_d, next_d, next_d if tie_to_next else prev_d)
+    own_d = next_d if tie_to_next else prev_d
+    group, outage = _regular_outages(group, prev_d, next_d, own_d)
 
     wall = index.tz_localize(None) if index.tz is not None else index
     wall_ns = wall.as_unit('ns').asi8
@@ -792,7 +807,7 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
         block = _coarse_blocks(next_d[::-1], wall_ns[::-1])[::-1]
     else:
         block = _coarse_blocks(prev_d, wall_ns)
-    group = _join_resolution_periods(group, diffs, block)
+    group = _join_resolution_periods(group, diffs, block, outage, tie_to_next)
 
     group_sec = np.where(group > 0, group / 1e9, np.nan)
     return pd.Series(index=index, data=group_sec, name='FREQ_AUTO_SEC')
@@ -803,52 +818,92 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
 # multiple of twice their resolution with a chance below 1/2, so 24 such
 # spacings in a row are as unlikely as 0.25**12 (see _MIN_PERIOD_RECORDS).
 _MIN_OUTAGE_SPACINGS = 2 * _MIN_PERIOD_RECORDS
+# Longest spacing, in steps of g, of a record that gets g from the common
+# divisor of its spacings (_regular_outages), and of the last coarse record
+# before finer data (_keep_coarse_edge).
+_MAX_OUTAGE_STEPS = 6
 
 
-def _regular_outages(group: np.ndarray, prev_d: np.ndarray, next_d: np.ndarray, own: np.ndarray) -> np.ndarray:
+def _regular_outages(group: np.ndarray, prev_d: np.ndarray, next_d: np.ndarray,
+                     own: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """*group* with a resolution for unassigned records in regular outage
-    patterns (L301).
+    patterns (L301, L309), and a mask of the records that got one.
 
     When 2 of every 4 or 3 of every 5 records are missing, the spacings
     alternate (1, 3, 1, 3 or 1, 4, 1, 4 steps) and passes 1-3 assign nothing.
-    An unassigned record gets its shorter spacing g as resolution if g covers
-    its own averaging period (*own*, as in pass 2), its longer spacing is a
-    whole multiple of g, and it lies in a stretch of at least
-    _MIN_OUTAGE_SPACINGS consecutive spacings that are all whole multiples of
-    g. The other records of the pattern join the resolution in pass 4. One
-    spacing must equal g, so timestamps that jitter around a resolution (599,
-    601 s) do not get a 1 s resolution. With g on the own side, the last 15MIN
-    record before 1MIN data keeps 900 s.
+    Two patterns at once (every 3rd and every 4th record missing: 1, 3, 2, 3,
+    1, 2 steps) or kept records that are never adjacent (records 2 and 5 of
+    every 5: 3, 2 steps) do not even show a spacing that divides the other.
+    An unassigned record gets g, the greatest common divisor of its two
+    spacings, if it lies in a stretch of at least _MIN_OUTAGE_SPACINGS
+    consecutive spacings that are all whole multiples of g and one of these
+    holds:
+
+    - its shorter spacing is g, covers its own averaging period (*own*, as in
+      pass 2) and divides the longer one (any multiple),
+    - both spacings are at most _MAX_OUTAGE_STEPS times g, and the stretch
+      holds at least _MIN_PERIOD_RECORDS such records with g as their common
+      divisor.
+
+    A record next to a record that got g in this way also gets g if its
+    own spacings have a coarser common divisor, are whole multiples of g
+    and at most _MAX_OUTAGE_STEPS times g, and the stretch holds those
+    _MIN_PERIOD_RECORDS records (spacings of 4 and 6 steps between records
+    with spacings of 1 and 4). Processed from fine to coarse g, so a coarser
+    g that also qualifies wins: a stretch of spacings of 4 and 6 minutes
+    gets 120 s. Every spacing is a whole multiple of the finest resolution
+    in the data, so a long stretch alone does not rule out a finer g: the
+    12 records keep a few stray stamps at 12:30:30 in 1MIN data from giving
+    their neighbours 30 s. The cap keeps timestamps that jitter around a
+    resolution (599, 601 s) from getting a 1 s resolution, and the own side
+    keeps the last 15MIN record before 1MIN data at 900 s. In pass 4 these
+    labels form runs as usual (see _fill_outage_gaps).
     """
     lo, hi = np.minimum(prev_d, next_d), np.maximum(prev_d, next_d)
-    cand = (group == 0) & (lo > 0) & (hi > lo) & (own == lo)
-    cand[cand] = hi[cand] % lo[cand] == 0
+    g_loc = np.gcd(prev_d, next_d)
+    base = (group == 0) & (lo > 0) & (hi > lo)
+    divides = base & (own == lo) & (hi % np.where(base, lo, 1) == 0)
+    cand = divides | (base & (hi <= _MAX_OUTAGE_STEPS * g_loc))
     if not cand.any():
-        return group
+        return group, np.zeros(len(group), dtype=bool)
     diffs = next_d[:-1]
     result = group.copy()
-    for g in np.unique(lo[cand]):
+    # Ascending, so a coarser resolution that also fits overwrites a finer one
+    for g in np.unique(g_loc[cand]):
         bad = diffs % g != 0
         # Stretch number of each spacing: each bad spacing starts a new one
         stretch = np.cumsum(bad)
         size = np.bincount(stretch[~bad], minlength=stretch[-1] + 1)
-        # Both spacings of a candidate are good and in the same stretch
-        idx = np.flatnonzero(cand & (lo == g))
-        idx = idx[size[stretch[idx]] >= _MIN_OUTAGE_SPACINGS]
-        result[idx] = g
-    return result
+        # Records with g as their own common divisor, counted per stretch
+        own_g = cand & (g_loc == g)
+        evidence = np.bincount(stretch[np.flatnonzero(own_g)], minlength=stretch[-1] + 1)
+        # Both spacings of a record are good and in the same stretch
+        long = np.zeros(len(group), dtype=bool)
+        dense = np.zeros(len(group), dtype=bool)
+        long[1:-1] = size[stretch[1:]] >= _MIN_OUTAGE_SPACINGS
+        dense[1:-1] = evidence[stretch[1:]] >= _MIN_PERIOD_RECORDS
+        own_g &= long & ((divides & (lo == g)) | dense)
+        # A record with a coarser common divisor next to such a record
+        near = np.concatenate([[False], own_g[:-1]]) | np.concatenate([own_g[1:], [False]])
+        near &= base & long & dense & (g_loc % g == 0) & (hi <= _MAX_OUTAGE_STEPS * g)
+        result[own_g | near] = g
+    return result, result != group
 
 
-def _join_resolution_periods(group: np.ndarray, diffs: np.ndarray, block: np.ndarray) -> np.ndarray:
+def _join_resolution_periods(group: np.ndarray, diffs: np.ndarray, block: np.ndarray,
+                             outage: np.ndarray, own_next: bool) -> np.ndarray:
     """Pass 4 of :func:`detect_freq_groups`: find the resolution periods, then let
     every other record join the coarsest neighbouring period it fits.
 
     *group* is the resolution of each record in ns (0 = unassigned), *diffs* the
     time differences between consecutive records in ns, *block* the resolution
-    of short coarse blocks from _coarse_blocks (0 = none).
+    of short coarse blocks from _coarse_blocks (0 = none), *outage* the records
+    labelled by _regular_outages. *own_next* is True if the next record's side
+    covers each record's own averaging period (TIMESTAMP_START).
     """
     n = len(group)
     group = np.where(block > 0, block, group)
+    outage = outage & (block == 0)
     if n < _MIN_PERIOD_RECORDS:
         return group
     # Runs of one resolution. A run also ends at a difference that is no whole
@@ -856,7 +911,7 @@ def _join_resolution_periods(group: np.ndarray, diffs: np.ndarray, block: np.nda
     # so in 1MIN data with many holes a run labelled 120 s could carry on across
     # a 1MIN step. Unassigned records count towards the run they continue (L289),
     # but stay unassigned until they join a period below.
-    counted = _continue_runs(group, diffs)
+    counted = _fill_outage_gaps(_continue_runs(group, diffs), group, diffs, outage)
     safe_g = np.where(counted[:-1] > 0, counted[:-1], 1)
     joined = (counted[1:] == counted[:-1]) & (diffs % safe_g == 0)
     starts = np.flatnonzero(np.concatenate([[True], ~joined]))
@@ -867,6 +922,9 @@ def _join_resolution_periods(group: np.ndarray, diffs: np.ndarray, block: np.nda
         return group
     period = np.repeat(long_run | _short_periods(run_group, lengths, long_run), lengths)
     period = (period & (group > 0)) | (block > 0)
+    prev_d = np.concatenate([[0], diffs])
+    next_d = np.concatenate([diffs, [0]])
+    group, period = _keep_coarse_edge(group, period, block, diffs, prev_d, next_d, own_next)
     if period.all():
         return group
 
@@ -874,8 +932,6 @@ def _join_resolution_periods(group: np.ndarray, diffs: np.ndarray, block: np.nda
     # Nearest period record before and after each record (-1 / n = none)
     prev_p = np.maximum.accumulate(np.where(period, pos, -1))
     next_p = np.minimum.accumulate(np.where(period, pos, n)[::-1])[::-1]
-    prev_d = np.concatenate([[0], diffs])
-    next_d = np.concatenate([diffs, [0]])
 
     result = group.copy()
     # Ascending, so a coarser resolution that also fits overwrites a finer one
@@ -890,6 +946,93 @@ def _join_resolution_periods(group: np.ndarray, diffs: np.ndarray, block: np.nda
             fits |= (near >= 0) & (near < n) & (group[safe] == res) & (bad[safe] == bad)
         result = np.where(~period & own & fits, res, result)
     return result
+
+
+def _keep_coarse_edge(group: np.ndarray, period: np.ndarray, block: np.ndarray, diffs: np.ndarray,
+                      prev_d: np.ndarray, next_d: np.ndarray, own_next: bool) -> tuple[np.ndarray, np.ndarray]:
+    """*group* and *period* with the last coarse record before finer data kept
+    at the coarse resolution, and the first coarse record after finer data
+    that is one finer step away kept at the finer one (L310).
+
+    With the record before it missing, the last 30MIN record before 1MIN data
+    has no pass-1 neighbour on its own side, and pass 2 gives it the 60 s of
+    the record after it. A record outside a short block gets the resolution
+    G of the nearest period record on its own side (the previous record for
+    TIMESTAMP_END, the next for TIMESTAMP_START) instead of a finer one or
+    none if:
+
+    - its own spacing is a whole multiple of G, at most _MAX_OUTAGE_STEPS
+      times G (up to five missing records),
+    - its other spacing is no whole multiple of G (finer data follow),
+    - every spacing back to that period record is a whole multiple of G (it
+      sits on the period's grid).
+
+    It then counts as a record of that period. The first 1MIN record after a
+    short gap that happens to end on the 30MIN grid gets 1800 s too: the
+    spacing alone cannot tell the two apart. In the mirror case, a record
+    that took a coarser resolution from its other side gets G if its own
+    spacing equals G: in holey 1MIN data the record at 10:00 before 10MIN
+    data from 10:10 stays 60 s although the record before it got no
+    resolution in passes 1-3.
+    """
+    n = len(group)
+    pos = np.arange(n)
+    own_d, other_d = (next_d, prev_d) if own_next else (prev_d, next_d)
+    if own_next:
+        near = np.minimum.accumulate(np.where(period, pos, n)[::-1])[::-1]
+        near = np.concatenate([near[1:], [n]])
+    else:
+        near = np.maximum.accumulate(np.where(period, pos, -1))
+        near = np.concatenate([[-1], near[:-1]])
+    has = (near >= 0) & (near < n)
+    g_near = np.where(has, group[np.clip(near, 0, n - 1)], 0)
+    safe = np.where(g_near > 0, g_near, 1)
+    coarse = (g_near > group) & (own_d % safe == 0) & (other_d % safe != 0)
+    coarse &= own_d <= _MAX_OUTAGE_STEPS * g_near
+    # Mirror case: the first record of a coarse run took its resolution from
+    # its other side, but its own spacing is one step of the finer period
+    fine = (g_near < group) & (own_d == g_near)
+    cand = has & (block == 0) & (own_d > 0) & (coarse | fine)
+    if not cand.any():
+        return group, period
+    group, period = group.copy(), period.copy()
+    for res in np.unique(g_near[cand]):
+        bad = np.concatenate([[0], np.cumsum(diffs % res != 0)])
+        idx = np.flatnonzero(cand & (g_near == res))
+        idx = idx[bad[near[idx]] == bad[idx]]
+        group[idx] = res
+        period[idx] = True
+    return group, period
+
+
+def _fill_outage_gaps(counted: np.ndarray, group: np.ndarray, diffs: np.ndarray, outage: np.ndarray) -> np.ndarray:
+    """*counted* with unassigned records between two records of one regular
+    outage pattern set to its resolution, for counting run lengths (L309).
+
+    With 7 of every 10 records missing, records with spacings of 4 and 11
+    steps get no resolution of their own (see _regular_outages) and split
+    the pattern into runs of 2 to 4 records. An unassigned record counts
+    with the pattern when the nearest assigned records on both sides got
+    the same resolution g from _regular_outages and every spacing between
+    them is a whole multiple of g.
+    """
+    n = len(group)
+    pos = np.arange(n)
+    has = group > 0
+    prev_l = np.maximum.accumulate(np.where(has, pos, -1))
+    next_l = np.minimum.accumulate(np.where(has, pos, n)[::-1])[::-1]
+    cand = (counted == 0) & (prev_l >= 0) & (next_l < n)
+    p, q = np.clip(prev_l, 0, n - 1), np.clip(next_l, 0, n - 1)
+    cand &= outage[p] & outage[q] & (group[p] == group[q])
+    if not cand.any():
+        return counted
+    counted = counted.copy()
+    for g in np.unique(group[p[cand]]):
+        bad = np.concatenate([[0], np.cumsum(diffs % g != 0)])
+        idx = np.flatnonzero(cand & (group[p] == g))
+        idx = idx[bad[p[idx]] == bad[q[idx]]]
+        counted[idx] = g
+    return counted
 
 
 def _continue_runs(group: np.ndarray, diffs: np.ndarray) -> np.ndarray:
