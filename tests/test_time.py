@@ -511,6 +511,95 @@ class TestDetectFreqGroups(unittest.TestCase):
         self.assertTrue((g.loc[fine] == 120).all())
         self.assertTrue((g.loc[coarse] == 1800).all())
 
+    @staticmethod
+    def _named(ix, name):
+        from diive.core.times.times import detect_freq_groups
+        return detect_freq_groups(index=pd.DatetimeIndex(ix, name=name))
+
+    def test_regular_outages_keep_their_resolution(self):
+        # L301: alternating spacings (1, 2 / 1, 3 / 1, 4 steps) got no group at all
+        for name in ('TIMESTAMP_END', 'TIMESTAMP_START'):
+            for res in (60, 600):
+                for every, missing in ((3, 1), (4, 2), (5, 3)):
+                    with self.subTest(name=name, res=res, every=every, missing=missing):
+                        ix = pd.date_range('2024-07-01', periods=3000, freq=f'{res}s')
+                        ix = ix[(np.arange(len(ix)) % every) >= missing]
+                        self.assertTrue((self._named(ix, name) == res).all())
+
+    def test_partial_regular_outage_keeps_its_records(self):
+        # L301: two days of 1MIN data with every 3rd record missing and one hour with
+        # 3 of 4 missing kept only the 16 records of that hour
+        ix = pd.date_range('2024-07-01 00:01', periods=2 * 1440, freq='1min')
+        pos = np.arange(len(ix))
+        keep = (pos % 3) != 2
+        hour = (pos >= 1440) & (pos < 1500)
+        keep[hour] = (pos[hour] % 4) == 0
+        g = self._groups(ix[keep])
+        self.assertFalse(g.isna().any())
+        self.assertGreater(int((g == 60).sum()), len(g) - 20)
+
+    def test_regular_outage_needs_whole_multiples_of_one_spacing(self):
+        # Stamps that jitter around 10MIN must not get a common resolution of 1 s
+        steps = np.tile([599, 601], 200)
+        ix = pd.Timestamp('2024-07-01') + pd.to_timedelta(np.r_[0, np.cumsum(steps)], unit='s')
+        g = self._groups(ix)
+        self.assertFalse((g == 1).any())
+
+    def test_short_block_next_to_a_gap(self):
+        # L302: a reboot gap between 1MIN data and a 10MIN block hid the block. A
+        # gap before the block hides the spacing of its first record, so 2 records
+        # stay ambiguous there.
+        a = pd.date_range('2024-06-01 00:01', '2024-06-01 10:00', freq='1min')
+        for n, gap_before, gap_after, block in ((2, False, True, True), (3, True, False, True),
+                                                (3, True, True, True), (2, True, False, False)):
+            with self.subTest(records=n, gap_before=gap_before, gap_after=gap_after):
+                m = pd.date_range('2024-06-01 10:20' if gap_before else '2024-06-01 10:10', periods=n, freq='10min')
+                c = pd.date_range(m[-1] + pd.Timedelta('6min' if gap_after else '1min'), periods=400, freq='1min')
+                for name in ('TIMESTAMP_END', 'TIMESTAMP_START'):
+                    ix, blk = a.append(m).append(c), m
+                    if name == 'TIMESTAMP_START':
+                        # Mirror image in time: each record keeps its own spacing
+                        mirror = pd.Timestamp('2024-06-04')
+                        ix, blk = (mirror - (ix - mirror)).sort_values(), mirror - (m - mirror)
+                    g = self._named(ix, name)
+                    self.assertTrue((g.loc[blk] == (600 if block else 60)).all(), name)
+                    self.assertTrue((g.drop(blk) == 60).all(), name)
+
+    def test_short_block_at_the_start_or_end(self):
+        # L302: at the edges of the data one side has no finer records. With
+        # TIMESTAMP_END the first record has no spacing of its own.
+        for n in (2, 3, 4):
+            with self.subTest(records=n):
+                m = pd.date_range('2024-06-01 00:10', periods=n, freq='10min')
+                f = pd.date_range(m[-1] + pd.Timedelta('1min'), periods=400, freq='1min')
+                g = self._groups(m.append(f))
+                self.assertTrue((g.loc[m] == (600 if n >= 4 else 60)).all())
+                self.assertTrue((g.loc[f] == 60).all())
+                f = pd.date_range('2024-06-01 00:01', periods=400, freq='1min')
+                m = pd.date_range(f[-1] + pd.Timedelta('10min'), periods=n, freq='10min')
+                g = self._groups(f.append(m))
+                self.assertTrue((g.loc[m] == (600 if n >= 3 else 60)).all())
+                self.assertTrue((g.loc[f] == 60).all())
+
+    def test_short_block_with_fewer_than_twelve_records(self):
+        # L304: pass 4 returned before the block rule
+        ix = pd.date_range('2024-06-01 09:57', periods=4, freq='1min').append(
+            pd.DatetimeIndex(['2024-06-01 10:10', '2024-06-01 10:20'])).append(
+            pd.date_range('2024-06-01 10:21', periods=4, freq='1min'))
+        g = self._groups(ix)
+        self.assertEqual(g.tolist(), [60] * 4 + [600] * 2 + [60] * 4)
+
+    def test_stray_stamp_does_not_pull_its_neighbour(self):
+        # L304: the record after a stray stamp got the stray's spacing and was dropped
+        for name in ('TIMESTAMP_END', 'TIMESTAMP_START'):
+            for res, stray in ((60, '2024-07-01 12:30:30'), (600, '2024-07-01 12:05')):
+                with self.subTest(name=name, res=res):
+                    ix = pd.date_range('2024-07-01', periods=(1440 * 60) // res, freq=f'{res}s')
+                    ix = ix.append(pd.DatetimeIndex([stray])).sort_values()
+                    g = self._named(ix, name)
+                    self.assertEqual(g.loc[stray], res / 2)
+                    self.assertTrue((g.drop(pd.Timestamp(stray)) == res).all())
+
 
 class TestStlDecompose(unittest.TestCase):
     """Regression tests for `core/times/decomposition_utils.py::stl_decompose`.
