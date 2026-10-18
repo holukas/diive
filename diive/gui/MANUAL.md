@@ -1575,7 +1575,7 @@ the corrections and resamples it.
   timestamps are in that offset. The status line warns when the UTC offset is
   **not set** (UTC+00:00 is used), and when the offset was **changed after the
   download**: send the field again from the Database explorer to use the new
-  offset.
+  offset. The warning goes once the offset is set back.
 - **Resample** (extra inspector page). The target resolution **defaults to your
   working dataset's resolution**, detected automatically (30 minutes if it cannot
   be detected); the info line shows the
@@ -1592,8 +1592,12 @@ the corrections and resamples it.
   timestamps are converted to your dataset's **middle-of-period** convention so it
   aligns on merge, it is **renamed with a suffix** if the name already exists, and
   it is **refused with an explanation** if its time range doesn't overlap your
-  dataset or its timestamps miss your dataset's grid (e.g. 1 hour on 30-minute
-  data). The new column's history records the database origin and **all its
+  dataset, if it is finer than your dataset (e.g. 10 minutes on 30-minute data)
+  or if its timestamps miss your dataset's grid (e.g. 1 hour on 30-minute data).
+  Resample to your dataset's resolution then. A coarser result on the grid
+  (e.g. 30 minutes on 10-minute data) is added, and the status line says that
+  only one record in three holds a value. It also says how many records lie
+  outside your dataset's range. The new column's history records the database origin and **all its
   tags** (and the timezone it was downloaded in). Its data-version tag is the
   processed version (`meteoscreening_diive`), not the download's.
 - **Copy Python** also works with corrections alone. The script uses the same

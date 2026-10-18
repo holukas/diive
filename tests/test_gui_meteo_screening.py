@@ -1175,3 +1175,121 @@ def test_add_refusal_names_grid_mismatch(window, slot_exceptions):
     finally:
         tab._freq.setCurrentText("30min")
         tab._freq_debounce.flush()
+
+
+# --- tests: Round 13 GUI findings (L292, L293) ----------------------------------------
+
+def test_offset_warning_follows_current_offset(window, slot_exceptions):
+    """L292: the 'send the field again' warning appears when the project offset
+    changes after the download, and goes again once it is set back."""
+    from diive.gui import site
+
+    raw, _ = _download([("10min", "2D")])
+    tab = _fresh_tab(window, raw)
+    text = "send the field again"
+    try:
+        assert text not in tab.status.text()
+        site.manager.update(name="CH-XYZ", latitude=LAT, longitude=LON, elevation=500.0,
+                            utc_offset=UTC + 1)
+        assert tab.status.text().count(text) == 1, tab.status.text()
+        site.manager.update(name="CH-XYZ", latitude=LAT, longitude=LON, elevation=500.0,
+                            utc_offset=UTC + 2)
+        assert tab.status.text().count(text) == 1, tab.status.text()
+        _restore_site()
+        status = tab.status.text()
+        assert text not in status, status
+        assert status.startswith("Loaded TA_T1_2_1 from the database"), status
+    finally:
+        _restore_site()
+
+
+def _click_add(win, tab):
+    """Click Add and return (status, new column or None). The column is dropped
+    from the working dataset again."""
+    before = set(win._full_data.columns)
+    tab.add_btn.click()
+    _settle(win, tab)
+    status = tab.status.text()
+    new = [c for c in win._full_data.columns if c not in before]
+    added = win._full_data[new[0]].copy() if new else None
+    if new:
+        win._full_data = win._full_data.drop(columns=new)
+        for c in new:
+            win._created.discard(c)
+        win._apply_range()
+        _settle(win, tab)
+    return status, added
+
+
+def test_add_refuses_other_resolution_or_grid(window, slot_exceptions):
+    """L293: on the 30-min dataset a 10-min result is refused (finer), a 30-min
+    result is added as is, and records outside the dataset's range are counted
+    as such. On a 10-min dataset a 30-min result is added with a note, and an
+    hourly one is refused (off the grid)."""
+    raw, _ = _download([("10min", "2D")])
+    tab = _fresh_tab(window, raw)
+    try:
+        tab.run_outliers_btn.click()
+        _settle(window, tab)
+
+        _emitted(window, tab, "mean", freq="10min")
+        status, added = _click_add(window, tab)
+        assert added is None, status
+        assert status.startswith("Not added: the resampled data (10min) are finer than "
+                                 "the working dataset (30min)"), status
+        assert "Resample to the dataset's resolution (30min)" in status
+
+        out = _emitted(window, tab, "mean", freq="30min")
+        status, added = _click_add(window, tab)
+        n = int(out[FIELD].count())
+        assert status == f"Added {FIELD} ({n} records) to the dataset.", status
+        assert int(added.count()) == n
+        pd.testing.assert_series_equal(added.reindex(out.index), out[FIELD],
+                                       check_names=False, check_freq=False)
+
+        # A 30-min result on a 10-min dataset (MIDDLE :05, :15, ...): on the
+        # grid, every third record. The window's own dataset stays 30-min, so
+        # the tab is shown a 10-min one and the emitted frame is captured.
+        ds10 = pd.DataFrame({"x": 1.0}, index=pd.date_range(
+            "2021-01-01 00:05", "2021-12-31 23:55", freq="10min", name="TIMESTAMP_MIDDLE"))
+        tab.on_data_loaded(ds10)
+        captured = []
+        tab.featuresCreated.connect(captured.append)
+        try:
+            _emitted(window, tab, "mean", freq="1h")  # Add is off after the last add
+            _emitted(window, tab, "mean", freq="30min")
+            status, _ = _click_add(window, tab)
+            assert len(captured) == 1, status
+            assert captured[0].index.isin(ds10.index).all()
+            assert ("The result (30min) is coarser than the dataset (10min): one record "
+                    "in 3 holds a value.") in status, status
+            assert "outside" not in status
+
+            captured.clear()
+            tab.on_data_loaded(ds10)  # the add pushed the 30-min dataset again
+            _emitted(window, tab, "mean", freq="1h")
+            status, added = _click_add(window, tab)
+            assert captured == [] and added is None, status
+            assert "do not align with the working dataset's grid (10min" in status, status
+        finally:
+            tab.featuresCreated.disconnect(captured.append)
+            tab.on_data_loaded(window._data_for(tab), window._created)
+
+        # Two days from 31 December: the records in 2022 lie outside the range.
+        late = raw.copy()
+        late.index = pd.DatetimeIndex(late.index + (pd.Timestamp("2021-12-31") - START),
+                                      name="TIMESTAMP_END")
+        tab = _fresh_tab(window, late)
+        tab.run_outliers_btn.click()
+        _settle(window, tab)
+        out = _emitted(window, tab, "mean", freq="30min")
+        n = int(out[FIELD].count())
+        n_out = int(out.loc[out.index > window._data.index.max(), FIELD].count())
+        assert 0 < n_out < n
+        status, added = _click_add(window, tab)
+        assert status == (f"Added {FIELD} ({n} records) to the dataset. {n_out} of these "
+                          f"records lie outside the dataset's range."), status
+        assert int(added.count()) == n - n_out
+    finally:
+        tab._freq.setCurrentText("30min")
+        tab._freq_debounce.flush()

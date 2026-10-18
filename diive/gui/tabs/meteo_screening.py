@@ -37,9 +37,11 @@ the plain screening tab, all via the base's seams:
 - **Extra inspector page**: ``Resample`` (target resolution + aggregation + min counts).
 - **Emit**: ``resample()`` to the target resolution (TIMESTAMP_END), converted
   END -> MIDDLE (so it aligns onto diive's TIMESTAMP_MIDDLE index), with a
-  collision rename, an overlap guard, and the InfluxDB origin + all db tags in
-  the variable's history. Add is enabled after any run, also Run outliers
-  without steps (a variable that needs no outlier removal is still screened).
+  collision rename, and the InfluxDB origin + all db tags in the variable's
+  history. Add refuses a result outside the dataset's range, finer than its
+  resolution or off its grid. A coarser result on its grid is added with a
+  note. Add is enabled after any run, also Run outliers without steps (a
+  variable that needs no outlier removal is still screened).
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -394,12 +396,22 @@ class MeteoScreeningTab(ScreeningTabBase):
         download (the staged timestamps keep the offset they were downloaded
         in, and the run uses it), or while Project settings have no offset."""
         if self._utc_offset is not None and self._utc_offset != project_utc_offset():
-            return (f"  The project's UTC offset changed after the download "
-                    f"({self._tz_label()}): send the field again from the "
-                    f"Database explorer.")
+            return self._tz_changed_warning()
         if not project_utc_offset_is_set():
             return f"  {NOT_SET_WARNING}"
         return ""
+
+    def _tz_changed_warning(self) -> str:
+        return (f"  The project's UTC offset changed after the download "
+                f"({self._tz_label()}): send the field again from the "
+                f"Database explorer.")
+
+    def _with_tz_warning(self, text: str) -> str:
+        """*text* with the offset warning of the current state. A warning that
+        no longer applies (e.g. the offset was set back) is removed."""
+        for old in (self._tz_changed_warning(), f"  {NOT_SET_WARNING}"):
+            text = text.replace(old, "")
+        return text + self._tz_warning()
 
     def on_data_loaded(self, df, created=None) -> None:
         # The screening source is the staged DB field, NOT the working dataset;
@@ -438,9 +450,8 @@ class MeteoScreeningTab(ScreeningTabBase):
         if coords == self._site_coords:
             # e.g. only the site name or notes changed, or only the project's
             # UTC offset (the run keeps the download's): say when it differs.
-            warning = self._tz_warning()
-            if self._mscr is not None and warning and warning.strip() not in self.status.text():
-                self.status.setText(self.status.text() + warning)
+            if self._mscr is not None:
+                self.status.setText(self._with_tz_warning(self.status.text()))
             return
         self._site_coords = coords
         if self._mscr is None or self._var is None:
@@ -483,12 +494,10 @@ class MeteoScreeningTab(ScreeningTabBase):
 
     def _on_done(self, payload: dict) -> None:
         super()._on_done(payload)
-        # The run split day/night with the offset: say so when it is not set
-        # (unless the base already did).
-        warning = self._tz_warning()
-        if (payload.get("run_id") == self._run_id and warning
-                and warning.strip() not in self.status.text()):
-            self.status.setText(self.status.text() + warning)
+        # The run split day/night with the download's offset: say so when the
+        # project's offset differs or is not set.
+        if payload.get("run_id") == self._run_id:
+            self.status.setText(self._with_tz_warning(self.status.text()))
 
     def _compute_corrected(self, corrs: list[dict]):
         mscr = self._current_mscr()
@@ -638,8 +647,21 @@ class MeteoScreeningTab(ScreeningTabBase):
             i += 1
         return f"{field}_{i}"
 
-    # --- add: overlap guard + meaningful status ---
+    # --- add: range, resolution and grid guards + meaningful status ---
+    @staticmethod
+    def _step(freq) -> pd.Timedelta | None:
+        """Length of *freq* (offset or string), or None (unknown or not fixed)."""
+        if freq is None:
+            return None
+        try:
+            return pd.Timedelta(to_offset(freq).nanos, unit="ns")
+        except (ValueError, TypeError):
+            return None
+
     def _add_to_dataset(self) -> None:
+        """Add the result only where it fits the working dataset: in its range,
+        not finer than its resolution, and with every timestamp on its grid. A
+        coarser result on the grid is added and the status says so."""
         # A resolution still being typed applies first.
         self._freq_debounce.flush()
         if self._pending_guard():
@@ -649,38 +671,55 @@ class MeteoScreeningTab(ScreeningTabBase):
         name = str(self._result_df.columns[0])
         series = self._result_df[name]
         n_total = int(series.count())
+        idx = series.index
+        res_step = self._step(idx.freq)
+        res = (f"{idx.freq.n}{idx.freq.name}" if res_step is not None
+               else self._freq.currentText().strip())
 
-        overlap = None
-        if self._dataset_index is not None and len(self._dataset_index):
-            overlap = int(series.index.isin(self._dataset_index).sum())
-            if overlap == 0:
-                ds = self._dataset_index
-                if series.index.min() <= ds.max() and series.index.max() >= ds.min():
-                    # The ranges overlap, so the timestamps miss the grid.
-                    grid = f"{self._target_freq}, " if self._target_freq else ""
-                    self.status.setText(
-                        f"Not added: the timestamps of the resampled data "
-                        f"({self._freq.currentText().strip()}, e.g. "
-                        f"{series.index.min():%Y-%m-%d %H:%M}) do not align with the "
-                        f"working dataset's grid ({grid}e.g. "
-                        f"{ds.min():%Y-%m-%d %H:%M}). Resample to the dataset's "
-                        f"resolution.")
-                    return
+        notes = ""
+        ds = self._dataset_index
+        if ds is not None and len(ds):
+            if idx.min() > ds.max() or idx.max() < ds.min():
                 self.status.setText(
                     f"Not added: the resampled data "
-                    f"({series.index.min():%Y-%m-%d %H:%M} to "
-                    f"{series.index.max():%Y-%m-%d %H:%M}, {self._freq.currentText().strip()}) "
+                    f"({idx.min():%Y-%m-%d %H:%M} to {idx.max():%Y-%m-%d %H:%M}, {res}) "
                     f"does not overlap the working dataset "
                     f"({ds.min():%Y-%m-%d %H:%M} to {ds.max():%Y-%m-%d %H:%M}). "
                     f"Download the meteo for the same period as your data.")
                 return
+            ds_step = self._step(self._target_freq)
+            if res_step is not None and ds_step is not None and res_step < ds_step:
+                self.status.setText(
+                    f"Not added: the resampled data ({res}) are finer than the working "
+                    f"dataset ({self._target_freq}). Resample to the dataset's "
+                    f"resolution ({self._target_freq}).")
+                return
+            in_range = (idx >= ds.min()) & (idx <= ds.max())
+            if ds_step is not None:
+                off_grid = (idx - ds.min()) % ds_step != pd.Timedelta(0)
+            else:
+                off_grid = in_range & ~idx.isin(ds)
+            if off_grid.any():
+                grid = f"{self._target_freq}, " if self._target_freq else ""
+                self.status.setText(
+                    f"Not added: the timestamps of the resampled data ({res}, e.g. "
+                    f"{idx[off_grid][0]:%Y-%m-%d %H:%M}) do not align with the "
+                    f"working dataset's grid ({grid}e.g. {ds.min():%Y-%m-%d %H:%M}). "
+                    f"Resample to the dataset's resolution.")
+                return
+            if res_step is not None and ds_step is not None and res_step > ds_step:
+                per = res_step / ds_step
+                share = (f"one record in {per:g} holds a value"
+                         if float(per).is_integer() else "the records between stay empty")
+                notes += (f" The result ({res}) is coarser than the dataset "
+                          f"({self._target_freq}): {share}.")
+            n_out = n_total - int(series[in_range].count())
+            if n_out:
+                notes += f" {n_out} of these records lie outside the dataset's range."
 
         self.featuresCreated.emit(self._result_df)
-        msg = f"Added {name} ({n_total} records) to the dataset"
+        msg = f"Added {name} ({n_total} records) to the dataset."
         if name != self._var:
-            msg = f"Added {name} (renamed from existing {self._var}, {n_total} records)"
-        if overlap is not None and overlap < n_total:
-            msg += (f"; {overlap} align with the dataset's timestamps, "
-                    f"the rest fall outside its range (NaN)")
-        self.status.setText(msg + ".")
+            msg = f"Added {name} (renamed from existing {self._var}, {n_total} records)."
+        self.status.setText(msg + notes)
         self.add_btn.setEnabled(False)
