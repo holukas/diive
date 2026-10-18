@@ -130,6 +130,10 @@ Library (also used by the notebook and the GUI):
   measured and corrected series, the daily offset as one value per calendar day with the spread of
   each night, the diel cycle near zero after each step, the night values before and after subtracting
   the offset, and a summary.
+- **Relative humidity offset, figure:** `remove_relativehumidity_offset(showplot=True)` and the meteo
+  screening correction show a new figure (`RelativeHumidityOffsetPlot`), in the style of the nighttime
+  zero-offset figure: the five steps with their counts, series, offset per record, values near 100 %,
+  daily maximum and a summary. `relativehumidity_offset_diagnostics()` returns all intermediate series.
 - **QCF reports:** `report_qcf_series()`, `report_qcf_flags()` and `report_qcf_evolution()` of
   `FlagQCF` (also called by the meteo screening) print one aligned table each, readable in
   notebooks.
