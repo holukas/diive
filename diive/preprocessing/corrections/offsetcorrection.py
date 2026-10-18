@@ -19,7 +19,8 @@ from pandas import Series, DataFrame
 import diive.core.dfun.frames as frames
 from diive.core.plotting.plotfuncs import quickplot
 from diive.core.utils.console import detail
-from diive.variables import DaytimeNighttimeFlag
+from diive.variables import potrad, daytime_nighttime_flag_from_swinpot
+from diive.variables.radiation import _noaa_solar_noon_minutes
 
 
 class MeasurementOffsetFromReplicate:
@@ -128,6 +129,16 @@ def remove_relativehumidity_offset(series: Series,
 
     Works for relative humidity data where maximum values should not exceed 100%.
 
+    For each day with values above 100%, the offset is the mean of these values
+    minus 100. Days without values above 100% get the offset interpolated
+    linearly between the nearest earlier and later days with such values.
+    Before the first and after the last such day, the offset of that day is
+    carried. A single day above 100% (e.g. two hours of fog) thus lowers every
+    record of the series by its offset. This assumes that a sensor reading too
+    high when saturated reads too high on every day. The result depends on the
+    period screened. Without any value above 100% the offset is 0. After the
+    offset is subtracted, values still above 100% are set to 100%.
+
     Args:
         series: Data for relative humidity variable that is corrected
         showplot: Show plot
@@ -205,7 +216,8 @@ class NighttimeZeroOffsetResult:
     Attributes:
         input: Original (uncorrected) series.
         offset: Daily nighttime-mean offset broadcast to the hires timestamps
-            (days without nighttime data filled with the median daily offset).
+            (days without nighttime data filled with the median daily offset,
+            0 when there is no nighttime data at all).
         corrected_by_offset: ``input - offset``, before nighttime is forced to
             zero and remaining negatives are clamped.
         corrected: Final corrected series (nighttime forced to zero, remaining
@@ -231,30 +243,124 @@ class NighttimeZeroOffsetResult:
     n_night: int
 
 
+def _midnight_shift_zeros(swinpot: Series, nighttime: Series, lon: float,
+                          utc_offset: int) -> Series:
+    """Night runs that are only the zeros ``potrad`` leaves at midnight in polar day.
+
+    ``potrad`` (faithful ONEFlux ``get_rpot``) shifts each calendar day's curve
+    onto solar noon and sets the minutes vacated by the shift to 0. These minutes
+    sit at the start or end of the calendar day. In polar day, a record that lies
+    entirely in them gets SW_IN_POT = 0 although the sun is up: one 10-min record,
+    or one record per vacated minute in 1-min data, between two daytime records.
+
+    A run of night records counts as such zeros when it:
+
+    - lies within one calendar day and starts or ends at midnight,
+    - has a daytime record directly before and directly after it, with the run
+      and both neighbours equally spaced (no gap in the index),
+    - lasts no longer than the minutes the shift vacated that day plus one record.
+
+    A real night at the edge of polar day can also end at midnight. It is longer
+    than the vacated minutes unless the sun stays below the horizon for less than
+    about one record, so it stays nighttime.
+
+    Records with missing *swinpot* are skipped, so a run may span empty slots.
+
+    Returns:
+        Boolean Series on the index of *swinpot*, True for records in such runs.
+    """
+    found = pd.Series(False, index=swinpot.index)
+    valid = swinpot.notna().to_numpy()
+    night = (nighttime.to_numpy() == 1)[valid]
+    if not night.any():
+        return found
+    times = swinpot.index[valid]
+    dates = times.normalize()
+    positions = np.flatnonzero(valid)
+    one_day = pd.Timedelta(days=1)
+
+    # Start and end positions (inclusive) of each run of night records
+    edges = np.diff(night.astype(np.int8))
+    starts = np.flatnonzero(edges == 1) + 1
+    ends = np.flatnonzero(edges == -1)
+    if night[0]:
+        starts = np.r_[0, starts]
+    if night[-1]:
+        ends = np.r_[ends, len(night) - 1]
+
+    for first, last in zip(starts, ends):
+        before, after = first - 1, last + 1
+        if before < 0 or after >= len(night):
+            continue  # needs a daytime record on both sides
+        if dates[first] != dates[last]:
+            continue  # crosses midnight: a real night
+        at_end_of_day = (dates[after] - dates[last] == one_day) and (dates[before] == dates[first])
+        at_start_of_day = (dates[first] - dates[before] == one_day) and (dates[after] == dates[last])
+        if not (at_end_of_day or at_start_of_day):
+            continue
+        spacing = np.diff(times[before:after + 1].asi8)
+        if not (spacing == spacing[0]).all():
+            continue  # a gap in the index next to the run
+        day = dates[first]
+        # potrad's own sign convention (positive west), see _oneflux_window_mean
+        shift_min = abs(_noaa_solar_noon_minutes(day.year, day.month, day.day,
+                                                 -lon, -utc_offset) - 720)
+        # Run length (last - first + step) at most the vacated minutes + step
+        if times[last] - times[first] > pd.Timedelta(minutes=shift_min):
+            continue  # longer than the vacated minutes: a real night
+        found.iloc[positions[first:last + 1]] = True
+    return found
+
+
+def _swinpot_with_margin(index: pd.DatetimeIndex, lat: float, lon: float,
+                         utc_offset: int) -> Series:
+    """Potential radiation on *index* plus one record before and after it.
+
+    The extra records let :func:`_midnight_shift_zeros` see the outer neighbour
+    of a run at the first or last record, which is where a download that ends
+    at midnight puts the last day's zeros. The margin has the median spacing,
+    the period ``potrad`` infers, so the values on *index* are unchanged.
+    """
+    if len(index) < 2:
+        return potrad(timestamp_index=index, lat=lat, lon=lon, utc_offset=utc_offset)
+    step = pd.Series(index).diff().median()
+    extended = pd.DatetimeIndex([index[0] - step]).append(index).append(
+        pd.DatetimeIndex([index[-1] + step]))
+    return potrad(timestamp_index=extended, lat=lat, lon=lon, utc_offset=utc_offset)
+
+
 def _nighttime_zero_offset(series: Series,
                            lat: float,
                            lon: float,
                            utc_offset: int,
-                           clamp_negatives: bool = True) -> NighttimeZeroOffsetResult:
+                           clamp_negatives: bool = True,
+                           swin_pot: Series | None = None) -> NighttimeZeroOffsetResult:
     """Compute the nighttime zero-offset correction and all intermediate series.
 
     Shared by :func:`remove_nighttime_zero_offset` (returns only the final series)
     and :func:`nighttime_zero_offset_diagnostics` (returns the full result). Does
     not mutate *series*. When ``clamp_negatives`` is False, daytime negatives that
     remain after the offset is removed are kept instead of being clamped to zero
-    (nighttime is forced to zero either way).
+    (nighttime is forced to zero either way). *swin_pot*, when given, replaces
+    the potential radiation computed from *lat*, *lon* and *utc_offset*. It must
+    cover the index of *series* and may hold further records, which serve only
+    to recognise potrad's midnight zeros (see :func:`_midnight_shift_zeros`).
     """
     outname = series.name
     work = series.rename("input_data")
 
     # Detect nighttime
-    dnf = DaytimeNighttimeFlag(
-        timestamp_index=work.index,
-        nighttime_threshold=0.001,
-        lat=lat,
-        lon=lon,
-        utc_offset=utc_offset)
-    nighttimeflag = dnf.get_nighttime_flag()
+    if swin_pot is None:
+        swin_pot = _swinpot_with_margin(work.index, lat=lat, lon=lon, utc_offset=utc_offset)
+    elif not work.index.isin(swin_pot.index).all():
+        raise ValueError("swin_pot must cover every timestamp of series.")
+    _, nighttimeflag = daytime_nighttime_flag_from_swinpot(swinpot=swin_pot,
+                                                           nighttime_threshold=0.001)
+    # In polar day, potrad's midnight zeros are daytime: neither zeroed nor used
+    # as that day's offset (L244)
+    artifact = _midnight_shift_zeros(swinpot=swin_pot, nighttime=nighttimeflag,
+                                     lon=lon, utc_offset=utc_offset)
+    nighttimeflag = nighttimeflag.mask(artifact, 0.0).reindex(work.index)
     nighttime_ix = nighttimeflag == 1
 
     # Calculate offset as the daily nighttime mean, broadcast to hires; days
@@ -266,6 +372,9 @@ def _nighttime_zero_offset(series: Series,
                                          hires_timestamp=work.index,
                                          interpolate_missing_vals=True)
     _offset = _offset.fillna(_offset.median()).rename("offset")
+    # No nighttime value at all (e.g. a period of polar day): nothing to derive
+    # an offset from, so none is removed. Without this every record became NaN.
+    _offset = _offset.fillna(0.0)
 
     # Subtract offset from the variable (value - offset). Offset examples
     # assuming a measured value of 120: negative offset -8 -> 120 - (-8) = 128;
@@ -297,17 +406,27 @@ def remove_nighttime_zero_offset(series: Series,
                                  lon: float,
                                  utc_offset: int,
                                  showplot: bool = False,
-                                 clamp_negatives: bool = True) -> Series:
+                                 clamp_negatives: bool = True,
+                                 swin_pot: Series | None = None) -> Series:
     """Remove a nighttime zero-offset from a variable that should read zero at night
 
     General-purpose: works for any variable expected to be zero during nighttime
     (e.g. shortwave radiation, PPFD). A nighttime flag is calculated and used to
     detect nighttime data. Then, for each day, the mean of that day's nighttime
     values is the offset by which all of the day's records are corrected (days
-    without nighttime data use the median of all daily offsets). Finally, after
-    the offset is applied, nighttime values are set to zero and (when
-    ``clamp_negatives``) any remaining negative values are clamped to zero —
-    enforcing the variable's physical floor of zero.
+    without nighttime data use the median of all daily offsets, and with no
+    nighttime value at all the offset is 0). Finally, after the offset is
+    applied, nighttime values are set to zero and (when ``clamp_negatives``) any
+    remaining negative values are clamped to zero, enforcing the variable's
+    physical floor of zero.
+
+    Nighttime is where potential radiation is below 0.001 W m-2. In polar day,
+    ``potrad`` gives 0 for the records in the minutes its solar-noon shift
+    vacates at midnight (one 10-min record per day, or several 1-min records).
+    These runs count as daytime, so they are not zeroed and give no offset. A
+    polar day then has no nighttime data and gets the median offset, or 0 if no
+    day in the series has nighttime data. The offset cannot be estimated in
+    polar day.
 
     Args:
         series: Data for the variable that is corrected
@@ -321,6 +440,18 @@ def remove_nighttime_zero_offset(series: Series,
             included) to zero after the offset is removed, enforcing a physical
             floor of zero. If False, keep those negatives (nighttime is still
             forced to zero).
+        swin_pot: Potential radiation (W m-2) aligned to the index of *series*,
+            used for the day/night split instead of computing it from *lat*,
+            *lon* and *utc_offset*. *lon* and *utc_offset* still give the
+            length of the midnight zeros described above. Pass it when the
+            potential radiation must be computed differently, e.g. per time
+            resolution.
+            It must contain every timestamp of *series* and may contain more.
+            Records outside the index only help to recognise the midnight zeros
+            described above at the first and last record: give one extra record
+            before and after the series for that, otherwise such a run at the
+            series edge stays nighttime. NaN means not a record. None (default)
+            computes it with ``potrad``, one record beyond each end included.
 
     Returns:
         Corrected series
@@ -329,7 +460,7 @@ def remove_nighttime_zero_offset(series: Series,
         See `examples/preprocessing/corrections/correction_radiation_offset.py`
     """
     result = _nighttime_zero_offset(series, lat=lat, lon=lon, utc_offset=utc_offset,
-                                    clamp_negatives=clamp_negatives)
+                                    clamp_negatives=clamp_negatives, swin_pot=swin_pot)
 
     if showplot:
         # Named per stage: the raw and the final series otherwise share the variable
@@ -350,7 +481,8 @@ def nighttime_zero_offset_diagnostics(series: Series,
                                       lat: float,
                                       lon: float,
                                       utc_offset: int,
-                                      clamp_negatives: bool = True) -> NighttimeZeroOffsetResult:
+                                      clamp_negatives: bool = True,
+                                      swin_pot: Series | None = None) -> NighttimeZeroOffsetResult:
     """Nighttime zero-offset correction with every intermediate series exposed.
 
     Same computation as :func:`remove_nighttime_zero_offset` (``result.corrected``
@@ -366,12 +498,14 @@ def nighttime_zero_offset_diagnostics(series: Series,
         clamp_negatives: If True (default), clamp remaining negatives to zero (see
             :func:`remove_nighttime_zero_offset`). With False, ``n_below_zero_after``
             reflects the daytime negatives that were kept.
+        swin_pot: Potential radiation on the index of *series*, used instead of
+            computing it (see :func:`remove_nighttime_zero_offset`).
 
     Returns:
         A :class:`NighttimeZeroOffsetResult`.
     """
     return _nighttime_zero_offset(series, lat=lat, lon=lon, utc_offset=utc_offset,
-                                  clamp_negatives=clamp_negatives)
+                                  clamp_negatives=clamp_negatives, swin_pot=swin_pot)
 
 
 class WindDirOffset:

@@ -18,15 +18,24 @@ from diive.core.utils.console import info, detail
 def set_exact_values_to_missing(series: Series,
                                 values: list,
                                 showplot: bool = False,
-                                verbose: int = 0) -> Series:
+                                verbose: int | bool | None = None) -> Series:
     """
     Set records matching *values* to missing values.
+
+    A record matches when it equals the value within a relative tolerance of
+    1e-6 (``np.isclose`` with ``rtol=1e-6, atol=0``), so data stored as float32
+    still match: float32 0.1 is 0.10000000149 as float64 and does not equal
+    0.1. The tolerance is below the resolution of measurements (-9999 matches
+    values within 0.01 of it). 0 matches only 0.
 
     Args:
         series: Data for variable that is corrected
         values: List of floats that will be set to missing values
         showplot: Show plot
-        verbose: Verbosity level
+        verbose: Verbosity for the console helpers. The report appears at
+            ``VERBOSE_PROGRESS`` (2) and above, the locations of the records
+            at ``VERBOSE_DEBUG`` (3). 0 prints nothing. None (default) uses the
+            level set with ``set_verbosity()``.
 
     Returns:
         Corrected series
@@ -43,10 +52,11 @@ def set_exact_values_to_missing(series: Series,
     # Create empty flag
     flag = pd.Series(index=work.index, data=np.nan)
 
-    # Create flag that indicates where records match one of the values
+    # Create flag that indicates where records match one of the values. Relative
+    # tolerance so float32 storage matches, atol=0 so 0 matches only 0.
+    values_float = work.to_numpy(dtype=float, na_value=np.nan)
     for val in values:
-        locs = work == val
-        flag[locs] = 1
+        flag[np.isclose(values_float, val, rtol=1e-6, atol=0)] = 1
 
     # Set flag to zero for all other records
     flag = flag.fillna(0)
@@ -63,12 +73,10 @@ def set_exact_values_to_missing(series: Series,
     # Number of values set to missing
     n_vals = int(flag.sum())
 
-    info(f"Correction: set exact values to missing")
-    info(f"  Variable: {outname}")
-    info(f"  Number of records set to missing: {n_vals}")
-
-    if verbose > 0:
-        detail(f"  Locations of records set to missing: {locs}")
+    info(f"Correction: set exact values to missing", verbose=verbose)
+    info(f"  Variable: {outname}", verbose=verbose)
+    info(f"  Number of records set to missing: {n_vals}", verbose=verbose)
+    detail(f"  Locations of records set to missing: {locs}", verbose=verbose)
 
     # Plot
     if showplot:
@@ -120,7 +128,8 @@ def setto_value(series: Series, dates: list, value: float = 0, verbose: int = 0)
 def setto_threshold(series: Series,
                     threshold: float,
                     type: str,
-                    showplot: bool = False) -> Series:
+                    showplot: bool = False,
+                    verbose: int | bool | None = None) -> Series:
     """
     Set values above or below a threshold value to threshold value
 
@@ -130,6 +139,9 @@ def setto_threshold(series: Series,
         type: `min` sets series values below *threshold* to *threshold*,
             'max' sets series values above *threshold* to *threshold*
         showplot: Show plot
+        verbose: Verbosity for the console helpers. The report appears at
+            ``VERBOSE_PROGRESS`` (2) and above, 0 prints nothing. None (default)
+            uses the level set with ``set_verbosity()``.
 
     Returns:
         Corrected series
@@ -159,14 +171,16 @@ def setto_threshold(series: Series,
     flag.loc[over_thres_ix] = 1
     flag.loc[range_ok_ix] = 0
 
-    info(f"QA/QC set to threshold value")
-    info(f"  Variable: {outname}")
+    info(f"QA/QC set to threshold value", verbose=verbose)
+    info(f"  Variable: {outname}", verbose=verbose)
     if type == 'max':
-        info(f"  Accepted: {range_ok_ix.sum()} values below max threshold of {threshold}")
-        info(f"  Corrected: {over_thres_ix.sum()} values above max threshold of {threshold} were set to {threshold}")
+        info(f"  Accepted: {range_ok_ix.sum()} values below max threshold of {threshold}", verbose=verbose)
+        info(f"  Corrected: {over_thres_ix.sum()} values above max threshold of {threshold} were set to {threshold}",
+             verbose=verbose)
     if type == 'min':
-        info(f"  Accepted: {range_ok_ix.sum()} values above min threshold of {threshold}")
-        info(f"  Corrected: {over_thres_ix.sum()} values below min threshold of {threshold} were set to {threshold}")
+        info(f"  Accepted: {range_ok_ix.sum()} values above min threshold of {threshold}", verbose=verbose)
+        info(f"  Corrected: {over_thres_ix.sum()} values below min threshold of {threshold} were set to {threshold}",
+             verbose=verbose)
 
     corrected_ix = flag == 1
     series_corr = work.copy()
