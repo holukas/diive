@@ -14,12 +14,14 @@ from typing import Literal
 import matplotlib.gridspec as gridspec
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt, _pylab_helpers, dates as mdates
+from matplotlib import pyplot as plt, _api, _pylab_helpers, dates as mdates
 from matplotlib.collections import Collection, PolyCollection
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch, Rectangle
+from matplotlib.path import Path as MplPath
 from matplotlib.text import Text
+from matplotlib.transforms import Bbox
 from pandas import DataFrame, Series
 
 import diive.core.plotting.styles.LightTheme as theme
@@ -365,9 +367,60 @@ def nice_date_ticks(ax, minticks: int = 3, maxticks: int = 9, which: Literal['x'
 #: 'best' search and tested as one array instead (see _ArrayOffsetsLegend).
 _LEGEND_BEST_MAX_POINTS = 10_000
 
+#: A line with more vertices than this, and display x that never decreases, is
+#: scored in the 'best' search only where a candidate box can reach it (see
+#: _SortedLine).
+_LEGEND_SORTED_MIN_VERTICES = 2000
+
+
+class _SortedLine:
+    """Display path of a long line with x that never decreases, scored per x-slice.
+
+    matplotlib scores a line against a candidate box with
+    ``box.count_contains(vertices)`` plus ``path.intersects_bbox(box,
+    filled=False)``, two passes over every vertex. Only the vertices with x
+    inside the box can be counted, and only segments that reach the box's x
+    range can cross it. ``intersects_bbox`` skips non-finite vertices and joins
+    the finite ones on either side, so the slice starts at the last finite
+    vertex before the box and ends at the first vertex after it. Scoring that
+    slice gives the same value.
+    """
+
+    def __init__(self, vertices, finite):
+        self.vertices = vertices
+        # A non-finite vertex takes the x of the last finite one before it, so
+        # the keys never decrease and searchsorted finds the slice.
+        self.keys = np.maximum.accumulate(np.where(finite, vertices[:, 0], -np.inf))
+        self.prev_finite = np.maximum.accumulate(np.where(finite, np.arange(len(vertices)), -1))
+
+    def score(self, box) -> int:
+        """Same value as matplotlib's two tests on the whole line."""
+        lo = int(np.searchsorted(self.keys, box.x0, side='left'))
+        hi = int(np.searchsorted(self.keys, box.x1, side='right'))
+        start = max(int(self.prev_finite[lo - 1]), 0) if lo > 0 else 0
+        sub = self.vertices[start:hi + 1]
+        return box.count_contains(sub) + MplPath(sub).intersects_bbox(box, filled=False)
+
+
+def _split_sorted_lines(lines: list) -> tuple[list, list]:
+    """Separate the long display paths with x that never decreases from the others."""
+    plain, sorted_lines = [], []
+    for path in lines:
+        vertices = path.vertices
+        if path.codes is None and len(vertices) > _LEGEND_SORTED_MIN_VERTICES:
+            finite = np.isfinite(vertices).all(axis=1)
+            x = vertices[finite, 0]
+            # An all-NaN line stays with matplotlib: its segment test then
+            # looks at a vertex that is not in the data.
+            if len(x) and (np.diff(x) >= 0).all():
+                sorted_lines.append(_SortedLine(vertices, finite))
+                continue
+        plain.append(path)
+    return plain, sorted_lines
+
 
 class _ArrayOffsetsLegend(Legend):
-    """A `Legend` whose ``loc='best'`` search stays fast for large scatters.
+    """A `Legend` with a ``loc='best'`` search that stays fast for large scatters and long lines.
 
     To place a legend at 'best', matplotlib tests up to nine candidate
     positions against the data, twice per draw. ``_auto_legend_data`` collects
@@ -384,11 +437,55 @@ class _ArrayOffsetsLegend(Legend):
     still moves away from the data after a zoom or pan. Below the limit
     matplotlib's own method runs unchanged.
 
-    ``_auto_legend_data`` is private, but the search has no public hook. The
-    copy below follows matplotlib 3.10; a test compares it with matplotlib's
-    method so a change there is noticed. If a private name it uses is gone,
-    matplotlib's method runs instead.
+    Each candidate also tests every vertex of every line twice. A time series
+    on a date axis has display x that never decreases, and for such a line
+    with more than ``_LEGEND_SORTED_MIN_VERTICES`` vertices only the slice a
+    candidate can reach is tested (see :class:`_SortedLine`). Other lines are
+    tested as matplotlib does.
+
+    ``_auto_legend_data`` and ``_find_best_position`` are private, but the
+    search has no public hook. The copies below follow matplotlib 3.10, and
+    tests compare them with matplotlib's methods so a change there is noticed.
+    If a private name they use is gone, matplotlib's method runs instead.
     """
+
+    def _find_best_position(self, width, height, renderer):
+        # Copy of matplotlib 3.10 Legend._find_best_position, except for the
+        # long sorted lines. The badness is a sum of counts, so it is the same.
+        try:
+            get_anchored_bbox = self._get_anchored_bbox
+            n_codes = len(self.codes)
+            loc_used_default = self._loc_used_default
+        except AttributeError:
+            return super()._find_best_position(width, height, renderer)
+
+        start_time = time.perf_counter()
+        bboxes, lines, offsets = self._auto_legend_data(renderer)
+        lines, sorted_lines = _split_sorted_lines(lines)
+        bbox = Bbox.from_bounds(0, 0, width, height)
+
+        candidates = []
+        for idx in range(1, n_codes):
+            l, b = get_anchored_bbox(idx, bbox, self.get_bbox_to_anchor(), renderer)
+            legend_box = Bbox.from_bounds(l, b, width, height)
+            badness = (sum(legend_box.count_contains(line.vertices) for line in lines)
+                       + legend_box.count_contains(offsets)
+                       + legend_box.count_overlaps(bboxes)
+                       + sum(line.intersects_bbox(legend_box, filled=False) for line in lines)
+                       + sum(line.score(legend_box) for line in sorted_lines))
+            # The index favours lower codes in a tie, as in matplotlib
+            candidates.append((badness, idx, (l, b)))
+            if badness == 0:
+                break
+
+        _, _, (l, b) = min(candidates)
+
+        if loc_used_default and time.perf_counter() - start_time > 1:
+            _api.warn_external(
+                'Creating legend with loc="best" can be slow with large '
+                'amounts of data.')
+
+        return l, b
 
     def _auto_legend_data(self, renderer):
         try:

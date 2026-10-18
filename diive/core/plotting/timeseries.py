@@ -210,40 +210,6 @@ class TimeSeries:
         p.legend.background_fill_alpha = 0.8
         p.legend.border_line_width = 0.5
 
-        # # https://stackoverflow.com/questions/61340741/get-bokehs-selection-in-notebook
-        # from bokeh.models import CustomJS
-        # # make a custom javascript callback that exports the indices of the selected points to the Jupyter notebook
-        # callback = CustomJS(args=dict(s=source),
-        #                     code="""
-        #                          console.log('Running CustomJS callback now.');
-        #                          var indices = s.selected.indices;
-        #                          var kernel = IPython.notebook.kernel;
-        #                          kernel.execute("selected_indices = " + indices)
-        #                          """)
-        #
-        # # set the callback to run when a selection geometry event occurs in the figure
-        # p.js_on_event('selectiongeometry', callback)
-        # selected_indices
-
-        # # Add hover tooltip
-        # hover = HoverTool(
-        #     tooltips=[
-        #         ('Date', '@date{%F %T}'),
-        #         ('Value', '@value')
-        #     ],
-        #     formatters={
-        #         '@date':'datetime'
-        #     },
-        #     # Display a tooltip whenever the cursor is vertically in line with a glyph
-        #     mode='vline'
-        # )
-
-        # hover.formatters = {'@date': 'datetime'}
-        # p.add_tools(hover)
-
-        # HoverTool(tooltips=[('date', '@DateTime{%F}')],
-        #           formatters={'@DateTime': 'datetime'})
-
         # Show plot
         if showplot:
             show(p)

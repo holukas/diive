@@ -260,10 +260,6 @@ def aggregated_as_hires(aggregate_series: Series,
 
     Example: half-hourly timestamp for daily maximum temperature
     """
-    # Imported here, not at module level: gapfilling pulls in sklearn/xgboost/shap,
-    # and this leaf module is imported by low-level code that must not depend on them.
-    from diive.gapfilling.interpolate import linear_interpolation
-
     # Aggregate series
     lowres_df = pd.DataFrame(aggregate_series.resample(to_freq).agg(to_agg))
     # lowres_df = lowres_df.rolling(window=5, center=True).mean()  # Testing
@@ -274,6 +270,10 @@ def aggregated_as_hires(aggregate_series: Series,
     if lowres_df[agghires_col].isnull().any() \
             and interpolate_missing_vals \
             and interpolation_lim:
+        # Imported here, not at module level: gapfilling pulls in sklearn/xgboost/shap,
+        # and this leaf module is imported by low-level code that must not depend on them.
+        # Only this branch needs it, the callers in the library never interpolate.
+        from diive.gapfilling.interpolate import linear_interpolation
         lowres_df[agghires_col] = linear_interpolation(series=lowres_df[agghires_col],
                                                        limit=interpolation_lim)
 

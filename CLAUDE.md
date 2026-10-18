@@ -150,7 +150,7 @@ Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to t
 - **Colours:** Material Design; 500-level lines/bars (`#2196F3`, `#F44336`, `#FFC107`), `#455A64` ink. The 300-bar/500-background split applies only to a bar panel sharing a figure with a shaded panel (`analysis/optimumrange.py`). Don't "correct" 400/500 bar fills to 300 (L145).
 - Bar labels `va='center_baseline'`; label contrast `'white' if 0.299*r + 0.587*g + 0.114*b < 0.5 else 'black'`; multi-year panel height `max(1.5, n_years * 0.38)`.
 - **Use internal column keys** (`_x`/`_y`/`_z`, `_values`) when building a frame from caller-supplied Series; a shared name silently swaps one role's data for another's.
-- Don't replace `_ArrayOffsetsLegend` (fast `loc='best'` on large collections) with a subsample or fixed `loc`. Find scatter collections with `isinstance(c, PathCollection)`, never by class name.
+- Don't replace `_ArrayOffsetsLegend` (fast `loc='best'` on large collections and long lines with non-decreasing x, pixel-identical to matplotlib) with a subsample or fixed `loc`. Find scatter collections with `isinstance(c, PathCollection)`, never by class name.
 - `RidgeLinePlot` must set gridspec `hspace` at creation; a later `gs.update()` is a no-op for embedded figures.
 
 ## Development Workflow

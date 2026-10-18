@@ -213,19 +213,19 @@ class HeatmapDateTime(HeatmapBase):
                    - ``ticks_time``: Float hours at each major tick (e.g. ``[3.0, 6.0, …]``).
                    - ``ticklabels_time``: Integer hour labels for the ticks.
         """
+        # Integer nanoseconds, so a grid under one minute (5 s, 30 s) also works
+        freq_nanos = 30 * 60 * 10 ** 9  # fallback: 30 min
         freq = self.series.index.freq
         if freq is not None:
             try:
-                freq_minutes = int(pd.tseries.frequencies.to_offset(freq).nanos / 1e9 / 60)
+                freq_nanos = int(pd.tseries.frequencies.to_offset(freq).nanos)
             except Exception:
-                freq_minutes = 30  # safe fallback
-        else:
-            freq_minutes = 30  # safe fallback
+                pass
 
         # Pick the smallest interval (3h, 6h, 12h) that is a whole multiple of the data frequency
         tick_interval_hours = 3
         for candidate in [3, 6, 12]:
-            if (candidate * 60) % freq_minutes == 0:
+            if (candidate * 3600 * 10 ** 9) % freq_nanos == 0:
                 tick_interval_hours = candidate
                 break
 

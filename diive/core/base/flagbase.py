@@ -34,6 +34,22 @@ def sum_flag_value(df: DataFrame, value: int) -> Series:
     return df[df == value].sum(axis=1)
 
 
+def _outlier_histogram(series: Series, ax) -> None:
+    """Histogram panel of the outlier plots."""
+    # `n_bins=None` bins each panel over its own range, so bin i is not the same
+    # interval in two histograms. That is deliberate here: sharing one grid
+    # (pass explicit edges as `n_bins`) is the only way to compare them bar for
+    # bar, but the shared grid would have to be the raw series' grid, and that is
+    # set by the very outliers this plot exists to remove -- on a spiked July
+    # record the cleaned panel collapses to 1 occupied bin of 10 (3 of 30, 5 of
+    # 50). Each panel resolving its own distribution is worth more than bar-for-bar
+    # comparability. Every panel tick-labels its bin edges, so the scales are read
+    # off the axes, not assumed equal.
+    HistogramPlot(series=series, method='n_bins', n_bins=None).plot(
+        ax=ax, highlight_peak=True, show_zscores=True, show_info=False, show_title=False,
+        show_zscore_values=False, format_style=FormatStyle(show_grid=False))
+
+
 class FlagBase:
     """Base class for flag/outlier detectors: holds the series and exposes the flag and filtered result."""
 
@@ -235,7 +251,6 @@ class FlagBase:
 
         fig = plt.figure(facecolor='white', figsize=(16, 7))
         gs = gridspec.GridSpec(2, 2)  # rows, cols
-        # gs.update(wspace=0.3, hspace=0.1, left=0.03, right=0.97, top=0.95, bottom=0.05)
         ax_series = fig.add_subplot(gs[0, 0])
         ax_series_hist = fig.add_subplot(gs[0, 1])
         ax_ok = fig.add_subplot(gs[1, 0], sharex=ax_series)
@@ -247,25 +262,12 @@ class FlagBase:
         ax_series.plot(self.series[rejected].index, self.series[rejected],
                        label="outlier (rejected)", color="#F44336", alpha=1, linestyle='none',
                        markersize=12, markeredgecolor='none', marker='X')
-        # `n_bins=None` bins each panel over its own range, so bin i is not the same
-        # interval in the two histograms. That is deliberate here: sharing one grid
-        # (pass explicit edges as `n_bins`) is the only way to compare them bar for
-        # bar, but the shared grid would have to be the raw series' grid, and that is
-        # set by the very outliers this plot exists to remove -- on a spiked July
-        # record the cleaned panel collapses to 1 occupied bin of 10 (3 of 30, 5 of
-        # 50). Each panel resolving its own distribution is worth more than bar-for-bar
-        # comparability; both panels tick-label every bin edge, so the scales are read
-        # off the axes, not assumed equal.
-        hist_computation_kwargs = dict(method='n_bins', n_bins=None)
-        hist_styling_kwargs = dict(highlight_peak=True, show_zscores=True, show_info=False,
-                                    show_title=False, show_zscore_values=False,
-                                    format_style=FormatStyle(show_grid=False))
-        HistogramPlot(self.series, **hist_computation_kwargs).plot(ax=ax_series_hist, **hist_styling_kwargs)
+        _outlier_histogram(self.series, ax=ax_series_hist)
 
         ax_ok.plot(self.series[ok].index, self.series[ok],
                    label="filtered series", alpha=.5, linestyle='none', markeredgewidth=1,
                    marker='o', markersize=6, markeredgecolor="#607D8B", fillstyle='none')
-        HistogramPlot(self.series[ok], **hist_computation_kwargs).plot(ax=ax_ok_hist, **hist_styling_kwargs)
+        _outlier_histogram(self.series[ok], ax=ax_ok_hist)
 
         default_format(ax=ax_series)
         default_format(ax=ax_ok)
@@ -301,11 +303,12 @@ class FlagBase:
             'OUTLIER_NT': series[(flag_quality == 2) & (flag_daytime == 0)],
         }
         df = pd.DataFrame(frame)
+        # The panels draw markers only, so each column is drawn without its NaN
+        # rows: the same markers, fewer vertices to transform.
+        marks = {col: df[col].dropna() for col in df.columns}
 
         fig = plt.figure(facecolor='white', figsize=(24, 12))
         gs = gridspec.GridSpec(3, 4)  # rows, cols
-        # gs.update(wspace=0.15, hspace=0.1, left=0.05, right=0.95, top=0.95, bottom=0.05)
-        # gs.update(left=0.05, right=0.95, top=0.92, bottom=0.05, hspace=0.5)
 
         if title:
             fig.suptitle(title, fontsize=24, fontweight='bold')
@@ -334,53 +337,42 @@ class FlagBase:
         axes_series = [ax_series, ax_cleaned, ax_series_dt, ax_cleaned_dt, ax_series_nt, ax_cleaned_nt]
         axes_hist = [ax_series_hist, ax_cleaned_hist, ax_series_dt_hist,
                      ax_cleaned_dt_hist, ax_series_nt_hist, ax_cleaned_nt_hist]
-        # Per-panel bin grids, for the reason given in `defaultplot`.
-        hist_computation_kwargs = dict(method='n_bins', n_bins=None)
-        hist_styling_kwargs = dict(highlight_peak=True, show_zscores=True, show_info=False,
-                                    show_title=False, show_zscore_values=False,
-                                    format_style=FormatStyle(show_grid=False))
         series_kwargs = dict(marker='o', mec='black', markeredgewidth=1, alpha=.2, fillstyle='none', linestyle='none')
 
         # Column 0
-        ax_series.plot(df.index, df['CLEANED'], label=f"OK ({df['CLEANED'].count()} values)", **series_kwargs)
-        ax_series.plot(df.index, df['OUTLIER'], marker='X', ms=10, mec='none', linestyle='none',
+        ax_series.plot(marks['CLEANED'].index, marks['CLEANED'], label=f"OK ({df['CLEANED'].count()} values)", **series_kwargs)
+        ax_series.plot(marks['OUTLIER'].index, marks['OUTLIER'], marker='X', ms=10, mec='none', linestyle='none',
                        alpha=.9, color='red', label=f"outlier ({df['OUTLIER'].count()} values)")
-        ax_series_dt.plot(df.index, df['UNFILTERED_DT'], label=f"series ({df['UNFILTERED_DT'].count()} values)",
+        ax_series_dt.plot(marks['UNFILTERED_DT'].index, marks['UNFILTERED_DT'], label=f"series ({df['UNFILTERED_DT'].count()} values)",
                           **series_kwargs)
-        ax_series_dt.plot(df.index, df['OUTLIER_DT'], marker='X', ms=10, mec='none', linestyle='none',
+        ax_series_dt.plot(marks['OUTLIER_DT'].index, marks['OUTLIER_DT'], marker='X', ms=10, mec='none', linestyle='none',
                           alpha=.9, color='red', label=f"outlier ({df['OUTLIER_DT'].count()} values)")
-        ax_series_nt.plot(df.index, df['UNFILTERED_NT'], label=f"series ({df['UNFILTERED_NT'].count()} values)",
+        ax_series_nt.plot(marks['UNFILTERED_NT'].index, marks['UNFILTERED_NT'], label=f"series ({df['UNFILTERED_NT'].count()} values)",
                           **series_kwargs)
-        ax_series_nt.plot(df.index, df['OUTLIER_NT'], marker='X', ms=10, mec='none', linestyle='none',
+        ax_series_nt.plot(marks['OUTLIER_NT'].index, marks['OUTLIER_NT'], marker='X', ms=10, mec='none', linestyle='none',
                           alpha=.9, color='red', label=f"outlier ({df['OUTLIER_NT'].count()} values)")
 
         # Column 1
-        HistogramPlot(series=df['UNFILTERED'], **hist_computation_kwargs).plot(ax=ax_series_hist, **hist_styling_kwargs)
-        HistogramPlot(series=df['UNFILTERED_DT'], **hist_computation_kwargs).plot(ax=ax_series_dt_hist, **hist_styling_kwargs)
-        HistogramPlot(series=df['UNFILTERED_NT'], **hist_computation_kwargs).plot(ax=ax_series_nt_hist, **hist_styling_kwargs)
+        _outlier_histogram(df['UNFILTERED'], ax=ax_series_hist)
+        _outlier_histogram(df['UNFILTERED_DT'], ax=ax_series_dt_hist)
+        _outlier_histogram(df['UNFILTERED_NT'], ax=ax_series_nt_hist)
 
         # Column 2
-        ax_cleaned.plot(df.index, df['CLEANED'], label=f"cleaned ({df['CLEANED'].count()} values)", **series_kwargs)
-        ax_cleaned_dt.plot(df.index, df['CLEANED_DT'], label=f"cleaned daytime ({df['CLEANED_DT'].count()} values)",
+        ax_cleaned.plot(marks['CLEANED'].index, marks['CLEANED'], label=f"cleaned ({df['CLEANED'].count()} values)", **series_kwargs)
+        ax_cleaned_dt.plot(marks['CLEANED_DT'].index, marks['CLEANED_DT'], label=f"cleaned daytime ({df['CLEANED_DT'].count()} values)",
                            **series_kwargs)
-        ax_cleaned_nt.plot(df.index, df['CLEANED_NT'], label=f"cleaned nighttime ({df['CLEANED_NT'].count()} values)",
+        ax_cleaned_nt.plot(marks['CLEANED_NT'].index, marks['CLEANED_NT'], label=f"cleaned nighttime ({df['CLEANED_NT'].count()} values)",
                            **series_kwargs)
 
         # Column 3
-        HistogramPlot(series=df['CLEANED'], **hist_computation_kwargs).plot(ax=ax_cleaned_hist, **hist_styling_kwargs)
-        HistogramPlot(series=df['CLEANED_DT'], **hist_computation_kwargs).plot(ax=ax_cleaned_dt_hist, **hist_styling_kwargs)
-        HistogramPlot(series=df['CLEANED_NT'], **hist_computation_kwargs).plot(ax=ax_cleaned_nt_hist, **hist_styling_kwargs)
+        _outlier_histogram(df['CLEANED'], ax=ax_cleaned_hist)
+        _outlier_histogram(df['CLEANED_DT'], ax=ax_cleaned_dt_hist)
+        _outlier_histogram(df['CLEANED_NT'], ax=ax_cleaned_nt_hist)
 
         for a in axes_series:
             default_format(ax=a, ax_ylabel_txt="value")
             default_legend(ax=a, ncol=1, loc=2)
             nice_date_ticks(ax=a)
-
-        # plt.setp(ax_series.get_xticklabels(), visible=False)
-        # plt.setp(ax_cleaned.get_xticklabels(), visible=False)
-        # plt.setp(ax_cleaned_dt.get_xticklabels(), visible=False)
-        # plt.setp(ax_cleaned_nt.get_xticklabels(), visible=False)
-        # plt.setp(ax_daytime.get_xticklabels(), visible=False)
 
         fig.tight_layout()
         fig.show()
