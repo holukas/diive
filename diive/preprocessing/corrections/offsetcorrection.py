@@ -245,7 +245,8 @@ class NighttimeZeroOffsetResult:
 
 def _midnight_shift_zeros(swinpot: Series, nighttime: Series, lat: float, lon: float,
                           utc_offset: int, period_min: int | None = None,
-                          nighttime_threshold: float = 0.001) -> Series:
+                          nighttime_threshold: float = 0.001,
+                          period_sec: Series | None = None) -> Series:
     """Night records that are night only because of the zeros ``potrad`` leaves at midnight.
 
     ``potrad`` (faithful ONEFlux ``get_rpot``) shifts each calendar day's curve
@@ -262,10 +263,14 @@ def _midnight_shift_zeros(swinpot: Series, nighttime: Series, lat: float, lon: f
 
     The window of a record is the one ``potrad`` averages: ``period_min`` minutes
     centred on the timestamp. Without ``period_min`` (a *swinpot* given by the
-    caller), each record's period is its spacing to the nearer neighbouring
-    record, and a record spaced wider than the grid of *swinpot* is taken to end
-    half a grid step after its timestamp, as on meteo screening's grids with
-    several time resolutions. Records with missing *swinpot* are not records.
+    caller), each record's period is its value in *period_sec* (seconds, e.g.
+    meteo screening's FREQ_AUTO_SEC), else its spacing to the nearer
+    neighbouring record. The spacing is wrong for the last coarse record before
+    a finer block, so pass *period_sec* where the records have several time
+    resolutions. A record with a period longer than the grid of *swinpot* is
+    taken to end half a grid step after its timestamp, as on meteo screening's
+    grids with several time resolutions. Records with missing *swinpot* are not
+    records.
 
     Returns:
         Boolean Series on the index of *swinpot*, True for such records.
@@ -278,13 +283,19 @@ def _midnight_shift_zeros(swinpot: Series, nighttime: Series, lat: float, lon: f
     minute_ns = 60_000_000_000
     ns = swinpot.index.as_unit('ns').asi8
     if period_min is None:
-        if valid.sum() < 2:
-            return found
-        grid = np.diff(ns).min()
-        spacing = np.diff(ns[valid])
-        nearer = np.minimum(np.r_[spacing[0], spacing], np.r_[spacing, spacing[-1]])
         period = np.zeros(len(ns), dtype=np.int64)
-        period[valid] = nearer
+        if valid.sum() >= 2:
+            spacing = np.diff(ns[valid])
+            period[valid] = np.minimum(np.r_[spacing[0], spacing], np.r_[spacing, spacing[-1]])
+        if period_sec is not None:
+            own = period_sec.reindex(swinpot.index).to_numpy(dtype=float) * 1e9
+            given = np.isfinite(own) & (own > 0)
+            period = np.where(given, np.round(np.where(given, own, 0)), period).astype(np.int64)
+        # Records without a period (a single record and no period_sec) are skipped
+        candidate &= period > 0
+        if not candidate.any():
+            return found
+        grid = np.diff(ns).min() if len(ns) > 1 else period[candidate][0]
         middle = ns + (grid - period) // 2
         period_minutes = np.maximum(1, np.round(period / minute_ns)).astype(np.int64)
     else:
@@ -312,11 +323,12 @@ def _midnight_shift_zeros(swinpot: Series, nighttime: Series, lat: float, lon: f
         vacated = ((i < 0) | (i >= 1440)) & (k < period_minutes)
         if not vacated.any():
             continue
-        # The vacated minute on the neighbouring day's curve
+        # The vacated minute on the neighbouring day's curve, only where vacated
+        sel = np.flatnonzero(vacated)
+        day, i = day[sel], i[sel]
         day = np.where(i < 0, day - 1, np.where(i >= 1440, day + 1, day))
         i = np.where(i < 0, i + 1440, np.where(i >= 1440, i - 1440, i))
-        rpot = _oneflux_daily_rpot(lat, day_rows[day] + i / 1440.0 + 1.0, i / 60.0)
-        added += np.where(vacated, rpot, 0.0)
+        added[sel] += _oneflux_daily_rpot(lat, day_rows[day] + i / 1440.0 + 1.0, i / 60.0)
     true_swinpot = swinpot.to_numpy()[rows] + added / period_minutes
     found.iloc[rows[true_swinpot >= nighttime_threshold]] = True
     return found
@@ -327,7 +339,8 @@ def _nighttime_zero_offset(series: Series,
                            lon: float,
                            utc_offset: int,
                            clamp_negatives: bool = True,
-                           swin_pot: Series | None = None) -> NighttimeZeroOffsetResult:
+                           swin_pot: Series | None = None,
+                           swin_pot_period_sec: Series | None = None) -> NighttimeZeroOffsetResult:
     """Compute the nighttime zero-offset correction and all intermediate series.
 
     Shared by :func:`remove_nighttime_zero_offset` (returns only the final series)
@@ -338,6 +351,7 @@ def _nighttime_zero_offset(series: Series,
     the potential radiation computed from *lat*, *lon* and *utc_offset*. It must
     cover the index of *series* and may hold further records, which only help to
     find each record's period (see :func:`_midnight_shift_zeros`).
+    *swin_pot_period_sec* gives the period of the records in *swin_pot*.
     """
     outname = series.name
     work = series.rename("input_data")
@@ -356,7 +370,7 @@ def _nighttime_zero_offset(series: Series,
     # zeroed nor used as that day's offset (L244, L266)
     artifact = _midnight_shift_zeros(swinpot=swin_pot, nighttime=nighttimeflag, lat=lat,
                                      lon=lon, utc_offset=utc_offset, period_min=period_min,
-                                     nighttime_threshold=0.001)
+                                     nighttime_threshold=0.001, period_sec=swin_pot_period_sec)
     nighttimeflag = nighttimeflag.mask(artifact, 0.0).reindex(work.index)
     nighttime_ix = nighttimeflag == 1
 
@@ -404,7 +418,8 @@ def remove_nighttime_zero_offset(series: Series,
                                  utc_offset: int,
                                  showplot: bool = False,
                                  clamp_negatives: bool = True,
-                                 swin_pot: Series | None = None) -> Series:
+                                 swin_pot: Series | None = None,
+                                 swin_pot_period_sec: Series | None = None) -> Series:
     """Remove a nighttime zero-offset from a variable that should read zero at night
 
     General-purpose: works for any variable expected to be zero during nighttime
@@ -444,12 +459,20 @@ def remove_nighttime_zero_offset(series: Series,
             described above. Pass it when the potential radiation must be
             computed differently, e.g. per time resolution.
             It must contain every timestamp of *series* and may contain more.
-            Timestamps are record middles, and each record's period is its
-            spacing to the nearer neighbouring record. A record spaced wider
-            than the grid of *swin_pot* is taken to end half a grid step after
-            its timestamp, as on meteo screening's grids with several time
+            Timestamps are record middles. Each record's period is its value
+            in *swin_pot_period_sec*, else its spacing to the nearer
+            neighbouring record. A record with a period longer than the grid
+            of *swin_pot* is taken to end half a grid step after its
+            timestamp, as on meteo screening's grids with several time
             resolutions. NaN means not a record. None (default) computes it
             with ``potrad``.
+        swin_pot_period_sec: Seconds each record of *swin_pot* averages, on
+            its index (e.g. meteo screening's FREQ_AUTO_SEC). Only used with
+            *swin_pot*, to find the midnight zeros described above. NaN or a
+            missing timestamp falls back to the spacing to the nearer
+            neighbouring record. That spacing is too short for the last
+            coarse record before a finer block, so pass this when the records
+            have several time resolutions. None (default) uses the spacing.
 
     Returns:
         Corrected series
@@ -458,7 +481,8 @@ def remove_nighttime_zero_offset(series: Series,
         See `examples/preprocessing/corrections/correction_radiation_offset.py`
     """
     result = _nighttime_zero_offset(series, lat=lat, lon=lon, utc_offset=utc_offset,
-                                    clamp_negatives=clamp_negatives, swin_pot=swin_pot)
+                                    clamp_negatives=clamp_negatives, swin_pot=swin_pot,
+                                    swin_pot_period_sec=swin_pot_period_sec)
 
     if showplot:
         # Named per stage: the raw and the final series otherwise share the variable
@@ -480,7 +504,8 @@ def nighttime_zero_offset_diagnostics(series: Series,
                                       lon: float,
                                       utc_offset: int,
                                       clamp_negatives: bool = True,
-                                      swin_pot: Series | None = None) -> NighttimeZeroOffsetResult:
+                                      swin_pot: Series | None = None,
+                                      swin_pot_period_sec: Series | None = None) -> NighttimeZeroOffsetResult:
     """Nighttime zero-offset correction with every intermediate series exposed.
 
     Same computation as :func:`remove_nighttime_zero_offset` (``result.corrected``
@@ -498,12 +523,15 @@ def nighttime_zero_offset_diagnostics(series: Series,
             reflects the daytime negatives that were kept.
         swin_pot: Potential radiation on the index of *series*, used instead of
             computing it (see :func:`remove_nighttime_zero_offset`).
+        swin_pot_period_sec: Seconds each record of *swin_pot* averages (see
+            :func:`remove_nighttime_zero_offset`).
 
     Returns:
         A :class:`NighttimeZeroOffsetResult`.
     """
     return _nighttime_zero_offset(series, lat=lat, lon=lon, utc_offset=utc_offset,
-                                  clamp_negatives=clamp_negatives, swin_pot=swin_pot)
+                                  clamp_negatives=clamp_negatives, swin_pot=swin_pot,
+                                  swin_pot_period_sec=swin_pot_period_sec)
 
 
 class WindDirOffset:

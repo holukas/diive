@@ -772,6 +772,57 @@ class TestNighttimeZeroOffsetSwinPot(unittest.TestCase):
         self.assertGreater(int(((pr <= 0.001).to_numpy() & ~truth).sum()), 0)  # precondition
         np.testing.assert_array_equal(result.nighttime_flag.to_numpy() == 1, truth)
 
+    @staticmethod
+    def _coarse_then_fine(t_end, lat, lon, utc):
+        """10-min records up to END *t_end*, then 1-min records, on a 1-min slot grid."""
+        import diive as dv
+        ends10 = pd.date_range(t_end - pd.Timedelta("1D"), t_end, freq="10min")
+        ends1 = pd.date_range(t_end + pd.Timedelta("1min"), periods=600, freq="1min")
+        m10, m1 = ends10 - pd.Timedelta("5min"), ends1 - pd.Timedelta("30s")
+        slots = pd.date_range(ends10[0], ends1[-1], freq="1min") - pd.Timedelta("30s")
+        swin_pot = pd.Series(np.nan, index=slots)
+        swin_pot.loc[ends10 - pd.Timedelta("30s")] = dv.variables.potrad(
+            timestamp_index=m10, lat=lat, lon=lon, utc_offset=utc).to_numpy()
+        swin_pot.loc[m1] = dv.variables.potrad(
+            timestamp_index=m1, lat=lat, lon=lon, utc_offset=utc).to_numpy()
+        record_slots = ends10.append(ends1) - pd.Timedelta("30s")
+        period_sec = pd.Series(np.r_[np.full(len(ends10), 600.0), np.full(len(ends1), 60.0)],
+                               index=record_slots)
+        truth = np.r_[_true_night(m10, lat, lon, utc, period_min=10),
+                      _true_night(m1, lat, lon, utc, period_min=1)]
+        return pd.Series(1.0, index=record_slots, name="SW_IN"), swin_pot, period_sec, truth
+
+    def test_swin_pot_period_sec_gives_the_last_coarse_record_its_own_window(self):
+        # L278: without periods the 10-min record ending 00:20, just before the
+        # 1-min block, got a 1-min window (the spacing to its nearer neighbour).
+        # Utqiagvik in May: the real night begins inside the minutes potrad vacates.
+        import diive as dv
+        lat, lon, utc = 71.29, -156.79, -9
+        t_end = pd.Timestamp("2026-05-12 00:20")
+        series, swin_pot, period_sec, truth = self._coarse_then_fine(t_end, lat, lon, utc)
+        kwargs = dict(series=series, lat=lat, lon=lon, utc_offset=utc, swin_pot=swin_pot)
+        spacing = dv.corrections.nighttime_zero_offset_diagnostics(**kwargs)
+        own = dv.corrections.nighttime_zero_offset_diagnostics(**kwargs, swin_pot_period_sec=period_sec)
+        last_coarse = series.index.get_loc(t_end - pd.Timedelta("30s"))
+        wrong = np.flatnonzero((spacing.nighttime_flag.to_numpy() == 1) != truth)
+        np.testing.assert_array_equal(wrong, [last_coarse])  # precondition
+        np.testing.assert_array_equal(own.nighttime_flag.to_numpy() == 1, truth)
+
+    def test_swin_pot_period_sec_falls_back_to_the_spacing(self):
+        # NaN or missing periods use the spacing, so all-NaN periods change nothing
+        import diive as dv
+        lat, lon, utc = 71.29, -156.79, -9
+        series, swin_pot, period_sec, _ = self._coarse_then_fine(
+            pd.Timestamp("2026-05-12 00:20"), lat, lon, utc)
+        kwargs = dict(series=series, lat=lat, lon=lon, utc_offset=utc, swin_pot=swin_pot)
+        spacing = dv.corrections.nighttime_zero_offset_diagnostics(**kwargs)
+        for periods in (period_sec * np.nan, period_sec.iloc[:0]):
+            with self.subTest(n=len(periods)):
+                given = dv.corrections.nighttime_zero_offset_diagnostics(
+                    **kwargs, swin_pot_period_sec=periods)
+                pd.testing.assert_series_equal(given.nighttime_flag, spacing.nighttime_flag)
+                pd.testing.assert_series_equal(given.corrected, spacing.corrected)
+
     def test_swin_pot_is_used_instead_of_the_coordinates(self):
         import diive as dv
         series = _radiation_series(offset=3.0, days=2)
