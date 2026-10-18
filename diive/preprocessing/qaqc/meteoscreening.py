@@ -30,8 +30,9 @@ from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import detect_freq_groups
 from diive.analysis import daily_correlation
 from diive.variables.radiation import potrad
-from diive.preprocessing.corrections import nighttime_zero_offset_diagnostics, remove_relativehumidity_offset
+from diive.preprocessing.corrections import nighttime_zero_offset_diagnostics, relativehumidity_offset_diagnostics
 from diive.preprocessing.corrections.nighttime_offset_plot import NighttimeZeroOffsetPlot
+from diive.preprocessing.corrections.relativehumidity_offset_plot import RelativeHumidityOffsetPlot
 from diive.preprocessing.corrections import set_exact_values_to_missing, setto_threshold, setto_value
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 from diive.preprocessing.outlier_detection.common import window_to_records
@@ -1651,8 +1652,18 @@ class StepwiseMeteoScreeningDb:
             >>> mscr.correction_remove_relativehumidity_offset(showplot=False)
         """
         for field in self.fields:
-            self._correct(field, remove_relativehumidity_offset, showplot=showplot,
-                          preview=dict(title=f"Remove RH offset from {field}", hline=100))
+            results = []
+
+            def correction(series, results=results, **kwargs):
+                # Corrected series and figure data in one pass, as for the zero offset
+                result = relativehumidity_offset_diagnostics(series)
+                results.append(result)
+                return result.corrected
+
+            self._correct(field, correction)
+            if showplot:
+                RelativeHumidityOffsetPlot(results[0], records=self._has_record(field)).plot(
+                    title=f"Relative humidity offset: {field}")
 
     def set_corrections(self, corrections: list[dict], showplot: bool = False):
         """Replace all corrections with *corrections*, applied in order to the uncorrected data.

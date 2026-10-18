@@ -520,6 +520,124 @@ class TestNighttimeZeroOffsetPlot(unittest.TestCase):
         self.assertEqual(plt.gcf()._suptitle.get_text(), 'Nighttime zero offset: SW_IN')
 
 
+def _rh_series(offset: float = 3.0, days: int = 20, name: str = "RH"):
+    """Relative humidity with a daily cycle that saturates at night, plus a sensor offset."""
+    idx = pd.date_range("2021-06-01", periods=48 * days, freq="30min", name="TIMESTAMP_MIDDLE")
+    true = np.clip(80 + 25 * np.cos(2 * np.pi * np.arange(len(idx)) / 48), None, 100)
+    return pd.Series(true + offset, index=idx, name=name)
+
+
+class TestRelativeHumidityOffsetDiagnostics(unittest.TestCase):
+    """`relativehumidity_offset_diagnostics` and the result dataclass."""
+
+    def test_corrected_equals_the_plain_correction(self):
+        import diive as dv
+        for offset in (0.0, -5.0, 3.0):
+            with self.subTest(offset=offset):
+                series = _rh_series(offset)
+                out = dv.corrections.remove_relativehumidity_offset(series.copy())
+                result = dv.corrections.relativehumidity_offset_diagnostics(series.copy())
+                pd.testing.assert_series_equal(out, result.corrected)
+
+    def test_fields(self):
+        import diive as dv
+        series = _rh_series(3.0)
+        result = dv.corrections.relativehumidity_offset_diagnostics(series)
+        self.assertEqual(result.n_above_100_before, int((series > 100).sum()))
+        self.assertEqual(int(result.above_100.sum()), result.n_above_100_before)
+        pd.testing.assert_series_equal(result.corrected_by_offset, (series - result.offset).rename("corrected_by_offset"))
+        self.assertEqual(result.n_capped, int((result.corrected_by_offset > 100).sum()))
+        self.assertLessEqual(float(result.corrected.max()), 100)
+        # Every day saturates, so every day has its own offset, constant within the day
+        per_day = result.daily_offset.groupby(series.index.normalize())
+        self.assertTrue((per_day.nunique() == 1).all())
+
+    def test_no_value_above_100_gives_offset_zero(self):
+        import diive as dv
+        result = dv.corrections.relativehumidity_offset_diagnostics(_rh_series(-5.0))
+        self.assertEqual(result.n_above_100_before, 0)
+        self.assertTrue(result.daily_offset.isna().all())
+        self.assertTrue((result.offset == 0).all())
+
+
+class TestRelativeHumidityOffsetPlot(unittest.TestCase):
+    """The diagnostic figure of the relative humidity offset correction."""
+
+    def setUp(self):
+        import matplotlib.pyplot as plt
+        plt.close('all')
+
+    def tearDown(self):
+        import matplotlib.pyplot as plt
+        plt.close('all')
+
+    @staticmethod
+    def _fig(series, **kwargs):
+        import diive as dv
+        result = dv.corrections.relativehumidity_offset_diagnostics(series)
+        return dv.corrections.RelativeHumidityOffsetPlot(result, **kwargs).plot(showplot=False)
+
+    @staticmethod
+    def _summary(fig) -> dict:
+        texts = [t.get_text() for t in fig.axes[5].texts]
+        return dict(zip(texts[::2], texts[1::2], strict=True))
+
+    def test_panels_steps_and_title(self):
+        fig = self._fig(_rh_series(3.0))
+        titles = [ax.get_title(loc='left') for ax in fig.axes[1:]]
+        self.assertEqual(titles, ['Series', 'Offset  ·  steps 1-3', 'Near 100 %  ·  steps 4-5',
+                                  'Daily maximum', 'Summary'])
+        self.assertEqual(fig._suptitle.get_text(), 'Relative humidity offset: RH')
+        steps = [t.get_text() for t in fig.axes[0].texts]
+        for number, name in enumerate(['Find > 100 %', 'Daily offset', 'Other days', 'Subtract',
+                                       'Cap at 100 %'], 1):
+            self.assertIn(str(number), steps)
+            self.assertIn(name, steps)
+
+    def test_summary_matches_the_result(self):
+        import diive as dv
+        series = _rh_series(3.0)
+        result = dv.corrections.relativehumidity_offset_diagnostics(series)
+        rows = self._summary(self._fig(series))
+        self.assertEqual(rows['Records'], f"{len(series):,}")
+        self.assertEqual(rows['Above 100 %'], f"{result.n_above_100_before:,} on 20 days")
+        self.assertEqual(rows['Capped at 100 %'], f"{result.n_capped:,}")
+
+    def test_no_value_above_100(self):
+        fig = self._fig(_rh_series(-5.0))
+        steps = [t.get_text() for t in fig.axes[0].texts]
+        self.assertIn('none: offset 0', steps)
+        self.assertIn('no value above 100 %, so the offset is 0', [t.get_text() for t in fig.axes[2].texts])
+        self.assertEqual(self._summary(fig)['Offset'], '0 (no value above 100 %)')
+
+    def test_a_cap_just_below_100_is_not_shown_as_100(self):
+        series = pd.Series(np.r_[np.full(100, 99.998), np.full(100, 50.0)],
+                           index=pd.date_range('2021-06-01', periods=200, freq='30min'), name='RH')
+        rows = self._summary(self._fig(series))
+        self.assertEqual(rows['At exactly 100 %'], '0')
+        self.assertEqual(rows['From 99.9 to 100 %'], '100')
+        self.assertTrue(rows['Max before → after'].startswith('99.998'))
+
+    def test_records_mask_keeps_empty_slots_out_of_the_lines(self):
+        series = _rh_series(3.0)
+        records = pd.Series(True, index=series.index)
+        records.iloc[1::2] = False
+        series[~records] = np.nan
+        fig = self._fig(series, records=records)
+        measured = fig.axes[1].get_lines()[0]
+        self.assertEqual(len(measured.get_xdata()), int(records.sum()))
+
+    def test_showplot_draws_the_figure(self):
+        import matplotlib.pyplot as plt
+        import warnings
+        import diive as dv
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')  # Agg cannot show
+            dv.corrections.remove_relativehumidity_offset(_rh_series(3.0), showplot=True)
+        self.assertEqual(len(plt.get_fignums()), 1)
+        self.assertEqual(plt.gcf()._suptitle.get_text(), 'Relative humidity offset: RH')
+
+
 class TestApplyCorrections(unittest.TestCase):
     """`apply_corrections` is the dispatch table every correction tab routes through."""
 

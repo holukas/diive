@@ -17,7 +17,6 @@ import pandas as pd
 from pandas import Series, DataFrame
 
 import diive.core.dfun.frames as frames
-from diive.core.plotting.plotfuncs import quickplot
 from diive.core.utils.console import detail
 from diive.variables import potrad, daytime_nighttime_flag_from_swinpot
 from diive.variables.radiation import _noaa_solar_noon_minutes, _oneflux_daily_rpot
@@ -123,45 +122,44 @@ class MeasurementOffsetFromReplicate:
     #         plt.show()
 
 
-def remove_relativehumidity_offset(series: Series,
-                                   showplot: bool = False) -> Series:
-    """Correct relative humidity offset > 100%
+@dataclass
+class RelativeHumidityOffsetResult:
+    """Intermediate series of the relative humidity offset correction, for inspection and plotting.
 
-    Works for relative humidity data where maximum values should not exceed 100%.
+    ``corrected`` is identical to :func:`remove_relativehumidity_offset`'s output.
 
-    For each day with values above 100%, the offset is the mean of these values
-    minus 100. Days without values above 100% get the offset interpolated
-    linearly between the nearest earlier and later days with such values.
-    Before the first and after the last such day, the offset of that day is
-    carried. A single day above 100% (e.g. two hours of fog) thus lowers every
-    record of the series by its offset. This assumes that a sensor reading too
-    high when saturated reads too high on every day. The result depends on the
-    period screened. Without any value above 100% the offset is 0. After the
-    offset is subtracted, values still above 100% are set to 100%.
-
-    Args:
-        series: Data for relative humidity variable that is corrected
-        showplot: Show plot
-
-    Returns:
-        Corrected series
-
-    Example:
-        See `examples/preprocessing/corrections/correction_relativehumidity_offset.py`
+    Attributes:
+        input: Original (uncorrected) series.
+        above_100: True where *input* is above 100.
+        daily_offset: Offset of the days with values above 100 (the mean of these
+            values minus 100), on every record of such a day, NaN on other days.
+        offset: Offset of every record: *daily_offset*, linearly interpolated
+            between the days with values above 100 and carried before the first
+            and after the last such day. 0 without any value above 100.
+        corrected_by_offset: ``input - offset``, before values above 100 are capped.
+        corrected: Final corrected series, values above 100 set to 100.
+        n_above_100_before: Records above 100 in *input*.
+        n_capped: Records above 100 after the offset, set to 100.
     """
+    input: Series
+    above_100: Series
+    daily_offset: Series
+    offset: Series
+    corrected_by_offset: Series
+    corrected: Series
+    n_above_100_before: int
+    n_capped: int
 
-    # print(f"Removing RH offset from {series.name} ...")
+
+def _relativehumidity_offset(series: Series) -> RelativeHumidityOffsetResult:
+    """Compute the relative humidity offset correction and all intermediate series."""
     outname = series.name
-    # Renamed copy, not an in-place rename: the label is only needed so the
-    # quickplot panels distinguish input from output, and renaming the parameter
-    # would leave the caller's own series called "input_data". Same pattern as
-    # _nighttime_zero_offset below.
+    # Renamed copy, not an in-place rename, so the caller's series keeps its name.
     work = series.rename("input_data")
 
     # Detect series data that exceeds 100% relative humidity
     _series_exceeds = work.loc[work > 100]
     _series_exceeds = _series_exceeds.rename("input_data_exceeds_100")
-    exceeds_ix = _series_exceeds.index
 
     # Calculate daily mean of values > 100
     _daily_mean_above_100 = frames.aggregated_as_hires(aggregate_series=_series_exceeds,
@@ -172,10 +170,10 @@ def remove_relativehumidity_offset(series: Series,
 
     # Calculate and gap-fill offset values
     _offset = _daily_mean_above_100.sub(100)  # Offset is the difference to 100
+    daily_offset = _offset.copy().rename("daily_offset")
     if _offset.dropna().empty:
         _offset.loc[:] = 0  # Set offset to zero
     _offset = _offset.interpolate().ffill().bfill()
-    # _offset = _offset.interpolate().ffill().bfill()
     _offset = _offset.rename("offset")
 
     # Subtract offset from relative humidity (RH) column (series - offset)
@@ -184,26 +182,82 @@ def remove_relativehumidity_offset(series: Series,
     #       (RH must not be larger than 100% but 130% were measured)
     #       130 - (+30) = 100
     # Corrected RH is most likely not *exactly* 100%, but closer to it.
-    _series_corr = work.sub(_offset)
+    _series_corr = work.sub(_offset).rename("corrected_by_offset")
 
     # Set maximum to 100
     series_corr_max100 = _series_corr.copy()
     still_above_100_locs = series_corr_max100 > 100
     series_corr_max100.loc[still_above_100_locs] = 100
-    series_corr_max100 = series_corr_max100.rename("corrected_by_offset_and_max100")
 
-    # Plot
+    return RelativeHumidityOffsetResult(
+        input=work.rename(outname),
+        above_100=(work > 100).rename("above_100"),
+        daily_offset=daily_offset,
+        offset=_offset,
+        corrected_by_offset=_series_corr,
+        corrected=series_corr_max100.rename(outname),
+        n_above_100_before=int((work > 100).sum()),
+        n_capped=int(still_above_100_locs.sum()),
+    )
+
+
+def relativehumidity_offset_diagnostics(series: Series) -> RelativeHumidityOffsetResult:
+    """Relative humidity offset correction with every intermediate series exposed.
+
+    Same computation as :func:`remove_relativehumidity_offset` (``result.corrected``
+    is identical), but additionally returns the offsets of the days above 100, the
+    offset of every record, the offset-subtracted series and the counts, for
+    inspection and plotting (``RelativeHumidityOffsetPlot``).
+
+    Args:
+        series: Relative humidity in %.
+
+    Returns:
+        A :class:`RelativeHumidityOffsetResult`.
+    """
+    return _relativehumidity_offset(series)
+
+
+def remove_relativehumidity_offset(series: Series,
+                                   showplot: bool = False) -> Series:
+    """Correct relative humidity offset > 100%
+
+    Works for relative humidity data where maximum values should not exceed 100%.
+    The correction runs in this order:
+
+    1. Find the values above 100%.
+    2. For each day with such values, the offset is the mean of these values
+       minus 100. Every record of the day gets it.
+    3. Days without values above 100% get the offset interpolated linearly,
+       record by record, between the nearest earlier and later days with such
+       values. Before the first and after the last such day, the offset of that
+       day is carried. Without any value above 100% the offset is 0.
+    4. The offset is subtracted from every record.
+    5. Values still above 100% are set to 100%.
+
+    A single day above 100% (e.g. two hours of fog) thus lowers every record of
+    the series by its offset. This assumes that a sensor reading too high when
+    saturated reads too high on every day. The result depends on the period
+    screened.
+
+    Args:
+        series: Data for relative humidity variable that is corrected
+        showplot: Show the diagnostic figure (``RelativeHumidityOffsetPlot``):
+            the five steps with their counts, series, offset, values near 100%,
+            daily maximum and a summary.
+
+    Returns:
+        Corrected series
+
+    Example:
+        See `examples/preprocessing/corrections/correction_relativehumidity_offset.py`
+    """
+    result = _relativehumidity_offset(series)
     if showplot:
-        quickplot([work, _series_exceeds,
-                   _daily_mean_above_100, _offset, _series_corr, series_corr_max100],
-                  subplots=True,
-                  showplot=showplot, hline=100,
-                  title=f"Remove RH offset from {outname}")
-
-    # Rename for output
-    series_corr_max100 = series_corr_max100.rename(outname)
-
-    return series_corr_max100
+        # Imported here: the plot module imports this one
+        from diive.preprocessing.corrections.relativehumidity_offset_plot import RelativeHumidityOffsetPlot
+        RelativeHumidityOffsetPlot(result).plot()
+    return result.corrected
 
 
 @dataclass

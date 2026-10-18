@@ -1371,6 +1371,29 @@ class TestCorrectionAfterFinalize(unittest.TestCase):
         self.assertEqual(len(measured.get_xdata()), int(shown._has_record(FIELD).sum()))
         plt.close('all')
 
+    def test_rh_offset_figure_shows_records_only(self):
+        """Same for the relative humidity offset, on mixed resolutions with values above 100."""
+        import warnings
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        plt.close('all')
+        df = _mixed_radiation()
+        df[FIELD] = 90 + df[FIELD] / df[FIELD].max() * 15  # up to 105 %
+        quiet, shown = _screening(df.copy()), _screening(df.copy())
+        quiet.correction_remove_relativehumidity_offset(showplot=False)
+        self.assertEqual(plt.get_fignums(), [])
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')  # Agg cannot show
+            shown.correction_remove_relativehumidity_offset(showplot=True)
+        pd.testing.assert_series_equal(shown.series_hires_cleaned[FIELD], quiet.series_hires_cleaned[FIELD])
+        self.assertLessEqual(float(shown.series_hires_cleaned[FIELD].max()), 100)
+        fig = plt.figure(plt.get_fignums()[-1])
+        self.assertEqual(fig._suptitle.get_text(), f'Relative humidity offset: {FIELD}')
+        measured = fig.axes[1].get_lines()[0]
+        self.assertEqual(len(measured.get_xdata()), int(shown._has_record(FIELD).sum()))
+        plt.close('all')
+
 
 class TestResampleCoverage(unittest.TestCase):
     """L235: coverage is the time the kept records cover, whatever the grid."""

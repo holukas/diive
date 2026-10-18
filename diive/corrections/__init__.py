@@ -9,8 +9,11 @@ Part of the diive library: https://github.com/holukas/diive
 from diive.preprocessing.corrections import MeasurementOffsetFromReplicate
 from diive.preprocessing.corrections import NighttimeZeroOffsetPlot
 from diive.preprocessing.corrections import NighttimeZeroOffsetResult
+from diive.preprocessing.corrections import RelativeHumidityOffsetPlot
+from diive.preprocessing.corrections import RelativeHumidityOffsetResult
 from diive.preprocessing.corrections import WindDirOffset
 from diive.preprocessing.corrections import nighttime_zero_offset_diagnostics
+from diive.preprocessing.corrections import relativehumidity_offset_diagnostics
 from diive.preprocessing.corrections import remove_nighttime_zero_offset
 from diive.preprocessing.corrections import remove_relativehumidity_offset
 from diive.preprocessing.corrections import set_exact_values_to_missing
@@ -22,8 +25,11 @@ __all__ = [
     'MeasurementOffsetFromReplicate',
     'NighttimeZeroOffsetPlot',
     'NighttimeZeroOffsetResult',
+    'RelativeHumidityOffsetPlot',
+    'RelativeHumidityOffsetResult',
     'WindDirOffset',
     'nighttime_zero_offset_diagnostics',
+    'relativehumidity_offset_diagnostics',
     'remove_nighttime_zero_offset',
     'remove_relativehumidity_offset',
     'set_exact_values_to_missing',
