@@ -34,6 +34,12 @@ from diive.core.utils.console import VERBOSE_PROGRESS, detail, info, success, wa
 #: Records per synchronous write request in ``upload_singlevar``.
 _WRITE_CHUNK_ROWS = 5000
 
+#: Tags ``upload_singlevar`` needs: the delete is limited to one site and data
+#: version, and ``download`` finds the variable by its ``varname`` tag.
+_REQUIRED_TAGS = ['site', 'varname', 'data_version']
+# A record stored without gain or offset was not scaled: gain 1, offset 0.
+_TAG_DEFAULTS = {'gain': '1', 'offset': '0'}
+
 
 class InfluxIO:
     """InfluxDB v2 connection backed by ``influxdb-client``.
@@ -124,9 +130,14 @@ class InfluxIO:
         write raises a RuntimeError that says whether the period was already deleted.
 
         Note:
-            *var_df* must contain one data column (the variable) plus a column
-            for every tag listed in :data:`diive.core.io.db.influx.common.TAGS`
-            (e.g. ``site``, ``units``, ``gain``, ``offset``, ...).
+            *var_df* must contain one data column (the variable) plus tag
+            columns from :data:`diive.core.io.db.influx.common.TAGS`. The tags
+            ``site``, ``varname`` and ``data_version`` are required. A missing
+            ``gain`` is written as ``'1'`` and a missing ``offset`` as ``'0'``
+            (raw data stored without them were not scaled). Any other tag may be
+            missing: the written points then do not carry it, as in the
+            downloaded data. Do not add it as an empty column: the client can
+            write an empty string as the tag value ``nan``.
 
         Returns:
             Nothing, only uploads to database.
@@ -142,10 +153,19 @@ class InfluxIO:
 
         data_cols = var_df.columns.to_list()
 
-        # Check if data contain all tag columns
-        cols_not_in_data = [l for l in TAGS if l not in data_cols]
+        # Other tags may be missing (raw data stored without them). The
+        # serializer skips absent tag columns, so the points get the same tag
+        # set as the downloaded data (L300). Gain and offset get their neutral
+        # values instead, as the data were not scaled.
+        cols_not_in_data = [l for l in _REQUIRED_TAGS if l not in data_cols]
         if len(cols_not_in_data) > 0:
             raise ValueError(f"Data do not contain required tag columns: {cols_not_in_data}")
+        for tag, default in _TAG_DEFAULTS.items():
+            if tag not in data_cols:
+                var_df[tag] = default
+            else:
+                var_df[tag] = var_df[tag].where(var_df[tag].notna(), default)
+        data_cols = var_df.columns.to_list()
 
         # Detect field name (variable name)
         # The field name is the name of the column that is not part of the tags
@@ -248,7 +268,8 @@ class InfluxIO:
         timezone, e.g. CET.
 
         A variable stored with several tag sets (e.g. a changed ``gain``) comes back
-        as several tables. At shared timestamps the table that starts later wins,
+        as several Flux tables, which the client may put into one DataFrame. Each
+        DataFrame is split by its ``table`` column first. At shared timestamps the table that starts later wins,
         i.e. the newer setup. Tables that start at the same time are ordered by their
         tag values (as strings, in :data:`~diive.core.io.db.influx.common.TAGS`
         order). A warning reports timestamps where the tables hold different values.
@@ -323,6 +344,11 @@ class InfluxIO:
         # contains only one element: the dataframe of the single variable.
         tables = [tables] if not isinstance(tables, list) else tables
 
+        # The client puts all tables with the same columns into one DataFrame,
+        # so two tag sets of one variable can arrive together. Split them first,
+        # so the merge rule below sees every tag set as its own table (L299).
+        tables = [series for t in tables for series in self._split_series(t)]
+
         # No data in the requested range: query_data_frame returns an empty
         # DataFrame (without the expected columns). Return empty results in that
         # case instead of raising when accessing '_measurement' below.
@@ -359,7 +385,7 @@ class InfluxIO:
 
             # Set TIMESTAMP_END as the main index
             table.set_index("TIMESTAMP_END", inplace=True)
-            table.sort_index(inplace=True)
+            table.sort_index(inplace=True, kind='stable')
 
             # Remove duplicated timestamps within this one table (one tag set),
             # keeping the last entry. Duplicates across tables (e.g. an old and a
@@ -428,6 +454,25 @@ class InfluxIO:
             self._verify_freq(data_index=data_simple.index, expected_freq=verify_freq)
 
         return data_simple, data_detailed, assigned_measurements
+
+    @staticmethod
+    def _split_series(frame: DataFrame) -> list[DataFrame]:
+        """Split a query result frame into one frame per Flux table.
+
+        ``query_data_frame`` starts a new DataFrame only when the columns change,
+        so one frame can hold several tables (series). The ``table`` column holds
+        the Flux table id. A frame without that column is split by its
+        measurement and tag values.
+        """
+        if frame.empty:
+            return [frame]
+        if 'table' in frame.columns:
+            by = ['table']
+        else:
+            by = [c for c in frame.columns if c == '_measurement' or c in TAGS]
+        if not by:
+            return [frame]
+        return [group.copy() for _, group in frame.groupby(by, sort=True, dropna=False)]
 
     @staticmethod
     def _tag_sort_key(table: DataFrame) -> tuple:

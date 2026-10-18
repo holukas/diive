@@ -488,6 +488,205 @@ class TestInfluxDownloadMergeMockedHttp(unittest.TestCase):
         self.warn.assert_not_called()
 
 
+FIELD2 = "TA_T1_2_1"
+_RAW_TAGS = dict(site="ch-hon", units="degC", raw_varname="TA", raw_units="degC", hpos="T1",
+                 vpos="4", repl="2", data_raw_freq="10min", freq="10min", filegroup="meteo",
+                 config_filetype="TOA5", data_version="raw", gain="1", offset="0")
+
+
+def _series(values, start_utc="2026-02-28 23:10", field=FIELD, **tags):
+    """One stored series (Flux table) of the pivoted download query."""
+    t = pd.date_range(start_utc, periods=len(values), freq="10min", tz="UTC")
+    df = pd.DataFrame({"_time": t, "_measurement": "TA", field: values})
+    for tag, val in {**_RAW_TAGS, "varname": field, **tags}.items():
+        if val is not None:
+            df[tag] = val
+    return df
+
+
+def _annotated_csv(tables, fields=None):
+    """InfluxDB annotated CSV of *tables*, header rows only when the columns change.
+
+    *fields* gives the field columns of every table (empty where a table has no
+    value), which puts tables of several fields under one header.
+    """
+    def _time(ts):
+        return pd.Timestamp(ts).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    lines, prev = [], None
+    for n, t in enumerate(tables):
+        tags = sorted(c for c in t.columns if c in TAGS)
+        tfields = fields or [c for c in t.columns if c not in tags and c not in ("_time", "_measurement")]
+        cols = ["result", "table", "_start", "_stop", "_time", "_measurement"] + tags + tfields
+        if cols != prev:
+            dtypes = (["string", "long"] + ["dateTime:RFC3339"] * 3 + ["string"] * (1 + len(tags))
+                      + ["double"] * len(tfields))
+            group = ["false", "false", "true", "true", "false"] + ["true"] * (1 + len(tags)) \
+                + ["false"] * len(tfields)
+            if prev is not None:
+                lines.append("")
+            lines += ["#group," + ",".join(group), "#datatype," + ",".join(dtypes),
+                      "#default,_result" + "," * (len(cols) - 1), "," + ",".join(cols)]
+            prev = cols
+        for _, r in t.iterrows():
+            vals = ["" if f not in t.columns or pd.isna(r[f]) else repr(float(r[f])) for f in tfields]
+            lines.append(",".join(["", "", str(n), "2026-02-28T23:00:01Z", "2026-03-31T23:00:01Z",
+                                   _time(r["_time"]), r["_measurement"]] + [str(r[c]) for c in tags] + vals))
+    return "\n".join(lines) + "\n"
+
+
+def _lines_to_tables(lines):
+    """Parse written line protocol (no escaped characters) back into one table per series."""
+    rows = []
+    for line in lines:
+        series, fieldset, ts = line.split(" ")
+        measurement, *tagpairs = series.split(",")
+        name, value = fieldset.split("=")
+        rows.append(dict(_measurement=measurement, **dict(p.split("=") for p in tagpairs),
+                         _time=pd.Timestamp(int(ts), unit="s", tz="UTC"), **{name: float(value)}))
+    df = pd.DataFrame(rows)
+    tagcols = [c for c in df.columns if c in TAGS] + ["_measurement"]
+    return [g.dropna(axis=1, how="all") for _, g in df.groupby(tagcols, sort=True)]
+
+
+@unittest.skipUnless(HAS_INFLUXDB_CLIENT, "needs the db group (influxdb-client)")
+class TestInfluxRealParser(unittest.TestCase):
+    """Download through the real client CSV parser and upload through the real serializer.
+
+    Only the HTTP calls are replaced. The real client puts all tables with the same
+    columns into one DataFrame (L299).
+    """
+
+    def setUp(self):
+        import urllib3
+        from influxdb_client.client.delete_api import DeleteApi
+        from influxdb_client.service.query_service import QueryService
+        from influxdb_client.service.write_service import WriteService
+
+        self.dbc = InfluxIO.__new__(InfluxIO)
+        self.dbc.conf_db = {"url": "http://127.0.0.1:1", "token": "x", "org": "o"}  # never contacted
+        self.dbc.verbose = 2
+        self.csv = ""
+        self.deletes, self.bodies = [], []
+
+        def fake_post_query(service, **kw):
+            text = self.csv
+            if "schema" in kw["query"].query:
+                text = ("#group,false,false,false\n#datatype,string,long,string\n#default,_result,,\n"
+                        f",result,table,_value\n,,0,{FIELD}\n,,0,{FIELD2}\n")
+            return urllib3.HTTPResponse(body=io.BytesIO(text.encode()), preload_content=False)
+
+        def fake_delete(api, start, stop, predicate, bucket, org=None):
+            self.deletes.append(dict(start=start, stop=stop, predicate=predicate))
+
+        def fake_post_write(service, org, bucket, body, **kw):
+            self.bodies.append(body.decode() if isinstance(body, bytes) else body)
+
+        mod = "diive.core.io.db.influx.influxio"
+        self.warn = MagicMock()
+        patchers = [patch.object(QueryService, "post_query", fake_post_query),
+                    patch.object(DeleteApi, "delete", fake_delete),
+                    patch.object(WriteService, "post_write", fake_post_write),
+                    patch(f"{mod}.warn", self.warn), patch(f"{mod}.info"),
+                    patch(f"{mod}.success"), patch(f"{mod}.detail")]
+        for p in patchers:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def _download(self, tables=None, fields=None, data_version="raw"):
+        if tables is not None:
+            self.csv = _annotated_csv(tables, fields=fields)
+        return self.dbc.download(bucket="b", measurements=["TA"], fields=[FIELD, FIELD2],
+                                 start="2026-03-01 00:00:01", stop="2026-04-01 00:00:01",
+                                 timezone_offset_to_utc_hours=1, data_version=data_version)
+
+    def _lines(self):
+        return [line for body in self.bodies for line in body.split("\n") if line]
+
+    def test_client_returns_tag_sets_in_one_frame(self):
+        # Premise of L299: two tag sets of one field arrive as one DataFrame.
+        self.csv = _annotated_csv([_series([5.0] * 4), _series([5.1] * 2, gain="1.02")])
+        res = self.dbc._query_df(fluxql.pivotstring())
+        self.assertIsInstance(res, pd.DataFrame)
+        self.assertEqual(sorted(res["table"].unique()), [0, 1])
+
+    def test_same_schema_tag_sets_merged_by_start(self):
+        old = _series([5.0] * 6)
+        new = _series([5.1] * 3, start_utc="2026-02-28 23:40", gain="1.02")
+        for tables in ([old, new], [new, old]):
+            self.warn.reset_mock()
+            simple, detailed, _ = self._download(tables)
+            d = detailed[FIELD]
+            self.assertEqual(d[FIELD].tolist(), [5.0] * 3 + [5.1] * 3)
+            self.assertEqual(d["gain"].tolist(), ["1"] * 3 + ["1.02"] * 3)
+            self.assertEqual(simple[FIELD].tolist(), [5.0] * 3 + [5.1] * 3)
+            self.assertTrue(d.index.is_monotonic_increasing and d.index.is_unique)
+            self.warn.assert_called_once()
+            msg = self.warn.call_args.args[0]
+            self.assertIn("3 timestamps", msg)
+            self.assertIn("gain ['1.02'] kept over ['1']", msg)
+
+    def test_nan_in_later_table_keeps_older_row(self):
+        old = _series([5.0] * 4)
+        new = _series([5.1, np.nan], start_utc="2026-02-28 23:30", gain="1.02")
+        _, detailed, _ = self._download([old, new])
+        d = detailed[FIELD]
+        self.assertEqual(d[FIELD].tolist(), [5.0, 5.0, 5.1, 5.0])
+        self.assertEqual(d["gain"].tolist(), ["1", "1", "1.02", "1"])
+        self.assertIn("1 timestamps", self.warn.call_args.args[0])
+
+    def test_several_fields_in_one_frame(self):
+        tables = [_series([5.0] * 4), _series([1.0, 2.0, 3.0], field=FIELD2),
+                  _series([5.1] * 2, start_utc="2026-02-28 23:30", gain="1.02")]
+        self.csv = _annotated_csv(tables, fields=[FIELD, FIELD2])
+        self.assertIsInstance(self.dbc._query_df(fluxql.pivotstring()), pd.DataFrame)
+        simple, detailed, assigned = self._download()
+        self.assertEqual(detailed[FIELD][FIELD].tolist(), [5.0, 5.0, 5.1, 5.1])
+        self.assertEqual(detailed[FIELD]["gain"].tolist(), ["1", "1", "1.02", "1.02"])
+        self.assertEqual(detailed[FIELD2][FIELD2].tolist(), [1.0, 2.0, 3.0])
+        self.assertNotIn(FIELD2, detailed[FIELD].columns)
+        self.assertEqual(simple[FIELD2].dropna().tolist(), [1.0, 2.0, 3.0])
+        self.assertEqual(assigned, {FIELD: "TA", FIELD2: "TA"})
+
+    def test_round_trip_without_gain_and_offset_tags(self):
+        # L300: raw data stored without gain and offset can be uploaded. The
+        # points carry the raw tags plus gain 1 and offset 0 (not scaled).
+        raw = _series([5.0, 5.5, 6.0, 6.5], gain=None, offset=None)
+        _, detailed, _ = self._download([raw])
+        var_df = detailed[FIELD].assign(data_version="meteoscreening_diive")
+        self.assertNotIn("gain", var_df.columns)
+        self.dbc.upload_singlevar(var_df=var_df, to_bucket="b", to_measurement="TA",
+                                  timezone_offset_to_utc_hours=1,
+                                  delete_start="2026-03-01 00:00:01", delete_stop="2026-04-01 00:00:01")
+        lines = self._lines()
+        self.assertEqual(len(lines), 4)
+        tagset = dict(p.split("=") for p in lines[0].split(" ")[0].split(",")[1:])
+        expected = {**_RAW_TAGS, "varname": FIELD, "data_version": "meteoscreening_diive",
+                    "gain": "1", "offset": "0"}
+        self.assertEqual(tagset, expected)
+        self.assertEqual(self.deletes[0]["predicate"],
+                         f'_measurement="TA" AND varname="{FIELD}" '
+                         f'AND data_version="meteoscreening_diive" AND site="ch-hon"')
+
+        # Same delete as for a frame with every tag.
+        self.dbc.upload_singlevar(var_df=var_df.assign(gain="1", offset="0"), to_bucket="b",
+                                  to_measurement="TA", timezone_offset_to_utc_hours=1,
+                                  delete_start="2026-03-01 00:00:01", delete_stop="2026-04-01 00:00:01")
+        self.assertEqual(self.deletes[1], self.deletes[0])
+
+        # Read the written points back through the parser.
+        _, back, _ = self._download(_lines_to_tables(lines), data_version="meteoscreening_diive")
+        pd.testing.assert_series_equal(back[FIELD][FIELD], detailed[FIELD][FIELD])
+        self.assertEqual(back[FIELD].index.tolist(), detailed[FIELD].index.tolist())
+
+    def test_upload_still_needs_site_varname_and_data_version(self):
+        var_df = _upload_frame().drop(columns=["gain", "offset", "varname"])
+        with self.assertRaisesRegex(ValueError, r"required tag columns: \['varname'\]"):
+            self.dbc.upload_singlevar(var_df=var_df, to_bucket="b", to_measurement="TA",
+                                      timezone_offset_to_utc_hours=1)
+        self.assertEqual(self.deletes, [])
+
+
 class TestInfluxRetry(unittest.TestCase):
     """get_client retries each request, also long after the client was created (L245)."""
 
