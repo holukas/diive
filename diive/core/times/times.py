@@ -499,6 +499,13 @@ def format_timestamp_to_fluxnet_format(df: DataFrame, timestamp_col: str) -> Ser
     return timestamp
 
 
+# A run of at least this many records with the same resolution is a resolution
+# period. Random missing records almost never leave this many records in a row
+# at a multiple of the resolution: at 50 % missing 10MIN records the chance per
+# record is 0.25**12 (6e-8) for 20MIN spacing and lower for coarser ones.
+_MIN_PERIOD_RECORDS = 12
+
+
 def detect_freq_groups(index: DatetimeIndex) -> Series:
     """
     Assign each record to the time resolution (frequency group) it was recorded at
@@ -522,6 +529,16 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
        records before and after it missing) has equal differences to both neighbours
        and got the gap length in pass 1. It joins its neighbours' group when both have
        the same resolution and the gaps are whole missing records of it.
+    4. Many missing records leave short runs that look like a coarser resolution
+       (10MIN data with every other record missing for an hour give 20MIN spacing)
+       and records that fit no neighbour. A run of at least 12 records with the same
+       resolution is a resolution period. Every other record joins the nearest period
+       on either side if all time differences between it and that period, and to
+       both its own neighbours, are whole multiples of the period's resolution. If
+       periods of different resolutions qualify, the coarsest wins: a record spaced
+       at multiples of 10MIN shows no sign of 1MIN logging. Records of a genuine
+       resolution that lasts fewer than 12 records join the neighbouring period as
+       records with gaps in between.
 
     Example: in regular 10MIN data with the record at 12:20 missing, the records at
     12:10 and 12:30 have differences of 10 and 20 minutes to their neighbours. Both
@@ -599,8 +616,48 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
     lone &= prev_d % np.where(lone, prev_final, 1) == 0
     group = np.where(lone, prev_final, group)
 
+    group = _join_resolution_periods(group, diffs)
+
     group_sec = np.where(group > 0, group / 1e9, np.nan)
     return pd.Series(index=index, data=group_sec, name='FREQ_AUTO_SEC')
+
+
+def _join_resolution_periods(group: np.ndarray, diffs: np.ndarray) -> np.ndarray:
+    """Pass 4 of :func:`detect_freq_groups`: records outside a resolution period
+    join the coarsest neighbouring period they fit.
+
+    *group* is the resolution of each record in ns (0 = unassigned), *diffs* the
+    time differences between consecutive records in ns.
+    """
+    n = len(group)
+    if n < _MIN_PERIOD_RECORDS:
+        return group
+    starts = np.flatnonzero(np.concatenate([[True], group[1:] != group[:-1]]))
+    lengths = np.diff(np.concatenate([starts, [n]]))
+    period = (group > 0) & (np.repeat(lengths, lengths) >= _MIN_PERIOD_RECORDS)
+    if period.all() or not period.any():
+        return group
+
+    pos = np.arange(n)
+    # Nearest period record before and after each record (-1 / n = none)
+    prev_p = np.maximum.accumulate(np.where(period, pos, -1))
+    next_p = np.minimum.accumulate(np.where(period, pos, n)[::-1])[::-1]
+    prev_d = np.concatenate([[0], diffs])
+    next_d = np.concatenate([diffs, [0]])
+
+    result = group.copy()
+    # Ascending, so a coarser resolution that also fits overwrites a finer one
+    for res in np.unique(group[period]):
+        # bad[k]: number of differences up to record k that are no whole multiple
+        # of res. The stretch between records a < b fits if bad[a] == bad[b].
+        bad = np.concatenate([[0], np.cumsum(diffs % res != 0)])
+        own = (prev_d % res == 0) & (next_d % res == 0)
+        fits = np.zeros(n, dtype=bool)
+        for near in (prev_p, next_p):
+            safe = np.clip(near, 0, n - 1)
+            fits |= (near >= 0) & (near < n) & (group[safe] == res) & (bad[safe] == bad)
+        result = np.where(~period & own & fits, res, result)
+    return result
 
 
 def sort_timestamp_ascending(data: Union[Series, DataFrame], verbose: bool = False) -> Union[Series, DataFrame]:

@@ -1,5 +1,6 @@
 import unittest
 
+import numpy as np
 import pandas as pd
 
 import diive.configs.exampledata as ed
@@ -366,6 +367,45 @@ class TestDetectFreqGroups(unittest.TestCase):
         self.assertTrue(pd.isna(g.loc['2024-06-01 10:00:07']))
         self.assertEqual(g.loc[pd.Timestamp('2024-06-01 10:00')], 600)
         self.assertEqual(g.loc[pd.Timestamp('2024-06-01 10:01')], 60)
+
+    def test_random_holes_keep_one_resolution(self):
+        # L254: holes left short runs at 20MIN, 30MIN, ... and records without a group
+        ix = pd.date_range('2026-03-01 00:10', '2026-04-01 00:00', freq='10min')
+        rng = np.random.default_rng(1)
+        for p in (0.1, 0.3, 0.5):
+            with self.subTest(missing=p):
+                g = self._groups(ix[rng.random(len(ix)) >= p])
+                self.assertTrue((g == 600).all())
+
+    def test_change_of_resolution_with_holes(self):
+        # Only the record at the change itself may be ambiguous.
+        rng = np.random.default_rng(3)
+        a = pd.date_range('2024-06-01 00:10', '2024-06-03 10:00', freq='10min')
+        b = pd.date_range('2024-06-03 10:01', '2024-06-05 10:00', freq='1min')
+        truth = np.r_[np.full(len(a), 600.), np.full(len(b), 60.)]
+        for p in (0.1, 0.2, 0.4):
+            with self.subTest(missing=p):
+                keep = rng.random(len(truth)) >= p
+                g = self._groups(a.append(b)[keep])
+                self.assertFalse(g.isna().any())
+                self.assertLessEqual(int((g.to_numpy() != truth[keep]).sum()), 1)
+
+    def test_genuine_period_of_twelve_records_stays(self):
+        a = pd.date_range('2024-06-01 00:01', '2024-06-01 10:00', freq='1min')
+        m = pd.date_range('2024-06-01 10:10', '2024-06-01 12:00', freq='10min')  # 12 records
+        c = pd.date_range('2024-06-01 12:01', '2024-06-01 20:00', freq='1min')
+        g = self._groups(a.append(m).append(c))
+        self.assertTrue((g.loc['2024-06-01 10:10':'2024-06-01 12:00'] == 600).all())
+        self.assertTrue((g.loc[:'2024-06-01 10:00'] == 60).all())
+        self.assertTrue((g.loc['2024-06-01 12:01':] == 60).all())
+
+    def test_shorter_run_joins_its_neighbours(self):
+        # Fewer than 12 records at another resolution read as gaps in the period around them
+        a = pd.date_range('2024-06-01 00:01', '2024-06-01 10:00', freq='1min')
+        m = pd.date_range('2024-06-01 10:10', '2024-06-01 11:00', freq='10min')  # 6 records
+        c = pd.date_range('2024-06-01 11:01', '2024-06-01 20:00', freq='1min')
+        g = self._groups(a.append(m).append(c))
+        self.assertTrue((g == 60).all())
 
 
 class TestStlDecompose(unittest.TestCase):
