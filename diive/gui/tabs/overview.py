@@ -1142,9 +1142,11 @@ class OverviewTab(DiiveTab):
                 # a marker to stay visible.
                 long_series = len(series) > _MARKER_MAX_POINTS
                 n_lines = len(ax.lines)
+                # An explicit FormatStyle keeps the class's default look (left
+                # title, open frame) out: _style_panel sets the panel's own.
                 dv.plotting.TimeSeries(series).plot(
-                    ax=ax, color=_TS_COLOR, linewidth=0.7,
-                    marker=not long_series, markersize=2.5)
+                    ax=ax, format_style=dv.plotting.FormatStyle(), color=_TS_COLOR,
+                    linewidth=0.7, marker=not long_series, markersize=2.5)
                 if long_series:
                     # Drawn thinned for its view (see _thin_time_series); the
                     # full record stays on the line for the hover. Needs
@@ -1191,8 +1193,9 @@ class OverviewTab(DiiveTab):
                 ax.fill_between(daily.index, (daily - sd).to_numpy(),
                                 (daily + sd).to_numpy(), color=_DAILY_COLOR,
                                 alpha=0.2, edgecolor="none", zorder=0)
-                dv.plotting.TimeSeries(daily).plot(ax=ax, color=_DAILY_COLOR,
-                                                   linewidth=0.8, marker=True, markersize=2.5)
+                dv.plotting.TimeSeries(daily).plot(ax=ax, format_style=dv.plotting.FormatStyle(),
+                                                   color=_DAILY_COLOR, linewidth=0.8, marker=True,
+                                                   markersize=2.5)
                 ax.axhline(0, color=_ZERO_COLOR, linestyle="--", linewidth=1.0,
                            alpha=0.6, zorder=0)
             elif plot_type == "Histogram":

@@ -23,6 +23,7 @@ from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
 from diive.core.plotting.styles.format import FormatStyle
+from diive.core.times.times import describe_time_resolution
 from diive.core.utils.console import warn
 
 # Material Design palette, matching diive's plotting conventions (CLAUDE.md):
@@ -32,6 +33,55 @@ _COLOR_INK = '#455A64'   # blue-grey 700 — text, spines, ticks, legend edge
 _COLOR_GRID = '#B0BEC5'  # blue-grey 200 — subtle gridlines
 _COLOR_ZERO = '#90A4AE'  # blue-grey 300 — zero reference line
 _COLOR_NOCOLOR = '#90A4AE'  # blue-grey 300 — measured, but no colour value to show
+_COLOR_TITLE = '#263238'  # blue-grey 900 — title and axis labels of the default look
+_COLOR_STATS = '#607D8B'  # blue-grey 500 — the stats lines above the axes
+_COLOR_GRID_LIGHT = '#ECEFF1'  # blue-grey 50 — y gridlines of the default look
+
+# The default look of `plot()` when no FormatStyle is given: white background,
+# open frame (left and bottom spines), outward ticks, light horizontal gridlines,
+# no legend (the title names the series). Applied by `_apply_default_look`.
+_DEFAULT_STYLE = FormatStyle(
+    title_fontsize=14, axlabel_fontsize=11, ticks_fontsize=10, legend_fontsize=10,
+    text_color=_COLOR_TITLE, chrome_color=_COLOR_ZERO, facecolor='white',
+    grid_color=_COLOR_GRID_LIGHT, spine_linewidth=0.8, ticks_direction='out',
+    ticks_length=4, ticks_width=0.8, show_legend=False, show_zeroline=False)
+_STATS_FONTSIZE = 9.5
+_STATS_LINESPACING = 1.6
+_STATS_OFFSET = 6  # points between the axes top and the stats lines
+_STATS_SEP = '   ·   '  # middle dot between the items of a stats line
+
+
+def _format_number(value: float, decimals: int) -> str:
+    """Number with thousands separators and a true minus sign, as on the tick labels."""
+    return f"{value:,.{decimals}f}".replace('-', '−')
+
+
+def _stats_lines(series: Series) -> list[str]:
+    """Two text lines describing *series*: coverage, then the basic statistics.
+
+    The first line holds the time resolution of the records (``describe_time_resolution``,
+    from the whole index, so missing values keep their slot), the period, the
+    number of values and the share of missing values (NaN). The second holds
+    mean, median, SD, min and max, with decimals chosen so that the largest
+    absolute value shows four significant digits (at most four decimals).
+    """
+    index = series.index
+    values = series.dropna()
+    n_total = len(series)
+    missing = 100 * (n_total - len(values)) / n_total if n_total else 0.0
+    period = (f"{index.min():%Y-%m-%d %H:%M} to {index.max():%Y-%m-%d %H:%M}"
+              if n_total else 'no records')
+    coverage = _STATS_SEP.join([f"Time resolution {describe_time_resolution(index)}", period,
+                                f"{len(values):,} values", f"{missing:.1f} % missing"])
+    if values.empty:
+        return [coverage, 'No values']
+    largest = float(np.abs(values).max())
+    magnitude = int(np.floor(np.log10(largest))) if largest > 0 else 0
+    decimals = int(np.clip(3 - magnitude, 0, 4))
+    stats = [('Mean', values.mean()), ('Median', values.median()), ('SD', values.std()),
+             ('Min', values.min()), ('Max', values.max())]
+    return [coverage, _STATS_SEP.join(f"{name} {_format_number(float(v), decimals)}"
+                                      for name, v in stats if pd.notna(v))]
 
 
 def _display_name(series: Series) -> str:
@@ -370,11 +420,65 @@ class TimeSeries:
         if show_colorbar:
             cb = self.ax.figure.colorbar(lc, ax=self.ax, pad=0.01)
             cb.set_label(color_label or self.color_name or '')
+            self._colorbar = cb
+
+    def _apply_default_look(self, title_pad: float = None):
+        """Finish the default look on top of ``_DEFAULT_STYLE`` (see `plot()`).
+
+        FormatStyle has no fields for an open frame, horizontal-only gridlines or
+        a left-aligned title, so they are set here. *title_pad* (points) lifts the
+        title above the stats lines.
+        """
+        ax = self.ax
+        for side in ('top', 'right'):
+            ax.spines[side].set_visible(False)
+        # Light spines and tick marks, darker tick labels
+        ax.tick_params(top=False, right=False, labeltop=False, labelright=False,
+                       labelcolor=_COLOR_INK)
+        if self._colorbar is not None:
+            cb = self._colorbar
+            cb.outline.set_visible(False)
+            cb.ax.tick_params(color=_COLOR_ZERO, labelcolor=_COLOR_INK, width=0.8, length=4,
+                              labelsize=_DEFAULT_STYLE.ticks_fontsize)
+            cb.ax.yaxis.label.set(color=_COLOR_TITLE, fontsize=_DEFAULT_STYLE.axlabel_fontsize)
+        ax.grid(False)
+        ax.yaxis.grid(True, color=_COLOR_GRID_LIGHT, linewidth=0.8, linestyle='-')
+        ax.set_axisbelow(True)
+        ax.set_xlabel('')  # the date labels name the axis
+        title = ax.get_title()
+        if title:
+            ax.set_title('')
+            ax.set_title(title, loc='left', pad=title_pad, fontsize=_DEFAULT_STYLE.title_fontsize,
+                         fontweight='bold', color=_COLOR_TITLE)
+        smin, smax = self.series.min(), self.series.max()
+        if pd.notna(smin) and pd.notna(smax) and smin < 0 < smax:
+            ax.axhline(0, color=_COLOR_ZERO, linewidth=0.8, zorder=1)
+        # Concise labels name each unit once, and the offset at the axis end adds the
+        # year. With day ticks the default offset is year and month, which named the
+        # month of the last tick ('2026-Apr' under a March plot ending at Apr 1 00:00).
+        locator = mdates.AutoDateLocator(minticks=3, maxticks=10)
+        formatter = mdates.ConciseDateFormatter(locator)
+        formatter.offset_formats = ['', '%Y', '%Y', '%Y', '%Y-%m-%d', '%Y-%m-%d %H:%M']
+        ax.xaxis.set_major_locator(locator)
+        ax.xaxis.set_major_formatter(formatter)
+        ax.set_xmargin(0)
+
+    def _draw_stats(self) -> float:
+        """Write the stats lines (``_stats_lines``) above the axes, left-aligned.
+
+        Returns the title pad in points that keeps the title clear of them.
+        """
+        lines = _stats_lines(self.series)
+        self.ax.annotate('\n'.join(lines), xy=(0, 1), xycoords='axes fraction',
+                         xytext=(0, _STATS_OFFSET), textcoords='offset points',
+                         ha='left', va='bottom', fontsize=_STATS_FONTSIZE, color=_COLOR_STATS,
+                         linespacing=_STATS_LINESPACING, annotation_clip=False)
+        return _STATS_OFFSET + len(lines) * _STATS_FONTSIZE * _STATS_LINESPACING + 4
 
     def plot(self, ax=None, format_style: FormatStyle = None, color: str = None,
-             linewidth: float = 2.2, alpha: float = 0.95, marker: bool = False, markersize: float = 3,
+             linewidth: float = 1.2, alpha: float = 0.95, marker: bool = False, markersize: float = 3,
              cmap: str = 'viridis', color_vmin: float = None, color_vmax: float = None,
-             show_colorbar: bool = True, color_label: str = None):
+             show_colorbar: bool = True, color_label: str = None, show_stats: bool = None):
         """
         Render time series plot with matplotlib styling (Phase 2 of two-phase design).
 
@@ -384,6 +488,13 @@ class TimeSeries:
         (``color``/``linewidth``/``alpha``/``marker``/``markersize``) are specific to
         the line itself and stay here. Can be called multiple times on the same
         object to draw on different axes with different styling.
+
+        Without a ``format_style`` the plot uses the default look: white
+        background, left and bottom spines only, outward ticks, light horizontal
+        gridlines, a left-aligned title, concise date labels with the year at
+        the end of the axis, a light zero line when the data cross zero, and no
+        legend (the title names the series). A given ``format_style`` sets the
+        chrome as before.
 
         Drawing is **additive**: a second call on the *same* axes appends its line
         to whatever is already there rather than replacing it, and with a
@@ -402,7 +513,7 @@ class TimeSeries:
                 a `color_series` was given (the line is then colormap-coloured) —
                 except when that series aligns to fewer than two values, where the
                 plot falls back to a plain line in this colour and warns.
-            linewidth: Line width in points (default: 2.2).
+            linewidth: Line width in points (default: 1.2).
             alpha: Line/marker opacity, 0-1 (default: 0.95).
             marker: If True, draw a point marker at each observation (default: False).
             markersize: Point marker size in points, used only when marker=True (default: 3).
@@ -411,6 +522,13 @@ class TimeSeries:
             color_vmax: Upper bound of the colour scale (default: the color_series max).
             show_colorbar: Draw a colorbar for the colour-by series (default: True).
             color_label: Colorbar label (default: the color_series name).
+            show_stats: Write two lines above the axes: the time resolution of the
+                records, the period, the number of values and the share of missing
+                values, then mean, median, SD, min and max. The time resolution is
+                detected from the timestamps, also where it changes. *None*
+                (default) shows them on a figure the plot creates itself
+                (``ax=None``) and leaves them out on a given axes, where several
+                series may be overlaid.
 
         Returns:
             The matplotlib axes the series was drawn on (the new axes when ax=None),
@@ -422,8 +540,11 @@ class TimeSeries:
             >>> ts = dv.plotting.TimeSeries(series=pd.Series([1.0, 2.0, 1.5], index=idx, name='TA'))
             >>> ax = ts.plot(ax=plt.subplots()[1], format_style=dv.plotting.FormatStyle(yunits='(°C)'))
         """
-        # Chrome comes only from the caller-supplied style.
-        style = format_style or FormatStyle()
+        # Chrome comes only from the caller-supplied style, else the default look.
+        default_look = format_style is None
+        style = _DEFAULT_STYLE if default_look else format_style
+        if show_stats is None:
+            show_stats = ax is None
 
         # Create axis
         if ax is not None:
@@ -433,11 +554,12 @@ class TimeSeries:
             self.showplot = False
         else:
             # If no ax is given, create fig and ax and then show the plot
-            self.fig, self.ax = pf.create_ax()
+            self.fig, self.ax = pf.create_ax(figsize=(12, 5.5), dpi=110)
             self.ax.xaxis.axis_date()
             self.showplot = True
 
         color = color if color else _COLOR_LINE
+        self._colorbar = None  # set by _plot_colored_line, restyled by _apply_default_look
 
         # Colour-by-variable mode: draw the line as a colormap-coloured
         # LineCollection. Falls back to a plain line if the colour series has
@@ -477,8 +599,17 @@ class TimeSeries:
         style.apply(ax=self.ax, default_title=self.series.name, default_xlabel='Date',
                     default_ylabel=self.varname, zeroline_data=self.series)
 
-        # Nice date ticks (time-series specific, not part of the shared chrome).
-        pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='auto')
+        # The stats lines sit between the axes and the title, which moves up to make room.
+        title_pad = self._draw_stats() if show_stats else None
+        if default_look:
+            self._apply_default_look(title_pad=title_pad)
+        else:
+            # Nice date ticks (time-series specific, not part of the shared chrome).
+            pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='auto')
+            title = self.ax.title
+            if title_pad is not None and title.get_text():
+                self.ax.set_title(title.get_text(), pad=title_pad, fontsize=title.get_fontsize(),
+                                  fontweight=title.get_fontweight(), color=title.get_color())
 
         if self.showplot:
             self.fig.patch.set_facecolor('white')
