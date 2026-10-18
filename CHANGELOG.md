@@ -104,8 +104,12 @@ Library (also used by the notebook and the GUI):
   around them are kept, e.g. a 3-day block of 10-min data in a year of 1-min data, and 2-5
   ten-minute records inside 1-min data are recognised as 10-min records, also next to a gap or at
   the end of the data. Stray timestamps (fewer than 3 records finer than the data around them)
-  and resolutions that would need a screening grid of more than 2 million rows are dropped. Before,
-  any resolution with at most 0.2 % of the records was dropped.
+  and resolutions that would make the screening grid finer and need more than 2 million rows are
+  dropped. Before, any resolution with at most 0.2 % of the records was dropped.
+- **Meteo screening, freq tag:** the detected time resolution of each record is compared with its
+  `freq` tag, and differences are listed in a warning. The detected resolution is used.
+- **Meteo screening, short fields:** a field with fewer than 2 records is left out with a warning,
+  and the other fields are screened.
 - **Meteo screening, speed:** screening runs about 20-50 % faster and previews draw faster, with
   identical results.
 
@@ -144,7 +148,7 @@ GUI only:
 - **MDS gap-filling, driver QC:** the MDS tab and Level 4.1 of the flux post-processing chain
   take an optional QC flag column for SW_IN, TA and VPD, and Copy Python includes it.
 
-Notebook (meteo screening notebook v18):
+Notebook (meteo screening notebook v19):
 
 - **Run All:** no longer applies outlier tests with example settings. All outlier tests are
   commented out, with notes on the variables each one does not suit.
@@ -165,7 +169,7 @@ Notebook (meteo screening notebook v18):
 - **Hampel note:** records with up to 20 W m-2 potential radiation count as night, and a sensor
   stuck at one value is not flagged.
 - **Settings check:** the upload stops before anything is deleted if the UTC offset, START, STOP,
-  site or fields changed after the download.
+  site or fields changed after the download or after the screening.
 - **Resampling note:** `'mean'` is an arithmetic mean, so angles such as wind direction need a
   circular mean.
 
@@ -297,7 +301,9 @@ Library (also used by the notebook and the GUI):
 - **Database upload, missing tags:** data without some tags could not be uploaded. A missing
   `gain` is now written as 1 and a missing `offset` as 0.
 - **Time resolution detection, regular outages:** records in data with a regular outage pattern
-  (e.g. every third record missing) got no time resolution and were dropped.
+  (e.g. every third record missing) got no time resolution and were dropped, and the last coarse
+  record before finer data could get the finer resolution.
+- **Set to threshold or value:** a decimal value failed on data stored as integers.
 - **Set-to corrections, console:** their reports follow `verbose`.
 
 GUI only:
