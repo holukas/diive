@@ -1,4 +1,6 @@
+import io
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
@@ -140,6 +142,72 @@ class TestInfluxConfig(unittest.TestCase):
             filetypes = get_conf_filetypes(folder=fg)
             self.assertIn("EXAMPLE_FILETYPE", filetypes)
             self.assertEqual(filetypes["EXAMPLE_FILETYPE"]["freq"], "30min")
+
+    @staticmethod
+    def _make_dirconf(tmp, dbconf="url: http://127.0.0.1:1\ntoken: t\norg: o\n",
+                      units="TA: degC\n", dirs="x: y\n", filegroups=None):
+        """Write a config folder into *tmp*. None leaves a file out."""
+        root = Path(tmp) / "conf"
+        (root / "filegroups").mkdir(parents=True)
+        for name, text in (filegroups or {"ft.yaml": "FT:\n  freq: 30min\n"}).items():
+            (root / "filegroups" / name).write_text(text, encoding="utf-8")
+        if units is not None:
+            (root / "units.yaml").write_text(units, encoding="utf-8")
+        if dirs is not None:
+            (root / "dirs.yaml").write_text(dirs, encoding="utf-8")
+        secret = Path(f"{root}_secret")
+        secret.mkdir()
+        if dbconf is not None:
+            (secret / "dbconf.yaml").write_text(dbconf, encoding="utf-8")
+        return root
+
+    @staticmethod
+    def _influxio(root):
+        client = MagicMock()
+        client.__enter__.return_value = client
+        client.ping.return_value = True
+        mod = "diive.core.io.db.influx.influxio"
+        with patch(f"{mod}.get_client", return_value=client), patch(f"{mod}.success"), \
+                patch(f"{mod}.info"), patch(f"{mod}.detail"):
+            return InfluxIO(dirconf=str(root))
+
+    def test_complete_config_folder(self):
+        with TemporaryDirectory() as tmp:
+            dbc = self._influxio(self._make_dirconf(tmp))
+        self.assertEqual(dbc.conf_db["token"], "t")
+        self.assertEqual(dbc.conf_unitmapper, {"TA": "degC"})
+        self.assertEqual(dbc.conf_filetypes, {"FT": {"freq": "30min"}})
+
+    def test_units_and_dirs_are_optional(self):
+        with TemporaryDirectory() as tmp:
+            dbc = self._influxio(self._make_dirconf(tmp, units=None, dirs=""))
+        self.assertEqual(dbc.conf_unitmapper, {})
+        self.assertEqual(dbc.conf_dirs, {})
+        self.assertEqual(dbc.conf_db["url"], "http://127.0.0.1:1")
+
+    def test_empty_filegroup_file_names_the_file(self):
+        with TemporaryDirectory() as tmp:
+            root = self._make_dirconf(tmp, filegroups={"broken.yaml": "# nothing\n"})
+            with self.assertRaisesRegex(ValueError, r"broken\.yaml is empty"):
+                self._influxio(root)
+
+    def test_missing_dbconf_names_the_file(self):
+        with TemporaryDirectory() as tmp:
+            root = self._make_dirconf(tmp, dbconf=None)
+            with self.assertRaisesRegex(FileNotFoundError, r"dbconf\.yaml"):
+                self._influxio(root)
+
+    def test_empty_dbconf_names_the_file(self):
+        with TemporaryDirectory() as tmp:
+            root = self._make_dirconf(tmp, dbconf="")
+            with self.assertRaisesRegex(ValueError, r"dbconf\.yaml is empty"):
+                self._influxio(root)
+
+    def test_dbconf_missing_keys_are_listed(self):
+        with TemporaryDirectory() as tmp:
+            root = self._make_dirconf(tmp, dbconf="url: http://127.0.0.1:1\ntoken:\n")
+            with self.assertRaisesRegex(ValueError, r"lacks a value for: token, org"):
+                self._influxio(root)
 
 
 class TestInfluxDelete(unittest.TestCase):
@@ -418,6 +486,81 @@ class TestInfluxDownloadMergeMockedHttp(unittest.TestCase):
     def test_no_warning_when_tables_agree(self):
         self._download([self._table("1", [5.0, 5.0]), self._table("1.02", [5.0, np.nan])])
         self.warn.assert_not_called()
+
+
+class TestInfluxRetry(unittest.TestCase):
+    """get_client retries each request, also long after the client was created (L245)."""
+
+    def setUp(self):
+        import influxdb_client.client.write.retry as wr
+
+        import diive.core.io.db.influx.connection as conn
+        self.client = conn.get_client({"url": "http://127.0.0.1:1", "token": "x", "org": "o"})
+        self.addCleanup(self.client.close)
+        self.retries = self.client.api_client.rest_client.pool_manager.connection_pool_kw["retries"]
+        clock = self.clock = [datetime.now()]
+
+        class FakeDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return clock[0]
+
+        patchers = [patch.object(wr, "datetime", FakeDatetime),
+                    patch.object(conn, "datetime", FakeDatetime),
+                    patch.object(wr, "logger")]
+        for p in patchers:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def _advance(self, seconds):
+        self.clock[0] += timedelta(seconds=seconds)
+
+    def test_late_errors_are_retried(self):
+        import urllib3
+        from urllib3.exceptions import ReadTimeoutError
+        self._advance(86400)  # one day: far beyond any client-wide deadline
+        new = self.retries.increment(method="POST", url="/api/v2/write",
+                                     response=urllib3.HTTPResponse(status=503, body=b""))
+        self.assertEqual(new.total, 4)
+        new = self.retries.increment(method="POST", url="/api/v2/write",
+                                     error=ReadTimeoutError(None, "/api/v2/write", "read timed out"))
+        self.assertEqual(new.total, 4)
+
+    def test_five_read_timeouts_in_a_row_are_retried(self):
+        from urllib3.exceptions import MaxRetryError, ReadTimeoutError
+
+        from diive.core.io.db.influx.connection import RETRY_MAX_DELAY_S, TIMEOUT_S
+        err = ReadTimeoutError(None, "/api/v2/write", "read timed out")
+        self._advance(86400)
+        retry = self.retries
+        for _ in range(5):
+            retry = retry.increment(method="POST", url="/api/v2/write", error=err)
+            self._advance(TIMEOUT_S + RETRY_MAX_DELAY_S)
+        self.assertEqual(retry.total, 0)
+        with self.assertRaises(MaxRetryError):
+            retry.increment(method="POST", url="/api/v2/write", error=err)
+
+    def test_shared_retry_object_is_not_changed(self):
+        from urllib3.exceptions import ReadTimeoutError
+        before = self.retries.retry_timeout
+        self._advance(86400)
+        self.retries.increment(method="POST", url="/api/v2/write",
+                               error=ReadTimeoutError(None, "/x", "read timed out"))
+        self.assertEqual(self.retries.retry_timeout, before)
+        self.assertEqual(self.retries.history, ())
+
+    def test_write_through_client_is_retried_after_503(self):
+        import urllib3
+        from influxdb_client.client.write_api import SYNCHRONOUS
+        from urllib3.connectionpool import HTTPConnectionPool
+        self._advance(86400)
+        responses = [urllib3.HTTPResponse(status=503, body=io.BytesIO(b""), preload_content=False),
+                     urllib3.HTTPResponse(status=204, body=io.BytesIO(b""), preload_content=False)]
+        with patch.object(HTTPConnectionPool, "_make_request", side_effect=responses) as req, \
+                patch("urllib3.util.retry.time.sleep") as sleep:
+            self.client.write_api(write_options=SYNCHRONOUS).write(bucket="b", record="m f=1")
+        self.assertEqual(req.call_count, 2)
+        sleep.assert_called_once()
 
 
 if __name__ == "__main__":

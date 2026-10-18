@@ -27,7 +27,7 @@ from pandas import DataFrame
 
 from diive.core.io.db.influx import fluxql
 from diive.core.io.db.influx.common import TAGS, convert_ts_to_timezone
-from diive.core.io.db.influx.config import get_conf_filetypes, read_configfile
+from diive.core.io.db.influx.config import get_conf_filetypes, read_configfile, read_dbconf
 from diive.core.io.db.influx.connection import get_client, get_delete_api, get_query_api
 from diive.core.utils.console import VERBOSE_PROGRESS, detail, info, success, warn
 
@@ -774,6 +774,10 @@ class InfluxIO:
         layout. The database connection config is read from the sibling directory
         ``<dirconf>_secret/dbconf.yaml`` so secrets can be kept out of the (often
         version-controlled) main config directory.
+
+        Only ``dbconf.yaml`` is required. A missing ``units.yaml``, ``dirs.yaml``
+        or ``filegroups/`` gives an empty dict: download and upload do not use
+        them.
         """
         # Config locations
         _dir_filegroups = self.dirconf / 'filegroups'
@@ -783,11 +787,18 @@ class InfluxIO:
 
         # Read configs
         conf_filetypes = get_conf_filetypes(folder=_dir_filegroups)
-        conf_unitmapper = read_configfile(config_file=_file_unitmapper)
-        conf_dirs = read_configfile(config_file=_file_dirs)
-        conf_db = read_configfile(config_file=_file_dbconf)
+        conf_unitmapper = self._read_optional_configfile(_file_unitmapper)
+        conf_dirs = self._read_optional_configfile(_file_dirs)
+        conf_db = read_dbconf(config_file=_file_dbconf)
         info("Reading configuration files was successful.", verbose=self.verbose)
         return conf_filetypes, conf_unitmapper, conf_dirs, conf_db
+
+    def _read_optional_configfile(self, config_file: Path) -> dict:
+        """Read a passthrough config file, or return {} if it is missing or empty."""
+        if not config_file.is_file():
+            detail(f"Optional config file not found, skipped: {config_file}", verbose=self.verbose)
+            return {}
+        return read_configfile(config_file=config_file) or {}
 
     def _query_df(self, query: str):
         """Run a Flux query and return the result as a DataFrame (or list of them).
