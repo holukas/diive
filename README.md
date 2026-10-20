@@ -106,7 +106,7 @@ panels. Zooming into one of the date panels updates the statistics and panels fo
 | [examples/EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md) | The bundled example dataset (37 variables)                   |
 | [diive/gui/MANUAL.md](diive/gui/MANUAL.md)                 | User manual of the desktop app                               |
 | [diive/gui/README.md](diive/gui/README.md)                 | How the desktop app is built, for developers                 |
-| [notebooks/README.md](notebooks/README.md)                 | Jupyter notebooks, including the InfluxDB database workflows |
+| [notebooks/README.md](notebooks/README.md)                 | Jupyter notebooks                                            |
 | [packaging/README.md](packaging/README.md)                 | Building the standalone Windows app                          |
 | [CONTRIBUTING.md](CONTRIBUTING.md)                         | Development setup, coding standards, testing                 |
 | [CHANGELOG.md](CHANGELOG.md)                               | Version history                                              |

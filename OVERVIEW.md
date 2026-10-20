@@ -73,8 +73,7 @@ uv sync --extra gui --group build
 .\packaging\build_gui.ps1        # → dist\diive-gui\diive-gui.exe (+ a shareable zip)
 ```
 
-Each GitHub release includes this build as `diive-gui-...-win64.zip`, without the database
-tabs. `build_gui.ps1 -WithDb` makes an internal build with them for the working group.
+Each GitHub release includes this build as `diive-gui-...-win64.zip`.
 Recipe and details: [`packaging/README.md`](packaging/README.md).
 
 ### 4. Examples, notebooks, and tests
@@ -82,8 +81,8 @@ Recipe and details: [`packaging/README.md`](packaging/README.md).
 - **`examples/`** — 113 runnable, API-only scripts in Sphinx-Gallery format (`# %%`
   cells, no file I/O). Run one with `uv run python examples/gapfilling/gapfill_randomforest.py`.
   Catalogued in `examples/CATALOG.md`. **Never run the whole suite** during development.
-- **`notebooks/`** — workflow notebooks: the flux post-processing chain, file formatting
-  and the InfluxDB database.
+- **`notebooks/`** — workflow notebooks, for example for the flux post-processing chain and file
+  formatting.
 - **`tests/`** — unit/integration tests: `uv run pytest tests/ -v` (GUI tests need the
   `gui` extra and run offscreen).
 
