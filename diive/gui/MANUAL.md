@@ -1094,7 +1094,7 @@ Edit the **Name** (default `SW_IN_POT`) and **Add … to dataset** to append the
 column. If the data already have a `SW_IN_POT` column, diive asks before it replaces
 it. **Copy Python** copies a runnable `dv.variables.potrad` script. Values are the
 mean over each averaging period, matching the `SW_IN_POT` column of FLUXNET/AmeriFlux/
-ICOS products. The UTC offset is local standard time; daylight saving is never applied.
+ICOS products. All timestamps use the UTC offset from Project settings.
 
 ---
 
@@ -1646,6 +1646,11 @@ Settings for the current project:
   processing decisions, and anything else worth recording.
 - **Site details.** The measurement site's name, latitude, longitude, elevation, and
   UTC offset.
+
+All timestamps of the dataset must be in this UTC offset. Which offset you use does
+not matter, for example UTC+01:00 or UTC+02:00, but it must not change within the
+dataset. Convert data whose clock switches between winter and summer time to one
+offset before you load them.
 
 Fill in and click **Save project settings**. The site coordinates and UTC offset are reused wherever diive
 needs them (the Hampel tab's daytime/nighttime split, the flux chain, and so on), so

@@ -103,6 +103,7 @@ A: A pandas DataFrame with:
    - a ``DatetimeIndex`` named ``TIMESTAMP_START``, ``TIMESTAMP_MIDDLE`` or
      ``TIMESTAMP_END``,
    - a regular frequency (30 min, hourly, daily, whatever your data is),
+   - the same UTC offset for every timestamp (see below),
    - string column names and numeric values.
 
    ``TimestampSanitizer`` gets your index into that shape. It sorts, removes
@@ -120,6 +121,23 @@ A: A pandas DataFrame with:
 
       df = dv.times.TimestampSanitizer(data=df, nominal_freq='30min').get()
       print(df.index.name)  # TIMESTAMP_MIDDLE
+
+**Q: Which UTC offset do the timestamps need?**
+
+A: Any offset, as long as every timestamp of the dataset uses it. diive uses the
+   timestamps as they are and takes the offset from you: ``utc_offset`` in the
+   functions that need it (for example the day/night split and potential
+   radiation), or **Settings > Project settings** in the desktop app. Set it to
+   the offset of your data, for example 1 for UTC+01:00 or 2 for UTC+02:00.
+
+   Timestamps whose offset changes within the dataset, for example from a logger
+   clock that switches between winter and summer time, do not fit one regular
+   time grid. Convert them to one offset first:
+
+   .. code-block:: python
+
+      # Time-zone-aware index, e.g. Europe/Zurich, to UTC+01:00 throughout
+      df.index = (df.index.tz_convert('UTC') + pd.Timedelta(hours=1)).tz_localize(None)
 
 **Q: How do I load diive's example data?**
 

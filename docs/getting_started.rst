@@ -123,7 +123,7 @@ result ends up with a datetime index.
 
 diive expects a pandas DataFrame with a datetime index named following the diive
 convention (``TIMESTAMP_MIDDLE``, ``TIMESTAMP_START`` or ``TIMESTAMP_END``).
-``TimestampSanitizer`` checks the naming, detects the time resolution, removes
+All timestamps of a dataset must use the same UTC offset. ``TimestampSanitizer`` checks the naming, detects the time resolution, removes
 duplicates and fills date gaps with NaN rows:
 
 .. code-block:: python

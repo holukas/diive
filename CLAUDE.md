@@ -67,6 +67,8 @@ Four NEE partitioning ports coexist, with column suffixes `*_NT_OF`, `*_NT_RP`, 
 
 **`FeatureEngineer`** names features `.{col}_TYPE{detail}` (e.g. `.Tair_f_POL2`); all per-column stages skip `.`-prefixed columns. Guard that filter with `str(c)` (unnamed Series give non-string labels). New stage: param in `__init__`, `_stagename_features()`, call from `_create_features()`.
 
+**One dataset, one UTC offset.** Timestamps are used as they are, with the UTC offset from Project settings (or `utc_offset`). Which offset does not matter, but every timestamp of a dataset must use it. Data whose offset changes within the dataset (a `Europe/Zurich` index, a logger clock switching to summer time) are not supported, so don't report or fix those cases (L329 daily part, L344).
+
 **`DetectFrequency`** runs at the front of nearly every workflow. Verify any change leaves the *detected frequency* unmoved on the bundled datasets, not just the reported percentage.
 
 ## Flux Post-Processing Chain
