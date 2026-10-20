@@ -388,6 +388,11 @@ Library (also used by the notebook and the GUI):
   largest or smallest value of the series was missed with `include_lim=False`.
 - **Local outlier factor, too few values:** a series or day/night period with too few values is
   left untested with a warning instead of raising an error.
+- **Wind direction offset:** an error is raised when the reference years have no data, and a year
+  without a valid correlation stays uncorrected with a warning, instead of being rotated silently.
+- **Offset from a replicate:** an error is raised when the measurement and the replicate never
+  overlap, instead of shifting the series by the first candidate offset.
+- **Set to value:** works on data with an unsorted timestamp index.
 
 GUI only:
 

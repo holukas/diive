@@ -17,7 +17,7 @@ import pandas as pd
 from pandas import Series, DataFrame
 
 import diive.core.dfun.frames as frames
-from diive.core.utils.console import detail
+from diive.core.utils.console import detail, warn
 from diive.variables import potrad, daytime_nighttime_flag_from_swinpot
 from diive.variables.radiation import _noaa_solar_noon_minutes, _oneflux_daily_rpot
 
@@ -59,6 +59,10 @@ class MeasurementOffsetFromReplicate:
             verbose: Verbosity for the console helpers. The line printed for each
                 candidate offset appears at ``VERBOSE_DEBUG`` (3). None uses the
                 level set with ``set_verbosity()``.
+
+        Raises:
+            ValueError: If *measurement* and *replicate* have no timestamp at
+                which both have a value, so no offset can be compared.
         """
         self.measurement = measurement
         self.replicate = replicate
@@ -94,6 +98,12 @@ class MeasurementOffsetFromReplicate:
         absolute difference between the offset-shifted measurement and the replicate."""
         m = self.measurement.copy()
         r = self.replicate.copy()
+        # Without a common record every summed difference is 0, and the first
+        # candidate offset would be returned as if it fitted perfectly.
+        if m.sub(r).notna().sum() == 0:
+            raise ValueError(
+                f"Cannot detect an offset: measurement {m.name!r} and replicate {r.name!r} "
+                f"have no timestamp at which both have a value.")
         offsets_df = pd.DataFrame(columns=['OFFSET', 'ABS_DIFF'])
         counter = 0
         for offset in np.arange(self.offset_start, self.offset_end, self.offset_stepsize):
@@ -102,7 +112,7 @@ class MeasurementOffsetFromReplicate:
             m_shifted += offset
             abs_diff = m_shifted.sub(r)
             abs_diff = abs_diff.abs()
-            abs_diff = abs_diff.sum()
+            abs_diff = abs_diff.sum(min_count=1)
             abs_diff = float(abs_diff)
             offsets_df.loc[len(offsets_df)] = [offset, abs_diff]
 
@@ -614,6 +624,11 @@ class WindDirOffset:
             2d: Continue with next offset, ending with *offset_end*
             2e: Detect offset that yielded maximum absolute correlation with reference
 
+        A year without a valid correlation for any offset (e.g. a year
+        without data, or a reference histogram with the same count in every
+        bin) gets NaN as offset and a warning, and its wind directions are not
+        corrected.
+
         Args:
             winddir: Time series of wind directions in degrees
             hist_ref_years: List of years for building reference histogram, e.g. "[2021, 2022]"
@@ -625,6 +640,9 @@ class WindDirOffset:
             verbose: Verbosity for the console helpers. The line printed for each
                 year appears at ``VERBOSE_DEBUG`` (3). None uses the level set
                 with ``set_verbosity()``.
+
+        Raises:
+            ValueError: If *winddir* has no data in *hist_ref_years*.
         """
         self.winddir = winddir
         self.hist_ref_years = hist_ref_years
@@ -664,13 +682,24 @@ class WindDirOffset:
     def _correct_wind_directions(self):
         """Correct wind directions by yearly offsets"""
         for year in self.uniq_years:
-            offset = int(self.yearlyoffsets_df.loc[self.yearlyoffsets_df['YEAR'] == year, 'OFFSET'].iloc[0])
+            offset = self.yearlyoffsets_df.loc[self.yearlyoffsets_df['YEAR'] == year, 'OFFSET'].iloc[0]
+            if np.isnan(offset):
+                continue
+            offset = int(offset)
             self.winddir_shifted.loc[self.winddir_shifted.index.year == year] += offset
         self.winddir_shifted = self._correct_degrees(self.winddir_shifted)
 
     def _find_yearly_offsets(self):
         yearlyoffsets_df = pd.DataFrame(columns=['YEAR', 'OFFSET'])
         for key, val in self.shiftdict.items():
+            # Sorting puts NaN last, so with only NaN correlations the first
+            # candidate offset would be taken as the best one.
+            if val['CORR_ABS'].isna().all():
+                warn(f"Wind direction offset for year {key}: no offset gives a valid "
+                     f"correlation with the reference histogram. The offset is NaN and "
+                     f"the year is not corrected.", verbose=self.verbose)
+                yearlyoffsets_df.loc[len(yearlyoffsets_df)] = [key, np.nan]
+                continue
             val_sorted = val.sort_values(by='CORR_ABS', ascending=False).copy()
             shift_maxcorr = val_sorted.iloc[0]['SHIFT']
             yearlyoffsets_df.loc[len(yearlyoffsets_df)] = [key, shift_maxcorr]
@@ -729,4 +758,11 @@ class WindDirOffset:
         """Calculate reference histogram"""
         select_years = self.winddir.index.year.isin(self.hist_ref_years)
         ref_s = self._correct_degrees(self.winddir[select_years])
-        return self._wind_histogram(ref_s)
+        counts = self._wind_histogram(ref_s)
+        # An empty reference correlates with nothing, and every year would get
+        # the first candidate offset.
+        if counts.sum() == 0:
+            raise ValueError(
+                f"The reference years {list(self.hist_ref_years)} have no wind direction "
+                f"data. Years with data: {sorted({int(y) for y in self.winddir.dropna().index.year})}.")
+        return counts

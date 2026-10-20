@@ -115,7 +115,7 @@ def setto_value(series: Series, dates: list, value: float = 0, verbose: int = 0)
     Set time range(s) to specific value
 
     Args:
-        series: time series
+        series: time series. The index does not need to be sorted.
         dates: list of the date(times) of records that are set to *value*. A
             string is a single date(time); a range is a nested ``[start, end]``
             list, both ends inclusive. A bare date covers the whole day.
@@ -137,14 +137,21 @@ def setto_value(series: Series, dates: list, value: float = 0, verbose: int = 0)
         See `examples/preprocessing/corrections/correction_setto_value.py`
     """
     series_corr = _fits_value(series, value).copy()
+    # Label slicing matches partial strings, so a bare date covers the whole
+    # day (a >= / <= comparison would stop at midnight), as in ManualRemoval.
+    # A timestamp that is not in the index selects nothing instead of raising.
+    # pandas raises KeyError when it slices an unsorted index by a timestamp
+    # that is not in it, so the slices are taken on a sorted copy of the index
+    # and mapped back to the record positions.
+    order = series_corr.index.argsort(kind="stable")
+    sorted_index = series_corr.index[order]
+    selected = np.zeros(len(series_corr), dtype=bool)
     for date in dates:
-        # Label slicing matches partial strings, so a bare date covers the whole
-        # day (a >= / <= comparison would stop at midnight), as in ManualRemoval.
-        # A timestamp that is not in the index selects nothing instead of raising.
         if isinstance(date, str):
-            series_corr.loc[date:date] = value
+            selected[order[sorted_index.slice_indexer(date, date)]] = True
         elif isinstance(date, list):
-            series_corr.loc[date[0]:date[1]] = value
+            selected[order[sorted_index.slice_indexer(date[0], date[1])]] = True
+    series_corr.iloc[selected] = value
     if verbose > 0:
         info(f"Records in time range {dates} were set to value {value}.")
     return series_corr

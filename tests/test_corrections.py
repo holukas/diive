@@ -264,6 +264,25 @@ class TestSettoCorrections(unittest.TestCase):
         out = setto_value(series=series, dates=[str(self.idx[0])], value=3.7)
         self.assertEqual(out.dtype, np.float32)
 
+    def test_setto_value_works_on_an_unsorted_index(self):
+        # L351: label slicing on an unsorted index raised KeyError for a
+        # timestamp that is not in the index, and also for a bare date.
+        from diive.preprocessing.corrections import setto_value
+        idx = pd.date_range("2021-01-01", periods=96, freq="30min")
+        series = pd.Series(np.arange(96.0), index=idx, name="TA")
+        shuffled = series.iloc[np.random.default_rng(7).permutation(96)]
+        self.assertFalse(shuffled.index.is_monotonic_increasing)
+        dates = ["2021-01-02",                                     # bare date: whole day
+                 str(idx[3]),                                      # existing timestamp
+                 "2021-01-01 05:10",                               # not in the index
+                 ["2021-01-01 07:10", "2021-01-01 09:00"]]         # range, start not in index
+        out = setto_value(series=shuffled, dates=dates, value=-9.0)
+        expected = setto_value(series=series, dates=dates, value=-9.0)
+        # Same records changed, in the caller's order.
+        self.assertTrue(out.index.equals(shuffled.index))
+        pd.testing.assert_series_equal(out.sort_index(), expected, check_freq=False)
+        self.assertEqual(int((expected == -9.0).sum()), 48 + 1 + 4)
+
 
 class TestOffsetCorrections(unittest.TestCase):
     """`remove_relativehumidity_offset` and `MeasurementOffsetFromReplicate`."""
@@ -330,6 +349,40 @@ class TestOffsetCorrections(unittest.TestCase):
             self.assertIn("trying with offset", _scan_output(VERBOSE_DEBUG, None))
         finally:
             set_verbosity(saved)
+
+    def test_measurement_offset_without_overlap_raises(self):
+        # L340: without a common record every summed difference was 0, and the
+        # first candidate (offset_start) was added to the whole series.
+        from diive.preprocessing.corrections import MeasurementOffsetFromReplicate
+        idx = pd.date_range("2021-01-01", periods=200, freq="30min")
+        measurement = pd.Series(np.linspace(0, 20, 200), index=idx, name="TA")
+        every_other = measurement.where(np.arange(200) % 2 == 0)
+        cases = {
+            "all NaN": (measurement, pd.Series(np.nan, index=idx, name="TA_REF")),
+            "other timestamps": (measurement, pd.Series(
+                np.linspace(0, 20, 200), name="TA_REF",
+                index=pd.date_range("2022-01-01", periods=200, freq="30min"))),
+            "values never at the same time": (every_other,
+                                              every_other.shift(1).rename("TA_REF")),
+        }
+        for label, (m, replicate) in cases.items():
+            with self.subTest(label):
+                with self.assertRaisesRegex(ValueError, "no timestamp at which both"):
+                    MeasurementOffsetFromReplicate(measurement=m, replicate=replicate,
+                                                   offset_start=-5, offset_end=5,
+                                                   offset_stepsize=0.5, verbose=0)
+
+    def test_measurement_offset_with_partial_overlap(self):
+        from diive.preprocessing.corrections import MeasurementOffsetFromReplicate
+        idx = pd.date_range("2021-01-01", periods=200, freq="30min")
+        replicate = pd.Series(np.linspace(0, 20, 200), index=idx, name="TA_REF")
+        replicate.iloc[:150] = np.nan
+        measurement = (pd.Series(np.linspace(0, 20, 200), index=idx) - 5.0).rename("TA")
+        measurement.iloc[190:] = np.nan
+        corr = MeasurementOffsetFromReplicate(measurement=measurement, replicate=replicate,
+                                              offset_start=-10, offset_end=10,
+                                              offset_stepsize=0.5, verbose=0)
+        self.assertAlmostEqual(float(corr.get_offset()), 5.0, places=6)
 
 
 class TestNighttimeZeroOffset(unittest.TestCase):
@@ -845,6 +898,57 @@ class TestWindDirOffsetCircularBinning(unittest.TestCase):
         self.assertEqual(len(counts), 36)
         self.assertEqual(counts.sum(), 500)
         self.assertEqual(counts[20:].sum(), 0, "no counts above 200 deg expected")
+
+
+class TestWindDirOffsetWithoutValidCorrelation(unittest.TestCase):
+    """L339: with only NaN correlations the first candidate offset was taken,
+    so every year was rotated by offset_start."""
+
+    N_PER_YEAR = TestWindDirOffsetCircularBinning.N_PER_YEAR
+    PLANTED_OFFSET = TestWindDirOffsetCircularBinning.PLANTED_OFFSET
+    _winddir = TestWindDirOffsetCircularBinning._winddir
+    _detect = TestWindDirOffsetCircularBinning._detect
+
+    def test_reference_years_without_data_raise(self):
+        import re
+        from diive.preprocessing.corrections import WindDirOffset
+        winddir = self._winddir(centre=90.0)
+        for ref_years in ([2019], [2018, 2019]):
+            with self.subTest(ref_years=ref_years):
+                with self.assertRaisesRegex(ValueError, re.escape(str(ref_years))):
+                    WindDirOffset(winddir=winddir, offset_start=-20, offset_end=20,
+                                  hist_ref_years=ref_years, hist_n_bins=36, verbose=0)
+        # A reference year with only missing values has no data either.
+        winddir.loc[winddir.index.year == 2020] = np.nan
+        with self.assertRaisesRegex(ValueError, "have no wind direction data"):
+            WindDirOffset(winddir=winddir, offset_start=-20, offset_end=20,
+                          hist_ref_years=[2020], hist_n_bins=36, verbose=0)
+
+    def test_year_with_only_nan_correlations_is_not_corrected(self):
+        from diive.core.utils.console import console
+        from diive.preprocessing.corrections import WindDirOffset
+        winddir = self._winddir(centre=90.0)
+        # 2022: one direction in each 10-degree bin. Every shift keeps one count
+        # per bin, so the histogram has no variance and every correlation is NaN.
+        flat = pd.Series(np.arange(5.0, 360.0, 10.0), name='WD',
+                         index=pd.date_range('2022-01-01', periods=36, freq='1h',
+                                             name='TIMESTAMP_MIDDLE'))
+        with console.capture() as cap:
+            wds = WindDirOffset(winddir=pd.concat([winddir, flat]), offset_start=-60,
+                                offset_end=60, hist_ref_years=[2020], hist_n_bins=36,
+                                verbose=1)
+        off = wds.get_yearly_offsets().set_index('YEAR')['OFFSET']
+        self.assertTrue(np.isnan(off[2022]))
+        self.assertIn("year 2022", cap.get())
+        corrected = wds.get_corrected_wind_directions()
+        pd.testing.assert_series_equal(corrected.loc['2022'], flat, check_freq=False)
+
+        # The other years are unchanged by the added year.
+        ref, ref_off = self._detect(winddir, n_bins=36)
+        self.assertEqual(off[2020], ref_off[2020])
+        self.assertEqual(off[2021], -self.PLANTED_OFFSET)
+        pd.testing.assert_series_equal(corrected.loc[:'2021'],
+                                       ref.get_corrected_wind_directions())
 
 
 # Abisko-like site in polar day in June. potrad's solar-noon shift there vacates
