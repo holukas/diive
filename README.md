@@ -152,8 +152,6 @@ desktop app with `diive-gui`. In a new terminal, run `conda activate diive` firs
 |------------------|--------------------------------------------------------|
 | `diive`          | The library only                                       |
 | `"diive[gui]"`   | The library and the desktop app (large download)       |
-| `"diive[db]"`    | Adds InfluxDB v2 access (internal use)                 |
-| `"diive[all]"`   | All of the above, plus JupyterLab                      |
 
 Keep the double quotes around names with brackets. Some shells need them.
 
