@@ -990,6 +990,239 @@ def test_add_dataset_extends_without_overwrite(window):
                for p in store.peek("NEWVAR").provenance)
 
 
+def _record_warnings(monkeypatch):
+    """Replace QMessageBox.warning with a recorder (no modal dialog)."""
+    from PySide6.QtWidgets import QMessageBox
+    shown = []
+    monkeypatch.setattr(QMessageBox, "warning",
+                        lambda parent, title, text, *a, **k: shown.append(text))
+    return shown
+
+
+@pytest.mark.parametrize("new_freq, start", [
+    ("10min", "2021-01-01 03:10"),   # another resolution
+    ("30min", "2021-01-01 03:15"),   # same resolution, other time steps
+])
+def test_add_dataset_refuses_other_time_resolution(window, monkeypatch,
+                                                   new_freq, start):
+    # L331: one dataset has one time resolution. 10-min data added to 30-min
+    # data (or 30-min data at :15/:45) used to be merged, and later the steps
+    # that regularize (Stepwise screening, Feature engineering, heatmaps)
+    # silently dropped those records. Now the add is refused and nothing changes.
+    base_idx = pd.date_range("2021-01-01", periods=6, freq="30min",
+                             name="TIMESTAMP_END")
+    base = pd.DataFrame({"TA": [1., 2., 3., 4., 5., 6.]}, index=base_idx)
+    window._set_data(base, source="base.parquet")
+    QApplication.processEvents()
+    before = window._full_data
+
+    new_idx = pd.date_range(start, periods=12, freq=new_freq, name="TIMESTAMP_END")
+    new_df = pd.DataFrame({"TA": 9., "NEWVAR": 7.}, index=new_idx)
+    shown = _record_warnings(monkeypatch)
+    window._add_dataset(new_df, "other.parquet")
+    QApplication.processEvents()
+
+    assert window._full_data is before            # same frame, nothing merged
+    assert list(window._full_data.columns) == ["TA"]
+    assert "NEWVAR" not in window._created
+    assert len(shown) == 1
+    if new_freq == "10min":
+        assert "30min" in shown[0] and "10min" in shown[0]
+        assert "same time resolution" in shown[0]
+    else:
+        assert "time grid" in shown[0]
+
+
+def test_add_dataset_later_period_gives_a_regular_index(window, monkeypatch):
+    # L331/L332: same-resolution data from a later period are added, and the gap
+    # between the two periods becomes empty rows, so the index stays regular
+    # (a gapped index made the flux chain and MDS fail after a project reopen).
+    base_idx = pd.date_range("2021-01-01", periods=6, freq="30min",
+                             name="TIMESTAMP_END")
+    base = pd.DataFrame({"TA": [1., 2., 3., 4., 5., 6.]}, index=base_idx)
+    window._set_data(base, source="base.parquet")
+    QApplication.processEvents()
+
+    new_idx = pd.date_range("2021-01-02", periods=4, freq="30min",
+                            name="TIMESTAMP_END")
+    new_df = pd.DataFrame({"TA": [7., 8., 9., 10.]}, index=new_idx)
+    shown = _record_warnings(monkeypatch)
+    window._add_dataset(new_df, "later.parquet")
+    QApplication.processEvents()
+
+    fd = window._full_data
+    assert shown == []
+    expected = pd.date_range(base_idx[0], new_idx[-1], freq="30min")
+    assert fd.index.equals(expected)
+    assert fd.index.name == "TIMESTAMP_END"
+    assert pd.infer_freq(fd.index) == "30min"
+    assert list(fd["TA"].loc[base_idx]) == [1., 2., 3., 4., 5., 6.]
+    assert list(fd["TA"].loc[new_idx]) == [7., 8., 9., 10.]
+    gap = fd["TA"].loc[base_idx[-1] + pd.Timedelta("30min"):
+                       new_idx[0] - pd.Timedelta("30min")]
+    assert len(gap) == 42 and gap.isna().all()     # empty rows in the gap
+    assert window._data.index.equals(expected)     # pushed to the tabs
+
+
+def test_open_project_warns_once_about_mixed_resolutions(window, tmp_path, monkeypatch):
+    # L331: projects saved by earlier versions can hold records of two time
+    # resolutions. Opening one says so in the Log once, and leaves the data as
+    # they are.
+    from diive.gui import app as app_mod
+    idx = pd.date_range("2021-01-01", periods=96, freq="30min").append(
+        pd.date_range("2021-01-03 00:10", periods=144, freq="10min"))
+    idx.name = "TIMESTAMP_END"
+    mixed = pd.DataFrame({"TA": range(len(idx))}, index=idx, dtype=float)
+    window._set_data(mixed, source="mixed.parquet")
+    QApplication.processEvents()
+    folder = tmp_path / "Mixed.diive"
+    assert window._write_project(folder, "Mixed")
+
+    warned = []
+    monkeypatch.setattr(app_mod, "warn", lambda msg, **k: warned.append(msg))
+    assert window._load_project_folder(folder)
+    QApplication.processEvents()
+    assert len(warned) == 1
+    assert "mixes time resolutions" in warned[0]
+    assert "30min" in warned[0] and "10min" in warned[0]
+    assert window._full_data.index.equals(idx)     # data unchanged
+
+    # A regular project opens without the warning.
+    window._set_data(window._full_data.iloc[:96], source="regular.parquet")
+    folder2 = tmp_path / "Regular.diive"
+    assert window._write_project(folder2, "Regular")
+    warned.clear()
+    assert window._load_project_folder(folder2)
+    assert warned == []
+
+
+def _answer_question(monkeypatch, button):
+    """Replace QMessageBox.question: record the prompt, answer with `button`."""
+    from PySide6.QtWidgets import QMessageBox
+    asked = []
+
+    def _question(parent, title, text, *a, **k):
+        asked.append(text)
+        return button
+    monkeypatch.setattr(QMessageBox, "question", _question)
+    return asked
+
+
+def test_add_features_asks_before_replacing_a_column(window, monkeypatch):
+    # L334: a new variable named like an existing one (a name typed in Combine
+    # variables, or a default such as SW_IN_POT) silently replaced the column.
+    # Every Add goes through `_add_features`, which now asks first.
+    from PySide6.QtWidgets import QMessageBox
+    from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
+    from diive.gui import metadata_store
+
+    original = window._full_data["Tair_f"].copy()
+    new = pd.DataFrame({"Tair_f": original * 0 + 99., "BRANDNEW": 1.},
+                       index=original.index)
+    new.attrs[ATTRS_KEY] = {c: provenance_attr(origin=DERIVED, operation="test")
+                            for c in new.columns}
+
+    # Cancel: nothing changes, not even the column without a clash.
+    asked = _answer_question(monkeypatch, QMessageBox.StandardButton.Cancel)
+    before = window._full_data
+    window._add_features(new)
+    QApplication.processEvents()
+    assert len(asked) == 1 and "Tair_f" in asked[0] and "BRANDNEW" not in asked[0]
+    assert window._full_data is before
+    pd.testing.assert_series_equal(window._full_data["Tair_f"], original)
+    assert "BRANDNEW" not in window._full_data.columns
+    assert "Tair_f" not in window._created
+    assert metadata_store.manager.store.peek("Tair_f").origin != DERIVED
+
+    # Yes: replaced, and the new column is added too.
+    asked = _answer_question(monkeypatch, QMessageBox.StandardButton.Yes)
+    window._add_features(new)
+    QApplication.processEvents()
+    assert len(asked) == 1
+    assert (window._full_data["Tair_f"].dropna() == 99.).all()
+    assert "BRANDNEW" in window._full_data.columns
+    assert "Tair_f" in window._data.columns and (window._data["Tair_f"] == 99.).all()
+
+    # No clash, no question.
+    asked = _answer_question(monkeypatch, QMessageBox.StandardButton.Cancel)
+    window._add_features(new[["BRANDNEW"]].rename(columns={"BRANDNEW": "OTHER"}))
+    assert asked == [] and "OTHER" in window._full_data.columns
+
+
+def test_combine_and_potrad_tabs_ask_before_replacing(window, monkeypatch,
+                                                       configured_site):
+    # The two tabs named in L334, through their real Add buttons: a typed name
+    # equal to a measured column, and the default name SW_IN_POT of Potential
+    # radiation when the data already have SW_IN_POT.
+    from PySide6.QtWidgets import QMessageBox
+
+    window._open_menu_tab("Combine variables")
+    tab = window._menu_tab_list[-1]
+    tab._assign(1, "Tair_f")
+    tab._assign(2, "VPD_f")
+    QApplication.processEvents()
+    tab.name_edit.setText("NEE_CUT_REF_f")          # the measured column
+    original = window._full_data["NEE_CUT_REF_f"].copy()
+    asked = _answer_question(monkeypatch, QMessageBox.StandardButton.Cancel)
+    tab._add()
+    QApplication.processEvents()
+    assert len(asked) == 1 and "NEE_CUT_REF_f" in asked[0]
+    pd.testing.assert_series_equal(window._full_data["NEE_CUT_REF_f"], original)
+    # A new name is added without a question.
+    tab.name_edit.setText("TA_X_VPD")
+    asked = _answer_question(monkeypatch, QMessageBox.StandardButton.Cancel)
+    tab._add()
+    QApplication.processEvents()
+    assert asked == [] and "TA_X_VPD" in window._full_data.columns
+
+    window._add_features(window._full_data[["Rg_f"]].rename(
+        columns={"Rg_f": "SW_IN_POT"}))            # data already have SW_IN_POT
+    stored = window._full_data["SW_IN_POT"].copy()
+    window._open_menu_tab("Potential radiation")
+    tab = window._menu_tab_list[-1]
+    tab._calculate()
+    QApplication.processEvents()
+    assert tab._out_name() == "SW_IN_POT" and tab.add_btn.isEnabled()
+    asked = _answer_question(monkeypatch, QMessageBox.StandardButton.Cancel)
+    tab._add()
+    QApplication.processEvents()
+    assert len(asked) == 1 and "SW_IN_POT" in asked[0]
+    pd.testing.assert_series_equal(window._full_data["SW_IN_POT"], stored)
+    asked = _answer_question(monkeypatch, QMessageBox.StandardButton.Yes)
+    tab.name_edit.setText("SW_IN_POT")             # re-enables Add
+    tab._add()
+    QApplication.processEvents()
+    assert len(asked) == 1
+    assert not window._full_data["SW_IN_POT"].equals(stored)
+
+
+def test_events_with_the_same_name_are_all_marked(window):
+    # L335: events with one name share one EVENT_* column. Only the last one
+    # was marked (two "Harvest" events, May and August: 0 records in May).
+    from diive.events import Event
+    from diive.gui import events
+
+    events.manager.add(Event(name="Harvest", start="2021-05-01", end="2021-05-02"))
+    events.manager.add(Event(name="Harvest", start="2021-08-01", end="2021-08-02"))
+    QApplication.processEvents()
+    col = window._full_data["EVENT_Harvest"]
+    may = col.loc[pd.Timestamp("2021-05-01"):pd.Timestamp("2021-05-02")]
+    aug = col.loc[pd.Timestamp("2021-08-01"):pd.Timestamp("2021-08-02")]
+    assert len(may) > 0 and (may == 1).all()
+    assert len(aug) > 0 and (aug == 1).all()
+    assert int(col.sum()) == len(may) + len(aug)
+    assert set(col.unique()) == {0, 1}
+
+    # Deleting one of them unmarks only its records.
+    assert events.manager.events[0].start.month == 5
+    events.manager.remove(0)
+    QApplication.processEvents()
+    col = window._full_data["EVENT_Harvest"]
+    assert (col.loc[may.index] == 0).all()
+    assert (col.loc[aug.index] == 1).all()
+    assert int(col.sum()) == len(aug)
+
+
 def test_daterange_dialog_clamps_and_orders(app):
     from diive.gui.widgets.daterange_dialog import DateRangeDialog
     start, end = pd.Timestamp("2020-01-01"), pd.Timestamp("2020-12-31 23:30")

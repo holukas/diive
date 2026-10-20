@@ -393,6 +393,10 @@ GUI only:
 - **Overview, text columns:** adding or selecting a column that is not numeric no longer freezes the
   app, the Overview shows a short note instead of plots.
 - **Overview, new columns:** every newly added numeric column is selected, not only the first one.
+- **Add to current data:** data with another time resolution or other time steps are refused, and
+  the time between two periods is filled with empty records.
+- **New variables:** adding a variable with the name of an existing one asks before it replaces it.
+- **Events with the same name:** all of them mark their records in the shared event column.
 
 Examples:
 

@@ -225,7 +225,7 @@ overrides the toolbar's Save to export `savefig` at that DPI, so saved images ar
 
 **Data flow:** **File ▸ Open data file…** shows `OpenDataDialog` — pick one or more files, choose the filetype, and
 preview the first parsed rows before loading (parquet via `dv.load_parquet`, other formats via `dv.ReadFileType`).
-Selecting multiple files merges them (`MultiDataFileReader`, or `combine_first` for parquet). All reading is library
+Selecting multiple files merges them (`MultiDataFileReader`, or `combine_first` for parquet). "Add to current data" (`_add_dataset`) refuses data of another time resolution or off the current time grid, and puts the merged record on one regular grid (`continuous_timestamp_freq`), so one dataset has one resolution (L331). Opening a project that mixes resolutions logs a warning once (`_warn_mixed_resolution`). All reading is library
 work, the dialog only orchestrates it. `MainWindow` holds the current DataFrame and pushes it to the visible tab via
 `DiiveTab.on_data_loaded(df, created)` (hidden tabs are marked stale and catch up when shown); tabs that present data override that hook to refresh. On startup the app reopens the
 last project, else it loads the example data (`_initial_load`). **File ▸ Export data as…** (`_save_file`) writes parquet **or** CSV — the save-dialog filter picks the format,
@@ -391,7 +391,7 @@ the Overview" fires `events.manager.request_focus(start, end)` → `MainWindow._
 Overview and `OverviewTab.focus_on(start, end)` zooms the linked datetime panels onto the event. A category's colour
 overrides the library default everywhere via `Event.resolved_color(i, colors=...)` — consistent on the cards and the plot
 overlays. `EventsTab.save_state`/`restore_state` persist the group + density choices with a project. Each event becomes a real `EVENT_<name>` 0/1
-column (1 = the event took place) — `MainWindow._sync_event_columns` reconciles those columns to the event list on every
+column (1 = the event took place). Events with the same name share one column, which ORs their flags (L335). `MainWindow._sync_event_columns` reconciles those columns to the event list on every
 `events.manager.changed`, tracking the ones it created (`_event_columns`) so it never drops an `EVENT_`-named column that
 came in as plain data. The Overview draws the overlays (`_overlay_events`): a dashed line for an instant and a shaded
 band for a period on the time-series/cumulative/daily panels (labelled on the time series), and a horizontal line/band on
@@ -438,7 +438,7 @@ the source file and re-derive the active range so every tab refreshes. The **Ren
 this: bulk prefix/suffix emits `variablesRenamed`, and a row double-click calls `request_rename`.
 
 **Newly created variables surface in the Overview.** When columns are added (outlier/feature tabs → `featuresCreated` →
-`_add_features` → push), `OverviewTab.on_data_loaded` diffs the incoming `created` set against the previous one to find
+`_add_features` → push; `_add_features` asks before a new column replaces an existing one, L334), `OverviewTab.on_data_loaded` diffs the incoming `created` set against the previous one to find
 the **new** columns and: clears the list's fuzzy filter (so a non-matching new name isn't hidden), `scroll_to`s the new
 row, and auto-selects/plots the new variable (skipping its `FLAG_…_TEST`). The **variable subset is app-wide** — it
 narrows `MainWindow._data` (see `_apply_var_subset`/`_reset_var_subset`), so every non-pinned tab (not just the Overview)

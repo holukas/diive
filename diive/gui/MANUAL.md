@@ -32,6 +32,20 @@ again any time via **Help ▸ About**.
 Selecting several files of the same type **merges** them into one dataset. The
 filetype you used is remembered for next time.
 
+When data are already loaded, **Load mode** offers **Add to current data**. It adds
+the new timestamps and variables to the current dataset and never overwrites
+existing values. All records of a dataset have one time resolution, so the added
+data must have the same resolution and the same time steps as the current data
+(for example 30 minutes at :00 and :30). Otherwise nothing is added and a message
+names both resolutions. Resample the data to the resolution of the current data
+first. Data from a later period are added on the same time grid, and the time
+between the two periods becomes empty records.
+
+Projects saved by earlier versions can mix two time resolutions. When you open such
+a project, the Log says so once. Stepwise screening, Feature engineering and the
+heatmaps then leave out the records that are not on the time grid of the most
+common resolution.
+
 ### Focusing on a date range
 
 **Data ▸ Select date range…** (Ctrl+R) narrows the dataset to a *from / to*
@@ -121,6 +135,11 @@ A pinned tab keeps the dataset it currently shows and ignores later changes (a n
 file, a date-range change, added features), which is handy for comparing while you
 change the data elsewhere. A pin marker appears on the tab; right-click → **Unpin**
 to let it follow the data again. Overview and Log are always live.
+
+**Add to dataset** in any tab adds the results as new variables. If the dataset
+already has a variable with one of their names, diive lists those names and asks
+before it replaces them. This also happens when you add the results of the same tab
+a second time. **Cancel** adds nothing.
 
 The menu bar runs across the top of the window: **File**, **Data**, **Variables**,
 **Plot**, **Cleaning**, **Flux**, **Gap-filling**, **Analyze**, **Settings**, and
@@ -447,7 +466,9 @@ event…** shortcut, and the **Show events on plots** toggle.*
 Mark **when something happened** at the site (fertilization, harvest, grazing, a
 management step, a sensor swap) and overlay those markers on the plots. Each event
 is stored as a `0/1` column (`EVENT_<name>`, where 1 means the event took place),
-so it travels with the data and can be used like any other flag. When events are
+so it travels with the data and can be used like any other flag. Events with the
+same name share one column, which marks the records of all of them (for example a
+"Harvest" event for each year). When events are
 visible, they are drawn on the time-series, cumulative, and daily panels (labels on
 the time series) and along the y-axis of the date/time heatmap. Events are saved
 with the project and between sessions, and are rebuilt on the current index when you
@@ -1070,7 +1091,8 @@ The preview gives three views of the result: the **diel cycle per month** above 
 **full time series** on the left, and the date/time **heatmap** on the right.
 
 Edit the **Name** (default `SW_IN_POT`) and **Add … to dataset** to append the new
-column; **Copy Python** copies a runnable `dv.variables.potrad` script. Values are the
+column. If the data already have a `SW_IN_POT` column, diive asks before it replaces
+it. **Copy Python** copies a runnable `dv.variables.potrad` script. Values are the
 mean over each averaging period, matching the `SW_IN_POT` column of FLUXNET/AmeriFlux/
 ICOS products. The UTC offset is local standard time; daylight saving is never applied.
 

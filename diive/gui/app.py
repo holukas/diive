@@ -43,7 +43,7 @@ from PySide6.QtWidgets import (
 )
 
 import diive
-from diive.core.utils.console import info, success
+from diive.core.utils.console import info, success, warn
 from diive.gui import config, db, events, metadata_store, site, theme
 from diive.gui.registry import (
     MENU_TAB_CLASSES,
@@ -114,6 +114,43 @@ def _namespace_metadata(raw: dict, key: str) -> dict:
     else:
         userdata = {"tags": raw, "descriptions": {}}  # legacy flat name->tags
     return {key: userdata}
+
+
+def _detect_freq(index) -> str | None:
+    """Time resolution of `index` from the library's detection, None if it has
+    fewer than two records or no detectable resolution."""
+    if getattr(index, "freq", None) is not None:
+        return index.freqstr
+    if len(index) < 2:
+        return None
+    from diive.core.times.times import DetectFrequency
+    try:
+        return DetectFrequency(index).get()
+    except (RuntimeError, ValueError):
+        return None
+
+
+def _step_ns(freq: str) -> int | None:
+    """Length of a fixed time step in ns, None for calendar steps (month, year)."""
+    from pandas.tseries.frequencies import to_offset
+    try:
+        return int(to_offset(freq).nanos)
+    except ValueError:
+        return None
+
+
+def _freq_text(freq: str) -> str:
+    """Readable resolution, e.g. '30min', '10min', '1h'."""
+    from pandas.tseries.frequencies import to_offset
+    offset = to_offset(freq)
+    return f"{offset.n}{offset.name}"
+
+
+def _off_grid(index, step: int, origin):
+    """Mask of the records of `index` not on the grid of `step` ns through the
+    timestamp `origin`."""
+    ns = index.as_unit("ns").asi8
+    return (ns - pd.Timestamp(origin).as_unit("ns").value) % step != 0
 
 
 def _read_startup_data(last_project):
@@ -1046,14 +1083,24 @@ class MainWindow(QMainWindow):
         if ok and new.strip():
             self._tabwidget.setTabText(index, new.strip())
 
-    def _add_features(self, new_df) -> None:
+    def _add_features(self, new_df, confirm_overwrite: bool = True) -> None:
         """Merge engineered features into the dataset and re-push to tabs.
 
         Features merge into `_full_data` (the full record), so they survive a
         later range reset; rows outside a computed feature's range align to NaN.
         The active range is then re-derived so tabs see the new columns.
+
+        Every tab's Add goes through here, so this is the one place that asks
+        before a new column replaces an existing one of the same name (a typed
+        name, a default such as ``SW_IN_POT``, or a tab re-adding its own
+        earlier output). Cancel adds nothing. `confirm_overwrite=False` is for
+        callers that already asked (Add timestamp column).
         """
         if new_df is None or new_df.empty or self._full_data is None:
+            return
+        if confirm_overwrite and not self._confirm_replace(
+                [str(c) for c in new_df.columns if str(c) in self._full_data.columns]):
+            info("Nothing added: existing variables kept")
             return
         # Rebind instead of mutating in place (`assign` aligns on index just the
         # same): with no active range `_data` *is* `_full_data`, the very frame
@@ -1079,6 +1126,21 @@ class MainWindow(QMainWindow):
                 attrs, timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"))
             metadata_store.manager.notify()
         self._apply_range()
+
+    def _confirm_replace(self, names: list) -> bool:
+        """Ask before new columns replace existing ones. True if nothing clashes
+        or the user agrees."""
+        if not names:
+            return True
+        shown = "\n".join(names[:15])
+        if len(names) > 15:
+            shown += f"\n... and {len(names) - 15} more"
+        return QMessageBox.question(
+            self, "Replace variables",
+            f"The dataset already has {len(names)} variable(s) with these names:\n\n"
+            f"{shown}\n\nReplace them with the new values? Cancel adds nothing.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel) == QMessageBox.StandardButton.Yes
 
     def _add_timestamp_column(self) -> None:
         """Open the Add-timestamp-column dialog and append the derived column.
@@ -1122,7 +1184,7 @@ class MainWindow(QMainWindow):
         new_df.attrs[ATTRS_KEY] = {name: provenance_attr(
             origin=DERIVED, operation="Add timestamp column",
             params={"convention": convention, "format": fmt}, tags=["timestamp"])}
-        self._add_features(new_df)
+        self._add_features(new_df, confirm_overwrite=False)  # asked above
 
     def _add_event(self) -> None:
         """Open the Add-event dialog and register the event (creates its 0/1
@@ -1190,8 +1252,12 @@ class MainWindow(QMainWindow):
             return False
         desired = {}
         for ev in events.manager.events:
-            desired[ev.flag_name] = diive.events.event_to_flag(
+            flag = diive.events.event_to_flag(
                 ev, self._full_data.index, name=ev.flag_name)
+            # Events with the same name (a harvest every year) share one column,
+            # so it marks the records of all of them, not only the last one.
+            prev = desired.get(ev.flag_name)
+            desired[ev.flag_name] = flag if prev is None else prev | flag
         changed = False
         added = []
         # Only drop EVENT_ columns we created (don't touch an EVENT_-named column
@@ -1350,8 +1416,22 @@ class MainWindow(QMainWindow):
         flagged NEW. Loading with a label keeps a second run's columns separate
         (all-new names) for side-by-side comparison; without one, same-named
         variables are simply extended.
+
+        All records of a dataset share one time resolution (L331): data of
+        another resolution, or with timestamps off the current time grid, are
+        refused and nothing changes. Otherwise the merged record is put on one
+        regular grid, so a gap between the two periods becomes empty rows.
         """
         existing = self._full_data
+        freq_old, freq_new = _detect_freq(existing.index), _detect_freq(new_df.index)
+        if freq_old and freq_new and _step_ns(freq_old) != _step_ns(freq_new):
+            self._refuse_add(
+                source,
+                f"The current data have a time resolution of {_freq_text(freq_old)}, "
+                f"the data to add have {_freq_text(freq_new)}.\n\n"
+                "All records of a dataset must have the same time resolution. "
+                f"Resample the data to {_freq_text(freq_old)} first, then add them.")
+            return
         new_cols = [str(c) for c in new_df.columns if str(c) not in existing.columns]
         extended_cols = [str(c) for c in new_df.columns if str(c) in existing.columns]
 
@@ -1363,7 +1443,33 @@ class MainWindow(QMainWindow):
         merged = existing.reindex(union_index).combine_first(new_df.reindex(union_index))
         merged = merged[list(existing.columns) + new_cols]
         merged.index.name = existing.index.name
-        n_new_rows = len(union_index) - len(existing.index)
+        freq = freq_old or freq_new
+        step = _step_ns(freq) if freq else None
+        if step is not None and len(union_index) > 1:
+            origin = existing.index[0]
+            if _off_grid(existing.index, step, origin).any():
+                self._refuse_add(
+                    source,
+                    "The current dataset mixes time resolutions or has records "
+                    "off its time grid (possible in projects saved by earlier "
+                    "versions), so no data can be added to it.\n\n"
+                    "Open the files again as a new dataset, with the same time "
+                    "resolution for all of them.")
+                return
+            off = _off_grid(new_df.index, step, origin)
+            if off.any():
+                self._refuse_add(
+                    source,
+                    f"{int(off.sum()):,} timestamps of the data to add are not on "
+                    f"the {_freq_text(freq)} time grid of the current data (first: "
+                    f"{new_df.index[off][0]}).\n\n"
+                    "The added data must have the same time resolution and the "
+                    "same time steps, e.g. both at :00 and :30 for 30-min data.")
+                return
+            # One regular grid: a gap between the two periods becomes empty rows.
+            from diive.core.times.times import continuous_timestamp_freq
+            merged = continuous_timestamp_freq(merged, freq)
+        n_new_rows = len(merged) - len(existing.index)
         self._full_data = merged
 
         ts = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -1393,6 +1499,28 @@ class MainWindow(QMainWindow):
         if n_new_rows:
             parts.append(f"+{n_new_rows:,} new timestamps")
         success(f"Merged {source}: " + (", ".join(parts) if parts else "no changes"))
+
+    def _refuse_add(self, source: str, message: str) -> None:
+        """Tell the user why "Add to current data" left the dataset unchanged."""
+        warn(f"Not added: {source}. The data do not match the time resolution "
+             "or time grid of the current data.")
+        QMessageBox.warning(self, "Add to current data", message)
+
+    def _warn_mixed_resolution(self, index) -> None:
+        """Say once when an opened dataset mixes time resolutions. Projects
+        saved by earlier versions can hold such data, and the steps that put
+        records on a regular grid (Stepwise screening, Feature engineering,
+        heatmaps) drop the records of the other resolution. The data stay as
+        they are."""
+        from diive.core.times.times import describe_time_resolution, detect_freq_groups
+        if len(index) < 3 or getattr(index, "freq", None) is not None:
+            return
+        groups = detect_freq_groups(index).dropna()
+        if groups.nunique() > 1:
+            warn("This dataset mixes time resolutions: "
+                 f"{describe_time_resolution(index)}. Stepwise screening, "
+                 "Feature engineering and heatmaps drop the records that are not "
+                 "on the time grid of the most common resolution.")
 
     def _save_file(self) -> None:
         """Export the current dataset as a diive-format parquet or CSV file."""
@@ -1748,6 +1876,8 @@ class MainWindow(QMainWindow):
                 pass
         self._restore_active_tab(project.extras.get("active_tab"))
         success(f"Opened project '{project.name}'")
+        # After the log restore above, which replaces the log text.
+        self._warn_mixed_resolution(project.data.index)
 
     def _restore_active_tab(self, title) -> None:
         """Focus the tab the user had active when the project was saved."""
