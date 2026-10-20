@@ -61,20 +61,29 @@ def _stats_lines(series: Series) -> list[str]:
 
     The first line holds the time resolution of the records (``describe_time_resolution``,
     from the whole index, so missing values keep their slot), the period, the
-    number of values and the share of missing values (NaN). The second holds
-    mean, median, SD, min and max, with decimals chosen so that the largest
+    number of finite values, the share of missing values (NaN) and, if there are
+    any, the number of infinite values. The second holds mean, median, SD, min
+    and max of the finite values, with decimals chosen so that the largest
     absolute value shows four significant digits (at most four decimals).
     """
     index = series.index
     values = series.dropna()
     n_total = len(series)
     missing = 100 * (n_total - len(values)) / n_total if n_total else 0.0
+    # +inf and -inf would make the statistics infinite or NaN, and the number of
+    # decimals comes from log10 of the largest value, which fails on inf (L315).
+    is_finite = np.isfinite(values.to_numpy(dtype=float))
+    n_inf = int((~is_finite).sum())
+    values = values[is_finite]
     period = (f"{index.min():%Y-%m-%d %H:%M} to {index.max():%Y-%m-%d %H:%M}"
               if n_total else 'no records')
-    coverage = _STATS_SEP.join([f"Time resolution {describe_time_resolution(index)}", period,
-                                f"{len(values):,} values", f"{missing:.1f} % missing"])
+    items = [f"Time resolution {describe_time_resolution(index)}", period,
+             f"{len(values):,} values", f"{missing:.1f} % missing"]
+    if n_inf:
+        items.append(f"{n_inf:,} infinite")
+    coverage = _STATS_SEP.join(items)
     if values.empty:
-        return [coverage, 'No values']
+        return [coverage, 'No finite values' if n_inf else 'No values']
     largest = float(np.abs(values).max())
     magnitude = int(np.floor(np.log10(largest))) if largest > 0 else 0
     decimals = int(np.clip(3 - magnitude, 0, 4))
@@ -524,8 +533,10 @@ class TimeSeries:
             color_label: Colorbar label (default: the color_series name).
             show_stats: Write two lines above the axes: the time resolution of the
                 records, the period, the number of values and the share of missing
-                values, then mean, median, SD, min and max. The time resolution is
-                detected from the timestamps, also where it changes. *None*
+                values, then mean, median, SD, min and max. Infinite values are
+                counted on the first line and left out of the statistics. The
+                time resolution is detected from the timestamps, also where it
+                changes. *None*
                 (default) shows them on a figure the plot creates itself
                 (``ax=None``) and leaves them out on a given axes, where several
                 series may be overlaid.

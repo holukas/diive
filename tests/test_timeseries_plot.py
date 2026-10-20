@@ -12,6 +12,7 @@ import pandas as pd
 from bokeh.io.state import curstate
 from matplotlib.collections import LineCollection
 from matplotlib.colors import to_rgb
+from matplotlib.figure import Figure
 from matplotlib.layout_engine import ConstrainedLayoutEngine
 
 import diive.core.plotting.timeseries as timeseries
@@ -602,6 +603,81 @@ class TestStatsAndDefaultLook(_TimeSeriesRenderMixin, unittest.TestCase):
         text = self._stats_text(ax)
         self.assertIn('100.0 % missing', text)
         self.assertIn('No values', text)
+
+    def test_finite_data_show_no_infinite_count(self):
+        self.assertNotIn('infinite', self._stats_text(TimeSeries(series=self.fc).plot()))
+
+    def _stats_with(self, values, **plot_kwargs):
+        """Stats text of a series that starts with *values*, then the random FC data."""
+        s = self.fc.copy()
+        s.iloc[:len(values)] = values
+        ax = TimeSeries(series=s).plot(**plot_kwargs)
+        ax.figure.canvas.draw()
+        return s, self._stats_text(ax)
+
+    def test_positive_infinity_is_counted_and_left_out_of_the_stats(self):
+        """L315: log10 of an infinite largest value raised OverflowError."""
+        s, text = self._stats_with([np.inf])
+        finite = s.iloc[1:]
+        self.assertIn(f'{self.N - 1:,} values', text)
+        self.assertIn('0.0 % missing', text)
+        self.assertIn('1 infinite', text)
+        self.assertIn(f'Mean {finite.mean():.3f}'.replace('-', '−'), text)
+        self.assertIn(f'Max {finite.max():.3f}'.replace('-', '−'), text)
+
+    def test_negative_infinity_is_counted_and_left_out_of_the_stats(self):
+        s, text = self._stats_with([-np.inf, -np.inf])
+        self.assertIn('2 infinite', text)
+        self.assertIn(f'Min {s.iloc[2:].min():.3f}'.replace('-', '−'), text)
+
+    def test_infinity_on_a_given_axes(self):
+        """The same stats code runs for a caller's axes with show_stats=True."""
+        s = self.fc.copy()
+        s.iloc[0] = np.inf
+        ax = Figure().subplots()
+        TimeSeries(series=s).plot(ax=ax, show_stats=True)
+        ax.figure.draw_without_rendering()
+        self.assertIn('1 infinite', self._stats_text(ax))
+
+    def test_only_infinite_and_missing_values(self):
+        s = pd.Series(np.nan, index=self.idx, name='X')
+        s.iloc[::2] = np.inf
+        s.iloc[1::4] = -np.inf
+        ax = TimeSeries(series=s).plot()
+        ax.figure.canvas.draw()
+        text = self._stats_text(ax)
+        self.assertIn('0 values', text)
+        self.assertIn('25.0 % missing', text)
+        self.assertIn(f'{3 * self.N // 4:,} infinite', text)
+        self.assertIn('No finite values', text)
+
+    def test_only_infinite_values(self):
+        s = pd.Series(np.inf, index=self.idx, name='X')
+        text = self._stats_text(TimeSeries(series=s).plot())
+        self.assertIn('0.0 % missing', text)
+        self.assertIn('No finite values', text)
+
+    def test_all_zeros(self):
+        s = pd.Series(0.0, index=self.idx, name='X')
+        text = self._stats_text(TimeSeries(series=s).plot())
+        for name in ('Mean', 'Median', 'SD', 'Min', 'Max'):
+            self.assertIn(f'{name} 0.000', text)
+
+    def test_negative_values_only(self):
+        s = -self.fc.abs() - 100  # largest absolute value above 100: one decimal
+        text = self._stats_text(TimeSeries(series=s).plot())
+        self.assertIn(f'Min {s.min():,.1f}'.replace('-', '−'), text)
+        self.assertIn(f'Max {s.max():,.1f}'.replace('-', '−'), text)
+
+    def test_single_finite_value_has_no_sd(self):
+        s = pd.Series(np.nan, index=self.idx, name='X')
+        s.iloc[5] = 7.0
+        s.iloc[6] = np.inf
+        text = self._stats_text(TimeSeries(series=s).plot())
+        self.assertIn('1 values', text)
+        self.assertIn('Mean 7.000', text)
+        self.assertIn('Max 7.000', text)
+        self.assertNotIn('SD', text)
 
     def test_title_clears_the_stats_lines(self):
         ax = TimeSeries(series=self.fc).plot()
