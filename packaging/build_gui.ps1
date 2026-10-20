@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Produces  dist\diive-gui\          (the runnable app folder)
-    and       dist\diive-gui-<ver>-win64.zip  (hand this to users)
+    and       dist\diive-gui-<ver>+build.<stamp>-win64.zip  (hand this to users)
 
     Users unzip the archive and run diive-gui.exe. No Python / uv / pip needed.
 

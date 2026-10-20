@@ -205,9 +205,9 @@ session touched adjacent work on without closing — its four functions take pre
 | ~~281~~ | ~~`preprocessing/qaqc/detect_timestamp_shifts.py`~~ — **now 92 %** | yes |
 | 205 | `io/formats/fluxnet.py` | — |
 | 167 | `io/formats/meteo.py` | — |
-| 149 | `core/plotting/seasonaltrend.py` | yes (`LongtermAnomaliesYear`) |
+| 149 | `core/plotting/seasonaltrend.py` | no (nothing calls it; `LongtermAnomaliesYear` is in `core/plotting/bar.py`) |
 | 49 | `core/utils/vargroups.py` | — |
-| 40 | `core/plotting/_fitplot.py` | yes (via `Fitter`) |
+| 40 | `core/plotting/_fitplot.py` | no (no `Fitter` class exists, and nothing calls `fitplot`) |
 | 16 | `core/dfun/regression.py` | — |
 | 11 | **`diive/corrections/__init__.py`** | — |
 | 5 | `core/plotting/rectangle.py` | — |
@@ -506,7 +506,7 @@ What the tests pin:
   and the empty-string miss.
 
 Also added: an `__all__` resolution test for `dv.qaqc` and `dv.variables`, matching the one written
-for `dv.corrections`. **Seven namespace `__init__` files still have no such test** — `dv.outliers`,
+for `dv.corrections`. ~~**Seven namespace `__init__` files still have no such test**~~ (closed by Tier 1e) — `dv.outliers`,
 `dv.events`, `dv.gapfilling`, `dv.flux`, `dv.analysis`, `dv.plotting`, `dv.times`.
 
 ## Tier 1c — `dv.corrections` — **DONE** (2026-07-26)
@@ -731,9 +731,9 @@ Coverage cannot speak to this tier; it stays grep-derived. Each is a documented 
 
 | Symbol | Real line coverage of backing module |
 |---|---|
-| `DetectTimestampShifts` | **0 %** (281 stmts) |
-| `LongtermAnomaliesYear` | **0 %** (`core/plotting/seasonaltrend.py`, 149 stmts) |
-| `Fitter` | `core/plotting/_fitplot.py` **0 %**; `core/dfun/fits.py` low |
+| ~~`DetectTimestampShifts`~~ | ~~**0 %** (281 stmts)~~ Now 92 %, see Tier 1j |
+| ~~`LongtermAnomaliesYear`~~ | ~~**0 %** (`core/plotting/seasonaltrend.py`, 149 stmts)~~ Wrong module: the class is in `core/plotting/bar.py`, tested since Tier 1b |
+| ~~`Fitter`~~ | ~~`core/plotting/_fitplot.py` **0 %**; `core/dfun/fits.py` low~~ No `Fitter` class exists. The fit example uses `BinFitterCP` |
 | `MultiDataFileReader`, `ReadFileType`, `search_files` | `core/io/filereader.py` partial, 82 of 290 covered lines GUI-only |
 | `UstarVekuriThresholdDetection` | 19 of 193 stmts, all GUI-only |
 | `TimeLagAnalysis` | 23 of 211 stmts, all GUI-only |
@@ -769,13 +769,13 @@ wrong** — corrected here.
 |---|---|---|
 | `flux/lowres/selfheating.py` | **10 %** (69 of 667), all GUI-only | Largest under-tested module. 3 examples, no real test |
 | `flux/lowres/ustarthreshold.py` | **29 %**, 73 % of that GUI-only | |
-| `core/times/decomposition_utils.py` | **45 %**, mostly GUI-only | CLAUDE.md records a **fixed bug** here (missing `period`, unsupported `fit(weights=)`). The regression test still does not exist |
+| `core/times/decomposition_utils.py` | **45 %**, mostly GUI-only | CLAUDE.md records a **fixed bug** here (missing `period`, unsupported `fit(weights=)`). ~~The regression test still does not exist~~ Tested since Tier 1h |
 | `core/plotting/heatmap_base.py` | 73 %, **92 of 103 covered lines GUI-only** | **[revised]** Worse than the "indirect via HeatmapDateTime" I assumed — `HeatmapDateTime` itself is GUI-only |
 | `preprocessing/qaqc/eddyproflags.py` | 80 %, 55/99 GUI-only | Confirmed indirect via `run_level2`; 7 flag functions, no direct unit test |
 | `preprocessing/outlier_detection/stepwiseoutlierdetection.py` | 84 %, 81 of 119 GUI-only | The documented chained-detection API |
-| `flux/postprocessingchain/levels/_rerun.py` | 87 %, mostly GUI-only | **The documented re-run cascade has no test in `test_postprocessingchain.py`.** Its coverage comes from the GUI driving levels repeatedly |
+| `flux/postprocessingchain/levels/_rerun.py` | 87 %, mostly GUI-only | ~~**The documented re-run cascade has no test in `test_postprocessingchain.py`.** Its coverage comes from the GUI driving levels repeatedly~~ Tested since Tier 1g |
 | `flux/postprocessingchain/levels/_qcf.py` | 86 %, GUI-only | |
-| `preprocessing/qaqc/qcf.py` | **53 %** | `FlagQCF` — 339 stmts, 159 missing |
+| `preprocessing/qaqc/qcf.py` | **53 %** | `FlagQCF` — 339 stmts, 159 missing. Now 95 %, see Tier 1i |
 | `preprocessing/qaqc/meteoscreening.py` | **55 %**, half GUI-only | |
 | `preprocessing/outlier_detection/localsd.py` | **63 %** | Lowest of the outlier detectors (siblings are 80-95 %) |
 
@@ -804,8 +804,9 @@ pass and is arguably the most important item.
 2. ~~**Break the plotting classes out of GUI-only coverage**~~ — **done**, `TestPlotClasses` in
    `tests/test_plots.py`. Follow-up left: `core/plotting/seasonaltrend.py`, still 0 %.
 3. ~~**`dv.corrections` namespace import + `apply_corrections` dispatch test**~~ — **done**,
-   `tests/test_corrections.py`. The same `__all__` check is still worth adding for the **other
-   nine namespace `__init__` files** (a one-line import test each); only `dv.corrections` has it.
+   `tests/test_corrections.py`. ~~The same `__all__` check is still worth adding for the **other
+   nine namespace `__init__` files** (a one-line import test each); only `dv.corrections` has it.~~
+   Done, see 4b.
 4. ~~**`dv.qaqc` registry and `dv.variables` classification tests**~~ — **done**, in
    `tests/test_qaqc.py` and `tests/test_createvar.py`.
 4b. ~~**`__all__` tests for the remaining namespaces**~~ — **done**, all ten in
