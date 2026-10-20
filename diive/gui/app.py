@@ -117,43 +117,6 @@ def _namespace_metadata(raw: dict, key: str) -> dict:
     return {key: userdata}
 
 
-def _detect_freq(index) -> str | None:
-    """Time resolution of `index` from the library's detection, None if it has
-    fewer than two records or no detectable resolution."""
-    if getattr(index, "freq", None) is not None:
-        return index.freqstr
-    if len(index) < 2:
-        return None
-    from diive.core.times.times import DetectFrequency
-    try:
-        return DetectFrequency(index).get()
-    except (RuntimeError, ValueError):
-        return None
-
-
-def _step_ns(freq: str) -> int | None:
-    """Length of a fixed time step in ns, None for calendar steps (month, year)."""
-    from pandas.tseries.frequencies import to_offset
-    try:
-        return int(to_offset(freq).nanos)
-    except ValueError:
-        return None
-
-
-def _freq_text(freq: str) -> str:
-    """Readable resolution, e.g. '30min', '10min', '1h'."""
-    from pandas.tseries.frequencies import to_offset
-    offset = to_offset(freq)
-    return f"{offset.n}{offset.name}"
-
-
-def _off_grid(index, step: int, origin):
-    """Mask of the records of `index` not on the grid of `step` ns through the
-    timestamp `origin`."""
-    ns = index.as_unit("ns").asi8
-    return (ns - pd.Timestamp(origin).as_unit("ns").value) % step != 0
-
-
 def _read_startup_data(last_project):
     """Read the last project, or the bundled example if that fails (worker side).
 
@@ -1426,15 +1389,12 @@ class MainWindow(QMainWindow):
         refused and nothing changes. Otherwise the merged record is put on one
         regular grid, so a gap between the two periods becomes empty rows.
         """
+        from diive.core.times.times import common_time_grid, continuous_timestamp_freq
         existing = self._full_data
-        freq_old, freq_new = _detect_freq(existing.index), _detect_freq(new_df.index)
-        if freq_old and freq_new and _step_ns(freq_old) != _step_ns(freq_new):
-            self._refuse_add(
-                source,
-                f"The current data have a time resolution of {_freq_text(freq_old)}, "
-                f"the data to add have {_freq_text(freq_new)}.\n\n"
-                "All records of a dataset must have the same time resolution. "
-                f"Resample the data to {_freq_text(freq_old)} first, then add them.")
+        try:
+            freq = common_time_grid(existing.index, new_df.index)
+        except ValueError as err:
+            self._refuse_add(source, str(err))
             return
         new_cols = [str(c) for c in new_df.columns if str(c) not in existing.columns]
         extended_cols = [str(c) for c in new_df.columns if str(c) in existing.columns]
@@ -1447,31 +1407,8 @@ class MainWindow(QMainWindow):
         merged = existing.reindex(union_index).combine_first(new_df.reindex(union_index))
         merged = merged[list(existing.columns) + new_cols]
         merged.index.name = existing.index.name
-        freq = freq_old or freq_new
-        step = _step_ns(freq) if freq else None
-        if step is not None and len(union_index) > 1:
-            origin = existing.index[0]
-            if _off_grid(existing.index, step, origin).any():
-                self._refuse_add(
-                    source,
-                    "The current dataset mixes time resolutions or has records "
-                    "off its time grid (possible in projects saved by earlier "
-                    "versions), so no data can be added to it.\n\n"
-                    "Open the files again as a new dataset, with the same time "
-                    "resolution for all of them.")
-                return
-            off = _off_grid(new_df.index, step, origin)
-            if off.any():
-                self._refuse_add(
-                    source,
-                    f"{int(off.sum()):,} timestamps of the data to add are not on "
-                    f"the {_freq_text(freq)} time grid of the current data (first: "
-                    f"{new_df.index[off][0]}).\n\n"
-                    "The added data must have the same time resolution and the "
-                    "same time steps, e.g. both at :00 and :30 for 30-min data.")
-                return
+        if freq is not None and len(union_index) > 1:
             # One regular grid: a gap between the two periods becomes empty rows.
-            from diive.core.times.times import continuous_timestamp_freq
             merged = continuous_timestamp_freq(merged, freq)
         n_new_rows = len(merged) - len(existing.index)
         self._full_data = merged

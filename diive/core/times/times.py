@@ -2060,11 +2060,93 @@ def continuous_timestamp_freq(data: Union[Series, DataFrame], freq: str, verbose
     - The number of rows will increase if there are gaps in the original data
     - Calendar frequencies (for example 'MS') have no fixed step. Their grid
       starts at the first record.
-    - The grid is built in absolute time. For time-zone-aware data with a
-      step of 24 h, the records after a daylight saving change (23 h or 25 h
-      after the previous record) are not on the grid and are removed.
+    - The grid is built in absolute time. Every timestamp of a dataset must use
+      the same UTC offset: data whose offset changes within the dataset are
+      not supported.
     """
     return _regularize(data=data, freq=freq, verbose=verbose)[0]
+
+
+def _detect_freq_or_none(index: DatetimeIndex) -> Optional[str]:
+    """Time resolution of *index*, None with fewer than two records or none found."""
+    if getattr(index, "freq", None) is not None:
+        return index.freqstr
+    if len(index) < 2:
+        return None
+    try:
+        return DetectFrequency(index).get()
+    except (RuntimeError, ValueError):
+        return None
+
+
+def _step_ns(freq: str) -> Optional[int]:
+    """Length of a fixed time step in ns, None for calendar steps (month, year)."""
+    try:
+        return int(to_offset(freq).nanos)
+    except ValueError:
+        return None
+
+
+def _freq_text(freq: str) -> str:
+    """Readable resolution, e.g. '30min', '10min', '1h'."""
+    offset = to_offset(freq)
+    return f"{offset.n}{offset.name}"
+
+
+def _off_grid(index: DatetimeIndex, step: int, origin) -> np.ndarray:
+    """Mask of the records of *index* that are not on the grid of *step* ns
+    through the timestamp *origin*."""
+    ns = index.as_unit("ns").asi8
+    return (ns - pd.Timestamp(origin).as_unit("ns").value) % step != 0
+
+
+def common_time_grid(current: DatetimeIndex, new: DatetimeIndex) -> Optional[str]:
+    """Check that records of *new* can join the records of *current*.
+
+    All records of a dataset share one time resolution and one time grid. Use
+    this before merging two datasets, then put the merged data on one grid with
+    :func:`continuous_timestamp_freq`.
+
+    Args:
+        current: Timestamp index of the existing dataset.
+        new: Timestamp index of the data to add.
+
+    Returns:
+        The shared time resolution as a pandas frequency string, or None when it
+        cannot be detected (fewer than two records, or a calendar step such as
+        months). With None, nothing could be checked.
+
+    Raises:
+        ValueError: The two have different time resolutions, *current* already
+            has records off its own time grid, or records of *new* are off the
+            time grid of *current*. The message says which and what to do.
+    """
+    freq_old, freq_new = _detect_freq_or_none(current), _detect_freq_or_none(new)
+    if freq_old and freq_new and _step_ns(freq_old) != _step_ns(freq_new):
+        raise ValueError(
+            f"The current data have a time resolution of {_freq_text(freq_old)}, "
+            f"the data to add have {_freq_text(freq_new)}.\n\n"
+            "All records of a dataset must have the same time resolution. "
+            f"Resample the data to {_freq_text(freq_old)} first, then add them.")
+    freq = freq_old or freq_new
+    step = _step_ns(freq) if freq else None
+    if step is None or len(current) == 0:
+        return freq
+    origin = current[0]
+    if _off_grid(current, step, origin).any():
+        raise ValueError(
+            "The current data mix time resolutions or have records off their "
+            "time grid, so no data can be added to them.\n\n"
+            "Load all files again with the same time resolution.")
+    off = _off_grid(new, step, origin)
+    if off.any():
+        raise ValueError(
+            f"{int(off.sum()):,} timestamps of the data to add are not on the "
+            f"{_freq_text(freq)} time grid of the current data (first: "
+            f"{new[off][0]}).\n\n"
+            "The added data must have the same time resolution and the same time "
+            "steps, e.g. both at :00 and :30 for 30-min data.")
+    return freq
 
 
 def freq_as_timedelta(freq, unit: str, divisor: int = 1) -> pd.Timedelta:

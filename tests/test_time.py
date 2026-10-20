@@ -947,10 +947,6 @@ class TestStlDecompose(unittest.TestCase):
                         'a series shorter than 2 * seasonal should warn')
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 class TestStlSurvivesGaps(unittest.TestCase):
     """A gap must not empty the whole decomposition.
 
@@ -1039,3 +1035,47 @@ class TestSeasonalityDetectionDoesNotInvent(unittest.TestCase):
         t = np.arange(1000)
         res = detect_seasonality(pd.Series(np.sin(2 * np.pi * t / 50)))
         self.assertAlmostEqual(res['primary_period'], 50, delta=1)
+
+
+class TestCommonTimeGrid(unittest.TestCase):
+    """L331: records added to a dataset must share its time resolution and grid."""
+
+    def _idx(self, start, periods, freq):
+        return pd.date_range(start, periods=periods, freq=freq, name='TIMESTAMP_MIDDLE')
+
+    def test_same_grid_returns_the_resolution(self):
+        from diive.core.times.times import common_time_grid
+        cur = self._idx('2024-01-01 00:30', 48, '30min')
+        new = self._idx('2024-01-05 00:30', 48, '30min')  # later period, gap between
+        self.assertEqual(common_time_grid(cur, new), '30min')
+
+    def test_other_resolution_is_refused(self):
+        from diive.core.times.times import common_time_grid
+        cur = self._idx('2024-01-01 00:30', 48, '30min')
+        new = self._idx('2024-01-01 00:10', 144, '10min')
+        with self.assertRaisesRegex(ValueError, '30min.*10min'):
+            common_time_grid(cur, new)
+
+    def test_other_time_steps_are_refused(self):
+        from diive.core.times.times import common_time_grid
+        cur = self._idx('2024-01-01 00:30', 48, '30min')
+        new = self._idx('2024-01-02 00:15', 48, '30min')  # :15/:45 against :00/:30
+        with self.assertRaisesRegex(ValueError, 'not on the 30min time grid'):
+            common_time_grid(cur, new)
+
+    def test_current_data_off_their_own_grid_are_refused(self):
+        from diive.core.times.times import common_time_grid
+        cur = self._idx('2024-01-01 00:30', 48, '30min').append(
+            pd.DatetimeIndex(['2024-01-02 00:10'], name='TIMESTAMP_MIDDLE'))
+        new = self._idx('2024-01-03 00:30', 48, '30min')
+        with self.assertRaisesRegex(ValueError, 'mix time resolutions'):
+            common_time_grid(cur, new)
+
+    def test_too_few_records_cannot_be_checked(self):
+        from diive.core.times.times import common_time_grid
+        one = pd.DatetimeIndex(['2024-01-01 00:30'], name='TIMESTAMP_MIDDLE')
+        self.assertIsNone(common_time_grid(one, one))
+
+
+if __name__ == '__main__':
+    unittest.main()
