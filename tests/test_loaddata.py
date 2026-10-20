@@ -323,5 +323,19 @@ class TestLoadParquetMany(unittest.TestCase):
         self.assertEqual(len(df), 96)
 
 
+class TestMetadataUnits(unittest.TestCase):
+    """L323: each unit belongs to its own variable, also after the timestamp
+    columns were removed from the data."""
+
+    def test_eddypro_full_output_units(self):
+        _, m = ed.load_exampledata_EDDYPRO_FULL_OUTPUT_CSV_30MIN()
+        self.assertEqual(m.loc['DOY', 'UNITS'], '[ddd.ddd]')
+        self.assertEqual(m.loc['daytime', 'UNITS'], '[1=daytime]')
+
+    def test_toa5_units(self):
+        _, m = ed.load_exampledata_TOA5_DAT_1MIN()
+        self.assertEqual(m.loc['RECORD', 'UNITS'], 'RN')
+
+
 if __name__ == '__main__':
     unittest.main()

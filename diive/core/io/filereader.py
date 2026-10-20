@@ -554,8 +554,13 @@ class DataFileReader:
         index = ['UNITS', 'TAGS', 'ADDED']
         data_metadata_df = pd.DataFrame(columns=varnames_list, index=index)
         addtime = datetime.datetime.now()  # Datetime of when var was added
+        # Look units up by name: data_df no longer has the timestamp columns, so
+        # its positions are shifted against the header lists (L323).
+        units = {}
+        for name, unit in zip(varnames_list, varunits_list):
+            units.setdefault(name, unit)
         for varix, varname in enumerate(self.data_df.columns):
-            data_metadata_df.loc['UNITS', varname] = varunits_list[varix]
+            data_metadata_df.loc['UNITS', varname] = units.get(varname)
             data_metadata_df.loc['TAGS', varname] = ["#orig"]
             data_metadata_df.loc['ADDED', varname] = addtime
             data_metadata_df.loc['VARINDEX', varname] = varix
