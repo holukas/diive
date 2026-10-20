@@ -6,13 +6,14 @@ A tiny app-wide store for the current database connection. It holds the active
 :class:`~diive.core.io.db.base.DatabaseBackend` (a generic port; InfluxDB is the
 first adapter) and the InfluxDB config-directory path used to build it.
 
-Secrets are NOT kept here and NOT persisted — only the directory path is
-remembered (safe to write to the plaintext GUI prefs). The token stays in the
-``<dir>_secret`` file on disk, read by the backend each time it is built.
+The directory path is saved only with a project (``.diive``), never in the app
+settings, so a fresh start without a project shows an empty field. Secrets are
+never saved: the token stays in the ``<dir>_secret`` file on disk, read by the
+backend each time it is built.
 
 This holds *state + a handle only* (no domain logic): connecting, browsing and
 download/upload are the backend's job (``diive.core.io.db``). The InfluxDB
-backend needs the optional ``db`` dependency group; :func:`influxdb_available`
+backend needs the optional ``db`` extra; :func:`influxdb_available`
 reports whether it is installed so the GUI can degrade gracefully.
 
 Part of the diive library: https://github.com/holukas/diive
@@ -54,7 +55,7 @@ class DbConnectionManager(QObject):
 
     def __init__(self) -> None:
         super().__init__()
-        self.dirconf: str = ""              # InfluxDB config dir (persisted)
+        self.dirconf: str = ""              # InfluxDB config dir (saved with a project)
         self.backend: DatabaseBackend | None = None
         self.connected: bool = False
 
@@ -85,7 +86,7 @@ class DbConnectionManager(QObject):
         self.changed.emit()
 
     def disconnect(self) -> None:
-        """Drop the active connection (keeps the remembered path)."""
+        """Drop the active connection (keeps the path)."""
         self.backend = None
         self.connected = False
         self.changed.emit()
@@ -97,13 +98,15 @@ class DbConnectionManager(QObject):
         return "Not connected"
 
     def as_dict(self) -> dict:
-        """Serialise for persistence — path only, never the secret token."""
+        """Serialise for a project — path only, never the secret token."""
         return {"dirconf": self.dirconf}
 
     def load_dict(self, data: dict) -> None:
-        """Restore from a persisted dict (missing keys keep their defaults)."""
-        if data:
-            self.dirconf = str(data.get("dirconf", self.dirconf))
+        """Restore a project's path. A project without one keeps the current
+        path, and a different path drops the live connection."""
+        path = str((data or {}).get("dirconf") or "")
+        if path and path != self.dirconf:
+            self.set_dirconf(path)
 
 
 #: Process-wide singleton; import as ``from diive.gui import db`` then ``db.manager``.

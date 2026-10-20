@@ -203,8 +203,9 @@ MENU_TABS: dict[str, dict[str, LazyTab]] = {
         "Appearance": _tab("settings", "SettingsTab"),
         "Project settings": _tab("site", "ProjectSettingsTab"),
     },
-    # Database I/O (InfluxDB, optional 'db' group). Folded into the File menu as
-    # a "Database ▸" submenu in MainWindow (it's another data source/sink).
+    # Database I/O (InfluxDB, optional 'db' extra, internal for now). Folded into
+    # the File menu as a "Database ▸" submenu in MainWindow (another data
+    # source/sink), which only appears when the extra is installed.
     "Database": {
         "Database connection": _tab("database", "DatabaseConnectionTab"),
         "Database explorer": _tab("database_explorer", "DatabaseExplorerTab"),

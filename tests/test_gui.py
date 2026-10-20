@@ -5143,6 +5143,30 @@ def test_project_save_and_open(window, tmp_path, monkeypatch):
     assert var in [str(c) for c in window._data.columns]
 
 
+def test_project_keeps_database_path_not_app_settings(window, tmp_path, monkeypatch):
+    """The InfluxDB config path is saved with the project only, never in the app
+    settings, so a fresh start without a project shows an empty field."""
+    from diive.gui import config, db
+    from PySide6.QtWidgets import QFileDialog
+
+    monkeypatch.setattr(db.manager, "dirconf", "D:/somewhere/configs")
+    folder = tmp_path / "Db.diive"
+    assert window._write_project(folder, "Db")
+
+    db.manager.dirconf = ""
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory",
+                        staticmethod(lambda *a, **k: str(folder)))
+    window._open_project()
+    window._wait_for_io()
+    QApplication.processEvents()
+    assert db.manager.dirconf == "D:/somewhere/configs"
+
+    saved = {}
+    monkeypatch.setattr(config, "save_config", saved.update)
+    window.close()
+    assert saved and "database" not in saved
+
+
 def test_event_manager_load_dict_clears_on_empty(app):
     """L93: loading empty event data must clear, not keep the previous events.
 
@@ -6127,6 +6151,31 @@ def test_old_classic_config_loads_into_studio():
     theme.manager.reset(silent=True)
 
 
+def test_database_menu_hidden_without_db_extra(app, monkeypatch, example_year):
+    """Without influxdb-client (the public exe, a plain diive[gui] install) the
+    File menu has no Database submenu, and a project that saved a Database tab
+    does not reopen it."""
+    import diive
+    from PySide6.QtWidgets import QToolButton
+    from diive.gui import db
+    monkeypatch.setattr(diive, "load_exampledata_parquet", lambda: example_year.copy())
+    monkeypatch.setattr(db, "influxdb_available", lambda: False)
+    from diive.gui.app import MainWindow
+    win = MainWindow()
+    try:
+        win.show()
+        QApplication.processEvents()
+        file_menu = win._header.findChildren(QToolButton, "headermenu")[0].menu()
+        file_items = [a.text() for a in file_menu.actions()]
+        assert any("Open" in t for t in file_items)
+        assert not any("Database" in t for t in file_items)
+
+        win._restore_tabs([{"label": "Database connection"}])
+        assert "Database connection" not in _tabs(win)
+    finally:
+        _destroy_window(win)
+
+
 def test_studio_chrome_builds_frameless_with_header(app, monkeypatch, example_year):
     from diive.gui import theme
     import diive
@@ -6158,12 +6207,13 @@ def test_studio_chrome_builds_frameless_with_header(app, monkeypatch, example_ye
         assert any("Hampel" in t for t in cleaning_items)
         assert any("nighttime zero offset" in t for t in cleaning_items)
         # Open and Save live inside the File menu (no separate buttons); the
-        # Database submenu is folded in there too.
+        # Database submenu is folded in there too, when the 'db' extra is installed.
+        from diive.gui import db
         file_menu = menu_btns[0].menu()
         file_items = [a.text() for a in file_menu.actions()]
         assert any("Open" in t for t in file_items)
         assert any("Save" in t for t in file_items)
-        assert any("Database" in t for t in file_items)
+        assert any("Database" in t for t in file_items) == db.influxdb_available()
         # Events fold into the Data menu.
         data_items = [a.text() for a in menu_btns[1].menu().actions()]
         assert any("Events" in t for t in data_items)

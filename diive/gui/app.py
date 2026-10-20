@@ -495,14 +495,17 @@ class MainWindow(QMainWindow):
         file_menu.addAction(_io_act("&Export data as...", self._save_file))
         file_menu.addSeparator()
         # Database I/O (InfluxDB) folded in from its own former top-level menu as
-        # a "Database ▸" submenu — it's just another data source/sink.
-        db_submenu = studio_menu(self)
-        for label in MENU_TABS.get("Database", {}):
-            db_submenu.addAction(_menu_tab_act(label))
-        db_action = file_menu.addMenu(db_submenu)
-        db_action.setText("&Database")
-        db_action.setIcon(menu_icon("Database"))
-        file_menu.addSeparator()
+        # a "Database ▸" submenu — it's just another data source/sink. Internal
+        # for now: shown only with the optional 'db' extra (the public exe leaves
+        # it out), so other users never see a feature they cannot use.
+        if db.influxdb_available():
+            db_submenu = studio_menu(self)
+            for label in MENU_TABS.get("Database", {}):
+                db_submenu.addAction(_menu_tab_act(label))
+            db_action = file_menu.addMenu(db_submenu)
+            db_action.setText("&Database")
+            db_action.setIcon(menu_icon("Database"))
+            file_menu.addSeparator()
         file_menu.addAction(_act("E&xit", self.close, "Ctrl+Q"))
 
         data_menu = add_menu("&Data")
@@ -867,6 +870,8 @@ class MainWindow(QMainWindow):
                 title = None
             if label not in MENU_TAB_CLASSES:
                 continue  # unknown/renamed feature — skip rather than crash
+            if label in MENU_TABS["Database"] and not db.influxdb_available():
+                continue  # a project from an internal build; the menu is hidden here
             self._open_menu_tab(label)
             tab = self._menu_tab_list[-1] if self._menu_tab_list else None
             if tab is None:
@@ -1537,6 +1542,7 @@ class MainWindow(QMainWindow):
         extras = {
             "site": site.manager.as_dict(),
             "events": events.manager.as_dict(),
+            "database": db.manager.as_dict(),  # path only, never the token
             "range": ([self._range[0].isoformat(), self._range[1].isoformat()]
                       if self._range else None),
             "var_subset": list(self._var_subset) if self._var_subset else None,
@@ -1689,6 +1695,8 @@ class MainWindow(QMainWindow):
         # Clear the current workspace before loading, so the project's saved tabs
         # replace it (and stale tabs don't get the incoming data push).
         self._close_all_menu_tabs()
+        # After the tabs are closed, so a reopened Database connection tab shows it.
+        db.manager.load_dict(project.extras.get("database") or {})
         # Restore the project's events *before* the data swap: `_set_data` builds
         # every event's 0/1 column on the incoming index, so loading them after it
         # first materialised the outgoing session's events on the new data and
@@ -1859,7 +1867,6 @@ class MainWindow(QMainWindow):
             "theme": theme.manager.as_dict(),
             "site": site.manager.as_dict(),
             "events": events.manager.as_dict(),
-            "database": db.manager.as_dict(),  # path only — never the token
             "geometry": bytes(self.saveGeometry().toBase64()).decode("ascii"),
             "last_filetype": odd._last_choice,
             "variable_metadata": self._saved_metadata,
@@ -1893,7 +1900,6 @@ def run(app: QApplication | None = None, splash=None) -> int:
     theme.manager.apply()
     site.manager.load_dict(cfg.get("site", {}))
     events.manager.load_dict(cfg.get("events", {}))
-    db.manager.load_dict(cfg.get("database", {}))
     from diive.gui.widgets import open_data_dialog as odd
     odd._last_choice = cfg.get("last_filetype")
 

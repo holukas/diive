@@ -8,13 +8,13 @@ built here (a :class:`~diive.core.io.db.base.DatabaseBackend`) is stored in
 screening (database) tab.
 
 InfluxDB is the only backend today: it is configured by a config directory whose
-``<dir>_secret`` sibling carries the url/org/token. This tab holds no secrets —
-it only remembers the directory *path* and shows the resolved url/org after a
-successful connect.
+``<dir>_secret`` sibling carries the url/org/token. This tab holds no secrets.
+The directory path is saved only with a project (``.diive``), not in the app
+settings, and the resolved url/org are shown after a successful connect.
 
 Strict GUI<->library separation: all database work lives in the library
 (``diive.core.io.db``); this tab only collects the path, fires the connection
-test on a worker thread, and shows the result. Without the optional ``db`` group
+test on a worker thread, and shows the result. Without the optional ``db`` extra
 it shows install instructions instead of failing.
 
 Part of the diive library: https://github.com/holukas/diive
@@ -79,7 +79,7 @@ class DatabaseConnectionTab(DiiveTab):
         intro = QLabel(
             "Connect diive to an InfluxDB through a config "
             "directory. Credentials (url, org, token) are read from the "
-            "'<dir>_secret' sibling folder — diive only remembers the directory "
+            "'<dir>_secret' sibling folder. A saved project keeps the directory "
             "path, never the token. Use 'Connect' to verify the server "
             "is reachable. The connection is then reused to explore and "
             "download data.")
