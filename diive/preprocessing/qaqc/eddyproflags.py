@@ -295,7 +295,7 @@ def flags_vm97_eddypro_fluxnetfile_tests(
         # '0': XXX,  # Index 0 is always the number `8`
         '1': f"FLAG{idstr}_{flux}_{fluxbasevar}_VM97_SPIKE_HF_TEST",  # Spike detection, hard flag
         '2': f"FLAG{idstr}_{flux}_{fluxbasevar}_VM97_AMPLITUDE_RESOLUTION_HF_TEST",  # Amplitude resolution, hard flag
-        '3': f"FLAG{idstr}_{flux}_{fluxbasevar}_VM97_DROPOUT_TEST",  # Drop-out, hard flag
+        '3': f"FLAG{idstr}_{flux}_{fluxbasevar}_VM97_DROPOUT_HF_TEST",  # Drop-out, hard flag
         '4': f"FLAG{idstr}_{flux}_{fluxbasevar}_VM97_ABSOLUTE_LIMITS_HF_TEST",  # Absolute limits, hard flag
         '5': f"FLAG{idstr}_{flux}_{fluxbasevar}_VM97_SKEWKURT_HF_TEST",  # Skewness/kurtosis, hard flag
         '6': f"FLAG{idstr}_{flux}_{fluxbasevar}_VM97_SKEWKURT_SF_TEST",  # Skewness/kurtosis, soft flag

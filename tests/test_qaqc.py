@@ -580,7 +580,23 @@ class TestEddyProFlags(unittest.TestCase):
         flags = flags_vm97_eddypro_fluxnetfile_tests(df=vm97, flux='FC', fluxbasevar='CO2',
                                                      spikes=True, dropout=True)
         self.assertEqual(list(flags['FLAG_FC_CO2_VM97_SPIKE_HF_TEST']), [0.0, 2.0, 0.0])
-        self.assertEqual(list(flags['FLAG_FC_CO2_VM97_DROPOUT_TEST']), [0.0, 0.0, 0.0])
+        self.assertEqual(list(flags['FLAG_FC_CO2_VM97_DROPOUT_HF_TEST']), [0.0, 0.0, 0.0])
+
+    def test_vm97_dropout_is_hard_flag(self):
+        # EddyPro labels drop_out a hard flag. The flag name used to lack '_HF_',
+        # so a failed drop-out test stayed a soft flag (1) and QCF kept the record.
+        from diive.preprocessing.qaqc.eddyproflags import flags_vm97_eddypro_fluxnetfile_tests
+        vm97 = pd.DataFrame({'CO2_VM97_TEST': [800000000.0, 800100000.0]}, index=self._idx(2))
+        flags = flags_vm97_eddypro_fluxnetfile_tests(df=vm97, flux='FC', fluxbasevar='CO2',
+                                                     spikes=False, dropout=True)
+        self.assertEqual(list(flags['FLAG_FC_CO2_VM97_DROPOUT_HF_TEST']), [0.0, 2.0])
+
+        df = flags.assign(FC=[1.0, 2.0])
+        qcf = FlagQCF(df=df, target_col='FC')
+        qcf.calculate(daytime_accept_qcf_below=2, nighttime_accept_qcf_below=2)
+        out = qcf.get()
+        self.assertEqual(list(out[qcf.flagqcfcol].astype(int)), [0, 2])
+        self.assertTrue(np.isnan(out[qcf.filteredseriescol].iloc[1]))
 
 
 class TestMeasurementsRegistry(unittest.TestCase):
