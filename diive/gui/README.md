@@ -106,7 +106,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `tabs/_correction_base.py` | `BaseCorrectionTab` — **template** for the standalone Corrections tabs (XGBoost-style title bar + Copy Python, "Target (click to set target)" var list, "Settings" panel, method hero chip with a stats strip, original/corrected two-panel preview, worker thread, Add). Routes through the library `apply_corrections` / `corrections_to_code`; subclasses set `corr_key`/`method_suffix`/`method_chip_*`/`needs_coords` and implement `_add_method_rows`/`_current_kwargs`/`_validate`/`_method_controls`, and may override `_apply` (return `(corrected, extra)`), `_hero_metrics`, `_render_result`, `_status_text` for richer output. One tab per correction, so all corrections are independently available (measurement is a hint, not a lock) |
 | `tabs/corrections_nighttime_offset.py` / `tabs/corrections_relativehumidity_offset.py` | Offset-removal correction tabs (`dv.corrections.remove_nighttime_zero_offset` / `remove_relativehumidity_offset`) — `BaseCorrectionTab` subclasses. **Remove nighttime zero offset** (`NighttimeZeroOffsetTab`) is for variables that read zero at night (SW/PPFD); needs site coords, has a **Clamp negative values to zero** checkbox (`clamp_negatives`, default on), and overrides the hooks to show a **4-panel diagnostic preview** (original → daily offset → series−offset → final corrected) + a **below-zero stats hero** (records < 0 before/after, overall + nighttime, confirming the night no longer dips below zero), driven by the library's `nighttime_zero_offset_diagnostics`. The same `clamp_negatives` option is mirrored on the stepwise panel (`widgets/corrections_panel.py`) |
 | `tabs/corrections_setto_threshold.py` / `tabs/corrections_setto_value.py` / `tabs/corrections_set_missing.py` | Generic correction tabs (`dv.corrections.setto_threshold` max/min, `setto_value`, `set_exact_values_to_missing`) — `BaseCorrectionTab` subclasses; under the **Cleaning** menu's Corrections section |
-| `tabs/metadata_explorer.py` | Metadata explorer — per-variable origin badge, editable tag chips (favorite/add/remove, auto-coloured), a 50-word note, provenance timeline; reads `metadata_store.manager` |
+| `tabs/metadata_explorer.py` | Metadata explorer — per-variable origin badge, editable tag chips (favorite/add/remove, auto-coloured), a 50-word note, provenance timeline; reads `metadata_store.manager` with `peek`, so a rebuild never re-creates the record of a deleted variable (a note creates its record on the first keystroke) |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
 | `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar (with a Save-DPI spinbox); attaches a `HoverAnnotator`; `show_message(text)` paints the shared centered empty/error state (use instead of hand-rolled `ax.text(0.5,0.5,…)` for whole-canvas messages); its figure canvas is a `_ResizeDeferringCanvas`, which paints the last frame scaled during a resize drag and renders once the size settles |
 | `widgets/hover.py` | `HoverAnnotator` — value-under-cursor tooltip (line snap + heatmap cell) via blitting |
@@ -232,6 +232,18 @@ last project, else it loads the example data (`_initial_load`). **File ▸ Expor
 though an explicit `.csv`/`.parquet` extension the user types wins. The file is written on the worker thread
 (`_run_io` → `_export_data`). Parquet goes through `dv.save_parquet(..., enforce_diive_format=True)` (single-level
 columns + valid `TIMESTAMP_*` index name); CSV is a plain `to_csv` with the same timestamp-name guarantee.
+
+**Unsaved changes (L324):** `MainWindow._mark_modified` sets `_modified` and puts a `*` in front of the title. It runs
+from `_apply_range` (every change to the data, range or variable subset ends there), on `metadata_store.manager.changed`,
+`site.manager.changed` and the event signals, and when a menu tab is opened, closed, renamed, moved or pinned. Tab
+controls are not tracked. `_mark_clean` clears it at the end of `_set_data` and `_apply_project` and after a successful
+save. A note saved in the Metadata explorer emits no signal, so `_has_unsaved_changes` also compares the store's
+`user_data()` with its state at the last open or save. A save started before an edit leaves the window modified
+(`_edit_count` is compared). `closeEvent`, `_open_project`, `_open_file` (replace only) and `_load_example` call
+`_confirm_discard`, which asks through the module-level `ask_save_changes` (Save / Don't save / Cancel). Save runs the
+project save (Save as without a project folder) and waits for it, and a cancelled dialog or a failed write stops the
+action. Tests that close a `MainWindow` patch `diive.gui.app.ask_save_changes` to return `"discard"`, or the dialog
+blocks the run.
 
 **Date-range subselection (`Data` menu):** non-destructive. `MainWindow` keeps the whole loaded record in `_full_data`;
 `_data` (pushed to the tabs) is `_full_data` optionally narrowed to `_range=(start,end)` via `dv.times.keep_daterange`.
@@ -409,7 +421,9 @@ reuses the existing site persistence, so notes travel with the project (`extras[
 **Cumulative provenance + tolerant project metadata (library, `diive.core.metadata`):** `MetadataStore.record_derived`
 makes a new column **inherit its parent's full history** on first creation (a *copied* snapshot), so a chain like
 `FC → FC_LOCALSD → FC_LOCALSD_HAMPEL` shows all three steps in the explorer, not just the last. `MetadataStore.rename`
-re-keys records and rewrites parent/provenance links. Deserialization is **tolerant of older project layouts**:
+re-keys records and rewrites parent/provenance links. `MainWindow._rename_variables` renames the store before the
+data, so a refused rename leaves both unchanged and shows the error, and it first drops a store record under a target
+name that is no longer a column (L337). Deserialization is **tolerant of older project layouts**:
 `VariableMetadata.from_dict` accepts an aliased/missing name and either the current `{tag: source}` dict or an older
 bare tag list (`_coerce_tag_sources`), and `load_dict` skips malformed entries instead of failing the whole project
 load — so a stale `.diive` folder still opens with whatever metadata is recoverable.

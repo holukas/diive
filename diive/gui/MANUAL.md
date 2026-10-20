@@ -80,6 +80,21 @@ the above. Once a project is open, **Ctrl+S (File ▸ Save project)** updates it
 place, and the window title shows the project name. diive reopens your most recent
 project automatically the next time you launch it.
 
+While there are unsaved changes, the window title starts with `*`. A change is an
+edit to the data, the date range, the variable subset, tags or notes, events or
+project settings, or opening, closing, renaming, moving or pinning a tab. Changes
+to the settings inside a tab are not tracked. Before you close diive, open another
+project, open a data file in place of the current data or load the example data,
+diive asks whether to save the changes:
+
+- **Save** saves the project and then goes on. Without an open project, diive first
+  asks for a name and a location, as **Save project as…** does. If you cancel that
+  dialog or the save fails, diive stops and keeps the current data.
+- **Don't save** goes on without saving.
+- **Cancel** keeps everything as it is.
+
+**Add to current data** keeps the current work, so it does not ask.
+
 Opening, saving, and exporting run in the background, so the window stays usable.
 While one runs, the header says what is happening and the open, save, and export
 entries are disabled until it finishes. A save writes the data as it was when you
@@ -857,7 +872,9 @@ Latitude, longitude and the UTC offset (used for the day/night split and some
 corrections) come from **Settings ▸ Project settings**. When you change them there,
 results computed with the old values are cleared; click **Run outliers** /
 **Run corrections** again. If the UTC offset is not set, the status line says so
-after a run (0 is used).
+after a run (0 is used). Without site coordinates, **Run outliers** refuses a chain
+with an enabled step that separates daytime and nighttime, and the status line says
+why. Steps without the split run without a site.
 
 **Corrections.** The **Corrections** section of the **Cleaning** menu has one tab per
 correction; they all share the same layout. **Click a variable** in the **Target**
@@ -936,13 +953,16 @@ narrows the working dataset to your selection: every tab then lists only these
 variables, except pinned tabs, which keep their data. The window title shows how
 many variables are in use. This tab always lists every variable, so you can add
 dropped ones back. Your data is not changed: **Data ▸ Reset to all variables**
-brings the full variable list back.
+brings the full variable list back. A saved project reopens with the variables that
+were in use when you saved it. The picks in this tab are restored too, but only
+**Confirm** applies them.
 
 ### Select records by condition
 
 Build a filtered copy of one variable (the **target**) using the value of another
 variable (the **condition**). Click a target on the left, then build an
-**operation** in the settings: pick a condition variable, a **lower** / **upper**
+**operation** in the settings: pick a condition variable (only numeric variables
+are listed, not datetime or true/false columns), a **lower** / **upper**
 range (untick a side for an open bound), the boundary inclusivity, and an
 **action** — *Keep selected records* (drop everything except the in-range ones) or
 *Remove selected records* (drop the in-range ones, keep the rest). **Select

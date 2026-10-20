@@ -75,6 +75,16 @@ def slot_exceptions():
             pytrace=False)
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _no_save_prompt():
+    """Answer "Save changes?" with Don't save, so closing, opening or loading
+    over unsaved changes never blocks on a dialog nobody clicks. Tests that
+    check the question patch ``ask_save_changes`` again for themselves."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("diive.gui.app.ask_save_changes", lambda *a, **k: "discard")
+        yield
+
+
 @pytest.fixture(scope="module")
 def app():
     yield QApplication.instance() or QApplication([])
@@ -7994,3 +8004,281 @@ def test_glyphs_unchanged_at_device_pixel_ratio_one(app, monkeypatch):
         icon = fn()
         assert icon.availableSizes() == [QSize(16, 16)], name
         assert _opaque_ink(_icon_image(icon))[0] > 0, name   # it really drew ink
+
+
+# --- unsaved changes (L324) and rename after delete (L337) -------------------
+
+def _answer_save_prompt(monkeypatch, answer):
+    """Answer the "Save changes?" question with `answer`; returns the list of
+    questions asked."""
+    from diive.gui import app as appmod
+    asked = []
+
+    def _ask(parent, question):
+        asked.append(question)
+        return answer
+
+    monkeypatch.setattr(appmod, "ask_save_changes", _ask)
+    return asked
+
+
+def _make_change(window):
+    """A change a project save keeps: a user tag on the first variable."""
+    from diive.gui import metadata_store
+    metadata_store.manager.add_user_tag(str(window._data.columns[0]), "keep")
+
+
+def test_no_save_question_when_nothing_changed(window, monkeypatch):
+    asked = _answer_save_prompt(monkeypatch, "cancel")
+    QApplication.processEvents()  # deferred first renders must not count
+    assert not window._has_unsaved_changes()
+    assert not window.windowTitle().startswith("*")
+    window._load_example()
+    assert window.close()
+    assert asked == []
+
+
+def test_change_marks_title_and_save_clears_it(window, tmp_path):
+    _make_change(window)
+    assert window._has_unsaved_changes()
+    assert window.windowTitle().startswith("*")
+    assert window._write_project(tmp_path / "P.diive", "P")
+    assert not window._has_unsaved_changes()
+    assert not window.windowTitle().startswith("*")
+
+
+def test_saved_note_counts_as_a_change(window):
+    """The explorer saves a note without a signal: still an unsaved change."""
+    from diive.gui import metadata_store
+    metadata_store.manager.store.set_description(str(window._data.columns[0]), "n")
+    assert window._has_unsaved_changes()
+
+
+def test_close_with_unsaved_changes_cancel_keeps_window_open(window, monkeypatch):
+    from diive.gui import app as appmod
+    _make_change(window)
+    asked = _answer_save_prompt(monkeypatch, "cancel")
+    assert not window.close()
+    assert window.isVisible()
+    assert len(asked) == 1 and "closing" in asked[0]
+    # The window still reacts to edits: its subscriptions were kept.
+    window._modified = False
+    _make_change(window)
+    assert window._modified
+    monkeypatch.setattr(appmod, "ask_save_changes", lambda *a: "discard")
+
+
+def test_close_with_unsaved_changes_dont_save_closes(window, tmp_path, monkeypatch):
+    from diive.core.io import project as projmod
+    folder = tmp_path / "P.diive"
+    window._project_dir, window._project_name = folder, "P"
+    _make_change(window)
+    asked = _answer_save_prompt(monkeypatch, "discard")
+    assert window.close()
+    assert len(asked) == 1
+    assert not projmod.is_project(folder)  # nothing written
+
+
+def test_close_with_save_writes_the_project_then_closes(window, tmp_path, monkeypatch):
+    from diive.core.io import project as projmod
+    from diive.core.io.project import load_project
+    folder = tmp_path / "P.diive"
+    window._project_dir, window._project_name = folder, "P"
+    _make_change(window)
+    var = str(window._data.columns[0])
+    _answer_save_prompt(monkeypatch, "save")
+    assert window.close()
+    assert projmod.is_project(folder)
+    assert "keep" in load_project(folder).metadata.get(var).tags
+    assert not window._has_unsaved_changes()
+
+
+def test_close_with_save_aborts_when_save_as_is_cancelled(window, monkeypatch):
+    from PySide6.QtWidgets import QDialog
+    from diive.gui import app as appmod
+    from diive.gui.widgets import save_project_dialog
+
+    class _Dialog:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def exec(self):
+            return QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(save_project_dialog, "SaveProjectDialog", _Dialog)
+    assert window._project_dir is None  # the example data: Save goes to Save as
+    _make_change(window)
+    _answer_save_prompt(monkeypatch, "save")
+    assert not window.close()
+    assert window.isVisible()
+    monkeypatch.setattr(appmod, "ask_save_changes", lambda *a: "discard")
+
+
+def test_close_with_save_aborts_when_the_save_fails(window, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    from diive.core.io import project as projmod
+    from diive.gui import app as appmod
+
+    def _fail(folder, project):
+        raise OSError("disk full")
+
+    errors = []
+    monkeypatch.setattr(projmod, "save_project", _fail)
+    monkeypatch.setattr(QMessageBox, "critical",
+                        staticmethod(lambda *a, **k: errors.append(a[1])))
+    window._project_dir, window._project_name = tmp_path / "P.diive", "P"
+    _make_change(window)
+    _answer_save_prompt(monkeypatch, "save")
+    assert not window.close()
+    assert errors == ["Save failed"]
+    assert window._has_unsaved_changes()
+    monkeypatch.setattr(appmod, "ask_save_changes", lambda *a: "discard")
+
+
+def test_edit_during_a_save_keeps_the_window_modified(window, tmp_path, monkeypatch):
+    from diive.core.io import project as projmod
+    gate = threading.Event()
+    real_save = projmod.save_project
+
+    def gated_save(folder, project):
+        gate.wait(10)
+        return real_save(folder, project)
+
+    monkeypatch.setattr(projmod, "save_project", gated_save)
+    window._project_dir, window._project_name = tmp_path / "P.diive", "P"
+    window._save_project()
+    try:
+        _make_change(window)  # after the snapshot, before the write is done
+    finally:
+        gate.set()
+    window._wait_for_io()
+    assert window._has_unsaved_changes()
+
+
+def test_load_example_asks_before_discarding_changes(window, monkeypatch):
+    before = window._full_data
+    _make_change(window)
+    asked = _answer_save_prompt(monkeypatch, "cancel")
+    window._load_example()
+    assert window._full_data is before
+    assert len(asked) == 1 and "example" in asked[0]
+    _answer_save_prompt(monkeypatch, "discard")
+    window._load_example()
+    assert window._full_data is not before
+    assert not window._has_unsaved_changes()
+
+
+def test_open_project_asks_before_discarding_changes(window, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+    folder = tmp_path / "Other.diive"
+    assert window._write_project(folder, "Other")
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory",
+                        staticmethod(lambda *a, **k: str(folder)))
+    before = window._full_data
+    _make_change(window)
+
+    asked = _answer_save_prompt(monkeypatch, "cancel")
+    window._open_project()
+    assert not window._io.is_running  # nothing started
+    assert window._full_data is before and window._project_dir is None
+    assert len(asked) == 1 and "project" in asked[0]
+
+    _answer_save_prompt(monkeypatch, "discard")
+    window._open_project()
+    window._wait_for_io()
+    QApplication.processEvents()
+    assert window._project_dir == folder
+    assert not window._has_unsaved_changes()
+    assert not window.windowTitle().startswith("*")
+
+
+def test_open_data_file_asks_only_when_replacing(window, monkeypatch, example_year):
+    from PySide6.QtWidgets import QDialog
+    from diive.gui import app as appmod
+
+    class _Dialog:
+        load_mode = "replace"
+
+        def __init__(self, *args, **kwargs):
+            self.dataframe = example_year.copy()
+            self.source_name = "other.parquet"
+            self.load_mode = _Dialog.load_mode
+
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(appmod, "OpenDataDialog", _Dialog)
+    before = window._full_data
+    _make_change(window)
+    asked = _answer_save_prompt(monkeypatch, "cancel")
+    window._open_file()
+    assert window._full_data is before and len(asked) == 1
+
+    _Dialog.load_mode = "add"  # merging keeps the current work: no question
+    window._open_file()
+    assert len(asked) == 1
+
+    _Dialog.load_mode = "replace"
+    _answer_save_prompt(monkeypatch, "discard")
+    window._open_file()
+    assert window._source == "other.parquet"
+    assert not window._has_unsaved_changes()
+
+
+def test_rename_to_the_name_of_a_deleted_variable(window, monkeypatch):
+    """L337: the Metadata explorer must not bring a deleted variable's record
+    back, and a rename onto that name must reach the data and every tab."""
+    from PySide6.QtWidgets import QInputDialog, QMessageBox
+    from diive.gui import metadata_store
+    store = metadata_store.manager.store
+
+    x, y = str(window._data.columns[0]), str(window._data.columns[1])
+    window._open_menu_tab("Heatmap date/time")
+    window._open_menu_tab("Metadata explorer")
+    explorer = window._menu_tab_list[-1]
+    explorer.select_variable(x)
+    explorer._desc_edit.setPlainText("a note on x")  # typed, as the user would
+    explorer._save_description()
+    assert store.peek(x).description == "a note on x"
+
+    monkeypatch.setattr(QMessageBox, "question",
+                        lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window._delete_variable(x)
+    QApplication.processEvents()
+    assert x not in window._full_data.columns
+    assert store.peek(x) is None  # the explorer rebuild did not re-create it
+
+    monkeypatch.setattr(QInputDialog, "getText",
+                        staticmethod(lambda *a, **k: (x, True)))
+    window._rename_one_variable(y)
+    QApplication.processEvents()
+    assert x in window._full_data.columns and y not in window._full_data.columns
+    assert store.peek(x) is not None and store.peek(y) is None
+    assert store.peek(x).description == ""  # not the deleted variable's note
+    for tab in window._tabs:
+        if not hasattr(tab, "varpanel"):
+            continue
+        window._tabwidget.setCurrentWidget(tab.widget())  # catch up if stale
+        QApplication.processEvents()
+        names = tab.varpanel.names()
+        assert x in names and y not in names, tab.title
+
+
+def test_rename_refused_by_the_store_leaves_the_data_unchanged(window, monkeypatch):
+    """If the metadata store refuses a rename, the data keep their names too,
+    and the user is told."""
+    from PySide6.QtWidgets import QMessageBox
+    from diive.gui import metadata_store
+    x = str(window._data.columns[0])
+
+    def _refuse(mapping):
+        raise ValueError("refused")
+
+    warnings = []
+    monkeypatch.setattr(metadata_store.manager.store, "rename", _refuse)
+    monkeypatch.setattr(QMessageBox, "warning",
+                        staticmethod(lambda *a, **k: warnings.append(a[2])))
+    before = window._full_data
+    window._rename_variables({x: "NEW_NAME"})
+    assert window._full_data is before
+    assert len(warnings) == 1 and "refused" in warnings[0]

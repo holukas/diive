@@ -420,6 +420,10 @@ GUI only:
 - **Events with the same name:** all of them mark their records in the shared event column.
 - **Plot tabs:** they keep their selected variables and settings when the data change, for example
   after adding a variable in another tab.
+- **Unsaved changes:** the app asks whether to save before it closes, opens another project, replaces
+  the data or loads the example data.
+- **Rename after delete:** renaming a variable to the name of a deleted variable works and updates
+  every tab.
 
 Examples:
 

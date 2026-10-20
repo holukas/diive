@@ -117,6 +117,30 @@ def _namespace_metadata(raw: dict, key: str) -> dict:
     return {key: userdata}
 
 
+def ask_save_changes(parent, question: str) -> str:
+    """Ask whether to save unsaved changes: ``"save"``, ``"discard"`` or
+    ``"cancel"``.
+
+    Module level so tests can answer it without showing the box: a modal dialog
+    nobody clicks blocks a test run for good. Test files that close a
+    ``MainWindow`` patch it, e.g. ``monkeypatch.setattr("diive.gui.app.
+    ask_save_changes", lambda *a: "discard")``.
+    """
+    btn = QMessageBox.StandardButton
+    box = QMessageBox(parent)
+    box.setIcon(QMessageBox.Icon.Warning)
+    box.setWindowTitle("Unsaved changes")
+    box.setText(question)
+    box.setInformativeText("Changes you don't save are lost.")
+    box.setStandardButtons(btn.Save | btn.Discard | btn.Cancel)
+    box.button(btn.Discard).setText("Don't save")
+    box.setDefaultButton(btn.Save)
+    box.setEscapeButton(btn.Cancel)
+    box.exec()
+    clicked = box.standardButton(box.clickedButton())
+    return {btn.Save: "save", btn.Discard: "discard"}.get(clicked, "cancel")
+
+
 def _read_startup_data(last_project):
     """Read the last project, or the bundled example if that fails (worker side).
 
@@ -270,6 +294,15 @@ class MainWindow(QMainWindow):
         self._io_then: tuple | None = None
         self._io_actions: list = []
         self._startup_done = None  # `run()`'s callback for the deferred first load
+        # Unsaved changes since the last open/load or project save (L324). Set by
+        # `_mark_modified`, cleared by `_mark_clean`. Notes saved in the Metadata
+        # explorer emit no signal, so the user tags/notes are also compared with
+        # their state at the last open/save (`_has_unsaved_changes`).
+        self._modified = False
+        self._edit_count = 0  # bumped on every change; a save checks it is unchanged
+        self._clean_user_data: dict = {}
+        self._last_save_ok = False  # outcome of the last project save
+        self._title = self._base_title  # window title without the '*' marker
 
         self._tabs = []
         self._header = None  # the Studio header, set by _build_studio_chrome
@@ -308,6 +341,10 @@ class MainWindow(QMainWindow):
         bar = self._tabwidget.tabBar()
         bar.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         bar.customContextMenuRequested.connect(self._tab_context_menu)
+        # A project saves the tab order, the variable metadata and the site.
+        bar.tabMoved.connect(self._mark_modified)
+        metadata_store.manager.changed.connect(self._mark_modified)
+        site.manager.changed.connect(self._mark_modified)
 
         # Variable-list "Edit metadata…" (any tab) opens the Metadata explorer.
         metadata_store.manager.editRequested.connect(self._edit_metadata)
@@ -704,6 +741,69 @@ class MainWindow(QMainWindow):
         self._sync_event_columns()
         self._apply_range()
         self._tabwidget.setCurrentIndex(0)  # show the Overview tab on load
+        self._mark_clean()  # a freshly loaded dataset has nothing to save yet
+
+    # --- unsaved changes (L324) ------------------------------------------
+    def _mark_modified(self, *_args) -> None:
+        """Note a change a project save would keep (data, range, variable
+        subset, metadata, events, site, open tabs). Takes and ignores signal
+        arguments, so it connects to any signal directly."""
+        self._edit_count += 1
+        if not self._modified:
+            self._modified = True
+            self._show_title()
+
+    def _mark_clean(self, user_data: dict | None = None) -> None:
+        """Nothing left to save: after an open/load or a successful save.
+        `user_data` is the saved tags/notes (default: the current ones)."""
+        self._modified = False
+        self._clean_user_data = (user_data if user_data is not None
+                                 else metadata_store.manager.store.user_data())
+        self._show_title()
+
+    def _has_unsaved_changes(self) -> bool:
+        if self._full_data is None:
+            return False
+        return (self._modified or metadata_store.manager.store.user_data()
+                != self._clean_user_data)
+
+    def _show_title(self) -> None:
+        """Window and header title, with a leading '*' while there are unsaved
+        changes."""
+        title = f"*{self._title}" if self._modified else self._title
+        self.setWindowTitle(title)
+        if self._header is not None:
+            self._header.set_title(title)
+
+    def _confirm_discard(self, action: str) -> bool:
+        """Before `action` replaces the current work: if it has unsaved changes,
+        ask Save / Don't save / Cancel. True means go on.
+
+        Save writes the project (Save as when no project is open yet) and goes
+        on only once that write has succeeded.
+        """
+        if not self._has_unsaved_changes():
+            return True
+        answer = ask_save_changes(self, f"Save changes before {action}?")
+        if answer == "discard":
+            return True
+        if answer != "save":
+            return False
+        return self._save_and_wait()
+
+    def _save_and_wait(self) -> bool:
+        """Save the project and block until the write is done. True on success,
+        False if it failed or the user cancelled the Save as dialog."""
+        self._wait_for_io()  # a job in flight would refuse the save
+        self._last_save_ok = False
+        if self._project_dir is not None:
+            started = self._write_project_async(self._project_dir, self._project_name)
+        else:
+            started = self._save_project_as()
+        if not started:
+            return False
+        self._wait_for_io()
+        return self._last_save_ok
 
     def _apply_range(self) -> None:
         """Derive `_data` from `_full_data` (+ active `_range`) and push to tabs.
@@ -729,9 +829,11 @@ class MainWindow(QMainWindow):
             if keep:
                 self._data = diive.keep_vars(self._data, keep)
                 title += f" [{len(keep)} of {total} variables]"
-        self.setWindowTitle(title)
-        if self._header is not None:
-            self._header.set_title(title)
+        self._title = title
+        # Every change to the data, the date range or the variable subset ends
+        # here. A load or a save clears the mark again right after.
+        self._mark_modified()
+        self._show_title()
         self._reset_range_act.setEnabled(self._range is not None)
         self._reset_subset_act.setEnabled(bool(self._var_subset))
         self._push_data()
@@ -821,6 +923,7 @@ class MainWindow(QMainWindow):
         if hasattr(tab, "set_active_subset") and self._var_subset:
             tab.set_active_subset(self._var_subset)
         self._tabwidget.setCurrentWidget(tab.widget())
+        self._mark_modified()  # a project reopens the same tabs
 
     def _next_menu_index(self, label: str) -> int:
         """Smallest unused 1-based index among open tabs of this menu label."""
@@ -920,6 +1023,7 @@ class MainWindow(QMainWindow):
         # each theme change. Deleting the page here is what actually frees them.
         widget.setParent(None)
         widget.deleteLater()
+        self._mark_modified()
         if self._tabwidget.count() == 0:
             return
         target = max(0, index - 1)
@@ -1008,6 +1112,7 @@ class MainWindow(QMainWindow):
                 tab.on_data_loaded(self._data_for(tab), self._created)
             self._pinned.add(tab)
         self._refresh_tab_icon(tab)
+        self._mark_modified()
 
     def _refresh_tab_icon(self, tab) -> None:
         """Pinned tabs show a pin glyph; otherwise restore the favicon (Studio)."""
@@ -1046,6 +1151,7 @@ class MainWindow(QMainWindow):
             self, "Rename tab", "Tab name:", text=self._tabwidget.tabText(index))
         if ok and new.strip():
             self._tabwidget.setTabText(index, new.strip())
+            self._mark_modified()
 
     def _add_features(self, new_df, confirm_overwrite: bool = True) -> None:
         """Merge engineered features into the dataset and re-push to tabs.
@@ -1168,6 +1274,7 @@ class MainWindow(QMainWindow):
     def _on_events_changed(self) -> None:
         """React to any event edit: keep the menu toggle in sync and reconcile
         each event's 0/1 flag column against the dataset."""
+        self._mark_modified()  # a project saves the events
         self._sync_events_toggle()
         # A column add/edit/delete re-renders the Overview through the data push;
         # a visibility-only toggle changes no column, so refresh it explicitly.
@@ -1183,6 +1290,7 @@ class MainWindow(QMainWindow):
 
     def _on_event_categories_changed(self) -> None:
         """Recolour the Overview's event overlays after a category-palette edit."""
+        self._mark_modified()  # the categories are saved with the events
         self._refresh_overview_events()
 
     def _refresh_overview_events(self) -> None:
@@ -1325,11 +1433,24 @@ class MainWindow(QMainWindow):
                 "The rename would produce duplicate variable names:\n\n"
                 f"{', '.join(clashes)}")
             return
+        # Rename the metadata first: if the store refuses, the data stay as they
+        # are, so data and metadata never disagree on the names (L337). A store
+        # entry under a target name that is no longer a column is left over from
+        # a deleted variable: it has no data to protect, so it gives way.
+        store = metadata_store.manager.store
+        for new in mapping.values():
+            if new not in self._full_data.columns:
+                store.drop(new)
+        try:
+            store.rename(mapping)
+        except ValueError as err:
+            QMessageBox.warning(self, "Rename variables",
+                                f"Could not rename the variables:\n\n{err}")
+            return
         self._full_data = self._full_data.rename(columns=mapping)
         self._created = {mapping.get(c, c) for c in self._created}
         if self._var_subset is not None:  # keep renamed vars in the active subset
             self._var_subset = [mapping.get(c, c) for c in self._var_subset]
-        metadata_store.manager.store.rename(mapping)
         metadata_store.manager.notify()
         self._apply_range()
         success(f"Renamed {len(mapping)} variables")
@@ -1356,6 +1477,8 @@ class MainWindow(QMainWindow):
         success("Reverted to all variables")
 
     def _load_example(self) -> None:
+        if not self._confirm_discard("loading the example data"):
+            return
         df = diive.load_exampledata_parquet()
         # The bundled example always opens clean — no persisted tags/notes.
         self._set_data(df, source=_EXAMPLE_SOURCE, persist_metadata=False)
@@ -1366,7 +1489,7 @@ class MainWindow(QMainWindow):
             return
         if dlg.load_mode == "add" and self._full_data is not None:
             self._add_dataset(dlg.dataframe, dlg.source_name)
-        else:
+        elif self._confirm_discard("opening the data file"):
             self._set_data(dlg.dataframe, source=dlg.source_name)
 
     def _add_dataset(self, new_df, source: str) -> None:
@@ -1568,31 +1691,34 @@ class MainWindow(QMainWindow):
         else:
             self._save_project_as()
 
-    def _save_project_as(self) -> None:
-        """Pick a name + location and write a new diive project folder."""
+    def _save_project_as(self) -> bool:
+        """Pick a name + location and write a new diive project folder.
+
+        Returns True if the write started (it finishes on the worker thread).
+        """
         from diive.core.io.project import is_project, project_name_to_dirname
         from diive.gui.widgets.save_project_dialog import SaveProjectDialog
         if self._full_data is None:
             QMessageBox.information(self, "Save project", "No data loaded yet.")
-            return
+            return False
         default_name = self._project_name or (self._source or "project").split(".")[0]
         dlg = SaveProjectDialog(default_name, self._last_project_dir, self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
+            return False
         name, location = dlg.values()
         folder = Path(location) / project_name_to_dirname(name)
         if folder.exists() and not is_project(folder):
             QMessageBox.warning(
                 self, "Save project",
                 f"'{folder.name}' already exists and is not a diive project.")
-            return
+            return False
         if folder.exists() and QMessageBox.question(
                 self, "Save project",
                 f"Overwrite the existing project '{folder.name}'?") \
                 != QMessageBox.StandardButton.Yes:
-            return
+            return False
         self._last_project_dir = location
-        self._write_project_async(folder, name, adopt=True)
+        return self._write_project_async(folder, name, adopt=True)
 
     def _log_tab(self):
         """The always-on Log tab, located by type (order-independent)."""
@@ -1643,6 +1769,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Save failed", f"Could not save project:\n{err}")
             return False
         QApplication.restoreOverrideCursor()
+        self._mark_clean(project.metadata.user_data())
         success(f"Saved project '{name}'")
         return True
 
@@ -1653,22 +1780,32 @@ class MainWindow(QMainWindow):
         write has succeeded.
         """
         from diive.core.io.project import save_project
+        project = self._project_snapshot(name)
+        # What the file will hold: the change count and tags/notes of this
+        # moment. Edits made while the worker writes keep the window modified.
+        saved_state = (self._edit_count, project.metadata.user_data())
         return self._run_io(
-            f"Saving project '{name}'…", save_project,
-            (folder, self._project_snapshot(name)),
-            on_done=partial(self._on_project_saved, Path(folder), name, adopt),
+            f"Saving project '{name}'…", save_project, (folder, project),
+            on_done=partial(self._on_project_saved, Path(folder), name, adopt,
+                            saved_state),
             on_failed=self._on_project_save_failed)
 
     def _on_project_saved(self, folder: Path, name: str, adopt: bool,
-                          _result=None) -> None:
+                          saved_state: tuple, _result=None) -> None:
+        self._last_save_ok = True
+        edit_count, user_data = saved_state
+        unchanged = edit_count == self._edit_count
         if adopt:
             self._project_dir, self._project_name = folder, name
             self._last_project = str(folder)
             self._source = name
             self._apply_range()  # refresh title with the project name
+        if unchanged:
+            self._mark_clean(user_data)
         success(f"Saved project '{name}'")
 
     def _on_project_save_failed(self, message: str) -> None:
+        self._last_save_ok = False
         QMessageBox.critical(self, "Save failed", f"Could not save project:\n{message}")
 
     def _initial_load(self, on_finished=None) -> None:
@@ -1725,6 +1862,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self, "Open project",
                 "That folder is not a diive project (no '__diive__' marker).")
+            return
+        if not self._confirm_discard("opening another project"):
             return
         self._run_io(f"Opening project '{Path(folder).name}'…", load_project, (folder,),
                      on_done=partial(self._apply_project, folder),
@@ -1816,6 +1955,7 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         self._restore_active_tab(project.extras.get("active_tab"))
+        self._mark_clean()  # the restore above marked changes: none are new
         success(f"Opened project '{project.name}'")
         # After the log restore above, which replaces the log text.
         self._warn_mixed_resolution(project.data.index)
@@ -1907,11 +2047,20 @@ class MainWindow(QMainWindow):
         show_about(self)
 
     def closeEvent(self, event) -> None:
-        """Persist preferences (theme, window geometry, last filetype) on exit."""
+        """Ask to save unsaved changes, then persist preferences (theme, window
+        geometry, last filetype) on exit. Cancel keeps the window open."""
         from diive.gui.widgets import open_data_dialog as odd
         # Let a running save finish (and its outcome register) before the
         # window and, at app exit, the worker's daemon thread go away.
         self._wait_for_io()
+        if not self._confirm_discard("closing"):
+            event.ignore()
+            return
+        for signal in (metadata_store.manager.changed, site.manager.changed):
+            try:
+                signal.disconnect(self._mark_modified)
+            except (RuntimeError, TypeError):
+                pass
         # Stop reacting to the app-wide event store once closed (the singleton
         # outlives the window; a stale window must not react to later edits).
         try:

@@ -102,6 +102,15 @@ def slot_exceptions():
             pytrace=False)
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _no_save_prompt():
+    """Answer "Save changes?" with Don't save, so closing a window with
+    unsaved changes never blocks on a dialog (see tests/test_gui.py)."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("diive.gui.app.ask_save_changes", lambda *a, **k: "discard")
+        yield
+
+
 @pytest.fixture(scope="module")
 def app():
     yield QApplication.instance() or QApplication([])
