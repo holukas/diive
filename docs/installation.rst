@@ -234,7 +234,7 @@ In a conda or other Python environment:
    cd diive
    git checkout indev
    python -m pip install --upgrade pip              # --group needs pip 25.1 or newer
-   python -m pip install -e ".[gui]" --group dev
+   python -m pip install -e ".[all]" --group dev
 
 With `uv <https://docs.astral.sh/uv/>`_, which also installs Python itself:
 
@@ -243,9 +243,10 @@ With `uv <https://docs.astral.sh/uv/>`_, which also installs Python itself:
    git clone https://github.com/holukas/diive.git
    cd diive
    git checkout indev
-   uv sync --extra gui
+   uv sync --all-extras
 
-Get the newest code later with ``git pull``. The contributing guide on GitHub
+Both install everything, including the database tabs and JupyterLab. To also build the Windows
+app, use ``uv sync --all-extras --all-groups``. Get the newest code later with ``git pull``. The contributing guide on GitHub
 (`CONTRIBUTING.md <https://github.com/holukas/diive/blob/main/CONTRIBUTING.md>`_) describes the
 tests, the code style and further uv options.
 

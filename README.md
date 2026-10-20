@@ -169,7 +169,7 @@ git clone https://github.com/holukas/diive.git
 cd diive
 git checkout indev
 python -m pip install --upgrade pip              # --group needs pip 25.1 or newer
-python -m pip install -e ".[gui]" --group dev
+python -m pip install -e ".[all]" --group dev
 ```
 
 With [uv](https://docs.astral.sh/uv/), which also installs Python itself:
@@ -178,8 +178,11 @@ With [uv](https://docs.astral.sh/uv/), which also installs Python itself:
 git clone https://github.com/holukas/diive.git
 cd diive
 git checkout indev
-uv sync --extra gui
+uv sync --all-extras
 ```
+
+Both install everything, including the database tabs and JupyterLab. To also build the Windows app, use
+`uv sync --all-extras --all-groups`.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) describes the tests, the code style and further uv options. The
 [installation guide](https://diive.readthedocs.io/en/latest/installation.html) covers updates, Jupyter, the newest code

@@ -25,7 +25,7 @@ git checkout indev
 ### Setup with uv (recommended)
 
 ```bash
-uv sync --extra gui
+uv sync --all-extras
 ```
 
 uv creates the environment in `.venv` with a matching Python, installs diive in editable mode and
@@ -40,8 +40,8 @@ through `uv run`, for example `uv run pytest tests/test_gapfilling.py -v` or `uv
 | group | `dev`   | Test, lint, docs and notebook tools             | included in `uv sync`   |
 | group | `build` | PyInstaller (standalone Windows app)            | `uv sync --group build` |
 
-Combine them as needed, e.g. `uv sync --extra gui --extra db`. `uv sync --all-extras` installs all
-extras, and `uv sync --all-extras --all-groups` also adds the `build` group.
+`uv sync --all-extras` installs all extras, and `uv sync --all-extras --all-groups` also adds the
+`build` group. For a smaller setup, pick extras, e.g. `uv sync --extra gui`.
 
 ### Setup with pip (conda or venv)
 
@@ -50,10 +50,10 @@ with the `dev` group:
 
 ```bash
 python -m pip install --upgrade pip              # --group needs pip 25.1 or newer
-python -m pip install -e ".[gui]" --group dev
+python -m pip install -e ".[all]" --group dev
 ```
 
-Other extras go in the brackets (e.g. `".[all]"`), and `--group build` adds PyInstaller.
+For a smaller setup, use fewer extras (e.g. `".[gui]"`). `--group build` adds PyInstaller.
 
 ### Verify the setup
 
@@ -66,7 +66,8 @@ See [Running Tests](#running-tests) for the full suite.
 ### Standalone Windows app
 
 To build the desktop app as a Windows program that runs without Python, run
-`uv sync --extra gui --group build` and then `.\packaging\build_gui.ps1 -Clean` in PowerShell.
+`uv sync --extra gui --group build` and then `.\packaging\build_gui.ps1 -Clean` in PowerShell. The
+internal build with the database tabs uses `uv sync --extra all --group build` and `-WithDb`.
 Details: [packaging/README.md](packaging/README.md).
 
 ## Running Tests
