@@ -7,7 +7,7 @@ described by a config directory (see :mod:`diive.core.io.db.influx.config`) and
 provides download, upload, delete and schema-browsing.
 
 This is a clean port of the former external ``dbc-influxdb`` package, folded into
-diive so the optional ``db`` dependency group needs only the real third-party
+diive so the optional ``db`` extra needs only the real third-party
 client (``influxdb-client``). Improvements over the original: diive console
 output (no ``logging``), no ``pytz`` / ``dateutil`` dependency, lazy client
 imports (importing this module never requires the ``db`` extra), and the

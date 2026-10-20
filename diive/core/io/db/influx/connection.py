@@ -4,7 +4,7 @@ CORE.IO.DB.INFLUX.CONNECTION: INFLUXDB CLIENT FACTORY
 
 Thin factory helpers around ``influxdb-client``. The client library is imported
 *lazily* inside the functions so that importing this module (and the rest of
-``diive.core.io.db``) never requires the optional ``db`` dependency group; only
+``diive.core.io.db``) never requires the optional ``db`` extra; only
 actually opening a connection does.
 
 Part of the diive library: https://github.com/holukas/diive
