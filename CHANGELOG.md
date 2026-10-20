@@ -384,6 +384,10 @@ Library (also used by the notebook and the GUI):
   `[0, 1]`, are read correctly.
 - **Timestamp shift detection, FFT method:** works on hourly data.
 - **Timestamp shift detection, noon peak method:** a day without data no longer stops the check.
+- **TimeSince (changes results):** a limit that is not given leaves that side open. Before, the
+  largest or smallest value of the series was missed with `include_lim=False`.
+- **Local outlier factor, too few values:** a series or day/night period with too few values is
+  left untested with a warning instead of raising an error.
 
 GUI only:
 

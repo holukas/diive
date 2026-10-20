@@ -33,7 +33,7 @@ from pandas import Series, DatetimeIndex, DataFrame
 from sklearn.neighbors import LocalOutlierFactor as SKLocalOutlierFactor
 
 from diive.core.base.flagbase import FlagBase
-from diive.core.utils.console import VERBOSE_PROGRESS, detail
+from diive.core.utils.console import VERBOSE_PROGRESS, detail, warn
 from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags, reject_legacy_params
 
 
@@ -146,9 +146,12 @@ class LocalOutlierFactor(FlagBase):
         Args:
             series: Time series in which outliers are identified.
             idstr: Identifier, added as suffix to output variable names.
-            n_neighbors: Number of neighbors to use by default for kneighbors queries.
-                If n_neighbors is larger than the number of samples provided, all samples
-                will be used (description taken from scikit, ref [1])
+            n_neighbors: Number of neighbors to use by default for kneighbors queries
+                (description taken from scikit, ref [1]). LOF needs more values than
+                n_neighbors. If the series has n_neighbors values or fewer, its records
+                are not tested and no outliers are flagged. With separate_day_night=True
+                this applies to the daytime and nighttime records separately.
+                verbose=True shows a warning when it happens.
             contamination: The amount of contamination of the data set, i.e. the proportion
                 of outliers in the data set. When fitting this is used to define the threshold
                 on the scores of the samples.
@@ -209,8 +212,16 @@ class LocalOutlierFactor(FlagBase):
 
         """
 
+        # Records with too few values to test, per part of the series:
+        # {label: number of values}. Filled during the passes, warned once.
+        self._untested = {}
         self._overall_flag, n_iterations = self.repeat(
             self.run_flagtests, repeat=repeat, progress_callback=progress_callback)
+        for label, n_values in self._untested.items():
+            warn(f"LocalOutlierFactor did not test {label} of {self.series.name}: "
+                 f"{n_values} value(s), but LOF needs more values than n_neighbors "
+                 f"({self.n_neighbors}). No outliers were flagged there.",
+                 verbose=self.verbose)
         if self.showplot:
             self.defaultplot(n_iterations=n_iterations)
             if self.separate_day_night:
@@ -220,18 +231,26 @@ class LocalOutlierFactor(FlagBase):
                 self.plot_outlier_daytime_nighttime(series=self.series, flag_daytime=self.flag_daytime,
                                                     flag_quality=self.overall_flag, title=title)
 
-    def _apply_lof_to_subset(self, series: Series, suffix: str = "") -> tuple[DatetimeIndex, DatetimeIndex, int]:
+    def _apply_lof_to_subset(self, series: Series, suffix: str = "",
+                             label: str = "all records") -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Apply LOF to a series subset and extract outlier indices.
 
         Args:
             series: Time series subset to analyze
             suffix: Column name suffix for LOF results
+            label: Name of the subset in the warning about too few values
 
         Returns:
             (ok_indices, rejected_indices, n_outliers)
         """
-        if len(series) == 0:
-            return series.index, series.index[:0], 0
+        # scikit-learn raises on 0 or 1 values and silently lowers n_neighbors
+        # below the requested value otherwise. Values that cannot be tested with
+        # the requested n_neighbors pass, as in the other detectors.
+        values = series.dropna()
+        if len(values) <= self.n_neighbors:
+            if len(series) > 0:
+                self._untested.setdefault(label, len(values))
+            return values.index, values.index[:0], 0
 
         lof_df = lof(series=series, n_neighbors=self.n_neighbors,
                      contamination=self.contamination, suffix=suffix, n_jobs=self.n_jobs)
@@ -280,10 +299,12 @@ class LocalOutlierFactor(FlagBase):
 
         if self.separate_day_night:
             s_daytime = self.filteredseries[self.is_daytime]
-            ok_dt, rejected_dt, n_out_dt = self._apply_lof_to_subset(s_daytime, suffix="DAYTIME")
+            ok_dt, rejected_dt, n_out_dt = self._apply_lof_to_subset(
+                s_daytime, suffix="DAYTIME", label="the daytime records")
 
             s_nighttime = self.filteredseries[self.is_nighttime]
-            ok_nt, rejected_nt, n_out_nt = self._apply_lof_to_subset(s_nighttime, suffix="NIGHTTIME")
+            ok_nt, rejected_nt, n_out_nt = self._apply_lof_to_subset(
+                s_nighttime, suffix="NIGHTTIME", label="the nighttime records")
 
             flag.loc[ok_dt] = 0
             flag.loc[rejected_dt] = 2

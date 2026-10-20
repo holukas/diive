@@ -1111,6 +1111,62 @@ class TestRepeatStops(unittest.TestCase):
         self.assertIn(").run(repeat=True)", absolutelimits_to_code({}, repeat=True))
 
 
+class TestLOFTooFewValues(unittest.TestCase):
+    """L354: LocalOutlierFactor raised a scikit-learn ValueError on an all-NaN
+    series, and with separate_day_night=True on a period without values. Records
+    with n_neighbors values or fewer are now left untested with a warning."""
+
+    COORDS = dict(lat=46.815333, lon=9.855972, utc_offset=1)
+
+    @staticmethod
+    def _series():
+        idx = pd.date_range('2024-06-01 00:15', periods=48 * 5, freq='30min')
+        rng = np.random.default_rng(0)
+        return pd.Series(rng.normal(0, 1, len(idx)), index=idx, name='X')
+
+    def _run(self, s, **kwargs):
+        from diive.core.utils.console import console
+        from diive.preprocessing.outlier_detection.lof import LocalOutlierFactor
+        with console.capture() as cap:
+            lof = LocalOutlierFactor(series=s, n_neighbors=20, contamination=0.01,
+                                     verbose=True, **kwargs).run()
+        # Join the lines the console wrapped.
+        return lof, ' '.join(cap.get().split())
+
+    def test_all_nan(self):
+        s = self._series() * np.nan
+        for kwargs in ({}, dict(separate_day_night=True, **self.COORDS)):
+            lof, out = self._run(s.copy(), **kwargs)
+            self.assertEqual(int(lof.overall_flag.notna().sum()), 0)
+            self.assertEqual(int(lof.filteredseries.count()), 0)
+            self.assertIn('did not test', out)
+
+    def test_fewer_values_than_n_neighbors(self):
+        s = self._series() * np.nan
+        s.iloc[20:25] = [1.0, 2.0, 3.0, 4.0, 50.0]
+        lof, out = self._run(s.copy())
+        self.assertEqual(int((lof.overall_flag == 2).sum()), 0)
+        self.assertEqual(int((lof.overall_flag == 0).sum()), 5)
+        pd.testing.assert_series_equal(lof.filteredseries, s, check_names=False, check_freq=False)
+        self.assertIn('did not test all records', out)
+        self.assertIn('5 value(s)', out)
+
+    def test_daytime_without_values(self):
+        from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
+        s = self._series()
+        s.iloc[100] = 30.0
+        _, _, is_daytime, is_nighttime = create_daytime_nighttime_flags(
+            timestamp_index=s.index, **self.COORDS)
+        s[is_daytime] = np.nan
+        lof, out = self._run(s.copy(), separate_day_night=True, **self.COORDS)
+        self.assertEqual(int(lof.overall_flag[is_daytime].notna().sum()), 0)
+        # The nighttime records are still tested.
+        self.assertEqual(int(lof.overall_flag[is_nighttime].notna().sum()), int(s.count()))
+        self.assertEqual(lof.overall_flag.iloc[100], 2)
+        self.assertIn('did not test the daytime records', out)
+        self.assertNotIn('nighttime records', out)
+
+
 class TestOffGridRecords(unittest.TestCase):
     """L330: a detector gave a series without a frequency one with asfreq, which
     starts the grid at the first record. One stray first record moved the grid
