@@ -428,7 +428,7 @@ def _example():
     y = f"{ycol}_mean"
     z = f"{zcol}_mean"
 
-    q = dv.ga(
+    q = dv.analysis.GridAggregator(
         x=df[x],
         y=df[y],
         z=df[z],
@@ -441,16 +441,17 @@ def _example():
     # Pre-aggregated dataframe (one row per bin)
     df_agg = q.df_agg_long
 
-    hm = dv.heatmap_xyz(
+    hm = dv.plotting.HeatmapXYZ(
         x=df_agg['BIN_Tair_f_mean'],
         y=df_agg['BIN_VPD_f_mean'],
         z=df_agg['NEP_mean'],
+    )
+    hm.plot(
         show_values=True,
         show_values_n_dec_places=2,
         show_values_fontsize=8,
         cb_digits_after_comma=0
     )
-    hm.show()
 
 
 if __name__ == '__main__':

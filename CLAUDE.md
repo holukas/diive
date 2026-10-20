@@ -57,7 +57,7 @@ Four NEE partitioning ports coexist, with column suffixes `*_NT_OF`, `*_NT_RP`, 
 
 **`RandomUncertaintyPAS20` is not an MDS caller.** It shares only the similarity tolerances, with its own window loop, so cascade changes don't reach it. Its cumulative is NaN-safe quadrature, not an object-dtype `ufloat` cumsum (one NaN must not poison the tail).
 
-**Units for these ports are stated in docstrings, not validated** (VPD in kPa by default via `vpd_in_kpa=True`). Don't add unit-guessing warnings or EddyPro-specific hints; the caller owns units.
+**Units for these ports are stated in docstrings, not validated** (VPD in kPa by default via `vpd_in_kpa=True`). Don't add unit-guessing warnings or EddyPro-specific hints; the caller owns units. This covers the library. The GUI's MDS tab may keep its warning when the VPD column name (`hPa`/`kPa`) contradicts the "VPD in kPa" box.
 
 ## Gap-filling
 

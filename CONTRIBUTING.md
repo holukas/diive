@@ -154,7 +154,7 @@ Let exceptions propagate unless you can recover. Be specific about what you catc
 try:
     result = operation()
 except FileNotFoundError:
-    logger.info("Using default fallback")
+    info("Using default fallback", verbose=self.verbose)  # diive.core.utils.console
     return default_value
 
 # Bad: too broad

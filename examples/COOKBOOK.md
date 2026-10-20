@@ -126,7 +126,7 @@ rfts.fillgaps(showplot_scores=False, showplot_importance=False)
 
 # Step 3: access results
 r = rfts.results                  # GapFillingResult dataclass
-print(r.scores['r2'])             # gap-filling R²
+print(r.scores_traintest['r2'])   # R² on held-out test data
 gapfilled = r.gapfilled           # gap-filled Series (r.flag: 0=observed, 1=filled, 2=fallback)
 ```
 
