@@ -776,6 +776,9 @@ density is substantially lower than that of its nearest neighbours. Parameters:
   density (default 20).
 - **Contamination.** The expected fraction of outliers (default 0.01), or tick
   **Auto** to use the threshold from the LOF paper.
+- **Repeat until no more outliers** *(off by default).* With a fixed
+  contamination, every pass flags that fraction of the remaining points again,
+  so repeated passes remove most of the data. One pass is usually what you want.
 
 Adds `{var}_LOF` and its flag to the variable list.
 

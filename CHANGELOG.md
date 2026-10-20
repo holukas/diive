@@ -359,6 +359,10 @@ Library (also used by the notebook and the GUI):
 - **QCF summary, duration:** the period was one day short (272 instead of 273 days), because it
   ran from the first to the last timestamp without the time step of the last record.
 - **Set-to corrections, console:** their reports follow `verbose`.
+- **Absolute limits, day/night:** with separate daytime and nighttime limits and repeat on, the
+  test no longer runs forever, also in the GUI tab.
+- **Local outlier factor (changes results):** `LocalOutlierFactor` and its GUI tab now run a single
+  pass by default, because repeated passes removed most of a series (79 % of NEE in one example).
 
 GUI only:
 

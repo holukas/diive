@@ -103,6 +103,9 @@ class BaseOutlierTab(DiiveTab):
     #: it is omitted (e.g. manual removal flags fixed timestamps — repeating would
     #: re-flag the same records and never converge, so the library ignores repeat).
     supports_repeat = True
+    #: Initial state of the "Repeat until no more outliers" checkbox. LOF starts
+    #: unticked: each pass flags the contamination fraction again (L317).
+    repeat_default = True
     #: Label of the run button (manual removal isn't really "detection").
     run_label = "Detect outliers"
     #: When set (e.g. "rolling mean"), the detection band's centre line is drawn
@@ -234,7 +237,7 @@ class BaseOutlierTab(DiiveTab):
         # Always created so `self.repeat_cb.isChecked()` is safe everywhere, but
         # only shown for methods where repeating is meaningful.
         self.repeat_cb = QCheckBox("Repeat until no more outliers")
-        self.repeat_cb.setChecked(True)
+        self.repeat_cb.setChecked(self.repeat_default)
         self.repeat_cb.setToolTip(
             "Re-run the filter until a pass finds no new outliers (removed points are "
             "excluded from the next pass). Off = a single pass only.")

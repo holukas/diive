@@ -117,10 +117,16 @@ def stepwise_to_code(steps: list[dict], *, var_name: str,
     return "\n".join(lines) + "\n"
 
 
+def _calc_repeat_default(cls) -> bool:
+    return inspect.signature(cls.calc).parameters["repeat"].default
+
+
 def _render_call(class_path: str, kwargs: dict, defaults: dict, repeat: bool,
-                 series_var: str, var_name: str | None) -> str:
+                 series_var: str, var_name: str | None,
+                 repeat_default: bool = True) -> str:
     """Shared renderer: ``h = <class_path>(series=…, …).run(...)`` + result lines,
-    dropping any kwarg equal to its constructor default."""
+    dropping any kwarg equal to its constructor default. ``repeat`` is written
+    out only when it differs from ``repeat_default``, the class's ``calc`` default."""
     lines = ["import diive as dv", ""]
     if var_name is not None:
         lines += [f"{series_var} = df[{var_name!r}]", ""]
@@ -130,7 +136,7 @@ def _render_call(class_path: str, kwargs: dict, defaults: dict, repeat: bool,
         if key in defaults and value == defaults[key]:
             continue
         lines.append(f"    {key}={value!r},")
-    lines.append(").run()" if repeat else ").run(repeat=False)")
+    lines.append(").run()" if repeat == repeat_default else f").run(repeat={repeat})")
     lines += ["",
               "cleaned = h.filteredseries  # outliers set to NaN",
               "flag = h.overall_flag       # 0 = ok, 2 = outlier, NaN = input missing"]
@@ -156,7 +162,8 @@ def lof_to_code(kwargs: dict, repeat: bool = True, *,
     """
     from diive.preprocessing.outlier_detection.lof import LocalOutlierFactor
     return _render_call("dv.outliers.LocalOutlierFactor", kwargs,
-                        _signature_defaults(LocalOutlierFactor), repeat, series_var, var_name)
+                        _signature_defaults(LocalOutlierFactor), repeat, series_var, var_name,
+                        repeat_default=_calc_repeat_default(LocalOutlierFactor))
 
 
 def absolutelimits_to_code(kwargs: dict, repeat: bool = True, *,
@@ -167,7 +174,8 @@ def absolutelimits_to_code(kwargs: dict, repeat: bool = True, *,
     """
     from diive.preprocessing.outlier_detection.absolutelimits import AbsoluteLimits
     return _render_call("dv.outliers.AbsoluteLimits", kwargs,
-                        _signature_defaults(AbsoluteLimits), repeat, series_var, var_name)
+                        _signature_defaults(AbsoluteLimits), repeat, series_var, var_name,
+                        repeat_default=_calc_repeat_default(AbsoluteLimits))
 
 
 def zscore_to_code(kwargs: dict, repeat: bool = True, *,

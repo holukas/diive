@@ -1024,3 +1024,88 @@ class TestTimeSpanWindows(unittest.TestCase):
             results[window] = (hampel, localsd, sod.last_flag)
         for by_span, by_records in zip(results['12h'], results[72]):
             pd.testing.assert_series_equal(by_span, by_records)
+
+
+class TestRepeatStops(unittest.TestCase):
+    """Repeated runs must stop, and LOF must default to one pass.
+
+    L316: AbsoluteLimits day/night tested the input series on every pass, so
+    repeat=True found the same outliers forever. L317: LocalOutlierFactor
+    repeated by default, and every pass flagged the contamination fraction of
+    the remaining records again.
+    """
+
+    COORDS = dict(lat=46.815333, lon=9.855972, utc_offset=1)
+    MAX_PASSES = 5
+
+    @staticmethod
+    def _diel_series(periods: int = 48 * 10):
+        idx = pd.date_range('2024-06-01', periods=periods, freq='30min')
+        hours = idx.hour + idx.minute / 60
+        rng = np.random.default_rng(0)
+        return pd.Series(12 * np.sin((hours - 6) / 24 * 2 * np.pi) + 8
+                         + rng.normal(0, 1.5, periods), index=idx, name='TA')
+
+    def _calc_capped(self, detector, repeat):
+        """Run calc, failing the test instead of hanging when it does not stop."""
+        passes = []
+
+        def cb(iteration, n_outliers, filteredseries):
+            passes.append(n_outliers)
+            if iteration > self.MAX_PASSES:
+                raise RuntimeError(f"no convergence, outliers per pass: {passes}")
+
+        detector.calc(repeat=repeat, progress_callback=cb)
+        return passes
+
+    def test_absolutelimits_daytime_nighttime_repeat_stops(self):
+        s = self._diel_series()
+        kw = dict(minval_daytime=4.0, maxval_daytime=20.0,
+                  minval_nighttime=-2.0, maxval_nighttime=10.0, **self.COORDS)
+        once = AbsoluteLimits(series=s.copy(), **kw)
+        self._calc_capped(once, repeat=False)
+        repeated = AbsoluteLimits(series=s.copy(), **kw)
+        passes = self._calc_capped(repeated, repeat=True)
+
+        n_once = int((once.overall_flag == 2).sum())
+        self.assertGreater(n_once, 0)
+        # Fixed limits: the second pass on the cleaned series finds nothing.
+        self.assertEqual(passes, [n_once, 0])
+        pd.testing.assert_series_equal(repeated.overall_flag, once.overall_flag)
+        pd.testing.assert_series_equal(repeated.filteredseries, once.filteredseries,
+                                       check_names=False)
+
+    def test_absolutelimits_global_unchanged_by_repeat(self):
+        s = self._diel_series()
+        once = AbsoluteLimits(series=s.copy(), minval=-2.0, maxval=18.0)
+        self._calc_capped(once, repeat=False)
+        repeated = AbsoluteLimits(series=s.copy(), minval=-2.0, maxval=18.0)
+        passes = self._calc_capped(repeated, repeat=True)
+        self.assertEqual(len(passes), 1)
+        self.assertGreater(int((once.overall_flag == 2).sum()), 0)
+        pd.testing.assert_series_equal(repeated.overall_flag, once.overall_flag)
+
+    def test_lof_default_is_one_pass(self):
+        import inspect
+        from diive.preprocessing.outlier_detection.lof import LocalOutlierFactor
+        self.assertIs(inspect.signature(LocalOutlierFactor.calc).parameters['repeat'].default,
+                      False)
+        s = self._diel_series()
+        lof = LocalOutlierFactor(series=s.copy(), n_neighbors=20, contamination=0.01)
+        passes = []
+        lof.run(progress_callback=lambda i, n, fs: passes.append(n))
+        self.assertEqual(len(passes), 1)
+        single = LocalOutlierFactor(series=s.copy(), n_neighbors=20, contamination=0.01)
+        single.calc(repeat=False)
+        pd.testing.assert_series_equal(lof.overall_flag, single.overall_flag)
+        # About 1 % of the records, not most of the series.
+        self.assertLess(int((lof.overall_flag == 2).sum()), 0.02 * s.count())
+
+    def test_lof_codegen_keeps_repeat(self):
+        from diive.preprocessing.outlier_detection.codegen import (
+            absolutelimits_to_code, lof_to_code)
+        # Generated code must run what the GUI ran, whatever the calc default.
+        self.assertIn(").run()", lof_to_code({}, repeat=False))
+        self.assertIn(").run(repeat=True)", lof_to_code({}, repeat=True))
+        self.assertIn(").run()", absolutelimits_to_code({}, repeat=False))
+        self.assertIn(").run(repeat=True)", absolutelimits_to_code({}, repeat=True))

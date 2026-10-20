@@ -45,6 +45,9 @@ class LocalOutlierFactorTab(BaseOutlierTab):
     method_chip_label = "LOF"
     method_chip_bg = "#F3E5F5"
     method_chip_fg = "#6A1B9A"
+    # One pass by default, as in the library: with a numeric contamination every
+    # repeated pass flags that fraction of the remaining records again.
+    repeat_default = False
 
     def _add_method_rows(self, form: QFormLayout) -> None:
         self.n_neighbors = QSpinBox()

@@ -185,8 +185,10 @@ class AbsoluteLimits(FlagBase):
         """Calculate overall flag based on value limits.
 
         Args:
-            repeat: If True, outlier detection is repeated until all outliers
-                are removed (only applies to day/night mode).
+            repeat: If True, repeat the test on the cleaned series until a pass
+                finds no more outliers (day/night mode only). The limits are
+                fixed, so the second pass finds nothing and the result equals a
+                single pass.
             progress_callback: Optional ``callable(iteration, n_outliers,
                 filteredseries)`` invoked after each iteration (e.g. to drive a
                 progress bar / live-update the cleaned series).
@@ -220,9 +222,12 @@ class AbsoluteLimits(FlagBase):
 
     def _flagtests_global(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Global absolute limits test"""
-        ok = (self.series >= self.minval) & (self.series <= self.maxval)
+        # Test the series cleaned by earlier passes, so a repeated run stops once
+        # a pass finds nothing new.
+        s = self.filteredseries
+        ok = (s >= self.minval) & (s <= self.maxval)
         ok = ok[ok].index
-        rejected = (self.series < self.minval) | (self.series > self.maxval)
+        rejected = (s < self.minval) | (s > self.maxval)
         rejected = rejected[rejected].index
         n_outliers = len(rejected)
 
@@ -236,8 +241,10 @@ class AbsoluteLimits(FlagBase):
     def _flagtests_daytime_nighttime(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Separate daytime/nighttime absolute limits test"""
 
-        # Working data
-        s = self.series.copy().dropna()
+        # Working data: the series cleaned by earlier passes. Testing the input
+        # series instead finds the same outliers on every pass, and repeat=True
+        # never stops (L316).
+        s = self.filteredseries.copy().dropna()
         flag = pd.Series(index=self.series.index, data=np.nan)
 
         # Run for daytime (dt)

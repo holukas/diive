@@ -110,20 +110,20 @@ class LocalOutlierFactor(FlagBase):
     """Flag outliers using the scikit-learn Local Outlier Factor. See :meth:`__init__`.
 
     Example:
-        With a float ``contamination`` every pass flags that fraction again, so
-        run a single pass with ``repeat=False``:
+        ``run()`` makes one pass. With a float ``contamination`` every repeated
+        pass flags that fraction again, so keep ``repeat=False``:
 
         >>> import diive as dv
         >>> s = dv.load_exampledata_parquet()['NEE_CUT_REF_orig'].loc['2022-07']
         >>> lof = dv.outliers.LocalOutlierFactor(series=s, n_neighbors=20,
-        ...                                      contamination=0.01).run(repeat=False)
+        ...                                      contamination=0.01).run()
         >>> cleaned = lof.filteredseries
 
         Separate daytime and nighttime (needs the site location):
 
         >>> lof = dv.outliers.LocalOutlierFactor(series=s, n_neighbors=20, contamination=0.01,
         ...                                      separate_day_night=True,
-        ...                                      lat=46.815, lon=9.856, utc_offset=1).run(repeat=False)
+        ...                                      lat=46.815, lon=9.856, utc_offset=1).run()
     """
 
     flagid = "OUTLIER_LOF"
@@ -195,14 +195,14 @@ class LocalOutlierFactor(FlagBase):
                 create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon,
                                                utc_offset=utc_offset))
 
-    def calc(self, repeat: bool = True, progress_callback=None):
+    def calc(self, repeat: bool = False, progress_callback=None):
         """Calculate overall flag, based on individual flags from multiple iterations.
 
         Args:
-            repeat: If *True*, the outlier detection is repeated until all
-                outliers are removed. With a numeric *contamination*, each pass
-                flags that fraction of the remaining records again, so use
-                *repeat=False* in that case.
+            repeat: If *True*, repeat the detection on the cleaned series until a
+                pass finds no more outliers. Default *False* (one pass). With a
+                numeric *contamination*, each pass flags that fraction of the
+                remaining records again, so repeating removes most of the data.
             progress_callback: Optional ``callable(iteration, n_outliers,
                 filteredseries)`` invoked after each iteration (e.g. to drive a
                 progress bar / live-update the cleaned series).
