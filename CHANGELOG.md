@@ -143,6 +143,8 @@ Library (also used by the notebook and the GUI):
   - The evolution table adds how many records each test failed and warned.
   - The missing-values test flags no measured record, so the test table gives its count above the
     table and the evolution table leaves it out.
+- **Projects, timestamps:** `load_project` returns the time index as it was saved and no longer
+  converts a `TIMESTAMP_END` index to `TIMESTAMP_MIDDLE`.
 
 GUI only:
 
