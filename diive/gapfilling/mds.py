@@ -84,6 +84,34 @@ def _infer_nperday(index: pd.DatetimeIndex) -> int:
     return int(round(86400.0 / secs))
 
 
+def _regular_grid(df: DataFrame, verbose: int = 1) -> DataFrame:
+    """Return *df* on a regular time grid, or *df* itself if its index has a freq.
+
+    The MDS windows count records by position, so a missing timestamp would
+    stretch a window over more days than intended. Missing timestamps are
+    added as empty (NaN) records. Records that are not on the grid are removed
+    with a warning that gives their number. *df* itself is not changed.
+    """
+    if getattr(df.index, 'freq', None) is not None:
+        return df
+    from diive.core.times.times import DetectFrequency, continuous_timestamp_freq
+    try:
+        freq = DetectFrequency(df.index).get()
+    except Exception as e:
+        raise ValueError(
+            "FluxMDS cannot detect the time resolution of the input data, and MDS "
+            "needs a regular timestamp index. Check the timestamp index (sorted, no "
+            "duplicates, mostly one time step), or set the time step yourself, for "
+            "example df = df.asfreq('30min')."
+        ) from e
+    regular = continuous_timestamp_freq(data=df, freq=freq)
+    n_added = int((~regular.index.isin(df.index)).sum())
+    if n_added:
+        info(f"Added {n_added} missing timestamps as empty records "
+             f"(regular {freq} time grid)", verbose=verbose)
+    return regular
+
+
 MDS_MODES = ('diive', 'oneflux', 'reddyproc')
 
 # Vekuri et al. (2023) apply the symmetric mean to daytime data only and count
@@ -125,8 +153,15 @@ class _MdsGapFillingBase:
         expanding-window cascade.
 
         Args:
-            df: DataFrame with *flux*, *swin*, *ta* and *vpd*. The index must be
-                a regular (gap-free) datetime index.
+            df: DataFrame with *flux*, *swin*, *ta* and *vpd*, with a datetime
+                index. MDS needs a regular index without missing timestamps,
+                because its time windows count records. If ``df.index`` has no
+                frequency set, the data are put on a regular grid at the
+                detected time resolution: missing timestamps are added as
+                empty (NaN) records and filled like other gaps. Records that
+                are not on the grid are removed, with a warning that gives
+                their number. The results are on this regular grid. *df*
+                itself is not changed.
             flux: flux variable to gap-fill.
             swin: short-wave incoming radiation (W m-2).
             ta: air temperature (deg C).
@@ -185,6 +220,11 @@ class _MdsGapFillingBase:
                 record with a driver value is a candidate (ONEFlux
                 ``energy_proc``, H and LE).
             verbose: verbosity level.
+
+        Raises:
+            KeyError: If a column named in the arguments is not in *df*.
+            ValueError: If *mode* is not valid, or if ``df.index`` has no
+                frequency set and its time resolution cannot be detected.
         """
         if 'sym_mean' in legacy:
             raise TypeError(
@@ -209,6 +249,8 @@ class _MdsGapFillingBase:
                 "Column(s) not found in df - MDS requires flux, SWIN (W m-2), TA (deg C), VPD (kPa):\n"
                 + "\n".join(_msgs)
             )
+
+        df = _regular_grid(df, verbose=verbose)
 
         _qc = {'swin': swin_qc, 'ta': ta_qc, 'vpd': vpd_qc}
         _qc = {k: c for k, c in _qc.items() if c is not None}
@@ -595,6 +637,11 @@ class FluxMDS(_MdsGapFillingBase):
     plain mean, as ONEFlux does (use it to compare with ICOS or FLUXNET
     products), and ``mode='reddyproc'`` follows REddyProc's
     ``sMDSGapFill``. See ``mode`` in ``__init__``.
+
+    The time windows count records, so the data must be on a regular time
+    grid. Data with missing timestamps (an index without a frequency) are put
+    on the grid first, and the results are on that grid. See ``df`` in
+    ``__init__``.
 
     Measured agreement (``mode='oneflux'``): compared with ONEFlux's ``gf_mds`` tool, compiled from
     the ONEFlux 1.3.7 C source and run on the same input with the settings of

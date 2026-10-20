@@ -398,6 +398,8 @@ Library (also used by the notebook and the GUI):
 - **Generated L4.2 scripts:** they keep `gapfill_method=None` instead of falling back to `'mds'`.
 - **Yearly cumulative, histogram and ridgeline plots:** they no longer fail on infinite values or on
   a series without finite values, and show a note when nothing is left to plot.
+- **MDS gap-filling, missing timestamps:** `FluxMDS` adds missing timestamps as empty records and
+  fills them, instead of silently changing the fills.
 
 GUI only:
 

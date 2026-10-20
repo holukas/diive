@@ -281,6 +281,76 @@ class TestGapFilling(unittest.TestCase):
         self.assertFalse(filled['reddyproc'].iloc[short_gap].isna().any())
         self.assertEqual(int(filled['reddyproc'].isna().sum()), 61 * 48)
 
+    @staticmethod
+    def _mds_regular_case():
+        """40 days of half-hourly data with a diurnal cycle and 30 % flux gaps."""
+        import pandas as pd
+        n = 40 * 48
+        idx = pd.date_range('2021-06-01 00:15', periods=n, freq='30min')
+        rng = np.random.RandomState(42)
+        hr = idx.hour + idx.minute / 60
+        sw = np.clip(800 * np.sin((hr - 6) / 12 * np.pi), 0, None) + rng.uniform(0, 50, n)
+        ta = 15 + 5 * np.sin((hr - 9) / 24 * 2 * np.pi) + rng.normal(0, 1, n)
+        vpd = np.clip(1 + 0.5 * np.sin((hr - 9) / 24 * 2 * np.pi) + rng.normal(0, 0.2, n), 0, None)
+        flux = -0.02 * sw + 0.3 * ta + rng.normal(0, 2, n)
+        df = pd.DataFrame({'flux': flux, 'sw': sw, 'ta': ta, 'vpd': vpd}, index=idx)
+        df.loc[rng.uniform(size=n) < 0.3, 'flux'] = np.nan
+        return df
+
+    def test_fluxmds_missing_timestamps_filled_like_nan_records(self):
+        # L326: the MDS windows count records, so two days of missing
+        # timestamps stretched every window across them and changed 188 fills.
+        # The data are now put on the regular grid first.
+        import pandas as pd
+        from diive.gapfilling.mds import FluxMDS
+        df = self._mds_regular_case()
+        missing = df.index[10 * 48:12 * 48]
+        with_nan_rows = df.copy()
+        with_nan_rows.loc[missing, :] = np.nan
+        gapped = df.drop(index=missing)
+        self.assertIsNone(gapped.index.freq)
+        gapped_before = gapped.copy()
+        for mode in ('diive', 'oneflux', 'reddyproc'):
+            with self.subTest(mode=mode):
+                ref = FluxMDS(df=with_nan_rows, flux='flux', swin='sw', ta='ta', vpd='vpd',
+                              mode=mode, verbose=0)
+                ref.run()
+                m = FluxMDS(df=gapped, flux='flux', swin='sw', ta='ta', vpd='vpd',
+                            mode=mode, verbose=0)
+                m.run()
+                # Results are on the regular grid, the missing timestamps filled
+                pd.testing.assert_frame_equal(m.gapfilling_df_, ref.gapfilling_df_)
+                self.assertTrue(m.get_gapfilled_target().loc[missing].notna().all())
+                self.assertEqual(m.scores_, ref.scores_)
+        # The caller's data are not changed
+        pd.testing.assert_frame_equal(gapped, gapped_before)
+
+    def test_fluxmds_undetectable_time_resolution_raises(self):
+        import pandas as pd
+        from diive.gapfilling.mds import FluxMDS
+        df = self._mds_regular_case().iloc[:50]
+        df.index = pd.DatetimeIndex(sorted(pd.Timestamp('2021-01-01') + pd.to_timedelta(
+            np.random.RandomState(1).uniform(0, 1e7, len(df)), unit='s')))
+        with self.assertRaisesRegex(ValueError, 'cannot detect the time resolution'):
+            FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd', verbose=0)
+
+    def test_fluxmds_regular_index_without_freq_unchanged(self):
+        # A regular index without a set frequency gets no extra records, and
+        # every result is the same as with the frequency set.
+        import pandas as pd
+        from diive.gapfilling.mds import FluxMDS
+        df = self._mds_regular_case()
+        no_freq = df.copy()
+        no_freq.index = pd.DatetimeIndex(list(df.index))
+        self.assertIsNone(no_freq.index.freq)
+        a = FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd', mode='oneflux', verbose=0)
+        a.run()
+        b = FluxMDS(df=no_freq, flux='flux', swin='sw', ta='ta', vpd='vpd', mode='oneflux', verbose=0)
+        b.run()
+        self.assertTrue(a.gapfilling_df_.index.equals(df.index))
+        pd.testing.assert_frame_equal(a.gapfilling_df_, b.gapfilling_df_)
+        self.assertEqual(a.scores_, b.scores_)
+
     def test_gapfilling_longterm_randomforest(self):
         from diive.configs.exampledata import load_exampledata_parquet
         from diive.gapfilling.longterm import LongTermGapFillingRandomForestTS
