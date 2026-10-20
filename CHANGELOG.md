@@ -369,6 +369,8 @@ GUI only:
   `TypeError`.
 - **Plot tabs with several panels:** *Update plot* became active again right after a render
   or a switch between panels, although no setting had changed.
+- **Memory:** the first tab that loaded the machine-learning libraries stayed in memory after
+  it was closed and kept reacting to changes in Project settings.
 
 Examples:
 

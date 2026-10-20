@@ -137,6 +137,7 @@ Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to t
 
 - Validate input only at system boundaries. Let exceptions propagate unless you can recover. Comments explain WHY, not WHAT.
 - **Console output:** use the Rich helpers from `diive/core/utils/console.py` (`rule`/`info`/`success` at PROGRESS, `warn`/`error` at ERROR, `detail` at DEBUG, `_console.print` for reports). **No `print()` in production code** (allowed in examples, docstrings, `__main__`), no separate `Console`, no `logging` for general output.
+- **Import shap with `diive.core.ml.shap_import.import_shap()`, not `import shap`.** shap stores failed optional imports (`cv2`) with their traceback, which keeps the frames of the first importer alive. In the GUI that kept the first ML tab in memory (L313).
 - **[CRITICAL] Always pass `verbose=` when the caller has one**, even inside an `if self.verbose >= N:` guard. A bare `detail(msg)` resolves to the module default (PROGRESS), below `detail`'s own DEBUG level, so it never prints.
 - **Module docstring:** `MODULE_NAME: DESCRIPTIVE_TITLE`, `===` underline, one-line scope, then `Part of the diive library: https://github.com/holukas/diive`.
 - **Written text** (docs, comments, commit messages, examples): use the `/llm-detox` skill.
