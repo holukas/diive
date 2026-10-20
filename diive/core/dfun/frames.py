@@ -373,13 +373,21 @@ def convert_data_to_numeric(df: pd.DataFrame) -> pd.DataFrame:
 
 def get_len_data(filepath: Path,
                  skiprows: list = None,
-                 headerrows: list = None):
-    """Check number of columns of the first data row after the header part"""
+                 headerrows: list = None,
+                 delimiter: str = ',',
+                 compression='infer'):
+    """Check number of columns of the first data row after the header part.
+
+    Pass the file's *delimiter* and *compression* as the data are read with,
+    otherwise a file separated by ';' or tabs is counted as one column (L342).
+    """
     skip_num_lines = len(headerrows) + len(skiprows)
     first_data_row_df = pd.read_csv(filepath,
                                     skiprows=skip_num_lines,
                                     header=None,
-                                    nrows=1)
+                                    nrows=1,
+                                    sep=delimiter,
+                                    compression=compression)
     return first_data_row_df.columns.size
 
 
@@ -387,7 +395,9 @@ def parse_header(filepath: Path,
                  varnames_row: int,
                  varunits_row: int = None,
                  skiprows: list = None,
-                 headerrows: list = None) -> tuple[list, list, int]:
+                 headerrows: list = None,
+                 delimiter: str = ',',
+                 compression='infer') -> tuple[list, list, int]:
     """Read variable names and units from a csv file.
 
     Units are optional since they are not included in all data files.
@@ -406,6 +416,8 @@ def parse_header(filepath: Path,
         skiprows: Ignored rows at start of file.
             For example: [0, 1, 2] would ignore the first 3 rows of the file.
         headerrows: (deprecated)
+        delimiter: Column separator of the file, as the data are read with.
+        compression: Compression of the file, as the data are read with.
 
     Returns:
         Lists of variable names and units, and the number of header columns.
@@ -416,7 +428,9 @@ def parse_header(filepath: Path,
                      # header=headerrows,
                      # index_col=False,
                      header=None,
-                     nrows=2)
+                     nrows=2,
+                     sep=delimiter,
+                     compression=compression)
     varnames_list = df.loc[varnames_row].copy().tolist()
     if varunits_row is not None:
         varunits_list = df.loc[varunits_row].copy().tolist()

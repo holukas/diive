@@ -379,6 +379,7 @@ Library (also used by the notebook and the GUI):
   of the same step, for example `'1h'`, `'60min'` or `'h'` for hourly data and `'D'` for daily data.
 - **File readers, units:** the units in the metadata belong to the right variables again. Before, they
   moved by one place for every timestamp column in the file.
+- **File readers, separator:** files separated by `;` or tabs can be read with a matching filetype.
 
 GUI only:
 

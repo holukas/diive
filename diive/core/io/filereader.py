@@ -511,13 +511,17 @@ class DataFileReader:
             skiprows=self.data_skip_rows,
             headerrows=self.data_header_rows,
             varnames_row=self.data_varnames_row,
-            varunits_row=self.data_varunits_row)
+            varunits_row=self.data_varunits_row,
+            delimiter=self.data_delimiter or ',',
+            compression=self.compression or 'infer')
 
         # Get number of columns for data
         n_cols_data = get_len_data(
             filepath=self.filepath,
             skiprows=self.data_skip_rows,
-            headerrows=self.data_header_rows)
+            headerrows=self.data_header_rows,
+            delimiter=self.data_delimiter or ',',
+            compression=self.compression or 'infer')
 
         # Check for missing header columns (in case there are more data cols than header cols)
         varnames_list, varunits_list, self.generated_missing_header_cols_list = compare_len_header_vs_data(

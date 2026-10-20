@@ -337,5 +337,26 @@ class TestMetadataUnits(unittest.TestCase):
         self.assertEqual(m.loc['RECORD', 'UNITS'], 'RN')
 
 
+class TestDelimiter(unittest.TestCase):
+    """L342: a file separated by ';' reads like the same file separated by ','."""
+
+    def _read(self, filepath, delimiter):
+        from diive.core.io.filereader import DataFileReader
+        return DataFileReader(
+            filepath=filepath, data_header_section_rows=[0], data_skip_rows=[],
+            data_header_rows=[0], data_varnames_row=0, data_varunits_row=None,
+            data_na_vals=[-9999], data_freq="30min", data_delimiter=delimiter,
+            data_nrows=48, timestamp_idx_col=["TIMESTAMP_END"],
+            timestamp_datetime_format="%Y%m%d%H%M", timestamp_start_middle_end="end",
+            output_middle_timestamp=True, compression=None).get_data()[0]
+
+    def test_semicolon_file(self):
+        src = next(Path(ed.DIR_PATH).glob('exampledata_EDDYPRO-FLUXNET-CSV-30MIN_CH-AWS*.csv'))
+        with tempfile.TemporaryDirectory() as tmp:
+            semi = Path(tmp) / 'semicolon.csv'
+            semi.write_text(src.read_text(encoding='utf-8').replace(',', ';'), encoding='utf-8')
+            pd.testing.assert_frame_equal(self._read(semi, ';'), self._read(src, ','))
+
+
 if __name__ == '__main__':
     unittest.main()
