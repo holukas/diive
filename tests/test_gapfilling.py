@@ -40,7 +40,7 @@ class TestGapFilling(unittest.TestCase):
         gapfilled = qfill.get_gapfilled_target()
         self.assertGreater(len(gapfilled), 0)
         self.assertLess(gapfilled.isnull().sum(), len(gapfilled))  # Some gaps filled
-        self.assertEqual(gapfilled.isnull().sum(), 0)  # Some gaps remain (only filled where possible)
+        self.assertEqual(gapfilled.isnull().sum(), 0)  # No gaps remain: the fallback fills the rest
 
     def test_fluxmds(self):
         from collections import Counter
