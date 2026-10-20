@@ -30,17 +30,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# PySide6 (Qt) desktop GUI. Optional so headless/library users never pull in
-# Qt. Install with: pip install 'diive[gui]'  (or: uv sync --extra gui).
+# PySide6 (Qt) desktop GUI, including the VTK-based 3-D surface tabs (embedded
+# via pyvistaqt's QtInteractor). Optional so headless/library users never pull
+# in Qt or VTK. Install with: pip install 'diive[gui]'  (or: uv sync --extra gui).
 gui = [
     "pyside6>=6.8,<7.0",
-]
-# GPU-accelerated 3-D plotting for the desktop GUI (VTK-based, embedded via
-# pyvistaqt's QtInteractor). Separate from 'gui' because VTK is heavy and most
-# GUI users don't need 3-D; lazy-imported, so a 'gui'-only install never pulls
-# in VTK. Install with: pip install 'diive[gui,gui3d]'  (or: uv sync --extra
-# gui --extra gui3d).
-gui3d = [
     "pyvista>=0.44",
     "pyvistaqt>=0.11",
     # Packs the 3-D surface export to a true binary .glb (VTK only writes .gltf);
@@ -52,11 +46,13 @@ gui3d = [
 db = [
     "influxdb-client>=1.37.0",
 ]
-# Every optional part: desktop app, 3-D views and InfluxDB. Refers back to the
-# extras above, so each version pin lives in one place.
+# Everything for the working group: desktop app, InfluxDB and JupyterLab for the
+# database notebooks. JupyterLab has no extra of its own, because public users
+# bring their own notebook setup. Its pin matches the dev group's.
 # Install with: pip install "diive[all]"  (or: uv sync --extra all).
 all = [
-    "diive[gui,gui3d,db]",
+    "diive[gui,db]",
+    "jupyterlab>=4.3.6,<5.0.0",
 ]
 
 [project.scripts]

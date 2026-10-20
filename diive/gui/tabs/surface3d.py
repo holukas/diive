@@ -11,7 +11,7 @@ orbit around.
 Strict GUI<->library separation: the numeric grid is the library's
 `dv.plotting.datetime_surface_grid` (sanitize + pivot — domain logic); this tab
 only builds a PyVista mesh from those arrays and styles the scene (camera,
-colormap, lighting). PyVista/VTK is the optional ``gui3d`` extra; without it the
+colormap, lighting). PyVista/VTK comes with the ``gui`` extra; without it the
 tab shows install instructions instead of failing.
 
 Part of the diive library: https://github.com/holukas/diive
@@ -318,7 +318,7 @@ class Surface3DTab(SingleVariableExplorerTab):
     # --- sub-widgets ---------------------------------------------------
     def _build_missing_notice(self) -> QWidget:
         msg = QLabel(
-            "<b>3-D plotting needs the optional <code>gui3d</code> extra.</b><br><br>"
+            "<b>3-D plotting needs PyVista/VTK.</b><br><br>"
             "Install it, then reopen this tab:<br>"
             f"<code>{INSTALL_HINT}</code>")
         msg.setWordWrap(True)

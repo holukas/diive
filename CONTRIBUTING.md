@@ -32,14 +32,13 @@ uv creates the environment in `.venv` with a matching Python, installs diive in 
 adds the `dev` group (tests, linting, docs, Jupyter), which it syncs by default. Run commands
 through `uv run`, for example `uv run pytest tests/test_gapfilling.py -v` or `uv run diive-gui`.
 
-| Kind  | Name    | Adds                                  | Command                 |
-|-------|---------|---------------------------------------|-------------------------|
-| extra | `gui`   | PySide6 desktop app                   | `uv sync --extra gui`   |
-| extra | `gui3d` | PyVista/VTK 3-D surface tabs          | `uv sync --extra gui3d` |
-| extra | `db`    | `influxdb-client` (InfluxDB engine)   | `uv sync --extra db`    |
-| extra | `all`   | `gui`, `gui3d` and `db`               | `uv sync --extra all`   |
-| group | `dev`   | Test, lint, docs and notebook tools   | included in `uv sync`   |
-| group | `build` | PyInstaller (standalone Windows app)  | `uv sync --group build` |
+| Kind  | Name    | Adds                                            | Command                 |
+|-------|---------|-------------------------------------------------|-------------------------|
+| extra | `gui`   | PySide6 desktop app with 3-D tabs               | `uv sync --extra gui`   |
+| extra | `db`    | `influxdb-client` (internal use)                | `uv sync --extra db`    |
+| extra | `all`   | `gui`, `db` and JupyterLab                      | `uv sync --extra all`   |
+| group | `dev`   | Test, lint, docs and notebook tools             | included in `uv sync`   |
+| group | `build` | PyInstaller (standalone Windows app)            | `uv sync --group build` |
 
 Combine them as needed, e.g. `uv sync --extra gui --extra db`. `uv sync --all-extras` installs all
 extras, and `uv sync --all-extras --all-groups` also adds the `build` group.

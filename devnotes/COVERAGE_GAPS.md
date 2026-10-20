@@ -702,7 +702,7 @@ direct test of the dispatch table, not just the individual correction functions.
 
 | Symbol | Status |
 |---|---|
-| `dv.plotting.DateTimeSurface`, `datetime_surface_grid` | `core/plotting/surface_grid.py` 48 %, all GUI-only. Runs without the `gui3d` extra, so testable headless |
+| `dv.plotting.DateTimeSurface`, `datetime_surface_grid` | `core/plotting/surface_grid.py` 48 %, all GUI-only. Runs without PyVista, so testable headless |
 | `dv.events.CATEGORY_COLORS` | no test, no example |
 | `dv.load_parquet_many` | no test, no example, despite a documented `progress_callback` |
 | `UstarDetectionMPT` (removed since, `85eb97cc`), `UstarThresholdConstantScenarios`, `FlagSingleConstantUstarThreshold` | `flux/lowres/ustarthreshold.py` **29 %**, 92 of 126 covered lines GUI-only |

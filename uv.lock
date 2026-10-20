@@ -483,6 +483,7 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "influxdb-client" },
+    { name = "jupyterlab" },
     { name = "pyside6" },
     { name = "pyvista" },
     { name = "pyvistaqt" },
@@ -493,8 +494,6 @@ db = [
 ]
 gui = [
     { name = "pyside6" },
-]
-gui3d = [
     { name = "pyvista" },
     { name = "pyvistaqt" },
     { name = "trimesh" },
@@ -524,15 +523,16 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "bokeh", specifier = ">=3.7.1,<4.0.0" },
-    { name = "diive", extras = ["gui", "gui3d", "db"], marker = "extra == 'all'" },
+    { name = "diive", extras = ["gui", "db"], marker = "extra == 'all'" },
     { name = "influxdb-client", marker = "extra == 'db'", specifier = ">=1.37.0" },
+    { name = "jupyterlab", marker = "extra == 'all'", specifier = ">=4.3.6,<5.0.0" },
     { name = "matplotlib", specifier = ">=3.10.0,<4.0.0" },
     { name = "numpy", specifier = ">=2.2.4,<3.0.0" },
     { name = "pandas", specifier = ">=3.0.0,<4.0.0" },
     { name = "pyarrow", specifier = ">=19.0.1,<20.0.0" },
     { name = "pyside6", marker = "extra == 'gui'", specifier = ">=6.8,<7.0" },
-    { name = "pyvista", marker = "extra == 'gui3d'", specifier = ">=0.44" },
-    { name = "pyvistaqt", marker = "extra == 'gui3d'", specifier = ">=0.11" },
+    { name = "pyvista", marker = "extra == 'gui'", specifier = ">=0.44" },
+    { name = "pyvistaqt", marker = "extra == 'gui'", specifier = ">=0.11" },
     { name = "pyyaml", specifier = ">=6.0.2,<7.0.0" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "scikit-learn", specifier = ">=1.6.1,<2.0.0" },
@@ -540,12 +540,12 @@ requires-dist = [
     { name = "shap", specifier = ">=0.50.0,<1.0.0" },
     { name = "statsmodels", specifier = ">=0.14.4,<0.15.0" },
     { name = "threadpoolctl", specifier = ">=3.1.0,<4.0.0" },
-    { name = "trimesh", marker = "extra == 'gui3d'", specifier = ">=4.0" },
+    { name = "trimesh", marker = "extra == 'gui'", specifier = ">=4.0" },
     { name = "uncertainties", specifier = ">=3.2.2,<4.0.0" },
     { name = "xgboost", specifier = ">=3.0.0,<4.0.0" },
     { name = "yellowbrick", specifier = ">=1.5,<2.0" },
 ]
-provides-extras = ["gui", "gui3d", "db", "all"]
+provides-extras = ["gui", "db", "all"]
 
 [package.metadata.requires-dev]
 build = [{ name = "pyinstaller", specifier = ">=6.10" }]

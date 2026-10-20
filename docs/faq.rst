@@ -66,8 +66,8 @@ A: Yes, a PySide6 desktop app. It ships as the optional ``gui`` extra:
       uv sync --extra gui
       uv run diive-gui
 
-   The 3D surface tabs need a second extra, ``gui3d``. The GUI only calls into
-   the library, so anything you can do there can also be scripted.
+   The GUI only calls into the library, so anything you can do there can also
+   be scripted.
 
 Data and loading
 ================

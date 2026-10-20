@@ -1493,7 +1493,7 @@ class TestPlotClasses(unittest.TestCase):
                 self.assertEqual(len(ax.patches), 2 * len(yearly))
                 plt.close(fig)
 
-    # --- 3D surface grid (library path, no gui3d extra needed) ---
+    # --- 3D surface grid (library path, no PyVista needed) ---
 
     def test_datetime_surface_grid_shape_and_axes(self):
         from diive.core.plotting.surface_grid import datetime_surface_grid
