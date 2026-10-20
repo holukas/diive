@@ -426,6 +426,10 @@ GUI only:
   the data or loads the example data.
 - **Rename after delete:** renaming a variable to the name of a deleted variable works and updates
   every tab.
+- **Stepwise screening without a site:** a step that separates daytime and nighttime refuses to run
+  until a site is set in Project settings.
+- **Reset to all variables:** the reset is kept when the project is saved and reopened.
+- **Select records by condition:** only numeric variables are offered as the condition.
 
 Examples:
 

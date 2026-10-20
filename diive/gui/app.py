@@ -1473,6 +1473,11 @@ class MainWindow(QMainWindow):
         if self._var_subset is None:
             return
         self._var_subset = None
+        # Clear the picks of open Select variables tabs too, so they do not show
+        # (and a saved project does not keep) the discarded subset (L336).
+        for tab in self._menu_tab_list:
+            if getattr(tab, "_menu_label", None) == "Select variables"                     and hasattr(tab, "set_active_subset"):
+                tab.set_active_subset([])
         self._apply_range()
         success("Reverted to all variables")
 

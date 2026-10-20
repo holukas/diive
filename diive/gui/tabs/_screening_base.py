@@ -48,6 +48,7 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import copy
+import inspect
 import threading
 
 import diive as dv
@@ -109,6 +110,39 @@ class _StepwiseSignals(QObject):
 #: out of the way so screening a variable literally named "SW_IN_POT" can't
 #: collide with (and overwrite) the target column.
 _SWINPOT_COL = "_SWINPOT_QCF_"
+
+#: Status text when a step needs the site but Project settings have none. Same
+#: wording as the standalone outlier tabs.
+_NO_SITE_MESSAGE = (
+    "Daytime/nighttime separation needs the site location, but no "
+    "coordinates are configured. Set latitude, longitude and UTC offset "
+    "in Settings -> Project settings first, or untick 'Separate daytime "
+    "/ nighttime' (running now would silently split at (0, 0) at UTC and "
+    "corrupt the result).")
+
+#: Per-period limits of the absolute-limits test: setting one turns the
+#: day/night split on in the library.
+_PERIOD_LIMITS = ("minval_daytime", "maxval_daytime",
+                  "minval_nighttime", "maxval_nighttime")
+
+
+def _step_needs_site(step: dict) -> bool:
+    """True when *step* splits day from night, which needs the site location.
+
+    A step without ``separate_day_night`` in its kwargs gets the method's
+    default (on for Hampel), as the detector would."""
+    kwargs = step.get("kwargs") or {}
+    if kwargs.get("trim_daytime") or kwargs.get("trim_nighttime"):
+        return True
+    if any(kwargs.get(k) is not None for k in _PERIOD_LIMITS):
+        return True
+    if "separate_day_night" in kwargs:
+        return bool(kwargs["separate_day_night"])
+    method = getattr(StepwiseOutlierDetection, step.get("method", ""), None)
+    if method is None:
+        return False
+    param = inspect.signature(method).parameters.get("separate_day_night")
+    return param is not None and param.default is True
 
 
 class ScreeningTabBase(DiiveTab):
@@ -749,6 +783,12 @@ class ScreeningTabBase(DiiveTab):
         # this every extra click also started another CPU-heavy thread that ran
         # to completion for nothing.
         if self._running:
+            return
+        # Refuse before anything changes: a day/night split without the site
+        # would run at (0, 0) at UTC, as the standalone outlier tabs warn.
+        if (not site.manager.configured
+                and any(_step_needs_site(s) for s in self._enabled_steps())):
+            self.status.setText(_NO_SITE_MESSAGE)
             return
         # Bump the run id so any in-flight worker's result is ignored on arrival
         # (results can land out of order under rapid edits).

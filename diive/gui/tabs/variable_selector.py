@@ -116,8 +116,11 @@ class VariableSelectorTab(DiiveTab):
         sel = [n for n in (state.get("selected") or []) if n in self._all]
         if not sel:
             return
+        # Show the picks only. The project's own saved subset decides what is
+        # active: applying the picks here brought back a subset the user had
+        # reset before saving.
         self.picker.set_selected(sel)
-        self._confirm()  # re-apply the subset app-wide
+        self._on_changed()
 
     def on_data_loaded(self, df, created: set | None = None) -> None:
         self._all = [str(c) for c in df.columns]
