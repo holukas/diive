@@ -6,58 +6,69 @@ This guide covers development setup, running tests, and contributing code.
 
 ### Prerequisites
 
-- Python 3.12 or 3.13
-- Git
-- **uv** (modern, fast package manager) - [Install uv](https://docs.astral.sh/uv/getting-started/)
+- Python 3.12 or 3.13 (uv installs it itself)
+- [Git](https://git-scm.com/downloads)
+- Either [uv](https://docs.astral.sh/uv/getting-started/installation/), or a conda or venv environment
+  with pip 25.1 or newer
 
-### Setup Steps with uv (Recommended)
+### Getting the code
 
-1. **Clone the repository:**
+Fork the repository on GitHub if you plan to open a pull request, then clone it. New work starts
+from the `indev` branch, and pull requests target `indev`.
 
 ```bash
-git clone https://github.com/holukas/diive.git
+git clone https://github.com/holukas/diive.git   # or the URL of your fork
 cd diive
+git checkout indev
 ```
 
-2. **Install dependencies and development tools:**
+### Setup with uv (recommended)
 
 ```bash
-uv sync                              # Core dependencies + the 'dev' group (synced by default)
-uv sync --all-extras --all-groups    # Everything: 'gui'/'gui3d' extras + 'db'/'dev'/'build' groups
+uv sync --extra gui
 ```
 
-The optional pieces are split across two uv mechanisms, so `--all-extras` alone is not "everything":
+uv creates the environment in `.venv` with a matching Python, installs diive in editable mode and
+adds the `dev` group (tests, linting, docs, Jupyter), which it syncs by default. Run commands
+through `uv run`, for example `uv run pytest tests/test_gapfilling.py -v` or `uv run diive-gui`.
 
-| Kind | Name | Pulls in | Install |
-|---|---|---|---|
-| extra | `gui` | PySide6 desktop GUI | `uv sync --extra gui` |
-| extra | `gui3d` | PyVista/VTK 3D surface tabs | `uv sync --extra gui3d` |
-| extra + group | `db` | `influxdb-client` (InfluxDB engine) | `uv sync --group db` |
-| group | `dev` | test/lint/docs/notebook tooling | synced by default |
-| group | `build` | PyInstaller (standalone GUI build) | `uv sync --group build` |
+| Kind  | Name    | Adds                                  | Command                 |
+|-------|---------|---------------------------------------|-------------------------|
+| extra | `gui`   | PySide6 desktop app                   | `uv sync --extra gui`   |
+| extra | `gui3d` | PyVista/VTK 3-D surface tabs          | `uv sync --extra gui3d` |
+| extra | `db`    | `influxdb-client` (InfluxDB engine)   | `uv sync --extra db`    |
+| extra | `all`   | `gui`, `gui3d` and `db`               | `uv sync --extra all`   |
+| group | `dev`   | Test, lint, docs and notebook tools   | included in `uv sync`   |
+| group | `build` | PyInstaller (standalone Windows app)  | `uv sync --group build` |
 
-3. **Verify installation:**
+Combine them as needed, e.g. `uv sync --extra gui --extra db`. `uv sync --all-extras` installs all
+extras, and `uv sync --all-extras --all-groups` also adds the `build` group.
+
+### Setup with pip (conda or venv)
+
+Activate an environment with Python 3.12 or 3.13, then install diive in editable mode together
+with the `dev` group:
 
 ```bash
-uv run pytest tests/ -v
+python -m pip install --upgrade pip              # --group needs pip 25.1 or newer
+python -m pip install -e ".[gui]" --group dev
 ```
 
-All tests should pass.
+Other extras go in the brackets (e.g. `".[all]"`), and `--group build` adds PyInstaller.
 
-### Alternative Setup with pip and venv
-
-`uv` is the supported path. If you use pip instead, note that the development
-tooling lives in dependency groups (a PEP 735 feature), not in an extra, so
-`pip install -e .[dev]` does not exist. Install the package, then the test
-tooling by hand:
+### Verify the setup
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -e .          # Add extras if needed, e.g. pip install -e '.[gui]'
-pip install pytest
-pytest tests/ -v
+uv run pytest tests/test_gapfilling.py -v   # with pip: pytest tests/test_gapfilling.py -v
 ```
+
+See [Running Tests](#running-tests) for the full suite.
+
+### Standalone Windows app
+
+To build the desktop app as a Windows program that runs without Python, run
+`uv sync --extra gui --group build` and then `.\packaging\build_gui.ps1 -Clean` in PowerShell.
+Details: [packaging/README.md](packaging/README.md).
 
 ## Running Tests
 

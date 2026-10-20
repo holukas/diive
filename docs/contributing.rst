@@ -9,7 +9,7 @@ only one copy to keep current:
 
 `CONTRIBUTING.md on GitHub <https://github.com/holukas/diive/blob/main/CONTRIBUTING.md>`_
 
-It covers the development setup with uv, running the tests, code style, adding
+It covers the development setup with uv or pip, running the tests, code style, adding
 examples and releasing. For a development install, see also :doc:`installation`.
 
 Bugs and feature requests go to the
