@@ -130,8 +130,9 @@ buttons always stay readable.
 
 The sections below are grouped by feature area, and each says which menu it lives
 under. A few menus gather more than one area: **File ▸ Database** holds the InfluxDB
-tools, the **Data** menu holds the event markers, and **Cleaning** holds the outlier
-filters and the corrections together.
+tools (only in installations with database support, see [Database](#database)), the
+**Data** menu holds the event markers, and **Cleaning** holds the outlier filters and
+the corrections together.
 
 ---
 
@@ -385,7 +386,7 @@ Everything else matches the 3D surface tab: the same relief controls (style, col
 exaggeration, opacity, Y stretch, smooth terrain, shadows, smooth shading, mesh), the same
 view presets and orbit/flyover animations, and the same **VR (.glb)** / **3D print (.stl)**
 exports. **Copy Python** copies a script that grids the data with
-`dv.analysis.GridAggregator` and draws the surface in Matplotlib (no 3-D extra needed).
+`dv.analysis.GridAggregator` and draws the surface in Matplotlib (no PyVista needed).
 
 ### Wind rose
 
@@ -1470,8 +1471,9 @@ VPD combos, auto-seeded by name with ✓ / ✗ markers; gap-filled `_f` versions
 preferred). Set the **similarity tolerances** (SWIN low/high, TA in °C, VPD in kPa)
 and the minimum number of similar records to average. Driver units matter: TA must be
 in °C and VPD in kPa. For VPD in hPa, untick **VPD driver is in kPa**; the VPD
-tolerance is then converted to hPa. diive does not check the units, so a column in the
-wrong unit produces a wrong fill with no warning.
+tolerance is then converted to hPa. diive does not check the units. The tab only warns
+when the VPD column name contains `hPa` or `kPa` and does not match the box. In all
+other cases a column in the wrong unit produces a wrong fill with no warning.
 
 **Driver QC flags (optional)** gives each driver a flag column: 0 = measured, above 0 =
 gap-filled, for example `FLAG_TA_gfXG_ISFILLED` from a diive gap-filling tab or FLUXNET

@@ -64,7 +64,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `tabs/site.py` | **Project settings** tab — author/description + site details form (→ `site.manager`) plus the **notes wall** (`widgets/notes_wall.py`) filling the empty space |
 | `tabs/plotting.py` | `PlottingTab(plot_type)` — one closable tab per plot method (opened from the Plot menu); var list + live settings panel + canvas |
 | `icons.py` | `menu_icon(label)` — tiny `QPainter`-drawn glyphs for **all** menu entries (folder/disk/calendar/gear/palette/… + plot shapes), keyword-matched |
-| `widgets/plot_settings.py` | `PlotSettingsPanel(plot_type)` — live plot-parameter controls (between list and canvas); `changed` re-renders; defines `HEATMAP`/`TIMESERIES` |
+| `widgets/plot_settings.py` | `PlotSettingsPanel(plot_type)` — plot-parameter controls (between list and canvas); `changed` enables the tab's **Update plot** button; defines `HEATMAP`/`TIMESERIES` |
 | `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
 | `tabs/fluxchain.py` | Flux post-processing chain tab — Input + L2 + L3.1 + L3.2 + L3.3 + L4.1 via the composable callables (`init_flux_data`/`run_level2`/`run_level31`/`make_level32_detector`+`run_level32`/`run_level33_constant_ustar`/`run_level33_ustar_detection`/`run_level41_*`); L3.3 supports constant thresholds **or** moving-point detection (Apply: CUT / VUT); shows the deepest level's QCF-filtered flux as a heatmap, **Copy Python** emits a reproducible script. Per-level **Add to dataset** buttons (`_add_level`, gated on the level having run) emit that level's columns + QCF-filtered flux via `featuresCreated` (DERIVED provenance) |
 | `tabs/ustar_detection.py` | **USTAR detection** tab — standalone moving-point u\* threshold detection (`UstarMovingPointDetection`): single seasonal detection (per-season + annual) or multi-year bootstrap (`UstarBootstrapThresholds`) for VUT (per-year) + CUT (constant); table + diagnostic plot, worker thread |
@@ -490,7 +490,7 @@ panel only renders.
   building the toolbar so icons stay dark on the white background (otherwise white-on-white on dark system themes).
 - **Use synchronous `canvas.draw()`, not `draw_idle()`,** after a user action so the plot updates immediately.
 - **Combo-box popups show a native frame/shadow as black bars** on the frameless translucent window. `widgets/combo.py::
-  install_combo_popup_fix(app)` (called in `run()`) installs one app-wide event filter that re-flags every popup
+  install_combo_popup_fix(app)` (called in `_create_application()`) installs one app-wide event filter that re-flags every popup
   container frameless + no-shadow + translucent at creation — fixes all dropdowns from one place.
 - **`QMenu` popups render black** the same way (the menu *is* the popup, so the combo trick can't catch them — Polish/Show
   don't route through the app filter reliably). Build every context menu with `widgets/menu.py::studio_menu(parent)`,
