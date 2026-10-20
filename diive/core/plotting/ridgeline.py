@@ -18,6 +18,7 @@ import pandas as pd
 from matplotlib.pyplot import cm
 from sklearn.neighbors import KernelDensity
 
+import diive.core.plotting.plotfuncs as pf
 from diive.core.plotting.styles import LightTheme as theme
 from diive.core.plotting.styles.LightTheme import adjust_color_lightness
 from diive.core.plotting.styles.format import FormatStyle
@@ -38,18 +39,14 @@ class RidgeLinePlot:
     def __init__(self, series: pd.Series):
         """Set up a ridgeline plot for *series* (one stacked density per group/year). See :meth:`plot`.
 
-        Missing values are dropped up front: the kernel density estimator rejects
-        NaN, so any gappy series would otherwise raise. Dropping here (rather than
-        per group) also means a group left without a single valid value gets no
-        ridge at all, instead of failing at fit time.
-
-        Raises:
-            ValueError: If *series* has no valid values, i.e. there is nothing to plot.
+        Missing values (NaN) and infinite values (+inf, -inf) are dropped up
+        front: the kernel density estimator rejects both, so any gappy series
+        would otherwise raise. Dropping here (rather than per group) also means a
+        group left without a single finite value gets no ridge at all, instead of
+        failing at fit time. Without any finite value, :meth:`plot` draws one
+        empty axes with the note "no finite values".
         """
-        self.series = series.dropna()
-        if self.series.empty:
-            raise ValueError(f"RidgeLinePlot: series '{series.name}' has no valid "
-                             f"(non-missing) values, there is nothing to plot.")
+        self.series, self.n_infinite = pf.drop_infinite(series.dropna())
 
         self.xlim = None
         self.ylim = None
@@ -145,6 +142,9 @@ class RidgeLinePlot:
                             shade_percentile=shade_percentile, show_mean_line=show_mean_line,
                             fig_dpi=fig_dpi, showplot=showplot,
                             ascending=ascending, style=style, kd_kwargs=kd_kwargs, fig=fig)
+        if self.series.empty:
+            self._plot_empty()
+            return
         self.ys, self.ys_unique = self._y_index(how=how)
         self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
         self.assigned_colors = self._assign_colors(how=how)
@@ -186,8 +186,7 @@ class RidgeLinePlot:
             y_index_colors[m] = next(self.colors)
         return y_index_colors
 
-    def _plot(self):
-
+    def _make_fig(self):
         # Draw into a caller-supplied figure (e.g. a GUI canvas) when given,
         # otherwise create a standalone one.
         if getattr(self, "_fig_external", None) is not None:
@@ -196,6 +195,19 @@ class RidgeLinePlot:
         else:
             self.fig = plt.figure(figsize=(self.fig_width, self.fig_height),
                                   layout=None, dpi=self.fig_dpi)
+
+    def _plot_empty(self):
+        """Draw one empty axes with a note: no finite value is left to plot (L353)."""
+        self._make_fig()
+        self.ax = self.fig.add_subplot(111)
+        self.ax.set_xticks([])
+        self.ax.set_yticks([])
+        pf.no_values_note(self.ax, f"{self.series.name}: no finite values")
+        if self.showplot:
+            self.fig.show()
+
+    def _plot(self):
+        self._make_fig()
 
         gs = (grid_spec.GridSpec(len(self.ys_unique), 1))
         # Set hspace up front (negative -> ridges overlap). Doing it here, before

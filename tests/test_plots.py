@@ -1557,10 +1557,13 @@ class TestPlotClasses(unittest.TestCase):
         labels = [t.get_text() for ax in fig.axes for t in ax.texts]
         self.assertNotIn("7", labels)
         plt.close(fig)
-        # A series with nothing left at all says so rather than failing inside sklearn.
-        with self.assertRaises(ValueError) as ctx:
-            RidgeLinePlot(self.series * np.nan)
-        self.assertIn("no valid", str(ctx.exception))
+        # A series with nothing left at all says so on the figure rather than
+        # failing inside sklearn (L353, it raised ValueError before).
+        fig = plt.figure()
+        RidgeLinePlot(self.series * np.nan).plot(fig=fig, showplot=False)
+        labels = [t.get_text() for ax in fig.axes for t in ax.texts]
+        self.assertIn("TA: no finite values", labels)
+        plt.close(fig)
 
     def test_cumulative_labels_an_all_nan_column_instead_of_raising(self):
         """L69: an unfilled scenario column is all-NaN, and had no legend total to index."""
@@ -1827,3 +1830,98 @@ class TestL219PlottingFixes(unittest.TestCase):
                 # The same value as in __init__ is still accepted.
                 hm.plot(ax=ax, fig=fig, ax_orientation='vertical')
                 self.assertIn(ax.get_ylabel(), ('Date', 'Year'))
+
+
+class TestL353NonFiniteValues(unittest.TestCase):
+    """L353: CumulativeYear, HistogramPlot and RidgeLinePlot raised on +inf/-inf,
+    CumulativeYear and RidgeLinePlot also on an all-NaN series.
+
+    Infinite values are left out. When no finite value is left, the plot shows
+    a note instead of raising. Axes come from a bare ``Figure()``.
+    """
+
+    NOTE = "TA: no finite values"
+
+    @staticmethod
+    def _series(kind: str):
+        import numpy as np
+        series = _synthetic_series(years=2)
+        if kind == "+inf":
+            series.iloc[[100, 9000]] = np.inf
+        elif kind == "-inf":
+            series.iloc[[100, 9000]] = -np.inf
+        elif kind == "allnan":
+            series[:] = np.nan
+        elif kind == "allinf":
+            series[:] = np.inf
+        return series
+
+    @staticmethod
+    def _texts(fig):
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        FigureCanvasAgg(fig).draw()  # limits and ticks are resolved only when drawing
+        return [t.get_text() for ax in fig.axes for t in ax.texts]
+
+    def _plot_cumulative_year(self, series):
+        from matplotlib.figure import Figure
+        from diive.core.plotting.cumulative import CumulativeYear
+        fig = Figure()
+        cy = CumulativeYear(series, show_reference=True)
+        cy.plot(ax=fig.add_subplot(), showplot=False)
+        return fig, cy
+
+    def _plot_histogram(self, series):
+        from matplotlib.figure import Figure
+        from diive.core.plotting.histogram import HistogramPlot
+        fig = Figure()
+        hist = HistogramPlot(series, method='n_bins', n_bins=10)
+        hist.plot(ax=fig.add_subplot(), show_kde=True, show_mean=True, show_median=True)
+        return fig, hist
+
+    def _plot_ridgeline(self, series):
+        from matplotlib.figure import Figure
+        from diive.core.plotting.ridgeline import RidgeLinePlot
+        fig = Figure()
+        ridge = RidgeLinePlot(series)
+        ridge.plot(fig=fig, how='monthly', showplot=False)
+        return fig, ridge
+
+    def test_infinite_values_are_left_out(self):
+        import numpy as np
+        finite = _synthetic_series(years=2)
+        for kind in ("+inf", "-inf"):
+            series = self._series(kind)
+            with self.subTest(kind=kind, cls="CumulativeYear"):
+                fig, cy = self._plot_cumulative_year(series)
+                self.assertNotIn(self.NOTE, self._texts(fig))
+                self.assertEqual(cy.n_infinite, 2)
+                self.assertFalse(np.isinf(cy.cumulatives_per_year_df.to_numpy()).any())
+                self.assertTrue(np.isfinite(fig.axes[0].get_ylim()).all())
+            with self.subTest(kind=kind, cls="HistogramPlot"):
+                fig, hist = self._plot_histogram(series)
+                self.assertNotIn(self.NOTE, self._texts(fig))
+                self.assertEqual(hist.n_infinite, 2)
+                self.assertEqual(hist.counts.sum(), len(finite) - 2)
+                self.assertTrue(np.isfinite(hist.edges).all())
+            with self.subTest(kind=kind, cls="RidgeLinePlot"):
+                fig, ridge = self._plot_ridgeline(series)
+                self.assertNotIn(self.NOTE, self._texts(fig))
+                self.assertEqual(ridge.n_infinite, 2)
+                self.assertEqual(len(fig.axes), 12)
+                self.assertTrue(np.isfinite(ridge.xlim).all())
+
+    def test_no_finite_values_shows_a_note(self):
+        for kind in ("allnan", "allinf"):
+            series = self._series(kind)
+            with self.subTest(kind=kind, cls="CumulativeYear"):
+                fig, _ = self._plot_cumulative_year(series)
+                self.assertIn(self.NOTE, self._texts(fig))
+            with self.subTest(kind=kind, cls="HistogramPlot"):
+                fig, _ = self._plot_histogram(series)
+                # All-NaN keeps the note it had before L353.
+                note = "TA: no data" if kind == "allnan" else self.NOTE
+                self.assertIn(note, self._texts(fig))
+            with self.subTest(kind=kind, cls="RidgeLinePlot"):
+                fig, _ = self._plot_ridgeline(series)
+                self.assertEqual(len(fig.axes), 1)
+                self.assertIn(self.NOTE, self._texts(fig))

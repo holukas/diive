@@ -396,6 +396,8 @@ Library (also used by the notebook and the GUI):
 - **Linear interpolation:** filling short gaps is much faster on long records (10 years of 30-min data
   in 0.02 s instead of 15 s), with the same results.
 - **Generated L4.2 scripts:** they keep `gapfill_method=None` instead of falling back to `'mds'`.
+- **Yearly cumulative, histogram and ridgeline plots:** they no longer fail on infinite values or on
+  a series without finite values, and show a note when nothing is left to plot.
 
 GUI only:
 

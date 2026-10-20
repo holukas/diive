@@ -258,6 +258,23 @@ def non_numeric_error(ax):
             verticalalignment='center', transform=ax.transAxes, bbox=dict(facecolor='red', alpha=0.5))
 
 
+def drop_infinite(series: Series) -> tuple[Series, int]:
+    """Return *series* without its +inf and -inf records, and the number removed.
+
+    Missing values (NaN) stay. Without infinite values the same object is
+    returned, so finite data take the same path as before.
+    """
+    is_inf = np.isinf(series.to_numpy(dtype=float, na_value=np.nan))
+    n_inf = int(is_inf.sum())
+    return (series[~is_inf] if n_inf else series), n_inf
+
+
+def no_values_note(ax, text: str):
+    """Write *text* in the centre of an axes that has nothing to plot."""
+    ax.text(0.5, 0.5, text, size=16, color="black", transform=ax.transAxes,
+            horizontalalignment='center', verticalalignment='center')
+
+
 def clear_ax(ax):
     """Clear all artists from *ax*."""
     ax.clear()

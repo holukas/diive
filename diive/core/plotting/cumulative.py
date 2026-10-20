@@ -45,7 +45,8 @@ class CumulativeYear:
         """Compute the cumulative sum of each year by day of year.
 
         Args:
-            series: Time series to accumulate. NaNs are dropped.
+            series: Time series to accumulate. Missing values (NaN) and infinite
+                values (+inf, -inf) are left out.
             series_units: Units shown on the y-axis label, LaTeX format is supported.
             yearly_end_date: Calculate cumulatives up to this date, given as string,
                 e.g. "08-11" means that cumulatives for each year are calculated until
@@ -75,6 +76,9 @@ class CumulativeYear:
         self.highlight_year_color = highlight_year_color
 
         self.series = self.series.dropna()
+        # An infinite value would make its year's cumulative and the y-limits
+        # infinite (L353).
+        self.series, self.n_infinite = pf.drop_infinite(self.series)
         # self.series_full = self.series.copy()
 
         self.series = keep_years(data=self.series, start_year=self.start_year, end_year=self.end_year)
@@ -163,6 +167,9 @@ class CumulativeYear:
              digits_after_comma: int = 2, highlight_year_color: str = None):
         """Plot one cumulative-sum curve per year on a shared day-of-year axis.
 
+        Without a single finite value to accumulate, the axes stay empty and show
+        the note "no finite values".
+
         Args:
             ax: Matplotlib axes to draw on; a standalone figure is created if None.
             format_style: Shared chrome (labels/fonts/grid/legend). None = house style.
@@ -188,6 +195,17 @@ class CumulativeYear:
             self.fig = ax.get_figure()
             self._own_fig = False
         self.ax.xaxis.axis_date()
+
+        # Nothing finite left (all NaN or all inf): there is no year, no last day
+        # of year and no y-range for the title and the limits.
+        if self.cumulatives_per_year_df.empty:
+            pf.no_values_note(self.ax, f"{self.varname}: no finite values")
+            chrome = style.merged(title="")
+            chrome.show_legend = False
+            chrome.apply(ax=self.ax, default_xlabel='Month', default_ylabel=self.varname)
+            if self._own_fig and showplot:
+                self.fig.show()
+            return self.ax
 
         # Resolve highlight color: plot() arg wins, then the (deprecated) constructor
         # value, then the default.
