@@ -418,6 +418,8 @@ GUI only:
   the time between two periods is filled with empty records.
 - **New variables:** adding a variable with the name of an existing one asks before it replaces it.
 - **Events with the same name:** all of them mark their records in the shared event column.
+- **Plot tabs:** they keep their selected variables and settings when the data change, for example
+  after adding a variable in another tab.
 
 Examples:
 
