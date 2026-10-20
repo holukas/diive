@@ -111,9 +111,10 @@ panels. Zooming into one of the date panels updates the statistics and panels fo
 | [CONTRIBUTING.md](CONTRIBUTING.md)                         | Development setup, coding standards, testing                 |
 | [CHANGELOG.md](CHANGELOG.md)                               | Version history                                              |
 
-The examples are plain scripts in the repository (see the development setup below). The online example gallery
-also offers each example as a Python file and as a Jupyter notebook to download. In a clone, run one with `python`,
-or with `uv run python` in a uv setup:
+The examples are plain scripts in the repository (see the
+[development setup](https://diive.readthedocs.io/en/latest/installation.html#development-setup)). The online example
+gallery also offers each example as a Python file and as a Jupyter notebook to download. In a clone, run one with
+`python`, or with `uv run python` in a uv setup:
 
 ```bash
 python examples/visualization/plot_heatmap_datetime_basic.py
@@ -121,6 +122,32 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 ```
 
 ## Installation
+
+`diive` needs Python 3.12 or 3.13. For new Python users, the recommended way is to install
+[Miniforge](https://conda-forge.org/download/) first. On Windows, open **Miniforge Prompt** from the Start menu. On
+macOS and Linux, open a terminal.
+
+### Library
+
+```bash
+conda create -n diive python=3.12
+conda activate diive
+python -m pip install diive
+```
+
+Conda creates an environment named `diive` with its own Python, and pip installs `diive` from PyPI into it. In a new
+terminal, run `conda activate diive` first.
+
+### Library and desktop app
+
+```bash
+conda create -n diive python=3.12
+conda activate diive
+python -m pip install "diive[gui]"
+```
+
+Start the desktop app with `diive-gui`. The desktop app is a large download. Keep the double quotes around
+`"diive[gui]"`, because some shells need them.
 
 ### Windows app (no Python needed)
 
@@ -130,61 +157,12 @@ folder. Nothing else needs to be installed. Windows may show a SmartScreen warni
 not signed. Click **More info**, then **Run anyway**.
 
 The app contains the same functions as `diive[gui]`. To use `diive` in your own Python code, install the library as
-described below.
+described above.
 
-### Library and desktop app
+### More options
 
-`diive` needs Python 3.12 or 3.13.
-
-For new Python users, the recommended way is to install [Miniforge](https://conda-forge.org/download/) first. On
-Windows, open **Miniforge Prompt** from the Start menu. On macOS and Linux, open a terminal. Then run:
-
-```bash
-conda create -n diive python=3.12
-conda activate diive
-python -m pip install "diive[gui]"
-```
-
-Conda creates an environment named `diive` with its own Python, and pip installs `diive` from PyPI into it. Start the
-desktop app with `diive-gui`. In a new terminal, run `conda activate diive` first.
-
-| Install          | Contains                                               |
-|------------------|--------------------------------------------------------|
-| `diive`          | The library only                                       |
-| `"diive[gui]"`   | The library and the desktop app (large download)       |
-
-Keep the double quotes around names with brackets. Some shells need them.
-
-### Development setup
-
-To work on the code, run the examples or run the tests, clone the repository and install it in editable mode,
-together with the development tools (tests, linting, documentation, Jupyter). New work happens in the `indev` branch.
-
-In a conda or other Python environment:
-
-```bash
-git clone https://github.com/holukas/diive.git
-cd diive
-git checkout indev
-python -m pip install --upgrade pip              # --group needs pip 25.1 or newer
-python -m pip install -e ".[all]" --group dev
-```
-
-With [uv](https://docs.astral.sh/uv/), which also installs Python itself:
-
-```bash
-git clone https://github.com/holukas/diive.git
-cd diive
-git checkout indev
-uv sync --all-extras
-```
-
-Both install all optional parts. To also build the Windows app, use
-`uv sync --all-extras --all-groups`.
-
-[CONTRIBUTING.md](CONTRIBUTING.md) describes the tests, the code style and further uv options. The
-[installation guide](https://diive.readthedocs.io/en/latest/installation.html) covers updates, Jupyter, the newest code
-from GitHub without a development setup, and solutions to common problems.
+The [installation guide](https://diive.readthedocs.io/en/latest/installation.html) covers the development setup,
+updates, Jupyter, the newest code from GitHub and solutions to common problems.
 
 ---
 
