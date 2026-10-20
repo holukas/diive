@@ -16,7 +16,7 @@ flowchart TD
     core --> learn["<b>Learn / verify</b><br/>examples/ · notebooks/ · tests/"]
     core --> docs["<b>Documentation</b><br/>docs/ (Sphinx)"]
 
-    gui --> exe["<b>Standalone Windows app</b><br/>packaging/ → dist/diive-gui.exe<br/><i>no Python needed</i>"]
+    gui --> exe["<b>Standalone Windows app</b><br/>packaging/ → dist/diive-gui/diive-gui.exe<br/><i>no Python needed</i>"]
 
     classDef root fill:#455A64,stroke:#263238,color:#fff;
     classDef surface fill:#E3F2FD,stroke:#2196F3,color:#0D47A1;
@@ -46,8 +46,8 @@ moved to [dyco](https://github.com/holukas/dyco).
 `dv.flux`, `dv.analysis`, `dv.plotting`, `dv.times`, `dv.variables`, `dv.corrections`,
 `dv.qaqc`, `dv.events`) plus a handful of top-level I/O helpers. Everything else is built on this —
 the GUI is a caller, not a reimplementation. Start at the README
-[Quick start](README.md#quick-start); the full namespace listing is in
-[`CLAUDE.md`](CLAUDE.md).
+[Quick start](README.md#quick-start); the full namespace listing is in the README's
+[Library overview](README.md#library-overview).
 
 ### 2. Desktop GUI
 
@@ -73,6 +73,8 @@ uv sync --extra gui --group build
 .\packaging\build_gui.ps1        # → dist\diive-gui\diive-gui.exe (+ a shareable zip)
 ```
 
+Each GitHub release includes this build as `diive-gui-...-win64.zip`, without the database
+tabs. `build_gui.ps1 -WithDb` makes an internal build with them for the working group.
 Recipe and details: [`packaging/README.md`](packaging/README.md).
 
 ### 4. Examples, notebooks, and tests
@@ -80,7 +82,8 @@ Recipe and details: [`packaging/README.md`](packaging/README.md).
 - **`examples/`** — 113 runnable, API-only scripts in Sphinx-Gallery format (`# %%`
   cells, no file I/O). Run one with `uv run python examples/gapfilling/gapfill_randomforest.py`.
   Catalogued in `examples/CATALOG.md`. **Never run the whole suite** during development.
-- **`notebooks/`** — exploratory Jupyter notebooks.
+- **`notebooks/`** — workflow notebooks: the flux post-processing chain, file formatting
+  and the InfluxDB database.
 - **`tests/`** — unit/integration tests: `uv run pytest tests/ -v` (GUI tests need the
   `gui` extra and run offscreen).
 
@@ -105,7 +108,7 @@ fast local build.
 diive/        core library + gui/                     ← the engine and its surfaces
 packaging/    PyInstaller build for the Windows exe
 examples/     113 runnable API examples
-notebooks/    exploratory Jupyter notebooks
+notebooks/    workflow Jupyter notebooks
 tests/        unit + integration tests
 docs/         Sphinx documentation source (published on Read the Docs)
 README.md     front door (install, quick start, features)

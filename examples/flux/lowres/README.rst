@@ -67,5 +67,5 @@ Key Concepts
 Related Documentation
 ---------------------
 
-- `Flux Post-Processing Chain <../index.html>`_ — Multi-level L2-L4.2 workflow
+- `Flux Post-Processing Chain <../postprocessingchain/index.html>`_ — Multi-level L2-L4.2 workflow
 - Source: ``diive/flux/lowres/``

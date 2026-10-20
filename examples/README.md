@@ -188,9 +188,6 @@ uv run python examples/analysis/analysis_daily_correlation.py
 
 # Run all examples in parallel
 uv run python examples/run_all_examples.py
-
-# Run examples by category
-uv run python examples/visualization/plot_heatmap_datetime_basic.py
 ```
 
 ## Documentation & Guides

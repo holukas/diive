@@ -143,7 +143,7 @@ The flux post-processing chain examples use a different dataset, Level-1 fluxes 
 
 ## Data Availability & Citation
 
-This example dataset is derived from the **Swiss FluxNet** and **FLUXNET2015** archives. The Davos site (CH-DAV) is a long-term measurement station operated by Swiss Federal Institute for Forest, Snow and Landscape Research (WSL).
+This example dataset is derived from the **Swiss FluxNet** and **FLUXNET2015** archives. The Davos site (CH-DAV) is a long-term measurement station.
 
 **For proper citation**, refer to FLUXNET2015 data policy and the site-specific data access agreements.
 
