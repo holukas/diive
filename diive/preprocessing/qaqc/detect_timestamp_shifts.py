@@ -47,6 +47,7 @@ import seaborn as sns
 from matplotlib import cm
 
 from diive.core.times.resampling import diel_cycle
+from diive.core.times.times import freq_as_timedelta
 from diive.variables.radiation import potrad
 
 
@@ -139,9 +140,9 @@ class DetectTimestampShifts:
         df = self.df
 
         freq = pd.infer_freq(df.index)
-        freq = '1min' if freq == 'min' else freq
         if freq:
-            dt_min = pd.to_timedelta(freq).total_seconds() / 60
+            # Through the offset: pd.to_timedelta('h') and ('min') reject a unit without a number
+            dt_min = freq_as_timedelta(freq, unit='ns').total_seconds() / 60
         elif len(df.index) >= 2:
             # median diff is robust against logging gaps at the start of the index
             dt_min = df.index.to_series().diff().median().total_seconds() / 60
@@ -335,18 +336,22 @@ class DetectTimestampShifts:
         -------
         pd.Series
             Daily time shift in minutes (positive = measured peak is earlier).
-            Index is DatetimeIndex of clear days only.
+            Index is DatetimeIndex of clear days only. Days without data are
+            left out.
         """
         df = self.df
         daily_sums = df[[self.col_meas, self.col_pot]].resample('D').sum()
         clearness = daily_sums[self.col_meas] / daily_sums[self.col_pot]
 
-        idx_max_meas = df[self.col_meas].groupby(df.index.normalize()).idxmax()
-        idx_max_pot = df[self.col_pot].groupby(df.index.normalize()).idxmax()
+        # Days without data are left out first: idxmax raises on an all-NaN group
+        meas = df[self.col_meas].dropna()
+        pot = df[self.col_pot].dropna()
+        idx_max_meas = meas.groupby(meas.index.normalize()).idxmax()
+        idx_max_pot = pot.groupby(pot.index.normalize()).idxmax()
 
         # pot - meas: positive when meas peaks earlier, matching FFT and crosscorr convention
         delta = (idx_max_pot - idx_max_meas).dt.total_seconds() / 60
-        result = pd.Series(delta.values, index=idx_max_meas.index, name='time_shift_minutes')
+        result = delta.dropna().rename('time_shift_minutes')
 
         clear_mask = clearness[clearness > clearness_threshold].index
         self._noon_shift_results = result[result.index.isin(clear_mask)]

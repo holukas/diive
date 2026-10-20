@@ -382,6 +382,8 @@ Library (also used by the notebook and the GUI):
 - **File readers, separator:** files separated by `;` or tabs can be read with a matching filetype.
 - **File readers, timestamp columns by position:** date and time columns given by position, for example
   `[0, 1]`, are read correctly.
+- **Timestamp shift detection, FFT method:** works on hourly data.
+- **Timestamp shift detection, noon peak method:** a day without data no longer stops the check.
 
 GUI only:
 
