@@ -141,7 +141,8 @@ Library (also used by the notebook and the GUI):
     nighttime counts.
   - The test table counts measured records once, with the records a test did not reach.
   - The evolution table adds how many records each test failed and warned.
-  - The missing-values test is listed above the tables, because it flags no measured record.
+  - The missing-values test flags no measured record, so the test table gives its count above the
+    table and the evolution table leaves it out.
 
 GUI only:
 
@@ -213,6 +214,11 @@ Notebook (meteo screening notebook v20):
 
 Library (also used by the notebook and the GUI):
 
+- **Remove after date:** `remove_after_date` no longer changes the data passed to it.
+- **u* scenarios:** `UstarThresholdConstantScenarios` now removes records with missing USTAR from
+  every scenario, as the u* filter does elsewhere in diive.
+- **EddyPro drop-out test (changes results):** a failed VM97 drop-out test now counts as a hard
+  flag, so these records are rejected at Level 2. Before, it counted as one soft flag.
 - **Nighttime partitioning (ONEFlux):** results now match ONEFlux bit for bit (CH-DAV 2016
   and 2019, CH-LAE 2017-2019), up from an RMSE of 0.0003 µmol m⁻² s⁻¹.
 - **Nighttime partitioning (ONEFlux), polar day and night:** on days without sunrise or sunset, no
