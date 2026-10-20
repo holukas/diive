@@ -898,12 +898,13 @@ class SWINGapFillerXGBoost:
                 model.reduce_features()
                 model.trainmodel(showplot_scores=False, showplot_importance=False)
 
-        # Filling gaps: the SHAP importance over the whole record is the slowest
-        # step, so drive a progress bar off fillgaps' progress_callback when the
+        # Filling gaps: the SHAP importance is the slowest step, so drive a progress bar off fillgaps' progress_callback when the
         # console can render one; otherwise fall back to a plain timed line.
         self._step_no += 1
         t0 = perf_counter()
-        label = "Filling daytime gaps (SHAP importances over full record)"
+        shap_rows = ("all records" if self._SHAP_MAX_ROWS is None
+                     else f"up to {self._SHAP_MAX_ROWS} records")
+        label = f"Filling daytime gaps (SHAP importances over {shap_rows})"
         if self.verbose == 1 and self._live_ok:
             from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
             with Progress(

@@ -361,6 +361,16 @@ class TestFlagQCFValidation(unittest.TestCase):
             with self.assertRaises(KeyError):
                 FlagQCF(df=df, target_col='FC', swinpot_col='NOT_A_COLUMN')
 
+    def test_ustar_scenario_error_says_none_or_several(self):
+        from diive.qaqc import FlagQCF
+        df = _flag_frame(4)
+        scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
+        with self.assertRaisesRegex(ValueError, 'No USTAR scenario'):
+            FlagQCF(df=df, target_col='FC', idstr='_L3.3', ustar_scenarios=scenarios)
+        with self.assertRaisesRegex(ValueError, 'More than one USTAR scenario'):
+            FlagQCF(df=df, target_col='FC', idstr='_CUT_16_CUT_50',
+                    ustar_scenarios=scenarios)
+
 
 class TestFlagQCFNeverNaN(unittest.TestCase):
     """QCF is always 0/1/2 for a record, never NaN (finding L8).

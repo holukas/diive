@@ -13,6 +13,7 @@ from diive.core.times.times import (
     validate_timestamp_column_name,
 )
 from diive.core.times.times import keep_daterange
+from diive.core.times.times import remove_after_date
 from diive.core.times.times import vectorize_timestamps
 
 
@@ -66,6 +67,18 @@ class TestTime(unittest.TestCase):
             keep_daterange(df, end, start)
         with self.assertRaises(TypeError):
             keep_daterange(df.reset_index(drop=True), start, end)
+
+    def test_remove_after_date_leaves_input_unchanged(self):
+        ix = pd.date_range('2022-08-01', '2023-09-30', freq='D')
+        series = pd.Series(range(len(ix)), index=ix, dtype=float, name='x')
+        original = series.copy()
+
+        out = remove_after_date(data=series, yearly_end_date='08-11')
+
+        pd.testing.assert_series_equal(series, original)
+        self.assertTrue(((out.index.month < 8)
+                         | ((out.index.month == 8) & (out.index.day <= 11))).all())
+        self.assertEqual(out.index.max(), pd.Timestamp('2023-08-11'))
 
     def test_vectorize_timestamps(self):
         df, _ = ed.load_exampledata_DIIVE_CSV_30MIN()

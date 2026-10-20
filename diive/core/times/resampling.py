@@ -315,7 +315,7 @@ def _example_resample_to_monthly_agg_matrix():
     df = load_exampledata_parquet_long()
     series = df['Tair_f'].copy()
     import diive as dv
-    monthly = dv.resample_to_monthly_agg_matrix(series=series, agg='mean', ranks=True)
+    monthly = dv.times.resample_to_monthly_agg_matrix(series=series, agg='mean', ranks=True)
     print(monthly)
 
 

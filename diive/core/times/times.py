@@ -2349,6 +2349,7 @@ def remove_after_date(data: Union[Series, DataFrame], yearly_end_date: str) -> U
     """
     month = int(yearly_end_date[0:2])
     dayinmonth = int(yearly_end_date[3:])
+    data = data.copy()
     data.loc[(data.index.month > month)] = np.nan
     data.loc[(data.index.month == month) & (data.index.day > dayinmonth)] = np.nan
     data = data.dropna()
@@ -2423,7 +2424,7 @@ def keep_daterange(data: Union[Series, DataFrame],
     out = data.loc[keep].copy()
     if verbose:
         info(f"Kept {len(out)} of {len(data)} records "
-             f"in date range [{start_ts}, {end_ts}].")
+             f"in date range [{start_ts}, {end_ts}].", verbose=verbose)
     return out
 
 

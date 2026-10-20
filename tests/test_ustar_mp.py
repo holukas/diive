@@ -460,6 +460,26 @@ class TestScenarioPlotCountsAreAddressedPositionally(unittest.TestCase):
         self.assertIn('100%', texts)
 
 
+class TestConstantScenariosRejectMissingUstar(unittest.TestCase):
+    """A record with no USTAR cannot pass a u* threshold, as in the flag and ONEFlux."""
+
+    def test_missing_ustar_is_removed_in_every_scenario(self):
+        import pandas as pd
+        from diive.flux.lowres.ustarthreshold import UstarThresholdConstantScenarios
+        ix = pd.date_range('2023-06-01 00:30', periods=6, freq='30min',
+                           name='TIMESTAMP_MIDDLE')
+        nee = pd.Series(np.arange(1.0, 7.0), index=ix, name='NEE')
+        ustar = pd.Series([0.05, 0.25, np.nan, 0.45, np.nan, 0.6], index=ix, name='USTAR')
+        swinpot = pd.Series(0.0, index=ix, name='SW_IN_POT')
+        scenarios = UstarThresholdConstantScenarios(series=nee, ustar=ustar, swinpot=swinpot)
+        scenarios.calc(ustarthresholds=[0.1, 0.5])
+        df = scenarios.scenariosdf
+        self.assertEqual(df['NEE_CUT0.1'].dropna().tolist(), [2.0, 4.0, 6.0])
+        self.assertEqual(df['NEE_CUT0.5'].dropna().tolist(), [6.0])
+        # The unfiltered column keeps every record.
+        self.assertEqual(df['NEE'].notna().sum(), 6)
+
+
 class TestBootstrapThresholdsAreReproducible(unittest.TestCase):
     """L97: UstarBootstrapThresholds resampled unseeded, in both of its paths.
 

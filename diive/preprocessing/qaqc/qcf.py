@@ -163,7 +163,8 @@ class FlagQCF:
                 If provided, automatically excludes irrelevant USTAR flags for current scenario.
 
         Raises:
-            ValueError: If multiple USTAR scenarios are detected in idstr.
+            ValueError: If ``ustar_scenarios`` is given and idstr does not name
+                exactly one of them.
             KeyError: If target_col or swinpot_col column not found in DataFrame.
 
         Example:
@@ -200,8 +201,11 @@ class FlagQCF:
             if len(current_ustar_scenario) == 1:
                 current_ustar_scenario = str(current_ustar_scenario[0])
             else:
-                raise ValueError(f"(!)More than one USTAR scenario detected: "
-                                 f"current_ustar_scenario={current_ustar_scenario}.")
+                found = "No" if not current_ustar_scenario else "More than one"
+                raise ValueError(f"(!){found} USTAR scenario detected in idstr={self.idstr!r}: "
+                                 f"ustar_scenarios={self.ustar_scenarios}, "
+                                 f"matched={current_ustar_scenario}. "
+                                 f"idstr must contain exactly one scenario name.")
             exclude_ustar_ids = self.ustar_scenarios.copy()
             exclude_ustar_ids.remove(current_ustar_scenario)
         else:

@@ -268,7 +268,7 @@ class UstarThresholdConstantScenarios:
     Properties:
         scenariosdf: DataFrame of the timeseries of *series* in different USTAR
             scenarios. Records of *series* where USTAR was below the respective
-            threshold are set to missing.
+            threshold or missing are set to missing.
 
     """
 
@@ -314,7 +314,8 @@ class UstarThresholdConstantScenarios:
             suffix = f"CUT{u}"
             colname = f"{self.series.name}_{suffix}"
             series_cut = self.series.copy()
-            series_cut.loc[self.ustar < u] = np.nan
+            # Missing USTAR is rejected too, as everywhere else in diive (and ONEFlux)
+            series_cut.loc[~(self.ustar >= u)] = np.nan
             self._scenariosdf[colname] = series_cut
 
         # Get daytime and nighttime data separately

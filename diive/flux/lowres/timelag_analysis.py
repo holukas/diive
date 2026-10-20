@@ -277,22 +277,19 @@ class TimeLagAnalysis:
     @staticmethod
     def adjust_range_for_eddypro(min_lag, max_lag, step=0.05):
         """
-        Adjust detected lag range for EddyPro's discrete lag stepping behavior.
+        Widen a detected lag range by one EddyPro lag step on each side.
 
-        EddyPro's covariance maximization searches at fixed step intervals (default 0.05s)
-        and excludes the specified boundaries (inclusive lower, exclusive upper).
-        To ensure a desired range [min_lag, max_lag] is actually used in EddyPro,
-        the input must be expanded by one step on each side.
+        Returns ``(min_lag - step, max_lag + step)``. EddyPro searches lags at
+        fixed steps (default 0.05 s), so the widened range keeps both detected
+        boundaries one step inside the range given to EddyPro.
 
         **Example:**
-        To ensure EddyPro uses the range [0.10-1.00] seconds::
+        To make sure EddyPro searches the range [0.10, 1.00] seconds::
 
             min_detected = 0.10
             max_detected = 1.00
             min_input, max_input = adjust_range_for_eddypro(min_detected, max_detected)
             # Result: min_input=0.05, max_input=1.05
-            # EddyPro will check: 0.05, 0.10, 0.15, ..., 0.95, 1.00
-            # (0.10 and 1.00 are included as desired)
 
         Parameters
         ----------

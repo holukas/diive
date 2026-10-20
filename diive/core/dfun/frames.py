@@ -49,7 +49,7 @@ def keep_vars(data: DataFrame | Series,
         raise ValueError(f"Variables not found in data: {missing}")
     out = data.loc[:, list(variables)].copy()
     if verbose:
-        info(f"Kept {len(variables)} of {data.shape[1]} variables.")
+        info(f"Kept {len(variables)} of {data.shape[1]} variables.", verbose=verbose)
     return out
 
 
