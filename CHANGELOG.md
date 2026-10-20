@@ -2,16 +2,15 @@
 
 ![diive](images/logo_diive1_256px.png)
 
-All notable changes to diive, newest first. The format follows
-[Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions before 0.92.0 use
-older section names.
 
 ## [0.92.0] - 2026-10-21
 
-This release makes gap-filling and NEE partitioning match their reference code, ONEFlux and
-REddyProc, and you choose between them with one setting. Many fixes stop data from being dropped or
-changed without notice, in loading, outlier detection, meteo screening and the desktop app. Some
-results change: look for entries marked "changes results".
+This release focuses on updates and improvements to MDS gap-filling and NEE partitioning. Both
+now produce results comparable to other community tools such as [ONEFlux](https://github.com/fluxnet/ONEFlux)
+and [REddyProc](https://github.com/EarthyScience/REddyProc). Many fixes stop data from being dropped or
+changed without notice, in loading, outlier detection, meteo screening and the desktop app. Many parts 
+were improved (faster execution, better plots) or refined. Some results change: look for entries marked
+"changes results".
 
 ### Added
 
