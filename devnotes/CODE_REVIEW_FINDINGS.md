@@ -17,7 +17,7 @@ what is still unreviewed after it is listed at the end of *Reviewed and found so
 `flux/lowres/ustar_mp_detection.py` / `ustarthreshold.py` / `ustar_bootstrap.py` /
 `ustar_vekuri_detection.py`, `flux/lowres/timelag_analysis.py`, `analysis/driveranalysis/`,
 `analysis/harmonic.py` / `granger.py` / `decoupling.py`, most of `core/plotting/`,
-`core/io/db/influx/`, and the GUI's `surface3d.py` / `surfacexyz.py` (optional `gui3d` extra) and
+`core/io/db/influx/`, and the GUI's `surface3d.py` / `surfacexyz.py` (PyVista, part of the `gui` extra) and
 `icons.py` / `theme.py`. The four NEE-partitioning ports were read (round 2) but not audited
 line-by-line against their R/C references — they are faithful ports with dedicated test files, so
 auditing them without the reference sources has low yield. (Since 2026-09-29 all four are checked
@@ -4872,3 +4872,4 @@ Six agents checked texts against the code. These are the code issues they found.
 | ID | Tier | Finding | Where | Status |
 |---|---|---|---|---|
 | L312 | S2 | A failed VM97 drop-out test was a soft flag, so the QCF kept the record: `flags_vm97_eddypro_fluxnetfile_tests` decides hard vs soft from the flag name (`'_HF_' in c`), and position 3 was named `..._VM97_DROPOUT_TEST` without `_HF_`. The code comment, the docstring, `VM97_SUBTESTS` in level2.py and EddyPro (drop-out is a hard flag) all disagree with that. The existing test only used a code with position 3 at 0. | `preprocessing/qaqc/eddyproflags.py` | [x] (uncommitted), renamed to `..._VM97_DROPOUT_HF_TEST`, so EddyPro 1 becomes 2. Test `test_qaqc.py::TestEddyProFlags::test_vm97_dropout_is_hard_flag`. Results change: with the L2 default `dropout=True`, records failing the drop-out test are now rejected. Not changed: the bundled CH-CHA example parquet and two Workbench notebooks still carry the old column name (precomputed output) |
+| L313 | S4 | A partitioning tab restored from a project keeps a `site.manager.changed` subscription after its widgets are deleted, so a later site change calls into a deleted `QDoubleSpinBox` ("Internal C++ object already deleted", swallowed by Qt in the app). Found as an order-dependent test error: `pytest tests/test_gui.py -k "restores_old_partitioning or potrad_tab_uses"` fails in the teardown of `test_potrad_tab_uses_project_utc_offset`, alone it passes. Not checked whether closing such a tab in the app triggers it too | `gui/tabs/_partitioning_base.py` (site subscription), `tests/test_gui.py::test_project_restores_old_partitioning_tab_as_nee_partitioning` | [ ] |
