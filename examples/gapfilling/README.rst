@@ -122,8 +122,8 @@ When to Use Each Method
    model.fillgaps()     # predict the missing values
    gapfilled = model.get_gapfilled_target()
 
-Keyword arguments other than ``input_df``, ``target_col``, ``verbose``, ``test_size`` and
-``below_zero`` are passed on to the underlying regressor (e.g. ``n_estimators``,
+Keyword arguments other than ``input_df``, ``target_col``, ``verbose``, ``test_size``,
+``below_zero`` and ``shap_max_rows`` are passed on to the underlying regressor (e.g. ``n_estimators``,
 ``random_state``, ``n_jobs``).
 
 **MDS:** You have no training data, or you want to avoid potential overfitting from learned models.
@@ -192,7 +192,7 @@ Random Forest and XGBoost both use an identical 8-stage feature engineering pipe
 4. **Exponential Moving Average** — EMA decay (e.g., [6, 12, 24])
 5. **Polynomial features** — Squared/cubic terms (e.g., degree=2)
 6. **STL decomposition** — Trend, seasonal, residual (optional)
-7. **Timestamps** — Year, month, hour, season (creates ~19 features for diurnal/seasonal patterns)
+7. **Timestamps** — Year, sine/cosine of season, month, week, day of year and hour, and the combined year-month, year-day-of-year and year-week (14 features)
 8. **Record number** — Continuous ordering to detect long-term drift
 
 See ``diive.core.ml.feature_engineer.FeatureEngineer`` for details.

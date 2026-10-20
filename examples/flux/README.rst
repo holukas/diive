@@ -89,7 +89,7 @@ Use Cases
    data = run_chain(data, cfg)
 
    results = data.fpc_df          # all per-level and gap-filled columns
-   cols = data.gapfilled_cols()   # {'rf': {'CUT_50': '...'}, 'xgb': ..., 'mds': ...}
+   cols = data.gapfilled_cols()   # {'mds': {'CUT_50': '...'}, 'rf': {...}}, 'xgb' with gapfill_xgb=True
 
 **Composable per-level API** — for custom L3.2 outlier pipelines, custom feature engineering, or per-level inspection, call each ``run_level*`` directly. See ``examples/flux/postprocessingchain/postprocessingchain_composable.py``.
 

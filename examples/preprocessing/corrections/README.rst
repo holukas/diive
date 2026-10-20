@@ -93,9 +93,12 @@ Related Documentation
 See ``dv.corrections`` for available corrections:
 
 - ``remove_relativehumidity_offset`` — Relative humidity saturation correction
+- ``relativehumidity_offset_diagnostics``: The same correction with every intermediate series, returned as ``RelativeHumidityOffsetResult``
+- ``RelativeHumidityOffsetPlot``: Diagnostic figure of the relative humidity correction (``showplot=True`` draws it)
 - ``remove_nighttime_zero_offset`` — Nighttime radiation offset removal
 - ``nighttime_zero_offset_diagnostics`` — Diagnostics for the nighttime radiation offset
 - ``NighttimeZeroOffsetResult`` — Result container returned by the diagnostics
+- ``NighttimeZeroOffsetPlot``: Diagnostic figure of the nighttime offset correction (``showplot=True`` draws it)
 - ``MeasurementOffsetFromReplicate`` — Instrument bias detection against a replicate
 - ``WindDirOffset`` — Wind direction calibration
 - ``set_exact_values_to_missing`` — Replace sentinel values

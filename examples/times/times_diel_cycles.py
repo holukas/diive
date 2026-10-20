@@ -5,7 +5,7 @@ DIURNAL CYCLE ANALYSIS: TIME-OF-DAY PATTERNS
 Extract and analyze hourly patterns in time series data, showing seasonal variation.
 
 See Also:
-    examples/visualization/dielcycle.py — Plotting diel cycles with the DielCycle class
+    examples/visualization/plot_dielcycle.py: plotting diel cycles with the DielCycle class
 
 Part of the diive library: https://github.com/holukas/diive
 """

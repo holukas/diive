@@ -43,7 +43,7 @@ Running Examples
    # Run one example
    uv run python examples/flux/lowres/flux_timelag_analysis.py
 
-   # Run all low-res flux examples
+   # Run more low-res flux examples
    uv run python examples/flux/lowres/flux_selfheating.py
    uv run python examples/flux/lowres/flux_selfheating_production.py
    uv run python examples/flux/lowres/flux_uncertainty.py

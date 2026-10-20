@@ -7,7 +7,7 @@ Characterize the spatial and temporal distribution of missing data in a
 time series.
 
 Extends basic gap detection (:class:`~diive.analysis.GapFinder`) with monthly
-and annual breakdowns, explicit long-gap listing, and a three-panel figure.
+and annual breakdowns, explicit long-gap listing, and a four-panel figure.
 Use this when you need to understand *when* gaps cluster (seasonal bias),
 *how many* qualify as long gaps, and what the year-by-year coverage looks like.
 
@@ -84,10 +84,11 @@ print(gs.long_gaps.head(10))
 # %%
 # Visualization
 # ^^^^^^^^^^^^^
-# Three-panel figure:
-# - top:    daily data availability heatmap (day-of-year x year)
-# - middle: monthly missing-data bar chart; bar annotation = number of gap periods
-# - bottom: gap-length histogram on log scale with 1h / 1-day / 1-week reference lines
+# Four-panel figure:
+# - top:          daily data availability heatmap (day-of-year x year)
+# - middle:       gap spike timeline, one vertical line per gap, tall spikes are long gaps
+# - bottom left:  monthly missing-data polar chart (January at the top, clockwise)
+# - bottom right: gap-length histogram on log scale with 1h / 1-day / 1-week reference lines
 
 gs.showfig(
     title=f"Gap Statistics  --  {series.name}",

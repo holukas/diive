@@ -6,7 +6,10 @@ Random Uncertainty Estimation (PAS20 Method)
 Calculate random uncertainty in flux measurements using the PAS20 method.
 
 Demonstrates hierarchical uncertainty quantification for eddy covariance flux data
-using the 4-method PAS20 approach (gap-filling uncertainty, daytime, nighttime, quality).
+with four methods. Methods 1 and 2 are the ONEFlux (PAS20) methods: the SD of
+measured fluxes under similar meteorological conditions, then the median of these
+uncertainties for similar fluxes. Methods 3 and 4 are diive extensions that relax
+the matching further, so every record gets an estimate.
 
 Best for: Assessing measurement reliability and random error propagation in flux data.
 """

@@ -441,7 +441,9 @@ A: Titles, labels, units, fonts, colors, grid and legend all go through
       ts.plot(ax=ax, format_style=style.merged(title='Zoom'))
 
    A bare ``FormatStyle()`` is the house style, every unset field falls back to
-   the standard theme. You can still reach for matplotlib on the axes afterwards.
+   the standard theme. ``TimeSeries.plot()`` called without ``format_style`` uses
+   its own default look instead (white, open frame, light horizontal gridlines,
+   left title). You can still reach for matplotlib on the axes afterwards.
 
 Flux processing
 ===============

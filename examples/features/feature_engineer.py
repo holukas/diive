@@ -30,26 +30,28 @@ print(f"  Columns: {list(df_data.columns)}")
 # Full 8-stage pipeline
 # ^^^^^^^^^^^^^^^^^^^^^
 #
-# Create ML-ready features by combining all 8 stages in one pass.
+# Create ML-ready features in one pass. The stage numbers follow the
+# FeatureEngineer docstring. STL (stage 6) and the record number (stage 8,
+# ``add_continuous_record_number``) stay off here.
 
 from diive.core.ml.feature_engineer import FeatureEngineer
 
 engineer = FeatureEngineer(
     target_col='temperature',
-    # Stage 1: Temporal features
+    # Stage 7: Timestamp features
     vectorize_timestamps=True,
-    # Stage 2: Lag features
+    # Stage 1: Lag features
     features_lag=[-2, -1],
-    # Stage 3: Rolling stats
+    # Stage 2: Rolling stats
     features_rolling=[12, 24],  # 6-hour, 12-hour windows
     features_rolling_stats=['mean', 'std', 'min', 'max'],
-    # Stage 4: Differencing
+    # Stage 3: Differencing
     features_diff=[1],
-    # Stage 5: EMA
+    # Stage 4: EMA
     features_ema=[6, 12],
-    # Stage 6: Polynomial
+    # Stage 5: Polynomial
     features_poly_degree=2,
-    # Stage 7: STL decomposition (optional)
+    # Stage 6: STL decomposition (optional)
     features_stl=False,
 )
 

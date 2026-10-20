@@ -108,20 +108,24 @@ print(
 # Handle missing values in quality assessment
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Missing/NaN values are automatically considered poor quality (QCF=2).
-# This section demonstrates how missing data propagates through QC flagging.
+# FlagQCF rates each record from its test flags only. A missing value gets
+# QCF=2 only through a missing-values test flag (``FLAG_*_MISSING_TEST``, e.g.
+# from ``StepwiseOutlierDetection.flag_missingvals_test``). This example has no
+# such flag, so a missing value gets its QCF from the other tests. The filtered
+# series is NaN there in any case.
 
 import numpy as np
 
-# Add some missing values to flux
-df['NEE'].iloc[[10, 50, 100, 150, 200]] = np.nan
+# Add some missing values to flux (positional rows of the NEE column; chained
+# assignment such as df['NEE'].iloc[...] = ... changes nothing in pandas 3)
+df.iloc[[10, 50, 100, 150, 200], df.columns.get_loc('NEE')] = np.nan
 
 print("\nMissing Data Impact:")
 print(f"  Total records: {len(df)}")
 print(f"  Records with data: {df['NEE'].notna().sum()}")
 print(f"  Missing records: {df['NEE'].isna().sum()}")
 
-# Missing values are automatically flagged as poor quality
+# Without a missing-values test flag, missing values are not rated QCF=2
 qcf_with_missing = dv.qaqc.FlagQCF(
     df=df,
     target_col='NEE',
@@ -135,7 +139,7 @@ missing_as_poor = (qcf_with_missing.flagqcf == 2).sum()
 valid_only = df['NEE'].notna().sum()
 
 print(f"\nQCF with missing values:")
-print(f"  QCF=2 (rejected/missing): {missing_as_poor} records ({100 * missing_as_poor / len(df):.1f}%)")
+print(f"  QCF=2 (rejected): {missing_as_poor} records ({100 * missing_as_poor / len(df):.1f}%)")
 print(f"  Valid data remaining: {valid_only} records ({100 * valid_only / len(df):.1f}%)")
 
 # Flagging records with excessive missing data in a window

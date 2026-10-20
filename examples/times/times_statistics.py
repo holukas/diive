@@ -44,7 +44,7 @@ print(f"Valid records: {int(stats.loc['NOV', col])} / {int(stats.loc['NOV', col]
 #
 # Returns 30 statistics including:
 # - **MEAN, MEDIAN** — Central tendency
-# - **SD, VARIANCE** — Spread
+# - **SD, VAR** — Spread
 # - **P01, P05, P25, P75, P95, P99** — Percentiles
 # - **NOV, MISSING** — Data counts
 # - **STARTDATE, ENDDATE, PERIOD** — Time span

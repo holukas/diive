@@ -86,7 +86,7 @@ Available methods on `StepwiseOutlierDetection`: `flag_outliers_hampel_test`,
 `flag_outliers_localsd_test`, `flag_outliers_zscore_test`,
 `flag_outliers_zscore_rolling_test`, `flag_outliers_lof_test`,
 `flag_outliers_abslim_test`, `flag_outliers_increments_zcore_test`,
-`flag_outliers_trim_low_test`.
+`flag_outliers_trim_low_test`, `flag_manualremoval_test`, `flag_missingvals_test`.
 
 Full example: [preprocessing/outlier_detection/outlier_stepwise.py](preprocessing/outlier_detection/outlier_stepwise.py)
 
@@ -127,7 +127,7 @@ rfts.fillgaps(showplot_scores=False, showplot_importance=False)
 # Step 3: access results
 r = rfts.results                  # GapFillingResult dataclass
 print(r.scores['r2'])             # gap-filling R²
-gapfilled = r.gapfilled           # gap-filled Series (flag: 0=observed, 1=filled)
+gapfilled = r.gapfilled           # gap-filled Series (r.flag: 0=observed, 1=filled, 2=fallback)
 ```
 
 Swap `RandomForestTS` for `XGBoostTS` (same API) or `FluxMDS` for a no-training alternative.
@@ -204,7 +204,7 @@ import diive as dv
 
 df = dv.load_exampledata_parquet()
 
-# DateTime heatmap: hours on y-axis, days on x-axis
+# DateTime heatmap: dates on y-axis, time of day on x-axis
 dv.plotting.HeatmapDateTime(series=df['NEE_CUT_REF_f']).plot()
 ```
 
@@ -217,7 +217,7 @@ dv.plotting.HeatmapYearMonth(series=df['NEE_CUT_REF_f'], agg='mean').plot()
 # Scatter
 dv.plotting.ScatterXY(x=df['Tair_f'], y=df['NEE_CUT_REF_f']).plot()
 
-# Diel cycle by month
+# Diel cycle (pass each_month=True to the plot for one curve per month)
 dv.plotting.DielCycle(series=df['NEE_CUT_REF_f']).plot()
 ```
 

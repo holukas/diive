@@ -3,8 +3,9 @@
 Time Series Visualization
 ============================
 
-Interactive time series plots for exploring temporal patterns in data.
-Shows multiple customization options for time series line plots.
+Static time series line plots with matplotlib, from the default look to
+custom chrome with ``FormatStyle``. For interactive Bokeh plots see
+``plot_timeseries_interactive.py``.
 
 Best for: Visualizing temporal data with axis control, unit labels, and colors
 """
@@ -24,9 +25,12 @@ print(f"Loaded {len(df)} records from {df.index[0]} to {df.index[-1]}")
 # Basic time series plot
 # ^^^^^^^^^^^^^^^^^^^^^^
 #
-# Create a simple time series plot with default styling. Passing no chrome
-# arguments at all keeps the diive house style: 'Date' on the x-axis, the
-# series name as title and y-label.
+# Create a simple time series plot with the default look. Without a
+# ``FormatStyle`` the series name is the title and the y-label, and the date
+# labels name the x-axis. On its own figure (``ax=None``) the plot also writes
+# two lines above the axes: time resolution, period, number of values and
+# share of missing values, then mean, median, SD, min and max. Pass
+# ``show_stats=False`` to leave them out.
 
 series = df['NEE_CUT_REF_f'].copy()
 
@@ -128,7 +132,7 @@ ts_gaps = dv.plotting.TimeSeries(
 ts_gaps.plot(
     ax=None,
     marker=True,       # draw a marker at each observation
-    linewidth=1.2,     # thinner line
+    linewidth=1.2,     # line width in points (1.2 is the default)
     alpha=0.85,
     format_style=dv.plotting.FormatStyle(
         title='Measured NEE — gaps shown as line breaks',

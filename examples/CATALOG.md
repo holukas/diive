@@ -62,7 +62,7 @@ See: [visualization/README.rst](visualization/README.rst)
 | [**analysis_seasonaltrend.py**](analysis/analysis_seasonaltrend.py) | STL decomposition, trend isolation, seasonality extraction |
 | [**analysis_decoupling.py**](analysis/analysis_decoupling.py) | Stratified binning to reveal how ecosystem responses change across temperature ranges |
 | [**analysis_gapfinder.py**](analysis/analysis_gapfinder.py) | Identify and characterize consecutive missing data periods in time series |
-| [**analysis_gapstats.py**](analysis/analysis_gapstats.py) | Extended gap analysis: monthly/annual breakdown, long-gap listing, Rich report, three-panel figure |
+| [**analysis_gapstats.py**](analysis/analysis_gapstats.py) | Extended gap analysis: monthly/annual breakdown, long-gap listing, Rich report, four-panel figure |
 | [**analysis_gridaggregator.py**](analysis/analysis_gridaggregator.py) | 2D grid aggregation with quantile, equal-width, and custom binning methods |
 | [**analysis_histogram_distribution.py**](analysis/analysis_histogram_distribution.py) | Histogram binning methods: fixed bins, unique values, fringe bin removal |
 | [**analysis_optimumrange.py**](analysis/analysis_optimumrange.py) | Find optimal value ranges, condition-based filtering |
@@ -162,7 +162,7 @@ See: [preprocessing/outlier_detection/README.rst](preprocessing/outlier_detectio
 | [**feature_evapotranspiration.py**](features/feature_evapotranspiration.py) | Evapotranspiration from latent heat flux |
 | [**feature_daynightflag.py**](features/feature_daynightflag.py) | Daytime/nighttime classification from solar geometry |
 | [**feature_vpd.py**](features/feature_vpd.py) | Vapor Pressure Deficit calculation |
-| [**feature_air.py**](features/feature_air.py) | Air properties (density, resistance, heat capacity) |
+| [**feature_air.py**](features/feature_air.py) | Air properties (aerodynamic resistance, dry air density) |
 | [**feature_potentialradiation.py**](features/feature_potentialradiation.py) | Potential radiation (SW_IN_POT) from solar geometry, ONEFlux/FLUXNET parity |
 | [**feature_laggedvariants.py**](features/feature_laggedvariants.py) | Lagged and shifted variable creation for modeling |
 | [**feature_timesince.py**](features/feature_timesince.py) | Time-since-event features |
