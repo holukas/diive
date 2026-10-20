@@ -271,7 +271,7 @@ class MainWindow(QMainWindow):
         self._startup_done = None  # `run()`'s callback for the deferred first load
 
         self._tabs = []
-        self._header = None  # set only in Studio chrome (None => native)
+        self._header = None  # the Studio header, set by _build_studio_chrome
         self._studio_tabs = False  # Studio pill tabs carry favicon-style glyphs
         self._tabwidget = QTabWidget()
         # Custom tab bar so the always-on Overview/Log tabs read slightly
@@ -367,9 +367,9 @@ class MainWindow(QMainWindow):
 
         self._header = StudioHeaderBar()
         # Each top-level menu (File, Data, Plot, …) becomes an inline dropdown
-        # button in the header instead of a native menu bar; the same builder
-        # populates both shells. Studio menus are translucent so the QSS rounds
-        # their corners into a white card (no square popup-shadow artefact).
+        # button in the header instead of a native menu bar. Studio menus are
+        # translucent so the QSS rounds their corners into a white card (no
+        # square popup-shadow artefact).
         def _add_menu(name):
             # Frameless + translucent (via studio_menu) so the QSS-rounded white
             # card has no opaque (black) corners and no native popup shadow.
@@ -1897,7 +1897,7 @@ def run(app: QApplication | None = None, splash=None) -> int:
     from diive.gui.widgets import open_data_dialog as odd
     odd._last_choice = cfg.get("last_filetype")
 
-    # Splash while the window builds (it auto-loads the example dataset).
+    # Splash while the window builds and loads the last project or the example.
     show_message(splash, "Loading…")
     app.processEvents()  # paint the splash before the (blocking) window build
 

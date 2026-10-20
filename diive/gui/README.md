@@ -40,7 +40,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `widgets/category_dialog.py` | `CategoryDialog` — add / rename / recolour / remove event categories (edits `events.manager.categories`; seeded with `category1/2/3`, the last one can't be deleted) |
 | `widgets/add_event_dialog.py` | `AddEventDialog` — name/category, three timing modes (single date/time, from/to, start + duration) with calendar pickers + colour; `make_event()` returns a `diive.events.Event` |
 | `tabs/settings.py` | Appearance settings tab — live colour editing with a pill/highlight preview, plus the shared variable-list width and the app-wide **preview-heatmap colormap** (`theme.manager.heatmap_cmap`) |
-| `widgets/colormaps.py` | The one curated `COLORMAPS` list + `colormap_combo()` behind every colormap dropdown in the GUI |
+| `widgets/colormaps.py` | The curated `COLORMAPS` list + `colormap_combo()` behind most colormap dropdowns in the GUI (Scatter XY, Spectrogram and the 3D surfaces keep their own lists) |
 | `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`); window opens filling the screen work area via `show_filling_workarea()` — **not** `showMaximized()`, which on a frameless window covers the taskbar and clips the active tab |
 | `splash.py` | Startup splash + **Help ▸ About** dialog (`QPainter`-drawn waves + wordmark/version/tagline/credits); `AUTHOR` + `SUPPORTERS` |
 | `build_manual.py` | Renders `MANUAL.md` → `MANUAL.html` (the styled manual **Help ▸ User manual** opens). Dependency-free; run `python -m diive.gui.build_manual` after editing the Markdown. `MANUAL.html` is generated — don't hand-edit |
@@ -102,7 +102,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `tabs/_screening_base.py` | **`ScreeningTabBase`** — the full stepwise-screening machinery shared by the Stepwise and Meteo-database screening tabs: variable list + segmented inspector (Outliers / Corrections / Report, one `QStackedWidget` page at a time) + always-visible plot grid; the `StepwiseOutlierDetection` chain → `FlagQCF` worker + `dv.corrections.apply_corrections`; per-section Run buttons; preview; save/restore. Variants override these seams: the data source (it is `self._df`/`self._var`-centric, so a variant can feed its own frame), `_inspector_pages` (extra page), `_emit_frame` (emitted columns), `_chain_input` + `_run_chain` (the worker's outlier chain and QCF), `_compute_corrected` (corrections), `_raw_series` / `_display_lines` / `_display_heatmap` (what the preview plots), and `_code_provider` (Copy Python; `stepwise_to_code` in the base). The database variant overrides them to run `StepwiseMeteoScreeningDb` |
 | `tabs/stepwise.py` | **Stepwise screening** tab — thin `ScreeningTabBase` subclass: screens a working-dataset column; Add emits per-test flags + QCF + filtered + corrected series. Coordinates and UTC offset come from Project settings; when they change, results computed with the old ones are cleared (`_on_site_changed`). The status line warns after a run when the UTC offset is not set |
 | `tabs/meteo_screening.py` | **Meteo screening (database)** tab — `ScreeningTabBase` subclass that screens a high-res field handed over from the Database explorer, **plus resampling**, through the library's `StepwiseMeteoScreeningDb`. The staged `data_detailed` builds the class on a worker (`LatestRunner`); `self._df` holds the field on the library's screening grid (TIMESTAMP_MIDDLE). Downloads with mixed time resolutions are supported (all records kept; the preview uses the class's `display_lines` / `display_heatmap`). The chain, QCF and corrections seams run on a copy of the loaded instance. Adds a **Resample** inspector page (target defaults to the working dataset's detected resolution, 30min as fallback); `_emit_frame` calls `mscr.resample()` and converts END→MIDDLE so it aligns on merge, with a collision rename, overlap guard, and DB-origin + all-tags provenance. **Copy Python** → `meteoscreening_to_code`. Latitude, longitude and UTC offset come from Project settings at run time; results are cleared when they change. The status line warns when the UTC offset is not set, and when it was changed after the download (send the field again) |
-| `tabs/database.py` / `tabs/database_explorer.py` | **Database connection** + **Database explorer** tabs (over `diive.core.io.db`, `InfluxDBBackend`). Connection: pick a config directory (path remembered, never the token), test it (green header pill via `db.manager`). Explorer: drill bucket → data version → measurement → field → field overview (all tags + first/last record); download a field for a date range (in the project's UTC offset, shown read-only via `ProjectUtcOffset`, **Match dataset time range**, progressive chunked download with a live-updating plot + `ProgressBar`, request caching) and plot it, or **Send to Meteo screening** via `db.manager.screeningRequested`. All queries on worker threads |
+| `tabs/database.py` / `tabs/database_explorer.py` | **Database connection** + **Database explorer** tabs (over `diive.core.io.db`, `InfluxDBBackend`). Connection: pick a config directory (path remembered, never the token), **Connect** to test it (green header pill via `db.manager`). Explorer: drill bucket → data version → measurement → field → field overview (all tags + first/last record); download a field for a date range (in the project's UTC offset, shown read-only via `ProjectUtcOffset`, **Match dataset time range**, progressive chunked download with a live-updating plot + `ProgressBar`, request caching) and plot it, or **Send to Meteo screening** via `db.manager.screeningRequested`. All queries on worker threads |
 | `tabs/_correction_base.py` | `BaseCorrectionTab` — **template** for the standalone Corrections tabs (XGBoost-style title bar + Copy Python, "Target (click to set target)" var list, "Settings" panel, method hero chip with a stats strip, original/corrected two-panel preview, worker thread, Add). Routes through the library `apply_corrections` / `corrections_to_code`; subclasses set `corr_key`/`method_suffix`/`method_chip_*`/`needs_coords` and implement `_add_method_rows`/`_current_kwargs`/`_validate`/`_method_controls`, and may override `_apply` (return `(corrected, extra)`), `_hero_metrics`, `_render_result`, `_status_text` for richer output. One tab per correction, so all corrections are independently available (measurement is a hint, not a lock) |
 | `tabs/corrections_nighttime_offset.py` / `tabs/corrections_relativehumidity_offset.py` | Offset-removal correction tabs (`dv.corrections.remove_nighttime_zero_offset` / `remove_relativehumidity_offset`) — `BaseCorrectionTab` subclasses. **Remove nighttime zero offset** (`NighttimeZeroOffsetTab`) is for variables that read zero at night (SW/PPFD); needs site coords, has a **Clamp negative values to zero** checkbox (`clamp_negatives`, default on), and overrides the hooks to show a **4-panel diagnostic preview** (original → daily offset → series−offset → final corrected) + a **below-zero stats hero** (records < 0 before/after, overall + nighttime, confirming the night no longer dips below zero), driven by the library's `nighttime_zero_offset_diagnostics`. The same `clamp_negatives` option is mirrored on the stepwise panel (`widgets/corrections_panel.py`) |
 | `tabs/corrections_setto_threshold.py` / `tabs/corrections_setto_value.py` / `tabs/corrections_set_missing.py` | Generic correction tabs (`dv.corrections.setto_threshold` max/min, `setto_value`, `set_exact_values_to_missing`) — `BaseCorrectionTab` subclasses; under the **Cleaning** menu's Corrections section |
@@ -132,7 +132,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `widgets/debounce.py` | `Debouncer(parent, slot, ms=250)` — runs a slow slot once a control's value has settled. Connect the control's change signal to `trigger` (arguments ignored); `flush()` runs a pending slot now, `cancel()` drops it. Used by the Overview pan/zoom summaries, the Appearance width/colormap, the 3D surface spin/combo controls, the Select-records bounds and the Gaps threshold. |
 
 **Adding a tab:** always-on tabs (Overview, Log) go in `TAB_CLASSES`. Menu-opened tabs go in `registry.MENU_TABS`
-(grouped by menu; values are factories) — they open as **new numbered instances** each time (Heatmap 1, 2, 3 ...), all
+(grouped by menu; values are factories) — they open as **new numbered instances** each time (Heatmap date/time 1, 2, 3 ...), all
 closable, unless listed in `SINGLE_INSTANCE_TABS`, which re-selecting focuses instead of duplicating. Nine tabs of two
 kinds are listed there: those editing one app-wide singleton, where a second copy would show conflicting state
 (Appearance, Project settings, Metadata explorer, and the three Database tabs), and the single-variable explorers
@@ -199,19 +199,20 @@ control in `plot_settings._build_*` + a key in `values()` + pass it through in `
 **GUI-only post-render passes:** a couple of settings have no library `plot()` parameter and are applied *after* the
 diive plot renders, analogous to the Overview's uniform-font pass:
 - **Axes group** (`_build_axes_group`) — X/Y limits (blank = auto), log X/Y, invert Y. Present on the
-  line/scatter types only (`TIMESERIES`, `CUMULATIVE_YEAR`, `SCATTER`, and Y-only for `DIELCYCLE`); `values()` carries
+  line/scatter/bar types only (`TIMESERIES`, `CUMULATIVE`, `CUMULATIVE_YEAR`, `SCATTER`, `WATERFALL`, and Y-only for `DIELCYCLE`); `values()` carries
   them under the `_axes` key and `plotting._apply_axes(axes)` applies them to the data axes. It is **plot-type-aware**:
   heatmaps and the ridgeline have no `_axes` (no-op), and the diel cycle's fixed 0–24 h x-axis is left alone (Y-only
   group). For shared multi-panel stacks the limits apply to every panel. The grid is **not** here — it has a single
   source in the Format group's `show_grid` (a duplicate Axes grid could only add, never remove, so it appeared broken).
   `_apply_axes` also re-applies the preserved pan/zoom only when the kept range still **overlaps** the new data
   (`_ranges_overlap`), so e.g. flipping a heatmap's orientation can't scroll the view off the data.
-- **Reverse colormap** — a checkbox in the Colors group (heatmap, heatmap year/month, hexbin, scatter) that appends/strips
+- **Reverse colormap** — a checkbox in the Colors group (heatmap date/time, heatmap year/month, heatmap x/y/z, hexbin, scatter, wind rose, tree ring) that appends/strips
   the matplotlib `_r` suffix on the chosen cmap in `values()` (`_reverse_cmap`); no library change.
 
-**Colormaps:** the curated list behind every colormap dropdown is `widgets/colormaps.py::COLORMAPS` (with
+**Colormaps:** the curated list behind most colormap dropdowns is `widgets/colormaps.py::COLORMAPS` (with
 `colormap_combo()` building an editable combo over it) — one list, so the plot settings, the Appearance tab and the
-tabs that preview a heatmap offer the same choices. The **preview** heatmaps (combine variables, derived variables,
+tabs that preview a heatmap offer the same choices. The Scatter XY colour map, the Spectrogram and the 3D surface
+tabs keep their own short lists. The **preview** heatmaps (combine variables, derived variables,
 flux chain, gap-filling, screening) have no per-plot Colors group; they follow the app-wide
 `theme.manager.heatmap_cmap`, editable in **Appearance ▸ Heatmap colours** and persisted with the theme. It applies at
 the next render — an already-drawn heatmap is not repainted, since re-pivoting every open tab's heatmap on a colour
@@ -226,8 +227,8 @@ overrides the toolbar's Save to export `savefig` at that DPI, so saved images ar
 preview the first parsed rows before loading (parquet via `dv.load_parquet`, other formats via `dv.ReadFileType`).
 Selecting multiple files merges them (`MultiDataFileReader`, or `combine_first` for parquet). All reading is library
 work, the dialog only orchestrates it. `MainWindow` holds the current DataFrame and pushes it to the visible tab via
-`DiiveTab.on_data_loaded(df, created)` (hidden tabs are marked stale and catch up when shown); tabs that present data override that hook to refresh. Example data auto-loads on
-startup. **File ▸ Export data as…** (`_save_file`) writes parquet **or** CSV — the save-dialog filter picks the format,
+`DiiveTab.on_data_loaded(df, created)` (hidden tabs are marked stale and catch up when shown); tabs that present data override that hook to refresh. On startup the app reopens the
+last project, else it loads the example data (`_initial_load`). **File ▸ Export data as…** (`_save_file`) writes parquet **or** CSV — the save-dialog filter picks the format,
 though an explicit `.csv`/`.parquet` extension the user types wins. The file is written on the worker thread
 (`_run_io` → `_export_data`). Parquet goes through `dv.save_parquet(..., enforce_diive_format=True)` (single-level
 columns + valid `TIMESTAMP_*` index name); CSV is a plain `to_csv` with the same timestamp-name guarantee.
@@ -449,8 +450,8 @@ motif (`splash.app_icon`); a Windows AppUserModelID is set in `_create_applicati
 
 **Hover tooltip (`HoverAnnotator`):** `MplCanvas` attaches one in its constructor; it works on every figure rendered into the
 canvas (Overview, plotting tabs) with no per-tab wiring. On mouse-move it shows a small box with the value under the cursor:
-**line** artists snap to the nearest sample along x (`np.searchsorted` on the unit-converted floats — use `get_xdata(orig=False)`,
-not the raw datetimes — so it stays O(log n) on large series) and show a marker; **`pcolormesh`** heatmaps read the cell from the
+**line** artists snap to the nearest sample along x (`np.nanargmin` over |x - cursor| on the unit-converted floats from `get_xdata(orig=False)`,
+not the raw datetimes. Argmin, not `searchsorted`, so non-monotonic lines such as the per-month diel cycle snap correctly) and show a marker; **`pcolormesh`** heatmaps read the cell from the
 grid (`get_coordinates()` + reshaped `get_array()`, cached per draw), and 2-D **`AxesImage`** heatmaps (the Overview's) from their extent and array. A line thinned for drawing carries its full record in `_diive_hover_xy`, which the hover reads instead. Scatter pixel positions are cached per draw (sorted by x) for the 2-D nearest-point pick. It renders by **blitting** (cache the background on
 `draw_event`, redraw just the annotation on move), so it never forces a full repaint. Pure presentation — no data/domain logic —
 so it lives in the GUI. A **"Hover values"** checkbox in the canvas's bottom row (next to the navigation toolbar) toggles it

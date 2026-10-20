@@ -2,14 +2,15 @@
 GUI.SPLASH: STARTUP SPLASH SCREEN
 =================================
 
-A small, self-contained splash shown while the main window builds (it auto-loads
-the example dataset, which takes a moment). Everything is drawn with `QPainter`
-— no image assets — so it works regardless of what's on disk: a deep blue-teal
-gradient, the diive wordmark + version + tagline, a band of layered sine
-**waves**, and a credits line (author now, supporters later).
+A small, self-contained splash shown while the main window builds and loads
+the last project or the example dataset, which takes a moment. Everything is
+drawn with `QPainter` — no image assets — so it works regardless of what's on
+disk: a deep blue-teal gradient, the diive wordmark + version + tagline, a band
+of layered sine **waves**, and a credits line (author, then supporters). The
+same drawing serves the **Help ▸ About** dialog and the app icon.
 
-To add supporters, append names to ``SUPPORTERS``. GUI-only presentation; no
-other module imports from here.
+To add supporters, append names to ``SUPPORTERS``. GUI-only presentation. This
+module imports no other GUI module.
 
 Part of the diive library: https://github.com/holukas/diive
 """

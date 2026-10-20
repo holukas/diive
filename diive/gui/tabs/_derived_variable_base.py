@@ -4,9 +4,8 @@ GUI.TABS._DERIVED_VARIABLE_BASE: SHARED BASE FOR DERIVED-VARIABLE TABS
 
 Common machinery for tabs that compute a single **derived variable** from a
 handful of existing columns via one library function — the thermodynamic /
-radiation family (VPD from air temperature + relative humidity, evapotranspiration
-from latent heat, dry-air density, ...). Each such calculation is a fast,
-closed-form formula.
+radiation family (today: VPD from air temperature + relative humidity, and
+potential radiation). Each such calculation is a fast, closed-form formula.
 
 Layout matches the other result-producing tabs: a draggable variable list on the
 left, a **Settings** column in the middle (input fields you can drag a variable

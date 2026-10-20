@@ -2,24 +2,28 @@
 GUI.TABS.PLOTTING: INTERACTIVE PLOTTING TAB
 ===========================================
 
-Three-column plotting tab: a list of variables on the left, a live plot-settings
-panel in the middle, the plot area on the right. On startup the bundled example
-dataset is loaded, the variable list is populated from its columns, and NEE is
-selected and rendered as a date x time-of-day heatmap. Editing a setting does
-not re-render on its own; the user clicks the **Update plot** button to apply all
-pending parameter changes at once (see `plot_settings.py`). Selecting a variable
-in the list still re-renders immediately.
+Three-column plotting tab, one closable tab per plot method (`PlottingTab(plot_type,
+title)`, opened from the Plot menu): a list of variables on the left, a live
+plot-settings panel in the middle, the plot area on the right. When data arrive,
+the variable list is populated from its columns and a default variable
+(`_DEFAULT_VAR`, or seeded roles for the role-picked types) is rendered. Editing
+a setting does not re-render on its own. The user clicks the **Update plot**
+button to apply all pending parameter changes at once (see `plot_settings.py`).
+Selecting a variable in the list still re-renders immediately.
 
-Selection model:
+Selection model (heatmaps, time series, diel cycle, cumulative types):
 - Plain click  -> reset to a single panel showing the clicked variable.
-- Ctrl + click -> append another panel to the right (up to `_MAX_PANELS`),
-  for side-by-side comparison.
+- Ctrl + click -> add or remove a panel (up to `_MAX_PANELS`). Heatmaps go
+  side by side with shared axes, the other types stack with a shared x-axis.
+  With more than one panel, a row of pills picks which panel's settings the
+  controls edit.
 
-Selected variables are highlighted in the list and numbered with their panel
-position (left to right). All panels share one date y-axis.
+Single-variable types (ridgeline, histogram, tree ring, shifted distribution,
+waterfall) show only the clicked variable. Role-picked types
+(`_ROLE_DROPDOWN_TYPES`) assign X/Y/Z through dropdowns instead of the list.
 
 diive's plot classes use the two-phase `__init__(data)` / `plot(ax=...)`
-pattern, so each panel is just `HeatmapDateTime(series).plot(ax=..., fig=...)`.
+pattern, so each panel is one library plot call into its own axes.
 
 Part of the diive library: https://github.com/holukas/diive
 """

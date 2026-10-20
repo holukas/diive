@@ -742,7 +742,7 @@ class OverviewTab(DiiveTab):
         # carries the per-variable identity + stats below it.
         outer.addLayout(build_titlebar(self.title))
 
-        # Variable list (left, full height) | right column (figure over stats).
+        # Variable list (left, full height) | right column (stats over figure).
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.varpanel = VariablePanel()
         self.varpanel.selected.connect(self._on_select)

@@ -2,8 +2,10 @@
 GUI.TABS.CORRECTIONS_RELATIVEHUMIDITY_OFFSET: REMOVE RH OFFSET TAB
 =================================================================
 
-Fix relative humidity that drifts above 100%: the daily mean of the values
-exceeding 100% is removed as an offset and any remainder is capped at 100%
+Fix relative humidity that drifts above 100%. For each day, the offset is the
+mean of that day's values above 100% minus 100. Days without such values get an
+offset interpolated from the neighbouring days. The offset is subtracted from
+every record, then values still above 100% are set to 100%
 (`dv.corrections.remove_relativehumidity_offset`).
 
 All the preview/threading/plotting machinery lives in :class:`BaseCorrectionTab`;
@@ -22,9 +24,11 @@ class RelativeHumidityOffsetTab(BaseCorrectionTab):
     """Remove the >100% offset from relative humidity data."""
 
     title = "Remove relative humidity offset"
-    intro = ("Fixes relative humidity that drifts above 100%. The daily mean of "
-             "the values exceeding 100% is removed as an offset; any remainder is "
-             "capped at 100%.")
+    intro = ("Fixes relative humidity that drifts above 100%. For each day, the "
+             "offset is the mean of that day's values above 100% minus 100. Days "
+             "without such values get an offset interpolated from the neighbouring "
+             "days. The offset is subtracted from every record, then values still "
+             "above 100% are set to 100%.")
     method_suffix = "RHOFFSET"
     corr_key = CORR_RELATIVEHUMIDITY_OFFSET
     method_chip_label = "RH OFFSET"

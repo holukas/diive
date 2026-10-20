@@ -4,8 +4,8 @@ GUI.TABS.DATABASE: DATABASE CONNECTION
 
 Point diive at a database and test the connection. The single app-wide backend
 built here (a :class:`~diive.core.io.db.base.DatabaseBackend`) is stored in
-``diive.gui.db.manager`` and reused by the Database explorer (and future
-download / upload tabs).
+``diive.gui.db.manager`` and reused by the Database explorer and the Meteo
+screening (database) tab.
 
 InfluxDB is the only backend today: it is configured by a config directory whose
 ``<dir>_secret`` sibling carries the url/org/token. This tab holds no secrets —
@@ -81,8 +81,8 @@ class DatabaseConnectionTab(DiiveTab):
             "directory. Credentials (url, org, token) are read from the "
             "'<dir>_secret' sibling folder — diive only remembers the directory "
             "path, never the token. Use 'Connect' to verify the server "
-            "is reachable; the connection is then reused for explore / "
-            "download / upload.")
+            "is reachable. The connection is then reused to explore and "
+            "download data.")
         intro.setWordWrap(True)
         intro.setStyleSheet("color: #6B7780;")
         col.addWidget(intro)
@@ -154,7 +154,7 @@ class DatabaseConnectionTab(DiiveTab):
     def _on_ok(self, backend) -> None:
         self.url_lbl.setText(getattr(backend, "url", "") or "-")
         self.org_lbl.setText(getattr(backend, "org", "") or "-")
-        self.status.setText("Connected. Ready to explore / download / upload.")
+        self.status.setText("Connected. Ready to explore and download.")
         self.test_btn.setEnabled(True)
         db.manager.mark_connected()  # fires changed -> header pill + explorer
 

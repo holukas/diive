@@ -4,10 +4,10 @@ GUI.WIDGETS.PLOT_SETTINGS: LIVE PLOT PARAMETER PANEL
 
 A scrollable panel of controls that sits between the variable list and the
 canvas in a plotting tab. Each control maps to one parameter of the underlying
-diive plot class (`HeatmapDateTime.plot(...)` or `TimeSeries.plot(...)`). Editing
-a control does not re-render on its own — the tab's "Update plot" button reads
-`values()` and re-renders when clicked. (Controls still emit `changed`; it is
-left available for callers but the plotting tab no longer renders on it.)
+diive plot class (e.g. `HeatmapDateTime.plot(...)`, `TimeSeries.plot(...)`), with
+one control set per plot type. Editing a control does not re-render on its own —
+the tab's "Update plot" button reads `values()` and re-renders when clicked.
+(Controls still emit `changed`, which the tab uses only to enable that button.)
 
 This is GUI-only: the controls merely collect parameter values via `values()`;
 all plotting is done by the library classes the tab calls. The plot-type

@@ -9,8 +9,8 @@ than ``n_sd`` standard deviations. Keeps the **original** (untouched), the
 
 All the preview/threading/plotting machinery lives in :class:`BaseOutlierTab`;
 this tab only supplies the LocalSD-specific parameter widgets, kwargs, detector,
-and codegen. In day/night mode the library takes ``n_sd`` and ``winsize`` as
-``[daytime, nighttime]`` lists, so this tab exposes a field per period.
+and codegen. In day/night mode it passes ``n_sd_daytime``/``n_sd_nighttime`` and
+``winsize_daytime``/``winsize_nighttime``, so this tab exposes a field per period.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -76,7 +76,7 @@ class LocalSDOutlierTab(BaseOutlierTab):
             self.winsize.blockSignals(False)
 
     def _add_daynight_threshold_rows(self, form: QFormLayout) -> tuple:
-        # Per-period n_sd + window (the library wants [daytime, nighttime] lists).
+        # Per-period n_sd + window (the library's n_sd_*/winsize_* overrides).
         self.n_sd_dt = QDoubleSpinBox()
         self.n_sd_dt.setRange(0.1, 50.0); self.n_sd_dt.setSingleStep(0.5)
         self.n_sd_dt.setValue(7.0)

@@ -27,7 +27,7 @@ Some tabs compute in a separate background process, which re-imports your script
 when it starts. Without the guard, that process would run the script again and open
 a second window.
 
-For the optional **Database** tabs (read/write an InfluxDB), also install the
+For the optional **Database** tabs (read from an InfluxDB), also install the
 `db` dependency group: `uv sync --group db` (or `pip install influxdb-client`).
 Without it the Database tabs show a short install notice instead of failing.
 
@@ -75,11 +75,12 @@ writes a `<name>.diive` folder containing:
 - all your **metadata**: variable tags, notes, and the full origin and processing
   history;
 - the **project settings** (author, description, site details, and your sticky
-  notes) and the active **date range**;
+  notes), the active **date range** and any **variable subset** (see
+  [Select variables](#selectvariables));
 - the **open tabs**, meaning the same tabs reopen in order, with pins, each
   restored to its selected variable(s) and settings, and the tab you had active
   regains focus;
-- the **Overview** state (its selected variable and any variable subset);
+- the **Overview** state (its selected variable);
 - a `__diive__` marker that identifies the folder as a diive project.
 
 **File ▸ Open project…** (Ctrl+Shift+O) loads a `.diive` folder and restores all of
@@ -133,7 +134,7 @@ or library.
 
 The window opens with **Overview** and **Log**. These two stay open: they have no
 close button. Other tabs open from the menus and can be closed (×). Most can be
-opened **multiple times**, so you'll get *Heatmap 1*, *Heatmap 2*, and so on. You
+opened **multiple times**, so you'll get *Heatmap date/time 1*, *Heatmap date/time 2*, and so on. You
 can **drag tabs to reorder** them, and **double-click a tab (left button) to
 rename** it.
 
@@ -160,14 +161,15 @@ filters and the corrections together.
 
 The first tab, focused on every load. Click a variable to see, for that variable:
 
+- a **band of statistics** above the figure: the variable name with its origin and
+  tags, then the count, mean, SD, min/max, percentiles, and more. **Hover** any one
+  for a short description of what it is.
 - a **figure** with several panels (the variable name is the figure title): a tall
   **time series** across the top, a full-height **date/time heatmap** down the right,
   and a bottom strip of smaller panels — a **cumulative** sum, a per-month **diel
   cycle**, the **daily mean ± SD**, a **distribution** (histogram with a KDE curve and
   mean/median markers), and a **cumulative waterfall**. The cumulative and waterfall
   panels show their running total inside the axes.
-- a **ribbon of statistics** along the bottom (count, mean, SD, min/max,
-  percentiles, and more). **Hover** any one for a short description of what it is.
 
 The datetime panels (time series, cumulative, daily mean, waterfall) share an x-axis,
 so panning or zooming one zooms them all to the same period. The heatmap follows the
@@ -223,7 +225,7 @@ pill to edit *that* panel's settings on their own — line width, colour, title,
 everything is independent per subplot. A newly added panel inherits the active
 panel's look but is given a distinct line colour automatically.
 
-**Axes** (time series, scatter, cumulative year; Y-only for the diel cycle): set
+**Axes** (time series, scatter, cumulative, cumulative year, waterfall, and Y only for the diel cycle): set
 **X/Y min/max** (blank means automatic), **log** scaling, and **invert Y**. An
 explicit limit you set here always wins over the kept pan/zoom. (The grid is toggled
 once, in the **Format** group's *Show grid*.)
@@ -446,8 +448,10 @@ final sum. One variable at a time. Settings:
 
 - **Resample period** and **aggregation** — the period each bar covers and how its
   values are combined.
-- **Uptake is negative** — flip the orientation so that uptake (a negative flux)
-  draws downward.
+- **Uptake is negative (NEE)**: the sign convention for the bar colours. On (the
+  default), negative values count as uptake (uptake colour) and positive values as
+  release (release colour). Untick it for sign-flipped data where positive means
+  uptake.
 - **Bar colours and width**, **connector lines** between bars, and the **units**.
 
 ---
@@ -695,8 +699,8 @@ parameters differ:
   outlier (lower is stricter).
 - **Constant SD (whole series).** Use the SD of the entire series instead of a
   rolling SD within the window.
-- **Separate daytime / nighttime.** Set a window and n SD per period (these become
-  `[daytime, nighttime]` lists for the library).
+- **Separate daytime / nighttime.** Set a window and n SD per period (they start
+  from the global values).
 
 Adds `{var}_LOCALSD` and its flag to the variable list.
 
@@ -776,7 +780,7 @@ variable list.
 ### Absolute limits filter
 
 The simplest, one-sided test: flag everything **outside a fixed range**. Set a
-**Min** and **Max**; any value below the min or above the max is rejected, and the
+**Minimum** and **Maximum**. Any value below the minimum or above the maximum is rejected, and the
 limits are drawn on the preview as the detection band. Use it for hard physical
 constraints (relative humidity must be 0 to 100 %, for example). Optionally split
 by day and night to enforce different ranges per period. Same preview, day/night
@@ -880,9 +884,13 @@ below zero. Adds `{var}_NIGHTOFFSET`.
 
 ### Remove relative humidity offset
 
-For **relative humidity** that drifts above 100%. The daily mean of the values
-exceeding 100% is removed as an offset and anything still over 100% is capped at 100.
-Same layout as above (no site coordinates needed). Adds `{var}_RHOFFSET`.
+For **relative humidity** that drifts above 100%. For each day with values above
+100%, the offset is the mean of these values minus 100. Days without such values get
+an offset interpolated from the nearest earlier and later days with them (before the
+first and after the last such day, that day's offset is carried). The offset is
+subtracted from every record, and anything still over 100% is set to 100. A single
+foggy day above 100% therefore lowers the whole series. Same layout as above (no site
+coordinates needed). Adds `{var}_RHOFFSET`.
 
 ### Set to max threshold / Set to min threshold
 
@@ -913,12 +921,15 @@ and the **Events** section (see [Events](#events)).
 
 ### Select variables
 
-Pick a subset of variables to focus the **Overview** list on. Click a variable on
-the left (*Available*) to move it to the right (*Selected*); click one on the right
-to remove it. **Add all →** (under the Available list) moves everything across, and
-**Clear** (under the Selected list) empties the selection. **Confirm → update
-Overview** restricts the Overview's variable list to your selection. Your data is
-not changed (load new data or re-open to reset).
+Pick a subset of variables to work with. Click a variable on the left
+(*Available*) to move it to the right (*Selected*). Click one on the right to remove
+it. **Add all →** (under the Available list) moves everything across, and **Clear**
+(under the Selected list) empties the selection. **Confirm → update Overview**
+narrows the working dataset to your selection: every tab then lists only these
+variables, except pinned tabs, which keep their data. The window title shows how
+many variables are in use. This tab always lists every variable, so you can add
+dropped ones back. Your data is not changed: **Data ▸ Reset to all variables**
+brings the full variable list back.
 
 ### Select records by condition
 
@@ -1528,7 +1539,7 @@ Point diive at an InfluxDB and test the connection.
 - **Config directory.** Pick the configuration folder (the connection's
   `url` / `org` / `token` live in its `<dir>_secret` sibling). diive remembers the
   **directory path only — never the token**.
-- **Test connection** verifies the server is reachable and fills in the resolved
+- **Connect** verifies the server is reachable and fills in the resolved
   URL / org. Once connected, the explorer and the screening tab can use it.
 
 ### Database explorer
@@ -1618,7 +1629,7 @@ Settings for the current project:
 - **Site details.** The measurement site's name, latitude, longitude, elevation, and
   UTC offset.
 
-Fill in and **Save**. The site coordinates and UTC offset are reused wherever diive
+Fill in and click **Save project settings**. The site coordinates and UTC offset are reused wherever diive
 needs them (the Hampel tab's daytime/nighttime split, the flux chain, and so on), so
 you don't retype them per tool. The **UTC offset is set only here**: every tab and
 the database download show it read-only. Where it is needed but not set, the tab
@@ -1638,8 +1649,12 @@ Customise the **Studio** look (the GUI's single design: near-white surfaces,
 pill-shaped tabs, a slim header with drop-down menus) with a **live preview**, so
 colours update across the whole app as you change them:
 
-- pill colours, selection and hover colours, time-series line colours;
-- the variable-list **width** (applies to every tab);
+- pill colours, interface colours (hover, accent, list background, input fields,
+  border, selection) and time-series line colours.
+- the **colormap of the preview heatmaps** (combine variables, derived variables,
+  flux chain, gap-filling, screening). The Plot-menu heatmaps keep their own
+  colormap setting, and a heatmap already drawn changes at its next redraw.
+- the variable-list **width** (applies to every tab).
 - **Reset to defaults** to undo.
 
 ---
@@ -1653,7 +1668,7 @@ on) in colour. **Save…** writes the log to a text file; **Clear** empties it.
 
 ## Tips
 
-- **Editable fields are tinted** (light blue) so you can see at a glance what you can
+- **Editable fields are tinted** (light grey) so you can see at a glance what you can
   change; **hover over a setting** for a tooltip describing what it does.
 - **Hover over any plot** to see the value under the cursor in a small box. On line
   plots it snaps to the nearest data point (with a marker); on heatmaps it shows the

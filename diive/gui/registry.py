@@ -3,8 +3,9 @@ GUI.REGISTRY: TAB REGISTRY
 ==========================
 
 Single source of truth for which tabs the main window shows, in order. To add
-a feature area (e.g. the flux post-processing chain), implement a `DiiveTab`
-subclass and register it here -- nothing else changes.
+a feature area, implement a `DiiveTab` subclass and register it here -- the
+main window does not change (a menu entry may need a menu icon keyword, see
+`icons._LINE_RULES`).
 
 Menu tabs are registered by module path, not imported: each entry is a
 `LazyTab` that imports its module on first open. Importing every tab module up
@@ -89,8 +90,8 @@ def _plot_tab(plot_type: str, title: str) -> LazyTab:
     return LazyTab(f"{TABS_PACKAGE}.plotting:PlottingTab", plot_type, title)
 
 
-#: Tab classes always shown in the main window, in display order.
-#: Future: append FluxChainTab, OutlierTab, GapFillingTab, ...
+#: Tab classes always shown in the main window, in display order. Every other
+#: tab is a menu tab (`MENU_TABS`).
 TAB_CLASSES: list[type[DiiveTab]] = [
     OverviewTab,
     LogTab,

@@ -4,9 +4,10 @@ GUI.TABS.SURFACEXYZ: 3-D X / Y / Z COORDINATE SURFACE
 
 The coordinate-surface sibling of the date x time-of-day :class:`Surface3DTab`.
 Instead of a variable's calendar grid, this renders an arbitrary **Z over X-Y**:
-pick three variables (drag one from the list onto the X / Y / Z field, or click
-to fill X -> Y -> Z in turn), and the scattered points are gridded onto a regular
-X-Y mesh and shown as the same rotatable relief.
+pick three variables by dragging each from the list onto the X / Y / Z field
+or by picking it from the field's dropdown (clicking the list does nothing).
+The scattered points are then gridded onto a regular X-Y mesh and shown as the
+same rotatable relief.
 
 Almost everything is inherited from :class:`Surface3DTab` -- the relief controls,
 camera presets, orbit/flyover animations, glTF/STL export, and the whole mesh /

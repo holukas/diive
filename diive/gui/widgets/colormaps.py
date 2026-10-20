@@ -2,9 +2,10 @@
 GUI.WIDGETS.COLORMAPS: SHARED COLORMAP CHOICES
 ==============================================
 
-One curated colormap list behind every colormap dropdown in the GUI, so the
+One curated colormap list behind most colormap dropdowns in the GUI, so the
 plotting settings panel, the Appearance tab and the tabs that preview a heatmap
-all offer the same choices.
+all offer the same choices. The Scatter XY colour map, the Spectrogram and the
+3D surface tabs keep their own short lists.
 
 The app-wide default colormap for the preview heatmaps lives in
 ``theme.manager.heatmap_cmap`` (edited in the Appearance tab).

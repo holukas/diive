@@ -1,15 +1,15 @@
 """
-GUI.WIDGETS.GAPFILL_RESULTS: XGBOOST GAP-FILLING RESULTS DASHBOARD
-=================================================================
+GUI.WIDGETS.GAPFILL_RESULTS: ML GAP-FILLING RESULTS DASHBOARD
+=============================================================
 
-The "Results" page of the XGBoost gap-filling tab — a scrollable, card-based
-dashboard that surfaces, natively in Qt, everything the library's gap-filling
-report writes to the console (full score tables, configuration, gap-fill quality
+The "Results" page of the ML gap-filling tabs (XGBoost, Random Forest) — a
+scrollable, card-based dashboard that surfaces, natively in Qt, everything the
+library's gap-filling report writes to the console (full score tables, configuration, gap-fill quality
 breakdown, feature importances) plus extra diagnostic and temporal plots
 (predicted-vs-observed, SHAP importance, diel cycle, cumulative sum).
 
 All numbers/plots come straight from the fitted library model
-(``XGBoostTS`` / ``MlRegressorGapFillingBase``): ``scores_``/``scores_traintest_``,
+(``XGBoostTS`` / ``RandomForestTS`` / ``MlRegressorGapFillingBase``): ``scores_``/``scores_traintest_``,
 ``feature_importances_``, ``gapfilling_df_``, ``plot_feature_importances``, and the
 ``dv.plotting`` classes. This widget only arranges and styles them — strict
 GUI<->library separation.
@@ -223,7 +223,8 @@ class GapFillResultsPanel(QScrollArea):
     # --- public update -------------------------------------------------
     def update(self, model, target: str,
                shap_threshold_factor: float | None = None) -> None:
-        """Render the full dashboard from a fitted XGBoostTS model. Pass
+        """Render the full dashboard from a fitted ML gap-filling model
+        (``XGBoostTS`` or ``RandomForestTS``). Pass
         ``shap_threshold_factor`` (the k used in ``reduce_features``) so the
         reduction card can show the exact threshold equation + line."""
         self._reset_layout()

@@ -91,7 +91,7 @@ STUDIO_TOKENS: dict[str, str] = {
 STUDIO_TYPOGRAPHY: dict = {"uppercase": True, "tracking": 1.5}
 
 #: kind -> [label, background, text]. Lists so values are editable in place.
-#: Shared across presets (the colours encode domain meaning: NEE green, Reco red).
+#: The colours encode domain meaning (NEE green, Reco red).
 DEFAULT_PILL_STYLE: dict[str, list[str]] = {
     "NEE": ["NEE", "#388E3C", WHITE],
     "FC": ["FC", "#388E3C", WHITE],

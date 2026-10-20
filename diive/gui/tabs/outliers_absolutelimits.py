@@ -10,7 +10,8 @@ series (`{var}_ABSLIM`, outliers set to NaN), and the **flag**.
 Unlike the density-based LOF method, the min/max here *are* a data-unit detection
 band, so the "Show limit lines" overlay draws the actual limits (flat lines in
 global mode; per-period day/night limits when separation is on). In day/night
-mode the library takes separate ``[min, max]`` ranges for daytime and nighttime.
+mode the tab passes ``minval_daytime``/``maxval_daytime`` and
+``minval_nighttime``/``maxval_nighttime``.
 All detection is library work; this tab only supplies the parameter widgets,
 kwargs, detector, and codegen.
 
