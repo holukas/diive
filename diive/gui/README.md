@@ -242,7 +242,7 @@ reset (out-of-range rows align to NaN). All plots and processing then run on the
 
 **Flux post-processing chain (`tabs/fluxchain.py`):** opened from **Flux ▸ Flux post-processing chain**. A
 guided tab for the Swiss-FluxNet chain, covering **Input + L2 + L3.1 + L3.2 + L3.3 + L4.1**. It
-collects site/flux-column + which L2 quality tests to run, the L3.1 storage-correction options, an optional L3.2
+collects the flux column + which L2 quality tests to run, the L3.1 storage-correction options, an optional L3.2
 outlier-detection chain, optional L3.3 USTAR filtering, and L4.1 gap-filling (MDS drivers with optional QC flag columns, and the MDS mode), then on a worker thread calls the composable library
 callables (`init_flux_data` → `run_level2` → `run_level31` → `make_level32_detector`/`run_level32` →
 `run_level33_constant_ustar` / `run_level33_ustar_detection` → `run_level41_*`), shows the deepest level's QCF-filtered
@@ -255,7 +255,11 @@ detection* (`run_level33_ustar_detection`, with TA/SW_IN pickers, bootstrap para
 script-gen lives in the library (`flux/postprocessingchain/codegen.py`: `chain_to_code` for the full
 `run_chain`/`FluxConfig` path, the `level*_to_code` functions for the composable path) because it encodes the API call
 shape; the GUI only calls it. Needs real EddyPro-FLUXNET input (FC/USTAR/`*_TEST` columns) —
-`load_exampledata_parquet_lae_level1_30MIN`, not the default CH-DAV.
+`load_exampledata_parquet_lae_level1_30MIN`, not the default CH-DAV. Latitude, longitude and UTC offset are read-only
+mirrors of Project settings (`site.manager`, followed through `ProjectUtcOffset.changed`) and are not saved with the tab
+state, so values from older projects are ignored. Without a configured site, `_run`, the Input level and `_code` refuse
+(`_site_missing`). `_results_stale` compares `data.meta` (the values `init_flux_data` used) with Project settings and
+keeps the Add buttons disabled while they differ.
 
 **USTAR detection (`tabs/ustar_detection.py`):** opened from **Flux ▸ USTAR detection**. Standalone
 friction-velocity threshold detection independent of the chain. Pick NEE/TA/USTAR/SW_IN + stratification params (TA/USTAR

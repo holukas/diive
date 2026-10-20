@@ -26,6 +26,11 @@ All computation is library work (`init_flux_data`, `run_level2`, `run_level31`,
 them (heavy runs on a worker thread). Script-generation is the library's
 `level31_to_code` / `level32_to_code` (they own the API shape).
 
+The site coordinates and the UTC offset are read-only mirrors of Project settings
+(`site.manager`). Without a configured site the tab refuses to initialize the chain
+or copy its script. After a settings change, levels initialized with the old values
+can no longer be added to the dataset.
+
 **Level 4.1** gap-fills the per-scenario L3.3 flux: tick any of rf / xgb / mds
 (additive across methods — each replaces only its own previous result), pick
 rf/xgb predictor features and the MDS SW_IN / TA / VPD driver columns (each
@@ -49,6 +54,7 @@ import threading
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -82,7 +88,7 @@ from diive.flux.postprocessingchain import (
     run_level41_mds, run_level41_rf, run_level41_xgb,
 )
 from diive.flux.lowres.common import detect_fluxbasevar
-from diive.gui import theme
+from diive.gui import site, theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.driver_qc import QC_TIP, fill_qc_combo, qc_value, set_qc_value
@@ -90,11 +96,7 @@ from diive.gui.widgets.feature_picker import FeaturePicker
 from diive.gui.widgets.mds_mode import make_mode_combo, mode_value, set_mode_value
 from diive.gui.widgets.flux_pipeline_rail import PipelineRail
 from diive.gui.widgets.mpl_canvas import MplCanvas
-from diive.gui.widgets.project_offset import (
-    NOT_SET_WARNING,
-    ProjectUtcOffset,
-    project_utc_offset_is_set,
-)
+from diive.gui.widgets.project_offset import ProjectUtcOffset, project_utc_offset
 from diive.gui.widgets.stepwise_method_params import STEP_METHOD_BY_KEY, method_labels
 from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.weak_slot import weak_slot
@@ -114,6 +116,19 @@ _STAGES = [
 _RESERVED = ("SW_IN_POT", "DAYTIME", "NIGHTTIME")
 
 _C_MUTED = "#6B7780"
+
+#: Status when the chain would need the site but Project settings have none.
+_SITE_NOT_SET = (
+    "The flux chain needs the site location for potential radiation and the "
+    "day/night split, but no coordinates are configured. Set latitude, longitude "
+    "and UTC offset in Settings -> Project settings first.")
+
+#: Status when the chain ran with other coordinates or UTC offset than the
+#: project's current ones.
+_SITE_CHANGED = (
+    "Project settings changed after the chain was initialized. Run it again from "
+    "Input to use the new site coordinates and UTC offset. Until then, its results "
+    "cannot be added to the dataset.")
 
 #: L2 tests offered as checkboxes -> (label, default-on). Each maps to a
 #: run_level2 keyword; the settings dict is built in `_level2_settings`.
@@ -352,14 +367,25 @@ class FluxChainTab(DiiveTab):
         form.addRow("USTAR column", self.ustarcol)
         self.ustar_mark = self._info_marker()
         form.addRow("", self.ustar_mark)
-        self.site_lat = self._dspin(47.42, -90, 90, 4)
+        # Read-only mirrors of Project settings: the coordinates and the offset
+        # have one home, so the chain always runs for the project's site.
+        self.site_lat = self._dspin(0.0, -90, 90, 4)
         form.addRow("Latitude", self.site_lat)
-        self.site_lon = self._dspin(8.49, -180, 180, 4)
+        self.site_lon = self._dspin(0.0, -180, 180, 4)
         form.addRow("Longitude", self.site_lon)
-        # Read-only: the offset has one home, Project settings.
+        for w in (self.site_lat, self.site_lon):
+            # Disabled, not read-only: read-only still reads as an input field.
+            w.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+            w.setEnabled(False)
         self.utc_offset = ProjectUtcOffset()
-        self.utc_offset.changed.connect(self._on_project_offset_changed)
+        # Follows site.manager and dies with the tab's widgets (no direct
+        # connection from the singleton to this plain-Python tab).
+        self.utc_offset.changed.connect(self._on_project_settings_changed)
         form.addRow("UTC offset", self.utc_offset)
+        self.site_note = QLabel()
+        self.site_note.setWordWrap(True)
+        form.addRow(self.site_note)
+        self._seed_site()
         self.nighttime_threshold = self._dspin(20.0, 0, 200, 1)
         form.addRow("Night threshold (W m⁻²)", self.nighttime_threshold)
         self.day_qcf = QComboBox()
@@ -1180,9 +1206,9 @@ class FluxChainTab(DiiveTab):
 
     # --- state ---
     def _fx_controls(self) -> dict:
+        # No "site_lat"/"site_lon"/"utc_offset": they come from Project settings,
+        # so values saved by an older project are ignored on restore.
         return {"fluxcol": self.fluxcol, "ustarcol": self.ustarcol,
-                "site_lat": self.site_lat,
-                "site_lon": self.site_lon,
                 "nighttime_threshold": self.nighttime_threshold,
                 "day_qcf": self.day_qcf, "night_qcf": self.night_qcf,
                 "signal_strength_col": self.signal_strength_col,
@@ -1317,14 +1343,71 @@ class FluxChainTab(DiiveTab):
         self._refresh_rail()
         self._update_level_buttons()
 
+    # --- site (mirrored from Project settings) ---
+    @staticmethod
+    def _site_coords() -> tuple[float, float, int]:
+        """Latitude, longitude and UTC offset from Project settings.
+
+        Read from ``site.manager``, not from the spin boxes, which round to four
+        decimals for display."""
+        m = site.manager
+        return float(m.latitude), float(m.longitude), project_utc_offset()
+
+    def _seed_site(self) -> None:
+        """Show the project's coordinates, or say that the site is not set."""
+        m = site.manager
+        if m.configured:
+            self.site_lat.setValue(m.latitude)
+            self.site_lon.setValue(m.longitude)
+            text, color = "From Settings ▸ Project settings. Change them there.", _C_MUTED
+        else:
+            text = ("<b>No site configured.</b> Set latitude, longitude and UTC "
+                    "offset in Settings ▸ Project settings.")
+            color = theme.manager.tokens.get("DANGER_BG", "#E04646")
+        self.site_note.setText(text)
+        self.site_note.setStyleSheet(f"QLabel {{ color: {color}; }}"
+                                     + theme.manager.tooltip_qss())
+
+    def _site_missing(self) -> bool:
+        """Refuse to run without a configured site, and say why.
+
+        Every level depends on SW_IN_POT and the day/night split computed at
+        initialization, so an unguarded run would silently process the flux at
+        latitude 0, longitude 0 on UTC."""
+        if site.manager.configured:
+            return False
+        self.summary.setPlainText(_SITE_NOT_SET)
+        return True
+
+    def _results_stale(self) -> bool:
+        """True when the chain output was initialized with other coordinates or
+        another UTC offset than the project's current ones (``data.meta`` keeps
+        the values ``init_flux_data`` used)."""
+        if self._data is None:
+            return False
+        meta = self._data.meta
+        used = (meta.site_lat, meta.site_lon, meta.utc_offset)
+        return not site.manager.configured or used != self._site_coords()
+
+    def _on_project_settings_changed(self) -> None:
+        """Mirror the new settings. Results initialized with the old coordinates
+        or offset stay visible but can no longer be added to the dataset."""
+        self._seed_site()
+        if self._running:
+            return  # _finalize checks the finished run against the new settings
+        self._update_level_buttons()
+        if self._results_stale():
+            self.summary.setPlainText(_SITE_CHANGED)
+
     # --- collect kwargs the library wants ---
     def _init_kwargs(self) -> dict:
+        lat, lon, utc = self._site_coords()
         return dict(
             fluxcol=self.fluxcol.currentText(),
             ustarcol=self.ustarcol.currentText() or "USTAR",
-            site_lat=self.site_lat.value(),
-            site_lon=self.site_lon.value(),
-            utc_offset=self.utc_offset.value(),
+            site_lat=lat,
+            site_lon=lon,
+            utc_offset=utc,
             nighttime_threshold=self.nighttime_threshold.value(),
             daytime_accept_qcf_below=int(self.day_qcf.currentText()),
             nighttime_accept_qcf_below=int(self.night_qcf.currentText()),
@@ -1471,14 +1554,15 @@ class FluxChainTab(DiiveTab):
                 "Random Forest / XGBoost need at least one feature. Select "
                 "predictor columns in the Level 4.1 feature list.")
             return
+        if self._site_missing():
+            return
         deepest = "4.1" if l41 else ("3.3" if l33 else ("3.2" if steps else "3.1"))
         # Run-all rebuilds from scratch to `deepest`; any already-computed level
         # beyond it is cascaded away. Confirm before discarding that real work.
         if not self._confirm_discard(self._level_to_stage(deepest)):
             return
         self._set_running(True)
-        self.summary.setPlainText(
-            self._with_offset_warning(f"Running Level 2 → Level {deepest}…"))
+        self.summary.setPlainText(f"Running Level 2 → Level {deepest}…")
         threading.Thread(
             target=self._worker, args=(self._df, ik, l2, l31, steps, l33, l41),
             daemon=True).start()
@@ -1508,15 +1592,16 @@ class FluxChainTab(DiiveTab):
         if not self._confirm_discard(idx):
             return  # user declined to discard downstream results
         self._set_running(True)
-        msg = f"Running {_STAGES[idx][0]} — {_STAGES[idx][1]}…"
-        # Only initialization reads the offset; later levels inherit its result.
-        self.summary.setPlainText(self._with_offset_warning(msg) if idx == 0 else msg)
+        self.summary.setPlainText(f"Running {_STAGES[idx][0]} — {_STAGES[idx][1]}…")
         threading.Thread(target=self._level_worker, args=(plan, self._data, self._df),
                          daemon=True).start()
 
     def _level_plan(self, idx: int) -> dict | None:
         """Collect + validate the kwargs for a single level; None blocks the run."""
         if idx == 0:
+            # Only initialization reads the site; later levels inherit its result.
+            if self._site_missing():
+                return None
             return {"idx": 0, "kind": "init", "init_kwargs": self._init_kwargs()}
         if idx == 1:
             l2 = self._level2_settings()
@@ -1606,21 +1691,8 @@ class FluxChainTab(DiiveTab):
         self.rail.set_reached_through(idx)
         self._render_stage(idx, data)
         self._update_report(idx, data)
-        if not project_utc_offset_is_set():
-            self.summary.appendPlainText(NOT_SET_WARNING)
-
-    @staticmethod
-    def _with_offset_warning(msg: str) -> str:
-        """Append the not-set warning when the project has no UTC offset."""
-        return msg if project_utc_offset_is_set() else f"{msg}\n{NOT_SET_WARNING}"
-
-    def _on_project_offset_changed(self) -> None:
-        """Chain results were initialized with the old offset (SW_IN_POT and
-        the day/night split); say so. Re-running is left to the user."""
-        if self._reached >= 0 and not self._running:
-            self.summary.setPlainText(
-                "Project settings changed after the chain was initialized. Run it "
-                "again from Input to use the new UTC offset.")
+        if self._results_stale():  # settings changed while the level ran
+            self.summary.appendPlainText(_SITE_CHANGED)
 
     @staticmethod
     def _level_qcf(idx: int, data):
@@ -1788,8 +1860,10 @@ class FluxChainTab(DiiveTab):
         self.run_btn.setEnabled(has)
         for idx, b in self._level_run_btns.items():
             b.setEnabled(has and (idx == 0 or self._reached >= idx - 1))
+        # Not for results initialized with other Project settings than the current.
+        stale = self._results_stale()
         for idx, b in self._level_add_btns.items():
-            b.setEnabled(has and self._reached >= idx)
+            b.setEnabled(has and self._reached >= idx and not stale)
 
     # --- pushing a level's results back into the dataset ---
     #: Stage index -> the idstr(s) keying that level's columns in added_columns.
@@ -1829,7 +1903,7 @@ class FluxChainTab(DiiveTab):
     def _add_level(self, idx: int) -> None:
         """Emit this level's columns + filtered flux to the app-wide dataset."""
         data = self._data
-        if data is None or self._reached < idx:
+        if data is None or self._reached < idx or self._results_stale():
             return
         label = _STAGES[idx][0]
         cols = self._level_output_columns(idx, data)
@@ -1853,7 +1927,9 @@ class FluxChainTab(DiiveTab):
             f"Added {len(out.columns)} {label} column(s) to the dataset.")
 
     # --- the killer button: the exact reproducible script ---
-    def _code(self) -> str:
+    def _code(self) -> str | None:
+        if self._site_missing():
+            return None  # the script would carry latitude 0, longitude 0 and UTC
         hint = "dv.load_parquet('your_data.parquet')"
         ik, l2, l31 = self._init_kwargs(), self._level2_settings(), self._level31_kwargs()
         l33 = self._level33_kwargs()

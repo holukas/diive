@@ -1077,13 +1077,21 @@ ICOS products. The UTC offset is local standard time; daylight saving is never a
 ### Flux post-processing chain
 
 A guided workspace for the flux post-processing chain, covering **Input + Level 2 +
-Level 3.1 + Level 3.2 + Level 3.3 + Level 4.1** (gap-filling). Pick the flux column
-and site, choose which Level-2 quality tests to run, set the Level-3.1 storage
+Level 3.1 + Level 3.2 + Level 3.3 + Level 4.1** (gap-filling). Pick the flux column,
+choose which Level-2 quality tests to run, set the Level-3.1 storage
 correction, optionally build a Level-3.2 outlier-detection chain, apply Level-3.3
 USTAR filtering, run gap-filling, then run the chain. The accepted (QCF-filtered)
 flux of the deepest level shows as a heatmap. **Copy Python** puts the exact,
 reproducible diive script for what you did on the clipboard, so a point-and-click
 run stays scriptable.
+
+The **site coordinates** and the **UTC offset** come from **Settings ▸ Project
+settings**. The Input page shows them read-only. To change them, go to Project
+settings. The chain computes potential radiation and the day/night split from these
+values, so without a configured site the tab does not run and **Copy Python** copies
+nothing. A run at latitude 0, longitude 0 on UTC would look plausible and be wrong
+for your site. After you change Project settings, levels computed with the old
+values can no longer be added to the dataset. Run the chain again from **Input**.
 
 Each level has its own **Add to dataset** button (next to that level's run button),
 enabled once the level has run. It appends that level's output columns (its flags,

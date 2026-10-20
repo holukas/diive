@@ -378,6 +378,8 @@ GUI only:
 - **Memory:** the first tab that loaded the machine-learning libraries stayed in memory after
   it was closed and kept reacting to changes in Project settings.
 - **Projects:** reopening a project returns the data exactly as saved, also when they mix time resolutions.
+- **Flux post-processing chain, site:** the tab uses the coordinates from Project settings instead of
+  fixed Swiss coordinates and refuses to run without them.
 
 Examples:
 

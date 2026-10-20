@@ -1794,7 +1794,19 @@ def test_feature_engineer_index_only(window):
     assert tab.add_btn.isEnabled()
 
 
-def test_flux_chain_tab_level31(app):
+@pytest.fixture
+def configured_site():
+    """Project settings with a site (the flux chain refuses to run or copy its
+    script without one), restored afterwards."""
+    from diive.gui import site
+    snap = site.manager.as_dict()
+    site.manager.update(name="X", latitude=47.42, longitude=8.49, elevation=0.0,
+                        utc_offset=1)
+    yield site.manager
+    site.manager.load_dict(snap)
+
+
+def test_flux_chain_tab_level31(app, configured_site):
     # The flux chain needs real EddyPro-FLUXNET input (FC, USTAR, *_TEST cols),
     # so load the dedicated EC example dataset (one month for speed).
     from diive.gui.tabs.fluxchain import FluxChainTab
@@ -1825,7 +1837,7 @@ def test_flux_chain_tab_level31(app):
                 if "Cannot plot" in t.get_text()]
 
 
-def test_flux_chain_tab_level32(app):
+def test_flux_chain_tab_level32(app, configured_site):
     # L3.2 chain: add outlier steps via the registry, run through make_level32_detector
     # + run_level32, and surface the overall QCF separately.
     from diive.gui.tabs.fluxchain import FluxChainTab
@@ -3104,7 +3116,7 @@ def test_derived_variable_potrad_tab(app):
     assert "rename('SW_IN_POT_calc')" in tab._python_code()
 
 
-def test_flux_chain_tab_level33_detection(app):
+def test_flux_chain_tab_level33_detection(app, configured_site):
     # L3.3 supports auto-detecting the USTAR threshold (moving point bootstrap)
     # as an alternative to constant thresholds. The detected CUT percentiles
     # become USTAR scenarios; Copy Python renders run_level33_ustar_detection.
@@ -3150,7 +3162,7 @@ def test_flux_chain_tab_level33_detection(app):
     assert tab2.l33_ta.currentText() == ta
 
 
-def test_flux_chain_tab_level33_vut(app):
+def test_flux_chain_tab_level33_vut(app, configured_site):
     # L3.3 detection can apply per-year VUT thresholds instead of a constant CUT.
     # CUT and VUT are mutually exclusive strategies.
     from diive.gui.tabs.fluxchain import FluxChainTab
@@ -3215,7 +3227,7 @@ def test_ustar_detection_tab(app):
                 if "failed" in t.get_text().lower()]
 
 
-def test_flux_chain_tab_level33(app):
+def test_flux_chain_tab_level33(app, configured_site):
     # L3.3 USTAR filtering: requires an L3.2 step, applies constant thresholds,
     # and exposes per-scenario QCFs.
     from diive.gui.tabs.fluxchain import FluxChainTab
@@ -3459,7 +3471,7 @@ def test_flux_chain_tab_level41_layout(app):
     assert set(fp.selected()) == set(picked) | {str(df.columns[0])}
 
 
-def test_flux_chain_tab_per_level_run(app):
+def test_flux_chain_tab_per_level_run(app, configured_site):
     # Each level runs separately, its output feeding the next; the per-level run
     # buttons are gated by how far the chain has reached.
     from diive.gui.tabs.fluxchain import FluxChainTab
@@ -3514,7 +3526,7 @@ def test_flux_chain_tab_per_level_run(app):
     assert not tab.rail._cards[3]._reached
 
 
-def test_flux_chain_tab_add_level_results(app):
+def test_flux_chain_tab_add_level_results(app, configured_site):
     # Each level can push its results (flag/QCF columns + QCF-filtered flux) to
     # the dataset via featuresCreated, after the level has run.
     from diive.gui.tabs.fluxchain import FluxChainTab
@@ -3564,7 +3576,7 @@ def test_flux_chain_tab_add_level_results(app):
     assert all(prov[c]["parent"] == fluxcol for c in out.columns)
 
 
-def test_flux_chain_tab_level41(app):
+def test_flux_chain_tab_level41(app, configured_site):
     # L4.1 gap-filling: fan out one gap-fill per USTAR scenario. MDS is fast and
     # has no ML training, so drive a real run with it; rf/xgb are checked via codegen.
     from diive.gui.tabs.fluxchain import FluxChainTab
@@ -3658,7 +3670,7 @@ def test_flux_chain_tab_level41(app):
     assert tab2.l41_features.selected() == tab.l41_features.selected()
 
 
-def test_flux_chain_tab_level41_mds_driver_qc(app, monkeypatch):
+def test_flux_chain_tab_level41_mds_driver_qc(app, monkeypatch, configured_site):
     # L4.1 MDS driver QC flags: "(none)" by default (config and script
     # unchanged); a picked flag reaches run_level41_mds and the script, and
     # round-trips through save/restore. Old projects restore to none.
@@ -3723,7 +3735,7 @@ def test_flux_chain_tab_level41_mds_driver_qc(app, monkeypatch):
     assert "vpd_qc" not in tab2._level41_cfg()["mds"]
 
 
-def test_flux_chain_tab_level41_mds_mode(app, monkeypatch):
+def test_flux_chain_tab_level41_mds_mode(app, monkeypatch, configured_site):
     # L4.1 MDS mode: 'diive' by default, always written to the config and the
     # script, passed to run_level41_mds, saved as the value. Chain projects saved
     # before the option used the plain mean and restore to 'oneflux'.
@@ -7091,43 +7103,89 @@ def test_potrad_tab_uses_project_utc_offset(app):
         site.manager.load_dict(snap)
 
 
-def test_flux_chain_tab_uses_project_utc_offset(app):
-    # init_flux_data and the generated script get the project offset; unset
-    # shows the warning in the run status; an old saved offset is ignored.
+def test_flux_chain_tab_uses_project_settings(app):
+    # The site coordinates and the UTC offset come from Project settings (L318):
+    # init_flux_data and the generated script get the project's values, values
+    # saved by an older project are ignored, a settings change after a run
+    # blocks adding its results, and an unset site refuses to run or copy.
     from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
     from diive.gui import site
     from diive.gui.tabs.fluxchain import FluxChainTab
-    from diive.gui.widgets.project_offset import NOT_SET_WARNING
 
     df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07-01":"2024-07-03"]
     snap = site.manager.as_dict()
     try:
-        site.manager.update(name="X", latitude=47.4, longitude=8.4, elevation=0.0,
-                            utc_offset=2)
+        site.manager.update(name="FI-Hyy", latitude=61.85, longitude=24.29,
+                            elevation=181.0, utc_offset=2)
         tab = FluxChainTab()
         tab.widget()
         tab.on_data_loaded(df)
+        # Read-only mirrors showing the project's site.
+        assert tab.site_lat.value() == 61.85 and not tab.site_lat.isEnabled()
+        assert tab.site_lon.value() == 24.29 and not tab.site_lon.isEnabled()
         assert tab.utc_offset.text() == "UTC+02:00"
-        assert tab._init_kwargs()["utc_offset"] == 2
-        assert "utc_offset=2" in tab._code()
+        ik = tab._init_kwargs()
+        assert (ik["site_lat"], ik["site_lon"], ik["utc_offset"]) == (61.85, 24.29, 2)
+        code = tab._code()
+        assert "site_lat=61.85," in code and "site_lon=24.29," in code
+        assert "utc_offset=2," in code
+        assert "47.42" not in code and "8.49" not in code
 
+        # A project saved before the fix carries its own coordinates and offset:
+        # it opens, and Project settings win.
         state = tab.save_state()
-        assert "utc_offset" not in state["controls"]
-        state["controls"]["utc_offset"] = 5
+        assert not {"site_lat", "site_lon", "utc_offset"} & set(state["controls"])
+        state["controls"].update(site_lat=47.42, site_lon=8.49, utc_offset=5)
         tab.restore_state(state)
-        assert tab._init_kwargs()["utc_offset"] == 2
+        ik = tab._init_kwargs()
+        assert (ik["site_lat"], ik["site_lon"], ik["utc_offset"]) == (61.85, 24.29, 2)
+        assert tab.site_lat.value() == 61.85
 
+        def run(idx):
+            plan = tab._level_plan(idx)
+            assert plan is not None
+            tab._level_worker(plan, tab._data, tab._df)
+            QApplication.processEvents()
+
+        run(0)
+        run(1)
+        meta = tab._data.meta
+        assert (meta.site_lat, meta.site_lon, meta.utc_offset) == (61.85, 24.29, 2)
+        assert tab._level_add_btns[1].isEnabled()
+
+        # Coordinates edited in Project settings: L2 was initialized with the old
+        # ones, so it can no longer be added.
+        site.manager.update(name="FI-Hyy", latitude=61.8475, longitude=24.29,
+                            elevation=181.0, utc_offset=2)
+        assert tab.site_lat.value() == 61.8475
+        assert not tab._level_add_btns[1].isEnabled()
+        assert "Project settings changed" in tab.summary.toPlainText()
+        # Back to the values the chain ran with: adding is allowed again.
+        site.manager.update(name="FI-Hyy", latitude=61.85, longitude=24.29,
+                            elevation=181.0, utc_offset=2)
+        assert tab._level_add_btns[1].isEnabled()
+        # Only the offset changes: adding is blocked too.
+        site.manager.update(name="FI-Hyy", latitude=61.85, longitude=24.29,
+                            elevation=181.0, utc_offset=3)
+        assert not tab._level_add_btns[1].isEnabled()
+        assert "Project settings changed" in tab.summary.toPlainText()
+        emitted = []
+        tab.featuresCreated.connect(emitted.append)
+        tab._add_level(1)
+        assert emitted == []
+
+        # No site configured: no initialization, no run-all, no script.
         site.manager.configured = False
-        assert tab._init_kwargs()["utc_offset"] == 0
+        site.manager.changed.emit()
+        assert "No site configured" in tab.site_note.text()
         started = []
         tab._level_worker = lambda plan, base, df: started.append(plan)  # no real run
-        tab._run_level(0)
-        for _ in range(100):
-            if started:
-                break
-            time.sleep(0.01)
-        assert started and started[0]["init_kwargs"]["utc_offset"] == 0
-        assert NOT_SET_WARNING in tab.summary.toPlainText()
+        tab._worker = lambda *args: started.append(args)
+        for attempt in (lambda: tab._run_level(0), tab._run, tab._code):
+            tab.summary.clear()
+            assert attempt() is None
+            assert "no coordinates are configured" in tab.summary.toPlainText()
+        assert started == [] and not tab._running
     finally:
         site.manager.load_dict(snap)
 
