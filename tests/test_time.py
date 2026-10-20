@@ -417,6 +417,20 @@ class TestSanitizerOffGridRecords(unittest.TestCase):
         self.assertEqual(int(out['X'].notna().sum()), 480)
         self.assertIn('1 records are not on the 30min time grid', cap.get())
 
+    def test_tz_aware_across_dst_keeps_all_records(self):
+        """L329: with a step that does not divide one hour evenly, the wall-clock
+        position after the daylight saving change won the vote. The grid then
+        missed every record."""
+        for freq in ['30min', 'h', '2h', '3h', '6h', '12h']:
+            with self.subTest(freq=freq):
+                idx = pd.date_range('2023-01-01', '2023-12-31', freq=freq, tz='Europe/Zurich',
+                                    name='TIMESTAMP_END')
+                df = pd.DataFrame({'X': np.arange(float(len(idx)))}, index=idx)
+                out, status, msg = self._sanitize(df)
+                pd.testing.assert_frame_equal(out, df.asfreq(freq), check_index_type=False)
+                self.assertEqual(status['rows_removed'], 0)
+                self.assertNotIn('time grid', msg)
+
 
 class TestDetectFreqGroups(unittest.TestCase):
     """Records next to a timestamp gap must keep the resolution of their regular

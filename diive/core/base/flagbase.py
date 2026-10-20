@@ -18,7 +18,7 @@ from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.histogram import HistogramPlot
 from diive.core.plotting.styles.format import FormatStyle
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
-from diive.core.times.times import DetectFrequency
+from diive.core.times.times import DetectFrequency, continuous_timestamp_freq
 
 
 def sum_flag_value(df: DataFrame, value: int) -> Series:
@@ -62,17 +62,25 @@ class FlagBase:
     nan_flag_at_missing: bool = True
 
     def __init__(self, series: Series, flagid: str, idstr: str = None, verbose: bool = True):
-        """Store the series and flag identifiers; ensure the index has a frequency."""
+        """Store the series and flag identifiers; ensure the index has a frequency.
+
+        A series without a frequency is put on a regular time grid. The grid
+        follows the position within the time step that most records share.
+        Records that are not on the grid are removed and their number is shown
+        as a warning.
+        """
         self.series = series
         self._flagid = flagid
         self._idstr = validate_id_string(idstr=idstr)
         self.verbose = verbose
 
         # Make sure time series has frequency
-        # Freq is needed for the detection of daytime/nighttime from lat/lon
+        # Freq is needed for the detection of daytime/nighttime from lat/lon.
+        # The grid follows the records (asfreq would start it at the first
+        # record). Records that are not on the grid are removed with a warning.
         if not self.series.index.freq:
             freq = DetectFrequency(index=self.series.index, verbose=True).get()
-            self.series = self.series.asfreq(freq)
+            self.series = continuous_timestamp_freq(data=self.series, freq=freq, verbose=self.verbose)
 
         self._overall_flag = None
         self._filteredseries = None

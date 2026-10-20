@@ -367,6 +367,8 @@ Library (also used by the notebook and the GUI):
   pass by default, because repeated passes removed most of a series (79 % of NEE in one example).
 - **Loading, records off the time grid:** loading no longer drops records silently when a few
   timestamps are off the regular time grid, and records that still do not fit are reported in a warning.
+- **Outlier detection, records off the time grid:** a single record off the time grid no longer makes
+  outlier detection lose all data, and such records are reported in a warning.
 
 GUI only:
 

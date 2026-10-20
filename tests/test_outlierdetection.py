@@ -1109,3 +1109,32 @@ class TestRepeatStops(unittest.TestCase):
         self.assertIn(").run(repeat=True)", lof_to_code({}, repeat=True))
         self.assertIn(").run()", absolutelimits_to_code({}, repeat=False))
         self.assertIn(").run(repeat=True)", absolutelimits_to_code({}, repeat=True))
+
+
+class TestOffGridRecords(unittest.TestCase):
+    """L330: a detector gave a series without a frequency one with asfreq, which
+    starts the grid at the first record. One stray first record moved the grid
+    and every other record was lost without a message."""
+
+    def setUp(self):
+        from diive.core.utils.console import get_verbosity, set_verbosity, VERBOSE_PROGRESS
+        self._saved = get_verbosity()
+        set_verbosity(VERBOSE_PROGRESS)
+
+    def tearDown(self):
+        from diive.core.utils.console import set_verbosity
+        set_verbosity(self._saved)
+
+    def test_stray_first_record_keeps_others_and_warns(self):
+        from diive.core.utils.console import console
+        idx = pd.date_range('2022-06-01 00:30', periods=1440, freq='30min')
+        idx = pd.DatetimeIndex([pd.Timestamp('2022-06-01 00:00:01')]).append(idx).rename('TIMESTAMP_END')
+        s = pd.Series(np.random.default_rng(1).normal(size=len(idx)), index=idx, name='X')
+        with console.capture() as cap:
+            z = zScore(series=s, thres_zscore=4, verbose=False)
+            z.calc(repeat=False)
+        self.assertEqual(z.series.index.freqstr, '30min')
+        self.assertEqual(z.series.index[0], pd.Timestamp('2022-06-01 00:30'))
+        pd.testing.assert_series_equal(z.series, s.iloc[1:], check_freq=False)
+        self.assertEqual(int(z.overall_flag.notna().sum()), 1440)
+        self.assertIn('1 records are not on the 30min time grid', cap.get())

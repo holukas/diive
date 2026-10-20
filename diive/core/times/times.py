@@ -1962,15 +1962,26 @@ def _grid_start(index: DatetimeIndex, freq) -> pd.Timestamp:
     share, so a single stray or late record cannot move it. Ties go to the
     position of the first record. Calendar frequencies (for example month
     start) have no fixed step, so their grid starts at the first record.
+
+    The position is measured in absolute time because ``pd.date_range``
+    builds the grid in absolute time. For time-zone-aware data with a step of
+    whole days, the position is measured in wall-clock time.
     """
     try:
         step = freq_as_timedelta(freq, unit=index.unit)
     except ValueError:
         return index[0]
-    # Wall-clock times, so that daily records at local midnight share one
-    # position across daylight saving changes.
-    wall = index.tz_localize(None) if index.tz is not None else index
-    position = (wall - wall[0]) % step
+    if index.tz is not None and step % pd.Timedelta(days=1) == pd.Timedelta(0):
+        # Daily records at local midnight share one wall-clock position across
+        # daylight saving changes. The grid is built in absolute time, so the
+        # records after a daylight saving change are not on it.
+        wall = index.tz_localize(None)
+        position = (wall - wall[0]) % step
+    else:
+        # After a daylight saving change, the wall-clock times of 2-h, 3-h,
+        # 6-h or 12-h records move by one hour. If that position won the vote,
+        # the absolute grid would miss every record.
+        position = (index - index[0]) % step
     counts = position.value_counts()
     # Keep the unit of the index (a nanosecond step would change it)
     return (index[0] + counts[counts == counts.max()].index.min()).as_unit(index.unit)
@@ -2049,6 +2060,9 @@ def continuous_timestamp_freq(data: Union[Series, DataFrame], freq: str, verbose
     - The number of rows will increase if there are gaps in the original data
     - Calendar frequencies (for example 'MS') have no fixed step. Their grid
       starts at the first record.
+    - The grid is built in absolute time. For time-zone-aware data with a
+      step of 24 h, the records after a daylight saving change (23 h or 25 h
+      after the previous record) are not on the grid and are removed.
     """
     return _regularize(data=data, freq=freq, verbose=verbose)[0]
 
