@@ -209,6 +209,12 @@ Notebook (meteo screening notebook v20):
 ### Packaging
 
 - `threadpoolctl` is now a declared dependency, no longer installed only through scikit-learn.
+- **New `all` extra:** `pip install "diive[all]"` installs the desktop app, the 3-D views and InfluxDB access
+  in one step.
+- **InfluxDB in a clone:** the `db` dependency group is removed because it duplicated the `db` extra. Use
+  `uv sync --extra db` instead of `uv sync --group db`.
+- **Installation guide:** the README shows one recommended setup and a development setup for pip and uv.
+  The full guide, with Jupyter, updates and common problems, is in the online documentation.
 
 ### Bugfixes
 
