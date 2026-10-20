@@ -46,7 +46,8 @@ class TimestampSanitizer:
     6. Validate timestamp monotonicity (if sorting enabled)
     7. Detect time resolution from timestamp
     8. Validate detected frequency against expected frequency (if provided)
-    9. Make timestamp continuous without date gaps
+    9. Make timestamp continuous without date gaps (records that are not on
+       the time grid are removed and counted)
     10. Convert to middle-of-period timestamp (optional)
 
     Attributes
@@ -70,7 +71,13 @@ class TimestampSanitizer:
     Warnings
     --------
     - **Regularization side effect**: When regularize=True, gaps are filled with
-      NaN data rows. This may increase the number of rows significantly.
+      NaN data rows. This may increase the number of rows significantly. The
+      grid follows the position within the time step that most records share,
+      so one stray or late record does not move it. Records that are not on
+      the grid (for example 1-min records in 10-min data) are removed. Their
+      number is shown as a warning and reported as 'rows_removed_off_grid' in
+      :meth:`get_status`. The warning is shown also with verbose=False, unless
+      the global verbosity is silent.
     - **Processing runs in the constructor**: if a step raises, no sanitized
       data are returned. The input data are not changed.
     - **Frequency detection**: Detection raises RuntimeError if timestamps are
@@ -115,7 +122,8 @@ class TimestampSanitizer:
         remove_duplicates : bool, optional
             Remove duplicate timestamps (keep last occurrence). Default is True.
         regularize : bool, optional
-            Generate continuous timestamp without date gaps. Default is True.
+            Generate continuous timestamp without date gaps. Records that are
+            not on the time grid are removed and counted. Default is True.
         nominal_freq : str, optional
             Expected time resolution of data timestamp index. If provided, detected
             frequency is validated against this. Raises ValueError if they don't match.
@@ -151,6 +159,7 @@ class TimestampSanitizer:
         self._original_rows = len(data)
         self._nat_removed = 0
         self._duplicates_removed = 0
+        self._off_grid_removed = 0
         self._rows_added_by_regularization = 0
 
         try:
@@ -185,6 +194,8 @@ class TimestampSanitizer:
             - 'rows_removed': Total rows removed during cleaning
             - 'rows_removed_nat': Rows removed due to NaT values
             - 'rows_removed_duplicates': Duplicate rows removed
+            - 'rows_removed_off_grid': Rows removed by regularization because
+              their timestamp is not on the time grid
             - 'rows_added_by_regularization': Rows added to fill gaps
             - 'net_rows': Final row count minus original row count (can be negative)
             - 'inferred_frequency': Detected time resolution
@@ -204,9 +215,10 @@ class TimestampSanitizer:
         return {
             'original_shape': self._original_shape,
             'final_shape': self.data.shape,
-            'rows_removed': self._nat_removed + self._duplicates_removed,
+            'rows_removed': self._nat_removed + self._duplicates_removed + self._off_grid_removed,
             'rows_removed_nat': self._nat_removed,
             'rows_removed_duplicates': self._duplicates_removed,
+            'rows_removed_off_grid': self._off_grid_removed,
             'rows_added_by_regularization': self._rows_added_by_regularization,
             'net_rows': len(self.data) - self._original_rows,
             'inferred_frequency': self.inferred_freq,
@@ -304,8 +316,9 @@ class TimestampSanitizer:
         # Make timestamp continuous w/o date gaps
         if self.regularize:
             rows_before = len(self.data)
-            self.data = continuous_timestamp_freq(data=self.data, freq=self.inferred_freq, verbose=self.verbose)
-            self._rows_added_by_regularization = len(self.data) - rows_before
+            self.data, self._off_grid_removed = _regularize(data=self.data, freq=self.inferred_freq,
+                                                            verbose=self.verbose)
+            self._rows_added_by_regularization = len(self.data) - (rows_before - self._off_grid_removed)
 
         # Convert timestamp to middle
         if self.output_middle_timestamp:
@@ -1942,14 +1955,69 @@ def remove_index_duplicates(data: Union[Series, DataFrame],
     return data, n_duplicates
 
 
+def _grid_start(index: DatetimeIndex, freq) -> pd.Timestamp:
+    """Return the first timestamp of the regular grid for *index* at *freq*.
+
+    The grid follows the position within the time step that most records
+    share, so a single stray or late record cannot move it. Ties go to the
+    position of the first record. Calendar frequencies (for example month
+    start) have no fixed step, so their grid starts at the first record.
+    """
+    try:
+        step = freq_as_timedelta(freq, unit=index.unit)
+    except ValueError:
+        return index[0]
+    # Wall-clock times, so that daily records at local midnight share one
+    # position across daylight saving changes.
+    wall = index.tz_localize(None) if index.tz is not None else index
+    position = (wall - wall[0]) % step
+    counts = position.value_counts()
+    # Keep the unit of the index (a nanosecond step would change it)
+    return (index[0] + counts[counts == counts.max()].index.min()).as_unit(index.unit)
+
+
+def _regularize(data: Union[Series, DataFrame], freq, verbose=False) -> tuple:
+    """Reindex *data* to a regular grid at *freq*. Return the data and the
+    number of records that are not on the grid and were removed."""
+    idx_name = data.index.name
+
+    # Timestamp index between the first and last grid point
+    _index = pd.date_range(start=_grid_start(data.index, freq), end=data.index[-1], freq=freq)
+
+    off_grid = ~data.index.isin(_index)
+    n_off_grid = int(off_grid.sum())
+    if n_off_grid:
+        # verbose=False only turns off progress messages. The loss of records
+        # is always reported, unless the global verbosity is silent.
+        warn(f"Regularize: {n_off_grid} records are not on the {freq} time grid and were removed "
+             f"(first: {data.index[off_grid][0]})", verbose=verbose if verbose else None)
+
+    data = data.reindex(_index)
+    data.index.name = idx_name
+
+    # Set freq
+    data.index = pd.to_datetime(data.index)
+    data = data.asfreq(freq=freq)
+    if verbose:
+        info("Regularize gaps: OK", verbose=verbose)
+    return data, n_off_grid
+
+
 def continuous_timestamp_freq(data: Union[Series, DataFrame], freq: str, verbose: bool = False) -> Union[
     Series, DataFrame]:
     """
     Generate continuous timestamp index without gaps.
 
-    Creates a regular timestamp grid from first to last date at the specified frequency,
-    then reindexes data to this grid. Gaps in the original data are filled with NaN
-    rows. Useful for time series analysis that requires uniform timesteps.
+    Creates a regular timestamp grid from first to last record at the specified
+    frequency, then reindexes data to this grid. Gaps in the original data are
+    filled with NaN rows. Useful for time series analysis that requires uniform
+    timesteps.
+
+    The grid follows the records: it uses the position within the time step that
+    most records share. For example, 30-min data at 00:30, 01:00, ... keep their
+    timestamps even if the first record is at 00:00:01. Records that are not on
+    the grid (a stray or late record, or 1-min records in 10-min data) are
+    removed. Their number is shown as a warning.
 
     Parameters
     ----------
@@ -1959,7 +2027,9 @@ def continuous_timestamp_freq(data: Union[Series, DataFrame], freq: str, verbose
         Target frequency string (e.g., '30min', '1h', '1D'). Must be a valid pandas
         frequency string.
     verbose : bool, optional
-        Print status message. Default is False.
+        Print status message. Default is False. The warning about removed
+        records is shown also with False, unless the global verbosity is
+        silent (see ``diive.set_verbosity``).
 
     Returns
     -------
@@ -1977,25 +2047,10 @@ def continuous_timestamp_freq(data: Union[Series, DataFrame], freq: str, verbose
     - Original timestamp index name is preserved
     - Data values are NaN for any timestamps not in original data
     - The number of rows will increase if there are gaps in the original data
+    - Calendar frequencies (for example 'MS') have no fixed step. Their grid
+      starts at the first record.
     """
-    first_date = data.index[0]
-    last_date = data.index[-1]
-
-    # Original timestamp name
-    idx_name = data.index.name
-
-    # Generate timestamp index b/w first and last date
-    _index = pd.date_range(start=first_date, end=last_date, freq=freq)
-
-    data = data.reindex(_index)
-    data.index.name = idx_name
-
-    # Set freq
-    data.index = pd.to_datetime(data.index)
-    data = data.asfreq(freq=freq)
-    if verbose:
-        info("Regularize gaps: OK", verbose=verbose)
-    return data
+    return _regularize(data=data, freq=freq, verbose=verbose)[0]
 
 
 def freq_as_timedelta(freq, unit: str, divisor: int = 1) -> pd.Timedelta:

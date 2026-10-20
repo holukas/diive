@@ -141,6 +141,10 @@ def load_parquet(filepath: str or Path, output_middle_timestamp: bool = True,
             Validate and regularize timestamp index: check naming convention, auto-detect
             frequency, remove duplicate timestamps and insert missing timestamps as
             empty (NaN) rows. Calls TimestampSanitizer.
+            Records that are not on the regular time grid (for example 1-min
+            records in 10-min data, or a record 1 s late) are removed, with a
+            warning that gives their number. Use sanitize_timestamp=False to
+            load all records as saved.
             Required for output_middle_timestamp to work.
 
     Returns:

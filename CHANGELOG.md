@@ -363,6 +363,8 @@ Library (also used by the notebook and the GUI):
   test no longer runs forever, also in the GUI tab.
 - **Local outlier factor (changes results):** `LocalOutlierFactor` and its GUI tab now run a single
   pass by default, because repeated passes removed most of a series (79 % of NEE in one example).
+- **Loading, records off the time grid:** loading no longer drops records silently when a few
+  timestamps are off the regular time grid, and records that still do not fit are reported in a warning.
 
 GUI only:
 
@@ -375,6 +377,7 @@ GUI only:
   or a switch between panels, although no setting had changed.
 - **Memory:** the first tab that loaded the machine-learning libraries stayed in memory after
   it was closed and kept reacting to changes in Project settings.
+- **Projects:** reopening a project returns the data exactly as saved, also when they mix time resolutions.
 
 Examples:
 

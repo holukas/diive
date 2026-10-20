@@ -57,6 +57,41 @@ class TestProject(unittest.TestCase):
             self.assertEqual(len(md.provenance), 2)
             self.assertEqual(proj.extras["site"], {"latitude": 46.8})
 
+    def test_roundtrip_mixed_resolutions_is_identical(self):
+        """L314: reopening a project must not regularize the saved data.
+
+        30-min data with 10-min data added keep all records, the timestamp
+        convention and no frequency.
+        """
+        i30 = pd.date_range("2023-01-01 00:30", periods=48 * 7, freq="30min")
+        i10 = pd.date_range("2023-01-01 00:10", periods=144 * 7, freq="10min")
+        a = pd.DataFrame({"TA": np.arange(len(i30), dtype=float)}, index=i30)
+        b = pd.DataFrame({"TA_10MIN": np.arange(len(i10), dtype=float)}, index=i10)
+        df = a.combine_first(b)
+        df.index.name = "TIMESTAMP_END"
+        self.assertIsNone(df.index.freq)
+        with tempfile.TemporaryDirectory() as d:
+            folder = Path(d) / project_name_to_dirname("Mixed")
+            save_project(folder, DiiveProject(name="Mixed", data=df))
+            proj = load_project(folder)
+        pd.testing.assert_frame_equal(proj.data, df, check_freq=True)
+        self.assertIsNone(proj.data.index.freq)
+        self.assertEqual(int(proj.data["TA_10MIN"].notna().sum()), 1008)
+
+    def test_roundtrip_restores_freq_of_older_project(self):
+        """Projects saved without data_freq get the frequency of a regular index."""
+        import json
+        df, store = _sample()
+        with tempfile.TemporaryDirectory() as d:
+            folder = Path(d) / project_name_to_dirname("Old")
+            save_project(folder, DiiveProject(name="Old", data=df, metadata=store))
+            manifest_path = folder / "project.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            del manifest["data_freq"]
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            proj = load_project(folder)
+        pd.testing.assert_frame_equal(proj.data, df, check_freq=True)
+
     def test_is_project_false_for_plain_folder(self):
         with tempfile.TemporaryDirectory() as d:
             self.assertFalse(is_project(d))

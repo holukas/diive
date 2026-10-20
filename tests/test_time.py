@@ -324,6 +324,100 @@ class TestTime(unittest.TestCase):
                                regularize=True, verbose=False).get()
 
 
+class TestSanitizerOffGridRecords(unittest.TestCase):
+    """L314: records that are not on the time grid must not vanish silently.
+
+    The grid started at the first timestamp, so one stray first record moved it
+    and every other record was lost, with rows_removed reporting 0.
+    """
+
+    def setUp(self):
+        from diive.core.utils.console import get_verbosity, set_verbosity, VERBOSE_PROGRESS
+        self._saved = get_verbosity()
+        set_verbosity(VERBOSE_PROGRESS)
+
+    def tearDown(self):
+        from diive.core.utils.console import set_verbosity
+        set_verbosity(self._saved)
+
+    def _sanitize(self, df):
+        from diive.core.times.times import TimestampSanitizer
+        from diive.core.utils.console import console
+        with console.capture() as cap:
+            ts = TimestampSanitizer(data=df, output_middle_timestamp=False, verbose=False)
+        return ts.get(), ts.get_status(), cap.get()
+
+    def _assert_on_grid_values_kept(self, df, out, n_off_grid):
+        on_grid = df.index.isin(out.index)
+        self.assertEqual(int((~on_grid).sum()), n_off_grid)
+        pd.testing.assert_series_equal(out['X'].reindex(df.index[on_grid]), df['X'][on_grid],
+                                       check_freq=False)
+
+    def test_stray_first_record(self):
+        idx = pd.date_range('2022-01-01 00:30', periods=17520, freq='30min', name='TIMESTAMP_END')
+        stray = pd.DatetimeIndex([pd.Timestamp('2022-01-01 00:00:01')], name='TIMESTAMP_END')
+        df = pd.DataFrame({'X': np.arange(-1.0, 17520.0)}, index=stray.append(idx))
+        out, status, msg = self._sanitize(df)
+        self.assertEqual(int(out['X'].notna().sum()), 17520)
+        self.assertEqual(out.index[0], pd.Timestamp('2022-01-01 00:30'))
+        self.assertEqual(out.index.freqstr, '30min')
+        self.assertEqual(status['rows_removed_off_grid'], 1)
+        self.assertEqual(status['rows_removed'], 1)
+        self.assertEqual(status['rows_added_by_regularization'], 0)
+        self.assertIn('1 records are not on the 30min time grid', msg)
+        self._assert_on_grid_values_kept(df, out, n_off_grid=1)
+
+    def test_jittered_records(self):
+        idx = pd.date_range('2022-01-01 00:30', periods=480, freq='30min', name='TIMESTAMP_END')
+        jitter = idx.to_series()
+        jitter.iloc[100:110] += pd.Timedelta('1s')
+        df = pd.DataFrame({'X': np.arange(480.0)}, index=pd.DatetimeIndex(jitter.values, name='TIMESTAMP_END'))
+        out, status, msg = self._sanitize(df)
+        self.assertEqual(int(out['X'].notna().sum()), 470)
+        self.assertEqual(status['rows_removed_off_grid'], 10)
+        self.assertEqual(status['rows_removed'], 10)
+        # The ten late records leave ten empty grid slots
+        self.assertEqual(status['rows_added_by_regularization'], 10)
+        self.assertIn('10 records are not on the 30min time grid', msg)
+        self._assert_on_grid_values_kept(df, out, n_off_grid=10)
+
+    def test_mixed_10min_and_1min(self):
+        i10 = pd.date_range('2022-01-01 00:10', periods=1440, freq='10min')
+        i1 = pd.date_range(i10[-1] + pd.Timedelta('1min'), periods=600, freq='1min')
+        df = pd.DataFrame({'X': np.arange(2040.0)}, index=i10.append(i1).rename('TIMESTAMP_END'))
+        out, status, msg = self._sanitize(df)
+        self.assertEqual(status['inferred_frequency'], '10min')
+        self.assertEqual(int(out['X'].notna().sum()), 1500)
+        self.assertEqual(status['rows_removed_off_grid'], 540)
+        self.assertEqual(status['rows_removed'], 540)
+        self.assertEqual(status['net_rows'], -540)
+        self.assertIn('540 records are not on the 10min time grid', msg)
+        self._assert_on_grid_values_kept(df, out, n_off_grid=540)
+
+    def test_regular_grid_with_offset_is_kept(self):
+        """A regular grid that does not start on the full hour keeps every record."""
+        idx = pd.date_range('2022-01-01 00:20', periods=100, freq='h', name='TIMESTAMP_END')
+        df = pd.DataFrame({'X': np.arange(100.0)}, index=idx)
+        out, status, msg = self._sanitize(df)
+        pd.testing.assert_frame_equal(out, df.asfreq('h'), check_index_type=False)
+        self.assertEqual(status['rows_removed'], 0)
+        self.assertNotIn('time grid', msg)
+
+    def test_load_parquet_keeps_records_after_stray_first_record(self):
+        import tempfile
+        from diive.core.io.files import load_parquet, save_parquet
+        from diive.core.utils.console import console
+        idx = pd.date_range('2022-01-01 00:30', periods=480, freq='30min', name='TIMESTAMP_END')
+        stray = pd.DatetimeIndex([pd.Timestamp('2022-01-01 00:00:01')], name='TIMESTAMP_END')
+        df = pd.DataFrame({'X': np.arange(-1.0, 480.0)}, index=stray.append(idx))
+        with tempfile.TemporaryDirectory() as d:
+            with console.capture() as cap:
+                path = save_parquet(filename='stray', data=df, outpath=d)
+                out = load_parquet(path, output_middle_timestamp=False)
+        self.assertEqual(int(out['X'].notna().sum()), 480)
+        self.assertIn('1 records are not on the 30min time grid', cap.get())
+
+
 class TestDetectFreqGroups(unittest.TestCase):
     """Records next to a timestamp gap must keep the resolution of their regular
     neighbour; meteo screening drops every record left without a group."""
