@@ -102,7 +102,8 @@ A: A pandas DataFrame with:
 
    - a ``DatetimeIndex`` named ``TIMESTAMP_START``, ``TIMESTAMP_MIDDLE`` or
      ``TIMESTAMP_END``,
-   - a regular frequency (30 min, hourly, daily, whatever your data is),
+   - a regular time resolution of one day or finer (for example 30 min, hourly or
+     daily; monthly, weekly and yearly records are not supported yet),
    - the same UTC offset for every timestamp (see below),
    - string column names and numeric values.
 

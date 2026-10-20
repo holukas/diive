@@ -28,7 +28,7 @@ Optional parts are extras: `gui` (PySide6 plus PyVista/VTK for the 3-D tabs), `d
 
 ## Repository rules
 
-**`devnotes/`** holds internal working documents (excluded from the sdist, outside `docs/`): `CODE_REVIEW_FINDINGS.md` (entries `L1`… and `G1`–`G9`, severity classes `S1`–`S5`), `COVERAGE_GAPS.md`, `GUI_PERFORMANCE.md` (re-measure with `devnotes/gui_timing_pass.py`). Items carry a status box (`[ ]` open, `[x]` fixed with its commit, `[-]` won't fix, with reason), a file anchor and evidence. Update the matching entry when you fix something it lists; add new findings there, not in the repo root.
+**`devnotes/`** holds internal working documents (excluded from the sdist, outside `docs/`): `CODE_REVIEW_FINDINGS.md` (entries `L1`… and `G1`–`G9`, severity classes `S1`–`S5`), `COVERAGE_GAPS.md`, `GUI_PERFORMANCE.md` (re-measure with `devnotes/gui_timing_pass.py`), `TODO.md` (planned features, e.g. monthly records). Items carry a status box (`[ ]` open, `[x]` fixed with its commit, `[-]` won't fix, with reason), a file anchor and evidence. Update the matching entry when you fix something it lists; add new findings there, not in the repo root.
 
 **[CRITICAL] Keep `diive/__init__.py` lazy.** Namespaces (and `diive.io`'s `binary`/`formats`) resolve via PEP 562 `__getattr__`. A plain `from diive import <namespace>` re-imports sklearn/xgboost/shap/statsmodels on `import diive` (~1.4 s). New namespaces go in `_LAZY_SUBMODULES`, the `TYPE_CHECKING` block, `diive.__all__` **and** `packaging/diive_gui.spec`'s `hiddenimports` (PyInstaller cannot follow `__getattr__`). `tests/test_imports.py` checks all four.
 
