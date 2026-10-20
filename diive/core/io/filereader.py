@@ -661,22 +661,24 @@ class DataFileReader:
         # read (see below).
         _temp_parsed_index_col = f"_temp_{parsed_index_col}"
 
-        # Construct timestamp as string
-        df[_temp_parsed_index_col] = ''
+        # Columns can be given by name or by position. Turn positions into names
+        # first: each column is dropped once it is used, which shifts the
+        # positions of the columns after it (L343).
+        tscols = []
         for col in self.timestamp_idx_col:
-
-            # Column can be given as string or integer
             if isinstance(col, str):
-                tscol = df[col].astype(str)
+                tscols.append(col)
             elif isinstance(col, int):
-                tscol = df.iloc[:, col].astype(str)
+                tscols.append(df.columns[col])
             else:
                 raise TypeError(f"Error: unable to parse timestamp column with setting INDEX_COLUMN: {col}.")
 
-            df[_temp_parsed_index_col] = df[_temp_parsed_index_col] + tscol
-            df = df.drop(tscol.name, axis=1, inplace=False)  # Remove col from df
-
-            if col != self.timestamp_idx_col[-1]:
+        # Construct timestamp as string
+        df[_temp_parsed_index_col] = ''
+        for i, col in enumerate(tscols):
+            df[_temp_parsed_index_col] = df[_temp_parsed_index_col] + df[col].astype(str)
+            df = df.drop(col, axis=1, inplace=False)  # Remove col from df
+            if i < len(tscols) - 1:
                 df[_temp_parsed_index_col] += ' '
 
         # Convert parsed timestamp string to datetime

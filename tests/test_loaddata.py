@@ -358,5 +358,30 @@ class TestDelimiter(unittest.TestCase):
             pd.testing.assert_frame_equal(self._read(semi, ';'), self._read(src, ','))
 
 
+class TestTimestampColumnsByPosition(unittest.TestCase):
+    """L343: date and time columns given by position read like given by name."""
+
+    def _read(self, filepath, idx_col):
+        from diive.core.io.filereader import DataFileReader
+        return DataFileReader(
+            filepath=filepath, data_header_section_rows=[0], data_skip_rows=[],
+            data_header_rows=[0], data_varnames_row=0, data_varunits_row=None,
+            data_na_vals=[-9999], data_freq="30min", data_delimiter=",",
+            data_nrows=None, timestamp_idx_col=idx_col,
+            timestamp_datetime_format="%Y-%m-%d %H:%M", timestamp_start_middle_end="end",
+            output_middle_timestamp=True, compression=None).get_data()[0]
+
+    def test_positions_and_names_agree(self):
+        idx = pd.date_range('2024-01-01 00:30', periods=48, freq='30min')
+        lines = ['date,time,TA'] + [f"{t:%Y-%m-%d},{t:%H:%M},{i}" for i, t in enumerate(idx)]
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / 'datetime_cols.csv'
+            f.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+            by_pos = self._read(f, [0, 1])
+            by_name = self._read(f, ['date', 'time'])
+        self.assertEqual(by_pos['TA'].notna().sum(), 48)
+        pd.testing.assert_frame_equal(by_pos, by_name)
+
+
 if __name__ == '__main__':
     unittest.main()
