@@ -335,9 +335,6 @@ _LEVEL42_VARIANTS: dict[str, tuple[str, tuple[str, ...]]] = {
                                   "gapfill_method")),
 }
 
-#: Kwargs whose default is omitted from the rendered L4.2 call.
-_LEVEL42_DEFAULTS: dict = {"gapfill_method": "mds", "vpd_in_kpa": True, "nee_sd": None}
-
 
 def _level42_selected(level42_cfg: dict) -> str | None:
     """The variant token picked by ``method`` / ``mode`` in ``level42_cfg``, or None."""
@@ -361,15 +358,33 @@ def _level42_fn_names(level42_cfg: dict) -> list[str]:
                     if v in variants and v != selected]
 
 
-def _level42_kwarg_lines(level42_cfg: dict, keys: tuple[str, ...]) -> list[str]:
+def _level42_defaults(fn_name: str) -> dict:
+    """Default values of the parameters of the ``run_level42_*`` function ``fn_name``."""
+    from diive.flux.postprocessingchain.levels import level42
+    return {p.name: p.default
+            for p in inspect.signature(getattr(level42, fn_name)).parameters.values()
+            if p.default is not inspect.Parameter.empty}
+
+
+def _level42_kwarg_lines(level42_cfg: dict, keys: tuple[str, ...], fn_name: str) -> list[str]:
+    """One line per kwarg in ``keys`` that differs from the default of ``fn_name``.
+
+    None is written when the default is not None, e.g. ``gapfill_method=None``
+    (daytime ONEFlux without gap-filled NEE). A parameter without a default is
+    left out when it is None.
+    """
+    defaults = _level42_defaults(fn_name)
     lines = []
     for key in keys:
-        if key not in level42_cfg or level42_cfg[key] is None:
+        if key not in level42_cfg:
             continue
-        # Drop kwargs that equal their library default to keep the script minimal.
-        if key in _LEVEL42_DEFAULTS and level42_cfg[key] == _LEVEL42_DEFAULTS[key]:
+        value = level42_cfg[key]
+        if key in defaults:
+            if value == defaults[key]:
+                continue
+        elif value is None:
             continue
-        lines.append(f"    {key}={level42_cfg[key]!r},")
+        lines.append(f"    {key}={value!r},")
     return lines
 
 
@@ -401,7 +416,8 @@ def _level42_block(level42_cfg: dict) -> list[str]:
         body = ["", "data = run_level42_partitioning(", "    data,",
                 f"    method={level42_cfg['method']!r},",
                 f"    mode={level42_cfg.get('mode', 'oneflux')!r},"]
-        body += _level42_kwarg_lines(level42_cfg, _LEVEL42_VARIANTS[selected][1])
+        body += _level42_kwarg_lines(level42_cfg, _LEVEL42_VARIANTS[selected][1],
+                                     "run_level42_partitioning")
         body.append(")")
         lines += body
     for variant in ("nt_of", "nt_rp", "dt_rp", "dt_of"):
@@ -409,7 +425,7 @@ def _level42_block(level42_cfg: dict) -> list[str]:
             continue
         suffix, keys = _LEVEL42_VARIANTS[variant]
         body = ["", f"data = run_level42_{suffix}(", "    data,"]
-        body += _level42_kwarg_lines(level42_cfg, keys)
+        body += _level42_kwarg_lines(level42_cfg, keys, f"run_level42_{suffix}")
         body.append(")")
         lines += body
     return lines

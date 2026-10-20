@@ -393,6 +393,9 @@ Library (also used by the notebook and the GUI):
 - **Offset from a replicate:** an error is raised when the measurement and the replicate never
   overlap, instead of shifting the series by the first candidate offset.
 - **Set to value:** works on data with an unsorted timestamp index.
+- **Linear interpolation:** filling short gaps is much faster on long records (10 years of 30-min data
+  in 0.02 s instead of 15 s), with the same results.
+- **Generated L4.2 scripts:** they keep `gapfill_method=None` instead of falling back to `'mds'`.
 
 GUI only:
 

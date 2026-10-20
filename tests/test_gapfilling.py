@@ -375,6 +375,58 @@ class TestGapFilling(unittest.TestCase):
         self.assertEqual(series_gapfilled.isnull().sum(), 7856)
         self.assertEqual(series.isnull().sum(), 11412)
 
+    def test_linear_interpolation_edge_cases_match_reference(self):
+        """Gaps up to the limit are filled, all others stay NaN (L349).
+
+        The reference walks the NaN runs one by one. Covers gaps at the start and
+        end, gaps longer than the limit, all-NaN, no NaN, int and float32 dtypes,
+        a time zone and a column taken from a DataFrame.
+        """
+        import pandas as pd
+        from diive.gapfilling.interpolate import linear_interpolation
+
+        def reference(series, limit):
+            interpolated = series.interpolate(method='linear', limit_area='inside')
+            out = series.copy()
+            isna = series.isna().to_numpy()
+            i = 0
+            while i < len(series):
+                if not isna[i]:
+                    i += 1
+                    continue
+                j = i
+                while j < len(series) and isna[j]:
+                    j += 1
+                if j - i <= limit:
+                    out.iloc[i:j] = interpolated.iloc[i:j]
+                i = j
+            return out
+
+        idx = pd.date_range('2022-06-01', periods=300, freq='30min')
+        rng = np.random.default_rng(7)
+        values = rng.normal(size=300)
+        values[rng.random(300) < 0.4] = np.nan
+        values[:3] = np.nan     # gap at the start
+        values[-5:] = np.nan    # gap at the end
+        values[100:120] = np.nan  # gap longer than every limit below
+        cases = {
+            'random': pd.Series(values, index=idx, name='x'),
+            'float32': pd.Series(values.astype('float32'), index=idx, name='x'),
+            'tz': pd.Series(values, index=idx.tz_localize('Europe/Zurich'), name='x'),
+            'frame_column': pd.DataFrame({'x': values, 'y': 1.0}, index=idx)['x'],
+            'all_nan': pd.Series(np.nan, index=idx, name='x'),
+            'no_nan': pd.Series(np.arange(300.0), index=idx, name='x'),
+            'int': pd.Series(np.arange(300), index=idx, name='x'),
+        }
+        for name, series in cases.items():
+            for limit in (1, 2, 3, 5, 25):
+                with self.subTest(case=name, limit=limit):
+                    result = linear_interpolation(series=series, limit=limit)
+                    pd.testing.assert_series_equal(result, reference(series, limit),
+                                                   check_exact=True)
+                    # A copy, never the input object
+                    self.assertIsNot(result, series)
+
     def test_linear_interpolation_verbose_reports_the_limit(self):
         """The verbose gap-analysis header must show the limit, not the literal.
 
