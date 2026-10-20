@@ -263,7 +263,7 @@ def harmonic_decompose(
                 - 'amplitude': float, component magnitude
                 - 'phase': float, phase in radians
                 - 'period': float, period in observations
-                - 'frequency': float, normalized frequency (0–1)
+                - 'frequency': float, cycles per observation (0 to 0.5)
             - 'frequencies': np.ndarray, frequency bins (DC excluded)
             - 'amplitudes': np.ndarray, amplitude at each frequency, corrected for
               the window's coherent gain so it is the amplitude of the signal, not
@@ -464,7 +464,8 @@ def detect_seasonality(
 
     Notes:
         - Period range: 2 to min(max_period, len(series) // 2)
-        - Strength estimate: variance of seasonal component divided by total variance
+        - Strength estimate: power at the detected peaks divided by the total
+          power over all candidate periods (see 'strength' above)
         - Very short series (< 10) may produce unreliable results
     """
     # Remove NaN

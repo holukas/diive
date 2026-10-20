@@ -1167,7 +1167,7 @@ def remove_rows_nat(df: Union[Series, DataFrame], verbose: bool = False) -> tupl
     Remove rows that do not have a timestamp (NaT).
 
     Identifies and removes any rows with missing timestamp values (NaT) in the index.
-    Issues a warning if more than 10% of rows are removed.
+    With *verbose*, warns if more than 10% of rows are removed.
 
     Parameters
     ----------
@@ -1179,13 +1179,9 @@ def remove_rows_nat(df: Union[Series, DataFrame], verbose: bool = False) -> tupl
     Returns
     -------
     tuple[Union[Series, DataFrame], int]
-        - Union[Series, DataFrame]: Data with NaT rows removed
+        - Union[Series, DataFrame]: Data with NaT rows removed. Empty if all
+          timestamps are NaT.
         - int: Number of rows removed
-
-    Raises
-    ------
-    ValueError
-        If all rows are removed (all timestamps are NaT).
     """
     no_date = df.index.isnull()
     n_rows = no_date.sum()

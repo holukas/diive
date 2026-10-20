@@ -121,7 +121,7 @@ class StepwiseOutlierDetection:
     def last_bounds(self) -> tuple:
         """``(lower, upper)`` data-unit Series for the most recent test's final
         detection band, or ``(None, None)`` for tests without a single envelope
-        (z-score increments, LOF, manual removal, missing values)."""
+        (z-score increments, LOF, trim low, manual removal, missing values)."""
         return self._last_bounds
 
     def _record_last(self, flagtest) -> None:
@@ -321,7 +321,8 @@ class StepwiseOutlierDetection:
         repeat : bool, default True
             If True, iteratively repeat detection until convergence.
         idstr : str, default None
-            Optional identifier string for labeling output.
+            Optional ID string added to the name of the flag. If None, uses the
+            ``idstr`` given when the class was initialized.
         """
         # Use provided parameters or class defaults
         lat = lat if lat is not None else self.site_lat

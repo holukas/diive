@@ -494,7 +494,7 @@ class TimeSeries:
         gridlines, a left-aligned title, concise date labels with the year at
         the end of the axis, a light zero line when the data cross zero, and no
         legend (the title names the series). A given ``format_style`` sets the
-        chrome as before.
+        chrome instead, so ``FormatStyle()`` gives the diive house style.
 
         Drawing is **additive**: a second call on the *same* axes appends its line
         to whatever is already there rather than replacing it, and with a
@@ -508,7 +508,7 @@ class TimeSeries:
                 drawn on top and the view grows to fit both.
             format_style: A :class:`~diive.plotting.FormatStyle` describing the chrome
                 (title, labels, units, fonts, colours, grid, legend). When None the
-                diive house style is used.
+                default look described above is used.
             color: Line color (default: Material Design blue #2196F3). Ignored when
                 a `color_series` was given (the line is then colormap-coloured) —
                 except when that series aligns to fewer than two values, where the

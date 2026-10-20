@@ -141,7 +141,7 @@ class NighttimeZeroOffsetPlot:
 
     @staticmethod
     def _title(ax, text: str, note: str = None):
-        """Left-aligned panel title with an optional grey note after it."""
+        """Left-aligned panel title with an optional grey note on the right."""
         panel_title(ax, text, note)
 
     def _steps(self) -> list[tuple[str, str, str, str]]:

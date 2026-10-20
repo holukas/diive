@@ -820,15 +820,15 @@ class StepwiseMeteoScreeningDb:
         return shown
 
     def report_outlier_detection_qcf_evolution(self):
-        """Print the QCF flag-evolution report."""
+        """Print the 'QCF evolution' table of each field (``FlagQCF.report_qcf_evolution``)."""
         self._report_qcf('report_qcf_evolution')
 
     def report_outlier_detection_qcf_flags(self):
-        """Print the QCF flags report."""
+        """Print the 'Test flags' table of each field (``FlagQCF.report_qcf_flags``)."""
         self._report_qcf('report_qcf_flags')
 
     def report_outlier_detection_qcf_series(self):
-        """Print the QCF series report."""
+        """Print the 'QCF summary' table of each field (``FlagQCF.report_qcf_series``)."""
         self._report_qcf('report_qcf_series')
 
     def _report_qcf(self, method: str):
@@ -1065,13 +1065,14 @@ class StepwiseMeteoScreeningDb:
         plottitle : str, default None
             Title for plot. If None, auto-generated.
         verbose : bool, default False
-            If True, print detection statistics (count of outliers, retention percentage).
+            If True, print the number of outliers found in each iteration.
             For day/night mode, prints separate statistics for each period.
         repeat : bool, default True
             If True, iteratively repeat detection until convergence (no new outliers detected).
             Useful for removing cascading outliers, but may over-filter.
         idstr : str, default None
-            Optional identifier string for labeling output in verbose mode.
+            Optional ID string added to the name of the flag, e.g. ``'L2'`` gives
+            ``FLAG_L2_<field>_OUTLIER_ZSCORE_TEST``.
 
         Examples
         --------
@@ -1527,6 +1528,9 @@ class StepwiseMeteoScreeningDb:
         ran, or the data hold more than one time resolution): then
         ``finalize_outlier_detection()`` keeps them NaN.
 
+        With ``showplot=True`` the diagnostic figure of each field is shown
+        (``NighttimeZeroOffsetPlot``).
+
         Example:
             ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example;
             in practice it would hold a radiation variable:
@@ -1644,6 +1648,9 @@ class StepwiseMeteoScreeningDb:
 
     def correction_remove_relativehumidity_offset(self, showplot: bool = True):
         """Remove the offset of relative humidity values above 100% and cap them at 100
+
+        See ``remove_relativehumidity_offset``. With ``showplot=True`` the
+        diagnostic figure of each field is shown (``RelativeHumidityOffsetPlot``).
 
         Example:
             ``mscr`` is a ``StepwiseMeteoScreeningDb`` built as in the class example;

@@ -121,7 +121,8 @@ def resample_series_to_freq(series: Series,
             Must be a *lower* time resolution than the source (downsampling only).
         agg: aggregation method ('mean' or 'sum').
         mincounts_perc: minimum fraction (0-1) of the maximum possible records
-            an interval must have for its aggregate to be kept (else NaN).
+            an interval must have for its aggregate to be kept (else NaN). If
+            this gives fewer than 3 records, one record is enough.
         output_timestamp_shows: 'end' (default) or 'middle' of the period.
 
     Note regarding .resample:
@@ -143,7 +144,7 @@ def resample_series_to_freq(series: Series,
 
     """
 
-    # 'T' is the deprecated pandas minute alias (removed in pandas 4); normalize
+    # 'T' is the old pandas minute alias (removed in pandas 3); normalize
     # e.g. '30T' -> '30min', '10T' -> '10min' so the old forms keep working.
     if to_freqstr.endswith('T'):
         to_freqstr = f"{to_freqstr[:-1]}min"

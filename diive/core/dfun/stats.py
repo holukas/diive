@@ -97,7 +97,7 @@ def series_sd_over_mean(series: pd.Series):
 # ============================================================
 
 def coefficient_of_variation(s: Series) -> float:
-    """Coefficient of variation (CV = SD / Mean).
+    """Coefficient of variation (CV = SD / |Mean|), NaN if the mean is 0.
 
     Relative variability measure standardized by the mean.
     Useful for comparing variability across different scales or units.

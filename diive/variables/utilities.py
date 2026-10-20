@@ -186,7 +186,7 @@ def generate_noisy_timeseries(
         periods (int): The number of time steps (data points) to generate.
             Defaults to 365.
         freq (str): The frequency string for the time index (e.g., 'D' for daily,
-            'H' for hourly, `30min` for half-hourly). Defaults to 'D'.
+            'h' for hourly, `30min` for half-hourly). Defaults to 'D'.
         trend_slope (float): The slope of the linear trend component.
             Positive values indicate an upward trend; negative values indicate
             a downward trend. Defaults to 0.05.
@@ -252,9 +252,9 @@ def add_impulse_noise(
     Args:
         series: time series
         factor_low: Low factor for noise creation, defines the lower bound of the noise,
-            calculated as factor_low * min(series).
+            calculated as factor_low * abs(min(series)).
         factor_high: High factor for noise creation, defines the upper bound of the noise,
-            calculated as factor_high * max(series).
+            calculated as factor_high * abs(max(series)).
         contamination: Fraction of *series* to add noise to.
         seed: Random seed.
 

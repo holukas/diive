@@ -282,7 +282,6 @@ def aggregated_as_hires(aggregate_series: Series,
     # lowres_df = lowres_df.ffill()
 
     # lowres_df.interpolate(limit=1)
-    # todo here linear interpolation with gap length limit
 
     # Input data
     hires_df = pd.DataFrame(index=hires_timestamp)
@@ -409,7 +408,7 @@ def parse_header(filepath: Path,
         headerrows: (deprecated)
 
     Returns:
-        Lists of variable names and units, and integer of number of rows.
+        Lists of variable names and units, and the number of header columns.
     """
     df = pd.read_csv(filepath,
                      # skiprows=[0, 1],

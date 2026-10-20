@@ -440,13 +440,15 @@ class HeatmapYearMonth(HeatmapBase):
         1. Ensures the time series has a name, defaulting to "data" if none exists.
         2. Sets up the series index as a proper timestamp using `_setup_timestamp`.
         3. Aggregates the time series data into a monthly matrix using
-           `dv.resample_to_monthly_agg_matrix`, applying the specified
+           `dv.times.resample_to_monthly_agg_matrix`, applying the specified
            aggregation method (`self.agg`) and optionally converting to ranks.
-        4. Transposes the resulting DataFrame if `self.ax_orientation` is "horizontal"
+        4. Completes the matrix to every year from the first to the last and
+           all 12 months. Months without data are NaN.
+        5. Transposes the resulting DataFrame if `self.ax_orientation` is "horizontal"
            to ensure months are the index and years are columns.
-        5. Extracts the x (columns), y (index), and z (values) data from the
+        6. Extracts the x (columns), y (index), and z (values) data from the
            prepared DataFrame.
-        6. Calls `_set_bounds` to extend the x and y data for proper heatmap
+        7. Calls `_set_bounds` to extend the x and y data for proper heatmap
            cell rendering, as `pcolormesh` uses bounds.
         """
         self.series.name = self.series.name if self.series.name else "data"  # Time series must have a name

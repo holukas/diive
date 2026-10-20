@@ -16,7 +16,8 @@ Typical workflow:
     1. Create FlagQCF instance with DataFrame containing individual test flags
     2. Call calculate() to compute QCF from flag combinations
     3. Access results via properties: flagqcf, filteredseries, filteredseries_hq
-    4. Use reporting methods for diagnostics: report_qcf_flags(), report_qcf_evolution()
+    4. Use reporting methods for diagnostics: report_qcf_series(), report_qcf_flags(),
+       report_qcf_evolution()
 
 Example:
     >>> import diive as dv, pandas as pd
