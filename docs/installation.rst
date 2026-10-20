@@ -10,6 +10,29 @@ to install it separately.
 Install diive into its own **environment**: a folder with one Python installation and the packages
 you add to it. This keeps diive from clashing with other Python projects on your computer.
 
+On Windows, the desktop app also runs without Python and without an environment, see the next
+section.
+
+Windows app without Python
+==========================
+
+Each `release <https://github.com/holukas/diive/releases/latest>`_ includes the desktop app for
+Windows as a zip file. It contains everything the app needs, so nothing else has to be installed.
+
+1. **Download** the file ``diive-gui-...-win64.zip`` under **Assets** on the release page.
+2. **Unzip** it to a folder of your choice, for example in your Documents folder.
+3. **Start** ``diive-gui.exe`` in the unzipped folder.
+
+Windows may show a SmartScreen warning the first time, because the app is not signed. Click
+**More info**, then **Run anyway**.
+
+**Updating to a new release.** Download and unzip the zip file of the new release, and delete the
+old folder. The app keeps its settings in your user profile, so they carry over. Save your projects
+outside the app folder, or they are deleted with it.
+
+The app contains the same functions as ``diive[gui]``. To use diive in your own Python code,
+install the library as described below.
+
 Library and desktop app with conda
 ==================================
 
@@ -54,6 +77,18 @@ manages the environment, and `pip <https://pip.pypa.io/>`_ installs diive from
    conda activate diive
    diive-gui
 
+**Starting the desktop app (GUI) from your own Python script.** Put the call under a main guard:
+
+.. code-block:: python
+
+   from diive.gui import launch
+
+   if __name__ == "__main__":
+       launch()
+
+Some tabs compute in a separate background process, which imports your script again when it
+starts. Without the guard, that process would run the script again and open a second window.
+
 **Updating to the latest release.**
 
 .. code-block:: bash
@@ -89,21 +124,53 @@ few smaller packages. This is sufficient for using diive in scripts. The other p
    * - ``diive``
      - The library only
    * - ``"diive[gui]"``
-     - The library and the desktop app (PySide6)
-   * - ``"diive[gui,gui3d]"``
-     - Adds 3-D surface plots to the app (PyVista and VTK, large download)
+     - The library and the desktop app (PySide6, plus PyVista and VTK for the 3-D views; large download)
    * - ``"diive[db]"``
      - Adds access to InfluxDB v2 databases (``influxdb-client``)
    * - ``"diive[all]"``
-     - All of the above
+     - All of the above, plus JupyterLab for the database notebooks
 
 Keep the double quotes around names with brackets. Some shells need them.
 
-The InfluxDB connection is a specialized feature for groups that keep their measurements in an
-InfluxDB v2 database. Most users do not need it. It is used by the library (``InfluxIO``), the
-app's **File > Database** tabs, the database source of the app's meteo screening tab and the
-database notebooks in ``notebooks/``. Without it, these parts of the app show a short notice
-instead.
+The InfluxDB connection is for internal use in our working group for now, which keeps its
+measurements in an InfluxDB v2 database. It is used by the library (``InfluxIO``), the app's
+**File > Database** tabs, including the meteo screening of database data, and the database
+notebooks in ``notebooks/``. Without it, the app hides the **File > Database** menu. The Windows
+app from the releases does not include it.
+
+Working group setup
+===================
+
+Members of our working group need the desktop app with the database tabs and JupyterLab for the
+database notebooks. ``diive[all]`` installs both. Install conda and open a terminal with conda
+as in steps 1 and 2 of *Library and desktop app with conda* above, then run:
+
+.. code-block:: bash
+
+   conda create -n diive python=3.12
+   conda activate diive
+   python -m pip install "diive[all]"
+
+In this environment, ``diive-gui`` starts the app with **File > Database**, and ``jupyter lab``
+starts JupyterLab.
+
+The notebooks are in the ``notebooks/`` folder of the repository and are not part of the pip
+package. Get them with Git, or download them from
+`GitHub <https://github.com/holukas/diive/tree/main/notebooks>`_:
+
+.. code-block:: bash
+
+   git clone https://github.com/holukas/diive.git
+   cd diive/notebooks
+   jupyter lab
+
+In each database notebook, set ``DIRCONF`` to your folder with the database configuration.
+
+**Updating.** Run ``python -m pip install --upgrade "diive[all]"`` in the environment, and
+``git pull`` in the cloned folder for the newest notebooks.
+
+**Only the app, without Python.** An internal build of the Windows app includes the database
+tabs. It is shared within the group and is not on GitHub. It does not include JupyterLab.
 
 Other Python environments
 =========================
@@ -121,7 +188,8 @@ PyArrow, and pip replaces older versions in the environment.
 Jupyter
 =======
 
-JupyterLab is not part of diive. Install it in the diive environment and start it there:
+JupyterLab comes with ``diive[all]`` (see above). Otherwise, install it in the diive environment
+and start it there:
 
 .. code-block:: bash
 

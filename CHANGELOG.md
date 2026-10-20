@@ -150,6 +150,10 @@ GUI only:
   reopen it.
 - **UTC offset:** the offset is set only in Project settings, and tabs that need it show it
   read-only, with a red mark where it is not set yet.
+- **Database connection:** the config directory is saved with the project instead of in the app
+  settings, so the field starts empty without a project.
+- **Database menu:** **File ▸ Database** appears only when the optional `db` extra is installed. The
+  database tabs are for internal use for now.
 - **Meteo screening (database):** the tab screens through `StepwiseMeteoScreeningDb` like the
   library, follows changes to the site coordinates and shows loading errors in the status line.
 - **Meteo screening (database), Copy Python:** writes a `StepwiseMeteoScreeningDb` script, also
@@ -209,8 +213,11 @@ Notebook (meteo screening notebook v20):
 ### Packaging
 
 - `threadpoolctl` is now a declared dependency, no longer installed only through scikit-learn.
-- **New `all` extra:** `pip install "diive[all]"` installs the desktop app, the 3-D views and InfluxDB access
-  in one step.
+- **3-D views in the `gui` extra:** `pip install "diive[gui]"` now also installs the 3-D surface tabs. The
+  `gui3d` extra is removed.
+- **Windows app without database tabs:** the release build leaves out the InfluxDB database tabs.
+  `build_gui.ps1 -WithDb` makes an internal build with them.
+- **New `all` extra:** `pip install "diive[all]"` installs the desktop app, InfluxDB access and JupyterLab in one step.
 - **InfluxDB in a clone:** the `db` dependency group is removed because it duplicated the `db` extra. Use
   `uv sync --extra db` instead of `uv sync --group db`.
 - **Installation guide:** the README shows one recommended setup and a development setup for pip and uv.

@@ -7,29 +7,7 @@ A point-and-click desktop app for exploring time series data with diive.
 
 ---
 
-## Install & launch
-
-```bash
-pip install 'diive[gui]'     # or: uv sync --extra gui
-diive-gui
-```
-
-To start the GUI from your own Python script, put the call under a main guard:
-
-```python
-from diive.gui import launch
-
-if __name__ == "__main__":
-    launch()
-```
-
-Some tabs compute in a separate background process, which re-imports your script
-when it starts. Without the guard, that process would run the script again and open
-a second window.
-
-For the optional **Database** tabs (read from an InfluxDB), also install the
-`db` extra: `pip install "diive[db]"` (or `uv sync --extra db` in a clone).
-Without it the Database tabs show a short install notice instead of failing.
+## Starting the app
 
 A splash screen with a loading spinner appears while the app starts. diive then
 **reopens the project you had open last**. If you haven't saved one yet, the
@@ -386,7 +364,7 @@ binary glTF with the colours baked into a texture (imports directly into PowerPo
 *Insert ▸ 3D Models*, Blender, and Meta Quest / WebXR viewers); **3D print (.stl)** writes
 a watertight solid with a base plate, ready to slice and print.
 
-This needs the optional **`gui3d`** extra (PyVista/VTK); without it the tab shows install
+This needs PyVista/VTK, which the `gui` extra installs; if they are missing, the tab shows install
 instructions instead of failing. **Copy Python** (top-right) copies a script that builds
 the same surface as a Matplotlib 3-D plot (so it runs without the extra).
 
@@ -1521,8 +1499,9 @@ flag; **Copy Python** copies a reproducible script.
 
 *Found under **File ▸ Database**.* Read measurement data straight from an
 **InfluxDB** time-series database, screen high-resolution meteo, resample it, and
-merge it into your dataset. These tabs need the optional `db` dependency group (see
-**Install & launch**); without it they show an install notice. The header shows a
+merge it into your dataset. The database tabs are for internal use: the menu only
+appears in an installation with the optional `db` extra or in an internal build of
+the Windows app. The header shows a
 green **Connected** pill once a connection is live.
 
 > **Timezone — important.** The database always stores timestamps in **UTC**, but
@@ -1537,8 +1516,8 @@ green **Connected** pill once a connection is live.
 Point diive at an InfluxDB and test the connection.
 
 - **Config directory.** Pick the configuration folder (the connection's
-  `url` / `org` / `token` live in its `<dir>_secret` sibling). diive remembers the
-  **directory path only — never the token**.
+  `url` / `org` / `token` live in its `<dir>_secret` sibling). A saved project
+  keeps the **directory path, never the token**. Without a project, the field starts empty.
 - **Connect** verifies the server is reachable and fills in the resolved
   URL / org. Once connected, the explorer and the screening tab can use it.
 

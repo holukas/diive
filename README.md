@@ -18,7 +18,8 @@ mainly to post-process eddy covariance fluxes: quality control, gap-filling, flu
 `diive` can be used in two ways:
 
 - **As a library** in your own Python code: `import diive as dv`.
-- **As a desktop app** (`diive-gui`) for interactive work without writing code.
+- **As a desktop app** (`diive-gui`) for interactive work without writing code. For Windows, each
+  [release](https://github.com/holukas/diive/releases/latest) includes a ready-to-run version that needs no Python.
 
 `diive` works with averaged data, for example 30-minute values. For raw high-frequency (10 or 20 Hz) eddy covariance
 data, such as wind rotation, flux detection limits and time lags, use [dyco](https://github.com/holukas/dyco).
@@ -86,7 +87,8 @@ for the machine-learning models. Examples: [examples/gapfilling/](examples/gapfi
 
 **Desktop app.** Provides the library functions in an interactive interface: plotting, data cleaning, gap-filling and flux tabs,
 a guided post-processing chain, metadata for each variable with its processing history, and project folders
-(`.diive`) that can be moved to another computer. Manual: [GUI manual](diive/gui/MANUAL.md)
+(`.diive`) that can be moved to another computer. On Windows, it also runs without Python, see
+[Windows app](#windows-app-no-python-needed). Manual: [GUI manual](diive/gui/MANUAL.md)
 
 ![The diive desktop app showing the Overview tab: variable list, summary statistics, and linked time series, heatmap, cumulative, diel cycle and distribution panels](images/diive-gui_v0.91.0_20260820.png)
 
@@ -120,9 +122,19 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 
 ## Installation
 
-`diive` needs Python 3.12 or 3.13.
+### Windows app (no Python needed)
+
+Each [release](https://github.com/holukas/diive/releases/latest) includes the desktop app for Windows as a zip file
+(`diive-gui-...-win64.zip` under **Assets**). Download it, unzip it and start `diive-gui.exe` in the unzipped
+folder. Nothing else needs to be installed. Windows may show a SmartScreen warning the first time, because the app is
+not signed. Click **More info**, then **Run anyway**.
+
+The app contains the same functions as `diive[gui]`. To use `diive` in your own Python code, install the library as
+described below.
 
 ### Library and desktop app
+
+`diive` needs Python 3.12 or 3.13.
 
 For new Python users, the recommended way is to install [Miniforge](https://conda-forge.org/download/) first. On
 Windows, open **Miniforge Prompt** from the Start menu. On macOS and Linux, open a terminal. Then run:
@@ -136,13 +148,12 @@ python -m pip install "diive[gui]"
 Conda creates an environment named `diive` with its own Python, and pip installs `diive` from PyPI into it. Start the
 desktop app with `diive-gui`. In a new terminal, run `conda activate diive` first.
 
-| Install              | Contains                                             |
-|----------------------|------------------------------------------------------|
-| `diive`              | The library only                                     |
-| `"diive[gui]"`       | The library and the desktop app                      |
-| `"diive[gui,gui3d]"` | Adds 3-D surface plots to the app (large download)   |
-| `"diive[db]"`        | Adds access to InfluxDB v2 databases (rarely needed) |
-| `"diive[all]"`       | All of the above                                     |
+| Install          | Contains                                               |
+|------------------|--------------------------------------------------------|
+| `diive`          | The library only                                       |
+| `"diive[gui]"`   | The library and the desktop app (large download)       |
+| `"diive[db]"`    | Adds InfluxDB v2 access (internal use)                 |
+| `"diive[all]"`   | All of the above, plus JupyterLab                      |
 
 Keep the double quotes around names with brackets. Some shells need them.
 
